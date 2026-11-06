@@ -37,18 +37,17 @@ def apply_policy(raw, *args):
 class ExtractTests(unittest.TestCase):
     """Driver/validation units; every compiler and extractor operation is mocked."""
 
-    def test_supported_module_names_reach_the_same_driver_and_context(self):
+    def test_supported_module_names_reach_the_same_extractor_and_context(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
-            commands, drivers = [], []
+            commands = []
             def run(command, *, root):
                 commands.append((command, root))
-                if command[1] != 'build':
-                    drivers.append(Path(command[-1]).read_text())
                 return audit.MARKER + '{}\n'
+            tool = {'executable': audit.EXTRACTOR, 'lean_sysroot': '/toolchain'}
             @contextlib.contextmanager
             def prepared(root, runner):
-                yield {'prepared': True}
+                yield tool
             with mock.patch.object(audit, 'run', side_effect=run), \
                  mock.patch.object(audit, 'prepared_tool', side_effect=prepared), \
                  mock.patch.object(audit, 'verify_extractor_inputs') as verify, \
@@ -56,16 +55,14 @@ class ExtractTests(unittest.TestCase):
                 result = audit.extract(["Proofs.Dep'", 'Proofs.Check!'], True,
                                        ['Fixture.Witness?'], root=root, lean_path='selected:libs')
             self.assertEqual(commands[0], (['lake', 'build', "Proofs.Dep'", 'Proofs.Check!'], root))
-            self.assertEqual(commands[1][0][1:5], ['env', 'env', 'LEAN_PATH=selected:libs', 'lean'])
+            # The compiled extractor on the selected lookup path, with the modules as arguments: it
+            # imports them itself, without running their initializers (E1).
+            self.assertEqual(commands[1][0], ['lake', 'env', 'env', 'LEAN_PATH=selected:libs',
+                                              str(root / audit.EXTRACTOR), '--sysroot', '/toolchain',
+                                              'Fixture.Witness?', 'Proofs.Check!', "Proofs.Dep'"])
             self.assertTrue(all(cwd == root for _, cwd in commands))
-            # The driver imports only the extractor; the audit command names (and imports) the
-            # modules without running their initializers (E1).
-            self.assertEqual([l for l in drivers[0].splitlines() if l.startswith('import ')],
-                             ['import tools.Assurance'])
-            self.assertIn('#assurance_audit ["Fixture.Witness?", "Proofs.Check!", "Proofs.Dep\'"]\n', drivers[0])
-            self.assertEqual(result['extractor'], {'prepared': True})
-            verify.assert_called_once_with({'prepared': True}, root, 'extraction')
-            self.assertEqual(list((root / '.lake/assurance').iterdir()), [])
+            self.assertEqual(result['extractor'], tool)
+            verify.assert_called_once_with(tool, root, 'extraction')
 
     def test_invalid_selected_and_witness_names_never_dispatch(self):
         for invalid in ('', 'A..B', 'A/B', '../A', 'A B', '«A»', 'A\\B', 1):

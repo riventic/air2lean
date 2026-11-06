@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """Theorem inventory: each headline theorem, its scope and domain, and its current check result.
 
-assurance/theorem-inventory.json lists each theorem (Lean name, module, example, scope class,
-domain) and the guarded `lake build` runs that checked it. A theorem must be checked against
+assurance/theorem-list.json (committed) lists each theorem (Lean name, module, example, scope
+class, domain). assurance/theorem-inventory.json is the whole-tree generated file (assurance/
+generated.json, docs/ci.md#whole-tree-generated-files): that list plus the guarded `lake build`
+runs that checked it, which `plan` derives from the list and `record` stores. It and
+docs/theorem-inventory.md (docs/theorem-inventory.template.md with the table filled in) are
+never committed: `scripts/generated.py materialize` supplies them, and every reader fails
+closed when they are missing. A theorem must be checked against
 the translation of every Zig version/target that its example supports (`translations`):
 `tests/golden/<v>/<ex>/Gen-<os>.lean`, else `tests/golden/<v>/<ex>/Gen.lean`, else the
 committed `Proofs/<Ex>/Gen.lean` (the rule of scripts/check.sh); a theorem whose entry names
@@ -15,7 +20,8 @@ successful run for a required translation, has an all-schedules scope without a 
 over every fuel and oracle, names a `completes` witness that does not show a completed run of
 the same program, when a document or Lean doc comment says "every schedule" of a
 theorem whose scope is narrower, when a theorem of a proved-examples table is not listed,
-or when docs/theorem-inventory.md is stale. `write` regenerates that document's table.
+or when docs/theorem-inventory.md is stale. `check --list` checks the list alone, with no
+generated file. `write` regenerates the document from its template.
 `swap-build` builds modules against other translation files in a check tree, never
 replacing the committed ones. `record` adds a build-guard report of such a build to the inventory, after
 scripts/gen-integrity.py attests that each translation file it records is a fresh translation
@@ -25,6 +31,7 @@ docs/theorem-inventory.md.
 from __future__ import annotations
 
 import argparse
+import copy
 import functools
 import hashlib
 import importlib.util
@@ -36,8 +43,11 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+LIST = Path('assurance/theorem-list.json')
 INVENTORY = Path('assurance/theorem-inventory.json')
+TEMPLATE = Path('docs/theorem-inventory.template.md')
 DOC = Path('docs/theorem-inventory.md')
+MATERIALIZE = 'run python3 scripts/generated.py materialize (whole-tree generated file, not committed)'
 BEGIN, END = '<!-- BEGIN theorem-inventory -->', '<!-- END theorem-inventory -->'
 SCOPES = ('single-step', 'single-schedule', 'bounded-schedules', 'all-schedules', 'sequential')
 # Host keys of the translation files (`Gen-<target>.lean`, as scripts/check.sh selects them).
@@ -80,6 +90,11 @@ def module_path(module: str) -> Path:
     return Path(*module.split('.')).with_suffix('.lean')
 
 
+def source_path(module: str, swaps: dict[str, str]) -> Path:
+    """The source a build reads for `module`: its swapped translation, else its own file."""
+    return Path(swaps.get(canonical_example(module), module_path(module)))
+
+
 def gen_module(example: str) -> str:
     return f'Proofs.{example.capitalize()}.Gen'
 
@@ -111,7 +126,8 @@ def argument_parser(root: Path = ROOT, *, add_help: bool = True):
     p = CommandParser(description=__doc__.split('\n\n')[0], add_help=add_help)
     p.add_argument('--root', type=Path, default=root)
     sub = p.add_subparsers(dest='cmd')
-    sub.add_parser('check', add_help=add_help)
+    ck = sub.add_parser('check', add_help=add_help)
+    ck.add_argument('--list', action='store_true', help='check the committed list alone (no generated file)')
     sub.add_parser('write', add_help=add_help)
     sb = sub.add_parser('swap-build', add_help=add_help)
     sb.add_argument('--lake', type=Path, help='physical selected toolchain Lake (required for recording)')
@@ -146,6 +162,18 @@ class BuildCommand:
         """Fresh renewal permits rebuilding; historical recording keeps captured policy."""
         command = self.invocation(lake, python)
         return [arg for arg in command if arg != '--no-build'] if self.kind == 'lake' else command
+
+    def existing(self, root: Path) -> BuildCommand:
+        """The recorded targets that still exist, for a renewal: a module deleted since the
+        recording has no theorem left to check, and Lake refuses its missing source. Library
+        and executable targets carry no dot and always stay."""
+        kept = copy.copy(self)
+        kept.modules = [m for m in self.modules
+                        if '.' not in m or (root / source_path(m, self.swaps)).is_file()]
+        if not kept.modules:
+            raise Error('every recorded build target is deleted: drop the run instead')
+        kept.lake_args = [a for a in self.lake_args if a not in self.modules or a in kept.modules]
+        return kept
 
 
 def parse_build_command(root: Path, command: list[str], *, lake: str | None = None) -> BuildCommand:
@@ -404,7 +432,7 @@ def closure(root: Path, modules: list[str], swaps: dict[str, str] | None = None)
         if mod in seen:
             continue
         seen.add(mod)
-        path = root / swaps.get(canonical_example(mod), module_path(mod))
+        path = root / source_path(mod, swaps)
         if not path.is_file():
             raise Error(f'{mod}: no source file {module_path(mod)}')
         try:
@@ -528,8 +556,20 @@ def module_evidence_matches(root: Path, run: dict, module: str, swaps: dict[str,
 
 # ----------------------------------------------------------------------------- check
 
+def load_list(root: Path) -> dict:
+    return json.loads((root / LIST).read_text())
+
+
 def load(root: Path) -> dict:
-    return json.loads((root / INVENTORY).read_text())
+    """The generated inventory (the list and its runs). Missing, or generated from another list:
+    an error naming the way to get a current one, never a silent skip."""
+    path = root / INVENTORY
+    if not path.is_file():
+        raise Error(f'{INVENTORY} is missing: {MATERIALIZE}')
+    inv, listed = json.loads(path.read_text()), load_list(root)
+    if any(inv.get(key) != listed.get(key) for key in ('schema', 'scopes', 'theorems')):
+        raise Error(f'{INVENTORY} was generated from a different {LIST}: {MATERIALIZE}')
+    return inv
 
 
 def prepare_run(root: Path, run: dict, discovered=None):
@@ -574,8 +614,9 @@ def current_result(root: Path, inv: dict, thm: dict, tr: dict, decl_closure: lis
     return None
 
 
-def results(root: Path, inv: dict) -> tuple[list[dict], list[str]]:
-    """Per theorem: its required translations with the current run (or the exclusion)."""
+def results(root: Path, inv: dict, runs: bool = True) -> tuple[list[dict], list[str]]:
+    """Per theorem: its required translations with the current run (or the exclusion).
+    `runs=False` checks the list alone: no run is looked up."""
     errors: list[str] = []
     rows = []
     names = set()
@@ -634,8 +675,8 @@ def results(root: Path, inv: dict) -> tuple[list[dict], list[str]]:
             if (tr['zig'], tr['target']) in excluded:
                 checks.append({**tr, 'excluded': excluded.pop((tr['zig'], tr['target']))})
                 continue
-            run = current_result(root, inv, thm, tr, mods, prepared, discovered)
-            if run is None:
+            run = current_result(root, inv, thm, tr, mods, prepared, discovered) if runs else None
+            if runs and run is None:
                 errors.append(f'{name}: no current check result for {label} ({tr["gen"]})')
             checks.append({**tr, 'run': run})
         for zig, target in excluded:
@@ -705,7 +746,7 @@ def listing_errors(root: Path, inv: dict) -> list[str]:
                 short = token.rsplit('.', 1)[-1]
                 for module, declared in shorts.items():
                     if short in declared and (short, module) not in listed:
-                        errors.append(f'{doc}: `{token}` ({module}) is not in {INVENTORY}')
+                        errors.append(f'{doc}: `{token}` ({module}) is not in {LIST}')
     return errors
 
 
@@ -726,8 +767,9 @@ def render(rows: list[dict], inv: dict) -> str:
                 checks.append(f'{label}: {"pass, run `" + c["run"] + "`" if c["run"] else "none"}')
         out.append(f'| `{row["name"]}` | `{row["module"]}` | {scope_label(row)} | {cell(row["domain"])} '
                    f'| {"<br>".join(checks)} |')
-    out += ['', '| Run | Translation | Build | Result | Revision | Started (UTC) | Log SHA-256 |',
-            '|---|---|---|---|---|---|---|']
+    # No start time or log digest: the generated document is the same for every run of one tree
+    # (they stay in the generated inventory file).
+    out += ['', '| Run | Translation | Build | Result | Revision |', '|---|---|---|---|---|']
     for run_id, run in sorted(inv.get('runs', {}).items()):
         swapped = ', '.join(f'`{g["path"]}`' for g in run['gens'].values()
                             if not g['path'].startswith('Proofs/'))
@@ -736,33 +778,78 @@ def render(rows: list[dict], inv: dict) -> str:
         revision = run.get('revision', {})
         rev = revision.get('head', 'unknown')[:12] + (' (dirty)' if revision.get('tracked_dirty') else '')
         out.append(f'| `{run_id}` | {translation} | `{" ".join(run["command"])}` | '
-                   f'{run["outcome"]} (exit {run["exit_code"]}) | `{rev}` | '
-                   f'{run.get("started_utc", "")[:19]} | `{run.get("log_sha256", "")[:16]}` |')
+                   f'{run["outcome"]} (exit {run["exit_code"]}) | `{rev}` |')
     return '\n'.join(out) + '\n'
 
 
-def document(root: Path, rows: list[dict], inv: dict) -> tuple[str, str]:
-    text = (root / DOC).read_text()
+def document(root: Path, rows: list[dict], inv: dict) -> str:
+    """The generated document: its template with the table filled in."""
+    text = (root / TEMPLATE).read_text()
     if text.count(BEGIN) != 1 or text.count(END) != 1:
-        raise Error(f'{DOC}: needs one {BEGIN} and one {END}')
+        raise Error(f'{TEMPLATE}: needs one {BEGIN} and one {END}')
     head, rest = text.split(BEGIN)
     _, tail = rest.split(END)
-    return text, f'{head}{BEGIN}\n{render(rows, inv)}{END}{tail}'
+    return f'{head}{BEGIN}\n{render(rows, inv)}{END}{tail}'
 
 
-def check(root: Path = ROOT, write: bool = False) -> list[str]:
-    inv = load(root)
-    rows, errors = results(root, inv)
+def check(root: Path = ROOT, write: bool = False, list_only: bool = False) -> list[str]:
+    inv = load_list(root) if list_only else load(root)
+    rows, errors = results(root, inv, runs=not list_only)
     errors += claim_errors(root, inv) + listing_errors(root, inv)
+    if list_only:
+        return errors
     try:
-        old, new = document(root, rows, inv)
+        new = document(root, rows, inv)
         if write:
             (root / DOC).write_text(new)
-        elif old != new:
-            errors.append(f'{DOC} is stale: run python3 scripts/theorem-inventory.py write')
+        elif not (root / DOC).is_file():
+            errors.append(f'{DOC} is missing: {MATERIALIZE}')
+        elif (root / DOC).read_text() != new:
+            errors.append(f'{DOC} is stale: {MATERIALIZE}')
     except Error as error:
         errors.append(str(error))
     return errors
+
+
+# ----------------------------------------------------------------------------- plan
+
+COMMITTED_RUN = 'committed'
+COMMITTED_ZIG = '0.16.0'  # the version the committed `Proofs/<Ex>/Gen.lean` modules are translations for
+
+
+def plan(root: Path, inv: dict) -> dict[str, dict]:
+    """The runs that give every listed theorem a check result per required translation, derived
+    from the list alone: `committed` is one `lake build` of every module with a translation under
+    `Proofs/` (the committed ones and the retained ones), and each Zig version and target with
+    translations elsewhere (`tests/golden`) is one `swap-build` over the modules that need them.
+    {run id: {zig, target, swaps: {example: translation file}, modules}}."""
+    committed: set[str] = set()
+    swapped: dict[tuple[str, str], dict] = {}
+    for thm in inv.get('theorems', []):
+        excluded = {(e['zig'], e['target']) for e in thm.get('excluded', [])}
+        for tr in theorem_translations(root, thm):
+            if (tr['zig'], tr['target']) in excluded:
+                continue
+            if tr['gen'].startswith('Proofs/'):
+                committed.add(thm['module'])
+                continue
+            run = swapped.setdefault((tr['zig'], tr['target']), {'swaps': {}, 'modules': set()})
+            if run['swaps'].setdefault(thm['example'], tr['gen']) != tr['gen']:
+                raise Error(f'{thm["example"]}: two translations for {tr["zig"]}/{tr["target"]}')
+            run['modules'].add(thm['module'])
+    runs = {COMMITTED_RUN: {'zig': COMMITTED_ZIG, 'target': 'linux', 'swaps': {},
+                            'modules': sorted(committed)}} if committed else {}
+    for (zig, target), run in sorted(swapped.items()):
+        runs[f'{zig}-{target}'] = {'zig': zig, 'target': target, 'swaps': dict(sorted(run['swaps'].items())),
+                                   'modules': sorted(run['modules'])}
+    return runs
+
+
+def plan_command(run: dict, lake: Path, python: str) -> BuildCommand:
+    """The guarded build of one planned run, in the grammar `record` and `check` accept."""
+    if not run['swaps']:
+        return BuildCommand('lake', str(lake), run['modules'], {}, ['build', *run['modules']])
+    return BuildCommand('swap', str(lake), run['modules'], run['swaps'], python=[python, '-B'])
 
 
 # ----------------------------------------------------------------------------- build and record
@@ -854,6 +941,11 @@ def record(root: Path, zig: str, target: str, report_path: Path, log_path: Path)
     }
 
 
+def seed(root: Path) -> dict:
+    """A generated inventory with the list and no run yet."""
+    return {**load_list(root), 'runs': {}}
+
+
 def write_inventory(root: Path, inv: dict) -> None:
     (root / INVENTORY).write_text(json.dumps(inv, indent=2, ensure_ascii=False) + '\n')
 
@@ -874,13 +966,13 @@ def main(argv: list[str] | None = None) -> int:
                 raise Error('swap-build --lake must name the selected physical Lake')
             return swap_build(root, build.swaps, build.modules, lake)
         if a.cmd == 'record':
-            inv = load(root)
+            inv = load(root) if (root / INVENTORY).is_file() else seed(root)
             inv.setdefault('runs', {})[a.run] = record(root, a.zig, a.target,
                                                        a.guard_report, a.guard_log)
             write_inventory(root, inv)
             print(f'recorded run {a.run}: {inv["runs"][a.run]["outcome"]}')
             return 0
-        errors = check(root, write=a.cmd == 'write')
+        errors = check(root, write=a.cmd == 'write', list_only=getattr(a, 'list', False))
     except (Error, OSError, KeyError, ValueError) as error:
         print(f'error: {error}', file=sys.stderr)
         return 1
@@ -888,7 +980,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f'error: {error}', file=sys.stderr)
     if errors:
         return 1
-    print('theorem inventory: every listed theorem has a current check result and scope')
+    print('theorem inventory: every listed theorem has ' +
+          ('a scope' if getattr(a, 'list', False) else 'a current check result and scope'))
     return 0
 
 

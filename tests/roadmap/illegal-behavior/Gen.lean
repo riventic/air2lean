@@ -31,6 +31,8 @@ def arrayItem (p0 : Zig.Ptr) (p1 : BitVec 64) : Zig.MemM (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] arrayItem
+
 structure arrayItemPtrLocals where
   deriving Inhabited
 
@@ -43,6 +45,8 @@ def arrayItemPtr (p0 : Zig.Ptr) (p1 : BitVec 64) : Zig.MemM (Zig.Ptr) := do
     pure (.ret i2)) : Zig.MM arrayItemPtrLocals arrayItemPtrExit).run' (default : arrayItemPtrLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] arrayItemPtr
 
 structure copyLenUnsafeLocals where
   deriving Inhabited
@@ -59,6 +63,8 @@ def copyLenUnsafe (p0 : Zig.Slice) (p1 : Zig.Slice) : Zig.MemM (Unit) := do
     pure .ret) : Zig.MM copyLenUnsafeLocals copyLenUnsafeExit).run' (default : copyLenUnsafeLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] copyLenUnsafe
 
 structure copyOverlapUnsafeLocals where
   deriving Inhabited
@@ -83,6 +89,8 @@ def copyOverlapUnsafe (p0 : Zig.Ptr) (p1 : BitVec 64) : Zig.MemM (Unit) := do
   match e with
   | .ret => pure ()
 
+attribute [zig_run] copyOverlapUnsafe
+
 structure divExactIntUnsafeLocals where
   deriving Inhabited
 
@@ -95,6 +103,8 @@ def divExactIntUnsafe (p0 : BitVec 32) (p1 : BitVec 32) : Zig.Result (BitVec 32)
     pure (.ret i2)) : Zig.M divExactIntUnsafeLocals divExactIntUnsafeExit).run' (default : divExactIntUnsafeLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] divExactIntUnsafe
 
 structure divExactLanesLocals where
   deriving Inhabited
@@ -121,6 +131,8 @@ def divExactLanes (p0 : Zig.Vec (Zig.F64) 2) (p1 : Zig.Vec (Zig.F64) 2) : Zig.Re
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] divExactLanes
+
 structure divExactSafeLocals where
   deriving Inhabited
 
@@ -145,6 +157,8 @@ def divExactSafe (p0 : Zig.F64) (p1 : Zig.F64) : Zig.Result (Zig.F64) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] divExactSafe
+
 structure divExactUnsafeLocals where
   deriving Inhabited
 
@@ -157,6 +171,8 @@ def divExactUnsafe (p0 : Zig.F64) (p1 : Zig.F64) : Zig.Result (Zig.F64) := do
     pure (.ret i2)) : Zig.M divExactUnsafeLocals divExactUnsafeExit).run' (default : divExactUnsafeLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] divExactUnsafe
 
 structure forArrayLocals where
   sum : BitVec 32
@@ -175,6 +191,7 @@ def forArray.again13 : forArrayExit → Bool
   | _ => false
 
 def forArray.loop13 (p0 : Zig.Slice) (p1 : Zig.Ptr) : Zig.MM forArrayLocals forArrayExit := do
+  Zig.callM Zig.tick
   let i14 ← pure ((← get).local4)
   match ← ((do
     let i16 ← pure (i14)
@@ -217,6 +234,8 @@ def forArray (p0 : Zig.Slice) (p1 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] forArray.loop13 forArray
 
 structure forLenLocals where
   sum : BitVec 32
@@ -280,6 +299,8 @@ def forLen (p0 : Array (BitVec 32)) (p1 : Array (BitVec 32)) : Zig.Result (BitVe
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] forLen.loop14 forLen
+
 structure forLenMemLocals where
   sum : BitVec 32
   local4 : BitVec 64
@@ -297,6 +318,7 @@ def forLenMem.again16 : forLenMemExit → Bool
   | _ => false
 
 def forLenMem.loop16 (i6 : Zig.Slice) (i7 : Zig.Slice) (i8 : BitVec 64) : Zig.MM forLenMemLocals forLenMemExit := do
+  Zig.callM Zig.tick
   let i17 ← pure ((← get).local4)
   match ← ((do
     let i19 ← pure (i17)
@@ -343,6 +365,8 @@ def forLenMem (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.MemM (BitVec 32) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] forLenMem.loop16 forLenMem
 
 structure forRangeLocals where
   sum : BitVec 32
@@ -404,6 +428,8 @@ def forRange (p0 : Array (BitVec 32)) (p1 : BitVec 64) : Zig.Result (BitVec 32) 
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] forRange.loop13 forRange
 
 structure forRangeFromLocals where
   sum : BitVec 32
@@ -468,6 +494,8 @@ def forRangeFrom (p0 : Array (BitVec 32)) (p1 : BitVec 64) (p2 : BitVec 64) : Zi
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] forRangeFrom.loop15 forRangeFrom
+
 structure itemPtrUnsafeLocals where
   deriving Inhabited
 
@@ -480,6 +508,8 @@ def itemPtrUnsafe (p0 : Zig.Slice) (p1 : BitVec 64) : Zig.MemM (Zig.Ptr) := do
     pure (.ret i2)) : Zig.MM itemPtrUnsafeLocals itemPtrUnsafeExit).run' (default : itemPtrUnsafeLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] itemPtrUnsafe
 
 structure itemUnsafeLocals where
   deriving Inhabited
@@ -495,6 +525,8 @@ def itemUnsafe (p0 : Zig.Ptr) (p1 : BitVec 64) : Zig.MemM (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] itemUnsafe
+
 structure manyItemPtrLocals where
   deriving Inhabited
 
@@ -507,6 +539,8 @@ def manyItemPtr (p0 : Zig.Ptr) (p1 : BitVec 64) : Zig.MemM (Zig.Ptr) := do
     pure (.ret i2)) : Zig.MM manyItemPtrLocals manyItemPtrExit).run' (default : manyItemPtrLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] manyItemPtr
 
 structure parentOfLocals where
   deriving Inhabited
@@ -522,6 +556,8 @@ def parentOf (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] parentOf
+
 structure sentinelArrayItemLocals where
   deriving Inhabited
 
@@ -534,6 +570,8 @@ def sentinelArrayItem (p0 : Zig.Ptr) (p1 : BitVec 64) : Zig.MemM (BitVec 8) := d
     pure (.ret i2)) : Zig.MM sentinelArrayItemLocals sentinelArrayItemExit).run' (default : sentinelArrayItemLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] sentinelArrayItem
 
 structure sentinelBytesLocals where
   deriving Inhabited
@@ -551,6 +589,8 @@ def sentinelBytes (p0 : Zig.Slice) (p1 : BitVec 64) : Zig.MemM (Zig.Slice) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] sentinelBytes
+
 structure sentinelItemPtrLocals where
   deriving Inhabited
 
@@ -563,6 +603,8 @@ def sentinelItemPtr (p0 : Zig.Slice) (p1 : BitVec 64) : Zig.MemM (Zig.Ptr) := do
     pure (.ret i2)) : Zig.MM sentinelItemPtrLocals sentinelItemPtrExit).run' (default : sentinelItemPtrLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] sentinelItemPtr
 
 structure shl24UnsafeLocals where
   deriving Inhabited
@@ -577,6 +619,8 @@ def shl24Unsafe (p0 : BitVec 24) (p1 : BitVec 5) : Zig.Result (BitVec 24) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] shl24Unsafe
+
 structure shlExactUnsafeLocals where
   deriving Inhabited
 
@@ -590,6 +634,8 @@ def shlExactUnsafe (p0 : BitVec 32) (p1 : BitVec 5) : Zig.Result (BitVec 32) := 
   match e with
   | .ret v => pure v
 
+attribute [zig_run] shlExactUnsafe
+
 structure shr24UnsafeLocals where
   deriving Inhabited
 
@@ -602,6 +648,8 @@ def shr24Unsafe (p0 : BitVec 24) (p1 : BitVec 5) : Zig.Result (BitVec 24) := do
     pure (.ret i2)) : Zig.M shr24UnsafeLocals shr24UnsafeExit).run' (default : shr24UnsafeLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] shr24Unsafe
 
 structure shrExactSafeLocals where
   deriving Inhabited
@@ -627,6 +675,8 @@ def shrExactSafe (p0 : BitVec 32) (p1 : BitVec 5) : Zig.Result (BitVec 32) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] shrExactSafe
+
 structure shrExactUnsafeLocals where
   deriving Inhabited
 
@@ -639,6 +689,8 @@ def shrExactUnsafe (p0 : BitVec 32) (p1 : BitVec 5) : Zig.Result (BitVec 32) := 
     pure (.ret i2)) : Zig.M shrExactUnsafeLocals shrExactUnsafeExit).run' (default : shrExactUnsafeLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] shrExactUnsafe
 
 structure sliceArrayLocals where
   deriving Inhabited
@@ -655,6 +707,8 @@ def sliceArray (p0 : Zig.Ptr) (p1 : BitVec 64) (p2 : BitVec 64) : Zig.MemM (Zig.
     pure (.ret i6)) : Zig.MM sliceArrayLocals sliceArrayExit).run' (default : sliceArrayLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] sliceArray
 
 structure sliceEndLocals where
   deriving Inhabited
@@ -673,6 +727,8 @@ def sliceEnd (p0 : Zig.Ptr) (p1 : BitVec 64) (p2 : BitVec 64) : Zig.MemM (Zig.Sl
   match e with
   | .ret v => pure v
 
+attribute [zig_run] sliceEnd
+
 structure toIntSafeLocals where
   deriving Inhabited
 
@@ -686,6 +742,8 @@ def toIntSafe (p0 : Zig.F64) : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] toIntSafe
+
 structure toIntUnsafeLocals where
   deriving Inhabited
 
@@ -698,5 +756,7 @@ def toIntUnsafe (p0 : Zig.F64) : Zig.Result (BitVec 32) := do
     pure (.ret i1)) : Zig.M toIntUnsafeLocals toIntUnsafeExit).run' (default : toIntUnsafeLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] toIntUnsafe
 
 end IllegalBehavior

@@ -6,13 +6,21 @@ fixture's own import is left to its check; an import of a `Lib` module that does
 renamed or split module, the break of the strength logs after #342) is an error for every file;
 a stale cache entry is never hit (the key covers the transitive library sources).
 """
+import contextlib
 import importlib.util
+import io
+import json
+import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "scripts"))
+import par  # noqa: E402  (the module lean-deps.py --elaborate imports)
 spec = importlib.util.spec_from_file_location("lean_deps", ROOT / "scripts/lean-deps.py")
 ld = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ld)
@@ -84,6 +92,65 @@ class Classify(unittest.TestCase):
         self.write('lakefile.toml', '[[lean_lib]]\nname = "Lib"\nglobs = ["*"]\n')
         with self.assertRaisesRegex(ValueError, 'unsupported Lake source glob'):
             ld.lib_roots(strict_sources=True)
+
+    def test_orphan_outputs_are_pruned_and_refused(self):
+        # Outputs of a deleted module (Lib.Gone), also in a library with its own srcDir (Fix).
+        self.write('lakefile.toml', 'name = "air2lean"\n[[lean_lib]]\nname = "Lib"\n'
+                   '[[lean_lib]]\nname = "Fix"\nsrcDir = "fix"\n')
+        self.write('fix/Fix/C.lean', 'def c := 1\n')
+        self.write('tests/pkg/lakefile.toml', '[[lean_lib]]\nname = "P"\n')  # a second tracked package
+        build = self.repo / '.lake/build/lib/lean'
+        ir = self.repo / '.lake/build/ir'
+        kept = [build / f'{m}{s}' for m in ('Lib/A', 'Lib/B', 'Fix/C') for s in ('.olean', '.trace')]
+        kept += [ir / 'Lib.setup.json', ir / 'Lib/A.c.o.export']
+        kept += [build / f'air2lean_Lib_A.dylib{s}' for s in ('', '.hash', '.trace')]  # a precompiled module
+        gone = [build / f'Lib/Gone{s}' for s in ('.olean', '.olean.hash', '.ilean', '.trace')]
+        gone += [ir / 'Lib/Gone.c', ir / 'Lib/Gone.c.o.export.hash']
+        own = sorted(gone)
+        gone.append(self.repo / 'tests/pkg/.lake/build/lib/lean/P/Gone.olean')
+        self.write('Lib.lean', 'import Lib.A\n')
+        for path in kept + gone:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b'')
+        self.assertEqual(sorted(ld.orphan_outputs(self.repo)), own)
+        spec = importlib.util.spec_from_file_location("air2lean_assumptions", ROOT / "scripts/assumptions.py")
+        assumptions = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(assumptions)
+        self.assertEqual(assumptions.module_needs(['Fix.C', 'Lib.A'], [build.resolve()], [self.repo]),
+                         ['@air2lean/+Fix.C:olean', '@air2lean/+Fix.C:depTrace',
+                          '@air2lean/+Lib.A:olean', '@air2lean/+Lib.A:depTrace'])
+        with self.assertRaisesRegex(ValueError, 'Lib/Gone.olean: compiled module without a source'):
+            assumptions.module_needs(['Lib.A', 'Lib.Gone'], [build.resolve()], [self.repo])
+        self.classify()  # tracks both lakefiles
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(ld.main(['--prune-orphans']), 0)
+        self.assertEqual(out.getvalue().count('removing'), len(gone))
+        self.assertTrue(all(p.exists() for p in kept) and not any(p.exists() for p in gone))
+
+    def test_elaborate_names_the_largest_peaks(self):
+        # The guard samples the phase's whole tree; the per-file peaks name the file that sized it.
+        self.write("t/Small.lean", "import Lib.A\n")
+        self.write("t/Big.lean", "import Lib.B\n")
+        self.write("assurance/lean-files.json", json.dumps({"reject": []}))
+        peaks = {"t/Big.lean": 9770 * 1024, "t/Small.lean": 300 * 1024}
+
+        def fake_run(jobs, workers, out=None, err=None, log_dir=None, stats=None):
+            files = [job.argv[-1] for job in jobs]
+            stats[:] = [{"status": 0, "elapsed_s": 2.5, "peak_rss_kib": peaks[f], "busy_s": {}} for f in files]
+            return [0] * len(files)
+        self.enterContext(mock.patch.object(ld, "REGISTRY", self.repo / "assurance/lean-files.json"))
+        self.enterContext(mock.patch.object(par, "run", fake_run))
+        self.enterContext(mock.patch.dict(os.environ, {"AIR2LEAN_CAS_DIR": str(self.repo / "cas")}))
+        self.classify()
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(ld.elaborate(None, 4000), 0)
+        self.assertIn("largest peaks (MiB, wall s): 9770 2.5 t/Big.lean, 300 2.5 t/Small.lean",
+                      output.getvalue())
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):  # both passes remembered: nothing elaborated
+            self.assertEqual(ld.elaborate(None, 4000), 0)
+        self.assertNotIn("largest peaks", output.getvalue())
 
     def fake_lake_query(self, targets):
         # Lake's answers in the tiny repo: transitive imports by the file headers, a library's

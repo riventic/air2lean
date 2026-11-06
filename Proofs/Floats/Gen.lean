@@ -27,6 +27,8 @@ def celsius (p0 : Zig.F32) : Zig.Result (Option (Zig.F32)) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] celsius
+
 structure clampLocals where
   deriving Inhabited
 
@@ -57,6 +59,8 @@ def clamp (p0 : Zig.F32) (p1 : Zig.F32) (p2 : Zig.F32) : Zig.Result (Zig.F32) :=
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] clamp
 
 structure dotLocals where
   s : Zig.F64
@@ -119,6 +123,8 @@ def dot (p0 : Array (Zig.F64)) (p1 : Array (Zig.F64)) : Zig.Result (Zig.F64) := 
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] dot.loop15 dot
 
 structure fitnessLocals where
   s : Zig.F64
@@ -186,6 +192,8 @@ def fitness (p0 : Array (Zig.F64)) (p1 : Array (Zig.F64)) (p2 : Zig.F64) (p3 : Z
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] fitness.loop17 fitness
+
 structure hypot2Locals where
   deriving Inhabited
 
@@ -202,6 +210,8 @@ def hypot2 (p0 : Zig.F64) (p1 : Zig.F64) : Zig.Result (Zig.F64) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] hypot2
+
 structure isNanLocals where
   deriving Inhabited
 
@@ -214,6 +224,8 @@ def isNan (p0 : Zig.F64) : Zig.Result (Bool) := do
     pure (.ret i1)) : Zig.M isNanLocals isNanExit).run' (default : isNanLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] isNan
 
 structure lerpLocals where
   deriving Inhabited
@@ -229,5 +241,7 @@ def lerp (p0 : Zig.F64) (p1 : Zig.F64) (p2 : Zig.F64) : Zig.Result (Zig.F64) := 
     pure (.ret i5)) : Zig.M lerpLocals lerpExit).run' (default : lerpLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] lerp
 
 end Floats

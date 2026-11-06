@@ -50,14 +50,6 @@ GATES = {
     "tests/roadmap/indirect-calls/Bridge.lean": "tests/roadmap/indirect-calls/check.sh",
     "tests/roadmap/dispatch-templates/TokenizerProof.lean": "tests/roadmap/dispatch-templates/check.sh",
     "tests/roadmap/env-boundaries/StdIo.lean": "tests/roadmap/env-boundaries/check.sh",
-    "tests/roadmap/packed-casts/Model.lean": "tests/roadmap/packed-casts/check.sh",
-    "tests/roadmap/packed-casts/ModelLogical.lean": "tests/roadmap/packed-casts/check.sh",
-    "tests/roadmap/packed-casts/ModelVector.lean": "tests/roadmap/packed-casts/check.sh",
-    "tests/roadmap/packed-casts/ModelAuto.lean": "tests/roadmap/packed-casts/check.sh",
-    "tests/roadmap/nan-bits/Model.lean": "tests/roadmap/nan-bits/check.sh",
-    "tests/roadmap/enc-exactness/Model.lean": "tests/roadmap/enc-exactness/check.sh",
-    "tests/roadmap/try-pointers/lifetimes/Lifetimes.lean":
-        "tests/roadmap/try-pointers/lifetimes/check.sh",
 }
 PLACEHOLDER = re.compile(r"\b(sorry|admit|native_decide)\b")
 # Never acceptable: the elaborator would write declarations the kernel did not check.
@@ -131,9 +123,21 @@ def universe(root: Path = ROOT) -> tuple[list[str], list[Unit]]:
             edges[rel].append((module, dep, "local"))
             pending.append(dep)
 
+    # A configured fixture Lake module has the name Lake gives it (its library's source root),
+    # also when nothing imports it and it imports no local module (`Outcomes.Contracts`).
+    import fixtures
+    lake_roots = fixtures.source_roots(root)
+
     def root_of(rel: str) -> str:
+        imported = None
         if rel in named:
-            return rel[:-len(named[rel].replace(".", "/") + ".lean")].rstrip("/") or "."
+            imported = rel[:-len(named[rel].replace(".", "/") + ".lean")].rstrip("/") or "."
+        if rel in lake_roots:
+            if imported is not None and imported != lake_roots[rel]:
+                raise ValueError(f"{rel} is imported as {named[rel]}, not by its Lake name")
+            return lake_roots[rel]
+        if imported is not None:
+            return imported
         # Not imported: the shallowest source root of its own local imports above it.
         bases = [root_of(dep) for _, dep, kind in edges[rel] if kind == "local"]
         bases = [b for b in bases if b == "." or rel.startswith(b + "/")]
@@ -163,6 +167,8 @@ def universe(root: Path = ROOT) -> tuple[list[str], list[Unit]]:
             m.split(".")[0] == module.split(".")[0] for m, dep, kind in edges[rel]
             if kind == "local" and root_of(dep) != base)
         if not MODULE.fullmatch(module) or module.split(".")[0] in RESERVED or clash:
+            if rel in lake_roots:
+                raise ValueError(f"{rel}: its Lake name {module} is invalid, reserved or clashes with an import")
             # Not imported, so its name is free: `local-parent/Proofs.lean` must neither be an
             # invalid name nor the Lake library root `Proofs`, nor shadow its own imports.
             base, module = None, "Universe." + re.sub(r"\W", "_", str(Path(rel).with_suffix("")))
@@ -908,14 +914,16 @@ def main(argv=None) -> int:
             return 1 if errors else 0
         output = args.output_dir.resolve()
         output.mkdir(parents=True, exist_ok=True)
-        if args.command == "audit":
-            cache = args.replay_cache or output / "replay-cache.json"
-            if args.replay_cache is None:
-                cache.unlink(missing_ok=True)  # The default cache serves this run only.
-            report = audit(output, not args.no_build, args.shipped, cache)
-        else:
-            report = gate(Path(args.file).resolve(), Path(args.root).resolve(), args.lean_path.resolve(), output,
-                          args.replay_cache and args.replay_cache.resolve())
+        # One toolchain-runtime digest for this command's audits (assumptions.runtime_run).
+        with assumptions.runtime_run():
+            if args.command == "audit":
+                cache = args.replay_cache or output / "replay-cache.json"
+                if args.replay_cache is None:
+                    cache.unlink(missing_ok=True)  # The default cache serves this run only.
+                report = audit(output, not args.no_build, args.shipped, cache)
+            else:
+                report = gate(Path(args.file).resolve(), Path(args.root).resolve(), args.lean_path.resolve(),
+                              output, args.replay_cache and args.replay_cache.resolve())
     except (OSError, ValueError, KeyError, RuntimeError) as error:
         print(f"theorem universe error: {error}", file=sys.stderr)
         return 2

@@ -54,6 +54,8 @@ def counter  : Zig.MemM (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] counter
+
 structure nameLenLocals where
   i : BitVec 32
   deriving Inhabited
@@ -69,6 +71,7 @@ def nameLen.again3 : nameLenExit → Bool
   | _ => false
 
 def nameLen.loop3  : Zig.MM nameLenLocals nameLenExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i5 ← Zig.load (Zig.Ptr) 8 (⟨some 1, 0⟩ : Zig.Ptr)
     let i6 ← pure ((← get).i)
@@ -99,6 +102,8 @@ def nameLen  : Zig.MemM (BitVec 32) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] nameLen.loop3 nameLen
+
 structure sumListLocals where
   n : Option (Zig.Ptr)
   s : BitVec 32
@@ -115,6 +120,7 @@ def sumList.again6 : sumListExit → Bool
   | _ => false
 
 def sumList.loop6  : Zig.MM sumListLocals sumListExit := do
+  Zig.callM Zig.tick
   match ← ((do
     let i8 ← pure ((← get).n)
     let i9 ← pure ((i8).isSome)
@@ -150,6 +156,8 @@ def sumList  : Zig.MemM (BitVec 32) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] sumList.loop6 sumList
+
 structure pushLocalLocals where
   deriving Inhabited
 
@@ -173,6 +181,8 @@ def pushLocal  : Zig.MemM (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] pushLocal
+
 structure slotValueLocals where
   deriving Inhabited
 
@@ -186,5 +196,7 @@ def slotValue  : Zig.MemM (BitVec 32) := do
     pure (.ret i1)) : Zig.MM slotValueLocals slotValueExit).run' (default : slotValueLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] slotValue
 
 end ExternStorage

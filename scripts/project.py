@@ -1532,7 +1532,9 @@ def run_guarded(tools, base, staging, name, phase, timeout, budget, lock, comman
             '--log', str(log_path), '--profile', 'project-check', '--phase', phase,
             '--timeout', str(timeout), '--rss-mib', str(budget['rss_mib']), '--log-bytes', str(16 * 1024 * 1024)]
     argv += ['--lock', str(lock)] if lock else []
-    argv += ['--lock-wait', str(lock_wait)] if lock_wait else []
+    # Always, 0 too (fail at once): omitted, the guard would wait AIR2LEAN_LOCK_WAIT seconds, past
+    # the timeout of communicate() below.
+    argv += ['--lock-wait', str(lock_wait)]
     child = subprocess.Popen([*argv, '--', *command], cwd=base, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     try:
         _, stderr = child.communicate(timeout=timeout + lock_wait + 120)

@@ -36,6 +36,8 @@ def absDiff (p0 : BitVec 32) (p1 : BitVec 32) : Zig.Result (BitVec 32) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] absDiff
+
 structure clampAddLocals where
   deriving Inhabited
 
@@ -48,6 +50,8 @@ def clampAdd (p0 : BitVec 16) (p1 : BitVec 16) : Zig.Result (BitVec 16) := do
     pure (.ret i2)) : Zig.M clampAddLocals clampAddExit).run' (default : clampAddLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] clampAdd
 
 structure classifyLocals where
   deriving Inhabited
@@ -73,6 +77,8 @@ def classify (p0 : BitVec 8) : Zig.Result (BitVec 8) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] classify
+
 structure scaleLocals where
   deriving Inhabited
 
@@ -86,6 +92,8 @@ def scale (p0 : BitVec 32) (p1 : BitVec 8) : Zig.Result (BitVec 32) := do
     pure (.ret i3)) : Zig.M scaleLocals scaleExit).run' (default : scaleLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] scale
 
 structure sumLocals where
   total : BitVec 64
@@ -138,6 +146,8 @@ def sum (p0 : Array (BitVec 32)) : Zig.Result (BitVec 64) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] sum.loop7 sum
+
 structure tardinessLocals where
   deriving Inhabited
 
@@ -161,6 +171,8 @@ def tardiness (p0 : BitVec 32) (p1 : BitVec 32) : Zig.Result (BitVec 32) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] tardiness
+
 structure weightedTardinessLocals where
   deriving Inhabited
 
@@ -179,6 +191,8 @@ def weightedTardiness (p0 : Job) (p1 : BitVec 32) : Zig.Result (BitVec 32) := do
     pure (.ret i8)) : Zig.M weightedTardinessLocals weightedTardinessExit).run' (default : weightedTardinessLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] weightedTardiness
 
 structure totalWeightedTardinessLocals where
   t : BitVec 32
@@ -262,5 +276,7 @@ def totalWeightedTardiness (p0 : Array (Job)) : Zig.Result (BitVec 64) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] totalWeightedTardiness.loop8 totalWeightedTardiness
 
 end Basic.Gen.V0_15_2.H_6c696e7578

@@ -50,7 +50,9 @@ flips its row. `test_exposure.py --require-fixed` is the gate for a hardening br
 `AIR2LEAN_CAS_DIR` set it restores unchanged ones from the shared artifact cache
 (docs/build-cache.md). `test_cache.py` (CI, after `check.sh`) runs `build.sh`
 without the cache, fills a new cache, runs `build.sh` again from it, and requires byte-identical
-fixtures, assurance reports and extraction.
+fixtures, assurance reports and extraction. It does this in a check tree
+(`.lake/check-tree/audit-cache`), so it never rebuilds the checkout's fixture package under
+parallel checks.
 `assurance/premises.json` excludes the fixture directory, as it does `tests/roadmap/assurance/`.
 
 ## Fix status (soundness batch)
@@ -82,11 +84,12 @@ EVIDENCE INTEGRITY, then HARDENING.
 
 ### S1 — SOUNDNESS, critical: kernel bypass is accepted (confirmed)
 
-`AuditClaims/Unchecked.lean` adds a theorem through `addDecl` with `debug.skipKernelTC` set. The
-proof is `True.intro` for the false statement `root 255 = pure 0`. Lean writes it to the olean.
-`collectAxioms` reports no axioms, `assumptions.py` passes, and `claims.py` derives
-`total_correctness`. `scripts/no-sorry.sh` greps only for `sorry|admit|native_decide`. TRU-01
-("the kernel checks the proof") is therefore not enforced: nothing replays the environment. The
+`AuditClaims/Unchecked.lean` states a plain theorem under `set_option debug.skipKernelTC true`,
+so `addDecl` skips the kernel; the built-in `run_tac` assigns the proof `True.intro` for the
+false statement `root 255 = pure 0`. Lean writes it to the olean. `collectAxioms` reports no
+axioms, `assumptions.py` passes, and `claims.py` derives `total_correctness`.
+`scripts/no-sorry.sh` greps only for `sorry|admit|native_decide`. TRU-01 ("the kernel checks the
+proof") is therefore not enforced: nothing replays the environment. The
 same hole is open to any metaprogram in a contract or proof file that bypasses the kernel, such
 as a `modifyEnv` that inserts a constant.
 

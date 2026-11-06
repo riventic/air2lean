@@ -1,4 +1,4 @@
-"""AIR semantics certificates (V01 slice): translator-side checks, no Lean or Zig.
+"""AIR semantics certificates (V01 slice): translator-side checks, no Zig extraction.
 
 Runs the built translator on the committed golden AIR of every example whose Proofs/<Ex>/Gen.lean
 is that AIR's translation, and checks that
@@ -9,6 +9,8 @@ is that AIR's translation, and checks that
     with a reason (fail closed);
 (d) the flag's argument checks reject incomplete or clashing outputs;
 (e) the semantics, the generator and the certificates contain no sorry/admit/native_decide.
+Recursive emitted cliques prepare exact Gen through Lean to read compiler induction facts;
+acyclic-only certificates need no preparation. Confined preparation controls use no compiler.
 `lake build Proofs` kernel-checks the committed certificates; test_lean.py runs the round
 trip and mutation checks. `--write` regenerates the committed certificates instead
 (`scripts/regen.sh`, step `aircert`).
@@ -18,6 +20,7 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -41,7 +44,7 @@ CERTIFIED = {
 }
 
 
-def run(binary, ex, out, *flags):
+def run(binary, ex, out, *flags, env=None):
     # The shared goldens are schema-11 AIR: translating them needs the explicit legacy profile.
     # The example's own admissions (examples/<ex>/translate.args, as scripts/check.sh) apply too.
     args = ROOT / 'examples' / ex / 'translate.args'
@@ -49,7 +52,7 @@ def run(binary, ex, out, *flags):
     command = [str(binary), str(ROOT / 'tests/golden' / ex / 'air'), '-o', str(out),
                '--namespace', ex.capitalize(), '--prefix', ex + '.', '--profile', 'legacy-abi64-le',
                *admissions, *flags]
-    return subprocess.run(command, capture_output=True, text=True, timeout=300)
+    return subprocess.run(command, capture_output=True, text=True, timeout=300, env=env)
 
 
 def certificate_sets(text):
@@ -57,6 +60,23 @@ def certificate_sets(text):
     certified = re.findall(r'`([^`]+)`', certified)
     excluded = re.findall(r'^\* `([^`]+)`: ', text, re.M)
     return certified, excluded
+
+
+# The Canon rewrites in pipeline order (Air2Lean/Air/Canon.lean `canonicalizeTraced`).
+CANON_PASSES = ['versionTags', 'argRanks', 'errTraces', 'dropDeadAllocPlaceholders',
+                'dropDeadRuntimeLanePtrs', 'forwardReadOnlyCopies', 'itemReads', 'dropTrueChecks',
+                'sinkPastChecks', 'renumber']
+
+
+def trusted_canon(text):
+    """Each function's fired Canon rewrites, from the report's `trusted-Canon` lines."""
+    fired = {}
+    for name, passes in re.findall(r'^\* `([^`]+)` trusted-Canon: (.*)$', text, re.M):
+        assert name not in fired, name
+        fired[name] = [] if passes == 'none' else passes.split(', ')
+        indices = [CANON_PASSES.index(p) for p in fired[name]]
+        assert indices == sorted(set(indices)), (name, passes)
+    return fired
 
 
 def check_example(binary, ex, work):
@@ -80,6 +100,12 @@ def check_example(binary, ex, work):
     golden = (ROOT / 'tests/golden' / ex / 'air').glob('*.json')
     names = sorted(json.loads(path.read_text())['name'] for path in golden)
     assert sorted(certified + excluded) == names, (ex, certified, excluded, names)
+    # Every function, certified or not, names the Canon rewrites it trusts. `renumber` is never
+    # among them: the native binding (`CanonCertificate.renumberBound`) matches each function's
+    # renumbering to `renFunc` of its input, so `execFunc_rename` covers it.
+    trusted = trusted_canon(text)
+    assert sorted(trusted) == names, ex
+    assert not [name for name, passes in trusted.items() if 'renumber' in passes], (ex, trusted)
     canon = work / f'{ex}.canon.json'
     result = run(binary, ex, canon, '--canon-certificate')
     assert result.returncode == 0, result.stderr
@@ -101,6 +127,11 @@ def check_example(binary, ex, work):
     if any(not re.search(rf'^theorem {re.sub(r"\W", "_", n.removeprefix(ex + "."))}_view ', text, re.M)
            for n in certified):
         assert re.search(r'^theorem run_le_gen ', text, re.M)
+    if certified:
+        # The step policies are one kernel evaluation (the call graph computed once); each
+        # function's `policy_`/`entry_` lemma is a projection of it.
+        assert len(re.findall(r'^theorem policies : program\.tickPolicies =', text, re.M)) == 1, ex
+        assert not re.search(r'^theorem (policy|entry)_\w+ .*\n.*decide \+kernel', text, re.M), ex
 
 
 def check_flags(binary, work):
@@ -116,6 +147,37 @@ def check_flags(binary, work):
     assert lone.returncode == 1 and 'go together' in lone.stderr, lone
     clash = run(binary, 'basic', out, '--air-certificate', str(out), '--air-certificate-import', 'M')
     assert clash.returncode == 1 and 'another output' in clash.stderr, clash
+    split_out = work / 'Collision/Gen.lean'
+    for destination in (work / 'Collision/Gen/Types.lean', work / 'Collision/Gen/types.lean',
+                        work / 'Collision/Gen.modules.json'):
+        clash = run(binary, 'basic', split_out, '--split-modules', 'Collision.Gen',
+                    '--air-certificate', str(destination), '--air-certificate-import', 'Collision.Gen')
+        assert clash.returncode == 1 and 'must not name' in clash.stderr, clash
+        assert not destination.exists() and not split_out.exists(), 'collision wrote a public output'
+    for option in ('--timing-json', '--source-map-json'):
+        clash = run(binary, 'basic', split_out, '--split-modules', 'Collision.Gen',
+                    '--air-certificate', str(work / 'SeparateCert.lean'),
+                    '--air-certificate-import', 'Collision.Gen', option, str(work / 'Collision/Gen/Types.lean'))
+        assert clash.returncode == 1 and 'must not name' in clash.stderr, clash
+        assert not split_out.exists(), 'sidecar collision wrote a public output'
+    linked = work / 'Linked/Gen/Types.lean'
+    linked.parent.mkdir(parents=True)
+    linked.write_bytes(b'preserve linked output\n')
+    linked_cert = work / 'LinkedCert.lean'
+    linked_cert.hardlink_to(linked)
+    clash = run(binary, 'basic', work / 'Linked/Gen.lean', '--split-modules', 'Linked.Gen',
+                '--air-certificate', str(linked_cert), '--air-certificate-import', 'Linked.Gen')
+    assert clash.returncode == 1 and 'hard-linked output' in clash.stderr, clash
+    assert linked.read_bytes() == linked_cert.read_bytes() == b'preserve linked output\n'
+    # A requested certificate that cannot be built (here: recursion's compiler metadata, without
+    # python3 on PATH) fails the whole translation closed with one diagnostic; nothing is written.
+    no_meta_out, no_meta_cert = work / 'NoMeta.lean', work / 'NoMetaCert.lean'
+    failed = run(binary, 'recursion', no_meta_out, '--air-certificate', str(no_meta_cert),
+                 '--air-certificate-import', 'Proofs.Recursion.Gen', env={'PATH': ''})
+    assert failed.returncode == 1 and \
+        '--air-certificate: cannot build the AIR certificate, nothing written: compiler metadata' \
+        in failed.stderr, failed
+    assert not no_meta_out.exists() and not no_meta_cert.exists(), 'a failed certificate wrote output'
     twice = run(binary, 'basic', out, '--air-certificate', 'a.lean', '--air-certificate', 'b.lean',
                 '--air-certificate-import', 'M')
     assert twice.returncode == 1 and 'duplicate --air-certificate' in twice.stderr, twice
@@ -156,6 +218,7 @@ def check_no_escape_hatches():
     paths = [ROOT / 'Air2Lean/Sem.lean', ROOT / 'Air2Lean/SemView.lean', ROOT / 'Air2Lean/SemAttr.lean',
              ROOT / 'Air2Lean/Certificate.lean',
              ROOT / 'Air2Lean/CanonSem.lean', ROOT / 'Air2Lean/CanonCertificate.lean',
+             ROOT / 'Air2Lean/Renumber.lean',
              *(ROOT / 'Proofs' / ex.capitalize() / 'AirCert.lean' for ex in EXAMPLES)]
     for path in paths:
         code = re.sub(r'/-.*?-/|--[^\n]*', '', path.read_text(), flags=re.S)
@@ -169,7 +232,7 @@ def check_coverage():
     committed = sorted(p.parent.name.lower() for p in (ROOT / 'Proofs').glob('*/AirCert.lean'))
     assert committed == EXAMPLES, (committed, EXAMPLES)
     round_trip = (ROOT / 'tests/roadmap/air-semantics/RoundTrip.lean').read_text()
-    listed = re.findall(r'^#eval checkTable "tests/golden/(\w+)/air" \w+\.AirCert\.(table|views)$', round_trip, re.M)
+    listed = re.findall(r'^#eval checkTable "tests/golden/(\w+)/air" \w+\.AirCert\.(table|views) \w+\.AirCert\.program$', round_trip, re.M)
     assert sorted({ex for ex, _ in listed}) == sorted(CERTIFIED), (listed, 'RoundTrip.lean')
     # Both tables of a certificate (`table`: the fixpoint program, `views`: functions with a viewed
     # slice parameter) are checked.
@@ -186,6 +249,9 @@ def main():
     parser.add_argument('--write', action='store_true',
                         help='regenerate the committed Proofs/<Ex>/AirCert.lean, then check')
     args = parser.parse_args()
+    controls = subprocess.run([sys.executable, '-I', '-B', str(Path(__file__).with_name('test_prepare.py'))],
+                              cwd=ROOT, capture_output=True, text=True, timeout=60)
+    assert controls.returncode == 0, controls.stdout + controls.stderr
     if args.write:
         with tempfile.TemporaryDirectory() as tmp:
             for ex in EXAMPLES:

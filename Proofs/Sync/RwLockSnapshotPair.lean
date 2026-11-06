@@ -1,4 +1,4 @@
-import ZigLean.Conc.Unroll
+import ZigLean.Conc.RunResult
 import Proofs.Sync.RwLockContract
 
 /-!
@@ -215,10 +215,12 @@ theorem snapshotPair_safe (env : Env) (henv : env.spawn = .available) {σ : Plac
     (fun _ _ _ _ hq => hq.2) rfl (main_spec σ io)
 
 /-- One schedule completes: under the oracle that always picks option 0, the snapshot-pair reader returns 0 (both reads before the writer) within
-fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
-each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
+fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run once the
+`zig_run` set has unfolded its path (`docs/proof-tools.md`, concrete runs of programs with loops). -/
 theorem snapshotPair_completes :
-    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (rwLockSnapshotPair ⟨⟩) (mem0 σ)) = some 0 :=
-  ⟨.fresh, by unroll_sched 10⟩
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (rwLockSnapshotPair ⟨⟩) (mem0 σ)) = some 0 := by
+  refine ⟨.fresh, ?_⟩
+  iterate 10 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
+  decide +kernel
 
 end Sync.RwLockSnapshotPair

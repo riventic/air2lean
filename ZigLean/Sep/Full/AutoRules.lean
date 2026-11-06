@@ -571,6 +571,12 @@ theorem sub_ok {a b : BitVec w} {safe : Bool} (h : b.toNat ≤ a.toNat) :
   simp only [Zig.sub, BitVec.usubOverflow, Bool.false_eq_true, ↓reduceIte]
   rw [if_neg (by simp; omega)]
 
+/-- An unsigned `*` that does not overflow is its wrapped product. -/
+theorem mul_ok {a b : BitVec w} {safe : Bool} (h : a.toNat * b.toNat < 2 ^ w) :
+    Zig.mul false a b safe = pure (a * b) := by
+  simp only [Zig.mul, BitVec.umulOverflow, Bool.false_eq_true, ↓reduceIte]
+  rw [if_neg (by simp; omega)]
+
 /-- The value of `sub_ok`'s difference, stated without truncated subtraction (which `omega`
 would case-split on). -/
 theorem sub_val {a b : BitVec w} (h : b.toNat ≤ a.toNat) : (a - b).toNat + b.toNat = a.toNat := by
@@ -590,12 +596,57 @@ theorem sub_val {a b : BitVec w} (h : b.toNat ≤ a.toNat) : (a - b).toNat + b.t
   exact (FTotalTriple.ret (Q := fun r => ⟪r.toNat + b.toNat = a.toNat⟫ ⋆ P) (a - b)).pre
     fun _ hp => sep_lift.mpr ⟨sub_val h, hp⟩
 
+/-- An unsigned `*` that does not overflow (`mul_safe` or plain `mul`). -/
+@[fsym] theorem mul_step {a b : BitVec w} {safe : Bool} (h : a.toNat * b.toNat < 2 ^ w) :
+    FTotalTriple P (StateT.lift (Zig.mul false a b safe) : MemM (BitVec w))
+      (fun r => ⟪r.toNat = a.toNat * b.toNat⟫ ⋆ P) := by
+  rw [mul_ok h]; exact read_val (BitVec.toNat_mul_of_lt h)
+
+/-- A `Result` contract `pre → ∃ v, x = pure v ∧ post v` as the step rule of the command
+`StateT.lift x`: the frame `P` is kept, the summary is a fact. A callee's contract is given to the
+walk as `fsym [result_step c]` (`docs/vcs.md`); the converse is `FTotalTriple.result_spec`
+(`Init.lean`). -/
+theorem result_step {α : Type} {P : FAssn} {x : Result α} {pre : Prop} {post : α → Prop}
+    (contract : pre → ∃ v, x = pure v ∧ post v) (h : pre) :
+    FTotalTriple P (StateT.lift x : MemM α) (fun v => ⟪post v⟫ ⋆ P) := by
+  obtain ⟨v, rfl, hv⟩ := contract h
+  exact (FTotalTriple.ret (Q := fun r => ⟪post r⟫ ⋆ P) v).pre fun _ hp => sep_lift.mpr ⟨hv, hp⟩
+
+/-- Signed `+`, checked (`add_safe`) or plain (`safe := false`, the form without runtime safety),
+without signed overflow: `safe` only decides the error of an overflow. -/
+@[fsym] theorem add_signed_step (a b : BitVec w) {safe : Bool} (h : a.saddOverflow b = false) :
+    FTotalTriple P (StateT.lift (Zig.add true a b safe) : MemM (BitVec w))
+      (fun v => ⟪v = a + b⟫ ⋆ P) :=
+  result_step (fun h => ⟨a + b, by simp [Zig.add, h], rfl⟩) h
+
+/-- Signed `-` without signed overflow, checked or plain. -/
+@[fsym] theorem sub_signed_step (a b : BitVec w) {safe : Bool} (h : a.ssubOverflow b = false) :
+    FTotalTriple P (StateT.lift (Zig.sub true a b safe) : MemM (BitVec w))
+      (fun v => ⟪v = a - b⟫ ⋆ P) :=
+  result_step (fun h => ⟨a - b, by simp [Zig.sub, h], rfl⟩) h
+
+/-- Signed `*` without signed overflow, checked or plain. -/
+@[fsym] theorem mul_signed_step (a b : BitVec w) {safe : Bool} (h : a.smulOverflow b = false) :
+    FTotalTriple P (StateT.lift (Zig.mul true a b safe) : MemM (BitVec w))
+      (fun v => ⟪v = a * b⟫ ⋆ P) :=
+  result_step (fun h => ⟨a * b, by simp [Zig.mul, h], rfl⟩) h
+
 /-- The payload of an optional that is not null (`.?`, `orelse unreachable`): some `v` with
 `o = some v`. -/
 @[fsym] theorem optPayload_step {α : Type} {o : Option α} (h : o.isSome = true) :
     FTotalTriple P (StateT.lift (optPayload o) : MemM α) (fun v => ⟪o = some v⟫ ⋆ P) := by
   obtain ⟨v, rfl⟩ := Option.isSome_iff_exists.mp h
   exact (FTotalTriple.ret (Q := fun r => ⟪some v = some r⟫ ⋆ P) v).pre fun _ hp => sep_lift.mpr ⟨rfl, hp⟩
+
+/-- The payload of an error union that holds one (`try`, `catch unreachable`). -/
+@[fsym] theorem unwrapPayload_step {α : Type} (e : Except ErrName α) (h : Zig.isNonErr e = true) :
+    FTotalTriple P (StateT.lift (Zig.unwrapPayload e) : MemM α) (fun v => ⟪e = .ok v⟫ ⋆ P) :=
+  result_step (fun h => by cases e with | error => cases h | ok v => exact ⟨v, rfl, rfl⟩) h
+
+/-- The error of an error union that holds one (`catch |err|`). -/
+@[fsym] theorem unwrapErr_step {α : Type} (e : Except ErrName α) (h : Zig.isErr e = true) :
+    FTotalTriple P (StateT.lift (Zig.unwrapErr e) : MemM ErrName) (fun v => ⟪e = .error v⟫ ⋆ P) :=
+  result_step (fun h => by cases e with | error v => exact ⟨v, rfl, rfl⟩ | ok => cases h) h
 
 /-- Bits that are `valid` as a packed value (`@bitCast` to a packed struct, its `fromInt`): the
 value of those bits (`Packed.ofBits?`). -/
@@ -730,6 +781,13 @@ theorem eupd_ac {P' : FAssn} (h : EUpd X Y) (e1 : P = X) (e2 : Y = P') : EUpd P 
 end Imp
 
 /-! ## Regions and shares (the planner's local steps) -/
+
+/-- A pointer restated from another pointer of its block (the walk's rebase of a literal pointer
+onto the region that holds it, `rebaseLitPtr?`). -/
+theorem ptr_eq_add_off_sub {q p : Ptr} (h : q.block = p.block) : q = p.add (q.off - p.off) := by
+  cases q; cases p
+  simp only [Ptr.add, Ptr.mk.injEq] at h ⊢
+  exact ⟨h, by omega⟩
 
 section Plan
 
@@ -907,9 +965,8 @@ theorem sub_lit {n : Nat} {a b : BitVec n} {safe : Bool} (h : decide (b.toNat �
     Zig.sub false a b safe = pure (a - b) :=
   sub_ok (of_decide_eq_true h)
 theorem mul_lit {n : Nat} {a b : BitVec n} {safe : Bool} (h : decide (a.toNat * b.toNat < 2 ^ n) = true) :
-    Zig.mul false a b safe = pure (a * b) := by
-  simp only [Zig.mul, BitVec.umulOverflow, Bool.false_eq_true, ↓reduceIte]
-  rw [if_neg (by simp at h ⊢; omega)]
+    Zig.mul false a b safe = pure (a * b) :=
+  mul_ok (of_decide_eq_true h)
 
 open Lean Meta Simp in
 /-- Unsigned `+ - *` of two word literals that does not overflow: its value (`pure (a - b)`,

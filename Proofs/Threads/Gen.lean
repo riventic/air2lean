@@ -127,6 +127,8 @@ def atomic_Value_threads_Phase_init (p0 : Phase) : Zig.Result (atomic_Value_thre
   match e with
   | .ret v => pure v
 
+attribute [zig_run] atomic_Value_threads_Phase_init
+
 structure atomic_Value_u32_initLocals where
   local1 : atomic_Value_u32
   deriving Inhabited
@@ -140,6 +142,8 @@ def atomic_Value_u32_init (p0 : BitVec 32) : Zig.Result (atomic_Value_u32) := do
     pure (.ret (← get).local1)) : Zig.M atomic_Value_u32_initLocals atomic_Value_u32_initExit).run' (default : atomic_Value_u32_initLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] atomic_Value_u32_init
 
 structure bumpLocals where
   i : BitVec 32
@@ -157,6 +161,7 @@ def bump.again4 : bumpExit → Bool
   | _ => false
 
 def bump.loop4 (p0 : Zig.Ptr) : Zig.CM Tgt bumpLocals bumpExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i6 ← pure ((← get).i)
     let i7 ← Zig.callMC (Zig.ptrProject p0 (·.add 8))
@@ -192,6 +197,8 @@ def bump (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] bump.loop4 bump
 
 structure claimLocals where
   deriving Inhabited
@@ -232,6 +239,8 @@ def claim (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] claim
 
 structure claimOnceLocals where
   phase : Zig.Ptr
@@ -306,6 +315,8 @@ def claimOnce  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] claimOnce
+
 structure writeFlagLocals where
   deriving Inhabited
 
@@ -322,6 +333,8 @@ def writeFlag (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
     pure .ret) : Zig.MM writeFlagLocals writeFlagExit).run' (default : writeFlagLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] writeFlag
 
 structure disjointLocals where
   x : Zig.Ptr
@@ -386,6 +399,8 @@ def disjoint (p0 : BitVec 32) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrNa
   match e with
   | .ret v => pure v
 
+attribute [zig_run] disjoint
+
 structure parallelCounterLocals where
   counter : Zig.Ptr
   ctxs : Zig.Ptr
@@ -431,6 +446,7 @@ def parallelCounter.again9 : parallelCounterExit → Bool
   | _ => false
 
 def parallelCounter.loop88 (i25 : Zig.Ptr) : Zig.CM Tgt parallelCounterLocals parallelCounterExit := do
+  Zig.callMC Zig.tick
   let i89 ← pure ((← get).local85)
   match ← ((do
     let i91 ← pure (i89)
@@ -448,6 +464,7 @@ def parallelCounter.loop88 (i25 : Zig.Ptr) : Zig.CM Tgt parallelCounterLocals pa
   | e => pure e
 
 def parallelCounter.loop59 (i56 : Zig.Slice) (i57 : BitVec 64) : Zig.CM Tgt parallelCounterLocals parallelCounterExit := do
+  Zig.callMC Zig.tick
   let i60 ← pure ((← get).local44)
   match ← ((do
     let i62 ← pure (i60)
@@ -466,6 +483,7 @@ def parallelCounter.loop59 (i56 : Zig.Slice) (i57 : BitVec 64) : Zig.CM Tgt para
   | e => pure e
 
 def parallelCounter.loop32 (i4 : Zig.Ptr) (i25 : Zig.Ptr) : Zig.CM Tgt parallelCounterLocals parallelCounterExit := do
+  Zig.callMC Zig.tick
   let i33 ← pure ((← get).local29)
   match ← ((do
     let i35 ← pure (i33)
@@ -515,6 +533,7 @@ def parallelCounter.loop32 (i4 : Zig.Ptr) (i25 : Zig.Ptr) : Zig.CM Tgt parallelC
   | e => pure e
 
 def parallelCounter.loop9 (p0 : BitVec 32) (i1 : Zig.Ptr) (i4 : Zig.Ptr) : Zig.CM Tgt parallelCounterLocals parallelCounterExit := do
+  Zig.callMC Zig.tick
   let i10 ← pure ((← get).local6)
   match ← ((do
     let i12 ← pure (i10)
@@ -578,6 +597,8 @@ def parallelCounter (p0 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] parallelCounter.loop88 parallelCounter.loop59 parallelCounter.loop32 parallelCounter.loop9 parallelCounter
+
 structure raceLocals where
   flag : Zig.Ptr
   c1 : Zig.Ptr
@@ -634,6 +655,8 @@ def race (p0 : BitVec 32) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName (
   match e with
   | .ret v => pure v
 
+attribute [zig_run] race
+
 structure swapFlagLocals where
   deriving Inhabited
 
@@ -657,6 +680,8 @@ def swapFlag (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] swapFlag
 
 structure xchgRaceLocals where
   flag : Zig.Ptr
@@ -723,11 +748,15 @@ def xchgRace (p0 : BitVec 32) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrNa
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] xchgRace
+
 /-- Runs a spawn target (`Zig.Sched.run`). -/
 def dispatch : Tgt → Zig.ConcM Tgt Unit
   | .claim a => discard (claim a)
   | .writeFlag a => discard (Zig.ConcM.liftMem (writeFlag a))
   | .bump a => discard (bump a)
   | .swapFlag a => discard (swapFlag a)
+
+attribute [zig_run] dispatch
 
 end Threads

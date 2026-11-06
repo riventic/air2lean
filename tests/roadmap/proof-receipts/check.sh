@@ -35,21 +35,25 @@ esac
 "$python" "$helper" prepare "$attempt" --toolchain "$toolchain" --profile "$profile" --lock "$lock" ${prepare_args[@]+"${prepare_args[@]}"} --guard "$guard" ${guard_pin[@]+"${guard_pin[@]}"}
 # Preparation has no compiler commands. Guarded worker snapshots again after locking.
 # Absolute physical paths are required by prepare; reuse exactly its recorded values.
+# The worker's inputs are proof-receipt.py's INPUTS, which seal checks against the guard's report.
 inputs=(--input "$attempt/plan.json")
-for path in lean-toolchain lakefile.toml assurance/policy.json scripts/assumptions.py tools/Assurance.lean \
-            scripts/proof-receipt.py tests/roadmap/proof-receipts/check.sh \
-            assurance/float-semantics.json scripts/float-semantics.py scripts/gen-integrity.py \
-            scripts/premise_markers.py assurance/witness-fixtures.json scripts/theorem_universe.py \
-            scripts/premises.py scripts/lean-deps.py; do
+receipt_inputs=$("$python" "$helper" inputs)
+while IFS= read -r path; do
   inputs+=(--input "$repo_root/$path")
-done
+done <<< "$receipt_inputs"
 inputs+=(--input "$guard")
 outputs=()
 for path in before.json audit.json after.json; do outputs+=(--output "$attempt/$path"); done
 status=0
-PATH="$toolchain/bin:$PATH" "$python" "$guard" \
+# It waits AIR2LEAN_LOCK_WAIT seconds for admission (scripts/provenance-evidence.py sets it to its
+# --lock-wait) and is never overcommitted: a preempted worker could not run again (write_new).
+# The audit runs without Lake's artifact cache: with AIR2LEAN_CAS_DIR set the guard would give
+# the worker LAKE_CACHE_DIR and the other cache settings (build-guard.py lake_cache_env), and the
+# worker refuses every Lake environment overlay (proof-receipt.py context).
+env -u AIR2LEAN_CAS_DIR PATH="$toolchain/bin:$PATH" "$python" "$guard" \
   --cwd "$repo_root" --lock "$lock" --profile "$profile" --phase proof \
-  --timeout 2700 --rss-mib 12288 --log-bytes 1048576 \
+  --timeout 2700 --rss-mib 12288 --log-bytes 1048576 --no-overcommit \
+  --lock-wait "${AIR2LEAN_LOCK_WAIT:-0}" \
   --report "$attempt/guard.json" --log "$attempt/guard.log" \
   "${inputs[@]}" "${outputs[@]}" --tool "$toolchain/bin/lean" --tool "$toolchain/bin/lake" --tool "$toolchain/bin/leanchecker" \
   -- "$python" "$helper" worker "$attempt" || status=$?

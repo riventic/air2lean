@@ -1,12 +1,13 @@
 import ZigLean.Sep.Full.ThreadOwned
 import ZigLean.Conc.SpawnLemmas
+import ZigLean.Conc.Capture
 
 /-!
 # Captures and failed spawns over the threads' parts
 
-The full-state forms of the spawn-ownership lemmas (`ZigLean/Conc/Transfer.lean`,
-`ZigLean/Conc/SpawnLemmas.lean`), for proofs that keep `FOwned` (`Full/ThreadOwned.lean`) in their
-protocol invariant:
+The spawn-ownership rules over the threads' parts (`ZigLean/Conc/SpawnLemmas.lean` has the
+resource-free ones), for proofs that keep `FOwned` (`Full/ThreadOwned.lean`) in their protocol
+invariant. The captured fields are the generated `Tgt.captures` (`ZigLean/Conc/Capture.lean`):
 
 - `FTransfer`, `FCapture.grant mode cs`: how a spawn hands the region of each captured field
   (the generated `Tgt.captures`) to the child, as a full-state assertion on the child's part: the

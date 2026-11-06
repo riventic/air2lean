@@ -5,6 +5,8 @@
     python3 -B scripts/fixtures.py audit MODULE... [--declaration NAME]... [--output FILE]
     python3 -B scripts/fixtures.py audit --library LIB [MODULE...] [--declaration NAME]...
     python3 -B scripts/fixtures.py mutant NAME --src DIR --fails MODULE [--expect TEXT]...
+    python3 -B scripts/fixtures.py instance PRIMARY --subst OLD=NEW... [--write]
+    python3 -B scripts/fixtures.py run OUTDIR MODULE:DECL...
     python3 -B scripts/fixtures.py files
 
 Every Lean file of a converted fixture is elaborated by Lake, in one mode:
@@ -20,7 +22,9 @@ Every Lean file of a converted fixture is elaborated by Lake, in one mode:
   `scripts/assumptions.py --all-declarations` (kernel replay included; in a fixture-checks run
   through the run's one replay cache, AIR2LEAN_FIXTURE_REPLAY_CACHE), not from a message log.
   Fails unless every theorem of the modules depends on the standard axioms only (propext,
-  Classical.choice, Quot.sound), no declaration of the modules depends on `sorry`, and each
+  Classical.choice, Quot.sound), no declaration depends on `sorry`, the report has no violation
+  in the modules (an axiom, opaque or unsafe declaration outside the policy, a float-semantics
+  label issue: docs/float-semantics.md), and each
   `--declaration` (a theorem or a definition whose value carries proofs) is one of them and
   reaches only the standard axioms in the extractor's dependency graph. `--library LIB` audits
   every module of LIB too, and fails when a `.lean` file below LIB's directory is no module of
@@ -35,6 +39,14 @@ Every Lean file of a converted fixture is elaborated by Lake, in one mode:
   MODULE (so its imports built) and an error is reported in MODULE's source; each `--expect`
   text must occur in the output. A failed import, a missing module or a killed process is not a
   rejection of the mutant.
+- `instance`: a module stated once for several Zig versions or targets (one module per
+  translation, as Lake needs distinct module names). PRIMARY is the hand-written instance;
+  another instance is PRIMARY with each OLD identifier token (`V0_17_0`, a whole name component)
+  replaced by NEW, in its text and its path. Fails unless the instance file equals that text
+  byte for byte (`--write`: writes it). Every OLD must occur in both text and path.
+- `run`: runs each DECL (an `IO Unit`, of the built fixture MODULE) in one `lean --run` of the
+  fixture package, its standard output to OUTDIR/DECL.txt. The modules must be up to date in
+  Lake's trace (`lake build --no-build`), so a run never loads a stale module.
 - `files`: the repository paths of the package's modules (scripts/lean-deps.py: they are not
   standalone files).
 """
@@ -123,6 +135,31 @@ def source_modules(root: Path | None = None) -> dict[str, tuple[str, str]]:
     return out
 
 
+def source_roots(root: Path | None = None) -> dict[str, str]:
+    """`source_modules` without Lake (the source scan runs where no Lean is installed): each
+    configured module's repository source -> its library's source root, read from the lakefile's
+    `srcDir` and `globs` (else `roots`): `M` is M, `M.+` M and its submodules, `M.*` its
+    submodules. A file in two libraries (nested source roots) fails."""
+    root = root or ROOT
+    package = root / PACKAGE.relative_to(ROOT)
+    if not (package / "lakefile.toml").is_file():
+        return {}
+    out: dict[str, str] = {}
+    for lib in libraries(package):
+        src = package / lib.get("srcDir", ".")
+        for pattern in lib.get("globs") or lib.get("roots") or [lib["name"]]:
+            base = pattern.removesuffix(".+").removesuffix(".*")
+            directory = src / base.replace(".", "/")
+            paths = [] if pattern.endswith(".*") else [directory.with_suffix(".lean")]
+            if pattern != base:
+                paths += sorted(directory.rglob("*.lean"))
+            for path in filter(Path.is_file, paths):
+                rel, source_root = path.relative_to(root).as_posix(), src.relative_to(root).as_posix()
+                if out.setdefault(rel, source_root) != source_root:
+                    raise ValueError(f"{rel} is in two fixture libraries ({out[rel]}, {source_root})")
+    return out
+
+
 def files(root: Path | None = None) -> list[str]:
     """The repository-relative source paths of the configured fixture modules."""
     return sorted(file for file, _ in source_modules(root).values())
@@ -160,6 +197,12 @@ def reached_axioms(name: str, nodes: dict[str, dict]) -> set[str]:
     return axioms
 
 
+def scripts_on_path() -> None:
+    """Lazy imports of the sibling scripts (assumptions, theorem_universe)."""
+    if str(Path(__file__).resolve().parent) not in sys.path:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+
 def audit(modules: list[str], declarations: list[str], output: Path | None, lib: Path | None = None,
           package: Path | None = None, all_declarations: bool = True) -> int:
     """`declarations`: theorems or definitions that must exist and use the standard axioms only;
@@ -167,8 +210,7 @@ def audit(modules: list[str], declarations: list[str], output: Path | None, lib:
     Lake package (`package`, else the fixture package when `lib` is not given) has Lake build the
     extractor's driver on that package (scripts/assumptions.py --extract-in); a fixture Unit
     audit only while Lake resolves exactly its compiler-owned lookup path."""
-    if str(Path(__file__).resolve().parent) not in sys.path:
-        sys.path.insert(0, str(Path(__file__).resolve().parent))
+    scripts_on_path()
     from assumptions import LAKE_ROOTS, STANDARD_AXIOMS  # Lazy: scripts/lean-deps.py loads this file for `files`.
     import theorem_universe
     work = Path(tempfile.mkdtemp(prefix="air2lean-fixtures-audit."))
@@ -230,8 +272,10 @@ def audit(modules: list[str], declarations: list[str], output: Path | None, lib:
             audited = [t for t in report["theorems"] if t["module"] in modules]
             problems += [f"{t['name']}: axioms {sorted(set(t['axioms']) - STANDARD_AXIOMS)}"
                          for t in audited if not set(t["axioms"]) <= STANDARD_AXIOMS]
-            problems += [f"{v['name']} ({v['module']}): {v['reason']}" for v in report["violations"]
-                         if v["trust_class"] == "sorry"]
+            # A sorry anywhere, and every violation of an audited module (an axiom, opaque or unsafe
+            # declaration outside the policy, a float-semantics label issue), as theorem_universe's gate.
+            problems += [f"{v['name']} ({v['module']}): {v['trust_class']}: {v['reason']}"
+                         for v in report["violations"] if v["trust_class"] == "sorry" or v["module"] in modules]
             nodes = {n["name"]: n for n in report["nodes"]}
             for name in declarations:
                 node = nodes.get(name)
@@ -306,6 +350,82 @@ def mutant(name: str, src: Path, fails: list[str], expect: list[str]) -> int:
     return 0
 
 
+def token(name: str) -> re.Pattern:
+    """`name` as a whole identifier component (not part of a longer identifier)."""
+    return re.compile(r"(?<![A-Za-z0-9_'])" + re.escape(name) + r"(?![A-Za-z0-9_'])")
+
+
+def instance(primary: Path, substs: list[str], write: bool) -> int:
+    """`primary` with each OLD replaced by its NEW (all at once, so substitutions never chain).
+    A primary that already names a NEW (the 0.17.0 model importing the 0.16.0 translation) would
+    make the instance agree while checking the wrong version, so it is refused."""
+    text, path = primary.read_text(encoding="utf-8"), primary.as_posix()
+    mapping = {}
+    for subst in substs:
+        old, sep, new = subst.partition("=")
+        if not (sep and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", old) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", new)):
+            raise SystemExit(f"fixtures instance: --subst needs OLD=NEW identifiers, not {subst!r}")
+        if mapping.setdefault(old, new) != new:
+            raise SystemExit(f"fixtures instance: {old} is substituted twice")
+        if not token(old).search(text) or not token(old).search(path):
+            raise SystemExit(f"fixtures instance: {old} does not occur in {primary} and its path")
+    for old, new in mapping.items():
+        if new != old and (token(new).search(text) or token(new).search(path)):
+            raise SystemExit(f"fixtures instance: {primary} already names {new}")
+    if all(old == new for old, new in mapping.items()):
+        raise SystemExit(f"fixtures instance: {' '.join(substs)} leaves {primary} unchanged")
+    combined = re.compile("|".join(token(old).pattern for old in sorted(mapping, key=len, reverse=True)))
+    text, path = (combined.sub(lambda m: mapping[m.group(0)], s) for s in (text, path))
+    target = Path(path)
+    if write:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, encoding="utf-8")
+        return 0
+    if not target.is_file() or target.read_bytes() != text.encode("utf-8"):
+        print(f"fixtures instance: {target} is not {primary} with {' '.join(substs)} "
+              f"(fixtures.py instance {primary} {' '.join('--subst ' + s for s in substs)} --write)",
+              file=sys.stderr)
+        return 1
+    return 0
+
+
+def run(outdir: Path, specs: list[str]) -> int:
+    mains = []
+    for spec in specs:
+        module, sep, decl = spec.partition(":")
+        if not (sep and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]*", module) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.']*", decl)):
+            raise SystemExit(f"fixtures run: expected MODULE:DECL, not {spec!r}")
+        mains.append((module, decl))
+    modules = sorted({m for m, _ in mains})
+    if len({d.casefold() for _, d in mains}) != len(mains):  # OUTDIR/DECL.txt, case-insensitive on macOS
+        raise SystemExit("fixtures run: a DECL is named twice")
+    check_names(PACKAGE)
+    done = lake(PACKAGE, ["build", "--no-build", *modules], capture=True)
+    if done.returncode:
+        sys.stdout.write(done.stdout[-4000:])
+        print(f"fixtures run: {', '.join(modules)} not up to date (fixtures.py build first)", file=sys.stderr)
+        return 1
+    outdir = outdir.resolve()
+    outdir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="air2lean-fixtures-run.") as work:
+        driver = Path(work) / "Run.lean"
+        lines = [f"import {m}" for m in modules] + [
+            "def runTo (path : System.FilePath) (act : IO Unit) : IO Unit := do",
+            "  let h ← IO.FS.Handle.mk path .write",
+            "  let old ← IO.setStdout (IO.FS.Stream.ofHandle h)",
+            "  try act finally h.flush; discard (IO.setStdout old)",
+            "def main : IO Unit := do"]
+        lines += [f"  runTo {json.dumps(str(outdir / (d + '.txt')))} {d}" for _, d in mains]
+        driver.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        done = lake(PACKAGE, ["env", "lean", "--run", str(driver)], capture=True)
+    if done.returncode:
+        sys.stdout.write(done.stdout[-4000:])
+        print(f"fixtures run: FAILED ({', '.join(d for _, d in mains)})", file=sys.stderr)
+        return 1
+    sys.stdout.write(done.stdout)
+    return 0
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -322,6 +442,13 @@ def main(argv: list[str]) -> int:
     p.add_argument("--src", type=Path, required=True)
     p.add_argument("--fails", action="append", required=True)
     p.add_argument("--expect", action="append", default=[])
+    p = sub.add_parser("instance")
+    p.add_argument("primary", type=Path)
+    p.add_argument("--subst", action="append", required=True)
+    p.add_argument("--write", action="store_true")
+    p = sub.add_parser("run")
+    p.add_argument("outdir", type=Path)
+    p.add_argument("mains", nargs="+")
     sub.add_parser("files")
     a = parser.parse_args(argv)
     # Every Lake of this command runs in one mode: its own builds (`lake`, through cas.py run)
@@ -340,9 +467,22 @@ def main(argv: list[str]) -> int:
         modules = sorted(set(a.modules) | set(library_modules(a.library) if a.library else []))
         if not modules:
             parser.error("audit: name MODULEs or --library LIB")
-        return audit(modules, a.declaration, a.output, all_declarations=not a.theorem_roots)
+        scripts_on_path()
+        from assumptions import runtime_run
+        try:
+            # One toolchain-runtime digest for the audit's steps, hashed again at its end.
+            with runtime_run():
+                code = audit(modules, a.declaration, a.output, all_declarations=not a.theorem_roots)
+        except (OSError, ValueError, RuntimeError) as error:
+            print(f"fixtures audit: FAILED\n  {error}", file=sys.stderr)
+            return 1
+        return code
     if a.command == "mutant":
         return mutant(a.name, a.src, a.fails, a.expect)
+    if a.command == "instance":
+        return instance(a.primary, a.subst, a.write)
+    if a.command == "run":
+        return run(a.outdir, a.mains)
     print("\n".join(files()))
     return 0
 

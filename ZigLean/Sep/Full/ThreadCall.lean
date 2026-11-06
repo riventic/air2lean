@@ -87,7 +87,7 @@ theorem Run.safe (hcost : P.cost = none) (hres : ∀ g r, res (set g r) = r)
       (rF := ⟨rR.heap ∪ rO.heap, rR.know.union rO.know, rR.gh.add rO.gh⟩) hh₁
     have hs := (ho.current t).step rfl htl hR hRO hh₁ hc₁ ho₁ hst hnc
     refine (Safe.sync_none hcost).mpr ⟨by rw [hst.threads], set (G t) r',
-      hloc G m m₁ rO rR r' hi hR hs hst, fun G₁ m₂ hg hi₂ => Step.of_solo hso fun ρ hρ => ?_⟩
+      hloc G m m₁ rO rR r' hi hR hs hst, fun G₁ m₂ hg hi₂ _ => Step.of_solo hso fun ρ hρ => ?_⟩
     obtain ⟨htl₂, rO₂, ho₂⟩ := hinv G₁ m₂ hi₂
     obtain ⟨rR₂, hR₂, hRO₂, hh₂⟩ := (ho₂.current t).part htl₂
     have hh₂ := hh₂.addCurF (ho₂.part_noCur hR₂)

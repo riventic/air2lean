@@ -36,6 +36,8 @@ def parseDigit (p0 : BitVec 8) : Zig.Result (Except Zig.ErrName (BitVec 8)) := d
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] parseDigit
+
 structure digitOrZeroLocals where
   deriving Inhabited
 
@@ -60,6 +62,8 @@ def digitOrZero (p0 : BitVec 8) : Zig.Result (BitVec 8) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] digitOrZero
 
 structure sumDigitsLocals where
   total : BitVec 32
@@ -119,5 +123,7 @@ def sumDigits (p0 : Array (BitVec 8)) : Zig.Result (Except Zig.ErrName (BitVec 3
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] sumDigits.loop7 sumDigits
 
 end Errors

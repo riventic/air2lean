@@ -112,6 +112,7 @@ def Io_Mutex_lock.again27 : Io_Mutex_lockExit → Bool
   | _ => false
 
 def Io_Mutex_lock.loop27 (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.CM Tgt Io_Mutex_lockLocals Io_Mutex_lockExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i29 ← pure p0
     match ← ((do
@@ -185,6 +186,8 @@ def Io_Mutex_lock (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrNa
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] Io_Mutex_lock.loop27 Io_Mutex_lock
+
 structure Io_Mutex_lockUncancelableLocals where
   deriving Inhabited
 
@@ -203,6 +206,7 @@ def Io_Mutex_lockUncancelable.again23 : Io_Mutex_lockUncancelableExit → Bool
   | _ => false
 
 def Io_Mutex_lockUncancelable.loop23 (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.CM Tgt Io_Mutex_lockUncancelableLocals Io_Mutex_lockUncancelableExit := do
+  Zig.callMC Zig.tick
   match ← ((do
     let i25 ← pure p0
     match ← ((do
@@ -264,6 +268,8 @@ def Io_Mutex_lockUncancelable (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] Io_Mutex_lockUncancelable.loop23 Io_Mutex_lockUncancelable
+
 structure Io_Mutex_tryLockLocals where
   deriving Inhabited
 
@@ -285,6 +291,8 @@ def Io_Mutex_tryLock (p0 : Zig.Ptr) : Zig.ConcM Tgt (Bool) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] Io_Mutex_tryLock
 
 structure Io_Mutex_unlockLocals where
   deriving Inhabited
@@ -323,6 +331,8 @@ def Io_Mutex_unlock (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] Io_Mutex_unlock
+
 structure debug_assertLocals where
   deriving Inhabited
 
@@ -344,6 +354,8 @@ def debug_assert (p0 : Bool) : Zig.Result (Unit) := do
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] debug_assert
 
 structure addLocals where
   deriving Inhabited
@@ -370,6 +382,8 @@ def add (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   match e with
   | .ret => pure ()
 
+attribute [zig_run] add
+
 structure groupConcurrentLocals where
   c : Zig.Ptr
   g : Zig.Ptr
@@ -387,6 +401,7 @@ def groupConcurrent.again13 : groupConcurrentExit → Bool
   | _ => false
 
 def groupConcurrent.loop13 (p0 : Zig.Io) (i1 : Zig.Ptr) (i8 : Zig.Ptr) : Zig.CM Tgt groupConcurrentLocals groupConcurrentExit := do
+  Zig.callMC Zig.tick
   let i14 ← pure ((← get).local10)
   match ← ((do
     let i16 ← pure (i14)
@@ -441,6 +456,8 @@ def groupConcurrent (p0 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] groupConcurrent.loop13 groupConcurrent
+
 structure groupCounterLocals where
   c : Zig.Ptr
   g : Zig.Ptr
@@ -458,6 +475,7 @@ def groupCounter.again13 : groupCounterExit → Bool
   | _ => false
 
 def groupCounter.loop13 (p0 : Zig.Io) (i1 : Zig.Ptr) (i8 : Zig.Ptr) : Zig.CM Tgt groupCounterLocals groupCounterExit := do
+  Zig.callMC Zig.tick
   let i14 ← pure ((← get).local10)
   match ← ((do
     let i16 ← pure (i14)
@@ -511,8 +529,12 @@ def groupCounter (p0 : Zig.Io) : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) 
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] groupCounter.loop13 groupCounter
+
 /-- Runs a spawn target (`Zig.Sched.run`). -/
 def dispatch : Tgt → Zig.ConcM Tgt Unit
   | .add a => discard (add a)
+
+attribute [zig_run] dispatch
 
 end Iogroup

@@ -29,6 +29,8 @@ def fail__anon_60b8866c0f76 (p0 : BitVec 32) (p1 : Zig.ErrName) : Zig.Result (Ex
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] fail__anon_60b8866c0f76
+
 structure fail__anon_6e006e1a96cdLocals where
   deriving Inhabited
 
@@ -54,6 +56,8 @@ def fail__anon_6e006e1a96cd (p0 : BitVec 32) (p1 : Zig.ErrName) : Zig.Result (Ex
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] fail__anon_6e006e1a96cd
+
 structure orBoomLocals where
   deriving Inhabited
 
@@ -78,6 +82,8 @@ def orBoom (p0 : BitVec 32) (p1 : Zig.ErrName) : Zig.Result (Except Zig.ErrName 
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] orBoom
+
 structure forwardLocals where
   deriving Inhabited
 
@@ -90,6 +96,8 @@ def forward (p0 : BitVec 32) : Zig.Result (Except Zig.ErrName (BitVec 32)) := do
     pure (.ret i1)) : Zig.M forwardLocals forwardExit).run' (default : forwardLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] forward
 
 structure skipFirstLocals where
   deriving Inhabited
@@ -104,6 +112,8 @@ def skipFirst (p0 : Zig.ErrName) (p1 : BitVec 32) : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] skipFirst
+
 structure unwrapEmptyLocals where
   deriving Inhabited
 
@@ -116,6 +126,8 @@ def unwrapEmpty (p0 : Except Zig.ErrName (BitVec 32)) : Zig.Result (BitVec 32) :
     pure (.ret i1)) : Zig.M unwrapEmptyLocals unwrapEmptyExit).run' (default : unwrapEmptyLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] unwrapEmpty
 
 structure viaFailLocals where
   deriving Inhabited
@@ -167,5 +179,7 @@ def viaFail (p0 : BitVec 32) : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] viaFail
 
 end ErrorParams

@@ -69,7 +69,8 @@ calls with 20 to 30 facts.
   `X … lo m … ⋆ X … m hi … = X … lo hi …` (checked when the attribute is added; the planner's
   table is data, never code `fsym` evaluates: no `evalConst`), `@[fsym_drop]` a drop lemma
   `EUpd (X ⋆ R) R` for atoms left over (knowledge, claims), `@[fsym_view]` a view lemma
-  `EUpd X Y` of one atom (§Views).
+  `EUpd X Y` of one atom (§Views), `@[fsym_inv]` a loop's invariant, measure and exit post
+  (§Loops).
 * `ZigLean/Sep/Full/AutoClaims.lean`: byte-range claims (`docs/sep-full-state.md` §Byte-range
   claims): `bclaim_split` is their range law, and claims left over are dropped (`claim_drop`).
   Import it (not just `Auto`) to prove allocator specifications: grants carry claims.
@@ -230,7 +231,13 @@ again on the new state, whose facts and existentials open as usual. A view is ke
 walk gets past the step. So the arena's `deinit` gives a free-list node back to its child
 allocator: the node's header words become regions, two regions of one block get the same labels
 (`facts_regions_labels`), the planner relabels and joins adjacent regions (`joinOnce`) and carves
-the granted region, whose size the grant's token names (`tok p bs.size …`, `atomSize?`).
+the granted region, whose size the grant's token names (`tok p bs.size …`). When the planner
+pre-assigns unknowns by unifying atoms with the state's, a measure of an unknown (`?bs.size`,
+`?l.length`: a token's argument, a field of a ledger fragment's tuple, under arithmetic) gives
+only its value, never the unknown (`abstractMeasures`: `Array.size` is not injective, so the
+token's `?bs.size` against the state's `old.size` must not take `?bs := old`, the bytes the
+grant had before a write). The region planner carves the bytes at the size the token names
+(`measuredSize?`), and the final match checks the token up to arithmetic.
 Regression: `tests/roadmap/sep-auto/SepAuto/Views.lean` (a node given back, a load of a value's encoding,
 a refund joined with a reservoir: two atoms of one head with unknown fractions take two state
 atoms, a region viewed as bytes for a rule and folded back at the return).
@@ -283,7 +290,13 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
   both branches of each `if` before it). A call of a generated function is inlined; a vtable
   projection is reduced. Every rewrite carries its proof, a `rfl` lemma too (`StateT.run_bind`):
   as a definitional step it would leave the kernel to unfold `StateT.run`/`bind` against the
-  rest of the program at a join of simp's proof (arena `resize` ran out of 10 GB there).
+  rest of the program at a join of simp's proof (arena `resize` ran out of 10 GB there). So is
+  each of the engine's own reductions of a projection of a structure value (`unfold1Eq?`,
+  `reduceProjsEq`: a vtable projection, a hypothesis, the atoms of a precondition or a
+  postcondition, a goal's field): one proof step per projection, as two definitional steps
+  (`(a, c).2` to `c`, `c.f` to `s.f`) reach the kernel as the one comparison
+  `((a, c).2).f =?= s.f`, which can exhaust its recursion on a literal field (ledger
+  `kernel-proj-ctor`).
 * **Facts of atoms** (`@[fsym_facts]`, `AtomFacts X φ`): an atom that owns memory at a pointer
   implies the pointer's block, a nonnegative offset and, for a region, its alignment
   (`facts_region`, `facts_bytes`, `facts_pts`, `facts_apts`, `facts_aptsE`). When the walk needs
@@ -300,7 +313,10 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
   `p.block`, ledger #55) or by the arithmetic
   solver (`0 < bs.size`); a lemma gives one fact per unordered pair (disjunctive facts cost `omega`
   case splits). Block
-  variables of pointers derived by `Ptr.add`/`elem` are identified (`unifyBlocks`). A Boolean
+  variables of pointers derived by `Ptr.add`/`elem` are identified, and a block variable equal to
+  a value (`some k = some b`, a fact `x.block = some k`, or a global's pointer `⟨some 0, 0⟩` by
+  reducible evaluation) is that value (`unifyBlocks`; the substitutions are recorded for the
+  caller's terms). A Boolean
   test (`(!decide (b = b' ∧ x = y)) = false`, of a pointer `==`) becomes the proposition.
 * **Commands** are executed by the first rule (the caller's `fsym [r]` first, then the `@[fsym]`
   rules) whose command unifies. The caller's terms are elaborated in the goal's context (its
@@ -341,7 +357,12 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
   up to arithmetic (`(replicate x.toNat b).size = bs.size`); atoms of `Q` that differ from the
   state's only in such arguments (`replicate x.toNat b` against `replicate (n + 1) b` with
   `x.toNat = n + 1`) are matched argument by argument, the differing ones proved equal
-  (`proveEq`; regression `tests/roadmap/sep-auto/SepAuto/Unify.lean`). Shares of one block and tag are joined, split and weakened (an
+  (`proveEq`; regression `tests/roadmap/sep-auto/SepAuto/Unify.lean`). A constructor of an
+  existential's pattern (the list `[?w₀, ?w₁]` of an invariant's `arr p [w₀, w₁]`) is matched
+  against the state's value evaluated to its head constructor within a budget (two stores'
+  `([a, b].set 0 x).set (1#64).toNat y`: `?w₀ := x`, `?w₁ := y`; not a number, which is the
+  solver's), and the match is proved (`matchArgs`, `proveEq`; regression
+  `tests/roadmap/sep-auto/SepAuto/AtomArgs.lean`). Shares of one block and tag are joined, split and weakened (an
   allocator's own share and its grants' tagged shares of the same block stay apart; regression
   `Walk.tags_apart`), and a share with a
   determined fraction is raised to a higher bound with another share of its block
@@ -369,8 +390,10 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
   reclaim an outstanding grant, or supply a replacement token. A proof that must retain the
   ability to reset an allocator or form a pointer through an extent share must require those
   resources in its postcondition. Their intentional omission no longer makes an otherwise
-  valid return fail. Exclusive stack resources (`sp`, `ent`, `cur`) are not affine and are never
-  disposed of by these laws; a stack block must still be released with its exact refund.
+  valid return fail. Exclusive stack-depth and entry resources (`sp`, `ent`) are not affine and
+  are never disposed of by these laws; a stack block must still be released with its exact
+  refund. The running-thread token may be forgotten by the separate `EUpd.cur_drop` rule,
+  which uses `MemAuth.dropCur` and does not refund stack space.
 * **The caller's updates** `fsym [u]` with `u : ∀ …, EUpd P₀ Q₀` (a module's step of its
   invariant that the planner cannot take: a ghost update, junk that grows, a pool push; the arena's
   `free_last_upd`): at a return that the planner does not close, `EUpd P (P₀ ⋆ ?R)` is planned,
@@ -520,6 +543,10 @@ backend):
   lemmas about `U` and its shape, no per-field rule.
   `FLock.Inv.loadRest` proves the exact plain-load/read-record fact from invariant rest and the
   caller's `NoRace`, and `Fits.wp_readRest` derives its shared-reader form from that single proof.
+  The read by the only thread that has not left the lock (the whole `Tally` of
+  `Proofs/Threadsync/WaitGroup/Read.lean`) is `Fits.wp_loadWith` with `FLock.Inv.loadMem` (over
+  `FLock.Inv.loadAll`): its bytes may span the protocol's rest, the lock's word and the free lock's
+  resource; it takes them from the live block and needs only that the complete rest holds each.
 * **A rule for every `MemM` step** (its command `ConcM.liftMem x` with `x` unknown: the holder's
   step, a segment of a thread that owns its part) is tried after the other rules and applies
   only completely: all its side goals proved, its segments walked without goals left. So of the
@@ -582,7 +609,10 @@ backend):
   is the solo reading of the `CTriple` backend; in a run it is a stop that a protocol's rule
   takes). A generated function with no rule is inlined.
 * The caller's terms are related to each step's context: a local that a substitution eliminated
-  (`m'.current = t` substitutes `t`) is replaced by its value (`refreshUser`).
+  (`m'.current = t` substitutes `t`) is replaced by its value (`refreshUser`). The branches of a
+  disjunction are split before either is walked, and each may substitute the same local by a
+  value of its own: each branch is walked with the substitutions of its own branch
+  (`eachBranch`; regression `SepAuto.WP` `sibling_values`).
 
 ```lean
 theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
@@ -693,7 +723,21 @@ Side goals are about words, pointer offsets and sizes. The solver (`arithCore`, 
    `minAtom`, `maxAtom`), so no split is explored for it. A case probe is not retried with a
    subset of the facts it failed with (`detProbe`; an undecided `min 4096 (2 ^ k)` of the page
    allocator's `alloc` was probed again for every side goal: 100k heartbeats, now 89k);
-5. unless the call is a probe (`quick`), `t % M = c` follows from a fact `u % M = c` with `t = u`.
+5. unless the call is a probe (`quick`), `t % M = c` follows from a fact `u % M = c` with `t = u`;
+6. unless the call is a probe, `omega` runs again with the relevant facts each normalized against
+   all the facts (`renormFacts`: a hypothesis is normalized once, against the facts before it, so
+   a conditional rewrite whose side condition a later fact proves applies only now: the loop test
+   `i < n` after an invariant's `tsum n g - tsum i g`) and with the **congruence of atoms**
+   (`atomCongr`): an atom that applies a function the solver does not read (a library sum
+   `tsum x.toNat g`, a caller's `f x.toNat`) to a term containing the side `l` of an equation
+   `l = r` of the facts, `l` itself an atom (`x.toNat = i.toNat + 1`, a counter's step), equals
+   the atom with `r` for `l`, in normal form (`tsum (i.toNat + 1) g` is
+   `tsum i.toNat g + g i.toNat`). Each fact rewrites an atom at most once, an equation to a
+   non-atom first, an alias (`y.toNat = x.toNat`) only else, so the rewrites end; at `Nat` and
+   `Int`; not in a probe. The library sum `tsum` (`ZigLean/Sep/Full/TSum.lean`) has the
+   non-recursive normal forms for a counter-dependent invariant (`tsumSubLt` where the term is not
+   `0`, `tsum_sub_of_le`; a bound `n + 1` by `tsumSucc`, a numeral bound kept). Regression: `tests/roadmap/sep-auto/SepAuto/AtomCongr.lean`
+   (the side goals of `counted.tri`'s step; ledger #arith-atom-congruence).
 
 `omega` is given only the facts **relevant** to the target: those connected to it by shared
 atoms (its variables: words' values, offsets, fields), transitively (`relevantFacts`); a target
@@ -728,6 +772,79 @@ obligation without a budget, or a query of a type nested inside one past the bud
 The caches belong to one run (theorems are elaborated in
 parallel; a run is identified by the option `fsym.run`).
 
+**`omega`'s certificates are shared** (`omegaRaw`). Core `omega` builds a tree: every step
+serializes its coefficient lists again, a constraint used twice is proved twice, and every call
+serializes its atoms and facts again. Unshared, the certificates of one ArenaSpec walk
+(`loop66_c0`) reached 64M term nodes for 0.23M distinct ones, and the elaborator held them until
+the theorem was checked (ArenaSpec*: 6.4–9 GB at one thread; shared, 3.7–4.3 GB). Each
+certificate is therefore hash-consed
+against the run's table (`RunCaches.omegaTerms`): a subterm becomes the equal one already in the
+table (`Expr.equal`, binder names and annotations included). A problem without unknowns (its
+target and its facts' types have no metavariables) is solved one metavariable depth deeper, so
+`omega` can assign only its own goals, and those goals (whose assignments hold the unshared copy)
+are dropped with the depth once the proof is instantiated. A proof that still mentions one, or
+needs a postponed constraint of the depth, is treated as no proof. A problem with unknowns is
+solved at the context's depth as before, where `omega` may assign them. The table is a persistent
+set: the caches of a run are shared between threads (`fsymRuns`), so the runtime never updates
+them in place, and an insertion into a hash set copied all of it (quadratic in the run). The
+interning (`internTerms`) is meta-level code: it only rebuilds `Expr` values and never appears in
+a proof term. The kernel checks every theorem as before. The regression test `omega_proofs_shared`
+(`tests/roadmap/sep-auto/SepAuto/Arith.lean`) type-checks shared proofs, finds no duplicate node
+in them and no goal of `omega` kept, and proves a problem with an unknown.
+
+## Loops
+
+A loop `(Zig.loop (B xs) again).run s₀` that no rule is about is proved by its **registered
+invariant** (`@[fsym_inv]`, P09-E4, `docs/invariant-synthesis.md`): definitions next to the loop
+body `B`, named by their part.
+
+```lean
+@[fsym_inv] def fill.loop.inv (p : Ptr) (n : BitVec 32) (v0 : BitVec 64) (s : Locals) : FAssn := …
+@[fsym_inv] def fill.loop.meas (n : BitVec 32) (s : Locals) : Nat := n.toNat - s.i.toNat
+@[fsym_inv] def fill.loop.post (p : Ptr) (n : BitVec 32) (v0 : BitVec 64) (r : Exit × Locals) : FAssn := …
+```
+
+* `B.inv` is the invariant at the start of an iteration, `B.meas` the measure (total correctness:
+  it decreases at each repetition), `B.post` the assertion at the exit. Without `B.post` the
+  exit is the invariant with `again r.1 = false`, which forgets the exit's label and the exit
+  test: a translated caller's `match` on the label needs a `B.post`. The attribute checks, when
+  it is added, that `B` is a defined program over locals (`StateT σ m ε`: `MM σ ε`, `CM Tgt σ ε`),
+  that the definition has no universe parameters, explicit parameters with names of their own,
+  the locals as its last one (`s : σ`, `r : ε × σ` for the post) and an `FAssn` value (a `Nat`
+  for the measure). A name is one definition, so there is one of each part per body.
+* `fsym` applies the backend's loop rule with them (`FTotalTriple.loop_measure`, `FTriple.loop`
+  in the partial logic, `FTTotalTriple.loop_measure` and `FTTriple.loop` in a thread,
+  `CTriple.loop` in the concurrent backend) as a rule (`tryRule`, `loopInvRule?`): its
+  precondition `B.inv … s₀` is planned in the state and the rest is the frame, which stays
+  outside the loop; its premise, the step `∀ s, T (B.inv … s) ((B xs).run s) (fun r => if again
+  r.1 then ⟪B.meas … r.2 < B.meas … s⟫ ⋆ B.inv … r.2 else B.post … r)`, is walked as a branch
+  of its own (in the context of the loop), then the walk goes on after the loop from `B.post`. The
+  body is inlined in the step as a generated call is (`unfoldCmd`: a generated program run from
+  a state, `StateT.run (B xs) s`).
+* The parameters before the locals are matched by name with `B.inv`'s. `B.inv`'s first ones are
+  the body's arguments `xs`; the one named `s0` is the locals at loop entry `s₀` (the
+  generator's name; the registration rejects another parameter of a locals structure's type);
+  every other one (the value at a pointer at entry, `v0`) is an unknown that the plan of the
+  precondition assigns. A fact of the precondition that only the whole plan determines (an
+  existential's witness fixed by a later atom) is proved by arithmetic once it is determined.
+* An invariant that does not hold at the entry (no plan, or a plan that leaves an unknown), after
+  the views and the rebase of a literal pointer for the atoms its plan wanted, stops the walk at
+  the loop (report reason `invariant_not_established`, condition `loop_entry`). A registration
+  that does not fit the loop (no `B.meas` in a total logic, a parameter of `B.meas` or `B.post`
+  that `B.inv` does not have or has with another type) is an error. The step's side goals that the walk does
+  not prove are left to the caller, as a rule's are; a wrong invariant that holds at the entry
+  fails there, at the step's next iteration (regressions:
+  `tests/roadmap/sep-auto/SepAuto/LoopInv.lean`: total, partial, in a thread, concurrent without
+  an exit post, an invariant the step does not keep, one that the entry does not establish, and
+  rejected registrations).
+* The registry is for a loop that no rule applies to: the caller's and the library's rules about
+  the loop are tried first, again with the facts of the state's atoms (`moreFacts`) and the views
+  their preconditions wanted; a rule that applies with side goals it leaves is taken instead (a
+  rule whose side goal the facts refute is not).
+* Not covered: a sequential loop inside a concurrent function's `ConcM.liftMem` command (it
+  stops with no rule), and a proof over a variable `FLogic` (no loop rule: the loop stays a
+  residual).
+
 ## Recursive groups
 
 `FTotalTriple.rec_group_wf` (`Full/Loop`) proves all members of a recursive group together.
@@ -735,7 +852,9 @@ The supplied invocation type is a tagged union of the members' arguments and the
 contract parameters; each invocation has its own precondition, postcondition and result type.
 The measure maps invocations into any well-founded order. Its natural-number specialization,
 `FTotalTriple.rec_group`, uses the same strict-decrease order as `loop_measure` and `loop_ghost`;
-the latter is itself an instance of this rule.
+the latter is itself an instance of this rule. `FTTotalTriple.rec_group_wf` and `rec_group`
+(`Full/ThreadLoop`) retain the stronger thread-total contract, including locality and frame
+safety, for every smaller invocation.
 
 The step proves one unfolding of each actual generated member, using its `partial_fixpoint`
 unfold equation. Its only recursive-call hypotheses are the callee's total contract at strictly
@@ -744,11 +863,75 @@ may change at a recursive call without changing the program arguments: a memory-
 contract quantifies the current stack depth `D`, and calls its callee's contract at the increased
 depth after `enterFrame`.
 
+After applying the group rule and introducing the current invocation and smaller-call
+contract, one `fsym` walks the step. It recognizes the compiler's complete recursive group
+through proof-carrying aliases and constructor-known dispatch. The full current contract must
+determine the invocation, including logical data supplied only by its pre/postcondition; the
+measure cannot supply missing data. Exactly one positional own-member equation is exposed.
+Every later occurrence of any member, including an identical call or a sibling lacking a
+contract, must use the ordinary contract selector and frame planner. Complete explicit, local
+or registered contracts have priority over a smaller-call contract. A failed decrease remains
+its actual side goal; it does not permit another body unfolding.
+
+An unknown initial conditional is still a refusal boundary. Constructor-decided condition
+views do not authorize a branch search or entry after an ordinary caller prefix. Without a
+recognized local smaller-call family, the existing bounded unfolding behavior is unchanged,
+except two changes shared by every run: an `if` is rewritten in its condition only
+(`ite_cond_congr`; its branches are normalized once the walk reaches them), and the arithmetic
+simp set unfolds `frameBase` and `InvImage id WellFoundedRelation.rel`.
+These engine rules do not complete the remaining concrete recursive clients or protocol/P03
+integration; the `recursive-group-total` engine-ledger row remains open.
+
 The rule preserves generated `enterFrame` and `leaveFrame` operations. Their existing rules
 consume and restore the stack-depth token `sp t S D`, with the room requirement proved from
 the caller's precondition. A decreasing argument does not establish stack room. Pure
 `Result` recursion has no modeled frame operations; its native interpretation retains premise
 STK-01 even when its lifted program has a total triple.
+
+`addDown_total` in `Proofs/Pointers/Sep.lean` is a generated memory-backed instance. Its flat
+invocation record holds the input, accumulator and logical stack depth; one `fsym` step uses
+the callee's contract with the decreased input and increased depth. Per-item sum identities
+supply the remaining overflow and result equalities. The contract preserves the exact owned
+accumulator, current thread, original stack depth and explicit `unmetered` mode. Its room
+condition includes all `n + 1` frames, and a budgeted start-memory witness supplies a real
+32-byte reserve. Unmetered mode makes no cost claim. This is a proof of the current generated
+`MemM` code, not an AIR/native certificate: `Certificate.fragment` still refuses recursive
+memory functions, and P03/native stack and producer integration remain open.
+
+## Kernel-run witnesses (`zig_run`)
+
+A theorem that one concrete run completes (`…_completes`, a counterexample run) is computed by
+the kernel (`decide +kernel`). The kernel does not unfold `Zig.loop` or a `partial_fixpoint`
+group, so the proof first rewrites them by their defining equations. It does that with one simp
+set, `zig_run` (`ZigLean/SimpAttr.lean`), and names no generated declaration:
+
+```lean
+  iterate 6 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
+  decide +kernel
+```
+
+* **Contents.** Every executable declaration of generated code: each function, each extracted
+  loop body (`f.loop<id>`), each member of a recursive group (by its unsplit equation
+  `f.eq_def`: its own equation lemmas split a `match` on a parameter into one lemma per case,
+  which a computed argument never matches), each `--model` wrapper (`air2lean_model_<i>`) and
+  `dispatch`. Also `Zig.loop` (tagged in `ZigLean/Simp.lean`) and the library models that hold a
+  loop, each tagged where it is defined (`Zig.osUnfairLockC`, `ZigLean/Conc/Call.lean`), so that
+  `ZigLean.Simp` imports no model. A new library model with a `Zig.loop` or a `partial_fixpoint`
+  is tagged the same way, as is a `--model` implementation that holds one.
+* **Emission rule.** The translator ends each declaration group with
+  `attribute [zig_run] <the group's executable declarations>`, each model wrapper with
+  `attribute [zig_run] air2lean_model_<i>` and `dispatch` with `attribute [zig_run] dispatch`
+  (`runAttribute`, `Air2Lean/Emit.lean`). This is default generation, so every translation
+  (every Zig version and target) tags its own declarations and one proof covers all of them.
+* **Use.** A plain definition unfolds as far as the term goes within one pass. A loop or a
+  recursive call unfolds one level per pass (`singlePass`), so `iterate n` needs `n` at least the
+  run's deepest count of nested loop iterations and recursive calls. A pass that changes nothing
+  fails, but the remaining `Zig.loop` of an unfinished loop always rewrites. `unfoldPartialApp`
+  unfolds `dispatch`, which `Sched.run` takes unapplied. A hand-written client definition on the
+  path (a test's `vt`, `client`) is unfolded by name first.
+* **Kernel-run witnesses only.** The rewrites unfold loops and recursive groups without end. Use
+  the set only under `singlePass`. Never add its members to `zig_unfold` or another set, and never
+  pass it to `fsym` or to a simp call without `singlePass`.
 
 ## Extending it
 
@@ -758,6 +941,8 @@ STK-01 even when its lifted program has a total triple.
   A rule on a view of owned bytes (a region, a typed value: labels and facts over `bytesAt`) is
   the rule of owned bytes (`Full/Ops`: `load_bytesAt`, `storeBytes_bytesAt`, …) through
   `FTotalTriple.up_view`/`up_view'`, not a proof of its own.
+* A loop: its invariant, measure and exit post as `@[fsym_inv] def B.inv`/`B.meas`/`B.post` next
+  to the body `B` (§Loops), not a lemma about the loop passed as `fsym [h]`.
 * A new opaque assertion: `attribute [fsym_atom] myPred`; its pure facts (the block of the
   pointer it owns memory at, its alignment): `@[fsym_facts] theorem … : AtomFacts (myPred p …) φ`;
   facts that need the memory or two atoms: `@[fsym_facts] theorem … : MemFacts (X ⋆ Y) φ`.
@@ -784,8 +969,7 @@ STK-01 even when its lifted program has a total triple.
 followed by a JSON object. Reporting is opt-in and uses the ordinary executor; the regression
 fixtures check exact proof-term and residual-goal parity when both runs have sufficient resources.
 A reporting call suppresses the ordinary
-human-readable stop messages; `set_option fsym.quiet true` suppresses those messages without
-enabling a report.
+human-readable stop messages.
 
 Reporting currently formats origins during the walk. That work consumes heartbeats, including
 inside speculative rule probes, so enabling it can change where a finite-budget probe stops.
@@ -813,7 +997,8 @@ The schema is versioned by `schemaVersion` (currently `1`):
   (`Eq`, an ordering, a provider, an encoding obligation, a typeclass, and so on).
 * `origin.reason`: `no_rule`, `fuel_exhausted`, `panic_not_refuted`,
   `postcondition_not_proved`, `side_condition_not_proved`, `indirect_targets_not_literal`,
-  or `match_without_discriminant`.
+  `match_without_discriminant`, or `invariant_not_established` (a loop's registered invariant
+  at its entry, condition `loop_entry`, §Loops).
 
 The JSON structure and discriminator strings are the API. The expression text follows Lean's
 pretty printer and its local names; it is display text, not an expression serialization. The
@@ -866,7 +1051,7 @@ run. Every proof must stay under the default heartbeat budget. Lessons:
   citation. When `fsym` cannot do something, add or cite the row in the same PR as the workaround.
 * Backends: the full-state triples (`FTotalTriple`, `FTriple`, `FLogic`) and the concurrent
   `CTriple`; `@[fsym]` takes `FTotalTriple` conclusions (every backend) and `FTriple` conclusions
-  (the partial ones). The legacy `TotalTriple` layer is not a target (it is being phased out).
+  (the partial ones). The legacy `TotalTriple` layer is deleted (L13).
 * Whole-mapping steps (`mmap`, `munmap` of a whole mapping, `mremap` that may move) are native
   like the partial-mapping steps: they are the block steps `Holds.push` and `Holds.free`.
 * Time: the `fsym` proofs are slower than the handwritten ones; the largest cost is `omega`

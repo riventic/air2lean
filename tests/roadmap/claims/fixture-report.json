@@ -15607,6 +15607,7 @@
     "Zig.BlockId",
     "Zig.DevEvent",
     "Zig.FootprintEntry",
+    "Zig.FutexKey",
     "Zig.NaScope",
     "Zig.OwnedAlloc",
     "Zig.Ptr",

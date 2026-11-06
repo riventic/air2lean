@@ -31,11 +31,21 @@ for `exact` cases; for `body` and `golden` cases the fresh body after the commit
 profile record, which these checks compare only for its float semantics (a record that names
 other ones than the translation is replaced by the fresh one). A module whose cases disagree is not written.
 
+`invgen` checks the generated loop invariants (`Inv.lean`, the TARGETS of scripts/invgen.py)
+without a translator or Lean: each target's first line is an `-- air2lean-invgen:` record of its
+module and namespace that names the generator revision of the checkout (its Lean version and the
+SHA-256 of each of its modules, `translator_revision%`), the current SHA-256 of the input it read
+(the translated module's source) and the SHA-256 of the rest of the file (no hand edit); no other
+tracked file has such a record. The generator is deterministic, so equal hashes mean the file is
+current; otherwise `scripts/invgen.py write` regenerates it. The runtime is not an input here
+(docs/invariant-synthesis.md): `scripts/invgen.py check` reruns the generator.
+
 Usage: gen-integrity.py check  [--translator PATH] [--only SUBSTRING]
        gen-integrity.py write  [--translator PATH] [--only SUBSTRING]
        gen-integrity.py attest [--translator PATH] [PATH ...]
        gen-integrity.py certify [--translator PATH] [--only SUBSTRING] [--work-dir PATH]
        gen-integrity.py list   (each case and its inputs; no translation)
+       gen-integrity.py invgen (the records of the generated loop invariants; no translation)
 
 `certify` checks every case's private debug-ID certificate, binds both complete actual
 normalized functions and every per-function proof root, and freshly replays the batch
@@ -166,6 +176,8 @@ FIXTURES = [
      ["--namespace", "Futures", "--prefix", "futures."], "exact"),
     ("tests/roadmap/loop-tactics/nested/Nested/Gen.lean", "tests/roadmap/loop-tactics/nested/air",
      ["--namespace", "Nested", "--prefix", "nested."], "exact"),
+    ("tests/roadmap/loop-tactics/counted/Counted/Gen.lean", "tests/roadmap/loop-tactics/counted/air",
+     ["--namespace", "Counted", "--prefix", "counted."], "exact"),
     ("tests/roadmap/thread-locals/ThreadLocals/Gen.lean", "tests/roadmap/thread-locals/air/0.16.0",
      ["--namespace", "ThreadLocals", "--prefix", "thread_locals."], "exact"),
     ("tests/roadmap/vector-layouts/Lanes/Gen.lean", "tests/roadmap/vector-layouts/air/0.16.0",
@@ -198,14 +210,16 @@ FIXTURES = [
     for ns, target in (("S390x", "s390x-linux"), ("Mips64", "mips64-linux"), ("X64", "x86_64-linux"))
 ] + [
     # T03 concurrency.sh: concurrency.zig per Zig version and target.
-    (f"tests/roadmap/big-endian/conc-gen/{v}-{target}.lean",
+    (f"tests/roadmap/big-endian/BigEndian/Conc/V{v.replace('.', '_')}/{ns}/Gen.lean",
      f"tests/roadmap/big-endian/air/{v}/concurrency/{target}",
-     ["--namespace", "Conc", "--prefix", "concurrency."], "exact")
-    for v in ("0.15.2", "0.17.0") for target in ("s390x-linux", "mips64-linux", "x86_64-linux")
+     ["--namespace", f"BigEndian.Conc.V{v.replace('.', '_')}.{ns}", "--prefix", "concurrency."], "exact")
+    for v in ("0.15.2", "0.17.0")
+    for target, ns in (("s390x-linux", "S390x"), ("mips64-linux", "Mips64"), ("x86_64-linux", "X64"))
 ] + [
     # L07/L08 packed-casts/check.sh: one translation per source and version.
-    (f"tests/roadmap/packed-casts/gen/{v}/{ns}.lean", f"tests/roadmap/packed-casts/air/{v}/{src}",
-     ["--namespace", ns, "--prefix", f"{src}."], "exact")
+    (f"tests/roadmap/packed-casts/PackedCasts/V{v.replace('.', '_')}/{ns}.lean",
+     f"tests/roadmap/packed-casts/air/{v}/{src}",
+     ["--namespace", f"PackedCasts.V{v.replace('.', '_')}.{ns}", "--prefix", f"{src}."], "exact")
     for src, ns, versions in (
         ("packed_casts", "PackedCasts", ("0.14.1", "0.15.2", "0.16.0", "0.17.0")),
         ("logical017", "Logical017", ("0.17.0",)),
@@ -214,20 +228,21 @@ FIXTURES = [
     for v in versions
 ] + [
     # nan-bits/check.sh (docs/architecture-audit/nan-bits.md): one translation per version.
-    (f"tests/roadmap/nan-bits/gen/{v}/NanBits.lean", f"tests/roadmap/nan-bits/air/{v}/nan_bits",
-     ["--namespace", "NanBits", "--prefix", "nan_bits."], "exact")
+    (f"tests/roadmap/nan-bits/NanBits/V{v.replace('.', '_')}/Gen.lean", f"tests/roadmap/nan-bits/air/{v}/nan_bits",
+     ["--namespace", f"NanBits.V{v.replace('.', '_')}", "--prefix", "nan_bits."], "exact")
     for v in ("0.14.1", "0.15.2", "0.16.0", "0.17.0")
 ] + [
     # enc-exactness/check.sh (docs/architecture-audit/enc-exactness.md): two sources per version.
-    (f"tests/roadmap/enc-exactness/gen/{v}/{out}.lean", f"tests/roadmap/enc-exactness/air/{v}/{src}",
-     ["--namespace", ns, "--prefix", f"{src}."], "exact")
-    for src, out, ns in (("enc_exactness", "EncExactness", "EncExactness"),
-                         ("opaque_bytes", "Opaque", "EncExactness.Opaque"))
+    (f"tests/roadmap/enc-exactness/EncExactness/V{v.replace('.', '_')}/{out}.lean",
+     f"tests/roadmap/enc-exactness/air/{v}/{src}",
+     ["--namespace", f"EncExactness.V{v.replace('.', '_')}{ns}", "--prefix", f"{src}."], "exact")
+    for src, out, ns in (("enc_exactness", "Gen", ""), ("opaque_bytes", "Opaque", ".Opaque"))
     for v in ("0.14.1", "0.15.2", "0.16.0", "0.17.0")
 ] + [
     # L04 try-pointers/lifetimes/check.sh.
-    (f"tests/roadmap/try-pointers/lifetimes/gen/{v}.lean", f"tests/roadmap/try-pointers/lifetimes/air/{v}",
-     ["--namespace", "TryLifetimes", "--prefix", "try_lifetimes."], "exact")
+    (f"tests/roadmap/try-pointers/lifetimes/TryLifetimes/V{v.replace('.', '_')}/Gen.lean",
+     f"tests/roadmap/try-pointers/lifetimes/air/{v}",
+     ["--namespace", f"TryLifetimes.V{v.replace('.', '_')}", "--prefix", "try_lifetimes."], "exact")
     for v in ("0.14.1", "0.15.2", "0.16.0", "0.17.0")
 ] + [
     (f"tests/roadmap/pointer-width/PointerWidth/{ns}/Gen.lean", f"tests/roadmap/pointer-width/air/0.16.0/{target}",
@@ -294,6 +309,78 @@ def git_files(*patterns):
     out = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z", "--", *patterns],
                          check=True, capture_output=True).stdout
     return [p for p in out.decode().split("\0") if p]
+
+
+INVGEN_PREFIX = b"-- air2lean-invgen: "
+
+
+@functools.cache
+def sibling(script):
+    """The globals of the sibling script `script` (run once)."""
+    return runpy.run_path(str(Path(__file__).with_name(script)))
+
+
+def invgen_record(path, *, header_only=False):
+    """The record on the first line of the generated invariants `path` and the SHA-256 of the
+    text after it (`header_only`: None, the rest unread); ValueError if there is no record,
+    OSError if there is no file."""
+    with open(ROOT / path, "rb") as f:
+        first = f.readline()
+        if not first.startswith(INVGEN_PREFIX):
+            raise ValueError("no air2lean-invgen record on its first line")
+        if header_only:
+            return None
+        body = f.read()
+    return json.loads(first[len(INVGEN_PREFIX):]), hashlib.sha256(body).hexdigest()
+
+
+def invgen_errors(targets=None):
+    """The `invgen` command: each target of scripts/invgen.py (`targets`: its TARGETS) has a
+    record that matches it and the checkout, and no other tracked file has one."""
+    invgen = sibling("invgen.py")
+    valid_revision = sibling("semantic-fingerprints.py")["valid_translator"]
+    targets = invgen["TARGETS"] if targets is None else targets
+    toolchain = (ROOT / "lean-toolchain").read_text().strip()
+
+    @functools.cache
+    def sha256_file(path):
+        return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
+
+    errors = []
+    known = {target[0] for target in targets}
+    for path in git_files("*.lean"):
+        if path not in known:
+            with contextlib.suppress(OSError, ValueError):
+                invgen_record(path, header_only=True)
+                errors.append(f"{path}: an air2lean-invgen record that is not a target of scripts/invgen.py")
+    for path, root, module, namespace in targets:
+        source = invgen["source"](root, module)
+        try:
+            record, body = invgen_record(path)
+            generator, [[name, digest]] = record["generator"], record["inputs"]
+            if record["version"] != 2 or not valid_revision(generator):
+                raise ValueError("not a version 2 record with a consistent generator revision")
+            if not {"Air2Lean.InvGen", "Air2Lean.InvGenMain"} <= {m for m, _ in generator["modules"]}:
+                raise ValueError("a revision that is not the generator's (no Air2Lean.InvGen, Air2Lean.InvGenMain)")
+            if (record["module"], record["namespace"], name) != (module, namespace, source):
+                raise ValueError(f"not the record of {module} (namespace {namespace}) read from {source}")
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            errors.append(f"{path}: no valid air2lean-invgen record ({error}); "
+                          "regenerate it with scripts/invgen.py write")
+            continue
+        if body != record.get("output"):
+            errors.append(f"{path}: its text is not the generator's output (edited by hand?); "
+                          "regenerate it with scripts/invgen.py write")
+            continue
+        stale = [] if toolchain.rpartition(":")[2] == "v" + generator["lean"] else \
+            [f"Lean {generator['lean']} (lean-toolchain {toolchain})"]
+        stale += [f"generator module {m}" for m, d in generator["modules"]
+                  if sha256_file(premise_markers.module_path(ROOT, m)) != d]
+        if sha256_file(ROOT / source) != digest:
+            stale.append(f"input {source}")
+        if stale:
+            errors.append(f"{path} is stale ({'; '.join(stale)} changed); regenerate it with scripts/invgen.py write")
+    return errors
 
 
 def tracked_generated():
@@ -802,7 +889,7 @@ def run_attest(translator, cases, paths):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("command", choices=("check", "write", "attest", "certify", "list",
+    parser.add_argument("command", choices=("check", "write", "attest", "certify", "list", "invgen",
                                             "case-coverage", "case-check", "case-targets", "enrollment"))
     parser.add_argument("paths", nargs="*", help="attest: generated files (default: every tracked one)")
     parser.add_argument("--translator", default=os.environ.get("AIR2LEAN_TRANSLATOR",
@@ -818,11 +905,17 @@ def main(argv=None):
         parser.error("--work-dir is only accepted by certify")
     if args.base is not None and args.command != "enrollment":
         parser.error("--base is only accepted by enrollment")
+    if args.only and args.command == "invgen":
+        parser.error("invgen checks every target of scripts/invgen.py")
     if args.only and (args.command.startswith("case-") or args.command == "enrollment"):
         parser.error("case-family coverage cannot select individual cases")
     try:
-        errors = enrollment_errors(args.base if args.base is not None else os.environ.get("AIR2LEAN_CASE_BASE")) \
-            if args.command == "enrollment" else run(args, all_cases())
+        if args.command == "invgen":
+            errors = invgen_errors()
+        elif args.command == "enrollment":
+            errors = enrollment_errors(args.base if args.base is not None else os.environ.get("AIR2LEAN_CASE_BASE"))
+        else:
+            errors = run(args, all_cases())
     except (ValueError, OSError, subprocess.SubprocessError) as error:
         errors = [str(error)]
     for error in errors:
@@ -831,7 +924,7 @@ def main(argv=None):
         if args.command == "enrollment":
             print("hint: restore withdrawn families/cases and verify the fetched comparison history "
                   "(ledger #case-family-enrollment)", file=sys.stderr)
-        else:
+        elif args.command != "invgen":  # (each invgen error names its fix)
             print("hint: never edit a generated module by hand: regenerate it from committed AIR "
                   "(scripts/check.sh) and put hand-written definitions in a separate module", file=sys.stderr)
         return 1

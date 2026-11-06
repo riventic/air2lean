@@ -3,7 +3,8 @@
 Status: design and feasibility spike, Zig 0.16.0, `x86_64-linux` and `aarch64-macos`, as written
 on 2026-10-09 (approved: OS primitives as the only trusted base). The branch names below record
 where each piece was then; most have since merged. The phases it plans are implemented in
-[os-threads.md](os-threads.md) (T2) and [thread-specs.md](thread-specs.md) (T3).
+[os-threads.md](os-threads.md) (T2). T3's specs (section 4.1) were built as `ZigLean/Conc/Spec/`
+and retired in L21: the full-state contracts replace them ([thread-specs.md](thread-specs.md)).
 
 **Principle (user decision, 2026-10-08).** Only base OS primitives get trusted models. Std code
 above them is translated from its AIR and proved. The allocator track does this already: OSM-01
@@ -191,7 +192,7 @@ translated thread mode. Each primitive is a `SyncOp` (a scheduling point) of the
 
 | Premise | Primitive(s) (Linux / macOS) | Model (new `ZigLean/Os/Thread.lean`, `Os/Futex.lean`, `Os/Clock.lean`) |
 |---|---|---|
-| **OSF-01** futex wait | `os.linux.futex_4arg` with `cmd=.WAIT` (private or shared) / `__ulock_wait2`, `__ulock_wait` with `COMPARE_AND_WAIT\|NO_ERRNO` | **Atomic read** of the u32 at `p`, with a footprint and `observe` (fixes audit finding #14). If it differs, return `EAGAIN`. Else `SyncOp.wait p expected`, after which the **oracle** picks among woken (`0`), spurious/`EINTR` (`-EINTR`), and, with a timeout, `ETIMEDOUT`. The spurious return is always allowed (batch7 C05 `spuriousWake`), which subsumes signal delivery. No happens-before edge from the waker. A bad pointer is `.illegal` (std's `FAULT` → `recoverableOsBugDetected`). Other ops or flags are rejected. |
+| **OSF-01** futex wait | `os.linux.futex_4arg` with `cmd=.WAIT` (private or shared) / `__ulock_wait2`, `__ulock_wait` with `COMPARE_AND_WAIT\|NO_ERRNO` | **Atomic read** of the u32 at `p`, with a footprint and `observe` (fixes audit finding #14). If it differs, return `EAGAIN`. Else `SyncOp.wait p expected`, after which the **oracle** picks among woken (`0`), spurious/`EINTR` (`-EINTR`), and, with a timeout, `ETIMEDOUT`. On macOS a wake, a spurious return or a mismatch returns the oracle's `--ull_nwaiters` (any non-negative `c_int`) or `-EFAULT` (`Darwin.ulockResult`). The spurious return is always allowed (batch7 C05 `spuriousWake`), which subsumes signal delivery. No happens-before edge from the waker. A bad pointer is `.illegal` (Linux std's `FAULT` → `recoverableOsBugDetected`; macOS std treats `FAULT` as a spurious return). Other ops or flags are rejected. |
 | **OSF-02** futex wake | `os.linux.futex_3arg` with `cmd=.WAKE` / `__ulock_wake` (`WAKE_ALL` flag) | `SyncOp.wake p n` that wakes an **oracle-chosen** subset of size `min n waiters` (audit finding #6). Linux returns the count. macOS returns `0` or `-ENOENT`, and `-EINTR` may be returned spuriously (std loops). |
 | **OST-01** thread create | Linux: `os.linux.clone` with exactly std's flag set; `tls.prepareArea` is part of the row. macOS: `pthread_create` (+ `pthread_attr_*` as no-op rows) | `SyncOp.spawn (entryFn, arg)`. The entry is a **constant** function pointer per call site, so `Emit` builds the spawn-target dispatcher as today. There is a happens-before edge parent→child, and the child gets a fresh TLS instance (batch7 C02). Failure is an oracle choice: `EAGAIN`/`ENOMEM` → `ThreadQuotaExceeded`/`SystemResources` under `fallible`. Linux `PARENT_SETTID` writes the tid. **Exit** (the child returns from `entryFn`) does Linux `CHILD_CLEARTID`: a **release** store of `0` to `ctid` that carries the child's final clock, then a wake-all on `ctid`. Std's translated `join` (seq_cst load loop + futex) then gets the join edge, and the hand `SyncOp.join` is not needed on Linux. |
 | **OST-02** join/detach/exit | macOS: `pthread_join` (= `SyncOp.join`, with edge), `pthread_detach`. Linux: `ThreadCompletion.freeAndExit` (asm munmap + exit) | Detached exit frees the thread's stack mapping and ends the thread (batch7 C07 detach). A frame-end footprint is recorded over the stack (audit finding #3). Joining a detached or already-joined handle is `.illegal` (std: `unreachable`). |
@@ -223,6 +224,11 @@ legacy.
 ## 4. Proof plan: generic specs, translated implementations, clients via the specs
 
 ### 4.1 Specs (`ZigLean/Sep/` style, parallel to P3 `AllocSpec`)
+
+Status: the `FutexSpec`, `MutexSpec`, `EventSpec`, `WaitGroupSpec` and `CondSpec` below were
+built in `ZigLean/Conc/Spec/` and retired in L21. Their full-state replacements (`MutexImpl`,
+`EventImpl`, `CondImpl`, the model futex's rules) and the open items are in
+[thread-specs.md](thread-specs.md). `IoSpec` is still a plan.
 
 * **`FutexSpec`.** The contract of the two vtable-free functions `Threaded.Thread.futexWaitInner`
   and `futexWake`. They are proved once from OSF-01/02 per target.

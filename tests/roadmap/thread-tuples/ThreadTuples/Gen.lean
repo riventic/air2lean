@@ -57,7 +57,7 @@ abbrev Tgt.spawnInit {γ : Type} (P : Zig.Conc.Proto Tgt γ) (target : Tgt) (gho
 
 /-- Each captured field in source order. A value is copied and carries no ownership;
 a pointer or slice copies only its identity, so a spawn proof must hand over or share its
-region (`Zig.Conc.Capture.grant`). An `other` field's obligation cannot be discharged. -/
+region (`Zig.Full.FCapture.grant`). An `other` field's obligation cannot be discharged. -/
 def Tgt.captures : Tgt → List Zig.Conc.Capture
   | .atomicWorker (capture0, capture1, _, _) => [.ptr capture0, .ptr capture1, .value, .value]
   | .copyWorker (capture0, _, _, _) => [.ptr capture0, .value, .value, .value]
@@ -79,6 +79,8 @@ def atomic_Value_u32_init (p0 : BitVec 32) : Zig.Result (atomic_Value_u32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] atomic_Value_u32_init
+
 structure ZeroWorker_u8_runLocals where
   deriving Inhabited
 
@@ -90,6 +92,8 @@ def ZeroWorker_u8_run  : Zig.Result (Unit) := do
     pure .ret) : Zig.M ZeroWorker_u8_runLocals ZeroWorker_u8_runExit).run' (default : ZeroWorker_u8_runLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] ZeroWorker_u8_run
 
 structure atomicWorkerLocals where
   deriving Inhabited
@@ -112,6 +116,8 @@ def atomicWorker (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2 : BitVec 32) (p3 : BitVec 32)
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] atomicWorker
 
 structure atomicSharedLocals where
   shared : Zig.Ptr
@@ -176,6 +182,8 @@ def atomicShared (p0 : BitVec 32) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.E
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] atomicShared
+
 structure copyWorkerLocals where
   deriving Inhabited
 
@@ -193,6 +201,8 @@ def copyWorker (p0 : Zig.Ptr) (p1 : BitVec 32) (p2 : BitVec 32) (p3 : BitVec 32)
     pure .ret) : Zig.MM copyWorkerLocals copyWorkerExit).run' (default : copyWorkerLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] copyWorker
 
 structure copiedLocals where
   snapshot : BitVec 32
@@ -229,6 +239,8 @@ def copied (p0 : BitVec 32) (p1 : BitVec 32) (p2 : BitVec 32) : Zig.ConcM Tgt (E
   match e with
   | .ret v => pure v
 
+attribute [zig_run] copied
+
 structure zeroWorkerLocals where
   deriving Inhabited
 
@@ -240,6 +252,8 @@ def zeroWorker  : Zig.Result (Unit) := do
     pure .ret) : Zig.M zeroWorkerLocals zeroWorkerExit).run' (default : zeroWorkerLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] zeroWorker
 
 structure emptyLocals where
   deriving Inhabited
@@ -262,6 +276,8 @@ def empty  : Zig.ConcM Tgt (Except Zig.ErrName (Unit)) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] empty
+
 structure genericEmptyLocals where
   deriving Inhabited
 
@@ -283,6 +299,8 @@ def genericEmpty  : Zig.ConcM Tgt (Except Zig.ErrName (Unit)) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] genericEmpty
+
 structure mixedWorkerLocals where
   deriving Inhabited
 
@@ -302,6 +320,8 @@ def mixedWorker (p0 : BitVec 32) (p1 : Zig.Ptr) (p2 : BitVec 32) (p3 : Zig.Ptr) 
     pure .ret) : Zig.MM mixedWorkerLocals mixedWorkerExit).run' (default : mixedWorkerLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] mixedWorker
 
 structure groupMixedLocals where
   out : Zig.Ptr
@@ -358,6 +378,8 @@ def groupMixed (p0 : Zig.Io) (p1 : BitVec 32) (p2 : BitVec 32) : Zig.ConcM Tgt (
   match e with
   | .ret v => pure v
 
+attribute [zig_run] groupMixed
+
 structure mixedLocals where
   out : Zig.Ptr
   other : Zig.Ptr
@@ -395,6 +417,8 @@ def mixed (p0 : BitVec 32) (p1 : BitVec 32) : Zig.ConcM Tgt (Except Zig.ErrName 
   match e with
   | .ret v => pure v
 
+attribute [zig_run] mixed
+
 /-- Runs a spawn target (`Zig.Sched.run`). -/
 def dispatch : Tgt → Zig.ConcM Tgt Unit
   | .atomicWorker a =>
@@ -408,5 +432,7 @@ def dispatch : Tgt → Zig.ConcM Tgt Unit
   | .mixedWorker a =>
     let (capture0, capture1, capture2, capture3) := a
     discard (Zig.ConcM.liftMem (mixedWorker capture0 capture1 capture2 capture3))
+
+attribute [zig_run] dispatch
 
 end ThreadTuples

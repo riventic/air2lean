@@ -24,7 +24,7 @@ it. On the dev Mac agents set it in their shell:
 | `AIR2LEAN_HOST_ZIG_<v>` | stock Zig `<v>` (dots as `_`) that bootstraps a patched build; default `$AIR2LEAN_CACHE/host-<v>/zig`, else `zig` on `PATH` of that version |
 | `AIR2LEAN_BUILD_LOCK`, `AIR2LEAN_LOCK_WAIT` | build-guard lock (keep the default: one per machine, see below) and lock wait (seconds) of the heavy steps |
 | `AIR2LEAN_BUILD_MEM_MIB` | memory budget of all guarded workloads of the machine (default 75% of RAM) |
-| `AIR2LEAN_REGEN_RSS_MIB` | `scripts/regen.sh`: the RSS limit of its guarded builds (default 11000) |
+| `AIR2LEAN_REGEN_RSS_MIB` | `scripts/regen.sh`: the RSS limit of its guarded builds (default 6144; theorem-inventory renewals 11000) |
 
 ## What is cached, and why a hit is always right
 
@@ -57,16 +57,19 @@ The Lean files of the proof fixtures (`tests/roadmap/<fixture>/check.sh`) are on
 `ArenaSpec`). The outputs go to `tests/roadmap/.lake/build`, outside the root
 `.lake/build/lib/lean`, where proof receipts reject untracked compiled modules. Converted so far:
 `alloc-arena`, `alloc-fba`, `alloc-translated`, `lists-fba` (and the two `interfaces` modules it
-imports), the architecture-audit claim fixtures and the claim-strength fixtures
-(`tests/roadmap/claims`); the other checks still elaborate with `lake env lean`.
+imports), the architecture-audit claim fixtures, the claim-strength fixtures
+(`tests/roadmap/claims`), `packed-casts`, `nan-bits`, `enc-exactness` and
+`try-pointers/lifetimes`; the other checks still elaborate with `lake env lean`.
 
 `scripts/fixtures.py` is the one entry point; a converted check runs nothing else on Lean files:
 
 | command | what it does |
 | --- | --- |
 | `fixtures.py build [TARGET...]` | `lake build` of fixture libraries or modules (no target: every library) in the package, through `cas.py run`. Lake also builds the root-package modules they import, into the root `.lake/build`. |
-| `fixtures.py audit M... [--declaration NAME]...` | `scripts/assumptions.py --no-build --all-declarations` over the built modules: the axioms come from the compiled environment, with kernel replay (`leanchecker`), not from a message log. Fails unless every theorem of the modules uses only `propext`, `Classical.choice`, `Quot.sound`, no declaration of the modules depends on `sorry`, every named declaration exists in them, and each reaches only the standard axioms in the extractor's dependency graph (a definition whose value carries proofs, such as `AllocFba.FBA.ledger`, is checked like a theorem); every audited fixture module is the Lake-built olean. The extractor's driver (the `#assurance_audit` file) is built by Lake (`assumptions.py --extract-in`, in the generated workspace `tests/roadmap/.lake/extraction`, which requires the package): its trace (the driver's text, every import's trace, `tools.Assurance` included, the toolchain) decides when the extraction runs again, and an unchanged one replays the build's stored log, which carries the report. The policy, the kernel replay and the freshness checks run on every audit. |
+| `fixtures.py audit M... [--declaration NAME]...` | `scripts/assumptions.py --no-build --all-declarations` over the built modules: the axioms come from the compiled environment, with kernel replay (`leanchecker`), not from a message log. Fails unless every theorem of the modules uses only `propext`, `Classical.choice`, `Quot.sound`, no declaration depends on `sorry`, the report has no violation in the modules (an axiom, opaque or unsafe declaration outside the policy, a float-semantics label issue), every named declaration exists in them, and each reaches only the standard axioms in the extractor's dependency graph (a definition whose value carries proofs, such as `AllocFba.FBA.ledger`, is checked like a theorem); every audited fixture module is the Lake-built olean. The extractor's driver (a file that runs the compiled extractor `.lake/build/bin/assurance`) is built by Lake (`assumptions.py --extract-in`, in the generated workspace `tests/roadmap/.lake/extraction`, which requires the package): its trace (the driver's text with the extractor's SHA-256, each audited module's trace, the toolchain) decides when the extraction runs again, and an unchanged one replays the build's stored log, which carries the report. The policy, the kernel replay and the freshness checks run on every audit. |
 | `fixtures.py mutant NAME --src DIR --fails M [--expect TEXT]...` | a negative check: DIR is the fixture's sources with one mutation, built as a workspace of its own (`tests/roadmap/.lake/mutants/NAME`). `lake build M` must fail on M itself: Lake's list of failed targets is exactly M, an error is located in M's source, and each `--expect` text occurs. A failed import, a missing module or a killed process is not a kill. |
+| `fixtures.py instance PRIMARY --subst OLD=NEW... [--write]` | a module stated once for several Zig versions or targets: the instance is PRIMARY with each OLD name component (`V0_17_0`) replaced by NEW, in its text and its path. Fails unless the committed instance is that text byte for byte (`--write` writes it). |
+| `fixtures.py run OUTDIR M:DECL...` | runs each `IO Unit` DECL of a built module M in one `lean --run` of the package, its output to `OUTDIR/DECL.txt`; fails unless the modules are up to date in Lake's trace (`lake build --no-build`) |
 | `fixtures.py files` | the package's module files (`lean-deps.py` does not treat them as standalone files) |
 
 **Reuse is Lake's trace, nothing else.** A module is elaborated again exactly when its trace
@@ -86,6 +89,15 @@ check result is never reused.
 is a tracked module of the library. The check first translates the AIR afresh and requires the
 output to be byte-identical (`cmp`), then builds: a changed translator output fails the comparison
 before any proof runs, and a regenerated file has new content, so a new trace.
+
+**One model, several versions.** A fixture that checks the same model against the translation of
+each Zig version (or target) has one translation and one model module per version, with distinct
+module names and namespaces (`NanBits.V0_16_0.Gen`, `NanBits.V0_16_0.Model`): two same-named
+modules cannot share a workspace, and distinct namespaces let one audit load every version. The
+model is written once, for the newest version; the check requires every other version's module to
+be that file with the version name replaced (`fixtures.py instance`), so no version's theorems can
+drift. A model's `main` (the lines compared with native output) runs from the built modules
+(`fixtures.py run`), not by elaborating the file again.
 
 **Mutants** are other files: copying the fixture's modules with one changed keeps every module
 name, and a workspace of their own keeps the two apart (in one workspace Lake would build only
@@ -140,10 +152,10 @@ tables of the modules below it) runs as native code in every Lake build of a mod
 package and `tests/diff`. Lean's interpreter runs the same code otherwise. This is a build mode,
 not a proof rule: the elaborator produces the same terms and the kernel checks them as before
 (the `.olean` of every measured module is byte-identical in both modes, on aarch64-macos and
-x86_64-linux). Meta code above `Auto` (the `fsym_norm` simprocs of `Wrappers`, `unroll_solo` in
-`Unroll`) stays interpreted. Native code does change one thing: `native_decide` and
-`Lean.ofReduceBool` would evaluate a closure function with compiled code. Both are already
-rejected (`scripts/no-sorry.sh`, the claim policy).
+x86_64-linux). Meta code above `Auto` (the `fsym_norm` simprocs of `Wrappers`) stays
+interpreted. Native code does change one thing: `native_decide` and `Lean.ofReduceBool` would
+evaluate a closure function with compiled code. Both are already rejected
+(`scripts/no-sorry.sh`, the claim policy).
 
 Two libraries of `lakefile.toml` do it:
 
@@ -244,7 +256,9 @@ are hashed before and after preparation and extraction; a change rejects the res
 persistent metadata-only digest cache is used. Loader overlays (`LD_*`, `DYLD_*`) are rejected.
 Caller `LEAN_PATH` libraries remain supported for theorem-universe and witness fixtures:
 their ordered roots, top-level directory selection, logical/IR/shared-library bytes and aliases
-join the same fresh binding. Changes, including added or removed companions, fail closed.
+are bound per run (the trace's `caller_lean_path`; not the record's context, since Lake compiles
+the extractor on the workspace's own path). Changes during a run, including added or removed
+companions, fail closed.
 Caller `LEAN_SYSROOT` replacement, empty/nonabsolute Lake sysroots and empty path components
 are rejected. A caller library written during preparation is rejected rather than rebound.
 This sidecar binding concerns extractor inputs; it does not authenticate replay-cache
@@ -276,6 +290,81 @@ directory entries by their last-hit stamp, Lake artifacts by the inode change ti
 restoring hard link updates; a Lake artifact still linked from a worktree frees nothing and is
 skipped. Nothing used within the last hour (`--min-age`) is evicted. A deleted Lake artifact is
 a miss: Lake rebuilds the module.
+
+## Remote build host
+
+The heavy work of a worktree (full builds, fixture checks, `scripts/regen.sh`, a PR's gate) can
+run on a second machine, while the development machine only edits and runs git. The repository
+needs nothing special for this. The host is an ordinary checkout with its own cache, and the
+coordinator's tooling holds the host's name and the runner script. The mechanism:
+
+- **Host.** Linux on x86_64; a VM such as WSL2 works. It needs git, curl, tar, xz and
+  python ≥ 3.12 ([ci.md](ci.md); build-guard's `os.waitid` needs 3.13 only on macOS). Install
+  elan from the `[ci.elan]` pin of `zig-patch/versions.toml` (sha256-checked) and the
+  `lean-toolchain` release. Install the stock Zig of each version from `[ci.host-zig."V"]` as
+  `$AIR2LEAN_CACHE/host-V/zig`, where `cas.py host-zig` finds it. `scripts/zig-air.sh V` then
+  builds the patched compilers into the host's own `AIR2LEAN_CAS_DIR`. Set that variable in every
+  job, so the host's worktrees share Lake artifacts and compilers as on any machine.
+- **Code transfer.** A bare repository on the host receives pushes over ssh:
+  `git push --receive-pack='<prefix> git-receive-pack' <host>:<path>/repo.git <sha>:refs/heads/<name>`.
+  `<prefix>` reaches the Linux shell when the ssh login shell is a different one, e.g.
+  `wsl -d <distro> --`. Set `receive.shallowUpdate=true` if the pushing clone is shallow. No
+  GitHub credential goes on the host. Before each job, the host's bare repository fetches `main`
+  and `generated` read-only from the public origin, for merge bases, main-relative steps and
+  `scripts/generated.py fetch`. `refs/remotes/origin/main` is one ref that all the host's
+  worktrees share, so it holds the origin's main, never one lane's copy. A dirty worktree is
+  shipped as one snapshot commit, made through a private index: `git add -A` into a temporary
+  `GIT_INDEX_FILE`, `git write-tree`, `git commit-tree -p HEAD`. The lane's index, worktree and
+  refs stay unchanged.
+- **Worktrees and concurrency.** The host keeps one worktree per branch, reset to the pushed
+  commit before each job (`checkout -f`, `clean -fd`). Ignored build outputs stay, so `.lake` is
+  warm. A lock file serializes the jobs of one worktree. Jobs in different worktrees run at once,
+  and the host's own build-guard lock admits them within the host's budget:
+  `AIR2LEAN_BUILD_MEM_MIB` is the host's memory less about 3000 MiB for the OS and unguarded
+  tools ([build-budgets.md](build-budgets.md#admission)). Every job runs under
+  `scripts/build-guard.py`. The host skips the wrapper guard only for an entry point that guards
+  its own Lean and Lake work: `full-build.sh`, `worktree-init.sh`, `fixture-checks.sh`,
+  `regen.sh`, `preflight.sh`, `zig-air.sh`, `build-guard.py`. It rejects any other command
+  without a guard, `bash -c` included, so the check fails closed. Without the guard there is no
+  budget and no `LEAN_NUM_THREADS=1`: one unguarded cold kernel replay (`leanchecker ZigLean` on
+  every core) passed 24 GB and drove a shared host into the OOM killer. A per-process watchdog of
+  12 GiB on `lean`, `lake` and `leanchecker` backs the guard up. The caller's
+  `AIR2LEAN_GUARD_PRIORITY` reaches every guard of the job: a gate run while holding the merge
+  lock passes `merge`, so it takes a drain ticket on the host as it would locally.
+- **Identity.** Jobs set a neutral git author and committer, because full `regen.sh` commits.
+  Those commits stay on the host; only their content comes back, in the patch.
+- **Results.** The job's output streams back over the ssh connection, which also carries its
+  exit status. Files the job produced, such as regenerated generated files, come back as a binary
+  diff of the host worktree against the pushed commit, which the lane applies with `git apply`.
+  The job writes the diff while it still holds the worktree's lock, because the next job of that
+  worktree resets it.
+- **Lifetime.** A job is detached from the connection that started it. It runs in its own
+  session (`setsid`, `nohup`), appends to a log on the host and writes its exit status there
+  when it ends. The client only follows the log, so a dropped connection loses nothing. Clients
+  can attach to the job again (replaying the log from the start), cancel it (its process group
+  gets SIGTERM, then SIGKILL), and starting an identical unfinished job attaches to it instead of
+  queueing a twin. A WSL host must keep the distro running without a session
+  (`instanceIdleTimeout=-1` in `.wslconfig`); otherwise WSL ends every process when the last
+  session closes. Set `AIR2LEAN_GUARD_IDLE_MINUTES` in the host's job environment: a job no one
+  watches then still ends when it hangs ([build-budgets.md](build-budgets.md)).
+- **Docker.** The few steps that call `docker run` themselves need Docker inside the host's
+  Linux. Examples are `scripts/local-ci.sh` parts, `scripts/build-mode-docker.sh` and the
+  `--docker-linux` modes. A job that needs Docker checks `docker info` first and fails at once
+  if it is not available. The native x86_64-linux runs need no container on an x86_64 Linux
+  host.
+
+Which work runs where:
+
+- Oleans are portable between hosts, but the precompiled `fsym` library
+  ([above](#precompiled-fsym)) is a native library for one platform. Each host therefore builds
+  its own `.lake` through its own cache. Never copy `.lake` between hosts.
+- An x86_64-linux host runs the x86_64-linux parts natively, without Rosetta: the CI `test`
+  rows, and every `--native` invocation of a fixture check, which `scripts/fixture-checks.py`
+  skips on the Mac (`fixture-checks.py --list`: `not on aarch64-macos (needs x86_64-linux)`).
+- The aarch64-macos parts stay on the Mac: the `macos` CI part ([ci.md](ci.md#3-macos-rows)).
+  So do the aarch64-linux native parts, in the Mac's native `linux/arm64` container
+  ([CLAUDE.md](../CLAUDE.md), [rosetta.md](rosetta.md)); the x86_64-linux invocations of
+  `tests/roadmap/dispatch/check.sh --native-only` run on the host.
 
 ## `scripts/regen.sh`
 

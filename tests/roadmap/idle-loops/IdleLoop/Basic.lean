@@ -19,7 +19,8 @@ client below runs the translated loop in a spawned worker:
 
 `data` and `flag` are zero-initialized `u32` globals (blocks 0 and 1). The client is a
 hand-written scheduler harness around the translated loop, not a translated source program.
-`wLoop_eq` unfolds one iteration of the translated loop: the acquire load (a scheduler stop
+`wLoop_eq` unfolds one iteration of the translated loop: the body's step tick (`Zig.tick`, no
+stop; only the memory's step count moves), the acquire load (a scheduler stop
 whose response picks the message), then the spin hint (a scheduler stop) and the translated
 `Thread.yield` (its `sched_yield`, OSY-01: a scheduler stop that returns 0) when the flag is 0.
 -/
@@ -67,7 +68,7 @@ def treeMap {T T' α : Type} (f : T → T') : {n : Nat} → CoN T α n → CoN T
   | _, .sync (.spawnGated t) m k => .sync (.spawnGated (f t)) m fun r m' => treeMap f (k r m')
   | _, .sync .gate m k => .sync .gate m fun r m' => treeMap f (k r m')
   | _, .sync (.join tid) m k => .sync (.join tid) m fun r m' => treeMap f (k r m')
-  | _, .sync (.wait p e) m k => .sync (.wait p e) m fun r m' => treeMap f (k r m')
+  | _, .sync (.wait p e sh) m k => .sync (.wait p e sh) m fun r m' => treeMap f (k r m')
   | _, .sync (.wake p c) m k => .sync (.wake p c) m fun r m' => treeMap f (k r m')
 
 /-- `x` with every spawn target mapped by `f`. -/
@@ -181,14 +182,14 @@ def wLoop : ConcM Tgt Unit := retarget noTgt (loopRun >>= idleTail) >>= fun _ =>
 
 theorem locals_eq (s : IdleLoop.idleLocals) : s = default := by cases s; rfl
 
-theorem iterRun_eq : iterRun = (syncPick loadCnt >>= fun c =>
+theorem iterRun_eq : iterRun = (ConcM.liftMem tick >>= fun _ => syncPick loadCnt >>= fun c =>
     ConcM.liftMem (atomicLoadAt (n := 32) c .acquire 4 fPtr) >>= fun v =>
     if v == 0 then (syncYield >>= fun _ => syncYield >>= fun _ =>
       pure (IdleLoop.idleExit.rep2, default)) else pure (IdleLoop.idleExit.br1, default)) := by
   unfold iterRun IdleLoop.idle.loop2
   simp only [atomicLoadC, pickC_eq, callMC, callC, spinLoopHintC_eq, threadYield_eq,
     StateT.run_bind, StateT.run_lift, bind_assoc, pure_bind, run_ite]
-  refine bindC fun c => bindC fun v => ?_
+  refine bindC fun _ => bindC fun c => bindC fun v => ?_
   split
   · simp only [bind_assoc]
     refine bindC fun u => bindC fun x => ?_
@@ -203,14 +204,15 @@ theorem loopRun_eq : loopRun = iterRun >>= fun r =>
   rw [locals_eq r.2]
   rfl
 
-/-- **One iteration.** The worker at the head of the translated loop: the acquire load, then,
-on 0, the spin hint, the yield and the loop again; on another value, the check. -/
-theorem wLoop_eq : wLoop = syncPick loadCnt >>= fun c =>
+/-- **One iteration.** The worker at the head of the translated loop: the body's step tick, the
+acquire load, then, on 0, the spin hint, the yield and the loop again; on another value, the
+check. -/
+theorem wLoop_eq : wLoop = ConcM.liftMem tick >>= fun _ => syncPick loadCnt >>= fun c =>
     ConcM.liftMem (atomicLoadAt (n := 32) c .acquire 4 fPtr) >>= fun v =>
     if v == 0 then (syncYield >>= fun _ => syncYield >>= fun _ => wLoop) else check := by
   conv => lhs; rw [wLoop.eq_1, loopRun_eq, iterRun_eq]
   simp only [bind_assoc, retarget_bind, retarget_syncPick, retarget_liftMem]
-  refine bindC fun c => bindC fun v => ?_
+  refine bindC fun _ => bindC fun c => bindC fun v => ?_
   split
   · simp only [bind_assoc, retarget_bind, retarget_syncYield]
     refine bindC fun u => bindC fun x => ?_

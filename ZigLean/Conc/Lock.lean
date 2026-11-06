@@ -19,7 +19,8 @@ protocol (`ZigLean/Conc/Logic.lean`) for one lock, proved once for every protoco
   chain, and no other location overlaps the word; no part has a byte of the word. The free lock
   owns a heap with `R` (`Lock.Owns`): each access to it happened before every thread, or before
   the release clock of the newest message of the word; the holder's resource has `R` (`res`).
-  A thread in the futex queue waits at the word, or at another futex (`away`, `Lock.Queue`); if a
+  A thread in the futex queue waits at the word's futex key (`Lock.key`, a private key of the
+  word's address), or at another key (`away`, `Lock.Queue`); if a
   thread waits at the word, a thread that is not asleep is in the lock's code and will take the
   lock or wake a waiter (`wit`), so there is no deadlock at the word.
 - **A protocol with the lock** (`Lock.Fits`): its invariant is `Lock.Inv` and the rest `U`; a
@@ -128,6 +129,11 @@ variable {γ : Type} (L : Lock γ)
 /-- The address of the word. -/
 def ptr : Ptr := ⟨some L.b, (L.o : Int)⟩
 
+/-- The futex key of the word in `m` (`Mem.wordKey`, private): the key of the lock's futex waits
+and wakes (`Mem.keyAt_wordKey`). It reads only the block's address, so it stays while the block
+does (`Lock.Step.key`). -/
+def key (m : Mem) : FutexKey := m.wordKey L.b L.o
+
 /-- The values of the word: `0`, `1`, `c`. -/
 def Val (w : Nat) : Prop := w = 0 ∨ w = 1 ∨ w = L.c
 
@@ -190,13 +196,22 @@ def Free (G : ThreadId → γ) : Prop := ∀ u, L.ph (G u) ≠ .holds
 def Before (m : Mem) (c : VClock) : Prop :=
   ∃ i l, L.Loc m i l ∧ VClock.le c (l.msgs.back!).relClock = true
 
-/-- A thread waits at the word in the futex queue `ws`. -/
-def Waits (ws : Array (ThreadId × Ptr)) : Prop := ws.any (·.2 == L.ptr) = true
+/-- A thread waits at the word's key in `m` (`Lock.key`) in the futex queue `ws`. -/
+def Waits (m : Mem) (ws : Array (ThreadId × FutexKey)) : Prop := ws.any (·.2 == L.key m) = true
 
-/-- The futex queue `ws`: a thread at the word is at `lock`'s futex wait; a thread at another
-futex is `away`. -/
-def Queue (G : ThreadId → γ) (ws : Array (ThreadId × Ptr)) : Prop :=
-  ∀ w ∈ ws, (w.2 = L.ptr ∧ L.ph (G w.1) = .wait) ∨ (w.2 ≠ L.ptr ∧ L.ph (G w.1) = .away)
+/-- The futex queue `ws` with the word's key in `m`: a thread at it is at `lock`'s futex wait; a
+thread at another key is `away`. -/
+def Queue (G : ThreadId → γ) (m : Mem) (ws : Array (ThreadId × FutexKey)) : Prop :=
+  ∀ w ∈ ws, (w.2 = L.key m ∧ L.ph (G w.1) = .wait) ∨ (w.2 ≠ L.key m ∧ L.ph (G w.1) = .away)
+
+/-- The queue in a memory with the same key of the word. -/
+theorem Queue.of_key {G : ThreadId → γ} {m m' : Mem} {ws : Array (ThreadId × FutexKey)}
+    (h : L.key m' = L.key m) (hq : L.Queue G m ws) : L.Queue G m' ws := by
+  unfold Lock.Queue; rw [h]; exact hq
+
+theorem Waits.of_key {m m' : Mem} {ws : Array (ThreadId × FutexKey)} (h : L.key m' = L.key m)
+    (hw : L.Waits m' ws) : L.Waits m ws := by
+  unfold Lock.Waits at hw; rw [h] at hw; exact hw
 
 /-- The invariant of the lock (module doc). -/
 structure Inv (G : ThreadId → γ) (m : Mem) : Prop where
@@ -221,8 +236,8 @@ structure Inv (G : ThreadId → γ) (m : Mem) : Prop where
     L.Off hL ∧ L.Owns G m hL
   /-- The holder's resource. -/
   res : ∀ u, L.ph (G u) = .holds → L.R G (L.held (G u))
-  fq : L.Queue G m.waiters
-  wit : L.Waits m.waiters → ∃ v, v < m.threads.size ∧ m.waiters.any (·.1 == v) = false ∧
+  fq : L.Queue G m m.waiters
+  wit : L.Waits m m.waiters → ∃ v, v < m.threads.size ∧ m.waiters.any (·.1 == v) = false ∧
     (L.ph (G v)).busy = true ∧ (L.ph (G v) = .holds → L.U32 m (BitVec.ofNat 32 L.c))
   /-- The holder made the most recent successful acquire of the word (`ALoc.holder`), for the
   owner check of the unlock (`Thread.mutexOwnerCheck`). -/
@@ -241,8 +256,8 @@ structure Step (t : ThreadId) (m m' : Mem) : Prop where
   bsize : m'.blocks.size = m.blocks.size
   blocks : m'.blocks = m.blocks ∨ ∃ blk bs, m.blocks[L.b]? = some blk ∧ blk.live = true ∧
     bs.size = 4 ∧ L.o + 4 ≤ blk.bytes.size ∧ m'.blocks = (m.write L.b blk L.o bs).blocks
-  /-- The threads at another futex stay in the queue. -/
-  waiters : ∀ w, w.2 ≠ L.ptr → (w ∈ m'.waiters ↔ w ∈ m.waiters)
+  /-- The threads at another futex key stay in the queue. -/
+  waiters : ∀ w, w.2 ≠ L.key m → (w ∈ m'.waiters ↔ w ∈ m.waiters)
   /-- A clock that happened before the newest message of the word still does. -/
   before : ∀ c, L.Before m c → L.Before m' c
   /-- The atomic locations at other addresses stay. -/
@@ -293,11 +308,6 @@ theorem Inv.wfpW {G G' : ThreadId → γ} {m : Mem} (hi : L.Inv G m)
 
 /-! ## Basic facts -/
 
-theorem allLe_mono {m m' : Mem} {c : VClock} (ht : m'.threads = m.threads)
-    (hcl : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
-    (h : AllLe m c) : AllLe m' c := fun u hu =>
-  VClock.le_trans (h u (ht ▸ hu)) (hcl u (ht ▸ hu))
-
 theorem LiveLe.mono {G : ThreadId → γ} {m m' : Mem} {c : VClock} (ht : m'.threads = m.threads)
     (hcl : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
     (h : L.LiveLe G m c) : L.LiveLe G m' c := fun u hu hg =>
@@ -312,22 +322,30 @@ theorem LiveLe.le {G : ThreadId → γ} {m : Mem} {c : VClock} {u : ThreadId} (h
     (hu : u < m.threads.size) (hg : L.ph (G u) ≠ .gone) : VClock.le c (m.clocks[u]!) = true :=
   h u hu hg
 
-theorem someLe_mono {m m' : Mem} {c : VClock} (ht : m'.threads = m.threads)
-    (hcl : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
-    (h : SomeLe m c) : SomeLe m' c := by
-  obtain ⟨u, hu, hle⟩ := h
-  exact ⟨u, ht ▸ hu, VClock.le_trans hle (hcl u hu)⟩
-
 /-- A step that keeps the threads, the groups, the blocks, the clocks, the footprint, the atomic
 locations and the threads at another futex. -/
 theorem Step.same {t : ThreadId} {m m' : Mem} (ht : m'.threads = m.threads)
     (hg : m'.groups = m.groups) (hb : m'.blocks = m.blocks) (hc : m'.clocks = m.clocks)
     (hf : m'.footprint = m.footprint) (ha : m'.atomics = m.atomics)
-    (hw : ∀ w, w.2 ≠ L.ptr → (w ∈ m'.waiters ↔ w ∈ m.waiters)) : L.Step t m m' :=
+    (hw : ∀ w, w.2 ≠ L.key m → (w ∈ m'.waiters ↔ w ∈ m.waiters)) : L.Step t m m' :=
   ⟨ht, fun e he => .inl (hf ▸ he), hg, by rw [hc], fun _ _ => by rw [hc],
     by rw [hc]; exact VClock.le_refl _, by rw [hb], .inl hb, hw,
     fun _ ⟨i, l, hl, hle⟩ => ⟨i, l, by unfold Lock.Loc; rw [ha]; exact hl, hle⟩, .of_eq ha,
     fun e he => .inl (hf ▸ he)⟩
+
+/-- A step keeps the word's futex key: the blocks stay, or only the word's bytes change. -/
+theorem Step.key {t : ThreadId} {m m' : Mem} (hs : L.Step t m m') : L.key m' = L.key m := by
+  unfold Lock.key
+  rcases hs.blocks with h | ⟨_, _, hb, -, -, -, h⟩
+  · exact Mem.wordKey_of_blocks h _ _ _
+  · exact (Mem.wordKey_of_blocks (m := m.write L.b _ L.o _) h _ _ _).trans
+      (Mem.wordKey_write hb _ _ _)
+
+/-- A step keeps every block's address, so every futex key (`Mem.SameAddrs.wordKey`). -/
+theorem Step.addrs {t : ThreadId} {m m' : Mem} (hs : L.Step t m m') : m.SameAddrs m' := by
+  rcases hs.blocks with h | ⟨_, _, hb, -, -, -, h⟩
+  · exact .of_blocks h
+  · exact (Mem.sameAddrs_write hb).trans (.of_blocks h)
 
 /-- The same memory, but `current`, `seen`, `nextMsg` and `woken`. -/
 theorem Inv.same {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) (c : ThreadId)
@@ -344,10 +362,17 @@ theorem Inv.groups {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) (gs : Array 
     hi.live, hi.blk, hi.word, hi.one, ⟨hi.loc.only, hi.loc.ok, hi.loc.plain⟩, hi.off, hi.wfp, hi.rel, hi.free,
     hi.res, hi.fq, hi.wit, hi.owner⟩
 
+/-- The same memory, one step tick later (`Zig.tick`): the invariant reads no step count. -/
+theorem Inv.ticked {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) :
+    L.Inv G { m with ticks := m.ticks + 1 } :=
+  ⟨⟨hi.own.sub, hi.own.disj, hi.own.owns, hi.own.outside, hi.own.csize⟩, hi.pdisj, hi.idle,
+    hi.live, hi.blk, hi.word, hi.one, ⟨hi.loc.only, hi.loc.ok, hi.loc.plain⟩, hi.off, hi.wfp, hi.rel, hi.free,
+    hi.res, hi.fq, hi.wit, hi.owner⟩
+
 /-- The queue with fewer threads, whose places stay. -/
-theorem Queue.mono {G G' : ThreadId → γ} {ws ws' : Array (ThreadId × Ptr)} (hq : L.Queue G ws)
-    (hsub : ∀ w ∈ ws', w ∈ ws) (hph : ∀ w ∈ ws', L.ph (G' w.1) = L.ph (G w.1)) :
-    L.Queue G' ws' := fun w hw => by
+theorem Queue.mono {G G' : ThreadId → γ} {m : Mem} {ws ws' : Array (ThreadId × FutexKey)}
+    (hq : L.Queue G m ws) (hsub : ∀ w ∈ ws', w ∈ ws)
+    (hph : ∀ w ∈ ws', L.ph (G' w.1) = L.ph (G w.1)) : L.Queue G' m ws' := fun w hw => by
   rw [hph w hw]; exact hq w (hsub w hw)
 
 theorem Inv.current {G : ThreadId → γ} {m : Mem} (hi : L.Inv G m) (t : ThreadId) :
@@ -497,6 +522,16 @@ theorem word_congr {m m' : Mem}
   simp only [Option.some.injEq, Cell.mk.injEq] at this
   exact this.1
 
+/-- The same cells at the word: the same futex key. -/
+theorem key_congr {m m' : Mem}
+    (hw : ∀ x, L.o ≤ x → x < L.o + 4 → m'.heap (L.b, x) = m.heap (L.b, x))
+    (hb : ∃ blk, m.blocks[L.b]? = some blk ∧ blk.live = true ∧ L.o + 4 ≤ blk.bytes.size ∧
+      (blk.addr + L.o) % 4 = 0 ∧ blk.kind ≠ .constGlobal ∧ blk.kind.mappedLo = 0) :
+    L.key m' = L.key m := by
+  obtain ⟨blk, hblk, hl, hs, -, -, hk⟩ := hb
+  exact Mem.wordKey_of_heap ((Mem.heap_of hblk L.o).trans (dif_pos ⟨hl, by omega, by omega⟩))
+    (hw L.o (Nat.le_refl _) (by omega)) _ _
+
 /-! ## A step of a thread on its own part -/
 
 /-- A step of thread `t` on its own part (`WP.liftMem_owned`), with the new ghost value `g`: the
@@ -523,6 +558,7 @@ theorem Inv.stepIn {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g : γ} (h
     rw [hm', Heap.union_of_right ((hd (L.b, x)).resolve_right (hwF x h1 h2))]
     simp [Heap.diff, hi.off t x h1 h2]
   obtain ⟨hblk', hcur⟩ := word_congr hheap hi.blk
+  have hkey := L.key_congr hheap hi.blk
   have hcl : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true := by
     intro u _
     by_cases hu : u = m.current
@@ -537,7 +573,7 @@ theorem Inv.stepIn {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g : γ} (h
   refine ⟨hown ▸ ho', fun u => ?_, fun u hu => ?_, fun u hu => ?_, hblk', ?_,
     fun u v hu hv => ?_, ⟨fun l hl => hi.loc.only l (hs.atomics ▸ hl), fun i l hl => ?_,
       fun i l hl => ?_⟩, fun u => ?_, fun e he hh => ?_, fun i l hl => ?_, fun hF => ?_, fun u hu => ?_,
-    hi.fq.mono (fun w hw => hs.waiters ▸ hw) (fun w _ => hphu w.1), fun hp => ?_,
+    Lock.Queue.of_key L hkey (hi.fq.mono (fun w hw => hs.waiters ▸ hw) (fun w _ => hphu w.1)), fun hp => ?_,
     fun u hu => let ⟨i, l, hl, hw⟩ := hi.owner u (by rwa [hphu] at hu)
       ⟨i, l, (hloc i l).mpr hl, hw⟩⟩
   · by_cases hu : u = t
@@ -588,7 +624,7 @@ theorem Inv.stepIn {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g : γ} (h
     · rw [upd_ne _ _ hut] at hu ⊢
       have htn : L.ph (G t) ≠ .holds := fun h => hut (hi.one u t hu h)
       exact hRk htn _ (hi.res u hu)
-  · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (hs.waiters ▸ hp)
+  · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit (hs.waiters ▸ Lock.Waits.of_key L hkey hp)
     refine ⟨v, hs.threads ▸ hv, hs.waiters ▸ hq, by rw [hphu]; exact h1, fun hh => ?_⟩
     rw [hphu] at hh; exact (hU32 _).mpr (h2 hh)
 
@@ -652,36 +688,7 @@ theorem Inv.ghost {G : ThreadId → γ} {m : Mem} {t : ThreadId} {g : γ} (hi : 
     exact ⟨v, hv, hq, by rw [upd_ne _ _ hvt]; exact h1,
       fun hh => h2 (by rw [upd_ne _ _ hvt] at hh; exact hh)⟩
 
-/-! ## Spawn and join -/
-
-theorem fork_eq {m m' : Mem} {t c : ThreadId} {gt : Bool}
-    (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m'))) :
-    c = m.threads.size ∧ m' = { m with
-      current := t,
-      clocks := (m.clocks.set! t (VClock.bump (m.clocks[t]!) t)).push (VClock.bump (m.clocks[t]!) t),
-      threads := m.threads.push { spawner := t, joined := false, gated := gt } } := by
-  rw [Proto.forkWith_run] at hf
-  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
-  obtain ⟨rfl, rfl⟩ := hf
-  exact ⟨rfl, rfl⟩
-
-/-- The clocks after a fork by `t`: the old ones are not smaller, the new thread's is above
-`t`'s, and the others stay. -/
-theorem fork_clocks {cs : Array VClock} {t : ThreadId} (ht : t < cs.size) :
-    (∀ u < cs.size, VClock.le (cs[u]!) (((cs.set! t (VClock.bump (cs[t]!) t)).push
-      (VClock.bump (cs[t]!) t))[u]!) = true) ∧
-    VClock.le (cs[t]!) (((cs.set! t (VClock.bump (cs[t]!) t)).push
-      (VClock.bump (cs[t]!) t))[cs.size]!) = true ∧
-    (∀ u < cs.size, u ≠ t → ((cs.set! t (VClock.bump (cs[t]!) t)).push
-      (VClock.bump (cs[t]!) t))[u]! = cs[u]!) := by
-  refine ⟨fun u hu => ?_, ?_, fun u hu hut => ?_⟩
-  · rw [Proto.getElem!_push, if_pos (by simp; omega), Proto.getElem!_set!_ite]
-    split
-    · rename_i h; rw [h.1]; exact VClock.le_bump _ _
-    · exact VClock.le_refl _
-  · rw [Proto.getElem!_push, if_neg (by simp), if_pos (by simp)]
-    exact VClock.le_bump _ _
-  · rw [Proto.getElem!_push, if_pos (by simp; omega), Proto.getElem!_set!_ite, if_neg (by omega)]
+/-! ## Spawn and join (`fork_eq`, `fork_clocks`: `ZigLean/Conc/Base/Lock.lean`) -/
 
 /-- A spawn by `t`, which is out of the lock's code: `t` keeps `part g₁`, the new thread gets
 `part g₀` and starts out of the lock's code. -/

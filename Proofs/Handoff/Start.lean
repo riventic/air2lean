@@ -35,7 +35,7 @@ theorem word_init {W : Word 32 4} {m : Mem} {blk : Block} (hW : W.b = 0)
   have hu : W.Holds m 0 := by unfold Word.Holds curBytes; rw [hW, hb]; exact hv
   refine ⟨⟨⟨blk, by rw [hW]; exact hb, hl, hsz, h4, by rw [hk]; simp⟩,
     fun l hl' => by rw [hat] at hl'; simp at hl', fun i l h => absurd h (hno i l),
-    fun e he hh => .inr (hfp e he hh), ⟨0, hu⟩, fun i l h => absurd h (hno i l)⟩, ?_, ?_, ?_⟩
+    fun e he hh => .inr ((hfp e he hh).on _), ⟨0, hu⟩, fun i l h => absurd h (hno i l)⟩, ?_, ?_, ?_⟩
   · rw [Word.hist_none hno]; rfl
   · rw [Word.hist_none hno]; exact hu
   · intro c; rw [Word.hist_none hno]; exact le_nil c
@@ -158,7 +158,7 @@ theorem inv_start {m : Mem} {own : ThreadId → Res} {A : Nat} {wb : Array Byte}
         exact erase_ne_r (heap_ne_r (heap_ne_l ((hBin _).mpr ⟨rfl, by omega, by omega⟩)))))
   obtain ⟨hwsOk, hwsz, hwsv, -⟩ := hwi Lo.WS rfl (Nat.le_refl _) (by simp [Layout.WS])
     hok.2.2.2.2.2.2.2.1 (by simp [Layout.WS]; exact hw0)
-  obtain ⟨hweOk, hwez, hwev, hwec⟩ := hwi Lo.WE rfl (by simp [Layout.WE]) (by simp [Layout.WE])
+  obtain ⟨hweOk, hwez, hwev, -⟩ := hwi Lo.WE rfl (by simp [Layout.WE]) (by simp [Layout.WE])
     (by simp [Layout.WE]; omega) (by simp [Layout.WE]; exact hw1)
   obtain ⟨hwvOk, hwvz, hwvv, -⟩ := hwi Lo.WV rfl (by simp [Layout.WV]; omega)
     (by simp [Layout.WV]; omega) (by simp [Layout.WV]; omega)
@@ -238,10 +238,12 @@ theorem inv_start {m : Mem} {own : ThreadId → Res} {A : Nat} {wb : Array Byte}
   · refine ⟨⟨by rw [hth]; rfl, .inl ⟨h1, hX0, fun u hu => hXu u (by unfold ThreadId at *; omega)⟩⟩,
       fun e he hr => .inr fun u hu => ?_, ⟨rIO, ⟨A', bs, hA', hbs, hdec, hio⟩, hIOoff, rfl⟩,
       ⟨blk, hblk, hl, hS, hK⟩, hwsOk, hweOk, hwvOk,
-      FCond.Inv.start _ hwsz hwsv hc hq, FEvent.Inv.start _ hwvz hwvv he hq hFresh,
-      by show ((upd G0 0 _ 1).2.c).waits = false; rw [hc]; rfl, fun _ => hwez, hwec _,
-      fun h => ?_, fun h => ?_, fun _ _ _ _ h => ?_, fun h => ?_, fun h => ?_,
-      fun w hw => by simp [hq] at hw, fun u h => absurd (hc u) h⟩
+      FCond.Inv.start hwsz hwsv hwez hwev hc hq, FEvent.Inv.start _ hwvz hwvv he hq hFresh,
+      by show ((upd G0 0 _ 1).2.c).waits = false; rw [hc]; rfl, fun _ => hwez,
+      by rw [hwez]; decide, fun h => (by rw [hwez] at h; cases h),
+      fun _ _ _ h => (by rw [hc] at h; cases h), fun h => ?_, fun h => ?_, fun j hj => ?_,
+      fun h => (by rw [hc] at h; cases h), fun n h => (by rw [hXu 1 (by decide)] at h; cases h),
+      fun h => ?_, fun h => ?_, fun w hw => by simp [hq] at hw, fun u h => absurd (hc u) h⟩
     · -- every access to `io` happened before `main`, which owned it
       obtain rfl : u = 0 := by rw [h1] at hu; omega
       have hx : rIO.heap (e.block, e.off) ≠ none := by
@@ -253,7 +255,8 @@ theorem inv_start {m : Mem} {own : ThreadId → Res} {A : Nat} {wb : Array Byte}
       exact erase_ne_r (heap_ne_r (heap_ne_r hx))
     · rw [hc] at h; exact absurd h (by decide)
     · rw [hp1] at h; rcases h with h | h <;> cases h
-    · rw [hc] at h; cases h
+    · -- the state has one write: no registration
+      have h1 := hj.1; have h2 : j < (Lo.WS.hist m).size := hj.2.1; rw [hwsz] at h2; omega
     · rw [hc] at h; exact absurd h (by decide)
     · rw [hp1] at h; cases h
 

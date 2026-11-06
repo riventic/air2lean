@@ -100,9 +100,10 @@ class CommittedBudgets(unittest.TestCase):
         data = pending_budgets()
         data["workloads"][0]["air"] = ["tests/golden/no-such-example/air"]
         self.assertTrue(any("missing AIR" in error for error in perf.validate_budgets(data)))
-        # A shared golden folder plus a version overlay can mix Zig versions.
+        # Two golden folders of different Zig versions with different file names mix versions
+        # (built explicitly, so it does not depend on which versions the shared goldens hold).
         data = pending_budgets()
-        data["workloads"][0]["air"].append("tests/golden/0.16.0/basic/air")
+        data["workloads"][0]["air"] = ["tests/golden/0.16.0/layout/air", "tests/golden/0.15.2/threads/air"]
         self.assertTrue(any("mixed AIR" in error for error in perf.validate_budgets(data)))
         data = pending_budgets()
         data["workloads"][0]["air_zig_version"] = "0.16.0"
@@ -499,7 +500,9 @@ class Record(unittest.TestCase):
             fake.write_text(FAKE_AIR2LEAN)
             fake.chmod(0o755)
             out = temporary / "measurement.json"
-            with mock.patch.dict(os.environ, {"LEAN_NUM_THREADS": "1"}), \
+            # The guard exports AIR2LEAN_GUARD_MODE=shared for non-exclusive runs, and record
+            # then refuses; this test stands for the exclusive timing run.
+            with mock.patch.dict(os.environ, {"LEAN_NUM_THREADS": "1", "AIR2LEAN_GUARD_MODE": "exclusive"}), \
                     contextlib.redirect_stderr(io.StringIO()):
                 code = perf.main(["record", "--out", str(out), "--air2lean", str(fake),
                                   "--lake", "/nonexistent/lake", "--no-build", "--skip-elaborate",

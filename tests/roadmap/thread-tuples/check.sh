@@ -20,6 +20,8 @@ case "${1:---check-artifacts}" in
     mkdir -p "$2"
     [ -z "$(find "$2" -mindepth 1 -maxdepth 1 -print -quit)" ] || { echo 'AIR output must be empty' >&2; exit 1; }
     air_output=$(cd -- "$2" && pwd)
+    # Our own diagnostic: paste's wording differs (uutils coreutils names no file).
+    [ -f tests/roadmap/thread-tuples/filter ] || { echo 'AIR filter tests/roadmap/thread-tuples/filter is missing' >&2; exit 1; }
     export_filter=$(paste -sd, tests/roadmap/thread-tuples/filter)
     [ -n "$export_filter" ] || { echo 'AIR filter is empty' >&2; exit 1; }
     ZIG_AIR_JSON_DIR="$air_output" ZIG_AIR_JSON_FILTER="$export_filter" \

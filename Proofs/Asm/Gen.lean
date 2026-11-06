@@ -24,6 +24,8 @@ def bswap32 (p0 : BitVec 32) : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] bswap32
+
 structure divmodLocals where
   rem : BitVec 32
   deriving Inhabited
@@ -46,6 +48,8 @@ def divmod (p0 : BitVec 32) (p1 : BitVec 32) : Zig.Result (BitVec 64) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] divmod
+
 structure lzcnt64Locals where
   deriving Inhabited
 
@@ -59,6 +63,8 @@ def lzcnt64 (p0 : BitVec 64) : Zig.Result (BitVec 64) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] lzcnt64
+
 structure popcnt64Locals where
   deriving Inhabited
 
@@ -71,5 +77,7 @@ def popcnt64 (p0 : BitVec 64) : Zig.Result (BitVec 64) := do
     pure (.ret i1)) : Zig.M popcnt64Locals popcnt64Exit).run' (default : popcnt64Locals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] popcnt64
 
 end Asm
