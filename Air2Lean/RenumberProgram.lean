@@ -578,7 +578,7 @@ theorem deadUndefStores_ren (hρ : Inj ρ) (f : Func) :
   case store p v =>
     cases p <;> cases v <;> try rfl
     next x t =>
-      simp only [renOp, renFlat, renVal, Array.any_map, Function.comp_def, renInst_id, renInst_op,
+      simp only [renOp, renFlat, renVal, Array.any_map', Function.comp_def, renInst_id, renInst_op,
         beq_ren hρ, isAlloc_renOp, placesOf_ren hρ, Array.size_map, ← Array.map_extract,
         Array.find?_map, usesPlaceOf_ren hρ, leavesBody_ren hρ, Option.any_map,
         overwritesLocal_ren hρ, apply_ite (Array.map ρ), Array.map_push]
