@@ -2,7 +2,8 @@
 """Every proof-fixture check that CI runs, run locally (scripts/full-build.sh, docs/ci.md#full-build).
 
     scripts/fixture-checks.sh [--logs DIR] [--only TEXT]...   (guarded; full-build.sh)
-    python3 -B scripts/fixture-checks.py [--jobs N] [--mem-mib M] [--only TEXT]... [--logs DIR]
+    python3 -B scripts/fixture-checks.py [--jobs N] [--mem-mib M] [--only TEXT]... [--logs DIR] [--rerun]
+    python3 -B scripts/fixture-checks.py --pending [--only TEXT]...
     python3 -B scripts/fixture-checks.py --list [--only TEXT]...
     python3 -B scripts/fixture-checks.py --prepare [--only TEXT]...
 
@@ -31,12 +32,21 @@ the Rosetta container, docs/rosetta.md). `--list` names them; a run prints their
 Units run in parallel (scripts/par.py: --jobs, else AIR2LEAN_JOBS), in the checkout, after the
 full build's Lean phases: the longest first, each admitted while the memory requests of the
 running units fit in the guard's budget (`schedule`; from the last runs' wall times and peaks,
-`hints_path`; --mem-mib for a unit not measured yet).
-Those measurements decide only order and admission. Every unit runs on every invocation:
-no result is reused across runs until a sound input tracer exists (maintainer decision on #443,
-2026-10-19; docs/ci.md#full-build). A key over the files a unit's text names missed every input
-reached by a path built in code (a stale pass of tests/roadmap/callbacks after an edit of
-tests/roadmap/asm-effects).
+`hints_path`; --mem-mib for a unit not measured yet). Those measurements decide only order and
+admission.
+
+A unit runs unless a pass of exactly its inputs is recorded. Its key covers everything it can
+read, not the files it names (a key over those missed every input reached by a path built in
+code: a stale pass of tests/roadmap/callbacks after an edit of tests/roadmap/asm-effects, #443):
+the content of every file of the checkout, tracked or not, and of the whole-tree generated
+files; every build output of the three Lake packages; the Lean toolchain's runtime digest; the
+content of each Zig compiler it names; python3, bash and git on PATH; the host; the inherited
+environment (all of it but RUN_VARIABLES, RUN_PREFIXES); and its CI step (`run_inputs`, `unit_key`). So any edit
+anywhere runs every unit again, and an unchanged tree runs none (docs/ci.md#full-build). A pass
+is recorded (~/.cache/air2lean/fixture-checks/passes, AIR2LEAN_FIXTURE_PASSES) only when those
+inputs are the same at the end of the run as at its start. CI (GITHUB_ACTIONS or CI set: pull
+requests, main, nightly, release) never reuses or records a pass. `--rerun` runs every unit;
+`--pending` exits 0 when no unit would run (scripts/fixture-checks.sh then takes no admission).
 
 The units of one run audit one build, so their `fixtures.py audit`s share one kernel-replay cache
 (AIR2LEAN_FIXTURE_REPLAY_CACHE, a file in the run's scratch directory, removed with it): a
@@ -56,6 +66,8 @@ Exit status: 0 when every unit passed, else 1 with each failure's log tail.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
+import hashlib
 import importlib.util
 import json
 import os
@@ -67,6 +79,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import tomllib
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -496,6 +509,172 @@ def changed_outputs(before, after):
     return sorted(name for name in before.keys() | after.keys() if before.get(name) != after.get(name))
 
 
+# ---- passes of unchanged inputs ---------------------------------------------------------------
+
+SCHEMA = 'air2lean-fixture-pass-v1'
+PASSES = Path(os.environ.get('AIR2LEAN_FIXTURE_PASSES') or Path.home() / '.cache/air2lean/fixture-checks/passes')
+# CI (every workflow run: pull requests, main, nightly, release) never reuses or records a pass:
+# its runs are the independent confirmation of the local ones.
+IN_CI = bool(os.environ.get('GITHUB_ACTIONS') or os.environ.get('CI'))
+# The environment a unit inherits is an input, every variable of it except these: the run's own
+# scratch paths, admission, worker counts and pass store, which differ per run and select no
+# result (the guard always sets ELAN_NO_OVERRIDE_NOTICE for the units; LEAN_NUM_THREADS and
+# AIR2LEAN_GUARD_MODE schedule, and differ between `--pending` and the guarded run); and the
+# shell's and the terminal's session state (RUN_PREFIXES). A variable not named here is an
+# input: a new one runs every unit again.
+RUN_VARIABLES = ('AIR2LEAN_FIXTURE_REPLAY_CACHE', 'AIR2LEAN_TOOLCHAIN_RUNTIME_RUN', 'AIR2LEAN_GUARD_ADMISSION',
+                 'AIR2LEAN_GUARD_MODE', 'AIR2LEAN_GUARD_PRIORITY', 'AIR2LEAN_JOBS', 'AIR2LEAN_MEM_MIB',
+                 'AIR2LEAN_LOCK_WAIT', 'AIR2LEAN_BUILD_MEM_MIB',
+                 'AIR2LEAN_FIXTURE_PASSES', 'AIR2LEAN_FULL_BUILD_INNER', 'GITHUB_WORKSPACE',
+                 'LEAN_NUM_THREADS', 'ELAN_NO_OVERRIDE_NOTICE', 'PWD', 'OLDPWD', 'SHLVL', '_', 'TERM')
+RUN_PREFIXES = ('CLAUDE', 'AI_AGENT', 'WARP_', 'TERM_', 'COLORTERM', 'SSH_', 'XPC_', '__CF', 'HIST')
+
+
+class Unkeyable(Exception):
+    """An input the key cannot cover: nothing is reused or recorded."""
+
+
+def directory_records(path):
+    """Every file below PATH (followed through aliases) with its content digest, and each alias's
+    target (scripts/assumptions.py input_tree_records); None when PATH does not exist."""
+    if not path.exists():
+        return None
+    return [[str(p.relative_to(path)), link, content]
+            for p, link, content in assumptions.input_tree_records(path, binaries=True)]
+
+
+def worktree_records(root):
+    """Every file of the worktree ROOT, ignored or not, by content: the checkout, its generated
+    files, every Lake package's `.lake` (build outputs, receipts, extraction drivers, tool traces,
+    mutants) and any other file a unit may read below ROOT. Left out: `.git` (its state: `git_state`)
+    and `__pycache__` (bytecode Python checks against its source). An alias records its target;
+    one that leaves ROOT also records what it reaches."""
+    records = []
+    for directory, dirs, files in os.walk(root):
+        here = Path(directory)
+        skip = {'__pycache__', '.git'} if here == root else {'__pycache__'}  # `.git`: a file in a worktree
+        dirs[:] = sorted(d for d in dirs if d not in skip)
+        for name in sorted({*dirs, *files} - skip):
+            path = here / name
+            rel = str(path.relative_to(root))
+            if path.is_symlink():
+                target, reached = os.readlink(path), path.resolve()
+                inside = reached == root or root in reached.parents
+                records.append([rel, '->', target, None if inside else
+                                directory_records(reached) if reached.is_dir() else
+                                assumptions.file_sha256(reached) if reached.is_file() else 'missing'])
+                if name in dirs:
+                    dirs.remove(name)  # not descended: an alias inside ROOT is covered by its target
+            elif name in files:
+                records.append([rel, assumptions.file_sha256(path)])
+    return records
+
+
+def git_state(root):
+    """What git reports beside the files: HEAD, the index and the main branch it is compared to."""
+    def git(*args):
+        result = subprocess.run(['git', *args], cwd=root, capture_output=True)
+        return [result.returncode, hashlib.sha256(result.stdout).hexdigest()]
+    return [git('rev-parse', 'HEAD'), git('ls-files', '-s', '-z'), git('rev-parse', '--verify', '-q', 'origin/main')]
+
+
+def tool_records(name):
+    """A tool on PATH: its real file, content and version."""
+    path = shutil.which(name)
+    if not path:
+        return None
+    real = Path(path).resolve()
+    return [path, str(real), assumptions.file_sha256(real),
+            subprocess.run([path, '--version'], capture_output=True, text=True).stdout.strip()]
+
+
+def python_records():
+    """The `python3` the units run: its interpreter and its standard and site libraries."""
+    out = subprocess.run(['python3', '-I', '-c', 'import json, sys, sysconfig; print(json.dumps('
+                          '[sys.executable, sysconfig.get_paths()["stdlib"], sysconfig.get_paths()["purelib"]]))'],
+                         capture_output=True, text=True, check=True).stdout
+    executable, stdlib, purelib = json.loads(out)
+    return [tool_records('python3'), assumptions.file_sha256(Path(executable).resolve()),
+            *(CAS.digest(directory_records(Path(p))) for p in (stdlib, purelib))]
+
+
+def compiler_root(kind, zig):
+    """The installation directory of a Zig binary: its `lib` beside it, or one level up (bin/)."""
+    if kind == 'patched':
+        return zig.parent.parent
+    return zig.parent.parent if zig.parent.name == 'bin' else zig.parent
+
+
+def compiler_digests(units):
+    """(kind, version) -> digest of the content of that Zig compiler's installation, for every
+    compiler a unit names and every unit's stock Zig (put first on its PATH, `_stage`); for a
+    stock Zig this host cannot provide, the `zig` on PATH the unit then runs (or None)."""
+    found = {}
+    wanted = {(k, v) for u in units for k, vs in u['toolchains'].items() for v in vs}
+    wanted |= {('stock', u['zig']) for u in units}
+    for kind, version in sorted(wanted):
+        try:
+            zig = resolve(kind, version)
+        except Unavailable:
+            fallback = shutil.which('zig')
+            found[kind, version] = fallback and ['path', CAS.digest(directory_records(
+                compiler_root('stock', Path(fallback).resolve())))]
+            continue
+        found[kind, version] = CAS.digest(directory_records(compiler_root(kind, zig)))
+    return sorted(found.items())
+
+
+def run_inputs(units):
+    """Everything a unit can read that the run does not choose per unit (`Unkeyable` when it
+    cannot be read): every file of the worktree, ignored or not (`worktree_records`), the
+    worktree's path and git state, the whole Lean toolchain, every Zig compiler the units run,
+    python3 with its libraries, bash and git, the host and the inherited environment (all of it
+    but RUN_VARIABLES and RUN_PREFIXES). A unit's own key adds its CI step (`unit_key`)."""
+    try:
+        sysroot = assumptions.lake_env('LEAN_SYSROOT')
+        if not sysroot:
+            raise Unkeyable('Lake reports no LEAN_SYSROOT')
+        # The components are independent reads of separate trees: hash them at once (hashlib and
+        # file reads release the GIL), so the digest takes about as long as the worktree alone.
+        with ThreadPoolExecutor() as pool:
+            worktree = pool.submit(worktree_records, ROOT)
+            lean = pool.submit(directory_records, Path(sysroot).resolve())
+            zig = pool.submit(compiler_digests, units)
+            python = pool.submit(python_records)
+            return {
+                'schema': SCHEMA,
+                'worktree': [str(ROOT), worktree.result(), git_state(ROOT)],
+                'lean': [sysroot, lean.result()],
+                'zig': zig.result(),
+                'tools': [python.result(), tool_records('bash'), tool_records('git')],
+                'host': [platform.platform(), platform.machine(), HOST],
+                'environment': {k: v for k, v in os.environ.items()
+                                if k not in RUN_VARIABLES and not k.startswith(RUN_PREFIXES)},
+            }
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+        raise Unkeyable(str(error)) from error
+
+
+def unit_key(unit, run_digest):
+    """The key of UNIT's pass: the run's inputs (`run_inputs`, as RUN_DIGEST) and the CI step it
+    is (its rendered script, environment and the native runs it leaves out on this host)."""
+    return CAS.digest([SCHEMA, run_digest, unit['name'], unit['zig'], unit['toolchains'], unit['run'],
+                       unit['env'], unit['skipped'], unit['error']])
+
+
+def recorded(key):
+    try:
+        return json.loads((PASSES / (key + '.json')).read_text()).get('key') == key
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+def record(key, unit, elapsed, head):
+    PASSES.mkdir(parents=True, exist_ok=True)
+    assumptions.write_report(PASSES / (key + '.json'), {'key': key, 'unit': unit['name'], 'elapsed_s': elapsed,
+                                                'head': head, 'recorded': time.strftime('%Y-%m-%dT%H:%M:%S%z')})
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     parser.add_argument('--list', action='store_true', help='print the units, their checks and toolchains')
@@ -507,6 +686,9 @@ def main(argv=None):
     parser.add_argument('--logs', type=Path, help='keep every unit\'s log here')
     parser.add_argument('--report', type=Path, help='write each unit\'s status, wall time, peak RSS and '
                         'wall time by process kind (scripts/par.py) to this JSON file')
+    parser.add_argument('--rerun', action='store_true', help='run every unit, also one with a recorded pass')
+    parser.add_argument('--pending', action='store_true',
+                        help='exit 0 when every unit has a recorded pass of its inputs (nothing to run), else 1')
     a = parser.parse_args(argv)
     tree = Tree()
     units = [u for u in discover(tree)
@@ -529,7 +711,24 @@ def main(argv=None):
             except Unavailable as error:  # the units that need it fail in the run, naming it
                 print('fixture-checks: %s' % error, file=sys.stderr)
         return 0
-    failed = []
+    failed, keys, inputs = [], {}, None
+    selected = units  # the run's inputs are those of every selected unit, also a reused one
+    if units and not IN_CI:
+        try:
+            if len({u['name'] for u in units}) != len(units):
+                raise Unkeyable('two units have one name')
+            inputs = CAS.digest(run_inputs(selected))
+            keys = {u['name']: unit_key(u, inputs) for u in units}
+        except Unkeyable as error:  # every unit runs, and no pass is recorded
+            print('fixture-checks: no pass is reused or recorded: %s' % error, file=sys.stderr)
+            inputs = None
+    reused = {u['name'] for u in units if inputs and not a.rerun and recorded(keys[u['name']])}
+    for name in sorted(reused):
+        print('fixture-checks: %s: a pass of the same inputs is recorded (%s)' % (name, keys[name][:16]))
+    units = [u for u in units if u['name'] not in reused]
+    if a.pending:
+        print('fixture-checks: %d units to run, %d with a recorded pass' % (len(units), len(reused)))
+        return 1 if units else 0
     if units:
         scratch = Path(tempfile.mkdtemp(prefix='air2lean-fixture-checks.'))
         logs = a.logs or Path(tempfile.mkdtemp(prefix='air2lean-fixture-logs.'))
@@ -583,6 +782,22 @@ def main(argv=None):
                               'modules of the root or the proof-fixture package, racing the units '
                               'that read them): '
                               + ', '.join(changed[:20]) + (' ...' if len(changed) > 20 else ''))
+            # A pass is recorded only for the inputs the whole run saw: unchanged from its start
+            # to its end (a unit that changed an input, or an edit during the run, records none),
+            # and only of a run that ran its units and failed no shared step (the shared build,
+            # the toolchain runtime, the scheduler). inputs None: in CI, or the inputs were unkeyable.
+            elif statuses is not None and not failed and inputs is not None:
+                try:
+                    after = CAS.digest(run_inputs(selected))
+                except Unkeyable:
+                    after = None
+                if after == inputs:
+                    head = assumptions.git_revision(ROOT)['head']
+                    for u, status, s in zip(units, statuses, stats):  # stats: one per job, in order
+                        if status == 0:
+                            record(keys[u['name']], u, (s or {}).get('elapsed_s'), head)
+                else:
+                    print('fixture-checks: the inputs changed during the run: no pass is recorded')
         finally:
             shutil.rmtree(scratch, ignore_errors=True)
         for u, status in zip(units, statuses or []):  # none: the run did not start
@@ -592,8 +807,8 @@ def main(argv=None):
         if not failed and not a.logs:
             shutil.rmtree(logs, ignore_errors=True)
     skipped = sum(len(u['skipped']) for u in units)
-    print('fixture-checks: %d units (%d checks) run, %d failed'
-          % (len(units), len({c for u in units for c in u['checks']}), len(failed)))
+    print('fixture-checks: %d units (%d checks) run, %d failed, %d with a recorded pass of the same inputs'
+          % (len(units), len({c for u in units for c in u['checks']}), len(failed), len(reused)))
     if skipped:
         print('fixture-checks: %d native runs need their CI host, not %s (--list names them; '
               'scripts/local-ci.sh part PART runs them)' % (skipped, HOST))

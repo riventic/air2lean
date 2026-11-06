@@ -45,8 +45,7 @@ The engine features these steps wait on are rows of the [engine ledger](docs/eng
 (177 rows: 72 open, 105 closed).
 
 **Open PRs** are the list on GitHub (`gh pr list`). On 2026-11-06: #637, #480 and #403 (Codex
-drafts); #570, #544 and #443
-(infrastructure drafts); #602 (its measurement failed) and #581 (obsolete), to be closed.
+drafts); #443 (an infrastructure draft, superseded by the light merge gate); #602 (its measurement failed) and #581 (obsolete), to be closed.
 
 **Main health.** The ~3-hourly run (`scripts/preflight.sh` with the full build and fixture
 checks, then `scripts/regen.sh`) was red on 2026-11-06 for `PageSpec.remap_spec` after #699; #703

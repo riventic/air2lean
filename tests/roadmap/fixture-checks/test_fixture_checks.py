@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""scripts/fixture-checks.py: every unit runs on every invocation, no result is reused.
+"""scripts/fixture-checks.py: a unit runs unless a pass of exactly its inputs is recorded.
 
 The regression for the false green of a reused pass (docs/ci.md#full-build): a unit whose input
 is reached by a path built in code (tests/roadmap/callbacks/mutants.py reaches
 `ROADMAP / "asm-effects"`) kept the key of its last pass after that input changed, and the stale
-pass was reused while the check failed. Here a synthetic unit reads a file whose path no text of
-the unit names; after an edit of that file the second run must run the unit again and fail.
+pass was reused while the check failed. A key now covers everything a unit can read
+(`run_inputs`: every file of the checkout, the Lake build outputs, the toolchains, the
+environment), not the files its text names. Here a synthetic unit reads a file whose path no
+text of the unit names; it stands for a file of the checkout (`run_inputs` is replaced by one
+that reads it), and `RunInputs` checks the real `run_inputs` on a scratch checkout.
 Offline: no toolchain, no Lean.
 """
 import contextlib
@@ -14,6 +17,7 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -50,7 +54,7 @@ def offline_prepared_tool(prepare=lambda: None):
     yield {}
 
 
-class NoReuse(unittest.TestCase):
+class Passes(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory(prefix="air2lean fixture-checks ")
         self.addCleanup(temp.cleanup)
@@ -59,14 +63,20 @@ class NoReuse(unittest.TestCase):
         self.cas.mkdir()
         self.hidden = self.temp / "hidden"
         self.hidden.mkdir()
+        self.runs = self.temp / "runs"
         # The path is assembled at run time: no text of the unit spells out "hidden/input".
         self.unit = {"name": "synthetic: hidden input", "job": "synthetic", "rows": ["synthetic"],
                      "zig": "0.0.0", "checks": ["tests/roadmap/synthetic/check.sh"],
-                     "run": 'f="$HIDDEN_DIR"/in""put\necho "read $f"\n[ "$(cat "$f")" = ok ]\n',
-                     "env": {"HIDDEN_DIR": str(self.hidden)}, "runner": fc.HOST, "skipped": [],
-                     "error": None, "toolchains": {"patched": [], "stock": []}}
+                     "run": 'echo run >> "$RUNS"\nf="$HIDDEN_DIR"/in""put\necho "read $f"\n[ "$(cat "$f")" = ok ]\n',
+                     "env": {"HIDDEN_DIR": str(self.hidden), "RUNS": str(self.runs)}, "runner": fc.HOST,
+                     "skipped": [], "error": None, "toolchains": {"patched": [], "stock": []}}
+        # The hidden file stands for a file of the checkout: an input of every unit.
+        inputs = lambda tree: {"checkout": (self.hidden / "input").read_text()}
         for patch in (mock.patch.object(fc, "discover", lambda tree: [dict(self.unit)]),
                       mock.patch.object(fc, "resolve", no_toolchain),
+                      mock.patch.object(fc, "run_inputs", inputs),
+                      mock.patch.object(fc, "PASSES", self.temp / "passes"),
+                      mock.patch.object(fc, "IN_CI", False),  # these tests also run in CI
                       mock.patch.object(fc.assumptions, "runtime_run", offline_runtime_run),
                       mock.patch.object(fc.assumptions, "prepared_tool", offline_prepared_tool),
                       mock.patch.object(fc, "FIXTURE_BUILD", ["true"]),
@@ -81,7 +91,10 @@ class NoReuse(unittest.TestCase):
             status = fc.main(["--jobs", "1", "--logs", str(self.temp / "logs"), *argv])
         return status, out.getvalue(), err.getvalue()
 
-    def test_an_edit_outside_the_named_paths_reruns_the_unit(self):
+    def runs_of_unit(self):
+        return len(self.runs.read_text().split()) if self.runs.exists() else 0
+
+    def test_an_edit_of_an_input_runs_the_unit_again(self):
         (self.hidden / "input").write_text("ok\n")
         status, out, err = self.run_checks()
         self.assertEqual(status, 0, out + err)
@@ -90,9 +103,48 @@ class NoReuse(unittest.TestCase):
         self.assertEqual(status, 1, out + err)  # rerun, not the first run's pass
         self.assertIn("1 failed", out)
         self.assertIn("FAILED synthetic: hidden input", err)
+        self.assertEqual(self.run_checks()[0], 1)  # a failure records no pass
+        self.assertEqual(self.runs_of_unit(), 3)
         (self.hidden / "input").write_text("ok\n")
-        self.assertEqual(self.run_checks()[0], 0)  # and a fixed input passes again
+        self.assertEqual(self.run_checks()[0], 0)  # the first run's inputs: its pass, no run
+        self.assertEqual(self.runs_of_unit(), 3)
         self.assertEqual(list(self.cas.iterdir()), [])  # no pass is published to the shared store
+
+    def test_a_pass_of_the_same_inputs_is_reused_unless_rerun(self):
+        (self.hidden / "input").write_text("ok\n")
+        self.assertEqual(self.run_checks("--pending")[0], 1)
+        self.assertEqual(self.run_checks()[0], 0)
+        status, out, _ = self.run_checks()
+        self.assertEqual((status, self.runs_of_unit()), (0, 1))
+        self.assertIn("a pass of the same inputs is recorded", out)
+        self.assertIn("0 units (0 checks) run, 0 failed, 1 with a recorded pass", out)
+        self.assertEqual(self.run_checks("--pending")[0], 0)
+        self.assertEqual(self.run_checks("--rerun")[0], 0)
+        self.assertEqual(self.runs_of_unit(), 2)
+        self.unit["run"] += "true\n"  # another CI step: another key
+        self.assertEqual(self.run_checks()[0], 0)
+        self.assertEqual(self.runs_of_unit(), 3)
+
+    def test_ci_never_reuses_or_records_a_pass(self):
+        (self.hidden / "input").write_text("ok\n")
+        self.assertEqual(self.run_checks()[0], 0)  # a local run records its pass
+        with mock.patch.object(fc, "IN_CI", True):
+            for _ in range(2):
+                self.assertEqual(self.run_checks()[0], 0)
+            self.assertEqual(self.run_checks("--pending")[0], 1)
+        self.assertEqual(self.runs_of_unit(), 3)
+        self.assertEqual(len(list((self.temp / "passes").iterdir())), 1)  # only the local one
+
+    def test_no_pass_when_an_input_changes_during_the_run(self):
+        (self.hidden / "input").write_text("ok\n")
+        self.unit["run"] = 'echo run >> "$RUNS"\nprintf "ok\\n\\n" > "$HIDDEN_DIR/input"\n'
+        status, out, _ = self.run_checks()
+        self.assertEqual(status, 0)
+        self.assertIn("the inputs changed during the run: no pass is recorded", out)
+        (self.hidden / "input").write_text("ok\n")
+        self.run_checks()
+        self.assertEqual(self.runs_of_unit(), 2)
+        self.assertFalse((self.temp / "passes").exists())
 
     def test_a_rerun_of_the_staged_command_starts_from_a_fresh_temp(self):
         # build-guard reruns a unit stopped at its charge with the same argv and env; the first
@@ -243,8 +295,9 @@ class NoReuse(unittest.TestCase):
         def fail():
             raise RuntimeError("command failed (1): lake --rehash build AssuranceTools assurance")
 
+        # The inputs are the ones just passed (the mock is no input): --rerun runs the unit.
         with mock.patch.object(fc.assumptions, "prepared_tool", lambda: offline_prepared_tool(fail)):
-            status, out, err = self.run_checks()
+            status, out, err = self.run_checks("--rerun")
         self.assertEqual(status, 1, out + err)
         self.assertIn("FAILED the assurance extractor: command failed", err)
         self.assertFalse(marker.exists(), "a unit ran without a prepared extractor")
@@ -262,7 +315,7 @@ class NoReuse(unittest.TestCase):
         self.assertTrue(marker.exists())
         marker.unlink()
         with mock.patch.object(fc, "FIXTURE_BUILD", ["sh", "-c", "echo lake failed; exit 1"]):
-            status, out, err = self.run_checks()
+            status, out, err = self.run_checks("--rerun")
         self.assertEqual(status, 1, out + err)
         self.assertIn("FAILED the proof-fixture package:", err)
         self.assertIn("lake failed", (self.temp / "logs" / "shared-build.log").read_text())
@@ -272,11 +325,72 @@ class NoReuse(unittest.TestCase):
         (self.hidden / "input").write_text("ok\n")
         self.unit["run"] = '[ "$AIR2LEAN_TOOLCHAIN_RUNTIME_RUN" = offline-record ]\n'
         self.assertEqual(self.run_checks()[0], 0)
+        shutil.rmtree(self.temp / "passes")
         for error in (ValueError("toolchain runtime changed during the run"), OSError("no lake")):
             with mock.patch.object(fc.assumptions, "runtime_run", lambda: offline_runtime_run(error)):
                 status, out, err = self.run_checks()
             self.assertEqual(status, 1, out + err)
             self.assertIn("the toolchain runtime: " + str(error), err)
+        # The unit itself passed, but its run failed a shared step: no pass is recorded.
+        self.assertFalse((self.temp / "passes").exists())
+
+
+class RunInputs(unittest.TestCase):
+    """`run_inputs` covers every file of a scratch worktree (ignored ones and every `.lake` too),
+    its git state, the toolchain, the stock Zig every unit runs and the environment, but not the
+    run's own variables; what it cannot read makes the run unkeyable."""
+
+    def test_every_file_git_state_compiler_and_variable_is_an_input(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, sysroot, zig = Path(directory) / "wt", Path(directory) / "lean", Path(directory) / "zig"
+            for d in (root, sysroot / "bin", zig / "lib"):
+                d.mkdir(parents=True)
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            (root / "tracked").write_text("1")
+            (root / ".gitignore").write_text(".lake/\nignored\n")
+            subprocess.run(["git", "-C", str(root), "add", "tracked", ".gitignore"], check=True)
+            (root / "untracked").write_text("1")
+            (root / "ignored").write_text("1")
+            build = root / "tests/roadmap/.lake/build/lib/lean"
+            build.mkdir(parents=True)
+            (build / "M.olean").write_text("1")
+            (root / ".lake/assurance").mkdir(parents=True)
+            (root / "__pycache__").mkdir()
+            (sysroot / "bin/lean").write_text("lean")
+            (zig / "zig").write_text("zig")
+            (zig / "lib/std.zig").write_text("std")
+            outside = Path(directory) / "outside"
+            outside.write_text("1")
+            unit = {"name": "u", "zig": "0.16.0", "toolchains": {"patched": [], "stock": []}}
+            with mock.patch.object(fc, "ROOT", root), \
+                    mock.patch.object(fc.assumptions, "lake_env", lambda name: str(sysroot)), \
+                    mock.patch.object(fc, "resolve", lambda kind, version: zig / "zig"), \
+                    mock.patch.dict(os.environ, {"AIR2LEAN_JOBS": "1"}):
+                key = lambda: fc.CAS.digest(fc.run_inputs([unit]))
+                first = key()
+                (root / "__pycache__/m.pyc").write_text("bytecode")  # bytecode: no input
+                for variable in ("AIR2LEAN_JOBS", "PWD", "CLAUDE_CODE_SESSION_ID", "WARP_X", "TERM", "TERM_PROGRAM"):
+                    os.environ[variable] = "changed"
+                self.assertEqual(key(), first)
+                git = lambda *args: subprocess.run(["git", "-C", str(root), *args], check=True)
+                for change in (lambda: (root / "tracked").write_text("2"),
+                               lambda: (root / "untracked").write_text("2"),
+                               lambda: (root / "ignored").write_text("2"),
+                               lambda: (root / "new").write_text(""),
+                               lambda: (build / "M.olean").write_text("2"),
+                               lambda: (root / ".lake/assurance/cache.json").write_text("{}"),
+                               lambda: git("add", "untracked"),
+                               lambda: (root / "link").symlink_to(outside),
+                               lambda: outside.write_text("2"),
+                               lambda: (sysroot / "bin/lean").write_text("lean2"),
+                               lambda: (zig / "lib/std.zig").write_text("std2"),
+                               lambda: os.environ.__setitem__("SOME_NEW_VARIABLE", "1"),
+                               lambda: os.environ.__setitem__("TERMINFO", "x")):
+                    before = key()
+                    change()
+                    self.assertNotEqual(key(), before)
+                with mock.patch.object(fc.assumptions, "lake_env", lambda name: ""), self.assertRaises(fc.Unkeyable):
+                    key()
 
 
 if __name__ == "__main__":

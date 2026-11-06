@@ -861,16 +861,33 @@ to eight at once inside their own elastic guard (`--jobs`; base `--rss-mib` 4096
 enclosing guard's), each with one Lean process (`--lean-threads`), the longest first by the last
 runs' wall times, each a sub-admission charged 1.5x the unit's largest recent sampled peak
 (11000 MiB unmeasured; [build-budgets.md](build-budgets.md#elastic-workloads)); the measurements
-(`~/.cache/air2lean/fixture-checks/schedule.json`) decide order and admission only. **Every unit runs on every invocation**: no
-result is reused across runs until a sound input tracer exists (maintainer decision on #443,
-2026-10-19). The phase once remembered a pass under a key of the files a unit's scanned text named
-by path, and of the stock compiler's path, size and modification time. That key missed every input
-reached by a path built in code, a false green: `tests/roadmap/callbacks/mutants.py` reaches
-`ROADMAP / "asm-effects"`, so after `theorem elapsed_counter` in
-`tests/roadmap/asm-effects/AsmEnv/Proofs.lean` became `private theorem`, the unit "test: Callback
-contracts" kept its key and its stale pass while `callbacks/check.sh` failed. The phase takes 16
-to 22 min on the dev Mac (75 units, 59 checks). `scripts/fixture-checks.sh` runs the phase on its
-own (`--only TEXT`: the units whose name or checks contain TEXT). It writes each unit's wall time,
+(`~/.cache/air2lean/fixture-checks/schedule.json`) decide order and admission only. **A unit
+runs unless a pass of exactly its inputs is recorded.** Its key covers everything it can read, not the files it names: the content
+of every file of the checkout (tracked and untracked) and of the whole-tree generated files, every
+build output of the three Lake packages (`.`, `tests/roadmap`, `tests/diff`), the Lean toolchain's
+runtime digest, the content of each Zig compiler the unit names, python3, bash and git on PATH,
+the host, the inherited environment (every variable but the run's own scratch, admission and
+session ones), and the unit's rendered CI step (`run_inputs`, `unit_key` in
+`scripts/fixture-checks.py`). So any edit anywhere runs every unit again, and only an unchanged
+tree reuses passes: a second full build, or `preflight.sh` after one, runs none and takes no
+admission (`fixture-checks.py --pending`). A pass is recorded in
+`~/.cache/air2lean/fixture-checks/passes` (one file per key, never in the artifact cache) only
+when those inputs are the same at the end of the run as at its start; `--rerun` runs every unit.
+Outside the key stay the host system below Python and the toolchains (the OS, the SDK, system
+tools), the shared artifact cache (content-addressed) and a file a unit reads outside the
+checkout by a path of its own. The phase once remembered a pass under a key of only the files a
+unit's scanned text named by path, and of the stock compiler's path, size and modification time.
+That key missed every input reached by a path built in code, a false green:
+`tests/roadmap/callbacks/mutants.py` reaches `ROADMAP / "asm-effects"`, so after `theorem
+elapsed_counter` in `tests/roadmap/asm-effects/AsmEnv/Proofs.lean` became `private theorem`, the
+unit "test: Callback contracts" kept its key and its stale pass while `callbacks/check.sh` failed;
+reuse was then off until a key over every input existed (maintainer decision on #443,
+2026-10-19). The whole-tree key above is that key; the maintainer approved reuse under it on
+#570 (2026-11-03). CI never reuses or records a pass (`GITHUB_ACTIONS` or `CI` set: pull
+requests, `main`, the nightly and release runs): its runs stay the independent confirmation.
+The phase takes 16 to 22 min on the dev Mac when its units run (75 units, 59 checks).
+`scripts/fixture-checks.sh` runs the phase on its own (`--only TEXT`: the units whose name or
+checks contain TEXT). It writes each unit's wall time,
 peak RSS (its process group, sampled) and wall time by process kind (lean, zig, the translator,
 lake, python) to `DIR/units.json` and prints the 20 longest units; these are measurements, used
 only for the order and admission above.
