@@ -416,6 +416,143 @@ instance : DecidableEq Frac := fun a b =>
 
 end Frac
 
+/-! ## Read shares of heap cells
+
+Heap ownership is exclusive: a byte is in exactly one resource's `FHeap` (`Holds.disj`). A **read
+share** lets several resources read one byte at once: each holds a fraction of the byte's cell,
+the fractions of one byte sum to at most `1`, and all of them agree on the cell. A load needs a
+positive fraction; a store or a free needs the byte exclusively, so it never changes a byte that a
+share reads. The whole fraction is the byte itself and converts to and from exclusive ownership.
+A shared reader (an `Io.RwLock` shared holder) gets the protected resource at a fraction
+(maintainer decision 2026-11-06 on #637, option A; `docs/sep-full-state.md` §Read shares, which
+also lists the integration steps that follow this algebra).
+
+A share cell is total: `SCell` holds the fraction of each possible cell value, composition is
+pointwise addition (commutative, associative, unit `SCell.zero`), and validity (`SCell.Valid`)
+asks for at most one value with a positive fraction, held at most whole: two shares of one byte
+that disagree on its cell, or that sum above `1`, do not compose. The cell a valid share reads is
+`SCell.cell` (none when it holds nothing). Regressions: `tests/roadmap/sep-full/ShareCX.lean`. -/
+
+/-- The fractions of one byte's possible cells (§Read shares). -/
+abbrev SCell := FCell → Frac
+
+namespace SCell
+
+/-- No fraction of any cell. -/
+def zero : SCell := fun _ => Frac.zero
+
+open Classical in
+/-- The fraction `q` of the cell `c`, nothing of any other. -/
+noncomputable def of (c : FCell) (q : Frac) : SCell := fun c' => if c' = c then q else Frac.zero
+
+/-- Pointwise sum. -/
+def add (a b : SCell) : SCell := fun c => (a c).add (b c)
+
+theorem add_val (a b : SCell) (c : FCell) : ((a.add b) c).val = (a c).val + (b c).val := rfl
+
+theorem zero_val (c : FCell) : (zero c).val = 0 := rfl
+
+theorem of_self (c : FCell) (q : Frac) : (of c q c).val = q.val := by simp [of]
+
+theorem of_ne {c c' : FCell} (q : Frac) (h : c' ≠ c) : (of c q c').val = 0 := by
+  simp [of, h, Frac.zero]
+
+theorem ext {a b : SCell} (h : ∀ c, (a c).val = (b c).val) : a = b :=
+  funext fun c => Frac.eq (h c)
+
+theorem add_comm (a b : SCell) : a.add b = b.add a := funext fun _ => Frac.add_comm _ _
+
+theorem add_assoc (a b c : SCell) : (a.add b).add c = a.add (b.add c) :=
+  funext fun _ => Frac.add_assoc _ _ _
+
+@[simp] theorem add_zero (a : SCell) : a.add zero = a := funext fun _ => Frac.add_zero _
+
+@[simp] theorem zero_add (a : SCell) : zero.add a = a := funext fun _ => Frac.zero_add _
+
+/-- A positive part makes a positive sum. -/
+theorem pos_add {a : SCell} (b : SCell) {c : FCell} (h : 0 < (a c).val) : 0 < ((a.add b) c).val := by
+  rw [add_val]; have := (b c).nonneg; grind
+
+theorem pos_add' (a : SCell) {b : SCell} {c : FCell} (h : 0 < (b c).val) : 0 < ((a.add b) c).val := by
+  rw [add_val]; have := (a c).nonneg; grind
+
+/-- Holds no fraction of any cell. -/
+def Empty (a : SCell) : Prop := ∀ c, (a c).val = 0
+
+theorem empty_zero : zero.Empty := fun _ => rfl
+
+theorem Empty.eq {a : SCell} (h : a.Empty) : a = zero := ext fun c => h c
+
+/-- At most one cell has a positive fraction, and it is held at most whole. -/
+def Valid (a : SCell) : Prop :=
+  (∀ c c', 0 < (a c).val → 0 < (a c').val → c = c') ∧ ∀ c, (a c).val ≤ 1
+
+theorem valid_zero : zero.Valid :=
+  ⟨fun c _ h => absurd h (by rw [zero_val c]; decide), fun c => by rw [zero_val c]; decide⟩
+
+theorem valid_of {c : FCell} {q : Frac} (hq : q.val ≤ 1) : (of c q).Valid := by
+  refine ⟨fun x y hx hy => ?_, fun x => ?_⟩
+  · by_cases ex : x = c
+    · by_cases ey : y = c
+      · rw [ex, ey]
+      · rw [of_ne q ey] at hy; exact absurd hy (by decide)
+    · rw [of_ne q ex] at hx; exact absurd hx (by decide)
+  · by_cases ex : x = c
+    · rw [ex, of_self]; exact hq
+    · rw [of_ne q ex]; decide
+
+/-- A part of a valid sum is valid: fractions are nonnegative, so each part's are below the sum's. -/
+theorem Valid.of_add {a b : SCell} (h : (a.add b).Valid) : a.Valid := by
+  refine ⟨fun c c' hc hc' => h.1 c c' (pos_add b hc) (pos_add b hc'), fun c => ?_⟩
+  have h2 := h.2 c; rw [add_val] at h2; have := (b c).nonneg; grind
+
+theorem Valid.of_add' {a b : SCell} (h : (a.add b).Valid) : b.Valid :=
+  Valid.of_add (by rw [add_comm]; exact h)
+
+open Classical in
+/-- **The cell a share reads**: the one cell with a positive fraction, none if it holds nothing. -/
+noncomputable def cell (a : SCell) : Option FCell :=
+  if h : ∃ c, 0 < (a c).val then some (Classical.choose h) else none
+
+theorem cell_eq_some {a : SCell} (hv : a.Valid) {c : FCell} (hc : 0 < (a c).val) :
+    a.cell = some c := by
+  have h : ∃ c, 0 < (a c).val := ⟨c, hc⟩
+  simp only [cell, h, dite_true]
+  exact congrArg some (hv.1 _ _ (Classical.choose_spec h) hc)
+
+theorem cell_eq_none {a : SCell} (h : a.Empty) : a.cell = none := by
+  have hn : ¬ ∃ c, 0 < (a c).val := fun ⟨c, hc⟩ => by rw [h c] at hc; exact absurd hc (by decide)
+  simp only [cell, hn, dite_false]
+
+theorem cell_zero : zero.cell = none := cell_eq_none empty_zero
+
+/-- **A positive part reads the sum's cell** (the load of a share). -/
+theorem cell_add {a b : SCell} (hv : (a.add b).Valid) {c : FCell} (hc : 0 < (a c).val) :
+    (a.add b).cell = some c :=
+  cell_eq_some hv (pos_add b hc)
+
+/-- **The whole fraction is exclusive**: next to a part holding `1` of a cell, a valid frame holds
+nothing (the conversion of a whole share to exclusive ownership, and back). -/
+theorem Valid.whole {a b : SCell} (hv : (a.add b).Valid) {c : FCell} (hc : (a c).val = 1) :
+    b.Empty := by
+  intro c'
+  have hb := (b c').nonneg
+  by_cases e : c' = c
+  · subst e; have h2 := hv.2 c'; rw [add_val] at h2; grind
+  · refine Classical.byContradiction fun hne => e (hv.1 _ _ (pos_add' a ?_) (pos_add b ?_))
+    · grind
+    · rw [hc]; decide
+
+/-- **Split and join are equalities**: `q₁ + q₂` of a cell is `q₁` of it next to `q₂` of it. -/
+theorem of_add (c : FCell) (q₁ q₂ : Frac) : (of c q₁).add (of c q₂) = of c (q₁.add q₂) :=
+  ext fun x => by
+    rw [add_val]
+    by_cases e : x = c
+    · rw [e, of_self, of_self, of_self]; rfl
+    · rw [of_ne _ e, of_ne _ e, of_ne _ e]; grind
+
+end SCell
+
 /-- A region named by a ledger token: its start pointer, its length in bytes, the fraction of
 its block's extent lent with it (`FAllocInv.granted`'s share), so that the allocator returns the
 share against exactly the receipt it holds for the grant, and the address and kind labels of its
