@@ -571,13 +571,13 @@ theorem deadUndefStores_ren (hρ : Inj ρ) (f : Func) :
   rw [← Array.map_zipIdx, Array.foldl_map]
   apply foldl_hom_mem
   intro ⟨i, k⟩ _ a
-  rcases i with ⟨id, ty, op⟩
-  dsimp only [Prod.map, id]
+  rcases i with ⟨iid, ty, op⟩
+  dsimp only [Prod.map, _root_.id]
   simp only [renInst_op, renInst_id]
   cases op <;> try rfl
   case store p v =>
     cases p <;> cases v <;> try rfl
-    case inst.undef x t =>
+    next x t =>
       simp only [renOp, renFlat, renVal, Array.any_map, Function.comp_def, renInst_id, renInst_op,
         beq_ren hρ, isAlloc_renOp, placesOf_ren hρ, Array.size_map, ← Array.map_extract,
         Array.find?_map, usesPlaceOf_ren hρ, leavesBody_ren hρ, Option.any_map,
@@ -597,7 +597,7 @@ theorem undefAllocs_ren (hρ : Inj ρ) (f : Func) :
   cases op <;> try rfl
   case store p v =>
     cases p <;> cases v <;> try rfl
-    case inst.undef x t =>
+    next x t =>
       simp only [renOp, renFlat, renVal, contains_ren hρ, apply_ite (Array.map ρ)]
       congr 1
       exact push_root_ren hρ _ acc x
@@ -649,8 +649,8 @@ theorem isPtrFromInt_ren (hρ : Inj ρ) (f : Func) (insts : Array Inst) (i : Ins
   case bitcast s v =>
     cases v <;> try rfl
     case inst x =>
-      simp only [renOp, renFlat, renVal, find?_id_ren hρ]
-      cases insts.find? (·.id == x) <;> rfl
+      (simp only [renOp, renFlat, renVal, find?_id_ren hρ, Option.map_map, Function.comp_def,
+        renInst_ty]) <;> rfl
 
 theorem usesMemoryAt_ren (hρ : Inj ρ) (f : Func) (insts : Array Inst) (i : Inst) :
     (renFunc ρ f).usesMemoryAt (insts.map (renInst ρ)) (renInst ρ i) = f.usesMemoryAt insts i := by
