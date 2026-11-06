@@ -750,6 +750,18 @@ that no part owns the bytes, shares included, and `FOwned.heap_empty` needs the 
 rest's owned sets empty. Then `RwLockImpl` hands shared holders the protected resource at a
 fraction.
 
+**Read ownership** (`ZigLean/Conc/Clock.lean` §Read ownership, regressions
+`tests/roadmap/sep-full/ShareRaceCX.lean`). Two reads never race (`racePair`), so a share holder
+needs only that every recorded *write* to its bytes happened before its clock (`Mem.OwnsR`); a
+read by any thread keeps it for every thread (`Mem.OwnsR.recordRead`), and a read by its holder
+does not race (`Mem.OwnsR.noRace`). Ownership (`Mem.Owns`) over a share cannot hold for two
+concurrent readers (`ShareRaceCX.reader_not_owns`), and for the same reason a whole share
+becomes an exclusive cell in a thread only with every earlier read before the thread's clock
+(`Mem.OwnsRC.owns`), which the protocol provides. Moving the thread layer (`FOwned.owns`,
+`FTTriple`, its frame `FStepIn`, `LockWord.Owns`) to ownership of the exclusive cells and read
+ownership of the shares is a pending maintainer decision (#637 slice F4). `FOwned.heap_empty`
+stays as it is: a byte whose whole share is in the rest is live with no exclusive cell anywhere.
+
 ### The fee of a grant (coordinator decision 2026-10-12)
 
 **The problem.** A `reset` that revokes outstanding grants is unsound whatever ghost state it

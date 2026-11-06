@@ -143,6 +143,98 @@ theorem Mem.Owns.noRace {b : BlockId} {off len : Nat} {kind : AccessKind} (ho : 
 
 end Owns
 
+/-! ## Read ownership
+
+A read races only with a concurrent write (`racePair`: two reads never race). So a thread that
+only reads bytes needs only that every recorded **write** to them happened before its clock
+(`Mem.OwnsRC`, `Mem.OwnsR`); reads by other threads may be concurrent with it. This is the
+ownership of a read share (`docs/sep-full-state.md` §Read shares): any number of threads may hold
+it for the same bytes at once (`tests/roadmap/sep-full/ShareRaceCX.lean`).
+
+- Ownership gives read ownership (`Mem.OwnsC.toR`), and read ownership is ownership once every
+  recorded read is before the clock, too (`Mem.OwnsRC.owns`): the obligation of turning a whole
+  share back into an exclusive cell.
+- A non-write access by the read owner does not race (`Mem.OwnsR.noRace`).
+- A recorded read, by any thread, keeps every clock's read ownership (`Mem.OwnsRC.recordRead`,
+  `Mem.OwnsR.recordRead`); the reader keeps its own after any access (`Mem.OwnsR.recordAt`). -/
+
+/-- The clock `c` may read `h`: every recorded write to a byte of `h`, and every write to a block
+that does not exist yet, happened before `c`. -/
+def Mem.OwnsRC (m : Mem) (c : VClock) (h : Heap) : Prop :=
+  ∀ e ∈ m.footprint, e.kind.isWrite = true → (e.Touches h ∨ m.blocks.size ≤ e.block) →
+    VClock.le e.clock c = true
+
+/-- Thread `t` may read `h`. -/
+def Mem.OwnsR (m : Mem) (t : ThreadId) (h : Heap) : Prop := m.OwnsRC (m.clocks[t]!) h
+
+section OwnsR
+
+variable {m m' : Mem} {c c' : VClock} {h h₁ h₂ hF : Heap}
+
+theorem Mem.OwnsC.toR (ho : m.OwnsC c h) : m.OwnsRC c h := fun e he _ ht => ho e he ht
+
+theorem Mem.Owns.toR {t : ThreadId} (ho : m.Owns t h) : m.OwnsR t h := Mem.OwnsC.toR ho
+
+/-- **Read ownership with every read before the clock is ownership.** -/
+theorem Mem.OwnsRC.owns (hw : m.OwnsRC c h)
+    (hr : ∀ e ∈ m.footprint, e.kind.isWrite = false → (e.Touches h ∨ m.blocks.size ≤ e.block) →
+      VClock.le e.clock c = true) : m.OwnsC c h := fun e he ht => by
+  cases hk : e.kind.isWrite
+  · exact hr e he hk ht
+  · exact hw e he hk ht
+
+theorem Mem.OwnsRC.mono (ho : m.OwnsRC c h) (hc : VClock.le c c' = true) : m.OwnsRC c' h :=
+  fun e he hw ht => VClock.le_trans (ho e he hw ht) hc
+
+theorem Mem.OwnsRC.sub (ho : m.OwnsRC c h) (hs : ∀ l, h₁ l ≠ none → h l ≠ none) :
+    m.OwnsRC c h₁ :=
+  fun e he hw ht => ho e he hw (ht.imp (fun ⟨x, h1, h2, h3⟩ => ⟨x, h1, h2, hs _ h3⟩) id)
+
+theorem Mem.OwnsRC.union (h1 : m.OwnsRC c h₁) (h2 : m.OwnsRC c h₂) : m.OwnsRC c (h₁ ∪ h₂) := by
+  intro e he hw ht
+  rcases ht with ⟨x, hx1, hx2, hx3⟩ | hb
+  · by_cases hn : h₁ (e.block, x) = none
+    · exact h2 e he hw (.inl ⟨x, hx1, hx2, by simpa [hn] using hx3⟩)
+    · exact h1 e he hw (.inl ⟨x, hx1, hx2, hn⟩)
+  · exact h1 e he hw (.inr hb)
+
+/-- A `StepIn hF` keeps the read ownership of each part of `hF`, by any clock. -/
+theorem Mem.OwnsRC.frame (hs : StepIn hF m m') (ho : m.OwnsRC c h)
+    (hsub : ∀ l, h l ≠ none → hF l ≠ none) : m'.OwnsRC c h := by
+  intro e he hw ht
+  rcases hs.fp e he with he | ⟨-, hnt, hb⟩
+  · exact ho e he hw (ht.imp id fun hb => Nat.le_trans hs.blocks hb)
+  · rcases ht with ⟨x, hx1, hx2, hx3⟩ | hb'
+    · exact absurd ⟨x, hx1, hx2, hsub _ hx3⟩ hnt
+    · exact absurd hb' (Nat.not_le.mpr hb)
+
+/-- **A non-write access by the current thread to bytes it may read does not race.** -/
+theorem Mem.OwnsR.noRace {b : BlockId} {off len : Nat} {kind : AccessKind}
+    (ho : m.OwnsR m.current h) (hk : kind.isWrite = false)
+    (hin : ∀ x, off ≤ x → x < off + len → h (b, x) ≠ none) :
+    NoRace m b off len kind := by
+  apply noRace_of_raceAt
+  unfold raceAt
+  rw [Array.findSome?_eq_none_iff]
+  intro e he
+  split
+  · rename_i hc
+    simp only [Bool.and_eq_true, beq_iff_eq, decide_eq_true_eq] at hc
+    obtain ⟨⟨⟨⟨⟨hb, hl⟩, hel⟩, h1⟩, h2⟩, hcon⟩ := hc
+    subst hb
+    cases hw : e.kind.isWrite
+    · simp [racePair, hw, hk]
+    · have ht : e.Touches h := by
+        by_cases ho' : e.off ≤ off
+        · exact ⟨off, ho', h1, hin off (Nat.le_refl _) (by omega)⟩
+        · exact ⟨e.off, Nat.le_refl _, by omega, hin e.off (by omega) h2⟩
+      have hle := VClock.le_trans (ho e he hw (.inl ht))
+        (VClock.le_bump (m.clocks[m.current]!) m.current)
+      simp [VClock.concurrent, hle] at hcon
+  · rfl
+
+end OwnsR
+
 namespace StepIn
 
 variable {m m' m'' : Mem} {hF hF' : Heap}
@@ -245,6 +337,39 @@ theorem Mem.Owns.recordAt (hc : m.current < m.clocks.size) (ho : m.Owns m.curren
   simp only [Mem.recordAt, Array.mem_push] at he
   rcases he with he | rfl
   · exact VClock.le_trans (ho e he ht) (VClock.le_bump _ _)
+  · exact VClock.le_refl _
+
+/-- No clock gets smaller over a recorded access. -/
+theorem recordAt_clock_le (u : ThreadId) :
+    VClock.le (m.clocks[u]!) ((m.recordAt b off len kind).clocks[u]!) = true := by
+  simp only [Mem.recordAt]; rw [Conc.Proto.getElem!_set!_ite]
+  split
+  · rename_i h; rw [h.1]; exact VClock.le_bump _ _
+  · exact VClock.le_refl _
+
+/-- **A recorded read keeps every clock's read ownership.** -/
+theorem Mem.OwnsRC.recordRead {c : VClock} (ho : m.OwnsRC c h) (hk : kind.isWrite = false) :
+    (m.recordAt b off len kind).OwnsRC c h := by
+  intro e he hw ht
+  simp only [Mem.recordAt, Array.mem_push] at he
+  rcases he with he | rfl
+  · exact ho e he hw ht
+  · simp [hk] at hw
+
+/-- A recorded read, by any thread, keeps what every thread may read. -/
+theorem Mem.OwnsR.recordRead {u : ThreadId} (ho : m.OwnsR u h) (hk : kind.isWrite = false) :
+    (m.recordAt b off len kind).OwnsR u h :=
+  (Mem.OwnsRC.recordRead ho hk).mono (recordAt_clock_le u)
+
+/-- The current thread keeps what it may read over one of its recorded accesses. -/
+theorem Mem.OwnsR.recordAt (hc : m.current < m.clocks.size) (ho : m.OwnsR m.current h) :
+    (m.recordAt b off len kind).OwnsR (m.recordAt b off len kind).current h := by
+  show (m.recordAt b off len kind).OwnsRC ((m.recordAt b off len kind).clocks[m.current]!) h
+  rw [recordAt_clock hc]
+  intro e he hw ht
+  simp only [Mem.recordAt, Array.mem_push] at he
+  rcases he with he | rfl
+  · exact VClock.le_trans (ho e he hw ht) (VClock.le_bump _ _)
   · exact VClock.le_refl _
 
 theorem Mem.Owns.readAt {blk : Block} (hc : m.current < m.clocks.size) (ho : m.Owns m.current h) :
