@@ -1,241 +1,178 @@
-# Roadmap handoff
+# Roadmap
 
-This handoff finishes the existing eight-closeout batch and preserves the broader roadmap. All eight closeouts are merged at feature integration head `5f7f547ed885d56624c9536c90e2b0d60e901568`. The register has <!-- register:counts -->**90 requirements: 45 complete, 34 partial, 2 open and 9 research**<!-- /register:counts -->. The other <!-- register:incomplete -->45<!-- /register:incomplete --> requirements remain incomplete even where a useful bounded feature has shipped.
+air2lean translates a supported subset of Zig into Lean, supplies executable memory and
+concurrency models and kernel-checked proofs, and compares generated computations with compiled
+Zig. Start with the [README](README.md); [PLAN](PLAN.md) lists the implemented milestones and
+[coverage](docs/coverage.md) the supported domains. Standing rules for every change are in
+[CLAUDE.md](CLAUDE.md).
 
-The repository translates a supported subset of Zig into Lean, supplies executable memory/concurrency models and kernel-checked proofs, and compares selected generated computations with compiled Zig. This batch improves error/outcome reporting, ABI/storage behavior, deadlines, sentinel allocation, byte permutations and a bounded RwLock snapshot client. Use the [README](https://github.com/riventic/air2lean/blob/main/README.md) to start, [PLAN](https://github.com/riventic/air2lean/blob/main/PLAN.md) for implemented milestones and [coverage](https://github.com/riventic/air2lean/blob/main/docs/coverage.md) for supported domains.
+The register has <!-- register:counts -->**90 requirements: 45 complete, 34 partial, 2 open and 9 research**<!-- /register:counts -->;
+<!-- register:incomplete -->45<!-- /register:incomplete --> are incomplete, even where a useful
+bounded feature has shipped. A bounded slice does not change a requirement's classification
+until its full acceptance is established.
 
-## Existing closeout batch
+## Current state (2026-11-06, main `95199990e`)
 
-| Closeout | State | Evidence / remaining work |
+**Current goal: one proof framework on main.** All active work serves it (CLAUDE.md, "One proof
+framework", "Coordination"). The full-state separation logic with `fsym` (`FTriple`,
+`FTotalTriple`, `CTriple`) is the end state; the legacy layer (`ZigLean/Sep` outside `Full/`,
+the Conc CSL chain) is migrated and deleted.
+
+| Gate (`assurance/proof-framework.json`) | 2026-10-15 | 2026-10-21 | now |
+|---|---|---|---|
+| `legacy_users` | 97 at the arena landing | 41 | **13** |
+| tactic entries | 34 | 29 | **10** (`legacy-to-retire`: `unroll_sched`, `within`, `when_defined`) |
+| judgments / registries | | | 82 / 14 |
+
+What is left of the goal, in order ([legacy-retirement](docs/legacy-retirement.md), "Dependency
+map" and "Retirement order"):
+
+1. **RwLock cluster.** An `RwLockImpl` contract with `Io.RwLock` as its instance, over `SemImpl`
+   ([#575](https://github.com/riventic/air2lean/pull/575)) and `MutexImpl`; then RwLockContract
+   and RwLockSnapshotPair as its clients, and `Contracts.RwContract`. Codex draft
+   [#637](https://github.com/riventic/air2lean/pull/637). This frees Semaphore, Sync/Lock and
+   Conc/Witness.
+2. **Conc library chain.** The legacy part of Conc/Word, then LockRules → Lock → Csl → Own, each
+   after its last importer.
+3. **Stage D-e.** Sep/{Block,Triple}, with the strength log kept compiled until that final PR.
+4. **Legacy tactics.** `unroll_sched` has no program use left
+   ([#705](https://github.com/riventic/air2lean/pull/705)); its elaborator, test and the library
+   part of `ZigLean/Conc/Unroll` can be deleted. `within` and `when_defined` keep their recorded
+   plans (`when_defined` retires with engine-ledger row case-family-enrollment).
+5. **Directory structure** on the one framework: `ZigLean/Sep` becomes the one logic, then a
+   target tree for proofs, fixtures, docs and scripts (mechanical `git mv` PRs).
+
+The engine features these steps wait on are rows of the [engine ledger](docs/engine-ledger.md)
+(177 rows: 72 open, 105 closed).
+
+**Open PRs** are the list on GitHub (`gh pr list`). On 2026-11-06: #637, #480 and #403 (Codex
+drafts); #569 (root-package replay receipts, being finished); #570, #544 and #443
+(infrastructure drafts); #602 (its measurement failed) and #581 (obsolete), to be closed.
+
+**Main health.** The ~3-hourly run (`scripts/preflight.sh` with the full build and fixture
+checks, then `scripts/regen.sh`) was red on 2026-11-06 for `PageSpec.remap_spec` after #699; #703
+fixed it, and the run restarted on current main.
+
+## Decisions
+
+Maintainer decisions that shape the remaining work. Where a decision is permanent it is also
+recorded in the file named.
+
+### Framework and process
+
+| Date | Decision | Recorded in |
 |---|---|---|
-| ABI alignment | Merged | [PR100](https://github.com/riventic/air2lean/pull/100): bounded equal-zero alignment behavior. |
-| Deadline/atomic correspondence | Merged | [PR101](https://github.com/riventic/air2lean/pull/101): declared clock/resource premises remain. |
-| Sentinel allocation | Merged | [PR102](https://github.com/riventic/air2lean/pull/102): bounded allocation/client scope. |
-| Byte permutation | Merged | [PR103](https://github.com/riventic/air2lean/pull/103): bounded byte-buffer behavior. |
-| Outcome taxonomy | Merged | [PR96](https://github.com/riventic/air2lean/pull/96): distinct outcomes, exclusions and skipped-case accounting. |
-| RwLock snapshot client | Merged | [PR104](https://github.com/riventic/air2lean/pull/104): bounded two-load snapshot/result and safety contracts. |
-| Storage | Merged | [PR105](https://github.com/riventic/air2lean/pull/105): bounded error-storage controls, normal-function-pointer provenance and same-finite-union regressions repaired, with declared version generation/proof/runtime controls. |
-| Global payload pointers | Merged | [PR106](https://github.com/riventic/air2lean/pull/106): bounded payload-pointer identity/offset and generated alias/read clients, with fresh producers and declared proof/runtime/metadata/frame controls. |
+| 2026-10-12 | One goal at a time; side tracks need approval, parked tracks keep a handoff and a pushed branch. CI does not block merges. | CLAUDE.md "Coordination", "Workflow" |
+| 2026-10-12 | The requirement register is data (`assurance/register/`, `scripts/register.py`). | [#176](https://github.com/riventic/air2lean/pull/176), docs/ci.md |
+| 2026-10-14 | The full-state logic with `fsym` is the end state: no second migration; transitional items need a deletion plan; no new judgments, tactics or legacy additions; the allow-list only shrinks. | CLAUDE.md, docs/proof-framework.md |
+| 2026-10-14 | Invariant synthesis (P09) is part of the end state: invariants are generated and kernel-checked; humans write only specifications. | docs/invariant-synthesis.md, register P09 |
+| 2026-10-14 | Legacy-retirement questions: `Proto.WP` re-statused as target (D-WP); the strength log stays compiled until the final deletion PR; claim heads use reserved names. | docs/legacy-retirement.md §7 and "Coordinator decisions" |
+| 2026-10-15 | Allocator contracts get a mandatory non-vacuity companion (`FAdmit`), assigned to P09 (audit F2); witnesses are tied to the program start for entry-point roots (F3, option a). | docs/architecture-audit/soundness-2026-10-14.md |
+| 2026-10-18 | `Float.AllowedSpec` is a `target` entry, not `legacy-to-retire`. | [#453](https://github.com/riventic/air2lean/pull/453) |
+| 2026-10-19 | Proof performance: fixtures as Lake packages first, then a precompiled `fsym`. | [#483](https://github.com/riventic/air2lean/pull/483), [#546](https://github.com/riventic/air2lean/pull/546) |
+| 2026-11-03 | The L10/L11 implementation gate is released (`SemImpl`, `RwLockImpl`); the lock-word atomic rules get the stepping thread's existence. | engine-ledger row l11-waitgroup-rwlock-impl |
+| 2026-11-04 | Light merge gate: touched modules and importers, the PR's own tests, no-sorry, proof-framework and `preflight --no-translator`; no re-gate when main moves; the full checks run in the ~3-hourly main health run, and a red result is fixed forward first. | CLAUDE.md "Workflow" ([#600](https://github.com/riventic/air2lean/pull/600)) |
+| 2026-11-05 | `ZigLean/Conc/Spec` is deleted once full-state contracts supersede it (L21, [#677](https://github.com/riventic/air2lean/pull/677)); the theorem inventory is a whole-tree generated file ([#686](https://github.com/riventic/air2lean/pull/686)). | docs/thread-specs.md, docs/ci.md |
+| 2026-11-05 | P09-E4 engine case approved: `fsym` uses loop invariants registered with `@[fsym_inv]` (no new tactic or judgment). | engine ledger, [#688](https://github.com/riventic/air2lean/pull/688) |
 
-For the next agent, start from a fresh worktree of current main (`scripts/worktree-init.sh`); preserve the dirty primary. Read [Current state](#current-state-2026-10-15) for what is merged, in review and in progress, then this register and the acceptance companion. The existing eight-closeout batch is finished; work proceeds from the <!-- register:incomplete -->45<!-- /register:incomplete --> broader incomplete requirements, in the order given there (rows not named there follow the register).
+### Semantics and soundness
 
-For the two final feature gates, use the [finite error-storage guide](https://github.com/riventic/air2lean/blob/main/tests/roadmap/error-storage/README.md) and [global payload-pointer guide](https://github.com/riventic/air2lean/blob/main/tests/roadmap/global-payload-pointers/README.md). Their matching-version fixtures, generated clients, negative controls and semantic mutations passed locally before final CI. The later global seven-family differential run records 27,424 cases, 27,068 exact matches, 191 illegal exclusions and 165 unspecified exclusions, with zero setup failures or mismatches and `qualified=false`; it remains a focused subset.
-
-The original Outcome closeout’s Zig0.16 differential report contains **87,064 cases: 85,987 exact matches, 497 illegal cases and 580 unspecified cases**, with zero setup failures or mismatches and one example/three functions skipped. It is complete with `qualified=false`. These totals belong to the original Outcome scope, not a later focused subset or a new current full-run claim. They do not establish compiler/native correspondence or theorem applicability; the [assumptions audit](https://github.com/riventic/air2lean/blob/main/docs/assumptions-audit.md) and [proof documentation](https://github.com/riventic/air2lean/blob/main/docs/proofs.md) retain the relevant distinctions. Use the repository's [differential driver](https://github.com/riventic/air2lean/blob/main/scripts/diff.sh), documented generation/proof checks and exact-head [CI workflow](https://github.com/riventic/air2lean/blob/main/.github/workflows/ci.yml) for the scope being changed.
-
-Native observations remain bounded by version, target, backend and profile. Global payload-pointer qualification retains its stage2_x86_64/Linux-musl ReleaseSafe domain; the LLVM constant-offset36 versus runtime38 discrepancy is unqualified. Concurrency proofs retain explicit ownership, clock, lifetime, join-before-free, schedule and fuel premises. They do not imply fairness, termination, multiwriter support or a general synchronization library. See [standard models](https://github.com/riventic/air2lean/blob/main/docs/std-models.md) and [coverage](https://github.com/riventic/air2lean/blob/main/docs/coverage.md).
-
-Use an isolated worktree and preserve the dirty primary. Lean runs go through `scripts/build-guard.py` with a memory cap (`--rss-mib 12000` or lower); builds share the Lake/CAS cache (`AIR2LEAN_CAS_DIR`, [build cache](https://github.com/riventic/air2lean/blob/main/docs/build-cache.md)) and parallel check/diff scripts ([build budgets](https://github.com/riventic/air2lean/blob/main/docs/build-budgets.md)). Check locally first (x86_64-linux under Rosetta Docker); a PR merges when green locally and CI runs as a warning (CLAUDE.md, "Workflow"). Keep later work scoped to an explicit requirement and its acceptance. The scheduler remains stopped; a restart requires its own explicit instruction.
-
-## Current state (2026-10-15)
-
-**Current goal: one proof framework on main.** All active work serves it (CLAUDE.md, "One proof framework", "Coordination"):
-
-1. The full-state logic, `fsym`, the translated allocators and persistent const-global knowledge are on main: the arena branch (`codex/alloc-arena-proof`) landed with [#279](https://github.com/riventic/air2lean/pull/279). The PRs that were held for adding proof machinery outside the framework are closed: #166 (batch E), #175 (slicing order; lazy pointer poison, V01/V02, supersedes it) and #178; #177 merged after its loop/run lemmas moved into `ZigLean/Mem/Run`.
-2. Migrate every remaining legacy-layer client to the full-state logic and delete the legacy layer. `assurance/proof-framework.json` lists them (`legacy_users`, 97 files at the landing, 41 after #520 on 2026-10-20); the list only shrinks. The order is [docs/legacy-retirement.md](docs/legacy-retirement.md); the engine features the migrations wait on are rows of [docs/engine-ledger.md](docs/engine-ledger.md). Migrated on the arena branch: arrays and slices (`Full/Arr`, native `@memset`/`@memmove`), lists, pointers, layout, the lock library over `FOwned` (`Full/Lock`, `LockRules`, the `MutexImpl` contract), thread-locals and spawn failure, and the test lanes (audit claims, outcome taxonomy, global payloads, global init, try-pointers). Concurrent termination and cost are one opt-in turn cost on `Proto.WP` (`Proto.cost`, `Proto.returnsWithin`).
-3. Restructure the directories on top of the one framework.
-
-Roadmap requirements resume on the framework afterwards. Parked tracks with pushed WIP branches and handoffs: Windows target (`codex/windows-target`), encode/decode exactness (`codex/enc-exactness`; its two soundness bugs are fixed on main by [#286](https://github.com/riventic/air2lean/pull/286), two rows of [enc-exactness](docs/architecture-audit/enc-exactness.md) stay open), Canon certificates (`codex/canon-cert`), exporter split (`codex/exporter-split`), CI once-parts on 0.17.0 (`codex/ci-once-017`).
-
-The register below counts <!-- register:counts -->**90 requirements: 45 complete, 34 partial, 2 open and 9 research**<!-- /register:counts --> (generated from `assurance/register/`); each PR updates its own rows.
-
-### Merged to main on 2026-10-21
-
-| PR | Content |
-|---|---|
-| [#548](https://github.com/riventic/air2lean/pull/548) | Premises OSF-01/OSF-02 state Linux's futex alignment check (`-EINVAL` before the word read or queue lookup); the model change is [#465](https://github.com/riventic/air2lean/pull/465). |
-| [#545](https://github.com/riventic/air2lean/pull/545) | Build speed: the claims fixtures are the Lake library `Claims`, with a shared replay cache and parallel CLI checks. |
-
-### Merged to main on 2026-10-20
-
-| PR | Content |
-|---|---|
-| [#492](https://github.com/riventic/air2lean/pull/492) | Docs: the 2026-10-19 table lists #487-#491, #397, #442, #488 and #470; the legacy count is 54. |
-| [#493](https://github.com/riventic/air2lean/pull/493) | Local CI: every row gets fresh HOME, tool and cache state; copy-in metadata is removed on failure; drain checks use exact container IDs. |
-| [#497](https://github.com/riventic/air2lean/pull/497), [#503](https://github.com/riventic/air2lean/pull/503) | The eleven `tests/roadmap/strength-log/*.lean` files leave the legacy layer (54 → 48 → 43 `legacy_users`). |
-| [#500](https://github.com/riventic/air2lean/pull/500) | Golden case hosts are checked against their full AIR profiles before translation. |
-| [#501](https://github.com/riventic/air2lean/pull/501), [#502](https://github.com/riventic/air2lean/pull/502), [#506](https://github.com/riventic/air2lean/pull/506) | Assurance: replay and report freshness are bound to the installed Lean inputs (#501); the theorem-universe adapter forwards declaration evidence (#502); the synthetic assurance fixtures carry runtime identities (#506). |
-| [#499](https://github.com/riventic/air2lean/pull/499) | `test_fixtures.py`: the audit controls build with the repository's toolchain. |
-| [#507](https://github.com/riventic/air2lean/pull/507) | `Fits.wp_holdParts`: lock holder steps transfer complete resources in both directions. |
-| [#481](https://github.com/riventic/air2lean/pull/481) | Native FBA resource rules; `fsym` derives requested block-address knowledge from owned bytes without changing store results. The FBA client proof stays open. |
-| [#400](https://github.com/riventic/air2lean/pull/400) | Allocator admission foundation (`FAllocInv.creationPost`, `FAdmit.of_total`) and the Page creation and admission lemmas; F2 and the rest of Task10 stay open. |
-| [#494](https://github.com/riventic/air2lean/pull/494) | Fix-forward after batches C/D: the theorem inventory is regenerated; `regen.py` no longer passes an empty `LEAN_PATH` root. |
-| [#498](https://github.com/riventic/air2lean/pull/498) | Fix-forward of main's audit and mutation (l) CI lanes (red since #471): the theorem-universe spoof isolation and the mutant's setup. |
-| [#515](https://github.com/riventic/air2lean/pull/515) | Fix-forward of the `Proofs/Lists/Append.lean` timeout after #481 (constrained region matching). |
-| [#509](https://github.com/riventic/air2lean/pull/509) | Scheduler wake selection: a request that covers the queue selects every matching entry, for every oracle list. |
-| [#511](https://github.com/riventic/air2lean/pull/511), [#517](https://github.com/riventic/air2lean/pull/517) | Compiler-owned Unit audits are bound to their actual inputs and outputs (#511); fixture audits carry the canonical compiler inputs (#517). |
-| [#512](https://github.com/riventic/air2lean/pull/512), [#516](https://github.com/riventic/air2lean/pull/516) | Sync is generated for every real profile (0.17.0 Linux, 0.16.0 Linux and Darwin) side by side (#512), and each profile instantiates the `IoMutexCode`/`MutexImpl` contract (#516). |
-| [#514](https://github.com/riventic/air2lean/pull/514) | Compiled premise comparison fails closed when a selected theorem has no source-derived bound. |
-| [#518](https://github.com/riventic/air2lean/pull/518) | Basic is generated for all four supported versions. |
-| [#519](https://github.com/riventic/air2lean/pull/519) | Fix-forward of the review-checks fixture after #488; the ROADMAP lists #492-#518. |
-| [#520](https://github.com/riventic/air2lean/pull/520) | Thread-tuple capture and failed-spawn contracts are stated over full-state `FOwned` resources (43 → 41 `legacy_users`). |
-| [#522](https://github.com/riventic/air2lean/pull/522), [#524](https://github.com/riventic/air2lean/pull/524) | Fix-forwards after #511: the claims Unit producer provenance (#522); premise comparison keeps compiler-owned source identities (#524). |
-| [#526](https://github.com/riventic/air2lean/pull/526) | Docs: this table lists #519-#524; the legacy count is 41. |
-| [#527](https://github.com/riventic/air2lean/pull/527), [#535](https://github.com/riventic/air2lean/pull/535) | Inventory builds are bound to the selected Lake producer (#527); outcome-taxonomy fixtures are bound before synthetic compilation (#535, fix-forward of main's taxonomy red after #511). |
-| [#513](https://github.com/riventic/air2lean/pull/513) | Conditional FBA creation from initialized resources. |
-| [#531](https://github.com/riventic/air2lean/pull/531) | Saturating add is proved across the four Basic cases. |
-| [#495](https://github.com/riventic/air2lean/pull/495), [#504](https://github.com/riventic/air2lean/pull/504), [#508](https://github.com/riventic/air2lean/pull/508), [#528](https://github.com/riventic/air2lean/pull/528) | Build speed: per-unit fixture statistics (#495); one kernel-replay cache per run (#504); sep-auto and one-logic as Lake modules (#508); parallel canonicalization certification (#528). |
-| [#525](https://github.com/riventic/air2lean/pull/525), [#530](https://github.com/riventic/air2lean/pull/530) | Assurance extractor: sharing-aware fingerprints and caught runtime limits (#525); a 32 MiB RSS growth budget for proof receipts (#530). |
-| [#532](https://github.com/riventic/air2lean/pull/532), [#533](https://github.com/riventic/air2lean/pull/533) | Fix-forwards of main's alloc-fba fixture red: one Lake cache mode per workload (#532); a fixture unit that rebuilds root modules fails (#533). |
-| [#523](https://github.com/riventic/air2lean/pull/523), [#536](https://github.com/riventic/air2lean/pull/536) | Assurance binding: registered witnesses are bound to their precompile context (#523); module spelling and the physical validator inputs share one identity (#536). |
-| [#537](https://github.com/riventic/air2lean/pull/537) | Docs: this table lists #525-#535; the "One proof logic" row's legacy count is 41. |
-| [#538](https://github.com/riventic/air2lean/pull/538), [#505](https://github.com/riventic/air2lean/pull/505) | Build speed: `full-build` takes one admission for all phases (#538); `fixtures.py audit` builds the extractor's driver with Lake (`assumptions.py --extract-in`, #505). |
-| [#539](https://github.com/riventic/air2lean/pull/539) | Architecture audit E1 (open, FAIL-OPEN): the assurance extractor imports audited modules, so their `initialize` code runs in the process that writes the report ([soundness-2026-10-20](docs/architecture-audit/soundness-2026-10-20.md)). |
-| [#542](https://github.com/riventic/air2lean/pull/542) | Docs: this table lists #505, #523 and #536-#539. |
-| [#541](https://github.com/riventic/air2lean/pull/541), [#547](https://github.com/riventic/air2lean/pull/547) | Full-state atomic word rules for 32- and 64-bit words (#541); rest transfer (`Inv.takeRest`/`Inv.giveRest`) and the admitted-reader load rule (#547). |
-| [#540](https://github.com/riventic/air2lean/pull/540), [#546](https://github.com/riventic/air2lean/pull/546) | Build speed: kernel replay as Lake-built receipts that never import audited code (#540); `fsym` is precompiled to native code, with byte-identical `.olean` files (#546). |
-| [#529](https://github.com/riventic/air2lean/pull/529) | `fsym` applies local proof functions; the four condition-signal bodies are one `fsym` call each over one outside-or-holding contract. |
-
-### Merged to main on 2026-10-19
-
-| PR | Content |
-|---|---|
-| [#452](https://github.com/riventic/air2lean/pull/452), [#454](https://github.com/riventic/air2lean/pull/454) | Main CI fixes: the proof-receipt audit checks one premise telescope per theorem (800 s → 154 s, under the job's timeout); the performance budgets are recalibrated after batch 14 with one `--exclusive` record. |
-| [#453](https://github.com/riventic/air2lean/pull/453) | Proof framework: `Float.AllowedSpec` (success plus every IEEE-allowed result) is a `target` entry, not `legacy-to-retire` (maintainer decision 2026-10-18 on #439); definition and users unchanged. |
-| [#449](https://github.com/riventic/air2lean/pull/449) | L4 controls: the memory-safety tutorial's client is `Proofs/Lists/Client.lean` (`NoIllegal`, `NoLeak` from its specifications); its refuted clients are restated over the translated `PageAllocator` (`tests/roadmap/alloc-translated/ListsPage.lean`, kernel-evaluated runs) and `tutorials/memory-safety/Controls.lean` is deleted; `FAdmit` and `FAdmit.Start` share one base (60 → 59 `legacy_users`). |
-| [#458](https://github.com/riventic/air2lean/pull/458) | Soundness audit S6 (open): the OS futex primitive (`ZigLean/Os/Futex.lean`, `Os/Thread.lean`) omits Linux wake-address validation and private/shared keys, compares provenance pointers instead of numeric addresses, and wakes every waiter at `CHILD_CLEARTID` instead of at most one; four kernel-checked current-model witnesses (`futex-primitive/CurrentModel.lean`, replaced by the corrected-model regressions `futex-primitive/Regression.lean` in #668), no model or client change ([soundness-2026-10-14](docs/architecture-audit/soundness-2026-10-14.md#s6-os-futex-keys-validation-and-child_cleartid-soundness-fixed-for-the-os-rows)). |
-| [#446](https://github.com/riventic/air2lean/pull/446), [#450](https://github.com/riventic/air2lean/pull/450) | Arena retaining `reset`, engine part: general `fsym` features with one engine-ledger row and one sep-auto regression each, and `loop78` proved by `fsym` (#446); `LawfulPacked` is stated once for every packed layout (`ZigLean/PackedLayout.lean`), and `fsym` derives each generated type's instance, which closes engine-ledger row packed-roundtrip (#450). |
-| [#460](https://github.com/riventic/air2lean/pull/460) | Premises: OST-02 says `CHILD_CLEARTID` wakes at most one waiter, as approved on #437; the approved OSL-01 contract is registered. |
-| [#461](https://github.com/riventic/air2lean/pull/461) | `fsym`: the generic `@[fsym_run]` facts of a successful allocation or store give the block count and the preserved protocol fields directly, without exposing the whole memory state. |
-| [#467](https://github.com/riventic/air2lean/pull/467) | Fix-forward of main's audit after #450: the packed `Float` round trip has a float-semantics label, and the source scan recognizes named instances. |
-| [#464](https://github.com/riventic/air2lean/pull/464) | Docs: `docs/sep-threads.md` names the existing `Proofs/Threads/Disjoint` and `Proofs/Atomics/PtrPublish`; engine-ledger row 46 names the `heartbeats` section of `perf-budgets.json`. |
-| [#455](https://github.com/riventic/air2lean/pull/455), [#456](https://github.com/riventic/air2lean/pull/456) | Docs: ROADMAP 2026-10-18/19 merges (#455); #449 in the 2026-10-19 table, the legacy count 59 and the L4/L7 PR columns of `docs/legacy-retirement.md` (#456). |
-| [#471](https://github.com/riventic/air2lean/pull/471) | Integration batch A: hidden source-premise dependencies are recovered generically (#419); the idle-loop `nn_step` tactic is retired (#439, 34 → 33 tactic entries); `PageObstruction.lean` leaves the legacy layer (#432, 59 → 58 `legacy_users`); program starts share their global claims (#434); a finite futex wake count suffices for a broadcast (`Os.wakeAt_all_of_le`, #463); full-state tick clients are checked (L8b-1, #393); kernel regressions for writes into page-sized blocks (#392). |
-| [#475](https://github.com/riventic/air2lean/pull/475) | Soundness: `scripts/fixture-checks.py` reuses no earlier result; its key missed files a unit reaches through paths built in code (a concrete false green). |
-| [#459](https://github.com/riventic/air2lean/pull/459) | Docs: this table lists #446-#467 (supersedes #457). |
-| [#478](https://github.com/riventic/air2lean/pull/478) | Integration batch B: the concurrency facts are extracted and full-state ownership is proved directly, so `Full/ThreadFacts`, `Full/ThreadOwned` and `Full/ThreadTls` leave the legacy layer (#390, 58 → 55 `legacy_users`); the `fsym` probe budget catches runtime exceptions and nothing found under a heartbeat or fuel limit is cached (#466); local CI captures and isolates its sources (#462); canonicalization certifies debug definition IDs (#394). |
-| [#479](https://github.com/riventic/air2lean/pull/479) | Docs: this table lists #471, #475, #459 and #478; the legacy count is 55. |
-| [#487](https://github.com/riventic/air2lean/pull/487) | Docs: this table lists #479; the "One proof logic" row's legacy count is 55. |
-| [#489](https://github.com/riventic/air2lean/pull/489) | Integration batch C: generic total correctness for recursive groups (#433); assurance extractor reuse is bound to the installed Lean runtime (#469), reports record the actual import headers (#473), and the extractor has one lock and per-context records (#484); `fsym` looks up library constants by module (−24 % on `fsym` proofs, #472) and reports residual origins and stop reasons (P09-E1, #416); `scripts/proof-framework.py` rejects an unreadable comparison base (#474); the arena's retaining reset modes by `fsym` (#468); the full lock keeps complete resources when repartitioning (#396); full-state reflexivity without the legacy adapter (#477); the native invariant-rest load fact (#395). |
-| [#490](https://github.com/riventic/air2lean/pull/490) | Integration batch D: the `Sem` interpreter (#482) and `Floatops` (#485) proof macros are retired (33 → 29 tactic entries); declared outcome contracts are checked against the audited theorems (#417); the allocator fixtures are Lake packages (#483); restricted checkouts refresh their indexes (#438); the theorem-universe gate keeps one replay cache per run (407 → 326 s, #476); typed declaration evidence is conservative (#486). |
-| [#397](https://github.com/riventic/air2lean/pull/397) | Atomic seen floors are preserved through full-state protocol steps; `Full/LockWord.lean` leaves the legacy layer (55 → 54 `legacy_users`). |
-| [#442](https://github.com/riventic/air2lean/pull/442) | Local CI routes its rows through keyed workers with scoped exports. |
-| [#488](https://github.com/riventic/air2lean/pull/488) | Every Threadsync golden case is built side by side; the transitional enrollment marker has engine-ledger row case-family-enrollment. |
-| [#470](https://github.com/riventic/air2lean/pull/470), [#491](https://github.com/riventic/air2lean/pull/491) | Assurance: extractor traces are bound to the configured library sources (#470); opt-in assurance evidence is conservative and type-bound (#491). |
-
-### Merged to main on 2026-10-18
-
-| PR | Content |
-|---|---|
-| [#448](https://github.com/riventic/air2lean/pull/448), [#451](https://github.com/riventic/air2lean/pull/451) | Build guard: a slow or failed `ps` sample no longer stops a workload (abort only after a bounded stale window); an `--exclusive` guard takes a drain ticket in arrival order with merge guards instead of never queueing ([build-budgets](docs/build-budgets.md)). |
-| [#437](https://github.com/riventic/air2lean/pull/437) | STD-05 step A: full-state rules of the OS futex rows (`ZigLean/Sep/Full/OsFutex.lean`: `futex_4arg`/`futex_3arg`, `__ulock_wait2`/`__ulock_wake`), stated once for every protocol; no client yet; wake-count finding S5. |
-| [#445](https://github.com/riventic/air2lean/pull/445) | Engine ledger: rows pick-bind and 68d closed, ofseq-one-liners and update-result-unknowns refreshed; `docs/allocation-policy-report.json` names the L5c replacement theorems instead of the deleted `releaseAttempt(s)_run`. |
-| [#444](https://github.com/riventic/air2lean/pull/444), [#447](https://github.com/riventic/air2lean/pull/447) | Docs: ROADMAP arena row and legacy count (#444); ROADMAP 2026-10-18 merges, `docs/invariant-synthesis.md` names #337 for the FBA reset ledger (#447). |
-
-### Merged to main on 2026-10-17
-
-| PR | Content |
-|---|---|
-| [#440](https://github.com/riventic/air2lean/pull/440) | Integration batch 14: batch-12 regressions (the spawnedSlice fixture names its global; the threadsync perf workload stages the macOS overlay and carries the current AIR profile); main CI fix-forward (#421: taxonomy fixture name, mutation (b) re-recorded after S3, the proof receipt binds witness-fixture modules); `fsym` takes the protocol's start at main's spawn, so `main` of Sync/{Mutex,Handoff,SnapshotCache} and Threadsync/{Mutex,Handoff} is one `fsym` call (fowned-bridges part 2, `@[fsym_run]`, 13 registries). |
-| [#441](https://github.com/riventic/air2lean/pull/441) | Docs: ROADMAP current state, legacy-retirement owners. |
-
-### Merged to main on 2026-10-16
-
-| PR | Content |
-|---|---|
-| [#407](https://github.com/riventic/air2lean/pull/407), [#412](https://github.com/riventic/air2lean/pull/412) | Integration batches: S4 strict error leaf (#363), `fsym` applies `FLock.Fits.wp_hold` (#385), page allocator's freed grant (#387), legacy `Sep/Step` deleted (#384), FBA proofs without legacy imports (#389); engine-ledger slug ids (#399), `Sep/Alloc` policy layer retired (#404), `Sep/{Sentinel,SentinelRealloc,RawAlloc,Remap}` retired (#406), total stack pushes from the stack-depth token (#402). |
-| [#414](https://github.com/riventic/air2lean/pull/414) | Integration batch: arena macros and hand step lemmas replaced by general `fsym` rules (#388; 12 tactic entries removed), `fsym` walks a thread's own stack block before its spawn (#410, fowned-bridges part 1), the shipped audit loads registered witness fixtures (#386), critic cleanup (#411). |
-| [#420](https://github.com/riventic/air2lean/pull/420) | Integration batch: the proof-framework ratchet records `fsym`'s attribute and simp-set registries (#415, 12 registries); `std` is the reviewed `lib/std` only, an edited `std` is `std@modified` and rejected (#408, F1). |
-| [#425](https://github.com/riventic/air2lean/pull/425) | Integration batch: struct layouts, `LawfulEnc` of generated structs and struct `pts` ↔ field words (#409, engine-ledger #78/#79). |
-| [#429](https://github.com/riventic/air2lean/pull/429) | Integration batch: an inexact `@shrExact` is `.illegal` in both forms, since LLVM deletes the check after `lshr exact` (#427, S3b; upstream draft row 16 in #131); build-guard merge priority lane (#424); claim fixtures as a Lake package of their own (#426); legacy-retirement status table (#423). |
-| [#430](https://github.com/riventic/air2lean/pull/430) | Std-models retirement step 3: `time.Timer` and `Thread.Futex.timedWait` translated over `clock_gettime` and the timed futex (#381, STD-07; premise TMR-01 deleted). |
-| [#431](https://github.com/riventic/air2lean/pull/431) | Integration batch: the proof-framework ratchet keeps a `legacy-to-retire` entry so, also when it moves, unless the flip records `status_approved`; ROADMAP current state (#428). |
-| [#435](https://github.com/riventic/air2lean/pull/435) | L7 step 2: `Sep/Witness` deleted, `Witnesses/Conc` leaves the legacy layer (62 → 60 `legacy_users`). |
-| [#413](https://github.com/riventic/air2lean/pull/413), [#422](https://github.com/riventic/air2lean/pull/422), [#436](https://github.com/riventic/air2lean/pull/436) | Docs: ROADMAP current state (#413, #436); CLAUDE.md "Working with Codex" (#422). |
-
-### Merged to main on 2026-10-15
-
-| PR | Content |
-|---|---|
-| [#344](https://github.com/riventic/air2lean/pull/344), [#347](https://github.com/riventic/air2lean/pull/347), [#348](https://github.com/riventic/air2lean/pull/348), [#372](https://github.com/riventic/air2lean/pull/372) | [Soundness audit 2026-10-14](docs/architecture-audit/soundness-2026-10-14.md) and its fixes S1 (no witness, no claim), S2 (std namespaces fail closed) and S3 (unchecked illegal behaviour is `.illegal`). |
-| [#341](https://github.com/riventic/air2lean/pull/341), [#346](https://github.com/riventic/air2lean/pull/346), [#349](https://github.com/riventic/air2lean/pull/349), [#342](https://github.com/riventic/air2lean/pull/342), [#353](https://github.com/riventic/air2lean/pull/353), [#340](https://github.com/riventic/air2lean/pull/340) | Legacy retirement: Sync/Mutex, Threadsync/Mutex and SnapshotCache on the full-state logic; Sep/Base split; legacy Sep/{Mmap,Try,TryAlias,Discard} deleted; reserved names for retired claim heads. |
-| [#365](https://github.com/riventic/air2lean/pull/365), [#371](https://github.com/riventic/air2lean/pull/371), [#374](https://github.com/riventic/air2lean/pull/374) | Integration batches: engine ledger and retirement plan in the repo, `fsym` pick-bind and bridge steps, dead modules, std hand models as premises, `KFact.dead`, page allocator solo thread, `Thread.yield` from OS primitives, generated-branch publish from push runs. |
-| [#373](https://github.com/riventic/air2lean/pull/373), [#329](https://github.com/riventic/air2lean/pull/329), [#350](https://github.com/riventic/air2lean/pull/350), [#337](https://github.com/riventic/air2lean/pull/337), [#357](https://github.com/riventic/air2lean/pull/357) | Library rules for read-shared reads and the lock holder's step; thread tick rules by `fsym`; FBA as the second `ResetLedger` instance; `freeAll` non-vacuity witness. |
-| [#343](https://github.com/riventic/air2lean/pull/343), [#355](https://github.com/riventic/air2lean/pull/355), [#356](https://github.com/riventic/air2lean/pull/356), [#351](https://github.com/riventic/air2lean/pull/351), [#375](https://github.com/riventic/air2lean/pull/375), [#345](https://github.com/riventic/air2lean/pull/345) | P09 invariant synthesis design; full build elaborates every standalone Lean file; fixture and tooling fixes. |
-
-### Merged to main on 2026-10-13/14
-
-| PR | Content |
-|---|---|
-| [#279](https://github.com/riventic/air2lean/pull/279) | The arena landing: full-state logic, `fsym`, translated FBA/page/arena allocators, const-global knowledge, legacy-client migrations. |
-| [#294](https://github.com/riventic/air2lean/pull/294), [#301](https://github.com/riventic/air2lean/pull/301) | The allocator fee (epoch-token fraction for the arena) and the arena's `reset`. |
-| [#283](https://github.com/riventic/air2lean/pull/283), [#297](https://github.com/riventic/air2lean/pull/297), [#299](https://github.com/riventic/air2lean/pull/299), [#323](https://github.com/riventic/air2lean/pull/323) | CSL: closed solo reading, const-global reads (MM-20), `CAllocSpec` as four stop-wise `CTriple`s, mixed-size atomics. |
-| [#289](https://github.com/riventic/air2lean/pull/289), [#290](https://github.com/riventic/air2lean/pull/290), [#296](https://github.com/riventic/air2lean/pull/296), [#303](https://github.com/riventic/air2lean/pull/303), [#318](https://github.com/riventic/air2lean/pull/318), [#319](https://github.com/riventic/air2lean/pull/319), [#322](https://github.com/riventic/air2lean/pull/322), [#324](https://github.com/riventic/air2lean/pull/324), [#327](https://github.com/riventic/air2lean/pull/327) | `fsym`: performance, WP, entailment, slice thread locality, counters, thread loop rules, owned parts, local heads, share tags. |
-| [#287](https://github.com/riventic/air2lean/pull/287), [#295](https://github.com/riventic/air2lean/pull/295), [#300](https://github.com/riventic/air2lean/pull/300), [#305](https://github.com/riventic/air2lean/pull/305), [#325](https://github.com/riventic/air2lean/pull/325) | One framework: structural gate, legacy-user gate, folds of legacy bridges, sync wave 10, generic `Fits`. |
-| [#272](https://github.com/riventic/air2lean/pull/272), [#286](https://github.com/riventic/air2lean/pull/286), [#288](https://github.com/riventic/air2lean/pull/288), [#291](https://github.com/riventic/air2lean/pull/291), [#292](https://github.com/riventic/air2lean/pull/292), [#293](https://github.com/riventic/air2lean/pull/293), [#282](https://github.com/riventic/air2lean/pull/282) | Stack pointer region, encode/decode exactness 2, audit evidence premises, premise-index gaps, float selection, weak CAS harness, error-storage cycles. |
-| [#306](https://github.com/riventic/air2lean/pull/306)–[#317](https://github.com/riventic/air2lean/pull/317), [#298](https://github.com/riventic/air2lean/pull/298), [#326](https://github.com/riventic/air2lean/pull/326) | Health: local CI, probes, audit policy, build-mode records, float labels, one full-build entry point (`scripts/full-build.sh`), generated files. |
-| [#280](https://github.com/riventic/air2lean/pull/280), [#281](https://github.com/riventic/air2lean/pull/281), [#284](https://github.com/riventic/air2lean/pull/284), [#285](https://github.com/riventic/air2lean/pull/285), [#320](https://github.com/riventic/air2lean/pull/320), [#321](https://github.com/riventic/air2lean/pull/321) | Architecture audit 3, CLAUDE.md updates, critic cleanups. |
-
-### Merged to main on 2026-10-11/13
-
-| PR | Content |
-|---|---|
-| [#133](https://github.com/riventic/air2lean/pull/133), [#136](https://github.com/riventic/air2lean/pull/136), [#137](https://github.com/riventic/air2lean/pull/137), [#140](https://github.com/riventic/air2lean/pull/140) | Soundness: architecture-audit fixes, soundness wave 3, concurrency soundness, bounds-checked item pointers. |
-| [#135](https://github.com/riventic/air2lean/pull/135) | Roadmap batch 10. |
-| [#139](https://github.com/riventic/air2lean/pull/139) | Allocator milestone 1: translated `FixedBufferAllocator` and `PageAllocator` (M02). |
-| [#142](https://github.com/riventic/air2lean/pull/142) | V01/V02: formal AIR semantics and emission certificates (research slices). |
-| [#143](https://github.com/riventic/air2lean/pull/143) | aarch64 translator and batch-10 follow-ups. |
-| [#144](https://github.com/riventic/air2lean/pull/144) | L10 error parameters, L09 vector bit casts. |
-| [#151](https://github.com/riventic/air2lean/pull/151) | Merge train 1 (#136 #139 #142 #143 #144). |
-| [#155](https://github.com/riventic/air2lean/pull/155) | Batch A: Q01 I08 I06 V06 (all still partial; residuals below). |
-| [#146](https://github.com/riventic/air2lean/pull/146), [#148](https://github.com/riventic/air2lean/pull/148), [#152](https://github.com/riventic/air2lean/pull/152), [#153](https://github.com/riventic/air2lean/pull/153), [#157](https://github.com/riventic/air2lean/pull/157), [#161](https://github.com/riventic/air2lean/pull/161) | Development speed: result reuse and merge queue, shared build cache and `scripts/regen.sh`, parallel check/diff scripts, recipe-keyed Lake caches, one-command worktree start (435 s cold, 15 s warm). |
-| [#154](https://github.com/riventic/air2lean/pull/154) | Batch B: Q06 I07 P08 P07, all four still partial. |
-| [#159](https://github.com/riventic/air2lean/pull/159) | Batch C: L14 and L06 complete; L05 continued in #168. |
-| [#163](https://github.com/riventic/air2lean/pull/163) | Research T05, C12: native/WASM correspondence study; memory-model premise reporting. |
-| [#164](https://github.com/riventic/air2lean/pull/164), [#165](https://github.com/riventic/air2lean/pull/165) | CI: generated-branch publish; restricted checkout as the single result-reuse mechanism, queue reuse, nightly full run. |
-| [#168](https://github.com/riventic/air2lean/pull/168) | Batch H: L05 complete (null pointers, optional-of-nullable casts). |
-| [#169](https://github.com/riventic/air2lean/pull/169) | Batch D: L08 L07 T03 L04 advanced, still partial. |
-| [#172](https://github.com/riventic/air2lean/pull/172) | Batch G: L12 and L10 complete; L09, T04 and T06 advanced. |
-| [#173](https://github.com/riventic/air2lean/pull/173) | Zig 0.17.0 as the default (one helper, lint against hardcoded versions). |
-| [#174](https://github.com/riventic/air2lean/pull/174) | Soundness: NaN bits observed through memory (Zig up to 0.16). |
-| [#177](https://github.com/riventic/air2lean/pull/177) | Batch I: E02 A01 complete (callback contracts, assembly effects). |
-| [#176](https://github.com/riventic/air2lean/pull/176) | Requirement register as data: one file per requirement under `assurance/register/`, generated tables and counts. |
-| [#203](https://github.com/riventic/air2lean/pull/203), [#205](https://github.com/riventic/air2lean/pull/205), [#210](https://github.com/riventic/air2lean/pull/210) | Research C10 (sequential consistency, unordered operations), A02 (instruction semantics, target expansion), F03 (fast math). |
-| [#211](https://github.com/riventic/air2lean/pull/211), [#223](https://github.com/riventic/air2lean/pull/223), [#245](https://github.com/riventic/air2lean/pull/245) | Inline asm CPU features from the profile (ASM-09); `i0` range fix; open interfaces through caller-supplied vtables (EXT-05). |
-| [#232](https://github.com/riventic/air2lean/pull/232), [#262](https://github.com/riventic/air2lean/pull/262) | L03/P03 on the full-state loop rules; manifest goal bounds checked against the proved bound. |
-| [#216](https://github.com/riventic/air2lean/pull/216), [#242](https://github.com/riventic/air2lean/pull/242), [#261](https://github.com/riventic/air2lean/pull/261) | CLAUDE.md "build generic"; critic cleanup; duplicate panic-policy row. |
-
-### In review (open PRs to main)
-
-The open PRs are the list on GitHub (`gh pr list`); a hand table here went stale within hours.
-Zig compiler bugs found on the way are drafted in `docs/upstream/` and tracked in one issue, [#131](https://github.com/riventic/air2lean/issues/131); none is filed upstream.
-
-### In progress (branches)
-
-| Work | Requirements | State |
+| Date | Decision | Recorded in |
 |---|---|---|
-| Arena allocator proof | M01–M04 groundwork | Translated `ArenaAllocator` against `FAllocSpec` for any child allocator. Done: general symbolic execution `fsym` with a CTriple backend ([#150](https://github.com/riventic/air2lean/pull/150), [#158](https://github.com/riventic/air2lean/pull/158), [#160](https://github.com/riventic/air2lean/pull/160), [#167](https://github.com/riventic/air2lean/pull/167)): FBA and page allocator proofs are invariants plus `fsym` only; every live block lies below the target's address limit; allocation without stack room is `.stackOverflow` (STK-01); globals placement fails closed (`GLOBALS_TOO_LARGE`); `not_fallocSpec_arena` is kernel-checked. Since: byte-range claims in the ghost state, const-global knowledge (a child allocator's vtable is read, not owned), the translated `ArenaAllocator`'s `free`/`resize`/`remap` against `FAllocSpec` (stock on x86_64-linux and aarch64-macos, and the patched arena; O-A/O-E obstructions kernel-checked, [alloc-arena](https://github.com/riventic/air2lean/blob/main/docs/alloc-arena.md)), the stack region (MM-18/19), and the first steps of arena reset: grants past their node's header and ghost epoch tokens. Landed on main ([#279](https://github.com/riventic/air2lean/pull/279)), with the arena's fee as an epoch token ([#294](https://github.com/riventic/air2lean/pull/294)), `reset` ([#301](https://github.com/riventic/air2lean/pull/301)) and the FBA as the second `ResetLedger` instance ([#337](https://github.com/riventic/air2lean/pull/337)); the arena macros and hand step lemmas are general `fsym` rules ([#388](https://github.com/riventic/air2lean/pull/388), in [#414](https://github.com/riventic/air2lean/pull/414)). Next: `alloc` of the patched arena and the retaining reset modes. |
-| Windows target (`codex/windows-target`) | T04 | `x86_64-windows-gnu` profile for all four Zig versions: fail-closed checks for OS-backed models, threadlocal and x87 precision; Windows T04 probe records; local Wine differential; design in [`docs/windows-target.md` on `codex/windows-target`](https://github.com/riventic/air2lean/blob/codex/windows-target/docs/windows-target.md). |
+| 2026-10-12 | V01/V02: pointer poison becomes lazy (poison-on-use in `Zig.Ptr`, premise SEM-08), implemented after the one-framework goal lands; the `canon-cert` sink theorem is dropped (the branch stays parked); locals whose address is never observed are frame cells under SEM-06. | docs/research/V01-V02.md |
+| 2026-10-12 | Stack region: placement addresses and a reserve with LIFO fallback, an exclusive stack-depth token, reverse free order (STK-02). Concurrent termination is an opt-in turn cost on `Proto.WP` (`Proto.cost`). | docs/sep-full-state.md, docs/sep-threads.md |
+| 2026-10-12 | F02: platform libm only as an explicit per-profile premise (MTH-08), fail closed without it. C13: one weak-fairness scheduler premise (SCH-01) with credits and wait tokens, no starvation-freedom claim. | docs/research/F02.md, docs/research/C13.md |
+| 2026-11-04 | Condition variable window: a quantitative premise plus a narrowed `Fits.win` ([#641](https://github.com/riventic/air2lean/pull/641)); the condition primitive step carries the lock's word invariant (option a, [#631](https://github.com/riventic/air2lean/pull/631)). | engine ledger |
+| 2026-11-05 | Futex queue keyed by `FutexKey` (audit S6, option A, [#668](https://github.com/riventic/air2lean/pull/668)); every block stays at its address across every thread step ([#681](https://github.com/riventic/air2lean/pull/681)). | docs/sep-full-state.md, soundness-2026-10-14 §S6 |
+| 2026-11-05 | `FLock.Fits.stable` gets the step's resource transfer (decision (a), [#696](https://github.com/riventic/air2lean/pull/696)). | engine ledger |
 
-### Architecture work (started 2026-10-12)
+### Open for the maintainer
 
-Weaknesses found while implementing the register. They come before new features where they block them or make results less trustworthy.
+1. **Audit S6, finding 4** (reported 2026-11-05): std's untimed futex calls bind to hand rows
+   that bypass the OS rows, and the hand wake can wake more threads than Linux does. Proposed end
+   state: route `Thread.Futex` (0.14.1, 0.15.2) through the OS rows (STD-05 step D); make
+   `Io.futexWait*`/`futexWake` (0.16.0, 0.17.0) a contract that `Io.Threaded`'s translated code
+   proves (step E); model `os_unfair_lock` as an OS row. Rejected: proving the hand rows a
+   refinement of the OS rows ([soundness-2026-10-14 §S6, finding 4](docs/architecture-audit/soundness-2026-10-14.md)).
+2. **Closing #581 and #602**: #581 is obsolete on main, and #602's measurement failed.
 
-| Work | Why | Plan |
+## Since 2026-10-21
+
+156 PRs merged between 2026-10-21 and 2026-11-06 (`gh pr list --state merged`). By theme:
+
+| Theme | PRs | Result |
 |---|---|---|
-| One proof logic | Two separation logics: the legacy `ZigLean/Sep` (`Triple`/`TotalTriple`, assertions over live heap bytes only) and the full-state logic `ZigLean/Sep/Full` (`FTriple`/`FTotalTriple`/`CTriple`, [sep-full-state](docs/sep-full-state.md)), joined by bridges. The legacy logic cannot state atomic layouts, addresses of freed blocks, block extents or disjointness of live blocks; two logics mean double maintenance. | Priority. New proofs use the full-state logic only. The arena branch landed ([#279](https://github.com/riventic/air2lean/pull/279)); migrate every legacy client (97 files left at the landing, 41 on 2026-10-20) to invariant + `fsym`; fold the atomic tag into `Cell`, `Triple := FTriple`; delete the bridges and the legacy layer. |
-| Directory structure | The full-state logic lives in a `Full` subdirectory beside the legacy layer; proofs are spread over `Proofs/` and `tests/roadmap/*`; docs and scripts have grown per batch. | After the legacy layer is gone: `ZigLean/Sep` is the one logic (automation in its own subdirectory); a target tree for proofs, fixtures, docs and scripts; mechanical `git mv` PRs with scripted path updates, scheduled between merge waves. |
-| Const-global bytes are persistent knowledge | Constant globals (allocator vtables) are owned exclusively, so two users of one vtable cannot be framed; this blocks M01–M04 clients of `std.mem.Allocator`. | Writes to const storage are `.illegal`; a duplicable assertion established from the initial memory; dispatch rules read it. Done (`ZigLean/Sep/Full/Const.lean`), on main since [#279](https://github.com/riventic/air2lean/pull/279); reads of const globals record nothing (MM-20, [#297](https://github.com/riventic/air2lean/pull/297)). |
-| Encode/decode exactness | The NaN-bits bug: the model chose canonical bits on a reload where the compiler keeps others. | Audit every value↔bytes pair (padding, `undefined`, enums/bool out of range, pointer bytes, unions, f80, vectors, error unions; four versions): exact or explicitly unspecified, never a canonical choice; counterexample, native fixture and fix per finding (`codex/enc-exactness`). |
-| Canon out of the trusted base | `Canon.lean` rewrites raw AIR (including reorderings) before the V01/V02 certificates start; the slicing-order bug came from such a rewrite. | General theorems per rewrite over the formal AIR semantics, reorderings first; uncertified rewrites reported as trusted in the certificate report (`codex/canon-cert`). |
-| Requirement register as data | Every batch PR hand-edits the same rows and counts in this file and the acceptance companion, so parallel PRs conflict. | One structured file per requirement; `scripts/register.py` generates the tables and counts; preflight/CI check drift. Done ([#176](https://github.com/riventic/air2lean/pull/176)). |
-| Smaller exporter patch | Every exporter change rebuilds four patched compilers, refreshes pins and re-exports goldens; parallel exporter PRs conflict. | Minimal per-version hook; serialization in a separately built module; byte-identical exports; after #159 and #172. |
+| Legacy retirement | #563, #566, #573, #576, #611, #633, #653, #654, #655, #657, #658, #659, #660, #662, #664, #665, #669, #671, #677, #697, #705 | `legacy_users` 41 → 13. Deleted: legacy AllocSpec/Wrap/Wrappers/Dispatch/Automation (L6 D-b), Conc/Transfer, Sep/{Total,Loop}, the VC layer and `vc_gen` (P02's VCs are `fsym` residuals), `Conc/Spec`, `ZigLean/VC`, Threadsync/Lock, the legacy Mutex/Sem/Cond contracts; tactics `blkat_alloc`, `tomega`, `if_decl`, `unroll_solo`, `conc_norm`, `tame`, `fsym.quiet`, the `#audit_unchecked_*` commands. Kernel run witnesses use the `zig_run` simp set ([#690](https://github.com/riventic/air2lean/pull/690)). |
+| Concurrency contracts | #572, #575, #579, #582, #599, #601, #603, #606, #607, #615, #630, #631, #636, #639, #640, #641, #642, #643, #644, #646, #648, #651, #666, #667, #675, #676, #683, #693, #696 | Full-state `SemImpl`, multi-waiter `CondImpl`, `FEvent` (a set orders memory), WaitGroup on `MutexImpl` + `EventImpl`; SemCounter and Mailbox (C14) over `SemImpl`; lock nesting and a two-lock product (`LockPair`, `FLock.Pair`, WIP). |
+| Futex soundness (audit S6) | #465, #548, #645, #649, #650, #656, #668, #670, #672, #681, #704 | Linux alignment `EINVAL`, `CHILD_CLEARTID` wakes at most one waiter, address validation after `get_futex_key` and xnu ulock, macOS ulock return values, a futex queue keyed by `FutexKey`, block addresses stable across thread steps. Fixed for the OS rows; finding 4 is open (above). |
+| `fsym` engine | #549-#557, #560, #561, #578, #585, #590, #592, #604, #605, #610, #629, #652, #688, #691, #699, #700, #702, #703 | Typed views, recursive group contracts, literal-pointer stores, reads through stores and memsets, projection reductions as proof steps, registered loop invariants, shared omega certificates, arithmetic atom congruence, discharger failure caching. |
+| Allocators and cost | #562, #567, #568, #580, #626, #510 | FBA client over `FAllocSpec` (legacy client retired); emitted step ticks with canonical tick semantics and cost rules (L8); the M03 append loop over the allocator contract. |
+| Recursion and threads | #597, #613, #616, #617, #620, #621, #625 | Parity, gcd and bounded factorial over full-state recursive contracts; `addDown` with its stack budget; the Disjoint worker by `fsym`. |
+| Research | #673, #678, #680, #682, #685, #692, #694, #695, #701 | V01/V02 Stage 0 (op-table coverage lint; certificates report every fired Canon rewrite) and Stage 2 (renumber preserves the AIR semantics: 0 of 124 functions trust it). P09: `air2lean-invgen` generates counted-loop invariants, prunes them Houdini-style through `fsym`, and emits `@[fsym_inv]` invariants and exit posts. |
+| Assurance | #543, #564, #574, #594, #609, #614, #623, #627, #686, #687, #689, #587 | Audit E1 fixed (the extractor runs no initializer of an audited module); bounded-memory kernel replay that fails closed on a killed checker; replay trace checks cover every olean `leanchecker` reads; compiled outputs of deleted modules are pruned. |
+| Build and process | #534, #545, #583, #586, #589, #593, #595, #596, #600, #608, #635, #661, #698 | Usage-aware and elastic build-guard admission (each Lean process charged its measured peak), a background lane, fail-closed hang detection; the remote build host; fixtures as Lake modules; the light merge gate. |
 
-### Remaining order
+## Earlier milestones
 
-After the current goal; the parked architecture tracks resume first where they fix soundness (encode/decode exactness, Canon certificates).
+| Period | Highlights |
+|---|---|
+| 2026-10-19/21 | Integration batches A–D ([#471](https://github.com/riventic/air2lean/pull/471), [#478](https://github.com/riventic/air2lean/pull/478), [#489](https://github.com/riventic/air2lean/pull/489), [#490](https://github.com/riventic/air2lean/pull/490)); Sync generated for every real profile ([#512](https://github.com/riventic/air2lean/pull/512)); allocator fixtures as Lake packages; kernel replay as Lake-built receipts ([#540](https://github.com/riventic/air2lean/pull/540)); precompiled `fsym` ([#546](https://github.com/riventic/air2lean/pull/546)); audit E1 found ([#539](https://github.com/riventic/air2lean/pull/539)). `legacy_users` 60 → 41. |
+| 2026-10-15/18 | [Soundness audit 2026-10-14](docs/architecture-audit/soundness-2026-10-14.md) and fixes S1–S4, S3b, F1; STD-05 OS futex rules ([#437](https://github.com/riventic/air2lean/pull/437)); `time.Timer` translated ([#430](https://github.com/riventic/air2lean/pull/430)); arena macros replaced by general `fsym` rules ([#388](https://github.com/riventic/air2lean/pull/388)); the proof-framework ratchet with registries. |
+| 2026-10-13/14 | The arena landing ([#279](https://github.com/riventic/air2lean/pull/279)): full-state logic, `fsym`, translated FBA, page and arena allocators, const-global knowledge; the arena fee and `reset`. |
+| 2026-10-11/13 | Translated `FixedBufferAllocator` and `PageAllocator` (M02, [#139](https://github.com/riventic/air2lean/pull/139)); V01/V02 first slices ([#142](https://github.com/riventic/air2lean/pull/142)); Zig 0.17.0 as the default ([#173](https://github.com/riventic/air2lean/pull/173)); the register as data; batches A–I; research C10, A02, F03, T05, C12. |
+| up to 2026-10-10 | The eight closeouts ([#96](https://github.com/riventic/air2lean/pull/96), [#100](https://github.com/riventic/air2lean/pull/100)–[#106](https://github.com/riventic/air2lean/pull/106)): outcome taxonomy, ABI alignment, deadlines, sentinel allocation, byte permutation, RwLock snapshot client, error storage, global payload pointers. |
 
-1. Residuals of merged batches: Q01 (floats, threads, allocators and generics in the program generator), I08 (macOS containment beyond sampling), I06 (relational strength), V06 (per-goal contracts and a theorem-side check); then X01 (C via translate-c).
-2. After the arena allocator: M01–M04, C01, C07.
-3. Research: F02, F03; C10 before C13; A02; V01–V03 beyond the current slices.
-4. C08, C14.
-5. Q07 last.
+## Scope of the evidence
+
+The original Outcome closeout's Zig 0.16 differential report has **87,064 cases: 85,987 exact
+matches, 497 illegal and 580 unspecified**, with no setup failures or mismatches, one example and
+three functions skipped, and `qualified=false`. The later global seven-family run has 27,424
+cases, 27,068 exact matches, 191 illegal and 165 unspecified exclusions, no mismatches,
+`qualified=false`; it is a focused subset. Neither establishes compiler/native correspondence or
+theorem applicability ([assumptions audit](docs/assumptions-audit.md), [proofs](docs/proofs.md)).
+
+Native observations are bounded by version, target, backend and profile. Global payload-pointer
+qualification keeps its stage2_x86_64/Linux-musl ReleaseSafe domain; the LLVM constant-offset 36
+versus runtime 38 discrepancy is unqualified. Concurrency proofs keep explicit ownership, clock,
+lifetime, join-before-free, schedule and fuel premises; they imply no fairness, termination or
+general synchronization library ([standard models](docs/std-models.md)).
+
+## Parked tracks and architecture work
+
+| Track | State |
+|---|---|
+| Encode/decode exactness (`codex/enc-exactness`) | Parked; its two soundness bugs are fixed on main ([#286](https://github.com/riventic/air2lean/pull/286)); two rows of [enc-exactness](docs/architecture-audit/enc-exactness.md) stay open. Resumes first after the goal (soundness). |
+| Canon out of the trusted base | Certificates report every fired Canon rewrite (Stage 0) and `renumber` is proved (Stage 2). Next: Stage 1 (lazy poison, deletes `sinkPastChecks`) after the goal, Stage 3 (cells). `codex/canon-cert` stays parked. |
+| Windows target (`codex/windows-target`) | Parked: `x86_64-windows-gnu` profile, fail-closed checks for OS-backed models, a local Wine differential (T04). |
+| Smaller exporter patch (`codex/exporter-split`) | Parked: a minimal per-version hook, serialization built separately, byte-identical exports. |
+| CI once-parts on 0.17.0 (`codex/ci-once-017`) | Parked. |
+| Soundness audit S5 | Open, steps D and E (the same plan as S6 finding 4). |
+
+## Remaining order after the goal
+
+1. Soundness tracks first: encode/decode exactness, V01/V02 Stage 1 (lazy poison, SEM-08), S5/S6
+   steps D and E.
+2. Residuals of merged batches: Q01 (floats, threads, allocators and generics in the program
+   generator), I08 (macOS containment beyond sampling), I06 (relational strength), V06; then X01
+   (C via `zig translate-c`).
+3. Allocators and concurrency: M01–M04, C01, C07, C14 (RwLock).
+4. Research: P09 beyond counted loops, F02, F03, C10 before C13, A02, V01–V03 Stages 3–7.
+5. C08; Q07 last.
+
+Work happens in a fresh worktree of current main (`scripts/worktree-init.sh`). Lean runs go
+through `scripts/build-guard.py` with a memory cap, and builds share the CAS cache
+(`AIR2LEAN_CAS_DIR`, [build cache](docs/build-cache.md)). Zig compiler bugs found on the way are
+drafted in `docs/upstream/` and tracked in one issue,
+[#131](https://github.com/riventic/air2lean/issues/131); none is filed upstream.
 
 ## Requirement register
 
-The table preserves all <!-- register:total -->90<!-- /register:total --> IDs, order and classifications. The [remaining acceptance companion](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md) preserves every broader acceptance statement; Desktop readers can use its [GitHub main link](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md) once the final docs merge is published. A bounded merged slice does not change a requirement's classification unless its full acceptance is established.
+The table keeps all <!-- register:total -->90<!-- /register:total --> IDs, their order and
+classifications. The [remaining acceptance companion](remaining-acceptance.md) keeps every
+broader acceptance statement.
 
-The table below is generated from `assurance/register/<ID>.md` by `scripts/register.py generate`; edit those files, not the table.
+The table below is generated from `assurance/register/<ID>.md` by `scripts/register.py generate`;
+edit those files, not the table.
 
 <!-- register:table:begin -->
 | ID | Requirement | Status | Bounded status and remaining scope |
@@ -311,7 +248,7 @@ The table below is generated from `assurance/register/<ID>.md` by `scripts/regis
 | I07 | Provenance and artifact manifests | partial | [PR112](https://github.com/riventic/air2lean/pull/112) merged: Chained artifact manifest hashes source closure, compiler patch/pin, AIR, validated profile, translator, Gen.lean, runtime, toolchain, proofs, theorem names and optional receipt, with sealed dirty-tree provenance and per-link staleness/--expect checks. [PR128](https://github.com/riventic/air2lean/pull/128): a genuine receipt-chained manifest on a fresh schema-12 export (assurance/provenance: patched 0.16.0 AIR-only export, translation with profile header, proofs, schema-2 proof receipt) chains source, compiler patch, AIR, profile, translator, Gen.lean, runtime, toolchain, proofs/theorems and receipt; an optional `native` link records a stock-Zig build's identity (target, mode, cpu, compiler and binary sha256) and goes stale on another binary or compiler or a source/profile change; scripts/provenance-evidence.py checks the committed fixture offline in CI with edit-one-link regressions, `regenerate` reruns the whole chain under build-guard, and the committed receipt copy is path-redacted. [PR135](https://github.com/riventic/air2lean/pull/135): a second genuine fixture (`assurance/provenance-gap`, `gap`/`within`, aarch64-macos target) beside `assurance/provenance`, both selected by `scripts/provenance-evidence.py --fixture NAME|all`; `replay` checks a committed receipt against the current tree without its revision (the Lean import closure of the proved module against the plan's source hashes: a changed fixture proof is `stale`, a changed shared file `aged`, which fails only with `--strict`; audit status, theorem set and host-local paths), with `--rerun` as the heavy guarded counterpart; `install` refuses a copy that still holds a host path. [PR154](https://github.com/riventic/air2lean/pull/154): `scripts/attest.py` authenticates manifests and proof receipts with an OpenSSH signature (`ssh-keygen -Y`, Ed25519, namespace `air2lean-attestation-v1`) over a statement of the exact file digests (`manifest_sha256` for a manifest), verified offline against the verifier's own `allowed_signers` file (never read from the attestation) with optional principal, key pin and `valid-before` time; `check-manifest --attestation --require-attestation` and `provenance-evidence.py check` report `authentication: attested` or fail closed; the key premise is TRU-05 (docs/premises.md). `tests/roadmap/attestation/test_attestation.py` signs the real receipt-chained fixtures (`provenance`, `gap`) and their receipts with a fresh key and rejects an edited manifest, receipt, statement, principal, signature, namespace, key, subject kind, added or missing artifact and an expired key, and a committed known-answer attestation (private key discarded) pins the verification path. Remaining: CI holds no release key, so the whole-tree fixtures it regenerates are unsigned (signing a release is an operator step with the operator's key); no revocation list, timestamp or transparency log; the native link is identity only (no binary-to-model correspondence); replay establishes only that the receipt concerns the bytes now in the tree. |
 | I08 | Safe output and execution controls | partial | [PR113](https://github.com/riventic/air2lean/pull/113) merged: Atomic fsync+rename/no-clobber publication with explicit overwrite policy for translate.sh, check.sh, proof receipts and project artifacts; per-stage timeouts and INT/TERM/HUP cancellation stop the stage process group and preserve prior artifacts. [PR128](https://github.com/riventic/air2lean/pull/128): `check.sh` bounds its final `lake build` and differential tests with per-stage timeouts and TERM/KILL cancellation, keeping published artifacts; the runner follows setsid-escaping descendants by sampled parent links and an `AIR2LEAN_STAGE_ID` environment marker and kills them on cancel, timeout or leader exit (exit 125). Batch A: on Linux the runner is also a child subreaper (`PR_SET_CHILD_SUBREAPER`), so an escapee whose parent exits is reparented to the runner and found regardless of sampling or environment scrubbing (regression: a double-forked, `setsid`, environment-scrubbed orphan with no sample after the fork is adopted and stopped, run on linux/amd64); `run --require-containment` / `AIR2LEAN_REQUIRE_CONTAINMENT=1` refuses the stage (exit 126) on hosts without a subreaper. Remaining: on macOS (no subreaper) containment stays best-effort sampling, so an escapee that forks, escapes and scrubs its environment between two samples can still be missed unless `--require-containment` is used. |
 | I09 | Distribution and editor workflow | complete | [PR114](https://github.com/riventic/air2lean/pull/114) merged: Checksum-pinned build instructions with compatibility.json release metadata (compat.py check/release); doctor checks toolchains, patched Zig per version, AIR-only lock state, Docker, disk/memory (--json); scripts/clean-env.sh fresh-container first proof and --translate locked-compiler translation both recorded passing; editor/LSP docs. No prebuilt binary packages. |
-| V01 | Formal AIR semantics | research | [Research](docs/research/V01-V02.md): keep the one interpreter and scale by value kind (89 of 177 decoded tags have an arm; 23 of 124 functions certify); [PR673](https://github.com/riventic/air2lean/pull/673): the op-table coverage lint (stage 0) fails unless every `Op` constructor has an interpreter arm (45 of 97) or a reason from the exhaustive classifier `Sem.outside?` (52, exported in the op table), and the L01 `semantics` column reports `interpreted`/`outside-fragment`; [PR680](https://github.com/riventic/air2lean/pull/680) completes stage 0 (the certificates' `trusted-Canon` lines, see V02); pointer poison becomes lazy (poison state in `Zig.Ptr`, comparison/address/access of poison illegal, premise SEM-08 proposed), which deletes Canon's `sinkPastChecks`; staged plan 0-7 with sizes; [PR695](https://github.com/riventic/air2lean/pull/695): on arguments without register-cell names, the program's least-fixpoint oracles never return one (`Renumber.run_cellFree`, `runOn_cellFree`), the contract under which renaming instruction IDs keeps the semantics (see V02). [PR129](https://github.com/riventic/air2lean/pull/129): first verified slice (scalar fragment, direct and mutual recursion, 9 functions). codex/v01-air-semantics: docs/air-semantics.md is the design (definitional interpreter over the decoded `Func` and `Zig.MemM`; per-family emission certificates; Canon preservation statement; register locals; loop commutation; SEM-06 shrink path); the semantics gains a typed SSA environment, memory through plain pointers (load/store of integers, `bool` and pointers, `struct_field_ptr` as `Zig.ptrProject`, pointer casts and comparisons), pointer arithmetic and slices of functions that use memory, register locals (an `alloc` whose address is never taken is a frame cell; a memory extension fails under ZigLean's placement, kernel-checked counterexample in docs/air-semantics.md §Locals) and loops (`execLoop`, `loop_comm`, `loop_comm_pure`, well-formed exits); slices of pure functions certify at the call boundary through a view (`SemView.execFunc_view`, memories equal up to read entries); optionals and error unions as values and `try`; 23 of 124 committed-example functions certify. Remaining: aggregates, enums, unions, optionals in memory, floats, vectors, globals, atomics, threads, external models and indirect calls are outside the semantics. |
+| V01 | Formal AIR semantics | research | [Research](docs/research/V01-V02.md): keep the one interpreter and scale by value kind (89 of 177 decoded tags have an arm; 23 of 124 functions certify); [PR673](https://github.com/riventic/air2lean/pull/673): the op-table coverage lint (stage 0) fails unless every `Op` constructor has an interpreter arm (45 of 97) or a reason from the exhaustive classifier `Sem.outside?` (52, exported in the op table), and the L01 `semantics` column reports `interpreted`/`outside-fragment`; [PR680](https://github.com/riventic/air2lean/pull/680) completes stage 0 (the certificates' `trusted-Canon` lines, see V02); pointer poison becomes lazy (poison state in `Zig.Ptr`, comparison/address/access of poison illegal, premise SEM-08; approved by the maintainer 2026-10-12, implemented after the one-proof-framework goal), which deletes Canon's `sinkPastChecks`; staged plan 0-7 with sizes; [PR695](https://github.com/riventic/air2lean/pull/695): on arguments without register-cell names, the program's least-fixpoint oracles never return one (`Renumber.run_cellFree`, `runOn_cellFree`), the contract under which renaming instruction IDs keeps the semantics (see V02). [PR129](https://github.com/riventic/air2lean/pull/129): first verified slice (scalar fragment, direct and mutual recursion, 9 functions). codex/v01-air-semantics: docs/air-semantics.md is the design (definitional interpreter over the decoded `Func` and `Zig.MemM`; per-family emission certificates; Canon preservation statement; register locals; loop commutation; SEM-06 shrink path); the semantics gains a typed SSA environment, memory through plain pointers (load/store of integers, `bool` and pointers, `struct_field_ptr` as `Zig.ptrProject`, pointer casts and comparisons), pointer arithmetic and slices of functions that use memory, register locals (an `alloc` whose address is never taken is a frame cell; a memory extension fails under ZigLean's placement, kernel-checked counterexample in docs/air-semantics.md §Locals) and loops (`execLoop`, `loop_comm`, `loop_comm_pure`, well-formed exits); slices of pure functions certify at the call boundary through a view (`SemView.execFunc_view`, memories equal up to read entries); optionals and error unions as values and `try`; 23 of 124 committed-example functions certify. Remaining: aggregates, enums, unions, optionals in memory, floats, vectors, globals, atomics, threads, external models and indirect calls are outside the semantics. |
 | V02 | Normalization and emission preservation | research | [Research](docs/research/V01-V02.md): raw-AIR certificates with general theorems per Canon rewrite (`renumber`, dead code, `itemReads`, `dropTrueChecks`), `forwardReadOnlyCopies` via unobservable-address locals as cells (avoids the placement prophecy), and the `FTriple.congr` bridge so proofs about `Gen.f` are proofs about the AIR in the one framework. [PR680](https://github.com/riventic/air2lean/pull/680) (stage 0 complete): `Raw.canonicalizeTraced` records every Canon rewrite that changed a function, and each certificate report lists every function's `trusted-Canon` rewrites (the 23 certified functions trust `renumber`, 3 of them also `forwardReadOnlyCopies`); over the 3,491 corpus functions `renumber` fires on 3,394, `forwardReadOnlyCopies` on 1,014, `versionTags` on 434, `itemReads` on 122, `argRanks` on 106, `dropTrueChecks` on 57, `errTraces` on 24, `sinkPastChecks` on 12, the dead-code passes on 14. [PR695](https://github.com/riventic/air2lean/pull/695) (stage 2, `renumber`): `Renumber.execFunc_rename` proves once that every injective renaming of instruction IDs keeps `Sem.execFunc` (value and full memory) under every call oracle that keeps the register-cell contract `Oracle.CellFree`, which the program's own `run`/`runOn` keep (`run_cellFree`, `runOn_cellFree`); the certificate path binds each function natively (`CanonCertificate.renumberBound`: `renFunc` of `renumber`'s decoded input equals the canonical function under an injective `zipRen`) and drops a bound `renumber` from its `trusted-Canon` line, so in the 13 examples no function trusts `renumber` (97 trust no rewrite, 20 of them certified); the binding is per function inside the canonical program, and the program-level statement (tick policies invariant under renaming) is open. [PR129](https://github.com/riventic/air2lean/pull/129): the AIR certificates relate each emitted definition in the V01 fragment to the semantics of its canonical AIR (equality via fixpoint induction for recursive cliques). codex/v01-air-semantics: certificates are generated and kernel-checked for every example whose Gen.lean is its golden translation (13 examples, `Proofs/<Ex>/AirCert.lean`); 23 of their 124 functions certify, including memory functions over the same `Zig.MemM` (equality of value and memory), `pointers.sumTo` (register and escaping locals, a loop, a call), `basic.sum` and `options.find` (a pure function's slice parameter, at the call boundary through a view: values and errors equal, memories equal up to read entries) and `errors.parseDigit`/`errors.digitOrZero` (error unions); the Zig 0.15.2 slices goldens certify 6 more functions with pointer arithmetic and item loads in the test suite; every other function is listed with a reason. Remaining: canonicalization other than `renumber` is not proved (read-only-copy forwarding needs a placement-prophecy statement, docs/air-semantics.md), callers of view functions and view functions that call are excluded, memory callers get soundness only, and recursive memory cliques are excluded (stack budget). |
 | V03 | Exporter and compiler correspondence | partial | [PR122](https://github.com/riventic/air2lean/pull/122): scripts/trust-report.py renders docs/trust-report.md from assurance/trust-stages.json and classifies every pipeline stage as kernel-checked, independently-checked-metadata or unverified-assumption; check fails on a stale report, a missing stage or class, an uncited premise, a missing checker/test or a check CI does not run. scripts/validate-air.py re-checks exported AIR JSON without the Lean decoder (ids, operand scoping, targets, terminators, type/global references, value-type cycles, per-version tag set); every committed golden AIR file passes. The recorded undefined-local-store gap is fixed in [PR124](https://github.com/riventic/air2lean/pull/124). Remaining: compiler/export/backend semantic preservation is unproved; decode, canonicalization, normalization, checker and emitter remain unverified assumptions. |
 | V04 | Theorem dependency and assumption auditing | complete | Compiled-environment theorem dependency/axiom/opaque/extern policy audit merged, with scoped actual checked inventories; each new profile needs its own run. |
