@@ -6,7 +6,8 @@ import Air2Lean.Renumber
 `Renumber.execFunc_rename` relates one function before and after `renumber` inside one program.
 This module lifts it to whole programs: renaming every function's instruction IDs by an
 injective map (one map per function) preserves `run` and `runOn` of the program
-(`run_renumber`, `runOn_renumber`).
+(`run_renumber`, `runOn_renumber`), given one local fact still taken as a hypothesis (renaming
+keeps `Func.usesMemoryLocally`, see **Open** below).
 
 The lift needs the program's step-tick policies (`Program.tickPolicy`) to be the same. They are
 computed from every body by `memoryFunctions`, `concFunctions` and `callGroups`, which read each
@@ -164,18 +165,12 @@ theorem effectsIn_renOp (mode : AllocatorModel) (op : Op) :
   case asm source vol clobbers outputs inputs =>
     simp only [renOp, renFlat, Op.effectsIn, filterMap_ref_ren, isSpinHint_ren]
     simp [renEffects, renControl, Effects.pure, Array.map_map, Function.comp_def]
-  case optPayloadPtr set p =>
-    cases set <;> simp [renOp, renFlat, Op.effectsIn, renEffects, renControl, Effects.pure,
-      Effects.address]
-  case errPayloadPtr set p =>
+  case optPayloadPtr set p | errPayloadPtr set p =>
     cases set <;> simp [renOp, renFlat, Op.effectsIn, renEffects, renControl, Effects.pure,
       Effects.address]
   case dbg name v =>
     cases v <;> simp [renOp, renFlat, Op.effectsIn, renEffects, renControl, Effects.pure]
-  case switchBr v cs e =>
-    simp only [renOp, Op.effectsIn, Effects.flow, Effects.pure, renEffects, renControl,
-      switchValues_ren, switchBodies_ren, Array.map_empty, Option.map_none]
-  case loopSwitchBr v cs e =>
+  case switchBr v cs e | loopSwitchBr v cs e =>
     simp only [renOp, Op.effectsIn, Effects.flow, Effects.pure, renEffects, renControl,
       switchValues_ren, switchBodies_ren, Array.map_empty, Option.map_none]
   all_goals
@@ -309,7 +304,10 @@ theorem syncLocally_ren (hρ : Inj ρ) (f : Func) : (renFunc ρ f).syncLocally =
   simp only [Func.syncLocally, allInsts_renFunc, Array.any_map, Function.comp_def, renInst_op,
     effects_renOp, renEffects, hasOpenCall_ren hρ]
 
-/-! ## Memory -/
+/-! ## Memory
+
+The parts of `Func.usesMemoryLocally` proved so far. The value, asm and place lemmas are the
+per-instruction predicate's and `deadUndefStores`'s building blocks (see **Open** above). -/
 
 section Memory
 
@@ -335,9 +333,6 @@ theorem hasNestedUndef_ren (v : Val) : (renVal ρ v).hasNestedUndef = v.hasNeste
   cases v <;> simp_all [renVal, Val.hasNestedUndef]
 
 theorem constTy?_ren (v : Val) : (renVal ρ v).constTy? = v.constTy? := by
-  cases v <;> rfl
-
-theorem isUndef_ren (v : Val) : (renVal ρ v matches .undef _) = (v matches .undef _) := by
   cases v <;> rfl
 
 theorem asmAllowEntry?_renOp (arch : String) (op : Op) :
