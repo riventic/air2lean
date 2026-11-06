@@ -462,6 +462,37 @@ theorem Keeps.otherStep (hp : A.Pair B) {rL rH rX : Res} {t : ThreadId} {m' : Me
   · rw [hs.threads] at hu; rw [hheld]
     exact LockWord.Owns.lstep hs (hHown u hu) hbl (hk.owns u hu)
 
+/-- **A stop keeps what the product keeps of `B`** (`current := t`). -/
+theorem Keeps.cur {rL rH rX : Res} (hk : B.Keeps G m rL rH rX) (t : ThreadId) :
+    side B { m with current := t } rL rH = side B m rL rH ∧
+      B.Keeps G { m with current := t } rL rH rX :=
+  ⟨rfl,
+    ⟨⟨hk.facts.w.current t, hk.facts.loff, hk.facts.free, hk.facts.busy, hk.facts.pdisj,
+      hk.facts.idle, hk.facts.res⟩, hk.held, hk.owns, hk.hoff, hk.xdisj, hk.xoff⟩⟩
+
+/-- **A step of `A`'s code keeps the product's rest for `A`** (`FLock.Fits.stable` of `A` for
+`Pair.U B U`), when the protocol's own `U` is stable under it. -/
+theorem U_stable (hp : A.Pair B) {U : (ThreadId → γ) → Res → Mem → Prop} {rXA : Res}
+    {t : ThreadId} {m' : Mem} {p : LPh} {h : Res} (hi : A.Inv G rXA m) (hU : Pair.U B U G rXA m)
+    (hs : A.Step t m m')
+    (ht : (∃ w ∈ m'.waiters, w ∉ m.waiters) →
+      B.ph (G t) = .away ∨ (B.ph (G t) = .holdsAway ∧ B.toLockWord.NestKey m (A.key m)))
+    (hcl : ∀ rL rH rX, rXA = rsum (side B m rL rH) rX → B.Keeps G m rL rH rX → U G rX m →
+      U (upd G t (A.set (G t) p h)) rX m') :
+    Pair.U B U (upd G t (A.set (G t) p h)) rXA m' := by
+  obtain ⟨rL, rH, rX, rfl, hk, hu⟩ := hU
+  obtain ⟨he, hk'⟩ := Keeps.otherStep (p := p) (h := h) hp hi hk hs ht
+  exact ⟨rL, rH, rX, by rw [he], hk', hcl rL rH rX rfl hk hu⟩
+
+/-- **A stop keeps the product's rest** (`FLock.Fits.atStop`), when the protocol's own `U` is
+kept. -/
+theorem U_atStop {U : (ThreadId → γ) → Res → Mem → Prop} {rXA : Res} (t : ThreadId)
+    (hU : Pair.U B U G rXA m) (hcl : ∀ rX, U G rX m → U G rX { m with current := t }) :
+    Pair.U B U G rXA { m with current := t } := by
+  obtain ⟨rL, rH, rX, rfl, hk, hu⟩ := hU
+  obtain ⟨he, hk'⟩ := Keeps.cur hk t
+  exact ⟨rL, rH, rX, by rw [he], hk', hcl rX hu⟩
+
 /-- **The two-lock product's invariant is the same in either lock's view**: a protocol whose
 invariant is `A`'s with `Pair.U B U` is also `B`'s with `Pair.U A U` (`FLock.Fits.inv` for both
 locks). -/
