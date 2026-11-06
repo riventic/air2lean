@@ -357,7 +357,12 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
   up to arithmetic (`(replicate x.toNat b).size = bs.size`); atoms of `Q` that differ from the
   state's only in such arguments (`replicate x.toNat b` against `replicate (n + 1) b` with
   `x.toNat = n + 1`) are matched argument by argument, the differing ones proved equal
-  (`proveEq`; regression `tests/roadmap/sep-auto/SepAuto/Unify.lean`). Shares of one block and tag are joined, split and weakened (an
+  (`proveEq`; regression `tests/roadmap/sep-auto/SepAuto/Unify.lean`). A constructor of an
+  existential's pattern (the list `[?w₀, ?w₁]` of an invariant's `arr p [w₀, w₁]`) is matched
+  against the state's value evaluated to its head constructor within a budget (two stores'
+  `([a, b].set 0 x).set (1#64).toNat y`: `?w₀ := x`, `?w₁ := y`; not a number, which is the
+  solver's), and the match is proved (`matchArgs`, `proveEq`; regression
+  `tests/roadmap/sep-auto/SepAuto/AtomArgs.lean`). Shares of one block and tag are joined, split and weakened (an
   allocator's own share and its grants' tagged shares of the same block stay apart; regression
   `Walk.tags_apart`), and a share with a
   determined fraction is raised to a higher bound with another share of its block
@@ -718,7 +723,21 @@ Side goals are about words, pointer offsets and sizes. The solver (`arithCore`, 
    `minAtom`, `maxAtom`), so no split is explored for it. A case probe is not retried with a
    subset of the facts it failed with (`detProbe`; an undecided `min 4096 (2 ^ k)` of the page
    allocator's `alloc` was probed again for every side goal: 100k heartbeats, now 89k);
-5. unless the call is a probe (`quick`), `t % M = c` follows from a fact `u % M = c` with `t = u`.
+5. unless the call is a probe (`quick`), `t % M = c` follows from a fact `u % M = c` with `t = u`;
+6. unless the call is a probe, `omega` runs again with the relevant facts each normalized against
+   all the facts (`renormFacts`: a hypothesis is normalized once, against the facts before it, so
+   a conditional rewrite whose side condition a later fact proves applies only now: the loop test
+   `i < n` after an invariant's `tsum n g - tsum i g`) and with the **congruence of atoms**
+   (`atomCongr`): an atom that applies a function the solver does not read (a library sum
+   `tsum x.toNat g`, a caller's `f x.toNat`) to a term containing the side `l` of an equation
+   `l = r` of the facts, `l` itself an atom (`x.toNat = i.toNat + 1`, a counter's step), equals
+   the atom with `r` for `l`, in normal form (`tsum (i.toNat + 1) g` is
+   `tsum i.toNat g + g i.toNat`). Each fact rewrites an atom at most once, an equation to a
+   non-atom first, an alias (`y.toNat = x.toNat`) only else, so the rewrites end; at `Nat` and
+   `Int`; not in a probe. The library sum `tsum` (`ZigLean/Sep/Full/TSum.lean`) has the
+   non-recursive normal forms for a counter-dependent invariant (`tsumSubLt` where the term is not
+   `0`, `tsum_sub_of_le`; a bound `n + 1` by `tsumSucc`, a numeral bound kept). Regression: `tests/roadmap/sep-auto/SepAuto/AtomCongr.lean`
+   (the side goals of `counted.tri`'s step; ledger #arith-atom-congruence).
 
 `omega` is given only the facts **relevant** to the target: those connected to it by shared
 atoms (its variables: words' values, offsets, fields), transitively (`relevantFacts`); a target
@@ -752,6 +771,26 @@ instance) that ran out of its nesting budget somewhere inside, say nothing about
 obligation without a budget, or a query of a type nested inside one past the budget, retries it.
 The caches belong to one run (theorems are elaborated in
 parallel; a run is identified by the option `fsym.run`).
+
+**`omega`'s certificates are shared** (`omegaRaw`). Core `omega` builds a tree: every step
+serializes its coefficient lists again, a constraint used twice is proved twice, and every call
+serializes its atoms and facts again. Unshared, the certificates of one ArenaSpec walk
+(`loop66_c0`) reached 64M term nodes for 0.23M distinct ones, and the elaborator held them until
+the theorem was checked (ArenaSpec*: 6.4–9 GB at one thread; shared, 3.7–4.3 GB). Each
+certificate is therefore hash-consed
+against the run's table (`RunCaches.omegaTerms`): a subterm becomes the equal one already in the
+table (`Expr.equal`, binder names and annotations included). A problem without unknowns (its
+target and its facts' types have no metavariables) is solved one metavariable depth deeper, so
+`omega` can assign only its own goals, and those goals (whose assignments hold the unshared copy)
+are dropped with the depth once the proof is instantiated. A proof that still mentions one, or
+needs a postponed constraint of the depth, is treated as no proof. A problem with unknowns is
+solved at the context's depth as before, where `omega` may assign them. The table is a persistent
+set: the caches of a run are shared between threads (`fsymRuns`), so the runtime never updates
+them in place, and an insertion into a hash set copied all of it (quadratic in the run). The
+interning (`internTerms`) is meta-level code: it only rebuilds `Expr` values and never appears in
+a proof term. The kernel checks every theorem as before. The regression test `omega_proofs_shared`
+(`tests/roadmap/sep-auto/SepAuto/Arith.lean`) type-checks shared proofs, finds no duplicate node
+in them and no goal of `omega` kept, and proves a problem with an unknown.
 
 ## Loops
 

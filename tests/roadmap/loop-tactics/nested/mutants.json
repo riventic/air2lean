@@ -1,11 +1,10 @@
 [
  {
   "name": "relation",
-  "old": "⟪v.toNat = v0.toNat + ",
-  "new": "⟪v.toNat = 1 + v0.toNat + ",
+  "old": "⟪v.toNat = v0.toNat + (s.j",
+  "new": "⟪v.toNat = 1 + v0.toNat + (s.j",
   "in": [
-   "inner_step",
-   "inner_loop"
+   "outer_step"
   ]
  },
  {
@@ -13,8 +12,7 @@
   "old": "s.j.toNat ≤ s.i.toNat ∧",
   "new": "True ∧",
   "in": [
-   "inner_step",
-   "inner_loop"
+   "outer_step"
   ]
  },
  {
@@ -22,8 +20,7 @@
   "old": ": Nat :=\n  s.i.toNat - s.j.toNat\n",
   "new": ": Nat :=\n  s.i.toNat\n",
   "in": [
-   "inner_step",
-   "inner_loop"
+   "outer_step"
   ]
  }
 ]

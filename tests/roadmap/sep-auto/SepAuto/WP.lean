@@ -1009,7 +1009,8 @@ theorem matcher_unknown_pointer_rollback (tok : Ptr → Nat → Array Byte → F
       throwError "matcher: refused atom retained an assignment"
     let c ← caches
     unless (← c.hyp.get).isEmpty && (← c.disch.get).isEmpty &&
-        (← c.facts.get).isEmpty && (← c.probe.get).isEmpty && (← c.detFail.get).isEmpty do
+        (← c.facts.get).isEmpty && (← c.probe.get).isEmpty && (← c.detFail.get).isEmpty &&
+        (← c.dischFail.get).isEmpty do
       throwError "matcher: refused atom retained speculative arithmetic state"
     let Y := mkAppN tok #[p, addr, bytes]
     let next ← mkFreshExprSyntheticOpaqueMVar (mkApp Y r)
