@@ -530,12 +530,6 @@
       "approved": "coordinator 2026-10-15 (end-state witness commands)"
     },
     {
-      "tactic": "unroll_sched",
-      "kind": "syntax",
-      "module": "ZigLean.Conc.Unroll",
-      "status": "legacy-to-retire"
-    },
-    {
       "tactic": "when_defined",
       "kind": "command",
       "module": "ZigLean.VersionGate",
@@ -754,12 +748,6 @@
       "path": "tests/roadmap/deadline-cases/Runtime.lean",
       "tactic": "within",
       "count": 1,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "tests/roadmap/proof-tools/Unroll.lean",
-      "tactic": "unroll_sched",
-      "count": 9,
       "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
     }
   ]

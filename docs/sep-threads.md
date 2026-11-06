@@ -485,7 +485,7 @@ FOwned own rO m := ∃ rT, sepN m.threads.size (fun u r => r = own u) rT ∧ Hol
   against the current memory inside a `MemM` step (`WP.liftMem_tlsPtr_bind`), so no thread triple
   needs the records (the legacy `TTripleIn` has no counterpart). `main`'s instances are start
   globals in its part (`FOwned.one`, `initRes_holds`).
-* **Witnesses / Unroll** (`Witness.lean`, `Unroll.lean`): no heap assertions of their own; they
+* **Witnesses** (`Witness.lean`): no heap assertions of their own; they
   follow the parts' type.
 
 ## Termination and turn cost: `Proto.cost`, not a second judgment

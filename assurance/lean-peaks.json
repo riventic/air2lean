@@ -920,10 +920,6 @@
    "peak_mib": 536,
    "sha256": "d5a5b5dca2370602ad3adf2ac489d81214ea0cd5ea6be250dcca7eb5612edb31"
   },
-  "ZigLean/Conc/Unroll.lean": {
-   "peak_mib": 1720,
-   "sha256": "c9500c7d543e827a9faa83492569c6473d6966571917c6b41bca065292b07e00"
-  },
   "ZigLean/Conc/WeakCas.lean": {
    "peak_mib": 697,
    "sha256": "567468a87b9f2bf6fd3015b2efe96ddbfa97c9206ecd3840f1010897ec1cf706"
@@ -2735,10 +2731,6 @@
   "tests/roadmap/proof-tools/Reassemble.lean": {
    "peak_mib": 1737,
    "sha256": "c99e4870a2f440cab517e6a096f8c144511b17f492ab42583bf658d23fe6a0a0"
-  },
-  "tests/roadmap/proof-tools/Unroll.lean": {
-   "peak_mib": 6843,
-   "sha256": "798198b31240fab37116906c94802d02114ffe7441b2d5f2f50c498f408abbb3"
   },
   "tests/roadmap/resize-remap/Check.lean": {
    "peak_mib": 497,

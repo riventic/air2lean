@@ -316,54 +316,12 @@ macOS `std.Thread.Mutex` enters `Zig.osUnfairLockC`'s loop on every lock, a Linu
 contended), and std functions may have other names or not exist. The proof names no generated
 declaration, so it covers every translation whose run needs at most its `n` passes.
 
-### `unroll_sched` (legacy-to-retire)
-
-`ZigLean.Conc.Unroll` (an optional module) is the earlier tactic for the same goals, being
-retired (`docs/legacy-retirement.md`, section 5). Its only remaining use is its own regression
-fixture; program witnesses, including the RwLock witnesses, use the `zig_run` form above. The
-earlier form was:
-
-```lean
-theorem rwLockRead_completes : … :=
-  ⟨.fresh, by unroll_sched 10⟩
-```
-
-`unroll_sched k` accepts a goal `g (Sched.run env dispatch fuel o main m₀) = v` with concrete
-arguments (the environment `env` included), for an observation `g` of the run that tells a run
-without a result from `v` (`Witness.okVal r = some n`, `Witness.errOf r = some e`; the kernel
-checks `g Sched.noResult ≠ v`). It:
-
-1. unfolds every definition reachable from `dispatch` and `main` that runs a `Zig.loop`
-   (`Unroll.expand`), and replaces each `Zig.loop body again` by
-   `Unroll.loopSel k s body again`. At `s = exact` this is the loop; at `s = approx` it is
-   `loopN body again k`, the loop cut after `k` runs of its body, which is `⊥` (no result)
-   where the loop would go on;
-2. proves the expanded program monotone in `s` with core's `monotonicity` machinery
-   (`monotone_loopSel` and the `partial_fixpoint_monotone` lemmas of the generated code),
-   using `loopN_le_loop : loopN body again k ⊑ loop body again`;
-3. applies `Sched.apply_le` (from `Sched.run_le`): if every thread of one program is below the
-   corresponding thread of another, a run of the first with a result is a run of the second
-   with the same result (a simulation of `Sched.go` that keeps the memory, the oracle step and
-   each thread's op);
-4. closes the goal about the cut program with `decide +kernel`.
-
-The proof uses only the standard axioms; nothing is evaluated outside the kernel. A wrong
-value, a run out of fuel, an error, or a loop that needs more than `k` runs of its body leaves
-the goal unproved, with the message `unroll_sched: the kernel does not compute the run …`.
-`k` bounds each loop's body runs per entry, so a loop entered again gets `k` more.
-
-A `partial_fixpoint` definition or mutual group (a recursive call group of generated code,
-`Lean.Order.fix F h`) is cut the same way: it becomes `Unroll.fixSel k s (fun s => F) h`, which
-is `fixN F k` (`F` applied `k` times to `⊥`) at `approx` and the fixpoint at `exact`
-(`fixN_le_fix`, `monotone_fixSel`); `k` bounds the nested unfoldings of the group. A definition
-met again inside its own expansion (a recursion through a dispatch table) stays uncut there.
-
-`tests/roadmap/proof-tools/Unroll.lean` checks a
-run, its axioms, and the rejection of a wrong value, too few iterations, too little fuel and a
-goal without a run, and a mutual `partial_fixpoint` group (`even_six`, rejected when cut too
-early; `even_six_solo`, its in-thread reading by `unfold`, rejected when unfolded too few times).
-Build with `lake build ZigLean.Conc.Unroll ZigLean.Sep.Full.Conc Proofs.Threads.Gen`, then run
-`lake env lean tests/roadmap/proof-tools/Unroll.lean`.
+A mutual `partial_fixpoint` group (a recursive call group of generated code) is unfolded the
+same way, by its defining equations (`unfold`), once per round of calls the run makes.
+`tests/roadmap/proof-tools/SoloRun.lean` checks the scheduler's run of such a group
+(`even_six`), its in-thread reading (`even_six_solo`), their axioms, a run unfolded too few times
+(stuck, rejected) and a wrong value (refuted). The earlier tactic for these goals,
+`unroll_sched` (`ZigLean.Conc.Unroll`, which cut each loop after `k` iterations), is deleted (L17).
 
 A concrete in-thread reading of a concurrent function, the run that `CTriple` speaks about
 (`(Sched.soloRun fuel x).run m`), needs no cut and no tactic of its own: the same `zig_run`
