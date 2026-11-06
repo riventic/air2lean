@@ -315,7 +315,7 @@ theorem stacksStep {m : Mem} (hF : Heap) (ss : Array StackState) :
       by_cases hf : m.noFp.stackDepth m.noFp.current + frameBase ≤ S
       · rw [enterFrame_run_fits h hf] at e
         obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
-        exact ⟨(stacksStep _ _).1, fun _ _ _ h => h⟩
+        exact ⟨(stacksStep _ _).1.reads, fun _ _ _ h => h⟩
       · have := enterFrame_overflow h (by omega)
         rw [e] at this; cases this⟩
 
@@ -339,7 +339,7 @@ theorem RunFp.leaveFrame {F : Array FootprintEntry} {m₀ : Mem} : RunFp F m₀ 
     | some S =>
       rw [leaveFrame_run_some h] at e
       obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
-      exact ⟨(stacksStep _ _).1, fun _ _ _ h => h⟩⟩
+      exact ⟨(stacksStep _ _).1.reads, fun _ _ _ h => h⟩⟩
 
 /-- **The running thread's token is dropped** when a postcondition does not use it: the memory
 demands none (`MemAuth.dropCur`). The stack tokens are not dropped (`StackAuth` demands them). -/

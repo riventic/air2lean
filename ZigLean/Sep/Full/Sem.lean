@@ -1097,7 +1097,7 @@ theorem Fits.move (hS : L.Fits S.prim P U ok) {G : ThreadId → γ} {m : Mem} {t
     P.inv (upd G t (S.set g s)) m := by
   obtain ⟨rX, hL, hU⟩ := (hS.inv _ m).mp hi
   have hsub := hS.sub _ rX m hU
-  have hfs := FStepIn.refl m (rsum (L.wordR m) rX).heap.erase
+  have hfs := FStepIn.refl m (rsum (L.wordR m) rX).heap.erase (hR := Heap.empty)
   have hg : L.set (upd G t g t) .holds (L.held g) = g := by
     rw [upd_self, ← hh, L.set_self]
   have hcells : ∀ W, (W = C.S ∨ W = C.Ep) → ∀ l, W.In l →
@@ -1145,6 +1145,7 @@ theorem Fits.toC (hS : S.Fits P U ok) : C.Fits L P U ok where
   role_l _ g q h := hS.role_l () g q h
   role_part _ g r := hS.role_part () g r
   holdLive := hS.holdLive
+  noGather := hS.noGather
   ok_calm g p q hp hq := by
     by_cases hs : S.ph g = .out ∨ S.ph g = .wt
     · have := hS.ok_calm g (p, S.ph g) (q, S.ph g) ⟨hp, hs⟩ ⟨hq, hs⟩

@@ -753,19 +753,72 @@ typed share `spts p a q v` is a positive `q` of `up (pts p a v)`, so `p ↦ v` c
 `spts p a 1 v` and back. A load reads any bytes through one precondition (`Mem.BytesRead`,
 `FTotalTriple.load_of_read`), so `load_sbytesAt` and `@[fsym]` `sload` keep the share. Store and
 free stay exclusive (`OwnsPtr` needs cells), so no rule changes a byte that a share reads. In a
-thread the conversions are sound because thread ownership covers a share's bytes in full (F2);
-read ownership for concurrent readers (F4) must give the conversion back an ordering premise.
+thread a whole share is exclusive (`Res.excl`), so converting it to a cell and back needs no
+ordering premise; partial shares are only read (option R below).
 
-Next, in order: the race clocks for a partial share (several readers
-of one byte, ordered before a later exclusive acquire by the RwLock's state word RMWs); until
-then two choices stay conservative: a recorded access to the rest (`FOwned.recordRest`) needs
-that no part owns the bytes, shares included, and `FOwned.heap_empty` needs the parts' and the
-rest's owned sets empty. Then `RwLockImpl` hands shared holders the protected resource at a
+The race clocks for a partial share (several readers of one byte, ordered before a later
+exclusive acquire by the RwLock's state word RMWs) are option R below. A recorded access to the
+rest (`FOwned.recordRest`) needs that no part holds the bytes exclusively (`Res.excl`), and a
+write also that no part holds a share of them; `FOwned.heap_empty` needs the parts' and the
+rest's owned sets empty. Next, `RwLockImpl` hands shared holders the protected resource at a
 fraction: the generic share above, `sheap H q` of the protected heap `H` (no RwLock-specific
 algebra). The free lock's fraction halves at each shared acquire (`sheap_add`,
 `Frac.half_add_half`), so the fractions need no bound on the readers; the native counters do
 (ledger `rwlock-reader-admission-room`), and `RwLockImpl` carries that room as `hroom` premises,
 as `CondImpl`/`SemImpl` carry the condition's 65535-waiter limit (maintainer decision 2026-11-06).
+
+**Read ownership** (`ZigLean/Conc/Clock.lean` §Read ownership, regressions
+`tests/roadmap/sep-full/ShareRaceCX.lean`). Two reads never race (`racePair`), so a share holder
+needs only that every recorded *write* to its bytes happened before its clock (`Mem.OwnsR`); a
+read by any thread keeps it for every thread (`Mem.OwnsR.recordRead`), and a read by its holder
+does not race (`Mem.OwnsR.noRace`). Ownership (`Mem.Owns`) over a share cannot hold for two
+concurrent readers (`ShareRaceCX.reader_not_owns`), and for the same reason a whole share
+becomes an exclusive cell in a thread only with every earlier read before the thread's clock
+(`Mem.OwnsRC.owns`), which the protocol provides. `FOwned.heap_empty` stays as it is: a byte
+whose whole share is in the rest is live with no exclusive cell anywhere.
+
+**Thread ownership: option R** (maintainer decision 2026-11-06, #637 slice F4; regressions
+`ShareRaceCX.readers_ownsRes`, `gather_not_ownsRes`). A resource's owned bytes split in two:
+`Res.excl`, its cells and its whole shares, and `Res.shared`, its partial shares. A thread owns a
+resource (`Mem.OwnsRes t r := m.Owns t r.excl ∧ m.OwnsR t r.shared`) when every recorded access to
+its exclusive bytes and every recorded *write* to its shared bytes happened before its clock. So two
+concurrent readers each own their half share (`readers_ownsRes`), which `Mem.Owns` over
+`Res.owned` rejected. `Mem.OwnsRes.of_owns` gives it from ownership of all bytes (any share-free
+resource: `Res.owned_eq_erase`); `.ownsR` gives read ownership of every byte, and `.cells` gives
+ownership of the cells. The layer moves to it in one step:
+- `FTTriple` takes and returns `m.OwnsRes m.current r`; its frame relation is
+  `FStepIn rF.owned m m' rF.shared`.
+- `FStepIn hF m m' hR` gets a read heap `hR`: a new access of the thread touches no byte of the
+  frame `hF` except a *read* of the frame's partial shares `hR` (`FootprintEntry.ReadsIn`). Next
+  to a byte the resource holds, the frame holds at most a partial share (`Holds.frame_shared`), so
+  a load of the resource's bytes reads only `hR`.
+- `FOwned.owns` is `∀ u < size, m.OwnsRes u (own u)`, and the free lock's resource is
+  `LockWord.OwnsRes` (`LockWord.Owns … r.excl` and the write-only `LockWord.Owns … r.shared true`).
+- **Thread share load** (`ThreadLocal.loadOwned`, the locality provider `ThreadLocal.sload`): a
+  load of a byte the resource holds or reads (`spts`, a cell or a share) is local to the thread, so
+  `fsym` applies the sequential `sload` in a thread (`FTTotalTriple.ofSeq`) with no thread copy of
+  it. Its read ownership orders every write before the load (`Mem.OwnsR.noRace`), the other holders
+  may read the byte meanwhile, and the share stays.
+
+**Gathering fails closed** (engine ledger `share-gather`). When two partial shares held by
+different owners become one whole share, the byte turns exclusive. It then needs every *read* of
+it ordered before the gatherer, which read ownership does not record (`gather_not_ownsRes`). The
+rules that could gather reject it with an explicit premise:
+- `FOwned.join` and `FCapture.join_regain` take `hg`: at each byte, the joiner's part or the joined
+  part has no partial share (an autoParam for share-free parts).
+- `FLock.Inv.join` takes `hgat : FLock.NoGather`.
+- A lock acquire (`FLock.Inv.acq`, `Inv.take`) takes `FLock.NoGather`. A resource without partial
+  shares discharges it by `NoGather.of_R`, from `FAssn.Unshared`: no partial shares, closed under
+  `⋆` and `∃`, and every assertion without ghost shares has it (`Unshared.of_share`).
+- The protocols' final states carry `∀ l, g.1.part.shared l = none` (MutexCounter, Iogroup,
+  SemCounter, WaitGroup), so their joins discharge `hg`.
+- `FOwned.take` and `FOwned.move` take the gatherer's `Mem.OwnsRes` (with `Mem.OwnsRes.addOwns`
+  when its clock owns the taken bytes).
+
+This loses joining two reader threads to recover a whole share, and a mutex-protected partial share
+whose complement the acquirer holds. RwLock does not need it: its readers return their shares
+through the state word's RMWs, whose release/acquire orders their reads. The ledger row's deletion
+plan replaces the no-gather premises by an explicit `Mem.Owns` premise over the gathered bytes.
 
 ### The fee of a grant (coordinator decision 2026-10-12)
 

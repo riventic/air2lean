@@ -614,6 +614,249 @@ theorem Holds.erase_disj_owned {m : Mem} {r rF : Res} (hh : Holds m r rF) :
   | none => exact .inl (by simp [FHeap.erase, e])
   | some _ => exact .inr (hh.frame_not_owned (by simp [e]))
 
+/-! ### Exclusive and shared bytes (§Read shares, slice F4, option R)
+
+A thread's race ownership (`Mem.OwnsRes`, `ZigLean/Sep/Full/Thread.lean`) splits a resource's
+bytes in two. **Exclusive bytes** (`Res.excl`): its cells and the bytes it holds a *whole* share
+of; no one else can read them, so the thread owns every recorded access to them (`Mem.Owns`).
+**Shared bytes** (`Res.shared`): the bytes it holds a *partial* share of; another thread may read
+them at the same time, so the thread owns only every recorded write to them (`Mem.OwnsR`).
+
+A whole share counts as exclusive, so turning it into a cell or a cell into it changes no
+thread's ownership (`Holds.excl_sub'`), and every update lifts into a thread (`FTTriple.eupd`).
+A share becomes whole in a thread only where a part gains the other pieces from another part or
+the protocol's rest (`FOwned.move`, a lock's acquire), which then needs `Mem.Owns` of the bytes:
+the order a protocol's RMWs give (`tests/roadmap/sep-full/ShareRaceCX.lean`). -/
+
+/-- A share holding some cell at least whole. -/
+def SCell.Whole (a : SCell) : Prop := ∃ c, 1 ≤ (a c).val
+
+theorem SCell.Whole.pos {a : SCell} (h : a.Whole) : a.Pos :=
+  let ⟨c, hc⟩ := h; ⟨c, by grind⟩
+
+theorem SCell.Whole.add {a : SCell} (b : SCell) (h : a.Whole) : (a.add b).Whole :=
+  let ⟨c, hc⟩ := h; ⟨c, by rw [SCell.add_val]; have := (b c).nonneg; grind⟩
+
+theorem SCell.Whole.add' (a : SCell) {b : SCell} (h : b.Whole) : (a.add b).Whole := by
+  rw [SCell.add_comm]; exact h.add a
+
+/-- Next to a whole share, a valid frame holds nothing. -/
+theorem SCell.Whole.frame {a b : SCell} (hv : (a.add b).Valid) (h : a.Whole) : b.Empty := by
+  obtain ⟨c, hc⟩ := h
+  have h1 := (hv.of_add).2 c
+  exact hv.whole (c := c) (by grind)
+
+open Classical in
+/-- **The exclusive bytes** of a resource: its cells and its whole shares (module doc). -/
+noncomputable def Res.excl (r : Res) : Heap := fun l =>
+  if r.heap l ≠ none ∨ (r.gh.share l).Whole then r.owned l else none
+
+open Classical in
+/-- **The shared bytes** of a resource: its partial shares (module doc). -/
+noncomputable def Res.shared (r : Res) : Heap := fun l =>
+  if r.heap l ≠ none ∨ (r.gh.share l).Whole then none else r.owned l
+
+/-- Ghost state without shares changes neither the exclusive nor the shared bytes. -/
+theorem Res.excl_addGh {h : FHeap} {k : Know} {a g : Ghost}
+    (hb : g.share = fun _ => SCell.zero := by rfl) :
+    (⟨h, k, a.add g⟩ : Res).excl = (⟨h, k, a⟩ : Res).excl := by
+  funext l; simp only [Res.excl, Res.owned_addGh hb]; rw [Ghost.share_add_none hb]
+
+theorem Res.shared_addGh {h : FHeap} {k : Know} {a g : Ghost}
+    (hb : g.share = fun _ => SCell.zero := by rfl) :
+    (⟨h, k, a.add g⟩ : Res).shared = (⟨h, k, a⟩ : Res).shared := by
+  funext l; simp only [Res.shared, Res.owned_addGh hb]; rw [Ghost.share_add_none hb]
+
+theorem Res.excl_ne {r : Res} {l : Loc} :
+    r.excl l ≠ none ↔ r.heap l ≠ none ∨ (r.gh.share l).Whole := by
+  unfold Res.excl
+  split
+  · rename_i h
+    refine ⟨fun _ => h, fun _ => Res.owned_ne.mpr ?_⟩
+    rcases h with h | h
+    · exact .inl h
+    · exact .inr h.pos
+  · rename_i h; simp only [ne_eq, not_true_eq_false, false_iff]; exact h
+
+theorem Res.shared_ne {r : Res} {l : Loc} :
+    r.shared l ≠ none ↔ r.heap l = none ∧ ¬ (r.gh.share l).Whole ∧ (r.gh.share l).Pos := by
+  unfold Res.shared
+  split
+  · rename_i h; simp only [ne_eq, not_true_eq_false, false_iff]; grind
+  · rename_i h
+    rw [Res.owned_ne]
+    grind
+
+theorem Res.excl_of_heap {r : Res} {l : Loc} (h : r.heap l ≠ none) : r.excl l ≠ none :=
+  Res.excl_ne.mpr (.inl h)
+
+theorem Res.excl_of_erase {r : Res} {l : Loc} (h : r.heap.erase l ≠ none) : r.excl l ≠ none :=
+  Res.excl_of_heap fun e => h (by simp [FHeap.erase, e])
+
+theorem Res.owned_of_excl {r : Res} {l : Loc} (h : r.excl l ≠ none) : r.owned l ≠ none := by
+  rcases Res.excl_ne.mp h with h | h
+  · exact Res.owned_of_heap h
+  · exact Res.owned_ne.mpr (.inr h.pos)
+
+theorem Res.owned_of_shared {r : Res} {l : Loc} (h : r.shared l ≠ none) : r.owned l ≠ none :=
+  Res.owned_ne.mpr (.inr (Res.shared_ne.mp h).2.2)
+
+/-- A byte a resource holds is exclusive or shared. -/
+theorem Res.excl_or_shared {r : Res} {l : Loc} (h : r.owned l ≠ none) :
+    r.excl l ≠ none ∨ r.shared l ≠ none := by
+  by_cases hx : r.heap l ≠ none ∨ (r.gh.share l).Whole
+  · exact .inl (Res.excl_ne.mpr hx)
+  · refine .inr (Res.shared_ne.mpr ⟨?_, ?_, ?_⟩)
+    · exact Classical.byContradiction fun e => hx (.inl e)
+    · exact fun e => hx (.inr e)
+    · rcases Res.owned_ne.mp h with e | e
+      · exact absurd (.inl e) hx
+      · exact e
+
+theorem Res.excl_shared_disj {r : Res} {l : Loc} (h : r.excl l ≠ none) : r.shared l = none := by
+  refine Classical.byContradiction fun hs => ?_
+  obtain ⟨h1, h2, -⟩ := Res.shared_ne.mp hs
+  rcases Res.excl_ne.mp h with e | e
+  · exact e h1
+  · exact h2 e
+
+/-- An exclusive byte of a part is an exclusive byte of the whole. -/
+theorem Res.excl_sep {r r₁ r₂ : Res} (hh : r.heap = r₁.heap ∪ r₂.heap)
+    (hg : r.gh = r₁.gh.add r₂.gh) {l : Loc} (h : r₁.excl l ≠ none ∨ r₂.excl l ≠ none) :
+    r.excl l ≠ none := by
+  refine Res.excl_ne.mpr ?_
+  rw [hh, hg, Ghost.add_share, FHeap.union_apply]
+  rcases h with h | h <;> rcases Res.excl_ne.mp h with e | e
+  · exact .inl fun hn => e (Option.or_eq_none_iff.mp hn).1
+  · exact .inr (e.add _)
+  · exact .inl fun hn => e (Option.or_eq_none_iff.mp hn).2
+  · exact .inr (e.add' _)
+
+/-- A shared byte of the whole that a part holds is a shared byte of the part. -/
+theorem Res.shared_sep {r r₁ r₂ : Res} (hh : r.heap = r₁.heap ∪ r₂.heap)
+    (hg : r.gh = r₁.gh.add r₂.gh) {l : Loc} (h : r.shared l ≠ none) (h₁ : r₁.owned l ≠ none) :
+    r₁.shared l ≠ none := by
+  obtain ⟨hn, hw, -⟩ := Res.shared_ne.mp h
+  rw [hh, FHeap.union_apply, Option.or_eq_none_iff] at hn
+  rw [hg, Ghost.add_share] at hw
+  refine Res.shared_ne.mpr ⟨hn.1, fun e => hw (e.add _), ?_⟩
+  rcases Res.owned_ne.mp h₁ with e | e
+  · exact absurd hn.1 e
+  · exact e
+
+theorem Res.shared_sep' {r r₁ r₂ : Res} (hh : r.heap = r₁.heap ∪ r₂.heap)
+    (hg : r.gh = r₁.gh.add r₂.gh) {l : Loc} (h : r.shared l ≠ none) (h₂ : r₂.owned l ≠ none) :
+    r₂.shared l ≠ none := by
+  obtain ⟨hn, hw, -⟩ := Res.shared_ne.mp h
+  rw [hh, FHeap.union_apply, Option.or_eq_none_iff] at hn
+  rw [hg, Ghost.add_share] at hw
+  refine Res.shared_ne.mpr ⟨hn.2, fun e => hw (e.add' _), ?_⟩
+  rcases Res.owned_ne.mp h₂ with e | e
+  · exact absurd hn.2 e
+  · exact e
+
+/-- Without shares, a resource's exclusive bytes are its cells' bytes, and it has no shared byte. -/
+theorem Res.excl_eq_erase {r : Res} (hs : r.gh.share = fun _ => SCell.zero := by rfl) :
+    (∀ l, r.excl l ≠ none ↔ r.heap l ≠ none) ∧ ∀ l, r.shared l = none := by
+  have hw : ∀ l, ¬ (r.gh.share l).Whole := fun l ⟨c, hc⟩ => by
+    rw [hs] at hc; exact absurd hc (by rw [SCell.zero_val]; decide)
+  refine ⟨fun l => ?_, fun l => Classical.byContradiction fun h => ?_⟩
+  · rw [Res.excl_ne]; exact ⟨fun h => h.resolve_right (hw l), .inl⟩
+  · obtain ⟨-, -, hp⟩ := Res.shared_ne.mp h
+    rw [hs] at hp; exact SCell.not_pos_iff.mpr SCell.empty_zero hp
+
+/-- **An assertion without partial shares**: every resource it holds has no shared byte
+(`Res.shared`), so its bytes are all exclusive. Such a resource never gathers a read share at a
+join or a lock acquire (`FOwned.join`, `FLock.NoGather.of_R`). It is closed under `⋆` and `∃`, and
+every assertion without ghost shares has it (`Unshared.of_share`). -/
+def FAssn.Unshared (P : FAssn) : Prop := ∀ r, P r → ∀ l, r.shared l = none
+
+namespace FAssn.Unshared
+
+theorem of_share {P : FAssn} (h : ∀ r, P r → r.gh.share = fun _ => SCell.zero) : P.Unshared :=
+  fun r hr => (Res.excl_eq_erase (h r hr)).2
+
+theorem of_gh {P : FAssn} (h : ∀ r, P r → r.gh = Ghost.unit) : P.Unshared :=
+  of_share fun r hr => by rw [h r hr]; rfl
+
+theorem up (P : Assn) : (FAssn.up P).Unshared := of_gh fun _ h => h.2.2
+theorem emp : FAssn.emp.Unshared := of_gh fun _ h => h.2.2
+theorem lift (φ : Prop) : (FAssn.lift φ).Unshared := of_gh fun _ h => h.2.2.2
+theorem bauth (b : BlockId) (S : Nat) (K : BlockKind) (q : Frac) : (Zig.Full.bauth b S K q).Unshared :=
+  of_share fun _ h => by rw [h.2.2]; rfl
+theorem bext (b : BlockId) (S : Nat) (K : BlockKind) : (Zig.Full.bext b S K).Unshared :=
+  Unshared.bauth b S K Frac.one
+
+theorem ex {γ : Type} {P : γ → FAssn} (h : ∀ x, (P x).Unshared) : (FAssn.ex P).Unshared :=
+  fun r ⟨x, hx⟩ => h x r hx
+
+theorem sep {P Q : FAssn} (hP : P.Unshared) (hQ : Q.Unshared) : (P ⋆ Q).Unshared := by
+  rintro r ⟨r₁, r₂, -, rfl, h₁, h₂⟩ l
+  refine Classical.byContradiction fun hs => ?_
+  have hp := (Res.shared_ne.mp hs).2.2
+  simp only [Ghost.add_share] at hp
+  rcases SCell.pos_add_iff.mp hp with hp | hp
+  · exact Res.shared_sep rfl rfl hs (Res.owned_ne.mpr (.inr hp)) (hP r₁ h₁ l)
+  · exact Res.shared_sep' rfl rfl hs (Res.owned_ne.mpr (.inr hp)) (hQ r₂ h₂ l)
+
+end FAssn.Unshared
+
+/-- **Next to a byte the resource holds, the frame holds at most a partial share of it**: not a
+cell (`Holds.erase_disj_owned`, the heap's apartness), not a whole share (`SCell.Whole.frame`).
+So a read of the resource's bytes touches only the frame's read shares (`FStepIn`'s `hR`). -/
+theorem Holds.frame_shared {m : Mem} {r rF : Res} (hh : Holds m r rF) {l : Loc}
+    (hr : r.owned l ≠ none) (hF : rF.owned l ≠ none) : rF.shared l ≠ none := by
+  -- `r` holds no cell there, so it holds a positive share
+  have hrh : r.heap l = none := by
+    have := (hh.erase_disj_owned l).resolve_right hF
+    simpa [FHeap.erase] using this
+  have hrp : (r.gh.share l).Pos := (Res.owned_ne.mp hr).resolve_left (· hrh)
+  have hFh : rF.heap l = none := Classical.byContradiction fun e =>
+    hh.not_pos_of_heap (l := l) (by simpa [FHeap.union_apply, hrh] using e)
+      (by rw [Ghost.add_share]; exact SCell.pos_add_iff.mpr (.inl hrp))
+  refine Res.shared_ne.mpr ⟨hFh, fun hw => ?_, (Res.owned_ne.mp hF).resolve_left (· hFh)⟩
+  have hv : ((rF.gh.share l).add (r.gh.share l)).Valid := by
+    rw [SCell.add_comm, ← Ghost.add_share]; exact hh.heap.valid l
+  exact SCell.not_pos_iff.mpr (hw.frame hv) hrp
+
+/-- **The exclusive bytes are fixed by the memory and the frame** (`Holds.owned_sub'`): next to the
+same frame, a byte live in the first memory that the second resource holds exclusively (a cell
+or a whole share), the first holds exclusively. An update turns a whole share into a cell and
+back, never a partial share into either. -/
+theorem Holds.excl_sub' {m m' : Mem} {r r' rF : Res} (hh : Holds m r rF) (hh' : Holds m' r' rF)
+    {l : Loc} (hlive : ∃ c, m.heap l = some c) (hl : r'.excl l ≠ none) : r.excl l ≠ none := by
+  -- the frame holds nothing of the byte
+  have hF : rF.heap l = none ∧ (rF.gh.share l).Empty := by
+    rcases Res.excl_ne.mp hl with h | h
+    · refine ⟨(hh'.disj l).resolve_left h, ?_⟩
+      have hn := hh'.not_pos_of_heap (l := l) (by simp [FHeap.union_apply, h])
+      rw [Ghost.add_share, SCell.pos_add_iff] at hn
+      exact SCell.not_pos_iff.mp fun hp => hn (.inr hp)
+    · have hv : ((r'.gh.share l).add (rF.gh.share l)).Valid := by
+        rw [← Ghost.add_share]; exact hh'.heap.valid l
+      refine ⟨?_, h.frame hv⟩
+      have hp : ((r'.gh.add rF.gh).share l).Pos := by rw [Ghost.add_share]; exact (h.add _).pos
+      have := (hh'.heap.apart l).resolve_right (by
+        show ¬ ((r'.gh.add rF.gh).share l).cell = none
+        rw [SCell.cell_eq_none_iff, Classical.not_not]; exact hp)
+      simp only [FHeap.union_apply, Option.or_eq_none_iff] at this
+      exact this.2
+  obtain ⟨c₀, hc₀⟩ := hlive
+  rcases hh.owned_of_live (l := l) (by simp [hc₀]) with h | h
+  · by_cases hr : r.heap l ≠ none
+    · exact Res.excl_of_heap hr
+    · have hr' : r.heap l = none := Classical.byContradiction hr
+      -- `r` holds a share of the byte, and with an empty frame it is the whole
+      have hP := hh.pos_of_live hc₀ (by simp [FHeap.union_apply, hr', hF.1])
+      obtain ⟨c, e⟩ := (hh.heap.total l).resolve_left fun e => by
+        rw [e] at hP; exact SCell.not_pos_iff.mpr SCell.empty_zero hP
+      rw [Ghost.add_share, hF.2.eq, SCell.add_zero] at e
+      exact Res.excl_ne.mpr (.inr ⟨c, by rw [e, SCell.of_self]; decide⟩)
+  · exfalso
+    rcases Res.owned_ne.mp h with e | e
+    · exact e hF.1
+    · exact SCell.not_pos_iff.mpr hF.2 e
+
 /-- **Knowledge true in the memory can be added at any time** (a fact of `Mem.kn m` is
 persistent, so whoever holds it later keeps it true). -/
 theorem Holds.addKnow {m : Mem} {r rF : Res} {k : Know} (hk : Know.Sub k m.kn)

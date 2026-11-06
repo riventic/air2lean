@@ -12575,7 +12575,7 @@
      }
     ],
     "head": {
-     "fingerprint": "a4b387aa24a484dba87eb5ade939f090",
+     "fingerprint": "a4175cea55c7d4b506856827eb6e0167",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Conc",
      "name": "Zig.Full.CTriple"
@@ -12648,9 +12648,8 @@
     "Zig.Full.Holds",
     "Zig.Full.Res",
     "Zig.Mem.FConc",
-    "Zig.Mem.Owns",
-    "Zig.Mem.current",
-    "Zig.Full.Res.owned"
+    "Zig.Mem.OwnsRes",
+    "Zig.Mem.current"
    ],
    "module": "Fixture",
    "name": "ClaimFixture.cret_partial.nonvacuous",
@@ -12759,11 +12758,10 @@
     "Zig.Full.Holds",
     "Zig.Full.Res",
     "Zig.Mem.FConc",
-    "Zig.Mem.Owns",
+    "Zig.Mem.OwnsRes",
     "Zig.Mem.current",
     "Zig.Sched.Out",
-    "Zig.Sched.soloTree",
-    "Zig.Full.Res.owned"
+    "Zig.Sched.soloTree"
    ],
    "module": "Fixture",
    "name": "ClaimFixture.cret_partial.returns",
@@ -16298,7 +16296,7 @@
      }
     ],
     "head": {
-     "fingerprint": "09736ac87b0c6c17b15a7e0d4570896f",
+     "fingerprint": "4a3115777497e93b057a77360974daf8",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Thread",
      "name": "Zig.Full.FTTriple"
@@ -16368,9 +16366,8 @@
     "Zig.Full.Holds",
     "Zig.Full.Res",
     "Zig.Mem.FConc",
-    "Zig.Mem.Owns",
-    "Zig.Mem.current",
-    "Zig.Full.Res.owned"
+    "Zig.Mem.OwnsRes",
+    "Zig.Mem.current"
    ],
    "module": "Fixture",
    "name": "ClaimFixture.tret_partial.nonvacuous",
@@ -16478,9 +16475,8 @@
     "Zig.Full.Holds",
     "Zig.Full.Res",
     "Zig.Mem.FConc",
-    "Zig.Mem.Owns",
-    "Zig.Mem.current",
-    "Zig.Full.Res.owned"
+    "Zig.Mem.OwnsRes",
+    "Zig.Mem.current"
    ],
    "module": "Fixture",
    "name": "ClaimFixture.tret_partial.returns",
@@ -16722,9 +16718,8 @@
     "Zig.Full.Holds",
     "Zig.Full.Res",
     "Zig.Mem.FConc",
-    "Zig.Mem.Owns",
-    "Zig.Mem.current",
-    "Zig.Full.Res.owned"
+    "Zig.Mem.OwnsRes",
+    "Zig.Mem.current"
    ],
    "module": "Fixture",
    "name": "ClaimFixture.tret_total.nonvacuous",

@@ -108,6 +108,36 @@ theorem of_blocks {W : Loc → Prop} {m m' : Mem} {hF : Heap} (hs : FStepIn hF m
     KMono.of_blocks hb, KeepsExt.of_blocks hb, LDMono.of_blocks hb, htag, hwf, hfp,
     MemAuth.Keep.of_aux (m' := {m' with current := m.current}) hb ha rfl, hs.msgCov⟩
 
+/-- A step at the shared bytes `W` keeps a thread's ownership of bytes off `W`. -/
+theorem owns {W : Loc → Prop} {m m' : Mem} {u : ThreadId} {h : Heap} (hs : RestStep W m m')
+    (ho : m.Owns u h) (hoff : ∀ l, W l → h l = none) : m'.Owns u h := by
+  intro e he htc
+  rcases hs.fp e he with h' | ⟨hw, hb⟩
+  · exact VClock.le_trans (ho e h' (htc.imp id fun h' => by rw [← hs.bsize]; exact h'))
+      (hs.clocks u)
+  · rcases htc with ⟨x, h1, h2, h3⟩ | hbe
+    · exact absurd (hoff _ (hw x h1 h2)) h3
+    · rw [hs.bsize] at hbe; exact absurd hb (Nat.not_lt.mpr hbe)
+
+/-- A step at the shared bytes `W` keeps a thread's read ownership of bytes off `W`. -/
+theorem ownsR {W : Loc → Prop} {m m' : Mem} {u : ThreadId} {h : Heap} (hs : RestStep W m m')
+    (ho : m.OwnsR u h) (hoff : ∀ l, W l → h l = none) : m'.OwnsR u h := by
+  intro e he hwr htc
+  rcases hs.fp e he with h' | ⟨hw, hb⟩
+  · exact VClock.le_trans (ho e h' hwr (htc.imp id fun h' => by rw [← hs.bsize]; exact h'))
+      (hs.clocks u)
+  · rcases htc with ⟨x, h1, h2, h3⟩ | hbe
+    · exact absurd (hoff _ (hw x h1 h2)) h3
+    · rw [hs.bsize] at hbe; exact absurd hb (Nat.not_lt.mpr hbe)
+
+/-- A step at the shared bytes `W` keeps a thread's ownership of a resource that owns nothing on
+`W`. -/
+theorem ownsRes {W : Loc → Prop} {m m' : Mem} {u : ThreadId} {r : Res} (hs : RestStep W m m')
+    (ho : m.OwnsRes u r) (hoff : ∀ l, W l → r.owned l = none) : m'.OwnsRes u r :=
+  ⟨hs.owns ho.1 fun l hl => Classical.byContradiction fun hn => Res.owned_of_excl hn (hoff l hl),
+    hs.ownsR ho.2 fun l hl =>
+      Classical.byContradiction fun hn => Res.owned_of_shared hn (hoff l hl)⟩
+
 end RestStep
 
 /-- A rest-only step that acquires the publication clock owns the drained region when
@@ -190,7 +220,7 @@ theorem restStep {W : Loc → Prop} [DecidablePred W] (ho : FOwned own (rsum (ce
       | some c => simp)
   refine ⟨⟨rT, by rw [hs.threads]; exact hsep, ⟨fun l => ?_,
     ⟨⟨fun l => ?_, fun l fc hfc => ?_⟩, fun l => ?_, hm.total⟩,
-    hh.know.trans hs.kn, ?_, ?_⟩⟩, fun u hu e he htc => ?_, fun u hu => ho.outside u (hs.threads ▸ hu),
+    hh.know.trans hs.kn, ?_, ?_⟩⟩, fun u hu => ?_, fun u hu => ho.outside u (hs.threads ▸ hu),
     by rw [hs.csize, hs.threads]; exact ho.csize, ⟨hs.wf ho.conc.1, hs.layout ho.conc.2.1,
     hs.cov ho.conc.2.2⟩, ho.noCur.1, Res.noCur_rsum (fun _ => rfl) ho.noCur.2.right⟩
   · -- disjointness
@@ -233,23 +263,17 @@ theorem restStep {W : Loc → Prop} [DecidablePred W] (ho : FOwned own (rsum (ce
     exact ⟨hg.1, hg.2.1, hg.2.2.1, hg.2.2.2.stop (ho.holds_noCur hsep) m'.current⟩
   · -- the clocks of the parts
     rw [hs.threads] at hu
-    rcases hs.fp e he with h | ⟨hw, hb⟩
-    · exact VClock.le_trans (ho.owns u hu e h (htc.imp id fun h' => by rw [← hs.bsize]; exact h'))
-        (hs.clocks u)
-    · rcases htc with ⟨x, h1, h2, h3⟩ | hbe
-      · exfalso; apply h3
-        have hl := hw x h1 h2
-        exact ho.part_off_owned hu (l := (e.block, x)) (by
-          simp only [FHeap.union_apply]; rw [cellsAt_of hl]
-          cases e' : m.heap (e.block, x) with
-          | none => exact absurd e' (hW _ hl)
-          | some c => simp)
-      · rw [hs.bsize] at hbe; exact absurd hb (Nat.not_lt.mpr hbe)
+    exact hs.ownsRes (ho.owns u hu) fun l hl => ho.part_off_owned hu (by
+      simp only [FHeap.union_apply]; rw [cellsAt_of hl]
+      cases e' : m.heap l with
+      | none => exact absurd e' (hW _ hl)
+      | some c => simp)
 
-/-- **Take**: thread `t` takes the resource `rA` of the rest `rsum rA Y`; its clock owns `rA`'s
-bytes (a lock's acquire). -/
+/-- **Take**: thread `t` takes the resource `rA` of the rest `rsum rA Y`; it owns its new part
+(`Mem.OwnsRes`: a lock's acquire, with `Mem.OwnsRes.addOwns` when its clock owns `rA`'s bytes, or
+`Mem.OwnsRes.gather` without gathering a share). -/
 theorem take {rA : Res} (ho : FOwned own (rsum rA Y) m) (ht : t < m.threads.size)
-    (hdA : FHeap.Disjoint rA.heap Y.heap) (hown : m.Owns t rA.owned) :
+    (hdA : FHeap.Disjoint rA.heap Y.heap) (hown : m.OwnsRes t (rsum (own t) rA)) :
     FOwned (upd own t (rsum (own t) rA)) Y m := by
   obtain ⟨rR, hR, hRO, hh⟩ := ho.part ht
   have hd := FHeap.disjoint_union_right.mp hh.disj
@@ -274,8 +298,7 @@ theorem take {rA : Res} (ho : FOwned own (rsum rA Y) m) (ht : t < m.threads.size
       rw [rsum_assoc, rsum_comm hRA, ← rsum_assoc]
     rw [e] at h3; exact h3
   · by_cases hut : u = t
-    · subst hut; rw [upd_self]
-      exact (Mem.OwnsC.union (ho.owns u hu) hown).sub fun _ => Res.owned_sub_union rfl rfl
+    · subst hut; rw [upd_self]; exact hown
     · rw [upd_ne _ _ hut]; exact ho.owns u hu
   · rw [upd_ne _ _ (Nat.ne_of_gt (Nat.lt_of_lt_of_le ht hu))]; exact ho.outside u hu
 
@@ -308,32 +331,40 @@ theorem give {a rA : Res} (ho : FOwned own Y m) (ht : t < m.threads.size)
   · by_cases hut : u = t
     · subst hut; rw [upd_self]
       have := ho.owns u hu; rw [hsplit] at this
-      exact this.sub fun _ hl => (Res.owned_sep rfl rfl).mpr (.inl hl)
+      exact this.sepL rfl rfl
     · rw [upd_ne _ _ hut]; exact ho.owns u hu
   · rw [upd_ne _ _ (Nat.ne_of_gt (Nat.lt_of_lt_of_le ht hu))]; exact ho.outside u hu
 
-/-- **A recorded access of the current thread `t` to bytes that no part owns** (no exclusive cell
-and no share: `Res.owned`) keeps the parts and the rest. -/
+/-- **A recorded access of the current thread `t` to bytes that no part holds exclusively**
+(`Res.excl`: no cell, no whole share) keeps the parts and the rest; a write also needs that no
+part holds a share of them (`Res.owned`). A read of a byte that parts hold by partial shares
+keeps their read ownership (`Mem.OwnsR`: only writes are ordered). -/
 theorem recordRest {b : BlockId} {off len : Nat} {kind : AccessKind} (ho : FOwned own rO m)
     (hc : m.current = t) (ht : t < m.threads.size) (hb : b < m.blocks.size)
-    (hno : ∀ u < m.threads.size, ∀ x, off ≤ x → x < off + len → (own u).owned (b, x) = none) :
+    (hno : ∀ u < m.threads.size, ∀ x, off ≤ x → x < off + len → (own u).excl (b, x) = none)
+    (hnw : kind.isWrite = true →
+      ∀ u < m.threads.size, ∀ x, off ≤ x → x < off + len → (own u).owned (b, x) = none) :
     FOwned own rO (m.recordAt b off len kind) := by
-  have hcs : m.current < m.clocks.size := by rw [hc, ho.csize]; exact ht
-  refine ⟨?_, fun u hu e he htc => ?_, ho.outside, by simp [Mem.recordAt]; exact ho.csize,
+  refine ⟨?_, fun u hu => ⟨fun e he htc => ?_, fun e he hw htc => ?_⟩, ho.outside,
+    by simp [Mem.recordAt]; exact ho.csize,
     ⟨by simpa [shapes, Mem.recordAt] using ho.conc.1, ?_, ho.conc.2.2.recordAt⟩, ho.noCur⟩
   · obtain ⟨rT, h1, h2⟩ := ho.holds; exact ⟨rT, h1, Holds.congrMem (m := m) rfl rfl h2⟩
-  · have hle : VClock.le (m.clocks[u]!) ((m.recordAt b off len kind).clocks[u]!) = true := by
-      simp only [Mem.recordAt]; rw [getElem!_set!_ite]
-      split
-      · rename_i h; rw [h.1]; exact VClock.le_bump _ _
-      · exact VClock.le_refl _
-    simp only [Mem.recordAt, Array.mem_push] at he
+  · simp only [Mem.recordAt, Array.mem_push] at he
     rcases he with he | rfl
-    · exact VClock.le_trans (ho.owns u hu e he htc) hle
+    · exact VClock.le_trans ((ho.owns u hu).1 e he htc) (recordAt_clock_le u)
     · exfalso
       rcases htc with ⟨x, h1, h2, h3⟩ | hbe
       · simp only at h1 h2 h3
         exact h3 (hno u hu x h1 h2)
+      · simp only [Mem.recordAt] at hbe; exact absurd hb (Nat.not_lt.mpr hbe)
+  · simp only [Mem.recordAt, Array.mem_push] at he
+    rcases he with he | rfl
+    · exact VClock.le_trans ((ho.owns u hu).2 e he hw htc) (recordAt_clock_le u)
+    · exfalso
+      rcases htc with ⟨x, h1, h2, h3⟩ | hbe
+      · simp only at h1 h2 h3 hw
+        exact h3 (Classical.byContradiction fun hn =>
+          Res.owned_of_shared hn (hnw hw u hu x h1 h2))
       · simp only [Mem.recordAt] at hbe; exact absurd hb (Nat.not_lt.mpr hbe)
   · obtain ⟨hd, hbd⟩ := ho.conc.2.1
     exact ⟨fun b b' blk blk' hne h1 h2 => hd b b' blk blk' hne h1 h2, fun b blk h1 => hbd b blk h1⟩
@@ -423,7 +454,7 @@ theorem WP.liftMem_fownedR {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
     {Q : α → (ThreadId → γ) → Mem → Nat → Prop} (ht : FTTriple Pa x Qa) (ho : FOwned own rO m)
     (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
     (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' →
-      Qa a r' → FStepIn rO.owned m m' → Q a G m' n)
+      Qa a r' → FStepIn rO.owned m m' rO.shared → Q a G m' n)
     (hret : P.Partial ∨ FTTReturns Pa x := by
       first
         | exact .inl (.inl rfl)
@@ -441,9 +472,9 @@ theorem WP.liftMem_fownedR {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
   · rw [hr] at hx
     obtain ⟨r', hh', hq, hc', ho', hs⟩ := hx
     obtain ⟨hnc, hh'⟩ := hh'.dropCurF
-    rw [Res.owned_addGh] at hs
+    rw [Res.owned_addGh, Res.shared_addGh] at hs
     exact ⟨by rw [hs.threads], h a m' r' hr (ho.step hc htl hR hRO hh' hc' ho' hs hnc) hq
-      (hs.weaken fun _ hl => (Res.owned_sep rfl rfl).mpr (.inr hl))⟩
+      hs.frameRight⟩
   · obtain ⟨v, m', e⟩ := hr m (own t) _ hh hp hcs (hc ▸ ho.owns t htl)
     rw [e] at hn; simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at hn
 

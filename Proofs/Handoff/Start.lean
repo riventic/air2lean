@@ -130,8 +130,8 @@ theorem inv_start {m : Mem} {own : ThreadId → Res} {A : Nat} {wb : Array Byte}
   rw [off_add, hwb] at hxB
   -- each access to a byte of `main`'s part happened before `main`
   have hown0 : ∀ e ∈ m.footprint, e.Touches (upd own 0 (rsum (rsum rM (rsum (rsum rV rRd) rW))
-      (rsum rB rIO)) 0).owned → AllLe m e.clock :=
-    fun e he htc => allLe_of_one h1 (ho.owns 0 ht e he (.inl htc))
+      (rsum rB rIO)) 0).excl → AllLe m e.clock :=
+    fun e he htc => allLe_of_one h1 ((ho.owns 0 ht).1 e he (.inl htc))
   have hBin : ∀ l, rB.heap l ≠ none ↔ Lo.BoxW l := fun l => by
     rw [up_bytesAt_some hB rfl l, off_add, hwb]; rfl
   have hIOoff : ∀ l, Lo.BoxW l → rIO.heap l = none := fun l hl =>
@@ -151,7 +151,7 @@ theorem inv_start {m : Mem} {own : ThreadId → Res} {A : Nat} {wb : Array Byte}
         rw [this, he]; exact intOfBytes_rmw 0)
       (fun e he' hh => hown0 e he' (Word.touches_of hh fun x a b => by
         rw [hb, upd_self]
-        exact Res.owned_of_heap (heap_ne_r (heap_ne_l ((hBin _).mpr ⟨rfl, by omega, by omega⟩)))))
+        exact Res.excl_of_heap (heap_ne_r (heap_ne_l ((hBin _).mpr ⟨rfl, by omega, by omega⟩)))))
   obtain ⟨hwsOk, hwsz, hwsv, -⟩ := hwi Lo.WS rfl (Nat.le_refl _) (by simp [Layout.WS])
     hok.2.2.2.2.2.2.2.1 (by simp [Layout.WS]; exact hw0)
   obtain ⟨hweOk, hwez, hwev, -⟩ := hwi Lo.WE rfl (by simp [Layout.WE]) (by simp [Layout.WE])
@@ -246,9 +246,9 @@ theorem inv_start {m : Mem} {own : ThreadId → Res} {A : Nat} {wb : Array Byte}
         obtain ⟨r₁, r₂, hd₁, rfl, h₁, -⟩ := hio
         exact heap_ne_l (b := r₂) ((up_bytesAt_some h₁ rfl (e.block, e.off)).mpr
           ⟨hr.1, by simp [bPtr], by simp [bPtr, hbs]; exact hr.2.2⟩)
-      refine ho.owns 0 ht e he (.inl ⟨e.off, Nat.le_refl _, by have := hr.2.1; omega, ?_⟩)
+      refine (ho.owns 0 ht).1 e he (.inl ⟨e.off, Nat.le_refl _, by have := hr.2.1; omega, ?_⟩)
       rw [upd_self]
-      exact Res.owned_of_heap (heap_ne_r (heap_ne_r hx))
+      exact Res.excl_of_heap (heap_ne_r (heap_ne_r hx))
     · rw [hc] at h; exact absurd h (by decide)
     · rw [hp1] at h; rcases h with h | h <;> cases h
     · -- the state has one write: no registration

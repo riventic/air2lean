@@ -199,7 +199,7 @@ theorem live_of {G : ThreadId → Gh} {m : Mem} {t : ThreadId} (hi : (proto semO
     | _ => rw [e] at hv; cases hv
   obtain ⟨hv2, hsz⟩ := hu.um.shape.lt hks
   rcases hall v (by rw [hsz]; exact hv2) with h | h | h
-  · have : (G v).2.ph = .fin := by rw [h.2]
+  · have : (G v).2.ph = .fin := by rw [h.2.1]
     rw [hks] at this; cases this
   · obtain ⟨w, hw, he⟩ := Array.any_eq_true'.mp h
     have e : w.1 = v := by simpa using he
