@@ -64,7 +64,9 @@ def run(argv, store, cwd=ROOT):
 
 
 def outputs():
-    files = [*BUILD.glob('lib/lean/AuditClaims/*.olean'), *REPORTS.glob('*.json')]
+    # build.sh's replay cache is no output: it is that run's shared kernel-replay state, and its
+    # audits check the root modules through Lake-built receipts, so it often stays unwritten.
+    files = [*BUILD.glob('lib/lean/AuditClaims/*.olean'), *REPORTS.glob('assurance-*.json')]
     return {p.name: DRIVER.sub(b'<driver>.lean', p.read_bytes()) for p in sorted(files)}
 
 
@@ -112,7 +114,7 @@ def main(argv):
     failures = ['%s: Lake compiled %d fixtures, expected %d' % (name, count, expected)
                 for (name, count), expected in zip(compiled.items(), (FIXTURES, FIXTURES, 0)) if count != expected]
     changed = sorted(f for f in cached.keys() | plain.keys() if cached.get(f) != plain.get(f))
-    if changed or len(plain) != FIXTURES + 5:  # the oleans, 4 reports and the replay cache
+    if changed or len(plain) != FIXTURES + 4:  # the oleans and the 4 reports
         failures.append('build.sh from the cache differs from the uncached run: ' + ', '.join(changed or plain))
     if json.dumps(snapshot.extract()) != extraction:
         failures.append('build.sh from the cache: the exposure extraction differs from the uncached run')
