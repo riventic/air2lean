@@ -167,8 +167,8 @@ def QM : Except ErrName (BitVec 32) → (ThreadId → Gh) → Mem → Nat → Pr
 theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p : LPh) (h : Res)
     (hg : L.ph (G t) ≠ .gone) (_ : L.ph (G t) ≠ .holdsAway) (_ : L.Inv G rX m) (hu : U G rX m)
     (hs : L.Step t m m')
-    (_ : L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) :
-    U (upd G t (L.set (G t) p h)) rX m' := by
+    (_ : L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!))
+    (_ : L.Transfer G rX m m' t p h) : U (upd G t (L.set (G t) p h)) rX m' := by
   obtain ⟨hsh, hio, hrest, hjle⟩ := hu
   have hjb : joinedB m' = joinedB m := LockWord.joinedB_congr hs.threads
   refine ⟨?_, fun e he hr => ?_, hrest, fun v hv => ?_⟩
