@@ -741,9 +741,16 @@ every ownership fact of the concurrency layer is over that set: thread ownership
 free resource (`LockWord.Owns … rL.owned`). A share therefore races with no exclusive access,
 and the protocol's rest holds its cells as no one's share (`FOwned.rest_noShare`).
 
-Next, in order: the load rule takes a positive share (an `@[fsym]` rule) and the whole share
-converts to and from the exclusive cell (`Valid.whole`); store and free stay exclusive, so no
-rule changes a byte that a share reads. Then the race clocks for a partial share (several readers
+**Shared bytes** (`ZigLean/Sep/Full/Share.lean`). `sbytesAt p A S K bs tg q` is a fraction `q` of
+each cell of `abytesAt p A S K bs tg`, held as a share; `spts p a q v` is a positive fraction of
+bytes that decode to `v`. A load reads shared bytes through the same precondition as exclusive
+ones (`Mem.BytesRead`), so `FTotalTriple.sload` (`@[fsym]`) and `load_sbytesAt` reuse the
+exclusive read path and keep the share. Split and join are an equality (`sbytesAt_add`), and the
+whole share converts to and from the exclusive bytes (`EUpd.share_whole`, `EUpd.unshare_whole`:
+next to the whole fraction a valid frame holds none, `SCell.Valid.whole`). Store and free stay
+exclusive, so no rule changes a byte that a share reads.
+
+Next, in order: the race clocks for a partial share (several readers
 of one byte, ordered before a later exclusive acquire by the RwLock's state word RMWs); until
 then two choices stay conservative: a recorded access to the rest (`FOwned.recordRest`) needs
 that no part owns the bytes, shares included, and `FOwned.heap_empty` needs the parts' and the

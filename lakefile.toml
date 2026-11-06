@@ -96,6 +96,7 @@ globs = [
   "ZigLean.Sep.Full.Region",
   "ZigLean.Sep.Full.Res",
   "ZigLean.Sep.Full.Seq",
+  "ZigLean.Sep.Full.Share",
   "ZigLean.Sep.Full.Stack",
   "ZigLean.Sep.Full.StackDepth",
   "ZigLean.Sep.Full.Strength",
