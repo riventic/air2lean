@@ -6,26 +6,18 @@ import Air2Lean.Renumber
 `Renumber.execFunc_rename` relates one function before and after `renumber` inside one program.
 This module lifts it to whole programs: renaming every function's instruction IDs by an
 injective map (one map per function) preserves `run` and `runOn` of the program
-(`run_renumber`, `runOn_renumber`), given one local fact still taken as a hypothesis (renaming
-keeps `Func.usesMemoryLocally`, see **Open** below).
+(`run_renumber`, `runOn_renumber`).
 
 The lift needs the program's step-tick policies (`Program.tickPolicy`) to be the same. They are
 computed from every body by `memoryFunctions`, `concFunctions` and `callGroups`, which read each
 function only through its local memory, sync and callee facts (`SemRewrite.tickPolicy_map`).
-The sync and callee facts are proved invariant under every injective renaming here
-(`syncLocally_ren`, `callees_ren`, `calleesOf_ren`). The proof sees a renamed body as the
+These facts are proved invariant under every injective renaming here (`usesMemoryLocally_ren`,
+`syncLocally_ren`, `callees_ren`, `calleesOf_ren`). The proof sees a renamed body as the
 original one with `renInst` applied to each instruction (`allInsts_renFunc`), whose operation
 has the original effects with every operand and target renamed (`effectsIn_renOp`), and every
 lookup by instruction ID commutes with the renaming because it is injective (`find?_id_ren`).
-
-**Open: the local memory fact.** `run_renumber` still takes
-`(renFunc (σ f) f).usesMemoryLocally = f.usesMemoryLocally` as a hypothesis. Of its parts, the
-place roots and the use-escaping allocs are proved invariant (`placeRoots_ren`,
-`usesEscapingAllocs_ren`, `bodyLists_ren`); `deadUndefStores`, `undefAllocs`, `byteLocalOk` and
-the per-instruction predicate of `Func.usesMemoryLocally` are not yet. Their instruction tests
-are anonymous `match`es under binders, which no lemma can name; naming them in `Memory.lean`
-(for example `Inst.usesPlaceOf`, `Inst.leavesBody`, `Val.instIn`) lets each get an invariance
-lemma like the ones here.
+Each memory analysis (`placeRoots`, `deadUndefStores`, `escapingAllocs`, ...) is the original
+one renamed, from one lemma per named instruction test of `Memory.lean`.
 -/
 
 namespace Air2Lean.Renumber
@@ -306,8 +298,7 @@ theorem syncLocally_ren (hρ : Inj ρ) (f : Func) : (renFunc ρ f).syncLocally =
 
 /-! ## Memory
 
-The parts of `Func.usesMemoryLocally` proved so far. The value, asm and place lemmas are the
-per-instruction predicate's and `deadUndefStores`'s building blocks (see **Open** above). -/
+Renaming keeps `Func.usesMemoryLocally`: each analysis it reads is the original one renamed. -/
 
 section Memory
 

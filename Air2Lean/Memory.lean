@@ -428,7 +428,7 @@ def structFieldOffset? (types : Array Ty) (layouts : Array Layout) (tid : TyId) 
 
 /-- The pointee type of the pointer-typed instruction `id` of `insts`. -/
 def instPtrChild? (types : Array Ty) (insts : Array Inst) (id : InstId) : Option TyId :=
-  ((insts.find? (·.id == id)).map (·.ty)).bind fun t => match types[t]? with
+  ((insts.find? (·.id == id)).map (·.ty)).bind fun (t : TyId) => match types[t]? with
     | some (.ptr _ _ c) => some c
     | _ => none
 
