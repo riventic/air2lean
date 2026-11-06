@@ -52,9 +52,9 @@ theorem U_rec {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {n : Nat
     (.inr (.inl (hnw _ (.inr (.inr rfl)))))
   refine hu.congrHist (fun _ => ⟨rfl, rfl, rfl⟩) hhS hhE hu.shape
     (hu.io.read (hc ▸ ht) hcs 0 0 n) (hu.rest.congr fun _ _ => rfl) hu.blk hwS hwE hwV
-    (hu.cinv.stay hhS hhE rfl (fun _ hw _ => hw) (fun _ _ h => h) (Nat.le_refl _) hclk)
+    (hu.cinv.stay hhS hhE rfl rfl rfl (fun _ hw _ => hw) (fun _ _ h => h) (Nat.le_refl _) hclk)
     (hu.einv.frame (t := t) (fun _ _ => rfl) rfl rfl hhV rfl hclk (Nat.le_refl _) id id
-      hu.einv.fresh)
+      hu.einv.fresh rfl rfl)
     hu.hold (fun j hj => ?_) (fun h1 => ?_) hu.q
   · rcases hu.reg j hj with h' | ⟨hlk, h'⟩
     · exact .inl (VClock.le_trans h' (hclk 1))

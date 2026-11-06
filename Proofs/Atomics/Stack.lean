@@ -1,4 +1,4 @@
-import ZigLean.Conc.Unroll
+import ZigLean.Conc.RunResult
 import ZigLean.Conc.Base.WeakCas
 import Proofs.Atomics.MessagePassing
 import ZigLean.Mem.Witness
@@ -1836,9 +1836,9 @@ theorem main_spec (σ : Placement) (d : Nat) :
   have hp₃ : Pre m₃ := by
     rw [hm₃]
     exact { toSolo := ⟨rfl, rfl, rfl, rfl, fun e he => by simp [mem0, Mem.ofGlobals, Mem.afterAlloc] at he⟩
-            b0 := by blkat_alloc
-            b1 := by blkat_alloc
-            b2 := by blkat_alloc }
+            b0 := ((BlkAt.alloc _ _ _ (by decide)).afterAlloc _ _ _).afterAlloc _ _ _
+            b1 := (BlkAt.alloc _ _ _ (by decide)).afterAlloc _ _ _
+            b2 := BlkAt.alloc _ _ _ (by decide) }
   clear hm₃ ha₃ hq₃
   refine WP.bind ?_
   rw [StateT.run'_eq]
@@ -2121,11 +2121,14 @@ theorem stackPush_safe (env : Env) (henv : env.spawn = .available) {σ : Placeme
   proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ)
 
 /-- One schedule completes: under the oracle that always picks option 0, the lock-free stack client returns 210 within
-fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
-each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
+fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run once the
+loops on its path are unfolded by their defining equation (`docs/proof-tools.md`, concrete runs of
+programs with loops). -/
 theorem stackPush_completes :
-    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) stackPush (mem0 σ)) = some 210 :=
-  ⟨.fresh, by unroll_sched 10⟩
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) stackPush (mem0 σ)) = some 210 := by
+  refine ⟨.fresh, ?_⟩
+  iterate 8 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
+  decide +kernel
 
 /-! ## Non-vacuity witnesses
 

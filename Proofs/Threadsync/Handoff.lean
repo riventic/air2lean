@@ -1,7 +1,7 @@
 import Proofs.Handoff.Ops
 import Proofs.Threadsync.Cond
 import Proofs.Threadsync.Event
-import ZigLean.Conc.Unroll
+import ZigLean.Conc.RunResult
 import ZigLean.Sep.Full.AutoWP
 
 /-!
@@ -47,6 +47,7 @@ def lo : Layout where
   c := mutexC
   c_ok := by decide
   ok := by decide
+  fits := by decide
 
 /-- The producer's argument. -/
 def prodOf : Tgt → Option Ptr
@@ -167,12 +168,15 @@ theorem handoff_safe (env : Env) (henv : env.spawn = .available) {σ : Placement
 
 omit [Zig.Os.HasEnv] in
 /-- One schedule completes: under the oracle that always picks option 0, the `std.Thread.Condition` handoff returns 7 within
-fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
-each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`), in the example OS
-environment (`Os.Env.example`; the run reads no clock). -/
+fuel 1000, from `mem0` with the translation's spawn policy, in the example OS environment
+(`Os.Env.example`; the run reads no clock). The kernel computes the run once the loops on its path
+are unfolded by their defining equation (`docs/proof-tools.md`, concrete runs of programs with
+loops). -/
 theorem handoff_completes :
     ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0)
-      (@handoff ⟨Os.Env.example⟩) (mem0 σ)) = some 7 :=
-  ⟨.fresh, by unroll_sched 10⟩
+      (@handoff ⟨Os.Env.example⟩) (mem0 σ)) = some 7 := by
+  refine ⟨.fresh, ?_⟩
+  iterate 8 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
+  decide +kernel
 
 end Threadsync.HO

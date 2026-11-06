@@ -179,11 +179,15 @@ def air2lean_model_0_contract : Zig.External.Contract ((BitVec 32)) (BitVec 64) 
 
 def air2lean_model_0 (p0 : BitVec 32) : Zig.MemM (BitVec 64) := _root_.Zig.Env.Linux.close p0
 
+attribute [zig_run] air2lean_model_0
+
 theorem air2lean_model_0_evidence : air2lean_model_0_contract.Holds .total [Zig.Error.illegal] .tracked _root_.Zig.Env.Linux.close := _root_.Zig.Env.Linux.closeEvidence
 
 def air2lean_model_1_contract : Zig.External.Contract ((BitVec 32) × (Zig.Ptr) × (BitVec 64)) (BitVec 64) := _root_.Zig.Env.Linux.readContract
 
 def air2lean_model_1 (p0 : BitVec 32) (p1 : Zig.Ptr) (p2 : BitVec 64) : Zig.MemM (BitVec 64) := _root_.Zig.Env.Linux.read (p0, p1, p2)
+
+attribute [zig_run] air2lean_model_1
 
 def air2lean_model_1_footprint : Zig.External.Footprint ((BitVec 32) × (Zig.Ptr) × (BitVec 64)) where
   reads := fun _ => []
@@ -230,6 +234,8 @@ def os_linux_errno (p0 : BitVec 64) : Zig.Result (os_linux_E__enum_1) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] os_linux_errno
+
 structure Io_Threaded_recoverableOsBugDetectedLocals where
   deriving Inhabited
 
@@ -241,6 +247,8 @@ def Io_Threaded_recoverableOsBugDetected  : Zig.Result (Unit) := do
     pure .ret) : Zig.M Io_Threaded_recoverableOsBugDetectedLocals Io_Threaded_recoverableOsBugDetectedExit).run' (default : Io_Threaded_recoverableOsBugDetectedLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] Io_Threaded_recoverableOsBugDetected
 
 structure Io_Threaded_closeFdLocals where
   deriving Inhabited
@@ -270,6 +278,8 @@ def Io_Threaded_closeFd (p0 : BitVec 32) : Zig.MemM (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] Io_Threaded_closeFd
+
 structure posix_unexpectedErrnoLocals where
   deriving Inhabited
 
@@ -281,6 +291,8 @@ def posix_unexpectedErrno (p0 : os_linux_E__enum_1) : Zig.Result (Zig.ErrName) :
     pure (.ret "Unexpected")) : Zig.M posix_unexpectedErrnoLocals posix_unexpectedErrnoExit).run' (default : posix_unexpectedErrnoLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] posix_unexpectedErrno
 
 structure posix_readLocals where
   local2 : Zig.Slice
@@ -377,6 +389,8 @@ def posix_read (p0 : BitVec 32) (p1 : Zig.Slice) : Zig.MemM (Except Zig.ErrName 
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] posix_read.loop13 posix_read
+
 structure readCloseLocals where
   deriving Inhabited
 
@@ -390,5 +404,7 @@ def readClose (p0 : BitVec 32) (p1 : Zig.Slice) : Zig.MemM (Except Zig.ErrName (
     pure (.ret i2)) : Zig.MM readCloseLocals readCloseExit).run' (default : readCloseLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] readClose
 
 end EnvStd16

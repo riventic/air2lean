@@ -39,10 +39,11 @@ input is a different key, so an entry cannot be stale; it can only be missing.
 | native build | `native/<key>` | `scripts/diff.sh`'s stock-Zig builds (`cas.py native -- ZIG build-exe\|build-lib ARGS`): the compiler binary and its `lib/` (path, size, mtime), the arguments, the target (the host identity without `-target`) and every `.zig`/`.zon` file under each source root's directory. The output (`-femit-bin`), stdout and stderr are stored and replayed. A tree that uses `@embedFile`, `ZIG_LIB_DIR` or no `-femit-bin` runs uncached. |
 | pristine source | `src/zig-<version>-<sha256>` | the `versions.toml` tarball digest (checked before extraction) |
 
-The proof-fixture checks (`scripts/fixture-checks.py`) cache nothing: every unit runs on every
-invocation, and no result is reused across runs until a sound input tracer exists (maintainer
-decision on #443, 2026-10-19; [ci.md](ci.md#full-build)). A `fixture-checks/` directory that an
-earlier version left in the cache (or in `.lake/` without it) is unused and can be deleted.
+The proof-fixture checks (`scripts/fixture-checks.py`) keep nothing in this cache: a unit's pass
+is recorded under a key of every input of the whole tree in `~/.cache/air2lean/fixture-checks/passes`
+(per machine; [ci.md](ci.md#full-build)), so only an unchanged tree reuses it. A `fixture-checks/`
+directory that an earlier version left in the cache (or in `.lake/` without it) is unused and can
+be deleted.
 
 Lean files outside the root package's libraries that need compiled outputs are built by a Lake
 package that requires the root package by path, so the same Lake artifact cache covers them:
@@ -56,8 +57,9 @@ The Lean files of the proof fixtures (`tests/roadmap/<fixture>/check.sh`) are on
 `ArenaSpec`). The outputs go to `tests/roadmap/.lake/build`, outside the root
 `.lake/build/lib/lean`, where proof receipts reject untracked compiled modules. Converted so far:
 `alloc-arena`, `alloc-fba`, `alloc-translated`, `lists-fba` (and the two `interfaces` modules it
-imports), the architecture-audit claim fixtures and the claim-strength fixtures
-(`tests/roadmap/claims`); the other checks still elaborate with `lake env lean`.
+imports), the architecture-audit claim fixtures, the claim-strength fixtures
+(`tests/roadmap/claims`), `packed-casts`, `nan-bits`, `enc-exactness` and
+`try-pointers/lifetimes`; the other checks still elaborate with `lake env lean`.
 
 `scripts/fixtures.py` is the one entry point; a converted check runs nothing else on Lean files:
 
@@ -66,6 +68,8 @@ imports), the architecture-audit claim fixtures and the claim-strength fixtures
 | `fixtures.py build [TARGET...]` | `lake build` of fixture libraries or modules (no target: every library) in the package, through `cas.py run`. Lake also builds the root-package modules they import, into the root `.lake/build`. |
 | `fixtures.py audit M... [--declaration NAME]...` | `scripts/assumptions.py --no-build --all-declarations` over the built modules: the axioms come from the compiled environment, with kernel replay (`leanchecker`), not from a message log. Fails unless every theorem of the modules uses only `propext`, `Classical.choice`, `Quot.sound`, no declaration depends on `sorry`, the report has no violation in the modules (an axiom, opaque or unsafe declaration outside the policy, a float-semantics label issue), every named declaration exists in them, and each reaches only the standard axioms in the extractor's dependency graph (a definition whose value carries proofs, such as `AllocFba.FBA.ledger`, is checked like a theorem); every audited fixture module is the Lake-built olean. The extractor's driver (a file that runs the compiled extractor `.lake/build/bin/assurance`) is built by Lake (`assumptions.py --extract-in`, in the generated workspace `tests/roadmap/.lake/extraction`, which requires the package): its trace (the driver's text with the extractor's SHA-256, each audited module's trace, the toolchain) decides when the extraction runs again, and an unchanged one replays the build's stored log, which carries the report. The policy, the kernel replay and the freshness checks run on every audit. |
 | `fixtures.py mutant NAME --src DIR --fails M [--expect TEXT]...` | a negative check: DIR is the fixture's sources with one mutation, built as a workspace of its own (`tests/roadmap/.lake/mutants/NAME`). `lake build M` must fail on M itself: Lake's list of failed targets is exactly M, an error is located in M's source, and each `--expect` text occurs. A failed import, a missing module or a killed process is not a kill. |
+| `fixtures.py instance PRIMARY --subst OLD=NEW... [--write]` | a module stated once for several Zig versions or targets: the instance is PRIMARY with each OLD name component (`V0_17_0`) replaced by NEW, in its text and its path. Fails unless the committed instance is that text byte for byte (`--write` writes it). |
+| `fixtures.py run OUTDIR M:DECL...` | runs each `IO Unit` DECL of a built module M in one `lean --run` of the package, its output to `OUTDIR/DECL.txt`; fails unless the modules are up to date in Lake's trace (`lake build --no-build`) |
 | `fixtures.py files` | the package's module files (`lean-deps.py` does not treat them as standalone files) |
 
 **Reuse is Lake's trace, nothing else.** A module is elaborated again exactly when its trace
@@ -85,6 +89,15 @@ check result is never reused.
 is a tracked module of the library. The check first translates the AIR afresh and requires the
 output to be byte-identical (`cmp`), then builds: a changed translator output fails the comparison
 before any proof runs, and a regenerated file has new content, so a new trace.
+
+**One model, several versions.** A fixture that checks the same model against the translation of
+each Zig version (or target) has one translation and one model module per version, with distinct
+module names and namespaces (`NanBits.V0_16_0.Gen`, `NanBits.V0_16_0.Model`): two same-named
+modules cannot share a workspace, and distinct namespaces let one audit load every version. The
+model is written once, for the newest version; the check requires every other version's module to
+be that file with the version name replaced (`fixtures.py instance`), so no version's theorems can
+drift. A model's `main` (the lines compared with native output) runs from the built modules
+(`fixtures.py run`), not by elaborating the file again.
 
 **Mutants** are other files: copying the fixture's modules with one changed keeps every module
 name, and a workspace of their own keeps the two apart (in one workspace Lake would build only
@@ -139,10 +152,10 @@ tables of the modules below it) runs as native code in every Lake build of a mod
 package and `tests/diff`. Lean's interpreter runs the same code otherwise. This is a build mode,
 not a proof rule: the elaborator produces the same terms and the kernel checks them as before
 (the `.olean` of every measured module is byte-identical in both modes, on aarch64-macos and
-x86_64-linux). Meta code above `Auto` (the `fsym_norm` simprocs of `Wrappers`, `unroll_solo` in
-`Unroll`) stays interpreted. Native code does change one thing: `native_decide` and
-`Lean.ofReduceBool` would evaluate a closure function with compiled code. Both are already
-rejected (`scripts/no-sorry.sh`, the claim policy).
+x86_64-linux). Meta code above `Auto` (the `fsym_norm` simprocs of `Wrappers`) stays
+interpreted. Native code does change one thing: `native_decide` and `Lean.ofReduceBool` would
+evaluate a closure function with compiled code. Both are already rejected
+(`scripts/no-sorry.sh`, the claim policy).
 
 Two libraries of `lakefile.toml` do it:
 

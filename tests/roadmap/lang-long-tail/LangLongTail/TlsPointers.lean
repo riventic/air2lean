@@ -76,6 +76,8 @@ def currentValue  : Zig.MemM (BitVec 32) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] currentValue
+
 structure leakSlotLocals where
   mine : Zig.Ptr
   deriving Inhabited
@@ -101,6 +103,8 @@ def leakSlot (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
   Zig.free s1
   match e with
   | .ret => pure ()
+
+attribute [zig_run] leakSlot
 
 structure leakedSlotLocals where
   p : Zig.Ptr
@@ -150,6 +154,8 @@ def leakedSlot  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] leakedSlot
 
 structure mainOnlyLocals where
   «local» : Zig.Ptr
@@ -211,6 +217,8 @@ def mainOnly (p0 : BitVec 32) : Zig.MemM (BitVec 32) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] mainOnly
+
 structure workerLocals where
   mine : Zig.Ptr
   deriving Inhabited
@@ -250,6 +258,8 @@ def worker (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
   Zig.free s1
   match e with
   | .ret => pure ()
+
+attribute [zig_run] worker
 
 structure perThreadLocals where
   a : Zig.Ptr
@@ -296,9 +306,13 @@ def perThread  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] perThread
+
 /-- Runs a spawn target (`Zig.Sched.run`). -/
 def dispatch : Tgt → Zig.ConcM Tgt Unit
   | .leakSlot a => Zig.ConcM.tlsThread tlsInit (discard (Zig.ConcM.liftMem (leakSlot a)))
   | .worker a => Zig.ConcM.tlsThread tlsInit (discard (Zig.ConcM.liftMem (worker a)))
+
+attribute [zig_run] dispatch
 
 end TlsPointers

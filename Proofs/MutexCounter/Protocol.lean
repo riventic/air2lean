@@ -132,9 +132,11 @@ theorem io_notL {e : FootprintEntry} (h : e.off = (L Lo).o) : ¬ IoR Lo e := fun
   have := Lo.ok; simp [L, FLock.prod] at h; omega
 
 theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p : LPh) (h : Res)
-    (_ : (L Lo).ph (G t) ≠ .gone) (hu : U Lo G rX m) (hs : (L Lo).Step t m m')
-    (_ : (L Lo).ph (G t) = .holds → p ≠ .holds → (L Lo).Before m' (m.clocks[t]!)) :
-    U Lo (upd G t ((L Lo).set (G t) p h)) rX m' := by
+    (_ : (L Lo).ph (G t) ≠ .gone) (_ : (L Lo).ph (G t) ≠ .holdsAway) (_ : (L Lo).Inv G rX m)
+    (hu : U Lo G rX m)
+    (hs : (L Lo).Step t m m')
+    (_ : (L Lo).ph (G t) = .holds → p ≠ .holds → (L Lo).Before m' (m.clocks[t]!))
+    (_ : (L Lo).Transfer G rX m m' t p h) : U Lo (upd G t ((L Lo).set (G t) p h)) rX m' := by
   obtain ⟨hsh, hio, hrest⟩ := hu
   refine ⟨?_, fun e he hr => ?_, hrest⟩
   · rw [FLock.snd_set]; unfold Shape at hsh ⊢; rw [hs.threads]; exact hsh
@@ -674,7 +676,7 @@ theorem wp_join {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} {
     · by_cases h1 : u = 1
       · subst h1; simp only [FLock.pl, upd_ne _ _ (by decide : (1 : ThreadId) ≠ 0)] at hu'
         rw [show (L Lo).ph (G₁ 1) = .gone from hfin.1] at hu'; cases hu'
-      · have := (hL'.w.live u (by rw [hu']; decide)).1
+      · have := (hL'.w.live u (LPh.ne_gone_of_held hu')).1
         rw [hs2'] at this; unfold ThreadId at *; omega
   have hall : ∀ u < m'.threads.size, VClock.le (m'.clocks[u]!) (m'.clocks[0]!) = true :=
     fun u hu' => by

@@ -478,6 +478,8 @@ def debug_assert (p0 : Bool) : Zig.Result (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] debug_assert
+
 structure Thread_Mutex_FutexImpl_unlockLocals where
   deriving Inhabited
 
@@ -514,6 +516,8 @@ def Thread_Mutex_FutexImpl_unlock (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] Thread_Mutex_FutexImpl_unlock
+
 structure Thread_Mutex_unlockLocals where
   deriving Inhabited
 
@@ -527,6 +531,8 @@ def Thread_Mutex_unlock (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
     pure .ret) : Zig.CM Tgt Thread_Mutex_unlockLocals Thread_Mutex_unlockExit).run' (default : Thread_Mutex_unlockLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] Thread_Mutex_unlock
 
 structure posix_errno__anon_c57b4435c781Locals where
   deriving Inhabited
@@ -564,6 +570,8 @@ def posix_errno__anon_c57b4435c781 (p0 : BitVec 64) : Zig.Result (os_linux_E__en
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] posix_errno__anon_c57b4435c781
+
 structure posix_unexpectedErrnoLocals where
   deriving Inhabited
 
@@ -575,6 +583,8 @@ def posix_unexpectedErrno (p0 : os_linux_E__enum_1) : Zig.Result (Zig.ErrName) :
     pure (.ret "Unexpected")) : Zig.M posix_unexpectedErrnoLocals posix_unexpectedErrnoExit).run' (default : posix_unexpectedErrnoLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] posix_unexpectedErrno
 
 structure posix_clock_gettimeLocals where
   tp : Zig.Ptr
@@ -609,6 +619,8 @@ def posix_clock_gettime [Zig.Os.HasEnv] (p0 : os_linux_clockid_t) : Zig.ConcM Tg
   match e with
   | .ret v => pure v
 
+attribute [zig_run] posix_clock_gettime
+
 structure time_Instant_nowLocals where
   local8 : Zig.Ptr
   deriving Inhabited
@@ -641,6 +653,8 @@ def time_Instant_now [Zig.Os.HasEnv]  : Zig.ConcM Tgt (Except Zig.ErrName (time_
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] time_Instant_now
+
 structure time_Timer_startLocals where
   deriving Inhabited
 
@@ -667,6 +681,8 @@ def time_Timer_start [Zig.Os.HasEnv]  : Zig.ConcM Tgt (Except Zig.ErrName (time_
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] time_Timer_start
 
 structure Thread_Futex_Deadline_initLocals where
   deadline : Zig.Bytes (Thread_Futex_Deadline)
@@ -710,6 +726,8 @@ def Thread_Futex_Deadline_init [Zig.Os.HasEnv] (p0 : Option (BitVec 64)) : Zig.C
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] Thread_Futex_Deadline_init
+
 structure math_order__anon_2e4ff451439dLocals where
   deriving Inhabited
 
@@ -739,6 +757,8 @@ def math_order__anon_2e4ff451439d (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result
           throw .unreachable)))) : Zig.M math_order__anon_2e4ff451439dLocals math_order__anon_2e4ff451439dExit).run' (default : math_order__anon_2e4ff451439dLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] math_order__anon_2e4ff451439d
 
 structure time_Instant_orderLocals where
   ord : math_Order
@@ -776,6 +796,8 @@ def time_Instant_order (p0 : time_Instant) (p1 : time_Instant) : Zig.Result (mat
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] time_Instant_order
 
 structure time_Timer_sampleLocals where
   deriving Inhabited
@@ -819,6 +841,8 @@ def time_Timer_sample [Zig.Os.HasEnv] (p0 : Zig.Ptr) : Zig.ConcM Tgt (time_Insta
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] time_Timer_sample
+
 structure time_Instant_sinceLocals where
   deriving Inhabited
 
@@ -848,6 +872,8 @@ def time_Instant_since (p0 : time_Instant) (p1 : time_Instant) : Zig.Result (Bit
   match e with
   | .ret v => pure v
 
+attribute [zig_run] time_Instant_since
+
 structure time_Timer_readLocals where
   deriving Inhabited
 
@@ -863,6 +889,8 @@ def time_Timer_read [Zig.Os.HasEnv] (p0 : Zig.Ptr) : Zig.ConcM Tgt (BitVec 64) :
     pure (.ret i4)) : Zig.CM Tgt time_Timer_readLocals time_Timer_readExit).run' (default : time_Timer_readLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] time_Timer_read
 
 structure math_sub__anon_85a035d52c51Locals where
   deriving Inhabited
@@ -889,6 +917,8 @@ def math_sub__anon_85a035d52c51 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] math_sub__anon_85a035d52c51
 
 structure os_linux_errnoFromSyscallLocals where
   deriving Inhabited
@@ -925,6 +955,8 @@ def os_linux_errnoFromSyscall (p0 : BitVec 64) : Zig.Result (os_linux_E__enum_1)
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] os_linux_errnoFromSyscall
 
 structure Thread_Futex_LinuxImpl_waitLocals where
   ts : Zig.Ptr
@@ -1001,6 +1033,8 @@ def Thread_Futex_LinuxImpl_wait (p0 : Zig.Ptr) (p1 : BitVec 32) (p2 : Option (Bi
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] Thread_Futex_LinuxImpl_wait
+
 structure Thread_Futex_timedWaitLocals where
   deriving Inhabited
 
@@ -1040,6 +1074,8 @@ def Thread_Futex_timedWait (p0 : Zig.Ptr) (p1 : BitVec 32) (p2 : BitVec 64) : Zi
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] Thread_Futex_timedWait
 
 structure Thread_Futex_Deadline_waitLocals where
   deriving Inhabited
@@ -1082,6 +1118,8 @@ def Thread_Futex_Deadline_wait [Zig.Os.HasEnv] (p0 : Zig.Ptr) (p1 : Zig.Ptr) (p2
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] Thread_Futex_Deadline_wait
+
 structure Thread_Mutex_FutexImpl_tryLockLocals where
   deriving Inhabited
 
@@ -1116,6 +1154,8 @@ def Thread_Mutex_FutexImpl_tryLock (p0 : Zig.Ptr) : Zig.ConcM Tgt (Bool) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] Thread_Mutex_FutexImpl_tryLock
 
 structure Thread_Mutex_FutexImpl_lockSlowLocals where
   deriving Inhabited
@@ -1185,6 +1225,8 @@ def Thread_Mutex_FutexImpl_lockSlow (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] Thread_Mutex_FutexImpl_lockSlow.loop16 Thread_Mutex_FutexImpl_lockSlow
+
 structure Thread_Mutex_FutexImpl_lockLocals where
   deriving Inhabited
 
@@ -1209,6 +1251,8 @@ def Thread_Mutex_FutexImpl_lock (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] Thread_Mutex_FutexImpl_lock
+
 structure Thread_Mutex_lockLocals where
   deriving Inhabited
 
@@ -1222,6 +1266,8 @@ def Thread_Mutex_lock (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
     pure .ret) : Zig.CM Tgt Thread_Mutex_lockLocals Thread_Mutex_lockExit).run' (default : Thread_Mutex_lockLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] Thread_Mutex_lock
 
 structure Thread_Condition_FutexImpl_waitLocals where
   epoch : BitVec 32
@@ -1463,6 +1509,8 @@ def Thread_Condition_FutexImpl_wait [Zig.Os.HasEnv] (p0 : Zig.Ptr) (p1 : Zig.Ptr
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] Thread_Condition_FutexImpl_wait.loop107 Thread_Condition_FutexImpl_wait.loop45 Thread_Condition_FutexImpl_wait.loop42 Thread_Condition_FutexImpl_wait.loop29 Thread_Condition_FutexImpl_wait
+
 structure Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals where
   state : BitVec 32
   deriving Inhabited
@@ -1550,6 +1598,8 @@ def Thread_Condition_FutexImpl_wake__anon_b3c587c57789 (p0 : Zig.Ptr) : Zig.Conc
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] Thread_Condition_FutexImpl_wake__anon_b3c587c57789.loop9 Thread_Condition_FutexImpl_wake__anon_b3c587c57789
+
 structure Thread_Condition_signalLocals where
   deriving Inhabited
 
@@ -1563,6 +1613,8 @@ def Thread_Condition_signal (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
     pure .ret) : Zig.CM Tgt Thread_Condition_signalLocals Thread_Condition_signalExit).run' (default : Thread_Condition_signalLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] Thread_Condition_signal
 
 structure Thread_Condition_waitLocals where
   deriving Inhabited
@@ -1593,6 +1645,8 @@ def Thread_Condition_wait [Zig.Os.HasEnv] (p0 : Zig.Ptr) (p1 : Zig.Ptr) : Zig.Co
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] Thread_Condition_wait
+
 structure Thread_ResetEvent_FutexImpl_isSetLocals where
   deriving Inhabited
 
@@ -1614,6 +1668,8 @@ def Thread_ResetEvent_FutexImpl_isSet (p0 : Zig.Ptr) : Zig.ConcM Tgt (Bool) := d
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] Thread_ResetEvent_FutexImpl_isSet
 
 structure Thread_ResetEvent_FutexImpl_setLocals where
   deriving Inhabited
@@ -1665,6 +1721,8 @@ def Thread_ResetEvent_FutexImpl_set (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] Thread_ResetEvent_FutexImpl_set
 
 structure Thread_ResetEvent_FutexImpl_waitUntilSetLocals where
   state : BitVec 32
@@ -1787,6 +1845,8 @@ def Thread_ResetEvent_FutexImpl_waitUntilSet [Zig.Os.HasEnv] (p0 : Zig.Ptr) (p1 
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] Thread_ResetEvent_FutexImpl_waitUntilSet.loop37 Thread_ResetEvent_FutexImpl_waitUntilSet
+
 structure Thread_ResetEvent_FutexImpl_waitLocals where
   deriving Inhabited
 
@@ -1812,6 +1872,8 @@ def Thread_ResetEvent_FutexImpl_wait [Zig.Os.HasEnv] (p0 : Zig.Ptr) (p1 : Option
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] Thread_ResetEvent_FutexImpl_wait
+
 structure Thread_ResetEvent_setLocals where
   deriving Inhabited
 
@@ -1825,6 +1887,8 @@ def Thread_ResetEvent_set (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
     pure .ret) : Zig.CM Tgt Thread_ResetEvent_setLocals Thread_ResetEvent_setExit).run' (default : Thread_ResetEvent_setLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] Thread_ResetEvent_set
 
 structure Thread_ResetEvent_waitLocals where
   deriving Inhabited
@@ -1854,6 +1918,8 @@ def Thread_ResetEvent_wait [Zig.Os.HasEnv] (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit)
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] Thread_ResetEvent_wait
 
 structure Thread_WaitGroup_finishLocals where
   deriving Inhabited
@@ -1892,6 +1958,8 @@ def Thread_WaitGroup_finish (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] Thread_WaitGroup_finish
+
 structure Thread_WaitGroup_startManyLocals where
   deriving Inhabited
 
@@ -1917,6 +1985,8 @@ def Thread_WaitGroup_startMany (p0 : Zig.Ptr) (p1 : BitVec 64) : Zig.ConcM Tgt (
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] Thread_WaitGroup_startMany
 
 structure Thread_WaitGroup_waitLocals where
   deriving Inhabited
@@ -1956,6 +2026,8 @@ def Thread_WaitGroup_wait [Zig.Os.HasEnv] (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) 
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] Thread_WaitGroup_wait
+
 structure math_order__anon_88b814a058f5Locals where
   deriving Inhabited
 
@@ -1979,6 +2051,8 @@ def math_order__anon_88b814a058f5 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result
           throw .unreachable)))) : Zig.M math_order__anon_88b814a058f5Locals math_order__anon_88b814a058f5Exit).run' (default : math_order__anon_88b814a058f5Locals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] math_order__anon_88b814a058f5
 
 structure math_sub__anon_2645c921d0aaLocals where
   deriving Inhabited
@@ -2006,6 +2080,8 @@ def math_sub__anon_2645c921d0aa (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] math_sub__anon_2645c921d0aa
+
 structure math_sub__anon_b9091a243743Locals where
   deriving Inhabited
 
@@ -2032,6 +2108,8 @@ def math_sub__anon_b9091a243743 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] math_sub__anon_b9091a243743
+
 structure producerLocals where
   deriving Inhabited
 
@@ -2055,6 +2133,8 @@ def producer (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
     pure .ret) : Zig.CM Tgt producerLocals producerExit).run' (default : producerLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] producer
 
 structure handoffLocals where
   b : Zig.Ptr
@@ -2121,6 +2201,8 @@ def handoff [Zig.Os.HasEnv]  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) :=
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] handoff.loop12 handoff
+
 structure workLocals where
   local1 : BitVec 64
   deriving Inhabited
@@ -2171,6 +2253,8 @@ def work (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] work.loop4 work
+
 structure mutexCounterLocals where
   c : Zig.Ptr
   deriving Inhabited
@@ -2202,6 +2286,8 @@ def mutexCounter  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] mutexCounter
+
 structure taskLocals where
   deriving Inhabited
 
@@ -2223,6 +2309,8 @@ def task (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
     pure .ret) : Zig.CM Tgt taskLocals taskExit).run' (default : taskLocals)
   match e with
   | .ret => pure ()
+
+attribute [zig_run] task
 
 structure waitGroupLocals where
   s : Zig.Ptr
@@ -2269,10 +2357,14 @@ def waitGroup [Zig.Os.HasEnv]  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) 
   match e with
   | .ret v => pure v
 
+attribute [zig_run] waitGroup
+
 /-- Runs a spawn target (`Zig.Sched.run`). -/
 def dispatch : Tgt → Zig.ConcM Tgt Unit
   | .producer a => discard (producer a)
   | .work a => discard (work a)
   | .task a => discard (task a)
+
+attribute [zig_run] dispatch
 
 end Threadsync.Gen.V0_15_2.H_6c696e7578

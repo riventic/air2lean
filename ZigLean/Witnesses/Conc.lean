@@ -1,15 +1,18 @@
 import ZigLean.Mem.Witness
 import ZigLean.Conc.Total
-import ZigLean.Conc.Word
+import ZigLean.Conc.Base.Word
 import ZigLean.Conc.Base.WeakCas
 import ZigLean.Conc.TimedCompare
+import ZigLean.Sep.Full.LockWord
 
 /-!
 # Non-vacuity witnesses: concurrency protocol lemmas
 
-Concrete arguments for the premises of the lemmas of `ZigLean/Conc/*.lean`
-(`docs/claim-strength.md`). The legacy thread-triple rules (`TTriple`, `ZigLean/Conc/Own.lean`)
-have none: their head is a reserved claim-head name, so no claim rests on them.
+Concrete arguments for the premises of the base concurrency lemmas (`ZigLean/Conc/*.lean`,
+`ZigLean/Conc/Base/*.lean`) and of the lock-word states of the full-state logic
+(`docs/claim-strength.md`); it imports no legacy-layer module. The legacy thread-triple rules
+(`TTriple`, `ZigLean/Conc/Own.lean`) have none: their head is a reserved claim-head name, so no
+claim rests on them.
 -/
 
 namespace Zig.Witness
@@ -27,10 +30,12 @@ nonvacuity_witness Proto.casMarkWrite_run :=
     by with_unfolding_all rfl, mem1_noRace _ _ _ _ _ _, trivial⟩
 
 nonvacuity_witness Proto.futexWait_run_go :=
-  ⟨p0, 0, mem1 (Enc.encode (0 : BitVec 32)), 0, blk (Enc.encode (0 : BitVec 32)), 0, 0, by decide +kernel,
+  ⟨p0, 0, false, mem1 (Enc.encode (0 : BitVec 32)), 0, blk (Enc.encode (0 : BitVec 32)), 0, 0,
+    by decide +kernel,
     by with_unfolding_all rfl, mem1_noRace _ _ _ _ _ _, by with_unfolding_all rfl, trivial⟩
 
-nonvacuity_witness Proto.futexWait_run_woken := ⟨p0, 0, { woken := #[0] }, by decide +kernel, trivial⟩
+nonvacuity_witness Proto.futexWait_run_woken :=
+  ⟨p0, 0, false, { woken := #[0] }, by decide +kernel, trivial⟩
 
 nonvacuity_witness Proto.intOfBytes_rmw := ⟨32, inferInstance, 0, trivial⟩
 
@@ -46,10 +51,10 @@ nonvacuity_witness Total.countdown_run := ⟨⟨.any, .available⟩, 0, 0, fun _
 nonvacuity_witness Total.go_countdown :=
   ⟨⟨.any, .available⟩, 0, 0, 1, 0, #[], fun _ => 0, Nat.le_refl 0, Nat.le_refl 1, trivial⟩
 
-/-! ## Lock states and words (`ZigLean/Conc/LockRules.lean`, `ZigLean/Conc/Word.lean`) -/
+/-! ## Lock states and words (`ZigLean/Sep/Full/LockWord.lean`, `ZigLean/Conc/Base/Word.lean`) -/
 
 /-- The states `0`, `1`, `3` of a `u32` mutex word. -/
-def statesU32 : Lock.States (BitVec 32) where
+def statesU32 : Full.LockWord.States (BitVec 32) where
   unl := 0
   one := 1
   two := 3
@@ -64,9 +69,9 @@ def statesU32 : Lock.States (BitVec 32) where
   ne02 := by decide
   ne12 := by decide
 
-nonvacuity_witness Lock.States.dec0 := ⟨BitVec 32, inferInstance, statesU32, trivial⟩
-nonvacuity_witness Lock.States.dec1 := ⟨BitVec 32, inferInstance, statesU32, trivial⟩
-nonvacuity_witness Lock.States.dec2 := ⟨BitVec 32, inferInstance, statesU32, trivial⟩
+nonvacuity_witness Full.LockWord.States.dec0 := ⟨BitVec 32, inferInstance, statesU32, trivial⟩
+nonvacuity_witness Full.LockWord.States.dec1 := ⟨BitVec 32, inferInstance, statesU32, trivial⟩
+nonvacuity_witness Full.LockWord.States.dec2 := ⟨BitVec 32, inferInstance, statesU32, trivial⟩
 
 nonvacuity_witness Word.enc_val := ⟨32, 4, ⟨0, 0, by decide⟩, 0, trivial⟩
 

@@ -721,11 +721,11 @@ The scheduler (`ZigLean/Conc/Sched.lean`) calls these at a `wait`/`wake` sync op
 schedules (`ZigLean/Conc/Logic.lean`) can name it. -/
 
 /-- A futex wait of the current thread at `p` for the value `e`: `true` if the thread sleeps
-(it is added to `waiters`). A woken thread goes on. Else the kernel compares the `u32` at `p`,
-the newest write (the block's bytes): the thread sleeps if it is `e`, else it goes on. The
-kernel's compare is an atomic read of the word (`recordAccess … .atomicRead`): a plain write
-that races with it is `.illegal`. -/
-def futexWait (p : Ptr) (e : BitVec 32) : MemM Bool := do
+(it is added to `waiters` at the word's key in the domain `shared`, `Block.key`). A woken thread
+goes on. Else the kernel compares the `u32` at `p`, the newest write (the block's bytes): the
+thread sleeps if it is `e`, else it goes on. The kernel's compare is an atomic read of the word
+(`recordAccess … .atomicRead`): a plain write that races with it is `.illegal`. -/
+def futexWait (p : Ptr) (e : BitVec 32) (shared : Bool) : MemM Bool := do
   let m ← get
   if m.woken.contains m.current then
     set { m with woken := m.woken.erase m.current }
@@ -736,7 +736,7 @@ def futexWait (p : Ptr) (e : BitVec 32) : MemM Bool := do
     let m ← get
     let v ← intOfBytes 32 (blk.bytes.extract o (o + 4))
     if v = e then
-      set { m with waiters := m.waiters.push (m.current, p) }
+      set { m with waiters := m.waiters.push (m.current, blk.key o shared) }
       pure true
     else pure false
 
@@ -750,19 +750,44 @@ def wakePick : Nat → List ThreadId → List Nat → List ThreadId
     let i := cs.headD 0 % (ws.length + 1)
     (w :: ws)[i]'(Nat.mod_lt _ (Nat.succ_pos _)) :: wakePick n ((w :: ws).eraseIdx i) cs.tail
 
-/-- The waiters that a wake of up to `n` waiters at `p` wakes, picked by the choices `cs`. -/
-def wakeSet (ws : Array (ThreadId × Ptr)) (p : Ptr) (n : Nat) (cs : List Nat) : Array ThreadId :=
+/-- The waiters that a wake of up to `n` waiters at the key `p` wakes, picked by the choices
+`cs`. -/
+def wakeSet (ws : Array (ThreadId × FutexKey)) (p : FutexKey) (n : Nat) (cs : List Nat) :
+    Array ThreadId :=
   (wakePick n ((ws.filter (·.2 == p)).toList.map (·.1)) cs).toArray
 
-/-- A futex wake at `p`: up to `n` of the waiters at `p` are woken, the ones that the choices
-`cs` pick (`wakeSet`; the scheduler takes them from the oracle). No happens-before edge (the std
-code reads the value again with an acquire). -/
-def futexWake (p : Ptr) (n : Nat) (cs : List Nat) : MemM Unit := modify fun m =>
-  let woke := wakeSet m.waiters p n cs
+/-- A futex wake at the key `k`: up to `n` of the waiters at `k` are woken, the ones that the
+choices `cs` pick (`wakeSet`; the scheduler takes them from the oracle). No happens-before edge
+(the std code reads the value again with an acquire). -/
+def futexWake (k : FutexKey) (n : Nat) (cs : List Nat) : MemM Unit := modify fun m =>
+  let woke := wakeSet m.waiters k n cs
   { m with waiters := m.waiters.filter (fun w => !woke.contains w.1), woken := m.woken ++ woke }
 
-/-- The number of waiters at `p`. -/
-def waitersAt (ws : Array (ThreadId × Ptr)) (p : Ptr) : Nat := (ws.filter (·.2 == p)).size
+/-- A futex wake at `p` (`Io.futexWake`, `Thread.Futex.wake`): `futexWake` at `p`'s private key
+(`Mem.keyAt`), resolved in the step that wakes, as the kernel resolves it in the syscall. A
+protocol's invariant then reads its word's key in the memory of the wake (`Mem.wordKey`): no key
+resolved earlier has to stay valid across other threads' steps. A pointer into a block id that
+does not exist has no key and wakes no thread; a pointer with no block (`⟨none, off⟩`) has the
+private key of its address `off`, as a raw address has in the kernel. -/
+def futexWakePtr (p : Ptr) (n : Nat) (cs : List Nat) : MemM Unit := modify fun m =>
+  match m.keyAt p false with
+  | some k =>
+    let woke := wakeSet m.waiters k n cs
+    { m with waiters := m.waiters.filter (fun w => !woke.contains w.1), woken := m.woken ++ woke }
+  | none => m
+
+/-- The wake at a pointer with a key is the wake at the key. -/
+theorem futexWakePtr_eq {p : Ptr} {k : FutexKey} {m : Mem} (h : m.keyAt p false = some k)
+    (n : Nat) (cs : List Nat) : (futexWakePtr p n cs).run m = (futexWake k n cs).run m := by
+  simp only [futexWakePtr, futexWake, StateT.run_modify, h]
+
+/-- The wake at a pointer without a key changes nothing. -/
+theorem futexWakePtr_none {p : Ptr} {m : Mem} (h : m.keyAt p false = none) (n : Nat)
+    (cs : List Nat) : ((futexWakePtr p n cs).run m).run = some (.ok ((), m)) := by
+  simp only [futexWakePtr, StateT.run_modify, h]; rfl
+
+/-- The number of waiters at the key `p`. -/
+def waitersAt (ws : Array (ThreadId × FutexKey)) (p : FutexKey) : Nat := (ws.filter (·.2 == p)).size
 
 theorem wakePick_mem : ∀ {n : Nat} {l : List ThreadId} {cs : List Nat} {u : ThreadId},
     u ∈ wakePick n l cs → u ∈ l
@@ -805,8 +830,8 @@ theorem mem_wakePick_of_length_le :
 
 /-- A request covering the actual queue at `p` selects each of its entries' IDs.
 No singleton-waiter or distinct-thread-ID premise is required. -/
-theorem mem_wakeSet_of_count {ws : Array (ThreadId × Ptr)} {p : Ptr}
-    {n : Nat} {cs : List Nat} {w : ThreadId × Ptr}
+theorem mem_wakeSet_of_count {ws : Array (ThreadId × FutexKey)} {p : FutexKey}
+    {n : Nat} {cs : List Nat} {w : ThreadId × FutexKey}
     (hn : waitersAt ws p ≤ n) (hw : w ∈ ws) (hp : w.2 = p) :
     w.1 ∈ wakeSet ws p n cs := by
   have hl : ((ws.filter (·.2 == p)).toList.map (·.1)).length ≤ n := by
@@ -823,7 +848,7 @@ theorem wakePick_ne_nil {n : Nat} {l : List ThreadId} {cs : List Nat} (hn : 0 < 
   simp [wakePick]
 
 /-- A woken thread waited at `p`. -/
-theorem mem_wakeSet {ws : Array (ThreadId × Ptr)} {p : Ptr} {n : Nat} {cs : List Nat}
+theorem mem_wakeSet {ws : Array (ThreadId × FutexKey)} {p : FutexKey} {n : Nat} {cs : List Nat}
     {u : ThreadId} (h : u ∈ wakeSet ws p n cs) : ∃ w ∈ ws, w.2 = p ∧ w.1 = u := by
   unfold wakeSet at h
   have := wakePick_mem (List.mem_toArray.mp h)
@@ -832,7 +857,7 @@ theorem mem_wakeSet {ws : Array (ThreadId × Ptr)} {p : Ptr} {n : Nat} {cs : Lis
   exact ⟨w, hw, hp, rfl⟩
 
 /-- A wake of at least one waiter at `p`, where one waits, wakes one. -/
-theorem wakeSet_nonempty {ws : Array (ThreadId × Ptr)} {p : Ptr} {n : Nat} {cs : List Nat}
+theorem wakeSet_nonempty {ws : Array (ThreadId × FutexKey)} {p : FutexKey} {n : Nat} {cs : List Nat}
     (hn : 0 < n) (hw : ∃ w ∈ ws, w.2 = p) : ∃ u, u ∈ wakeSet ws p n cs := by
   have hl : (ws.filter (·.2 == p)).toList.map (·.1) ≠ [] := by
     obtain ⟨w, hw, hp⟩ := hw
@@ -845,7 +870,7 @@ theorem wakeSet_nonempty {ws : Array (ThreadId × Ptr)} {p : Ptr} {n : Nat} {cs 
 
 /-- A wake of at least one waiter at `p`, where every waiter at `p` is thread `u` and one waits,
 wakes `u`. -/
-theorem mem_wakeSet_of_all {ws : Array (ThreadId × Ptr)} {p : Ptr} {n : Nat} {cs : List Nat}
+theorem mem_wakeSet_of_all {ws : Array (ThreadId × FutexKey)} {p : FutexKey} {n : Nat} {cs : List Nat}
     {u : ThreadId} (hn : 0 < n) (hw : ∃ w ∈ ws, w.2 = p) (hall : ∀ w ∈ ws, w.2 = p → w.1 = u) :
     u ∈ wakeSet ws p n cs := by
   obtain ⟨v, hv⟩ := wakeSet_nonempty (cs := cs) hn hw

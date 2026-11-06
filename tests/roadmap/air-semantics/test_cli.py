@@ -62,6 +62,23 @@ def certificate_sets(text):
     return certified, excluded
 
 
+# The Canon rewrites in pipeline order (Air2Lean/Air/Canon.lean `canonicalizeTraced`).
+CANON_PASSES = ['versionTags', 'argRanks', 'errTraces', 'dropDeadAllocPlaceholders',
+                'dropDeadRuntimeLanePtrs', 'forwardReadOnlyCopies', 'itemReads', 'dropTrueChecks',
+                'sinkPastChecks', 'renumber']
+
+
+def trusted_canon(text):
+    """Each function's fired Canon rewrites, from the report's `trusted-Canon` lines."""
+    fired = {}
+    for name, passes in re.findall(r'^\* `([^`]+)` trusted-Canon: (.*)$', text, re.M):
+        assert name not in fired, name
+        fired[name] = [] if passes == 'none' else passes.split(', ')
+        indices = [CANON_PASSES.index(p) for p in fired[name]]
+        assert indices == sorted(set(indices)), (name, passes)
+    return fired
+
+
 def check_example(binary, ex, work):
     plain = work / f'{ex}.lean'
     cert = work / f'{ex}.cert.lean'
@@ -83,6 +100,12 @@ def check_example(binary, ex, work):
     golden = (ROOT / 'tests/golden' / ex / 'air').glob('*.json')
     names = sorted(json.loads(path.read_text())['name'] for path in golden)
     assert sorted(certified + excluded) == names, (ex, certified, excluded, names)
+    # Every function, certified or not, names the Canon rewrites it trusts. `renumber` is never
+    # among them: the native binding (`CanonCertificate.renumberBound`) matches each function's
+    # renumbering to `renFunc` of its input, so `execFunc_rename` covers it.
+    trusted = trusted_canon(text)
+    assert sorted(trusted) == names, ex
+    assert not [name for name, passes in trusted.items() if 'renumber' in passes], (ex, trusted)
     canon = work / f'{ex}.canon.json'
     result = run(binary, ex, canon, '--canon-certificate')
     assert result.returncode == 0, result.stderr
@@ -195,6 +218,7 @@ def check_no_escape_hatches():
     paths = [ROOT / 'Air2Lean/Sem.lean', ROOT / 'Air2Lean/SemView.lean', ROOT / 'Air2Lean/SemAttr.lean',
              ROOT / 'Air2Lean/Certificate.lean',
              ROOT / 'Air2Lean/CanonSem.lean', ROOT / 'Air2Lean/CanonCertificate.lean',
+             ROOT / 'Air2Lean/Renumber.lean',
              *(ROOT / 'Proofs' / ex.capitalize() / 'AirCert.lean' for ex in EXAMPLES)]
     for path in paths:
         code = re.sub(r'/-.*?-/|--[^\n]*', '', path.read_text(), flags=re.S)

@@ -1,5 +1,5 @@
 //! Prints each case of `concurrency.zig` as `name: value` (decimal) on stderr, in the order of
-//! `ConcDiff.lean`; `futexNoSleep` (Zig 0.14.1 and 0.15.2 only) last, as `ConcFutex.lean` prints it.
+//! `BigEndian/Conc/*/*/Diff.lean`; `futexNoSleep` (Zig 0.14.1 and 0.15.2 only) last, as `Futex.lean` prints it.
 const std = @import("std");
 const c = @import("concurrency.zig");
 

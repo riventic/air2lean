@@ -111,6 +111,13 @@ def BlockKind.mappedLo : BlockKind → Nat
   | .mapped lo => lo
   | _ => 0
 
+/-- The block's pages are anonymous memory natively: a stack, a heap block or an OS mapping
+(`mmap` admits only `MAP_PRIVATE | MAP_ANONYMOUS`, OSM-01). A global, and an allocator's block
+(whose buffer may be a global), can lie on a file-backed page. -/
+def BlockKind.anon : BlockKind → Bool
+  | .stack | .heap | .mapped _ => true
+  | .global | .constGlobal | .owned _ => false
+
 @[simp] theorem BlockKind.mappedLo_mapped (lo : Nat) : (BlockKind.mapped lo).mappedLo = lo := rfl
 @[simp] theorem BlockKind.mappedLo_stack : BlockKind.stack.mappedLo = 0 := rfl
 @[simp] theorem BlockKind.mappedLo_heap : BlockKind.heap.mappedLo = 0 := rfl
@@ -479,6 +486,25 @@ structure StackState where
   native : Option NativeStack := none
   deriving Repr, Inhabited
 
+/-- The key of a futex (premise OSF-02): its domain and the numeric address of the word. Linux's
+`union futex_key` (v6.16 `kernel/futex/core.c`, `get_futex_key`) of a private futex is the
+address space and the address; a shared futex on anonymous memory has the same address space and
+address but `FUT_OFF_MMSHARED` in its offset, so the two never match. xnu's `ULK_UADDR` key is
+the task and the address (process-local): `shared = true` is Linux's alone, and a Darwin row
+forms only keys with `shared = false`. A process has one address space, so the model keeps only
+the domain and the address.
+
+The address is the `usize` that the kernel receives (`futexAddr` of the pointer's numeric
+address), so every key is the native key's address, also for a pointer whose numeric address
+lies outside `[0, 2 ^ 64)`. Two words of one block at offsets below `2 ^ 64` have different keys
+without any bound on the block (`Mem.wordKey_ne_off`, `Mem.keyAt_ne_off`). -/
+structure FutexKey where
+  /-- A shared (not `FUTEX_PRIVATE_FLAG`) key. -/
+  shared : Bool
+  /-- The address of the word as a `usize`. -/
+  addr : Nat
+  deriving DecidableEq, Repr, Inhabited
+
 structure Mem where
   blocks : Array Block := #[]
   /-- The address of every new block (`Mem.newAddr`). -/
@@ -504,9 +530,9 @@ structure Mem where
   /-- The id of the next message. -/
   nextMsg : Nat := 0
   /-- The futex queue (the kernel's state, `ZigLean/Mem/Thread.lean`): the threads that wait at
-  a futex, and the address. A wake picks among them (`Thread.wakeSet`): the order is not a
-  wake order. -/
-  waiters : Array (ThreadId × Ptr) := #[]
+  a futex, and its key (`FutexKey`: domain and numeric address, not the provenance pointer). A
+  wake picks among them (`Thread.wakeSet`): the order is not a wake order. -/
+  waiters : Array (ThreadId × FutexKey) := #[]
   /-- The threads that a futex wake woke: their wait goes on at their next turn. -/
   woken : Array ThreadId := #[]
   /-- The tasks of each `Io.Group` (by its address) that no `await` has joined yet, in the order
@@ -1269,6 +1295,32 @@ def ptrAddr (p : Ptr) : MemM Int := do
     match (← get).blocks[b]? with
     | some blk => pure (blk.addr + p.off)
     | none => throw .illegal
+
+/-- The address that the kernel receives for a pointer with numeric address `a`: its `usize`. -/
+def futexAddr (a : Int) : Nat := (a % 2 ^ 64).toNat
+
+/-- The futex key of `p` in the domain `shared` (`FutexKey`): the `usize` of its address
+(`addrIn`, `ptrAddr` without the state monad); `none` if `p`'s block does not exist (`ptrAddr`
+throws). -/
+def Mem.keyAt (m : Mem) (p : Ptr) (shared : Bool) : Option FutexKey :=
+  (addrIn m.blocks p).map fun a => ⟨shared, futexAddr a⟩
+
+/-- The futex key of the word at offset `o` of `blk` in the domain `shared` (`Mem.keyAt` of a
+pointer into the block, `Mem.keyAt_of_access`). -/
+def Block.key (blk : Block) (o : Nat) (shared : Bool) : FutexKey :=
+  ⟨shared, futexAddr (blk.addr + (o : Int))⟩
+
+/-- `Mem.keyAt` in the state monad: `.illegal` if `p`'s block does not exist. -/
+def futexKeyOf (p : Ptr) (shared : Bool) : MemM FutexKey := do
+  let some k := (← get).keyAt p shared | throw .illegal
+  pure k
+
+/-- The futex key of the word at offset `o` of block `b` in the domain `shared`, as a total
+function of the memory: `Mem.keyAt` of `⟨some b, o⟩` where block `b` exists
+(`Mem.keyAt_wordKey`). A protocol's queue invariant names its word's waiters by this key; it
+reads only the block's address, so it stays while the block does (`Mem.wordKey_of_addr`). -/
+def Mem.wordKey (m : Mem) (b : BlockId) (o : Nat) (shared : Bool := false) : FutexKey :=
+  ⟨shared, futexAddr (((m.blocks[b]?).map (·.addr)).getD 0 + (o : Int))⟩
 
 /-- The pointer to address `n`: inside or one past the block whose address range covers `n`, at
 the matching offset, or `⟨none, n⟩` if no block covers it (`@ptrFromInt`). A dead block still

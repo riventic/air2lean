@@ -56,7 +56,7 @@ class UniverseTests(unittest.TestCase):
         indexed = {f.rel for f in premises.theorem_files(premises.load_repository(ROOT, config))}
         audited = {u.file for u in units} | {m.replace('.', '/') + '.lean' for m in shipped}
         self.assertEqual(indexed - audited, set())
-        self.assertTrue({'tutorials/first-proof/Main.lean', 'tests/roadmap/vcs/Result.lean',
+        self.assertTrue({'tutorials/first-proof/Main.lean', 'tests/roadmap/vcs/Memory.lean',
                          'case-studies/flow-time/FlowTime/Proofs.lean'} <= audited)
         gated = {u.file: u.gate for u in units if u.gate}
         # A file that imports a gated file inherits its gate (`gate_of`), as the strength log of
@@ -98,6 +98,20 @@ class UniverseTests(unittest.TestCase):
             self.assertIsNone(units[rel].root)
             self.assertTrue(units[rel].module.startswith('Universe.'))
         self.assertEqual(units['tests/roadmap/idle-loops/IdleLoop/Gen.lean'].module, 'IdleLoop.Gen')
+
+    def test_fixture_lake_modules_have_their_lake_names(self):
+        # A fixture Lake module that nothing imports and that imports no local module was named
+        # from its own directory (`Contracts`), so its audit and its float labels disagreed with
+        # every Lake-built audit (`Outcomes.Contracts`).
+        import fixtures
+        lake = fixtures.source_modules(ROOT)  # Lake's own enumeration (`lake query`)
+        self.assertEqual(fixtures.source_roots(ROOT), {file: root for file, root in lake.values()})
+        units = {u.file: u for u in universe.universe()[1]}
+        for module, (file, root) in lake.items():
+            if file in units:
+                self.assertEqual((units[file].module, units[file].root), (module, root), file)
+        self.assertEqual(units['tests/roadmap/outcome-taxonomy/Outcomes/Contracts.lean'].module,
+                         'Outcomes.Contracts')
 
     def test_scan_rejects_kernel_bypass_and_placeholders(self):
         source = ('-- sorry in a comment is fine\n/- set_option debug.skipKernelTC true -/\n'
@@ -229,6 +243,10 @@ class ReplayTests(unittest.TestCase):
                            '[ "$1" != Bad ] || { echo rejected; exit 1; }\n[ "$1" != Killed ] || kill -9 $$\n')
         checker.chmod(0o755)
         (self.toolchain / 'bin/lean').write_text('lean')
+        # By default Lake resolves another lookup path, so no root-package receipt applies.
+        receipts = mock.patch.object(assumptions, 'lake_kernel_replay', return_value=None)
+        receipts.start()
+        self.addCleanup(receipts.stop)
 
     def checked(self):
         return sorted(self.calls.read_text().split()) if self.calls.exists() else []
@@ -263,6 +281,30 @@ class ReplayTests(unittest.TestCase):
         self.calls.unlink()
         record = assumptions.kernel_replay({'Good': 'g', 'Other': 'changed'}, self.toolchain, '', cache, lake)
         self.assertEqual((record['reused'], self.checked()), ([], ['Good', 'Other']))
+
+    def test_root_receipts_serve_the_lake_built_modules_only_with_a_cache(self):
+        cache, lake = self.toolchain / 'cache.json', frozenset({'Bad', 'Good'})
+        digests = {'Bad': 'b', 'Good': 'g', 'Local': 'l'}
+        receipts = {'Bad': {'status': 'fail', 'exit_code': 1, 'output': 'rejected'}, 'Good': {'status': 'pass'}}
+        with mock.patch.object(assumptions, 'lake_kernel_replay', return_value=receipts) as built:
+            record = assumptions.kernel_replay(digests, self.toolchain, '', cache, lake)
+        modules, package, *_, path = built.call_args.args
+        self.assertEqual((modules, package), (['Bad', 'Good'], assumptions.ROOT))
+        self.assertEqual(path.split(os.pathsep), [str(assumptions.ROOT / '.lake/build/lib/lean'),
+                                                  str(self.toolchain / 'lib/lean')])
+        self.assertEqual(self.checked(), ['Local'])  # only the module that is not Lake-built
+        # Lake may replay a receipt kept from an earlier build: a passing one counts as reused.
+        self.assertEqual(record['reused'], ['Good'])
+        self.assertEqual({r['module']: r['output'] for r in record['rejected']}, {'Bad': 'leanchecker exited 1\nrejected'})
+        self.calls.unlink()
+        # Lake resolves another path: checked afresh. No cache (a fresh replay, as proof receipts
+        # require): no receipt at all.
+        for allowed, value in ((cache, None), (None, receipts)):
+            with mock.patch.object(assumptions, 'lake_kernel_replay', return_value=value) as built:
+                record = assumptions.kernel_replay(digests, self.toolchain, '', allowed, lake)
+            self.assertEqual((built.called, self.checked(), record['reused'], record['status']),
+                             (allowed is not None, ['Bad', 'Good', 'Local'], [], 'fail'))
+            self.calls.unlink()
 
     def test_installed_input_changes_invalidate_cache_with_fixed_project_bytes(self):
         checker = (self.toolchain / 'bin/leanchecker').read_bytes()
@@ -439,11 +481,16 @@ class ReplayTests(unittest.TestCase):
             assumptions.kernel_replay(digests, self.toolchain, '', None, lake)
         self.assertEqual(self.checked(), ['Lib', 'Lib'])
 
-    def test_gate_scripts_keep_their_replay_cache_in_the_run_directory(self):
+    def test_fixture_scripts_keep_their_replay_cache_in_the_run(self):
+        # These scripts audit their Lake modules through `fixtures.py audit`, whose replay cache is
+        # its own run directory's file or the fixture-checks run's (AIR2LEAN_FIXTURE_REPLAY_CACHE),
+        # never one shared across runs; none of them passes a cache of its own.
+        fixtures = (ROOT / 'scripts/fixtures.py').read_text()
+        self.assertIn('os.environ.get("AIR2LEAN_FIXTURE_REPLAY_CACHE") or work / "replay-cache.json"', fixtures)
         for script in ('nan-bits', 'enc-exactness', 'packed-casts', 'try-pointers/lifetimes'):
             text = (ROOT / 'tests/roadmap' / script / 'check.sh').read_text()
-            self.assertIn('--replay-cache "$work/replay-cache.json"', text, script)
-            self.assertIn('work=$(mktemp -d', text, script)
+            self.assertIn('scripts/fixtures.py audit', text, script)
+            self.assertNotIn('--replay-cache', text, script)
 
 
 class LakeExtractionTests(unittest.TestCase):
@@ -752,12 +799,13 @@ class FreshnessTests(unittest.TestCase):
             freshness = assumptions.replay_and_freshness(raw)
             self.assertEqual(set(replay.call_args.kwargs),
                              {'expected_runtime', 'compiled_inputs_sha256', 'validate_inputs', 'lake_package'})
-            self.assertIsNone(replay.call_args.kwargs['lake_package'])  # no package: no receipts
+            self.assertIsNone(replay.call_args.kwargs['lake_package'])  # no package: no package receipts
             self.assertEqual(replay.call_args.kwargs['compiled_inputs_sha256'], universe.input_digest([]))
             validate = replay.call_args.kwargs['validate_inputs']
             validate()
-            inputs.return_value = [['changed synthetic compiled input']]
-            with self.assertRaisesRegex(ValueError, 'canonical Lake compiled inputs changed'):
+            inputs.return_value = [['changed', 'changed', True, [['changed/M.olean', '', '00']]]]
+            with self.assertRaisesRegex(ValueError, 'canonical Lake compiled inputs changed during kernel '
+                                                    r'replay: changed \(root\): absent -> .*changed/M.olean'):
                 validate()
         runtime = self.report['extractor']['toolchain_runtime_sha256']
         self.assertEqual(replay.call_args.kwargs['expected_runtime'], runtime)

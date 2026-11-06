@@ -13,11 +13,6 @@ register_option fsym.report : Bool := {
   descr := "emit a versioned JSON report of fsym's residual goals"
 }
 
-register_option fsym.quiet : Bool := {
-  defValue := false
-  descr := "suppress fsym's human-readable stop messages (reports are independent)"
-}
-
 namespace Zig.Full.Auto.Report
 
 open Lean Meta Elab Tactic
@@ -156,9 +151,8 @@ def collect (run : TacticM (List MVarId)) : TacticM (List MVarId × Result) := d
     cleanup c
     collectors.modify (·.erase id)
 
-/-- The old human-readable messages are useful by default. Machine consumers can ask for a
-quiet walk, and a JSON-reporting walk emits just its report. -/
+/-- A human-readable stop message; a JSON-reporting walk emits just its report. -/
 def stopMessage (msg : MessageData) : TacticM Unit := do
-  unless fsym.quiet.get (← getOptions) || (← current).isSome do logInfo msg
+  unless (← current).isSome do logInfo msg
 
 end Zig.Full.Auto.Report

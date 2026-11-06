@@ -110,7 +110,7 @@ def cmpxchgWeakAsCOf (o : ByteOrder) {α : Type} {n : Nat} [Packed α n] (succ f
 def futexWaitCOf (o : ByteOrder) {α : Type} {n : Nat} [Packed α n] (_ : Io) (p : Ptr)
     (expected : α) : CM Tgt σ Unit :=
   StateT.lift (discard (ConcM.sync (Tgt := Tgt)
-    (.wait p (o.swapBits ((Packed.toBits expected).setWidth 32)))))
+    (.wait p (o.swapBits ((Packed.toBits expected).setWidth 32)) false)))
 
 def futexWaitCancelableCOf (o : ByteOrder) {α : Type} {n : Nat} [Packed α n] (io : Io) (p : Ptr)
     (expected : α) : CM Tgt σ (Except ErrName Unit) := do

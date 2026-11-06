@@ -60,6 +60,8 @@ def libc_ref_memset (p0 : Zig.Ptr) (p1 : BitVec 32) (p2 : BitVec 64) : Zig.MemM 
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] libc_ref_memset.loop8 libc_ref_memset
+
 structure fillSumLocals where
   buf : Zig.Ptr
   sum : BitVec 32
@@ -128,6 +130,8 @@ def fillSum (p0 : BitVec 64) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] fillSum.loop18 fillSum
+
 structure libc_ref_strlenLocals where
   i : BitVec 64
   deriving Inhabited
@@ -172,6 +176,8 @@ def libc_ref_strlen (p0 : Zig.Ptr) : Zig.MemM (BitVec 64) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] libc_ref_strlen.loop4 libc_ref_strlen
+
 structure greetLenLocals where
   deriving Inhabited
 
@@ -194,5 +200,7 @@ def greetLen (p0 : BitVec 32) : Zig.MemM (BitVec 64) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] greetLen
 
 end ExternCalls

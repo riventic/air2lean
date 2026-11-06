@@ -28,13 +28,38 @@ inductive LPh where
   | wake
   /-- Out of the lock's code, at the futex wait of another sync object: it can sleep there. -/
   | away
+  /-- It holds the lock and is at the futex wait of another sync object (an inner lock of a lock
+  order, a semaphore): it can sleep there (`LockWord.nest`). -/
+  | holdsAway
   deriving DecidableEq
 
 /-- In the lock's code, after `lock`'s first try: the thread will take the lock or wake a
 waiter. -/
 def LPh.busy : LPh → Bool
-  | .spin | .wait | .holds | .wake => true
+  | .spin | .wait | .holds | .wake | .holdsAway => true
   | _ => false
+
+/-- The thread holds the lock: awake (`holds`) or at another object's futex wait
+(`holdsAway`). -/
+def LPh.held : LPh → Bool
+  | .holds | .holdsAway => true
+  | _ => false
+
+theorem LPh.held_of_holds {p : LPh} (h : p = .holds) : p.held = true := by
+  rw [h]; rfl
+
+theorem LPh.ne_gone_of_held {p : LPh} (h : p.held = true) : p ≠ .gone := by
+  rintro rfl; cases h
+
+/-- A holder that is not at `holdsAway` is awake. -/
+theorem LPh.holds_of_held {p : LPh} (h : p.held = true) (hz : p ≠ .holdsAway) : p = .holds := by
+  cases p <;> first | rfl | exact absurd rfl hz | cases h
+
+theorem LPh.ne_holdsAway_of_not_held {p : LPh} (h : p.held = false) : p ≠ .holdsAway := by
+  rintro rfl; cases h
+
+theorem LPh.busy_of_held {p : LPh} (h : p.held = true) : p.busy = true := by
+  cases p <;> first | rfl | cases h
 
 /-- The clock `c` happened before every thread. -/
 def AllLe (m : Mem) (c : VClock) : Prop :=
@@ -44,10 +69,28 @@ def AllLe (m : Mem) (c : VClock) : Prop :=
 def SomeLe (m : Mem) (c : VClock) : Prop :=
   ∃ u < m.threads.size, VClock.le c (m.clocks[u]!) = true
 
+/-- The clock `c` happened before every thread of the set `A` (a protocol's threads that may still
+access a word: `Word.Ok`). With every thread in `A` it is `AllLe`. -/
+def AllLeOn (A : ThreadId → Prop) (m : Mem) (c : VClock) : Prop :=
+  ∀ u < m.threads.size, A u → VClock.le c (m.clocks[u]!) = true
+
+theorem AllLe.on {m : Mem} {c : VClock} (h : AllLe m c) (A : ThreadId → Prop) : AllLeOn A m c :=
+  fun u hu _ => h u hu
+
+/-- A smaller set. -/
+theorem AllLeOn.anti {A B : ThreadId → Prop} {m : Mem} {c : VClock} (h : AllLeOn A m c)
+    (hB : ∀ u, B u → A u) : AllLeOn B m c :=
+  fun u hu hb => h u hu (hB u hb)
+
+theorem allLeOn_mono {A : ThreadId → Prop} {m m' : Mem} {c : VClock} (ht : m'.threads = m.threads)
+    (hcl : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
+    (h : AllLeOn A m c) : AllLeOn A m' c := fun u hu ha =>
+  VClock.le_trans (h u (ht ▸ hu) ha) (hcl u (ht ▸ hu))
+
 theorem allLe_mono {m m' : Mem} {c : VClock} (ht : m'.threads = m.threads)
     (hcl : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
     (h : AllLe m c) : AllLe m' c := fun u hu =>
-  VClock.le_trans (h u (ht ▸ hu)) (hcl u (ht ▸ hu))
+  allLeOn_mono ht hcl (h.on fun _ => True) u hu trivial
 
 theorem someLe_mono {m m' : Mem} {c : VClock} (ht : m'.threads = m.threads)
     (hcl : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)

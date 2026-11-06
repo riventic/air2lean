@@ -11,7 +11,12 @@ For each function in the certificate fragment (`fragmentReason?`), writes a Lean
 * the complete original canonical program as constructor terms (`Reify.func`), before
   selecting the certificate fragment;
 * a theorem that `Air2Lean.Sem.execFunc` of that `Func` equals the generated definition
-  (`docs/air-semantics.md`), proved by the kernel when the file is compiled.
+  (`docs/air-semantics.md`), proved by the kernel when the file is compiled;
+* a report of the certified functions, those outside the fragment with their reasons, and the
+  Canon rewrites that fired on each function (`trusted-Canon`: the theorems are over canonical
+  AIR, so these rewrites stay in the trusted base). A `renumber` natively bound to
+  `Renumber.execFunc_rename` is left out; its binding (TRU-02) and the program-level renaming stay
+  trusted (docs/air-semantics.md §Canonicalization).
 
 The certificate is a separate file: the ordinary translation output does not change. Nothing
 here is trusted for soundness except source quotation (the printed term must be the decoded `Func`;
@@ -1439,9 +1444,12 @@ def viewCert (f : Func) (sh : CertShape) (ns gen air d : String) (calleeLemmas :
 /-- The certificate file for the complete original `program` and the actual emitted
 declaration plan. Native effects/costs remain derived from `program`; declaration names,
 capture shapes and executable proof cliques come from the same emitter's `parts`.
-`genModule` defines these declarations in namespace `ns`. -/
+`genModule` defines these declarations in namespace `ns`. `canonFired` names each function's
+fired Canon rewrites (`Raw.CanonTrace.fired`, without a natively bound `renumber`); the report
+lists them as trusted-Canon, and a function without an entry fails the certificate closed. -/
 def emit (program : Program) (ns : String) (parts : EmitParts)
-    (genModule : String) (metadata : Lean.Json) : Except String String := do
+    (genModule : String) (metadata : Lean.Json)
+    (canonFired : Array (String × Array String)) : Except String String := do
   let compiled ← (compiledGroups metadata).mapError ("compiler fixpoint metadata: " ++ ·)
   unless compiled.size == parts.declGroups.countP (·.recursive) do
     throw "compiler fixpoint metadata has missing or unexpected executable cliques"
@@ -1481,6 +1489,14 @@ def emit (program : Program) (ns : String) (parts : EmitParts)
     "", "Outside the certificate fragment:", ""]
   for (n, r) in out do lines := lines.push s!"* `{n}`: {r}"
   if out.isEmpty then lines := lines.push "(none)"
+  lines := lines ++ #["", "The Canon rewrites that fired on each function (`Raw.canonicalizeTraced`); a certificate",
+    "is over the canonical AIR, so they are trusted (docs/air-semantics.md §Canonicalization).",
+    "`renumber` is not listed where its native binding (TRU-02) to `Renumber.execFunc_rename` holds;",
+    "that binding is per function, and the program-level renaming stays trusted:", ""]
+  let firedOf : Std.HashMap String (Array String) := .ofList canonFired.toList
+  for f in funcs do
+    let some fired := firedOf[f.name]? | throw s!"no Canon trace for {f.name}"
+    lines := lines.push s!"* `{f.name}` trusted-Canon: {if fired.isEmpty then "none" else ", ".intercalate fired.toList}"
   lines := lines ++ #["-/", ""]
   if frag.isEmpty then
     lines := lines.push s!"end {ns}.AirCert"

@@ -45,6 +45,8 @@ def maybeBytePtr  : Zig.MemM (Zig.Ptr) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] maybeBytePtr
+
 structure maybeElemPtrLocals where
   deriving Inhabited
 
@@ -57,6 +59,8 @@ def maybeElemPtr  : Zig.MemM (Zig.Ptr) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] maybeElemPtr
+
 structure maybeSliceLocals where
   deriving Inhabited
 
@@ -68,6 +72,8 @@ def maybeSlice  : Zig.MemM (Zig.Slice) := do
     pure (.ret (⟨(⟨some 0, 15⟩ : Zig.Ptr), (2 : BitVec 64)⟩ : Zig.Slice))) : Zig.MM maybeSliceLocals maybeSliceExit).run' (default : maybeSliceLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] maybeSlice
 
 structure projectMaybeLocals where
   deriving Inhabited
@@ -85,6 +91,8 @@ def projectMaybe (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] projectMaybe
+
 structure projectResLocals where
   deriving Inhabited
 
@@ -100,6 +108,8 @@ def projectRes (p0 : Zig.Ptr) : Zig.MemM (Zig.Ptr) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] projectRes
+
 structure readResElemLocals where
   deriving Inhabited
 
@@ -113,6 +123,8 @@ def readResElem  : Zig.MemM (BitVec 8) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] readResElem
+
 structure resCodePtrLocals where
   deriving Inhabited
 
@@ -125,6 +137,8 @@ def resCodePtr  : Zig.MemM (Zig.Ptr) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] resCodePtr
+
 structure resElemPtrLocals where
   deriving Inhabited
 
@@ -136,5 +150,7 @@ def resElemPtr  : Zig.MemM (Zig.Ptr) := do
     pure (.ret (⟨some 0, 24⟩ : Zig.Ptr))) : Zig.MM resElemPtrLocals resElemPtrExit).run' (default : resElemPtrLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] resElemPtr
 
 end ConstBases

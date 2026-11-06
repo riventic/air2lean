@@ -433,6 +433,16 @@ theorem forward_substitution {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
     P.WP t (pure ()) (fun _ _ _ _ => ∀ r : BitVec 32, r.toNat = 1 → r = 1) G m n := by
   fsym [forward_to_one]
 
+/-- **Both branches of a disjunction substitute one local** (`wpEntry` splits both before walking
+either): `a` by `b` in the first, by `c` in the second. Each branch is walked with its own
+substitutions (`eachBranch`): the caller's `hk a` is `hk b` in the first branch, not the second
+branch's `hk c`. -/
+theorem sibling_values {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
+    (G : ThreadId → γ) (m : Mem) (n : Nat) (s : Nat → Nat → Nat) (a b c : Nat)
+    (hab : b = a ∨ c = a) (hk : ∀ x, s x 0 = 0) (R : Nat → Prop) (hR : R 0) :
+    P.WP t (pure ()) (fun _ _ _ _ => R (s a 0)) G m n := by
+  fsym [hk a]
+
 /-- Normalize an incoming fact with an earlier opaque Boolean equation before splitting. -/
 theorem incoming_boolean_fact {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
     (G : ThreadId → γ) (m : Mem) (n : Nat) (flag : Nat → Bool) (k : Nat)
@@ -999,7 +1009,8 @@ theorem matcher_unknown_pointer_rollback (tok : Ptr → Nat → Array Byte → F
       throwError "matcher: refused atom retained an assignment"
     let c ← caches
     unless (← c.hyp.get).isEmpty && (← c.disch.get).isEmpty &&
-        (← c.facts.get).isEmpty && (← c.probe.get).isEmpty && (← c.detFail.get).isEmpty do
+        (← c.facts.get).isEmpty && (← c.probe.get).isEmpty && (← c.detFail.get).isEmpty &&
+        (← c.dischFail.get).isEmpty do
       throwError "matcher: refused atom retained speculative arithmetic state"
     let Y := mkAppN tok #[p, addr, bytes]
     let next ← mkFreshExprSyntheticOpaqueMVar (mkApp Y r)

@@ -71,8 +71,8 @@ byte-order mistake the model would sleep forever.
 | File | Role |
 |---|---|
 | `air/<version>/concurrency/<target>/` | Exports for Zig 0.17.0 and 0.15.2 (`std.Thread.Futex` exists only up to 0.15.2), for s390x-linux, mips64-linux and x86_64-linux |
-| `conc-gen/<version>-<target>.lean` | Retained translations |
-| `ConcRun.lean`, `ConcDiff.lean`, `ConcFutex.lean` | The model's lines. Each case runs under 24 scheduler oracles and must give the same result under all of them |
+| `BigEndian/Conc/<version>/<target>/Gen.lean` | Retained translations (`<version>` as a name: `V0_17_0`; `<target>` `S390x`, `Mips64`, `X64`) |
+| `BigEndian/Conc/<version>/<target>/{Run,Diff,Futex}.lean` | The model's lines. Each case runs under 24 scheduler oracles and must give the same result under all of them. Written for 0.17.0 x86_64-linux (`Futex`: 0.15.2); the other modules are those with the version and target renamed (`scripts/fixtures.py instance ... --write` after an edit) |
 | `concurrency_native.zig`, `observed/concurrency-<version>-<target>.txt` | The native program and its output |
 
 ```sh

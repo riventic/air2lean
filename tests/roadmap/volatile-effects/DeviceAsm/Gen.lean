@@ -26,4 +26,6 @@ def elapsed  : Zig.MemM (BitVec 64) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] elapsed
+
 end DeviceAsm

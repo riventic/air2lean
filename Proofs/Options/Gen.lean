@@ -57,6 +57,8 @@ def find (p0 : Array (BitVec 32)) (p1 : BitVec 32) : Zig.Result (Option (BitVec 
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] find.loop6 find
+
 structure findOrLocals where
   deriving Inhabited
 
@@ -82,6 +84,8 @@ def findOr (p0 : Array (BitVec 32)) (p1 : BitVec 32) : Zig.Result (BitVec 64) :=
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] findOr
+
 structure firstIndexPlusOneLocals where
   deriving Inhabited
 
@@ -106,5 +110,7 @@ def firstIndexPlusOne (p0 : Array (BitVec 32)) (p1 : BitVec 32) : Zig.Result (Bi
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] firstIndexPlusOne
 
 end Options

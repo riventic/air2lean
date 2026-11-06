@@ -1,0 +1,600 @@
+{
+  "schema": 1,
+  "scopes": {
+    "sequential": "one thread (no `ConcM`): a `Triple`/`*_run` lemma with `Mem.Seq`, or a pure function equation",
+    "single-step": "one operation or one step of a concurrent program (a `WP` rule or a step fact); composed into a program theorem, not one by itself",
+    "single-schedule": "one concrete oracle and fuel of `Sched.run`, computed by the kernel",
+    "bounded-schedules": "a finite, enumerated set of schedules or a bounded fuel/oracle domain",
+    "all-schedules": "every fuel and every oracle of `Sched.run` (the statement binds both)"
+  },
+  "theorems": [
+    {
+      "name": "swap_sep",
+      "module": "Proofs.Pointers.Sep",
+      "example": "pointers",
+      "scope": "sequential",
+      "domain": "`FTotalTriple` (total correctness, one thread: `Mem.FSeq`) for every `p q : Ptr` and `x y : BitVec 32`: `pts p 4 x ⋆ pts q 4 y` before, `swap` returns with the values swapped; any frame"
+    },
+    {
+      "name": "swap_self_sep",
+      "module": "Proofs.Pointers.Sep",
+      "example": "pointers",
+      "scope": "sequential",
+      "domain": "`FTotalTriple` for every `p` and `x`: `swap(p, p)` returns and keeps `pts p 4 x`"
+    },
+    {
+      "name": "counter_init",
+      "module": "Proofs.Slices.Sep",
+      "example": "slices",
+      "scope": "sequential",
+      "domain": "`mem0` (program start) owns the global `counter` with the value 0, split from the rest of the heap"
+    },
+    {
+      "name": "bump_spec",
+      "module": "Proofs.Slices.Sep",
+      "example": "slices",
+      "scope": "sequential",
+      "domain": "`Triple` for every counter value `x` with `x + 1 < 2^32` (no overflow): `bump` returns `x + 1` and stores it"
+    },
+    {
+      "name": "copyWithin_spec",
+      "module": "Proofs.Slices.Sep",
+      "example": "slices",
+      "scope": "sequential",
+      "domain": "`Triple` for every `u32` slice and every `d s n` with both ranges in bounds (they can overlap): the items are `copyItems vs d s n` after"
+    },
+    {
+      "name": "fill_sep",
+      "module": "Proofs.Slices.Sep",
+      "example": "slices",
+      "scope": "sequential",
+      "domain": "`Triple` for every `u8` slice whose length matches `vs` and every value `v`: every item is `v` after"
+    },
+    {
+      "name": "reverse_spec",
+      "module": "Proofs.Slices.Sep",
+      "example": "slices",
+      "scope": "sequential",
+      "domain": "`Triple` for every `u32` slice whose length matches `vs`: the items in the other order after"
+    },
+    {
+      "name": "Lists.Linked.reverse_total",
+      "module": "Proofs.Lists.Linked",
+      "example": "lists",
+      "gen": "Proofs/Lists/Open.lean",
+      "scope": "sequential",
+      "domain": "`FTotalTriple` for every linked list `list X hd xs` and per-node resource `X`: it returns the list in the other order"
+    },
+    {
+      "name": "Lists.Linked.sum_total",
+      "module": "Proofs.Lists.Linked",
+      "example": "lists",
+      "gen": "Proofs/Lists/Open.lean",
+      "scope": "sequential",
+      "domain": "`FTotalTriple` for every linked list `list X hd xs` whose sum fits in a `u64`: it returns the sum, the list unchanged"
+    },
+    {
+      "name": "Lists.Linked.sum_exact",
+      "module": "Proofs.Lists.Linked",
+      "example": "lists",
+      "gen": "Proofs/Lists/Open.lean",
+      "scope": "sequential",
+      "domain": "`FTotalTriple` for every linked list `list X hd xs` whose sum fits in a `u64`, with exactly `xs.length + 1` credits: it returns the sum, the list unchanged, and `xs.length + 1` receipts (one per loop-body run)"
+    },
+    {
+      "name": "Lists.Linked.sum_loop_not_within",
+      "module": "Proofs.Lists.Bounded",
+      "example": "lists",
+      "gen": "Proofs/Lists/Open.lean",
+      "scope": "sequential",
+      "domain": "for every credit-free start (`CreditFree`, `Holds`, `Mem.FSeq`) holding a list `list X hd xs` whose sum fits in a `u64`: no `FTotalTriple` with `xs.length` credits holds for `sum`'s loop, whatever the postcondition"
+    },
+    {
+      "name": "Lists.Linked.sum_not_within",
+      "module": "Proofs.Lists.Bounded",
+      "example": "lists",
+      "gen": "Proofs/Lists/Open.lean",
+      "scope": "sequential",
+      "domain": "for every credit-free start (`CreditFree`, `Holds`, `Mem.FSeq`) holding a list `list X hd xs` whose sum fits in a `u64`: no `FTotalTriple` with `xs.length` credits holds for `sum`, whatever the postcondition"
+    },
+    {
+      "name": "Lists.Linked.sum_steps",
+      "module": "Proofs.Lists.Bounded",
+      "example": "lists",
+      "gen": "Proofs/Lists/Open.lean",
+      "scope": "sequential",
+      "domain": "for every credit-free start (`CreditFree`, `Holds`, `Mem.FSeq`) holding a list `list X hd xs` whose sum fits in a `u64`: `sum` returns the sum of the items after exactly `xs.length + 1` steps (`Mem.ticks`), and its final memory's live bytes are the untouched frame and a part holding the same list (`FMatch`)"
+    },
+    {
+      "name": "Lists.Alloc.push_spec",
+      "module": "Proofs.Lists.Alloc",
+      "example": "lists",
+      "gen": "Proofs/Lists/Open.lean",
+      "scope": "sequential",
+      "domain": "`CTriple` (one thread) for every allocator whose environment entries meet `CAllocSpec` with invariant `I` and `I.fits 16 3`, and every fee `I.fee φ`: a new node in front of `next`, paid with the fee, or `error.OutOfMemory`, the fee back and only `I.own` and the vtable"
+    },
+    {
+      "name": "Lists.Alloc.freeAll_spec",
+      "module": "Proofs.Lists.Alloc",
+      "example": "lists",
+      "gen": "Proofs/Lists/Open.lean",
+      "scope": "sequential",
+      "domain": "`CTriple` (one thread) for every allocator whose environment entries meet `CAllocSpec` and every list `list I φ hd xs` of its grants: afterwards only `I.own`, one fee `I.fee φ` per node (`fees I φ xs.length`) and the vtable"
+    },
+    {
+      "name": "Lists.Alloc.freeAll_freed",
+      "module": "Proofs.Lists.Alloc",
+      "example": "lists",
+      "gen": "Proofs/Lists/Open.lean",
+      "scope": "sequential",
+      "domain": "`CTriple` (one thread) for every allocator whose environment entries meet `CAllocSpec` and every list `list I φ hd xs` of its grants: `freeAll_spec`'s postcondition and what the allocator's `free` told of each node (`freedSeg I hd none xs.length`, `FAllocInv.freed`)"
+    },
+    {
+      "name": "Lists.Append.append_spec",
+      "module": "Proofs.Lists.Append",
+      "example": "lists",
+      "gen": "Proofs/Lists/Open.lean",
+      "scope": "sequential",
+      "domain": "`CTriple` (one thread) for every allocator whose environment entries meet `CAllocSpec` with invariant `I` and the room `I.fits (4 * growTo (xs.length + 1)) 2`, every value, list `alist I φ p xs` (`.empty` included, with its unspent fee) and fee `I.fee φ`: `ArrayListUnmanaged(u32).append` gives `xs ++ [v]` (a new buffer when full) or `error.OutOfMemory` and the same list, and the fee back"
+    },
+    {
+      "name": "Lists.Container.linkedAdd_spec",
+      "module": "Proofs.Lists.Container",
+      "example": "lists",
+      "gen": "Proofs/Lists/Open.lean",
+      "scope": "sequential",
+      "domain": "`CTriple` (one thread) for every allocator whose environment entries meet `CAllocSpec` with `I.fits 16 3`, fee `I.fee φ`, linked list `LList I φ hd xs` and value: the generated `push` as an add at the end of the abstract sequence (`Added`), or `error.OutOfMemory`, the fee back and the list unchanged"
+    },
+    {
+      "name": "Lists.Container.arrayAdd_spec",
+      "module": "Proofs.Lists.Container",
+      "example": "lists",
+      "gen": "Proofs/Lists/Open.lean",
+      "scope": "sequential",
+      "domain": "`CTriple` (one thread) for every allocator whose environment entries meet `CAllocSpec` with the room of `append_spec`, fee `I.fee φ`, `ArrayListUnmanaged(u32)` `AList I φ p xs` and value: the generated `append` as the same add (`Added`), or `error.OutOfMemory`, the fee back and the list unchanged"
+    },
+    {
+      "name": "cmp64_spec",
+      "module": "Proofs.Floatops.Proofs",
+      "example": "floatops",
+      "scope": "sequential",
+      "domain": "every `a b : f64`: the six comparison bits (`cmpMask`); sequential pure function; IEEE model semantics of ZigLean/Float (docs/floats.md)"
+    },
+    {
+      "name": "op16_spec",
+      "module": "Proofs.Floatops.Proofs",
+      "example": "floatops",
+      "scope": "sequential",
+      "domain": "every selector `sel : u8` and every `a b c : f16`: `op16` is `opSpec sel` (selectors ≥ 26 return `a`); sequential pure function; IEEE model semantics of ZigLean/Float (docs/floats.md)"
+    },
+    {
+      "name": "op32_spec",
+      "module": "Proofs.Floatops.Proofs",
+      "example": "floatops",
+      "scope": "sequential",
+      "domain": "every selector `sel : u8` and every `a b c : f32`: `op32` is `opSpec sel` (selectors ≥ 26 return `a`); sequential pure function; IEEE model semantics of ZigLean/Float (docs/floats.md)"
+    },
+    {
+      "name": "op64_spec",
+      "module": "Proofs.Floatops.Proofs",
+      "example": "floatops",
+      "scope": "sequential",
+      "domain": "every selector `sel : u8` and every `a b c : f64`: `op64` is `opSpec sel` (selectors ≥ 26 return `a`); sequential pure function; IEEE model semantics of ZigLean/Float (docs/floats.md)"
+    },
+    {
+      "name": "op80_spec",
+      "module": "Proofs.Floatops.Proofs",
+      "example": "floatops",
+      "scope": "sequential",
+      "domain": "every selector and every `a b c : f80` with `a` not a pseudo-denormal (a noncanonical encoding that legacy floor/ceil misread): `op80` is `opSpec sel`; sequential pure function; IEEE model semantics of ZigLean/Float (docs/floats.md)"
+    },
+    {
+      "name": "op128_spec",
+      "module": "Proofs.Floatops.Proofs",
+      "example": "floatops",
+      "scope": "sequential",
+      "domain": "every `a b c : f128` and every selector except 3, 5, 6 and 9 (`/`, `@divTrunc`, `@divFloor`, `@sqrt`: they call a different model function per Zig version; `op128_spec_full` covers them): `op128` is `opSpec sel`; sequential pure function; IEEE model semantics of ZigLean/Float (docs/floats.md)"
+    },
+    {
+      "name": "op128_spec_full",
+      "module": "Proofs.Floatops.Proofs",
+      "example": "floatops",
+      "scope": "sequential",
+      "domain": "every selector `sel : u8` and every `a b c : f128`: `op128` is `opSpec128 op128Profile sel`, where `op128Profile` is the profile whose helpers the translation calls (`legacy` on 0.14.1/0.15.2: `Float.divRt`, `Float.sqrtF128ViaF64`; `v016` on 0.16.0: `Float.divRt016`, IEEE `Float.sqrt`) and every other selector is `opSpec sel`; sequential pure function; compiler-rt model ports of ZigLean/Float (docs/floats.md §Per-version differences)"
+    },
+    {
+      "name": "op128_eq_opSpec_of_special",
+      "module": "Proofs.Floatops.Proofs",
+      "example": "floatops",
+      "scope": "sequential",
+      "domain": "every selector and every `a b c : f128` with `a` NaN, infinite or zero, or with `b` NaN, infinite or zero and a selector other than 9 (`@sqrt`): `op128` is `opSpec sel` (IEEE division and `@sqrt`) on every profile; sequential pure function; compiler-rt model ports of ZigLean/Float (docs/floats.md)"
+    },
+    {
+      "name": "divExact64_spec",
+      "module": "Proofs.Floatops.Proofs",
+      "example": "floatops",
+      "scope": "sequential",
+      "domain": "every `a b : f64`: `@divExact` is the truncated quotient when it is a whole number, else a panic (a NaN quotient panics); sequential pure function; IEEE model semantics of ZigLean/Float (docs/floats.md)"
+    },
+    {
+      "name": "Vectors.checkedAdd_ok",
+      "module": "Proofs.Vectors.Proofs",
+      "example": "vectors",
+      "scope": "sequential",
+      "domain": "every pair of `@Vector(4, u32)` values whose every lane sum is below 2^32: the exact lane-wise sum"
+    },
+    {
+      "name": "Vectors.checkedAdd_overflow",
+      "module": "Proofs.Vectors.Proofs",
+      "example": "vectors",
+      "scope": "sequential",
+      "domain": "every pair of `@Vector(4, u32)` values with some lane sum ≥ 2^32: `error.overflow`"
+    },
+    {
+      "name": "Vectors.checkedAdd_spec",
+      "module": "Proofs.Vectors.Proofs",
+      "example": "vectors",
+      "scope": "sequential",
+      "domain": "every pair of `@Vector(4, u32)` values, no premise: overflow exactly when a lane overflows, else the exact sum"
+    },
+    {
+      "name": "Vectors.checkedAdd_overflow_iff",
+      "module": "Proofs.Vectors.Proofs",
+      "example": "vectors",
+      "scope": "sequential",
+      "domain": "every pair of `@Vector(4, u32)` values: the overflow result iff a lane overflows"
+    },
+    {
+      "name": "Vectors.checkedAdd_ok_iff",
+      "module": "Proofs.Vectors.Proofs",
+      "example": "vectors",
+      "scope": "sequential",
+      "domain": "every pair of `@Vector(4, u32)` values: the exact sum iff every lane fits"
+    },
+    {
+      "name": "Threads.Counter.parallelCounter_spec",
+      "module": "Proofs.Threads.Counter",
+      "example": "threads",
+      "scope": "all-schedules",
+      "domain": "`parallelCounter` for every `n : u32` (4 threads, atomic RMW): every completed run returns `4 * n` (wrapping `u32`); for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Threads.Counter.parallelCounter_safe",
+      "module": "Proofs.Threads.Counter",
+      "example": "threads",
+      "scope": "all-schedules",
+      "domain": "`parallelCounter` for every `n : u32` (4 threads, atomic RMW): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Threads.Disjoint.disjoint_spec",
+      "module": "Proofs.Threads.Disjoint",
+      "example": "threads",
+      "scope": "all-schedules",
+      "domain": "`disjoint` for every `a b : u32` (2 threads, disjoint owned blocks): every completed run returns `a + b` (wrapping); for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Threads.Disjoint.disjoint_safe",
+      "module": "Proofs.Threads.Disjoint",
+      "example": "threads",
+      "scope": "all-schedules",
+      "domain": "`disjoint` for every `a b : u32` (2 threads, disjoint owned blocks): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Sync.MutexCounter.mutexCounter_spec",
+      "module": "Proofs.Sync.Mutex",
+      "example": "sync",
+      "scope": "all-schedules",
+      "domain": "`mutexCounter` with the translated 0.16.0 `Io.Mutex`, for every `io` (2 threads × 2 increments): every completed run returns 4; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Sync.MutexCounter.mutexCounter_safe",
+      "module": "Proofs.Sync.Mutex",
+      "example": "sync",
+      "scope": "all-schedules",
+      "domain": "`mutexCounter` with the translated 0.16.0 `Io.Mutex`, for every `io` (2 threads × 2 increments): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Iogroup.GroupCounter.groupCounter_spec",
+      "module": "Proofs.Iogroup.Counter",
+      "example": "iogroup",
+      "scope": "all-schedules",
+      "domain": "`groupCounter` with `Io.Group` and `Io.Mutex` (0.16.0), for every `io` (3 tasks): every completed run returns 3; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Iogroup.GroupCounter.groupCounter_safe",
+      "module": "Proofs.Iogroup.Counter",
+      "example": "iogroup",
+      "scope": "all-schedules",
+      "domain": "`groupCounter` with `Io.Group` and `Io.Mutex` (0.16.0), for every `io` (3 tasks): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Iogroup.GroupCounter.groupCounter_reclaim",
+      "module": "Proofs.Iogroup.Counter",
+      "example": "iogroup",
+      "scope": "all-schedules",
+      "domain": "`groupCounter` with `Io.Group` and `Io.Mutex` (0.16.0), for every `io`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), a completed run ends with every task joined (`joinedAll 0`) and the three read shares of `io` returned before its free (`Reclaimed`); partial correctness, no termination or fairness"
+    },
+    {
+      "name": "Threadsync.MutexCounter.mutexCounter_spec",
+      "module": "Proofs.Threadsync.Mutex",
+      "example": "threadsync",
+      "scope": "all-schedules",
+      "domain": "`mutexCounter` with the translated 0.15.2 `Thread.Mutex` (Linux `FutexImpl` and macOS `DarwinImpl` translations): every completed run returns 4; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Threadsync.MutexCounter.mutexCounter_safe",
+      "module": "Proofs.Threadsync.Mutex",
+      "example": "threadsync",
+      "scope": "all-schedules",
+      "domain": "`mutexCounter` with the translated 0.15.2 `Thread.Mutex` (Linux `FutexImpl` and macOS `DarwinImpl` translations): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Threadsync.WG.waitGroup_spec",
+      "module": "Proofs.Threadsync.WaitGroup",
+      "example": "threadsync",
+      "scope": "all-schedules",
+      "domain": "`waitGroup` with 0.15.2 `Thread.WaitGroup`, `Thread.ResetEvent` and `Thread.Mutex`: every completed run returns 2; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Threadsync.WG.waitGroup_safe",
+      "module": "Proofs.Threadsync.WaitGroup",
+      "example": "threadsync",
+      "scope": "all-schedules",
+      "domain": "`waitGroup` with 0.15.2 `Thread.WaitGroup`, `Thread.ResetEvent` and `Thread.Mutex`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Threadsync.HO.handoff_spec",
+      "module": "Proofs.Threadsync.Handoff",
+      "example": "threadsync",
+      "scope": "all-schedules",
+      "domain": "`handoff` with 0.15.2 `Thread.Mutex`, `Thread.Condition` and `Thread.ResetEvent`: every completed run returns 7; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Threadsync.HO.handoff_safe",
+      "module": "Proofs.Threadsync.Handoff",
+      "example": "threadsync",
+      "scope": "all-schedules",
+      "domain": "`handoff` with 0.15.2 `Thread.Mutex`, `Thread.Condition` and `Thread.ResetEvent`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Sync.Handoff.handoff_spec",
+      "module": "Proofs.Sync.Handoff",
+      "example": "sync",
+      "scope": "all-schedules",
+      "domain": "`handoff` with 0.16.0 `Io.Mutex`, `Io.Condition` and `Io.Event`, for every `io`: every completed run returns 7; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Sync.Handoff.handoff_safe",
+      "module": "Proofs.Sync.Handoff",
+      "example": "sync",
+      "scope": "all-schedules",
+      "domain": "`handoff` with 0.16.0 `Io.Mutex`, `Io.Condition` and `Io.Event`, for every `io`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Sync.SemCounter.semaphoreCounter_spec",
+      "module": "Proofs.Sync.SemCounter",
+      "example": "sync",
+      "scope": "all-schedules",
+      "domain": "`semaphoreCounter` with 0.16.0 `Io.Semaphore`, `Io.Mutex` and `Io.Condition`, for every `io`: every completed run returns 4; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Sync.SemCounter.semaphoreCounter_safe",
+      "module": "Proofs.Sync.SemCounter",
+      "example": "sync",
+      "scope": "all-schedules",
+      "domain": "`semaphoreCounter` with 0.16.0 `Io.Semaphore`, `Io.Mutex` and `Io.Condition`, for every `io`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Sync.RwLockRead.rwLockRead_spec",
+      "module": "Proofs.Sync.RwLock",
+      "example": "sync",
+      "scope": "all-schedules",
+      "domain": "`rwLockRead` with 0.16.0 `Io.RwLock` (its `Io.Mutex` and `Io.Semaphore`), for every `io`; the fixed client: main reader and one writer adding 1 twice: every completed run returns 2, 12 or 22; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Sync.RwLockRead.rwLockRead_safe",
+      "module": "Proofs.Sync.RwLock",
+      "example": "sync",
+      "scope": "all-schedules",
+      "domain": "`rwLockRead` with 0.16.0 `Io.RwLock` (its `Io.Mutex` and `Io.Semaphore`), for every `io`; the fixed client: main reader and one writer adding 1 twice: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Sync.RwLockSnapshotPair.snapshotPair_spec",
+      "module": "Proofs.Sync.RwLockSnapshotPair",
+      "example": "sync",
+      "scope": "all-schedules",
+      "domain": "`snapshotPair` (`rwLockSnapshotPair`, C14) for every `io`; the restricted protocol of Proofs/Sync/RwLockContract.lean (main reader 0, writer 1, writer count ≤ 2, one shared hold over both loads, join before reclamation); not a reusable RwLock contract for arbitrary readers or resources: every completed run returns 0, 11 or 22; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Sync.RwLockSnapshotPair.snapshotPair_safe",
+      "module": "Proofs.Sync.RwLockSnapshotPair",
+      "example": "sync",
+      "scope": "all-schedules",
+      "domain": "`snapshotPair` (`rwLockSnapshotPair`, C14) for every `io`; the restricted protocol of Proofs/Sync/RwLockContract.lean (main reader 0, writer 1, writer count ≤ 2, one shared hold over both loads, join before reclamation); not a reusable RwLock contract for arbitrary readers or resources: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Atomics.MP.mpRelAcq_spec",
+      "module": "Proofs.Atomics.MessagePassing",
+      "example": "atomics",
+      "scope": "all-schedules",
+      "completes": "mp_sees_data",
+      "domain": "`mpRelAcq` (release/acquire flag): every completed run returns 0 or 42; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Atomics.MP.mpRelAcq_safe",
+      "module": "Proofs.Atomics.MessagePassing",
+      "example": "atomics",
+      "scope": "all-schedules",
+      "completes": "mp_sees_data",
+      "domain": "`mpRelAcq` (release/acquire flag): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Atomics.MPR.mpRelaxed_spec",
+      "module": "Proofs.Atomics.Relaxed",
+      "example": "atomics",
+      "scope": "all-schedules",
+      "domain": "`mpRelaxed` (relaxed flag): every completed run returns 0 (a read of 1 races); for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness; no safety theorem (runs that race end in an error)"
+    },
+    {
+      "name": "Atomics.Stack.stackPush_spec",
+      "module": "Proofs.Atomics.Stack",
+      "example": "atomics",
+      "scope": "all-schedules",
+      "domain": "`stackPush` (two `cmpxchgWeak` pushers): every completed run returns 120 or 210; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Atomics.Stack.stackPush_safe",
+      "module": "Proofs.Atomics.Stack",
+      "example": "atomics",
+      "scope": "all-schedules",
+      "domain": "`stackPush` (two `cmpxchgWeak` pushers): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Sync.RwLockContract.held_pair_wp",
+      "module": "Proofs.Sync.RwLockContract",
+      "example": "sync",
+      "scope": "single-step",
+      "domain": "`WP` rule for the two protected loads of one shared hold, under the restricted RwLock protocol and the semaphore premise `E.Spec`; a step lemma composed into `snapshotPair_spec`, not a program theorem"
+    },
+    {
+      "name": "Sync.RwLockContract.acquire_shared",
+      "module": "Proofs.Sync.RwLockContract",
+      "example": "sync",
+      "scope": "single-step",
+      "domain": "`WP` rule: the shared acquire under the restricted protocol gives the protected counter facts (`ProtectedFacts`), premise `E.Spec`; one operation, not a program theorem"
+    },
+    {
+      "name": "Sync.RwLockSnapshotPair.result_of_same_snapshot",
+      "module": "Proofs.Sync.RwLockSnapshotPair",
+      "example": "sync",
+      "scope": "sequential",
+      "domain": "arithmetic: two equal observations `first ≤ 2` give 0, 11 or 22; equality is a premise, not derived from the lock"
+    },
+    {
+      "name": "Sync.MutexOps.lock_spec",
+      "module": "Proofs.Sync.Lock",
+      "example": "sync",
+      "scope": "single-step",
+      "domain": "`WP` of the translated 0.16.0 `Io.Mutex.lock` for every protocol with the lock (`Lock.Fits`): the thread takes the lock and its resource; one operation, not a program theorem"
+    },
+    {
+      "name": "Sync.MutexOps.unlock_spec",
+      "module": "Proofs.Sync.Lock",
+      "example": "sync",
+      "scope": "single-step",
+      "domain": "`WP` of the translated 0.16.0 `Io.Mutex.unlock` for every protocol with the lock: the resource goes back to the lock; one operation"
+    },
+    {
+      "name": "Zig.noRace_of_atomic",
+      "module": "Proofs.Threads.Proofs",
+      "example": "threads",
+      "scope": "single-step",
+      "domain": "one access: an atomic access does not race when every earlier access to its block is atomic"
+    },
+    {
+      "name": "Zig.readOpts_zero",
+      "module": "Proofs.Threads.Proofs",
+      "example": "threads",
+      "scope": "single-step",
+      "domain": "one read step: option 0 of an atomic read is the newest message"
+    },
+    {
+      "name": "sb_sc",
+      "module": "Proofs.Atomics.Proofs",
+      "example": "atomics",
+      "scope": "single-schedule",
+      "domain": "`sbRelaxed` returns 2 under the sequentially consistent schedule; one concrete oracle (`sched cs`) with fuel 100, computed by the kernel (`decide +kernel`); says nothing about other schedules"
+    },
+    {
+      "name": "sb_weak",
+      "module": "Proofs.Atomics.Proofs",
+      "example": "atomics",
+      "scope": "single-schedule",
+      "domain": "`sbRelaxed` returns 0 (weak-memory result) under one chosen schedule; one concrete oracle (`sched cs`) with fuel 100, computed by the kernel (`decide +kernel`); says nothing about other schedules"
+    },
+    {
+      "name": "twoPlusTwoW_weak",
+      "module": "Proofs.Atomics.Proofs",
+      "example": "atomics",
+      "scope": "single-schedule",
+      "domain": "`twoPlusTwoW` returns 11 (weak-memory result) under one chosen schedule; one concrete oracle (`sched cs`) with fuel 100, computed by the kernel (`decide +kernel`); says nothing about other schedules"
+    },
+    {
+      "name": "mp_sees_data",
+      "module": "Proofs.Atomics.Proofs",
+      "example": "atomics",
+      "scope": "single-schedule",
+      "domain": "`mpRelAcq` returns 42 under one chosen schedule; one concrete oracle (`sched cs`) with fuel 100, computed by the kernel (`decide +kernel`); says nothing about other schedules"
+    },
+    {
+      "name": "mpRelaxed_race",
+      "module": "Proofs.Atomics.Proofs",
+      "example": "atomics",
+      "scope": "single-schedule",
+      "domain": "`mpRelaxed` ends in a data race (`.illegal`) under one chosen schedule; one concrete oracle (`sched cs`) with fuel 100, computed by the kernel (`decide +kernel`); says nothing about other schedules"
+    },
+    {
+      "name": "tryLock_new",
+      "module": "Proofs.Sync.Proofs",
+      "example": "sync",
+      "scope": "single-schedule",
+      "domain": "`Io.Mutex.tryLock` of a new mutex succeeds; the oracle that always picks option 0, fuel 10, computed by the kernel; one schedule only"
+    },
+    {
+      "name": "tryLock_twice",
+      "module": "Proofs.Sync.Proofs",
+      "example": "sync",
+      "scope": "single-schedule",
+      "domain": "a second `tryLock` of a taken mutex fails; the oracle that always picks option 0, fuel 10, computed by the kernel; one schedule only"
+    },
+    {
+      "name": "wait_alone_deadlock",
+      "module": "Proofs.Sync.Proofs",
+      "example": "sync",
+      "scope": "single-schedule",
+      "domain": "the only thread waiting at an unwoken futex is `.deadlock`; the oracle that always picks option 0, fuel 10, computed by the kernel; one schedule only"
+    },
+    {
+      "name": "wait_other_value",
+      "module": "Proofs.Sync.Proofs",
+      "example": "sync",
+      "scope": "single-schedule",
+      "domain": "a futex wait on a different value goes on; the oracle that always picks option 0, fuel 10, computed by the kernel; one schedule only"
+    },
+    {
+      "name": "snapshot_without_clock_edge_rejected",
+      "module": "Proofs.Sync.Proofs",
+      "example": "sync",
+      "scope": "single-schedule",
+      "domain": "one fixed `MemM` run (child write, parent read without acquire or join) ends in `.illegal` (C14 race negative)"
+    },
+    {
+      "name": "Sync.SnapshotCache.cache_spec",
+      "module": "Proofs.Sync.SnapshotCache",
+      "example": "sync",
+      "scope": "all-schedules",
+      "domain": "the Lean model client `cacheMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Mutex` lock and unlock, for every `io`: one reader and one writer doing two updates `a += 1; b -= 1` under the mutex; proved against the mutex contract `MutexImpl` only, for every implementation (no unfolding of the std code): every completed run returns 10; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Sync.SnapshotCache.cache_safe",
+      "module": "Proofs.Sync.SnapshotCache",
+      "example": "sync",
+      "scope": "all-schedules",
+      "domain": "the Lean model client `cacheMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Mutex` lock and unlock, for every `io`: one reader and one writer doing two updates `a += 1; b -= 1` under the mutex; proved against the mutex contract `MutexImpl` only, for every implementation (no unfolding of the std code): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, lifetime or other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Sync.Mailbox.mailbox_spec",
+      "module": "Proofs.Sync.Mailbox",
+      "example": "sync",
+      "scope": "all-schedules",
+      "domain": "the Lean model producer/consumer `mailMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Semaphore` wait (condition-variable loop with predicate recheck) and post, for every `io`: one producer, one consumer, one two-field message moved by ownership transfer; proved against the semaphore contract `SemImpl` only (for every implementation; instance `Sync.ioSem`): every completed run returns 34; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Sync.Mailbox.mailbox_safe",
+      "module": "Proofs.Sync.Mailbox",
+      "example": "sync",
+      "scope": "all-schedules",
+      "domain": "the Lean model producer/consumer `mailMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Semaphore` wait (condition-variable loop with predicate recheck) and post, for every `io`: one producer, one consumer, one two-field message moved by ownership transfer; proved against the semaphore contract `SemImpl` only (for every implementation; instance `Sync.ioSem`): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, lifetime or other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    }
+  ]
+}

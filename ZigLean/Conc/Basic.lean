@@ -135,9 +135,10 @@ inductive SyncOp (Tgt : Type) where
   /-- `Thread.join`: waits until thread `tid` ends. -/
   | join (tid : ThreadId)
   /-- A futex wait (`Io.futexWait`): if the `u32` at `p` is `expected`, the thread waits until a
-  `wake` at `p`; else it goes on. -/
-  | wait (p : Ptr) (expected : BitVec 32)
-  /-- A futex wake (`Io.futexWake`): up to `n` threads that wait at `p` go on. -/
+  `wake` at `p`'s key (`Mem.keyAt`, domain `shared`); else it goes on. -/
+  | wait (p : Ptr) (expected : BitVec 32) (shared : Bool)
+  /-- A futex wake (`Io.futexWake`): up to `n` threads that wait at `p`'s private key go on
+  (`Thread.futexWakePtr`: the key is resolved when the wake runs). -/
   | wake (p : Ptr) (n : Nat)
 
 /-- The response of the scheduler to a sync op. -/

@@ -17,6 +17,8 @@ def add (p0 : BitVec 32) (p1 : BitVec 32) : Zig.Result (BitVec 32) := do
   match e with
   | .ret v => pure v
 
+attribute [zig_run] add
+
 structure doubleLocals where
   deriving Inhabited
 
@@ -29,5 +31,7 @@ def double (p0 : BitVec 32) : Zig.Result (BitVec 32) := do
     pure (.ret i1)) : Zig.M doubleLocals doubleExit).run' (default : doubleLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] double
 
 end Provenance

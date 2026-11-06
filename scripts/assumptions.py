@@ -613,6 +613,20 @@ def library_compiled_inputs(root: Path) -> list:
     return records
 
 
+def compiled_inputs_changes(old: list, new: list, limit: int = 10) -> str:
+    """The entries in which two `library_compiled_inputs` snapshots differ: path, old, new."""
+    def flat(records):
+        entries = {}
+        for selected, resolved, exists, files in records:
+            entries[selected + ' (root)'] = f'resolved={resolved} exists={exists}'
+            entries.update((path, f'link={link!r} sha256={content or "-"}') for path, link, content in files)
+        return entries
+    before, after = flat(old), flat(new)
+    changes = [f'{path}: {before.get(path, "absent")} -> {after.get(path, "absent")}'
+               for path in sorted(before.keys() | after.keys()) if before.get(path) != after.get(path)]
+    return '; '.join(changes[:limit]) + (f'; and {len(changes) - limit} more' if len(changes) > limit else '')
+
+
 RUNTIME_RUN = "AIR2LEAN_TOOLCHAIN_RUNTIME_RUN"
 
 
@@ -942,6 +956,16 @@ def checked_modules(module: str, roots: list[Path]) -> list[str]:
     return sorted(found)
 
 
+def require_source(sources: list[Path], module: str, olean: Path, package: Path) -> None:
+    """Fails on `olean`, of `package` (source directories `sources`), when `module` has no source
+    there: Lake can build it no more, and `leanchecker` would check it (lean-deps.py
+    `orphan_outputs`)."""
+    if not lean_deps().has_source(sources, module.replace(".", "/")):
+        raise ValueError(f"{olean}: compiled module without a source in {package} (deleted since it "
+                         "was built); scripts/full-build.sh removes such outputs "
+                         "(python3 -B scripts/lean-deps.py --prune-orphans)")
+
+
 def module_needs(modules: list[str], roots: list[Path], packages: list[Path]) -> list[str] | None:
     """Lake targets that put each module's olean and dependency trace into a generated module's
     trace without importing it (`@pkg/+M:olean`, `@pkg/+M:depTrace`): an import would run the
@@ -956,16 +980,12 @@ def module_needs(modules: list[str], roots: list[Path], packages: list[Path]) ->
                deps.package_sources(path)) for path in packages}
     needs = []
     for module in sorted(modules):
-        stem = module.replace(".", "/")
-        relative = stem + ".olean"
+        relative = module.replace(".", "/") + ".olean"
         owner = next((root for root in roots if (root / relative).is_file()), None)
         if owner not in owners:
             return None
         package, name, sources = owners[owner]
-        if not deps.has_source(sources, stem):
-            raise ValueError(f"{owner / relative}: compiled module without a source in {package} (deleted "
-                             "since it was built); scripts/full-build.sh removes such outputs "
-                             "(python3 -B scripts/lean-deps.py --prune-orphans)")
+        require_source(sources, module, owner / relative, package)
         needs += [f"@{name}/+{module}:olean", f"@{name}/+{module}:depTrace"]
     return needs
 
@@ -1406,6 +1426,11 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
     modules; this runtime binding does not authenticate project/private import closures.
     `lake_package`: every module's check is a Lake-built receipt in that package's replay
     workspace instead (`lake_kernel_replay`), when Lake resolves exactly `lean_path` there.
+    Otherwise, with `cache` (the caller allows reuse), the check of each `cacheable` module is a
+    receipt in the root package's replay workspace, which Lake keeps across builds until the
+    module or an import changes, when Lake resolves exactly the root package's build directory
+    and the toolchain there; such a passing module counts as `reused`, and the others are checked
+    afresh or through `cache`. Without `cache`, every module outside `lake_package` replays now.
     Several audits of one build may share `cache` at once (scripts/fixture-checks.py's run): each
     cacheable module is checked under a claim (`<cache>.d/<module>.lock`), the cache is read
     again under it and a pass is merged in at once, so concurrent audits replay each module once
@@ -1477,14 +1502,20 @@ def kernel_replay(digests: dict[str, str], toolchain: Path, lean_path: str, cach
     modules, published = sorted(digests), []
     receipts = (lake_kernel_replay(modules, lake_package, checker_sha, runtime_sha, lean_path)
                 if lake_package is not None and modules else None)
+    root = receipts is None and cache is not None and bool(built := sorted(set(modules) & cacheable))
+    if root:
+        # A `cacheable` module and its whole import closure resolve to the root package's build
+        # directory or the toolchain on `lean_path` (cacheable_modules), so leanchecker checks the
+        # same oleans on the root package's own lookup path.
+        receipts = lake_kernel_replay(built, ROOT, checker_sha, runtime_sha, os.pathsep.join(
+            map(str, (ROOT / ".lake/build/lib/lean", toolchain / "lib/lean"))))
     try:
-        if receipts is not None:
-            results = {m: (False, None if r.get("status") == "pass" else {
-                "module": m, "output": f"leanchecker exited {r.get('exit_code')}\n" + str(r.get("output", ""))})
-                for m, r in receipts.items()}
-        else:
+        results = {m: (root and r.get("status") == "pass", None if r.get("status") == "pass" else {
+            "module": m, "output": f"leanchecker exited {r.get('exit_code')}\n" + str(r.get("output", ""))})
+            for m, r in (receipts or {}).items()}
+        if rest := [m for m in modules if m not in results]:
             with ThreadPoolExecutor(jobs) as pool:
-                results = dict(zip(modules, pool.map(check, modules)))
+                results.update(zip(rest, pool.map(check, rest)))
         if toolchain_runtime_sha256(toolchain) != runtime_sha:
             raise ValueError('toolchain runtime changed during kernel replay')
         if validate_inputs is not None:
@@ -1589,14 +1620,24 @@ def replay_and_freshness(raw: dict, cache: Path | None = None, bound: dict[str, 
             raise ValueError(f'witness source has no compiler-owned run binding: {module}')
         artifacts.append(row)
     if lake_modules:
-        # Fails if any Lake-built olean is stale against its sources (--no-build audits too).
-        run(["lake", "--rehash", "build", "--no-build", *lake_modules])
+        # Fails if any Lake-built olean the replay reads is stale against its sources (--no-build
+        # audits too): an audited module's, and each one `leanchecker` checks below it
+        # (`checked_modules`: an olean of an older build that no import reaches). A Lake receipt
+        # needs all of them, so a stale one would be rebuilt during the replay, after the compiled
+        # inputs are bound (`validate_inputs`). An orphan (no source) fails here, on either path.
+        checked = sorted({c for m in lake_modules for c in checked_modules(m, [built])})
+        sources = lean_deps().package_sources(ROOT)
+        for module in checked:
+            require_source(sources, module, built / (module.replace(".", "/") + ".olean"), ROOT)
+        run(["lake", "--rehash", "build", "--no-build", *checked])
     lake_inputs = library_compiled_inputs(ROOT)
     cacheable = cacheable_modules(raw.get('module_imports'), lake_modules, lean_path, toolchain)
 
     def validate_inputs():
-        if library_compiled_inputs(ROOT) != lake_inputs:
-            raise ValueError('canonical Lake compiled inputs changed during kernel replay')
+        current = library_compiled_inputs(ROOT)
+        if current != lake_inputs:
+            raise ValueError('canonical Lake compiled inputs changed during kernel replay: '
+                             + compiled_inputs_changes(lake_inputs, current))
         if compiled_units is not None:
             theorem_universe.verify_compilation(compiled_units)
 

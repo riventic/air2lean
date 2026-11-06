@@ -3,36 +3,10 @@
 For the full-state logic (`ZigLean/Sep/Full`), the general symbolic executor `fsym` walks
 generated code from an invariant alone: [proof-automation.md](proof-automation.md).
 
-Import `ZigLean.Sep.Automation` for `sep_normalize` and `sep_frame`, and
-`ZigLean.Sep.Total` for total-correctness rules. These are optional modules;
-existing generated-code imports and `Triple` keep their current meaning. The legacy
-symbolic-execution tactics of P01 are retired ([below](#symbolic-execution-steps-p01)).
-
-`sep_normalize` rewrites assertion expressions with associativity, commutativity,
-and the `emp` unit. It also accepts ordinary Lean locations, for example
-`sep_normalize at hp ⊢`. The resulting simp proofs use proved assertion equalities;
-the tactic does not extend the trusted kernel or execute a decision procedure.
-
-`sep_frame rule` closes a `Triple` goal by inferring the unused atoms in the
-goal's precondition, applying `Triple.frame`, and checking both consequences by
-normalization. With `open Zig Assn`, for example:
-
-```lean
-example (P Q R : Assn) (c : MemM Unit)
-    (rule : Triple P c (fun _ => Q)) :
-    Triple (R ∗ P) c (fun _ => Q ∗ R) := by
-  sep_frame rule
-```
-
-Separating atoms are opaque; candidate matching uses definitional equality.
-Repeated atoms are counted separately. A missing atom, a changed command, or an
-incorrect postcondition causes failure. Final proof checking uses Lean's standard
-simp ordering, which can fail to align definitionally equal wrapper atoms or
-atoms differing only in implicit typeclass instances. In those cases, first
-rewrite wrappers explicitly or apply the separation equalities directly. This
-is AC/unit simplification and syntactic frame inference. It does not split byte
-ranges or arrays, choose existential witnesses, discharge arithmetic, or synthesize
-loop invariants. It is a bounded part of P01.
+The legacy tactics `sep_normalize` and `sep_frame` (`Sep/Automation`) and the legacy
+total-correctness rules (`Sep/Total`, `Sep/Loop`) are deleted; `fsym` normalizes and frames
+full-state assertions. The legacy symbolic-execution tactics of P01 are retired
+([below](#symbolic-execution-steps-p01)).
 
 Whole-array ownership is `ZigLean/Sep/Full/Arr.lean` (imported by `ZigLean.Sep.Full.AutoAll`).
 `arr_split hp hk hs` splits `arr p xs` into `arr p (xs.take k)` and
@@ -55,7 +29,8 @@ are updates that read the labels from the memory (`EUpd.arr_join`, `EUpd.arr_unf
 `fsym` walks item loads and stores on whole-array ownership with the `@[fsym]` rules
 `FTotalTriple.arr_load` and `FTotalTriple.arr_store` (an in-bounds item `p.elem (Enc.size T) i`
 at the type's alignment; the array stays whole, the bound `i.toNat < xs.length` is a side
-condition), and pointer formation `&xs[i]` with `ptrProject_elem_of` and the provider
+condition; item `0` through `p` itself, the form the walk gives `p.elem _ 0`, by
+`arr_load_zero`/`arr_store_zero`), and pointer formation `&xs[i]` with `ptrProject_elem_of` and the provider
 `Live.arr`. For example:
 
 ```lean
@@ -97,22 +72,14 @@ with `lake build Proofs.Lists.Container` and
 container deallocation through the interface, and a general ADT library remain outside this
 bounded P04 contribution.
 
-`TotalTriple P c Q` requires an explicit `c.run m = pure (v, m')` witness for
-every admissible sequential input and disjoint frame, along with ownership of
-`Q v` and preservation of the frame. Divergence and safety panics cannot satisfy
-this equality. An unsatisfiable precondition remains vacuous, as with ordinary
-Hoare logic. Zig error-union values such as `OutOfMemory` remain return values.
-
-`TotalTriple.toPartial` projects ordinary partial correctness. Conversely,
-`TotalTriple.of_partial` additionally requires `Returns P c`; partial correctness
-alone never establishes termination. The API includes consequence, frame, return,
-bind, existential/pure-precondition rules, load/store, array store, and
-`TotalTriple.loop_ghost`. The loop rule requires a natural-number measure that
-strictly decreases on each repeat, through the existing `loop_sep_ghost` theorem.
-It does not provide concurrency termination or a general recursive-call rule.
-This is an honest total/partial interface and a bounded contribution to P05.
-Reports classify theorems over these interfaces by their kernel types, not by labels
-(`docs/claim-strength.md`).
+`FTotalTriple P c Q` (`ZigLean/Sep/Full/Logic.lean`) is `FTriple P c Q ∧ FReturns P c`:
+`FReturns` requires an explicit `c.run m = pure (v, m')` witness for every `Mem.FSeq`
+memory that holds `P` with some frame. Divergence and safety panics cannot satisfy this
+equality. An unsatisfiable precondition remains vacuous, as with ordinary Hoare logic. Zig
+error-union values such as `OutOfMemory` remain return values. `FTotalTriple.toPartial`
+projects partial correctness; partial correctness alone never establishes termination. The total
+loop rules are in [Loops, recursion and range conversions](#loops-recursion-and-range-conversions). Reports classify theorems over these interfaces by their kernel types, not by
+labels (`docs/claim-strength.md`).
 
 The scenarios of the retired `Normalize`, `Clients` and `Total` regressions (AC normalization,
 unit/duplicate handling, rejected framing, total bind, rejection of divergence/panics, partial
@@ -204,10 +171,13 @@ leaves the queue unchanged.
 `tests/roadmap/loop-tactics/nested/nested.zig` (an inner `while (j < i)` inside an outer
 `while (i < n)`) total: under the explicit premise that the result fits in `u64`, it returns
 and adds `0 + 1 + … + (n - 1)` to `*acc`. Both loops use `loop_measure`; the outer step's walk
-uses the inner loop's triple as a rule. The AIR is retained with its provenance in `nested/`;
-`nested/check.sh` retranslates it, compares the result with the committed
-`nested/Nested/Gen.lean` byte for byte, and checks the proof and its legacy form by
-`toTotal_on_plain` (`tests/roadmap/strength-log/LoopTactics.lean`).
+applies it to the inner loop with the inner loop's registered invariant, measure and exit post
+(`@[fsym_inv]`, P09-E4), which `air2lean-invgen` (P09, `docs/invariant-synthesis.md`) generates
+into `nested/Nested/Inv.lean`. The AIR is
+retained with its provenance in `nested/`; `nested/check.sh` retranslates it, compares the result
+with the committed `nested/Nested/Gen.lean` byte for byte, regenerates `Inv.lean` and compares it
+the same way, checks that seeded mutants of the generated invariant fail, and checks the proof and
+its legacy form by `toTotal_on_plain` (`tests/roadmap/strength-log/LoopTactics.lean`).
 
 A recursive group becomes a `mutual` block of `partial_fixpoint` defs with unfold equations
 `<fn>.eq_1`. `Proofs.Recursion.Proofs` proves the pure functions of
@@ -225,7 +195,7 @@ shows that no measure makes the step of a body that always repeats (`spin_no_mea
 premise is not proved.
 
 Build with `lake build ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Strength
-ZigLean.Simp Proofs.Lists.Linked Proofs.Recursion.Proofs air2lean`, then run
+ZigLean.Simp Proofs.Lists.Linked Proofs.Recursion.Proofs air2lean air2lean-invgen`, then run
 `lake env lean tests/roadmap/loop-tactics/<name>.lean` for `Queue` and `Recursion`, and
 `tests/roadmap/loop-tactics/nested/check.sh`.
 
@@ -314,61 +284,51 @@ are not restated: with a translated allocator, "no leak" is a postcondition that
 (`docs/alloc-spec.md`); `freeAll_cost`'s loop-step count is `freeAll_exact`. Build with
 `lake build ZigLean.Sep.Full.Cost Proofs.Lists.Bounded Proofs.Lists.Alloc`.
 
-## Concrete runs of programs with loops (`unroll_sched`)
+## Concrete runs of programs with loops
 
 `Zig.loop` is a `partial_fixpoint`: the least fixpoint of its unfolding, which the kernel does
-not compute, so `decide +kernel` cannot evaluate a run that reaches a loop. Import
-`ZigLean.Conc.Unroll` (an optional module) for a kernel-checked run of a concurrent program
-with loops under one schedule:
+not compute, so `decide +kernel` cannot evaluate a run that reaches a loop. A kernel-checked run
+of a concurrent program with loops under one schedule unfolds the loops first
+(`Proofs/Sync/Mutex.lean`):
 
 ```lean
-theorem parallelCounter_completes :
-    Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (parallelCounter 1)
-      (mem0 .fresh)) = some 4 := by
-  unroll_sched 10
+theorem mutexCounter_completes :
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (mutexCounter ⟨⟩)
+      (mem0 σ)) = some 4 := by
+  refine ⟨.fresh, ?_⟩
+  iterate 5 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
+  decide +kernel
 ```
 
-`unroll_sched k` accepts a goal `g (Sched.run env dispatch fuel o main m₀) = v` with concrete
-arguments (the environment `env` included), for an observation `g` of the run that tells a run
-without a result from `v` (`Witness.okVal r = some n`, `Witness.errOf r = some e`; the kernel
-checks `g Sched.noResult ≠ v`). It:
+1. Each `simp` pass rewrites with the `zig_run` set: the generated code, the ZigLean models that
+   hold a loop and `Zig.loop`, each by its defining equation (contents, emission rule and how to
+   pick `n`: [proof-automation.md](proof-automation.md), kernel-run witnesses). The code a loop's
+   rewrite exposes waits for the next pass, so check `n` on the deepest translation. A
+   hand-written definition on the path (a test's `dispatchW`, a client over an interface) is
+   unfolded by name first (`delta`, `unfold`).
+2. The kernel computes the run (`Witness.okVal`/`Witness.errOf`, `ZigLean/Conc/RunResult.lean`).
+   A wrong value, a run out of fuel, or a reached loop that is not unfolded or needs more
+   iterations leaves the goal unproved.
 
-1. unfolds every definition reachable from `dispatch` and `main` that runs a `Zig.loop`
-   (`Unroll.expand`), and replaces each `Zig.loop body again` by
-   `Unroll.loopSel k s body again`. At `s = exact` this is the loop; at `s = approx` it is
-   `loopN body again k`, the loop cut after `k` runs of its body, which is `⊥` (no result)
-   where the loop would go on;
-2. proves the expanded program monotone in `s` with core's `monotonicity` machinery
-   (`monotone_loopSel` and the `partial_fixpoint_monotone` lemmas of the generated code),
-   using `loopN_le_loop : loopN body again k ⊑ loop body again`;
-3. applies `Sched.apply_le` (from `Sched.run_le`): if every thread of one program is below the
-   corresponding thread of another, a run of the first with a result is a run of the second
-   with the same result (a simulation of `Sched.go` that keeps the memory, the oracle step and
-   each thread's op);
-4. closes the goal about the cut program with `decide +kernel`.
+`lake build Proofs` also runs against the translations of other Zig versions and targets (the swap
+builds of [theorem-inventory.md](theorem-inventory.md)). The run's path differs between them (a
+macOS `std.Thread.Mutex` enters `Zig.osUnfairLockC`'s loop on every lock, a Linux one only when
+contended), and std functions may have other names or not exist. The proof names no generated
+declaration, so it covers every translation whose run needs at most its `n` passes.
 
-The proof uses only the standard axioms; nothing is evaluated outside the kernel. A wrong
-value, a run out of fuel, an error, or a loop that needs more than `k` runs of its body leaves
-the goal unproved, with the message `unroll_sched: the kernel does not compute the run …`.
-`k` bounds each loop's body runs per entry, so a loop entered again gets `k` more.
+A mutual `partial_fixpoint` group (a recursive call group of generated code) is unfolded the
+same way, by its defining equations (`unfold`), once per round of calls the run makes.
+`tests/roadmap/proof-tools/SoloRun.lean` checks the scheduler's run of such a group
+(`even_six`), its in-thread reading (`even_six_solo`), their axioms, a run unfolded too few times
+(stuck, rejected) and a wrong value (refuted). The earlier tactic for these goals,
+`unroll_sched` (`ZigLean.Conc.Unroll`, which cut each loop after `k` iterations), is deleted (L17).
 
-`unroll_solo k` (module `ZigLean.Sep.Full.Unroll`) does the same for the in-thread reading of a
-concurrent function that `CTriple` speaks about: a goal `g ((Sched.soloRun fuel x).run m) = v`
-(`Sched.soloRun_apply_le`, from `soloTree_le`: a reading with a result is the reading of every
-tree above). `AllocArena.ArenaObstruction.client_illegal` runs the stock `ArenaAllocator`'s
-`alloc`, `alloc`, `free` this way from a memory that `Mem.FSeq` holds in (`Mem.FSeq` of a concrete
-memory is decidable).
-
-A `partial_fixpoint` definition or mutual group (a recursive call group of generated code,
-`Lean.Order.fix F h`) is cut the same way: it becomes `Unroll.fixSel k s (fun s => F) h`, which
-is `fixN F k` (`F` applied `k` times to `⊥`) at `approx` and the fixpoint at `exact`
-(`fixN_le_fix`, `monotone_fixSel`); `k` bounds the nested unfoldings of the group. A definition
-met again inside its own expansion (a recursion through a dispatch table) stays uncut there.
-
-The `completes` companions of the concurrent all-schedules theorems
-([theorem-inventory.md](theorem-inventory.md)) use it: one concrete schedule (the oracle that
-always picks option 0), fuel 1000, `mem0`. `tests/roadmap/proof-tools/Unroll.lean` checks a
-run, its axioms, and the rejection of a wrong value, too few iterations, too little fuel and a
-goal without a run, and a mutual `partial_fixpoint` group (`even_six`, rejected when cut too
-early). Build with `lake build ZigLean.Conc.Unroll Proofs.Threads.Gen`, then run
-`lake env lean tests/roadmap/proof-tools/Unroll.lean`.
+A concrete in-thread reading of a concurrent function, the run that `CTriple` speaks about
+(`(Sched.soloRun fuel x).run m`), needs no cut and no tactic of its own: the same `zig_run`
+passes rewrite each generated definition, `partial_fixpoint` group and `Zig.loop` by its
+defining equation, once per call or iteration the run makes, and `decide +kernel` computes the
+result. A run that reaches a definition not unfolded far enough gets stuck there and is
+rejected. Only the hand-written client is named (`unfold client vt`).
+`AllocArena.ArenaObstruction.client_illegal` runs the stock `ArenaAllocator`'s `alloc`, `alloc`,
+`free` this way from a memory that `Mem.FSeq` holds in (`Mem.FSeq` of a concrete memory is
+decidable), as do the refuted clients of `AllocTranslated.ListsPage`.

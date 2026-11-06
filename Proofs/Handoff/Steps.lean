@@ -60,7 +60,7 @@ theorem live_of {G : ThreadId → Gh} {m : Mem} {t : ThreadId} (hi : (proto Lo p
   · obtain ⟨w, hw, he⟩ := Array.any_eq_true'.mp h
     have e : w.1 = 1 := by simpa using he
     rcases hu.q w hw with hq | hq | hq
-    · exact (fitsL (Lo := Lo) (prodOf := prodOf)).noWaits hL hall
+    · exact (fitsL (Lo := Lo) (prodOf := prodOf)).noWaits hL hu hall
         (Array.any_eq_true'.mpr ⟨w, hw, by simp [hq]⟩)
     · obtain ⟨i, jr, e', h1, -⟩ := hu.cinv.q w hw hq
       have hw1 : ((G 1).2.c).waits = true := by
@@ -86,7 +86,8 @@ theorem cinv_out {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g : Gh}
     (C Lo).Inv (L Lo) (upd G t g) m := by
   have hcg : (C Lo).ph g = .out := h₁
   have hct : (C Lo).ph (G t) = .out := h₀
-  refine hI.frame rfl rfl rfl (fun w hw _ _ => hw) (Nat.le_refl _) (fun _ => VClock.le_refl _)
+  refine hI.frame rfl rfl rfl rfl rfl (fun w hw _ _ => hw) (Nat.le_refl _)
+    (fun _ => VClock.le_refl _)
     (fun h => by rw [hcg, hct] at h; rcases h with h | h <;> cases h)
     (fun _ _ h => by rw [hcg] at h; cases h) (fun _ _ _ _ h => by rw [hcg] at h; cases h)
     (fun h => by obtain ⟨_, _, _, h'⟩ := hI.qd_reg h; rw [hct] at h'; cases h')
@@ -258,7 +259,7 @@ theorem U_prod {G : ThreadId → Gh} {rX : Res} {m : Mem} {a₀ a₁ : FLG} {x�
 /-- Two threads do not hold the mutex. -/
 theorem one_holder {G : ThreadId → Gh} {rX : Res} {m : Mem} (hL : (L Lo).Inv G rX m)
     (h0 : (G 0).1.ph = .holds) (h1 : (G 1).1.ph = .holds) : False := by
-  have := hL.w.one 0 1 h0 h1; cases this
+  have := hL.w.one 0 1 (LPh.held_of_holds h0) (LPh.held_of_holds h1); cases this
 
 /-- While the producer holds the mutex, `main`'s registration happened before it (`main` does
 not hold the mutex, and its release happened before the producer's lock). `hL` is the lock's
@@ -269,7 +270,7 @@ theorem U.reg_lk {G G' : ThreadId → Gh} {rX rX' : Res} {m : Mem} (hL : (L Lo).
   rcases hu.reg j hj with h | ⟨-, ⟨h0', -⟩ | ⟨k, l, hl, hle⟩⟩
   · exact h
   · exact (one_holder hL (h0.trans h0') hh).elim
-  · exact VClock.le_trans hle ((hL.w.rel k l hl).2 1 hh)
+  · exact VClock.le_trans hle ((hL.w.rel k l hl).2 1 (LPh.held_of_holds hh))
 
 /-- Past its lock, the producer saw every registration (`reg`). -/
 theorem U.reg_out {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U Lo G rX m)
@@ -467,12 +468,12 @@ theorem inv_spawnParts {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM rP 
   have hG0c : (G 0).2.c = .out := by rw [hg]; rfl
   have hG0e : (G 0).2.e = .out := by rw [hg]; rfl
   -- the condition's and the event's invariants
-  have hI := hu.cinv.stay hhS hhE rfl (fun _ hw _ => hw) (fun _ _ h => h) (by simp) hclk
+  have hI := hu.cinv.stay hhS hhE rfl rfl rfl (fun _ hw _ => hw) (fun _ _ h => h) (by simp) hclk
   have hI' := cinv_out (cinv_out hI (t := 1) (g := gO rP { ph := .lk }) (by rw [hG1]) rfl)
     (t := 0) (g := gO rM { ph := .run })
     (by rw [upd1_0]; exact hG0c) rfl
   have hJ := hu.einv.frame (G' := G) (t := 0) (fun _ _ => rfl) rfl rfl hhV rfl hclk (by simp <;> omega) id id
-    hu.einv.fresh
+    hu.einv.fresh rfl rfl
   have hJ' := einv_out (einv_out hJ (t := 1) (g := gO rP { ph := .lk }) (by rw [hG1]) rfl
       (fun h => by
         have h' : (G 1).2.ph = .ev ∨ (G 1).2.ph = .joins := h

@@ -12,6 +12,13 @@ Every fixture .olean, every assurance report and the exposure extraction (snapsh
 byte-identical between the two build.sh runs. The one exception is the Shadow audits' error
 reports, compared up to the name of the extractor's temporary driver file, which differs from
 run to run with or without the cache. Needs what check.sh needs.
+
+The runs delete and rebuild the library's outputs, so they run in a check tree
+(`.lake/check-tree/audit-cache`, scripts/check-tree.py), never in the checkout: there they would
+rebuild the shared fixture package under the parallel units of scripts/fixture-checks.py, whose
+audits bind every compiled module on their lookup path (a missing `AuditClaims/AsmTotal.olean`,
+"compiler-owned Unit imported inputs changed"). Run from the checkout, the test creates the tree
+and runs its own copy there.
 """
 import importlib.util
 import json
@@ -36,6 +43,9 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 spec = importlib.util.spec_from_file_location('snapshot', HERE / 'snapshot.py')
 snapshot = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(snapshot)
+spec = importlib.util.spec_from_file_location('check_tree', ROOT / 'scripts/check-tree.py')
+check_tree = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(check_tree)
 
 
 def run(argv, store, cwd=ROOT):
@@ -54,18 +64,18 @@ def run(argv, store, cwd=ROOT):
 
 
 def outputs():
-    files = [*BUILD.glob('lib/lean/AuditClaims/*.olean'), *REPORTS.glob('*.json')]
+    # build.sh's replay cache is no output: it is that run's shared kernel-replay state, and its
+    # audits check the root modules through Lake-built receipts, so it often stays unwritten.
+    files = [*BUILD.glob('lib/lean/AuditClaims/*.olean'), *REPORTS.glob('assurance-*.json')]
     return {p.name: DRIVER.sub(b'<driver>.lean', p.read_bytes()) for p in sorted(files)}
 
 
-def require_built_root():
-    """The runs below toggle the cache for the fixtures only; the root package's modules must be
-    up to date for Lake with and without it. Otherwise the uncached run would rebuild them in
-    place in the shared checkout, racing every check that imports them (scripts/fixture-checks.py
-    runs in parallel), and compare outputs built from two different root builds."""
+def require_built_root(targets):
+    """The runs below toggle the cache for the fixtures only; the root package's modules
+    (`targets`, scripts/lean-deps.py --all) must be up to date for Lake with and without it, in
+    the checkout and in the check tree that clones its build. Otherwise the uncached run would
+    rebuild them and compare outputs built from two different root builds."""
     env = {k: v for k, v in os.environ.items() if k != 'AIR2LEAN_CAS_DIR' and not k.startswith('LAKE_')}
-    targets = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/lean-deps.py'), '--all'], cwd=ROOT,
-                             env=env, text=True, stdout=subprocess.PIPE, check=True).stdout.split()
     done = subprocess.run(['lake', 'build', '--no-build', *targets], cwd=ROOT, env=env, text=True,
                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     if done.returncode:
@@ -75,10 +85,21 @@ def require_built_root():
                          % (', '.join(stale[:10]) or done.stdout[-2000:]))
 
 
-def main():
+def main(argv):
+    if not (ROOT / check_tree.MARKER).is_file():  # the checkout: run in a check tree
+        # The root's targets come from git (scripts/lean-deps.py), which a check tree is not.
+        targets = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/lean-deps.py'), '--all'], cwd=ROOT,
+                                 text=True, stdout=subprocess.PIPE, check=True).stdout.split()
+        require_built_root(targets)
+        try:
+            tree = check_tree.create(ROOT / '.lake/check-tree/audit-cache', [], ROOT)
+        except (ValueError, OSError, subprocess.CalledProcessError) as error:
+            raise SystemExit(f'check tree: {error}')
+        return subprocess.run([sys.executable, '-B', str(tree / Path(__file__).resolve().relative_to(ROOT)),
+                               *targets], cwd=tree).returncode
     build = ['bash', str(HERE / 'build.sh')]
     fill = [sys.executable, '-B', str(ROOT / 'scripts/cas.py'), 'run', '--', 'lake', 'build', 'AuditClaims']
-    require_built_root()
+    require_built_root(argv)  # the clone of the checkout's build, as up to date as the checkout's
     # The extractor records whether its tool olean was reused; a first audit in a new checkout
     # has no record yet. Make both build.sh runs see the same state.
     import assumptions
@@ -93,7 +114,7 @@ def main():
     failures = ['%s: Lake compiled %d fixtures, expected %d' % (name, count, expected)
                 for (name, count), expected in zip(compiled.items(), (FIXTURES, FIXTURES, 0)) if count != expected]
     changed = sorted(f for f in cached.keys() | plain.keys() if cached.get(f) != plain.get(f))
-    if changed or len(plain) != FIXTURES + 5:  # the oleans, 4 reports and the replay cache
+    if changed or len(plain) != FIXTURES + 4:  # the oleans and the 4 reports
         failures.append('build.sh from the cache differs from the uncached run: ' + ', '.join(changed or plain))
     if json.dumps(snapshot.extract()) != extraction:
         failures.append('build.sh from the cache: the exposure extraction differs from the uncached run')
@@ -106,4 +127,4 @@ def main():
 
 
 if __name__ == '__main__':
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

@@ -149,6 +149,8 @@ def debug_assert (p0 : Bool) : Zig.Result (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] debug_assert
+
 structure mem_Alignment_toByteUnitsLocals where
   deriving Inhabited
 
@@ -162,6 +164,8 @@ def mem_Alignment_toByteUnits (p0 : mem_Alignment) : Zig.Result (BitVec 64) := d
     pure (.ret i2)) : Zig.M mem_Alignment_toByteUnitsLocals mem_Alignment_toByteUnitsExit).run' (default : mem_Alignment_toByteUnitsLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] mem_Alignment_toByteUnits
 
 structure math_isPowerOfTwo__anon_38853e1fe316Locals where
   deriving Inhabited
@@ -181,6 +185,8 @@ def math_isPowerOfTwo__anon_38853e1fe316 (p0 : BitVec 64) : Zig.Result (Bool) :=
     pure (.ret i7)) : Zig.M math_isPowerOfTwo__anon_38853e1fe316Locals math_isPowerOfTwo__anon_38853e1fe316Exit).run' (default : math_isPowerOfTwo__anon_38853e1fe316Locals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] math_isPowerOfTwo__anon_38853e1fe316
 
 structure mem_isValidAlignGeneric__anon_32d5b5f10ec2Locals where
   deriving Inhabited
@@ -206,6 +212,8 @@ def mem_isValidAlignGeneric__anon_32d5b5f10ec2 (p0 : BitVec 64) : Zig.Result (Bo
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] mem_isValidAlignGeneric__anon_32d5b5f10ec2
+
 structure mem_alignBackward__anon_f056e98f6fd2Locals where
   deriving Inhabited
 
@@ -222,6 +230,8 @@ def mem_alignBackward__anon_f056e98f6fd2 (p0 : BitVec 64) (p1 : BitVec 64) : Zig
     pure (.ret i6)) : Zig.M mem_alignBackward__anon_f056e98f6fd2Locals mem_alignBackward__anon_f056e98f6fd2Exit).run' (default : mem_alignBackward__anon_f056e98f6fd2Locals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] mem_alignBackward__anon_f056e98f6fd2
 
 structure mem_alignForward__anon_589277751031Locals where
   deriving Inhabited
@@ -240,6 +250,8 @@ def mem_alignForward__anon_589277751031 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.
   match e with
   | .ret v => pure v
 
+attribute [zig_run] mem_alignForward__anon_589277751031
+
 structure mem_isValidAlignLocals where
   deriving Inhabited
 
@@ -252,6 +264,8 @@ def mem_isValidAlign (p0 : BitVec 64) : Zig.Result (Bool) := do
     pure (.ret i1)) : Zig.M mem_isValidAlignLocals mem_isValidAlignExit).run' (default : mem_isValidAlignLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] mem_isValidAlign
 
 structure mem_alignPointerOffset__anon_db50554bf50fLocals where
   ov : BitVec 64 × BitVec 1
@@ -313,6 +327,8 @@ def mem_alignPointerOffset__anon_db50554bf50f (p0 : Zig.Ptr) (p1 : BitVec 64) : 
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] mem_alignPointerOffset__anon_db50554bf50f
+
 structure mem_alignPointer__anon_787bfe5d1eabLocals where
   deriving Inhabited
 
@@ -349,6 +365,8 @@ def mem_alignPointer__anon_787bfe5d1eab (p0 : Zig.Ptr) (p1 : BitVec 64) : Zig.Me
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] mem_alignPointer__anon_787bfe5d1eab
 
 structure heap_PageAllocator_mapLocals where
   local14 : Option (Zig.Ptr)
@@ -530,6 +548,8 @@ def heap_PageAllocator_map (p0 : BitVec 64) (p1 : mem_Alignment) : Zig.ConcM Tgt
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] heap_PageAllocator_map
+
 structure heap_PageAllocator_allocLocals where
   deriving Inhabited
 
@@ -545,6 +565,8 @@ def heap_PageAllocator_alloc (p0 : Zig.Ptr) (p1 : BitVec 64) (p2 : mem_Alignment
     pure (.ret i7)) : Zig.CM Tgt heap_PageAllocator_allocLocals heap_PageAllocator_allocExit).run' (default : heap_PageAllocator_allocLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] heap_PageAllocator_alloc
 
 structure heap_PageAllocator_unmapLocals where
   local1 : Zig.Slice
@@ -579,6 +601,8 @@ def heap_PageAllocator_unmap (p0 : Zig.Slice) : Zig.MemM (Unit) := do
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] heap_PageAllocator_unmap
+
 structure heap_PageAllocator_freeLocals where
   deriving Inhabited
 
@@ -608,6 +632,8 @@ def heap_PageAllocator_free (p0 : Zig.Ptr) (p1 : Zig.Slice) (p2 : mem_Alignment)
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] heap_PageAllocator_free
 
 structure heap_PageAllocator_reallocLocals where
   local17 : Zig.Slice
@@ -708,6 +734,8 @@ def heap_PageAllocator_realloc (p0 : Zig.Slice) (p1 : mem_Alignment) (p2 : BitVe
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] heap_PageAllocator_realloc
+
 structure heap_PageAllocator_remapLocals where
   deriving Inhabited
 
@@ -720,6 +748,8 @@ def heap_PageAllocator_remap (p0 : Zig.Ptr) (p1 : Zig.Slice) (p2 : mem_Alignment
     pure (.ret i5)) : Zig.MM heap_PageAllocator_remapLocals heap_PageAllocator_remapExit).run' (default : heap_PageAllocator_remapLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] heap_PageAllocator_remap
 
 structure heap_PageAllocator_resizeLocals where
   deriving Inhabited
@@ -734,6 +764,8 @@ def heap_PageAllocator_resize (p0 : Zig.Ptr) (p1 : Zig.Slice) (p2 : mem_Alignmen
     pure (.ret i6)) : Zig.MM heap_PageAllocator_resizeLocals heap_PageAllocator_resizeExit).run' (default : heap_PageAllocator_resizeLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] heap_PageAllocator_resize
 
 structure math_mul__anon_44faaf286c79Locals where
   deriving Inhabited
@@ -761,6 +793,8 @@ def math_mul__anon_44faaf286c79 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] math_mul__anon_44faaf286c79
+
 structure mem_Alignment_fromByteUnitsLocals where
   deriving Inhabited
 
@@ -776,6 +810,8 @@ def mem_Alignment_fromByteUnits (p0 : BitVec 64) : Zig.Result (mem_Alignment) :=
     pure (.ret i4)) : Zig.M mem_Alignment_fromByteUnitsLocals mem_Alignment_fromByteUnitsExit).run' (default : mem_Alignment_fromByteUnitsLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] mem_Alignment_fromByteUnits
 
 structure mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bLocals where
   deriving Inhabited
@@ -826,6 +862,8 @@ def mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8b (p0 : mem_Allocator
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8b
 
 structure mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Locals where
   deriving Inhabited
@@ -888,6 +926,8 @@ def mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279 (p0 : mem_Allocator
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279
+
 structure mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43Locals where
   deriving Inhabited
 
@@ -913,6 +953,8 @@ def mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43 (p0 : mem_Allocat
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43
 
 structure mem_Allocator_alloc__anon_a8254a5f2b74Locals where
   deriving Inhabited
@@ -945,6 +987,8 @@ def mem_Allocator_alloc__anon_a8254a5f2b74 (p0 : mem_Allocator) (p1 : BitVec 64)
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] mem_Allocator_alloc__anon_a8254a5f2b74
+
 structure mem_Allocator_create__anon_8f6a81b88324Locals where
   deriving Inhabited
 
@@ -966,6 +1010,8 @@ def mem_Allocator_create__anon_8f6a81b88324 (p0 : mem_Allocator) : Zig.ConcM Tgt
       pure (.ret i8))) : Zig.CM Tgt mem_Allocator_create__anon_8f6a81b88324Locals mem_Allocator_create__anon_8f6a81b88324Exit).run' (default : mem_Allocator_create__anon_8f6a81b88324Locals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] mem_Allocator_create__anon_8f6a81b88324
 
 structure mem_Allocator_destroy__anon_7fa4accb9a56Locals where
   deriving Inhabited
@@ -996,6 +1042,8 @@ def mem_Allocator_destroy__anon_7fa4accb9a56 (p0 : mem_Allocator) (p1 : Zig.Ptr)
   | .ret => pure ()
   | _ => throw .panic
 
+attribute [zig_run] mem_Allocator_destroy__anon_7fa4accb9a56
+
 structure mem_absorbSentinel__anon_7342b53a30edLocals where
   deriving Inhabited
 
@@ -1007,6 +1055,8 @@ def mem_absorbSentinel__anon_7342b53a30ed (p0 : Zig.Slice) : Zig.MemM (Zig.Slice
     pure (.ret p0)) : Zig.MM mem_absorbSentinel__anon_7342b53a30edLocals mem_absorbSentinel__anon_7342b53a30edExit).run' (default : mem_absorbSentinel__anon_7342b53a30edLocals)
   match e with
   | .ret v => pure v
+
+attribute [zig_run] mem_absorbSentinel__anon_7342b53a30ed
 
 structure mem_Allocator_free__anon_1e60e7ef40f5Locals where
   deriving Inhabited
@@ -1047,6 +1097,8 @@ def mem_Allocator_free__anon_1e60e7ef40f5 (p0 : mem_Allocator) (p1 : Zig.Slice) 
   match e with
   | .ret => pure ()
   | _ => throw .panic
+
+attribute [zig_run] mem_Allocator_free__anon_1e60e7ef40f5
 
 structure mem_Allocator_resize__anon_ec6bca265858Locals where
   deriving Inhabited
@@ -1109,6 +1161,8 @@ def mem_Allocator_resize__anon_ec6bca265858 (p0 : mem_Allocator) (p1 : Zig.Slice
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] mem_Allocator_resize__anon_ec6bca265858
+
 structure page_createLocals where
   deriving Inhabited
 
@@ -1136,6 +1190,8 @@ def page_create (p0 : BitVec 32) : Zig.ConcM Tgt (BitVec 32) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] page_create
 
 structure page_resizeLocals where
   local10 : Zig.Slice
@@ -1178,6 +1234,8 @@ def page_resize (p0 : BitVec 64) (p1 : BitVec 64) : Zig.ConcM Tgt (Bool) := do
   match e with
   | .ret v => pure v
   | _ => throw .panic
+
+attribute [zig_run] page_resize
 
 structure page_sumLocals where
   sum : BitVec 64
@@ -1246,8 +1304,12 @@ def page_sum (p0 : BitVec 64) : Zig.ConcM Tgt (BitVec 64) := do
   | .ret v => pure v
   | _ => throw .panic
 
+attribute [zig_run] page_sum.loop17 page_sum
+
 /-- Runs a spawn target (`Zig.Sched.run`). -/
 def dispatch : Tgt → Zig.ConcM Tgt Unit :=
   fun t => nomatch t
+
+attribute [zig_run] dispatch
 
 end AllocTranslated.PageMacos

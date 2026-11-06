@@ -9,18 +9,8 @@ without kernel replay (S1), which rejects this module. The S7 variant is in `Asm
 that each module's audit verdict belongs to one finding.
 -/
 
-open Lean Elab Command Term Meta
-
-/-- S1: a kernel-unchecked universal claim (false: `root 255` panics). -/
-elab "#audit_unchecked_universal" : command => do
-  liftTermElabM do
-    let type ← instantiateMVars (← elabType (← `(∀ x : BitVec 8, AuditClaims.root x = pure (x + 1))))
-    withOptions (fun o => o.setBool `debug.skipKernelTC true) do
-      addDecl (.thmDecl { name := `AuditClaims.unchecked_universal, levelParams := [], type,
-                          value := mkConst ``True.intro })
-
-#audit_unchecked_universal
-
-namespace AuditClaims
-
-end AuditClaims
+set_option debug.skipKernelTC true in
+/-- S1: a kernel-unchecked universal claim (false: `root 255` panics), entered as in
+`Unchecked.lean`. -/
+theorem AuditClaims.unchecked_universal : ∀ x : BitVec 8, AuditClaims.root x = pure (x + 1) := by
+  run_tac do (← Lean.Elab.Tactic.getMainGoal).assign (Lean.mkConst ``True.intro)

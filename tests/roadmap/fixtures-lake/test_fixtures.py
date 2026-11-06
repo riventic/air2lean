@@ -111,6 +111,69 @@ class Mutant(Repo):
                                      ["did not evaluate to"]), 1)
 
 
+class Instance(unittest.TestCase):
+    """`fixtures.py instance`: an instance is its primary with whole name components renamed, in
+    text and path; a drifted instance, a partial-name match or an absent name fails."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="air2lean-fixtures-instance-test.")
+        self.addCleanup(tmp.cleanup)
+        self.dir = Path(tmp.name)
+        self.primary = self.dir / "Fix/V0_17_0/Model.lean"
+        self.primary.parent.mkdir(parents=True)
+        self.primary.write_text("import Fix.V0_17_0.Gen\nnamespace Fix.V0_17_0.Model\n"
+                                "-- XV0_17_0 V0_17_0x stay\nend Fix.V0_17_0.Model\n")
+        self.instance = self.dir / "Fix/V0_14_1/Model.lean"
+
+    def test_write_then_check(self):
+        self.assertEqual(fx.instance(self.primary, ["V0_17_0=V0_14_1"], True), 0)
+        self.assertEqual(self.instance.read_text(), "import Fix.V0_14_1.Gen\nnamespace Fix.V0_14_1.Model\n"
+                         "-- XV0_17_0 V0_17_0x stay\nend Fix.V0_14_1.Model\n")
+        self.assertEqual(fx.instance(self.primary, ["V0_17_0=V0_14_1"], False), 0)
+
+    def test_drift_fails(self):
+        fx.instance(self.primary, ["V0_17_0=V0_14_1"], True)
+        self.instance.write_text(self.instance.read_text() + "theorem extra : True := trivial\n")
+        self.assertEqual(fx.instance(self.primary, ["V0_17_0=V0_14_1"], False), 1)
+
+    def test_missing_instance_fails(self):
+        self.assertEqual(fx.instance(self.primary, ["V0_17_0=V0_14_1"], False), 1)
+
+    def test_absent_name_fails(self):
+        with self.assertRaises(SystemExit):
+            fx.instance(self.primary, ["V0_16_0=V0_14_1"], False)
+
+    def test_primary_naming_a_new_version_is_refused(self):
+        # A 0.17.0 model importing the 0.16.0 translation would make every instance agree.
+        self.primary.write_text(self.primary.read_text() + "open Fix.V0_14_1\n")
+        with self.assertRaisesRegex(SystemExit, "already names V0_14_1"):
+            fx.instance(self.primary, ["V0_17_0=V0_14_1"], True)
+
+    def test_identity_is_refused(self):
+        with self.assertRaisesRegex(SystemExit, "unchanged"):
+            fx.instance(self.primary, ["V0_17_0=V0_17_0"], False)
+
+    def test_chained_substitutions_are_refused(self):
+        # V0_17_0 -> Model -> Raw would rename both to Raw; Model is in the primary: refused.
+        with self.assertRaisesRegex(SystemExit, "already names Model"):
+            fx.instance(self.primary, ["V0_17_0=Model", "Model=Raw"], True)
+
+
+class Run(Repo):
+    def test_runs_built_modules_only(self):
+        self.write("tests/roadmap/a/A/Main.lean", 'namespace A\ndef main : IO Unit := IO.println "a line"\nend A\n')
+        self.fixtures([("A", "a", '["A.+"]')])
+        out = self.repo / "out"
+        # Not built yet: the run refuses instead of loading a stale or missing module.
+        self.assertEqual(fx.run(out, ["A.Main:A.main"]), 1)
+        self.assertEqual(fx.build(["A"]), 0)
+        self.assertEqual(fx.run(out, ["A.Main:A.main"]), 0)
+        self.assertEqual((out / "A.main.txt").read_text(), "a line\n")
+        # A changed source is out of date until it is built again.
+        self.write("tests/roadmap/a/A/Main.lean", 'namespace A\ndef main : IO Unit := IO.println "b"\nend A\n')
+        self.assertEqual(fx.run(out, ["A.Main:A.main"]), 1)
+
+
 class Audit(unittest.TestCase):
     """Controls of `fixtures.py audit` against this repository's extractor (tools.Assurance,
     built by scripts/assumptions.py): a Lake-built module with a `sorry` or a non-standard axiom
@@ -345,6 +408,61 @@ class LakeKernelReplay(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertTrue(killed)
         self.assertEqual(self.replay(text)["status"], "pass")
+
+
+class ReplayFreshness(unittest.TestCase):
+    """scripts/assumptions.py replay_and_freshness: `leanchecker Lib` checks every olean below
+    `Lib` (`checked_modules`), also `Lib.Extra`, which `Lib` does not import. A stale one fails
+    the trace check before the compiled inputs are bound, rather than being checked as it is or
+    rebuilt by a Lake receipt during the replay (which then failed with "canonical Lake compiled
+    inputs changed during kernel replay"). An orphan one (no source) fails there too."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="air2lean-replay-freshness-test.")
+        self.addCleanup(tmp.cleanup)
+        self.repo = Path(tmp.name).resolve()
+        shutil.copy(ROOT / "lean-toolchain", self.repo / "lean-toolchain")
+        (self.repo / "lakefile.toml").write_text('name = "air2lean"\n[[lean_lib]]\nname = "Lib"\n')
+        (self.repo / "Lib.lean").write_text("def lib : Nat := 1\n")
+        (self.repo / "Lib").mkdir()
+        self.extra = self.repo / "Lib/Extra.lean"
+        self.extra.write_text("def extra : Nat := 1\n")
+        spec = importlib.util.spec_from_file_location("air2lean_assumptions", ROOT / "scripts/assumptions.py")
+        self.assumptions = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.assumptions)
+        for patch in (mock.patch.object(self.assumptions, "ROOT", self.repo),
+                      mock.patch.object(self.assumptions, "LAKE_ROOTS", ("Lib",)), without_cache()):
+            patch.start()
+            self.addCleanup(patch.stop)
+        self.build("Lib", "Lib.Extra")
+
+    def build(self, *modules):
+        done = fx.lake(self.repo, ["build", *modules], capture=True)
+        self.assertEqual(done.returncode, 0, done.stdout)
+
+    def audit(self):
+        sysroot = Path(self.assumptions.lake_env("LEAN_SYSROOT")).resolve()
+        raw = {"extractor": {"lean_sysroot": str(sysroot),
+                             "toolchain_runtime_sha256": self.assumptions.toolchain_runtime_sha256(sysroot)},
+               "nodes": [], "modules": ["Lib"]}
+        freshness = self.assumptions.replay_and_freshness(raw)
+        return raw["kernel_replay"]["status"], freshness["lake_trace_check"]["status"]
+
+    def test_stale_olean_below_an_audited_module_fails_before_the_replay(self):
+        self.assertEqual(self.audit(), ("pass", "up-to-date"))
+        self.extra.write_text("def extra : Nat := 2\n")  # Lib.Extra's olean is now stale
+        olean = self.repo / ".lake/build/lib/lean/Lib/Extra.olean"
+        before = olean.read_bytes()
+        with mock.patch("sys.stderr"), self.assertRaisesRegex(RuntimeError, "--no-build .*Lib.Extra"):
+            self.audit()
+        self.assertEqual(olean.read_bytes(), before)  # the audit built nothing
+        self.build("Lib.Extra")
+        self.assertEqual(self.audit(), ("pass", "up-to-date"))
+
+    def test_orphan_olean_below_an_audited_module_fails_before_the_replay(self):
+        self.extra.unlink()  # Lib.Extra's olean has no source any more: Lake cannot build it
+        with self.assertRaisesRegex(ValueError, "Lib/Extra.olean: compiled module without a source"):
+            self.audit()
 
 
 if __name__ == "__main__":

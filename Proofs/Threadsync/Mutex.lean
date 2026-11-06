@@ -1,7 +1,7 @@
 import Proofs.MutexCounter.Protocol
 import Proofs.Threadsync.ThreadMutex
 import ZigLean.Sep.Full.AutoWP
-import ZigLean.Conc.Unroll
+import ZigLean.Conc.RunResult
 import ZigLean.Witness
 
 /-!
@@ -184,11 +184,14 @@ theorem mutexCounter_safe (env : Env) (henv : env.spawn = .available) {σ : Plac
   P.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec (fun _ _ _ _ hq => hq.2) rfl (main_spec σ)
 
 /-- One schedule completes: under the oracle that always picks option 0, the `std.Thread.Mutex` counter returns 4 within
-fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
-each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
+fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run once the
+loops on its path are unfolded by their defining equation (`docs/proof-tools.md`, concrete runs of
+programs with loops). -/
 theorem mutexCounter_completes :
-    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) mutexCounter (mem0 σ)) = some 4 :=
-  ⟨.fresh, by unroll_sched 10⟩
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) mutexCounter (mem0 σ)) = some 4 := by
+  refine ⟨.fresh, ?_⟩
+  iterate 8 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
+  decide +kernel
 
 nonvacuity_witness cnt_decode :=
   ⟨Enc.encode (0 : BitVec 32) ++ Enc.encode (4 : BitVec 32), 0, by decide +kernel,

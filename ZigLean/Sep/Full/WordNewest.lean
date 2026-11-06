@@ -98,7 +98,7 @@ theorem cmpxchgWeakAt_run_ne_none {n : Nat} (c : Nat) (succ fail : AtomicOrder) 
 namespace Thread
 
 /-- A futex wake at `p` where no thread waits wakes no thread: the memory stays as it is. -/
-theorem futexWake_run_idle {m : Mem} {p : Ptr} {n : Nat} {cs : List Nat}
+theorem futexWake_run_idle {m : Mem} {p : FutexKey} {n : Nat} {cs : List Nat}
     (hq : ∀ w ∈ m.waiters, w.2 ≠ p) :
     ((futexWake p n cs).run m).run = some (.ok ((), m)) := by
   have hf : m.waiters.filter (·.2 == p) = #[] := by
@@ -121,7 +121,7 @@ end Thread
 
 namespace Conc.Word
 
-variable {n nb : Nat} {W : Word n nb}
+variable {n nb : Nat} {W : Word n nb} {A : ThreadId → Prop}
 
 /-- One write has one value. -/
 theorem Entry.val_inj {x : Entry} {a b : BitVec n} (ha : x.Val a) (hb : x.Val b) : a = b := by
@@ -146,13 +146,13 @@ private theorem filter_first {α : Type} {a : Array α} {x : α} {p : α → Boo
 
 /-- **A load of the newest write**: the first choice of a load at a valid word returns the
 value the word holds, and keeps it. -/
-theorem Ok.load_newest {m : Mem} {ord : AtomicOrder} {v : BitVec n} (hw : W.Ok m)
+theorem Ok.load_newest {m : Mem} {ord : AtomicOrder} {v : BitVec n} (hw : W.Ok m A)
     (ht : m.current < m.threads.size) (hcs : m.clocks.size = m.threads.size)
-    (hv : W.Holds m v) :
+    (hv : W.Holds m v) (hA : A m.current := by trivial) :
     ∃ m', ((atomicLoadAt (n := n) 0 ord nb W.ptr).run m).run = some (.ok (v, m')) ∧
-      W.Ok m' ∧ W.Holds m' v ∧ FStepIn (fun _ => none) m m' := by
+      W.Ok m' A ∧ W.Holds m' v ∧ FStepIn (fun _ => none) m m' := by
   obtain ⟨⟨v', m'⟩, h⟩ := Result.exists_ok_of_run_ne_none (atomicLoadAt_run_ne_none (n := n) 0 ord nb W.ptr m)
-    (hw.load_noErr_native ht hcs (first_choice _))
+    (hw.load_noErr_native ht hA hcs (first_choice _))
   have hcc : m.current < m.clocks.size := by rw [hcs]; exact ht
   obtain ⟨_, _, _, _, _, hh, hw'⟩ := hw.load_native rfl ht hcs h
   have hs := atomicLoad_fstep (hF := fun _ => none) hw hcc (fun _ _ _ => rfl) h
@@ -175,14 +175,15 @@ theorem Ok.load_newest {m : Mem} {ord : AtomicOrder} {v : BitVec n} (hw : W.Ok m
 /-- **An RMW of the newest write**: the first choice of an RMW at a valid word reads the value
 the word holds and leaves the word holding the op's result. -/
 theorem Ok.rmw_newest {m : Mem} {op : RmwOp} {signed : Bool} {ord : AtomicOrder}
-    {v₀ v : BitVec n} (hw : W.Ok m) (ht : m.current < m.threads.size)
-    (hcs : m.clocks.size = m.threads.size) (hv : W.Holds m v₀) :
+    {v₀ v : BitVec n} (hw : W.Ok m A) (ht : m.current < m.threads.size)
+    (hcs : m.clocks.size = m.threads.size) (hv : W.Holds m v₀) (hA : A m.current := by trivial) :
     ∃ m', ((atomicRmwAt 0 op signed ord nb W.ptr v).run m).run = some (.ok (v₀, m')) ∧
-      W.Ok m' ∧ W.Holds m' (op.apply signed v₀ v) ∧ FStepIn (fun _ => none) m m' := by
+      W.Ok m' A ∧ W.Holds m' (op.apply signed v₀ v) ∧ FStepIn (fun _ => none) m m' := by
   obtain ⟨⟨old, m'⟩, h⟩ := Result.exists_ok_of_run_ne_none
-    (atomicRmwAt_run_ne_none 0 op signed ord nb W.ptr v m) (hw.rmw_noErr_native ht hcs (first_choice _))
+    (atomicRmwAt_run_ne_none 0 op signed ord nb W.ptr v m)
+    (hw.rmw_noErr_native ht hA hcs (first_choice _))
   have hcc : m.current < m.clocks.size := by rw [hcs]; exact ht
-  obtain ⟨hold, hw', hU, _, _⟩ := hw.rmw_native rfl ht hcs h
+  obtain ⟨hold, hw', hU, _, _⟩ := hw.rmw_native rfl ht hA hcs h
   obtain rfl := Entry.val_inj hold (hw.holds_last.mp hv)
   exact ⟨m', h, hw', hU, atomicRmw_fstep hw hcc (fun _ _ _ => rfl) h⟩
 
@@ -190,12 +191,13 @@ theorem Ok.rmw_newest {m : Mem} {op : RmwOp} {signed : Bool} {ord : AtomicOrder}
 word that expects the value the word holds succeeds (the first choices are the strong ones,
 newest first) and leaves the word holding the new value. -/
 theorem Ok.weakCas_newest {m : Mem} {succ fail : AtomicOrder} {exp new : BitVec n}
-    (hw : W.Ok m) (ht : m.current < m.threads.size) (hcs : m.clocks.size = m.threads.size)
-    (hv : W.Holds m exp) :
+    (hw : W.Ok m A) (ht : m.current < m.threads.size) (hcs : m.clocks.size = m.threads.size)
+    (hv : W.Holds m exp) (hA : A m.current := by trivial) :
     ∃ m', ((cmpxchgWeakAt 0 succ fail nb W.ptr exp new).run m).run = some (.ok (none, m')) ∧
-      W.Ok m' ∧ W.Holds m' new ∧ FStepIn (fun _ => none) m m' := by
+      W.Ok m' A ∧ W.Holds m' new ∧ FStepIn (fun _ => none) m m' := by
   obtain ⟨⟨r, m'⟩, h⟩ := Result.exists_ok_of_run_ne_none
-    (cmpxchgWeakAt_run_ne_none 0 succ fail nb W.ptr exp new m) (hw.weakCas_noErr_native ht hcs (first_choice _))
+    (cmpxchgWeakAt_run_ne_none 0 succ fail nb W.ptr exp new m)
+    (hw.weakCas_noErr_native ht hA hcs (first_choice _))
   have hcc : m.current < m.clocks.size := by rw [hcs]; exact ht
   have hs := cmpxchgWeak_fstep (hF := fun _ => none) hw hcc (fun _ _ _ => rfl) h
   have hr : r = none := by
@@ -230,13 +232,14 @@ theorem Ok.weakCas_newest {m : Mem} {succ fail : AtomicOrder} {exp new : BitVec 
     · exact hr
     · exact absurd ⟨rfl, rfl⟩ hne
   subst hr
-  obtain ⟨hw', hcase⟩ := hw.weakCas_native rfl ht hcs h
+  obtain ⟨hw', hcase⟩ := hw.weakCas_native rfl ht hA hcs h
   rcases hcase with ⟨_, _, hU, _⟩ | ⟨_, _, hr, _⟩
   · exact ⟨m', h, hw', hU, hs⟩
   · cases hr
 
 /-- **An actual op at a word keeps every word apart from it**: its validity and its writes. -/
-theorem Ok.apart_run {n' nb' : Nat} {V : Word n' nb'} {m m' : Mem} (hw : W.Ok m) (hv : V.Ok m)
+theorem Ok.apart_run {n' nb' : Nat} {V : Word n' nb'} {m m' : Mem} {B : ThreadId → Prop}
+    (hw : W.Ok m A) (hv : V.Ok m B)
     (hc : m.current < m.clocks.size) (hap : W.b ≠ V.b ∨ W.o + nb ≤ V.o ∨ V.o + nb' ≤ W.o)
     (hop :
       (∃ (c : Nat) (ord : AtomicOrder) (v : BitVec n),
@@ -254,18 +257,19 @@ theorem Ok.apart_run {n' nb' : Nat} {V : Word n' nb'} {m m' : Mem} (hw : W.Ok m)
         ((cmpxchgWeakAt c succ fail nb W.ptr expected new).run m).run =
           some (.ok (r, m'))) ∨
       m' = m.recordAt W.b W.o nb .atomicRead) :
-    V.Ok m' ∧ V.hist m' = V.hist m :=
+    V.Ok m' B ∧ V.hist m' = V.hist m :=
   preserve_apart hv (fun _ hoff => actualRun_fstep hw hc hoff hop)
     (fun l hl => (actualRun_rest hw hc hop).heap l hl) hap
 
 /-- A word with the same writes holds the same value. -/
-theorem Ok.holds_of_hist {m m' : Mem} {v : BitVec n} (hw : W.Ok m) (hw' : W.Ok m')
+theorem Ok.holds_of_hist {m m' : Mem} {v : BitVec n} {B : ThreadId → Prop} (hw : W.Ok m A)
+    (hw' : W.Ok m' B)
     (hh : W.hist m' = W.hist m) (hv : W.Holds m v) : W.Holds m' v :=
   hw'.holds_last.mpr (by rw [hh]; exact hw.holds_last.mp hv)
 
 /-- A word is valid, with the same writes, in a memory with another current thread. -/
-theorem Ok.withCurrent {m : Mem} (hw : W.Ok m) (t : ThreadId) :
-    W.Ok { m with current := t } ∧ W.hist { m with current := t } = W.hist m :=
+theorem Ok.withCurrent {m : Mem} (hw : W.Ok m A) (t : ThreadId) :
+    W.Ok { m with current := t } A ∧ W.hist { m with current := t } = W.hist m :=
   hw.fields_native rfl rfl rfl rfl fun _ => VClock.le_refl _
 
 section futex
@@ -274,16 +278,18 @@ variable {W : Word 32 4}
 
 /-- **A futex wait at a valid word** of a thread that is not woken compares the word's newest
 value `v` with `e`: it sleeps exactly if they are equal. -/
-theorem Ok.futexWait_newest {m : Mem} {e v : BitVec 32} (hw : W.Ok m)
+theorem Ok.futexWait_newest {m : Mem} {e v : BitVec 32} {sh : Bool} (hw : W.Ok m A)
     (ht : m.current < m.threads.size) (hwk : m.woken.contains m.current = false)
-    (hv : W.Holds m v) :
-    ((Thread.futexWait W.ptr e).run m).run = some (.ok (decide (v = e),
+    (hv : W.Holds m v) (hA : A m.current := by trivial) :
+    ((Thread.futexWait W.ptr e sh).run m).run = some (.ok (decide (v = e),
       if v = e then
-        { m.recordAt W.b W.o 4 .atomicRead with waiters := m.waiters.push (m.current, W.ptr) }
+        { m.recordAt W.b W.o 4 .atomicRead with
+          waiters := m.waiters.push (m.current, m.wordKey W.b W.o sh) }
       else m.recordAt W.b W.o 4 .atomicRead)) := by
   obtain ⟨blk, hb, -, -, ha, -⟩ := hw.access
   rw [holds_bytes hb] at hv
-  exact futexWait_run_go hwk ha (hw.noRace rfl ht) hv
+  rw [Mem.wordKey_of hb]
+  exact futexWait_run_go hwk ha (hw.noRace rfl ht hA) hv
 
 end futex
 

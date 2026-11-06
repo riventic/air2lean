@@ -1,5 +1,6 @@
-import ZigLean.Conc.Unroll
+import ZigLean.Conc.RunResult
 import Proofs.Threads.Gen
+import ZigLean.Conc.Base.Lock
 import ZigLean.Conc.Lemmas
 import ZigLean.Mem.Witness
 
@@ -1038,18 +1039,6 @@ theorem bump_body (p : Ptr) (u : ThreadId) (s : bumpLocals) (G : ThreadId → Gh
     exact ⟨rfl, hcur, heq ▸ hi₁, heq ▸ he₁⟩
 
 /-! ## `main`'s steps -/
-
-theorem fork_eq {m m' : Mem} {c : ThreadId}
-    (h : (Thread.fork.run m).run = some (.ok (c, m'))) :
-    c = m.threads.size ∧ m' = { m with
-      clocks := (m.clocks.set! m.current (VClock.bump (m.clocks[m.current]!) m.current)).push
-        (VClock.bump (m.clocks[m.current]!) m.current),
-      threads := m.threads.push { spawner := m.current, joined := false } } := by
-  simp [Thread.fork, Thread.forkWith, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get,
-    StateT.get, set, StateT.set, pure, StateT.pure, ExceptT.pure, ExceptT.mk, ExceptT.run,
-    ExceptT.bind, ExceptT.bindCont, Option.bind] at h
-  obtain ⟨rfl, rfl⟩ := h
-  exact ⟨rfl, rfl⟩
 
 theorem total_succ (G : ThreadId → Gh) (s : Nat) :
     total G (s + 1) = total G s + (G (s + 1)).count := by
@@ -2173,7 +2162,9 @@ theorem main_spec (σ : Placement) (d : Nat) :
   -- The three blocks.
   have hpb3 : PreB m₃ := by
     subst hm₁ hm₂ hm₃
-    refine ⟨by blkat_alloc, by blkat_alloc, by blkat_alloc, fun e he => ?_⟩
+    refine ⟨((BlkAt.alloc _ _ _ (by decide)).afterAlloc _ _ _).afterAlloc _ _ _,
+      (BlkAt.alloc _ _ _ (by decide)).afterAlloc _ _ _, BlkAt.alloc _ _ _ (by decide),
+      fun e he => ?_⟩
     simp [mem0, Mem.ofGlobals, Mem.afterAlloc] at he
   simp only [e0, e1, e2]
   refine WP.bind ?_
@@ -2363,11 +2354,14 @@ theorem parallelCounter_safe (env : Env) (henv : env.spawn = .available) {σ : P
     (main_spec n σ)
 
 /-- One schedule completes: under the oracle that always picks option 0, `parallelCounter 1` returns 4 within
-fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run, with
-each loop cut after 10 iterations (`unroll_sched`, `ZigLean/Conc/Unroll.lean`). -/
+fuel 1000, from `mem0` with the translation's spawn policy. The kernel computes the run once the
+loops on its path are unfolded by their defining equation (`docs/proof-tools.md`, concrete runs of
+programs with loops; the loops over the 4 threads run 5 times). -/
 theorem parallelCounter_completes :
-    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (parallelCounter 1) (mem0 σ)) = some 4 :=
-  ⟨.fresh, by unroll_sched 10⟩
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0) (parallelCounter 1) (mem0 σ)) = some 4 := by
+  refine ⟨.fresh, ?_⟩
+  iterate 9 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
+  decide +kernel
 
 /-! ## Non-vacuity witnesses -/
 
