@@ -210,6 +210,16 @@ theorem _root_.Zig.FStepIn.unread {hF hR : Heap} {m m' : Mem} (hs : FStepIn hF m
   hs.weakenR (fun l hl => by unfold Heap.diff at hl; split at hl <;> simp_all)
     fun l hl hr => by unfold Heap.diff at hl; split at hl <;> simp_all
 
+/-- A step in a resource's bytes that may read its partial shares is a step in its cells, which
+are no share. -/
+theorem _root_.Zig.FStepIn.cells {r : Res} {m m' : Mem} (hs : FStepIn r.owned m m' r.shared) :
+    FStepIn r.heap.erase m m' :=
+  hs.unread.weaken fun l hl => by
+    have hh : r.heap l ≠ none := fun e => hl (by simp [FHeap.erase, e])
+    unfold Heap.diff
+    rw [if_pos (Res.excl_shared_disj (Res.excl_of_heap hh))]
+    exact Res.owned_of_heap hh
+
 theorem _root_.Zig.Mem.OwnsRes.fork {m m' : Mem} {t u c : ThreadId} {gt : Bool} {r : Res}
     (ho : m.OwnsRes u r) (hcs : m.clocks.size = m.threads.size) (hu : u < m.threads.size)
     (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m'))) :

@@ -1931,6 +1931,21 @@
    ],
    "deletion_plan": "Delete `fthread_remap`'s `set_option maxHeartbeats 300000` when a failed rule premise no longer pays the second pass and `fthread_remap` elaborates within 180k heartbeats (a margin under the default 200k, which it reached before #699).",
    "note": "Cost only: the second pass adds facts, never a premise; a goal it fails on fails as before."
+  },
+  {
+   "id": "share-gather",
+   "title": "gathering partial read shares of different owners into a whole share fails closed",
+   "status": "open",
+   "requester": "coordinator (F4 read shares, option R, PR #713)",
+   "progress": "Option R (maintainer 2026-11-06): a thread owns its cells and whole shares (`Mem.Owns`: every access before its clock) and only reads its partial shares (`Mem.OwnsR`: every write before its clock); the free lock likewise (`LockWord.OwnsRes`). Where two partial shares held by different owners become one whole share, the byte turns exclusive and needs every read of it ordered before the gatherer, which no clock records. The rules fail closed there: `FOwned.join` and `FCapture.join_regain` (`hg`, discharged by an autoParam for share-free parts), `FLock.Inv.join` (`hgat`), and a lock acquire (`FLock.Inv.acq`, `Inv.take`: `FLock.NoGather`, from `NoGather.of_R` for a resource without partial shares). `FOwned.take` and `FOwned.move` take the gatherer's `Mem.OwnsRes` (with `Mem.OwnsRes.addOwns` when the clock owns the taken bytes). Lost: joining two reader threads to recover a whole share, and a mutex-protected partial share whose complement the acquirer holds. RwLock does not need it: its readers return their shares through the state word's RMWs, whose release/acquire orders their reads.",
+   "request": "An explicit `Mem.Owns` premise at the gathering join (or acquire) in place of the no-gather premise, which the client discharges once every holder's reads are ordered before the gatherer (for a join: each reader thread's reads happen before its end, which the join acquires; for a lock: the protocol's release/acquire chain).",
+   "workaround_sites": [
+    "ZigLean/Sep/Full/ThreadOwned.lean",
+    "ZigLean/Sep/Full/ThreadSpawn.lean",
+    "ZigLean/Sep/Full/Lock.lean"
+   ],
+   "deletion_plan": "Replace the no-gather premises `hg`/`hgat`/`NoGather` of `FOwned.join`, `FCapture.join_regain`, `FLock.Inv.join`, `FLock.Inv.acq` and `FLock.Inv.take` by the `Mem.Owns` premise of the gathered bytes (`Mem.OwnsRes.addOwns` shape), and delete `FLock.NoGather`.",
+   "note": "Fail closed, not a weakening: without the premise the rules reject the gathering step; every share-free resource discharges it by `Res.excl_eq_erase` (autoParam) or `NoGather.of_R`. Counterexample to dropping it: tests/roadmap/sep-full/ShareRaceCX.lean (`twoReaders`)."
   }
  ],
  "mechanisms": [

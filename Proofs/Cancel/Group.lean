@@ -676,6 +676,7 @@ theorem main_spec (n : Nat) :
     have := hi₉.own.disj (u := 0) (v := 1) (by rw [hsz₉]; decide) (by rw [hsz₉]; decide) (by decide)
     rwa [hown0, hown1] at this
   have ho₁₀ := FOwned.join (hi₉.own.current 0) (by rw [hsz₉]; decide) (show (1 : ThreadId) ≠ 0 by decide) hj
+    fun l => .inl (by rw [hown0]; exact (Res.excl_eq_erase).2 l)
   obtain ⟨rec, -, -, hm₁₀⟩ := Proto.join_eq hj
   rw [hown0, hown1] at ho₁₀
   have hc₁₀ : m₁₀.current = 0 := by rw [hm₁₀]

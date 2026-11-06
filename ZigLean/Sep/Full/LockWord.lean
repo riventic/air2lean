@@ -1207,6 +1207,35 @@ theorem Rel.post {P' P'' : ThreadId → LPh} {t : ThreadId} {m M M' : Mem} (h : 
     L.Rel t P'' m M' :=
   fun h' w ho hoff => (h h' w ho hoff).step hs hoff hbl hg
 
+theorem Off.excl {r : Res} (h : L.Off r.owned) : L.Off r.excl := fun x h1 h2 =>
+  Classical.byContradiction fun hn => Res.owned_of_excl hn (h x h1 h2)
+
+theorem Off.shared {r : Res} (h : L.Off r.owned) : L.Off r.shared := fun x h1 h2 =>
+  Classical.byContradiction fun hn => Res.owned_of_shared hn (h x h1 h2)
+
+theorem OwnsRes.of_owns {P : ThreadId → LPh} {m : Mem} {r : Res} (ho : L.Owns P m r.owned) :
+    L.OwnsRes P m r :=
+  ⟨ho.sub fun _ => Res.owned_of_excl, (ho.sub fun _ => Res.owned_of_shared).toR⟩
+
+theorem OwnsRes.weaken {P P' : ThreadId → LPh} {m : Mem} {r : Res}
+    (hg : ∀ u, P' u ≠ .gone → P u ≠ .gone) (ho : L.OwnsRes P m r) : L.OwnsRes P' m r :=
+  ⟨ho.1.weaken hg, ho.2.weaken hg⟩
+
+/-- A lock step keeps the free lock's resource (`Owns.step`). -/
+theorem OwnsRes.step {P P' : ThreadId → LPh} {t : ThreadId} {m m' : Mem} {r : Res}
+    (hs : L.Step t m m') (hoff : L.Off r.owned) (hbl : L.b < m.blocks.size)
+    (hg : ∀ u, P' u ≠ .gone → P u ≠ .gone) (ho : L.OwnsRes P m r) : L.OwnsRes P' m' r :=
+  ⟨ho.1.step hs hoff.excl hbl hg, ho.2.step hs hoff.shared hbl hg⟩
+
+/-- A step of a thread on its own part keeps the free lock's resource (`Owns.stepIn`): the step
+may read the frame's shares `hR`, which hold none of the resource's exclusive bytes (`hd`). -/
+theorem OwnsRes.stepIn {P : ThreadId → LPh} {m m' : Mem} {hF hR : Heap} {r : Res}
+    (ho : L.OwnsRes P m r) (hs : FStepIn hF m m' hR) (hsub : ∀ l, r.owned l ≠ none → hF l ≠ none)
+    (hwF : ∀ x, L.o ≤ x → x < L.o + 4 → hF (L.b, x) ≠ none) (hok : ∀ i l, L.Loc m i l → l.len = 4)
+    (hd : ∀ l, r.excl l ≠ none → hR l = none) : L.OwnsRes P m' r :=
+  ⟨ho.1.stepIn hs (fun l hl => hsub l (Res.owned_of_excl hl)) hwF hok fun _ => hd,
+    ho.2.stepIn hs (fun l hl => hsub l (Res.owned_of_shared hl)) hwF hok nofun⟩
+
 /-- An acquire: the free lock's resource `r` is the acquiring thread's (`Mem.OwnsRes`). -/
 theorem Acq.ownsRes {P : ThreadId → LPh} {t : ThreadId} {m m' : Mem} {r : Res}
     (h : L.Acq P t m m') (ho : L.OwnsRes P m r) (hoff : L.Off r.owned) :

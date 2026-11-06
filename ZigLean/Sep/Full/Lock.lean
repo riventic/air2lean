@@ -277,7 +277,21 @@ resource only when the lock is free). -/
 abbrev FreeRes (G : ThreadId → γ) (rX : Res) (m : Mem) (rL : Res) : Prop :=
   FOwned (L.own G m) (rsum (L.wordR m) (rsum rL rX)) m ∧
     L.Off rL.heap.erase ∧ FHeap.Disjoint rL.heap rX.heap ∧
-    (L.Free G → L.R G rL ∧ L.toLockWord.Owns (L.pl G) m rL.owned) ∧ (¬ L.Free G → rL = rnil)
+    (L.Free G → L.R G rL ∧ L.toLockWord.OwnsRes (L.pl G) m rL) ∧ (¬ L.Free G → rL = rnil)
+
+/-- **An acquire by `t` gathers no read share** (`docs/sep-full-state.md` §Read shares): at every
+byte, `t`'s part or the lock's resource holds no partial share. Gathering two partial shares into a
+whole one makes the byte exclusive, which needs every read of it ordered before `t`; the free
+lock orders only the writes to its partial shares (`LockWord.OwnsRes`), so `Inv.acq` fails closed
+on it (engine ledger #share-gather). A resource without partial shares never gathers
+(`NoGather.of_R`). -/
+def NoGather (G : ThreadId → γ) (m : Mem) (t : ThreadId) : Prop :=
+  ∀ rL, L.R G rL → ∀ l, (L.own G m t).shared l = none ∨ rL.shared l = none
+
+/-- A lock whose resource holds no partial share gathers none. -/
+theorem NoGather.of_R (hR : ∀ G r, L.R G r → ∀ l, r.shared l = none) {G : ThreadId → γ} {m : Mem}
+    {t : ThreadId} : L.NoGather G m t :=
+  fun rL h l => .inr (hR G rL h l)
 
 /-- The invariant of the lock with the protocol's own rest `rX` (module doc). -/
 structure Inv (G : ThreadId → γ) (rX : Res) (m : Mem) : Prop where
@@ -358,6 +372,9 @@ structure Fits (K : FPrim γ) {Tgt : Type} (P : Proto Tgt γ)
   that left the lock (`gone`) and runs other sync code. The scheduler resumes only a thread that
   exists (`Proto.Safe`), so the stop knows `t < m.threads.size`. -/
   atStop : ∀ G rX m t, t < m.threads.size → U G rX m → U G rX { m with current := t }
+  /-- An acquire gathers no read share (`NoGather`, `Inv.acq`: fail closed, engine ledger
+  #share-gather); a resource without partial shares discharges it (`NoGather.of_R`). -/
+  noGather : ∀ G rX m t, L.Inv G rX m → U G rX m → L.NoGather G m t
   /-- A finished or joinable thread is out of the primitive's code. -/
   kfin : ∀ g, P.fin g → K.pl.ph g = K.out
   kjoins : ∀ g, P.joins g → K.pl.ph g = K.out
@@ -414,6 +431,7 @@ theorem Fits.ofLock {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → R
       L.Transfer G rX m m' t p h → U (upd G t (L.set (G t) p h)) rX m')
     (atStop : ∀ G rX m t, t < m.threads.size → U G rX m → U G rX { m with current := t })
     (tick : ∀ t G rX m G' rX' m', L.PartTick t G rX m G' rX' m' → U G rX m → U G' rX' m')
+    (noGather : ∀ G rX m t, L.Inv G rX m → U G rX m → L.NoGather G m t)
     (hn : ∀ p, ¬ L.nest p := by exact fun _ h => h) :
     L.Fits (FPrim.empty γ) P U ok where
   inv := inv
@@ -423,6 +441,7 @@ theorem Fits.ofLock {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → R
   ok_setPart := ok_setPart
   stable := stable
   atStop := atStop
+  noGather := noGather
   kfin _ _ := rfl
   kjoins _ _ := rfl
   sub _ _ _ _ := trivial
@@ -451,10 +470,11 @@ theorem Fits.ofLockAll {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) �
       L.Transfer G rX m m' t p h → U (upd G t (L.set (G t) p h)) rX m')
     (atStop : ∀ G rX m t, t < m.threads.size → U G rX m → U G rX { m with current := t })
     (tick : ∀ t G rX m G' rX' m', L.PartTick t G rX m G' rX' m' → U G rX m → U G' rX' m')
+    (noGather : ∀ G rX m t, L.Inv G rX m → U G rX m → L.NoGather G m t)
     (hn : ∀ p, ¬ L.nest p := by exact fun _ h => h) :
     L.Fits (FPrim.empty γ) P U fun _ => True :=
   .ofLock inv fin joins (fun _ _ _ => Iff.rfl) (fun _ _ => Iff.rfl)
-    (fun G rX m m' t p h _ hg _ hz => stable G rX m m' t p h hg hz) atStop tick hn
+    (fun G rX m m' t p h _ hg _ hz => stable G rX m m' t p h hg hz) atStop tick noGather hn
 
 /-! ## Basic facts -/
 
@@ -614,7 +634,7 @@ theorem Inv.groups {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m
 theorem Inv.acq {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId}
     (hi : L.Inv G rX m) (hs : L.Step t m m') (hnh : (L.ph (G t)).held = false)
     (hng : L.ph (G t) ≠ .gone) (hF : L.Free G) (hacq : L.Acq (L.pl G) t m m')
-    (hw : L.WInv (upd (L.pl G) t .holds) m') :
+    (hw : L.WInv (upd (L.pl G) t .holds) m') (hgat : L.NoGather G m t) :
     ∃ rL, L.FreeRes G rX m rL ∧ L.Inv (upd G t (L.set (G t) .holds rL)) rX m' := by
   obtain ⟨rL, hfr⟩ := hi.rest
   obtain ⟨ho, hLoff, hLX, hFr, -⟩ := id hfr
@@ -635,7 +655,8 @@ theorem Inv.acq {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId}
   have hdA : FHeap.Disjoint rL.heap (rsum (L.wordR m') rX).heap :=
     FHeap.disjoint_union_right.mpr ⟨hWL.symm, hLX⟩
   have ht' : t < m'.threads.size := by rw [hs.threads]; exact ht
-  have hown : m'.Owns t rL.owned := hacq _ hLown (off_owned ho hi.w.blk hLoff)
+  have hown : m'.OwnsRes t (rsum (L.own G m t) rL) :=
+    (ho'.owns t ht').gather (hacq.ownsRes hLown (off_owned ho hi.w.blk hLoff)) (hgat rL hR)
   have ho2 := ho'.take ht' hdA hown
   have hpt : L.pl (upd G t (L.set (G t) .holds rL)) = upd (L.pl G) t .holds := pl_upd_set G t _ _
   have hphu : ∀ u, L.ph (upd G t (L.set (G t) .holds rL) u) = if u = t then .holds else L.ph (G u) := by
@@ -724,8 +745,8 @@ theorem Inv.rel {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId} {p 
     intro u; rw [hphu]; split
     · exact hp
     · rename_i h; exact hnh₀ u h
-  have hown : m.OwnsC (m.clocks[t]!) (L.held (G t)).owned :=
-    (ho.owns t ht).sub fun _ h => by rw [hsplit]; exact (Res.owned_sep rfl rfl).mpr (.inr h)
+  have hown : m.OwnsRes t (L.held (G t)) := by
+    have := ho.owns t ht; rw [hsplit] at this; exact this.sepR rfl rfl
   have hHoff' : L.Off (L.held (G t)).owned := fun x h1 h2 => by
     have := ho.part_off_owned ht (l := (L.b, x)) (by
       simp only [rsum, FHeap.union_apply, ne_eq, Option.or_eq_none_iff, not_and]
@@ -734,7 +755,7 @@ theorem Inv.rel {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId} {p 
     exact Classical.byContradiction fun hn => (Res.owned_sep rfl rfl).mpr (.inr hn) this
   have hfr : L.FreeRes (upd G t (L.set (G t) p rnil)) rX m' (L.held (G t)) :=
     ⟨by rw [own_upd hjb hjt, L.part_set, L.held_set, rsum_rnil]; exact ho2, hHoff, hHX,
-      fun _ => ⟨by rw [L.R_set]; exact hi.res t hph₁, by rw [hpt]; exact hrel _ hown hHoff'⟩,
+      fun _ => ⟨by rw [L.R_set]; exact hi.res t hph₁, by rw [hpt]; exact hrel.ownsRes hown hHoff'⟩,
       fun h => absurd (LockWord.Free.of_held hnh) h⟩
   refine ⟨hfr, by rw [hpt]; exact hw, ⟨_, hfr⟩, hi.xoff, fun u => ?_, fun u _ => ?_,
     fun u hu => by rw [hnh u] at hu; cases hu⟩
@@ -864,7 +885,7 @@ theorem Inv.takeRest {G : ThreadId → γ} {rA rX : Res} {m : Mem} {t : ThreadId
   have hHA : FHeap.Disjoint (L.held (G t)).heap rA.heap := by
     rw [own_live hjt] at hTA
     exact (FHeap.disjoint_union_left.mp hTA).2
-  have ho' := ho.take ht hAR howns
+  have ho' := ho.take ht hAR ((ho.owns t ht).addOwns howns)
   let g := L.setPart (G t) (rsum (L.part (G t)) rA)
   let G' := upd G t g
   have hpl : L.pl G' = L.pl G := by
@@ -998,10 +1019,10 @@ No execution rule or resource mode is assumed by this pure reconstruction. -/
 private theorem Inv.rebuildPartStep {G : ThreadId → γ} {rX rL r' : Res} {m m' : Mem}
     {t : ThreadId} {g : γ} (hi : L.Inv G rX m) (hjt : joinedB m t = false)
     (hLoff : L.Off rL.heap.erase) (hLX : FHeap.Disjoint rL.heap rX.heap)
-    (hF : L.Free G → L.R G rL ∧ L.toLockWord.Owns (L.pl G) m rL.owned)
+    (hF : L.Free G → L.R G rL ∧ L.toLockWord.OwnsRes (L.pl G) m rL)
     (hnF : ¬ L.Free G → rL = rnil)
     (ho' : FOwned (upd (L.own G m) t r') (rsum (L.wordR m) (rsum rL rX)) m')
-    (hs : FStepIn (rsum (L.wordR m) (rsum rL rX)).owned m m')
+    (hs : FStepIn (rsum (L.wordR m) (rsum rL rX)).owned m m' (rsum (L.wordR m) (rsum rL rX)).shared)
     (hph : L.ph g = L.ph (G t)) (hr' : rsum (L.part g) (L.held g) = r')
     (hpd : FHeap.Disjoint (L.part g).heap (L.held g).heap)
     (hidle : (L.ph g).held = false → L.held g = rnil)
@@ -1028,6 +1049,14 @@ private theorem Inv.rebuildPartStep {G : ThreadId → γ} {rX rL r' : Res} {m m'
     exact Res.owned_of_heap (by
       simp only [rsum, FHeap.union_apply, ne_eq, Option.or_eq_none_iff, not_and]
       intro h; exact absurd h this)
+  -- the word's bytes are the rest's cells, so no read share
+  have hwR : ∀ x, L.o ≤ x → x < L.o + 4 →
+      (rsum (L.wordR m) (rsum rL rX)).shared (L.b, x) = none := by
+    intro x h1 h2
+    have := LockWord.wordR_some hi.w.blk (l := (L.b, x)) ⟨rfl, h1, h2⟩
+    exact Res.excl_shared_disj (Res.excl_of_heap (by
+      simp only [rsum, FHeap.union_apply, ne_eq, Option.or_eq_none_iff, not_and]
+      intro h; exact absurd h this))
   have hplg : L.pl (upd G t g) = L.pl G := by
     rw [pl_upd, hph]; funext u; unfold upd pl; split
     · rename_i e; subst e; rfl
@@ -1050,7 +1079,7 @@ private theorem Inv.rebuildPartStep {G : ThreadId → γ} {rX rL r' : Res} {m m'
         simp_all [Option.map]
     · simp [rsum, FHeap.union_apply, cellsAt_none hl]
   have ho2 := ho'.congrRest hsim rfl rfl
-  refine ⟨by rw [hplg]; exact hi.w.stepIn hs hwF hcells, ⟨rL, ?_, hLoff, hLX, fun hF' => ?_,
+  refine ⟨by rw [hplg]; exact hi.w.stepIn hs hwF hwR hcells, ⟨rL, ?_, hLoff, hLX, fun hF' => ?_,
     fun h => hnF (fun h' => h (hfree.mpr h'))⟩, hi.xoff, fun u => ?_, fun u hu => ?_, fun u hu => ?_⟩
   · rw [own_upd hjb hjt, hr']; exact ho2
   · obtain ⟨h1, h2⟩ := hF (hfree.mp hF')
@@ -1058,7 +1087,9 @@ private theorem Inv.rebuildPartStep {G : ThreadId → γ} {rX rL r' : Res} {m m'
     have hsub : ∀ l, rL.owned l ≠ none → (rsum (L.wordR m) (rsum rL rX)).owned l ≠ none :=
       fun _ hl => (Res.owned_sep rfl rfl).mpr (.inr ((Res.owned_sep rfl rfl).mpr (.inl hl)))
     refine ⟨hRk htn rL h1, ?_⟩
-    rw [hplg]; exact h2.stepIn hs hsub hwF fun i l hl => (hi.w.loc.ok i l hl).1
+    rw [hplg]
+    exact h2.stepIn hs hsub hwF (fun i l hl => (hi.w.loc.ok i l hl).1) fun l hl =>
+      Res.excl_shared_disj (Res.excl_sep rfl rfl (.inr (Res.excl_sep rfl rfl (.inl hl))))
   · unfold upd; split
     · exact hpd
     · exact hi.pdisj u
@@ -1101,7 +1132,7 @@ theorem Inv.wp_liftMem {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : FA
   refine WP.liftMem_fownedR htt ho hc ht (by rw [own_live hjt]; exact hp) ?_ hret
   intro a m' r' hr ho' hq hs
   have hsX : FStepIn (rsum (L.wordR m) rX).heap.erase m m' := by
-    refine hs.weaken fun l hl => Res.owned_of_heap ?_
+    refine hs.cells.weaken fun l hl => ?_
     simp only [FHeap.erase, Option.map_eq_none_iff, ne_eq, rsum, FHeap.union_apply,
       Option.or_eq_none_iff, not_and] at hl ⊢
     intro h1 _; exact hl h1
@@ -1137,7 +1168,7 @@ theorem Inv.wp_liftMemCur {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa :
   refine WP.liftMem_fownedCurR htt ho hc ht (by rw [own_live hjt]; exact hp) ?_ hret
   intro a m' r' hr ho' hq hs
   have hsX : FStepIn (rsum (L.wordR m) rX).heap.erase m m' := by
-    refine hs.weaken fun l hl => Res.owned_of_heap ?_
+    refine hs.cells.weaken fun l hl => ?_
     simp only [FHeap.erase, Option.map_eq_none_iff, ne_eq, rsum, FHeap.union_apply,
       Option.or_eq_none_iff, not_and] at hl ⊢
     intro h1 _; exact hl h1
@@ -1404,7 +1435,7 @@ theorem Inv.fork {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t c : ThreadId} 
         · simp [upd, h1, h2, FLock.own]
     rw [e]; exact ho'
   · obtain ⟨h1, h2⟩ := hF (hfree.mp hF')
-    exact ⟨hRk rL h1, by rw [hpl]; exact hown _ h2⟩
+    exact ⟨hRk rL h1, by rw [hpl]; exact ⟨hown _ _ h2.1, hown _ _ h2.2⟩⟩
   · unfold upd
     by_cases h1 : u = t
     · simp only [h1, ↓reduceIte, h₁h]; exact FHeap.disjoint_empty _
@@ -1429,12 +1460,14 @@ theorem Inv.join {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t u : ThreadId} 
     (huo : L.ph (G u) = .gone)
     (hj : ((Thread.join u).run { m with current := t }).run = some (.ok ((), m')))
     (hg : L.part g = rsum (L.part (G t)) (L.own G m u)) (hgo : L.ph g = .out)
-    (hgh : L.held g = rnil) (hRk : ∀ r, L.R G r → L.R (upd G t g) r) :
+    (hgh : L.held g = rnil) (hRk : ∀ r, L.R G r → L.R (upd G t g) r)
+    (hgat : ∀ l, (L.own G m t).shared l = none ∨ (L.own G m u).shared l = none := by
+      intro l; exact .inl ((Res.excl_eq_erase).2 l)) :
     L.Inv (upd G t g) rX m' := by
   obtain ⟨ht, hjt⟩ := hi.ht (by rw [hout]; decide)
   have hheld : L.held (G t) = rnil := hi.idle t (by rw [hout]; decide)
   obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
-  have ho' := ho.join ht hut hj
+  have ho' := ho.join ht hut hj hgat
   obtain ⟨hw, hown⟩ := hi.w.join hut hu0 (by exact hout) (by exact huo) hj
   obtain ⟨rec, hr, -, rfl⟩ := Proto.join_eq hj
   have hul : u < m.threads.size := (Array.getElem?_eq_some_iff.mp hr).1
@@ -1472,7 +1505,7 @@ theorem Inv.join {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t u : ThreadId} 
         · simp [upd, h1, h2]
     rw [e]; exact ho'
   · obtain ⟨h1, h2⟩ := hF (hfree.mp hF')
-    exact ⟨hRk rL h1, by rw [hpl]; exact hown _ h2⟩
+    exact ⟨hRk rL h1, by rw [hpl]; exact ⟨hown _ _ h2.1, hown _ _ h2.2⟩⟩
   · unfold upd; split
     · rw [hgh]; exact FHeap.disjoint_empty _
     · exact hi.pdisj w
@@ -1511,15 +1544,25 @@ theorem Inv.make {G : ThreadId → γ} {own : ThreadId → Res} {rX rL rW : Res}
   -- `t` owns the word and the resource: every access to them happened before every thread
   have htown := ho.owns t ht
   rw [hsplit] at htown
-  have hle : ∀ (h : Heap), (∀ l, h l ≠ none → (rsum rL rW).owned l ≠ none) →
+  -- every access to the exclusive bytes of `rL ⋆ rW`, every write to its shared bytes
+  have hle : ∀ (h : Heap),
+      (∀ l, h l ≠ none → (rsum (L.part (G t)) (rsum rL rW)).excl l ≠ none) →
       ∀ e ∈ m.footprint, (e.Touches h ∨ m.blocks.size ≤ e.block) →
         ∀ u < m.threads.size, VClock.le e.clock (m.clocks[u]!) = true :=
-    fun h hs e he htc u hu => VClock.le_trans
-      (htown.sub (fun l hl => (Res.owned_sep rfl rfl).mpr (.inr (hs l hl))) e he htc) (hall u hu)
-  have hW' : ∀ l, rW.heap.erase l ≠ none → (rsum rL rW).owned l ≠ none := fun _ hl =>
-    (Res.owned_sep rfl rfl).mpr (.inr (Res.owned_of_erase hl))
-  have hL' : ∀ l, rL.owned l ≠ none → (rsum rL rW).owned l ≠ none := fun _ hl =>
-    (Res.owned_sep rfl rfl).mpr (.inl hl)
+    fun h hs e he htc u hu => VClock.le_trans (htown.1.sub hs e he htc) (hall u hu)
+  have hleR : ∀ (h : Heap), (∀ l, h l ≠ none → (rsum rL rW).owned l ≠ none) →
+      ∀ e ∈ m.footprint, e.kind.isWrite = true → (e.Touches h ∨ m.blocks.size ≤ e.block) →
+        ∀ u < m.threads.size, VClock.le e.clock (m.clocks[u]!) = true :=
+    fun h hs e he hwr htc u hu => VClock.le_trans
+      (htown.ownsR.sub (fun l hl => (Res.owned_sep rfl rfl).mpr (.inr (hs l hl))) e he hwr htc)
+      (hall u hu)
+  have hW' : ∀ l, rW.heap.erase l ≠ none → (rsum (L.part (G t)) (rsum rL rW)).excl l ≠ none :=
+    fun _ hl => Res.excl_sep rfl rfl (.inr (Res.excl_sep rfl rfl (.inr (Res.excl_of_heap
+      fun e => hl (by simp [FHeap.erase, e])))))
+  have hLx : ∀ l, rL.excl l ≠ none → (rsum (L.part (G t)) (rsum rL rW)).excl l ≠ none :=
+    fun _ hl => Res.excl_sep rfl rfl (.inr (Res.excl_sep rfl rfl (.inl hl)))
+  have hLs : ∀ l, rL.shared l ≠ none → (rsum rL rW).owned l ≠ none := fun _ hl =>
+    (Res.owned_sep rfl rfl).mpr (.inl (Res.owned_of_shared hl))
   have hw : L.WInv (L.pl G) m :=
     LockWord.WInv.make (ho.csize) (fun u => hph u) hblk h0 hat hq fun e he hh u hu _ =>
       hle rW.heap.erase hW' e he (.inl (LockWord.touches_word hh fun x h1 h2 => by
@@ -1553,8 +1596,9 @@ theorem Inv.make {G : ThreadId → γ} {own : ThreadId → Res} {rX rL rW : Res}
     rcases hWX l with e | e
     · exact absurd e ((hW l).mpr hl)
     · exact e
-  refine ⟨hw, ⟨rL, ?_, hLoff, hLX, fun _ => ⟨hR, fun e he htc => .inl fun u hu _ =>
-      hle rL.owned hL' e he htc u hu⟩, fun h => absurd hfree h⟩, hxoff,
+  refine ⟨hw, ⟨rL, ?_, hLoff, hLX, fun _ => ⟨hR, fun e he _ htc => .inl fun u hu _ =>
+      hle rL.excl hLx e he htc u hu, fun e he hwr htc => .inl fun u hu _ =>
+      hleR rL.shared hLs e he (hwr rfl) htc u hu⟩, fun h => absurd hfree h⟩, hxoff,
     fun u => by rw [hheld]; exact FHeap.disjoint_empty _, fun u _ => hheld u,
     fun u hu => (hfree u hu).elim⟩
   -- `rsum (rsum rL rW) rX` as `rsum (wordR m) (rsum rL rX)`
@@ -1599,7 +1643,8 @@ thread's. Then `t` takes the resource `rL` (with `R`) and the word's cells into 
 its old part. -/
 theorem Inv.take {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} (hi : L.Inv G rX m)
     (hF : L.Free G) (hg : L.ph (G t) ≠ .gone)
-    (hall : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m.clocks[t]!) = true) :
+    (hall : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m.clocks[t]!) = true)
+    (hgat : L.NoGather G m t) :
     ∃ rL, L.R G rL ∧ ((fun r => r = L.own G m t) ⋆ ((fun r => r = rL) ⋆ fun r => r = L.wordR m))
         (rsum (L.own G m t) (rsum rL (L.wordR m))) ∧
       FOwned (upd (L.own G m) t (rsum (L.own G m t) (rsum rL (L.wordR m)))) rX m := by
@@ -1623,15 +1668,29 @@ theorem Inv.take {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} (hi :
     | some _ => exact .inl (ho.part_off ht (by
         show ((rsum rL (L.wordR m)).heap ∪ rX.heap) l ≠ none
         rw [FHeap.union_apply, e]; simp))
-  refine ⟨rL, hR, ⟨_, _, hT, rfl, rfl, _, _, hWL.symm, rfl, rfl, rfl⟩,
-    ho.take ht (FHeap.disjoint_union_left.mpr ⟨hLX, hWX⟩) ?_⟩
-  refine (Mem.OwnsC.union (fun e he htc => ?_) (fun e he htc => ?_)).sub
-    fun _ => Res.owned_sub_union (r₁ := rL) (r₂ := L.wordR m) rfl rfl
-  · rcases hLown e he htc with h | ⟨i, l, hl, hle⟩
+  -- what the free lock owns (may read), `t` owns (may read): it is above every thread
+  have hlk : ∀ (h : Heap) (w : Bool), L.toLockWord.Owns (L.pl G) m h w →
+      LockWord.OwnsW w m (m.clocks[t]!) h := fun h w ho' e he hw htc => by
+    rcases ho' e he hw htc with h | ⟨i, l, hl, hle⟩
     · exact VClock.le_trans (h t ht hg) (VClock.le_refl _)
     · obtain ⟨⟨v, hv, hle'⟩, -⟩ := hi.w.rel i l hl
       exact VClock.le_trans hle (VClock.le_trans hle' (hall v hv))
-  · rcases htc with ⟨x, h1, h2, h3⟩ | hb
+  -- the word has no share
+  have hsh : ∀ l, rL.shared l = none → (rsum rL (L.wordR m)).shared l = none := fun l h =>
+    Classical.byContradiction fun hn => by
+      obtain ⟨h1, h2, h3⟩ := Res.shared_ne.mp hn
+      have hg : (rsum rL (L.wordR m)).gh = rL.gh := Ghost.add_unit _
+      rw [hg] at h2 h3
+      simp only [rsum, FHeap.union_apply, Option.or_eq_none_iff] at h1
+      exact Res.shared_ne.mpr ⟨h1.1, h2, h3⟩ h
+  refine ⟨rL, hR, ⟨_, _, hT, rfl, rfl, _, _, hWL.symm, rfl, rfl, rfl⟩,
+    ho.take ht (FHeap.disjoint_union_left.mpr ⟨hLX, hWX⟩) ((ho.owns t ht).gather
+      (Mem.OwnsRes.gather ⟨LockWord.ownsW_false.mp (hlk _ _ hLown.1),
+        LockWord.ownsW_true.mp (hlk _ _ hLown.2)⟩ (.of_owns ?_)
+        fun l => .inr ((Res.excl_eq_erase).2 l))
+      fun l => (hgat rL hR l).imp id (hsh l))⟩
+  · intro e he htc
+    rcases htc with ⟨x, h1, h2, h3⟩ | hb
     · have hin : L.In (e.block, x) := Classical.byContradiction fun hn =>
         h3 (cellsAt_owned_none hn)
       obtain ⟨hb, hx1, hx2⟩ := hin
@@ -1639,7 +1698,7 @@ theorem Inv.take {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} (hi :
       · exact VClock.le_trans hle (hall v hv)
       · exact h t ht hg
     · -- an access to a block that does not exist yet happened before `t`: `t` owns its part
-      exact ho.owns t ht e he (.inr hb)
+      exact (ho.owns t ht).1 e he (.inr hb)
 
 /-! ## A recorded access to bytes of the protocol's rest -/
 
@@ -1652,7 +1711,7 @@ theorem Inv.record {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {b 
     (hw : L.WInv (L.pl G) (m.recordAt b o n k))
     (hno : ∀ u < m.threads.size, ∀ x, o ≤ x → x < o + n → (L.own G m u).owned (b, x) = none)
     (hown : ∀ rL : Res, (∀ l, rX.heap l ≠ none → rL.owned l = none) →
-      L.Owns (L.pl G) m rL.owned → L.Owns (L.pl G) (m.recordAt b o n k) rL.owned) :
+      L.OwnsRes (L.pl G) m rL → L.OwnsRes (L.pl G) (m.recordAt b o n k) rL) :
     L.Inv G rX (m.recordAt b o n k) := by
   obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
   have hLX' : ∀ l, rX.heap l ≠ none → rL.owned l = none := fun l hl =>
@@ -1665,7 +1724,8 @@ theorem Inv.record {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {b 
     rw [this]
     have e : L.own G (m.recordAt b o n k) = L.own G m := rfl
     rw [e]
-    exact ho.recordRest hc ht hb hno
+    exact ho.recordRest hc ht hb (fun u hu x h1 h2 => Classical.byContradiction fun hn =>
+      Res.owned_of_excl hn (hno u hu x h1 h2)) fun _ => hno
   · obtain ⟨h1, h2⟩ := hF hF'
     exact ⟨h1, hown rL hLX' h2⟩
 
@@ -1700,7 +1760,10 @@ theorem Inv.recordX {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {b
     · exact .inl hbb
   exact hi.record hc ht hb (hi.w.readK hk hnw)
     (fun u hu x h1 h2 => ho.part_off_owned hu (hrest x h1 h2))
-    fun _ hLX' h2 => h2.readK hb fun x h1 h2 => hLX' _ (hX x h1 h2)
+    fun _ hLX' h2 => ⟨h2.1.readK hb fun x h1 h2 => Classical.byContradiction fun hn =>
+        Res.owned_of_excl hn (hLX' _ (hX x h1 h2)),
+      h2.2.readK hb fun x h1 h2 => Classical.byContradiction fun hn =>
+        Res.owned_of_shared hn (hLX' _ (hX x h1 h2))⟩
 
 /-- A plain read by the current thread `t`, when every other thread has left the lock (`gone`), of
 bytes that no thread's part has (`hno`; e.g. bytes of the protocol's rest, the word's cells and the
@@ -1713,7 +1776,8 @@ theorem Inv.recordAll {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} 
   have hs : ∀ u < m.threads.size, u ≠ m.current → L.pl G u = .gone := fun u hu h =>
     hsole u hu (by rw [← hc]; exact h)
   exact hi.record hc ht hb (hi.w.readAll (by rw [hc]; exact ht) hs) hno
-    fun _ _ h2 => h2.readAll (by rw [hi.w.csize, hc]; exact ht) hs
+    fun _ _ h2 => ⟨h2.1.readAll (by rw [hi.w.csize, hc]; exact ht) hs,
+      h2.2.readAll (by rw [hi.w.csize, hc]; exact ht) hs⟩
 
 /-! ## Happened before the lock's holder
 
