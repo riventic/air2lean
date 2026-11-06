@@ -14,6 +14,7 @@ import io
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -92,6 +93,23 @@ class NoReuse(unittest.TestCase):
         (self.hidden / "input").write_text("ok\n")
         self.assertEqual(self.run_checks()[0], 0)  # and a fixed input passes again
         self.assertEqual(list(self.cas.iterdir()), [])  # no pass is published to the shared store
+
+    def test_a_rerun_of_the_staged_command_starts_from_a_fresh_temp(self):
+        # build-guard reruns a unit stopped at its charge with the same argv and env; the first
+        # attempt's outputs in RUNNER_TEMP are gone, the staged host-zig links stay.
+        stock = self.temp / "stock" / "zig"
+        stock.parent.mkdir()
+        unit = dict(self.unit, toolchains={"patched": [], "stock": ["9.9.9"]},
+                    run='[ ! -e "$RUNNER_TEMP/out" ]\nmkdir "$RUNNER_TEMP/out"\n'
+                        '[ -d "$RUNNER_TEMP/host-zig-9.9.9" ]\n')
+        with mock.patch.object(fc, "resolve", lambda kind, version: stock if version == "9.9.9"
+                               else no_toolchain(kind, version)):
+            argv, env = fc.stage(unit, self.temp / "scratch")
+        for _ in range(2):
+            run = subprocess.run(argv, env=env, capture_output=True, text=True)
+            self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertEqual(sorted(p.name for p in (self.temp / "scratch" / "temp").iterdir()),
+                         ["host-zig-9.9.9", "out"])
 
     def test_the_schedule_orders_and_sizes_but_never_decides(self):
         (self.hidden / "input").write_text("ok\n")
