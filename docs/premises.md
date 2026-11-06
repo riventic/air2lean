@@ -1520,7 +1520,10 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
 - Statement: The generated Lean module is believed to model the analyzed AIR of the source,
   as exported by the patched Zig compiler and translated by `air2lean`. This is not proved.
   The evidence is golden comparisons, structural checks, mutation tests and bounded
-  native/model differential tests.
+  native/model differential tests. Canon's `renumber` is narrower: per function it is
+  kernel-checked (`Renumber.execFunc_rename`) and natively bound, and its program-level part
+  (`RenumberProgram.run_renumber`) is kernel-checked except one hypothesis, that renaming keeps
+  `Func.usesMemoryLocally` ([air-semantics.md](air-semantics.md#generic-renaming-theorem-and-native-binding)).
 - Derived from: a reached generated module.
 - Sources: [generated-code.md](generated-code.md), [profiles.md](profiles.md#golden-comparisons-and-check-receipts), [air-json.md](air-json.md), [trust-report.md](trust-report.md).
 

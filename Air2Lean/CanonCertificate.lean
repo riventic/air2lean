@@ -1,5 +1,5 @@
 import Air2Lean.CanonSem
-import Air2Lean.Renumber
+import Air2Lean.RenumberProgram
 import Air2Lean.Memory
 
 /-!
