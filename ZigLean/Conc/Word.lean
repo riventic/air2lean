@@ -1179,7 +1179,16 @@ theorem Inv.wordOp {G : ThreadId → γ} {rY : Res} {t : ThreadId} {m m' : Mem}
       · exact absurd h hm
       · rcases htc with ⟨x, h1, h2, h3⟩ | hbe
         · rw [hb] at h3; rw [heo] at h1; rw [heo, hlen] at h2
-          exact absurd (by simp [FHeap.erase, hLW (W.b, x) ⟨rfl, h1, by omega⟩]) h3
+          have hin : W.In (W.b, x) := ⟨rfl, h1, by omega⟩
+          -- `rL` owns no byte of `W`: the rest has them as cells (`FOwned.rest_noShare`)
+          refine (h3 (Classical.byContradiction fun hn => (Res.owned_ne.mp hn).elim
+            (· (hLW _ hin)) fun hp => ho.rest_noShare (l := (W.b, x)) ?_ ?_)).elim
+          · intro e
+            simp only [rsum, FHeap.union_apply, Option.or_eq_none_iff] at e
+            exact cellsAt_some hin (hw.cellIn hin) e.1
+          · simp only [rsum, Ghost.add_share]
+            exact SCell.pos_add_iff.mpr (.inr (SCell.pos_add_iff.mpr (.inr
+              (SCell.pos_add_iff.mpr (.inl hp)))))
         · rw [hb, hop.bsize] at hbe; exact absurd hWb (Nat.not_lt.mpr hbe)
   · have := LockWord.off_erase.mp hi.xoff l hl
     simp only [FHeap.union_apply, Option.or_eq_none_iff]

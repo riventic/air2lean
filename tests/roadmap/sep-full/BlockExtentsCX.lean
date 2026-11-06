@@ -81,7 +81,7 @@ theorem gF_ok : GOk m1 Ghost.unit gF := by
     split
     · have := (ECell.dormant_unit (Ghost.ls ⟨fun γ => GCell.unit.add GCell.unit,
         fun b' => if b' = 0 then ECell.auth1 1 .heap Frac.one else ECell.unit, fun _ _ => ECell.unit,
-        ACell.unit.add ACell.unit⟩)).auth1_ok
+        ACell.unit.add ACell.unit, fun _ => SCell.zero.add SCell.zero⟩)).auth1_ok
         (S := 1) (K := .heap)
       rwa [ECell.add_unit] at this
     · exact ⟨ECell.valid_unit, ECell.tagOk_unit _⟩
@@ -103,9 +103,12 @@ theorem gF_ok : GOk m1 Ghost.unit gF := by
 
 /-- `m1` holds a resource that owns byte `(0, 0)` with a cell recording size `S`, and a frame
 with the ghost state `g` and no bytes. -/
-theorem holds1 (S : Nat) (g : Ghost) (hg : GOk m1 Ghost.unit g) :
+theorem holds1 (S : Nat) (g : Ghost) (hg : GOk m1 Ghost.unit g)
+    (hs : g.share = fun _ => SCell.zero := by rfl) :
     Holds m1 ⟨own1 ⟨.int 0, 16, S, .heap⟩, Know.none, Ghost.unit⟩ ⟨FHeap.empty, Know.none, g⟩ := by
-  refine ⟨fun _ => .inr rfl, ⟨fun l => ?_, fun l fc hfc => ?_⟩, Know.sub_none _, Know.sub_none _, hg⟩
+  refine ⟨fun _ => .inr rfl, SMatch.of_fmatch ⟨fun l => ?_, fun l fc hfc => ?_⟩
+    (fun l => by rw [Ghost.add_share, hs]; exact SCell.Empty.add SCell.empty_zero SCell.empty_zero),
+    Know.sub_none _, Know.sub_none _, hg⟩
   · rw [m1_heap]
     by_cases h : l = (0, 0)
     · simp [h, own1, Cell.norm, BlockKind.norm]

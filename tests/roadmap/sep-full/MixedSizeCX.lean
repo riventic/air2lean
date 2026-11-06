@@ -144,8 +144,9 @@ theorem fconc : mArena.FConc := by
     · simp [mArena, mk] at h
 
 /-- Thread 0 owns the word: thread 1's write touches none of its bytes. -/
-theorem owns : mArena.Owns mArena.current (FHeap.ofHeap (shapes mArena) (hP mArena)).erase := by
-  rw [FHeap.ofHeap_erase]
+theorem owns : mArena.Owns mArena.current
+    (⟨FHeap.ofHeap (shapes mArena) (hP mArena), Know.none, Ghost.unit⟩ : Res).owned := by
+  rw [Res.owned_eq_erase (r := ⟨_, _, Ghost.unit⟩) rfl, FHeap.ofHeap_erase]
   intro e he hc
   have : e = wr := by simpa [mArena, mk] using he
   subst this

@@ -479,6 +479,18 @@ theorem Res.owned_addGh {h : FHeap} {k : Know} {a g : Ghost}
     (⟨h, k, a.add g⟩ : Res).owned = (⟨h, k, a⟩ : Res).owned := by
   funext l; simp only [Res.owned, Ghost.share_add_none hb]
 
+/-- Without shares, a resource owns exactly the bytes of its cells. -/
+theorem Res.owned_eq_erase {r : Res} (hs : r.gh.share = fun _ => SCell.zero := by rfl) :
+    r.owned = r.heap.erase := by
+  funext l
+  simp only [Res.owned, hs, SCell.cell_eq_none SCell.empty_zero, Option.map_none, Option.or_none]
+  rfl
+
+/-- A resource with no cell and no share owns nothing (`emp`, `rnil`, a mode token). -/
+theorem Res.owned_eq_empty {r : Res} (hh : r.heap = FHeap.empty)
+    (hs : r.gh.share = fun _ => SCell.zero := by rfl) : r.owned = Heap.empty := by
+  rw [Res.owned_eq_erase hs, hh]; rfl
+
 /-- No share of a byte where a resource or its frame has an exclusive cell. -/
 theorem Holds.not_pos_of_heap {m : Mem} {r rF : Res} (hh : Holds m r rF) {l : Loc}
     (h : (r.heap ∪ rF.heap) l ≠ none) : ¬ ((r.gh.add rF.gh).share l).Pos := by

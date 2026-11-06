@@ -714,15 +714,16 @@ theorem main_spec (n : Nat) :
     (by rw [hs₁₅.threads, hs₁₄.threads, hs₁₃.threads, hs₁₂.threads, ht₁₀]; decide)
     hq₁₅ fun _ m₁₆ r₁₆ _ _ ho₁₆ hq₁₆ hs₁₆ => ?_)
   have he : r₁₆.heap = FHeap.empty := hq₁₆.1
-  refine WP.pure' ⟨hout, ho₁₆.heap_empty (fun u _ => ?_) (fheap_empty_mem)⟩
+  refine WP.pure' ⟨hout, ho₁₆.heap_empty (fun u _ => ?_) (Res.owned_eq_empty fheap_empty_mem)⟩
   by_cases h0 : u = 0
-  · subst h0; rw [upd_self]; exact he
+  · subst h0; rw [upd_self]; exact Res.owned_eq_empty he (by rw [hq₁₆.2.2]; rfl)
   · simp only [upd_upd]
     rw [upd_ne _ _ h0]
     by_cases h1 : u = 1
-    · subst h1; rw [upd_self]
+    · subst h1; rw [upd_self]; exact Res.owned_eq_empty rfl
     · rw [upd_ne _ _ h1]
       simp [ownOf, hn₉ u (by unfold ThreadId at *; omega), Gh.res]
+      exact Res.owned_eq_empty rfl
 
 /-! ## The results -/
 
