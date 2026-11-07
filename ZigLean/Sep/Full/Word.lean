@@ -3253,7 +3253,7 @@ theorem cmpxchgWeak_fpNew {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
     have hs : FStepIn Heap.empty (m₁.recordAt W.b W.o nb .atomicWrite) m' := by
       rw [hm']
       exact rmwM_fstep (pos := pos) hlr hlen (by omega) (by simpa [Mem.recordAt] using hcs)
-        (rec_recordAt rfl hcs) ⟨_, by rw [hblocks]; exact hb⟩ (fun _ _ _ => rfl) succ new
+        (rec_recordAt rfl hcs) ⟨_, by show m₁.blocks[W.b]? = _; rw [hblocks]; exact hb⟩ (fun _ _ _ => rfl) succ new
     have hm2 := hs.mine
     rw [show (m₁.recordAt W.b W.o nb .atomicWrite).current = m.current from hcur] at hm2
     have hw2 : VClock.le (VClock.bump (m₁.clocks[m₁.current]!) m₁.current)
