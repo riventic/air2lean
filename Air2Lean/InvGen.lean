@@ -117,10 +117,10 @@ structure Cell where
   deriving Inhabited
 
 /-- A memory access through a node pointer: the field at offset `off` of the node that the
-optional pointer `at` points to, with its value type and alignment, and the value stored to it
+optional pointer `node` points to, with its value type and alignment, and the value stored to it
 (none: a load). -/
 structure NodeOp where
-  at : Sym
+  node : Sym
   off : Nat
   ty : Expr
   align : Nat
@@ -334,8 +334,8 @@ partial def execLift (ctx : Ctx) (st : St) (x : Expr) : MetaM Path := do
     if let some (c, off) ← nodeLoc? args[3]! then
       -- the value the path stored there last, else the field's value at the iteration's start
       let last := st.nodeOps.reverse.findSome? fun o =>
-        if o.at == c && o.off == off then o.store? else none
-      let op := { at := c, off, ty := args[0]!, align := al }
+        if o.node == c && o.off == off then o.store? else none
+      let op := { node := c, off, ty := args[0]!, align := al }
       return { st := { st with nodeOps := st.nodeOps.push op }, res := last.getD (.nload c off) }
     let some i := paramIdx? ctx args[3]! | throwError "a load through a pointer that is not a loop parameter"
     let (st, k) ← st.access i args[0]! al
@@ -344,7 +344,7 @@ partial def execLift (ctx : Ctx) (st : St) (x : Expr) : MetaM Path := do
     let some al := natLit? args[2]! | throwError "a store with an unknown alignment"
     let v ← evalPure ctx st args[4]!
     if let some (c, off) ← nodeLoc? args[3]! then
-      let op := { at := c, off, ty := args[0]!, align := al, store? := some v }
+      let op := { node := c, off, ty := args[0]!, align := al, store? := some v }
       return { st := { st with nodeOps := st.nodeOps.push op }, res := unitV }
     let some i := paramIdx? ctx args[3]! | throwError "a store through a pointer that is not a loop parameter"
     let (st, k) ← st.access i args[0]! al
@@ -535,7 +535,7 @@ def listWalk (ctx : Ctx) (again : Expr → MetaM Bool) (fieldTy : Name → MetaM
       throwError "an exit that adds, accesses memory or changes a local"
   unless c.st.cells.isEmpty do throwError "a list walk that accesses a cell of a parameter"
   let ops := c.st.nodeOps
-  unless ops.all (·.at == .local cur) do throwError "an access to a node other than the cursor's"
+  unless ops.all (·.node == .local cur) do throwError "an access to a node other than the cursor's"
   -- the cursor moves to the node's `next`
   let some cv := (c.st.locals.zip ctx.fields).findSome? fun (v, f) => if f == cur then some v else none
     | throwError "no cursor"
