@@ -779,7 +779,12 @@ the free resource in `M`'s rest (`R` with no reader, the share `1 - Σ q` of the
 with readers, `rnil` while it is away), and its ownership through the word's RMW chain, with a
 read of a shared byte below a current reader's clock admitted. The last reader posts the whole
 resource to a writer asleep at the semaphore through the semaphore's pool (`pool_posted`), so
-`SemImpl` orders its reads before the writer. No instance or client is in that module yet.
+`SemImpl` orders its reads before the writer. The writer holds `M` while it may sleep in the
+semaphore's code, and a holder at `holds` is never in the futex queue, so an implementation naps
+`M` around its semaphore wait: `FRw.Fits` carries `UM`'s stability over that nap and unnap
+(`mnap`, `munnap`; decision on #667, the nesting protocol's obligation). The facts every
+implementation walks its code with (`Fits.inRest`, `Fits.napW`/`unnapW`, `Fits.wstep`,
+`Owns.step`) are in the module; no instance or client is there.
 
 **Read ownership** (`ZigLean/Conc/Clock.lean` §Read ownership, regressions
 `tests/roadmap/sep-full/ShareRaceCX.lean`). Two reads never race (`racePair`), so a share holder
