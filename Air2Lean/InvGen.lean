@@ -350,7 +350,7 @@ partial def execLift (ctx : Ctx) (st : St) (x : Expr) : MetaM Path := do
     let some al := natLit? args[2]! | throwError "a load with an unknown alignment"
     if let some (c, off) ← nodeLoc? args[3]! then
       -- the value the path stored there last, else the field's value at the iteration's start
-      let last := st.nodeOps.reverse.findSome? fun o =>
+      let last := st.nodeOps.findSomeRev? fun o =>
         if o.node == c && o.off == off then o.store? else none
       let op := { node := c, off, ty := args[0]!, align := al }
       return { st := { st with nodeOps := st.nodeOps.push op }, res := last.getD (.nload c off) }
@@ -449,8 +449,8 @@ structure Counted where
 /-- `R` includes the bound: the counter passes it by one before the loop exits. -/
 def Counted.incl (c : Counted) : Bool := c.rel == .le || c.rel == .ge
 
-/-- Classify the paths of one iteration as a counted loop, or say why not. -/
-def counted (ctx : Ctx) (again : Expr → MetaM Bool) (paths : Array Path) : MetaM Counted := do
+/-- The one repeating path of an iteration and its exiting paths (each family's first test). -/
+def splitPaths (again : Expr → MetaM Bool) (paths : Array Path) : MetaM (Path × Array Path) := do
   let mut cont := #[]
   let mut exits := #[]
   for p in paths do
@@ -458,6 +458,11 @@ def counted (ctx : Ctx) (again : Expr → MetaM Bool) (paths : Array Path) : Met
     if ← again e then cont := cont.push p else exits := exits.push p
   let #[c] := cont | throwError "{cont.size} repeating paths, not one"
   if exits.isEmpty then throwError "no exit"
+  return (c, exits)
+
+/-- Classify the paths of one iteration as a counted loop, or say why not. -/
+def counted (ctx : Ctx) (again : Expr → MetaM Bool) (paths : Array Path) : MetaM Counted := do
+  let (c, exits) ← splitPaths again paths
   -- The counter: the one local the iteration changes, by 1 up or down.
   let changed := (c.st.locals.zip ctx.fields).filter fun (v, f) => v != .local f
   let #[(v, x)] := changed | throwError "the body writes {changed.size} locals, not one counter"
@@ -535,13 +540,7 @@ sets to the node (a reversal). It accesses no other node, field or memory. `fiel
 of the local `f`. -/
 def listWalk (ctx : Ctx) (again : Expr → MetaM Bool) (fieldTy : Name → MetaM Expr)
     (paths : Array Path) : MetaM Walk := do
-  let mut cont := #[]
-  let mut exits := #[]
-  for p in paths do
-    let .val e := p.res | throwError "an iteration whose exit is not a constructor"
-    if ← again e then cont := cont.push p else exits := exits.push p
-  let #[c] := cont | throwError "{cont.size} repeating paths, not one"
-  if exits.isEmpty then throwError "no exit"
+  let (c, exits) ← splitPaths again paths
   let some (.isSome (.local cur), true) := c.st.cond
     | throwError "the repeating path is not guarded by a test of an optional pointer local"
   unless isOptPtr (← fieldTy cur) do throwError "a cursor `{cur}` that is not an optional pointer"
@@ -560,7 +559,8 @@ def listWalk (ctx : Ctx) (again : Expr → MetaM Bool) (fieldTy : Name → MetaM
   unless c0 == cur do throwError "the cursor `{cur}` moves to a field of another node"
   let some nextOp := ops.find? fun o => o.off == nextOff && o.store?.isNone
     | throwError "no load of the node's next pointer"
-  unless isOptPtr nextOp.ty do throwError "a next field that is not an optional pointer"
+  unless ops.all (fun o => o.off != nextOff || (isOptPtr o.ty && o.align == nextOp.align)) do
+    throwError "a next field that is not an optional pointer at one alignment"
   -- the item: the one other field it reads
   let reads := ops.filter fun o => o.off != nextOff && o.store?.isNone
   let item? ← match reads[0]? with
@@ -663,8 +663,6 @@ structure Cand where
   exit : String
   postFacts : Array String
   postCells : Array (Nat × String)
-  /-- The family, as the file's record names it. -/
-  family : String := "counted"
   /-- A list walk's: the invariant's last parameter is a ghost measure `n` (no `name.meas`), and
   its facts and resources stand under the existentials `exs` (name, type) of the ghost lists. -/
   ghost : Bool := false
@@ -706,6 +704,9 @@ def Cand.body (c : Cand) (keep : Array Bool) (fact : Nat → String) : String :=
 def Cand.post (c : Cand) : String :=
   c.assn c.postFacts.toList (owned := c.postOwned?.getD c.owned)
     fun k => (c.postCells.filter (·.1 == k)).toList.map (·.2)
+
+/-- The family, as the file's record names it (a ghost measure is a list walk's). -/
+def Cand.family (c : Cand) : String := if c.ghost then "list-walk" else "counted"
 
 /-- The ghost measure's binder of the invariant, if it has one. -/
 def Cand.nBinder (c : Cand) : String := if c.ghost then "(n : Nat) " else ""
@@ -898,7 +899,7 @@ def listCand (ns : Name) (name again binders args loc exit : String) (w : Walk) 
     name, again, binders := binders ++ layout ++ s!"(xs : {LT}) ", args := args ++ layoutArgs ++ " xs ",
     loc, entry := "", vargs := "", measEntry := "", measArgs := "", facts,
     owned := #[.atom prefixAt, .atom s!"listSeg {N} s.{cur} none zs"] ++ plain,
-    meas := "", exit, postFacts := post, postCells := #[], family := "list-walk", ghost := true,
+    meas := "", exit, postFacts := post, postCells := #[], ghost := true,
     exs := #[("ys", LT), ("zs", LT)], postOwned? := some (#[.atom postList] ++ plain), pre,
     fsymArgs := if w.rev?.isSome then "" else " [Zig.Full.listSeg_snoc_upd]", bodyArgs? := some args,
     doc := s!"/-- The invariant of `{name}`, a list walk that {kind} `xs` at `{cur}` \
