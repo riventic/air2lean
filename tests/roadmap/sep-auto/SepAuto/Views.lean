@@ -149,12 +149,13 @@ theorem lend_half :
   fsym_entail
 
 /-- A user fact the planner leaves (the dispatch tokenizer's `counted`): the retry with the
-facts of the state's atoms closes no more, and the fact is the caller's goal. -/
-def Twice (xs : List Nat) : Prop := (xs ++ xs).length = 2 * xs.length
+facts of the state's atoms closes no more, and the fact is the caller's goal
+(not a fact of the normal form of lists, `fsym_arith`, which the planner proves.) -/
+def Split (xs : List Nat) : Prop := xs.take 1 ++ xs.drop 1 = xs
 
 theorem fact_left (p : Ptr) (A S : Nat) (K : BlockKind) (bs : Array Byte) (xs : List Nat) :
-    EUpd (up (regionIn p A S K 8 bs)) (⟪Twice xs⟫ ⋆ up (regionIn p A S K 8 bs)) := by
+    EUpd (up (regionIn p A S K 8 bs)) (⟪Split xs⟫ ⋆ up (regionIn p A S K 8 bs)) := by
   fsym_entail
-  simp only [Twice, List.length_append]; omega
+  exact List.take_append_drop 1 xs
 
 end SepAuto.Views

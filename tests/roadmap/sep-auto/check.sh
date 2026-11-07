@@ -26,7 +26,9 @@
 # pushes of a thread with a stack budget
 # (Stack: the token rules, a thread, the start, rejected pushes without room) and step ticks
 # (Ticks: memory/concurrent loops, straight-line ticks, thread locality, WP segments, one credit)
-# and loops by their registered invariants (LoopInv: `@[fsym_inv]`, a wrong invariant rejected).
+# and loops by their registered invariants (LoopInv: `@[fsym_inv]`, a wrong invariant rejected)
+# and list walks from theirs (ListWalk: a ghost measure, the ghost list split at the cursor's
+# test, the constructor fold at a repetition, a wrong invariant rejected).
 # Its large user is
 # the FixedBufferAllocator
 # (tests/roadmap/alloc-fba/AllocFba/Full.lean). Every example is a module of the fixture's library
