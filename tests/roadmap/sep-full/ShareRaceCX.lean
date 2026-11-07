@@ -82,12 +82,11 @@ def cellH (c : Cell) : FHeap := fun l => if l = (0, 0) then some ⟨c, none⟩ e
 /-- The fraction `1/2`. -/
 def half : Frac := ⟨1 / 2, by grind⟩
 
-/-- A share `q` of the byte: no cell, the share as ghost state (`sheap`). -/
-noncomputable def shareRes (c : Cell) (q : Frac) : Res :=
-  ⟨FHeap.empty, Know.none, Ghost.sharesOf (cellH c) q⟩
+/-! A share `q` of the byte is `shareRes (cellH c) q` (`Share.lean`): no cell, the share as ghost
+state (`sheap`). -/
 
 /-- A half share is not exclusive: it holds no cell and no whole share (`Res.excl`). -/
-theorem half_excl (c : Cell) (l : Loc) : (shareRes c half).excl l = none := by
+theorem half_excl (c : Cell) (l : Loc) : (shareRes (cellH c) half).excl l = none := by
   refine Classical.byContradiction fun h => ?_
   rcases Res.excl_ne.mp h with h | ⟨c', hc'⟩
   · exact h rfl
@@ -100,7 +99,7 @@ theorem half_excl (c : Cell) (l : Loc) : (shareRes c half).excl l = none := by
     · simp only [Option.elim_none, SCell.zero, Frac.zero] at hc'; grind
 
 /-- The whole share of the byte is exclusive (`Res.excl`). -/
-theorem whole_excl (c : Cell) : (shareRes c Frac.one).excl (0, 0) ≠ none :=
+theorem whole_excl (c : Cell) : (shareRes (cellH c) Frac.one).excl (0, 0) ≠ none :=
   Res.excl_ne.mpr (.inr ⟨⟨c, none⟩, by
     simp only [shareRes, Ghost.sharesOf_share, cellH, ite_true, Option.elim_some, SCell.of_self,
       Frac.one]
@@ -108,7 +107,7 @@ theorem whole_excl (c : Cell) : (shareRes c Frac.one).excl (0, 0) ≠ none :=
 
 /-- **Each of the two readers owns its half share** (`Mem.OwnsRes`): nothing is exclusive and no
 write is recorded. -/
-theorem readers_ownsRes (c : Cell) (t : ThreadId) : (twoReaders).OwnsRes t (shareRes c half) := by
+theorem readers_ownsRes (c : Cell) (t : ThreadId) : (twoReaders).OwnsRes t (shareRes (cellH c) half) := by
   refine ⟨fun e he htc => ?_, fun e he hw _ => ?_⟩
   · simp only [twoReaders, Array.mem_singleton] at he
     subst he
@@ -121,7 +120,7 @@ theorem readers_ownsRes (c : Cell) (t : ThreadId) : (twoReaders).OwnsRes t (shar
 /-- **The second reader does not own the gathered whole share** (`Mem.OwnsRes`): the first
 reader's read is not before its clock. So gathering the two halves at a join or an acquire fails
 closed (`FOwned.join`'s `hg`, `FLock.NoGather`; engine ledger #share-gather). -/
-theorem gather_not_ownsRes (c : Cell) : ¬ (twoReaders).OwnsRes 1 (shareRes c Frac.one) := by
+theorem gather_not_ownsRes (c : Cell) : ¬ (twoReaders).OwnsRes 1 (shareRes (cellH c) Frac.one) := by
   intro ho
   have := ho.1 readEntry (by simp [twoReaders]) (.inl ⟨0, Nat.le_refl _, by decide, whole_excl c⟩)
   revert this; decide +kernel
