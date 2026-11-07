@@ -1794,6 +1794,30 @@ theorem rmwM_amap {m : Mem} {li pos : Nat} {l : ALoc} {hF : Heap}
   have hs := rmwM_fstep hl hlen hpos hc hrec hb hoff ord new
   exact ⟨hs.nextMsg, hs.atomics⟩
 
+/-- **A completed RMW is the actual preparation and the newest-message write** at the word's
+location: the facts every RMW rule (`atomicRmw_fstep`, `atomicRmw_rest`, `atomicRmw_fpNew`)
+starts from. -/
+theorem atomicRmw_prep {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool} {ord : AtomicOrder}
+    {v old : BitVec n} (hw : W.Ok m A) (hc : m.current < m.clocks.size)
+    (h : ((atomicRmwAt c op signed ord nb W.ptr v).run m).run = some (.ok (old, m'))) :
+    ∃ li m₁ pos l,
+      ((locIdx W.b W.o nb).run (m.recordAt W.b W.o nb .atomicWrite)).run = some (.ok (li, m₁)) ∧
+      W.Loc m₁ li l ∧ l.len = nb ∧ pos + 1 = l.msgs.size ∧ W.Rec m₁ m₁.current ∧
+      m₁.current < m₁.clocks.size ∧ m₁.blocks = m.blocks ∧
+      m' = rmwM m₁ li pos ord ((m₁.atomics[li]!).msgs[pos]!) (op.apply signed old v) := by
+  obtain ⟨b, blk, o, li, m₁, pos, hacc, _, hp, hr, _, rfl⟩ := atomicRmwAt_ok h
+  obtain ⟨blk₀, _, _, _, _, ha⟩ := hw.access
+  rw [W.sz_eq, ha] at hacc
+  rw [W.sz_eq] at hp
+  cases hacc
+  obtain ⟨l, hl, hlen, h0, hch, _⟩ := prepare hw rfl hp
+  obtain ⟨hrec, hcs, hblocks⟩ := prepare_rec hc hp
+  have hpos : pos + 1 = l.msgs.size := by
+    have := rmw_chain_pos (by rwa [(loc_get hl).2.2]) (by rwa [(loc_get hl).2.2]) hr
+    rw [(loc_get hl).2.2] at this
+    omega
+  exact ⟨li, m₁, pos, l, hp, hl, hlen, hpos, hrec, hcs, hblocks, rfl⟩
+
 /-- Every completed RMW operation and signedness is a native full-state step, using actual
 preparation and the newest-message write. -/
 theorem atomicRmw_fstep {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool} {ord : AtomicOrder}
@@ -1801,17 +1825,8 @@ theorem atomicRmw_fstep {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool} {ord
     (hoff : ∀ x, W.o ≤ x → x < W.o + nb → hF (W.b, x) = none)
     (h : ((atomicRmwAt c op signed ord nb W.ptr v).run m).run = some (.ok (old, m'))) :
     FStepIn hF m m' := by
-  obtain ⟨b, blk, o, li, m₁, pos, hacc, _, hp, hr, _, rfl⟩ := atomicRmwAt_ok h
-  obtain ⟨blk₀, hb, _, _, _, ha⟩ := hw.access
-  rw [W.sz_eq, ha] at hacc
-  rw [W.sz_eq] at hp
-  cases hacc
-  obtain ⟨l, hl, hlen, h0, hch, _, _, _, _⟩ := prepare hw rfl hp
-  obtain ⟨hrec, hcs, hblocks⟩ := prepare_rec hc hp
-  have hpos : pos + 1 = l.msgs.size := by
-    have := rmw_chain_pos (by rwa [(loc_get hl).2.2]) (by rwa [(loc_get hl).2.2]) hr
-    rw [(loc_get hl).2.2] at this
-    omega
+  obtain ⟨li, m₁, pos, l, hp, hl, hlen, hpos, hrec, hcs, hblocks, rfl⟩ := atomicRmw_prep hw hc h
+  obtain ⟨blk₀, hb, _, _, _, _⟩ := hw.access
   exact (prepare_fstep hw hc hoff hp).trans
     (rmwM_fstep hl hlen hpos hcs hrec
       ⟨_, by rw [hblocks]; exact hb⟩ hoff ord (op.apply signed old v))
@@ -1821,18 +1836,8 @@ theorem atomicRmw_rest {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool} {ord 
     {v old : BitVec n} (hw : W.Ok m A) (hc : m.current < m.clocks.size)
     (h : ((atomicRmwAt c op signed ord nb W.ptr v).run m).run = some (.ok (old, m'))) :
     RestStep W.In m m' := by
-  obtain ⟨b, blk, o, li, m₁, pos, hacc, _, hp, hr, _, rfl⟩ := atomicRmwAt_ok h
-  obtain ⟨blk₀, _, _, _, _, ha⟩ := hw.access
-  rw [W.sz_eq, ha] at hacc
-  rw [W.sz_eq] at hp
-  cases hacc
+  obtain ⟨li, m₁, pos, l, hp, hl, hlen, hpos, hrec, hcs, hblocks, rfl⟩ := atomicRmw_prep hw hc h
   obtain ⟨blk₁, hb, hlive, hsize, _, hk, hlo⟩ := hw.blk
-  obtain ⟨l, hl, hlen, h0, hch, _⟩ := prepare hw rfl hp
-  obtain ⟨hrec, hcs, hblocks⟩ := prepare_rec hc hp
-  have hpos : pos + 1 = l.msgs.size := by
-    have := rmw_chain_pos (by rwa [(loc_get hl).2.2]) (by rwa [(loc_get hl).2.2]) hr
-    rw [(loc_get hl).2.2] at this
-    omega
   exact (prepare_rest hw hc rfl hp).trans
     (rmwM_rest hl hlen hpos hcs hrec (by rw [hblocks]; exact hb)
       hlive hsize hk hlo ord (op.apply signed old v))
@@ -3138,6 +3143,32 @@ theorem atomicRmw_fpAt {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool}
   cases hacc
   rw [rmwM_footprint] at he
   exact prepare_fpAt hp he
+
+/-- **An RMW's new access is the recorded one**: by the current thread, before its new clock
+(`recordAt`'s entry; `rmwM` keeps the footprint and does not lower the clock). Sharper than the
+step's `FStepIn.fpc`, which also admits a narrowing of an old access. -/
+theorem atomicRmw_fpNew {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool}
+    {ord : AtomicOrder} {v old : BitVec n} (hw : W.Ok m A) (hc : m.current < m.clocks.size)
+    (h : ((atomicRmwAt c op signed ord nb W.ptr v).run m).run = some (.ok (old, m')))
+    {e : FootprintEntry} (he : e ∈ m'.footprint) :
+    e ∈ m.footprint ∨ (e.tid = m.current ∧ VClock.le e.clock (m'.clocks[m.current]!) = true) := by
+  obtain ⟨li, m₁, pos, l, hp, hl, hlen, hpos, hrec, hcs, hblocks, rfl⟩ := atomicRmw_prep hw hc h
+  obtain ⟨blk₀, hb, _, _, _, _⟩ := hw.access
+  have hmine := (rmwM_fstep (hF := Heap.empty) hl hlen hpos hcs hrec
+    ⟨_, by rw [hblocks]; exact hb⟩ (fun _ _ _ => rfl) ord (op.apply signed old v)).mine
+  rw [rmwM_footprint] at he
+  obtain ⟨a, sn, next, hm₁⟩ := locIdx_updates hp
+  have hfp : m₁.footprint = (m.recordAt W.b W.o nb .atomicWrite).footprint := by subst hm₁; rfl
+  have hcur : m₁.current = m.current := by subst hm₁; rfl
+  have hclk : m₁.clocks[m.current]! = VClock.bump (m.clocks[m.current]!) m.current := by
+    subst hm₁; exact recordAt_clock (b := W.b) (off := W.o) (len := nb) (kind := .atomicWrite) hc
+  rw [hfp] at he
+  simp only [Mem.recordAt, Array.mem_push] at he
+  rcases he with he | rfl
+  · exact .inl he
+  · refine .inr ⟨rfl, ?_⟩
+    rw [hcur, hclk] at hmine
+    exact hmine
 
 theorem cmpxchg_fpAt {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
     {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m A)
