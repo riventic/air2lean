@@ -383,7 +383,7 @@ theorem freeAll_step (h : CAllocSpec (CVTable.env (env e) fns) ctx I) (hd : Opti
         rw [e, fees_succ]
         exact sep_mono_right (fun _ h => sep_mono_right (fun _ h => freedSeg_snoc I q _ h) h) h
       · obtain ⟨r₁, r₂, hd', rfl, h1, h2⟩ := h
-        obtain ⟨p, q, hp, h2⟩ := list_cons h2
+        obtain ⟨p, q, hp, h2⟩ := listSeg_cons h2
         refine ⟨p, q, Full.sep_lift.mpr ⟨hp, ⟨r₁, r₂, hd', rfl, h1, ?_⟩⟩⟩
         subst hp
         exact ac_cast h2 (by simp only [list, node]; ac_rfl)
@@ -529,7 +529,7 @@ theorem freeAll_step_exact (h : CAllocSpec (CVTable.env (env e) fns) ctx I) (hd 
         rw [e, fees_succ]
         exact sep_mono_right (fun _ h => sep_mono_right (fun _ h => freedSeg_snoc I q _ h) h) h
       · obtain ⟨r₁, r₂, hd', rfl, h1, h2⟩ := h
-        obtain ⟨p, q, hp, h2⟩ := list_cons h2
+        obtain ⟨p, q, hp, h2⟩ := listSeg_cons h2
         refine ⟨p, q, Full.sep_lift.mpr ⟨hp, ⟨r₁, r₂, hd', rfl, h1, ?_⟩⟩⟩
         subst hp
         exact ac_cast h2 (by simp only [list, node]; ac_rfl)
