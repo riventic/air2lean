@@ -465,7 +465,7 @@ theorem Owns.step {G G' : ThreadId → γ} {m m' : Mem} {r : Res} {t : ThreadId}
     (ho : W.Owns G m r)
     (hfp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨ VClock.le e.clock (m'.clocks[t]!) = true)
     (hth : m'.threads = m.threads)
-    (hcl : ∀ u, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
+    (hcl : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
     (hbs : m.blocks.size ≤ m'.blocks.size)
     (hrel : VClock.le ((W.st.hist m).back!).relClock ((W.st.hist m').back!).relClock = true)
     (hnew : VClock.le (m'.clocks[t]!) ((W.st.hist m').back!).relClock = true)
