@@ -45,6 +45,11 @@ attribute [local irreducible] Proto.WP
 abbrev u32At (p : Ptr) (A : Nat) (K : BlockKind) (b : BlockId) (v : BitVec 32) : FAssn :=
   up (bytesAt p A 4 K (Enc.encode v)) ⋆ bext b 4 K
 
+/-- A `u32` block holds no read share, so a join that returns one gathers none (`FOwned.join`). -/
+theorem u32At_unshared (p : Ptr) (A : Nat) (K : BlockKind) (b : BlockId) (v : BitVec 32) :
+    (u32At p A K b v).Unshared :=
+  .sep (.up _) (.bext _ _ _)
+
 /-- `main`'s instance of `counter`: block 0 of `mem0` at the address `Ac`, and its knowledge. -/
 abbrev cnt (Ac : Nat) (v : BitVec 32) : FAssn := u32At ⟨some 0, 0⟩ Ac .global 0 v ⋆ known 0 Ac
 
@@ -706,9 +711,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
   have e1 : ownOf G₃ m₁₁ 1 = rk1 := by simp [ownOf, joinedB, hr1, hf1, Gh.res]
   -- kid 1's part is its output block, without read shares: the join gathers none
   have ho₁₂ := FOwned.join (ho₁₁.current 0) (by rw [hsz₁₁]; decide) (by decide) hj
-    fun l => .inr (by
-      rw [e1]
-      exact (FAssn.Unshared.sep (.up _) (.bext _ _ _) : (u32At _ _ _ _ _).Unshared) rk1 hka1 l)
+    fun l => .inr (by rw [e1]; exact u32At_unshared _ _ _ _ _ rk1 hka1 l)
   rw [e0, e1] at ho₁₂
   have hjb₁₂ : ∀ u, joinedB m₁₂ u = if u = 1 then true else joinedB m₁₁ u := by
     intro u
@@ -770,9 +773,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
   have e2 : ownOf G₄ m₁₃ 2 = rk2 := by simp [ownOf, joinedB, hr2, hf2, Gh.res]
   -- kid 2's part is its output block, without read shares: the join gathers none
   have ho₁₄ := FOwned.join (ho₁₃.current 0) (by rw [hsz₁₃]; decide) (by decide) hj₂
-    fun l => .inr (by
-      rw [e2]
-      exact (FAssn.Unshared.sep (.up _) (.bext _ _ _) : (u32At _ _ _ _ _).Unshared) rk2 hka2 l)
+    fun l => .inr (by rw [e2]; exact u32At_unshared _ _ _ _ _ rk2 hka2 l)
   have hd12 : FHeap.Disjoint (rsum r₁₀ rk1).heap rk2.heap := by
     have := ho₁₃.disj (u := 0) (v := 2) (by rw [hsz₁₃]; decide) (by rw [hsz₁₃]; decide) (by decide)
     rwa [e0, e2] at this

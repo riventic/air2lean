@@ -24,7 +24,7 @@ The proof is in the full-state concurrent separation logic (`docs/sep-threads.md
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto Zig.Full Zig.Full.FAssn SpawnFailure
-open SpawnFailure.Group (flagA KidA writeWorker_spec lift_l start)
+open SpawnFailure.Group (flagA flagA_unshared KidA writeWorker_spec lift_l start)
 
 namespace SpawnFailure.Pair
 
@@ -507,8 +507,7 @@ theorem main_spec (σ : Placement) (lim : Option Nat) (d : Nat) :
       simp [ownOf, joinedB, r, hf1, Gh.res]
     -- child 1's part is its flag, without read shares: the join gathers none
     have ho₁₀ := FOwned.join (ho₉.current 0) (by rw [hsz₉]; decide) (by decide) hj
-      fun l => .inr (by rw [e1]; exact (FAssn.Unshared.sep (.up _) (.bext _ _ _) :
-        (flagA _ _ _ _).Unshared) hk1 hka1 l)
+      fun l => .inr (by rw [e1]; exact flagA_unshared _ _ _ _ hk1 hka1 l)
     have hd : FHeap.Disjoint hR.heap hk1.heap := by
       have := ho₉.disj (u := 0) (v := 1) (by rw [hsz₉]; decide) (by rw [hsz₉]; decide) (by decide)
       rwa [e0, e1] at this
@@ -609,8 +608,7 @@ theorem main_spec (σ : Placement) (lim : Option Nat) (d : Nat) :
     simp [ownOf, joinedB, r, hf1, Gh.res]
   -- child 1's part is its flag, without read shares: the join gathers none
   have ho₁₂ := FOwned.join (ho₁₁.current 0) (by rw [hsz₁₁]; decide) (by decide) hj
-    fun l => .inr (by rw [e1]; exact (FAssn.Unshared.sep (.up _) (.bext _ _ _) :
-      (flagA _ _ _ _).Unshared) hk1 hka1 l)
+    fun l => .inr (by rw [e1]; exact flagA_unshared _ _ _ _ hk1 hka1 l)
   rw [e0, e1, rnil_rsum] at ho₁₂
   have hjb₁₂ : ∀ u, joinedB m₁₂ u = if u = 1 then true else joinedB m₁₁ u := by
     intro u
@@ -671,8 +669,7 @@ theorem main_spec (σ : Placement) (lim : Option Nat) (d : Nat) :
     simp [ownOf, joinedB, r, hf2, Gh.res]
   -- child 2's part is its flag, without read shares: the join gathers none
   have ho₁₄ := FOwned.join (ho₁₃.current 0) (by rw [hsz₁₃]; decide) (by decide) hj₂
-    fun l => .inr (by rw [e2]; exact (FAssn.Unshared.sep (.up _) (.bext _ _ _) :
-      (flagA _ _ _ _).Unshared) hk2 hka2 l)
+    fun l => .inr (by rw [e2]; exact flagA_unshared _ _ _ _ hk2 hka2 l)
   have hd12 : FHeap.Disjoint hk1.heap hk2.heap := by
     have := ho₁₃.disj (u := 0) (v := 2) (by rw [hsz₁₃]; decide) (by rw [hsz₁₃]; decide) (by decide)
     rwa [e0, e2] at this
