@@ -82,12 +82,13 @@ class AuditTests(unittest.TestCase):
         self.assertIn("Air2Lean.Renumber.execFunc_rename", cc.GENERIC_ROOTS["Air2Lean.Renumber"])
         cc.check_audit(audit(), artifact())
 
-    def test_scope_is_in_the_reports_sorted_order(self):
-        # `scripts/assumptions.py` lists the audited modules sorted; the expected scope must match
-        # whatever order `GENERIC_ROOTS` declares them in.
-        report = audit()
-        report["modules"] = sorted(cc.GENERIC_ROOTS)
-        cc.check_audit(report, artifact())
+    def test_module_scope_in_any_order_is_accepted(self):
+        # scripts/assumptions.sh reports its modules sorted, GENERIC_ROOTS keeps its own order.
+        for order in (sorted(cc.MODULES), list(reversed(cc.MODULES))):
+            report = audit()
+            report["modules"] = order
+            with self.subTest(order=order):
+                cc.check_audit(report, artifact())
 
     def test_each_generic_root_requires_its_actual_theorem_and_node(self):
         for _, name in ROOTS:
@@ -113,6 +114,9 @@ class AuditTests(unittest.TestCase):
                    lambda r: r.update(modules=[*cc.MODULES, "RoundTrip0"]),
                    lambda r: r.update(modules=["RoundTrip0"]),
                    lambda r: r.update(modules=[CANON_SEM]),
+                   lambda r: r.update(modules=[*cc.MODULES[1:], cc.MODULES[1]]),
+                   lambda r: r.update(modules=dict.fromkeys(cc.MODULES)),
+                   lambda r: r.update(modules=None),
                    lambda r: r["kernel_replay"].update(status="fail"),
                    lambda r: r["kernel_replay"].update(reused=[CANON_SEM]),
                    lambda r: r["kernel_replay"].update(rejected=[CANON_SEM]),
