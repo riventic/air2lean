@@ -617,8 +617,9 @@ theorem Inv.addW {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
     · rw [hne u e] at hu; exact hI.ex u hu
   · refine ⟨Word.rmwEnt m' t ord (W.st.hist m)[(W.st.hist m).size - 1]! (old + 2),
       by rw [hh]; simp, ?_⟩
-    rw [hnrd, hnwi, hwr,
-      ← (RwState.Family.add_writer 31 1 _ _ _ : RwState.encode _ _ _ + 2 = _), ← hold]
+    have hadd : RwState.encode (W.nrd G m) (W.nwi G m + 1) (W.writing G m) = old + 2 := by
+      rw [hold]; exact (RwState.Family.add_writer 31 1 _ _ _).symm
+    rw [hnrd, hnwi, hwr, hadd]
     exact W.st.enc_val (old + 2)
   · have hu' : u ≠ t := fun e => by subst e; rw [hGt] at hu; cases hu
     have hv' : v ≠ t := fun e => by subst e; rw [hGt] at hv; cases hv
