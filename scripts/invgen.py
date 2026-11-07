@@ -31,6 +31,7 @@ TARGETS = [
      'Nested.Gen', 'Nested'),
     ('tests/roadmap/loop-tactics/counted/Counted/Inv.lean', 'tests/roadmap/loop-tactics/counted',
      'Counted.Gen', 'Counted'),
+    ('Proofs/Lists/OpenInv.lean', '.', 'Proofs.Lists.Open', 'Lists.Open'),
 ]
 
 
