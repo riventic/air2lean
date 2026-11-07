@@ -346,7 +346,7 @@ theorem Fits.wp_holdParts (hF : L.Fits K P U ok) {α : Type} {x : MemM α}
     (fun h => by rw [hh] at h; cases h)
     (fun _ => by rw [hhd]; exact hR a rp rh hqp hqh)
   exact h a m' rp rh hc' hs.threads hqp hqh
-    ((hF.inv _ _).mpr ⟨rX, hl, hU a rX m' rp rh hqp hqh hiL hU₀ hjt hs hs.threads hl⟩)
+    ((hF.inv _ _).mpr ⟨rX, hl, hU a rX m' rp rh hqp hqh hiL hU₀ hjt hs.cells hs.threads hl⟩)
 
 /-- **A step of the lock's holder `t` on the lock's resource** (module doc): a thread triple from
 what the resource `L.R G'` gives (`hpa`; the holder's part framed); after it, the holder's new
