@@ -343,7 +343,6 @@ omit [Ext] in
     ⟪xs.length = k + zs.length⟫ ⋆ (I.own ⋆ ((list I φ s.p zs ⋆ (fees I φ k ⋆
       freedSeg I s0.p s.p k)) ⋆ vtR p0.vtable fns.toList)) ⋆ plain
 
-set_option fsym.report true in
 set_option maxRecDepth 20000 in
 theorem freeAll_freed_fsym (hd : Option Ptr) (xs : List (BitVec 32))
     (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
