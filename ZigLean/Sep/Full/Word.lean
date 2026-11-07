@@ -3222,7 +3222,7 @@ theorem cmpxchgWeak_fpNew {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
   rw [W.sz_eq, ha] at hacc
   rw [W.sz_eq] at hp
   cases hacc
-  obtain ⟨l, hl, hlen, -⟩ := prepare hw rfl hp
+  obtain ⟨l, hl, hlen, _, hch, -⟩ := prepare hw rfl hp
   obtain ⟨-, hcs, hblocks⟩ := prepare_rec hc hp
   obtain ⟨a, sn, next, hm₁⟩ := locIdx_updates hp
   have hfp₁ : m₁.footprint = (m.recordAt W.b W.o nb .atomicRead).footprint := by subst hm₁; rfl
