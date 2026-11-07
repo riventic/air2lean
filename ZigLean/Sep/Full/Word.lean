@@ -3250,10 +3250,10 @@ theorem cmpxchgWeak_fpNew {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
     rw [(loc_get hl).2.2] at hpos hj'
     rw [W.sz_eq] at hm'
     have hlr : W.Loc (m₁.recordAt W.b W.o nb .atomicWrite) li l := hl
-    have hs := rmwM_fstep (hF := Heap.empty) (pos := pos) hlr hlen (by omega)
-      (by simpa [Mem.recordAt] using hcs) (rec_recordAt rfl hcs) ⟨blk₀, by rw [hblocks]; exact hb⟩
-      (fun _ _ _ => rfl) succ new
-    rw [← hm'] at hs
+    have hs : FStepIn Heap.empty (m₁.recordAt W.b W.o nb .atomicWrite) m' := by
+      rw [hm']
+      exact rmwM_fstep (pos := pos) hlr hlen (by omega) (by simpa [Mem.recordAt] using hcs)
+        (rec_recordAt rfl hcs) ⟨_, by rw [hblocks]; exact hb⟩ (fun _ _ _ => rfl) succ new
     have hm2 := hs.mine
     rw [show (m₁.recordAt W.b W.o nb .atomicWrite).current = m.current from hcur] at hm2
     have hw2 : VClock.le (VClock.bump (m₁.clocks[m₁.current]!) m₁.current)
@@ -3265,9 +3265,10 @@ theorem cmpxchgWeak_fpNew {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
     rcases he with he | rfl
     · exact hlift (VClock.le_trans (recordAt_clock_le m.current) hm2) e he
     · exact .inr ⟨hcur, hw2⟩
-  · have hs := FStepIn.loadM hcs fail ((m₁.atomics[li]!).msgs[pos]!)
-      (loc_notIn (hF := Heap.empty) hl hlen fun _ _ _ => rfl)
-    rw [← hm'] at hs
+  · have hs : FStepIn Heap.empty m₁ m' := by
+      rw [hm']
+      exact FStepIn.loadM hcs fail ((m₁.atomics[li]!).msgs[pos]!)
+        (loc_notIn (hF := Heap.empty) hl hlen fun _ _ _ => rfl)
     have hm2 := hs.mine
     rw [hcur] at hm2
     rw [hm', loadM_footprint] at he

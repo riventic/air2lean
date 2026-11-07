@@ -1646,7 +1646,8 @@ theorem wp_casAs {α : Type} [Packed α 32] (hE : L.Fits (E.prim L) P U ok)
   have hlv := hE.liveWaiter hi (.inl hg)
   refine FLock.wp_wordCasAs hE (hE.wRest rfl) (hE.wAp rfl) hi
     (fun G₁ rY m₁ _ _ hU j hj b hv => hdec b ((hE.wInv _ _ _ hU).val3 hj hv)) (hlv := hlv)
-    fun k hk G₁ rY m₁ m' hg₁ hc₁ hU hwL hY _ hw₀ hct hrun hA hS hL =>
+    fun k hk G₁ rY m₁ m' hg₁ hc₁ hU hiL hY _ hw₀ hct hrun hA hS hL =>
+      let hwL := hiL.w
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
       let hms := MStep.op (E := E) (t := t) (m := m₁) (m' := m')
         (by rw [FEvent.cur_eq hc₁]; exact hw₀.single (hg₁ ▸ hlv)) hct hwL.csize (by
@@ -1680,7 +1681,8 @@ theorem wp_cas (hE : L.Fits (E.prim L) P U ok) {succ fail : AtomicOrder}
   subst he hn
   have hlv := hE.liveWaiter hi (.inl hg)
   refine FLock.wp_wordCas hE (hE.wRest rfl) (hE.wAp rfl) hi (hlv := hlv)
-    fun k hk G₁ rY m₁ m' hg₁ hc₁ hU hwL hY _ hw₀ hct hrun hA hS hL =>
+    fun k hk G₁ rY m₁ m' hg₁ hc₁ hU hiL hY _ hw₀ hct hrun hA hS hL =>
+      let hwL := hiL.w
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
       let hms := MStep.op (E := E) (t := t) (m := m₁) (m' := m')
         (by rw [FEvent.cur_eq hc₁]; exact hw₀.single (hg₁ ▸ hlv)) hct hwL.csize (by
@@ -1710,7 +1712,8 @@ theorem wp_load (hE : L.Fits (E.prim L) P U ok) {ord : AtomicOrder}
     P.WP t ((atomicLoadC (n := 32) ord 4 E.W.ptr : CM Tgt σ (BitVec 32)).run s) Q G m n :=
   have hlv := hE.liveWaiter hi hg
   FLock.wp_wordLoad hE (hE.wRest rfl) (hE.wAp rfl) hi (hlv := hlv)
-    fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hwL hY hj hv hfl hacq hh _ hw₀ hct hrun hA hS _hR hL =>
+    fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hiL hY hj hv hfl hacq hh _ hw₀ hct hrun hA hS _hR hL =>
+      let hwL := hiL.w
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
       h k hk G₁ m' b (hop.current.trans hc₁) (hE.afterRead hg₁ hg hgo hU hwL hY (by
         refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀.single (hg₁ ▸ hlv)) hct
@@ -1737,7 +1740,8 @@ theorem wp_loadAs {α : Type} [Packed α 32] (hE : L.Fits (E.prim L) P U ok)
   FLock.wp_wordLoadAs hE (hE.wRest rfl) (hE.wAp rfl) hi
     (fun G₁ rY m₁ _ _ hU j hj b hv => hdec b ((hE.wInv _ _ _ hU).val3 hj hv))
     (hlv := hlv)
-    fun k hk G₁ rY m₁ m' b r j hg₁ hc₁ hU hwL hY hd hj hv hfl hacq hh _ hw₀ hct hrun hA hS _hR hL =>
+    fun k hk G₁ rY m₁ m' b r j hg₁ hc₁ hU hiL hY hd hj hv hfl hacq hh _ hw₀ hct hrun hA hS _hR hL =>
+      let hwL := hiL.w
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
       h k hk G₁ m' b r (hop.current.trans hc₁) hd
         (hE.afterRead hg₁ hg hgo hU hwL hY (by
@@ -1758,7 +1762,8 @@ theorem wp_peek (hE : L.Fits (E.prim L) P U ok) {ord : AtomicOrder}
     P.WP t ((atomicLoadC (n := 32) ord 4 E.W.ptr : CM Tgt σ (BitVec 32)).run s) Q G m n :=
   have hlv := live_out (E := E) hg hr
   FLock.wp_wordLoad hE (hE.wRest rfl) (hE.wAp rfl) hi (hlv := hlv)
-    fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hwL hY hj hv _ _ hh _ hw₀ hct hrun hA hS _hR hL =>
+    fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hiL hY hj hv _ _ hh _ hw₀ hct hrun hA hS _hR hL =>
+      let hwL := hiL.w
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
       let ⟨h1, h2⟩ := hE.afterPeek hg₁ hg hgo hU hwL hY (by
         refine .op (by rw [FEvent.cur_eq hc₁]; exact hw₀.single (hg₁ ▸ hlv)) hct
@@ -1787,7 +1792,8 @@ theorem wp_xchgAs {α : Type} [Packed α 32] (hE : L.Fits (E.prim L) P U ok)
     (fun G₁ rY m₁ _ _ hU b hv => hdec b ((hE.wInv _ _ _ hU).val3
       (by have := hist_pos ((hE.wRest rfl) _ _ _ hU).1; omega) hv))
     (hlv := hlv)
-    fun k hk G₁ rY m₁ m' o r hg₁ hc₁ hU hwL hY hd hv _ hh _ _ hw₀ hct hrun hA hS _hR hL => by
+    fun k hk G₁ rY m₁ m' o r hg₁ hc₁ hU hiL hY hd hv _ hh _ _ hw₀ hct hrun hA hS _hR hL => by
+      have hwL := hiL.w
       have hop := hA (fun _ => none) (fun _ _ _ => rfl)
       have hh' : E.W.hist m' = (E.W.hist m₁).push
           (Word.rmwEnt m' t ord (E.newest m₁) (2 : BitVec 32)) := by
@@ -1814,7 +1820,8 @@ theorem wp_xchg (hE : L.Fits (E.prim L) P U ok) {signed : Bool}
     P.WP t ((atomicRmwC .xchg signed ord 4 E.W.ptr v : CM Tgt σ (BitVec 32)).run s) Q G m n :=
   have hlv := live_out (E := E) hg (.inr hsx)
   FLock.wp_wordRmw hE (hE.wRest rfl) (hE.wAp rfl) hi (hlv := hlv)
-    fun k hk G₁ rY m₁ m' o hg₁ hc₁ hU hwL hY hv _ hh _ _ hw₀ hct hrun hA hS _hR hL => by
+    fun k hk G₁ rY m₁ m' o hg₁ hc₁ hU hiL hY hv _ hh _ _ hw₀ hct hrun hA hS _hR hL => by
+      have hwL := hiL.w
       have hop := hA (fun _ => none) (fun _ _ _ => rfl)
       have hh' : E.W.hist m' = (E.W.hist m₁).push
           (Word.rmwEnt m' t ord (E.newest m₁) (2 : BitVec 32)) := by
