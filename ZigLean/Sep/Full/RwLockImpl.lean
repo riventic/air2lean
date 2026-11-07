@@ -519,6 +519,36 @@ theorem Fits.wstep (hW : W.Fits P UM US okM okS) {t : ThreadId} {G G' : ThreadId
   have hst := hs (hW.m.sub G rX m hU)
   (hW.m.inv G' m').mpr ⟨rX', hst.2.2.1, hW.m.kstep t G rX m G' rX' m' (.inl hst) hU⟩
 
+/-- **An atomic op at the state word moves `t` to `a`** (`Fits.wstep` with the facts of the word
+rules at `M`, `FLock.wp_wordRmw`, `wp_wordWeakCas`, `wp_wordLoad`): the outer mutex's invariant
+before (the stop's) and after the op, the op's rest step, and the rwlock's invariant after it with
+`t` at `a`. The other facts of `Step` hold at once: only `t`'s rwlock place changes. -/
+theorem Fits.atWord (hW : W.Fits P UM US okM okS) {t : ThreadId} {G₁ : ThreadId → γ} {g : γ}
+    {a : RwPh} {rY : Res} {m₁ m' : Mem} (hg₁ : G₁ t = g) (hc₁ : m₁.current = t)
+    (hU : UM G₁ (rsum (W.st.cellsR m₁) rY) m₁) (hiL : M.Inv G₁ (rsum (W.st.cellsR m₁) rY) m₁)
+    (hrest : RestStep W.st.In m₁ m') (hL : M.Inv G₁ (rsum (W.st.cellsR m') rY) m')
+    (hI : W.Inv G₁ (rsum (W.st.cellsR m₁) rY) m₁ →
+      W.Inv (upd G₁ t (W.set g a)) (rsum (W.st.cellsR m') rY) m') :
+    P.inv (upd G₁ t (W.set g a)) m' := by
+  have hK : W.prim.pl.set g (a, S.place.ph g) = W.set g a := by
+    show W.set (S.place.set g (S.place.ph g)) a = W.set g a
+    rw [S.place.set_self]
+  have hM : M.Inv (upd G₁ t (W.set g a)) (rsum (W.st.cellsR m') rY) m' := by
+    have := hW.m.relabelK (G := G₁) (t := t) (g := g) (a, S.place.ph g)
+      (by rw [← hg₁, upd_same]; exact hL)
+    rwa [hK] at this
+  refine hW.wstep hU fun hI₁ => ⟨hiL, hI₁, hM, hI hI₁, hc₁, .inr hrest,
+    fun u hu => upd_ne _ _ hu, fun u => ?_, ?_, ?_, ?_, ?_, ?_,
+    rY, rY, rnil, by rw [rsum_rnil], by rw [rsum_rnil]⟩
+  · by_cases e : u = t
+    · subst e; rw [upd_self, W.x_set, hg₁]
+    · rw [upd_ne _ _ e]
+  · rw [upd_self, hg₁, ← hK, hW.m.lph]
+  · rw [upd_self, hg₁, ← hK, hW.m.lheld]
+  · rw [upd_self, hg₁, W.lph]
+  · rw [upd_self, hg₁, W.lheld]
+  · rw [upd_self, hg₁, W.sp_ph]
+
 end Proto
 
 end FRw
