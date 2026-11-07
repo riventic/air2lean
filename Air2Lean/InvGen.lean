@@ -130,8 +130,8 @@ structure NodeOp where
 /-- The node field that the pointer `p` addresses: the optional pointer whose payload it is
 offset, and the offset. -/
 def Sym.nodeLoc? : Sym → Option (Sym × Nat)
-  | .payload c => some (c, 0)
-  | .addr (.payload c) k => some (c, k)
+  | .payload c => Option.some (c, 0)
+  | .addr (.payload c) k => Option.some (c, k)
   | _ => none
 
 /-- `()`, the result of a step that returns nothing. -/
@@ -571,7 +571,7 @@ def listWalk (ctx : Ctx) (again : Expr → MetaM Bool) (fieldTy : Name → MetaM
     let some w := bitVecWidth? (← fieldTy f) | throwError "a local `{f}` that is not a word changes"
     let .add (.local f') t := v | throwError "a local `{f}` that does not go up by the item or a constant"
     unless f' == f do throwError "a local `{f}` that does not go up by the item or a constant"
-    let itemV := match item? with
+    let itemV : Bool := match item? with
       | some (k, _, _) => t == .nload (.local cur) k || t == .widen (.nload (.local cur) k)
       | none => false
     let acc ← if itemV then
