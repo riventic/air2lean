@@ -456,13 +456,13 @@ operation (`effectsIn_renOp`) and the instruction list of a renamed function
 in a mask (which `Raw.validateRefs` rejects), an unrenamed mask would let the escaping-alloc
 analysis see a different local.
 
-One local fact remains a hypothesis of `run_renumber`: that renaming keeps
-`Func.usesMemoryLocally`. Its place roots and use-escaping allocs are proved invariant
-(`placeRoots_ren`, `usesEscapingAllocs_ren`); `deadUndefStores`, `undefAllocs`, `byteLocalOk`
-and the per-instruction predicate are not yet, because their instruction tests are anonymous
-`match`es under binders that no lemma can name (the fix is to name them in `Memory.lean`). So
-the program-level part of `renumber` stays under TRU-02, narrowed to that memory fact and the
-native binding.
+The local memory fact is proved too (`usesMemoryLocally_ren`): renaming keeps each analysis of
+`Memory.lean` up to the renaming (`placeRoots_ren`, `usesEscapingAllocs_ren`,
+`deadUndefStores_ren`, `undefAllocs_ren`, `byteLocalOk_ren`, `escapingAllocs_ren`), from one
+lemma per named instruction test (`Inst.usesPlaceOf`, `Inst.leavesBody`,
+`Inst.overwritesLocal`, `byteLocalUseOk`, `Func.usesMemoryAt`, ...). So `run_renumber` has no
+hypothesis beyond the injective renaming, and only the native binding of `renumber` stays under
+TRU-02.
 
 ### How SEM-06 shrinks
 

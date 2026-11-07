@@ -20,7 +20,7 @@ and the canceled `lock`'s `And ~is_writing`), `set_writing` (`tryLock`'s
 `state | is_writing` under `reader_mask == 0`) and `sub_writer` (the canceled
 `lock`'s `Sub writer`).
 
-The contract `RwLockImpl` (B2) states only the four uncancelable entry points
+The contract `RwLockImpl` (`ZigLean/Sep/Full/RwLockImpl.lean`) states only the four uncancelable entry points
 `lockUncancelable`, `unlock`, `lockSharedUncancelable` and `unlockShared`.
 `tryLock`, `tryLockShared` and the cancelable `lock`/`lockShared` are not
 modelled: there is no contract rule for them, so a client that calls them has

@@ -122,6 +122,12 @@
       "approved": "coordinator 2026-11-03 (maintainer: *Impl gate released; semaphore model next to FLock/FCond, L10-sync)"
     },
     {
+      "name": "FRw",
+      "module": "ZigLean.Sep.Full.RwLockImpl",
+      "status": "target",
+      "approved": "coordinator 2026-11-07 (maintainer 2026-11-03: *Impl gate released, RwLockImpl built like MutexImpl/SemImpl; rwlock model over FLock.Pair + FSem, precedent FSem; PR #723)"
+    },
+    {
       "name": "FStepIn",
       "module": "ZigLean.Conc.Clock",
       "status": "target",
@@ -220,6 +226,12 @@
       "module": "ZigLean.Sep.Full.Sem",
       "status": "target",
       "approved": "coordinator 2026-11-04 (PR #575 comment 6638437976: FSem.Fits is L.Fits S.prim with ok_s and the window field; precedent FCond.Fits, PR #575 decision 6625654179)"
+    },
+    {
+      "name": "Fits",
+      "module": "ZigLean.Sep.Full.RwLockImpl",
+      "status": "target",
+      "approved": "coordinator 2026-11-07 (FRw.Fits is M.Fits W.prim plus S.Fits over one protocol with the ok laws; precedent FSem.Fits / FCond.Fits; PR #723)"
     },
     {
       "name": "FitsOn",
@@ -386,6 +398,12 @@
       "module": "ZigLean.Sep.Full.Sem",
       "status": "target",
       "approved": "coordinator 2026-11-03 (maintainer: *Impl gate released, as MutexImpl/CondImpl; L10-sync)"
+    },
+    {
+      "name": "RwLockImpl",
+      "module": "ZigLean.Sep.Full.RwLockImpl",
+      "status": "target",
+      "approved": "coordinator 2026-11-07 (maintainer 2026-11-03: *Impl gate released, SemImpl and RwLockImpl built like MutexImpl/CondImpl; hroom premises maintainer 2026-11-06; PR #723)"
     },
     {
       "name": "SeqImpl",

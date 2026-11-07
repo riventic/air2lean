@@ -47,6 +47,13 @@ noncomputable def Ghost.sharesOf (H : FHeap) (q : Frac) : Ghost :=
 def sheap (H : FHeap) (q : Frac) : FAssn := fun r =>
   r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh = Ghost.sharesOf H q
 
+/-- The share `q` of the heap `H`, as a resource: the one resource of `sheap H q`. -/
+noncomputable def shareRes (H : FHeap) (q : Frac) : Res :=
+  ⟨FHeap.empty, Know.none, Ghost.sharesOf H q⟩
+
+theorem shareRes_sheap (H : FHeap) (q : Frac) : sheap H q (shareRes H q) :=
+  ⟨rfl, rfl, rfl⟩
+
 /-- **The share `q` of an exclusive assertion** `P`: of a heap that `P` holds alone. -/
 def shared (P : FAssn) (q : Frac) : FAssn := fun r =>
   ∃ H, P ⟨H, Know.none, Ghost.unit⟩ ∧ sheap H q r
