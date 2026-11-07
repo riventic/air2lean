@@ -3165,7 +3165,7 @@ theorem atomicRmw_fpNew {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool}
   have hfp : m₁.footprint = (m.recordAt W.b W.o nb .atomicWrite).footprint := by subst hm₁; rfl
   have hcur : m₁.current = m.current := by subst hm₁; rfl
   have hclk : m₁.clocks[m.current]! = VClock.bump (m.clocks[m.current]!) m.current := by
-    subst hm₁; exact recordAt_clock hc
+    subst hm₁; exact recordAt_clock (b := W.b) (off := W.o) (len := nb) (kind := .atomicWrite) hc
   rw [hfp] at he
   simp only [Mem.recordAt, Array.mem_push] at he
   rcases he with he | rfl
