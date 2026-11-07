@@ -2,7 +2,6 @@ import ZigLean.Sep.Full.RwLock
 import ZigLean.Sep.Full.Sem
 import ZigLean.Sep.Full.Share
 import ZigLean.Sep.Full.LockPair
-import ZigLean.Sep.Full.TSum
 
 /-!
 # The reader/writer lock contract, over full-state resources
@@ -36,7 +35,7 @@ rules, with the state word's value equations of `RwState.Family` (`ZigLean/Sep/F
   `share H q` that joins the caller's part (`M.part`, which is `L.part`); the writer's `r` joins it
   too. The client reads the share's bytes with the share load rule (`sload`, `load_sbytesAt`).
 - **The semaphore's count and pool.** The count is `1` exactly when the resource is posted
-  (`Posted`: a writer at `ww`, no reader at `rd` and none at `rp`), and then the pool is the whole
+  (`RwPosted`: a writer at `ww`, no reader at `rd` and none at `rp`), and then the pool is the whole
   resource (`R`); else the count is `0` and the pool empty (`cnt_posted`, `cnt_idle`,
   `pool_posted`, `pool_idle`). So the last reader hands the resource to the sleeping writer through
   the semaphore (`SemImpl.post_wp`, `SemImpl.wait_wp`), which orders its reads before the writer.
@@ -135,19 +134,12 @@ def isWi : RwPh → Bool
   | .wi => true
   | _ => false
 
-/-- A reader's fraction (`0` elsewhere). -/
-def frac : RwPh → Rat
-  | .rd q _ => q.val
-  | _ => 0
+/-- A reader's fraction (`Frac.zero` elsewhere). -/
+def frac : RwPh → Frac
+  | .rd q _ => q
+  | _ => Frac.zero
 
 end RwPh
-
-/-- The share `q` of the heap `H`, as a resource (`sheap H q`). -/
-noncomputable def shareRes (H : FHeap) (q : Frac) : Res :=
-  ⟨FHeap.empty, Know.none, Ghost.sharesOf H q⟩
-
-theorem shareRes_sheap (H : FHeap) (q : Frac) : sheap H q (shareRes H q) :=
-  ⟨rfl, rfl, rfl⟩
 
 /-- The resource is posted to the waiting writer (module doc): a writer at `ww`, no reader at
 `rd` and none at `rp`. -/
@@ -186,12 +178,9 @@ structure FRw (γ X Y : Type) (M L : FLock γ) (C : FCond γ) (S : FSem γ Y L C
   lheld : ∀ g a, L.held (set g a) = L.held g
   ph_l : ∀ g q h, ph (L.set g q h) = ph g
   set_l : ∀ g a q h, set (L.set g q h) a = L.set (set g a) q h
-  ph_c : ∀ g c, ph (C.set g c) = ph g
-  cph : ∀ g a, C.ph (set g a) = C.ph g
-  set_c : ∀ g a c, C.set (set g a) c = set (C.set g c) a
-  ph_s : ∀ g s, ph (S.set g s) = ph g
-  sph : ∀ g a, S.ph (set g a) = S.ph g
-  set_s : ∀ g a s, S.set (set g a) s = set (S.set g s) a
+  ph_sp : ∀ g q, ph (S.place.set g q) = ph g
+  sp_ph : ∀ g a, S.place.ph (set g a) = S.place.ph g
+  set_sp : ∀ g a q, S.place.set (set g a) q = set (S.place.set g q) a
   /-- The semaphore's count and pool (module doc). -/
   cnt_posted : ∀ G, RwPosted ph G → S.cnt G = 1
   cnt_idle : ∀ G, ¬ RwPosted ph G → S.cnt G = 0
@@ -221,15 +210,12 @@ def writing (G : ThreadId → γ) (m : Mem) : Bool :=
 
 /-- The readers' fractions. -/
 def fsum (G : ThreadId → γ) (m : Mem) : Rat :=
-  ((List.range m.threads.size).map fun u => (W.ph (G u)).frac).sum
-
-/-- The resource is posted to the waiting writer. -/
-abbrev Posted (G : ThreadId → γ) : Prop := RwPosted W.ph G
+  ftot (fun u => (W.ph (G u)).frac) m.threads.size
 
 /-- The resource is away from the rest: the writer holds it, the last reader carries it, or it is
 posted. -/
 def Busy (G : ThreadId → γ) : Prop :=
-  (∃ u, W.ph (G u) = .wr) ∨ (∃ u, W.ph (G u) = .rp) ∨ W.Posted G
+  (∃ u, W.ph (G u) = .wr) ∨ (∃ u, W.ph (G u) = .rp) ∨ RwPosted W.ph G
 
 /-- **The free resource** `rF` in the rest (module doc). -/
 def FreeRes (G : ThreadId → γ) (m : Mem) (rF : Res) : Prop :=
@@ -242,7 +228,7 @@ def FreeRes (G : ThreadId → γ) (m : Mem) (rF : Res) : Prop :=
 /-- **The free resource is owned through the word** (module doc). -/
 def Owns (G : ThreadId → γ) (m : Mem) (r : Res) : Prop :=
   ∀ e ∈ m.footprint, (e.Touches r.excl ∨ e.Touches r.shared ∨ m.blocks.size ≤ e.block) →
-    AllLeOn (fun u => M.ph (G u) ≠ .gone) m e.clock ∨
+    LockWord.LiveLe (M.pl G) m e.clock ∨
     VClock.le e.clock ((W.st.hist m).back!).relClock = true ∨
     (e.kind.isWrite = false ∧ e.Touches r.shared ∧
       ∃ u, (W.ph (G u)).isRd = true ∧ VClock.le e.clock (m.clocks[u]!) = true)
@@ -274,17 +260,12 @@ def place : FPlace γ (RwPh × (CPh × SPh)) where
   ph g := (W.ph g, S.place.ph g)
   set g q := W.set (S.place.set g q.2) q.1
   ph_set g q := by
-    show (W.ph (W.set (S.place.set g q.2) q.1),
-      (C.ph (W.set (S.place.set g q.2) q.1), S.ph (W.set (S.place.set g q.2) q.1))) = q
-    rw [W.ph_set, W.cph, W.sph]
-    show (q.1, S.place.ph (S.place.set g q.2)) = q
-    rw [S.place.ph_set]
+    show (W.ph (W.set (S.place.set g q.2) q.1), S.place.ph (W.set (S.place.set g q.2) q.1)) = q
+    rw [W.ph_set, W.sp_ph, S.place.ph_set]
   set_set g q q' := by
-    show W.set (S.set (C.set (W.set (S.place.set g q.2) q.1) q'.2.1) q'.2.2) q'.1 =
+    show W.set (S.place.set (W.set (S.place.set g q.2) q.1) q'.2) q'.1 =
       W.set (S.place.set g q'.2) q'.1
-    rw [W.set_c, W.set_s, W.set_set]
-    show W.set (S.place.set (S.place.set g q.2) q'.2) q'.1 = _
-    rw [S.place.set_set]
+    rw [W.set_sp, W.set_set, S.place.set_set]
   set_self g := by
     show W.set (S.place.set g (S.place.ph g)) (W.ph g) = g
     rw [S.place.set_self, W.set_self]
@@ -331,8 +312,10 @@ structure Fits {Tgt : Type} (P : Proto Tgt γ) (UM US : (ThreadId → γ) → Re
     (okM okS : γ → Prop) : Prop where
   m : M.Fits W.prim P UM okM
   s : S.Fits P US okS
-  /-- The rwlock's place is not `okS`'s (a thread runs the semaphore's mutex code in any of
-  them). -/
+  /-- The rwlock's place is read by neither `ok`: a thread runs either mutex's code at any of
+  them (`M.Fits.ok_calm` covers only the calm places, and the writer moves `wr → out` before its
+  outer unlock and `ww → wr` before it returns from `lock`). -/
+  okM_set : ∀ g a, okM (W.set g a) ↔ okM g
   okS_set : ∀ g a, okS (W.set g a) ↔ okS g
   /-- Neither lock's code is `ok` of the other's view: a thread's place, held resource and part in
   one lock do not change whether it may run the other's code. -/
@@ -349,19 +332,13 @@ structure Fits {Tgt : Type} (P : Proto Tgt γ) (UM US : (ThreadId → γ) → Re
 
 variable {W}
 
-theorem tsum_zero_of {N : Nat} {g : Nat → Nat} (h : ∀ u, u < N → g u = 0) : tsum N g = 0 := by
-  induction N with
-  | zero => rfl
-  | succ N ih =>
-    rw [tsum_succ, ih fun u hu => h u (by omega), h N (by omega)]
-
 /-- With every thread out of the rwlock's code there is no reader. -/
 theorem nrd_out {G : ThreadId → γ} {m : Mem} (h : ∀ u, W.ph (G u) = .out) : W.nrd G m = 0 :=
-  tsum_zero_of fun u _ => by simp [h u, RwPh.isRd]
+  tsum_eq_zero fun u _ => by simp [h u, RwPh.isRd]
 
 /-- With every thread out of the rwlock's code there is no pending writer. -/
 theorem nwi_out {G : ThreadId → γ} {m : Mem} (h : ∀ u, W.ph (G u) = .out) : W.nwi G m = 0 :=
-  tsum_zero_of fun u _ => by simp [h u, RwPh.isWi]
+  tsum_eq_zero fun u _ => by simp [h u, RwPh.isWi]
 
 /-- With every thread out of the rwlock's code no thread is writing. -/
 theorem writing_out {G : ThreadId → γ} {m : Mem} (h : ∀ u, W.ph (G u) = .out) :
