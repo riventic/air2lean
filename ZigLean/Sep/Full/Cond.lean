@@ -914,7 +914,7 @@ theorem wp_consume (hC : L.Fits (C.prim L) P U ok) {succ fail : AtomicOrder}
   subst hnew
   exact FLock.wp_wordWeakCas hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) hi
     fun k hk G₁ rY m₁ m' hg₁ hc₁ hU hiL hY hw' hw₀ hct hrun hA _hS hL =>
-      let hwL := hiL.w
+      have hwL := hiL.w
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
       let hms := mstep_op (C := C) hc₁ hw₀ hct
         (by rcases hrun with ⟨c, r, hr⟩; exact .inr (.inr (.inr (.inl ⟨c, _, _, _, _, r, hr⟩)))) hw'
@@ -943,7 +943,7 @@ theorem wp_consumeAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok)
   FLock.wp_wordWeakCasAs hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) hi
     (fun _ _ _ _ _ hU => dec_of hdec (hC.wInv _ _ _ hU))
     fun k hk G₁ rY m₁ m' hg₁ hc₁ hU hiL hY hw' hw₀ hct hrun hA _hS hL =>
-      let hwL := hiL.w
+      have hwL := hiL.w
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
       let hms := mstep_op (C := C) hc₁ hw₀ hct
         (by rcases hrun with ⟨c₀, r, hr⟩; exact .inr (.inr (.inr (.inl ⟨c₀, _, _, _, _, r, hr⟩)))) hw'
@@ -1267,7 +1267,7 @@ theorem wp_post (hC : L.Fits (C.prim L) P U ok) {succ fail : AtomicOrder}
     P.WP t ((cmpxchgWeakC (n := 32) succ fail 4 C.S.ptr exp new : CM Tgt σ _).run s) Q G m n :=
   FLock.wp_wordWeakCas hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) hi
     fun k hk G₁ rY m₁ m' hg₁ hc₁ hU hiL hY hw' hw₀ hct hrun hA _hS hL =>
-      let hwL := hiL.w
+      have hwL := hiL.w
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
       let hms := mstep_op (C := C) hc₁ hw₀ hct
         (by rcases hrun with ⟨c₀, r, hr⟩; exact .inr (.inr (.inr (.inl ⟨c₀, _, _, _, _, r, hr⟩)))) hw'
@@ -1299,7 +1299,7 @@ theorem wp_postAs {α : Type} [Packed α 32] (hC : L.Fits (C.prim L) P U ok)
   FLock.wp_wordWeakCasAs hC (hC.wRest (.inl rfl)) (hC.wAp (.inl rfl)) hi
     (fun _ _ _ _ _ hU => dec_of hdec (hC.wInv _ _ _ hU))
     fun k hk G₁ rY m₁ m' hg₁ hc₁ hU hiL hY hw' hw₀ hct hrun hA _hS hL =>
-      let hwL := hiL.w
+      have hwL := hiL.w
       let hop := hA (fun _ => none) (fun _ _ _ => rfl)
       let hms := mstep_op (C := C) hc₁ hw₀ hct
         (by rcases hrun with ⟨c₀, r, hr⟩; exact .inr (.inr (.inr (.inl ⟨c₀, _, _, _, _, r, hr⟩)))) hw'
