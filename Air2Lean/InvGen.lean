@@ -697,8 +697,8 @@ def Cand.assn (c : Cand) (top : List String) (cell : Nat → List String) (owned
 /-- The invariant's body with the kept facts (`keep`), each written by `fact`. -/
 def Cand.body (c : Cand) (keep : Array Bool) (fact : Nat → String) : String :=
   let kept := (List.range c.facts.size).filter (keep[·]!)
-  String.join (c.exs.toList.map fun (y, ty) => s!"FAssn.ex fun {y} : {ty} => ") ++
-  (if c.exs.isEmpty then "" else "\n    ") ++
+  (if c.exs.isEmpty then "" else
+    " ".intercalate (c.exs.toList.map fun (y, ty) => s!"FAssn.ex fun {y} : {ty} =>") ++ "\n    ") ++
   c.assn ((kept.filter (c.facts[·]!.cell?.isNone)).map fact)
     fun k => (kept.filter fun i => (c.facts[i]!.cell?.map (·.1)) == some k).map fact
 
