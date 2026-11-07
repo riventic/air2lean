@@ -658,6 +658,8 @@ structure Cand where
   pre : String := ""
   /-- The arguments of the check's `fsym` (` [update]`). -/
   fsymArgs : String := ""
+  /-- The body's arguments, if not all of `args` (a list walk's invariant takes more). -/
+  bodyArgs? : Option String := none
 
 /-- An assertion over the resources `owned`: the facts `top`, and each written cell `k` at a
 value `v` with the facts `cell k`. -/
@@ -738,7 +740,7 @@ def Cand.check (ns : Name) (c : Cand) (keep : Array Bool) (final := false) : Str
     return s!"{text}\n\
       set_option fsym.report true in\n\
       theorem {c.name}.houdini {c.binders}(s0 : {c.loc}) {c.entry}(s : {c.loc}) (n : Nat) :\n    \
-        FTotalTriple ({inv "s n"}) (({q c.name} {c.args}).run s)\n      \
+        FTotalTriple ({inv "s n"}) (({q c.name} {c.bodyArgs?.getD c.args}).run s)\n      \
         (floopNext {q c.again} ({inv ""}) ({q c.name}.post {c.args}s0 {c.vargs}) n) := by\n  \
         unfold {q c.name} {q c.name}.inv {q c.name}.post\n  fsym{c.fsymArgs}\n"
   -- the definitions, the assertion at the exit and the extra definition to unfold
@@ -880,7 +882,7 @@ def listCand (ns : Name) (name again binders args loc exit : String) (w : Walk) 
     owned := #[.atom prefixAt, .atom s!"listSeg {N} s.{cur} none zs"] ++ plain,
     meas := "", exit, postFacts := post, postCells := #[], family := "list-walk", ghost := true,
     exs := #[("ys", LT), ("zs", LT)], postOwned? := some (#[.atom postList] ++ plain), pre,
-    fsymArgs := if w.rev?.isSome then "" else " [Zig.Full.listSeg_snoc_upd]",
+    fsymArgs := if w.rev?.isSome then "" else " [Zig.Full.listSeg_snoc_upd]", bodyArgs? := some args,
     doc := s!"/-- The invariant of `{name}`, a list walk that {kind} `xs` at `{cur}` \
       (`{name}.node`): `zs` are the `n` nodes left.\n`s0` holds the locals at loop entry. -/\n" }
 

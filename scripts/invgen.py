@@ -38,7 +38,7 @@ TARGETS = [
 def source(root, module):
     """The source of the translated `module` of the fixture at `root`: the generator's input
     (`--source`), which `scripts/gen-integrity.py invgen` checks the record against."""
-    return f"{root}/{module.replace('.', '/')}.lean"
+    return (Path(root) / f"{module.replace('.', '/')}.lean").as_posix()
 
 
 def generate(root, module, namespace, work):
