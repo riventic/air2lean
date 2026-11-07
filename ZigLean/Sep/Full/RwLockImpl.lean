@@ -406,53 +406,48 @@ theorem xs_set (G : ThreadId → γ) (t : ThreadId) (g : γ) (a : RwPh) :
   · subst e; rw [upd_self, upd_self, W.x_set]
   · rw [upd_ne _ _ e, upd_ne _ _ e]
 
-/-- One thread's change moves the readers' count by its own (`tsum_upd`). -/
+/-- One thread's change moves a count of the places with `p` by its own (`tsum_upd`). -/
+theorem cnt_upd (p : RwPh → Bool) (G : ThreadId → γ) {N t : Nat} (ht : t < N) (g g' : γ) :
+    tsum N (fun u => if p (W.ph (upd G t g' u)) then 1 else 0) + (if p (W.ph g) then 1 else 0) =
+      tsum N (fun u => if p (W.ph (upd G t g u)) then 1 else 0) +
+        (if p (W.ph g') then 1 else 0) := by
+  have h := tsum_upd (g := fun u => if p (W.ph (upd G t g u)) then 1 else 0)
+    (g' := fun u => if p (W.ph (upd G t g' u)) then 1 else 0) ht fun u e => by
+      show (if p (W.ph (upd G t g' u)) then 1 else 0) = (if p (W.ph (upd G t g u)) then 1 else 0)
+      rw [upd_ne _ _ e, upd_ne _ _ e]
+  simpa only [upd_self] using h
+
+/-- One thread's change moves the readers' count by its own. -/
 theorem nrd_upd (G : ThreadId → γ) {m : Mem} {t : ThreadId} (ht : t < m.threads.size)
     (g g' : γ) :
     W.nrd (upd G t g') m + (if (W.ph g).isRd then 1 else 0) =
-      W.nrd (upd G t g) m + (if (W.ph g').isRd then 1 else 0) := by
-  have h := tsum_upd (N := m.threads.size)
-    (g := fun u => if (W.ph (upd G t g u)).isRd then 1 else 0)
-    (g' := fun u => if (W.ph (upd G t g' u)).isRd then 1 else 0) ht fun u e => by
-      show (if (W.ph (upd G t g' u)).isRd then 1 else 0) =
-        (if (W.ph (upd G t g u)).isRd then 1 else 0)
-      rw [upd_ne _ _ e, upd_ne _ _ e]
-  unfold nrd
-  simpa only [upd_self] using h
+      W.nrd (upd G t g) m + (if (W.ph g').isRd then 1 else 0) :=
+  cnt_upd (W := W) RwPh.isRd G ht g g'
 
-/-- One thread's change moves the pending writers' count by its own (`tsum_upd`). -/
+/-- One thread's change moves the pending writers' count by its own. -/
 theorem nwi_upd (G : ThreadId → γ) {m : Mem} {t : ThreadId} (ht : t < m.threads.size)
     (g g' : γ) :
     W.nwi (upd G t g') m + (if (W.ph g).isWi then 1 else 0) =
-      W.nwi (upd G t g) m + (if (W.ph g').isWi then 1 else 0) := by
-  have h := tsum_upd (N := m.threads.size)
-    (g := fun u => if (W.ph (upd G t g u)).isWi then 1 else 0)
-    (g' := fun u => if (W.ph (upd G t g' u)).isWi then 1 else 0) ht fun u e => by
-      show (if (W.ph (upd G t g' u)).isWi then 1 else 0) =
-        (if (W.ph (upd G t g u)).isWi then 1 else 0)
-      rw [upd_ne _ _ e, upd_ne _ _ e]
-  unfold nwi
-  simpa only [upd_self] using h
+      W.nwi (upd G t g) m + (if (W.ph g').isWi then 1 else 0) :=
+  cnt_upd (W := W) RwPh.isWi G ht g g'
+
+/-- A change that keeps `f` of the thread's place keeps `f` of every thread's. -/
+theorem ph_upd {α : Type} (f : RwPh → α) (G : ThreadId → γ) (t : ThreadId) {g g' : γ}
+    (h : f (W.ph g') = f (W.ph g)) :
+    (fun u => f (W.ph (upd G t g' u))) = fun u => f (W.ph (upd G t g u)) := funext fun u => by
+  by_cases e : u = t
+  · subst e; rw [upd_self, upd_self, h]
+  · rw [upd_ne _ _ e, upd_ne _ _ e]
 
 /-- A change that keeps whether the thread holds the writing bit keeps `writing`. -/
 theorem writing_upd (G : ThreadId → γ) (m : Mem) (t : ThreadId) {g g' : γ}
-    (h : (W.ph g').isW = (W.ph g).isW) : W.writing (upd G t g') m = W.writing (upd G t g) m := by
-  unfold writing
-  congr 1
-  funext u
-  by_cases e : u = t
-  · subst e; rw [upd_self, upd_self, h]
-  · rw [upd_ne _ _ e, upd_ne _ _ e]
+    (h : (W.ph g').isW = (W.ph g).isW) : W.writing (upd G t g') m = W.writing (upd G t g) m :=
+  congrArg (fun F => (List.range m.threads.size).any F) (ph_upd (W := W) RwPh.isW G t h)
 
 /-- A change that keeps the thread's fraction keeps the readers' fractions. -/
 theorem fsum_upd (G : ThreadId → γ) (m : Mem) (t : ThreadId) {g g' : γ}
-    (h : (W.ph g').frac = (W.ph g).frac) : W.fsum (upd G t g') m = W.fsum (upd G t g) m := by
-  unfold fsum
-  congr 1
-  funext u
-  by_cases e : u = t
-  · subst e; rw [upd_self, upd_self, h]
-  · rw [upd_ne _ _ e, upd_ne _ _ e]
+    (h : (W.ph g').frac = (W.ph g).frac) : W.fsum (upd G t g') m = W.fsum (upd G t g) m :=
+  congrArg (ftot · m.threads.size) (ph_upd (W := W) RwPh.frac G t h)
 
 /-! ## Ownership over a step at the state word -/
 

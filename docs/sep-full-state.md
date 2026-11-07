@@ -782,7 +782,9 @@ resource to a writer asleep at the semaphore through the semaphore's pool (`pool
 `SemImpl` orders its reads before the writer. The writer holds `M` while it may sleep in the
 semaphore's code, and a holder at `holds` is never in the futex queue, so an implementation naps
 `M` around its semaphore wait: `FRw.Fits` carries `UM`'s stability over that nap and unnap
-(`mnap`, `munnap`; decision on #667, the nesting protocol's obligation). The facts every
+(`mnap`, `munnap`). Maintainer decision 2026-11-07 (#724): this is the nesting protocol's
+obligation, consistent with the decision on #667; it is not derived from `FLock.Fits.stable`,
+whose release premise does not hold for a holder, and every client discharges it. The facts every
 implementation walks its code with (`Fits.inRest`, `Fits.napW`/`unnapW`, `Fits.wstep`,
 `Owns.step`) are in the module; no instance or client is there.
 
