@@ -46,13 +46,6 @@ theorem rsum_rsum_comm {a b c d : Res} (hbc : FHeap.Disjoint b.heap c.heap) :
     rsum (rsum a b) (rsum c d) = rsum (rsum a c) (rsum b d) := by
   rw [rsum_assoc, ← rsum_assoc (a := b), rsum_comm hbc, rsum_assoc, ← rsum_assoc]
 
-/-- The parts are exactly composed: `sepN` of exact parts has one resource. -/
-theorem sepN_partOf_unique {own : ThreadId → Res} :
-    ∀ {n : Nat} {r r' : Res}, sepN n (partOf own) r → sepN n (partOf own) r' → r = r'
-  | 0, r, r', ⟨h1, k1, g1⟩, ⟨h2, k2, g2⟩ => by rw [res_eta r, res_eta r', h1, k1, g1, h2, k2, g2]
-  | n + 1, _, _, ⟨_, _, _, rfl, rfl, h1⟩, ⟨_, _, _, rfl, rfl, h2⟩ => by
-    rw [sepN_partOf_unique h1 h2]
-
 /-- **Pointwise sums of parts are the sum of the two families' compositions** (both directions:
 splitting needs that each pair is apart). -/
 theorem sepN_partOf_rsum {a b : ThreadId → Res} :
@@ -202,29 +195,6 @@ theorem off_owned_of_rest {own : ThreadId → Res} {rO rc : Res}
       · simp only [Ghost.add_share]
         exact SCell.pos_add_iff.mpr (.inr hp)
 
-/-- **A lock step keeps what any thread's clock owns** without the word's bytes: the stepping
-thread's clock grows (`OwnsW.step`), the others stay, and no new access touches the bytes. -/
-theorem OwnsW.lstep {t u : ThreadId} {m' : Mem} {h : Heap} {w : Bool} (hs : L.Step t m m')
-    (hoff : L.Off h) (hbl : L.b < m.blocks.size) (ho : OwnsW w m (m.clocks[u]!) h) :
-    OwnsW w m' (m'.clocks[u]!) h := by
-  by_cases e : u = t
-  · subst e; exact OwnsW.step hs hoff hbl ho
-  · rw [hs.others u e]
-    intro en he hw htc
-    by_cases hm : en ∈ m.footprint
-    · exact ho en hm hw (htc.imp id fun h => by rw [← hs.bsize]; exact h)
-    · rcases htc with htc | hbe
-      · exact absurd htc (hs.fpOff hoff he hm)
-      · rcases hs.fp en he with h | ⟨heb, -⟩
-        · exact absurd h hm
-        · rw [heb, hs.bsize] at hbe; exact absurd hbl (Nat.not_lt.mpr hbe)
-
-/-- **A lock step keeps what any thread owns** without the word's bytes (`OwnsW.lstep`). -/
-theorem ownsRes_lstep {t u : ThreadId} {m' : Mem} {r : Res} (hs : L.Step t m m')
-    (hoff : L.Off r.owned) (hbl : L.b < m.blocks.size) (ho : m.OwnsRes u r) : m'.OwnsRes u r :=
-  ⟨ownsW_false.mp (OwnsW.lstep hs hoff.excl hbl (ownsW_false.mpr ho.1)),
-    ownsW_true.mp (OwnsW.lstep hs hoff.shared hbl (ownsW_true.mpr ho.2))⟩
-
 end LockWord
 
 namespace FLock
@@ -267,6 +237,23 @@ theorem Facts.inv (hf : L.Facts G m rL)
     (ho : FOwned (L.own G m) (rsum (L.wordR m) (rsum rL rX)) m)
     (hLX : FHeap.Disjoint rL.heap rX.heap) (hxoff : L.Off rX.heap.erase) : L.Inv G rX m :=
   ⟨hf.w, ⟨rL, ho, hf.loff, hLX, hf.free, hf.busy⟩, hxoff, hf.pdisj, hf.idle, hf.res⟩
+
+/-- **The facts at a new ghost value and memory**: the same places and held resources, the
+resource kept (`hR`), the word invariant and the free resource's ownership at the new memory, and
+each part apart from its held resource. -/
+theorem Facts.relabel {G' : ThreadId → γ} {m' : Mem} (hf : L.Facts G m rL)
+    (hph : ∀ u, L.ph (G' u) = L.ph (G u)) (hheld : ∀ u, L.held (G' u) = L.held (G u))
+    (hR : ∀ r, L.R G r → L.R G' r) (hw : L.WInv (L.pl G) m')
+    (hown : L.Free G → L.toLockWord.OwnsRes (L.pl G) m' rL)
+    (hpd : ∀ u, FHeap.Disjoint (L.part (G' u)).heap (L.held (G' u)).heap) :
+    L.Facts G' m' rL := by
+  have hpl : L.pl G' = L.pl G := funext hph
+  have hfree : L.Free G' ↔ L.Free G := by unfold FLock.Free; rw [hpl]
+  refine ⟨by rw [hpl]; exact hw, hf.loff, fun hF => ⟨hR rL (hf.free (hfree.mp hF)).1, ?_⟩,
+    fun hF => hf.busy fun h' => hF (hfree.mpr h'), hpd, fun u hu => ?_, fun u hu => ?_⟩
+  · rw [hpl]; exact hown (hfree.mp hF)
+  · rw [hph u] at hu; rw [hheld u]; exact hf.idle u hu
+  · rw [hph u] at hu; rw [hheld u]; exact hR _ (hf.res u hu)
 
 /-- A thread beyond the threads holds nothing. -/
 theorem Facts.held_out (hf : L.Facts G m rL) {u : ThreadId} (hu : m.threads.size ≤ u) :
@@ -365,12 +352,11 @@ theorem swap (hp : A.Pair B) {rLB rHB rX : Res}
     (hi : A.Inv G (rsum (side B m rLB rHB) rX) m) (hk : B.Keeps G m rLB rHB rX)
     (hg : B.NoGatherHeld G m) :
     ∃ rLA rHA, B.Inv G (rsum (side A m rLA rHA) rX) m ∧ A.Keeps G m rLA rHA rX := by
-  obtain ⟨rLA, ⟨hoA, hLoffA, hLXA, -, -⟩, hfA⟩ := hi.facts
+  obtain ⟨rLA, ⟨hoA0, hLoffA, hLXA, -, -⟩, hfA⟩ := hi.facts
   have hxA := hi.xoff
+  have hoA := hoA0
   rw [FLock.own_eq] at hoA
-  obtain ⟨rHA, hHA, hdHA, ho1⟩ := hoA.out hfA.heldOf_disj fun u hu => by
-    have := hi.rest; obtain ⟨_, ho, -⟩ := this
-    exact hfA.base_out ho hu
+  obtain ⟨rHA, hHA, hdHA, ho1⟩ := hoA.out hfA.heldOf_disj fun u hu => hfA.base_out hoA0 hu
   have hbB : B.BlkOk m := hk.facts.w.blk
   -- the disjointness of the pieces
   have hdA := FHeap.disjoint_union_right.mp hdHA
@@ -426,10 +412,8 @@ theorem swap (hp : A.Pair B) {rLB rHB rX : Res}
   refine ⟨rLA, rHA, hk.facts.inv ho2 (FHeap.disjoint_union_right.mpr ⟨hLB_SA, hxd.1⟩) hBX,
     hfA, hHA, fun u hu => ?_, ?_, FHeap.disjoint_union_left.mpr ⟨hLX.2, hdA3.2⟩,
     LockWord.off_erase.mpr fun l hl => ?_⟩
-  · have := hi.rest; obtain ⟨_, ho, -⟩ := this
-    rw [FLock.own_eq] at ho
-    exact ho.owns_right hu
-  · exact LockWord.off_of_wordDisj hfA.w.blk (FHeap.disjoint_union_right.mp hdHA).1
+  · exact hoA.owns_right hu
+  · exact LockWord.off_of_wordDisj hfA.w.blk hdA.1
   · have := LockWord.off_erase.mp hxA l hl
     simp only [FHeap.union_apply, Option.or_eq_none_iff] at this
     exact this.2
@@ -457,12 +441,8 @@ theorem Keeps.otherStep (hp : A.Pair B) {rL rH rX : Res} {t : ThreadId} {m' : Me
     side B m' rL rH = side B m rL rH ∧ B.Keeps (upd G t (A.set (G t) p h)) m' rL rH rX := by
   have hap : B.ApartL A.toLockWord := hp.apart.symm
   have hU := hp.B_upd G t p h
-  have hpl : B.pl (upd G t (A.set (G t) p h)) = B.pl G := funext fun u => (hU u).1
   have hheld : B.heldOf (upd G t (A.set (G t) p h)) m' = B.heldOf G m := funext fun u => by
     unfold heldOf; rw [LockWord.joinedB_congr hs.threads, (hU u).2.2]
-  have hR : ∀ r, B.R (upd G t (A.set (G t) p h)) r ↔ B.R G r := hp.R_ab G t p h
-  have hfree : B.Free (upd G t (A.set (G t) p h)) ↔ B.Free G := by
-    unfold FLock.Free; rw [hpl]
   obtain ⟨rLA, ⟨ho, hLoffA, -, -, -⟩, -⟩ := hi.facts
   have hbA : A.BlkOk m := hi.w.blk
   have hbl : A.b < m.blocks.size := by
@@ -485,43 +465,31 @@ theorem Keeps.otherStep (hp : A.Pair B) {rL rH rX : Res} {t : ThreadId} {m' : Me
     exact hsub fun l hl' => (Res.owned_sep rfl rfl).mpr (.inl
       ((Res.owned_sep rfl rfl).mpr (.inr ((Res.owned_sep rfl rfl).mpr (.inr (hj l hl'))))))
   have hf := hk.facts
-  refine ⟨by unfold FLock.side; rw [LockWord.wordR_otherStep hs hap], ⟨⟨?_, hf.loff, fun hF => ?_,
-    fun hF => hf.busy fun h' => hF (hfree.mpr h'), fun u => ?_, fun u hu => ?_, fun u hu => ?_⟩,
+  refine ⟨by unfold FLock.side; rw [LockWord.wordR_otherStep hs hap],
+    ⟨hf.relabel (fun u => (hU u).1) (fun u => (hU u).2.2) (fun r => (hp.R_ab G t p h r).mpr)
+      (hf.w.otherStep hs hap (hap.key_ne hl hf.w.blk hbA) ht)
+      (fun hF => ⟨(hf.free hF).2.1.otherStep hs hap hLown.excl hbl fun _ h => h,
+        (hf.free hF).2.2.otherStep hs hap hLown.shared hbl fun _ h => h⟩)
+      (fun u => by rw [(hU u).2.1, (hU u).2.2]; exact hf.pdisj u),
     ?_, fun u hu => ?_, hk.hoff, hk.xdisj, hk.xoff⟩⟩
-  · rw [hpl]
-    exact hf.w.otherStep hs hap (hap.key_ne hl hf.w.blk hbA) ht
-  · obtain ⟨h1, h2⟩ := hf.free (hfree.mp hF)
-    refine ⟨(hR rL).mpr h1, ?_⟩
-    rw [hpl]
-    exact ⟨h2.1.otherStep hs hap hLown.excl hbl fun _ h => h,
-      h2.2.otherStep hs hap hLown.shared hbl fun _ h => h⟩
-  · rw [(hU u).2.1, (hU u).2.2]; exact hf.pdisj u
-  · rw [(hU u).1] at hu; rw [(hU u).2.2]; exact hf.idle u hu
-  · rw [(hU u).1] at hu; rw [(hU u).2.2]; exact (hR _).mpr (hf.res u hu)
   · rw [hheld, hs.threads]; exact hk.held
   · rw [hs.threads] at hu; rw [hheld]
-    exact LockWord.ownsRes_lstep hs (hHown u hu) hbl (hk.owns u hu)
+    refine (hs.rest hbA).ownsRes (hk.owns u hu) fun l hl => ?_
+    obtain ⟨b, x⟩ := l
+    obtain ⟨h1, h2, h3⟩ := hl; simp only at h1 h2 h3; subst h1
+    exact hHown u hu x h2 h3
 
 /-- **A change of `A`'s coordinates keeps what the product keeps of `B`**, at the same memory
 (e.g. `A`'s nap and unnap, `FLock.Fits.nap`/`unnap`). -/
 theorem Keeps.setA (hp : A.Pair B) {rL rH rX : Res} {t : ThreadId} {p : LPh} {h : Res}
     (hk : B.Keeps G m rL rH rX) : B.Keeps (upd G t (A.set (G t) p h)) m rL rH rX := by
   have hU := hp.B_upd G t p h
-  have hpl : B.pl (upd G t (A.set (G t) p h)) = B.pl G := funext fun u => (hU u).1
   have hheld : B.heldOf (upd G t (A.set (G t) p h)) m = B.heldOf G m := funext fun u => by
     unfold heldOf; rw [(hU u).2.2]
-  have hR : ∀ r, B.R (upd G t (A.set (G t) p h)) r ↔ B.R G r := hp.R_ab G t p h
-  have hfree : B.Free (upd G t (A.set (G t) p h)) ↔ B.Free G := by
-    unfold FLock.Free; rw [hpl]
   have hf := hk.facts
-  refine ⟨⟨by rw [hpl]; exact hf.w, hf.loff, fun hF => ?_,
-    fun hF => hf.busy fun h' => hF (hfree.mpr h'), fun u => ?_, fun u hu => ?_, fun u hu => ?_⟩,
+  exact ⟨hf.relabel (fun u => (hU u).1) (fun u => (hU u).2.2) (fun r => (hp.R_ab G t p h r).mpr)
+      hf.w (fun hF => (hf.free hF).2) (fun u => by rw [(hU u).2.1, (hU u).2.2]; exact hf.pdisj u),
     by rw [hheld]; exact hk.held, by rw [hheld]; exact hk.owns, hk.hoff, hk.xdisj, hk.xoff⟩
-  · obtain ⟨h1, h2⟩ := hf.free (hfree.mp hF)
-    exact ⟨(hR rL).mpr h1, by rw [hpl]; exact h2⟩
-  · rw [(hU u).2.1, (hU u).2.2]; exact hf.pdisj u
-  · rw [(hU u).1] at hu; rw [(hU u).2.2]; exact hf.idle u hu
-  · rw [(hU u).1] at hu; rw [(hU u).2.2]; exact (hR _).mpr (hf.res u hu)
 
 /-- **The nap or unnap of `A`'s holder keeps the product's rest** (`FLock.Fits.nap`/`unnap`'s
 `hU`), when the protocol's own `U` is kept. -/
@@ -536,9 +504,7 @@ theorem U_setA (hp : A.Pair B) {U : (ThreadId → γ) → Res → Mem → Prop} 
 theorem Keeps.cur {rL rH rX : Res} (hk : B.Keeps G m rL rH rX) (t : ThreadId) :
     side B { m with current := t } rL rH = side B m rL rH ∧
       B.Keeps G { m with current := t } rL rH rX :=
-  ⟨rfl,
-    ⟨⟨hk.facts.w.current t, hk.facts.loff, hk.facts.free, hk.facts.busy, hk.facts.pdisj,
-      hk.facts.idle, hk.facts.res⟩, hk.held, hk.owns, hk.hoff, hk.xdisj, hk.xoff⟩⟩
+  ⟨rfl, { hk with facts := { hk.facts with w := hk.facts.w.current t } }⟩
 
 /-- **A step of `A`'s code keeps the product's rest for `A`** (`FLock.Fits.stable` of `A` for
 `Pair.U B U`), when the protocol's own `U` is stable under it. -/
@@ -634,11 +600,9 @@ theorem Keeps.partStep {rL rH rX : Res} {t : ThreadId} {g : γ} {m' : Mem}
       by_cases e : u = t
       · subst e; rw [upd_self]; exact ⟨hph, hheld⟩
       · rw [upd_ne _ _ e]; exact ⟨rfl, rfl⟩
-  have hpl : B.pl (upd G t g) = B.pl G := funext fun u => (hU u).1
   have hjb : joinedB m' = joinedB m := LockWord.joinedB_congr hs.threads
   have hheldOf : B.heldOf (upd G t g) m' = B.heldOf G m := funext fun u => by
     unfold heldOf; rw [hjb, (hU u).2]
-  have hfree : B.Free (upd G t g) ↔ B.Free G := by unfold FLock.Free; rw [hpl]
   have hok : ∀ i l, B.Loc m i l → l.len = 4 := fun i l hl => (hf.w.loc.ok i l hl).1
   -- the thread's new part at `A` is apart from its resource at `B`, which is in `A`'s rest
   have hpdt : FHeap.Disjoint (B.part g).heap (B.held (G t)).heap := by
@@ -661,21 +625,17 @@ theorem Keeps.partStep {rL rH rX : Res} {t : ThreadId} {g : γ} {m' : Mem}
       simp only [FLock.own, hjb, hjt, upd_self, Bool.false_eq_true, ↓reduceIte] at h0
       exact h0
     rw [← hp.part]; exact (Option.or_eq_none_iff.mp e').1
+  have hpd : ∀ u, FHeap.Disjoint (B.part (upd G t g u)).heap (B.held (upd G t g u)).heap :=
+    fun u => by
+      by_cases e : u = t
+      · subst e; rw [upd_self, hheld]; exact hpdt
+      · rw [upd_ne _ _ e]; exact hf.pdisj u
   refine ⟨hi'.congrX (hsim.union (FHeap.Sim.refl _)) rfl rfl,
-    ⟨⟨by rw [hpl]; exact hf.w.stepIn hs hwF hwR hcells, hf.loff, fun hF => ?_,
-      fun hF => hf.busy fun h' => hF (hfree.mpr h'), fun u => ?_, fun u hu => ?_, fun u hu => ?_⟩,
+    ⟨hf.relabel (fun u => (hU u).1) (fun u => (hU u).2) hR (hf.w.stepIn hs hwF hwR hcells)
+      (fun hF => (hf.free hF).2.stepIn hs (hsubO fun l hl => (Res.owned_sep rfl rfl).mpr (.inr
+          ((Res.owned_sep rfl rfl).mpr (.inl hl)))) hwF hok
+        (hsubX fun l hl => Res.excl_sep rfl rfl (.inr (Res.excl_sep rfl rfl (.inl hl))))) hpd,
     by rw [hheldOf, hs.threads]; exact hk.held, fun u hu => ?_, hk.hoff, hk.xdisj, hk.xoff⟩⟩
-  · obtain ⟨h1, h2⟩ := hf.free (hfree.mp hF)
-    refine ⟨hR rL h1, ?_⟩
-    rw [hpl]
-    exact h2.stepIn hs (hsubO fun l hl => (Res.owned_sep rfl rfl).mpr (.inr
-        ((Res.owned_sep rfl rfl).mpr (.inl hl)))) hwF hok
-      (hsubX fun l hl => Res.excl_sep rfl rfl (.inr (Res.excl_sep rfl rfl (.inl hl))))
-  · by_cases e : u = t
-    · subst e; rw [upd_self, hheld]; exact hpdt
-    · rw [upd_ne _ _ e]; exact hf.pdisj u
-  · rw [(hU u).1] at hu; rw [(hU u).2]; exact hf.idle u hu
-  · rw [(hU u).1] at hu; rw [(hU u).2]; exact hR _ (hf.res u hu)
   · rw [hs.threads] at hu; rw [hheldOf]
     by_cases e : u = m.current
     · rw [e]
