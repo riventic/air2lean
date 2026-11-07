@@ -98,6 +98,14 @@ theorem upd_snd {β δ : Type} (G : ThreadId → β × δ) (t : ThreadId) (g : �
     (fun u => (upd G t g u).2) = upd (fun u => (G u).2) t g.2 := by
   funext u; unfold upd; split <;> rfl
 
+/-- A change of one thread's ghost value that keeps `f` of it keeps `f` of every thread's (the
+counts and views over the threads: `tsum_upd`'s other points, a client's parts). -/
+theorem upd_map {α : Type} (f : γ → α) (G : ThreadId → γ) (t : ThreadId) {g g' : γ}
+    (h : f g' = f g) : (fun u => f (upd G t g' u)) = fun u => f (upd G t g u) := by
+  funext u; unfold upd; split
+  · exact h
+  · rfl
+
 /-- `upd_snd` at a thread. -/
 theorem upd_snd_apply {β δ : Type} (G : ThreadId → β × δ) (t u : ThreadId) (g : β × δ) :
     (upd G t g u).2 = upd (fun u => (G u).2) t g.2 u := by

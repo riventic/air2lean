@@ -66,7 +66,19 @@ semaphore next to its mutex (`S.Fits P US okS`). Both views are views of one inv
 (`FLock.Fits.inv`, `FSem.Fits`'s): building both for one protocol is the two-lock product of `M`
 and `L` (ledger `two-lock-product`, item (5)), which this contract takes as its interface and does
 not construct. The client also shows that a writer asleep at the semaphore is not in a deadlock
-(`wlive`, the semaphore's `hlive`; the outer mutex's `holdLive` covers it at `M`'s `holdsAway`).
+(`wlive`, the semaphore's `hlive`; the outer mutex's `holdLive` covers it at `M`'s `holdsAway`),
+and that `UM` is stable over the writer's nap and unnap at `M` around its semaphore wait (`mnap`,
+`munnap`: a holder in the futex queue is at `holdsAway`; decision on #667, a nesting protocol
+proves the nap's stability for its own `U`).
+
+## Facts for every implementation
+
+`Fits.inRest` (the state word in the outer mutex's rest, for the generic word rules at `M`),
+`Fits.napW` / `Fits.unnapW` (the writer's nap and unnap) and `Fits.wstep` (a step of the
+rwlock's own code keeps the protocol: `FLock.Fits.kstep` at `Step`), with the counts over one
+thread's change (`nrd_upd`, `nwi_upd` over `cnt_upd`; `writing_upd`, `fsum_upd`, `xs_set` over
+`upd_map`), are stated once
+here; an instance walks its code with them.
 
 ## The rules (`RwLockImpl`)
 
@@ -322,6 +334,19 @@ structure Fits {Tgt : Type} (P : Proto Tgt γ) (UM US : (ThreadId → γ) → Re
   okS_m : ∀ g q h, okS (M.set g q h) ↔ okS g
   okS_part : ∀ g r, okS (M.setPart g r) ↔ okS g
   okM_l : ∀ g q h, okM (L.set g q h) ↔ okM g
+  /-- **The writer's nap and unnap around its semaphore wait** (`FLock.Fits.nap`/`unnap`'s `hU`
+  at the outer mutex): the writer at `ww` holds the outer mutex while it may sleep in the
+  semaphore's code, and a holder in the futex queue is at `holdsAway` (`LockWord.WInv.notQ`,
+  `WInv.nap`). `UM`'s stability over this relabel is the nesting protocol's obligation (decision
+  on #667): `FLock.Fits.stable` does not give it, since a nap is no step of the outer mutex's
+  code and meets no release premise. The unnap's other premise (the writer is not in the futex
+  queue) follows from the semaphore's mutex's view (`Fits.unnapW`). -/
+  mnap : ∀ G rX m t g, W.ph g = .ww → L.ph g = .out → M.ph g = .holds →
+    UM (upd G t g) rX m → M.Inv (upd G t g) rX m →
+    UM (upd G t (M.set g .holdsAway (M.held g))) rX m
+  munnap : ∀ G rX m t g, W.ph g = .ww → L.ph g = .out → M.ph g = .holdsAway →
+    UM (upd G t g) rX m → M.Inv (upd G t g) rX m →
+    UM (upd G t (M.set g .holds (M.held g))) rX m
   /-- **The writer asleep at the semaphore is not in a deadlock** (`SemImpl.wait_wp`'s `hlive` for
   the writer at `ww`). -/
   wlive : ∀ t G₁ m₁, W.ph (G₁ t) = .ww → (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) →
@@ -371,6 +396,130 @@ theorem Inv.start {G : ThreadId → γ} {m : Mem} {rF rO : Res}
   rest := ⟨rF, rO, rfl, hoff, hd,
     ⟨fun hb => absurd hb (not_busy_out hout), fun _ _ => hR,
       fun _ hn => absurd (nrd_out hout) hn⟩, hown⟩
+
+/-! ## Counts over one thread's change -/
+
+/-- The client parts do not read the rwlock's place. -/
+theorem xs_set (G : ThreadId → γ) (t : ThreadId) (g : γ) (a : RwPh) :
+    W.xs (upd G t (W.set g a)) = W.xs (upd G t g) :=
+  upd_map W.x G t (W.x_set g a)
+
+/-- One thread's change moves a count of the places with `p` by its own (`tsum_upd`). -/
+theorem cnt_upd (p : RwPh → Bool) (G : ThreadId → γ) {N t : Nat} (ht : t < N) (g g' : γ) :
+    tsum N (fun u => if p (W.ph (upd G t g' u)) then 1 else 0) + (if p (W.ph g) then 1 else 0) =
+      tsum N (fun u => if p (W.ph (upd G t g u)) then 1 else 0) +
+        (if p (W.ph g') then 1 else 0) := by
+  have h := tsum_upd (g := fun u => if p (W.ph (upd G t g u)) then 1 else 0)
+    (g' := fun u => if p (W.ph (upd G t g' u)) then 1 else 0) ht fun u e => by
+      show (if p (W.ph (upd G t g' u)) then 1 else 0) = (if p (W.ph (upd G t g u)) then 1 else 0)
+      rw [upd_ne _ _ e, upd_ne _ _ e]
+  simpa only [upd_self] using h
+
+/-- One thread's change moves the readers' count by its own. -/
+theorem nrd_upd (G : ThreadId → γ) {m : Mem} {t : ThreadId} (ht : t < m.threads.size)
+    (g g' : γ) :
+    W.nrd (upd G t g') m + (if (W.ph g).isRd then 1 else 0) =
+      W.nrd (upd G t g) m + (if (W.ph g').isRd then 1 else 0) :=
+  cnt_upd (W := W) RwPh.isRd G ht g g'
+
+/-- One thread's change moves the pending writers' count by its own. -/
+theorem nwi_upd (G : ThreadId → γ) {m : Mem} {t : ThreadId} (ht : t < m.threads.size)
+    (g g' : γ) :
+    W.nwi (upd G t g') m + (if (W.ph g).isWi then 1 else 0) =
+      W.nwi (upd G t g) m + (if (W.ph g').isWi then 1 else 0) :=
+  cnt_upd (W := W) RwPh.isWi G ht g g'
+
+/-- A change that keeps whether the thread holds the writing bit keeps `writing`. -/
+theorem writing_upd (G : ThreadId → γ) (m : Mem) (t : ThreadId) {g g' : γ}
+    (h : (W.ph g').isW = (W.ph g).isW) : W.writing (upd G t g') m = W.writing (upd G t g) m :=
+  congrArg (fun F => (List.range m.threads.size).any F) (upd_map (fun g => (W.ph g).isW) G t h)
+
+/-- A change that keeps the thread's fraction keeps the readers' fractions. -/
+theorem fsum_upd (G : ThreadId → γ) (m : Mem) (t : ThreadId) {g g' : γ}
+    (h : (W.ph g').frac = (W.ph g).frac) : W.fsum (upd G t g') m = W.fsum (upd G t g) m :=
+  congrArg (ftot · m.threads.size) (upd_map (fun g => (W.ph g).frac) G t h)
+
+/-! ## Ownership over a step at the state word -/
+
+/-- **Ownership survives a release write at the state word** (`Owns`): an old access keeps its
+clause (the threads' clocks and the newest release clock grow, `hcl`, `hrel`; a reader that leaves
+`rd` is one the new release clock covers, `hrd`), and a new access is the writer's, before its new
+clock (`hfp`: `Word.atomicRmw_fpNew`), which the new message's release clock covers (`hnew`:
+`Word.rmwEnt` of a release RMW merges the writer's clock). -/
+theorem Owns.step {G G' : ThreadId → γ} {m m' : Mem} {r : Res} {t : ThreadId}
+    (ho : W.Owns G m r)
+    (hfp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨ VClock.le e.clock (m'.clocks[t]!) = true)
+    (hth : m'.threads = m.threads)
+    (hcl : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
+    (hbs : m.blocks.size ≤ m'.blocks.size)
+    (hrel : VClock.le ((W.st.hist m).back!).relClock ((W.st.hist m').back!).relClock = true)
+    (hnew : VClock.le (m'.clocks[t]!) ((W.st.hist m').back!).relClock = true)
+    (hM : ∀ u, M.ph (G' u) ≠ .gone → M.ph (G u) ≠ .gone)
+    (hrd : ∀ u, (W.ph (G u)).isRd = true → (W.ph (G' u)).isRd = true ∨
+      VClock.le (m.clocks[u]!) ((W.st.hist m').back!).relClock = true) :
+    W.Owns G' m' r := by
+  intro e he hT
+  rcases hfp e he with he₀ | hc
+  · have hT₀ : e.Touches r.excl ∨ e.Touches r.shared ∨ m.blocks.size ≤ e.block :=
+      hT.imp_right (Or.imp_right fun h => Nat.le_trans hbs h)
+    rcases ho e he₀ hT₀ with h | h | ⟨hw, hs, u, hu, hcu⟩
+    · exact .inl (LockWord.LiveLe.weaken hM (LockWord.LiveLe.mono hth (fun u _ => hcl u) h))
+    · exact .inr (.inl (VClock.le_trans h hrel))
+    · rcases hrd u hu with hu' | hu'
+      · exact .inr (.inr ⟨hw, hs, u, hu', VClock.le_trans hcu (hcl u)⟩)
+      · exact .inr (.inl (VClock.le_trans hcu hu'))
+  · exact .inr (.inl (VClock.le_trans hc hnew))
+
+/-! ## The protocol's facts for every implementation -/
+
+section Proto
+
+variable {Tgt : Type} {P : Proto Tgt γ} {UM US : (ThreadId → γ) → Res → Mem → Prop}
+  {okM okS : γ → Prop}
+
+/-- **The state word lies in the outer mutex's rest** (`Word.InRest`, for the generic word rules
+at `M`: `FLock.wp_wordLoad`, `wp_wordRmw`, `wp_wordWeakCas`), live for the threads not gone from
+`M` (`Inv.ok`, `Inv.rest`). -/
+theorem Fits.inRest (hW : W.Fits P UM US okM okS) :
+    W.st.InRest UM fun g => M.ph g ≠ .gone := by
+  intro G rX m hU
+  have hI : W.Inv G rX m := hW.m.sub G rX m hU
+  obtain ⟨rF, rO, he, hoff, -⟩ := hI.rest
+  refine ⟨hI.ok, rsum rF rO, he, fun l hl => ?_⟩
+  show (rF.heap ∪ rO.heap) l = none
+  rw [FHeap.union_apply, (hoff l hl).1, (hoff l hl).2]
+  rfl
+
+/-- **The writer's nap** before its semaphore wait (`FLock.Fits.nap` at the outer mutex, with
+`mnap`). -/
+theorem Fits.napW (hW : W.Fits P UM US okM okS) {G : ThreadId → γ} {m : Mem} {t : ThreadId}
+    {g : γ} (hw : W.ph g = .ww) (hl : L.ph g = .out) (hg : M.ph g = .holds)
+    (hi : P.inv (upd G t g) m) : P.inv (upd G t (M.set g .holdsAway (M.held g))) m :=
+  FLock.Fits.nap hW.m hg hi fun rX hU hI => hW.mnap G rX m t g hw hl hg hU hI
+
+/-- **The writer's unnap** after its semaphore wait (`FLock.Fits.unnap` at the outer mutex, with
+`munnap`): out of the semaphore's mutex's code, the writer is not in the futex queue
+(`LockWord.WInv.notQ` in the semaphore's mutex's view of the same invariant). -/
+theorem Fits.unnapW (hW : W.Fits P UM US okM okS) {G : ThreadId → γ} {m : Mem} {t : ThreadId}
+    {g : γ} (hw : W.ph g = .ww) (hl : L.ph g = .out) (hg : M.ph g = .holdsAway)
+    (hi : P.inv (upd G t g) m) : P.inv (upd G t (M.set g .holds (M.held g))) m := by
+  obtain ⟨rX, hL, -⟩ := (hW.s.inv _ _).mp hi
+  have hp : L.pl (upd G t g) t = .out := by
+    show L.ph (upd G t g t) = .out
+    rw [upd_self, hl]
+  exact FLock.Fits.unnap hW.m hg hi
+    (hL.w.notQ (by rw [hp]; decide) (by rw [hp]; decide) (by rw [hp]; decide))
+    fun rX hU hI => hW.munnap G rX m t g hw hl hg hU hI
+
+/-- **A step of the rwlock's own code keeps the protocol** (`FLock.Fits.kstep` at `Step`): the
+step's facts, given the rwlock's invariant before it (`Fits.sub`). -/
+theorem Fits.wstep (hW : W.Fits P UM US okM okS) {t : ThreadId} {G G' : ThreadId → γ}
+    {rX rX' : Res} {m m' : Mem} (hU : UM G rX m)
+    (hs : W.Inv G rX m → W.Step t G rX m G' rX' m') : P.inv G' m' :=
+  have hst := hs (hW.m.sub G rX m hU)
+  (hW.m.inv G' m').mpr ⟨rX', hst.2.2.1, hW.m.kstep t G rX m G' rX' m' (.inl hst) hU⟩
+
+end Proto
 
 end FRw
 
