@@ -76,7 +76,8 @@ proves the nap's stability for its own `U`).
 `Fits.inRest` (the state word in the outer mutex's rest, for the generic word rules at `M`),
 `Fits.napW` / `Fits.unnapW` (the writer's nap and unnap) and `Fits.wstep` (a step of the
 rwlock's own code keeps the protocol: `FLock.Fits.kstep` at `Step`), with the counts over one
-thread's change (`nrd_upd`, `nwi_upd`, `writing_upd`, `fsum_upd`, `xs_set`), are stated once
+thread's change (`nrd_upd`, `nwi_upd` over `cnt_upd`; `writing_upd`, `fsum_upd`, `xs_set` over
+`upd_map`), are stated once
 here; an instance walks its code with them.
 
 ## The rules (`RwLockImpl`)
@@ -400,11 +401,8 @@ theorem Inv.start {G : ThreadId → γ} {m : Mem} {rF rO : Res}
 
 /-- The client parts do not read the rwlock's place. -/
 theorem xs_set (G : ThreadId → γ) (t : ThreadId) (g : γ) (a : RwPh) :
-    W.xs (upd G t (W.set g a)) = W.xs (upd G t g) := funext fun u => by
-  show W.x (upd G t (W.set g a) u) = W.x (upd G t g u)
-  by_cases e : u = t
-  · subst e; rw [upd_self, upd_self, W.x_set]
-  · rw [upd_ne _ _ e, upd_ne _ _ e]
+    W.xs (upd G t (W.set g a)) = W.xs (upd G t g) :=
+  upd_map W.x G t (W.x_set g a)
 
 /-- One thread's change moves a count of the places with `p` by its own (`tsum_upd`). -/
 theorem cnt_upd (p : RwPh → Bool) (G : ThreadId → γ) {N t : Nat} (ht : t < N) (g g' : γ) :
@@ -431,23 +429,15 @@ theorem nwi_upd (G : ThreadId → γ) {m : Mem} {t : ThreadId} (ht : t < m.threa
       W.nwi (upd G t g) m + (if (W.ph g').isWi then 1 else 0) :=
   cnt_upd (W := W) RwPh.isWi G ht g g'
 
-/-- A change that keeps `f` of the thread's place keeps `f` of every thread's. -/
-theorem ph_upd {α : Type} (f : RwPh → α) (G : ThreadId → γ) (t : ThreadId) {g g' : γ}
-    (h : f (W.ph g') = f (W.ph g)) :
-    (fun u => f (W.ph (upd G t g' u))) = fun u => f (W.ph (upd G t g u)) := funext fun u => by
-  by_cases e : u = t
-  · subst e; rw [upd_self, upd_self, h]
-  · rw [upd_ne _ _ e, upd_ne _ _ e]
-
 /-- A change that keeps whether the thread holds the writing bit keeps `writing`. -/
 theorem writing_upd (G : ThreadId → γ) (m : Mem) (t : ThreadId) {g g' : γ}
     (h : (W.ph g').isW = (W.ph g).isW) : W.writing (upd G t g') m = W.writing (upd G t g) m :=
-  congrArg (fun F => (List.range m.threads.size).any F) (ph_upd (W := W) RwPh.isW G t h)
+  congrArg (fun F => (List.range m.threads.size).any F) (upd_map (fun g => (W.ph g).isW) G t h)
 
 /-- A change that keeps the thread's fraction keeps the readers' fractions. -/
 theorem fsum_upd (G : ThreadId → γ) (m : Mem) (t : ThreadId) {g g' : γ}
     (h : (W.ph g').frac = (W.ph g).frac) : W.fsum (upd G t g') m = W.fsum (upd G t g) m :=
-  congrArg (ftot · m.threads.size) (ph_upd (W := W) RwPh.frac G t h)
+  congrArg (ftot · m.threads.size) (upd_map (fun g => (W.ph g).frac) G t h)
 
 /-! ## Ownership over a step at the state word -/
 

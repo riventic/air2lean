@@ -784,7 +784,8 @@ semaphore's code, and a holder at `holds` is never in the futex queue, so an imp
 `M` around its semaphore wait: `FRw.Fits` carries `UM`'s stability over that nap and unnap
 (`mnap`, `munnap`). Maintainer decision 2026-11-07 (#724): this is the nesting protocol's
 obligation, consistent with the decision on #667; it is not derived from `FLock.Fits.stable`,
-whose release premise does not hold for a holder, and every client discharges it. The facts every
+since a nap is no step of the outer mutex's code and meets no release premise, and every client
+discharges it. The facts every
 implementation walks its code with (`Fits.inRest`, `Fits.napW`/`unnapW`, `Fits.wstep`,
 `Owns.step`) are in the module; no instance or client is there.
 
