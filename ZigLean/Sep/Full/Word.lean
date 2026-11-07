@@ -480,6 +480,18 @@ theorem Inv.toOut {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} (hi 
     (fun r => by rw [L.R_set])
   exact this
 
+/-- The futex access at a shared word apart from the lock's word misses the word's bytes (the
+`hoff` of `LockWord.WInv.waitOff`/`waitNest`). -/
+private theorem access_apart {W : Word 32 4} {m : Mem} (hW : W.Ok m A)
+    (hap : W.ApartL L.toLockWord) : ∀ bid blk o, m.access W.ptr 4 4 = pure (bid, blk, o) →
+      bid ≠ L.b ∨ o + 4 ≤ L.o ∨ L.o + 4 ≤ o := fun bid blk o ha => by
+  obtain ⟨blk₀, -, -, -, ha₀, -⟩ := hW.access
+  rw [ha₀] at ha; cases ha
+  rcases hap with h | h | h
+  · exact .inl (Ne.symm h)
+  · exact .inr (.inr h)
+  · exact .inr (.inl h)
+
 /-- A futex wait of thread `t` (`away`, not in the queue) at a shared word `W` (its bytes in the
 protocol's rest, apart from the lock's word). If it sleeps, the lock's invariant holds with `t` in
 the queue; else `t` goes to `out`. -/
@@ -495,13 +507,7 @@ theorem Inv.waitOff {W : Word 32 4} {G : ThreadId → γ} {rX : Res} {m m' : Mem
   obtain ⟨ht, -⟩ := hi.ht hng
   obtain ⟨blk₀, hb₀, -, -, ha₀, -⟩ := hW.access
   have hWb : W.b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb₀).1
-  have hoff : ∀ bid blk o, m.access W.ptr 4 4 = pure (bid, blk, o) →
-      bid ≠ L.b ∨ o + 4 ≤ L.o ∨ L.o + 4 ≤ o := fun bid blk o ha => by
-    rw [ha₀] at ha; cases ha
-    rcases hap with h | h | h
-    · exact .inl (Ne.symm h)
-    · exact .inr (.inr h)
-    · exact .inr (.inl h)
+  have hoff := access_apart (L := L) hW hap
   have hw := hi.w.waitOff (t := t) (by exact hph) (hi.keyAt_ne hW hap sh) hoff hq h
   -- the relabel of `t` from `away` to `out`, at a memory with the same parts
   have hrel : ∀ M : Mem, L.Inv G rX M → M.current = t →
@@ -537,13 +543,7 @@ theorem Inv.waitNest {W : Word 32 4} {G : ThreadId → γ} {rX : Res} {m m' : Me
   obtain ⟨ht, -⟩ := hi.ht (by rw [hph]; decide)
   obtain ⟨blk₀, hb₀, -, -, ha₀, -⟩ := hW.access
   have hWb : W.b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb₀).1
-  have hoff : ∀ bid blk o, m.access W.ptr 4 4 = pure (bid, blk, o) →
-      bid ≠ L.b ∨ o + 4 ≤ L.o ∨ L.o + 4 ≤ o := fun bid blk o ha => by
-    rw [ha₀] at ha; cases ha
-    rcases hap with h | h | h
-    · exact .inl (Ne.symm h)
-    · exact .inr (.inr h)
-    · exact .inr (.inl h)
+  have hoff := access_apart (L := L) hW hap
   have hw := hi.w.waitNest (t := t) (by exact hph) (hi.keyAt_ne hW hap false) hn hoff h
   rcases futexWait_eq h with ⟨-, rfl, rfl⟩ | ⟨-, bid, blk, o, v, ha, -, -, hc⟩
   · exact hi.requeue t m.waiters _ hw (fun _ => rfl) (fun _ => rfl) (fun _ => Iff.rfl)
