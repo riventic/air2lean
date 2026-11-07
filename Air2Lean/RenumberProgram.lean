@@ -6,26 +6,18 @@ import Air2Lean.Renumber
 `Renumber.execFunc_rename` relates one function before and after `renumber` inside one program.
 This module lifts it to whole programs: renaming every function's instruction IDs by an
 injective map (one map per function) preserves `run` and `runOn` of the program
-(`run_renumber`, `runOn_renumber`), given one local fact still taken as a hypothesis (renaming
-keeps `Func.usesMemoryLocally`, see **Open** below).
+(`run_renumber`, `runOn_renumber`).
 
 The lift needs the program's step-tick policies (`Program.tickPolicy`) to be the same. They are
 computed from every body by `memoryFunctions`, `concFunctions` and `callGroups`, which read each
 function only through its local memory, sync and callee facts (`SemRewrite.tickPolicy_map`).
-The sync and callee facts are proved invariant under every injective renaming here
-(`syncLocally_ren`, `callees_ren`, `calleesOf_ren`). The proof sees a renamed body as the
+These facts are proved invariant under every injective renaming here (`usesMemoryLocally_ren`,
+`syncLocally_ren`, `callees_ren`, `calleesOf_ren`). The proof sees a renamed body as the
 original one with `renInst` applied to each instruction (`allInsts_renFunc`), whose operation
 has the original effects with every operand and target renamed (`effectsIn_renOp`), and every
 lookup by instruction ID commutes with the renaming because it is injective (`find?_id_ren`).
-
-**Open: the local memory fact.** `run_renumber` still takes
-`(renFunc (σ f) f).usesMemoryLocally = f.usesMemoryLocally` as a hypothesis. Of its parts, the
-place roots and the use-escaping allocs are proved invariant (`placeRoots_ren`,
-`usesEscapingAllocs_ren`, `bodyLists_ren`); `deadUndefStores`, `undefAllocs`, `byteLocalOk` and
-the per-instruction predicate of `Func.usesMemoryLocally` are not yet. Their instruction tests
-are anonymous `match`es under binders, which no lemma can name; naming them in `Memory.lean`
-(for example `Inst.usesPlaceOf`, `Inst.leavesBody`, `Val.instIn`) lets each get an invariance
-lemma like the ones here.
+Each memory analysis (`placeRoots`, `deadUndefStores`, `escapingAllocs`, ...) is the original
+one renamed, from one lemma per named instruction test of `Memory.lean`.
 -/
 
 namespace Air2Lean.Renumber
@@ -306,8 +298,7 @@ theorem syncLocally_ren (hρ : Inj ρ) (f : Func) : (renFunc ρ f).syncLocally =
 
 /-! ## Memory
 
-The parts of `Func.usesMemoryLocally` proved so far. The value, asm and place lemmas are the
-per-instruction predicate's and `deadUndefStores`'s building blocks (see **Open** above). -/
+Renaming keeps `Func.usesMemoryLocally`: each analysis it reads is the original one renamed. -/
 
 section Memory
 
@@ -529,37 +520,177 @@ theorem flattenInst_nil_ren (j : Inst) :
     flattenInst #[] (renInst ρ j) = (flattenInst #[] j).map (renInst ρ) := by
   simpa only [Array.map_empty] using flattenInst_ren (ρ := ρ) j #[]
 
+theorem renFunc_body (f : Func) : (renFunc ρ f).body = f.body.map (renInst ρ) := renArr ρ f.body
+
+theorem isInst_ren (hρ : Inj ρ) (a : InstId) (v : Val) : (renVal ρ v).isInst (ρ a) = v.isInst a := by
+  cases v <;> simp only [renVal, Val.isInst, beq_ren hρ]
+
+theorem instIn_ren (hρ : Inj ρ) (ids : Array InstId) (v : Val) :
+    (renVal ρ v).instIn (ids.map ρ) = v.instIn ids := by
+  cases v <;> simp only [renVal, Val.instIn, contains_ren hρ]
+
+theorem isUndef_ren (v : Val) : (renVal ρ v).isUndef = v.isUndef := by
+  cases v <;> rfl
+
+theorem isAlloc_renOp (op : Op) : (renOp ρ op).isAlloc = op.isAlloc := by
+  cases op <;> rfl
+
+theorem isDbg_renOp (op : Op) : (renOp ρ op).isDbg = op.isDbg := by
+  cases op <;> rfl
+
+theorem isUndefStore_renOp (op : Op) : (renOp ρ op).isUndefStore = op.isUndefStore := by
+  cases op <;> try rfl
+  case store p v => cases v <;> rfl
+
+theorem leavesBody_ren (hρ : Inj ρ) (j : Inst) : (renInst ρ j).leavesBody = j.leavesBody := by
+  simp only [Inst.leavesBody, flattenInst_nil_ren, Array.any_map, Function.comp_def, renInst_op,
+    renInst_id, effects_renOp, renEffects, renControl_jumpTarget, Option.any_map, beq_ren hρ]
+
+theorem usesPlaceOf_ren (hρ : Inj ρ) (ps : Array InstId) (j : Inst) :
+    (renInst ρ j).usesPlaceOf (ps.map ρ) = j.usesPlaceOf ps := by
+  simp only [Inst.usesPlaceOf, flattenInst_nil_ren, Array.any_map, Function.comp_def, renInst_op,
+    isDbg_renOp, placeOperands_renOp, instIn_ren hρ]
+
+theorem overwritesLocal_ren (hρ : Inj ρ) (ps : Array InstId) (a : InstId) (j : Inst) :
+    (renInst ρ j).overwritesLocal (ps.map ρ) (ρ a) = j.overwritesLocal ps a := by
+  rcases j with ⟨id, ty, op⟩
+  simp only [Inst.overwritesLocal, renInst_op]
+  cases op <;> try rfl
+  case store p v => simp only [renOp, renFlat, isInst_ren hρ, isUndef_ren, hasNestedUndef_ren]
+  case asm source vol clobbers outputs inputs =>
+    simp only [renOp, renFlat, Array.any_map, Function.comp_def, renAsm, Option.any_map,
+      isInst_ren hρ, instIn_ren hρ]
+
+/-- **Renaming keeps the dead `undefined` stores**, renamed. -/
+theorem deadUndefStores_ren (hρ : Inj ρ) (f : Func) :
+    deadUndefStores (renFunc ρ f) = (deadUndefStores f).map ρ := by
+  simp only [deadUndefStores, allInsts_renFunc, placeRoots_ren hρ, renFunc_body, bodyLists_ren,
+    Array.foldl_map]
+  apply foldl_hom_nil
+  intro body _ acc
+  rw [← Array.map_zipIdx, Array.foldl_map]
+  apply foldl_hom_mem
+  rintro ⟨i, k⟩ - a
+  rcases i with ⟨iid, ty, op⟩
+  dsimp only [Prod.map, _root_.id]
+  simp only [renInst_op, renInst_id]
+  cases op <;> try rfl
+  case store p v =>
+    cases p <;> cases v <;> try rfl
+    next x t =>
+      rw [show renOp ρ (.store (.inst x) (.undef t)) = .store (.inst (ρ x)) (.undef t) from rfl]
+      simp only [Array.any_map', Function.comp_def, renInst_id, renInst_op, beq_ren hρ,
+        isAlloc_renOp, placesOf_ren hρ, Array.size_map, ← Array.map_extract, Array.find?_map, usesPlaceOf_ren hρ, leavesBody_ren hρ, Option.any_map,
+        overwritesLocal_ren hρ, apply_ite (Array.map ρ), Array.map_push]
+
+/-- **Renaming keeps the observable `undefined` stores' allocs**, renamed. -/
+theorem undefAllocs_ren (hρ : Inj ρ) (f : Func) :
+    undefAllocs (renFunc ρ f) = (undefAllocs f).map ρ := by
+  simp only [undefAllocs, allInsts_renFunc, Array.any_map, Function.comp_def, renInst_op,
+    isUndefStore_renOp, placeRoots_ren hρ, deadUndefStores_ren hρ, apply_ite (Array.map ρ),
+    Array.map_empty, Array.foldl_map]
+  congr 1
+  apply foldl_hom_nil
+  rintro ⟨id, ty, op⟩ - acc
+  simp only [renInst_id]
+  cases op <;> try rfl
+  case store p v =>
+    cases p <;> cases v <;> try rfl
+    next x t =>
+      simp only [renOp, renFlat, renVal, contains_ren hρ, apply_ite (Array.map ρ)]
+      congr 1
+      exact push_root_ren hρ _ acc x
+
+theorem renFunc_types (f : Func) : (renFunc ρ f).types = f.types := rfl
+theorem renFunc_layouts (f : Func) : (renFunc ρ f).layouts = f.layouts := rfl
+
+theorem instPtrChild?_ren (hρ : Inj ρ) (types : Array Ty) (insts : Array Inst) (x : InstId) :
+    instPtrChild? types (insts.map (renInst ρ)) (ρ x) = instPtrChild? types insts x := by
+  simp only [instPtrChild?, find?_id_ren hρ]
+  cases insts.find? (·.id == x) <;> simp
+
+theorem byteLocalUseOk_ren (hρ : Inj ρ) (f : Func) (insts : Array Inst) (ps : Array InstId)
+    (i : Inst) :
+    byteLocalUseOk (renFunc ρ f) (insts.map (renInst ρ)) (ps.map ρ) (renInst ρ i) =
+      byteLocalUseOk f insts ps i := by
+  rcases i with ⟨id, ty, op⟩
+  simp only [byteLocalUseOk, renInst_op, renInst_ty, placeOperands_renOp, Array.any_map,
+    Function.comp_def, instIn_ren hρ]
+  congr 1
+  cases op <;> try rfl
+  case load p => simp only [renOp, renFlat, instIn_ren hρ]
+  case store p v => simp only [renOp, renFlat, instIn_ren hρ]
+  case fieldPtr p n =>
+    cases p <;> try rfl
+    case inst b =>
+      simp only [renOp, renFlat, renVal, Val.instIn, contains_ren hρ, instPtrChild?_ren hρ,
+        renFunc_types, renFunc_layouts]
+
+theorem byteLocalOk_ren (hρ : Inj ρ) (f : Func) (insts : Array Inst) (roots : Array (InstId × InstId))
+    (a : InstId) :
+    byteLocalOk (renFunc ρ f) (insts.map (renInst ρ)) (roots.map (ren2 ρ)) (ρ a) =
+      byteLocalOk f insts roots a := by
+  simp only [byteLocalOk, placesOf_ren hρ, Array.all_map, Function.comp_def, byteLocalUseOk_ren hρ,
+    instPtrChild?_ren hρ, renFunc_types]
+
+/-- **Renaming keeps the escaping allocs**, renamed. -/
+theorem escapingAllocs_ren (hρ : Inj ρ) (f : Func) :
+    escapingAllocs (renFunc ρ f) = (escapingAllocs f).map ρ := by
+  simp only [escapingAllocs, allInsts_renFunc, placeRoots_ren hρ, usesEscapingAllocs_ren hρ,
+    undefAllocs_ren hρ, Array.filter_map, Function.comp_def, contains_ren hρ, byteLocalOk_ren hρ,
+    Array.map_append]
+
+theorem isPtrFromInt_ren (hρ : Inj ρ) (f : Func) (insts : Array Inst) (i : Inst) :
+    (renFunc ρ f).isPtrFromInt (insts.map (renInst ρ)) (renInst ρ i) = f.isPtrFromInt insts i := by
+  rcases i with ⟨id, ty, op⟩
+  simp only [Func.isPtrFromInt, renInst_op, renInst_ty]
+  cases op <;> try rfl
+  case bitcast s v =>
+    cases v <;> try rfl
+    case inst x =>
+      (simp only [renOp, renFlat, renVal, find?_id_ren hρ, Option.map_map, Function.comp_def,
+        renInst_ty]) <;> rfl
+
+theorem usesMemoryAt_ren (hρ : Inj ρ) (f : Func) (insts : Array Inst) (i : Inst) :
+    (renFunc ρ f).usesMemoryAt (insts.map (renInst ρ)) (renInst ρ i) = f.usesMemoryAt insts i := by
+  (simp only [Func.usesMemoryAt, renInst_op, renInst_ty, memoryOp, effectsIn_renOp, effects_renOp,
+    renEffects, isDeviceAsm_renOp, isMemAsm_renOp, valueOperands_renOp, ptrOperands_renOp,
+    ← Array.map_append, Array.any_map, Function.comp_def, pointsToMem_ren, hasUndefExcept_ren,
+    isPtrFromInt_ren hρ]) <;> rfl
+
+/-- **Renaming keeps a function's local memory use** (`Func.usesMemoryLocally`). -/
+theorem usesMemoryLocally_ren (hρ : Inj ρ) (f : Func) :
+    (renFunc ρ f).usesMemoryLocally = f.usesMemoryLocally := by
+  (simp only [Func.usesMemoryLocally, escapingAllocs_ren hρ, isEmpty_map, allInsts_renFunc,
+    Array.any_map, Function.comp_def, usesMemoryAt_ren hρ]) <;> rfl
+
 end Memory
 
 /-! ## The whole program -/
 
-/-- **The tick policies of a renamed program** are the original ones, given that every renaming
-keeps a function's local memory use (`Func.usesMemoryLocally`); its sync and callee facts are
-proved invariant above. -/
+/-- **The tick policies of a renamed program** are the original ones: every renaming keeps a
+function's local memory, sync and callee facts (proved above). -/
 theorem tickPolicy_renumber (p q : Prog) (σ : Func → InstId → InstId) (hσ : ∀ f, Inj (σ f))
-    (hq : q.funcs = p.funcs.map fun f => renFunc (σ f) f) (hm : q.models = p.models)
-    (hmem : ∀ f, (renFunc (σ f) f).usesMemoryLocally = f.usesMemoryLocally) (name : String) :
+    (hq : q.funcs = p.funcs.map fun f => renFunc (σ f) f) (hm : q.models = p.models) (name : String) :
     q.tickPolicy name = p.tickPolicy name :=
-  tickPolicy_map p q _ hq hm (fun _ => rfl) (fun _ => rfl) (fun _ => rfl) hmem
-    (fun f => syncLocally_ren (hσ f) f) (fun f refs => callees_ren (hσ f) f refs)
-    (fun names refs f => calleesOf_ren (hσ f) names refs f) name
+  tickPolicy_map p q _ hq hm (fun _ => rfl) (fun _ => rfl) (fun _ => rfl)
+    (fun f => usesMemoryLocally_ren (hσ f) f) (fun f => syncLocally_ren (hσ f) f)
+    (fun f refs => callees_ren (hσ f) f refs) (fun names refs f => calleesOf_ren (hσ f) names refs f) name
 
 /-- **Renaming every function of a program preserves the program** (V02, Canon `renumber`):
 `q` is `p` with each function `f` renamed by an injective `σ f`. -/
 theorem run_renumber (p q : Prog) (σ : Func → InstId → InstId) (hσ : ∀ f, Inj (σ f))
-    (hq : q.funcs = p.funcs.map fun f => renFunc (σ f) f) (hm : q.models = p.models)
-    (hmem : ∀ f, (renFunc (σ f) f).usesMemoryLocally = f.usesMemoryLocally) :
+    (hq : q.funcs = p.funcs.map fun f => renFunc (σ f) f) (hm : q.models = p.models) :
     run q = run p :=
-  run_map p q _ hq (fun _ => rfl) (tickPolicy_renumber p q σ hσ hq hm hmem) fun o ho f args => by
+  run_map p q _ hq (fun _ => rfl) (tickPolicy_renumber p q σ hσ hq hm) fun o ho f args => by
     rcases ho with rfl | rfl <;> exact execFunc_rename (hσ f) q (run_cellFree _) f args
 
 /-- `run_renumber` for a certified subprogram's semantics. -/
 theorem runOn_renumber (p q : Prog) (names : List String) (σ : Func → InstId → InstId)
     (hσ : ∀ f, Inj (σ f)) (hq : q.funcs = p.funcs.map fun f => renFunc (σ f) f)
-    (hm : q.models = p.models)
-    (hmem : ∀ f, (renFunc (σ f) f).usesMemoryLocally = f.usesMemoryLocally) :
+    (hm : q.models = p.models) :
     runOn q names = runOn p names :=
-  runOn_map p q names _ hq (fun _ => rfl) (tickPolicy_renumber p q σ hσ hq hm hmem) fun o ho f args => by
+  runOn_map p q names _ hq (fun _ => rfl) (tickPolicy_renumber p q σ hσ hq hm) fun o ho f args => by
     rcases ho with rfl | rfl <;> exact execFunc_rename (hσ f) q (runOn_cellFree _ names) f args
 
 end Air2Lean.Renumber

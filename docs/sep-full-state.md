@@ -767,6 +767,20 @@ algebra). The free lock's fraction halves at each shared acquire (`sheap_add`,
 (ledger `rwlock-reader-admission-room`), and `RwLockImpl` carries that room as `hroom` premises,
 as `CondImpl`/`SemImpl` carry the condition's 65535-waiter limit (maintainer decision 2026-11-06).
 
+**The contract** (`ZigLean/Sep/Full/RwLockImpl.lean`, B2). `RwLockImpl` states the four
+uncancelable entry points of `std.Io.RwLock` for every protocol with the component
+`FRw γ X Y M L C S` (`FRw.Fits`): the outer mutex `M` with the rwlock as its primitive
+(`M.Fits W.prim`) and the semaphore next to its mutex `L` (`S.Fits`), `M` and `L` one pair over
+the ghost value (`FLock.Pair`). Building both views for one protocol is the two-lock product
+(ledger `two-lock-product`), which the contract takes as its interface. A reader gets
+`shareRes H q` (`sheap H q`) in its part at `rd q H`; the writer gets `r` exclusively, holding
+`M`. `FRw.Inv` keeps the state word's newest message at `RwState.encode` of the threads' places,
+the free resource in `M`'s rest (`R` with no reader, the share `1 - Σ q` of the readers' one heap
+with readers, `rnil` while it is away), and its ownership through the word's RMW chain, with a
+read of a shared byte below a current reader's clock admitted. The last reader posts the whole
+resource to a writer asleep at the semaphore through the semaphore's pool (`pool_posted`), so
+`SemImpl` orders its reads before the writer. No instance or client is in that module yet.
+
 **Read ownership** (`ZigLean/Conc/Clock.lean` §Read ownership, regressions
 `tests/roadmap/sep-full/ShareRaceCX.lean`). Two reads never race (`racePair`), so a share holder
 needs only that every recorded *write* to its bytes happened before its clock (`Mem.OwnsR`); a
