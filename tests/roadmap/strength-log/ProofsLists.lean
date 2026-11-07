@@ -39,9 +39,9 @@ def plist : Option Ptr → List (BitVec 32) → Assn
 
 theorem up_plist : ∀ (hd : Option Ptr) (xs : List (BitVec 32)) (r : Res),
     up (plist hd xs) r ↔ list (fun _ => emp) hd xs r
-  | _, [], _ => by simp only [plist, list, lseg]; rw [up_lift, up_emp]; rfl
+  | _, [], _ => by simp only [plist, list, lseg, listSeg]; rw [up_lift, up_emp]; rfl
   | hd, v :: vs, r => by
-    simp only [plist, list, lseg, up_ex, FAssn.ex]
+    simp only [plist, list, lseg, listSeg, up_ex, FAssn.ex]
     refine exists_congr fun p => exists_congr fun q => ?_
     rw [up_lift, Full.sep_lift]
     refine and_congr_right fun _ => ⟨fun h => ?_, fun h => ?_⟩

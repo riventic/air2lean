@@ -248,6 +248,14 @@ attribute [fsym_arith] BitVec.toNat_ofNat BitVec.toNat_ofInt BitVec.toNat_add Bi
   Bool.not_eq_true' beq_iff_eq bne_iff_ne Int.natCast_add Int.natCast_mul Int.toNat_natCast
   Bool.or_eq_true Bool.and_eq_true Nat.not_lt Nat.not_le BlockKind.mapped.injEq
 
+-- The ghost lists of a list family (a list walk's visited and remaining items, ledger
+-- #list-walk-step) in a normal form: appends to the right, reversals of variables, sums and
+-- lengths of the parts.
+attribute [fsym_arith] List.append_nil List.nil_append List.cons_append List.append_assoc
+  List.singleton_append List.reverse_nil List.reverse_cons List.reverse_append List.reverse_reverse
+  List.length_append List.length_reverse List.map_nil List.map_cons List.map_append List.sum_nil
+  List.sum_cons List.sum_append
+
 -- The fixed recursive frame charge is a numeral in stack-room arithmetic.
 attribute [fsym_arith] Zig.frameBase
 

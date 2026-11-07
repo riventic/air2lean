@@ -204,10 +204,24 @@ def loopInvParts : List String := ["inv", "meas", "post"]
 def loopEntryParam : Name := `s0
 
 open Meta in
+/-- The parameters `xs` of `B.inv` end in a ghost measure (`B.inv … s n`): a last parameter of
+type `Nat` after the locals, of a type `σ` other than `Nat` (`none`: locals that depend on the
+body's parameters). Locals of type `Nat` have no ghost measure: their invariant's last parameter
+is the locals. Only the signature's shape decides, so the registration (`checkLoopInv`, which then
+checks the locals' parameter) and the loop's use (`registeredLoop?`, with the instantiated `σ`)
+read an invariant alike. -/
+def isGhostInv (xs : Array Expr) (σ? : Option Expr) : MetaM Bool := do
+  unless xs.size ≥ 2 do return false
+  unless ← isDefEq (← inferType xs.back!) (mkConst ``Nat) do return false
+  let some σ := σ? | return true
+  return !(← isDefEq σ (mkConst ``Nat))
+
+open Meta in
 /-- Check that `decl` is `B.inv`, `B.meas` or `B.post` of a loop body `B` (a definition of a
 `StateT σ m ε` program, `Zig.MM σ ε` or `CM Tgt σ ε`), or say why not: a definition without
 universe parameters whose parameters are explicit and named apart (`fsym` matches them by name with
-`B.inv`'s), whose last parameter is the loop's locals (`s : σ`; `r : ε × σ` for the post), whose
+`B.inv`'s), whose last parameter is the loop's locals (`s : σ`; `r : ε × σ` for the post; for
+the invariant, the locals may be followed by a ghost measure `n : Nat`), whose
 parameter of the locals at the loop's entry is named `s0` and whose value is an `FAssn` (a `Nat`
 for the measure). -/
 def checkLoopInv (decl : Name) : MetaM Unit := do
@@ -230,6 +244,10 @@ def checkLoopInv (decl : Name) : MetaM Unit := do
     let dep (e : Expr) := e.hasAnyFVar fun v => ys.any (·.fvarId! == v)
     return if dep σ || dep ε then none else some (σ, ε)
   forallTelescope d.type fun xs res => do
+    -- a ghost measure (`B.inv … s n`: a last parameter `n : Nat` after the locals; the loop rule
+    -- is `loop_ghost_ex`, so there is no `B.meas`)
+    let ghost ← if last == "inv" then isGhostInv xs (types?.map (·.1)) else pure false
+    let xs := if ghost then xs.pop else xs
     let some s := xs.back? | fail "no parameter for the loop's locals"
     if let some (σ, ε) := types? then
       let loc ← if last == "post" then mkAppM ``Prod #[ε, σ] else pure σ
