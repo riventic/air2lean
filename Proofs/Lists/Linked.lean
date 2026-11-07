@@ -17,7 +17,7 @@ a list of bare fields. `lseg X hd tl ys` is the segment from `hd` to `tl` holdin
 
 * `reverse_thread`: `reverse` turns the list into the list of the items in the other order, and
   returns, as a step of the thread that owns the list (`FTTotalTriple`, the loop by
-  `FTTotalTriple.loop_ghost`), so a concurrent client lifts it into its thread
+  `FTTotalTriple.loop_ghost_ex`), so a concurrent client lifts it into its thread
   (`CTriple.liftMem`). `reverse_total` is its reading in one thread, `reverse_spec` the partial
   form.
 * `sum_total`: if the sum of the items fits in a `u64`, `sum` returns it (no overflow panic) and
@@ -26,10 +26,11 @@ a list of bare fields. `lseg X hd tl ys` is the segment from `hd` to `tl` holdin
 The loops are walked by `fsym` from their registered invariants (`@[fsym_inv]`, with the number
 of nodes left as a ghost measure: `loop_ghost_ex`): the cursor's test splits the ghost list of
 the nodes left, and a repetition folds the node it passed back into the invariant's lists.
-`sum_exact` counts the steps by `FTotalTriple.loop_exact` over `sumInv`, whose step `fsym` walks. The program is `Proofs/Lists/Open.lean`, the translation in
-which the `Allocator` parameter is an open interface; `push` and `freeAll`, which allocate and
-free nodes through it, are proved for every allocator in `Proofs/Lists/Alloc.lean`, with `X` the
-rest of each node's grant.
+`sum_exact` counts the steps by `FTotalTriple.loop_exact` over `sumInv`, whose step `fsym`
+walks. The program is `Proofs/Lists/Open.lean`, the translation in which the `Allocator`
+parameter is an open interface; `push` and `freeAll`, which allocate and free nodes through it,
+are proved for every allocator in `Proofs/Lists/Alloc.lean`, with `X` the rest of each node's
+grant.
 -/
 
 namespace Lists.Linked
@@ -111,7 +112,6 @@ theorem reverse_total (hd : Option Ptr) (xs : List (BitVec 32)) :
 theorem reverse_spec (hd : Option Ptr) (xs : List (BitVec 32)) :
     FTriple (list X hd xs ⋆ plain) (reverse hd) (fun r => list X r xs.reverse ⋆ plain) :=
   (reverse_total hd xs).toPartial
-
 
 /-! ## `sum` -/
 

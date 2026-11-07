@@ -205,15 +205,16 @@ def loopEntryParam : Name := `s0
 
 open Meta in
 /-- The parameters `xs` of `B.inv` end in a ghost measure (`B.inv … s n`): a last parameter of
-type `Nat` after one of the locals `σ` (`none`: locals that depend on the body's parameters, any
-type). Locals of type `Nat` have no ghost measure: their invariant's last parameter is the
-locals. -/
+type `Nat` after the locals, of a type `σ` other than `Nat` (`none`: locals that depend on the
+body's parameters). Locals of type `Nat` have no ghost measure: their invariant's last parameter
+is the locals. Only the signature's shape decides, so the registration (`checkLoopInv`, which then
+checks the locals' parameter) and the loop's use (`registeredLoop?`, with the instantiated `σ`)
+read an invariant alike. -/
 def isGhostInv (xs : Array Expr) (σ? : Option Expr) : MetaM Bool := do
   unless xs.size ≥ 2 do return false
   unless ← isDefEq (← inferType xs.back!) (mkConst ``Nat) do return false
   let some σ := σ? | return true
-  if ← isDefEq σ (mkConst ``Nat) then return false
-  isDefEq (← inferType xs[xs.size - 2]!) σ
+  return !(← isDefEq σ (mkConst ``Nat))
 
 open Meta in
 /-- Check that `decl` is `B.inv`, `B.meas` or `B.post` of a loop body `B` (a definition of a

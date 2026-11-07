@@ -3990,20 +3990,31 @@ partial def instQ (e : Expr) (fuel : Nat := 64) : TacticM (Expr × Expr) := do
 node into a list, a loop's entry an empty list next to it. -/
 def maxCtorFolds : Nat := 2
 
+/-- The arguments of a recursive type (a list; `recCaseType?`) that the atom `a` is stuck on,
+among those `keep` picks (a variable to split, `ghostSplit?`; an unknown to fold,
+`stuckUnknown?`): `a` does not unfold, its definition being by cases on them (`lseg X cur none
+zs`); never an `@[fsym_atom]`, a fact or an existential. `a` is unfolded only when an argument
+is picked. -/
+def stuckRecArgs (a : Expr) (keep : Expr → MetaM Bool) : MetaM (Array Expr) := do
+  let .const c _ := a.getAppFn | return #[]
+  if isFsymAtom (← getEnv) c || a.isAppOf liftN || a.isAppOf exN then return #[]
+  let ds ← a.getAppArgs.filterM fun d => do
+    unless ← keep d do return false
+    return (← recCaseType? (← inferType d)).isSome
+  if ds.isEmpty || (← unfoldAtom a).expr != a then return #[]
+  return ds
+
 /-- An unknown `?m` of a recursive type (a list; not `Nat`, which is arithmetic) that an atom of
 `Q` is stuck on (its definition is by cases on it: `lseg X hd tl ?m` does not unfold), with its
 type's constructors and parameters: the planner's constructor fold (`closeEntail`). -/
 def stuckUnknown? (Q : Expr) : MetaM (Option (MVarId × List Name × Array Expr)) := do
-  let env ← getEnv
   for a in atoms (← instantiateMVars Q) do
-    let .const c _ := a.getAppFn | continue
-    if isFsymAtom env c || a.isAppOf liftN || a.isAppOf exN then continue
-    for d in a.getAppArgs do
-      let .mvar m := d | continue
-      if ← m.isAssigned then continue
-      let some (ii, args) ← recCaseType? (← m.getType) | continue
-      if (← unfoldAtom a).expr != a then continue
-      return some (m, ii.ctors, args.extract 0 ii.numParams)
+    let ds ← stuckRecArgs a fun d => do
+      let .mvar m := d | return false
+      return !(← m.isAssigned)
+    let some d := ds[0]? | continue
+    let some (ii, args) ← recCaseType? (← inferType d) | continue
+    return some (d.mvarId!, ii.ctors, args.extract 0 ii.numParams)
   return none
 
 /-! ## Updates into a postcondition: the planner -/
@@ -7068,22 +7079,11 @@ in each case the atom unfolds, its facts and existentials go into the context (`
 the facts then prove the condition or its negation, or are contradictory. Only a probe: the
 state is restored, and the caller splits `d` (`casesWalk`). -/
 def ghostSplit? (g : MVarId) (P : Expr) : TacticM (Option Expr) := g.withContext do
-  let env ← getEnv
   let mut seen : Array FVarId := #[]
   for a in atoms (← instantiateMVars P) do
-    let .const c _ := a.getAppFn | continue
-    if isFsymAtom env c then continue
-    -- (an atom stuck on its arguments: unfolding does not change it; computed once per atom)
-    let mut stuck? : Option Bool := none
-    for d in a.getAppArgs do
-      let .fvar f := d | continue
+    for d in ← stuckRecArgs a (pure ·.isFVar) do
+      let f := d.fvarId!
       if seen.contains f then continue
-      if (← recCaseType? (← f.getType)).isNone then continue
-      let stuck ← match stuck? with
-        | some b => pure b
-        | none => do let b := (← unfoldAtom a).expr == a; stuck? := some b; pure b
-      -- (another atom may be stuck on `d`)
-      unless stuck do continue
       seen := seen.push f
       let ok ← decidesBranch f
       trace[fsym] "ghost split of {d} in {a}: {if ok then "decides" else "does not decide"} the branch"
