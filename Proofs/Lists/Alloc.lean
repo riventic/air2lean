@@ -323,6 +323,35 @@ theorem freedSeg_snoc {p : Ptr} (q : Option Ptr) :
     obtain ⟨hp, h⟩ := sep_lift.mp (sep_assoc h)
     exact ⟨p', q', sep_lift.mpr ⟨hp, sep_mono_right (fun _ h => freedSeg_snoc q k h) (sep_assoc h)⟩⟩
 
+omit [Ext] in
+/-- `freedSeg_snoc` as an update (a caller's update of `fsym`). -/
+theorem freedSeg_snoc_upd {hd q : Option Ptr} {p : Ptr} {k : Nat} :
+    EUpd (freedSeg I hd (some p) k ⋆ I.freed p) (freedSeg I hd q (k + 1)) :=
+  EUpd.of_imp fun _ h => freedSeg_snoc I q k h
+
+omit [Ext] in
+/-- One more fee (`fees_succ`) as an update. -/
+theorem fees_snoc_upd {k : Nat} : EUpd (fees I φ k ⋆ I.fee φ) (fees I φ (k + 1)) :=
+  EUpd.of_imp fun _ h => by rw [fees_succ]; exact sep_comm h
+
+omit [Ext] in
+/-- EXPERIMENT: `freeAll`'s loop invariant, registered. -/
+@[fsym_inv] def _root_.Lists.Open.freeAll.loop5.inv (ext : Ext) (p0 : mem_Allocator) (fns : VTableFns)
+    (I : FAllocInv) (φ : Frac) (xs : List (BitVec 32)) (s0 : freeAllLocals) (s : freeAllLocals) :
+    FAssn :=
+  FAssn.ex fun k : Nat => FAssn.ex fun zs : List (BitVec 32) =>
+    ⟪xs.length = k + zs.length⟫ ⋆ (I.own ⋆ ((list I φ s.p zs ⋆ (fees I φ k ⋆
+      freedSeg I s0.p s.p k)) ⋆ vtR p0.vtable fns.toList)) ⋆ plain
+
+set_option maxRecDepth 20000 in
+theorem freeAll_freed_fsym (hd : Option Ptr) (xs : List (BitVec 32))
+    (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
+    CTriple (I.own ⋆ (list I φ hd xs ⋆ vtR vtp fns.toList) ⋆ plain) (freeAll ⟨ctx, vtp⟩ hd)
+      (fun _ => (I.own ⋆ ((fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆
+        freedSeg I hd none xs.length)) ⋆ plain) := by
+  unfold freeAll
+  fsym [destroy_fields ctx vtp fns I e φ (h := h), fees_snoc_upd, freedSeg_snoc_upd I]
+
 /-- The invariant of `freeAll`'s loop over a list of `n` nodes from `hd`: `p` is a list of
 granted nodes, and the fees of the nodes freed so far are back, with what the allocator told of
 them. -/
