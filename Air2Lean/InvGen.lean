@@ -36,13 +36,30 @@ Families (layer 2 of the design: numeric facts and measures over the variables o
   holds at entry only for a counter that starts on the repeating side of its exit value (or at
   it): a client proves that, and a loop entered past it is not an instance.
 
-Outside the family (each one recorded with its reason): a cell at an offset of a parameter
+* **List walk** (`listWalk`, `listCand`; ledger #list-walk-step). One iteration tests an
+  optional node pointer, the cursor (`cur.isSome`, a `while (cur) |n|` over `?*Node`): at `null`
+  it exits and changes nothing; at a node it reads the node's `next` into the cursor and repeats.
+  On the way it may read one item field of the node, add the item or a constant to word locals
+  (accumulators), and point the node back to a local that it then sets to the node (a
+  reversal). The invariant is stated over the library list family `listSeg`
+  (`ZigLean/Sep/Full/ListSeg.lean`) at the node layout the body accesses (`F.loopN.node`: `next`,
+  the item field if read, and the rest of each node as a parameter), with the nodes left as a
+  ghost measure (`B.inv … s n`, `loop_ghost_ex`): the ghost lists `ys` (visited) and `zs` (left)
+  with `xs = ys ++ zs` (a visit; `ys` the segment from the cursor's entry value) or
+  `xs = ys.reverse ++ zs` (a reversal; `ys` the list at the reversal's local), each accumulator
+  its entry value plus the items visited (with the no-overflow fact over `xs`, an entry
+  obligation) and the other locals at their entry values. The exit post holds the whole list
+  (reversed for a reversal) and the accumulators over `xs`.
+
+Outside the families (each one recorded with its reason): a cell at an offset of a parameter
 (`Zig.ptrProject`), an increment that depends on the counter, a bound of another width
 (`@intCast`), a `>= 0` or `<= maxInt` test (it holds until the step wraps), a nested loop, a call.
 
 The body is read by a symbolic run over its monadic term (`bind`, `pure`, `get`, `modify`, `ite`,
 the lifted `Zig.load`/`Zig.store`/`Zig.add`/`Zig.sub`/`Zig.intCast`, the unsigned comparisons
-`Zig.lt`/`gt`/`le`/`ge`, `!=` (`bne`), a slice's `len`, `Zig.tick`, a `match` on a known exit):
+`Zig.lt`/`gt`/`le`/`ge`, `!=` (`bne`), a slice's `len`, `Zig.tick`, a `match` on a known exit,
+an optional pointer's `isSome`, `some` and `Zig.optPayload`, and the loads and stores of a node's
+fields through the payload, at offsets by `Zig.ptrProject`):
 this is a reading of the generated term, not a second semantics. Nothing it concludes is trusted.
 
 The reading proposes candidate facts, and `fsym` decides which of them stay (Houdini pruning,
@@ -680,7 +697,8 @@ def Cand.assn (c : Cand) (top : List String) (cell : Nat → List String) (owned
 /-- The invariant's body with the kept facts (`keep`), each written by `fact`. -/
 def Cand.body (c : Cand) (keep : Array Bool) (fact : Nat → String) : String :=
   let kept := (List.range c.facts.size).filter (keep[·]!)
-  String.join (c.exs.toList.map fun (y, ty) => s!"FAssn.ex fun {y} : {ty} =>\n    ") ++
+  String.join (c.exs.toList.map fun (y, ty) => s!"FAssn.ex fun {y} : {ty} => ") ++
+  (if c.exs.isEmpty then "" else "\n    ") ++
   c.assn ((kept.filter (c.facts[·]!.cell?.isNone)).map fact)
     fun k => (kept.filter fun i => (c.facts[i]!.cell?.map (·.1)) == some k).map fact
 

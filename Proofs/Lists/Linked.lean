@@ -13,7 +13,8 @@ A node (`node X p v q`) owns its two fields, `next` at offset 0 and `val` at off
 allocation, so they are proved for every `X`. A list that an allocator built carries the rest of
 each node's grant in `X` (its padding bytes and the allocator's token), and `X := fun _ => emp` is
 a list of bare fields. `lseg X hd tl ys` is the segment from `hd` to `tl` holding `ys`, and
-`list X hd xs` the whole list (the segment that ends at `null`).
+`list X hd xs` the whole list (the segment that ends at `null`): the library list family
+`listSeg` (`ZigLean/Sep/Full/ListSeg.lean`) at this node layout.
 
 * `reverse_thread`: `reverse` turns the list into the list of the items in the other order, and
   returns, as a step of the thread that owns the list (`FTTotalTriple`, the loop by
@@ -23,9 +24,13 @@ a list of bare fields. `lseg X hd tl ys` is the segment from `hd` to `tl` holdin
 * `sum_total`: if the sum of the items fits in a `u64`, `sum` returns it (no overflow panic) and
   leaves the list unchanged.
 
-The loops are walked by `fsym` from their registered invariants (`@[fsym_inv]`, with the number
-of nodes left as a ghost measure: `loop_ghost_ex`): the cursor's test splits the ghost list of
-the nodes left, and a repetition folds the node it passed back into the invariant's lists.
+The loops are walked by `fsym` from their generated invariants (`Proofs/Lists/OpenInv.lean`,
+`air2lean-invgen`'s list-walk family, `@[fsym_inv]`, with the number of nodes left as a ghost
+measure: `loop_ghost_ex`): the cursor's test splits the ghost list of the nodes left, and a
+repetition folds the node it passed back into the invariant's lists. Each generated invariant is
+stated over its own node layout (`reverse.loop6.node`: `next` and an abstract rest, so `reverse`
+holds for every node with a `next` field; `sum.loop6.node`: `next`, the item and `X`), which `node`
+instantiates.
 `sum_exact` counts the steps by `FTotalTriple.loop_exact` over `sumInv`, whose step `fsym`
 walks. The program is `Proofs/Lists/Open.lean`, the translation in which the `Allocator`
 parameter is an open interface; `push` and `freeAll`, which allocate and free nodes through it,
