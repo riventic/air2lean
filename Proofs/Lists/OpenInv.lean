@@ -1,4 +1,4 @@
--- air2lean-invgen: {"generator":{"lean":"4.34.0","modules":[["Air2Lean.InvGen","4a4ae5e5f5f68b8b179d348947642d06e85c40074b47c3d3db430ce006e6dcf4"],["Air2Lean.InvGenMain","e0c27992f95da5dc9678176bdd17f095088ce82669b50d83aee9ca8665757297"],["Air2Lean.Revision","0abdb80bf11b8b7e1b0820755e2015f43cce91c00db65dd085b2a8afa6e65f8c"]],"revision":"7a0c8c4f1917296a5851612ee96a2b8ba2acd72b7ce58a1801be39350eebb2f9"},"inputs":[["Proofs/Lists/Open.lean","6a1f5a940db7e9f24ff61518a6c17c666be741b7d1230ec0ac608faab14911b0"]],"loops":[{"loop":"evens.loop8","none":"not a loop body of `Zig.MM`"},{"loop":"freeAll.loop5","none":"not a loop body of `Zig.MM`"},{"family":"list-walk","loop":"reverse.loop6","pruned":[]},{"family":"list-walk","loop":"sum.loop6","pruned":[]}],"module":"Proofs.Lists.Open","namespace":"Lists.Open","output":"b8d42c785cce38fccaac442c26dea24ef4bdbc7c28ee1502bf4eaef9434a1d9f","version":2}
+-- air2lean-invgen: {"generator":{"lean":"4.34.0","modules":[["Air2Lean.InvGen","79da3d2f7539068f23c713133453716efed50a731fd31a17386fd9e2735eef67"],["Air2Lean.InvGenMain","e0c27992f95da5dc9678176bdd17f095088ce82669b50d83aee9ca8665757297"],["Air2Lean.Revision","0abdb80bf11b8b7e1b0820755e2015f43cce91c00db65dd085b2a8afa6e65f8c"]],"revision":"4f96ed5a7c6e3af4539be57af649742b098136926aed33ba310a467ffdffb2d0"},"inputs":[["Proofs/Lists/Open.lean","6a1f5a940db7e9f24ff61518a6c17c666be741b7d1230ec0ac608faab14911b0"]],"loops":[{"loop":"evens.loop8","none":"not a loop body of `Zig.MM`"},{"loop":"freeAll.loop5","none":"not a loop body of `Zig.MM`"},{"family":"list-walk","loop":"reverse.loop6","pruned":[]},{"family":"list-walk","loop":"sum.loop6","pruned":[]}],"module":"Proofs.Lists.Open","namespace":"Lists.Open","output":"8f636f671160a68e0019f901863f1e6b20fb70a232686474eaf590900df3ef0f","version":2}
 import Proofs.Lists.Open
 import ZigLean.Sep.Full.Ghost
 import ZigLean.Sep.Full.AutoAttr
@@ -21,7 +21,7 @@ abbrev reverse.loop6.node (V : Type) (D : Zig.Ptr → V → FAssn) (p : Zig.Ptr)
 /-- The invariant of `reverse.loop6`, a list walk that reverses the list `xs` at `cur` (`reverse.loop6.node`): `zs` are the `n` nodes left.
 `s0` holds the locals at loop entry. -/
 @[fsym_inv] def reverse.loop6.inv (V : Type) (D : Zig.Ptr → V → FAssn) (xs : List V) (s0 : reverseLocals) (s : reverseLocals) (n : Nat) : FAssn :=
-  FAssn.ex fun ys : List V => FAssn.ex fun zs : List V => 
+  FAssn.ex fun ys : List V => FAssn.ex fun zs : List V =>
     ⟪xs = ys.reverse ++ zs ∧
       zs.length = n⟫ ⋆
     listSeg (Lists.Open.reverse.loop6.node V D) s.prev none ys ⋆
@@ -41,7 +41,7 @@ abbrev sum.loop6.node (X : Zig.Ptr → FAssn) (p : Zig.Ptr) (v : BitVec 32) (q :
 /-- The invariant of `sum.loop6`, a list walk that visits the list `xs` at `p` (`sum.loop6.node`): `zs` are the `n` nodes left.
 `s0` holds the locals at loop entry. -/
 @[fsym_inv] def sum.loop6.inv (X : Zig.Ptr → FAssn) (xs : List (BitVec 32)) (s0 : sumLocals) (s : sumLocals) (n : Nat) : FAssn :=
-  FAssn.ex fun ys : List (BitVec 32) => FAssn.ex fun zs : List (BitVec 32) => 
+  FAssn.ex fun ys : List (BitVec 32) => FAssn.ex fun zs : List (BitVec 32) =>
     ⟪xs = ys ++ zs ∧
       zs.length = n ∧
       s.s.toNat = s0.s.toNat + (ys.map BitVec.toNat).sum ∧
