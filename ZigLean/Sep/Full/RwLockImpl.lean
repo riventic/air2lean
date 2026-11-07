@@ -439,6 +439,64 @@ theorem fsum_upd (G : ThreadId → γ) (m : Mem) (t : ThreadId) {g g' : γ}
     (h : (W.ph g').frac = (W.ph g).frac) : W.fsum (upd G t g') m = W.fsum (upd G t g) m :=
   congrArg (ftot · m.threads.size) (upd_map (fun g => (W.ph g).frac) G t h)
 
+/-- The counts read the threads only. -/
+theorem nrd_threads {G : ThreadId → γ} {m m' : Mem} (h : m'.threads = m.threads) :
+    W.nrd G m' = W.nrd G m := by unfold nrd; rw [h]
+
+theorem nwi_threads {G : ThreadId → γ} {m m' : Mem} (h : m'.threads = m.threads) :
+    W.nwi G m' = W.nwi G m := by unfold nwi; rw [h]
+
+theorem writing_threads {G : ThreadId → γ} {m m' : Mem} (h : m'.threads = m.threads) :
+    W.writing G m' = W.writing G m := by unfold writing; rw [h]
+
+theorem fsum_threads {G : ThreadId → γ} {m m' : Mem} (h : m'.threads = m.threads) :
+    W.fsum G m' = W.fsum G m := by unfold fsum; rw [h]
+
+/-- A move of `t` between places in the writers' entry (`out`, `wi`) keeps whether some thread is
+at a place outside them. -/
+theorem ex_calm {G : ThreadId → γ} {t : ThreadId} {a : RwPh} (p : RwPh → Prop)
+    (hp : ∀ b, b = .out ∨ b = .wi → ¬ p b) (ha : a = .out ∨ a = .wi)
+    (h₀ : W.ph (G t) = .out ∨ W.ph (G t) = .wi) :
+    (∃ u, p (W.ph (upd G t (W.set (G t) a) u))) ↔ ∃ u, p (W.ph (G u)) := by
+  constructor
+  · rintro ⟨u, hu⟩
+    by_cases e : u = t
+    · subst e; rw [upd_self, W.ph_set] at hu; exact absurd hu (hp a ha)
+    · rw [upd_ne _ _ e] at hu; exact ⟨u, hu⟩
+  · rintro ⟨u, hu⟩
+    by_cases e : u = t
+    · subst e; exact absurd hu (hp _ h₀)
+    · exact ⟨u, by rw [upd_ne _ _ e]; exact hu⟩
+
+/-- The same for a property of every thread that holds at `out` and `wi`. -/
+theorem all_calm {G : ThreadId → γ} {t : ThreadId} {a : RwPh} (p : RwPh → Prop)
+    (hp : ∀ b, b = .out ∨ b = .wi → p b) (ha : a = .out ∨ a = .wi)
+    (h₀ : W.ph (G t) = .out ∨ W.ph (G t) = .wi) :
+    (∀ u, p (W.ph (upd G t (W.set (G t) a) u))) ↔ ∀ u, p (W.ph (G u)) := by
+  constructor
+  · intro h u
+    by_cases e : u = t
+    · subst e; exact hp _ h₀
+    · have := h u; rwa [upd_ne _ _ e] at this
+  · intro h u
+    by_cases e : u = t
+    · subst e; rw [upd_self, W.ph_set]; exact hp a ha
+    · rw [upd_ne _ _ e]; exact h u
+
+/-- A move of `t` between `out` and `wi` keeps whether the resource is away and posted. -/
+theorem busy_calm {G : ThreadId → γ} {t : ThreadId} {a : RwPh} (ha : a = .out ∨ a = .wi)
+    (h₀ : W.ph (G t) = .out ∨ W.ph (G t) = .wi) :
+    (W.Busy (upd G t (W.set (G t) a)) ↔ W.Busy G) ∧
+      (RwPosted W.ph (upd G t (W.set (G t) a)) ↔ RwPosted W.ph G) := by
+  have hpost : RwPosted W.ph (upd G t (W.set (G t) a)) ↔ RwPosted W.ph G :=
+    and_congr (ex_calm (W := W) (· = .ww) (by rintro b (rfl | rfl) <;> nofun) ha h₀)
+      (and_congr (all_calm (W := W) (fun b => b.isRd = false)
+          (by rintro b (rfl | rfl) <;> rfl) ha h₀)
+        (all_calm (W := W) (· ≠ .rp) (by rintro b (rfl | rfl) <;> nofun) ha h₀))
+  exact ⟨or_congr (ex_calm (W := W) (· = .wr) (by rintro b (rfl | rfl) <;> nofun) ha h₀)
+    (or_congr (ex_calm (W := W) (· = .rp) (by rintro b (rfl | rfl) <;> nofun) ha h₀) hpost),
+    hpost⟩
+
 /-! ## Ownership over a step at the state word -/
 
 /-- **Ownership survives a release write at the state word** (`Owns`): an old access keeps its
@@ -469,6 +527,130 @@ theorem Owns.step {G G' : ThreadId → γ} {m m' : Mem} {r : Res} {t : ThreadId}
       · exact .inr (.inr ⟨hw, hs, u, hu', VClock.le_trans hcu (hcl u)⟩)
       · exact .inr (.inl (VClock.le_trans hcu hu'))
   · exact .inr (.inl (VClock.le_trans hc hnew))
+
+/-! ## The invariant after the rwlock's own ops
+
+Each op at the state word is one of the atomic word rules at the outer mutex (`wp_wordRmw`,
+`wp_wordWeakCas`): its continuation has the rest as the word's cells and a rest `rY` without the
+word's bytes, which the invariant splits (`Inv.restY`); the lemmas below give the rwlock's
+invariant after the op, the `hI` of `Fits.atWord`. -/
+
+/-- **The rest beside the word's cells** is the free resource and the rest of the rest. -/
+theorem Inv.restY {G : ThreadId → γ} {rY : Res} {m : Mem}
+    (hI : W.Inv G (rsum (W.st.cellsR m) rY) m) (hY : ∀ l, W.st.In l → rY.heap l = none) :
+    ∃ rF rO, rY = rsum rF rO ∧ (∀ l, W.st.In l → rF.heap l = none ∧ rO.heap l = none) ∧
+      FHeap.Disjoint rF.heap rO.heap ∧ W.FreeRes G m rF ∧ W.Owns G m rF := by
+  obtain ⟨rF, rO, he, hoff, hd, hfr, how⟩ := hI.rest
+  refine ⟨rF, rO, cellsAt_cancel he hY fun l hl => ?_, hoff, hd, hfr, how⟩
+  show (rF.heap ∪ rO.heap) l = none
+  rw [FHeap.union_apply, (hoff l hl).1, (hoff l hl).2]
+  rfl
+
+/-- The newest write, as the last index. -/
+theorem last_of_back {a : Array Word.Entry} {e : Word.Entry} (h : a.back? = some e) :
+    a[a.size - 1]! = e := by
+  simp only [Array.back?] at h
+  simp [getElem!_def, h]
+
+/-- The newest write after a push. -/
+theorem back_push (a : Array Word.Entry) (x : Word.Entry) : (a.push x).back! = x := by
+  rw [Array.back!, getElem!_pos _ _ (by simp)]
+  simp
+
+/-- **A writer's intent** (`lockUncancelable`'s `+2`, `out → wi`): the word counts one more pending
+writer; the readers, the writing bit, the free resource and its ownership stay (`Owns.step`, a
+release RMW). The room is `lock_wp`'s. -/
+theorem Inv.addW {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
+    {ord : AtomicOrder} {old : BitVec 64}
+    (hI : W.Inv G (rsum (W.st.cellsR m) rY) m) (hY : ∀ l, W.st.In l → rY.heap l = none)
+    (hout : W.ph (G t) = .out) (ht : t < m.threads.size)
+    (hmph : ∀ a, M.ph (W.set (G t) a) = M.ph (G t))
+    (hroom : W.nwi G m + 1 < RwState.countBound)
+    (hrest : RestStep W.st.In m m') (hok : W.st.Ok m' fun u => M.ph (G u) ≠ .gone)
+    (hv : (W.st.hist m)[(W.st.hist m).size - 1]!.Val old)
+    (hh : W.st.hist m' = (W.st.hist m).push
+      (Word.rmwEnt m' t ord (W.st.hist m)[(W.st.hist m).size - 1]! (old + 2)))
+    (hrel : ord.isRel = true)
+    (hfp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨ VClock.le e.clock (m'.clocks[t]!) = true) :
+    W.Inv (upd G t (W.set (G t) .wi)) (rsum (W.st.cellsR m') rY) m' := by
+  have hth := hrest.threads
+  have hne : ∀ u, u ≠ t → upd G t (W.set (G t) .wi) u = G u := fun u hu => upd_ne _ _ hu
+  have hGt : W.ph (upd G t (W.set (G t) .wi) t) = .wi := by rw [upd_self, W.ph_set]
+  have hMph : ∀ u, M.ph (upd G t (W.set (G t) .wi) u) = M.ph (G u) := fun u => by
+    by_cases e : u = t
+    · subst e; rw [upd_self, hmph]
+    · rw [hne u e]
+  have hnrd : W.nrd (upd G t (W.set (G t) .wi)) m' = W.nrd G m := by
+    have h := nrd_upd (W := W) G ht (G t) (W.set (G t) .wi)
+    rw [upd_same] at h
+    rw [nrd_threads hth]
+    simpa [W.ph_set, hout, RwPh.isRd] using h
+  have hnwi : W.nwi (upd G t (W.set (G t) .wi)) m' = W.nwi G m + 1 := by
+    have h := nwi_upd (W := W) G ht (G t) (W.set (G t) .wi)
+    rw [upd_same] at h
+    rw [nwi_threads hth]
+    simpa [W.ph_set, hout, RwPh.isWi] using h
+  have hwr : W.writing (upd G t (W.set (G t) .wi)) m' = W.writing G m := by
+    rw [writing_threads hth, writing_upd (W := W) G m t (g := G t) (g' := W.set (G t) .wi)
+      (by rw [W.ph_set, hout]; rfl), upd_same]
+  have hfs : W.fsum (upd G t (W.set (G t) .wi)) m' = W.fsum G m := by
+    rw [fsum_threads hth, fsum_upd (W := W) G m t (g := G t) (g' := W.set (G t) .wi)
+      (by rw [W.ph_set, hout]; rfl), upd_same]
+  have hxs : W.xs (upd G t (W.set (G t) .wi)) = W.xs G := by rw [xs_set, upd_same]
+  obtain ⟨hbusy, -⟩ := busy_calm (W := W) (G := G) (t := t) (.inr rfl) (.inl hout)
+  obtain ⟨e, hb, hev⟩ := hI.word
+  have hold : old = RwState.encode (W.nrd G m) (W.nwi G m) (W.writing G m) := by
+    rw [last_of_back hb] at hv
+    unfold Word.Entry.Val at hv hev
+    rw [hv] at hev
+    cases hev; rfl
+  obtain ⟨rF, rO, he, hoff, hd, hfr, how⟩ := hI.rest
+  refine ⟨?_, fun u hu => ?_, ⟨by rw [hnrd]; exact hI.room.1, by rw [hnwi]; exact hroom⟩, ?_,
+    fun u v hu hv => ?_, fun u hu => ?_, fun u hu => ?_, fun u hu => ?_,
+    ⟨rF, rO, ?_, hoff, hd, ?_, ?_⟩⟩
+  · have : (fun u => M.ph (upd G t (W.set (G t) .wi) u) ≠ .gone) = fun u => M.ph (G u) ≠ .gone :=
+      funext fun u => by rw [hMph]
+    rw [this]; exact hok
+  · rw [hth]
+    by_cases e : u = t
+    · subst e; exact ht
+    · rw [hne u e] at hu; exact hI.ex u hu
+  · refine ⟨Word.rmwEnt m' t ord _ (old + 2), by rw [hh]; simp, ?_⟩
+    rw [hnrd, hnwi, hwr,
+      ← (RwState.Family.add_writer 31 1 _ _ _ : RwState.encode _ _ _ + 2 = _), ← hold]
+    exact W.st.enc_val (old + 2)
+  · have hu' : u ≠ t := fun e => by subst e; rw [hGt] at hu; cases hu
+    have hv' : v ≠ t := fun e => by subst e; rw [hGt] at hv; cases hv
+    rw [hne u hu'] at hu; rw [hne v hv'] at hv
+    exact hI.one u v hu hv
+  · have hu' : u ≠ t := fun e => by subst e; rw [hGt] at hu; cases hu
+    rw [hne u hu'] at hu ⊢; exact hI.wm u hu
+  · have hu' : u ≠ t := fun e => by subst e; rw [hGt] at hu; cases hu
+    rw [hne u hu'] at hu; rw [hnrd]; exact hI.wr u hu
+  · have hu' : u ≠ t := fun e => by subst e; rw [hGt] at hu; cases hu
+    rw [hne u hu'] at hu
+    obtain ⟨h0, ⟨w, hw⟩, hone⟩ := hI.rp u hu
+    have hw' : w ≠ t := fun e => by subst e; rw [hout] at hw; cases hw
+    refine ⟨by rw [hnrd]; exact h0, ⟨w, by rw [hne w hw']; exact hw⟩, fun v hv => ?_⟩
+    have hv' : v ≠ t := fun e => by subst e; rw [hGt] at hv; cases hv
+    rw [hne v hv'] at hv; exact hone v hv
+  · rw [cellsAt_cancel he hY fun l hl => by
+      show (rF.heap ∪ rO.heap) l = none
+      rw [FHeap.union_apply, (hoff l hl).1, (hoff l hl).2]; rfl]
+  · refine ⟨fun hb => hfr.1 (hbusy.mp hb), fun hb hn => ?_, fun hb hn => ?_⟩
+    · rw [hxs]; exact hfr.2.1 (fun h => hb (hbusy.mpr h)) (by rwa [hnrd] at hn)
+    · obtain ⟨H, f, hR, hf, hsum, hrF, hall⟩ :=
+        hfr.2.2 (fun h => hb (hbusy.mpr h)) (by rwa [hnrd] at hn)
+      refine ⟨H, f, by rw [hxs]; exact hR, hf, by rw [hfs]; exact hsum, hrF, fun u q H' hu => ?_⟩
+      have hu' : u ≠ t := fun e => by subst e; rw [hGt] at hu; cases hu
+      rw [hne u hu'] at hu; exact hall u q H' hu
+  · refine Owns.step how hfp hth hrest.clocks (Nat.le_of_eq hrest.bsize.symm) ?_ ?_
+      (fun u hu => by rwa [hMph] at hu) (fun u hu => .inl ?_)
+    · rw [hh, back_push]; exact Word.rmwEnt_relLe
+    · rw [hh, back_push]; exact Word.rmwEnt_rel hrel
+    · by_cases e : u = t
+      · subst e; rw [hout] at hu; cases hu
+      · rw [hne u e]; exact hu
 
 /-! ## The protocol's facts for every implementation -/
 
@@ -519,35 +701,48 @@ theorem Fits.wstep (hW : W.Fits P UM US okM okS) {t : ThreadId} {G G' : ThreadId
   have hst := hs (hW.m.sub G rX m hU)
   (hW.m.inv G' m').mpr ⟨rX', hst.2.2.1, hW.m.kstep t G rX m G' rX' m' (.inl hst) hU⟩
 
+/-- The rwlock's place is set by the primitive's place, the semaphore's kept. -/
+theorem prim_set (g : γ) (a : RwPh) : W.prim.pl.set g (a, S.place.ph g) = W.set g a := by
+  show W.set (S.place.set g (S.place.ph g)) a = W.set g a
+  rw [S.place.set_self]
+
+/-- The rwlock's place is not the outer mutex's. -/
+theorem Fits.mph (hW : W.Fits P UM US okM okS) (g : γ) (a : RwPh) : M.ph (W.set g a) = M.ph g := by
+  rw [← prim_set, hW.m.lph]
+
 /-- **An atomic op at the state word moves `t` to `a`** (`Fits.wstep` with the facts of the word
 rules at `M`, `FLock.wp_wordRmw`, `wp_wordWeakCas`, `wp_wordLoad`): the outer mutex's invariant
 before (the stop's) and after the op, the op's rest step, and the rwlock's invariant after it with
-`t` at `a`. The other facts of `Step` hold at once: only `t`'s rwlock place changes. -/
-theorem Fits.atWord (hW : W.Fits P UM US okM okS) {t : ThreadId} {G₁ : ThreadId → γ} {g : γ}
-    {a : RwPh} {rY : Res} {m₁ m' : Mem} (hg₁ : G₁ t = g) (hc₁ : m₁.current = t)
+`t` at `a`. The op may move the free resource between the rest (`rF` to `rF'`, the rest of the
+rest `rO` kept) and `t`'s part (`g` to `g₁`, which keeps `t`'s client part and its places and held
+resources in the locks' code: `M.setPart`); the outer mutex's invariant after it is at `g₁`
+(`FLock.Inv.takeRest`, `giveRest`). The other facts of `Step` hold at once. -/
+theorem Fits.atWord (hW : W.Fits P UM US okM okS) {t : ThreadId} {G₁ : ThreadId → γ} {g g₁ : γ}
+    {a : RwPh} {rY rY' : Res} {m₁ m' : Mem} (hg₁ : G₁ t = g) (hc₁ : m₁.current = t)
     (hU : UM G₁ (rsum (W.st.cellsR m₁) rY) m₁) (hiL : M.Inv G₁ (rsum (W.st.cellsR m₁) rY) m₁)
-    (hrest : RestStep W.st.In m₁ m') (hL : M.Inv G₁ (rsum (W.st.cellsR m') rY) m')
+    (hrest : RestStep W.st.In m₁ m') (hL : M.Inv (upd G₁ t g₁) (rsum (W.st.cellsR m') rY') m')
+    (hg : W.x g₁ = W.x g ∧ M.ph g₁ = M.ph g ∧ M.held g₁ = M.held g ∧ L.ph g₁ = L.ph g ∧
+      L.held g₁ = L.held g ∧ S.place.ph g₁ = S.place.ph g)
+    (hY : ∃ rF rF' rO, rY = rsum rF rO ∧ rY' = rsum rF' rO)
     (hI : W.Inv G₁ (rsum (W.st.cellsR m₁) rY) m₁ →
-      W.Inv (upd G₁ t (W.set g a)) (rsum (W.st.cellsR m') rY) m') :
-    P.inv (upd G₁ t (W.set g a)) m' := by
-  have hK : W.prim.pl.set g (a, S.place.ph g) = W.set g a := by
-    show W.set (S.place.set g (S.place.ph g)) a = W.set g a
-    rw [S.place.set_self]
-  have hM : M.Inv (upd G₁ t (W.set g a)) (rsum (W.st.cellsR m') rY) m' := by
-    have := hW.m.relabelK (G := G₁) (t := t) (g := g) (a, S.place.ph g)
-      (by rw [← hg₁, upd_same]; exact hL)
-    rwa [hK] at this
+      W.Inv (upd G₁ t (W.set g₁ a)) (rsum (W.st.cellsR m') rY') m') :
+    P.inv (upd G₁ t (W.set g₁ a)) m' := by
+  obtain ⟨hx, hmp, hmh, hlp, hlh, hsp⟩ := hg
+  obtain ⟨rF, rF', rO, rfl, rfl⟩ := hY
+  have hM : M.Inv (upd G₁ t (W.set g₁ a)) (rsum (W.st.cellsR m') (rsum rF' rO)) m' := by
+    have := hW.m.relabelK (G := G₁) (t := t) (g := g₁) (a, S.place.ph g₁) hL
+    rwa [prim_set] at this
   refine hW.wstep hU fun hI₁ => ⟨hiL, hI₁, hM, hI hI₁, hc₁, .inr hrest,
     fun u hu => upd_ne _ _ hu, fun u => ?_, ?_, ?_, ?_, ?_, ?_,
-    rY, rY, rnil, by rw [rsum_rnil], by rw [rsum_rnil]⟩
+    rF, rF', rO, rfl, rfl⟩
   · by_cases e : u = t
-    · subst e; rw [upd_self, W.x_set, hg₁]
+    · subst e; rw [upd_self, W.x_set, hg₁, hx]
     · rw [upd_ne _ _ e]
-  · rw [upd_self, hg₁, ← hK, hW.m.lph]
-  · rw [upd_self, hg₁, ← hK, hW.m.lheld]
-  · rw [upd_self, hg₁, W.lph]
-  · rw [upd_self, hg₁, W.lheld]
-  · rw [upd_self, hg₁, W.sp_ph]
+  · rw [upd_self, hg₁, ← prim_set, hW.m.lph, hmp]
+  · rw [upd_self, hg₁, ← prim_set, hW.m.lheld, hmh]
+  · rw [upd_self, hg₁, W.lph, hlp]
+  · rw [upd_self, hg₁, W.lheld, hlh]
+  · rw [upd_self, hg₁, W.sp_ph, hsp]
 
 end Proto
 
