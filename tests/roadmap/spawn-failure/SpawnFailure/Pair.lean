@@ -501,11 +501,14 @@ theorem main_spec (σ : Placement) (lim : Option Nat) (d : Nat) :
     simp only [↓reduceIte] at hka1
     obtain ⟨hc₁₀, hth₁₀⟩ := join_threads r1₉ hj
     obtain ⟨rO₉, ho₉⟩ := hi₉.own
-    have ho₁₀ := FOwned.join (ho₉.current 0) (by rw [hsz₉]; decide) (by decide) hj
     have e0 : ownOf G₄ m₉ 0 = hR := by simp [ownOf, joinedB, hg₄, Gh.res]
     have e1 : ownOf G₄ m₉ 1 = hk1 := by
       have r : m₉.threads[1]? = some { spawner := 0, joined := false } := r1₉
       simp [ownOf, joinedB, r, hf1, Gh.res]
+    -- child 1's part is its flag, without read shares: the join gathers none
+    have ho₁₀ := FOwned.join (ho₉.current 0) (by rw [hsz₉]; decide) (by decide) hj
+      fun l => .inr (by rw [e1]; exact (FAssn.Unshared.sep (.up _) (.bext _ _ _) :
+        (flagA _ _ _ _).Unshared) hk1 hka1 l)
     have hd : FHeap.Disjoint hR.heap hk1.heap := by
       have := ho₉.disj (u := 0) (v := 1) (by rw [hsz₉]; decide) (by rw [hsz₉]; decide) (by decide)
       rwa [e0, e1] at this
@@ -600,11 +603,14 @@ theorem main_spec (σ : Placement) (lim : Option Nat) (d : Nat) :
   simp only [↓reduceIte] at hka1
   obtain ⟨hc₁₂, hth₁₂⟩ := join_threads r1₁₁ hj
   obtain ⟨rO₁₁, ho₁₁⟩ := hi₁₁.own
-  have ho₁₂ := FOwned.join (ho₁₁.current 0) (by rw [hsz₁₁]; decide) (by decide) hj
   have e0 : ownOf G₅ m₁₁ 0 = rnil := by simp [ownOf, joinedB, hg₅, Gh.res]
   have e1 : ownOf G₅ m₁₁ 1 = hk1 := by
     have r : m₁₁.threads[1]? = some { spawner := 0, joined := false } := r1₁₁
     simp [ownOf, joinedB, r, hf1, Gh.res]
+  -- child 1's part is its flag, without read shares: the join gathers none
+  have ho₁₂ := FOwned.join (ho₁₁.current 0) (by rw [hsz₁₁]; decide) (by decide) hj
+    fun l => .inr (by rw [e1]; exact (FAssn.Unshared.sep (.up _) (.bext _ _ _) :
+      (flagA _ _ _ _).Unshared) hk1 hka1 l)
   rw [e0, e1, rnil_rsum] at ho₁₂
   have hjb₁₂ : ∀ u, joinedB m₁₂ u = if u = 1 then true else joinedB m₁₁ u := by
     intro u
@@ -659,11 +665,14 @@ theorem main_spec (σ : Placement) (lim : Option Nat) (d : Nat) :
   simp only [↓reduceIte] at hka2
   obtain ⟨hc₁₄, hth₁₄⟩ := join_threads r2₁₃ hj₂
   obtain ⟨rO₁₃, ho₁₃⟩ := hi₁₃.own
-  have ho₁₄ := FOwned.join (ho₁₃.current 0) (by rw [hsz₁₃]; decide) (by decide) hj₂
   have e0 : ownOf G₆ m₁₃ 0 = hk1 := by simp [ownOf, joinedB, hg₆, Gh.res]
   have e2 : ownOf G₆ m₁₃ 2 = hk2 := by
     have r : m₁₃.threads[2]? = some { spawner := 0, joined := false } := r2₁₃
     simp [ownOf, joinedB, r, hf2, Gh.res]
+  -- child 2's part is its flag, without read shares: the join gathers none
+  have ho₁₄ := FOwned.join (ho₁₃.current 0) (by rw [hsz₁₃]; decide) (by decide) hj₂
+    fun l => .inr (by rw [e2]; exact (FAssn.Unshared.sep (.up _) (.bext _ _ _) :
+      (flagA _ _ _ _).Unshared) hk2 hka2 l)
   have hd12 : FHeap.Disjoint hk1.heap hk2.heap := by
     have := ho₁₃.disj (u := 0) (v := 2) (by rw [hsz₁₃]; decide) (by rw [hsz₁₃]; decide) (by decide)
     rwa [e0, e2] at this

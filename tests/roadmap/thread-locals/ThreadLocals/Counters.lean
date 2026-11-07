@@ -702,9 +702,13 @@ theorem main_spec (σ : Placement) (d : Nat) :
   simp only [↓reduceIte] at hka1
   obtain ⟨hc₁₂, hth₁₂⟩ := join_threads hr1 hj
   obtain ⟨rO₁₁, ho₁₁⟩ := hi₁₁.own
-  have ho₁₂ := FOwned.join (ho₁₁.current 0) (by rw [hsz₁₁]; decide) (by decide) hj
   have e0 : ownOf G₃ m₁₁ 0 = r₁₀ := by simp [ownOf, joinedB, hg₃, Gh.res]
   have e1 : ownOf G₃ m₁₁ 1 = rk1 := by simp [ownOf, joinedB, hr1, hf1, Gh.res]
+  -- kid 1's part is its output block, without read shares: the join gathers none
+  have ho₁₂ := FOwned.join (ho₁₁.current 0) (by rw [hsz₁₁]; decide) (by decide) hj
+    fun l => .inr (by
+      rw [e1]
+      exact (FAssn.Unshared.sep (.up _) (.bext _ _ _) : (u32At _ _ _ _ _).Unshared) rk1 hka1 l)
   rw [e0, e1] at ho₁₂
   have hjb₁₂ : ∀ u, joinedB m₁₂ u = if u = 1 then true else joinedB m₁₁ u := by
     intro u
@@ -762,9 +766,13 @@ theorem main_spec (σ : Placement) (d : Nat) :
   simp only [↓reduceIte] at hka2
   obtain ⟨hc₁₄, hth₁₄⟩ := join_threads hr2 hj₂
   obtain ⟨rO₁₃, ho₁₃⟩ := hi₁₃.own
-  have ho₁₄ := FOwned.join (ho₁₃.current 0) (by rw [hsz₁₃]; decide) (by decide) hj₂
   have e0 : ownOf G₄ m₁₃ 0 = rsum r₁₀ rk1 := by simp [ownOf, joinedB, hg₄, Gh.res]
   have e2 : ownOf G₄ m₁₃ 2 = rk2 := by simp [ownOf, joinedB, hr2, hf2, Gh.res]
+  -- kid 2's part is its output block, without read shares: the join gathers none
+  have ho₁₄ := FOwned.join (ho₁₃.current 0) (by rw [hsz₁₃]; decide) (by decide) hj₂
+    fun l => .inr (by
+      rw [e2]
+      exact (FAssn.Unshared.sep (.up _) (.bext _ _ _) : (u32At _ _ _ _ _).Unshared) rk2 hka2 l)
   have hd12 : FHeap.Disjoint (rsum r₁₀ rk1).heap rk2.heap := by
     have := ho₁₃.disj (u := 0) (v := 2) (by rw [hsz₁₃]; decide) (by rw [hsz₁₃]; decide) (by decide)
     rwa [e0, e2] at this
