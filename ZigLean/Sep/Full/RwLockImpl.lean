@@ -615,7 +615,8 @@ theorem Inv.addW {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
     by_cases e : u = t
     · subst e; exact ht
     · rw [hne u e] at hu; exact hI.ex u hu
-  · refine ⟨Word.rmwEnt m' t ord _ (old + 2), by rw [hh]; simp, ?_⟩
+  · refine ⟨Word.rmwEnt m' t ord (W.st.hist m)[(W.st.hist m).size - 1]! (old + 2),
+      by rw [hh]; simp, ?_⟩
     rw [hnrd, hnwi, hwr,
       ← (RwState.Family.add_writer 31 1 _ _ _ : RwState.encode _ _ _ + 2 = _), ← hold]
     exact W.st.enc_val (old + 2)
