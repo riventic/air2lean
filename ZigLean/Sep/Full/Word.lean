@@ -3139,6 +3139,41 @@ theorem atomicRmw_fpAt {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool}
   rw [rmwM_footprint] at he
   exact prepare_fpAt hp he
 
+/-- **An RMW's new access is the recorded one**: by the current thread, before its new clock
+(`recordAt`'s entry; `rmwM` keeps the footprint and does not lower the clock). Sharper than the
+step's `FStepIn.fpc`, which also admits a narrowing of an old access. -/
+theorem atomicRmw_fpNew {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool}
+    {ord : AtomicOrder} {v old : BitVec n} (hw : W.Ok m A) (hc : m.current < m.clocks.size)
+    (h : ((atomicRmwAt c op signed ord nb W.ptr v).run m).run = some (.ok (old, m')))
+    {e : FootprintEntry} (he : e ∈ m'.footprint) :
+    e ∈ m.footprint ∨ (e.tid = m.current ∧ VClock.le e.clock (m'.clocks[m.current]!) = true) := by
+  obtain ⟨b, blk, o, li, m₁, pos, hacc, _, hp, hr, _, rfl⟩ := atomicRmwAt_ok h
+  obtain ⟨blk₀, hb, _, _, _, ha⟩ := hw.access
+  rw [W.sz_eq, ha] at hacc
+  rw [W.sz_eq] at hp
+  cases hacc
+  obtain ⟨l, hl, hlen, h0, hch, _, _, _, _⟩ := prepare hw rfl hp
+  obtain ⟨hrec, hcs, hblocks⟩ := prepare_rec hc hp
+  have hpos : pos + 1 = l.msgs.size := by
+    have := rmw_chain_pos (by rwa [(loc_get hl).2.2]) (by rwa [(loc_get hl).2.2]) hr
+    rw [(loc_get hl).2.2] at this
+    omega
+  have hmine := (rmwM_fstep (hF := Heap.empty) hl hlen hpos hcs hrec
+    ⟨_, by rw [hblocks]; exact hb⟩ (fun _ _ _ => rfl) ord (op.apply signed old v)).mine
+  rw [rmwM_footprint] at he
+  obtain ⟨a, sn, next, hm₁⟩ := locIdx_updates hp
+  have hfp : m₁.footprint = (m.recordAt W.b W.o nb .atomicWrite).footprint := by subst hm₁; rfl
+  have hcur : m₁.current = m.current := by subst hm₁; rfl
+  have hclk : m₁.clocks[m.current]! = VClock.bump (m.clocks[m.current]!) m.current := by
+    subst hm₁; exact recordAt_clock hc
+  rw [hfp] at he
+  simp only [Mem.recordAt, Array.mem_push] at he
+  rcases he with he | rfl
+  · exact .inl he
+  · refine .inr ⟨rfl, ?_⟩
+    rw [hcur, hclk] at hmine
+    exact hmine
+
 theorem cmpxchg_fpAt {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
     {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m A)
     (h : ((cmpxchgAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m')))

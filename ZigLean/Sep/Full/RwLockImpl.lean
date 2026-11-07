@@ -454,6 +454,37 @@ theorem fsum_upd (G : ThreadId → γ) (m : Mem) (t : ThreadId) {g g' : γ}
   · subst e; rw [upd_self, upd_self, h]
   · rw [upd_ne _ _ e, upd_ne _ _ e]
 
+/-! ## Ownership over a step at the state word -/
+
+/-- **Ownership survives a release write at the state word** (`Owns`): an old access keeps its
+clause (the threads' clocks and the newest release clock grow, `hcl`, `hrel`; a reader that leaves
+`rd` is one the new release clock covers, `hrd`), and a new access is the writer's, before its new
+clock (`hfp`: `Word.atomicRmw_fpNew`), which the new message's release clock covers (`hnew`:
+`Word.rmwEnt` of a release RMW merges the writer's clock). -/
+theorem Owns.step {G G' : ThreadId → γ} {m m' : Mem} {r : Res} {t : ThreadId}
+    (ho : W.Owns G m r)
+    (hfp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨ VClock.le e.clock (m'.clocks[t]!) = true)
+    (hth : m'.threads = m.threads)
+    (hcl : ∀ u, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
+    (hbs : m.blocks.size ≤ m'.blocks.size)
+    (hrel : VClock.le ((W.st.hist m).back!).relClock ((W.st.hist m').back!).relClock = true)
+    (hnew : VClock.le (m'.clocks[t]!) ((W.st.hist m').back!).relClock = true)
+    (hM : ∀ u, M.ph (G' u) ≠ .gone → M.ph (G u) ≠ .gone)
+    (hrd : ∀ u, (W.ph (G u)).isRd = true → (W.ph (G' u)).isRd = true ∨
+      VClock.le (m.clocks[u]!) ((W.st.hist m').back!).relClock = true) :
+    W.Owns G' m' r := by
+  intro e he hT
+  rcases hfp e he with he₀ | hc
+  · have hT₀ : e.Touches r.excl ∨ e.Touches r.shared ∨ m.blocks.size ≤ e.block :=
+      hT.imp_right (Or.imp_right fun h => Nat.le_trans hbs h)
+    rcases ho e he₀ hT₀ with h | h | ⟨hw, hs, u, hu, hcu⟩
+    · exact .inl (LockWord.LiveLe.weaken hM (LockWord.LiveLe.mono hth (fun u _ => hcl u) h))
+    · exact .inr (.inl (VClock.le_trans h hrel))
+    · rcases hrd u hu with hu' | hu'
+      · exact .inr (.inr ⟨hw, hs, u, hu', VClock.le_trans hcu (hcl u)⟩)
+      · exact .inr (.inl (VClock.le_trans hcu hu'))
+  · exact .inr (.inl (VClock.le_trans hc hnew))
+
 /-! ## The protocol's facts for every implementation -/
 
 section Proto
