@@ -99,6 +99,12 @@ Stated once here; an instance walks its code with them:
   (fewer bytes), `Owns.ofThread` (a resource `t` gives to the rest), `Owns.toThread` (the free
   resource `t` takes with an acquire RMW, no other reader left: `FLock.Inv.takeRest`'s premise)
   and `Owns.toReader` (a reader's share after its acquire).
+- **The rules of the ops at the word** (for the walks of the entry points): `wp_addW` (`+2`),
+  `wp_decW` (`-1`: `ww` with readers, else `wr` with the free resource in `t`'s part), `wp_giveW`
+  (`and ~1`: the resource back to the rest) and `wp_loadW` (a load). Each is the generic word rule
+  at the outer mutex with `Fits.atWord` and the op's lemma; the code's literal operand is a default
+  premise (`by decide`). The part facts a give needs come from the outer mutex's invariant
+  (`FLock.Inv.partApart`).
 
 ## The rules (`RwLockImpl`)
 
@@ -1522,7 +1528,9 @@ before (the stop's) and after the op, the op's rest step, and the rwlock's invar
 `t` at `a`. The op may move the free resource between the rest (`rF` to `rF'`, the rest of the
 rest `rO` kept) and `t`'s part (`g` to `g₁`, which keeps `t`'s client part and its places and held
 resources in the locks' code: `M.setPart`); the outer mutex's invariant after it is at `g₁`
-(`FLock.Inv.takeRest`, `giveRest`). The other facts of `Step` hold at once. -/
+(`FLock.Inv.takeRest`, `giveRest`). The rwlock's invariant after it may be given at `g` (an op
+lemma's `upd G₁ t (W.set (G₁ t) a)`): it does not read the part (`Inv.congr`). The other facts of
+`Step` hold at once. -/
 theorem Fits.atWord (hW : W.Fits P UM US okM okS) {t : ThreadId} {G₁ : ThreadId → γ} {g g₁ : γ}
     {a : RwPh} {rY rY' : Res} {m₁ m' : Mem} (hg₁ : G₁ t = g) (hc₁ : m₁.current = t)
     (hU : UM G₁ (rsum (W.st.cellsR m₁) rY) m₁) (hiL : M.Inv G₁ (rsum (W.st.cellsR m₁) rY) m₁)
@@ -1603,7 +1611,7 @@ theorem wp_giveW (hW : W.Fits P UM US okM okS) {r₀ r : Res} {ord : AtomicOrder
   have hoffr : ∀ l, W.st.In l → r.heap l = none := fun l hl =>
     (hdr l).resolve_right (by
       have := cellsAt_some hl (hw₀.cellIn hl) (m := m₁)
-      simp only [FHeap.union_apply, ne_eq, Option.or_eq_none_iff, not_and]
+      simp only [FHeap.union_apply, Option.or_eq_none_iff, not_and]
       intro h; exact absurd h this)
   have hrc : FHeap.Disjoint r.heap (W.st.cellsR m').heap := fun l => by
     by_cases hl : W.st.In l
@@ -1695,7 +1703,7 @@ theorem wp_decW (hW : W.Fits P UM US okM okS) {ord : AtomicOrder} {v : BitVec 64
     have hcF : FHeap.Disjoint (W.st.cellsR m').heap rF.heap := fun l => by
       by_cases hl : W.st.In l
       · have := hY l hl
-        simp only [rsum, FHeap.union_apply, Option.or_eq_none_iff] at this
+        simp only [FHeap.union_apply, Option.or_eq_none_iff] at this
         exact .inr this.1
       · exact .inl (cellsAt_none hl)
     rw [← rsum_assoc, rsum_comm hcF, rsum_assoc] at hL
