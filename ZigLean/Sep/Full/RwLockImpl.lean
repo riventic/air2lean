@@ -1839,8 +1839,9 @@ theorem Fits.enterR (hW : W.Fits P UM US okM okS) {G₁ : ThreadId → γ} {rY :
       (by rw [M.ph_setPart]; exact hmg) (Qa := (· = M.part g) ⋆ (· = shareRes H Frac.one))
       (by
         rw [M.part_setPart]
-        exact (EUpd.of_imp fun _ hr => ⟨M.part g, ⟨H, Know.none, Ghost.unit⟩, hpH, hr, rfl, rfl⟩).trans
-          (EUpd.frameL (EUpd.shareRes_whole H)))
+        exact (EUpd.of_imp fun _ hr =>
+          ⟨M.part g, ⟨H, Know.none, Ghost.unit⟩, hpH, hr, rfl, rfl⟩).trans
+            (EUpd.frameL (EUpd.shareRes_whole H)))
     replace hr : r = rsum (M.part g) (shareRes H Frac.one) := hr
     subst hr
     rw [M.setPart_setPart] at hL₂
@@ -1860,7 +1861,7 @@ theorem Fits.enterR (hW : W.Fits P UM US okM okS) {G₁ : ThreadId → γ} {rY :
         ((rsum (W.st.cellsR m') (rsum (shareRes H f.half) rO)).gh.share l).Pos := fun l h => by
       have hp : ((shareRes H f.half).gh.share l).Pos :=
         (Res.owned_ne.mp h).resolve_left fun e => e rfl
-      simp only [rsum, Ghost.add_share]
+      simp only [Ghost.add_share]
       exact SCell.pos_add_iff.mpr (.inr (SCell.pos_add_iff.mpr (.inl hp)))
     have hL₁ := hL.takeRestR hgt (fun _ => .inl rfl) (hL.ownsShare hgt (fun _ => rfl) hR' hX)
     rwa [hg₁] at hL₁
@@ -1992,16 +1993,17 @@ theorem wp_subR (hW : W.Fits P UM US okM okS) {r₀ : Res} {q : Frac} {H : FHeap
       (by rw [M.ph_setPart]; exact hmg) (Qa := (· = r₀) ⋆ (· = ⟨H, Know.none, Ghost.unit⟩))
       (by
         rw [M.part_setPart]
-        exact (EUpd.of_imp fun _ hr => ⟨r₀, shareRes H Frac.one, fun _ => .inr rfl, hr, rfl, rfl⟩).trans
-          (EUpd.frameL (EUpd.shareRes_unwhole H)))
+        exact (EUpd.of_imp fun _ hr =>
+          ⟨r₀, shareRes H Frac.one, fun _ => .inr rfl, hr, rfl, rfl⟩).trans
+            (EUpd.frameL (EUpd.shareRes_unwhole H)))
     rw [h₁, h₂] at hd₀ hr
     replace hr : r = rsum r₀ ⟨H, Know.none, Ghost.unit⟩ := hr
     subst hr
     rw [M.setPart_setPart] at hL₂
     by_cases hwt : W.writing G₁ m₁ = true
     · -- before a writer: at `rp`, holding the resource
-      refine .inr ⟨by rw [hro]; exact h1, by rw [hwo]; exact hwt, ⟨H, Know.none, Ghost.unit⟩, hR, hd₀,
-        hW.atWord hg₁ hc₁ hU hiL hrest hL₂ (hW.setPart_keeps g _)
+      refine .inr ⟨by rw [hro]; exact h1, by rw [hwo]; exact hwt, ⟨H, Know.none, Ghost.unit⟩, hR,
+        hd₀, hW.atWord hg₁ hc₁ hU hiL hrest hL₂ (hW.setPart_keeps g _)
           ⟨shareRes H f, rnil, rO, rfl, (rnil_rsum _).symm⟩ fun _ => ?_⟩
       have := hC h1 hwt
       rwa [hg₁] at this
