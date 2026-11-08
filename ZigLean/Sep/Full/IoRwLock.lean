@@ -1,3 +1,4 @@
+import ZigLean.Sep.Full.Conc
 import ZigLean.Sep.Full.RwLockImpl
 
 /-!
@@ -34,6 +35,9 @@ semaphore's (`SemImpl.post_wp_resource`, with the protocol's `upost`):
 
 A program instantiates it with its names and `simp`/`rfl` proofs of the equations
 (`Proofs/Sync/IoRwLock.lean`).
+
+The walks are rule-by-rule term proofs, as `IoMutexCode`'s: `fsym` cannot yet walk a shape whose
+continuations are hypotheses (ledger `fsym-abstract-shape`).
 -/
 
 namespace Zig
@@ -74,16 +78,17 @@ def unlockOf (M : MutexImpl Tgt) (ret : E) (fin : E → ConcM Tgt Unit) (p : Ptr
   fin e
 
 /-- `lockSharedUncancelable`'s loop body in normal form: the loop-entry tick; while the local
-`state` has no writer, the checked add of a reader and the weak CAS (`k15` the generated match on
-its exit: a failure stores the value read and repeats); `kB` the match on the body's exit. -/
-def bodyOf (getSt : σ → BitVec 64) (k15 kB : E → CM Tgt σ E) (fail : BitVec 64 → E)
-    (ret slow : E) (p : Ptr) : CM Tgt σ E := do
+`state` has no writer, the checked add of a reader (`addR`: `Zig.add false · 2^32` in the code,
+`IoRwLockCode.body_eq`) and the weak CAS (`k15` the generated match on its exit: a failure stores
+the value read and repeats); `kB` the match on the body's exit. -/
+def bodyOf (getSt : σ → BitVec 64) (addR : BitVec 64 → Result (BitVec 64))
+    (k15 kB : E → CM Tgt σ E) (fail : BitVec 64 → E) (ret slow : E) (p : Ptr) : CM Tgt σ E := do
   callMC tick
   let s ← get
   let y ← (if (getSt s &&& (4294967295 : BitVec 64) == (0 : BitVec 64)) then (do
       let s₁ ← get
       let s₂ ← get
-      let n ← Zig.add false (getSt s₂) (4294967296 : BitVec 64)
+      let n ← addR (getSt s₂)
       let r ← cmpxchgWeakC .seqCst .seqCst 8 p (getSt s₁) n
       let z ← (if r.isSome then (do
           let v ← Zig.optPayload r
@@ -177,7 +182,8 @@ structure IoRwLockCode (Tgt : Type) where
   again_slow : again rslow = false
   body : Ptr → CM Tgt σR ER
   body_eq : ∃ (k15 kB : ER → CM Tgt σR ER),
-    (∀ p, body p = IoRwLockCode.bodyOf getSt k15 kB rfail rret rslow p) ∧
+    (∀ p, body p = IoRwLockCode.bodyOf getSt (Zig.add false · (4294967296 : BitVec 64)) k15 kB
+      rfail rret rslow p) ∧
     (∀ v, k15 (rfail v) = do modify (fun s => setSt s v); pure rnext) ∧
     k15 rret = pure rret ∧ kB rnext = pure rrep ∧ kB rret = pure rret ∧ kB rslow = pure rslow
   lockShared : Ptr → Io → ConcM Tgt Unit
@@ -348,7 +354,7 @@ theorem unlock_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc : M
 
 /-- The fast loop's invariant: `t` is `out` and the local `state` holds a value of the word
 (`MsgOk`). -/
-def lsInv (P : Proto Tgt γ) (W : FRw γ X Y M L Cn S) (t : ThreadId) (g : γ) (D : Nat)
+def lsInv (P : Proto Tgt γ) (t : ThreadId) (g : γ) (D : Nat)
     (s : C.σR) (G : ThreadId → γ) (m : Mem) (d : Nat) : Prop :=
   d < D ∧ m.current = t ∧ FRw.MsgOk (C.getSt s) ∧ P.inv (upd G t g) m
 
@@ -367,27 +373,33 @@ read (`MsgOk`) and repeats (a stop: the depth gets smaller). -/
 theorem body_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (t : ThreadId) (g : γ)
     (hout : W.ph g = .out) (hmg : M.ph g ≠ .gone) (hu : 0 < (M.part g).gh.ac.frag .unmetered)
     (hroom : ∀ G m, P.inv G m → W.ph (G t) = .out → W.nrd G m + 1 < RwState.countBound)
-    (D : Nat) (s : C.σR) (G : ThreadId → γ) (m : Mem) (d : Nat) (h : C.lsInv P W t g D s G m d) :
+    (D : Nat) (s : C.σR) (G : ThreadId → γ) (m : Mem) (d : Nat) (h : C.lsInv P t g D s G m d) :
     P.WP t ((C.body W.st.ptr).run s) (fun r G' m' d' =>
-      if C.again r.1 then C.lsInv P W t g D r.2 G' m' d' ∧
+      if C.again r.1 then C.lsInv P t g D r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : C.σR) => 0) s)
       else C.lsPost P W t g D r G' m' d') G m d := by
   obtain ⟨hD, hc, ⟨rr, ww, aa, hrr, hww, hst⟩, hi⟩ := h
   obtain ⟨k15, kB, hbody, hk15f, hk15r, hkB9, hkBr, hkB7⟩ := C.body_eq
-  rw [hbody, bodyOf, StateT.run_bind]
+  -- the checked add, abstracted: its overflow test of the unknown `state` against `2^64` unfolds
+  -- unary on the literal, so the walk keeps it a variable and uses only its value at `MsgOk`
+  have haddR : ∀ r w a, r < RwState.countBound → w < RwState.countBound →
+      (Zig.add false · (4294967296 : BitVec 64)) (RwState.encode r w a) =
+        pure (RwState.encode (r + 1) w a) := fun r w a hr hw =>
+    RwState.Family.checked_add_reader_stale (by decide) hr hw a true
+  rw [hbody]
+  generalize (Zig.add false · (4294967296 : BitVec 64)) = addR at haddR ⊢
+  rw [bodyOf, StateT.run_bind]
   refine WP.bind ?_
   show P.WP t (ConcM.liftMem Zig.tick >>= fun a => pure (a, s)) _ _ _ _
   refine WP.bind (hW.m.wp_tick_unmetered hi hc hmg hu fun m₀ hc₀ hi₀ => WP.pure' ?_)
   simp only [StateT.run_bind, StateT.run_get, pure_bind]
   refine WP.bind ?_
-  split
-  · rename_i hgd
+  by_cases hgd : (C.getSt s &&& (4294967295 : BitVec 64) == (0 : BitVec 64)) = true
+  · rw [ite_eq_left hgd]
     simp only [StateT.run_bind, StateT.run_get, pure_bind]
-    have hadd : Zig.add false (C.getSt s) (4294967296 : BitVec 64) =
-        pure (RwState.encode (rr + 1) ww aa) := by
-      rw [hst]; exact RwState.Family.checked_add_reader_stale (by decide) hrr hww aa true
-    refine WP.bind (WP.callRC_ok (x := Zig.add false (C.getSt s) (4294967296 : BitVec 64))
-      (v := RwState.encode (rr + 1) ww aa) (by rw [hadd]; rfl) ?_)
+    rw [CNorm.run_liftR, ← CNorm.run_callRC]
+    refine WP.bind (WP.callRC_ok (v := RwState.encode (rr + 1) ww aa)
+      (by rw [hst, haddR rr ww aa hrr hww]; rfl) ?_)
     refine WP.bind (FRw.wp_casR hW hout hmg hroom (beq_iff_eq.mp hgd)
       (by rw [hst]; exact (RwState.Family.add_reader 31 1 rr ww aa).symm) hi₀
       (fun k hk G₁ m₁ hc₁ q H hq _ hi₁ => ?_) (fun k hk G₁ m₁ b hc₁ hb hi₁ => ?_))
@@ -401,7 +413,8 @@ theorem body_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (t : Threa
       exact ⟨by omega, hc₁, .inl ⟨rfl, q, H, hq, hi₁⟩⟩
     · -- failure: store the value read and repeat
       simp only [Option.isSome_some, ↓reduceIte, StateT.run_bind, bind_assoc]
-      refine WP.bind (WP.callRC_ok (x := Zig.optPayload (some b)) (v := b) rfl ?_)
+      rw [CNorm.run_liftR, ← CNorm.run_callRC]
+      refine WP.bind (WP.callRC_ok (v := b) rfl ?_)
       simp only [StateT.run_pure, pure_bind, hk15f, StateT.run_bind, StateT.run_modify]
       refine WP.pure' ?_
       simp only [hkB9, StateT.run_pure]
@@ -409,7 +422,7 @@ theorem body_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (t : Threa
       simp only [C.again_rep, ↓reduceIte]
       exact ⟨⟨by omega, hc₁, by rw [C.get_set]; exact hb, hi₁⟩, .inl (by omega)⟩
   · -- a writer: the slow path
-    rw [StateT.run_pure]
+    rw [ite_eq_right hgd, StateT.run_pure]
     refine WP.pure' ?_
     simp only [hkB7, StateT.run_pure]
     refine WP.pure' ?_
@@ -445,7 +458,7 @@ theorem lockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc
   rw [StateT.run_bind]
   refine WP.bind (FRw.wp_loadW hW hmg hi fun k₁ hk₁ G₁ m₁ b hc₁ hb hi₁ => ?_)
   simp only [StateT.run_bind, StateT.run_modify, pure_bind]
-  refine WP.bind (WP.mono ?_ (WP.loop _ _ (C.lsInv P W t g d) (fun _ => 0) (C.lsPost P W t g d)
+  refine WP.bind (WP.mono ?_ (WP.loop _ _ (C.lsInv P t g d) (fun _ => 0) (C.lsPost P W t g d)
     (C.body_wp hW hcost t g hwo hmg hu hroom d) _ G₁ m₁ k₁
     ⟨by omega, hc₁, by rw [C.get_set]; exact hb, hi₁⟩))
   rintro ⟨e, s'⟩ G₂ m₂ k₂ ⟨hk₂, hc₂, ⟨rfl, q, H, hq, hi₂⟩ | ⟨rfl, hi₂⟩⟩
@@ -521,7 +534,8 @@ theorem unlockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none)
     rw [← hg₁] at hi₁
     have hcd : (old &&& (9223372032559808512 : BitVec 64) == (4294967296 : BitVec 64)) = true :=
       by rw [hlg, h1]; rfl
-    rw [if_pos hcd, hwg, hwt, StateT.run_pure]
+    rw [hwg, hwt]
+    simp only [hcd, ↓reduceIte, StateT.run_pure]
     refine WP.pure' ?_
     simp only [hk1t, bind_assoc, StateT.run_bind]
     have hpgx : L.part gx = r₀ := by rw [hgxd, ← W.pair.part, hW.mpart, M.part_setPart]
@@ -585,7 +599,7 @@ theorem unlockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none)
           rw [← hsplit, L.setPart_self] at h₂
           obtain ⟨hp, hnp, hR'⟩ := hst G₂ rL m₂ h₂
           rw [W.pool_idle _ hnp] at hx
-          have hxr : x = r := sep_emp.mp hx
+          have hxr : x = r := (sep_emp.mp hx :)
           subst hxr
           rw [W.pool_posted _ hp]
           exact hR')

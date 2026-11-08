@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 181 rows, 74 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 182 rows, 75 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -95,6 +95,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [two-lock-product](#row-two-lock-product) | The generic two-lock product over FLock (lock nesting) is not built yet | L8q/L8r lock-order work (Step 2), #693; parked by the coordinator 2026-11-05 | - | Closes when the product invariant, the partTick and waitNest rules at FLock level and the generic two-mutex fixture land; no workaround is in the tree. |
 | [second-pass-speculative-cost](#row-second-pass-speculative-cost) | the arithmetic's second pass runs on the failed side goals of rules that do not apply | coordinator (main red on alloc-translated since #699, PR #703) | `tests/roadmap/alloc-translated/PageThread.lean` | Delete `fthread_remap`'s `set_option maxHeartbeats 300000` when a failed rule premise no longer pays the second pass and `fthread_remap` elaborates within 180k heartbeats (a margin under the default 200k, which it reached before #699). |
 | [share-gather](#row-share-gather) | gathering partial read shares of different owners into a whole share fails closed | coordinator (F4 read shares, option R, PR #713) | `ZigLean/Sep/Full/ThreadOwned.lean`, `ZigLean/Sep/Full/ThreadSpawn.lean`, `ZigLean/Sep/Full/Lock.lean` | Replace the no-gather premises `hg`/`hgat`/`NoGather` of `FOwned.join`, `FCapture.join_regain`, `FLock.Inv.join`, `FLock.Inv.acq` and `FLock.Inv.take` by the `Mem.Owns` premise of the gathered bytes (`Mem.OwnsRes.addOwns` shape), and delete `FLock.NoGather`. |
+| [fsym-abstract-shape](#row-fsym-abstract-shape) | fsym walks over an abstract code shape (continuations as hypotheses) | B3 lane (Io.RwLock as RwLockImpl, PR #734) | `ZigLean/Sep/Full/IoMutex.lean`, `ZigLean/Sep/Full/IoRwLock.lean` | Replace the term walks of `IoMutexCode` (`body_wp`, `lock_wp`, `unlock_wp`) and `IoRwLockCode` (`wp_frame`, `lock_wp`, `unlock_wp`, `body_wp`, `lockShared_wp`, `unlockShared_wp`) by `fsym` walks with the same statements, and delete the hand steps. |
 
 ## Closed rows
 
@@ -2176,3 +2177,18 @@ Request: An explicit `Mem.Owns` premise at the gathering join (or acquire) in pl
 Workaround sites: `ZigLean/Sep/Full/ThreadOwned.lean`, `ZigLean/Sep/Full/ThreadSpawn.lean`, `ZigLean/Sep/Full/Lock.lean`
 
 Deletion plan: Replace the no-gather premises `hg`/`hgat`/`NoGather` of `FOwned.join`, `FCapture.join_regain`, `FLock.Inv.join`, `FLock.Inv.acq` and `FLock.Inv.take` by the `Mem.Owns` premise of the gathered bytes (`Mem.OwnsRes.addOwns` shape), and delete `FLock.NoGather`.
+
+<a id="row-fsym-abstract-shape"></a>
+### #fsym-abstract-shape fsym walks over an abstract code shape (continuations as hypotheses)
+
+Status: **open**. Requester: B3 lane (Io.RwLock as RwLockImpl, PR #734).
+
+Note: Not a weakening: the shapes' statements are the contracts' (`MutexImpl`, `RwLockImpl`); only the proof style is transitional.
+
+Progress: Open. `IoMutexCode` and `IoRwLockCode` state a std module's code once for every program as a shape: the program's functions with unfolding equations over a normal form, the generated matches on the code's own exits as continuations of which only their values at the taken exits are known (hypotheses such as `kW lmid = pure lret`), and the callee contracts (`MutexImpl`, `SemImpl`) as fields. `fsym` walks only code it can unfold: it cannot step through a continuation by its local equation, so the walks of these shapes are rule-by-rule term proofs (`WP.bind` with the contracts' rules).
+
+Request: Let `fsym` walk a code shape whose functions are given by unfolding equations (`lock_eq`, `body_eq`) and whose continuations are hypotheses with equations at their exits: rewrite the entry by the shape's equation, step through the normal form with the registered rules (the callee fields' contract rules, the protocol's op rules), and close a continuation step by its local equation, as it closes a generated `match` today.
+
+Workaround sites: `ZigLean/Sep/Full/IoMutex.lean`, `ZigLean/Sep/Full/IoRwLock.lean`
+
+Deletion plan: Replace the term walks of `IoMutexCode` (`body_wp`, `lock_wp`, `unlock_wp`) and `IoRwLockCode` (`wp_frame`, `lock_wp`, `unlock_wp`, `body_wp`, `lockShared_wp`, `unlockShared_wp`) by `fsym` walks with the same statements, and delete the hand steps.

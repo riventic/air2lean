@@ -13,7 +13,9 @@ matches on its own exits is a continuation (`kL`, `fin`, `kX`, `kU`, `ufin`), of
 uses only its value at the exit it takes. `IoMutexCode.impl` proves the mutex contract
 (`ZigLean/Sep/Full/Mutex.lean`) once from the rules of a lock's code
 (`ZigLean/Sep/Full/LockRules.lean`); a program instantiates it with its names and `rfl`/`simp`
-proofs of the equations (`Proofs/Iogroup/Lock.lean`, `Proofs/Sync/IoMutex.lean`).
+proofs of the equations (`Proofs/Iogroup/Lock.lean`, `Proofs/Sync/IoMutex.lean`). The walks are
+rule-by-rule term proofs: `fsym` cannot yet walk a shape whose continuations are hypotheses (ledger
+`fsym-abstract-shape`).
 -/
 
 namespace Zig
