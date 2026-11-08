@@ -967,6 +967,81 @@ theorem Inv.takeW {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
         · rw [hne u e, hrd u]; decide)))
   rwa [rnil_rsum] at this
 
+/-- **The writer leaves** (`unlock`'s `and ~1`, `wr → out`): the writing bit is cleared and the
+resource `r` with `R` (at the current client parts) that `t` owns goes back to the rest
+(`Owns.ofThread`); the free resource was empty (`Busy`). `r` is apart from the rest and the word
+(the outer mutex's invariant, `FLock.Inv.giveRest`). -/
+theorem Inv.giveW {G : ThreadId → γ} {rY r : Res} {m m' : Mem} {t : ThreadId}
+    {ord : AtomicOrder} {old : BitVec 64}
+    (hI : W.Inv G (rsum (W.st.cellsR m) rY) m) (hY : ∀ l, W.st.In l → rY.heap l = none)
+    (hwr : W.ph (G t) = .wr) (ht : t < m.threads.size)
+    (hmph : ∀ a, M.ph (W.set (G t) a) = M.ph (G t))
+    (hR : W.R (W.xs G) r) (hown : m.Owns t r.excl) (hsh : ∀ l, r.shared l = none)
+    (hoffr : ∀ l, W.st.In l → r.heap l = none) (hdr : FHeap.Disjoint r.heap rY.heap)
+    (hrest : RestStep W.st.In m m') (hok : W.st.Ok m' fun u => M.ph (G u) ≠ .gone)
+    (hv : (W.st.hist m)[(W.st.hist m).size - 1]!.Val old)
+    (hh : W.st.hist m' = (W.st.hist m).push
+      (Word.rmwEnt m' t ord (W.st.hist m)[(W.st.hist m).size - 1]! (old &&& RwState.clearWriting)))
+    (hrel : ord.isRel = true)
+    (hfp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨ VClock.le e.clock (m'.clocks[t]!) = true) :
+    W.Inv (upd G t (W.set (G t) .out)) (rsum (W.st.cellsR m') (rsum r rY)) m' := by
+  have hne : ∀ u, u ≠ t → upd G t (W.set (G t) .out) u = G u := fun u hu => upd_ne _ _ hu
+  have hGt : W.ph (upd G t (W.set (G t) .out) t) = .out := by rw [upd_self, W.ph_set]
+  have hW : ∀ u, (W.ph (G u)).isW = true → u = t := fun u hu =>
+    hI.one u t hu (by rw [hwr]; rfl)
+  have hW' : ∀ u, (W.ph (upd G t (W.set (G t) .out) u)).isW = false := fun u => by
+    by_cases e : u = t
+    · subst e; rw [hGt]; rfl
+    · rw [hne u e]
+      cases h : (W.ph (G u)).isW
+      · rfl
+      · exact absurd (hW u h) e
+  have hnrd : W.nrd (upd G t (W.set (G t) .out)) m = W.nrd G m := by
+    have h := nrd_upd (W := W) G ht (G t) (W.set (G t) .out)
+    rw [upd_same] at h
+    simpa [W.ph_set, hwr, RwPh.isRd] using h
+  have hnwi : W.nwi (upd G t (W.set (G t) .out)) m = W.nwi G m := by
+    have h := nwi_upd (W := W) G ht (G t) (W.set (G t) .out)
+    rw [upd_same] at h
+    simpa [W.ph_set, hwr, RwPh.isWi] using h
+  have hwr₀ : W.writing G m = true :=
+    List.any_eq_true.mpr ⟨t, List.mem_range.mpr ht, by rw [hwr]; rfl⟩
+  have hwr' : W.writing (upd G t (W.set (G t) .out)) m = false := by simp [writing, hW']
+  have hxs : W.xs (upd G t (W.set (G t) .out)) = W.xs G := by rw [xs_set, upd_same]
+  have hnorp : ∀ u, W.ph (G u) ≠ .rp := fun u hu => by
+    obtain ⟨-, ⟨w, hw⟩, -⟩ := hI.rp u hu
+    have := hW w (by rw [hw]; rfl)
+    subst this; rw [hwr] at hw; cases hw
+  have hnorp' : ∀ u, W.ph (upd G t (W.set (G t) .out) u) ≠ .rp := fun u => by
+    by_cases e : u = t
+    · subst e; rw [hGt]; nofun
+    · rw [hne u e]; exact hnorp u
+  have hnb' : ¬ W.Busy (upd G t (W.set (G t) .out)) := by
+    rintro (⟨u, hu⟩ | ⟨u, hu⟩ | ⟨⟨u, hu⟩, -, -⟩)
+    · have := hW' u; rw [hu] at this; cases this
+    · exact hnorp' u hu
+    · have := hW' u; rw [hu] at this; cases this
+  have h0 : W.nrd G m = 0 := hI.wr t hwr
+  obtain ⟨rF, rO, rfl, hoff, hd, hfr₀, how⟩ := hI.restY hY
+  have hrF : rF = rnil := hfr₀.1 (.inl ⟨t, hwr⟩)
+  subst hrF
+  have hnew : VClock.le (m'.clocks[t]!) ((W.st.hist m').back!).relClock = true := by
+    rw [hh, back_push]; exact Word.rmwEnt_rel hrel
+  rw [rnil_rsum] at hdr ⊢
+  refine hI.ofRmwMv (rF' := r) ht hmph hrest hok hh hrel hfp
+    ⟨by rw [hnrd]; exact hI.room.1, by rw [hnwi]; exact hI.room.2⟩
+    (by rw [hnrd, hnwi, hwr', hI.old hv, hwr₀]; exact RwState.Family.clear_writer 31 1 _ _)
+    (fun u _ hu => by rw [hW' u] at hu; cases hu) (fun u hu => by rw [hW' u] at hu; cases hu)
+    (fun u hu => by
+      by_cases e : u = t
+      · subst e; rw [hGt] at hu; cases hu
+      · rw [hne u e] at hu; have := hW u (by rw [hu]; rfl); exact absurd this e)
+    (fun u hu => absurd hu (hnorp' u))
+    (fun l hl => (hoff l hl).2) how hoffr hdr
+    ⟨fun hb => absurd hb hnb', fun _ _ => by rw [hxs]; exact hR,
+      fun _ hn => absurd (by rw [hnrd]; exact h0) hn⟩
+    (fun _ => Owns.ofThread hown hsh hfp (hrest.clocks t) (Nat.le_of_eq hrest.bsize.symm) hnew)
+
 /-! ## The protocol's facts for every implementation -/
 
 section Proto
