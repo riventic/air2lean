@@ -1115,6 +1115,12 @@ theorem Inv.enterW {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
 /-- The empty resource owns no byte. -/
 theorem rnil_owned (l : Loc) : rnil.owned l = none := Res.owned_plain rfl rfl
 
+/-- **Two shares of one heap are its share of their sum** (`Ghost.sharesOf_add`; here, since
+`Share.lean` does not import `rsum`). -/
+theorem shareRes_add (H : FHeap) (q₁ q₂ : Frac) :
+    rsum (shareRes H q₁) (shareRes H q₂) = shareRes H (q₁.add q₂) := by
+  simp only [rsum, shareRes, FHeap.union_empty, Know.none_union, Ghost.sharesOf_add]
+
 /-- With no reader counted, no thread is at `rd` (`Inv.ex`: a thread in the code exists). -/
 theorem Inv.noRd {G : ThreadId → γ} {rX : Res} {m : Mem} (hI : W.Inv G rX m)
     (h0 : W.nrd G m = 0) : ∀ u, (W.ph (G u)).isRd = false := noRd_of hI.ex h0

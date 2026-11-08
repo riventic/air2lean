@@ -963,7 +963,7 @@ theorem Inv.ownsShare {G : ThreadId → γ} {rA rX : Res} {m : Mem} {t : ThreadI
     ⟨((L.wordR m).gh.share l).add ((rL.gh.share l).add (rX.gh.share l)), ?_,
       SCell.pos_add_iff.mpr (.inr (SCell.pos_add_iff.mpr (.inr (hX l hl))))⟩
   refine SCell.ext fun c => ?_
-  simp only [rsum, Ghost.add_share, SCell.add_val]
+  simp only [Ghost.add_share, SCell.add_val]
   grind
 
 /-- Publish one complete caller-owned resource into protocol rest while retaining the

@@ -247,11 +247,6 @@ theorem Ghost.sharesOf_add (H : FHeap) (q₁ q₂ : Frac) :
     · exact SCell.add_zero _
     · exact SCell.of_add _ _ _
 
-/-- **Two shares of one heap are its share of their sum** (`Ghost.sharesOf_add`). -/
-theorem shareRes_add (H : FHeap) (q₁ q₂ : Frac) :
-    rsum (shareRes H q₁) (shareRes H q₂) = shareRes H (q₁.add q₂) := by
-  simp only [rsum, shareRes, FHeap.union_empty, Know.none_union, Ghost.sharesOf_add]
-
 /-- **Split and join of one heap's share are equalities.** -/
 theorem sheap_add {H : FHeap} {q₁ q₂ : Frac} {r : Res} :
     sheap H (q₁.add q₂) r ↔ (sheap H q₁ ⋆ sheap H q₂) r := by

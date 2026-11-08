@@ -330,8 +330,8 @@ theorem ownsShare {sh : Res} (ho : FOwned own rO m) (ht : t < m.threads.size)
   obtain ⟨rR, -, -, hhd⟩ := ho.part ht
   refine ⟨hot.1.sub fun l hl => ?_, (Mem.OwnsRC.union hot.ownsR hR).sub Res.shared_rsum⟩
   rcases Res.excl_ne.mp hl with e | e
-  · exact Res.excl_of_heap fun hn => e (by simp [rsum, FHeap.union_apply, hn, hh l])
-  · simp only [rsum, Ghost.add_share] at e
+  · exact Res.excl_of_heap fun hn => e (by simp [FHeap.union_apply, hn, hh l])
+  · simp only [Ghost.add_share] at e
     by_cases hs : sh.owned l ≠ none
     · obtain ⟨s, hs', hp⟩ := hX l hs
       have hv : ((((own t).gh.share l).add (sh.gh.share l)).add ((rR.gh.share l).add s)).Valid := by
