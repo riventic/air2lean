@@ -890,10 +890,9 @@ theorem Inv.noRd {G : ThreadId → γ} {rX : Res} {m : Mem} (hI : W.Inv G rX m)
   cases e : (W.ph (G u)).isRd
   · rfl
   · have hu : u < m.threads.size := hI.ex u fun h => by rw [h] at e; cases e
-    have := le_tsum (fun v => if (W.ph (G v)).isRd then 1 else 0) hu
-    simp only [e] at this
-    unfold nrd at h0
-    omega
+    have h1 : (fun v => if (W.ph (G v)).isRd then 1 else 0) u ≤ W.nrd G m := le_tsum _ hu
+    rw [h0] at h1
+    simp [e] at h1
 
 /-- **A writer enters with no reader** (`lockUncancelable`'s `-1` holding the outer mutex,
 `wi → wr`, when the old value has no reader): the writing bit is set and the free resource `rF`,
