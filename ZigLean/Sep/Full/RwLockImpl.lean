@@ -682,6 +682,13 @@ theorem Owns.step {G G' : ThreadId → γ} {m m' : Mem} {r : Res} {t : ThreadId}
       · exact .inr (.inl (VClock.le_trans hcu hu'))
   · exact .inr (.inl (VClock.le_trans hc hnew))
 
+/-- An access to a byte a resource holds touches its exclusive or its shared bytes
+(`Res.excl_or_shared`). -/
+theorem touches_owned {e : FootprintEntry} {r : Res} (h : e.Touches r.owned) :
+    e.Touches r.excl ∨ e.Touches r.shared :=
+  let ⟨x, h1, h2, h3⟩ := h
+  (Res.excl_or_shared h3).imp (fun h => ⟨x, h1, h2, h⟩) (fun h => ⟨x, h1, h2, h⟩)
+
 /-- **Ownership of a resource with fewer bytes** (`Owns`): each byte `r'` owns, `r` owns; while a
 reader is in its code, each shared byte of `r` is shared in `r'`. -/
 theorem Owns.mono {G : ThreadId → γ} {m : Mem} {r r' : Res} (ho : W.Owns G m r)
@@ -691,7 +698,7 @@ theorem Owns.mono {G : ThreadId → γ} {m : Mem} {r r' : Res} (ho : W.Owns G m 
   intro e he hT'
   have hsplit : ∀ x, r'.owned (e.block, x) ≠ none → e.off ≤ x → x < e.off + e.len →
       e.Touches r.excl ∨ e.Touches r.shared ∨ m.blocks.size ≤ e.block := fun x h h1 h2 =>
-    Or.assoc.mp (.inl (FootprintEntry.Touches.excl_or_shared ⟨x, h1, h2, hT _ h⟩))
+    Or.assoc.mp (.inl (touches_owned ⟨x, h1, h2, hT _ h⟩))
   have hT₀ : e.Touches r.excl ∨ e.Touches r.shared ∨ m.blocks.size ≤ e.block := by
     rcases hT' with ⟨x, h1, h2, h3⟩ | ⟨x, h1, h2, h3⟩ | h
     · exact hsplit x (Res.owned_of_excl h3) h1 h2
@@ -738,7 +745,7 @@ theorem Owns.toThread {G : ThreadId → γ} {m m' : Mem} {r : Res} {t : ThreadId
   intro e he hT
   rcases hfp e he with he₀ | hc
   · have hT' : e.Touches r.excl ∨ e.Touches r.shared ∨ m.blocks.size ≤ e.block :=
-      Or.assoc.mp (hT.imp FootprintEntry.Touches.excl_or_shared (Nat.le_trans hbs))
+      Or.assoc.mp (hT.imp touches_owned (Nat.le_trans hbs))
     rcases ho e he₀ hT' with h | h | ⟨-, -, u, hu, hc⟩
     · exact VClock.le_trans (h t ht hg) hcl
     · exact VClock.le_trans h hacq
@@ -761,7 +768,7 @@ theorem Owns.toReader {G : ThreadId → γ} {m m' : Mem} {r r' : Res} {t : Threa
   rcases hfp e he with he₀ | hc
   · have hT₀ : e.Touches r.excl ∨ e.Touches r.shared ∨ m.blocks.size ≤ e.block :=
       Or.assoc.mp (hT'.imp (fun ⟨x, h1, h2, h3⟩ =>
-        FootprintEntry.Touches.excl_or_shared ⟨x, h1, h2, hT _ h3⟩) (Nat.le_trans hbs))
+        touches_owned ⟨x, h1, h2, hT _ h3⟩) (Nat.le_trans hbs))
     rcases ho e he₀ hT₀ with h | h | ⟨hr, -⟩
     · exact VClock.le_trans (h t ht hg) hcl
     · exact VClock.le_trans h hacq

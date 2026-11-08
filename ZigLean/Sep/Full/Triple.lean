@@ -723,12 +723,6 @@ theorem Res.excl_or_shared {r : Res} {l : Loc} (h : r.owned l ≠ none) :
       · exact absurd (.inl e) hx
       · exact e
 
-/-- An access to a byte a resource holds touches its exclusive or its shared bytes. -/
-theorem _root_.Zig.FootprintEntry.Touches.excl_or_shared {e : FootprintEntry} {r : Res}
-    (h : e.Touches r.owned) : e.Touches r.excl ∨ e.Touches r.shared :=
-  let ⟨x, h1, h2, h3⟩ := h
-  (Res.excl_or_shared h3).imp (fun h => ⟨x, h1, h2, h⟩) (fun h => ⟨x, h1, h2, h⟩)
-
 theorem Res.excl_shared_disj {r : Res} {l : Loc} (h : r.excl l ≠ none) : r.shared l = none := by
   refine Classical.byContradiction fun hs => ?_
   obtain ⟨h1, h2, -⟩ := Res.shared_ne.mp hs
