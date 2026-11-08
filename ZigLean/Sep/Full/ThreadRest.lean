@@ -317,6 +317,36 @@ theorem take {rA : Res} (ho : FOwned own (rsum rA Y) m) (ht : t < m.threads.size
     · rw [upd_ne _ _ hut]; exact ho.owns u hu
   · rw [upd_ne _ _ (Nat.ne_of_gt (Nat.lt_of_lt_of_le ht hu))]; exact ho.outside u hu
 
+/-- **Ownership of a part with a read share of the rest** (a reader's acquire, `take`'s premise;
+engine ledger #share-gather): thread `t` owns `own t ⋆ sh` when `sh` holds no cell, `t` may read
+each of its bytes (`Mem.OwnsR`), and the rest keeps a positive share `s` next to `sh`'s at each of
+them. A whole share of the sum would leave nothing to the rest (`SCell.Whole.frame` over the
+memory's validity), so the sum's exclusive bytes are `own t`'s. -/
+theorem ownsShare {sh : Res} (ho : FOwned own rO m) (ht : t < m.threads.size)
+    (hh : ∀ l, sh.heap l = none) (hR : m.OwnsR t sh.owned)
+    (hX : ∀ l, sh.owned l ≠ none → ∃ s, rO.gh.share l = (sh.gh.share l).add s ∧ s.Pos) :
+    m.OwnsRes t (rsum (own t) sh) := by
+  have hot := ho.owns t ht
+  obtain ⟨rR, -, -, hhd⟩ := ho.part ht
+  refine ⟨hot.1.sub fun l hl => ?_, (Mem.OwnsRC.union hot.ownsR hR).sub Res.shared_rsum⟩
+  rcases Res.excl_ne.mp hl with e | e
+  · exact Res.excl_of_heap fun hn => e (by simp [FHeap.union_apply, hn, hh l])
+  · simp only [Ghost.add_share] at e
+    by_cases hs : sh.owned l ≠ none
+    · obtain ⟨s, hs', hp⟩ := hX l hs
+      have hv : ((((own t).gh.share l).add (sh.gh.share l)).add ((rR.gh.share l).add s)).Valid := by
+        have h := hhd.heap.valid l
+        simp only [Ghost.add_share, hs'] at h
+        have e' : ((own t).gh.share l).add ((rR.gh.share l).add ((sh.gh.share l).add s)) =
+            (((own t).gh.share l).add (sh.gh.share l)).add ((rR.gh.share l).add s) :=
+          SCell.ext fun c => by simp only [SCell.add_val]; grind
+        rwa [e'] at h
+      exact absurd (SCell.pos_add_iff.mpr (.inr hp)) (SCell.not_pos_iff.mpr (e.frame hv))
+    · have hz : (sh.gh.share l).Empty :=
+        SCell.not_pos_iff.mp fun hp => hs (Res.owned_ne.mpr (.inr hp))
+      rw [hz.eq, SCell.add_zero] at e
+      exact Res.excl_ne.mpr (.inr e)
+
 /-- **Give**: thread `t` gives the resource `rA` of its part `rsum a rA` to the rest (a lock's
 release). -/
 theorem give {a rA : Res} (ho : FOwned own Y m) (ht : t < m.threads.size)
