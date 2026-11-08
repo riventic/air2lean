@@ -38,7 +38,8 @@ No lemma here is tagged yet. When the instance proofs walk the Gen bodies:
   `set_writing`, `readers_encode`, `writers_encode`, `writing_encode`,
   `writing_guard`;
 - guards with count premises (`read_guard`, `last_reader_guard`,
-  `drain_guard_encode`, `checked_add_reader`) are hint terms in the protocol's
+  `drain_guard_encode`, `checked_add_reader`, `checked_add_reader_stale`) are
+  hint terms in the protocol's
   `fsym [...]` list, since their premises come from the invariant;
 - nothing here is an `@[fsym]` step rule: the RMW steps are the generic
   atomic rules, and this file supplies only their value equations.
@@ -289,6 +290,36 @@ theorem checked_add_reader {c p r w : Nat} (hr : r + 1 < countBound c)
       _ = raw c (r + 1) w a := by
         simp only [raw, Nat.add_mul, Nat.one_mul]; omega
       _ < _ := raw_lt hr hw a
+  rw [Zig.add_unsigned_of_lt hsum, add_reader]
+
+/-- The checked addition of a reader to a value read earlier, which may be older than the newest
+(`lockSharedUncancelable`'s fast path adds to the value of its load or failed CAS): only
+`r < countBound` is known, so `r + 1` may reach the bound, but a spare high bit (`0 < p`) keeps the
+sum below `2 ^ width` and the addition does not trap. Whether the result is admitted is the CAS's:
+it succeeds only at the newest value, where the room is `checked_add_reader`'s. -/
+theorem checked_add_reader_stale {c p r w : Nat} (hp : 0 < p) (hr : r < countBound c)
+    (hw : w < countBound c) (a : Bool) (safe : Bool) :
+    Zig.add false (encode c p r w a) (BitVec.ofNat (width c p) (readerUnit c)) safe =
+      pure (encode c p (r + 1) w a) := by
+  have hsum : (encode c p r w a).toNat +
+      (BitVec.ofNat (width c p) (readerUnit c)).toNat < 2 ^ width c p := by
+    rw [encode_toNat hr hw a, BitVec.toNat_ofNat]
+    have hlow := low_lt (c := c) hw a
+    have hle : r + 1 + 1 ≤ 2 * countBound c := by
+      have := Nat.two_pow_pos c
+      unfold countBound at hr ⊢
+      omega
+    calc
+      _ ≤ raw c r w a + readerUnit c := Nat.add_le_add_left (Nat.mod_le _ _) _
+      _ = (r + 1) * readerUnit c + (2 * w + if a then 1 else 0) := by
+        simp only [raw, Nat.succ_mul]; omega
+      _ < (r + 1) * readerUnit c + readerUnit c := Nat.add_lt_add_left hlow _
+      _ = (r + 1 + 1) * readerUnit c := (Nat.succ_mul (r + 1) _).symm
+      _ ≤ 2 * countBound c * readerUnit c := Nat.mul_le_mul_right _ hle
+      _ = 2 ^ (2 * c + 2) := by
+        simp only [countBound, readerUnit, ← Nat.pow_succ', ← Nat.pow_add]
+        congr 1; omega
+      _ ≤ 2 ^ width c p := Nat.pow_le_pow_right (by decide) (by unfold width; omega)
   rw [Zig.add_unsigned_of_lt hsum, add_reader]
 
 end Family
