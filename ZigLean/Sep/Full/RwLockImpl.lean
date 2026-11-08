@@ -799,6 +799,31 @@ theorem Owns.toThread {G : ThreadId → γ} {m m' : Mem} {r : Res} {t : ThreadId
     · rw [hnr u hu] at hc; exact VClock.le_trans hc hcl
   · exact hc
 
+/-- **A reader's share of the free resource, read-owned by `t` after an acquire RMW** (the reader's
+`+2^32`): every write to a byte of `r` is before every live thread or before the word's release
+clock, which the acquire brings to `t` (reads of other readers need no order), so `t` may read
+each byte of `r` that `r'` owns (`Mem.OwnsR`, for `Mem.OwnsRes` of `t`'s new part). -/
+theorem Owns.toReader {G : ThreadId → γ} {m m' : Mem} {r r' : Res} {t : ThreadId}
+    (ho : W.Owns G m r) (hT : ∀ l, r'.owned l ≠ none → r.owned l ≠ none)
+    (ht : t < m.threads.size) (hg : M.ph (G t) ≠ .gone)
+    (hacq : VClock.le ((W.st.hist m).back!).relClock (m'.clocks[t]!) = true)
+    (hfp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨ VClock.le e.clock (m'.clocks[t]!) = true)
+    (hcl : VClock.le (m.clocks[t]!) (m'.clocks[t]!) = true)
+    (hbs : m.blocks.size ≤ m'.blocks.size) :
+    m'.OwnsR t r'.owned := by
+  intro e he hw hT'
+  rcases hfp e he with he₀ | hc
+  · have hT₀ : e.Touches r.excl ∨ e.Touches r.shared ∨ m.blocks.size ≤ e.block := by
+      rcases hT' with ⟨x, h1, h2, h3⟩ | h
+      · exact (Res.owned_split (hT _ h3)).elim (fun h => .inl ⟨x, h1, h2, h⟩)
+          (fun h => .inr (.inl ⟨x, h1, h2, h⟩))
+      · exact .inr (.inr (Nat.le_trans hbs h))
+    rcases ho e he₀ hT₀ with h | h | ⟨hr, -⟩
+    · exact VClock.le_trans (h t ht hg) hcl
+    · exact VClock.le_trans h hacq
+    · rw [hw] at hr; cases hr
+  · exact hc
+
 /-! ## The invariant after the rwlock's own ops
 
 Each op at the state word is one of the atomic word rules at the outer mutex (`wp_wordRmw`,
@@ -1218,7 +1243,8 @@ theorem Inv.addR {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
       (W.st.hist m)[(W.st.hist m).size - 1]! (old + BitVec.ofNat 64 RwState.readerUnit)))
     (hrel : ord.isRel = true)
     (hfp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨ VClock.le e.clock (m'.clocks[t]!) = true) :
-    ∃ rF rO H f, rY = rsum rF rO ∧ W.R (W.xs G) ⟨H, Know.none, Ghost.unit⟩ ∧ 0 < f.val ∧
+    ∃ rF rO H f, rY = rsum rF rO ∧ W.Owns G m rF ∧
+      W.R (W.xs G) ⟨H, Know.none, Ghost.unit⟩ ∧ 0 < f.val ∧
       (W.nrd G m = 0 → rF = ⟨H, Know.none, Ghost.unit⟩ ∧ f = Frac.one) ∧
       (W.nrd G m ≠ 0 → rF = shareRes H f) ∧
       ∀ q f', 0 < q.val → 0 < f'.val → q.add f' = f →
@@ -1250,7 +1276,7 @@ theorem Inv.addR {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
       exact ⟨H, f, hR, hf, hsum, hall, ⟨fun h => absurd h h0, fun _ => rfl⟩,
         fun l h => (shareRes_owned hf).mpr h,
         fun l h => (shareRes_owned hf).mp (Res.owned_of_shared h)⟩
-  refine ⟨rF, rO, H, f, rfl, hR, hf, hcase.1, hcase.2, fun q f' hq hf' hqf => ?_⟩
+  refine ⟨rF, rO, H, f, rfl, how, hR, hf, hcase.1, hcase.2, fun q f' hq hf' hqf => ?_⟩
   have hqf' : q.val + f'.val = f.val := congrArg Frac.val hqf
   have hGt : W.ph (upd G t (W.set (G t) (.rd q H)) t) = .rd q H := by rw [upd_self, W.ph_set]
   have hnrd : W.nrd (upd G t (W.set (G t) (.rd q H))) m = W.nrd G m + 1 := by
