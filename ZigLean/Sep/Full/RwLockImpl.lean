@@ -957,7 +957,7 @@ theorem Inv.load {G : ThreadId → γ} {rY : Res} {m m' : Mem}
     rcases hT with ⟨x, h1, h2, h3⟩ | ⟨x, h1, h2, h3⟩ | h
     · exact Res.owned_of_excl h3 (hoff _ (hw x h1 h2)).1
     · exact Res.owned_of_shared h3 (hoff _ (hw x h1 h2)).1
-    · rw [hrest.bsize] at h; omega
+    · rw [hrest.bsize] at h; exact absurd h (Nat.not_le.mpr hb)
 
 /-- **A writer's intent** (`lockUncancelable`'s `+2`, `out → wi`): the word counts one more pending
 writer; the readers, the writing bit, the free resource and its ownership stay. The room is
@@ -1241,7 +1241,7 @@ theorem Inv.addR {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
       dsimp only at hk hg
       subst hk hg
       refine ⟨H, Frac.one, hR, by show (0 : Rat) < 1; decide,
-        by rw [fsum_noRd hrd]; show (1 : Rat) + 0 = 1; decide, fun u q' H' hu => ?_,
+        by rw [fsum_noRd hrd]; show (1 : Rat) + 0 = 1; grind, fun u q' H' hu => ?_,
         ⟨fun _ => ⟨rfl, rfl⟩, fun h => absurd h0 h⟩, fun l h => Res.owned_of_heap h,
         fun l h => (h (Res.shared_plain rfl l)).elim⟩
       have := hrd u; rw [hu] at this; cases this
@@ -1265,7 +1265,7 @@ theorem Inv.addR {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
     have h0 : Frac.zero.val = 0 := rfl
     grind
   have hfle : f.val ≤ 1 := by
-    have := (ftot_nonneg (fun u => (W.ph (G u)).frac) m.threads.size : 0 ≤ W.fsum G m)
+    have h0 : 0 ≤ W.fsum G m := ftot_nonneg _ _
     grind
   have hf'1 : f'.val < 1 := by grind
   have hxs : W.xs (upd G t (W.set (G t) (.rd q H))) = W.xs G := by rw [xs_set, upd_same]
