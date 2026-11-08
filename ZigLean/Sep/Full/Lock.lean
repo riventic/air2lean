@@ -1014,6 +1014,24 @@ theorem Inv.giveRest {G : ThreadId → γ} {rP rA rX : Res} {m : Mem} {t : Threa
     rw [hheld u]
     exact (L.R_setPart G t rP _).mpr (hi.res u (by rw [← hph u]; exact hu))
 
+/-- **A live thread's part against the rest**: `t` owns its part (`FOwned.owns`), and the part has
+no byte of the protocol's rest `rX` (`FOwned.part_off`), so none of a word whose cells `rX` holds.
+What a caller of `Inv.giveRest` needs of the resource it gives (its ownership, its place). -/
+theorem Inv.partApart {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} (hi : L.Inv G rX m)
+    (hg : L.ph (G t) ≠ .gone) :
+    m.OwnsRes t (L.part (G t)) ∧ FHeap.Disjoint (L.part (G t)).heap rX.heap := by
+  obtain ⟨ht, hjt⟩ := hi.ht hg
+  obtain ⟨rL, ho, -⟩ := hi.rest
+  have hown : L.own G m t = rsum (L.part (G t)) (L.held (G t)) := own_live hjt
+  refine ⟨by have := ho.owns t ht; rw [hown] at this; exact this.sepL rfl rfl, fun l => ?_⟩
+  cases e : rX.heap l with
+  | none => exact .inr rfl
+  | some c =>
+    have hp := ho.part_off ht (l := l) (by simp [FHeap.union_apply, e])
+    rw [hown] at hp
+    simp only [FHeap.union_apply, Option.or_eq_none_iff] at hp
+    exact .inl hp.1
+
 /-- A change of thread `t`'s ghost value that keeps its place, its part and its resource in the
 lock (a step of `t` in another sync object's code, also while it holds the lock). -/
 theorem Inv.relabel {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {g : γ}
