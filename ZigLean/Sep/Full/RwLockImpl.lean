@@ -1987,7 +1987,7 @@ theorem wp_subR (hW : W.Fits P UM US okM okS) {r₀ : Res} {q : Frac} {H : FHeap
     rw [← rsum_assoc, rsum_comm (a := W.st.cellsR m') (b := shareRes H f) (fun _ => .inr rfl),
       rsum_assoc] at hL
     have hL₁ := hL.takeRest hgt (fun _ => .inl rfl) (hOwn h1 hgt (hac hacq))
-    rw [hg₁, hpart, rsum_assoc, shareRes_add, Frac.add_comm q f, hone] at hL₁
+    rw [hg₁, hpart, rsum_assoc, shareRes_add, Frac.add_comm q f, hone h1] at hL₁
     obtain ⟨r, ⟨r₁, r₂, hd₀, hr, h₁, h₂⟩, hL₂⟩ := hL₁.eupdPart P hc'
       (by rw [M.ph_setPart]; exact hmg) (Qa := (· = r₀) ⋆ (· = ⟨H, Know.none, Ghost.unit⟩))
       (by

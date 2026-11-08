@@ -215,14 +215,20 @@ theorem unshare_whole : EUpd (shared P Frac.one) P := by
 
 /-- **A heap becomes its whole share**, as resources (`share_whole`). -/
 theorem shareRes_whole (H : FHeap) :
-    EUpd (· = ⟨H, Know.none, Ghost.unit⟩) (· = shareRes H Frac.one) :=
-  (share_whole fun _ h => by subst h; exact ⟨rfl, rfl⟩).trans
-    (of_imp fun _ ⟨_, hH, hs⟩ => by cases hH; exact sheap_eq hs)
+    EUpd (· = ⟨H, Know.none, Ghost.unit⟩) (· = shareRes H Frac.one) := by
+  refine (share_whole fun _ h => ?_).trans (of_imp fun _ h => ?_)
+  · obtain rfl := h
+    exact ⟨rfl, rfl⟩
+  · obtain ⟨_, hH, hs⟩ := h
+    cases hH
+    exact sheap_eq hs
 
 /-- **The whole share of a heap becomes the heap**, as resources (`unshare_whole`). -/
 theorem shareRes_unwhole (H : FHeap) :
-    EUpd (· = shareRes H Frac.one) (· = ⟨H, Know.none, Ghost.unit⟩) :=
-  (of_imp fun _ h => ⟨H, rfl, by subst h; exact shareRes_sheap H _⟩).trans unshare_whole
+    EUpd (· = shareRes H Frac.one) (· = ⟨H, Know.none, Ghost.unit⟩) := by
+  refine (of_imp fun _ h => ?_).trans unshare_whole
+  obtain rfl := h
+  exact ⟨H, rfl, shareRes_sheap H _⟩
 
 end EUpd
 
