@@ -74,9 +74,10 @@ not construct. The client also shows that a writer asleep at the semaphore is no
 (`wlive`, the semaphore's `hlive`; the outer mutex's `holdLive` covers it at `M`'s `holdsAway`),
 and that `UM` is stable over the writer's nap (at `ww`) and unnap (at `wr`, after its take) at `M`
 around its semaphore wait (`mnap`, `munnap`: a holder in the futex queue is at `holdsAway`;
-decision on #667, a nesting protocol proves the nap's stability for its own `U`), that the semaphore's view `US` is stable over the
-writer's take (`ww → wr`, `utake`) and the last reader's give (`rp → out`, `upost`), and that only
-the writer at `ww` is in the semaphore's wait (`wtw`; decision 2026-11-08 on #729).
+decision on #667, a nesting protocol proves the nap's stability for its own `U`), that the
+semaphore's view `US` is stable over the writer's take (`ww → wr`, `utake`) and the last reader's
+give (`rp → out`, `upost`), and that only the writer at `ww` is in the semaphore's wait (`wtw`;
+decision 2026-11-08 on #729).
 
 ## Facts for every implementation
 
@@ -111,6 +112,10 @@ Stated once here; an instance walks its code with them:
   (`by decide`). The part facts a give needs come from the outer mutex's invariant
   (`FLock.Inv.partApart`); a reader takes a share into a part that may hold shares of the same
   bytes with `FLock.Inv.takeRestR` and `FLock.Inv.ownsShare` (the rest keeps a positive share).
+- **The writer's wait at the semaphore** (`wp_waitW`, `lock`'s drain path): for a semaphore whose
+  wait admits a positive unmetered fragment and keeps that part (the program's `Io.Semaphore`'s
+  per-item facts), the writer at `ww` naps the outer mutex, takes the posted resource and is back
+  at `wr` holding it and the outer mutex.
 
 ## The rules (`RwLockImpl`)
 
@@ -2148,11 +2153,12 @@ theorem wp_waitW (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (I : SemI
     · subst e; rw [upd_self, W.ph_set] at hu; cases hu
     · rw [upd_ne _ _ e] at hu
       exact e (hI.one u t (by rw [upd_ne _ _ e, hu]; rfl) (by rw [upd_self, hgw]; rfl))
-  have hpo : ∀ {G₁ : ThreadId → γ}, S.cnt (upd G₁ t gN) ≠ 0 → RwPosted W.ph (upd G₁ t gN) :=
+  have hpo : ∀ {G₁ : ThreadId → γ}, S.cnt (upd G₁ t gN) ≠ 0 →
+      RwPosted W.ph (upd G₁ t gN) :=
     fun h0 => Classical.byContradiction fun hn => h0 (W.cnt_idle _ hn)
   refine WP.mono ?_ (I.wait_wp_resource hW.s hcost hLc hp t gN (fun _ => W.set gN .wr)
-    (fun Y r => S.Pool Y r ∧ ∃ G₀, W.R (W.xs (upd G₀ t g)) r) hlN hcN hsN ((W.wx_iff gN).mpr hwN)
-    hokN (fun _ => by rw [W.lph, hlN]) (fun _ => by rw [W.lheld, hlhN])
+    (fun Y r => S.Pool Y r ∧ ∃ G₀, W.R (W.xs (upd G₀ t g)) r) hlN hcN hsN
+    ((W.wx_iff gN).mpr hwN) hokN (fun _ => by rw [W.lph, hlN]) (fun _ => by rw [W.lheld, hlhN])
     (fun _ => by rw [cph_w, hcN]) (fun _ => by rw [sph_w, hsN])
     (fun _ => (hW.okS_set _ _).mpr hokN)
     (fun rᵢ hr G₁ rL m₁ h₁ h0 => by
