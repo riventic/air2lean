@@ -2096,25 +2096,25 @@ theorem Fits.mheld (hW : W.Fits P UM US okM okS) (g : γ) (a : RwPh) :
     M.held (W.set g a) = M.held g := by
   rw [← prim_set, hW.m.lheld]
 
+/-- The rwlock's `set` commutes with a change `f` that keeps the primitive's places and commutes
+with its `set` (the outer mutex's `set` and `setPart`: `FLock.Fits.ph_l`/`set_l`,
+`ph_part`/`set_part`). -/
+theorem wset_comm {f : γ → γ} (hph : ∀ g, W.prim.pl.ph (f g) = W.prim.pl.ph g)
+    (hset : ∀ g p, W.prim.pl.set (f g) p = f (W.prim.pl.set g p)) (g : γ) (a : RwPh) :
+    W.set (f g) a = f (W.set g a) := by
+  have hs : S.place.ph (f g) = S.place.ph g := congrArg Prod.snd (hph g)
+  rw [← prim_set (f g) a, hs, hset, prim_set g a]
+
 /-- The rwlock's `set` and the outer mutex's commute. -/
 theorem Fits.wset_m (hW : W.Fits P UM US okM okS) (g : γ) (a : RwPh) (q : LPh) (h : Res) :
-    W.set (M.set g q h) a = M.set (W.set g a) q h := by
-  have hs : S.place.ph (M.set g q h) = S.place.ph g := congrArg Prod.snd (hW.m.ph_l g q h)
-  calc W.set (M.set g q h) a = W.prim.pl.set (M.set g q h) (a, S.place.ph (M.set g q h)) :=
-        (prim_set _ _).symm
-    _ = W.prim.pl.set (M.set g q h) (a, S.place.ph g) := by rw [hs]
-    _ = M.set (W.prim.pl.set g (a, S.place.ph g)) q h := hW.m.set_l g _ q h
-    _ = M.set (W.set g a) q h := by rw [prim_set]
+    W.set (M.set g q h) a = M.set (W.set g a) q h :=
+  wset_comm (f := (M.set · q h)) (fun g => hW.m.ph_l g q h) (fun g p => hW.m.set_l g p q h) g a
 
 /-- The rwlock's `set` and the outer mutex's `setPart` commute. -/
 theorem Fits.wset_part (hW : W.Fits P UM US okM okS) (g : γ) (a : RwPh) (r : Res) :
-    W.set (M.setPart g r) a = M.setPart (W.set g a) r := by
-  have hs : S.place.ph (M.setPart g r) = S.place.ph g := congrArg Prod.snd (hW.m.ph_part g r)
-  calc W.set (M.setPart g r) a = W.prim.pl.set (M.setPart g r) (a, S.place.ph (M.setPart g r)) :=
-        (prim_set _ _).symm
-    _ = W.prim.pl.set (M.setPart g r) (a, S.place.ph g) := by rw [hs]
-    _ = M.setPart (W.prim.pl.set g (a, S.place.ph g)) r := hW.m.set_part g _ r
-    _ = M.setPart (W.set g a) r := by rw [prim_set]
+    W.set (M.setPart g r) a = M.setPart (W.set g a) r :=
+  wset_comm (f := (M.setPart · r)) (fun g => hW.m.ph_part g r) (fun g p => hW.m.set_part g p r)
+    g a
 
 /-- The rwlock's invariant in a state of the protocol (the outer mutex's view, `Fits.sub`). -/
 theorem Fits.winv (hW : W.Fits P UM US okM okS) {G : ThreadId → γ} {m : Mem}
