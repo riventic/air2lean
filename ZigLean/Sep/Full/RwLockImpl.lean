@@ -509,7 +509,8 @@ theorem fsum_upd (G : ThreadId → γ) {m : Mem} {t : ThreadId} (ht : t < m.thre
     W.fsum (upd G t g') m + (W.ph g).frac.val = W.fsum (upd G t g) m + (W.ph g').frac.val := by
   have h := ftot_upd (f := fun u => (W.ph (upd G t g' u)).frac)
     (g := fun u => (W.ph (upd G t g u)).frac) (fun u e => by simp only [upd_ne _ _ e]) ht
-  simpa only [upd_self] using h
+  simp only [upd_self] at h
+  exact h
 
 /-- **`t` moves to `b`**: the readers' count by its old and new place (`nrd_upd`). -/
 theorem nrd_mv (G : ThreadId → γ) {m : Mem} {t : ThreadId} (ht : t < m.threads.size) (b : RwPh) :
@@ -546,8 +547,9 @@ theorem writing_mv (G : ThreadId → γ) (m : Mem) {t : ThreadId} {b : RwPh}
     upd_same]
 
 /-- A place property after `t` moves to `b`, which `b` lacks, is another thread's before. -/
-theorem ph_mv {G : ThreadId → γ} {t u : ThreadId} {b : RwPh} (p : RwPh → Prop) (hb : ¬ p b)
-    (h : p (W.ph (upd G t (W.set (G t) b) u))) : u ≠ t ∧ p (W.ph (G u)) := by
+theorem ph_mv {G : ThreadId → γ} {t u : ThreadId} {b : RwPh} (p : RwPh → Prop)
+    (h : p (W.ph (upd G t (W.set (G t) b) u))) (hb : ¬ p b := by rintro ⟨⟩) :
+    u ≠ t ∧ p (W.ph (G u)) := by
   by_cases e : u = t
   · subst e; rw [upd_self, W.ph_set] at h; exact absurd h hb
   · rw [upd_ne _ _ e] at h; exact ⟨e, h⟩
@@ -913,22 +915,22 @@ theorem Inv.addW {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
   refine hI.ofRmw hY ht hmph hrest hok hh hrel hfp
     ⟨by rw [hnrd]; exact hI.room.1, by rw [hnwi]; exact hroom⟩
     (by rw [hnrd, hnwi, hwr, hI.old hv]; exact RwState.Family.add_writer 31 1 _ _ _)
-    (fun u v hu hv => hI.one u v (ph_mv (·.isW = true) nofun hu).2
-      (ph_mv (·.isW = true) nofun hv).2)
+    (fun u v hu hv => hI.one u v (ph_mv (·.isW = true) hu).2
+      (ph_mv (·.isW = true) hv).2)
     (fun u hu => ?_) (fun u hu => ?_) (fun u hu => ?_) (fun rF hfr => ?_)
-  · obtain ⟨hu', hu⟩ := ph_mv (·.isW = true) nofun hu
+  · obtain ⟨hu', hu⟩ := ph_mv (·.isW = true) hu
     rw [upd_ne _ _ hu']; exact hI.wm u hu
-  · rw [hnrd]; exact hI.wr u (ph_mv (· = .wr) nofun hu).2
-  · obtain ⟨h0, ⟨w, hw⟩, hone⟩ := hI.rp u (ph_mv (· = .rp) nofun hu).2
+  · rw [hnrd]; exact hI.wr u (ph_mv (· = .wr) hu).2
+  · obtain ⟨h0, ⟨w, hw⟩, hone⟩ := hI.rp u (ph_mv (· = .rp) hu).2
     have hw' : w ≠ t := fun e => by subst e; rw [hout] at hw; cases hw
     exact ⟨by rw [hnrd]; exact h0, ⟨w, by rw [upd_ne _ _ hw']; exact hw⟩,
-      fun v hv => hone v (ph_mv (· = .rp) nofun hv).2⟩
+      fun v hv => hone v (ph_mv (· = .rp) hv).2⟩
   · refine ⟨fun hb => hfr.1 (hbusy.mp hb), fun hb hn => ?_, fun hb hn => ?_⟩
     · rw [hxs]; exact hfr.2.1 (fun h => hb (hbusy.mpr h)) (by rwa [hnrd] at hn)
     · obtain ⟨H, f, hR, hf, hsum, hrF, hall⟩ :=
         hfr.2.2 (fun h => hb (hbusy.mpr h)) (by rwa [hnrd] at hn)
       exact ⟨H, f, by rw [hxs]; exact hR, hf, by rw [hfs]; exact hsum, hrF,
-        fun u q H' hu => hall u q H' (ph_mv (· = .rd q H') nofun hu).2⟩
+        fun u q H' hu => hall u q H' (ph_mv (· = .rd q H') hu).2⟩
 
 /-- With no thread at `wr` or `rp` and readers present, the resource is not away. -/
 theorem not_busy_rd {G : ThreadId → γ} {m : Mem} (hwr : ∀ u, W.ph (G u) ≠ .wr)
@@ -989,9 +991,9 @@ theorem Inv.enterW {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
   have hfs := fsum_keep (W := W) G m (t := t) (b := .ww) (by rw [hwi]; rfl)
   have hxs : W.xs (upd G t (W.set (G t) .ww)) = W.xs G := by rw [xs_set, upd_same]
   have hnowr' : ∀ u, W.ph (upd G t (W.set (G t) .ww) u) ≠ .wr := fun u hu =>
-    hnowr u (ph_mv (· = .wr) nofun hu).2
+    hnowr u (ph_mv (· = .wr) hu).2
   have hnorp' : ∀ u, W.ph (upd G t (W.set (G t) .ww) u) ≠ .rp := fun u hu =>
-    hnorp u (ph_mv (· = .rp) nofun hu).2
+    hnorp u (ph_mv (· = .rp) hu).2
   refine hI.ofRmw hY ht hmph hrest hok hh hrel hfp
     ⟨by rw [hnrd]; exact hI.room.1, by have := hI.room.2; omega⟩
     (by rw [hnrd, hwr, hI.old hv, hwr₀, ← hnwi]; exact RwState.Family.enter_writer 31 1 _ _)
@@ -1004,7 +1006,7 @@ theorem Inv.enterW {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
     exact ⟨fun hb => absurd hb (not_busy_rd hnowr' hnorp' (by rw [hnrd]; exact hnr)),
       fun _ hn => absurd (by rwa [hnrd] at hn) hnr,
       fun _ _ => ⟨H, f, by rw [hxs]; exact hR, hf, by rw [hfs]; exact hsum, hrF,
-        fun u q H' hu => hall u q H' (ph_mv (· = .rd q H') nofun hu).2⟩⟩
+        fun u q H' hu => hall u q H' (ph_mv (· = .rd q H') hu).2⟩⟩
 
 /-- The empty resource owns no byte. -/
 theorem rnil_owned (l : Loc) : rnil.owned l = none := Res.owned_plain rfl rfl
@@ -1047,18 +1049,18 @@ theorem Inv.takeW {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
   refine ⟨rF, rO, rfl, hfr₀.2.1 hnb hnr,
     how.toThread (fun u hu => by rw [hrd u] at hu; cases hu) ht hg hacq hfp (hrest.clocks t)
       (Nat.le_of_eq hrest.bsize.symm), hd, ?_⟩
-  have := hI.ofRmwMv (rF' := rnil) ht hmph hrest hok hh hrel hfp
+  have := hI.ofRmwMv (rF' := rnil) (b := .wr) ht hmph hrest hok hh hrel hfp
     ⟨by rw [hnrd]; exact hI.room.1, by have := hI.room.2; omega⟩
     (by rw [hnrd, hwr, hI.old hv, hwr₀, ← hnwi]; exact RwState.Family.enter_writer 31 1 _ _)
     (fun u v hu hv => by rw [hW u hu, hW v hv])
     (fun u hu => by rw [hW u hu, upd_self, hmph]; exact hMt)
     (fun _ _ => by rw [hnrd]; exact hnr)
-    (fun u hu => absurd (ph_mv (· = .rp) nofun hu).2 (hnorp u))
+    (fun u hu => absurd (ph_mv (· = .rp) hu).2 (hnorp u))
     (fun l hl => (hoff l hl).2) how (fun l _ => rnil_owned l) (fun _ => .inl rfl)
     ⟨fun _ => rfl, fun hb _ => absurd (.inl ⟨t, hGt⟩) hb, fun hb _ => absurd (.inl ⟨t, hGt⟩) hb⟩
     (fun ho => ho.mono (fun l h => absurd (rnil_owned l) h)
       (fun ⟨u, hu⟩ _ _ => by
-        have := (ph_mv (·.isRd = true) nofun hu).2
+        have := (ph_mv (·.isRd = true) hu).2
         rw [hrd u] at this; cases this))
   rwa [rnil_rsum] at this
 
@@ -1086,7 +1088,7 @@ theorem Inv.giveW {G : ThreadId → γ} {rY r : Res} {m m' : Mem} {t : ThreadId}
   have hW' : ∀ u, (W.ph (upd G t (W.set (G t) .out) u)).isW = false := fun u => by
     cases h : (W.ph (upd G t (W.set (G t) .out) u)).isW
     · rfl
-    · obtain ⟨e, hu⟩ := ph_mv (·.isW = true) nofun h; exact absurd (hW u hu) e
+    · obtain ⟨e, hu⟩ := ph_mv (·.isW = true) h; exact absurd (hW u hu) e
   have hnrd : W.nrd (upd G t (W.set (G t) .out)) m = W.nrd G m := by
     simpa [hwr, RwPh.isRd] using nrd_mv (W := W) G ht .out
   have hnwi : W.nwi (upd G t (W.set (G t) .out)) m = W.nwi G m := by
@@ -1100,7 +1102,7 @@ theorem Inv.giveW {G : ThreadId → γ} {rY r : Res} {m m' : Mem} {t : ThreadId}
     have := hW w (by rw [hw]; rfl)
     subst this; rw [hwr] at hw; cases hw
   have hnorp' : ∀ u, W.ph (upd G t (W.set (G t) .out) u) ≠ .rp := fun u hu =>
-    hnorp u (ph_mv (· = .rp) nofun hu).2
+    hnorp u (ph_mv (· = .rp) hu).2
   have hnb' : ¬ W.Busy (upd G t (W.set (G t) .out)) := by
     rintro (⟨u, hu⟩ | ⟨u, hu⟩ | ⟨⟨u, hu⟩, -, -⟩)
     · have := hW' u; rw [hu] at this; cases this
