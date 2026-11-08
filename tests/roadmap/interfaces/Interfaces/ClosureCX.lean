@@ -117,7 +117,7 @@ theorem double_not_spec (p ctx : Ptr) : ¬ CAllocSpec (double (Tgt := Tgt) p) ct
   obtain ⟨hh, hg⟩ := initRes_holds Placement.fresh [] (by simp)
   have hs := Mem.init_fseq Placement.fresh [] (by decide)
   have t := h.alloc 1 0 0 Frac.zero (by decide) (by decide) trivial 0 _ _ _ hh (sep_emp.mpr hg)
-    hs.fconc (hs.1.single.owns _)
+    hs.fconc (.of_owns (hs.1.single.owns _))
   obtain ⟨_, -, ⟨-, r₂, -, -, -, bs, hb⟩, -⟩ := CTriple.Run.ok_iff.mp t
   obtain ⟨_, r₄, -, -, -, h₄⟩ := hb
   exact granted_false h₄

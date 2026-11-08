@@ -186,14 +186,15 @@ theorem mixed_spawn {own : ThreadId → Res} {rO : Res} {m m' : Mem} {t c : Thre
       · rw [FCapture.excludes_ptr hother]; trivial
   exact ⟨(FCapture.fork_grant ho ht hsplit hd hgrant hf).1, rfl, hgrant⟩
 
-/-- Join: the parent regains every cell the joined worker holds, including its outputs. -/
+/-- Join: the parent regains every cell the joined worker holds, including its outputs. The
+cells move with the parts alone (`FCapture.join_cells`); the join's `FOwned` also needs the
+share premise of `FCapture.join_regain`. -/
 theorem worker_join {own : ThreadId → Res} {rO : Res} {m m' : Mem} {t u : ThreadId}
     (ho : FOwned own rO m) (ht : t < m.threads.size) (hut : u ≠ t)
-    (hj : ((Thread.join u).run { m with current := t }).run = some (.ok ((), m'))) :
+    (_hj : ((Thread.join u).run { m with current := t }).run = some (.ok ((), m'))) :
     ∀ l fc, (own u).heap l = some fc →
       (upd (upd own t (rsum (own t) (own u))) u rnil t).heap l = some fc := by
-  simpa only [upd_comm own rnil (rsum (own t) (own u)) hut] using
-    (FCapture.join_regain ho ht hut hj).2
+  simpa only [upd_comm own rnil (rsum (own t) (own u)) hut] using FCapture.join_cells ho ht hut
 
 theorem pts_cell {p : Ptr} {a : Nat} {v : BitVec 32} {h : Res} (hp : up (pts p a v) h) :
     ∃ b, p.block = some b ∧ h.heap (b, p.off.toNat) ≠ none := by

@@ -43,6 +43,11 @@ theorem writeWorker_eq (x : Ptr) (v : BitVec 32) :
 abbrev flagA (x : Ptr) (A : Nat) (b : BlockId) (w : BitVec 32) : FAssn :=
   up (bytesAt x A 4 .stack (Enc.encode w)) ⋆ bext b 4 .stack
 
+/-- A flag holds no read share, so a join that returns one gathers none (`FOwned.join`). -/
+theorem flagA_unshared (x : Ptr) (A : Nat) (b : BlockId) (w : BitVec 32) :
+    (flagA x A b w).Unshared :=
+  .sep (.up _) (.bext _ _ _)
+
 theorem wr (v w : BitVec 32) : writeBytes (Enc.encode v) 0 (Enc.encode w) = Enc.encode w :=
   writeBytes_all (by rw [LawfulEnc.size_encode_u32, LawfulEnc.size_encode_u32])
 
@@ -533,11 +538,13 @@ theorem await_spec {σ : Type} {s : σ} (io : Io) (B : Blks) {G : ThreadId → G
     simp only [↓reduceIte] at hka1
     obtain ⟨hc₂, hth₂⟩ := join_threads r1₁ hj
     obtain ⟨rO₁, ho₁⟩ := hi₁.own
-    have ho₂ := FOwned.join (ho₁.current 0) (by rw [hsz₁]; decide) (by decide) hj
     have e0 : ownOf G₁ m₁ 0 = h := by simp [ownOf, joinedB, hg₁, hi₁.t0, Gh.res]
     have e1 : ownOf G₁ m₁ 1 = hk := by
       have r : m₁.threads[1]? = some { spawner := 0, joined := false, gated := gt₁ } := r1₁
       simp [ownOf, joinedB, r, hf1, Gh.res]
+    -- the child's part is its flag, without read shares: the join gathers none
+    have ho₂ := FOwned.join (ho₁.current 0) (by rw [hsz₁]; decide) (by decide) hj
+      fun l => .inr (by rw [e1]; exact flagA_unshared _ _ _ _ hk hka1 l)
     have hd01 : FHeap.Disjoint h.heap hk.heap := by
       have := ho₁.disj (u := 0) (v := 1) (by rw [hsz₁]; decide) (by rw [hsz₁]; decide) (by decide)
       rwa [e0, e1] at this
