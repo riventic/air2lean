@@ -209,7 +209,8 @@ attribute [instance] IoRwLockCode.inhL IoRwLockCode.inhU IoRwLockCode.inhR IoRwL
 
 /-- **The frame of an entry point**: its locals' run from `default`, then the generated match on
 its exit, which is `pure ()` at the return. -/
-theorem wp_frame {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {G : ThreadId → γ} {m : Mem}
+theorem wp_frame {Tgt σ E γ : Type} [Inhabited σ] {P : Proto Tgt γ} {t : ThreadId}
+    {G : ThreadId → γ} {m : Mem}
     {n : Nat} {x : CM Tgt σ E} {fin : E → ConcM Tgt Unit} {ret : E} (hfin : fin ret = pure ())
     {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop}
     (h : P.WP t (x.run default) (fun r G' m' d' => r.1 = ret ∧ Q () G' m' d') G m n) :
@@ -385,8 +386,9 @@ theorem body_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (t : Threa
     have hadd : Zig.add false (C.getSt s) (4294967296 : BitVec 64) =
         pure (RwState.encode (rr + 1) ww aa) := by
       rw [hst]; exact RwState.Family.checked_add_reader_stale (by decide) hrr hww aa true
-    refine WP.bind (WP.callRC_ok (by rw [hadd]; rfl) ?_)
-    refine WP.bind (FRw.wp_casR hW hout hmg hroom (by simpa using hgd)
+    refine WP.bind (WP.callRC_ok (x := Zig.add false (C.getSt s) (4294967296 : BitVec 64))
+      (v := RwState.encode (rr + 1) ww aa) (by rw [hadd]; rfl) ?_)
+    refine WP.bind (FRw.wp_casR hW hout hmg hroom (beq_iff_eq.mp hgd)
       (by rw [hst]; exact (RwState.Family.add_reader 31 1 rr ww aa).symm) hi₀
       (fun k hk G₁ m₁ hc₁ q H hq _ hi₁ => ?_) (fun k hk G₁ m₁ b hc₁ hb hi₁ => ?_))
     · -- success: the reader is in
@@ -398,8 +400,8 @@ theorem body_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (t : Threa
       simp only [C.again_ret, Bool.false_eq_true, ↓reduceIte]
       exact ⟨by omega, hc₁, .inl ⟨rfl, q, H, hq, hi₁⟩⟩
     · -- failure: store the value read and repeat
-      simp only [Option.isSome_some, ↓reduceIte, StateT.run_bind]
-      refine WP.bind (WP.callRC_ok rfl ?_)
+      simp only [Option.isSome_some, ↓reduceIte, StateT.run_bind, bind_assoc]
+      refine WP.bind (WP.callRC_ok (x := Zig.optPayload (some b)) (v := b) rfl ?_)
       simp only [StateT.run_pure, pure_bind, hk15f, StateT.run_bind, StateT.run_modify]
       refine WP.pure' ?_
       simp only [hkB9, StateT.run_pure]
