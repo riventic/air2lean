@@ -1,0 +1,617 @@
+import ZigLean.Sep.Full.RwLockImpl
+
+/-!
+# `Io.RwLock` as a reader/writer lock (`RwLockImpl`), once for every program
+
+`Io.RwLock`'s `lockUncancelable`, `unlock`, `lockSharedUncancelable` and `unlockShared` (Zig
+0.16.0's std code; 0.17.0 translates to the same code) are the same code in every program that
+uses them: only the names differ (each program's `Gen` defines its own exits and locals) and the
+outer mutex and the semaphore they call are the program's `Io.Mutex` and `Io.Semaphore`.
+`IoRwLockCode Tgt` is that code passed as parameters, built like `IoMutexCode`
+(`ZigLean/Sep/Full/IoMutex.lean`): the functions of a program's `Gen` with their unfolding
+equations over the code's normal form (`bind_assoc`, `pure_bind`), the generated matches on the
+code's own exits as continuations of which the proof uses only their values at the exits it takes,
+the outer mutex `M : MutexImpl` and the semaphore `S : SemImpl` the code calls, and the two
+per-item facts of the semaphore's wait that the writer's wait needs (`FRw.wp_waitW`): it admits a
+caller whose part has a positive unmetered fragment and keeps that part exactly (`wait_unm_pre`,
+`wait_unm_keep`; for the program's `Io.Semaphore`, `payUnmetered` and `keepPart`).
+
+`IoRwLockCode.impl` proves the reader/writer contract (`ZigLean/Sep/Full/RwLockImpl.lean`) once,
+by walking each entry point with the contract's rules of the ops at the state word (`FRw.wp_addW`,
+`wp_decW`, `wp_giveW`, `wp_loadW`, `wp_casR`, `wp_addR`, `wp_subR`), the writer's wait
+(`FRw.wp_waitW`), the outer mutex's contract (`MutexImpl.lock_wp`, `unlock_wp`) and the
+semaphore's (`SemImpl.post_wp_resource`, with the protocol's `upost`):
+
+- `lock_wp`: `+2` (`wi`), the outer mutex, `-1`; with readers (the drain guard,
+  `RwState.Family.drain_guard`) the writer waits at the semaphore for the resource.
+- `unlock_wp`: `and ~1` (the resource back to the rest), then the outer mutex's unlock.
+- `lockShared_wp`: a load, then the fast loop of weak CASes `+2^32` while the read value has no
+  writer (each failure's value is `MsgOk`, so the checked add does not trap:
+  `RwState.Family.checked_add_reader_stale`); a writer sends the reader the slow way, `+2^32`
+  under the outer mutex. The reader's heap has `R` at the return's client parts (`FRw.Inv.rdR`).
+- `unlockShared_wp`: `-2^32`; the last reader before a writer (`RwState.Family.last_guard`,
+  `writing_guard`) posts the resource at the semaphore.
+
+A program instantiates it with its names and `simp`/`rfl` proofs of the equations
+(`Proofs/Sync/IoRwLock.lean`).
+-/
+
+namespace Zig
+namespace Full
+
+open FAssn Conc Proto
+
+namespace IoRwLockCode
+
+variable {Tgt σ E : Type} [Inhabited σ]
+
+/-- `lockUncancelable` in normal form: `+2`, the outer mutex, `-1`, and the semaphore's wait if the
+old value has readers. `kW` is the generated match after the drain branch, `fin` the one on the
+function's exit. -/
+def lockOf (M : MutexImpl Tgt) (S : SemImpl Tgt) (mid : E) (kW : E → CM Tgt σ E)
+    (fin : E → ConcM Tgt Unit) (p : Ptr) (io : Io) : ConcM Tgt Unit := do
+  let e ← StateT.run' ((do
+      let _ ← atomicRmwC .add false .seqCst 8 p (2 : BitVec 64)
+      let pm ← callMC (ptrProject p (·.add 32))
+      let _ ← callC (M.lock pm io)
+      let old ← atomicRmwC .add false .seqCst 8 p (18446744073709551615 : BitVec 64)
+      let x ← (if (old &&& (9223372032559808512 : BitVec 64) != (0 : BitVec 64)) then (do
+          let ps ← callMC (ptrProject p (·.add 8))
+          let _ ← callC (S.wait ps io)
+          pure mid)
+        else pure mid)
+      kW x) : CM Tgt σ E) default
+  fin e
+
+/-- `unlock` in normal form: `and ~1`, then the outer mutex's unlock. -/
+def unlockOf (M : MutexImpl Tgt) (ret : E) (fin : E → ConcM Tgt Unit) (p : Ptr) (io : Io) :
+    ConcM Tgt Unit := do
+  let e ← StateT.run' ((do
+      let _ ← atomicRmwC .and false .seqCst 8 p (18446744073709551614 : BitVec 64)
+      let pm ← callMC (ptrProject p (·.add 32))
+      let _ ← callC (M.unlock pm io)
+      pure ret) : CM Tgt σ E) default
+  fin e
+
+/-- `lockSharedUncancelable`'s loop body in normal form: the loop-entry tick; while the local
+`state` has no writer, the checked add of a reader and the weak CAS (`k15` the generated match on
+its exit: a failure stores the value read and repeats); `kB` the match on the body's exit. -/
+def bodyOf (getSt : σ → BitVec 64) (k15 kB : E → CM Tgt σ E) (fail : BitVec 64 → E)
+    (ret slow : E) (p : Ptr) : CM Tgt σ E := do
+  callMC tick
+  let s ← get
+  let y ← (if (getSt s &&& (4294967295 : BitVec 64) == (0 : BitVec 64)) then (do
+      let s₁ ← get
+      let s₂ ← get
+      let n ← Zig.add false (getSt s₂) (4294967296 : BitVec 64)
+      let r ← cmpxchgWeakC .seqCst .seqCst 8 p (getSt s₁) n
+      let z ← (if r.isSome then (do
+          let v ← Zig.optPayload r
+          pure (fail v))
+        else pure ret)
+      k15 z)
+    else pure slow)
+  kB y
+
+/-- `lockSharedUncancelable`'s slow path in normal form: `+2^32` under the outer mutex. -/
+def slowOf (M : MutexImpl Tgt) (ret : E) (p : Ptr) (io : Io) : CM Tgt σ E := do
+  let pm ← callMC (ptrProject p (·.add 32))
+  let _ ← callC (M.lock pm io)
+  let _ ← atomicRmwC .add false .seqCst 8 p (4294967296 : BitVec 64)
+  let pm' ← callMC (ptrProject p (·.add 32))
+  let _ ← callC (M.unlock pm' io)
+  pure ret
+
+/-- `lockSharedUncancelable` in normal form: the load into the local `state`, the loop, and the
+generated match on the loop's exit (`kS`: the slow path at its exit) and on the function's. -/
+def lockSharedOf (setSt : σ → BitVec 64 → σ) (body : Ptr → CM Tgt σ E) (again : E → Bool)
+    (kS : Ptr → Io → E → CM Tgt σ E) (fin : E → ConcM Tgt Unit) (p : Ptr) (io : Io) :
+    ConcM Tgt Unit := do
+  let e ← StateT.run' ((do
+      let v ← atomicLoadC (n := 64) .seqCst 8 p
+      modify (fun s => setSt s v)
+      let y ← loop (body p) again
+      kS p io y) : CM Tgt σ E) default
+  fin e
+
+/-- `unlockShared` in normal form: `-2^32`, the last-reader guard and the writing bit (`k8` the
+exit carrying it), the generated match that posts at the semaphore (`k1`), and the matches on its
+exit (`k2`) and on the function's (`fin`). -/
+def unlockSharedOf (k8 : Bool → E) (k1 : Ptr → Io → E → CM Tgt σ E) (k2 : E → CM Tgt σ E)
+    (fin : E → ConcM Tgt Unit) (p : Ptr) (io : Io) : ConcM Tgt Unit := do
+  let e ← StateT.run' ((do
+      let old ← atomicRmwC .sub false .seqCst 8 p (4294967296 : BitVec 64)
+      let x ← (if (old &&& (9223372032559808512 : BitVec 64) == (4294967296 : BitVec 64)) then
+          pure (k8 (old &&& (1 : BitVec 64) != (0 : BitVec 64)))
+        else pure (k8 false))
+      let y ← k1 p io x
+      k2 y) : CM Tgt σ E) default
+  fin e
+
+end IoRwLockCode
+
+/-- `Io.RwLock`'s code in a program's generated code (module doc). -/
+structure IoRwLockCode (Tgt : Type) where
+  /-- The outer mutex and the semaphore the code calls, with one contended value. -/
+  M : MutexImpl Tgt
+  S : SemImpl Tgt
+  c_eq : S.c = M.c
+  /-- The semaphore's wait admits a positive unmetered fragment and keeps that part. -/
+  wait_unm_pre : ∀ t r, 0 < r.gh.ac.frag .unmetered → S.wait_pre t r
+  wait_unm_keep : ∀ t r r', 0 < r.gh.ac.frag .unmetered →
+    (S.wait_during t r r' → r' = r) ∧ (S.wait_post t r r' → r' = r)
+  /-- `lockUncancelable`'s locals and exits (the return, the end of the drain branch). -/
+  σL : Type
+  [inhL : Inhabited σL]
+  EL : Type
+  lret : EL
+  lmid : EL
+  lock : Ptr → Io → ConcM Tgt Unit
+  lock_eq : ∃ (kW : EL → CM Tgt σL EL) (fin : EL → ConcM Tgt Unit),
+    (∀ p io, lock p io = IoRwLockCode.lockOf M S lmid kW fin p io) ∧
+    kW lmid = pure lret ∧ fin lret = pure ()
+  /-- `unlock`'s locals and exit. -/
+  σU : Type
+  [inhU : Inhabited σU]
+  EU : Type
+  uret : EU
+  unlock : Ptr → Io → ConcM Tgt Unit
+  unlock_eq : ∃ fin : EU → ConcM Tgt Unit,
+    (∀ p io, unlock p io = IoRwLockCode.unlockOf (σ := σU) M uret fin p io) ∧ fin uret = pure ()
+  /-- `lockSharedUncancelable`'s locals (the local `state`) and exits: the return, the slow path,
+  the CAS's failure with the value read, the body's end before a repeat, the repeat. -/
+  σR : Type
+  [inhR : Inhabited σR]
+  ER : Type
+  getSt : σR → BitVec 64
+  setSt : σR → BitVec 64 → σR
+  get_set : ∀ s v, getSt (setSt s v) = v
+  rret : ER
+  rslow : ER
+  rfail : BitVec 64 → ER
+  rnext : ER
+  rrep : ER
+  again : ER → Bool
+  again_rep : again rrep = true
+  again_ret : again rret = false
+  again_slow : again rslow = false
+  body : Ptr → CM Tgt σR ER
+  body_eq : ∃ (k15 kB : ER → CM Tgt σR ER),
+    (∀ p, body p = IoRwLockCode.bodyOf getSt k15 kB rfail rret rslow p) ∧
+    (∀ v, k15 (rfail v) = do modify (fun s => setSt s v); pure rnext) ∧
+    k15 rret = pure rret ∧ kB rnext = pure rrep ∧ kB rret = pure rret ∧ kB rslow = pure rslow
+  lockShared : Ptr → Io → ConcM Tgt Unit
+  lockShared_eq : ∃ (kS : Ptr → Io → ER → CM Tgt σR ER) (fin : ER → ConcM Tgt Unit),
+    (∀ p io, lockShared p io = IoRwLockCode.lockSharedOf setSt body again kS fin p io) ∧
+    (∀ p io, kS p io rslow = IoRwLockCode.slowOf M rret p io) ∧
+    (∀ p io, kS p io rret = pure rret) ∧ fin rret = pure ()
+  /-- `unlockShared`'s locals and exits: the return, the end of the post branch, the exit with the
+  writing bit. -/
+  σS : Type
+  [inhS : Inhabited σS]
+  ES : Type
+  sret : ES
+  smid : ES
+  s8 : Bool → ES
+  unlockShared : Ptr → Io → ConcM Tgt Unit
+  unlockShared_eq : ∃ (k1 : Ptr → Io → ES → CM Tgt σS ES) (k2 : ES → CM Tgt σS ES)
+      (fin : ES → ConcM Tgt Unit),
+    (∀ p io, unlockShared p io = IoRwLockCode.unlockSharedOf s8 k1 k2 fin p io) ∧
+    (∀ p io, k1 p io (s8 true) = do
+      let ps ← callMC (ptrProject p (·.add 8))
+      let _ ← callC (S.post ps io)
+      pure smid) ∧
+    (∀ p io, k1 p io (s8 false) = pure smid) ∧ k2 smid = pure sret ∧ fin sret = pure ()
+
+namespace IoRwLockCode
+
+attribute [instance] IoRwLockCode.inhL IoRwLockCode.inhU IoRwLockCode.inhR IoRwLockCode.inhS
+
+/-- **The frame of an entry point**: its locals' run from `default`, then the generated match on
+its exit, which is `pure ()` at the return. -/
+theorem wp_frame {γ : Type} {P : Proto Tgt γ} {t : ThreadId} {G : ThreadId → γ} {m : Mem}
+    {n : Nat} {x : CM Tgt σ E} {fin : E → ConcM Tgt Unit} {ret : E} (hfin : fin ret = pure ())
+    {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : P.WP t (x.run default) (fun r G' m' d' => r.1 = ret ∧ Q () G' m' d') G m n) :
+    P.WP t (do let e ← x.run' default; fin e) Q G m n := by
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map (WP.mono ?_ h)
+  rintro r G' m' d' ⟨he, hq⟩
+  show P.WP t (fin r.1) Q G' m' d'
+  rw [he, hfin]
+  exact WP.pure' hq
+
+variable (C : IoRwLockCode Tgt) {γ X Y : Type} {M L : FLock γ} {Cn : FCond γ}
+  {S : FSem γ Y L Cn} {W : FRw γ X Y M L Cn S} {P : Proto Tgt γ}
+  {UM US : (ThreadId → γ) → Res → Mem → Prop} {okM okS : γ → Prop}
+
+/-! ## `lockUncancelable` -/
+
+/-- **`lockUncancelable`** (`RwLockImpl.lock_wp`): `+2`, the outer mutex, `-1`; with readers the
+writer waits at the semaphore (`FRw.wp_waitW`), else it takes the free resource at the `-1`. -/
+theorem lock_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc : M.c = C.M.c)
+    (hLc : L.c = C.M.c) {p : Ptr} (hp : p = W.p) (t : ThreadId) (g : γ) (hg : W.Out g)
+    (hokM : okM g) (hokS : okS g) (hu : 0 < (M.part g).gh.ac.frag .unmetered)
+    (hroom : ∀ G m, P.inv G m → W.ph (G t) = .out → W.nwi G m + 1 < RwState.countBound)
+    (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m)
+    (_hc : m.current = t) :
+    P.WP t (C.lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      ∃ r rM, (∃ G₀, W.R (W.xs (upd G₀ t g)) r) ∧ FHeap.Disjoint (M.part g).heap r.heap ∧
+        P.inv (upd G' t (M.set (W.set (M.setPart g (rsum (M.part g) r)) .wr) .holds rM)) m')
+      G m d := by
+  obtain ⟨hwo, hmo, -, hlo, hlh, hco, hso⟩ := hg
+  obtain rfl : p = W.st.ptr := hp.trans W.ptr_st.symm
+  obtain ⟨kW, fin, hlock, hkW, hfin⟩ := C.lock_eq
+  rw [hlock, lockOf]
+  refine wp_frame hfin ?_
+  rw [StateT.run_bind]
+  refine WP.bind (FRw.wp_addW hW hwo (by rw [hmo]; decide) hroom hi
+    fun k₁ hk₁ G₁ m₁ _ hc₁ hi₁ => ?_)
+  rw [StateT.run_bind]
+  refine WP.bind (WP.callMC_ptrProject (hW.projW hi₁ (by decide) (by decide)) ?_)
+  rw [StateT.run_bind]
+  refine WP.bind (WP.callC (WP.mono (fun _ G₂ m₂ k₂ h₂ => ?_)
+    (C.M.lock_wp hW.m hcost (by rw [W.ptr_m, ← W.ptr_st]) hMc t (W.set g .wi)
+      (by rw [hW.mph, hmo]) ((hW.okM_set _ _).mpr hokM) (by rw [hW.mpart]; exact hu)
+      io G₁ m₁ k₁ hi₁)))
+  obtain ⟨hk₂, hc₂, rL, hi₂⟩ := h₂
+  -- `t` holds the outer mutex at `wi`
+  have hpart₂ : M.part (M.set (W.set g .wi) .holds rL) = M.part g := by
+    rw [M.part_set, hW.mpart]
+  have hx₂ : ∀ G₀, W.xs (upd G₀ t (M.set (W.set g .wi) .holds rL)) = W.xs (upd G₀ t g) :=
+    fun G₀ => upd_map W.x G₀ t (by rw [W.x_m, W.x_set])
+  have hset₂ : ∀ X, W.set (M.setPart (M.set (W.set g .wi) .holds rL) X) .wr =
+      M.set (W.set (M.setPart g X) .wr) .holds rL := fun X => by
+    rw [M.setPart_set, ← hW.wset_part, hW.wset_m, W.set_set]
+  rw [StateT.run_bind]
+  refine WP.bind (FRw.wp_decW hW (g := M.set (W.set g .wi) .holds rL)
+    (by rw [(hW.ph_m _ _ _).1, W.ph_set]) (M.ph_set _ _ _) hi₂
+    fun k₃ hk₃ G₃ m₃ old hc₃ hcase => ?_)
+  have hgo : (old &&& (9223372032559808512 : BitVec 64) != (0 : BitVec 64)) =
+      (RwState.readers old != 0) := RwState.Family.drain_guard 31 1 old
+  rw [StateT.run_bind]
+  refine WP.bind ?_
+  split
+  · rename_i hcd
+    rcases hcase with ⟨-, hi₃⟩ | ⟨hro, -⟩
+    · -- readers drain: the writer waits at the semaphore for the resource
+      rw [StateT.run_bind]
+      refine WP.bind (WP.callMC_ptrProject (hW.projW hi₃ (by decide) (by decide)) ?_)
+      rw [StateT.run_bind]
+      refine WP.bind (WP.callC (WP.mono (fun _ G₄ m₄ k₄ h₄ => ?_)
+        (FRw.wp_waitW hW hcost C.S (hLc.trans C.c_eq.symm) C.wait_unm_pre C.wait_unm_keep
+          (by rw [W.ptr_s, ← W.ptr_st]) (W.ph_set _ _) (by rw [hW.mph, M.ph_set])
+          (by rw [W.lph, W.pair.ph_ab, W.lph, hlo])
+          (by rw [W.lheld, W.pair.held_ab, W.lheld, hlh])
+          (by rw [FRw.cph_w, (hW.ph_m _ _ _).2.1, FRw.cph_w, hco])
+          (by rw [FRw.sph_w, (hW.ph_m _ _ _).2.2, FRw.sph_w, hso])
+          ((hW.okS_set _ _).mpr ((hW.okS_m _ _ _).mpr ((hW.okS_set _ _).mpr hokS)))
+          (by rw [hW.mpart, hpart₂]; exact hu) io hi₃ hc₃)))
+      obtain ⟨hk₄, hc₄, r, ⟨G₀, hR⟩, hdj, hi₄⟩ := h₄
+      rw [hW.mpart, hpart₂] at hdj hi₄
+      rw [← hW.wset_part, W.set_set, hset₂] at hi₄
+      rw [show W.xs (upd G₀ t (W.set (M.set (W.set g .wi) .holds rL) .ww)) =
+        W.xs (upd G₀ t g) from upd_map W.x G₀ t (by rw [W.x_set, W.x_m, W.x_set])] at hR
+      rw [StateT.run_pure]
+      refine WP.pure' ?_
+      simp only [hkW, StateT.run_pure]
+      exact WP.pure' ⟨rfl, by omega, hc₄, r, rL, ⟨G₀, hR⟩, hdj, hi₄⟩
+    · rw [hgo, hro] at hcd
+      exact absurd hcd (by decide)
+  · rename_i hcd
+    rcases hcase with ⟨hro, -⟩ | ⟨-, r, hR, hdj, hi₃⟩
+    · exact absurd (by rw [hgo]; simpa using hro) hcd
+    · -- no reader: `t` took the free resource at the `-1`
+      rw [hpart₂] at hdj hi₃
+      rw [hset₂] at hi₃
+      rw [hx₂] at hR
+      rw [StateT.run_pure]
+      refine WP.pure' ?_
+      simp only [hkW, StateT.run_pure]
+      exact WP.pure' ⟨rfl, by omega, hc₃, r, rL, ⟨G₃, hR⟩, hdj, hi₃⟩
+
+/-! ## `unlock` -/
+
+/-- **`unlock`** (`RwLockImpl.unlock_wp`): `and ~1` gives the resource back to the rest
+(`FRw.wp_giveW`), then the outer mutex's unlock. -/
+theorem unlock_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc : M.c = C.M.c)
+    (_hLc : L.c = C.M.c) {p : Ptr} (hp : p = W.p) (t : ThreadId) (g : γ) (r₀ r : Res)
+    (hwr : W.ph g = .wr) (hmh : M.ph g = .holds) (_hlo : L.ph g = .out) (_hlh : L.held g = rnil)
+    (_hco : Cn.ph g = .out) (_hso : S.ph g = .out) (hpart : M.part g = rsum r₀ r)
+    (hd : FHeap.Disjoint r₀.heap r.heap) (hokM : okM g) (_hokS : okS g)
+    (_hu : 0 < r₀.gh.ac.frag .unmetered) (hR : ∀ G, W.R (W.xs (upd G t g)) r)
+    (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m)
+    (_hc : m.current = t) :
+    P.WP t (C.unlock p io) (fun _ G' m' d' => d' ≤ d ∧ m'.current = t ∧
+      P.inv (upd G' t (M.set (W.set (M.setPart g r₀) .out) .out rnil)) m') G m d := by
+  obtain rfl : p = W.st.ptr := hp.trans W.ptr_st.symm
+  obtain ⟨fin, hunlock, hfin⟩ := C.unlock_eq
+  rw [hunlock, unlockOf]
+  refine wp_frame hfin ?_
+  rw [StateT.run_bind]
+  refine WP.bind (FRw.wp_giveW hW hwr (by rw [hmh]; decide) hpart hd hR hi
+    fun k₁ hk₁ G₁ m₁ _ hc₁ hi₁ => ?_)
+  rw [StateT.run_bind]
+  refine WP.bind (WP.callMC_ptrProject (hW.projW hi₁ (by decide) (by decide)) ?_)
+  rw [StateT.run_bind]
+  refine WP.bind (WP.callC (WP.mono (fun _ G₂ m₂ k₂ h₂ => ?_)
+    (C.M.unlock_wp hW.m hcost (by rw [W.ptr_m, ← W.ptr_st]) hMc t _
+      (by rw [hW.mph, M.ph_setPart, hmh])
+      ((hW.okM_set _ _).mpr ((hW.m.ok_setPart _ _).mpr hokM)) io G₁ m₁ k₁ hi₁ hc₁)))
+  obtain ⟨hk₂, hc₂, hi₂⟩ := h₂
+  rw [StateT.run_pure]
+  exact WP.pure' ⟨rfl, by omega, hc₂, hi₂⟩
+
+/-! ## `lockSharedUncancelable` -/
+
+/-- The fast loop's invariant: `t` is `out` and the local `state` holds a value of the word
+(`MsgOk`). -/
+def lsInv (P : Proto Tgt γ) (W : FRw γ X Y M L Cn S) (t : ThreadId) (g : γ) (D : Nat)
+    (s : C.σR) (G : ThreadId → γ) (m : Mem) (d : Nat) : Prop :=
+  d < D ∧ m.current = t ∧ FRw.MsgOk (C.getSt s) ∧ P.inv (upd G t g) m
+
+/-- The fast loop ends at the return with the reader's share in `t`'s part, or at the slow
+path with `t` still `out`. -/
+def lsPost (P : Proto Tgt γ) (W : FRw γ X Y M L Cn S) (t : ThreadId) (g : γ) (D : Nat)
+    (r : C.ER × C.σR) (G : ThreadId → γ) (m : Mem) (d : Nat) : Prop :=
+  d < D ∧ m.current = t ∧
+    ((r.1 = C.rret ∧ ∃ (q : Frac) (H : FHeap), 0 < q.val ∧
+      P.inv (upd G t (W.set (M.setPart g (rsum (M.part g) (shareRes H q))) (.rd q H))) m) ∨
+     (r.1 = C.rslow ∧ P.inv (upd G t g) m))
+
+/-- One run of the fast loop's body: the tick; with no writer in `state`, the checked add and the
+weak CAS (`FRw.wp_casR`): its success ends the loop with the share, its failure stores the value
+read (`MsgOk`) and repeats (a stop: the depth gets smaller). -/
+theorem body_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (t : ThreadId) (g : γ)
+    (hout : W.ph g = .out) (hmg : M.ph g ≠ .gone) (hu : 0 < (M.part g).gh.ac.frag .unmetered)
+    (hroom : ∀ G m, P.inv G m → W.ph (G t) = .out → W.nrd G m + 1 < RwState.countBound)
+    (D : Nat) (s : C.σR) (G : ThreadId → γ) (m : Mem) (d : Nat) (h : C.lsInv P W t g D s G m d) :
+    P.WP t ((C.body W.st.ptr).run s) (fun r G' m' d' =>
+      if C.again r.1 then C.lsInv P W t g D r.2 G' m' d' ∧
+        (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : C.σR) => 0) s)
+      else C.lsPost P W t g D r G' m' d') G m d := by
+  obtain ⟨hD, hc, ⟨rr, ww, aa, hrr, hww, hst⟩, hi⟩ := h
+  obtain ⟨k15, kB, hbody, hk15f, hk15r, hkB9, hkBr, hkB7⟩ := C.body_eq
+  rw [hbody, bodyOf, StateT.run_bind]
+  refine WP.bind ?_
+  show P.WP t (ConcM.liftMem Zig.tick >>= fun a => pure (a, s)) _ _ _ _
+  refine WP.bind (hW.m.wp_tick_unmetered hi hc hmg hu fun m₀ hc₀ hi₀ => WP.pure' ?_)
+  simp only [StateT.run_bind, StateT.run_get, pure_bind]
+  refine WP.bind ?_
+  split
+  · rename_i hgd
+    simp only [StateT.run_bind, StateT.run_get, pure_bind]
+    have hadd : Zig.add false (C.getSt s) (4294967296 : BitVec 64) =
+        pure (RwState.encode (rr + 1) ww aa) := by
+      rw [hst]; exact RwState.Family.checked_add_reader_stale (by decide) hrr hww aa true
+    refine WP.bind (WP.callRC_ok (by rw [hadd]; rfl) ?_)
+    refine WP.bind (FRw.wp_casR hW hout hmg hroom (by simpa using hgd)
+      (by rw [hst]; exact (RwState.Family.add_reader 31 1 rr ww aa).symm) hi₀
+      (fun k hk G₁ m₁ hc₁ q H hq _ hi₁ => ?_) (fun k hk G₁ m₁ b hc₁ hb hi₁ => ?_))
+    · -- success: the reader is in
+      simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte, StateT.run_pure, pure_bind,
+        hk15r]
+      refine WP.pure' ?_
+      simp only [hkBr, StateT.run_pure]
+      refine WP.pure' ?_
+      simp only [C.again_ret, Bool.false_eq_true, ↓reduceIte]
+      exact ⟨by omega, hc₁, .inl ⟨rfl, q, H, hq, hi₁⟩⟩
+    · -- failure: store the value read and repeat
+      simp only [Option.isSome_some, ↓reduceIte, StateT.run_bind]
+      refine WP.bind (WP.callRC_ok rfl ?_)
+      simp only [StateT.run_pure, pure_bind, hk15f, StateT.run_bind, StateT.run_modify]
+      refine WP.pure' ?_
+      simp only [hkB9, StateT.run_pure]
+      refine WP.pure' ?_
+      simp only [C.again_rep, ↓reduceIte]
+      exact ⟨⟨by omega, hc₁, by rw [C.get_set]; exact hb, hi₁⟩, .inl (by omega)⟩
+  · -- a writer: the slow path
+    rw [StateT.run_pure]
+    refine WP.pure' ?_
+    simp only [hkB7, StateT.run_pure]
+    refine WP.pure' ?_
+    simp only [C.again_slow, Bool.false_eq_true, ↓reduceIte]
+    exact ⟨hD, hc₀, .inr ⟨rfl, hi₀⟩⟩
+
+/-- **`lockSharedUncancelable`** (`RwLockImpl.lockShared_wp`): the load, the fast loop
+(`body_wp`), and the slow path under the outer mutex (`FRw.wp_addR`). The reader's heap has `R`
+at the return's client parts (`FRw.Inv.rdR`). -/
+theorem lockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc : M.c = C.M.c)
+    (_hLc : L.c = C.M.c) {p : Ptr} (hp : p = W.p) (t : ThreadId) (g : γ) (hg : W.Out g)
+    (hokM : okM g) (_hokS : okS g) (hu : 0 < (M.part g).gh.ac.frag .unmetered)
+    (hroom : ∀ G m, P.inv G m → W.ph (G t) = .out → W.nrd G m + 1 < RwState.countBound)
+    (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m)
+    (_hc : m.current = t) :
+    P.WP t (C.lockShared p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      ∃ (q : Frac) (H : FHeap), 0 < q.val ∧ W.R (W.xs (upd G' t g)) ⟨H, Know.none, Ghost.unit⟩ ∧
+        P.inv (upd G' t (W.set (M.setPart g (rsum (M.part g) (shareRes H q))) (.rd q H))) m')
+      G m d := by
+  obtain ⟨hwo, hmo, hmh, -, -, -, -⟩ := hg
+  have hmg : M.ph g ≠ .gone := by rw [hmo]; decide
+  obtain rfl : p = W.st.ptr := hp.trans W.ptr_st.symm
+  have hret : ∀ G' m' q H, P.inv (upd G' t
+      (W.set (M.setPart g (rsum (M.part g) (shareRes H q))) (.rd q H))) m' →
+      W.R (W.xs (upd G' t g)) ⟨H, Know.none, Ghost.unit⟩ := fun G' m' q H h => by
+    obtain ⟨rX, hI⟩ := hW.winv h
+    have := hI.rdR (u := t) (by rw [upd_self, W.ph_set])
+    rwa [show W.xs (upd G' t (W.set (M.setPart g (rsum (M.part g) (shareRes H q))) (.rd q H))) =
+      W.xs (upd G' t g) from upd_map W.x G' t (by rw [W.x_set, W.x_part])] at this
+  obtain ⟨kS, fin, hls, hslow, hkret, hfin⟩ := C.lockShared_eq
+  rw [hls, lockSharedOf]
+  refine wp_frame hfin ?_
+  rw [StateT.run_bind]
+  refine WP.bind (FRw.wp_loadW hW hmg hi fun k₁ hk₁ G₁ m₁ b hc₁ hb hi₁ => ?_)
+  simp only [StateT.run_bind, StateT.run_modify, pure_bind]
+  refine WP.bind (WP.mono ?_ (WP.loop _ _ (C.lsInv P W t g d) (fun _ => 0) (C.lsPost P W t g d)
+    (C.body_wp hW hcost t g hwo hmg hu hroom d) _ G₁ m₁ k₁
+    ⟨by omega, hc₁, by rw [C.get_set]; exact hb, hi₁⟩))
+  rintro ⟨e, s'⟩ G₂ m₂ k₂ ⟨hk₂, hc₂, ⟨rfl, q, H, hq, hi₂⟩ | ⟨rfl, hi₂⟩⟩
+  · -- the fast path's return
+    simp only [hkret, StateT.run_pure]
+    exact WP.pure' ⟨rfl, hk₂, hc₂, q, H, hq, hret _ _ q H hi₂, hi₂⟩
+  · -- the slow path: `+2^32` under the outer mutex
+    simp only [hslow, slowOf, StateT.run_bind]
+    refine WP.bind (WP.callMC_ptrProject (hW.projW hi₂ (by decide) (by decide)) ?_)
+    refine WP.bind (WP.callC (WP.mono (fun _ G₃ m₃ k₃ h₃ => ?_)
+      (C.M.lock_wp hW.m hcost (by rw [W.ptr_m, ← W.ptr_st]) hMc t g hmo hokM hu
+        io G₂ m₂ k₂ hi₂)))
+    obtain ⟨hk₃, hc₃, rL, hi₃⟩ := h₃
+    refine WP.bind (FRw.wp_addR hW (g := M.set g .holds rL) (by rw [(hW.ph_m _ _ _).1, hwo])
+      (M.ph_set _ _ _) hroom hi₃ fun k₄ hk₄ G₄ m₄ _ hc₄ q H hq _ hi₄ => ?_)
+    refine WP.bind (WP.callMC_ptrProject (hW.projW hi₄ (by decide) (by decide)) ?_)
+    refine WP.bind (WP.callC (WP.mono (fun _ G₅ m₅ k₅ h₅ => ?_)
+      (C.M.unlock_wp hW.m hcost (by rw [W.ptr_m, ← W.ptr_st]) hMc t _
+        (by rw [hW.mph, M.ph_setPart, M.ph_set])
+        ((hW.okM_set _ _).mpr ((hW.m.ok_setPart _ _).mpr ((hW.m.ok_set _ _ _).mpr hokM)))
+        io G₄ m₄ k₄ hi₄ hc₄)))
+    obtain ⟨hk₅, hc₅, hi₅⟩ := h₅
+    have hgo : M.set g .out rnil = g := by rw [← hmo, ← hmh, M.set_self]
+    rw [M.part_set, ← hW.wset_m, M.setPart_set, M.set_set, ← M.setPart_set, hgo] at hi₅
+    simp only [StateT.run_pure]
+    exact WP.pure' ⟨rfl, by omega, hc₅, q, H, hq, hret _ _ q H hi₅, hi₅⟩
+
+/-! ## `unlockShared` -/
+
+/-- **`unlockShared`** (`RwLockImpl.unlockShared_wp`): `-2^32` (`FRw.wp_subR`); the last reader
+before a writer (`RwState.Family.last_guard`, `writing_guard`) posts the resource it carries at
+the semaphore (`SemImpl.post_wp_resource`): the post makes the state `RwPosted` (`Inv.rp`: the
+writer at `ww`, no other reader), the pool is the resource (`Inv.rpR`), and `US`'s stability is
+the protocol's `upost`. -/
+theorem unlockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none)
+    (_hMc : M.c = C.M.c) (hLc : L.c = C.M.c) {p : Ptr} (hp : p = W.p) (t : ThreadId) (g : γ)
+    (r₀ : Res) (q : Frac) (H : FHeap) (hrd : W.ph g = .rd q H) (hmo : M.ph g = .out)
+    (_hmh : M.held g = rnil) (hlo : L.ph g = .out) (hlh : L.held g = rnil) (hco : Cn.ph g = .out)
+    (hso : S.ph g = .out) (hpart : M.part g = rsum r₀ (shareRes H q)) (_hokM : okM g)
+    (hokS : okS g) (hu : 0 < r₀.gh.ac.frag .unmetered)
+    (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m)
+    (_hc : m.current = t) :
+    P.WP t (C.unlockShared p io) (fun _ G' m' d' => d' ≤ d ∧ m'.current = t ∧
+      P.inv (upd G' t (W.set (M.setPart g r₀) .out)) m') G m d := by
+  obtain rfl : p = W.st.ptr := hp.trans W.ptr_st.symm
+  obtain ⟨k1, k2, fin, hus, hk1t, hk1f, hk2, hfin⟩ := C.unlockShared_eq
+  rw [hus, unlockSharedOf]
+  refine wp_frame hfin ?_
+  rw [StateT.run_bind]
+  refine WP.bind (FRw.wp_subR hW hrd (by rw [hmo]; decide) hpart hi
+    fun k₁ hk₁ G₁ m₁ old hc₁ hcase => ?_)
+  have hlg : (old &&& (9223372032559808512 : BitVec 64) == (4294967296 : BitVec 64)) =
+      (RwState.readers old == 1) := RwState.Family.last_guard 31 1 old
+  have hwg : (old &&& (1 : BitVec 64) != (0 : BitVec 64)) = RwState.writing old :=
+    RwState.Family.writing_guard 31 1 old
+  rw [StateT.run_bind]
+  refine WP.bind ?_
+  rcases hcase with ⟨hlast, hi₁⟩ | ⟨h1, hwt, r, hR, hdj, hi₁⟩
+  · -- no post: other readers remain, or no writer
+    split
+    · rename_i hcd
+      rw [hwg, hlast (by rw [hlg] at hcd; simpa using hcd), StateT.run_pure]
+      refine WP.pure' ?_
+      simp only [hk1f, pure_bind, hk2, StateT.run_pure]
+      exact WP.pure' ⟨rfl, by omega, hc₁, hi₁⟩
+    · rw [StateT.run_pure]
+      refine WP.pure' ?_
+      simp only [hk1f, pure_bind, hk2, StateT.run_pure]
+      exact WP.pure' ⟨rfl, by omega, hc₁, hi₁⟩
+  · -- the last reader before the writer: it posts the resource
+    obtain ⟨g₁, hg₁⟩ : ∃ g₁, g₁ = W.set (M.setPart g (rsum r₀ r)) (.rp r) := ⟨_, rfl⟩
+    obtain ⟨gx, hgxd⟩ : ∃ gx, gx = W.set (M.setPart g r₀) .out := ⟨_, rfl⟩
+    rw [← hg₁] at hi₁
+    have hcd : (old &&& (9223372032559808512 : BitVec 64) == (4294967296 : BitVec 64)) = true :=
+      by rw [hlg, h1]; rfl
+    rw [if_pos hcd, hwg, hwt, StateT.run_pure]
+    refine WP.pure' ?_
+    simp only [hk1t, bind_assoc, StateT.run_bind]
+    have hpgx : L.part gx = r₀ := by rw [hgxd, ← W.pair.part, hW.mpart, M.part_setPart]
+    have hsplit : L.part g₁ = rsum (L.part gx) r := by
+      rw [hpgx, hg₁, ← W.pair.part, hW.mpart, M.part_setPart]
+    have hu' : 0 < (L.part gx).gh.ac.frag .unmetered := by rw [hpgx]; exact hu
+    have hgx : gx = W.set (L.setPart g₁ r₀) .out := by
+      rw [hgxd, hg₁, ← W.pair.setPart, ← hW.wset_part, M.setPart_setPart, W.set_set]
+    have hxs : ∀ G₂ rL, W.xs (upd G₂ t (L.set g₁ .holds rL)) = W.xs (upd G₂ t gx) :=
+      fun G₂ rL => upd_map W.x G₂ t (by rw [hgxd, hg₁, W.x_l, W.x_set, W.x_part, W.x_set, W.x_part])
+    -- at the post the state becomes `RwPosted` and the pool the resource
+    have hst : ∀ G₂ rL m₂, P.inv (upd G₂ t (L.set g₁ .holds rL)) m₂ →
+        RwPosted W.ph (upd G₂ t gx) ∧ ¬ RwPosted W.ph (upd G₂ t g₁) ∧
+          W.R (W.xs (upd G₂ t gx)) r := by
+      intro G₂ rL m₂ h
+      obtain ⟨rX, hI⟩ := hW.winv h
+      have hrp : W.ph (upd G₂ t (L.set g₁ .holds rL) t) = .rp r := by
+        rw [upd_self, W.ph_l, hg₁, W.ph_set]
+      obtain ⟨h0, ⟨w, hw⟩, huq⟩ := hI.rp t (by rw [hrp]; rfl)
+      have hwt : w ≠ t := by rintro rfl; rw [hrp] at hw; cases hw
+      have hgo : W.ph gx = .out := by rw [hgxd, W.ph_set]
+      refine ⟨⟨⟨w, by rwa [upd_ne _ _ hwt] at hw ⊢⟩, fun u => ?_, fun u => ?_⟩,
+        fun ⟨_, _, h⟩ => ?_, ?_⟩
+      · by_cases e : u = t
+        · subst e; rw [upd_self, hgo]; rfl
+        · have := FRw.noRd_of hI.ex h0 u
+          rwa [upd_ne _ _ e] at this ⊢
+      · by_cases e : u = t
+        · subst e; rw [upd_self, hgo]; rfl
+        · rw [upd_ne _ _ e]
+          cases hr : (W.ph (G₂ u)).isRp
+          · rfl
+          · exact absurd (huq u (by rw [upd_ne _ _ e]; exact hr)) e
+      · have := h t
+        rw [upd_self, hg₁, W.ph_set] at this
+        cases this
+      · have := hI.rpR t r hrp
+        rwa [hxs] at this
+    refine WP.bind (WP.callMC_ptrProject (hW.projW hi₁ (by decide) (by decide)) ?_)
+    refine WP.bind (WP.callC (WP.mono (fun _ G₂ m₂ k₂ h₂ => ?_)
+      (C.S.post_wp_resource hW.s hcost (hLc.trans C.c_eq.symm) (by rw [W.ptr_s, ← W.ptr_st])
+        t g₁ gx r
+        (by rw [hg₁, W.lph, W.pair.setPart, L.ph_setPart, hlo])
+        (by rw [hg₁, FRw.cph_w, (hW.ph_part _ _).2.1, hco])
+        (by rw [hg₁, FRw.sph_w, (hW.ph_part _ _).2.2, hso])
+        (by rw [hg₁]; exact (hW.okS_set _ _).mpr ((hW.okS_part _ _).mpr hokS))
+        (by rw [hgxd, W.lph, W.pair.setPart, L.ph_setPart, hlo])
+        (by rw [hgxd, W.lheld, W.pair.setPart, L.held_setPart, hlh])
+        (by rw [hgxd, FRw.cph_w, (hW.ph_part _ _).2.1, hco])
+        (by rw [hgxd, FRw.sph_w, (hW.ph_part _ _).2.2, hso])
+        (by rw [hgxd]; exact (hW.okS_set _ _).mpr ((hW.okS_part _ _).mpr hokS))
+        hsplit (by rw [hpgx]; exact hdj)
+        (fun rᵢ hr G₂ rL m₂ h₂ => by
+          obtain rfl := C.S.post_unmetered_during t _ rᵢ hu' hr
+          rw [← hsplit, L.setPart_self] at h₂
+          obtain ⟨hp, hnp, -⟩ := hst G₂ rL m₂ h₂
+          rw [W.cnt_posted _ hp, W.cnt_idle _ hnp]
+          decide)
+        (fun rᵢ hr G₂ rL m₂ h₂ x hx => by
+          obtain rfl := C.S.post_unmetered_during t _ rᵢ hu' hr
+          rw [← hsplit, L.setPart_self] at h₂
+          obtain ⟨hp, hnp, hR'⟩ := hst G₂ rL m₂ h₂
+          rw [W.pool_idle _ hnp] at hx
+          have hxr : x = r := sep_emp.mp hx
+          subst hxr
+          rw [W.pool_posted _ hp]
+          exact hR')
+        (fun rᵢ hr G₂ rX m₂ h₁ h₂ sh sc hUS hL hS hC => by
+          obtain rfl := C.S.post_unmetered_during t _ rᵢ hu' hr
+          rw [← hsplit, L.setPart_self] at hUS
+          rw [L.setPart_self, hgx] at hL hS hC ⊢
+          exact hW.upost G₂ rX m₂ t g₁ r₀ r h₁ h₂ sh sc (by rw [hg₁, W.ph_set]) hUS hL hS hC)
+        io G₁ m₁ k₁ (C.S.post_unmetered_pre t _ hu') hi₁ hc₁)))
+    obtain ⟨hk₂, hc₂, r', hpp, hi₂⟩ := h₂
+    obtain rfl := C.S.post_unmetered_post t _ r' hu' hpp
+    rw [L.setPart_self, hgxd] at hi₂
+    simp only [StateT.run_pure, pure_bind, hk2]
+    exact WP.pure' ⟨rfl, by omega, hc₂, hi₂⟩
+
+/-- **`Io.RwLock` is a reader/writer lock** (`RwLockImpl`), in every program whose code it is. -/
+def impl : RwLockImpl Tgt where
+  lock := C.lock
+  unlock := C.unlock
+  lockShared := C.lockShared
+  unlockShared := C.unlockShared
+  c := C.M.c
+  lockShared_wp := C.lockShared_wp
+  unlockShared_wp := C.unlockShared_wp
+  lock_wp := C.lock_wp
+  unlock_wp := C.unlock_wp
+
+end IoRwLockCode
+
+end Full
+end Zig

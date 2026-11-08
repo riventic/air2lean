@@ -173,6 +173,18 @@ theorem drain_guard_encode {c p r w : Nat} (hr : r < countBound c) (hw : w < cou
     (a : Bool) : (encode c p r w a &&& readerMask c p != 0#(width c p)) = (r != 0) := by
   rw [drain_guard, readers_encode hr hw]
 
+/-- The last-reader guard of `unlockShared` (`old & reader_mask == reader_unit`), with no count
+hypotheses. -/
+theorem last_guard (c p : Nat) (s : BitVec (width c p)) :
+    (s &&& readerMask c p == BitVec.ofNat (width c p) (readerUnit c)) = (readers c s == 1) := by
+  have hu : readerUnit c < 2 ^ width c p :=
+    Nat.pow_lt_pow_right (by decide) (by unfold width; omega)
+  rw [Bool.eq_iff_iff]
+  simp only [beq_iff_eq]
+  rw [← BitVec.toNat_inj, reader_mask, Zig.toNat_ofNat_of_lt hu]
+  simpa only [Nat.one_mul] using
+    (Nat.mul_right_cancel_iff (n := readers c s) (k := 1) (Nat.two_pow_pos (c + 1)))
+
 theorem writing_mask (c p : Nat) (s : BitVec (width c p)) :
     (s &&& 1#(width c p)).toNat = s.toNat % 2 := by
   have h := Zig.toNat_and_field s 0 1 (by omega) (by unfold width; omega)
