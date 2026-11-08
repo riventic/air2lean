@@ -1111,6 +1111,11 @@ theorem Inv.enterW {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
 /-- The empty resource owns no byte. -/
 theorem rnil_owned (l : Loc) : rnil.owned l = none := Res.owned_plain rfl rfl
 
+/-- **Two shares of one heap are its share of their sum** (`Ghost.sharesOf_add`). -/
+theorem shareRes_add (H : FHeap) (q₁ q₂ : Frac) :
+    rsum (shareRes H q₁) (shareRes H q₂) = shareRes H (q₁.add q₂) := by
+  simp only [rsum, shareRes, FHeap.union_empty, Know.none_union, Ghost.sharesOf_add]
+
 /-- With no reader counted, no thread is at `rd` (`Inv.ex`: a thread in the code exists). -/
 theorem Inv.noRd {G : ThreadId → γ} {rX : Res} {m : Mem} (hI : W.Inv G rX m)
     (h0 : W.nrd G m = 0) : ∀ u, (W.ph (G u)).isRd = false := noRd_of hI.ex h0
@@ -1237,7 +1242,7 @@ theorem Inv.addR {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
       (W.st.hist m)[(W.st.hist m).size - 1]! (old + BitVec.ofNat 64 RwState.readerUnit)))
     (hrel : ord.isRel = true)
     (hfp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨ VClock.le e.clock (m'.clocks[t]!) = true) :
-    ∃ rF rO H f, rY = rsum rF rO ∧ W.Owns G m rF ∧
+    ∃ rF rO H f, rY = rsum rF rO ∧ FHeap.Disjoint rF.heap rO.heap ∧ W.Owns G m rF ∧
       W.R (W.xs G) ⟨H, Know.none, Ghost.unit⟩ ∧ 0 < f.val ∧
       (W.nrd G m = 0 → rF = ⟨H, Know.none, Ghost.unit⟩ ∧ f = Frac.one) ∧
       (W.nrd G m ≠ 0 → rF = shareRes H f) ∧
@@ -1245,7 +1250,7 @@ theorem Inv.addR {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
         W.Inv (upd G t (W.set (G t) (.rd q H)))
           (rsum (W.st.cellsR m') (rsum (shareRes H f') rO)) m' := by
   obtain ⟨hnowr, hnorp, -, hnb⟩ := hI.noW hnoW
-  obtain ⟨rF, rO, rfl, hoff, -, hfr₀, how⟩ := hI.restY hY
+  obtain ⟨rF, rO, rfl, hoff, hdFO, hfr₀, how⟩ := hI.restY hY
   -- the free resource: `R` with no reader, else the readers' share
   obtain ⟨H, f, hR, hf, hsum, hall, hcase, hTo, hSh⟩ : ∃ H f,
       W.R (W.xs G) ⟨H, Know.none, Ghost.unit⟩ ∧ 0 < f.val ∧ f.val + W.fsum G m = 1 ∧
@@ -1270,7 +1275,7 @@ theorem Inv.addR {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
       exact ⟨H, f, hR, hf, hsum, hall, ⟨fun h => absurd h h0, fun _ => rfl⟩,
         fun l h => (shareRes_owned hf).mpr h,
         fun l h => (shareRes_owned hf).mp (Res.owned_of_shared h)⟩
-  refine ⟨rF, rO, H, f, rfl, how, hR, hf, hcase.1, hcase.2, fun q f' hq hf' hqf => ?_⟩
+  refine ⟨rF, rO, H, f, rfl, hdFO, how, hR, hf, hcase.1, hcase.2, fun q f' hq hf' hqf => ?_⟩
   have hqf' : q.val + f'.val = f.val := congrArg Frac.val hqf
   have hGt : W.ph (upd G t (W.set (G t) (.rd q H)) t) = .rd q H := by rw [upd_self, W.ph_set]
   have hnrd : W.nrd (upd G t (W.set (G t) (.rd q H))) m = W.nrd G m + 1 := by
@@ -1314,9 +1319,11 @@ outcomes, by the old value (`RwState.Family.last_reader_guard`, `writing_guard`)
 - other readers remain (`nrd ≠ 1`): `t` is `out`, the rest has the share `f + q`;
 - `t` was the last reader and no writer is writing: `t` is `out`, `f + q = 1`, and the whole
   share is `R` in the rest again (`EUpd.unshare_whole`), apart from the rest of the rest;
-- `t` was the last reader before a writer at `ww`: `t` is at `rp` and takes the share `f` too, which
-  it owns after the acquire (`Owns.toThread`: the other readers' reads are before the release
-  clock), to post the whole resource to the writer. -/
+- `t` was the last reader before a writer at `ww`: `t` is at `rp` and takes the share `f` too, to
+  post the whole resource to the writer.
+
+As the last reader `t` owns the rest's share `f` after the acquire (`Owns.toThread`: the other
+readers' reads are before the release clock), so it may take it and join the whole (`wp_subR`). -/
 theorem Inv.subR {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
     {ord : AtomicOrder} {old : BitVec 64} {q : Frac} {H : FHeap}
     (hI : W.Inv G (rsum (W.st.cellsR m) rY) m) (hY : ∀ l, W.st.In l → rY.heap l = none)
@@ -1332,13 +1339,14 @@ theorem Inv.subR {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
       (W.nrd G m ≠ 1 → W.Inv (upd G t (W.set (G t) .out))
         (rsum (W.st.cellsR m') (rsum (shareRes H (f.add q)) rO)) m') ∧
       (W.nrd G m = 1 → f.add q = Frac.one) ∧
+      (W.nrd G m = 1 → M.ph (G t) ≠ .gone →
+        VClock.le ((W.st.hist m).back!).relClock (m'.clocks[t]!) = true →
+        m'.Owns t (shareRes H f).owned) ∧
       (W.nrd G m = 1 → W.writing G m = false → FHeap.Disjoint H rO.heap →
         W.Inv (upd G t (W.set (G t) .out))
           (rsum (W.st.cellsR m') (rsum ⟨H, Know.none, Ghost.unit⟩ rO)) m') ∧
-      (W.nrd G m = 1 → W.writing G m = true → M.ph (G t) ≠ .gone →
-        VClock.le ((W.st.hist m).back!).relClock (m'.clocks[t]!) = true →
-        m'.Owns t (shareRes H f).owned ∧
-          W.Inv (upd G t (W.set (G t) .rp)) (rsum (W.st.cellsR m') rO) m') := by
+      (W.nrd G m = 1 → W.writing G m = true →
+        W.Inv (upd G t (W.set (G t) .rp)) (rsum (W.st.cellsR m') rO) m') := by
   have hnr : W.nrd G m ≠ 0 := nrd_pos ht (by rw [hrd]; rfl)
   have hnowr : ∀ u, W.ph (G u) ≠ .wr := fun u hu => hnr (hI.wr u hu)
   have hnorp : ∀ u, W.ph (G u) ≠ .rp := fun u hu => hnr (hI.rp u hu).1
@@ -1399,8 +1407,9 @@ theorem Inv.subR {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
     have := fsum_noRd hnoRd (m := m)
     show f.val + q.val = 1
     grind
-  refine ⟨rO, f, rfl, hf, hR, fun hA => ?_, fun h1 => (hlast h1).2.1, fun h1 hwf hdH => ?_,
-    fun h1 hwt hg hacq => ?_⟩
+  refine ⟨rO, f, rfl, hf, hR, fun hA => ?_, fun h1 => (hlast h1).2.1,
+    fun h1 hg hacq => how.toThread (hlast h1).2.2 ht hg hacq hfp (hrest.clocks t)
+      (Nat.le_of_eq hrest.bsize.symm), fun h1 hwf hdH => ?_, fun h1 hwt => ?_⟩
   · -- other readers remain: the joined share stays in the rest
     have hfq : 0 < (f.add q).val := by rw [hfqv]; have := q.nonneg; grind
     refine hI.ofRmwMv (rF' := shareRes H (f.add q)) (b := .out) ht hmph hrest hok hh hrel hfp
@@ -1440,8 +1449,6 @@ theorem Inv.subR {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
     obtain ⟨hn2, hw2, hg2, -⟩ := hmv .rp rfl rfl rfl rfl
     have hGt : W.ph (upd G t (W.set (G t) .rp) t) = .rp := by rw [upd_self, W.ph_set]
     have h0 : W.nrd (upd G t (W.set (G t) .rp)) m = 0 := by omega
-    refine ⟨how.toThread honly ht hg hacq hfp (hrest.clocks t) (Nat.le_of_eq hrest.bsize.symm),
-      ?_⟩
     have := hI.ofRmwMv (rF' := rnil) (b := .rp) ht hmph hrest hok hh hrel hfp
       ⟨by rw [h0]; exact Nat.two_pow_pos _, by rw [hw2]; exact hI.room.2⟩
       (hval .rp hn2 hw2 hg2) (hI.one_mv rfl) (hI.wm_mv rfl) (fun _ _ => h0)
@@ -1608,6 +1615,18 @@ theorem rmwFacts {A : ThreadId → Prop} {m₁ m' : Mem} {c : Nat} {op : RmwOp} 
   exact ⟨Word.atomicRmw_rest hw hct' hr, fun e he =>
     (Word.atomicRmw_fpNew hw hct' hr he).imp_right fun h => by rw [hc₁] at h; exact h.2⟩
 
+/-- `rmwFacts` for a weak CAS by `t` at the word (`Word.cmpxchgWeak_rest`,
+`Word.cmpxchgWeak_fpNew`). -/
+theorem casFacts {A : ThreadId → Prop} {m₁ m' : Mem} {c : Nat} {succ fail : AtomicOrder}
+    {exp new : BitVec 64} {r : Option (BitVec 64)} (hw : W.st.Ok m₁ A) (hc₁ : m₁.current = t)
+    (hct : t < m₁.clocks.size)
+    (hr : ((cmpxchgWeakAt c succ fail 8 W.st.ptr exp new).run m₁).run = some (.ok (r, m'))) :
+    RestStep W.st.In m₁ m' ∧
+      ∀ e ∈ m'.footprint, e ∈ m₁.footprint ∨ VClock.le e.clock (m'.clocks[t]!) = true := by
+  have hct' : m₁.current < m₁.clocks.size := by rw [hc₁]; exact hct
+  exact ⟨Word.cmpxchgWeak_rest hw hct' hr, fun e he =>
+    (Word.cmpxchgWeak_fpNew hw hct' hr he).imp_right fun h => by rw [hc₁] at h; exact h.2⟩
+
 /-- **The writer's `and ~1`** (`unlock`, `wr → out`): the writing bit is cleared and the resource
 `r` with `R` leaves `t`'s part (`r₀` stays) for the rest (`FLock.Inv.giveRest`; `Inv.giveW`). Its
 ownership and place come from the outer mutex's invariant before the op (`FLock.Inv.partApart`). -/
@@ -1750,6 +1769,265 @@ theorem wp_loadW (hW : W.Fits P UM US okM okS) {ord : AtomicOrder} (hmg : M.ph g
   refine h k hk G₁ m' b (hop.current.trans hc₁) ((hW.m.sub _ _ _ hU).msgOk hj hv) ?_
   have := hW.atWord_keep (a := W.ph g) hg₁ hc₁ hU hiL hrest hL fun hI => by rw [W.set_self, ← hg₁, upd_same]; exact hI.load hY hrest hw' hh
   rwa [W.set_self] at this
+
+/-- **A reader's `+2^32` at the word moves `t` to `rd q H` with the share `q` in its part** (the
+shared part of `wp_casR` and `wp_addR`, in the word rule's continuation; `Inv.addR` splits the
+free resource). With readers the free resource is their heap's share `f`: `t` takes half of it,
+which it may read after the acquire (`Owns.toReader`) and owns with its part since the rest keeps
+the other half (`FLock.Inv.ownsShare`, `FLock.Inv.takeRestR`). With none it is the whole
+resource, which `t` owns after the acquire (`Owns.toThread`) and takes; in its part it becomes the
+whole share (`EUpd.shareRes_whole`, `FLock.Inv.eupdPart`), and `t` gives half back
+(`FLock.Inv.giveRest`). -/
+theorem Fits.enterR (hW : W.Fits P UM US okM okS) {G₁ : ThreadId → γ} {rY : Res} {m₁ m' : Mem}
+    {ord : AtomicOrder} {old : BitVec 64} (hg₁ : G₁ t = g) (hc₁ : m₁.current = t)
+    (hc' : m'.current = t) (hU : UM G₁ (rsum (W.st.cellsR m₁) rY) m₁)
+    (hiL : M.Inv G₁ (rsum (W.st.cellsR m₁) rY) m₁) (hY : ∀ l, W.st.In l → rY.heap l = none)
+    (hout : W.ph g = .out) (hmg : M.ph g ≠ .gone) (hnoW : ∀ u, (W.ph (G₁ u)).isW = false)
+    (hroom : W.nrd G₁ m₁ + 1 < RwState.countBound) (hrest : RestStep W.st.In m₁ m')
+    (hok : W.st.Ok m' fun u => M.ph (G₁ u) ≠ .gone)
+    (hv : (W.st.hist m₁)[(W.st.hist m₁).size - 1]!.Val old)
+    (hh : W.st.hist m' = (W.st.hist m₁).push (Word.rmwEnt m' t ord
+      (W.st.hist m₁)[(W.st.hist m₁).size - 1]! (old + BitVec.ofNat 64 RwState.readerUnit)))
+    (hrel : ord.isRel = true)
+    (hacq : VClock.le ((W.st.hist m₁).back!).relClock (m'.clocks[t]!) = true)
+    (hfp : ∀ e ∈ m'.footprint, e ∈ m₁.footprint ∨ VClock.le e.clock (m'.clocks[t]!) = true)
+    (hL : M.Inv G₁ (rsum (W.st.cellsR m') rY) m') :
+    ∃ q H, 0 < q.val ∧ W.R (W.xs G₁) ⟨H, Know.none, Ghost.unit⟩ ∧
+      P.inv (upd G₁ t (W.set (M.setPart g (rsum (M.part g) (shareRes H q))) (.rd q H))) m' := by
+  have hgt : M.ph (G₁ t) ≠ .gone := by rw [hg₁]; exact hmg
+  have ht := (hiL.ht hgt).1
+  have hI₁ : W.Inv G₁ (rsum (W.st.cellsR m₁) rY) m₁ := hW.m.sub _ _ _ hU
+  obtain ⟨rF, rO, H, f, rfl, hdFO, how, hR, hf, hz, hnz, hI'⟩ :=
+    hI₁.addR hY (by rw [hg₁]; exact hout) ht (hW.mph _) hnoW hroom hrest hok hv hh hrel hfp
+  have hbs : m₁.blocks.size ≤ m'.blocks.size := Nat.le_of_eq hrest.bsize.symm
+  have he : ∀ {H' : FHeap} {a : Frac} {X : Res},
+      rsum (shareRes H' a) (rsum (W.st.cellsR m') X) =
+        rsum (W.st.cellsR m') (rsum (shareRes H' a) X) := by
+    intro H' a X
+    rw [← rsum_assoc, ← rsum_assoc,
+      rsum_comm (a := shareRes H' a) (b := W.st.cellsR m') (fun _ => .inl rfl)]
+  -- the rest keeps `shareRes H f'`, `t`'s part gets `shareRes H q`
+  suffices hM : ∃ q f', 0 < q.val ∧ 0 < f'.val ∧ q.add f' = f ∧
+      M.Inv (upd G₁ t (M.setPart g (rsum (M.part g) (shareRes H q))))
+        (rsum (W.st.cellsR m') (rsum (shareRes H f') rO)) m' by
+    obtain ⟨q, f', hq, hf', hqf, hM⟩ := hM
+    refine ⟨q, H, hq, hR, hW.atWord hg₁ hc₁ hU hiL hrest hM (hW.setPart_keeps g _)
+      ⟨rF, shareRes H f', rO, rfl, rfl⟩ fun _ => ?_⟩
+    have := hI' q f' hq hf' hqf
+    rwa [hg₁] at this
+  refine ⟨f.half, f.half, Frac.half_pos hf, Frac.half_pos hf, Frac.half_add_half f, ?_⟩
+  by_cases h0 : W.nrd G₁ m₁ = 0
+  · -- no reader: `t` takes the whole resource, shares it in its part and gives half back
+    obtain ⟨rfl, rfl⟩ := hz h0
+    have hown := how.toThread (fun u hu => by rw [hI₁.noRd h0 u] at hu; cases hu) ht hgt hacq
+      hfp (hrest.clocks t) hbs
+    have hcF : FHeap.Disjoint (W.st.cellsR m').heap H := fun l => by
+      by_cases hl : W.st.In l
+      · have := hY l hl
+        simp only [FHeap.union_apply, Option.or_eq_none_iff] at this
+        exact .inr this.1
+      · exact .inl (cellsAt_none hl)
+    rw [← rsum_assoc, rsum_comm (a := W.st.cellsR m') (b := ⟨H, Know.none, Ghost.unit⟩) hcF,
+      rsum_assoc] at hL
+    have hL₁ := hL.takeRest hgt (FHeap.disjoint_union_right.mpr ⟨hcF.symm, hdFO⟩) hown
+    rw [hg₁] at hL₁
+    have hpH : FHeap.Disjoint (M.part g).heap H := by
+      have := (hiL.partApart hgt).2
+      rw [hg₁] at this
+      exact (FHeap.disjoint_union_right.mp (FHeap.disjoint_union_right.mp this).2).1
+    obtain ⟨r, ⟨_, _, -, hr, rfl, rfl⟩, hL₂⟩ := hL₁.eupdPart P hc'
+      (by rw [M.ph_setPart]; exact hmg) (Qa := (· = M.part g) ⋆ (· = shareRes H Frac.one))
+      (by
+        rw [M.part_setPart]
+        exact (EUpd.of_imp fun _ hr => ⟨M.part g, ⟨H, Know.none, Ghost.unit⟩, hpH, hr, rfl, rfl⟩).trans
+          (EUpd.frameL (EUpd.shareRes_whole H)))
+    replace hr : r = rsum (M.part g) (shareRes H Frac.one) := hr
+    subst hr
+    rw [M.setPart_setPart] at hL₂
+    have hL₃ := hL₂.giveRest (rP := rsum (M.part g) (shareRes H Frac.one.half))
+      (rA := shareRes H Frac.one.half) (by rw [upd_self, M.ph_setPart]; exact hmg)
+      (by rw [upd_self, M.part_setPart, rsum_assoc, shareRes_add, Frac.half_add_half])
+      (fun _ => .inr rfl)
+    rwa [upd_self, M.setPart_setPart, upd_upd, he] at hL₃
+  · -- readers: `t` takes half of their share
+    obtain rfl := hnz h0
+    rw [show shareRes H f = rsum (shareRes H f.half) (shareRes H f.half) by
+      rw [shareRes_add, Frac.half_add_half], rsum_assoc, ← he] at hL
+    have hR' : m'.OwnsR t (shareRes H f.half).owned :=
+      how.toReader (fun l h => (shareRes_owned hf).mpr ((shareRes_owned (Frac.half_pos hf)).mp h))
+        ht hgt hacq hfp (hrest.clocks t) hbs
+    have hX : ∀ l, (shareRes H f.half).owned l ≠ none →
+        ((rsum (W.st.cellsR m') (rsum (shareRes H f.half) rO)).gh.share l).Pos := fun l h => by
+      have hp : ((shareRes H f.half).gh.share l).Pos :=
+        (Res.owned_ne.mp h).resolve_left fun e => e rfl
+      simp only [rsum, Ghost.add_share]
+      exact SCell.pos_add_iff.mpr (.inr (SCell.pos_add_iff.mpr (.inl hp)))
+    have hL₁ := hL.takeRestR hgt (fun _ => .inl rfl) (hL.ownsShare hgt (fun _ => rfl) hR' hX)
+    rwa [hg₁] at hL₁
+
+/-- **A reader's fast weak CAS** (`lockSharedUncancelable`'s `cmpxchgWeak(state, state + 2^32)`,
+under the code's guard that the expected value has no writer): on success `t` is at `rd q H` with
+the share in its part (`Fits.enterR`: the old value is `exp`, so no thread holds the writing bit,
+`RwState.Family.read_guard`); on failure `t` stays and the value read is `MsgOk` (`Inv.load`). The
+room is `lockShared_wp`'s (`hroom`). -/
+theorem wp_casR (hW : W.Fits P UM US okM okS) {succ fail : AtomicOrder} {exp new : BitVec 64}
+    (hout : W.ph g = .out) (hmg : M.ph g ≠ .gone)
+    (hroom : ∀ G m, P.inv G m → W.ph (G t) = .out → W.nrd G m + 1 < RwState.countBound)
+    (hguard : exp &&& RwState.lowMask = 0) (hnew : new = exp + BitVec.ofNat 64 RwState.readerUnit)
+    (hi : P.inv (upd G t g) m) {Q : Option (BitVec 64) × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (hs : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = t → ∀ q H, 0 < q.val →
+      W.R (W.xs G₁) ⟨H, Know.none, Ghost.unit⟩ →
+      P.inv (upd G₁ t (W.set (M.setPart g (rsum (M.part g) (shareRes H q))) (.rd q H))) m' →
+      Q (none, s) G₁ m' k)
+    (hf : ∀ k, n = k + 1 → ∀ G₁ m' b, m'.current = t → MsgOk b → P.inv (upd G₁ t g) m' →
+      Q (some b, s) G₁ m' k)
+    (hrel : succ.isRel = true := by rfl) (hacq : succ.isAcq = true := by rfl)
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t ((cmpxchgWeakC (n := 64) succ fail 8 W.st.ptr exp new : CM Tgt σ _).run s) Q G m n := by
+  subst hnew
+  refine FLock.wp_wordWeakCas hW.m hW.inRest hW.m.apart hi (hlv := hmg)
+    fun k hk G₁ rY m₁ m' hg₁ hc₁ hU hiL hY hw' hw₀ hct hrun hA _ hL => ?_
+  obtain ⟨c, r, hr⟩ := hrun
+  obtain ⟨hrest, hfp⟩ := casFacts hw₀ hc₁ hct hr
+  have hop := hA (fun _ => none) (fun _ _ _ => rfl)
+  have hc' : m'.current = t := hop.current.trans hc₁
+  have hI₁ : W.Inv G₁ (rsum (W.st.cellsR m₁) rY) m₁ := hW.m.sub _ _ _ hU
+  refine ⟨fun hv _ hh hac _ => ?_, fun j b hj hv _ _ hh _ => ?_⟩
+  · have hg := hguard
+    rw [hI₁.old hv] at hg
+    have hwr := ((RwState.Family.read_guard hI₁.room.2 _).mp hg).2
+    have hnoW : ∀ u, (W.ph (G₁ u)).isW = false := fun u => by
+      cases hu : (W.ph (G₁ u)).isW
+      · rfl
+      · rw [writing_of (hI₁.ex u fun e => by rw [e] at hu; cases hu) hu] at hwr; cases hwr
+    obtain ⟨q, H, hq, hR, hP⟩ := hW.enterR hg₁ hc₁ hc' hU hiL hY hout hmg hnoW
+      (hroom G₁ m₁ ((hW.m.inv _ _).mpr ⟨_, hiL, hU⟩) (by rw [hg₁]; exact hout)) hrest hw' hv hh
+      hrel (hac hacq) hfp hL
+    exact hs k hk G₁ m' hc' q H hq hR hP
+  · refine hf k hk G₁ m' b hc' (hI₁.msgOk hj hv) ?_
+    have := hW.atWord_keep (a := W.ph g) hg₁ hc₁ hU hiL hrest hL fun hI => by
+      rw [W.set_self, ← hg₁, upd_same]; exact hI.load hY hrest hw' hh
+    rwa [W.set_self] at this
+
+/-- **A slow reader's `+2^32`** (`lockSharedUncancelable` under the outer mutex, at `out`): `t` is
+at `rd q H` with the share in its part (`Fits.enterR`). No other thread holds the writing bit: its
+holder holds the outer mutex (`Inv.wm`), which `t` holds. The room is `lockShared_wp`'s. -/
+theorem wp_addR (hW : W.Fits P UM US okM okS) {ord : AtomicOrder} {v : BitVec 64}
+    (hout : W.ph g = .out) (hmh : M.ph g = .holds)
+    (hroom : ∀ G m, P.inv G m → W.ph (G t) = .out → W.nrd G m + 1 < RwState.countBound)
+    (hi : P.inv (upd G t g) m) {Q : BitVec 64 × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m' old, m'.current = t → ∀ q H, 0 < q.val →
+      W.R (W.xs G₁) ⟨H, Know.none, Ghost.unit⟩ →
+      P.inv (upd G₁ t (W.set (M.setPart g (rsum (M.part g) (shareRes H q))) (.rd q H))) m' →
+      Q (old, s) G₁ m' k)
+    (hv : v = BitVec.ofNat 64 RwState.readerUnit := by decide) (hrel : ord.isRel = true := by rfl)
+    (hacq : ord.isAcq = true := by rfl) (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t ((atomicRmwC .add false ord 8 W.st.ptr v : CM Tgt σ (BitVec 64)).run s) Q G m n := by
+  subst hv
+  have hmg : M.ph g ≠ .gone := by rw [hmh]; decide
+  refine FLock.wp_wordRmw hW.m hW.inRest hW.m.apart hi (hlv := hmg)
+    fun k hk G₁ rY m₁ m' old hg₁ hc₁ hU hiL hY hv _ hh hac hw' hw₀ hct hrun hA _ _ hL => ?_
+  obtain ⟨c, hr⟩ := hrun
+  obtain ⟨hrest, hfp⟩ := rmwFacts hw₀ hc₁ hct hr
+  have hop := hA (fun _ => none) (fun _ _ _ => rfl)
+  have hc' : m'.current = t := hop.current.trans hc₁
+  have hI₁ : W.Inv G₁ (rsum (W.st.cellsR m₁) rY) m₁ := hW.m.sub _ _ _ hU
+  have hMt : (M.ph (G₁ t)).held = true := by rw [hg₁, hmh]; rfl
+  have hout₁ : W.ph (G₁ t) = .out := by rw [hg₁]; exact hout
+  have hnoW : ∀ u, (W.ph (G₁ u)).isW = false := fun u => by
+    cases hu : (W.ph (G₁ u)).isW
+    · rfl
+    · have := hiL.w.one u t (hI₁.wm u hu) hMt
+      subst this; rw [hout₁] at hu; cases hu
+  obtain ⟨q, H, hq, hR, hP⟩ := hW.enterR hg₁ hc₁ hc' hU hiL hY hout hmg hnoW
+    (hroom G₁ m₁ ((hW.m.inv _ _).mpr ⟨_, hiL, hU⟩) (by rw [hg₁]; exact hout)) hrest hw' hv hh
+    hrel (hac hacq) hfp hL
+  exact h k hk G₁ m' old hc' q H hq hR hP
+
+/-- **A reader's `-2^32`** (`unlockShared`, from `rd q H` with the share in its part beside `r₀`),
+by the old value (`RwState.Family.last_reader_guard`, `writing_guard`; `Inv.subR`): with other
+readers left or no writer writing, `t` is `out` with `r₀`; with other readers left it gives the
+share to the rest (`FLock.Inv.giveRest`). As the last reader it owns the rest's share after the
+acquire and takes it (`FLock.Inv.takeRest`), and in its part the two shares are the whole share,
+which becomes the resource (`EUpd.shareRes_unwhole`). With no writer it gives the resource back;
+before a writer at `ww` it is at `rp` holding it, to post it to the writer. -/
+theorem wp_subR (hW : W.Fits P UM US okM okS) {r₀ : Res} {q : Frac} {H : FHeap}
+    {ord : AtomicOrder} {v : BitVec 64}
+    (hrd : W.ph g = .rd q H) (hmg : M.ph g ≠ .gone) (hpart : M.part g = rsum r₀ (shareRes H q))
+    (hi : P.inv (upd G t g) m) {Q : BitVec 64 × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m' old, m'.current = t →
+      ((RwState.readers old = 1 → RwState.writing old = false) ∧
+        P.inv (upd G₁ t (W.set (M.setPart g r₀) .out)) m') ∨
+      (RwState.readers old = 1 ∧ RwState.writing old = true ∧
+        ∃ r, W.R (W.xs G₁) r ∧ FHeap.Disjoint r₀.heap r.heap ∧
+          P.inv (upd G₁ t (W.set (M.setPart g (rsum r₀ r)) .rp)) m') →
+      Q (old, s) G₁ m' k)
+    (hv : v = BitVec.ofNat 64 RwState.readerUnit := by decide) (hrel : ord.isRel = true := by rfl)
+    (hacq : ord.isAcq = true := by rfl) (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t ((atomicRmwC .sub false ord 8 W.st.ptr v : CM Tgt σ (BitVec 64)).run s) Q G m n := by
+  subst hv
+  refine FLock.wp_wordRmw hW.m hW.inRest hW.m.apart hi (hlv := hmg)
+    fun k hk G₁ rY m₁ m' old hg₁ hc₁ hU hiL hY hv _ hh hac hw' hw₀ hct hrun hA _ _ hL => ?_
+  obtain ⟨c, hr⟩ := hrun
+  obtain ⟨hrest, hfp⟩ := rmwFacts hw₀ hc₁ hct hr
+  have hop := hA (fun _ => none) (fun _ _ _ => rfl)
+  have hc' : m'.current = t := hop.current.trans hc₁
+  have hgt : M.ph (G₁ t) ≠ .gone := by rw [hg₁]; exact hmg
+  have ht := (hiL.ht hgt).1
+  have hI₁ : W.Inv G₁ (rsum (W.st.cellsR m₁) rY) m₁ := hW.m.sub _ _ _ hU
+  have hro : RwState.readers old = W.nrd G₁ m₁ := by
+    rw [hI₁.old hv]; exact RwState.Family.readers_encode hI₁.room.1 hI₁.room.2 _
+  have hwo : RwState.writing old = W.writing G₁ m₁ := by
+    rw [hI₁.old hv]; exact RwState.Family.writing_encode 31 1 _ _ _
+  obtain ⟨rO, f, rfl, -, hR, hA', hone, hOwn, hB, hC⟩ :=
+    hI₁.subR hY (by rw [hg₁]; exact hrd) ht (hW.mph _) hrest hw' hv hh hrel hfp
+  refine h k hk G₁ m' old hc' ?_
+  by_cases h1 : W.nrd G₁ m₁ = 1
+  · -- the last reader: it takes the rest's share and joins the whole resource
+    rw [← rsum_assoc, rsum_comm (a := W.st.cellsR m') (b := shareRes H f) (fun _ => .inr rfl),
+      rsum_assoc] at hL
+    have hL₁ := hL.takeRest hgt (fun _ => .inl rfl) (hOwn h1 hgt (hac hacq))
+    rw [hg₁, hpart, rsum_assoc, shareRes_add, Frac.add_comm q f, hone] at hL₁
+    obtain ⟨r, ⟨r₁, r₂, hd₀, hr, h₁, h₂⟩, hL₂⟩ := hL₁.eupdPart P hc'
+      (by rw [M.ph_setPart]; exact hmg) (Qa := (· = r₀) ⋆ (· = ⟨H, Know.none, Ghost.unit⟩))
+      (by
+        rw [M.part_setPart]
+        exact (EUpd.of_imp fun _ hr => ⟨r₀, shareRes H Frac.one, fun _ => .inr rfl, hr, rfl, rfl⟩).trans
+          (EUpd.frameL (EUpd.shareRes_unwhole H)))
+    rw [h₁, h₂] at hd₀ hr
+    replace hr : r = rsum r₀ ⟨H, Know.none, Ghost.unit⟩ := hr
+    subst hr
+    rw [M.setPart_setPart] at hL₂
+    by_cases hwt : W.writing G₁ m₁ = true
+    · -- before a writer: at `rp`, holding the resource
+      refine .inr ⟨by rw [hro]; exact h1, by rw [hwo]; exact hwt, ⟨H, Know.none, Ghost.unit⟩, hR, hd₀,
+        hW.atWord hg₁ hc₁ hU hiL hrest hL₂ (hW.setPart_keeps g _)
+          ⟨shareRes H f, rnil, rO, rfl, (rnil_rsum _).symm⟩ fun _ => ?_⟩
+      have := hC h1 hwt
+      rwa [hg₁] at this
+    · -- no writer: the resource goes back to the rest
+      have hpa := (hL₂.partApart (by rw [upd_self, M.ph_setPart]; exact hmg)).2
+      rw [upd_self, M.part_setPart] at hpa
+      obtain ⟨hHc, hHO⟩ := FHeap.disjoint_union_right.mp (FHeap.disjoint_union_left.mp hpa).2
+      have hL₃ := hL₂.giveRest (rP := r₀) (rA := ⟨H, Know.none, Ghost.unit⟩)
+        (by rw [upd_self, M.ph_setPart]; exact hmg) (by rw [upd_self, M.part_setPart]) hd₀
+      rw [upd_self, M.setPart_setPart, upd_upd, ← rsum_assoc,
+        rsum_comm (a := ⟨H, Know.none, Ghost.unit⟩) (b := W.st.cellsR m') hHc, rsum_assoc] at hL₃
+      refine .inl ⟨fun _ => by rw [hwo]; exact Bool.eq_false_iff.mpr hwt,
+        hW.atWord hg₁ hc₁ hU hiL hrest hL₃ (hW.setPart_keeps g r₀)
+          ⟨shareRes H f, ⟨H, Know.none, Ghost.unit⟩, rO, rfl, rfl⟩ fun _ => ?_⟩
+      have := hB h1 (Bool.eq_false_iff.mpr hwt) hHO
+      rwa [hg₁] at this
+  · -- other readers remain: the share goes back to the rest
+    have hL₁ := hL.giveRest hgt (by rw [hg₁]; exact hpart) (fun _ => .inr rfl)
+    rw [hg₁, ← rsum_assoc, rsum_comm (a := shareRes H q) (b := W.st.cellsR m') (fun _ => .inl rfl),
+      rsum_assoc, ← rsum_assoc (a := shareRes H q),
+      rsum_comm (a := shareRes H q) (b := shareRes H f) (fun _ => .inl rfl), shareRes_add] at hL₁
+    refine .inl ⟨fun h1' => absurd (by rw [← hro]; exact h1') h1,
+      hW.atWord hg₁ hc₁ hU hiL hrest hL₁ (hW.setPart_keeps g r₀)
+        ⟨shareRes H f, shareRes H (f.add q), rO, rfl, rfl⟩ fun _ => ?_⟩
+    have := hA' h1
+    rwa [hg₁] at this
 
 end Proto
 

@@ -862,12 +862,13 @@ theorem Inv.repartition {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId
     · rw [upd_ne _ _ e]
       exact hRk (hi.w.held_false_of_ne hu e) _ (hi.res u hu)
 
-/-- Take one complete resource from protocol rest into this caller's part at the same
-mutex phase. The free/held lock resource, all other callers, memory and phase map stay.
-This uses actual clock ownership, without requiring this caller to hold the mutex. -/
-theorem Inv.takeRest {G : ThreadId → γ} {rA rX : Res} {m : Mem} {t : ThreadId}
+/-- **Take a resource from the protocol's rest** into this caller's part at the same mutex phase,
+given `t`'s ownership of its whole new part (`Mem.OwnsRes`: with `Mem.Owns` of `rA`'s bytes,
+`Inv.takeRest`; a read share whose rest keeps a positive share, `Inv.ownsShare`). The free/held
+lock resource, all other callers, memory and phase map stay; `t` need not hold the mutex. -/
+theorem Inv.takeRestR {G : ThreadId → γ} {rA rX : Res} {m : Mem} {t : ThreadId}
     (hi : L.Inv G (rsum rA rX) m) (hg : L.ph (G t) ≠ .gone)
-    (hd : FHeap.Disjoint rA.heap rX.heap) (howns : m.Owns t rA.owned) :
+    (hd : FHeap.Disjoint rA.heap rX.heap) (hown : m.OwnsRes t (rsum (L.own G m t) rA)) :
     L.Inv (upd G t (L.setPart (G t) (rsum (L.part (G t)) rA))) rX m := by
   obtain ⟨ht, hjt⟩ := hi.ht hg
   obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
@@ -896,7 +897,7 @@ theorem Inv.takeRest {G : ThreadId → γ} {rA rX : Res} {m : Mem} {t : ThreadId
   have hHA : FHeap.Disjoint (L.held (G t)).heap rA.heap := by
     rw [own_live hjt] at hTA
     exact (FHeap.disjoint_union_left.mp hTA).2
-  have ho' := ho.take ht hAR ((ho.owns t ht).addOwns howns)
+  have ho' := ho.take ht hAR hown
   let g := L.setPart (G t) (rsum (L.part (G t)) rA)
   let G' := upd G t g
   have hpl : L.pl G' = L.pl G := by
@@ -939,6 +940,31 @@ theorem Inv.takeRest {G : ThreadId → γ} {rA rX : Res} {m : Mem} {t : ThreadId
   · intro u hu
     rw [hheld u]
     exact (L.R_setPart G t _ _).mpr (hi.res u (by rw [← hph u]; exact hu))
+
+/-- Take one complete resource from protocol rest into this caller's part (`Inv.takeRestR`), with
+the caller's clock owning every byte of it (`Mem.OwnsRes.addOwns`). -/
+theorem Inv.takeRest {G : ThreadId → γ} {rA rX : Res} {m : Mem} {t : ThreadId}
+    (hi : L.Inv G (rsum rA rX) m) (hg : L.ph (G t) ≠ .gone)
+    (hd : FHeap.Disjoint rA.heap rX.heap) (howns : m.Owns t rA.owned) :
+    L.Inv (upd G t (L.setPart (G t) (rsum (L.part (G t)) rA))) rX m := by
+  obtain ⟨rL, ho, -⟩ := hi.rest
+  exact hi.takeRestR hg hd ((ho.owns t (hi.ht hg).1).addOwns howns)
+
+/-- **`t` owns its part with a read share `rA` of the rest** (a reader's acquire,
+`Inv.takeRestR`'s premise): `rA` holds no cell, `t` may read its bytes (`Mem.OwnsR`), and the rest
+`rX` keeps a positive share of each of them, so the part does not gather a whole share
+(`FOwned.ownsShare`; engine ledger #share-gather). -/
+theorem Inv.ownsShare {G : ThreadId → γ} {rA rX : Res} {m : Mem} {t : ThreadId}
+    (hi : L.Inv G (rsum rA rX) m) (hg : L.ph (G t) ≠ .gone) (hh : ∀ l, rA.heap l = none)
+    (hR : m.OwnsR t rA.owned) (hX : ∀ l, rA.owned l ≠ none → (rX.gh.share l).Pos) :
+    m.OwnsRes t (rsum (L.own G m t) rA) := by
+  obtain ⟨rL, ho, -⟩ := hi.rest
+  refine ho.ownsShare (hi.ht hg).1 hh hR fun l hl =>
+    ⟨((L.wordR m).gh.share l).add ((rL.gh.share l).add (rX.gh.share l)), ?_,
+      SCell.pos_add_iff.mpr (.inr (SCell.pos_add_iff.mpr (.inr (hX l hl))))⟩
+  refine SCell.ext fun c => ?_
+  simp only [rsum, Ghost.add_share, SCell.add_val]
+  grind
 
 /-- Publish one complete caller-owned resource into protocol rest while retaining the
 caller's mutex phase and complete held resource. No mutex release or Free is required. -/

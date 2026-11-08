@@ -54,6 +54,14 @@ noncomputable def shareRes (H : FHeap) (q : Frac) : Res :=
 theorem shareRes_sheap (H : FHeap) (q : Frac) : sheap H q (shareRes H q) :=
   ⟨rfl, rfl, rfl⟩
 
+/-- `shareRes H q` is the one resource of `sheap H q`. -/
+theorem sheap_eq {H : FHeap} {q : Frac} {r : Res} (h : sheap H q r) : r = shareRes H q := by
+  obtain ⟨rh, rk, rg⟩ := r
+  obtain ⟨h1, h2, h3⟩ := h
+  dsimp only at h1 h2 h3
+  subst h1 h2 h3
+  rfl
+
 /-- **The share `q` of an exclusive assertion** `P`: of a heap that `P` holds alone. -/
 def shared (P : FAssn) (q : Frac) : FAssn := fun r =>
   ∃ H, P ⟨H, Know.none, Ghost.unit⟩ ∧ sheap H q r
@@ -204,6 +212,17 @@ theorem unshare_whole : EUpd (shared P Frac.one) P := by
   rintro m ⟨h, k, g⟩ rF hh ⟨H, hp, hH, hk, hg⟩ _
   subst hH hk hg
   exact ⟨_, hh.ofShares, hp⟩
+
+/-- **A heap becomes its whole share**, as resources (`share_whole`). -/
+theorem shareRes_whole (H : FHeap) :
+    EUpd (· = ⟨H, Know.none, Ghost.unit⟩) (· = shareRes H Frac.one) :=
+  (share_whole fun _ h => by subst h; exact ⟨rfl, rfl⟩).trans
+    (of_imp fun _ ⟨_, hH, hs⟩ => by cases hH; exact sheap_eq hs)
+
+/-- **The whole share of a heap becomes the heap**, as resources (`unshare_whole`). -/
+theorem shareRes_unwhole (H : FHeap) :
+    EUpd (· = shareRes H Frac.one) (· = ⟨H, Know.none, Ghost.unit⟩) :=
+  (of_imp fun _ h => ⟨H, rfl, by subst h; exact shareRes_sheap H _⟩).trans unshare_whole
 
 end EUpd
 
