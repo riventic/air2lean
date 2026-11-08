@@ -85,8 +85,9 @@ Stated once here; an instance walks its code with them:
 
 - **The protocol.** `Fits.inRest` (the state word in the outer mutex's rest, for the generic word
   rules at `M`), `Fits.napW` / `Fits.unnapW` (the writer's nap and unnap), `Fits.wstep` (a step of
-  the rwlock's own code keeps the protocol: `FLock.Fits.kstep` at `Step`) and `Fits.atWord` (an
-  atomic op at the word moves `t` to a new place).
+  the rwlock's own code keeps the protocol: `FLock.Fits.kstep` at `Step`), `Fits.atWord` (an
+  atomic op at the word moves `t` to a new place) and `Fits.winv` / `Fits.sinv` (the rwlock's and
+  the semaphore's invariants in a state of the protocol).
 - **The counts over one thread's change**: `nrd_upd`, `nwi_upd` over `cnt_upd`; `writing_upd`,
   `fsum_upd`, `xs_set` over `upd_map`; for a move of `t` to `b`, `nrd_mv`, `nwi_mv`, `fsum_mv`
   (the counts move), `nrd_keep`, `nwi_keep`, `fsum_keep`, `writing_mv`, `xs_mv` (they stay),
@@ -2085,8 +2086,9 @@ theorem Fits.ph_part (hW : W.Fits P UM US okM okS) (g : γ) (r : Res) :
 /-- The rwlock's place through the semaphore's `set`. -/
 theorem ph_s (g : γ) (s : SPh) : W.ph (S.set g s) = W.ph g := by rw [← S.place_s, W.ph_sp]
 
-/-- The semaphore's places through the rwlock's `set`. -/
+/-- The condition's place through the rwlock's `set`. -/
 theorem cph_w (g : γ) (a : RwPh) : C.ph (W.set g a) = C.ph g := congrArg Prod.fst (W.sp_ph g a)
+/-- The semaphore's place through the rwlock's `set`. -/
 theorem sph_w (g : γ) (a : RwPh) : S.ph (W.set g a) = S.ph g := congrArg Prod.snd (W.sp_ph g a)
 
 /-- The outer mutex's held resource through the rwlock's `set`. -/
@@ -2103,6 +2105,28 @@ theorem Fits.wset_m (hW : W.Fits P UM US okM okS) (g : γ) (a : RwPh) (q : LPh) 
     _ = W.prim.pl.set (M.set g q h) (a, S.place.ph g) := by rw [hs]
     _ = M.set (W.prim.pl.set g (a, S.place.ph g)) q h := hW.m.set_l g _ q h
     _ = M.set (W.set g a) q h := by rw [prim_set]
+
+/-- The rwlock's `set` and the outer mutex's `setPart` commute. -/
+theorem Fits.wset_part (hW : W.Fits P UM US okM okS) (g : γ) (a : RwPh) (r : Res) :
+    W.set (M.setPart g r) a = M.setPart (W.set g a) r := by
+  have hs : S.place.ph (M.setPart g r) = S.place.ph g := congrArg Prod.snd (hW.m.ph_part g r)
+  calc W.set (M.setPart g r) a = W.prim.pl.set (M.setPart g r) (a, S.place.ph (M.setPart g r)) :=
+        (prim_set _ _).symm
+    _ = W.prim.pl.set (M.setPart g r) (a, S.place.ph g) := by rw [hs]
+    _ = M.setPart (W.prim.pl.set g (a, S.place.ph g)) r := hW.m.set_part g _ r
+    _ = M.setPart (W.set g a) r := by rw [prim_set]
+
+/-- The rwlock's invariant in a state of the protocol (the outer mutex's view, `Fits.sub`). -/
+theorem Fits.winv (hW : W.Fits P UM US okM okS) {G : ThreadId → γ} {m : Mem}
+    (hi : P.inv G m) : ∃ rX, W.Inv G rX m := by
+  obtain ⟨rX, -, hU⟩ := (hW.m.inv _ _).mp hi
+  exact ⟨rX, hW.m.sub _ _ _ hU⟩
+
+/-- The semaphore's invariant in a state of the protocol (its view, `Fits.sub`). -/
+theorem Fits.sinv (hW : W.Fits P UM US okM okS) {G : ThreadId → γ} {m : Mem}
+    (hi : P.inv G m) : S.Inv G m := by
+  obtain ⟨rX, -, hU⟩ := (hW.s.inv _ _).mp hi
+  exact (hW.s.sub _ _ _ hU).2
 
 /-- **The writer's wait at the semaphore** (`lockUncancelable`'s drain path: at `ww`, holding the
 outer mutex, out of the semaphore's code), for a semaphore `I` whose wait admits a caller with a
@@ -2125,7 +2149,7 @@ theorem wp_waitW (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (I : SemI
     (hc : m.current = t) :
     P.WP t (I.wait p io) (fun _ G' m' d' => d' < n ∧ m'.current = t ∧ ∃ r,
       (∃ G₀, W.R (W.xs (upd G₀ t g)) r) ∧ FHeap.Disjoint (M.part g).heap r.heap ∧
-      P.inv (upd G' t (M.setPart (W.set g .wr) (rsum (M.part g) r))) m') G m n := by
+      P.inv (upd G' t (W.set (M.setPart g (rsum (M.part g) r)) .wr)) m') G m n := by
   obtain ⟨gN, hgN⟩ : ∃ gN, gN = M.set g .holdsAway (M.held g) := ⟨_, rfl⟩
   have hiN : P.inv (upd G t gN) m := by rw [hgN]; exact hW.napW hww hlo hmh hi
   have hwN : W.ph gN = .ww := by rw [hgN, (hW.ph_m _ _ _).1, hww]
@@ -2137,12 +2161,6 @@ theorem wp_waitW (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (I : SemI
   have hpN : L.part gN = M.part g := by rw [hgN, ← W.pair.part, M.part_set]
   have hokN : okS gN := by rw [hgN]; exact (hW.okS_m _ _ _).mpr hok
   have hu' : 0 < (L.part gN).gh.ac.frag .unmetered := by rw [hpN]; exact hu
-  have hWI : ∀ {G' m'}, P.inv G' m' → ∃ rX, W.Inv G' rX m' := fun h => by
-    obtain ⟨rX, -, hU⟩ := (hW.m.inv _ _).mp h
-    exact ⟨rX, hW.m.sub _ _ _ hU⟩
-  have hSI : ∀ {G' m'}, P.inv G' m' → S.Inv G' m' := fun h => by
-    obtain ⟨rX, -, hU⟩ := (hW.s.inv _ _).mp h
-    exact (hW.s.sub _ _ _ hU).2
   have hgw : ∀ rL, W.ph (L.set (S.set gN .wt) .holds rL) = .ww := fun _ => by
     rw [W.ph_l, ph_s, hwN]
   -- at the take `t` is the only writer, so the state after it is not posted
@@ -2164,13 +2182,13 @@ theorem wp_waitW (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (I : SemI
     (fun rᵢ hr G₁ rL m₁ h₁ h0 => by
       obtain rfl := (hkeep t _ rᵢ hu').1 hr
       rw [L.setPart_self] at h₁
-      obtain ⟨rX, hI⟩ := hWI h₁
+      obtain ⟨rX, hI⟩ := hW.winv h₁
       rw [W.cnt_posted _ (hpo h0), W.cnt_idle _ (hnp hI)]
       decide)
     (fun rᵢ hr G₁ rL m₁ h₁ h0 r hP => by
       obtain rfl := (hkeep t _ rᵢ hu').1 hr
       rw [L.setPart_self] at h₁
-      obtain ⟨rX, hI⟩ := hWI h₁
+      obtain ⟨rX, hI⟩ := hW.winv h₁
       have hR := hP
       rw [W.pool_posted _ (hpo h0)] at hR
       have hx : W.xs (upd G₁ t gN) = W.xs (upd G₁ t g) := by
@@ -2184,8 +2202,8 @@ theorem wp_waitW (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (I : SemI
     (fun rᵢ hr G₁ rL m₁ h₁ _ n' _ => by
       obtain rfl := (hkeep t _ rᵢ hu').1 hr
       rw [L.setPart_self] at h₁
-      obtain ⟨rX, hI⟩ := hWI h₁
-      have hS₁ := hSI h₁
+      obtain ⟨rX, hI⟩ := hW.winv h₁
+      have hS₁ := hW.sinv h₁
       -- a thread registered at the condition is at `wt`, so the writer at `ww`: only `t`
       have h0 : C.nreg (upd G₁ t gN) n' = 0 := tsum_eq_zero fun u _ => by
         show (if (C.ph (upd G₁ t gN u)).isReg then 1 else 0) = 0
@@ -2202,7 +2220,7 @@ theorem wp_waitW (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (I : SemI
       rw [h0]; decide)
     (fun G₁ m₁ hreg hla h₁ hs hsig hc0 => by
       obtain ⟨i, jr, e, he⟩ := hreg
-      have hwt := (hSI h₁).wt t (by rw [he]; rfl)
+      have hwt := (hW.sinv h₁).wt t (by rw [he]; rfl)
       exact hW.wlive t G₁ m₁ (hW.wtw _ _ t h₁ hwt) ⟨i, jr, e, he⟩ hla h₁ hs hsig hc0)
     io G m n (hpre t _ hu') hiN hc)
   rintro _ G' m' d' ⟨hd, hc', Y, r', r, hr', ⟨-, hR⟩, hdj, hi'⟩
@@ -2223,7 +2241,7 @@ theorem wp_waitW (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (I : SemI
     have := M.set_self (M.setPart (W.set g .wr) (rsum (M.part g) r))
     rwa [M.ph_setPart, hW.mph, hmh, M.held_setPart, hW.mheld] at this
   have := hW.unnapW hwr hlx hmx hi'
-  rw [hx] at this
+  rw [hx, ← hW.wset_part] at this
   exact ⟨hd, hc', r, hR, hdj, this⟩
 
 end Proto
