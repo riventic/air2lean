@@ -613,7 +613,7 @@ theorem Inv.ofRmw {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId} {
   refine ⟨?_, fun u hu => ?_, by rw [nrd_threads hth, nwi_threads hth]; exact hroom, ?_, hone,
     hwm, fun u hu => by rw [nrd_threads hth]; exact hwr u hu,
     fun u hu => by rw [nrd_threads hth]; exact hrp u hu,
-    ⟨rF, rO, rfl, hoff, hd, (hfr rF hfr₀).threads hth.symm, ?_⟩⟩
+    ⟨rF, rO, rfl, hoff, hd, (hfr rF hfr₀).threads hth, ?_⟩⟩
   · have : (fun u => M.ph (upd G t (W.set (G t) b) u) ≠ .gone) = fun u => M.ph (G u) ≠ .gone :=
       funext fun u => by rw [hMph]
     rw [this]; exact hok
@@ -722,8 +722,9 @@ theorem Inv.enterW {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
   have hne : ∀ u, u ≠ t → upd G t (W.set (G t) .ww) u = G u := fun u hu => upd_ne _ _ hu
   have hGt : W.ph (upd G t (W.set (G t) .ww) t) = .ww := by rw [upd_self, W.ph_set]
   have hW : ∀ u, (W.ph (upd G t (W.set (G t) .ww) u)).isW = true → u = t := fun u hu => by
-    by_contra e
-    rw [hne u e, hnoW u] at hu; cases hu
+    by_cases e : u = t
+    · exact e
+    · rw [hne u e, hnoW u] at hu; cases hu
   have hnrd : W.nrd (upd G t (W.set (G t) .ww)) m = W.nrd G m := by
     have h := nrd_upd (W := W) G ht (G t) (W.set (G t) .ww)
     rw [upd_same] at h
