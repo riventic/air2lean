@@ -72,7 +72,9 @@ not construct. The client also shows that a writer asleep at the semaphore is no
 (`wlive`, the semaphore's `hlive`; the outer mutex's `holdLive` covers it at `M`'s `holdsAway`),
 and that `UM` is stable over the writer's nap and unnap at `M` around its semaphore wait (`mnap`,
 `munnap`: a holder in the futex queue is at `holdsAway`; decision on #667, a nesting protocol
-proves the nap's stability for its own `U`).
+proves the nap's stability for its own `U`), that the semaphore's view `US` is stable over the
+writer's take (`ww → wr`, `utake`) and the last reader's give (`rp → out`, `upost`), and that only
+the writer at `ww` is in the semaphore's wait (`wtw`; decision 2026-11-08 on #729).
 
 ## Facts for every implementation
 
@@ -369,6 +371,39 @@ structure Fits {Tgt : Type} (P : Proto Tgt γ) (UM US : (ThreadId → γ) → Re
   munnap : ∀ G rX m t g, W.ph g = .ww → L.ph g = .out → M.ph g = .holdsAway →
     UM (upd G t g) rX m → M.Inv (upd G t g) rX m →
     UM (upd G t (M.set g .holds (M.held g))) rX m
+  /-- **The writer's take at the semaphore** (`SemImpl.wait_wp_resource`'s `hU` at the
+  semaphore's view `US`, the pool `S.Pool` as `T`): at its store of the count the writer moves
+  `ww → wr` and the posted resource joins its part (staying at `ww` keeps `RwPosted`, so the count
+  could not drop: `cnt_posted`). `US`'s stability over this change is the nesting protocol's
+  obligation (maintainer decision 2026-11-08 on #729, option A, consistent with `mnap` and the
+  decisions on #667 and #724): `FLock.Fits.kstep` at `M` covers only the rwlock's own steps, and
+  `FLock.Inv` does not determine its rest, so the outer mutex's view cannot supply it. -/
+  utake : ∀ G rX m t g h₁ h₂ r sh sc, W.ph g = .ww → S.cnt (upd G t g) ≠ 0 →
+    S.Pool (S.xs (upd G t g)) r → FHeap.Disjoint (L.part g).heap r.heap →
+    US (upd G t (S.set (L.set g .holds h₁) (.pst sh sc))) rX m →
+    L.Inv (upd G t (S.set (L.set (L.setPart (W.set g .wr) (rsum (L.part g) r)) .holds h₂)
+      (.pst sh sc))) rX m →
+    S.Inv (upd G t (S.set (L.set (L.setPart (W.set g .wr) (rsum (L.part g) r)) .holds h₂)
+      (.pst sh sc))) m →
+    C.Inv L (upd G t (S.set (L.set (L.setPart (W.set g .wr) (rsum (L.part g) r)) .holds h₂)
+      (.pst sh sc))) m →
+    US (upd G t (S.set (L.set (L.setPart (W.set g .wr) (rsum (L.part g) r)) .holds h₂)
+      (.pst sh sc))) rX m
+  /-- **The last reader's give at the semaphore** (`SemImpl.post_wp_resource`'s `hU` at `US`): at
+  its store of the count the last reader moves `rp → out` and its part keeps `r₀` (the whole
+  resource goes to the pool; at `rp` the state is not `RwPosted`, so the count could not rise:
+  `cnt_idle`). The nesting protocol's obligation (decision 2026-11-08 on #729, as `utake`). -/
+  upost : ∀ G rX m t g r₀ h₁ h₂ sh sc, W.ph g = .rp →
+    US (upd G t (S.set (L.set g .holds h₁) (.pst sh sc))) rX m →
+    L.Inv (upd G t (S.set (L.set (W.set (L.setPart g r₀) .out) .holds h₂) (.pst sh sc))) rX m →
+    S.Inv (upd G t (S.set (L.set (W.set (L.setPart g r₀) .out) .holds h₂) (.pst sh sc))) m →
+    C.Inv L (upd G t (S.set (L.set (W.set (L.setPart g r₀) .out) .holds h₂) (.pst sh sc))) m →
+    US (upd G t (S.set (L.set (W.set (L.setPart g r₀) .out) .holds h₂) (.pst sh sc))) rX m
+  /-- **Only the writer at `ww` is in the semaphore's wait** (for the take's condition room,
+  `SemImpl.wait_wp`'s `hroom`: a waiter registered at the condition is at `wt`, `FSem.Inv.wt`, so
+  at `ww`, and `Inv.one` leaves at most one). `wx_iff` gives `ww` only at the entry (`FSem.Go`);
+  that it lasts is the nesting protocol's obligation (decision 2026-11-08 on #729). -/
+  wtw : ∀ G m u, P.inv G m → S.ph (G u) = .wt → W.ph (G u) = .ww
   /-- **The writer asleep at the semaphore is not in a deadlock** (`SemImpl.wait_wp`'s `hlive` for
   the writer at `ww`). -/
   wlive : ∀ t G₁ m₁, W.ph (G₁ t) = .ww → (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) →
