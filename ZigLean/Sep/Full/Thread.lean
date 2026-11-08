@@ -132,6 +132,13 @@ theorem _root_.Zig.Mem.OwnsRes.ownsR (ho : m.OwnsRes t r) : m.OwnsR t r.owned :=
     · exact h hn.1
     · exact h hn.2
 
+/-- An access to a byte a resource holds touches its exclusive or its shared bytes
+(`Res.excl_or_shared`). -/
+theorem _root_.Zig.FootprintEntry.Touches.excl_or_shared {e : FootprintEntry} {r : Res}
+    (h : e.Touches r.owned) : e.Touches r.excl ∨ e.Touches r.shared :=
+  let ⟨x, h1, h2, h3⟩ := h
+  (Res.excl_or_shared h3).imp (fun h => ⟨x, h1, h2, h⟩) (fun h => ⟨x, h1, h2, h⟩)
+
 /-- A thread owns every access to its cells. -/
 theorem _root_.Zig.Mem.OwnsRes.cells (ho : m.OwnsRes t r) : m.Owns t r.heap.erase :=
   ho.1.sub fun _ hl => Res.excl_of_heap fun e => hl (by simp [FHeap.erase, e])

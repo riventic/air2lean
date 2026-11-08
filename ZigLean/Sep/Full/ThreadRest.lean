@@ -49,6 +49,21 @@ theorem cellsAt_some {W : Loc → Prop} [DecidablePred W] {m : Mem} {l : Loc} (h
   | none => exact absurd e hl
   | some c => simp
 
+/-- The rest beside the cells is determined by its sum with them, when it has none of their
+places. -/
+theorem cellsAt_cancel {W : Loc → Prop} [DecidablePred W] {m : Mem} {a b : Res}
+    (h : rsum (cellsAt W m) a = rsum (cellsAt W m) b)
+    (ha : ∀ l, W l → a.heap l = none) (hb : ∀ l, W l → b.heap l = none) : a = b := by
+  obtain ⟨ah, ak, ag⟩ := a
+  obtain ⟨bh, bk, bg⟩ := b
+  simp only [rsum, cellsAt, Res.mk.injEq, Know.none_union, Ghost.unit_add] at h ha hb
+  obtain ⟨hh, rfl, rfl⟩ := h
+  have : ah = bh := funext fun l => by
+    by_cases hl : W l
+    · rw [ha l hl, hb l hl]
+    · simpa [FHeap.union_apply, hl] using congrFun hh l
+  rw [this]
+
 /-- A step that changes only the bytes `W`, which stay live, and records accesses only to them
 (module doc). -/
 structure RestStep (W : Loc → Prop) (m m' : Mem) : Prop where
