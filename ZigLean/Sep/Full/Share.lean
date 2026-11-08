@@ -77,6 +77,41 @@ theorem Ghost.sharesOf_share (H : FHeap) (q : Frac) (l : Loc) :
 theorem SCell.cell_of_one (c : FCell) : (SCell.of c Frac.one).cell = some c :=
   SCell.cell_eq_some (SCell.valid_of (by decide)) (by rw [SCell.of_self]; decide)
 
+/-- A positive share of `H` owns `H`'s bytes. -/
+theorem shareRes_owned {H : FHeap} {q : Frac} (hq : 0 < q.val) {l : Loc} :
+    (shareRes H q).owned l ≠ none ↔ H l ≠ none := by
+  rw [Res.owned_ne]
+  constructor
+  · rintro (h | ⟨c, hc⟩)
+    · exact absurd rfl h
+    · intro e
+      have hc' : 0 < ((Ghost.sharesOf H q).share l c).val := hc
+      rw [Ghost.sharesOf_share, e] at hc'
+      exact absurd hc' Rat.lt_irrefl
+  · intro h
+    cases e : H l with
+    | none => exact absurd e h
+    | some c =>
+      refine .inr ⟨c, ?_⟩
+      show 0 < ((Ghost.sharesOf H q).share l c).val
+      rw [Ghost.sharesOf_share, e, Option.elim_some, SCell.of_self]
+      exact hq
+
+/-- A share of `H` below the whole holds `H`'s bytes as shared bytes. -/
+theorem shareRes_shared {H : FHeap} {q : Frac} (hq : 0 < q.val) (hq1 : q.val < 1) {l : Loc}
+    (h : H l ≠ none) : (shareRes H q).shared l ≠ none := by
+  cases e : H l with
+  | none => exact absurd e h
+  | some c =>
+    have hs : (shareRes H q).gh.share l = SCell.of c q := by
+      show (Ghost.sharesOf H q).share l = _
+      rw [Ghost.sharesOf_share, e]; rfl
+    refine Res.shared_ne.mpr ⟨rfl, fun ⟨c', hc'⟩ => ?_, c, by rw [hs, SCell.of_self]; exact hq⟩
+    rw [hs] at hc'
+    by_cases ec : c' = c
+    · subst ec; rw [SCell.of_self] at hc'; grind
+    · rw [SCell.of_ne q ec] at hc'; exact absurd hc' (by decide)
+
 /-! ## The whole share is the heap -/
 
 /-- Next to the whole share of `H`, a frame with no share on `H`'s cells: the composed share is

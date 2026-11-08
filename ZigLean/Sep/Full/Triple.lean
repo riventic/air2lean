@@ -463,6 +463,10 @@ theorem Res.owned_ne {r : Res} {l : Loc} :
 theorem Res.owned_of_heap {r : Res} {l : Loc} (h : r.heap l ≠ none) : r.owned l ≠ none :=
   Res.owned_ne.mpr (.inl h)
 
+/-- A byte a resource does not own is not in its heap. -/
+theorem Res.heap_of_owned {r : Res} {l : Loc} (h : r.owned l = none) : r.heap l = none :=
+  Classical.byContradiction fun e => Res.owned_of_heap e h
+
 theorem Res.owned_of_erase {r : Res} {l : Loc} (h : r.heap.erase l ≠ none) : r.owned l ≠ none :=
   Res.owned_of_heap fun e => h (by simp [FHeap.erase, e])
 
@@ -504,6 +508,12 @@ theorem Res.owned_eq_erase {r : Res} (hs : r.gh.share = fun _ => SCell.zero := b
 theorem Res.owned_eq_empty {r : Res} (hh : r.heap = FHeap.empty)
     (hs : r.gh.share = fun _ => SCell.zero := by rfl) : r.owned = Heap.empty := by
   rw [Res.owned_eq_erase hs, hh]; rfl
+
+/-- A resource without ghost state owns exactly its cells. -/
+theorem Res.owned_plain {r : Res} (hg : r.gh = Ghost.unit) {l : Loc} (h : r.heap l = none) :
+    r.owned l = none := by
+  rw [Res.owned_eq_erase (by rw [hg]; rfl)]
+  simp [FHeap.erase, h]
 
 /-- No share of a byte where a resource or its frame has an exclusive cell. -/
 theorem Holds.not_pos_of_heap {m : Mem} {r rF : Res} (hh : Holds m r rF) {l : Loc}
@@ -712,6 +722,12 @@ theorem Res.excl_or_shared {r : Res} {l : Loc} (h : r.owned l ≠ none) :
     · rcases Res.owned_ne.mp h with e | e
       · exact absurd (.inl e) hx
       · exact e
+
+/-- An access to a byte a resource holds touches its exclusive or its shared bytes. -/
+theorem _root_.Zig.FootprintEntry.Touches.excl_or_shared {e : FootprintEntry} {r : Res}
+    (h : e.Touches r.owned) : e.Touches r.excl ∨ e.Touches r.shared :=
+  let ⟨x, h1, h2, h3⟩ := h
+  (Res.excl_or_shared h3).imp (fun h => ⟨x, h1, h2, h⟩) (fun h => ⟨x, h1, h2, h⟩)
 
 theorem Res.excl_shared_disj {r : Res} {l : Loc} (h : r.excl l ≠ none) : r.shared l = none := by
   refine Classical.byContradiction fun hs => ?_

@@ -869,6 +869,27 @@ theorem ftot_congr {f g : Nat → Frac} (h : ∀ k, (f k).val = (g k).val) : ∀
   | 0 => rfl
   | n + 1 => by simp only [ftot, ftot_congr h n, h n]
 
+/-- Two fraction functions that agree below `n` have one sum below `n`. -/
+theorem ftot_eq_lt {f g : Nat → Frac} : ∀ {n}, (∀ k, k < n → f k = g k) → ftot f n = ftot g n
+  | 0, _ => rfl
+  | n + 1, h => by
+    simp only [ftot]
+    rw [ftot_eq_lt fun k hk => h k (by omega), h n (by omega)]
+
+/-- **One point changes** (`tsum_upd` for fractions): the sum moves by the difference there. -/
+theorem ftot_upd {f g : Nat → Frac} {t : Nat} (h : ∀ u, u ≠ t → f u = g u) :
+    ∀ {N}, t < N → ftot f N + (g t).val = ftot g N + (f t).val
+  | 0, ht => absurd ht (Nat.not_lt_zero _)
+  | N + 1, ht => by
+    simp only [ftot]
+    by_cases e : N = t
+    · subst e
+      rw [ftot_eq_lt fun k hk => h k (by omega)]
+      grind
+    · have := ftot_upd h (N := N) (by omega)
+      rw [h N e]
+      grind
+
 /-! ## Ledger status and the tag tree (`docs/sep-full-state.md` §Nested tags)
 
 A ledger status `ls γ e p` says that ledger `γ`'s authority is at epoch `e` with parent tag `p`.
