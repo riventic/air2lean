@@ -1571,10 +1571,21 @@ theorem Fits.setPart_keeps (hW : W.Fits P UM US okM okS) (g : γ) (r : Res) :
     W.x (M.setPart g r) = W.x g ∧ M.ph (M.setPart g r) = M.ph g ∧
       M.held (M.setPart g r) = M.held g ∧ L.ph (M.setPart g r) = L.ph g ∧
       L.held (M.setPart g r) = L.held g ∧ S.place.ph (M.setPart g r) = S.place.ph g := by
-  rw [W.pair.setPart]
-  exact ⟨by rw [← W.pair.setPart]; exact W.x_part g r, by rw [← W.pair.setPart, M.ph_setPart],
-    by rw [← W.pair.setPart, M.held_setPart], L.ph_setPart g r, L.held_setPart g r,
-    hW.s.ph_part g r⟩
+  exact ⟨W.x_part g r, M.ph_setPart g r, M.held_setPart g r,
+    by rw [W.pair.setPart, L.ph_setPart], by rw [W.pair.setPart, L.held_setPart],
+    by rw [W.pair.setPart]; exact hW.s.ph_part g r⟩
+
+/-- **An atomic op at the word that moves no resource** (`Fits.atWord` with `t`'s part and the
+rest kept). -/
+theorem Fits.atWord_keep (hW : W.Fits P UM US okM okS) {t : ThreadId} {G₁ : ThreadId → γ} {g : γ}
+    {a : RwPh} {rY : Res} {m₁ m' : Mem} (hg₁ : G₁ t = g) (hc₁ : m₁.current = t)
+    (hU : UM G₁ (rsum (W.st.cellsR m₁) rY) m₁) (hiL : M.Inv G₁ (rsum (W.st.cellsR m₁) rY) m₁)
+    (hrest : RestStep W.st.In m₁ m') (hL : M.Inv G₁ (rsum (W.st.cellsR m') rY) m')
+    (hI : W.Inv G₁ (rsum (W.st.cellsR m₁) rY) m₁ →
+      W.Inv (upd G₁ t (W.set g a)) (rsum (W.st.cellsR m') rY) m') :
+    P.inv (upd G₁ t (W.set g a)) m' :=
+  hW.atWord hg₁ hc₁ hU hiL hrest (by rw [← hg₁, upd_same]; exact hL)
+    ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩ ⟨rY, rY, rnil, (rsum_rnil _).symm, (rsum_rnil _).symm⟩ hI
 
 /-! ## The rules of the ops at the state word
 
@@ -1656,9 +1667,8 @@ theorem wp_addW (hW : W.Fits P UM US okM okS) {ord : AtomicOrder} {v : BitVec 64
   obtain ⟨hrest, hfp⟩ := rmwFacts hw₀ hc₁ hct hr
   have hgt : M.ph (G₁ t) ≠ .gone := by rw [hg₁]; exact hmg
   have hop := hA (fun _ => none) (fun _ _ _ => rfl)
-  refine h k hk G₁ m' old (hop.current.trans hc₁) (hW.atWord hg₁ hc₁ hU hiL hrest
-    (by rw [← hg₁, upd_same]; exact hL) ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
-    ⟨rY, rY, rnil, (rsum_rnil _).symm, (rsum_rnil _).symm⟩ fun hI => ?_)
+  refine h k hk G₁ m' old (hop.current.trans hc₁)
+    (hW.atWord_keep hg₁ hc₁ hU hiL hrest hL fun hI => ?_)
   have := hI.addW hY (by rw [hg₁]; exact hout) (hiL.ht hgt).1 (hW.mph _)
     (hroom G₁ m₁ ((hW.m.inv _ _).mpr ⟨_, hiL, hU⟩) (by rw [hg₁]; exact hout)) hrest hw' hv hh hrel
     hfp
@@ -1719,9 +1729,7 @@ theorem wp_decW (hW : W.Fits P UM US okM okS) {ord : AtomicOrder} {v : BitVec 64
       (FHeap.disjoint_union_right.mp (FHeap.disjoint_union_right.mp hdp).2).1,
       hW.atWord hg₁ hc₁ hU hiL hrest hL' (hW.setPart_keeps g _)
         ⟨rF, rnil, rO, rfl, (rnil_rsum _).symm⟩ fun _ => hI'⟩
-  · refine .inl ⟨by rw [hro]; exact hn, hW.atWord hg₁ hc₁ hU hiL hrest
-      (by rw [← hg₁, upd_same]; exact hL) ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
-      ⟨rY, rY, rnil, (rsum_rnil _).symm, (rsum_rnil _).symm⟩ fun hI => ?_⟩
+  · refine .inl ⟨by rw [hro]; exact hn, hW.atWord_keep hg₁ hc₁ hU hiL hrest hL fun hI => ?_⟩
     have := hI.enterW hY hwi₁ ht (hW.mph _) hMt hnoW hn hrest hw' hv hh hrel hfp
     rwa [hg₁] at this
 
@@ -1740,9 +1748,7 @@ theorem wp_loadW (hW : W.Fits P UM US okM okS) {ord : AtomicOrder} (hmg : M.ph g
   have hrest := Word.atomicLoad_rest hw₀ hct' hr
   have hop := hA (fun _ => none) (fun _ _ _ => rfl)
   refine h k hk G₁ m' b (hop.current.trans hc₁) ((hW.m.sub _ _ _ hU).msgOk hj hv) ?_
-  have := hW.atWord (a := W.ph g) hg₁ hc₁ hU hiL hrest (by rw [← hg₁, upd_same]; exact hL)
-    ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩ ⟨rY, rY, rnil, (rsum_rnil _).symm, (rsum_rnil _).symm⟩
-    fun hI => by rw [W.set_self, ← hg₁, upd_same]; exact hI.load hY hrest hw' hh
+  have := hW.atWord_keep (a := W.ph g) hg₁ hc₁ hU hiL hrest hL fun hI => by rw [W.set_self, ← hg₁, upd_same]; exact hI.load hY hrest hw' hh
   rwa [W.set_self] at this
 
 end Proto
