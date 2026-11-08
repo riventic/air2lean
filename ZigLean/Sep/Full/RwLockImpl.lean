@@ -890,7 +890,8 @@ theorem Inv.noRd {G : ThreadId → γ} {rX : Res} {m : Mem} (hI : W.Inv G rX m)
   cases e : (W.ph (G u)).isRd
   · rfl
   · have hu : u < m.threads.size := hI.ex u fun h => by rw [h] at e; cases e
-    have h1 : (fun v => if (W.ph (G v)).isRd then 1 else 0) u ≤ W.nrd G m := le_tsum _ hu
+    have h1 : (fun v => if (W.ph (G v)).isRd then 1 else 0) u ≤ W.nrd G m :=
+      le_tsum (fun v => if (W.ph (G v)).isRd then 1 else 0) hu
     rw [h0] at h1
     simp [e] at h1
 
