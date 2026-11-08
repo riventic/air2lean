@@ -947,7 +947,7 @@ theorem Inv.takeRest {G : ThreadId → γ} {rA rX : Res} {m : Mem} {t : ThreadId
     (hi : L.Inv G (rsum rA rX) m) (hg : L.ph (G t) ≠ .gone)
     (hd : FHeap.Disjoint rA.heap rX.heap) (howns : m.Owns t rA.owned) :
     L.Inv (upd G t (L.setPart (G t) (rsum (L.part (G t)) rA))) rX m := by
-  obtain ⟨rL, ho, -⟩ := hi.rest
+  obtain ⟨_, ho, -⟩ := hi.rest
   exact hi.takeRestR hg hd ((ho.owns t (hi.ht hg).1).addOwns howns)
 
 /-- **`t` owns its part with a read share `rA` of the rest** (a reader's acquire,

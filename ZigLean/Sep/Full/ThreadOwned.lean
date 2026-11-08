@@ -158,6 +158,10 @@ theorem rsum_comm {a b : Res} (hd : FHeap.Disjoint a.heap b.heap) : rsum a b = r
 theorem rsum_assoc {a b c : Res} : rsum (rsum a b) c = rsum a (rsum b c) := by
   simp only [rsum, FHeap.union_assoc, Know.union_assoc, Ghost.add_assoc]
 
+theorem rsum_left_comm {a b c : Res} (hd : FHeap.Disjoint a.heap b.heap) :
+    rsum a (rsum b c) = rsum b (rsum a c) := by
+  rw [← rsum_assoc, rsum_comm hd, rsum_assoc]
+
 /-- The empty resource: the part of a thread that owns nothing (a joined one). -/
 abbrev rnil : Res := ⟨FHeap.empty, Know.none, Ghost.unit⟩
 

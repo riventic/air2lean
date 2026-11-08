@@ -1782,8 +1782,8 @@ theorem Fits.enterR (hW : W.Fits P UM US okM okS) {G₁ : ThreadId → γ} {rY :
     (hc' : m'.current = t) (hU : UM G₁ (rsum (W.st.cellsR m₁) rY) m₁)
     (hiL : M.Inv G₁ (rsum (W.st.cellsR m₁) rY) m₁) (hY : ∀ l, W.st.In l → rY.heap l = none)
     (hout : W.ph g = .out) (hmg : M.ph g ≠ .gone) (hnoW : ∀ u, (W.ph (G₁ u)).isW = false)
-    (hroom : W.nrd G₁ m₁ + 1 < RwState.countBound) (hrest : RestStep W.st.In m₁ m')
-    (hok : W.st.Ok m' fun u => M.ph (G₁ u) ≠ .gone)
+    (hroom : ∀ G m, P.inv G m → W.ph (G t) = .out → W.nrd G m + 1 < RwState.countBound)
+    (hrest : RestStep W.st.In m₁ m') (hok : W.st.Ok m' fun u => M.ph (G₁ u) ≠ .gone)
     (hv : (W.st.hist m₁)[(W.st.hist m₁).size - 1]!.Val old)
     (hh : W.st.hist m' = (W.st.hist m₁).push (Word.rmwEnt m' t ord
       (W.st.hist m₁)[(W.st.hist m₁).size - 1]! (old + BitVec.ofNat 64 RwState.readerUnit)))
@@ -1797,24 +1797,21 @@ theorem Fits.enterR (hW : W.Fits P UM US okM okS) {G₁ : ThreadId → γ} {rY :
   have ht := (hiL.ht hgt).1
   have hI₁ : W.Inv G₁ (rsum (W.st.cellsR m₁) rY) m₁ := hW.m.sub _ _ _ hU
   obtain ⟨rF, rO, H, f, rfl, hdFO, how, hR, hf, hz, hnz, hI'⟩ :=
-    hI₁.addR hY (by rw [hg₁]; exact hout) ht (hW.mph _) hnoW hroom hrest hok hv hh hrel hfp
+    hI₁.addR hY (by rw [hg₁]; exact hout) ht (hW.mph _) hnoW
+      (hroom G₁ m₁ ((hW.m.inv _ _).mpr ⟨_, hiL, hU⟩) (by rw [hg₁]; exact hout)) hrest hok hv hh
+      hrel hfp
   have hbs : m₁.blocks.size ≤ m'.blocks.size := Nat.le_of_eq hrest.bsize.symm
   have he : ∀ {H' : FHeap} {a : Frac} {X : Res},
       rsum (shareRes H' a) (rsum (W.st.cellsR m') X) =
-        rsum (W.st.cellsR m') (rsum (shareRes H' a) X) := by
-    intro H' a X
-    rw [← rsum_assoc, ← rsum_assoc,
-      rsum_comm (a := shareRes H' a) (b := W.st.cellsR m') (fun _ => .inl rfl)]
-  -- the rest keeps `shareRes H f'`, `t`'s part gets `shareRes H q`
-  suffices hM : ∃ q f', 0 < q.val ∧ 0 < f'.val ∧ q.add f' = f ∧
-      M.Inv (upd G₁ t (M.setPart g (rsum (M.part g) (shareRes H q))))
-        (rsum (W.st.cellsR m') (rsum (shareRes H f') rO)) m' by
-    obtain ⟨q, f', hq, hf', hqf, hM⟩ := hM
-    refine ⟨q, H, hq, hR, hW.atWord hg₁ hc₁ hU hiL hrest hM (hW.setPart_keeps g _)
-      ⟨rF, shareRes H f', rO, rfl, rfl⟩ fun _ => ?_⟩
-    have := hI' q f' hq hf' hqf
+        rsum (W.st.cellsR m') (rsum (shareRes H' a) X) :=
+    rsum_left_comm fun _ => .inl rfl
+  -- the rest keeps one half of `f`, `t`'s part gets the other
+  suffices hM : M.Inv (upd G₁ t (M.setPart g (rsum (M.part g) (shareRes H f.half))))
+      (rsum (W.st.cellsR m') (rsum (shareRes H f.half) rO)) m' by
+    refine ⟨f.half, H, Frac.half_pos hf, hR, hW.atWord hg₁ hc₁ hU hiL hrest hM
+      (hW.setPart_keeps g _) ⟨rF, shareRes H f.half, rO, rfl, rfl⟩ fun _ => ?_⟩
+    have := hI' f.half f.half (Frac.half_pos hf) (Frac.half_pos hf) (Frac.half_add_half f)
     rwa [hg₁] at this
-  refine ⟨f.half, f.half, Frac.half_pos hf, Frac.half_pos hf, Frac.half_add_half f, ?_⟩
   by_cases h0 : W.nrd G₁ m₁ = 0
   · -- no reader: `t` takes the whole resource, shares it in its part and gives half back
     obtain ⟨rfl, rfl⟩ := hz h0
@@ -1826,8 +1823,7 @@ theorem Fits.enterR (hW : W.Fits P UM US okM okS) {G₁ : ThreadId → γ} {rY :
         simp only [FHeap.union_apply, Option.or_eq_none_iff] at this
         exact .inr this.1
       · exact .inl (cellsAt_none hl)
-    rw [← rsum_assoc, rsum_comm (a := W.st.cellsR m') (b := ⟨H, Know.none, Ghost.unit⟩) hcF,
-      rsum_assoc] at hL
+    rw [rsum_left_comm (a := W.st.cellsR m') (b := ⟨H, Know.none, Ghost.unit⟩) hcF] at hL
     have hL₁ := hL.takeRest hgt (FHeap.disjoint_union_right.mpr ⟨hcF.symm, hdFO⟩) hown
     rw [hg₁] at hL₁
     have hpH : FHeap.Disjoint (M.part g).heap H := by
@@ -1900,9 +1896,8 @@ theorem wp_casR (hW : W.Fits P UM US okM okS) {succ fail : AtomicOrder} {exp new
       cases hu : (W.ph (G₁ u)).isW
       · rfl
       · rw [writing_of (hI₁.ex u fun e => by rw [e] at hu; cases hu) hu] at hwr; cases hwr
-    obtain ⟨q, H, hq, hR, hP⟩ := hW.enterR hg₁ hc₁ hc' hU hiL hY hout hmg hnoW
-      (hroom G₁ m₁ ((hW.m.inv _ _).mpr ⟨_, hiL, hU⟩) (by rw [hg₁]; exact hout)) hrest hw' hv hh
-      hrel (hac hacq) hfp hL
+    obtain ⟨q, H, hq, hR, hP⟩ := hW.enterR hg₁ hc₁ hc' hU hiL hY hout hmg hnoW hroom hrest hw'
+      hv hh hrel (hac hacq) hfp hL
     exact hs k hk G₁ m' hc' q H hq hR hP
   · refine hf k hk G₁ m' b hc' (hI₁.msgOk hj hv) ?_
     have := hW.atWord_keep (a := W.ph g) hg₁ hc₁ hU hiL hrest hL fun hI => by
@@ -1939,9 +1934,8 @@ theorem wp_addR (hW : W.Fits P UM US okM okS) {ord : AtomicOrder} {v : BitVec 64
     · rfl
     · have := hiL.w.one u t (hI₁.wm u hu) hMt
       subst this; rw [hout₁] at hu; cases hu
-  obtain ⟨q, H, hq, hR, hP⟩ := hW.enterR hg₁ hc₁ hc' hU hiL hY hout hmg hnoW
-    (hroom G₁ m₁ ((hW.m.inv _ _).mpr ⟨_, hiL, hU⟩) (by rw [hg₁]; exact hout)) hrest hw' hv hh
-    hrel (hac hacq) hfp hL
+  obtain ⟨q, H, hq, hR, hP⟩ := hW.enterR hg₁ hc₁ hc' hU hiL hY hout hmg hnoW hroom hrest hw' hv
+    hh hrel (hac hacq) hfp hL
   exact h k hk G₁ m' old hc' q H hq hR hP
 
 /-- **A reader's `-2^32`** (`unlockShared`, from `rd q H` with the share in its part beside `r₀`),
@@ -1984,8 +1978,7 @@ theorem wp_subR (hW : W.Fits P UM US okM okS) {r₀ : Res} {q : Frac} {H : FHeap
   refine h k hk G₁ m' old hc' ?_
   by_cases h1 : W.nrd G₁ m₁ = 1
   · -- the last reader: it takes the rest's share and joins the whole resource
-    rw [← rsum_assoc, rsum_comm (a := W.st.cellsR m') (b := shareRes H f) (fun _ => .inr rfl),
-      rsum_assoc] at hL
+    rw [rsum_left_comm (a := W.st.cellsR m') (b := shareRes H f) fun _ => .inr rfl] at hL
     have hL₁ := hL.takeRest hgt (fun _ => .inl rfl) (hOwn h1 hgt (hac hacq))
     rw [hg₁, hpart, rsum_assoc, shareRes_add, Frac.add_comm q f, hone h1] at hL₁
     obtain ⟨r, ⟨r₁, r₂, hd₀, hr, h₁, h₂⟩, hL₂⟩ := hL₁.eupdPart P hc'
@@ -2012,8 +2005,8 @@ theorem wp_subR (hW : W.Fits P UM US okM okS) {r₀ : Res} {q : Frac} {H : FHeap
       obtain ⟨hHc, hHO⟩ := FHeap.disjoint_union_right.mp (FHeap.disjoint_union_left.mp hpa).2
       have hL₃ := hL₂.giveRest (rP := r₀) (rA := ⟨H, Know.none, Ghost.unit⟩)
         (by rw [upd_self, M.ph_setPart]; exact hmg) (by rw [upd_self, M.part_setPart]) hd₀
-      rw [upd_self, M.setPart_setPart, upd_upd, ← rsum_assoc,
-        rsum_comm (a := ⟨H, Know.none, Ghost.unit⟩) (b := W.st.cellsR m') hHc, rsum_assoc] at hL₃
+      rw [upd_self, M.setPart_setPart, upd_upd,
+        rsum_left_comm (a := ⟨H, Know.none, Ghost.unit⟩) (b := W.st.cellsR m') hHc] at hL₃
       refine .inl ⟨fun _ => by rw [hwo]; exact Bool.eq_false_iff.mpr hwt,
         hW.atWord hg₁ hc₁ hU hiL hrest hL₃ (hW.setPart_keeps g r₀)
           ⟨shareRes H f, ⟨H, Know.none, Ghost.unit⟩, rO, rfl, rfl⟩ fun _ => ?_⟩
@@ -2021,9 +2014,8 @@ theorem wp_subR (hW : W.Fits P UM US okM okS) {r₀ : Res} {q : Frac} {H : FHeap
       rwa [hg₁] at this
   · -- other readers remain: the share goes back to the rest
     have hL₁ := hL.giveRest hgt (by rw [hg₁]; exact hpart) (fun _ => .inr rfl)
-    rw [hg₁, ← rsum_assoc, rsum_comm (a := shareRes H q) (b := W.st.cellsR m') (fun _ => .inl rfl),
-      rsum_assoc, ← rsum_assoc (a := shareRes H q),
-      rsum_comm (a := shareRes H q) (b := shareRes H f) (fun _ => .inl rfl), shareRes_add] at hL₁
+    rw [hg₁, rsum_left_comm (a := shareRes H q) (b := W.st.cellsR m') fun _ => .inl rfl,
+      ← rsum_assoc (a := shareRes H q), shareRes_add, Frac.add_comm q f] at hL₁
     refine .inl ⟨fun h1' => absurd (by rw [← hro]; exact h1') h1,
       hW.atWord hg₁ hc₁ hU hiL hrest hL₁ (hW.setPart_keeps g r₀)
         ⟨shareRes H f, shareRes H (f.add q), rO, rfl, rfl⟩ fun _ => ?_⟩
