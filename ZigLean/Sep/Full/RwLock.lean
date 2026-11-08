@@ -175,7 +175,7 @@ theorem drain_guard_encode {c p r w : Nat} (hr : r < countBound c) (hw : w < cou
 
 /-- The last-reader guard of `unlockShared` (`old & reader_mask == reader_unit`), with no count
 hypotheses. -/
-theorem last_guard (c p : Nat) (s : BitVec (width c p)) :
+theorem last_guard {c : Nat} (hc : 0 < c) (p : Nat) (s : BitVec (width c p)) :
     (s &&& readerMask c p == BitVec.ofNat (width c p) (readerUnit c)) = (readers c s == 1) := by
   have hu : readerUnit c < 2 ^ width c p :=
     Nat.pow_lt_pow_right (by decide) (by unfold width; omega)

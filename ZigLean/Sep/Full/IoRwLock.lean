@@ -496,7 +496,7 @@ theorem unlockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none)
   refine WP.bind (FRw.wp_subR hW hrd (by rw [hmo]; decide) hpart hi
     fun k₁ hk₁ G₁ m₁ old hc₁ hcase => ?_)
   have hlg : (old &&& (9223372032559808512 : BitVec 64) == (4294967296 : BitVec 64)) =
-      (RwState.readers old == 1) := RwState.Family.last_guard 31 1 old
+      (RwState.readers old == 1) := RwState.Family.last_guard (c := 31) (by decide) 1 old
   have hwg : (old &&& (1 : BitVec 64) != (0 : BitVec 64)) = RwState.writing old :=
     RwState.Family.writing_guard 31 1 old
   rw [StateT.run_bind]
