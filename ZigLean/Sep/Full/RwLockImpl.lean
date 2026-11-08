@@ -306,11 +306,10 @@ structure Inv (G : ThreadId → γ) (rX : Res) (m : Mem) : Prop where
   /-- The writer at `wr` has no reader. -/
   wr : ∀ u, W.ph (G u) = .wr → W.nrd G m = 0
   /-- The last reader at `rp` is the only one in the readers' code, with a writer at `ww`. -/
-  rp : ∀ u, (W.ph (G u)).isRp → W.nrd G m = 0 ∧ (∃ w, W.ph (G w) = .ww) ∧
-    ∀ v, (W.ph (G v)).isRp → v = u
-  /-- The resource the last reader carries has `R` at the current client parts (decision
-  2026-11-08 on #732, R-C: it posts it to the writer after stops of other threads, and the posted
-  pool is `R` at the client parts of the post, `pool_posted`). -/
+  rp : ∀ u, (W.ph (G u)).isRp = true → W.nrd G m = 0 ∧ (∃ w, W.ph (G w) = .ww) ∧
+    ∀ v, (W.ph (G v)).isRp = true → v = u
+  /-- The resource the last reader carries has `R` at the current client parts (module doc;
+  decision R-C on #732). -/
   rpR : ∀ u r, W.ph (G u) = .rp r → W.R (W.xs G) r
   /-- The rest: the word's cells, the free resource, the rest of the rest. -/
   rest : ∃ rF rO, rX = rsum (W.st.cellsR m) (rsum rF rO) ∧
@@ -942,9 +941,9 @@ theorem Inv.ofRmwMv {G : ThreadId → γ} {rF rO rF' : Res} {m m' : Mem} {t : Th
     (hwm : ∀ u, (W.ph (upd G t (W.set (G t) b) u)).isW →
       (M.ph (upd G t (W.set (G t) b) u)).held = true)
     (hwr : ∀ u, W.ph (upd G t (W.set (G t) b) u) = .wr → W.nrd (upd G t (W.set (G t) b)) m = 0)
-    (hrp : ∀ u, (W.ph (upd G t (W.set (G t) b) u)).isRp →
+    (hrp : ∀ u, (W.ph (upd G t (W.set (G t) b) u)).isRp = true →
       W.nrd (upd G t (W.set (G t) b)) m = 0 ∧ (∃ w, W.ph (upd G t (W.set (G t) b) w) = .ww) ∧
-      ∀ v, (W.ph (upd G t (W.set (G t) b) v)).isRp → v = u)
+      ∀ v, (W.ph (upd G t (W.set (G t) b) v)).isRp = true → v = u)
     (hoff : ∀ l, W.st.In l → rO.heap l = none) (how : W.Owns G m rF)
     (hoff' : ∀ l, W.st.In l → rF'.owned l = none) (hd' : FHeap.Disjoint rF'.heap rO.heap)
     (hfr' : W.FreeRes (upd G t (W.set (G t) b)) m rF')
@@ -962,7 +961,7 @@ theorem Inv.ofRmwMv {G : ThreadId → γ} {rF rO rF' : Res} {m m' : Mem} {t : Th
     hwm, fun u hu => by rw [nrd_threads hth]; exact hwr u hu,
     fun u hu => by rw [nrd_threads hth]; exact hrp u hu, fun u r hu => ?_,
     ⟨rF', rO, rfl, fun l hl => ⟨hoff' l hl, hoff l hl⟩, hd', hfr'.threads hth, hown ?_⟩⟩
-  · have :(fun u => M.ph (upd G t (W.set (G t) b) u) ≠ .gone) = fun u => M.ph (G u) ≠ .gone :=
+  · have : (fun u => M.ph (upd G t (W.set (G t) b) u) ≠ .gone) = fun u => M.ph (G u) ≠ .gone :=
       funext fun u => by rw [hMph]
     rw [this]; exact hok
   · refine ⟨Word.rmwEnt m' t ord (W.st.hist m)[(W.st.hist m).size - 1]! new, by rw [hh]; simp, ?_⟩
@@ -1079,7 +1078,8 @@ theorem not_busy_noW {G : ThreadId → γ} (hnoW : ∀ u, (W.ph (G u)).isW = fal
 (`Inv.rp`: it has a writer at `ww`), the writing bit is clear and the resource is not away. -/
 theorem Inv.noW {G : ThreadId → γ} {rX : Res} {m : Mem} (hI : W.Inv G rX m)
     (hnoW : ∀ u, (W.ph (G u)).isW = false) :
-    (∀ u, W.ph (G u) ≠ .wr) ∧ (∀ u, (W.ph (G u)).isRp ≠ true) ∧ W.writing G m = false ∧ ¬ W.Busy G := by
+    (∀ u, W.ph (G u) ≠ .wr) ∧ (∀ u, (W.ph (G u)).isRp ≠ true) ∧ W.writing G m = false ∧
+      ¬ W.Busy G := by
   have hnowr : ∀ u, W.ph (G u) ≠ .wr := fun u hu => by
     have := hnoW u; rw [hu] at this; cases this
   have hnorp : ∀ u, (W.ph (G u)).isRp ≠ true := fun u hu => by
@@ -2108,7 +2108,6 @@ structure RwLockImpl (Tgt : Type) where
     (∀ G m, P.inv G m → W.ph (G t) = .out → W.nwi G m + 1 < RwState.countBound) →
     ∀ (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat), P.inv (upd G t g) m → m.current = t →
     P.WP t (lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
-      -- `R` at the client parts of some state (decision 2026-11-08 on #732, option A)
       ∃ r rM, (∃ G₀, W.R (W.xs (upd G₀ t g)) r) ∧ FHeap.Disjoint (M.part g).heap r.heap ∧
         P.inv (upd G' t (M.set (W.set (M.setPart g (rsum (M.part g) r)) .wr) .holds rM)) m')
       G m d
