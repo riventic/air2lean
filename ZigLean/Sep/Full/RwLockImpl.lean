@@ -698,7 +698,7 @@ theorem Owns.mono {G : ThreadId → γ} {m : Mem} {r r' : Res} (ho : W.Owns G m 
   intro e he hT'
   have hsplit : ∀ x, r'.owned (e.block, x) ≠ none → e.off ≤ x → x < e.off + e.len →
       e.Touches r.excl ∨ e.Touches r.shared ∨ m.blocks.size ≤ e.block := fun x h h1 h2 =>
-    Or.assoc.mp (.inl (touches_owned ⟨x, h1, h2, hT _ h⟩))
+    or_assoc.mp (.inl (touches_owned ⟨x, h1, h2, hT _ h⟩))
   have hT₀ : e.Touches r.excl ∨ e.Touches r.shared ∨ m.blocks.size ≤ e.block := by
     rcases hT' with ⟨x, h1, h2, h3⟩ | ⟨x, h1, h2, h3⟩ | h
     · exact hsplit x (Res.owned_of_excl h3) h1 h2
@@ -745,7 +745,7 @@ theorem Owns.toThread {G : ThreadId → γ} {m m' : Mem} {r : Res} {t : ThreadId
   intro e he hT
   rcases hfp e he with he₀ | hc
   · have hT' : e.Touches r.excl ∨ e.Touches r.shared ∨ m.blocks.size ≤ e.block :=
-      Or.assoc.mp (hT.imp touches_owned (Nat.le_trans hbs))
+      or_assoc.mp (hT.imp touches_owned (Nat.le_trans hbs))
     rcases ho e he₀ hT' with h | h | ⟨-, -, u, hu, hc⟩
     · exact VClock.le_trans (h t ht hg) hcl
     · exact VClock.le_trans h hacq
@@ -767,7 +767,7 @@ theorem Owns.toReader {G : ThreadId → γ} {m m' : Mem} {r r' : Res} {t : Threa
   intro e he hw hT'
   rcases hfp e he with he₀ | hc
   · have hT₀ : e.Touches r.excl ∨ e.Touches r.shared ∨ m.blocks.size ≤ e.block :=
-      Or.assoc.mp (hT'.imp (fun ⟨x, h1, h2, h3⟩ =>
+      or_assoc.mp (hT'.imp (fun ⟨x, h1, h2, h3⟩ =>
         touches_owned ⟨x, h1, h2, hT _ h3⟩) (Nat.le_trans hbs))
     rcases ho e he₀ hT₀ with h | h | ⟨hr, -⟩
     · exact VClock.le_trans (h t ht hg) hcl
