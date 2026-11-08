@@ -72,9 +72,9 @@ semaphore next to its mutex (`S.Fits P US okS`). Both views are views of one inv
 and `L` (ledger `two-lock-product`, item (5)), which this contract takes as its interface and does
 not construct. The client also shows that a writer asleep at the semaphore is not in a deadlock
 (`wlive`, the semaphore's `hlive`; the outer mutex's `holdLive` covers it at `M`'s `holdsAway`),
-and that `UM` is stable over the writer's nap and unnap at `M` around its semaphore wait (`mnap`,
-`munnap`: a holder in the futex queue is at `holdsAway`; decision on #667, a nesting protocol
-proves the nap's stability for its own `U`), that the semaphore's view `US` is stable over the
+and that `UM` is stable over the writer's nap (at `ww`) and unnap (at `wr`, after its take) at `M`
+around its semaphore wait (`mnap`, `munnap`: a holder in the futex queue is at `holdsAway`;
+decision on #667, a nesting protocol proves the nap's stability for its own `U`), that the semaphore's view `US` is stable over the
 writer's take (`ww → wr`, `utake`) and the last reader's give (`rp → out`, `upost`), and that only
 the writer at `ww` is in the semaphore's wait (`wtw`; decision 2026-11-08 on #729).
 
@@ -389,11 +389,14 @@ structure Fits {Tgt : Type} (P : Proto Tgt γ) (UM US : (ThreadId → γ) → Re
   `WInv.nap`). `UM`'s stability over this relabel is the nesting protocol's obligation (decision
   on #667): `FLock.Fits.stable` does not give it, since a nap is no step of the outer mutex's
   code and meets no release premise. The unnap's other premise (the writer is not in the futex
-  queue) follows from the semaphore's mutex's view (`Fits.unnapW`). -/
+  queue) follows from the semaphore's mutex's view (`Fits.unnapW`). The nap is at `ww` and the
+  unnap at `wr`, as the code runs: the writer's take inside the semaphore's wait moves it
+  `ww → wr` (`utake`), so it is back from the wait at `wr`. (Decision 2026-11-08, correcting the
+  form of #724, which stated the unnap at `ww`, where no path unnaps.) -/
   mnap : ∀ G rX m t g, W.ph g = .ww → L.ph g = .out → M.ph g = .holds →
     UM (upd G t g) rX m → M.Inv (upd G t g) rX m →
     UM (upd G t (M.set g .holdsAway (M.held g))) rX m
-  munnap : ∀ G rX m t g, W.ph g = .ww → L.ph g = .out → M.ph g = .holdsAway →
+  munnap : ∀ G rX m t g, W.ph g = .wr → L.ph g = .out → M.ph g = .holdsAway →
     UM (upd G t g) rX m → M.Inv (upd G t g) rX m →
     UM (upd G t (M.set g .holds (M.held g))) rX m
   /-- **The writer's take at the semaphore** (`SemImpl.wait_wp_resource`'s `hU` at the
@@ -1534,10 +1537,10 @@ theorem Fits.napW (hW : W.Fits P UM US okM okS) {G : ThreadId → γ} {m : Mem} 
   FLock.Fits.nap hW.m hg hi fun rX hU hI => hW.mnap G rX m t g hw hl hg hU hI
 
 /-- **The writer's unnap** after its semaphore wait (`FLock.Fits.unnap` at the outer mutex, with
-`munnap`): out of the semaphore's mutex's code, the writer is not in the futex queue
-(`LockWord.WInv.notQ` in the semaphore's mutex's view of the same invariant). -/
+`munnap`), at `wr` after the take: out of the semaphore's mutex's code, the writer is not in the
+futex queue (`LockWord.WInv.notQ` in the semaphore's mutex's view of the same invariant). -/
 theorem Fits.unnapW (hW : W.Fits P UM US okM okS) {G : ThreadId → γ} {m : Mem} {t : ThreadId}
-    {g : γ} (hw : W.ph g = .ww) (hl : L.ph g = .out) (hg : M.ph g = .holdsAway)
+    {g : γ} (hw : W.ph g = .wr) (hl : L.ph g = .out) (hg : M.ph g = .holdsAway)
     (hi : P.inv (upd G t g) m) : P.inv (upd G t (M.set g .holds (M.held g))) m := by
   obtain ⟨rX, hL, -⟩ := (hW.s.inv _ _).mp hi
   have hp : L.pl (upd G t g) t = .out := by
