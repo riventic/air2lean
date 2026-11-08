@@ -3208,6 +3208,72 @@ theorem cmpxchgWeak_fpAt {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
   · rw [hm, loadM_footprint] at he
     exact prepare_fpAt hp he
 
+/-- **A weak CAS's new accesses are the recorded ones** (`atomicRmw_fpNew`'s counterpart): its
+read and, on success, its write, both by the current thread before its new clock. -/
+theorem cmpxchgWeak_fpNew {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
+    {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m A)
+    (hc : m.current < m.clocks.size)
+    (h : ((cmpxchgWeakAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m')))
+    {e : FootprintEntry} (he : e ∈ m'.footprint) :
+    e ∈ m.footprint ∨ (e.tid = m.current ∧ VClock.le e.clock (m'.clocks[m.current]!) = true) := by
+  obtain ⟨b, blk, o, li, m₁, pos, spurious, old, hacc, _, hp, hr, hv, hcase⟩ :=
+    cmpxchgWeakAt_ok h
+  obtain ⟨blk₀, hb, _, _, _, ha⟩ := hw.access
+  rw [W.sz_eq, ha] at hacc
+  rw [W.sz_eq] at hp
+  cases hacc
+  obtain ⟨l, hl, hlen, _, hch, -⟩ := prepare hw rfl hp
+  obtain ⟨-, hcs, hblocks⟩ := prepare_rec hc hp
+  obtain ⟨a, sn, next, hm₁⟩ := locIdx_updates hp
+  have hfp₁ : m₁.footprint = (m.recordAt W.b W.o nb .atomicRead).footprint := by subst hm₁; rfl
+  have hcur : m₁.current = m.current := by subst hm₁; rfl
+  have hclk : m₁.clocks[m.current]! = VClock.bump (m.clocks[m.current]!) m.current := by
+    subst hm₁; exact recordAt_clock (b := W.b) (off := W.o) (len := nb) (kind := .atomicRead) hc
+  -- The entries after the read: the old ones and the read, before the read's clock.
+  have h₁ : ∀ e ∈ m₁.footprint, e ∈ m.footprint ∨
+      (e.tid = m.current ∧ VClock.le e.clock (m₁.clocks[m.current]!) = true) := by
+    intro e he
+    rw [hfp₁] at he
+    simp only [Mem.recordAt, Array.mem_push] at he
+    rcases he with he | rfl
+    · exact .inl he
+    · exact .inr ⟨rfl, by rw [hclk]; exact VClock.le_refl _⟩
+  -- From the read's entries to `m'`, given the thread's clock grows.
+  have hlift : VClock.le (m₁.clocks[m.current]!) (m'.clocks[m.current]!) = true →
+      ∀ e ∈ m₁.footprint, e ∈ m.footprint ∨
+        (e.tid = m.current ∧ VClock.le e.clock (m'.clocks[m.current]!) = true) :=
+    fun hle e he => (h₁ e he).imp_right fun ⟨ht, hc'⟩ => ⟨ht, VClock.le_trans hc' hle⟩
+  rcases hcase with ⟨rfl, rfl, _, _, hm'⟩ | ⟨_, _, hm'⟩
+  · obtain ⟨j, hj⟩ := weakCasOpts_strong hr
+    have hpos := cas_chain_pos (by rwa [(loc_get hl).2.2]) hj hv
+    have hj' := (casOpts_pos hj).1
+    rw [(loc_get hl).2.2] at hpos hj'
+    rw [W.sz_eq] at hm'
+    have hlr : W.Loc (m₁.recordAt W.b W.o nb .atomicWrite) li l := hl
+    have hs : FStepIn Heap.empty (m₁.recordAt W.b W.o nb .atomicWrite) m' := by
+      rw [hm']
+      exact rmwM_fstep (pos := pos) hlr hlen (by omega) (by simpa [Mem.recordAt] using hcs)
+        (rec_recordAt rfl hcs) ⟨_, by show m₁.blocks[W.b]? = _; rw [hblocks]; exact hb⟩ (fun _ _ _ => rfl) succ new
+    have hm2 := hs.mine
+    rw [show (m₁.recordAt W.b W.o nb .atomicWrite).current = m.current from hcur] at hm2
+    have hw2 : VClock.le (VClock.bump (m₁.clocks[m₁.current]!) m₁.current)
+        (m'.clocks[m.current]!) = true := by
+      rw [← recordAt_clock (b := W.b) (off := W.o) (len := nb) (kind := .atomicWrite) hcs, hcur]
+      exact hm2
+    rw [hm', rmwM_footprint] at he
+    simp only [Mem.recordAt, Array.mem_push] at he
+    rcases he with he | rfl
+    · exact hlift (VClock.le_trans (recordAt_clock_le m.current) hm2) e he
+    · exact .inr ⟨hcur, hw2⟩
+  · have hs : FStepIn Heap.empty m₁ m' := by
+      rw [hm']
+      exact FStepIn.loadM hcs fail ((m₁.atomics[li]!).msgs[pos]!)
+        (loc_notIn (hF := Heap.empty) hl hlen fun _ _ _ => rfl)
+    have hm2 := hs.mine
+    rw [hcur] at hm2
+    rw [hm', loadM_footprint] at he
+    exact hlift hm2 e he
+
 /-- Every actual primitive run at a valid word preserves the resource rest.
 The alternatives include all widths, orders, signedness and strong/weak CAS results. -/
 theorem actualRun_rest {m m' : Mem} (hw : W.Ok m A)
