@@ -76,12 +76,26 @@ proves the nap's stability for its own `U`).
 
 ## Facts for every implementation
 
-`Fits.inRest` (the state word in the outer mutex's rest, for the generic word rules at `M`),
-`Fits.napW` / `Fits.unnapW` (the writer's nap and unnap) and `Fits.wstep` (a step of the
-rwlock's own code keeps the protocol: `FLock.Fits.kstep` at `Step`), with the counts over one
-thread's change (`nrd_upd`, `nwi_upd` over `cnt_upd`; `writing_upd`, `fsum_upd`, `xs_set` over
-`upd_map`), are stated once
-here; an instance walks its code with them.
+Stated once here; an instance walks its code with them:
+
+- **The protocol.** `Fits.inRest` (the state word in the outer mutex's rest, for the generic word
+  rules at `M`), `Fits.napW` / `Fits.unnapW` (the writer's nap and unnap), `Fits.wstep` (a step of
+  the rwlock's own code keeps the protocol: `FLock.Fits.kstep` at `Step`) and `Fits.atWord` (an
+  atomic op at the word moves `t` to a new place).
+- **The counts over one thread's change**: `nrd_upd`, `nwi_upd` over `cnt_upd`; `writing_upd`,
+  `fsum_upd`, `xs_set` over `upd_map`; for a move of `t` to `b`, `nrd_mv`, `nwi_mv`, `fsum_mv`,
+  `writing_mv`, `ph_mv`, `Inv.one_mv`, `Inv.wm_mv`.
+- **The invariant after each op at the word**, the `hI` of `Fits.atWord`: `Inv.load` (a load, a
+  failed weak CAS); `Inv.addW` (`+2`, `out → wi`), `Inv.enterW` (`-1` with readers, `wi → ww`),
+  `Inv.takeW` (`-1` with no reader, `wi → wr`, `t` takes the free resource) and `Inv.giveW`
+  (`and ~1`, `wr → out`, `t` gives it back) for the writer; `Inv.addR` (`+2^32`, `out → rd q H`,
+  a share split) and `Inv.subR` (`-2^32`, the share joined; `out`, or the last reader at `rp`)
+  for the reader. Their shared part is `Inv.ofRmwMv` (the free resource may change) and
+  `Inv.ofRmw` (it stays).
+- **Ownership through the word** (`Owns`): `Owns.step` (a release write at the word), `Owns.mono`
+  (fewer bytes), `Owns.ofThread` (a resource `t` gives to the rest), `Owns.toThread` (the free
+  resource `t` takes with an acquire RMW, no other reader left: `FLock.Inv.takeRest`'s premise)
+  and `Owns.toReader` (a reader's share after its acquire).
 
 ## The rules (`RwLockImpl`)
 
@@ -581,13 +595,31 @@ theorem writing_mv (G : ThreadId → γ) (m : Mem) {t : ThreadId} {b : RwPh}
   rw [writing_upd (W := W) G m t (g := G t) (g' := W.set (G t) b) (by rw [W.ph_set]; exact h),
     upd_same]
 
-/-- A place property after `t` moves to `b`, which `b` lacks, is another thread's before. -/
+/-- A place property after `t` moves to `b`, which `b` lacks, is another thread's before. The
+default proof of `¬ p b` (`rintro ⟨⟩`) can assign `b` when it is still a metavariable, so a caller
+fixes `b` first: here every op lemma passes `b` to `Inv.ofRmwMv` / `Inv.ofRmw` explicitly. -/
 theorem ph_mv {G : ThreadId → γ} {t u : ThreadId} {b : RwPh} (p : RwPh → Prop)
     (h : p (W.ph (upd G t (W.set (G t) b) u))) (hb : ¬ p b := by rintro ⟨⟩) :
     u ≠ t ∧ p (W.ph (G u)) := by
   by_cases e : u = t
   · subst e; rw [upd_self, W.ph_set] at h; exact absurd h hb
   · rw [upd_ne _ _ e] at h; exact ⟨e, h⟩
+
+/-- After `t` moves to a place without the writing bit, at most one thread holds it (`Inv.one`). -/
+theorem Inv.one_mv {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {b : RwPh}
+    (hI : W.Inv G rX m) (hb : b.isW = false) :
+    ∀ u v, (W.ph (upd G t (W.set (G t) b) u)).isW → (W.ph (upd G t (W.set (G t) b) v)).isW →
+      u = v := fun u v hu hv =>
+  hI.one u v (ph_mv (·.isW = true) hu (by simp [hb])).2 (ph_mv (·.isW = true) hv (by simp [hb])).2
+
+/-- After `t` moves to a place without the writing bit, its holder holds the outer mutex
+(`Inv.wm`). -/
+theorem Inv.wm_mv {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {b : RwPh}
+    (hI : W.Inv G rX m) (hb : b.isW = false) :
+    ∀ u, (W.ph (upd G t (W.set (G t) b) u)).isW → (M.ph (upd G t (W.set (G t) b) u)).held = true :=
+  fun u hu => by
+    obtain ⟨e, hu⟩ := ph_mv (·.isW = true) hu (by simp [hb])
+    rw [upd_ne _ _ e]; exact hI.wm u hu
 
 /-- A thread in the rwlock's code exists, after `t` (which exists) moves. -/
 theorem ex_mv {G : ThreadId → γ} {m : Mem} {t : ThreadId} {b : RwPh} (ht : t < m.threads.size)
@@ -1008,14 +1040,10 @@ theorem Inv.addW {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
   have hfs := fsum_keep (W := W) G m (t := t) (b := .wi) (by rw [hout]; rfl)
   have hxs : W.xs (upd G t (W.set (G t) .wi)) = W.xs G := by rw [xs_set, upd_same]
   obtain ⟨hbusy, -⟩ := busy_calm (W := W) (G := G) (t := t) (.inr rfl) (.inl hout)
-  refine hI.ofRmw hY ht hmph hrest hok hh hrel hfp
+  refine hI.ofRmw (b := .wi) hY ht hmph hrest hok hh hrel hfp
     ⟨by rw [hnrd]; exact hI.room.1, by rw [hnwi]; exact hroom⟩
     (by rw [hnrd, hnwi, hwr, hI.old hv]; exact RwState.Family.add_writer 31 1 _ _ _)
-    (fun u v hu hv => hI.one u v (ph_mv (·.isW = true) hu).2
-      (ph_mv (·.isW = true) hv).2)
-    (fun u hu => ?_) (fun u hu => ?_) (fun u hu => ?_) (fun rF hfr => ?_)
-  · obtain ⟨hu', hu⟩ := ph_mv (·.isW = true) hu
-    rw [upd_ne _ _ hu']; exact hI.wm u hu
+    (hI.one_mv rfl) (hI.wm_mv rfl) (fun u hu => ?_) (fun u hu => ?_) (fun rF hfr => ?_)
   · rw [hnrd]; exact hI.wr u (ph_mv (· = .wr) hu).2
   · obtain ⟨h0, ⟨w, hw⟩, hone⟩ := hI.rp u (ph_mv (· = .rp) hu).2
     have hw' : w ≠ t := fun e => by subst e; rw [hout] at hw; cases hw
@@ -1090,7 +1118,7 @@ theorem Inv.enterW {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
     hnowr u (ph_mv (· = .wr) hu).2
   have hnorp' : ∀ u, W.ph (upd G t (W.set (G t) .ww) u) ≠ .rp := fun u hu =>
     hnorp u (ph_mv (· = .rp) hu).2
-  refine hI.ofRmw hY ht hmph hrest hok hh hrel hfp
+  refine hI.ofRmw (b := .ww) hY ht hmph hrest hok hh hrel hfp
     ⟨by rw [hnrd]; exact hI.room.1, by have := hI.room.2; omega⟩
     (by rw [hnrd, hwr, hI.old hv, hwr₀, ← hnwi]; exact RwState.Family.enter_writer 31 1 _ _)
     (fun u v hu hv => by rw [hW u hu, hW v hv]) (fun u hu => ?_) (fun u hu => ?_)
@@ -1211,11 +1239,10 @@ theorem Inv.giveW {G : ThreadId → γ} {rY r : Res} {m m' : Mem} {t : ThreadId}
   have hnew : VClock.le (m'.clocks[t]!) ((W.st.hist m').back!).relClock = true := by
     rw [hh, back_push]; exact Word.rmwEnt_rel hrel
   rw [rnil_rsum] at hdr ⊢
-  refine hI.ofRmwMv (rF' := r) ht hmph hrest hok hh hrel hfp
+  refine hI.ofRmwMv (rF' := r) (b := .out) ht hmph hrest hok hh hrel hfp
     ⟨by rw [hnrd]; exact hI.room.1, by rw [hnwi]; exact hI.room.2⟩
     (by rw [hnrd, hnwi, hwr', hI.old hv, hwr₀]; exact RwState.Family.clear_writer 31 1 _ _)
-    (fun u _ hu => by rw [hW' u] at hu; cases hu) (fun u hu => by rw [hW' u] at hu; cases hu)
-    (fun u hu => by have := hW' u; rw [hu] at this; cases this)
+    (hI.one_mv rfl) (hI.wm_mv rfl) (fun u hu => by have := hW' u; rw [hu] at this; cases this)
     (fun u hu => absurd hu (hnorp' u))
     (fun l hl => (hoff l hl).2) how
     (fun l hl => Res.owned_plain (W.R_plain _ _ hR).2 (hoffr l hl)) hdr
@@ -1295,10 +1322,6 @@ theorem Inv.addR {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
     grind
   have hf'1 : f'.val < 1 := by grind
   have hxs : W.xs (upd G t (W.set (G t) (.rd q H))) = W.xs G := by rw [xs_set, upd_same]
-  have hW' : ∀ u, (W.ph (upd G t (W.set (G t) (.rd q H)) u)).isW = false := fun u => by
-    cases h : (W.ph (upd G t (W.set (G t) (.rd q H)) u)).isW
-    · rfl
-    · have := (ph_mv (·.isW = true) h).2; rw [hnoW u] at this; cases this
   have hnowr' : ∀ u, W.ph (upd G t (W.set (G t) (.rd q H)) u) ≠ .wr := fun u hu =>
     hnowr u (ph_mv (· = .wr) hu).2
   have hnorp' : ∀ u, W.ph (upd G t (W.set (G t) (.rd q H)) u) ≠ .rp := fun u hu =>
@@ -1308,11 +1331,10 @@ theorem Inv.addR {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
     · exact hnowr' u hu
     · exact hnorp' u hu
     · have := hall' t; rw [hGt] at this; cases this
-  refine hI.ofRmwMv (rF' := shareRes H f') ht hmph hrest hok hh hrel hfp
+  refine hI.ofRmwMv (rF' := shareRes H f') (b := .rd q H) ht hmph hrest hok hh hrel hfp
     ⟨by rw [hnrd]; exact hroom, by rw [hnwi]; exact hI.room.2⟩
     (by rw [hnrd, hnwi, hwr, hI.old hv]; exact RwState.Family.add_reader 31 1 _ _ _)
-    (fun u _ hu => by rw [hW' u] at hu; cases hu) (fun u hu => by rw [hW' u] at hu; cases hu)
-    (fun u hu => absurd hu (hnowr' u)) (fun u hu => absurd hu (hnorp' u))
+    (hI.one_mv rfl) (hI.wm_mv rfl) (fun u hu => absurd hu (hnowr' u)) (fun u hu => absurd hu (hnorp' u))
     (fun l hl => (hoff l hl).2) how
     (fun l hl => Classical.byContradiction fun h =>
       hTo l ((shareRes_owned hf').mp h) (hoff l hl).1)
@@ -1389,14 +1411,6 @@ theorem Inv.subR {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
         (W.nwi (upd G t (W.set (G t) b)) m) (W.writing (upd G t (W.set (G t) b)) m) :=
     fun b hn hw hg => by
       rw [hI.old hv, ← hn, hw, hg]; exact RwState.Family.sub_reader 31 1 _ _ _
-  have hone : ∀ b : RwPh, b.isW = false → ∀ u v, (W.ph (upd G t (W.set (G t) b) u)).isW →
-      (W.ph (upd G t (W.set (G t) b) v)).isW → u = v := fun b hb u v hu hv =>
-    hI.one u v (ph_mv (·.isW = true) hu (by simp [hb])).2
-      (ph_mv (·.isW = true) hv (by simp [hb])).2
-  have hwm : ∀ b : RwPh, b.isW = false → ∀ u, (W.ph (upd G t (W.set (G t) b) u)).isW →
-      (M.ph (upd G t (W.set (G t) b) u)).held = true := fun b hb u hu => by
-    obtain ⟨e, hu⟩ := ph_mv (·.isW = true) hu (by simp [hb])
-    rw [upd_ne _ _ e]; exact hI.wm u hu
   obtain ⟨hn1, hw1, hg1, hs1⟩ := hmv .out rfl rfl rfl rfl
   have hxs1 : W.xs (upd G t (W.set (G t) .out)) = W.xs G := by rw [xs_set, upd_same]
   have hex1 := ex_mv (W := W) (b := .out) ht hI.ex
@@ -1429,8 +1443,8 @@ theorem Inv.subR {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
     fun h1 hwt hg hacq => ?_⟩
   · -- other readers remain: the joined share stays in the rest
     have hfq : 0 < (f.add q).val := by rw [hfqv]; have := q.nonneg; grind
-    refine hI.ofRmwMv (rF' := shareRes H (f.add q)) ht hmph hrest hok hh hrel hfp hroom1
-      (hval .out hn1 hw1 hg1) (hone .out rfl) (hwm .out rfl)
+    refine hI.ofRmwMv (rF' := shareRes H (f.add q)) (b := .out) ht hmph hrest hok hh hrel hfp
+      hroom1 (hval .out hn1 hw1 hg1) (hI.one_mv rfl) (hI.wm_mv rfl)
       (fun u hu => absurd (ph_mv (· = .wr) hu).2 (hnowr u))
       (fun u hu => absurd (ph_mv (· = .rp) hu).2 (hnorp u))
       (fun l hl => (hoff l hl).2) how
@@ -1451,8 +1465,8 @@ theorem Inv.subR {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
     grind
   · -- the last reader with no writer: the whole share is `R` in the rest
     obtain ⟨hnoRd, hone1, -⟩ := hlast h1
-    refine hI.ofRmwMv (rF' := ⟨H, Know.none, Ghost.unit⟩) ht hmph hrest hok hh hrel hfp hroom1
-      (hval .out hn1 hw1 hg1) (hone .out rfl) (hwm .out rfl)
+    refine hI.ofRmwMv (rF' := ⟨H, Know.none, Ghost.unit⟩) (b := .out) ht hmph hrest hok hh hrel
+      hfp hroom1 (hval .out hn1 hw1 hg1) (hI.one_mv rfl) (hI.wm_mv rfl)
       (fun u hu => absurd (ph_mv (· = .wr) hu).2 (hnowr u))
       (fun u hu => absurd (ph_mv (· = .rp) hu).2 (hnorp u))
       (fun l hl => (hoff l hl).2) how (fun l hl => Res.owned_plain rfl (hoffH l hl)) hdH
@@ -1470,7 +1484,7 @@ theorem Inv.subR {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
       ?_⟩
     have := hI.ofRmwMv (rF' := rnil) (b := .rp) ht hmph hrest hok hh hrel hfp
       ⟨by rw [h0]; exact Nat.two_pow_pos _, by rw [hw2]; exact hI.room.2⟩
-      (hval .rp hn2 hw2 hg2) (hone .rp rfl) (hwm .rp rfl) (fun _ _ => h0)
+      (hval .rp hn2 hw2 hg2) (hI.one_mv rfl) (hI.wm_mv rfl) (fun _ _ => h0)
       (fun u hu => by
         have hut : u = t := Classical.byContradiction fun e =>
           hnorp u (by rwa [upd_ne _ _ e] at hu)
