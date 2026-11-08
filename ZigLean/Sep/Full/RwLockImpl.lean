@@ -2062,6 +2062,164 @@ theorem wp_subR (hW : W.Fits P UM US okM okS) {r₀ : Res} {q : Frac} {H : FHeap
     have := hA' h1
     rwa [hg₁] at this
 
+/-! ## The writer's wait at the semaphore -/
+
+/-- The rwlock's and the semaphore's places through the outer mutex's `set`. -/
+theorem Fits.ph_m (hW : W.Fits P UM US okM okS) (g : γ) (q : LPh) (h : Res) :
+    W.ph (M.set g q h) = W.ph g ∧ C.ph (M.set g q h) = C.ph g ∧ S.ph (M.set g q h) = S.ph g :=
+  have e := hW.m.ph_l g q h
+  ⟨congrArg Prod.fst e, congrArg (fun x => x.2.1) e, congrArg (fun x => x.2.2) e⟩
+
+/-- The rwlock's and the semaphore's places through the outer mutex's `setPart`. -/
+theorem Fits.ph_part (hW : W.Fits P UM US okM okS) (g : γ) (r : Res) :
+    W.ph (M.setPart g r) = W.ph g ∧ C.ph (M.setPart g r) = C.ph g ∧
+      S.ph (M.setPart g r) = S.ph g :=
+  have e := hW.m.ph_part g r
+  ⟨congrArg Prod.fst e, congrArg (fun x => x.2.1) e, congrArg (fun x => x.2.2) e⟩
+
+/-- The rwlock's place through the semaphore's `set`. -/
+theorem ph_s (g : γ) (s : SPh) : W.ph (S.set g s) = W.ph g := by rw [← S.place_s, W.ph_sp]
+
+/-- The semaphore's places through the rwlock's `set`. -/
+theorem cph_w (g : γ) (a : RwPh) : C.ph (W.set g a) = C.ph g := congrArg Prod.fst (W.sp_ph g a)
+theorem sph_w (g : γ) (a : RwPh) : S.ph (W.set g a) = S.ph g := congrArg Prod.snd (W.sp_ph g a)
+
+/-- The outer mutex's held resource through the rwlock's `set`. -/
+theorem Fits.mheld (hW : W.Fits P UM US okM okS) (g : γ) (a : RwPh) :
+    M.held (W.set g a) = M.held g := by
+  rw [← prim_set, hW.m.lheld]
+
+/-- The rwlock's `set` and the outer mutex's commute. -/
+theorem Fits.wset_m (hW : W.Fits P UM US okM okS) (g : γ) (a : RwPh) (q : LPh) (h : Res) :
+    W.set (M.set g q h) a = M.set (W.set g a) q h := by
+  have hs : S.place.ph (M.set g q h) = S.place.ph g := congrArg Prod.snd (hW.m.ph_l g q h)
+  calc W.set (M.set g q h) a = W.prim.pl.set (M.set g q h) (a, S.place.ph (M.set g q h)) :=
+        (prim_set _ _).symm
+    _ = W.prim.pl.set (M.set g q h) (a, S.place.ph g) := by rw [hs]
+    _ = M.set (W.prim.pl.set g (a, S.place.ph g)) q h := hW.m.set_l g _ q h
+    _ = M.set (W.set g a) q h := by rw [prim_set]
+
+/-- **The writer's wait at the semaphore** (`lockUncancelable`'s drain path: at `ww`, holding the
+outer mutex, out of the semaphore's code), for a semaphore `I` whose wait admits a caller with a
+positive unmetered fragment and keeps that part exactly (`hpre`, `hkeep`: the program's
+`Io.Semaphore`'s per-item facts, `payUnmetered`/`keepPart` for `ioSem`). The writer naps the outer
+mutex (`Fits.napW`), takes the posted resource at the semaphore (`SemImpl.wait_wp_resource` with
+`gx := W.set · .wr` and the pool as `T`, with `R` at the take's client parts: `pool_posted`), and
+unnaps at `wr` (`Fits.unnapW`). The take's premises are the component's: the count and the pool
+(`cnt_posted`, `cnt_idle`, `pool_posted`, `pool_idle`, with `Inv.one`: no other writer), `US`'s
+stability (`utake`), the condition's room (only the writer at `ww` waits there: `wtw`, `Inv.one`)
+and its liveness (`wlive`). -/
+theorem wp_waitW (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (I : SemImpl Tgt)
+    (hLc : L.c = I.c)
+    (hpre : ∀ t r, 0 < r.gh.ac.frag .unmetered → I.wait_pre t r)
+    (hkeep : ∀ t r r', 0 < r.gh.ac.frag .unmetered →
+      (I.wait_during t r r' → r' = r) ∧ (I.wait_post t r r' → r' = r))
+    {p : Ptr} (hp : p = S.p) (hww : W.ph g = .ww) (hmh : M.ph g = .holds) (hlo : L.ph g = .out)
+    (hlh : L.held g = rnil) (hco : C.ph g = .out) (hso : S.ph g = .out) (hok : okS g)
+    (hu : 0 < (M.part g).gh.ac.frag .unmetered) (io : Io) (hi : P.inv (upd G t g) m)
+    (hc : m.current = t) :
+    P.WP t (I.wait p io) (fun _ G' m' d' => d' < n ∧ m'.current = t ∧ ∃ r,
+      (∃ G₀, W.R (W.xs (upd G₀ t g)) r) ∧ FHeap.Disjoint (M.part g).heap r.heap ∧
+      P.inv (upd G' t (M.setPart (W.set g .wr) (rsum (M.part g) r))) m') G m n := by
+  obtain ⟨gN, hgN⟩ : ∃ gN, gN = M.set g .holdsAway (M.held g) := ⟨_, rfl⟩
+  have hiN : P.inv (upd G t gN) m := by rw [hgN]; exact hW.napW hww hlo hmh hi
+  have hwN : W.ph gN = .ww := by rw [hgN, (hW.ph_m _ _ _).1, hww]
+  have hcN : C.ph gN = .out := by rw [hgN, (hW.ph_m _ _ _).2.1, hco]
+  have hsN : S.ph gN = .out := by rw [hgN, (hW.ph_m _ _ _).2.2, hso]
+  have hmN : M.ph gN = .holdsAway := by rw [hgN, M.ph_set]
+  have hlN : L.ph gN = .out := by rw [hgN, W.pair.ph_ab, hlo]
+  have hlhN : L.held gN = rnil := by rw [hgN, W.pair.held_ab, hlh]
+  have hpN : L.part gN = M.part g := by rw [hgN, ← W.pair.part, M.part_set]
+  have hokN : okS gN := by rw [hgN]; exact (hW.okS_m _ _ _).mpr hok
+  have hu' : 0 < (L.part gN).gh.ac.frag .unmetered := by rw [hpN]; exact hu
+  have hWI : ∀ {G' m'}, P.inv G' m' → ∃ rX, W.Inv G' rX m' := fun h => by
+    obtain ⟨rX, -, hU⟩ := (hW.m.inv _ _).mp h
+    exact ⟨rX, hW.m.sub _ _ _ hU⟩
+  have hSI : ∀ {G' m'}, P.inv G' m' → S.Inv G' m' := fun h => by
+    obtain ⟨rX, -, hU⟩ := (hW.s.inv _ _).mp h
+    exact (hW.s.sub _ _ _ hU).2
+  have hgw : ∀ rL, W.ph (L.set (S.set gN .wt) .holds rL) = .ww := fun _ => by
+    rw [W.ph_l, ph_s, hwN]
+  -- at the take `t` is the only writer, so the state after it is not posted
+  have hnp : ∀ {G₁ rL rX m₁}, W.Inv (upd G₁ t (L.set (S.set gN .wt) .holds rL)) rX m₁ →
+      ¬ RwPosted W.ph (upd G₁ t (W.set gN .wr)) := by
+    rintro G₁ rL rX m₁ hI ⟨⟨u, hu⟩, -, -⟩
+    by_cases e : u = t
+    · subst e; rw [upd_self, W.ph_set] at hu; cases hu
+    · rw [upd_ne _ _ e] at hu
+      exact e (hI.one u t (by rw [upd_ne _ _ e, hu]; rfl) (by rw [upd_self, hgw]; rfl))
+  have hpo : ∀ {G₁ : ThreadId → γ}, S.cnt (upd G₁ t gN) ≠ 0 → RwPosted W.ph (upd G₁ t gN) :=
+    fun h0 => Classical.byContradiction fun hn => h0 (W.cnt_idle _ hn)
+  refine WP.mono ?_ (I.wait_wp_resource hW.s hcost hLc hp t gN (fun _ => W.set gN .wr)
+    (fun Y r => S.Pool Y r ∧ ∃ G₀, W.R (W.xs (upd G₀ t g)) r) hlN hcN hsN ((W.wx_iff gN).mpr hwN)
+    hokN (fun _ => by rw [W.lph, hlN]) (fun _ => by rw [W.lheld, hlhN])
+    (fun _ => by rw [cph_w, hcN]) (fun _ => by rw [sph_w, hsN])
+    (fun _ => (hW.okS_set _ _).mpr hokN)
+    (fun rᵢ hr G₁ rL m₁ h₁ h0 => by
+      obtain rfl := (hkeep t _ rᵢ hu').1 hr
+      rw [L.setPart_self] at h₁
+      obtain ⟨rX, hI⟩ := hWI h₁
+      rw [W.cnt_posted _ (hpo h0), W.cnt_idle _ (hnp hI)]
+      decide)
+    (fun rᵢ hr G₁ rL m₁ h₁ h0 r hP => by
+      obtain rfl := (hkeep t _ rᵢ hu').1 hr
+      rw [L.setPart_self] at h₁
+      obtain ⟨rX, hI⟩ := hWI h₁
+      have hR := hP
+      rw [W.pool_posted _ (hpo h0)] at hR
+      have hx : W.xs (upd G₁ t gN) = W.xs (upd G₁ t g) := by
+        rw [hgN]; exact upd_map W.x G₁ t (W.x_m g _ _)
+      rw [W.pool_idle _ (hnp hI)]
+      exact sep_comm (sep_emp.mpr ⟨hP, G₁, by rw [← hx]; exact hR⟩))
+    (fun rᵢ hr G₁ rX m₁ h₁ h₂ r sh sc h0 hT hd hU hL hS hC => by
+      obtain rfl := (hkeep t _ rᵢ hu').1 hr
+      rw [L.setPart_self] at hU
+      exact hW.utake G₁ rX m₁ t gN h₁ h₂ r sh sc hwN h0 hT.1 hd hU hL hS hC)
+    (fun rᵢ hr G₁ rL m₁ h₁ _ n' _ => by
+      obtain rfl := (hkeep t _ rᵢ hu').1 hr
+      rw [L.setPart_self] at h₁
+      obtain ⟨rX, hI⟩ := hWI h₁
+      have hS₁ := hSI h₁
+      -- a thread registered at the condition is at `wt`, so the writer at `ww`: only `t`
+      have h0 : C.nreg (upd G₁ t gN) n' = 0 := tsum_eq_zero fun u _ => by
+        show (if (C.ph (upd G₁ t gN u)).isReg then 1 else 0) = 0
+        by_cases e : u = t
+        · subst e; rw [upd_self, hcN]; rfl
+        · rw [upd_ne _ _ e]
+          by_cases hr : (C.ph (G₁ u)).isReg = true
+          · exfalso
+            have hwt := hS₁.wt u (by rw [upd_ne _ _ e]; exact CPh.isReg_waits hr)
+            have hw' := hW.wtw _ _ u h₁ hwt
+            rw [upd_ne _ _ e] at hw'
+            exact e (hI.one u t (by rw [upd_ne _ _ e, hw']; rfl) (by rw [upd_self, hgw]; rfl))
+          · simp [hr]
+      rw [h0]; decide)
+    (fun G₁ m₁ hreg hla h₁ hs hsig hc0 => by
+      obtain ⟨i, jr, e, he⟩ := hreg
+      have hwt := (hSI h₁).wt t (by rw [he]; rfl)
+      exact hW.wlive t G₁ m₁ (hW.wtw _ _ t h₁ hwt) ⟨i, jr, e, he⟩ hla h₁ hs hsig hc0)
+    io G m n (hpre t _ hu') hiN hc)
+  rintro _ G' m' d' ⟨hd, hc', Y, r', r, hr', ⟨-, hR⟩, hdj, hi'⟩
+  obtain rfl := (hkeep t _ r' hu').2 hr'
+  rw [hpN] at hdj hi'
+  rw [← W.pair.setPart] at hi'
+  -- the unnap, at `wr`
+  have hwr : W.ph (M.setPart (W.set gN .wr) (rsum (M.part g) r)) = .wr := by
+    rw [(hW.ph_part _ _).1, W.ph_set]
+  have hlx : L.ph (M.setPart (W.set gN .wr) (rsum (M.part g) r)) = .out := by
+    rw [W.pair.setPart, L.ph_setPart, W.lph, hlN]
+  have hmx : M.ph (M.setPart (W.set gN .wr) (rsum (M.part g) r)) = .holdsAway := by
+    rw [M.ph_setPart, hW.mph, hmN]
+  have hx : M.set (M.setPart (W.set gN .wr) (rsum (M.part g) r)) .holds
+      (M.held (M.setPart (W.set gN .wr) (rsum (M.part g) r))) =
+      M.setPart (W.set g .wr) (rsum (M.part g) r) := by
+    rw [hgN, hW.wset_m, M.setPart_set, M.held_set, M.set_set]
+    have := M.set_self (M.setPart (W.set g .wr) (rsum (M.part g) r))
+    rwa [M.ph_setPart, hW.mph, hmh, M.held_setPart, hW.mheld] at this
+  have := hW.unnapW hwr hlx hmx hi'
+  rw [hx] at this
+  exact ⟨hd, hc', r, hR, hdj, this⟩
+
 end Proto
 
 end FRw
