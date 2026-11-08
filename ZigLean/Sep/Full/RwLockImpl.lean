@@ -652,14 +652,13 @@ theorem FreeRes.threads {G : ThreadId → γ} {m m' : Mem} {rF : Res} (h : m'.th
 /-- **The invariant after a release RMW of `t` at the state word that moves `t` to `b`** (the
 shared part of the op lemmas): the op's word facts (`wp_wordRmw`, `Word.atomicRmw_fpNew`), the
 new value as the encoding of the new places, the room, the writer and last-reader facts, and the
-free resource for the new places (all at the threads of `m`). The rest of the rest stays; the
-free resource may change (`hmv`: moved to or from `t`'s part, a share split or joined), given its
-ownership after the op from the old one's (`Owns.step`: a thread leaving `rd` is the RMW's, which
+free resource for the new places (all at the threads of `m`). The rest of the rest `rO` stays; the
+free resource `rF` (the invariant's, `Inv.restY`) may become `rF'` (moved to or from `t`'s part, a
+share split or joined), given its ownership after the op from the old one's (`Owns.step`: a thread leaving `rd` is the RMW's, which
 its release clock covers; then `Owns.mono`, `Owns.ofThread`). -/
-theorem Inv.ofRmwMv {G : ThreadId → γ} {rY rY' : Res} {m m' : Mem} {t : ThreadId} {b : RwPh}
-    {ord : AtomicOrder} {new : BitVec 64}
-    (hI : W.Inv G (rsum (W.st.cellsR m) rY) m) (hY : ∀ l, W.st.In l → rY.heap l = none)
-    (ht : t < m.threads.size) (hmph : ∀ a, M.ph (W.set (G t) a) = M.ph (G t))
+theorem Inv.ofRmwMv {G : ThreadId → γ} {rF rO rF' : Res} {m m' : Mem} {t : ThreadId}
+    {b : RwPh} {ord : AtomicOrder} {new : BitVec 64}
+    (hI : W.Inv G (rsum (W.st.cellsR m) (rsum rF rO)) m) (ht : t < m.threads.size) (hmph : ∀ a, M.ph (W.set (G t) a) = M.ph (G t))
     (hrest : RestStep W.st.In m m') (hok : W.st.Ok m' fun u => M.ph (G u) ≠ .gone)
     (hh : W.st.hist m' = (W.st.hist m).push
       (Word.rmwEnt m' t ord (W.st.hist m)[(W.st.hist m).size - 1]! new))
@@ -677,24 +676,21 @@ theorem Inv.ofRmwMv {G : ThreadId → γ} {rY rY' : Res} {m m' : Mem} {t : Threa
     (hrp : ∀ u, W.ph (upd G t (W.set (G t) b) u) = .rp →
       W.nrd (upd G t (W.set (G t) b)) m = 0 ∧ (∃ w, W.ph (upd G t (W.set (G t) b) w) = .ww) ∧
       ∀ v, W.ph (upd G t (W.set (G t) b) v) = .rp → v = u)
-    (hmv : ∀ rF rO, rY = rsum rF rO → (∀ l, W.st.In l → rF.heap l = none ∧ rO.heap l = none) →
-      FHeap.Disjoint rF.heap rO.heap → W.FreeRes G m rF → ∃ rF', rY' = rsum rF' rO ∧
-        (∀ l, W.st.In l → rF'.heap l = none) ∧ FHeap.Disjoint rF'.heap rO.heap ∧
-        W.FreeRes (upd G t (W.set (G t) b)) m rF' ∧
-        (W.Owns (upd G t (W.set (G t) b)) m' rF → W.Owns (upd G t (W.set (G t) b)) m' rF')) :
-    W.Inv (upd G t (W.set (G t) b)) (rsum (W.st.cellsR m') rY') m' := by
+    (hoff : ∀ l, W.st.In l → rO.heap l = none) (how : W.Owns G m rF)
+    (hoff' : ∀ l, W.st.In l → rF'.heap l = none) (hd' : FHeap.Disjoint rF'.heap rO.heap)
+    (hfr' : W.FreeRes (upd G t (W.set (G t) b)) m rF')
+    (hown : W.Owns (upd G t (W.set (G t) b)) m' rF → W.Owns (upd G t (W.set (G t) b)) m' rF') :
+    W.Inv (upd G t (W.set (G t) b)) (rsum (W.st.cellsR m') (rsum rF' rO)) m' := by
   have hth := hrest.threads
   have hne : ∀ u, u ≠ t → upd G t (W.set (G t) b) u = G u := fun u hu => upd_ne _ _ hu
   have hMph : ∀ u, M.ph (upd G t (W.set (G t) b) u) = M.ph (G u) := fun u => by
     by_cases e : u = t
     · subst e; rw [upd_self, hmph]
     · rw [hne u e]
-  obtain ⟨rF, rO, he, hoff, hd, hfr₀, how⟩ := hI.restY hY
-  obtain ⟨rF', rfl, hoff', hd', hfr', hown⟩ := hmv rF rO he hoff hd hfr₀
   refine ⟨?_, fun u hu => ?_, by rw [nrd_threads hth, nwi_threads hth]; exact hroom, ?_, hone,
     hwm, fun u hu => by rw [nrd_threads hth]; exact hwr u hu,
     fun u hu => by rw [nrd_threads hth]; exact hrp u hu,
-    ⟨rF', rO, rfl, fun l hl => ⟨hoff' l hl, (hoff l hl).2⟩, hd', hfr'.threads hth, hown ?_⟩⟩
+    ⟨rF', rO, rfl, fun l hl => ⟨hoff' l hl, hoff l hl⟩, hd', hfr'.threads hth, hown ?_⟩⟩
   · have : (fun u => M.ph (upd G t (W.set (G t) b) u) ≠ .gone) = fun u => M.ph (G u) ≠ .gone :=
       funext fun u => by rw [hMph]
     rw [this]; exact hok
@@ -737,9 +733,10 @@ theorem Inv.ofRmw {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId} {
       W.nrd (upd G t (W.set (G t) b)) m = 0 ∧ (∃ w, W.ph (upd G t (W.set (G t) b) w) = .ww) ∧
       ∀ v, W.ph (upd G t (W.set (G t) b) v) = .rp → v = u)
     (hfr : ∀ rF, W.FreeRes G m rF → W.FreeRes (upd G t (W.set (G t) b)) m rF) :
-    W.Inv (upd G t (W.set (G t) b)) (rsum (W.st.cellsR m') rY) m' :=
-  hI.ofRmwMv hY ht hmph hrest hok hh hrel hfp hroom hval hone hwm hwr hrp
-    fun rF _ he hoff hd hf => ⟨rF, he, fun l hl => (hoff l hl).1, hd, hfr rF hf, id⟩
+    W.Inv (upd G t (W.set (G t) b)) (rsum (W.st.cellsR m') rY) m' := by
+  obtain ⟨rF, rO, rfl, hoff, hd, hfr₀, how⟩ := hI.restY hY
+  exact hI.ofRmwMv ht hmph hrest hok hh hrel hfp hroom hval hone hwm hwr hrp
+    (fun l hl => (hoff l hl).2) how (fun l hl => (hoff l hl).1) hd (hfr rF hfr₀) id
 
 /-- **A writer's intent** (`lockUncancelable`'s `+2`, `out → wi`): the word counts one more pending
 writer; the readers, the writing bit, the free resource and its ownership stay. The room is
@@ -876,6 +873,99 @@ theorem Inv.enterW {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
         fun u q H' hu => ?_⟩⟩
     have hu' : u ≠ t := fun e => by subst e; rw [hGt] at hu; cases hu
     rw [hne u hu'] at hu; exact hall u q H' hu
+
+/-- The empty resource owns no byte. -/
+theorem rnil_owned (l : Loc) : rnil.owned l = none :=
+  Classical.byContradiction fun h =>
+    (Res.owned_ne.mp h).elim (fun h => h rfl) fun ⟨_, hc⟩ => absurd hc Rat.lt_irrefl
+
+theorem rnil_excl_shared (l : Loc) : rnil.excl l = none ∧ rnil.shared l = none :=
+  ⟨Classical.byContradiction fun h => Res.owned_of_excl h (rnil_owned l),
+    Classical.byContradiction fun h =>
+      Res.owned_ne.mpr (.inr (Res.shared_ne.mp h).2.2) (rnil_owned l)⟩
+
+/-- With no reader counted, no thread is at `rd` (`Inv.ex`: a thread in the code exists). -/
+theorem Inv.noRd {G : ThreadId → γ} {rX : Res} {m : Mem} (hI : W.Inv G rX m)
+    (h0 : W.nrd G m = 0) : ∀ u, (W.ph (G u)).isRd = false := fun u => by
+  cases e : (W.ph (G u)).isRd
+  · rfl
+  · have hu : u < m.threads.size := hI.ex u fun h => by rw [h] at e; cases e
+    have := le_tsum (fun v => if (W.ph (G v)).isRd then 1 else 0) hu
+    simp only [e] at this
+    unfold nrd at h0
+    omega
+
+/-- **A writer enters with no reader** (`lockUncancelable`'s `-1` holding the outer mutex,
+`wi → wr`, when the old value has no reader): the writing bit is set and the free resource `rF`,
+which has `R`, goes to `t`, which owns it after the acquire (`Owns.toThread`, the premise of
+`FLock.Inv.takeRest`); the rest keeps the rest of the rest `rO`. -/
+theorem Inv.takeW {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
+    {ord : AtomicOrder} {old : BitVec 64}
+    (hI : W.Inv G (rsum (W.st.cellsR m) rY) m) (hY : ∀ l, W.st.In l → rY.heap l = none)
+    (hwi : W.ph (G t) = .wi) (ht : t < m.threads.size)
+    (hmph : ∀ a, M.ph (W.set (G t) a) = M.ph (G t)) (hMt : (M.ph (G t)).held = true)
+    (hg : M.ph (G t) ≠ .gone) (hnoW : ∀ u, (W.ph (G u)).isW = false) (hnr : W.nrd G m = 0)
+    (hrest : RestStep W.st.In m m') (hok : W.st.Ok m' fun u => M.ph (G u) ≠ .gone)
+    (hv : (W.st.hist m)[(W.st.hist m).size - 1]!.Val old)
+    (hh : W.st.hist m' = (W.st.hist m).push
+      (Word.rmwEnt m' t ord (W.st.hist m)[(W.st.hist m).size - 1]! (old + -1)))
+    (hrel : ord.isRel = true)
+    (hacq : VClock.le ((W.st.hist m).back!).relClock (m'.clocks[t]!) = true)
+    (hfp : ∀ e ∈ m'.footprint, e ∈ m.footprint ∨ VClock.le e.clock (m'.clocks[t]!) = true) :
+    ∃ rF rO, rY = rsum rF rO ∧ W.R (W.xs G) rF ∧ m'.Owns t rF.owned ∧
+      FHeap.Disjoint rF.heap rO.heap ∧
+      W.Inv (upd G t (W.set (G t) .wr)) (rsum (W.st.cellsR m') rO) m' := by
+  have hne : ∀ u, u ≠ t → upd G t (W.set (G t) .wr) u = G u := fun u hu => upd_ne _ _ hu
+  have hGt : W.ph (upd G t (W.set (G t) .wr) t) = .wr := by rw [upd_self, W.ph_set]
+  have hW : ∀ u, (W.ph (upd G t (W.set (G t) .wr) u)).isW = true → u = t := fun u hu => by
+    by_cases e : u = t
+    · exact e
+    · rw [hne u e, hnoW u] at hu; cases hu
+  have hnrd : W.nrd (upd G t (W.set (G t) .wr)) m = W.nrd G m := by
+    have h := nrd_upd (W := W) G ht (G t) (W.set (G t) .wr)
+    rw [upd_same] at h
+    simpa [W.ph_set, hwi, RwPh.isRd] using h
+  have hnwi : W.nwi (upd G t (W.set (G t) .wr)) m + 1 = W.nwi G m := by
+    have h := nwi_upd (W := W) G ht (G t) (W.set (G t) .wr)
+    rw [upd_same] at h
+    simpa [W.ph_set, hwi, RwPh.isWi] using h
+  have hwr₀ : W.writing G m = false := by simp [writing, hnoW]
+  have hwr : W.writing (upd G t (W.set (G t) .wr)) m = true :=
+    List.any_eq_true.mpr ⟨t, List.mem_range.mpr ht, by rw [hGt]; rfl⟩
+  have hnowr : ∀ u, W.ph (G u) ≠ .wr := fun u hu => by
+    have := hnoW u; rw [hu] at this; cases this
+  have hnorp : ∀ u, W.ph (G u) ≠ .rp := fun u hu => by
+    obtain ⟨-, ⟨w, hw⟩, -⟩ := hI.rp u hu
+    have := hnoW w; rw [hw] at this; cases this
+  have hnb : ¬ W.Busy G := by
+    rintro (⟨u, hu⟩ | ⟨u, hu⟩ | ⟨⟨u, hu⟩, -, -⟩)
+    · exact hnowr u hu
+    · exact hnorp u hu
+    · have := hnoW u; rw [hu] at this; cases this
+  have hrd := hI.noRd hnr
+  obtain ⟨rF, rO, rfl, hoff, hd, hfr₀, how⟩ := hI.restY hY
+  refine ⟨rF, rO, rfl, hfr₀.2.1 hnb hnr,
+    how.toThread hrd ht hg hacq hfp (hrest.clocks t) (Nat.le_of_eq hrest.bsize.symm), hd, ?_⟩
+  have := hI.ofRmwMv (rF' := rnil) ht hmph hrest hok hh hrel hfp
+    ⟨by rw [hnrd]; exact hI.room.1, by have := hI.room.2; omega⟩
+    (by rw [hnrd, hwr, hI.old hv, hwr₀, ← hnwi]; exact RwState.Family.enter_writer 31 1 _ _)
+    (fun u v hu hv => by rw [hW u hu, hW v hv])
+    (fun u hu => by rw [hW u hu, upd_self, hmph]; exact hMt)
+    (fun _ _ => by rw [hnrd]; exact hnr)
+    (fun u hu => by
+      by_cases e : u = t
+      · subst e; rw [hGt] at hu; cases hu
+      · rw [hne u e] at hu; exact absurd hu (hnorp u))
+    (fun l hl => (hoff l hl).2) how (fun _ _ => rfl) (fun _ => .inl rfl)
+    ⟨fun _ => rfl, fun hb _ => absurd (.inl ⟨t, hGt⟩) hb, fun hb _ => absurd (.inl ⟨t, hGt⟩) hb⟩
+    (fun ho => ho.mono
+      (fun l h => h.elim (fun h => absurd (rnil_excl_shared l).1 h)
+        (fun h => absurd (rnil_excl_shared l).2 h))
+      (fun ⟨u, hu⟩ _ _ => absurd hu (by
+        by_cases e : u = t
+        · subst e; rw [hGt]; decide
+        · rw [hne u e, hrd u]; decide)))
+  rwa [rnil_rsum] at this
 
 /-! ## The protocol's facts for every implementation -/
 
