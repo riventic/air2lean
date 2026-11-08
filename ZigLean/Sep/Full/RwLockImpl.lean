@@ -1578,12 +1578,24 @@ theorem Fits.setPart_keeps (hW : W.Fits P UM US okM okS) (g : γ) (r : Res) :
 
 /-! ## The rules of the ops at the state word
 
-Each rule is the generic word rule at the outer mutex (`FLock.wp_wordRmw`, `wp_wordWeakCas`,
-`wp_wordLoad`, with `Fits.inRest`), whose continuation moves `t` with `Fits.atWord` and the op's
-lemma of the invariant (`Inv.giveW`, …). The code's literal operand is the rule's `v`, with its
-meaning a default premise (`by decide`). -/
+Each rule is the generic word rule at the outer mutex (`FLock.wp_wordRmw`, `wp_wordLoad`, with
+`Fits.inRest`), whose continuation moves `t` with `Fits.atWord` and the op's lemma of the
+invariant (`Inv.giveW`, …). The code's literal operand is the rule's `v`, with its meaning a
+default premise (`by decide`). -/
 
 variable {σ : Type} {s : σ} {G : ThreadId → γ} {m : Mem} {n : Nat} {t : ThreadId} {g : γ}
+
+/-- The facts of an RMW by `t` at the word that every op lemma takes: its rest step and its new
+accesses, before `t`'s new clock (`Word.atomicRmw_rest`, `Word.atomicRmw_fpNew`). -/
+theorem rmwFacts {A : ThreadId → Prop} {m₁ m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool}
+    {ord : AtomicOrder} {v old : BitVec 64} (hw : W.st.Ok m₁ A) (hc₁ : m₁.current = t)
+    (hct : t < m₁.clocks.size)
+    (hr : ((atomicRmwAt c op signed ord 8 W.st.ptr v).run m₁).run = some (.ok (old, m'))) :
+    RestStep W.st.In m₁ m' ∧
+      ∀ e ∈ m'.footprint, e ∈ m₁.footprint ∨ VClock.le e.clock (m'.clocks[t]!) = true := by
+  have hct' : m₁.current < m₁.clocks.size := by rw [hc₁]; exact hct
+  exact ⟨Word.atomicRmw_rest hw hct' hr, fun e he =>
+    (Word.atomicRmw_fpNew hw hct' hr he).imp_right fun h => by rw [hc₁] at h; exact h.2⟩
 
 /-- **The writer's `and ~1`** (`unlock`, `wr → out`): the writing bit is cleared and the resource
 `r` with `R` leaves `t`'s part (`r₀` stays) for the rest (`FLock.Inv.giveRest`; `Inv.giveW`). Its
@@ -1601,8 +1613,7 @@ theorem wp_giveW (hW : W.Fits P UM US okM okS) {r₀ r : Res} {ord : AtomicOrder
   refine FLock.wp_wordRmw hW.m hW.inRest hW.m.apart hi (hlv := hmg)
     fun k hk G₁ rY m₁ m' old hg₁ hc₁ hU hiL hY hv _ hh _ hw' hw₀ hct hrun hA _ _ hL => ?_
   obtain ⟨c, hr⟩ := hrun
-  have hct' : m₁.current < m₁.clocks.size := by rw [hc₁]; exact hct
-  have hrest := Word.atomicRmw_rest hw₀ hct' hr
+  obtain ⟨hrest, hfp⟩ := rmwFacts hw₀ hc₁ hct hr
   have hgt : M.ph (G₁ t) ≠ .gone := by rw [hg₁]; exact hmg
   have ht := (hiL.ht hgt).1
   obtain ⟨hown, hdp⟩ := hiL.partApart hgt
@@ -1624,8 +1635,7 @@ theorem wp_giveW (hW : W.Fits P UM US okM okS) {r₀ r : Res} {ord : AtomicOrder
     (hW.setPart_keeps g r₀) ⟨rnil, r, rY, (rnil_rsum _).symm, rfl⟩ fun hI => ?_)
   have hR₁ : W.R (W.xs G₁) r := by have := hR G₁; rwa [← hg₁, upd_same] at this
   have := hI.giveW hY (by rw [hg₁]; exact hwr) ht (hW.mph _) hR₁ (hown.sepR rfl rfl).1 hoffr
-    (FHeap.disjoint_union_right.mp hdr).2 hrest hw' hv hh hrel fun e he =>
-      (Word.atomicRmw_fpNew hw₀ hct' hr he).imp_right fun h => by rw [hc₁] at h; exact h.2
+    (FHeap.disjoint_union_right.mp hdr).2 hrest hw' hv hh hrel hfp
   rwa [hg₁] at this
 
 /-- **The writer's `+2`** (`lock`'s first RMW, `out → wi`): its intent is counted. The room is
@@ -1643,8 +1653,7 @@ theorem wp_addW (hW : W.Fits P UM US okM okS) {ord : AtomicOrder} {v : BitVec 64
   refine FLock.wp_wordRmw hW.m hW.inRest hW.m.apart hi (hlv := hmg)
     fun k hk G₁ rY m₁ m' old hg₁ hc₁ hU hiL hY hv _ hh _ hw' hw₀ hct hrun hA _ _ hL => ?_
   obtain ⟨c, hr⟩ := hrun
-  have hct' : m₁.current < m₁.clocks.size := by rw [hc₁]; exact hct
-  have hrest := Word.atomicRmw_rest hw₀ hct' hr
+  obtain ⟨hrest, hfp⟩ := rmwFacts hw₀ hc₁ hct hr
   have hgt : M.ph (G₁ t) ≠ .gone := by rw [hg₁]; exact hmg
   have hop := hA (fun _ => none) (fun _ _ _ => rfl)
   refine h k hk G₁ m' old (hop.current.trans hc₁) (hW.atWord hg₁ hc₁ hU hiL hrest
@@ -1652,8 +1661,7 @@ theorem wp_addW (hW : W.Fits P UM US okM okS) {ord : AtomicOrder} {v : BitVec 64
     ⟨rY, rY, rnil, (rsum_rnil _).symm, (rsum_rnil _).symm⟩ fun hI => ?_)
   have := hI.addW hY (by rw [hg₁]; exact hout) (hiL.ht hgt).1 (hW.mph _)
     (hroom G₁ m₁ ((hW.m.inv _ _).mpr ⟨_, hiL, hU⟩) (by rw [hg₁]; exact hout)) hrest hw' hv hh hrel
-    fun e he =>
-      (Word.atomicRmw_fpNew hw₀ hct' hr he).imp_right fun h => by rw [hc₁] at h; exact h.2
+    hfp
   rwa [hg₁] at this
 
 /-- **The writer's `-1`** (`lock`, at `wi` holding the outer mutex): with readers it moves to `ww`
@@ -1677,11 +1685,7 @@ theorem wp_decW (hW : W.Fits P UM US okM okS) {ord : AtomicOrder} {v : BitVec 64
   refine FLock.wp_wordRmw hW.m hW.inRest hW.m.apart hi (hlv := hmg)
     fun k hk G₁ rY m₁ m' old hg₁ hc₁ hU hiL hY hv _ hh hac hw' hw₀ hct hrun hA _ _ hL => ?_
   obtain ⟨c, hr⟩ := hrun
-  have hct' : m₁.current < m₁.clocks.size := by rw [hc₁]; exact hct
-  have hrest := Word.atomicRmw_rest hw₀ hct' hr
-  have hfp : ∀ e ∈ m'.footprint, e ∈ m₁.footprint ∨ VClock.le e.clock (m'.clocks[t]!) = true :=
-    fun e he => (Word.atomicRmw_fpNew hw₀ hct' hr he).imp_right fun h => by
-      rw [hc₁] at h; exact h.2
+  obtain ⟨hrest, hfp⟩ := rmwFacts hw₀ hc₁ hct hr
   have hgt : M.ph (G₁ t) ≠ .gone := by rw [hg₁]; exact hmg
   have ht := (hiL.ht hgt).1
   have hop := hA (fun _ => none) (fun _ _ _ => rfl)
