@@ -534,8 +534,7 @@ theorem unlockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none)
     rw [← hg₁] at hi₁
     have hcd : (old &&& (9223372032559808512 : BitVec 64) == (4294967296 : BitVec 64)) = true :=
       by rw [hlg, h1]; rfl
-    rw [hwg, hwt]
-    simp only [hcd, ↓reduceIte, StateT.run_pure]
+    rw [ite_eq_left hcd, hwg, hwt, StateT.run_pure]
     refine WP.pure' ?_
     simp only [hk1t, bind_assoc, StateT.run_bind]
     have hpgx : L.part gx = r₀ := by rw [hgxd, ← W.pair.part, hW.mpart, M.part_setPart]
