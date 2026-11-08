@@ -101,10 +101,14 @@ Stated once here; an instance walks its code with them:
   and `Owns.toReader` (a reader's share after its acquire).
 - **The rules of the ops at the word** (for the walks of the entry points): `wp_addW` (`+2`),
   `wp_decW` (`-1`: `ww` with readers, else `wr` with the free resource in `t`'s part), `wp_giveW`
-  (`and ~1`: the resource back to the rest) and `wp_loadW` (a load). Each is the generic word rule
-  at the outer mutex with `Fits.atWord` and the op's lemma; the code's literal operand is a default
-  premise (`by decide`). The part facts a give needs come from the outer mutex's invariant
-  (`FLock.Inv.partApart`).
+  (`and ~1`: the resource back to the rest) and `wp_loadW` (a load) for the writer; `wp_casR` (the
+  fast weak CAS `+2^32`) and `wp_addR` (the slow `+2^32` under the outer mutex), both `out → rd q H`
+  with the share `q` in `t`'s part (`Fits.enterR`), and `wp_subR` (`-2^32`: `out`, or the last
+  reader at `rp` with the resource) for the reader. Each is the generic word rule at the outer
+  mutex with `Fits.atWord` and the op's lemma; the code's literal operand is a default premise
+  (`by decide`). The part facts a give needs come from the outer mutex's invariant
+  (`FLock.Inv.partApart`); a reader takes a share into a part that may hold shares of the same
+  bytes with `FLock.Inv.takeRestR` and `FLock.Inv.ownsShare` (the rest keeps a positive share).
 
 ## The rules (`RwLockImpl`)
 
@@ -1110,11 +1114,6 @@ theorem Inv.enterW {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
 
 /-- The empty resource owns no byte. -/
 theorem rnil_owned (l : Loc) : rnil.owned l = none := Res.owned_plain rfl rfl
-
-/-- **Two shares of one heap are its share of their sum** (`Ghost.sharesOf_add`). -/
-theorem shareRes_add (H : FHeap) (q₁ q₂ : Frac) :
-    rsum (shareRes H q₁) (shareRes H q₂) = shareRes H (q₁.add q₂) := by
-  simp only [rsum, shareRes, FHeap.union_empty, Know.none_union, Ghost.sharesOf_add]
 
 /-- With no reader counted, no thread is at `rd` (`Inv.ex`: a thread in the code exists). -/
 theorem Inv.noRd {G : ThreadId → γ} {rX : Res} {m : Mem} (hI : W.Inv G rX m)
