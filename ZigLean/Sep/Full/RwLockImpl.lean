@@ -867,6 +867,20 @@ theorem Inv.old {G : ThreadId → γ} {rX : Res} {m : Mem} {old : BitVec 64} (hI
   rw [hv] at hev
   cases hev; rfl
 
+/-- A state value that encodes counts below the bound (every message's, `Inv.msgs`). -/
+def MsgOk (b : BitVec 64) : Prop :=
+  ∃ r w a, r < RwState.countBound ∧ w < RwState.countBound ∧ b = RwState.encode r w a
+
+/-- The value of any message of the word is `MsgOk` (a read's, `wp_loadW`). -/
+theorem Inv.msgOk {G : ThreadId → γ} {rX : Res} {m : Mem} {j : Nat} {b : BitVec 64}
+    (hI : W.Inv G rX m) (hj : j < (W.st.hist m).size) (hv : (W.st.hist m)[j]!.Val b) :
+    MsgOk b := by
+  obtain ⟨r, w, a, hr, hw, hev⟩ := hI.msgs j hj
+  unfold Word.Entry.Val at hv hev
+  rw [hv] at hev
+  cases hev
+  exact ⟨r, w, a, hr, hw, rfl⟩
+
 /-- The free resource reads the threads only. -/
 theorem FreeRes.threads {G : ThreadId → γ} {m m' : Mem} {rF : Res} (h : m'.threads = m.threads)
     (hf : W.FreeRes G m rF) : W.FreeRes G m' rF := by
@@ -1605,6 +1619,119 @@ theorem wp_giveW (hW : W.Fits P UM US okM okS) {r₀ r : Res} {ord : AtomicOrder
     (FHeap.disjoint_union_right.mp hdr).2 hrest hw' hv hh hrel fun e he =>
       (Word.atomicRmw_fpNew hw₀ hct' hr he).imp_right fun h => by rw [hc₁] at h; exact h.2
   rwa [hg₁] at this
+
+/-- **The writer's `+2`** (`lock`'s first RMW, `out → wi`): its intent is counted. The room is
+`lock_wp`'s (`hroom`). -/
+theorem wp_addW (hW : W.Fits P UM US okM okS) {ord : AtomicOrder} {v : BitVec 64}
+    (hout : W.ph g = .out) (hmg : M.ph g ≠ .gone)
+    (hroom : ∀ G m, P.inv G m → W.ph (G t) = .out → W.nwi G m + 1 < RwState.countBound)
+    (hi : P.inv (upd G t g) m) {Q : BitVec 64 × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m' old, m'.current = t →
+      P.inv (upd G₁ t (W.set g .wi)) m' → Q (old, s) G₁ m' k)
+    (hv : v = 2 := by decide) (hrel : ord.isRel = true := by rfl)
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t ((atomicRmwC .add false ord 8 W.st.ptr v : CM Tgt σ (BitVec 64)).run s) Q G m n := by
+  subst hv
+  refine FLock.wp_wordRmw hW.m hW.inRest hW.m.apart hi (hlv := hmg)
+    fun k hk G₁ rY m₁ m' old hg₁ hc₁ hU hiL hY hv _ hh _ hw' hw₀ hct hrun hA _ _ hL => ?_
+  obtain ⟨c, hr⟩ := hrun
+  have hct' : m₁.current < m₁.clocks.size := by rw [hc₁]; exact hct
+  have hrest := Word.atomicRmw_rest hw₀ hct' hr
+  have hgt : M.ph (G₁ t) ≠ .gone := by rw [hg₁]; exact hmg
+  have hop := hA (fun _ => none) (fun _ _ _ => rfl)
+  refine h k hk G₁ m' old (hop.current.trans hc₁) (hW.atWord hg₁ hc₁ hU hiL hrest
+    (by rw [← hg₁, upd_same]; exact hL) ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+    ⟨rY, rY, rnil, (rsum_rnil _).symm, (rsum_rnil _).symm⟩ fun hI => ?_)
+  have := hI.addW hY (by rw [hg₁]; exact hout) (hiL.ht hgt).1 (hW.mph _)
+    (hroom G₁ m₁ ((hW.m.inv _ _).mpr ⟨_, hiL, hU⟩) (by rw [hg₁]; exact hout)) hrest hw' hv hh hrel
+    fun e he =>
+      (Word.atomicRmw_fpNew hw₀ hct' hr he).imp_right fun h => by rw [hc₁] at h; exact h.2
+  rwa [hg₁] at this
+
+/-- **The writer's `-1`** (`lock`, at `wi` holding the outer mutex): with readers it moves to `ww`
+(`Inv.enterW`; it then waits at the semaphore); with none it takes the free resource `r` with `R`
+from the rest into its part, at `wr` (`Inv.takeW`, `FLock.Inv.takeRest`). The case is the old
+value's reader count, which the code's drain guard reads (`RwState.Family.drain_guard`). No other
+thread holds the writing bit: its holder holds the outer mutex (`Inv.wm`), which `t` holds. -/
+theorem wp_decW (hW : W.Fits P UM US okM okS) {ord : AtomicOrder} {v : BitVec 64}
+    (hwi : W.ph g = .wi) (hmh : M.ph g = .holds)
+    (hi : P.inv (upd G t g) m) {Q : BitVec 64 × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m' old, m'.current = t →
+      (RwState.readers old ≠ 0 ∧ P.inv (upd G₁ t (W.set g .ww)) m') ∨
+      (RwState.readers old = 0 ∧ ∃ r, W.R (W.xs G₁) r ∧ FHeap.Disjoint (M.part g).heap r.heap ∧
+        P.inv (upd G₁ t (W.set (M.setPart g (rsum (M.part g) r)) .wr)) m') →
+      Q (old, s) G₁ m' k)
+    (hv : v = -1 := by decide) (hrel : ord.isRel = true := by rfl)
+    (hacq : ord.isAcq = true := by rfl) (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t ((atomicRmwC .add false ord 8 W.st.ptr v : CM Tgt σ (BitVec 64)).run s) Q G m n := by
+  subst hv
+  have hmg : M.ph g ≠ .gone := by rw [hmh]; decide
+  refine FLock.wp_wordRmw hW.m hW.inRest hW.m.apart hi (hlv := hmg)
+    fun k hk G₁ rY m₁ m' old hg₁ hc₁ hU hiL hY hv _ hh hac hw' hw₀ hct hrun hA _ _ hL => ?_
+  obtain ⟨c, hr⟩ := hrun
+  have hct' : m₁.current < m₁.clocks.size := by rw [hc₁]; exact hct
+  have hrest := Word.atomicRmw_rest hw₀ hct' hr
+  have hfp : ∀ e ∈ m'.footprint, e ∈ m₁.footprint ∨ VClock.le e.clock (m'.clocks[t]!) = true :=
+    fun e he => (Word.atomicRmw_fpNew hw₀ hct' hr he).imp_right fun h => by
+      rw [hc₁] at h; exact h.2
+  have hgt : M.ph (G₁ t) ≠ .gone := by rw [hg₁]; exact hmg
+  have ht := (hiL.ht hgt).1
+  have hop := hA (fun _ => none) (fun _ _ _ => rfl)
+  have hI₁ : W.Inv G₁ (rsum (W.st.cellsR m₁) rY) m₁ := hW.m.sub _ _ _ hU
+  have hwi₁ : W.ph (G₁ t) = .wi := by rw [hg₁]; exact hwi
+  have hMt : (M.ph (G₁ t)).held = true := by rw [hg₁, hmh]; rfl
+  have hnoW : ∀ u, (W.ph (G₁ u)).isW = false := fun u => by
+    cases hu : (W.ph (G₁ u)).isW
+    · rfl
+    · have := hiL.w.one u t (hI₁.wm u hu) hMt
+      subst this; rw [hwi₁] at hu; cases hu
+  have hro : RwState.readers old = W.nrd G₁ m₁ := by
+    rw [hI₁.old hv]; exact RwState.Family.readers_encode hI₁.room.1 hI₁.room.2 _
+  refine h k hk G₁ m' old (hop.current.trans hc₁) ?_
+  by_cases hn : W.nrd G₁ m₁ = 0
+  · obtain ⟨rF, rO, rfl, hR, hown, hd, hI'⟩ := hI₁.takeW hY hwi₁ ht (hW.mph _) hMt hgt hnoW hn
+      hrest hw' hv hh hrel (hac hacq) hfp
+    rw [hg₁] at hI'
+    have hcF : FHeap.Disjoint (W.st.cellsR m').heap rF.heap := fun l => by
+      by_cases hl : W.st.In l
+      · have := hY l hl
+        simp only [rsum, FHeap.union_apply, Option.or_eq_none_iff] at this
+        exact .inr this.1
+      · exact .inl (cellsAt_none hl)
+    rw [← rsum_assoc, rsum_comm hcF, rsum_assoc] at hL
+    have hL' := hL.takeRest hgt (FHeap.disjoint_union_right.mpr ⟨hcF.symm, hd⟩) hown
+    rw [hg₁] at hL'
+    have hdp := (hiL.partApart hgt).2
+    rw [hg₁] at hdp
+    refine .inr ⟨by rw [hro]; exact hn, rF, hR,
+      (FHeap.disjoint_union_right.mp (FHeap.disjoint_union_right.mp hdp).2).1,
+      hW.atWord hg₁ hc₁ hU hiL hrest hL' (hW.setPart_keeps g _)
+        ⟨rF, rnil, rO, rfl, (rnil_rsum _).symm⟩ fun _ => hI'⟩
+  · refine .inl ⟨by rw [hro]; exact hn, hW.atWord hg₁ hc₁ hU hiL hrest
+      (by rw [← hg₁, upd_same]; exact hL) ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+      ⟨rY, rY, rnil, (rsum_rnil _).symm, (rsum_rnil _).symm⟩ fun hI => ?_⟩
+    have := hI.enterW hY hwi₁ ht (hW.mph _) hMt hnoW hn hrest hw' hv hh hrel hfp
+    rwa [hg₁] at this
+
+/-- **A read of the state word** at any place of `t` (`lockSharedUncancelable`'s load): `t` stays
+(`Inv.load`), and the value read encodes counts below the bound (`Inv.msgOk`). -/
+theorem wp_loadW (hW : W.Fits P UM US okM okS) {ord : AtomicOrder} (hmg : M.ph g ≠ .gone)
+    (hi : P.inv (upd G t g) m) {Q : BitVec 64 × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m' b, m'.current = t → MsgOk b →
+      P.inv (upd G₁ t g) m' → Q (b, s) G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t ((atomicLoadC (n := 64) ord 8 W.st.ptr : CM Tgt σ (BitVec 64)).run s) Q G m n := by
+  refine FLock.wp_wordLoad hW.m hW.inRest hW.m.apart hi (hlv := hmg)
+    fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hiL hY hj hv _ _ hh hw' hw₀ hct hrun hA _ _ hL => ?_
+  obtain ⟨c, hr⟩ := hrun
+  have hct' : m₁.current < m₁.clocks.size := by rw [hc₁]; exact hct
+  have hrest := Word.atomicLoad_rest hw₀ hct' hr
+  have hop := hA (fun _ => none) (fun _ _ _ => rfl)
+  refine h k hk G₁ m' b (hop.current.trans hc₁) ((hW.m.sub _ _ _ hU).msgOk hj hv) ?_
+  have := hW.atWord (a := W.ph g) hg₁ hc₁ hU hiL hrest (by rw [← hg₁, upd_same]; exact hL)
+    ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩ ⟨rY, rY, rnil, (rsum_rnil _).symm, (rsum_rnil _).symm⟩
+    fun hI => by rw [W.set_self, ← hg₁, upd_same]; exact hI.load hY hrest hw' hh
+  rwa [W.set_self] at this
 
 end Proto
 
