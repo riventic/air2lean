@@ -298,8 +298,7 @@ theorem lock_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc : M.c
       obtain ⟨hk₄, hc₄, r, ⟨G₀, hR⟩, hdj, hi₄⟩ := h₄
       rw [hW.mpart, hpart₂] at hdj hi₄
       rw [← hW.wset_part, W.set_set, hset₂] at hi₄
-      rw [show W.xs (upd G₀ t (W.set (M.set (W.set g .wi) .holds rL) .ww)) =
-        W.xs (upd G₀ t g) from upd_map W.x G₀ t (by rw [W.x_set, W.x_m, W.x_set])] at hR
+      rw [FRw.xs_set, hx₂] at hR
       rw [StateT.run_pure]
       refine WP.pure' ?_
       simp only [hkW, StateT.run_pure]
@@ -382,6 +381,7 @@ theorem body_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (t : Threa
   obtain ⟨k15, kB, hbody, hk15f, hk15r, hkB9, hkBr, hkB7⟩ := C.body_eq
   -- the checked add, abstracted: its overflow test of the unknown `state` against `2^64` unfolds
   -- unary on the literal, so the walk keeps it a variable and uses only its value at `MsgOk`
+  -- (ledger `fsym-abstract-shape`)
   have haddR : ∀ r w a, r < RwState.countBound → w < RwState.countBound →
       (Zig.add false · (4294967296 : BitVec 64)) (RwState.encode r w a) =
         pure (RwState.encode (r + 1) w a) := fun r w a hr hw =>
@@ -390,10 +390,10 @@ theorem body_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (t : Threa
   generalize (Zig.add false · (4294967296 : BitVec 64)) = addR at haddR ⊢
   rw [bodyOf, StateT.run_bind]
   refine WP.bind ?_
-  show P.WP t (ConcM.liftMem Zig.tick >>= fun a => pure (a, s)) _ _ _ _
+  rw [CNorm.run_callMC]
   refine WP.bind (hW.m.wp_tick_unmetered hi hc hmg hu fun m₀ hc₀ hi₀ => WP.pure' ?_)
   -- `rw`, not `simp`: `simp`'s `rfl` steps over the body leave the kernel a defeq check that
-  -- times out
+  -- times out (ledger `fsym-abstract-shape`)
   rw [StateT.run_bind, StateT.run_get, pure_bind, StateT.run_bind]
   refine WP.bind ?_
   by_cases hgd : (C.getSt s &&& (4294967295 : BitVec 64) == (0 : BitVec 64)) = true
@@ -430,9 +430,9 @@ theorem body_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (t : Threa
   · -- a writer: the slow path
     rw [ite_eq_right hgd, StateT.run_pure]
     refine WP.pure' ?_
-    simp only [hkB7, StateT.run_pure]
+    rw [hkB7, StateT.run_pure]
     refine WP.pure' ?_
-    simp only [C.again_slow, Bool.false_eq_true, ↓reduceIte]
+    rw [C.again_slow, ite_eq_right Bool.false_ne_true]
     exact ⟨hD, hc₀, .inr ⟨rfl, hi₀⟩⟩
 
 /-- **`lockSharedUncancelable`** (`RwLockImpl.lockShared_wp`): the load, the fast loop
@@ -467,7 +467,7 @@ theorem lockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc
   refine WP.bind (WP.mono ?_ (WP.loop _ _ (C.lsInv P t g d) (fun _ => 0) (C.lsPost P W t g d)
     (C.body_wp hW hcost t g hwo hmg hu hroom d) _ G₁ m₁ k₁
     ⟨by omega, hc₁, by rw [C.get_set]; exact hb, hi₁⟩))
-  rintro ⟨e, s'⟩ G₂ m₂ k₂ ⟨hk₂, hc₂, ⟨rfl, q, H, hq, hi₂⟩ | ⟨rfl, hi₂⟩⟩
+  rintro ⟨_, _⟩ G₂ m₂ k₂ ⟨hk₂, hc₂, ⟨rfl, q, H, hq, hi₂⟩ | ⟨rfl, hi₂⟩⟩
   · -- the fast path's return
     simp only [hkret, StateT.run_pure]
     exact WP.pure' ⟨rfl, hk₂, hc₂, q, H, hq, hret _ _ q H hi₂, hi₂⟩
@@ -560,9 +560,9 @@ theorem unlockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none)
       have hrp : W.ph (upd G₂ t (L.set g₁ .holds rL) t) = .rp r := by
         rw [upd_self, W.ph_l, hg₁, W.ph_set]
       obtain ⟨h0, ⟨w, hw⟩, huq⟩ := hI.rp t (by rw [hrp]; rfl)
-      have hwt : w ≠ t := by rintro rfl; rw [hrp] at hw; cases hw
+      have hwne : w ≠ t := by rintro rfl; rw [hrp] at hw; cases hw
       have hgo : W.ph gx = .out := by rw [hgxd, W.ph_set]
-      refine ⟨⟨⟨w, by rwa [upd_ne _ _ hwt] at hw ⊢⟩, fun u => ?_, fun u => ?_⟩,
+      refine ⟨⟨⟨w, by rwa [upd_ne _ _ hwne] at hw ⊢⟩, fun u => ?_, fun u => ?_⟩,
         fun ⟨_, _, h⟩ => ?_, ?_⟩
       · by_cases e : u = t
         · subst e; rw [upd_self, hgo]; rfl

@@ -15,7 +15,7 @@ contract `RwLockImpl` takes that room as `hroom` premises (ledger
 The family has an equation for every state operation of the 0.17
 `std/Io/RwLock.zig` entry points: `add_reader`/`sub_reader` and `read_guard`
 (the shared paths), `add_writer`, `enter_writer` and `drain_guard` (`lock`),
-`last_reader_guard`/`writing_guard` (`unlockShared`), `clear_writer` (`unlock`
+`last_guard`/`last_reader_guard`/`writing_guard` (`unlockShared`), `clear_writer` (`unlock`
 and the canceled `lock`'s `And ~is_writing`), `set_writing` (`tryLock`'s
 `state | is_writing` under `reader_mask == 0`) and `sub_writer` (the canceled
 `lock`'s `Sub writer`).
@@ -146,15 +146,20 @@ theorem reader_mask (c p : Nat) (s : BitVec (width c p)) :
   simpa only [readerMask, readers, readerUnit, countBound, he]
     using Zig.toNat_and_field s (c + 1) (2 * c + 1) (by omega) (by unfold width; omega)
 
+/-- The reader field is one reader exactly when the decoded reader count is one. -/
+theorem readers_eq_one {c : Nat} (hc : 0 < c) (p : Nat) (s : BitVec (width c p)) :
+    s &&& readerMask c p = BitVec.ofNat (width c p) (readerUnit c) ↔ readers c s = 1 := by
+  have hu : readerUnit c < 2 ^ width c p :=
+    Nat.pow_lt_pow_right (by decide) (by unfold width; omega)
+  rw [← BitVec.toNat_inj, reader_mask, Zig.toNat_ofNat_of_lt hu]
+  simpa only [Nat.one_mul] using
+    (Nat.mul_right_cancel_iff (n := readers c s) (k := 1) (Nat.two_pow_pos (c + 1)))
+
 theorem last_reader_guard {c p r w : Nat} (hc : 0 < c)
     (hr : r < countBound c) (hw : w < countBound c)
     (a : Bool) :
     (encode c p r w a &&& readerMask c p = BitVec.ofNat (width c p) (readerUnit c)) ↔ r = 1 := by
-  have hu : readerUnit c < 2 ^ width c p := by
-    exact Nat.pow_lt_pow_right (by decide) (by unfold width; omega)
-  rw [← BitVec.toNat_inj, reader_mask, readers_encode hr hw, Zig.toNat_ofNat_of_lt hu]
-  simpa only [Nat.one_mul] using
-    (Nat.mul_right_cancel_iff (n := r) (k := 1) (Nat.two_pow_pos (c + 1)))
+  rw [readers_eq_one hc, readers_encode hr hw]
 
 /-- The reader field is nonzero exactly when the decoded reader count is. -/
 theorem readers_ne_zero (c p : Nat) (s : BitVec (width c p)) :
@@ -177,13 +182,9 @@ theorem drain_guard_encode {c p r w : Nat} (hr : r < countBound c) (hw : w < cou
 hypotheses. -/
 theorem last_guard {c : Nat} (hc : 0 < c) (p : Nat) (s : BitVec (width c p)) :
     (s &&& readerMask c p == BitVec.ofNat (width c p) (readerUnit c)) = (readers c s == 1) := by
-  have hu : readerUnit c < 2 ^ width c p :=
-    Nat.pow_lt_pow_right (by decide) (by unfold width; omega)
   rw [Bool.eq_iff_iff]
   simp only [beq_iff_eq]
-  rw [← BitVec.toNat_inj, reader_mask, Zig.toNat_ofNat_of_lt hu]
-  simpa only [Nat.one_mul] using
-    (Nat.mul_right_cancel_iff (n := readers c s) (k := 1) (Nat.two_pow_pos (c + 1)))
+  exact readers_eq_one hc p s
 
 theorem writing_mask (c p : Nat) (s : BitVec (width c p)) :
     (s &&& 1#(width c p)).toNat = s.toNat % 2 := by
