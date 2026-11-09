@@ -217,18 +217,15 @@ theorem heap_none (h : Res.Sim a b) {l : Zig.Loc} : a.heap l = Option.none ↔ b
 theorem disj (h : Res.Sim a b) {x : FHeap} (hd : FHeap.Disjoint b.heap x) :
     FHeap.Disjoint a.heap x := fun l => (hd l).imp h.heap_none.mpr id
 
-private theorem none_iff {α β : Type} {x : Option α} {y : Option β}
-    (h : x ≠ Option.none ↔ y ≠ Option.none) : x = Option.none ↔ y = Option.none :=
-  ⟨fun e => Classical.byContradiction fun n => h.mpr n e,
-    fun e => Classical.byContradiction fun n => h.mp n e⟩
-
 theorem owned_none (h : Res.Sim a b) {l : Zig.Loc} :
     a.owned l = Option.none ↔ b.owned l = Option.none :=
-  none_iff (by rw [Res.owned_ne, Res.owned_ne, h.gh, ne_eq, ne_eq, h.heap_none])
+  Decidable.not_iff_not.mp (show a.owned l ≠ Option.none ↔ b.owned l ≠ Option.none by
+    rw [Res.owned_ne, Res.owned_ne, h.gh, ne_eq, ne_eq, h.heap_none])
 
 theorem excl_none (h : Res.Sim a b) {l : Zig.Loc} :
     a.excl l = Option.none ↔ b.excl l = Option.none :=
-  none_iff (by rw [Res.excl_ne, Res.excl_ne, h.gh, ne_eq, ne_eq, h.heap_none])
+  Decidable.not_iff_not.mp (show a.excl l ≠ Option.none ↔ b.excl l ≠ Option.none by
+    rw [Res.excl_ne, Res.excl_ne, h.gh, ne_eq, ne_eq, h.heap_none])
 
 end Res.Sim
 
@@ -954,14 +951,8 @@ theorem Keeps.partStep {sB rL rH rX rX' : Res} {t : ThreadId} {g : γ} {m' : Mem
     intro l
     refine (Classical.em ((B.held (G t)).heap l = none)).symm.imp (fun hn => ?_) id
     have hO : (rsum (A.wordR m') (rsum rLA (rsum sB rX'))).heap l ≠ none :=
-      fun e => hsj l hn (by
-        have e' : ((A.wordR m').heap l).or ((rLA.heap l).or ((sB.heap l).or (rX'.heap l))) =
-            none := e
-        simp only [Option.or_eq_none_iff] at e'
-        have e'' : ((B.wordR m).heap l).or ((rL.heap l).or (rH.heap l)) = none :=
-          hsB.heap_none.mp e'.2.2.1
-        simp only [Option.or_eq_none_iff] at e''
-        exact e''.2.2)
+      fun e => hsj l hn (rsum_heap_none.mp (rsum_heap_none.mp (hsB.heap_none.mp
+        (rsum_heap_none.mp (rsum_heap_none.mp (rsum_heap_none.mp e).2).2).1)).2).2
     have := ho'.part_off (u := t) (by rw [hs.threads]; exact ht) hO
     have e' : ((A.part g).heap l).or ((A.held g).heap l) = none := by
       have h0 := this

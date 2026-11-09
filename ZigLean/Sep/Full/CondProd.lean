@@ -53,15 +53,13 @@ variable {γ : Type} {B : FLock γ} {G : ThreadId → γ} {m : Mem} {rL rH rX : 
 
 /-- **A step of the condition's code keeps what the product keeps of `B`** (module doc): every
 `FCond.MStep` at a word `W` of the condition, when `B`'s side owns no byte of `W` or of the epoch
-and the epoch's key is not `B`'s; the sleep at the epoch queues `t` `away` from `B`, or holding it
-at `holdsAway` with the epoch's key in `B`'s nest (`ht`, as `Keeps.otherStep`, given the sleep's
-memory). `B`'s side is the same. -/
+and the epoch's key is not `B`'s; a sleep at the epoch queues `t` `away` from `B`, or holding it
+at `holdsAway` with the epoch's key in `B`'s nest (`ht`, as `Keeps.otherStep`). `B`'s side is the
+same. -/
 theorem Keeps.mstep (hk : B.Keeps G m rL rH rX) (hs : C.MStep W t m m')
     (hWo : ∀ l, W.In l → (side B m rL rH).owned l = none)
     (hEo : ∀ l, C.Ep.In l → (side B m rL rH).owned l = none) (hkey : C.Ep.key m ≠ B.key m)
-    (ht : (t, C.Ep.key m) ∉ m.waiters →
-      m' = { (({ m with current := t } : Mem).recordAt C.Ep.b C.Ep.o 4 .atomicRead) with
-        waiters := m.waiters.push (t, C.Ep.key m) } →
+    (ht : (∃ w ∈ m'.waiters, w ∉ m.waiters) →
       B.ph (G t) = .away ∨ (B.ph (G t) = .holdsAway ∧ B.toLockWord.NestKey m (C.Ep.key m))) :
     side B m' rL rH = side B m rL rH ∧ B.Keeps G m' rL rH rX := by
   have hk₁ := (Keeps.cur hk t).2
@@ -70,7 +68,7 @@ theorem Keeps.mstep (hk : B.Keeps G m rL rH rX) (hs : C.MStep W t m m')
   | op hw hc hop _ _ => exact Keeps.wordRun (m := { m with current := t }) hk₁ hw hc hop hWo
   | @sleep M hw hc hM _ _ =>
     subst hM
-    exact Keeps.sleepAt hk hw hc hEo hkey fun hn => ht hn rfl
+    exact Keeps.sleepAt hk hw hc hEo hkey fun hn => ht ⟨_, Array.mem_push_self, hn⟩
   | woken => exact ⟨rfl, Keeps.queue hk₁ (hk₁.facts.w.requeue hk₁.facts.w.fq hk₁.facts.w.wit)⟩
   | resume => exact ⟨rfl, hk₁⟩
   | wake c cs h => exact Keeps.wakeAt hk hkey h
@@ -178,7 +176,7 @@ theorem U_semStep (hp : L.Pair B) {U₀ : (ThreadId → γ) → Res → Mem → 
     rw [← S.place_s g s]; exact hpl g _
   have hl : ∀ g q h, B.ph (L.set g q h) = B.ph g ∧ B.held (L.set g q h) = B.held g ∧
       B.part (L.set g q h) = B.part g := fun g q h =>
-    ⟨hp.ph_ab g q h, hp.held_ab g q h, by rw [← hp.part, ← hp.part, L.part_set]⟩
+    ⟨hp.ph_ab g q h, hp.held_ab g q h, hp.symm.part_ba g q h⟩
   -- `B`'s resource over the relabels of `t`
   have hRC : ∀ G t p r, B.R G r → B.R (upd G t (C.set (G t) p)) r := fun G t p r h => by
     have h' := bR G t (p, S.ph (G t)) r h; rwa [S.place_c] at h'
@@ -198,13 +196,14 @@ theorem U_semStep (hp : L.Pair B) {U₀ : (ThreadId → γ) → Res → Mem → 
       have hWo' := hWo G m rL rH _ hk hu
       -- the sleep queues a waiter of the condition
       obtain ⟨hside, hk₁⟩ := Keeps.mstep hk hms (hWo' Wd hWs) (hWo' C.Ep (.inr rfl)) (hkey m)
-        fun _ hm' => by
-          subst hm'
-          obtain ⟨i, jr, e, hreg, -⟩ := hCI'.q (t, C.Ep.key m) Array.mem_push_self rfl
+        fun ⟨w, hw', hn⟩ => by
+          have hEp := (hS.2 C.Ep (.inr rfl)).1
+          rcases hms.waiters hw' with h' | rfl
+          · exact absurd h' hn
+          obtain ⟨i, jr, e, hreg, -⟩ := hCI'.q _ hw' (hms.key hEp).symm
           rw [upd_self, cph_l, C.ph_set] at hreg
           have hw : (C.ph (G t)).waits = true := hnext.waits (by rw [hreg]; rfl)
-          exact (hsleep G _ m t hu hw).imp id fun ⟨h1, h2⟩ =>
-            ⟨h1, C.Ep.ptr, h2, (hS.2 C.Ep (.inr rfl)).1.keyAt⟩
+          exact (hsleep G _ m t hu hw).imp id fun ⟨h1, h2⟩ => ⟨h1, C.Ep.ptr, h2, hEp.keyAt⟩
       have hg := And.intro ((hl (C.set (G t) p) q h).1.trans (hc (G t) p).1)
         (And.intro ((hl (C.set (G t) p) q h).2.1.trans (hc (G t) p).2.1)
           ((hl (C.set (G t) p) q h).2.2.trans (hc (G t) p).2.2))
