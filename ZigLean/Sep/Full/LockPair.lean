@@ -37,6 +37,12 @@ theorem disj_cellsAt {W : Zig.Loc → Prop} [DecidablePred W] {h : FHeap} {m : M
     (hW : ∀ l, W l → h l = none) : FHeap.Disjoint h (cellsAt W m).heap := fun l =>
   (Decidable.em (W l)).imp (hW l) cellsAt_none
 
+/-- A sum has no cell at a byte exactly when neither summand has. -/
+theorem rsum_heap_none {a b : Res} {l : Zig.Loc} :
+    (rsum a b).heap l = none ↔ a.heap l = none ∧ b.heap l = none := by
+  show (a.heap ∪ b.heap) l = none ↔ _
+  rw [FHeap.union_apply, Option.or_eq_none_iff]
+
 /-- The cells at bytes `W` depend only on those bytes. -/
 theorem cellsAt_congr {W : Zig.Loc → Prop} [DecidablePred W] {m m' : Mem}
     (h : ∀ l, W l → m'.heap l = m.heap l) : cellsAt W m' = cellsAt W m := by
