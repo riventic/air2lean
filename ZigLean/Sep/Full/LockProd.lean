@@ -33,6 +33,15 @@ each lock's code then need only their own lock's `Fits`; the other lock rides in
   `Pair.U_stable`, `U_setA`, `U_atStop`, `U_partStep` and `U_partTick` lift them to `Pair.U` for
   `A`'s `Fits.stable`, `Fits.nap`'s `hU`, `Fits.atStop`, a part step's continuation and
   `Fits.kstep`'s `PartTick`.
+* **`B` kept across a primitive's own steps** (item (4)): `Keeps.stepIn` once for every native
+  step whose frame (`FStepIn`) covers `B`'s side; `Keeps.partStep` is an instance, and
+  `Keeps.wordStep`/`U_wordStep` the atomic op at another shared word (`Inv.wordStep`'s facts).
+* **Both locks' `Fits` from the client's** (item (4)): `Pair.fits` builds `A`'s `Fits` at
+  `Pair.U B U` from the client's obligations at its own rest `U` (and that a thread `A`'s code
+  queues is `away` from `B`), `fitsEmpty` for a lock without a primitive, and `fitsOrder` both
+  locks' for a lock order (`holdLive_inner`, `holdLive_none`). `FLock.prodA`/`prodB`/`prodPair`:
+  two locks of one ghost value (`FLG2`), an instance. The client `Proofs/Sync/NestedMutex.lean`
+  nests two mutexes over every `MutexImpl`.
 -/
 
 namespace Zig
