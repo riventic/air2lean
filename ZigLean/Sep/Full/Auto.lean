@@ -8713,7 +8713,11 @@ partial def wpSides (todo : List MVarId) (strict : Bool) (budget : Nat) (user : 
         s.restore; restoreArith; throw ex
       s.restore
       restoreArith
-    if budget > 0 && !rest.isEmpty then
+    -- (waits only for a goal that has one of its unknowns: no other goal can fix the rest, so
+    -- it is solved now, as it would be after the waits)
+    let ms := (ts[0]!.collectMVars {}).result
+    if budget > 0 && (← rest.anyM fun r => do
+        return ((← instantiateMVars (← r.getType)).collectMVars {}).result.any ms.contains) then
       return ← wpSides (rest ++ [sg]) strict (budget - 1) user extra fuel noCases
     let s ← saveState
     let restoreArith ← (← caches).saveArith noCases
