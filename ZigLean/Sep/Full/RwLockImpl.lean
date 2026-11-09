@@ -1300,6 +1300,79 @@ theorem shareRes_add (H : FHeap) (q₁ q₂ : Frac) :
     rsum (shareRes H q₁) (shareRes H q₂) = shareRes H (q₁.add q₂) := by
   simp only [rsum, shareRes, FHeap.union_empty, Know.none_union, Ghost.sharesOf_add]
 
+/-- **A resource without knowledge cancels** from sums with resources apart from its heap, when
+its ghost state cancels (with `rsum` from `ThreadOwned.lean`; here beside its use). -/
+theorem rsum_cancel {a b c : Res} (hk : a.know = Know.none)
+    (hg : ∀ g₁ g₂ : Ghost, a.gh.add g₁ = a.gh.add g₂ → g₁ = g₂)
+    (hb : FHeap.Disjoint a.heap b.heap) (hc : FHeap.Disjoint a.heap c.heap)
+    (h : rsum a b = rsum a c) : b = c := by
+  obtain ⟨bh, bk, bg⟩ := b
+  obtain ⟨ch, ck, cg⟩ := c
+  simp only [rsum, hk, Know.none_union, Res.mk.injEq] at h
+  obtain ⟨hh, rfl, he⟩ := h
+  have : bh = ch := funext fun l => by
+    have hl := congrFun hh l
+    rw [FHeap.union_apply, FHeap.union_apply] at hl
+    cases e : a.heap l with
+    | none => rw [e] at hl; exact hl
+    | some _ =>
+      have hbl : bh l = none := (hb l).resolve_left (by rw [e]; simp)
+      have hcl : ch l = none := (hc l).resolve_left (by rw [e]; simp)
+      rw [hbl, hcl]
+  rw [this, hg _ _ he]
+
+/-- **The invariant's split of the rest is unique** (`Split`, `Step`'s free resources): two splits
+of one resource at one state are one. The free resource is `rnil` when busy, `R`'s heap with no
+reader (`R_fixed`: one domain, `R_plain`: no knowledge or ghost state), and the readers' heap's
+remaining share with readers (their heap, and `1` less their fractions); the rest of the rest is
+what remains beside it (`rsum_cancel`, `Ghost.sharesOf_cancel`). -/
+theorem Split.unique {G : ThreadId → γ} {m : Mem} {rF₁ rO₁ rF₂ rO₂ : Res}
+    (h₁ : W.Split G m rF₁ rO₁) (h₂ : W.Split G m rF₂ rO₂) (he : rsum rF₁ rO₁ = rsum rF₂ rO₂) :
+    rF₁ = rF₂ ∧ rO₁ = rO₂ := by
+  obtain ⟨-, hd₁, hb₁, hz₁, hn₁⟩ := h₁
+  obtain ⟨-, hd₂, hb₂, hz₂, hn₂⟩ := h₂
+  have key : rF₁ = rF₂ ∧ rF₁.know = Know.none ∧
+      ∀ g₁ g₂ : Ghost, rF₁.gh.add g₁ = rF₁.gh.add g₂ → g₁ = g₂ := by
+    by_cases hb : W.Busy G
+    · rw [hb₁ hb, hb₂ hb]
+      exact ⟨rfl, rfl, Ghost.unit_cancel⟩
+    by_cases hnr : W.nrd G m = 0
+    · have hR₁ := hz₁ hb hnr
+      have hR₂ := hz₂ hb hnr
+      obtain ⟨H₁, k₁, g₁⟩ := rF₁
+      obtain ⟨H₂, k₂, g₂⟩ := rF₂
+      obtain ⟨hk₁, hg₁⟩ := W.R_plain _ _ hR₁
+      obtain ⟨hk₂, hg₂⟩ := W.R_plain _ _ hR₂
+      change k₁ = Know.none at hk₁
+      change g₁ = Ghost.unit at hg₁
+      change k₂ = Know.none at hk₂
+      change g₂ = Ghost.unit at hg₂
+      subst hk₁ hg₁ hk₂ hg₂
+      have hH : H₁ = H₂ := funext fun l => by
+        have hl := congrFun (congrArg Res.heap he) l
+        change (H₁ l).or (rO₁.heap l) = (H₂ l).or (rO₂.heap l) at hl
+        have hs := W.R_fixed _ H₁ H₂ hR₁ hR₂ l
+        cases e₁ : H₁ l <;> cases e₂ : H₂ l
+        · rfl
+        · rw [e₁, e₂] at hs; simp at hs
+        · rw [e₁, e₂] at hs; simp at hs
+        · rw [e₁, e₂] at hl; exact hl
+      subst hH
+      exact ⟨rfl, rfl, Ghost.unit_cancel⟩
+    · obtain ⟨Ha, fa, -, -, hsa, rfl, hra⟩ := hn₁ hb hnr
+      obtain ⟨Hb, fb, -, -, hsb, rfl, hrb⟩ := hn₂ hb hnr
+      obtain ⟨u, -, hu⟩ := exists_of_tsum_pos (Nat.pos_of_ne_zero hnr)
+      have hrd : ∃ q H', W.ph (G u) = .rd q H' := by
+        rcases h : W.ph (G u) with _ | ⟨q, H'⟩ | _ | _ | _ | _ <;>
+          first | exact ⟨q, H', rfl⟩ | simp [h, RwPh.isRd] at hu
+      obtain ⟨q, H', hq⟩ := hrd
+      obtain ⟨rfl, -⟩ := hra u q H' hq
+      obtain ⟨rfl, -⟩ := hrb u q H' hq
+      obtain rfl : fa = fb := Frac.eq (by grind)
+      exact ⟨rfl, rfl, fun _ _ => Ghost.sharesOf_cancel⟩
+  obtain ⟨rfl, hk, hg⟩ := key
+  exact ⟨rfl, rsum_cancel hk hg hd₁ hd₂ he⟩
+
 /-- With no reader counted, no thread is at `rd` (`Inv.ex`: a thread in the code exists). -/
 theorem Inv.noRd {G : ThreadId → γ} {rX : Res} {m : Mem} (hI : W.Inv G rX m)
     (h0 : W.nrd G m = 0) : ∀ u, (W.ph (G u)).isRd = false := noRd_of hI.ex h0
@@ -1871,7 +1944,7 @@ theorem Fits.atWord (hW : W.Fits P UM US okM okS) {t : ThreadId} {G₁ : ThreadI
     · rw [upd_ne _ _ e, upd_ne _ _ e]
   have hph := hu W.ph (by rw [W.ph_set, W.ph_set])
   have hxu := hu W.x (by rw [W.x_set, W.x_set, hx])
-  refine hW.wstep hU fun hI₁ => ?_
+  refine hW.wstep (t := t) (rX' := rsum (W.st.cellsR m') rY') hU fun hI₁ => ?_
   obtain ⟨hI₂, hMv⟩ := hI hI₁
   obtain ⟨hpost, rF, rF', rO, he, he', hs, hs'⟩ := hMv.congr hph hxu
   refine ⟨hiL, hI₁, hM, hI₂.congr hph (hu M.ph (by rw [hW.mph, hW.mph, hmp])) hxu, hc₁,
