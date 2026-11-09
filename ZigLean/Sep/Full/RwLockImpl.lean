@@ -1386,12 +1386,6 @@ theorem Split.unique {G : ThreadId → γ} {m : Mem} {rF₁ rO₁ rF₂ rO₂ : 
   obtain ⟨rfl, hk, hg⟩ := key
   exact ⟨rfl, rsum_cancel hk hg hd₁ hd₂ he⟩
 
-/-- A sum has no cell at a byte exactly when neither summand has (here beside `rsum_cancel`). -/
-theorem rsum_heap_none {a b : Res} {l : Loc} :
-    (rsum a b).heap l = none ↔ a.heap l = none ∧ b.heap l = none := by
-  show (a.heap ∪ b.heap) l = none ↔ _
-  rw [FHeap.union_apply, Option.or_eq_none_iff]
-
 /-- A resource apart from the free resource and off the word joins the rest of the rest. -/
 theorem Split.frame {G : ThreadId → γ} {m : Mem} {rF rO r : Res} (hs : W.Split G m rF rO)
     (hw : ∀ l, W.st.In l → r.heap l = none) (hd : FHeap.Disjoint rF.heap r.heap) :
