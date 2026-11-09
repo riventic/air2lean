@@ -21,8 +21,8 @@ words lie next to `B`'s side; a product's view of `L` (the reader/writer lock's 
   `Keeps.otherStep`'s), and a futex wake at the epoch (`wake`, `LockWord.WInv.wakeOff`). `B`'s side
   owns no byte of `W` or of the epoch, and the epoch's key is not `B`'s. `B`'s side is then exactly
   the same. A change of the stepping thread's places that keeps `B`'s is `Keeps.relabel`
-  (`ZigLean/Sep/Full/LockProd.lean`, with `Keeps.queue`, `Keeps.wordRun` and `WInv.push`: they
-  hold for any lock).
+  (`ZigLean/Sep/Full/LockProd.lean`, with `Keeps.queue`, `Keeps.wordRun`, `Keeps.sleepAt`,
+  `Keeps.wakeAt` and `WInv.push`: they hold for any lock and any futex word, an event's too).
 - **The condition's words next to `B`'s side** (`FPrim.ofWords_sub_rsum`): a primitive over futex
   words whose `Sub` holds at the protocol's own rest also holds with a resource apart from it in
   front (`B`'s side, `FLock.Keeps.side_disj`), the `sub` of `FLock.Pair.fits` for such a primitive.
@@ -55,15 +55,10 @@ theorem Keeps.mstep (hk : B.Keeps G m rL rH rX) (hs : C.MStep W t m m')
   | op hw hc hop _ _ => exact Keeps.wordRun (m := { m with current := t }) hk₁ hw hc hop hWo
   | @sleep M hw hc hM _ _ =>
     subst hM
-    obtain ⟨he, hkM⟩ := Keeps.wordRun (m := { m with current := t }) hk₁ hw hc
-      (.inr (.inr (.inr (.inr rfl)))) hEo
-    exact ⟨he, Keeps.queue hkM (hkM.facts.w.push hkey fun hn => ht ⟨_, Array.mem_push_self, hn⟩)⟩
+    exact Keeps.sleepAt hk hw hc hEo hkey fun hn => ht ⟨_, Array.mem_push_self, hn⟩
   | woken => exact ⟨rfl, Keeps.queue hk₁ (hk₁.facts.w.requeue hk₁.facts.w.fq hk₁.facts.w.wit)⟩
   | resume => exact ⟨rfl, hk₁⟩
-  | wake c cs h =>
-    have hw := hk₁.facts.w.wakeOff hkey h
-    obtain rfl := Proto.modify_ok h
-    exact ⟨rfl, Keeps.queue hk₁ hw⟩
+  | wake c cs h => exact Keeps.wakeAt hk hkey h
 
 end FLock.Pair
 

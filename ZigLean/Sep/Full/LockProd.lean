@@ -35,7 +35,11 @@ each lock's code then need only their own lock's `Fits`; the other lock rides in
   `Fits.kstep`'s `PartTick`.
 * **`B` kept across a primitive's own steps** (item (4)): `Keeps.stepIn` once for every native
   step whose frame (`FStepIn`) covers `B`'s side; `Keeps.partStep` is an instance, and
-  `Keeps.wordStep`/`U_wordStep` the atomic op at another shared word (`Inv.wordStep`'s facts).
+  `Keeps.wordStep`/`U_wordStep` the atomic op at another shared word (`Inv.wordStep`'s facts),
+  `Keeps.wordRun` an actual run of it; a futex wait's sleep at another word (`Keeps.sleepAt`,
+  `LockWord.WInv.push`) and a wake at another key (`Keeps.wakeAt`); a relabel that keeps `B`'s
+  places (`Keeps.relabel`) and a change of the queue (`Keeps.queue`). A condition's steps:
+  `ZigLean/Sep/Full/CondProd.lean`.
 * **Both locks' `Fits` from the client's** (item (4)): `Pair.fits` builds `A`'s `Fits` at
   `Pair.U B U` from the client's obligations at its own rest `U` (and that a thread `A`'s code
   queues is `away` from `B`), `fitsEmpty` for a lock without a primitive, and `fitsOrder` both
@@ -705,6 +709,34 @@ theorem Keeps.wordRun {n nb : Nat} {W : Word n nb} {X : ThreadId → Prop} {rL r
   Keeps.wordStep hk (Word.actualRun_rest hw hc hop)
     (fun _ h0 => Word.actualRun_fstep hw hc (fun _ h1 h2 => h0 _ ⟨rfl, h1, h2⟩) hop) hWo
     (fun _ => ⟨rfl, rfl⟩) (fun _ h => h) hk.facts.pdisj hk.xdisj hk.xoff
+
+/-- **The sleep of a futex wait at another word keeps what the product keeps of `B`** (an event's
+or a condition's `MStep.sleep`): `t`'s read of the word, then `t` in the futex queue at the word's
+key, `away` from `B` or holding it at `holdsAway` with the key in `B`'s nest (`LockWord.Queue`,
+`WInv.push`), unless it was queued there. `B`'s side is the same. -/
+theorem Keeps.sleepAt {W : Word 32 4} {X : ThreadId → Prop} {rL rH rX : Res} {t : ThreadId}
+    (hk : B.Keeps G m rL rH rX) (hw : W.Ok { m with current := t } X) (hc : t < m.clocks.size)
+    (hWo : ∀ l, W.In l → (side B m rL rH).owned l = none) (hkey : W.key m ≠ B.key m)
+    (ht : (t, W.key m) ∉ m.waiters →
+      B.ph (G t) = .away ∨ (B.ph (G t) = .holdsAway ∧ B.toLockWord.NestKey m (W.key m))) :
+    side B { (({ m with current := t } : Mem).recordAt W.b W.o 4 .atomicRead) with
+        waiters := m.waiters.push (t, W.key m) } rL rH = side B m rL rH ∧
+      B.Keeps G { (({ m with current := t } : Mem).recordAt W.b W.o 4 .atomicRead) with
+        waiters := m.waiters.push (t, W.key m) } rL rH rX := by
+  obtain ⟨he, hkM⟩ := Keeps.wordRun (m := { m with current := t }) (Keeps.cur hk t).2 hw hc
+    (.inr (.inr (.inr (.inr rfl)))) hWo
+  exact ⟨he, Keeps.queue hkM (hkM.facts.w.push hkey ht)⟩
+
+/-- **A futex wake at another key keeps what the product keeps of `B`** (an event's or a
+condition's `MStep.wake`, `LockWord.WInv.wakeOff`): `B`'s side is the same. -/
+theorem Keeps.wakeAt {rL rH rX : Res} {t : ThreadId} {k : FutexKey} {n : Nat} {cs : List Nat}
+    {m' : Mem} (hk : B.Keeps G m rL rH rX) (hkey : k ≠ B.key m)
+    (h : ((Thread.futexWake k n cs).run { m with current := t }).run = some (.ok ((), m'))) :
+    side B m' rL rH = side B m rL rH ∧ B.Keeps G m' rL rH rX := by
+  have hk₁ := (Keeps.cur hk t).2
+  have hw := hk₁.facts.w.wakeOff hkey h
+  obtain rfl := Proto.modify_ok h
+  exact ⟨rfl, Keeps.queue hk₁ hw⟩
 
 /-- **A native step at another shared word keeps the product's rest** (`FLock.Fits.kstep` at a
 primitive's atomic op, `Keeps.wordStep`): the client gives, for the step, the protocol's own rest
