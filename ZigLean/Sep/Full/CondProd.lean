@@ -113,7 +113,7 @@ theorem Keeps.wordRun {n nb : Nat} {W : Word n nb} {A : ThreadId → Prop} {m' :
     (hWo : ∀ l, W.In l → (side B m rL rH).owned l = none) :
     side B m' rL rH = side B m rL rH ∧ B.Keeps G m' rL rH rX :=
   Keeps.wordStep hk (Word.actualRun_rest hw hc hop)
-    (fun _ h0 => Word.actualRun_fstep hw hc (fun x h1 h2 => h0 _ ⟨rfl, h1, h2⟩) hop) hWo
+    (fun _ h0 => Word.actualRun_fstep hw hc (fun _ h1 h2 => h0 _ ⟨rfl, h1, h2⟩) hop) hWo
     (fun _ => ⟨rfl, rfl⟩) (fun _ h => h) hk.facts.pdisj hk.xdisj hk.xoff
 
 variable {C : FCond γ} {W : Word 32 4} {t : ThreadId} {m' : Mem}
@@ -132,10 +132,11 @@ theorem Keeps.mstep (hk : B.Keeps G m rL rH rX) (hs : C.MStep W t m m')
   have hk₁ := (Keeps.cur hk t).2
   cases hs with
   | same => exact ⟨rfl, hk⟩
-  | op hw hc hop _ _ => exact Keeps.wordRun hk₁ hw hc hop hWo
+  | op hw hc hop _ _ => exact Keeps.wordRun (m := { m with current := t }) hk₁ hw hc hop hWo
   | @sleep M hw hc hM _ _ =>
     subst hM
-    obtain ⟨he, hkM⟩ := Keeps.wordRun hk₁ hw hc (.inr (.inr (.inr (.inr rfl)))) hEo
+    obtain ⟨he, hkM⟩ := Keeps.wordRun (m := { m with current := t }) hk₁ hw hc
+      (.inr (.inr (.inr (.inr rfl)))) hEo
     refine ⟨he, Keeps.queue hkM (hkM.facts.w.push hkey fun hn => ht ?_)⟩
     exact ⟨_, Array.mem_push_self, hn⟩
   | woken => exact ⟨rfl, Keeps.queue hk₁ (hk₁.facts.w.requeue hk₁.facts.w.fq hk₁.facts.w.wit)⟩
