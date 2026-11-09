@@ -192,10 +192,9 @@ theorem U_step {U₀ : (ThreadId → γ) → Res → Mem → Prop} {t : ThreadId
   have hLR := lR_eq (W := W) hpost hx
   have hthr : m'.threads = m.threads := hr.threads
   have hpd : ∀ u, FHeap.Disjoint (L.part (G' u)).heap (L.held (G' u)).heap := fun u => by
-    by_cases e : u = t
-    swap
+    by_cases e : u ≠ t
     · rw [hoth u e]; exact hf.pdisj u
-    rw [e, hlheld]
+    rw [Classical.not_not.mp e, hlheld]
     by_cases hg : L.ph (G t) = .gone
     · rw [hf.idle t (by rw [hg]; rfl)]; exact fun _ => .inr rfl
     obtain ⟨hut, hju⟩ := hf.w.live t hg
