@@ -117,7 +117,9 @@ Stated once here; an instance walks its code with them:
   `Inv.takeW` (`-1` with no reader, `wi → wr`, `t` takes the free resource) and `Inv.giveW`
   (`and ~1`, `wr → out`, `t` gives it back) for the writer; `Inv.addR` (`+2^32`, `out → rd q H`,
   a share split) and `Inv.subR` (`-2^32`, the share joined; `out`, or the last reader at `rp`)
-  for the reader. Their shared part is `Inv.ofRmwMv` (the free resource may change).
+  for the reader. Their shared part is `Inv.ofRmwMv` (the free resource may change). `Inv.frame`:
+  the invariant next to a resource apart from its rest (either lock's side in the two-lock
+  product, `FLock.Pair.U`).
 - **Ownership through the word** (`Owns`): `Owns.step` (a release write at the word), `Owns.mono`
   (fewer bytes), `Owns.ofThread` (a resource `t` gives to the rest), `Owns.toThread` (the free
   resource `t` takes with an acquire RMW, no other reader left: `FLock.Inv.takeRest`'s premise)
