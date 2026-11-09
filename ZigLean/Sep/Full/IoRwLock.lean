@@ -395,31 +395,38 @@ theorem body_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (t : Threa
   simp only [StateT.run_bind, StateT.run_get, pure_bind]
   refine WP.bind ?_
   by_cases hgd : (C.getSt s &&& (4294967295 : BitVec 64) == (0 : BitVec 64)) = true
-  · rw [ite_eq_left hgd]
-    simp only [StateT.run_bind, StateT.run_get, pure_bind]
-    rw [CNorm.run_liftR, ← CNorm.run_callRC]
+  · -- `rw`, not `simp`: `simp`'s `rfl` steps over the CAS's body leave the kernel a defeq check
+    -- that times out
+    rw [ite_eq_left hgd]
+    rw [StateT.run_bind, StateT.run_get, pure_bind, StateT.run_bind, StateT.run_get, pure_bind,
+      StateT.run_bind, CNorm.run_liftR, ← CNorm.run_callRC]
     refine WP.bind (WP.callRC_ok (v := RwState.encode (rr + 1) ww aa)
       (by rw [hst, haddR rr ww aa hrr hww]; rfl) ?_)
+    rw [StateT.run_bind]
     refine WP.bind (FRw.wp_casR hW hout hmg hroom (beq_iff_eq.mp hgd)
       (by rw [hst]; exact (RwState.Family.add_reader 31 1 rr ww aa).symm) hi₀
       (fun k hk G₁ m₁ hc₁ q H hq _ hi₁ => ?_) (fun k hk G₁ m₁ b hc₁ hb hi₁ => ?_))
     · -- success: the reader is in
-      simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte, StateT.run_pure, pure_bind,
-        hk15r]
+      rw [StateT.run_bind, CNorm.run_ite,
+        ite_eq_right (show ¬(none : Option (BitVec 64)).isSome = true from Bool.false_ne_true),
+        StateT.run_pure, pure_bind, hk15r, StateT.run_pure]
       refine WP.pure' ?_
-      simp only [hkBr, StateT.run_pure]
+      rw [hkBr, StateT.run_pure]
       refine WP.pure' ?_
-      simp only [C.again_ret, Bool.false_eq_true, ↓reduceIte]
+      rw [C.again_ret, ite_eq_right Bool.false_ne_true]
       exact ⟨by omega, hc₁, .inl ⟨rfl, q, H, hq, hi₁⟩⟩
     · -- failure: store the value read and repeat
-      simp only [Option.isSome_some, ↓reduceIte, StateT.run_bind, bind_assoc]
-      rw [CNorm.run_liftR, ← CNorm.run_callRC]
-      refine WP.bind (WP.callRC_ok (v := b) rfl ?_)
-      simp only [StateT.run_pure, pure_bind, hk15f, StateT.run_bind, StateT.run_modify]
+      rw [StateT.run_bind, CNorm.run_ite,
+        ite_eq_left (show (some b).isSome = true from rfl), StateT.run_bind, CNorm.run_liftR,
+        ← CNorm.run_callRC]
+      refine WP.bind (WP.bind (WP.callRC_ok (v := b) (by rfl) ?_))
+      rw [StateT.run_pure]
       refine WP.pure' ?_
-      simp only [hkB9, StateT.run_pure]
+      rw [hk15f, StateT.run_bind, StateT.run_modify, pure_bind, StateT.run_pure]
       refine WP.pure' ?_
-      simp only [C.again_rep, ↓reduceIte]
+      rw [hkB9, StateT.run_pure]
+      refine WP.pure' ?_
+      rw [C.again_rep, ite_eq_left (rfl : true = true)]
       exact ⟨⟨by omega, hc₁, by rw [C.get_set]; exact hb, hi₁⟩, .inl (by omega)⟩
   · -- a writer: the slow path
     rw [ite_eq_right hgd, StateT.run_pure]
