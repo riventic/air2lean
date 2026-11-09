@@ -1,4 +1,5 @@
 import ZigLean.Sep.Full.LockPair
+import ZigLean.Sep.Full.LockOrder
 import ZigLean.Sep.Full.Word
 
 /-!
@@ -529,12 +530,118 @@ theorem U_atStop {U : (ThreadId → γ) → Res → Mem → Prop} {rXA : Res} (t
   obtain ⟨he, hk'⟩ := Keeps.cur hk t
   exact ⟨rL, rH, rX, by rw [he], hk', hcl rX hu⟩
 
-/-- **A step on a thread's own part in `A`'s view keeps what the product keeps of `B`**, in the
-frame of `Inv.wp_liftMem` (`A`'s word and rest, with their read shares): `B`'s word cells stay up
-to `Cell.norm` (from `A`'s invariant after the step, `hi'`), so `A`'s invariant also holds with
-`B`'s side at the new memory, and `B` is kept at the same free resource, holders' resources and
-rest. The thread's new ghost value `g` keeps its place and its held resource at `B`, and `B`'s
-resource. -/
+/-- **A step whose frame holds `B`'s side keeps what the product keeps of `B`** (the one rule
+for every step outside `B`'s code that is no step of `A`'s lock code: a step on a part, a
+primitive's step such as an atomic op at another word that moves a resource between the rest and
+the thread's part, or a store of a semaphore's count under its mutex). The step is an `FStepIn`
+whose frame `hF` holds the bytes of `B`'s side (its word, free resource and holders' resources)
+and whose read shares `hR` hold none of their exclusive bytes; `B`'s word cells stay up to
+`Cell.norm` (`hcells`). The new ghost values `G'` keep every thread's place and held resource at
+`B`, and `B`'s resource; each part stays apart from its held resource (`hpd`); the protocol's
+rest may change to `rX'` (`hxd`, `hxo`: its facts in `Keeps`). Then `B`'s side is the same up to
+`Cell.norm` and `B` is kept at the same free and holders' resources. -/
+theorem Keeps.stepIn {G' : ThreadId → γ} {rL rH rX rX' : Res} {m' : Mem} {hF hR : Heap}
+    (hk : B.Keeps G m rL rH rX) (hs : FStepIn hF m m' hR)
+    (hFo : ∀ l, (side B m rL rH).owned l ≠ none → hF l ≠ none)
+    (hFx : ∀ l, (side B m rL rH).excl l ≠ none → hR l = none)
+    (hcells : ∀ l, B.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm)
+    (hG : ∀ u, B.ph (G' u) = B.ph (G u) ∧ B.held (G' u) = B.held (G u))
+    (hRk : ∀ r, B.R G r → B.R G' r)
+    (hpd : ∀ u, FHeap.Disjoint (B.part (G' u)).heap (B.held (G' u)).heap)
+    (hxd : FHeap.Disjoint (rsum rL rH).heap rX'.heap) (hxo : B.Off rX'.heap.erase) :
+    FHeap.Sim (side B m' rL rH).heap (side B m rL rH).heap ∧ B.Keeps G' m' rL rH rX' := by
+  have hf := hk.facts
+  have hbB : B.BlkOk m := hf.w.blk
+  have hsim : FHeap.Sim (side B m' rL rH).heap (side B m rL rH).heap := by
+    intro l
+    show (((B.wordR m').heap l).or ((rsum rL rH).heap l)).map (fun fc => (fc.cell.norm, fc.atom)) =
+      (((B.wordR m).heap l).or ((rsum rL rH).heap l)).map (fun fc => (fc.cell.norm, fc.atom))
+    by_cases hl : B.In l
+    · have := hcells l hl
+      rw [cellsAt_of hl, cellsAt_of hl]
+      cases e : m.heap l <;> cases e' : m'.heap l <;> simp_all [Option.map]
+    · rw [cellsAt_none hl, cellsAt_none hl]
+  -- `B`'s word bytes are cells of the side: in the frame, not among its read shares
+  have hwH : ∀ x, B.o ≤ x → x < B.o + 4 → (side B m rL rH).heap (B.b, x) ≠ none :=
+    fun x h1 h2 hn => by
+      refine LockWord.wordR_some hbB (l := (B.b, x)) ⟨rfl, h1, h2⟩ ?_
+      have hn' : ((B.wordR m).heap (B.b, x)).or ((rsum rL rH).heap (B.b, x)) = none := hn
+      exact (Option.or_eq_none_iff.mp hn').1
+  have hwF : ∀ x, B.o ≤ x → x < B.o + 4 → hF (B.b, x) ≠ none :=
+    fun x h1 h2 => hFo _ (Res.owned_of_heap (hwH x h1 h2))
+  have hwR : ∀ x, B.o ≤ x → x < B.o + 4 → hR (B.b, x) = none :=
+    fun x h1 h2 => hFx _ (Res.excl_of_heap (hwH x h1 h2))
+  have hjb : joinedB m' = joinedB m := LockWord.joinedB_congr hs.threads
+  have hheldOf : B.heldOf G' m' = B.heldOf G m := funext fun u => by
+    unfold heldOf; rw [hjb, (hG u).2]
+  have hok : ∀ i l, B.Loc m i l → l.len = 4 := fun i l hl => (hf.w.loc.ok i l hl).1
+  refine ⟨hsim, hf.relabel (fun u => (hG u).1) (fun u => (hG u).2) hRk
+      (hf.w.stepIn hs hwF hwR fun x h1 h2 => hcells _ ⟨rfl, h1, h2⟩)
+      (fun hfr => (hf.free hfr).2.stepIn hs (fun l hl => hFo l ((Res.owned_sep rfl rfl).mpr
+          (.inr ((Res.owned_sep rfl rfl).mpr (.inl hl))))) hwF hok
+        fun l hl => hFx l (Res.excl_sep rfl rfl (.inr (Res.excl_sep rfl rfl (.inl hl))))) hpd,
+    by rw [hheldOf, hs.threads]; exact hk.held, fun u hu => ?_, hk.hoff, hxd, hxo⟩
+  rw [hs.threads] at hu; rw [hheldOf]
+  by_cases e : u = m.current
+  · rw [e]
+    have := (hk.owns _ (e ▸ hu)).fstepCur hs
+    rwa [hs.current] at this
+  obtain ⟨_, rfl, hsj⟩ := sepN_owned hk.held hu
+  obtain ⟨_, rfl, hxj⟩ := sepN_excl hk.held hu
+  have hin : ∀ l, (B.heldOf G m u).owned l ≠ none → hF l ≠ none := fun l hl =>
+    hFo l ((Res.owned_sep rfl rfl).mpr (.inr ((Res.owned_sep rfl rfl).mpr (.inr (hsj l hl)))))
+  exact (hk.owns u hu).fstep hs e
+    (fun l hl => ⟨hin l (Res.owned_of_excl hl),
+      hFx l (Res.excl_sep rfl rfl (.inr (Res.excl_sep rfl rfl (.inr (hxj l hl)))))⟩)
+    fun l hl => hin l (Res.owned_of_shared hl)
+
+/-- **A native step at another shared word keeps what the product keeps of `B`** (`Keeps.stepIn`;
+a primitive's atomic op, such as the reader/writer lock's at its state word): the step changes
+only the bytes `W` (`RestStep`) and is an `FStepIn` in every frame without them (the atomic rules'
+`Word.atomicRmw_fstep`, …; `Inv.wordStep` takes the same two facts), and `B`'s side owns no byte
+of `W`. `B`'s side is then exactly the same. -/
+theorem Keeps.wordStep {W : Zig.Loc → Prop} {G' : ThreadId → γ} {rL rH rX rX' : Res} {m' : Mem}
+    (hk : B.Keeps G m rL rH rX) (hr : RestStep W m m')
+    (hs : ∀ hF : Heap, (∀ l, W l → hF l = none) → FStepIn hF m m')
+    (hW : ∀ l, W l → (side B m rL rH).owned l = none)
+    (hG : ∀ u, B.ph (G' u) = B.ph (G u) ∧ B.held (G' u) = B.held (G u))
+    (hRk : ∀ r, B.R G r → B.R G' r)
+    (hpd : ∀ u, FHeap.Disjoint (B.part (G' u)).heap (B.held (G' u)).heap)
+    (hxd : FHeap.Disjoint (rsum rL rH).heap rX'.heap) (hxo : B.Off rX'.heap.erase) :
+    side B m' rL rH = side B m rL rH ∧ B.Keeps G' m' rL rH rX' := by
+  have hbB : B.BlkOk m := hk.facts.w.blk
+  have hBW : ∀ l, B.In l → ¬ W l := fun l hl hw => hW l hw (Res.owned_of_heap fun hn => by
+    have hn' : ((B.wordR m).heap l).or ((rsum rL rH).heap l) = none := hn
+    exact LockWord.wordR_some hbB hl (Option.or_eq_none_iff.mp hn').1)
+  have hwR : B.wordR m' = B.wordR m := cellsAt_congr fun l hl => hr.heap l (hBW l hl)
+  obtain ⟨-, hk'⟩ := Keeps.stepIn hk (hs _ hW) (fun _ h => h) (fun _ _ => rfl)
+    (fun l hl => by rw [hr.heap l (hBW l hl)]) hG hRk hpd hxd hxo
+  exact ⟨by unfold FLock.side; rw [hwR], hk'⟩
+
+/-- **A native step at another shared word keeps the product's rest** (`FLock.Fits.kstep` at a
+primitive's atomic op, `Keeps.wordStep`): the client gives, for the step, the protocol's own rest
+`rX'` after it (`A`'s new rest is `B`'s side next to it) and its `U` there. -/
+theorem U_wordStep {U : (ThreadId → γ) → Res → Mem → Prop} {W : Zig.Loc → Prop}
+    {rXA rXA' : Res} {G' : ThreadId → γ} {m' : Mem} (hU : Pair.U B U G rXA m)
+    (hr : RestStep W m m') (hs : ∀ hF : Heap, (∀ l, W l → hF l = none) → FStepIn hF m m')
+    (hG : ∀ u, B.ph (G' u) = B.ph (G u) ∧ B.held (G' u) = B.held (G u))
+    (hRk : ∀ r, B.R G r → B.R G' r)
+    (hpd : ∀ u, FHeap.Disjoint (B.part (G' u)).heap (B.held (G' u)).heap)
+    (hcl : ∀ rL rH rX, rXA = rsum (side B m rL rH) rX → B.Keeps G m rL rH rX → U G rX m →
+      (∀ l, W l → (side B m rL rH).owned l = none) ∧ ∃ rX', rXA' = rsum (side B m rL rH) rX' ∧
+        FHeap.Disjoint (rsum rL rH).heap rX'.heap ∧ B.Off rX'.heap.erase ∧ U G' rX' m') :
+    Pair.U B U G' rXA' m' := by
+  obtain ⟨rL, rH, rX, rfl, hk, hu⟩ := hU
+  obtain ⟨hW, rX', rfl, hxd, hxo, hu'⟩ := hcl rL rH rX rfl hk hu
+  obtain ⟨he, hk'⟩ := Keeps.wordStep hk hr hs hW hG hRk hpd hxd hxo
+  exact ⟨rL, rH, rX', by rw [he], hk', hu'⟩
+
+/-- **A step on a thread's own part in `A`'s view keeps what the product keeps of `B`**
+(`Keeps.stepIn`), in the frame of `Inv.wp_liftMem` (`A`'s word and rest, with their read shares):
+`B`'s word cells stay up to `Cell.norm` (from `A`'s invariant after the step, `hi'`), so `A`'s
+invariant also holds with `B`'s side at the new memory, and `B` is kept at the same free resource,
+holders' resources and rest. The thread's new ghost value `g` keeps its place and its held
+resource at `B`, and `B`'s resource. -/
 theorem Keeps.partStep {rL rH rX : Res} {t : ThreadId} {g : γ} {m' : Mem}
     (hp : A.Pair B) (hk : B.Keeps G m rL rH rX)
     (hs : FStepIn (rsum (A.wordR m) (rsum (side B m rL rH) rX)).owned m m'
@@ -562,38 +669,6 @@ theorem Keeps.partStep {rL rH rX : Res} {t : ThreadId} {g : γ} {m' : Mem}
     obtain ⟨c, hc, hX⟩ := hside l hl
     rw [hc, hi'.restCell hX]
     rfl
-  have hcells : ∀ x, B.o ≤ x → x < B.o + 4 →
-      (m'.heap (B.b, x)).map Cell.norm = (m.heap (B.b, x)).map Cell.norm :=
-    fun x h1 h2 => hcellsL _ ⟨rfl, h1, h2⟩
-  have hsim : FHeap.Sim (side B m' rL rH).heap (side B m rL rH).heap := by
-    intro l
-    show (((B.wordR m').heap l).or ((rsum rL rH).heap l)).map (fun fc => (fc.cell.norm, fc.atom)) =
-      (((B.wordR m).heap l).or ((rsum rL rH).heap l)).map (fun fc => (fc.cell.norm, fc.atom))
-    by_cases hl : B.In l
-    · have := hcellsL l hl
-      rw [cellsAt_of hl, cellsAt_of hl]
-      cases e : m.heap l <;> cases e' : m'.heap l <;> simp_all [Option.map]
-    · rw [cellsAt_none hl, cellsAt_none hl]
-  -- the frame has `B`'s word bytes as cells, `rL`'s and `rH`'s resources
-  have hFh : ∀ l, (side B m rL rH).heap l ≠ none →
-      (rsum (A.wordR m) (rsum (side B m rL rH) rX)).heap l ≠ none := fun l hl hn => hl (by
-    have hn' : ((A.wordR m).heap l).or (((side B m rL rH).heap l).or (rX.heap l)) = none := hn
-    exact (Option.or_eq_none_iff.mp (Option.or_eq_none_iff.mp hn').2).1)
-  have hwH : ∀ x, B.o ≤ x → x < B.o + 4 →
-      (rsum (A.wordR m) (rsum (side B m rL rH) rX)).heap (B.b, x) ≠ none := fun x h1 h2 => by
-    refine hFh _ fun hn => LockWord.wordR_some hbB (l := (B.b, x)) ⟨rfl, h1, h2⟩ ?_
-    have hn' : ((B.wordR m).heap (B.b, x)).or ((rsum rL rH).heap (B.b, x)) = none := hn
-    exact (Option.or_eq_none_iff.mp hn').1
-  have hwF := fun x h1 h2 => Res.owned_of_heap (hwH x h1 h2)
-  have hwR := fun x h1 h2 => Res.excl_shared_disj (Res.excl_of_heap (hwH x h1 h2))
-  -- a resource of `B`'s side is in the frame, its exclusive bytes not among the frame's shares
-  have hsubO : ∀ {r : Res}, (∀ l, r.owned l ≠ none → (side B m rL rH).owned l ≠ none) →
-      ∀ l, r.owned l ≠ none → (rsum (A.wordR m) (rsum (side B m rL rH) rX)).owned l ≠ none :=
-    fun h l hl => (Res.owned_sep rfl rfl).mpr (.inr ((Res.owned_sep rfl rfl).mpr (.inl (h l hl))))
-  have hsubX : ∀ {r : Res}, (∀ l, r.excl l ≠ none → (side B m rL rH).excl l ≠ none) →
-      ∀ l, r.excl l ≠ none → (rsum (A.wordR m) (rsum (side B m rL rH) rX)).shared l = none :=
-    fun h l hl => Res.excl_shared_disj
-      (Res.excl_sep rfl rfl (.inr (Res.excl_sep rfl rfl (.inl (h l hl)))))
   -- the new ghost value is `G`'s at `B`
   have hU : ∀ u, B.ph (upd G t g u) = B.ph (G u) ∧ B.held (upd G t g u) = B.held (G u) :=
     fun u => by
@@ -601,9 +676,6 @@ theorem Keeps.partStep {rL rH rX : Res} {t : ThreadId} {g : γ} {m' : Mem}
       · subst e; rw [upd_self]; exact ⟨hph, hheld⟩
       · rw [upd_ne _ _ e]; exact ⟨rfl, rfl⟩
   have hjb : joinedB m' = joinedB m := LockWord.joinedB_congr hs.threads
-  have hheldOf : B.heldOf (upd G t g) m' = B.heldOf G m := funext fun u => by
-    unfold heldOf; rw [hjb, (hU u).2]
-  have hok : ∀ i l, B.Loc m i l → l.len = 4 := fun i l hl => (hf.w.loc.ok i l hl).1
   -- the thread's new part at `A` is apart from its resource at `B`, which is in `A`'s rest
   have hpdt : FHeap.Disjoint (B.part g).heap (B.held (G t)).heap := by
     by_cases hg : B.ph (G t) = .gone
@@ -630,25 +702,13 @@ theorem Keeps.partStep {rL rH rX : Res} {t : ThreadId} {g : γ} {m' : Mem}
       by_cases e : u = t
       · subst e; rw [upd_self, hheld]; exact hpdt
       · rw [upd_ne _ _ e]; exact hf.pdisj u
-  refine ⟨hi'.congrX (hsim.union (FHeap.Sim.refl _)) rfl rfl,
-    ⟨hf.relabel (fun u => (hU u).1) (fun u => (hU u).2) hR (hf.w.stepIn hs hwF hwR hcells)
-      (fun hF => (hf.free hF).2.stepIn hs (hsubO fun l hl => (Res.owned_sep rfl rfl).mpr (.inr
-          ((Res.owned_sep rfl rfl).mpr (.inl hl)))) hwF hok
-        (hsubX fun l hl => Res.excl_sep rfl rfl (.inr (Res.excl_sep rfl rfl (.inl hl))))) hpd,
-    by rw [hheldOf, hs.threads]; exact hk.held, fun u hu => ?_, hk.hoff, hk.xdisj, hk.xoff⟩⟩
-  · rw [hs.threads] at hu; rw [hheldOf]
-    by_cases e : u = m.current
-    · rw [e]
-      have := (hk.owns _ (e ▸ hu)).fstepCur hs
-      rwa [hs.current] at this
-    obtain ⟨_, rfl, hsj⟩ := sepN_owned hk.held hu
-    obtain ⟨_, rfl, hxj⟩ := sepN_excl hk.held hu
-    have hin : ∀ l, (B.heldOf G m u).owned l ≠ none → (side B m rL rH).owned l ≠ none :=
-      fun l hl => (Res.owned_sep rfl rfl).mpr (.inr ((Res.owned_sep rfl rfl).mpr (.inr (hsj l hl))))
-    exact (hk.owns u hu).fstep hs e
-      (fun l hl => ⟨hsubO hin l (Res.owned_of_excl hl), hsubX (fun l hl =>
-        Res.excl_sep rfl rfl (.inr (Res.excl_sep rfl rfl (.inr (hxj l hl))))) l hl⟩)
-      fun l hl => hsubO hin l (Res.owned_of_shared hl)
+  -- the frame holds `B`'s side, its exclusive bytes not among the frame's read shares
+  obtain ⟨hsim, hk'⟩ := Keeps.stepIn hk hs
+    (fun l hl => (Res.owned_sep rfl rfl).mpr (.inr ((Res.owned_sep rfl rfl).mpr (.inl hl))))
+    (fun l hl => Res.excl_shared_disj
+      (Res.excl_sep rfl rfl (.inr (Res.excl_sep rfl rfl (.inl hl)))))
+    hcellsL hU hR hpd hk.xdisj hk.xoff
+  exact ⟨hi'.congrX (hsim.union (FHeap.Sim.refl _)) rfl rfl, hk'⟩
 
 /-- **A step on a thread's own part in `A`'s view keeps the product's rest** (`Inv.wp_liftMem`'s
 continuation): `A`'s invariant after the step gives the product's rest at `B`'s new side, when the
@@ -697,6 +757,302 @@ theorem inv_iff (hp : A.Pair B) {U : (ThreadId → γ) → Res → Mem → Prop}
     exact ⟨_, hi', rL', rH', rX, rfl, hk', hU⟩
 
 end FLock.Pair
+
+/-! ## Both locks' `Fits` from the product's rest
+
+(ledger #two-lock-product, item (4).) A protocol whose invariant is `A`'s with `B` kept in its rest
+(`Pair.U B U`, the client's own rest `U` at the common rest) has both locks' `FLock.Fits`:
+`Pair.fits` builds `A`'s from the client's obligations, stated at `U`; `Pair.inv_swap` gives the
+same invariant in `B`'s view, so `Pair.fits` at `hp.symm` builds `B`'s. The product supplies what
+the other lock needs: `B` kept over `A`'s steps (`Pair.U_stable`), stops (`U_atStop`) and part
+ticks (`U_partTick`). The client supplies its own `U`'s, and that a thread in `A`'s code is
+`away` from `B` when one of `A`'s steps queues it, or holds `B` at `holdsAway` with `A`'s word
+in `B`'s nest (`B`'s futex queue admits no other place: `LockWord.Queue`; `Pair.away_of`).
+A primitive's own steps next to `A` (`kstep`) are the client's, through `Pair.U_wordStep` or
+`Keeps.stepIn`.
+
+`Pair.fitsOrder` is the lock order of two locks alone (`FPrim.empty`): `A` outer, whose holder
+sleeps only at `B`'s word, `B` inner without a nest; `A`'s `holdLive` comes from `B`'s `Fits`
+(`holdLive_inner`), `B`'s from `holdLive_none`.
+
+`FLock.prodA`/`prodB` are two locks over one ghost value `FLG2 × X` (as `FLock.prod` for one),
+a pair (`FLock.prodPair`). -/
+
+namespace FLock.Pair
+
+variable {γ : Type} {A B : FLock γ} {Tgt : Type} {P : Proto Tgt γ}
+  {U : (ThreadId → γ) → Res → Mem → Prop}
+
+/-- **The other lock's view of the protocol** (`inv_iff`): a protocol whose invariant is `A`'s with
+`Pair.U B U` is `B`'s with `Pair.U A U` (`FLock.Fits.inv` of `B`). -/
+theorem inv_swap (hp : A.Pair B)
+    (hgA : ∀ G m rL, A.Facts G m rL → A.NoGatherHeld G m)
+    (hgB : ∀ G m rL, B.Facts G m rL → B.NoGatherHeld G m)
+    (inv : ∀ G m, P.inv G m ↔ ∃ rX, A.Inv G rX m ∧ Pair.U B U G rX m) :
+    ∀ G m, P.inv G m ↔ ∃ rX, B.Inv G rX m ∧ Pair.U A U G rX m :=
+  fun G m => (inv G m).trans (hp.inv_iff (hgA G m) (hgB G m))
+
+/-- **A thread `away` from `B`, or holding it at `holdsAway` with `A`'s word in `B`'s nest, may
+sleep in `A`'s code** (`Fits.stable`'s queue premise for `B`, `Keeps.otherStep`): `A`'s word's
+key is a key of `B`'s nest (`LockWord.BlkOk.keyAt`). -/
+theorem away_of {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} (hi : A.Inv G rX m)
+    (h : B.ph (G t) = .away ∨ (B.ph (G t) = .holdsAway ∧ B.nest A.ptr)) :
+    B.ph (G t) = .away ∨ (B.ph (G t) = .holdsAway ∧ B.toLockWord.NestKey m (A.key m)) :=
+  h.imp id fun ⟨h1, h2⟩ => ⟨h1, A.ptr, h2, hi.w.blk.keyAt⟩
+
+/-- **The product's `Fits` for `A`**, with the primitive `K` (module section doc): `stable`,
+`atStop` and the part ticks of `kstep` from the client's `U` and the product (`U_stable`,
+`U_atStop`, `U_partTick`); the queue premise `away`; `K`'s laws, its rest (`sub`, at `B`'s side
+next to the common rest) and its steps (`kstep`, at the product's rest) and `holdLive` are the
+client's. -/
+theorem fits (hp : A.Pair B) {K : FPrim γ} {ok : γ → Prop}
+    (inv : ∀ G m, P.inv G m ↔ ∃ rX, A.Inv G rX m ∧ Pair.U B U G rX m)
+    (fin : ∀ g, P.fin g → A.ph g = .gone) (joins : ∀ g, P.joins g → A.ph g = .out)
+    (ok_set : ∀ g p h, ok (A.set g p h) ↔ ok g) (ok_setPart : ∀ g r, ok (A.setPart g r) ↔ ok g)
+    (away : ∀ G rXA m m' t, ok (G t) → A.Inv G rXA m → Pair.U B U G rXA m → A.Step t m m' →
+      (∃ w ∈ m'.waiters, w ∉ m.waiters) →
+      B.ph (G t) = .away ∨ (B.ph (G t) = .holdsAway ∧ B.toLockWord.NestKey m (A.key m)))
+    (stable : ∀ G rL rH rX m m' t p h, ok (G t) → A.ph (G t) ≠ .gone → A.ph (G t) ≠ .away →
+      A.ph (G t) ≠ .holdsAway → A.Inv G (rsum (side B m rL rH) rX) m → B.Keeps G m rL rH rX →
+      U G rX m → A.Step t m m' → (A.ph (G t) = .holds → p ≠ .holds → A.Before m' (m.clocks[t]!)) →
+      A.Transfer G (rsum (side B m rL rH) rX) m m' t p h → U (upd G t (A.set (G t) p h)) rX m')
+    (atStop : ∀ G rX m t, t < m.threads.size → U G rX m → U G rX { m with current := t })
+    (tick : ∀ t G rX m r, U G rX m → U (upd G t (A.setPart (G t) r)) rX m.ticked)
+    (noGather : ∀ G rX m t, A.Inv G rX m → Pair.U B U G rX m → A.NoGather G m t)
+    (kfin : ∀ g, P.fin g → K.pl.ph g = K.out) (kjoins : ∀ g, P.joins g → K.pl.ph g = K.out)
+    (sub : ∀ G rL rH rX m, B.Keeps G m rL rH rX → U G rX m →
+      K.Sub G (rsum (side B m rL rH) rX) m)
+    (apart : K.Apart)
+    (lph : ∀ g p, A.ph (K.pl.set g p) = A.ph g) (lpart : ∀ g p, A.part (K.pl.set g p) = A.part g)
+    (lheld : ∀ g p, A.held (K.pl.set g p) = A.held g)
+    (lR : ∀ G t p r, A.R G r → A.R (upd G t (K.pl.set (G t) p)) r)
+    (ph_l : ∀ g q h, K.pl.ph (A.set g q h) = K.pl.ph g)
+    (set_l : ∀ g p q h, K.pl.set (A.set g q h) p = A.set (K.pl.set g p) q h)
+    (ph_part : ∀ g r, K.pl.ph (A.setPart g r) = K.pl.ph g)
+    (set_part : ∀ g p r, K.pl.set (A.setPart g r) p = A.setPart (K.pl.set g p) r)
+    (role_l : ∀ i g q h, K.role i (A.set g q h) ↔ K.role i g)
+    (role_part : ∀ i g r, K.role i (A.setPart g r) ↔ K.role i g)
+    (ok_calm : ∀ g p q, K.calm p → K.calm q → (ok (K.pl.set g p) ↔ ok (K.pl.set g q)))
+    (kstep : ∀ t G rX m G' rX' m', K.Step t G rX m G' rX' m' → Pair.U B U G rX m →
+      Pair.U B U G' rX' m')
+    (holdLive : ∀ G rX m v, A.Inv G rX m → Pair.U B U G rX m → A.ph (G v) = .holdsAway →
+      P.Live v G m) :
+    A.Fits K P (Pair.U B U) ok where
+  inv := inv
+  fin := fin
+  joins := joins
+  ok_set := ok_set
+  ok_setPart := ok_setPart
+  stable G rXA m m' t p h hok hg ha hh hi hU hs hb htr :=
+    U_stable hp hi hU hs (away G rXA m m' t hok hi hU hs) fun rL rH rX he hk hu => by
+      subst he; exact stable G rL rH rX m m' t p h hok hg ha hh hi hk hu hs hb htr
+  atStop G _ m t ht hU := U_atStop t hU fun rX hu => atStop G rX m t ht hu
+  noGather := noGather
+  kfin := kfin
+  kjoins := kjoins
+  sub G rXA m hU := by
+    obtain ⟨rL, rH, rX, rfl, hk, hu⟩ := hU
+    exact sub G rL rH rX m hk hu
+  apart := apart
+  lph := lph
+  lpart := lpart
+  lheld := lheld
+  lR := lR
+  ph_l := ph_l
+  set_l := set_l
+  ph_part := ph_part
+  set_part := set_part
+  role_l := role_l
+  role_part := role_part
+  ok_calm := ok_calm
+  kstep t G rXA m G' rXA' m' h hU := h.elim (fun h => kstep t G rXA m G' rXA' m' h hU) fun h =>
+    U_partTick hp hU h fun rX hu => by
+      obtain ⟨-, -, -, r, -, rfl, -, rfl, -⟩ := h
+      exact tick t G rX m r hu
+  holdLive := holdLive
+
+/-- **The product's `Fits` for `A` alone with its word** (`FPrim.empty`; `fits`, as
+`FLock.Fits.ofLock` for one lock). -/
+theorem fitsEmpty (hp : A.Pair B) {ok : γ → Prop}
+    (inv : ∀ G m, P.inv G m ↔ ∃ rX, A.Inv G rX m ∧ Pair.U B U G rX m)
+    (fin : ∀ g, P.fin g → A.ph g = .gone) (joins : ∀ g, P.joins g → A.ph g = .out)
+    (ok_set : ∀ g p h, ok (A.set g p h) ↔ ok g) (ok_setPart : ∀ g r, ok (A.setPart g r) ↔ ok g)
+    (away : ∀ G rXA m m' t, ok (G t) → A.Inv G rXA m → Pair.U B U G rXA m → A.Step t m m' →
+      (∃ w ∈ m'.waiters, w ∉ m.waiters) →
+      B.ph (G t) = .away ∨ (B.ph (G t) = .holdsAway ∧ B.toLockWord.NestKey m (A.key m)))
+    (stable : ∀ G rL rH rX m m' t p h, ok (G t) → A.ph (G t) ≠ .gone → A.ph (G t) ≠ .away →
+      A.ph (G t) ≠ .holdsAway → A.Inv G (rsum (side B m rL rH) rX) m → B.Keeps G m rL rH rX →
+      U G rX m → A.Step t m m' → (A.ph (G t) = .holds → p ≠ .holds → A.Before m' (m.clocks[t]!)) →
+      A.Transfer G (rsum (side B m rL rH) rX) m m' t p h → U (upd G t (A.set (G t) p h)) rX m')
+    (atStop : ∀ G rX m t, t < m.threads.size → U G rX m → U G rX { m with current := t })
+    (tick : ∀ t G rX m r, U G rX m → U (upd G t (A.setPart (G t) r)) rX m.ticked)
+    (noGather : ∀ G rX m t, A.Inv G rX m → Pair.U B U G rX m → A.NoGather G m t)
+    (holdLive : ∀ G rX m v, A.Inv G rX m → Pair.U B U G rX m → A.ph (G v) = .holdsAway →
+      P.Live v G m) :
+    A.Fits (FPrim.empty γ) P (Pair.U B U) ok :=
+  hp.fits inv fin joins ok_set ok_setPart away stable atStop tick noGather (fun _ _ => rfl)
+    (fun _ _ => rfl) (fun _ _ _ _ _ _ _ => trivial) trivial (fun _ _ => rfl) (fun _ _ => rfl)
+    (fun _ _ => rfl) (fun G t _ r h => by show A.R (upd G t (G t)) r; rwa [upd_same])
+    (fun _ _ _ => rfl) (fun _ _ _ _ => rfl) (fun _ _ => rfl) (fun _ _ _ => rfl)
+    (fun i => nomatch i) (fun i => nomatch i) (fun _ _ _ _ _ => Iff.rfl)
+    (fun _ _ _ _ _ _ _ h _ => nomatch h) holdLive
+
+/-- **A lock order of two locks alone** (module section doc): `A` outer, whose holder sleeps only
+at `B`'s word (`hnA`), `B` inner without a nest (`hnB`). A thread runs `A`'s code `away` from `B`
+(`awayA`), and `B`'s `away` from `A` or holding `A` at `holdsAway` (`awayB`). Both locks' `Fits`
+from the client's obligations at the common rest `U`: `B`'s view by `inv_swap`, `A`'s `holdLive`
+by `holdLive_inner` from `B`'s `Fits`, `B`'s by `holdLive_none`. -/
+theorem fitsOrder (hp : A.Pair B) {okA okB : γ → Prop}
+    (hnA : ∀ p, A.nest p ↔ p = B.ptr) (hnB : ∀ p, ¬ B.nest p)
+    (hgA : ∀ G m rL, A.Facts G m rL → A.NoGatherHeld G m)
+    (hgB : ∀ G m rL, B.Facts G m rL → B.NoGatherHeld G m)
+    (inv : ∀ G m, P.inv G m ↔ ∃ rX, A.Inv G rX m ∧ Pair.U B U G rX m)
+    (finA : ∀ g, P.fin g → A.ph g = .gone) (finB : ∀ g, P.fin g → B.ph g = .gone)
+    (joinsA : ∀ g, P.joins g → A.ph g = .out) (joinsB : ∀ g, P.joins g → B.ph g = .out)
+    (okA_set : ∀ g p h, okA (A.set g p h) ↔ okA g)
+    (okA_setPart : ∀ g r, okA (A.setPart g r) ↔ okA g)
+    (okB_set : ∀ g p h, okB (B.set g p h) ↔ okB g)
+    (okB_setPart : ∀ g r, okB (B.setPart g r) ↔ okB g)
+    (awayA : ∀ g, okA g → B.ph g = .away)
+    (awayB : ∀ g, okB g → A.ph g = .away ∨ A.ph g = .holdsAway)
+    (stableA : ∀ G rL rH rX m m' t p h, okA (G t) → A.ph (G t) ≠ .gone → A.ph (G t) ≠ .away →
+      A.ph (G t) ≠ .holdsAway → A.Inv G (rsum (side B m rL rH) rX) m → B.Keeps G m rL rH rX →
+      U G rX m → A.Step t m m' → (A.ph (G t) = .holds → p ≠ .holds → A.Before m' (m.clocks[t]!)) →
+      A.Transfer G (rsum (side B m rL rH) rX) m m' t p h → U (upd G t (A.set (G t) p h)) rX m')
+    (stableB : ∀ G rL rH rX m m' t p h, okB (G t) → B.ph (G t) ≠ .gone → B.ph (G t) ≠ .away →
+      B.ph (G t) ≠ .holdsAway → B.Inv G (rsum (side A m rL rH) rX) m → A.Keeps G m rL rH rX →
+      U G rX m → B.Step t m m' → (B.ph (G t) = .holds → p ≠ .holds → B.Before m' (m.clocks[t]!)) →
+      B.Transfer G (rsum (side A m rL rH) rX) m m' t p h → U (upd G t (B.set (G t) p h)) rX m')
+    (atStop : ∀ G rX m t, t < m.threads.size → U G rX m → U G rX { m with current := t })
+    (tick : ∀ t G rX m r, U G rX m → U (upd G t (A.setPart (G t) r)) rX m.ticked)
+    (noGatherA : ∀ G rX m t, A.Inv G rX m → Pair.U B U G rX m → A.NoGather G m t)
+    (noGatherB : ∀ G rX m t, B.Inv G rX m → Pair.U A U G rX m → B.NoGather G m t) :
+    A.Fits (FPrim.empty γ) P (Pair.U B U) okA ∧ B.Fits (FPrim.empty γ) P (Pair.U A U) okB := by
+  have hB : B.Fits (FPrim.empty γ) P (Pair.U A U) okB :=
+    hp.symm.fitsEmpty (hp.inv_swap hgA hgB inv) finB joinsB okB_set okB_setPart
+      (fun _ _ _ _ _ hok hi _ _ _ =>
+        away_of hi ((awayB _ hok).imp id fun h => ⟨h, (hnA _).mpr rfl⟩))
+      stableB atStop (fun t G rX m r hu => by rw [← hp.setPart]; exact tick t G rX m r hu)
+      noGatherB fun _ _ _ _ hi _ hv => holdLive_none hnB hi hv
+  exact ⟨hp.fitsEmpty inv finA joinsA okA_set okA_setPart
+    (fun _ _ _ _ _ hok _ _ _ _ => .inl (awayA _ hok)) stableA atStop tick noGatherA
+    (holdLive_inner hB (fun p h => (hnA p).mp h) fun G rX m hi hU => (inv G m).mpr ⟨rX, hi, hU⟩),
+    hB⟩
+
+end FLock.Pair
+
+/-! ### Two locks over one ghost value -/
+
+/-- A thread's ghost value for two locks `A` and `B` (`FLock.prodA`, `prodB`): its place and the
+resource it holds in each, and its part, which both locks see. -/
+structure FLG2 where
+  phA : LPh := .gone
+  heldA : Res := rnil
+  phB : LPh := .gone
+  heldB : Res := rnil
+  part : Res := rnil
+
+/-- `X` of two ghost values is kept by a change of the first component. -/
+private theorem upd_snd_keep {X Y : Type} (G : ThreadId → Y × X) (t : ThreadId) (y : Y) :
+    (fun u => (upd G t (y, (G t).2) u).2) = fun u => (G u).2 := by
+  funext u; unfold upd; split
+  · rename_i e; subst e; rfl
+  · rfl
+
+/-- **Lock `A` of two locks over `FLG2 × X`** (`FLock.prod` for two locks): its place and held
+resource are `phA`, `heldA`; the part is shared with `B` (`prodB`); its nest is `nest` (the
+words at which its holder may sleep); its resource reads only `X`. -/
+def FLock.prodA {X : Type} (b o : Nat) (R : (ThreadId → X) → FAssn)
+    (nest : Ptr → Prop := fun _ => False) (c : Nat := 2)
+    (c_ok : c = 1 ∨ c = 2 ∨ c = 3 := by decide) : FLock (FLG2 × X) where
+  b := b
+  o := o
+  c := c
+  c_ok := c_ok
+  nest := nest
+  R G := R fun u => (G u).2
+  ph g := g.1.phA
+  part g := g.1.part
+  held g := g.1.heldA
+  set g p h := ({ g.1 with phA := p, heldA := h }, g.2)
+  ph_set _ _ _ := rfl
+  part_set _ _ _ := rfl
+  held_set _ _ _ := rfl
+  set_self _ := rfl
+  set_set _ _ _ _ _ := rfl
+  R_set G t p h r := by
+    show R (fun u => (upd G t ({ (G t).1 with phA := p, heldA := h }, (G t).2) u).2) r ↔
+      R (fun u => (G u).2) r
+    rw [upd_snd_keep]
+  setPart g r := ({ g.1 with part := r }, g.2)
+  ph_setPart _ _ := rfl
+  part_setPart _ _ := rfl
+  held_setPart _ _ := rfl
+  setPart_self _ := rfl
+  setPart_setPart _ _ _ := rfl
+  setPart_set _ _ _ _ := rfl
+  R_setPart G t r r' := by
+    show R (fun u => (upd G t ({ (G t).1 with part := r }, (G t).2) u).2) r' ↔
+      R (fun u => (G u).2) r'
+    rw [upd_snd_keep]
+
+/-- **Lock `B` of two locks over `FLG2 × X`** (`prodA`): its place and held resource are `phB`,
+`heldB`. -/
+def FLock.prodB {X : Type} (b o : Nat) (R : (ThreadId → X) → FAssn)
+    (nest : Ptr → Prop := fun _ => False) (c : Nat := 2)
+    (c_ok : c = 1 ∨ c = 2 ∨ c = 3 := by decide) : FLock (FLG2 × X) where
+  b := b
+  o := o
+  c := c
+  c_ok := c_ok
+  nest := nest
+  R G := R fun u => (G u).2
+  ph g := g.1.phB
+  part g := g.1.part
+  held g := g.1.heldB
+  set g p h := ({ g.1 with phB := p, heldB := h }, g.2)
+  ph_set _ _ _ := rfl
+  part_set _ _ _ := rfl
+  held_set _ _ _ := rfl
+  set_self _ := rfl
+  set_set _ _ _ _ _ := rfl
+  R_set G t p h r := by
+    show R (fun u => (upd G t ({ (G t).1 with phB := p, heldB := h }, (G t).2) u).2) r ↔
+      R (fun u => (G u).2) r
+    rw [upd_snd_keep]
+  setPart g r := ({ g.1 with part := r }, g.2)
+  ph_setPart _ _ := rfl
+  part_setPart _ _ := rfl
+  held_setPart _ _ := rfl
+  setPart_self _ := rfl
+  setPart_setPart _ _ _ := rfl
+  setPart_set _ _ _ _ := rfl
+  R_setPart G t r r' := by
+    show R (fun u => (upd G t ({ (G t).1 with part := r }, (G t).2) u).2) r' ↔
+      R (fun u => (G u).2) r'
+    rw [upd_snd_keep]
+
+/-- **`prodA` and `prodB` are a pair** when their words are apart. -/
+theorem FLock.prodPair {X : Type} {bA oA bB oB : Nat} {RA RB : (ThreadId → X) → FAssn}
+    {nA nB : Ptr → Prop} {cA cB : Nat} {hA : cA = 1 ∨ cA = 2 ∨ cA = 3}
+    {hB : cB = 1 ∨ cB = 2 ∨ cB = 3}
+    (hap : (FLock.prodA bA oA RA nA cA hA).ApartL (FLock.prodB bB oB RB nB cB hB).toLockWord) :
+    (FLock.prodA bA oA RA nA cA hA).Pair (FLock.prodB bB oB RB nB cB hB) where
+  apart := hap
+  ph_ab _ _ _ := rfl
+  held_ab _ _ _ := rfl
+  R_ab G t p h r := by
+    show RB (fun u => (upd G t ({ (G t).1 with phA := p, heldA := h }, (G t).2) u).2) r ↔
+      RB (fun u => (G u).2) r
+    rw [upd_snd_keep]
+  ph_ba _ _ _ := rfl
+  held_ba _ _ _ := rfl
+  R_ba G t p h r := by
+    show RA (fun u => (upd G t ({ (G t).1 with phB := p, heldB := h }, (G t).2) u).2) r ↔
+      RA (fun u => (G u).2) r
+    rw [upd_snd_keep]
+  part _ := rfl
+  setPart _ _ := rfl
 
 end Full
 end Zig

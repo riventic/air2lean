@@ -546,6 +546,24 @@ theorem Fits.goAway (hP : L.Fits K P U ok) (hg : L.ph g = .out) (hi : P.inv (upd
   rw [upd_upd] at hl
   exact (hP.inv _ _).mpr ⟨rX₀, hl, hUa _ hU₀ hiL₀.w⟩
 
+/-- Thread `t` `away` (`g`), not in the futex queue, is back `out` (`Fits.goAway`'s converse: e.g.
+a thread that ran another lock's code is back to run this lock's), when its `U` lets it
+(`hUo`). -/
+theorem Fits.unaway (hP : L.Fits K P U ok) (hg : L.ph g = .away) (hi : P.inv (upd G t g) m)
+    (hq : ∀ w ∈ m.waiters, w.1 ≠ t)
+    (hUo : ∀ rX, U (upd G t g) rX m → L.WInv (L.pl (upd G t g)) m →
+      U (upd G t (L.set g .out rnil)) rX m) :
+    P.inv (upd G t (L.set g .out rnil)) m := by
+  obtain ⟨rX₀, hiL₀, hU₀⟩ := (hP.inv _ _).mp hi
+  have hl := hiL₀.ghostOff (t := t) (g := L.set g .out rnil) (by rw [upd_self]; exact .inr hg) hq
+    (.inl (L.ph_set _ _ _)) (by rw [upd_self, L.part_set]) (L.held_set _ _ _)
+    (fun _ => hiL₀.ht (t := t) (by rw [upd_self, hg]; decide))
+    (fun r hr => by
+      have := (L.R_set (upd G t g) t .out rnil r).mpr hr
+      rwa [upd_self] at this)
+  rw [upd_upd] at hl
+  exact (hP.inv _ _).mpr ⟨rX₀, hl, hUo _ hU₀ hiL₀.w⟩
+
 /-- A change of `t`'s place in the primitive keeps the lock's invariant (`Inv.relabel`: the
 primitive's place and the lock's are independent, `Fits.lph`, …). -/
 theorem Fits.relabelK (hP : L.Fits K P U ok) {rX : Res} (p : K.Ph)
