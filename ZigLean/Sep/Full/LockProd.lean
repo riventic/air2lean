@@ -1071,8 +1071,8 @@ theorem away_of {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} (hi : 
 /-- **The product's `Fits` for `A`**, with the primitive `K` (module section doc): `stable`,
 `atStop` and the part ticks of `kstep` from the client's `U` and the product (`U_stable`,
 `U_atStop`, `U_partTick`); the queue premise `away`; `K`'s laws, its rest (`sub`, at `B`'s side
-as the rest stores it, next to the common rest) and its steps (`kstep`, at the product's rest) and `holdLive` are the
-client's. -/
+as the rest stores it, next to the common rest) and its steps (`kstep`, at the product's rest)
+and `holdLive` are the client's. -/
 theorem fits (hp : A.Pair B) {K : FPrim γ} {ok : γ → Prop}
     (inv : ∀ G m, P.inv G m ↔ ∃ rX, A.Inv G rX m ∧ Pair.U B U G rX m)
     (fin : ∀ g, P.fin g → A.ph g = .gone) (joins : ∀ g, P.joins g → A.ph g = .out)

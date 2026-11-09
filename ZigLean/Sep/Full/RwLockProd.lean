@@ -239,6 +239,20 @@ theorem c_apart (W : FRw γ X Y M L C S) : ∀ Wd : Word 32 4, (Wd = C.S ∨ Wd 
   · exact ⟨Or.inr (Or.inl (by omega)), Or.inr (Or.inr (by omega))⟩
   · exact ⟨Or.inr (Or.inl (by omega)), Or.inr (Or.inr (by omega))⟩
 
+/-- **The condition's epoch and the outer mutex have other futex keys in every memory** (the
+layout: one block, at `p + 24` and `p + 32`; `Mem.wordKey_ne_off`). -/
+theorem ep_key_ne (W : FRw γ X Y M L C S) (m : Mem) : C.Ep.key m ≠ M.key m := by
+  have b1 : C.S.b = S.p.block := congrArg Ptr.block S.ptr_c
+  have b2 : S.p.block = W.p.block := congrArg Ptr.block W.ptr_s
+  have b3 : M.b = W.p.block := congrArg Ptr.block W.ptr_m
+  have h1 : (C.S.o : Int) = S.p.off + 12 := congrArg Ptr.off S.ptr_c
+  have h2 : S.p.off = W.p.off + 8 := congrArg Ptr.off W.ptr_s
+  have h3 : (M.o : Int) = W.p.off + 32 := congrArg Ptr.off W.ptr_m
+  have h5 := C.ep_o
+  show m.wordKey C.Ep.b C.Ep.o ≠ m.wordKey M.b M.o
+  rw [C.ep_b, b1, b2, ← b3]
+  exact Mem.wordKey_ne_off (by omega) (by omega) (by omega) _ _
+
 /-- The semaphore's mutex protects the count and the pool, without partial shares. -/
 theorem lR_unshared (W : FRw γ X Y M L C S) (G : ThreadId → γ) : (L.R G).Unshared := by
   rw [S.R_cnt G]
@@ -251,13 +265,14 @@ theorem lR_unshared (W : FRw γ X Y M L C S) (G : ThreadId → γ) : (L.R G).Uns
 `FLock.Pair.fits` at the semaphore's primitive in the semaphore's mutex's view, where the
 semaphore's code runs `away` from the outer mutex or holding it at `holdsAway`
 (`FLock.Pair.U_semStep` for the semaphore's steps). The outer mutex protects nothing, so its side
-owns only its word, apart from the condition's (`c_apart`). The client gives its base `U₀`'s
+owns only its word, apart from the condition's (`c_apart`), and its key is not the epoch's
+(`ep_key_ne`). The client gives its base `U₀`'s
 obligations at the common rest (`stable`, `atStop`, `tick`, `kstep`, `holdLive`, the window), where
 `U₀` keeps the condition and the semaphore (`hsub`), that a waiter of the condition is `away` from
 the outer mutex or holds it at `holdsAway` with the epoch in its nest (`hsleep`), the laws of the
 semaphore's places next to `L` and `M`, and of `okS`. -/
 theorem fitsS (W : FRw γ X Y M L C S) {okS : γ → Prop}
-    (inv :∀ G m, P.inv G m ↔ ∃ rX, M.Inv G rX m ∧ FLock.Pair.U L U₀ G rX m)
+    (inv : ∀ G m, P.inv G m ↔ ∃ rX, M.Inv G rX m ∧ FLock.Pair.U L U₀ G rX m)
     (fin : ∀ g, P.fin g → L.ph g = .gone) (joins : ∀ g, P.joins g → L.ph g = .out)
     (kfin : ∀ g, P.fin g → S.place.ph g = (.out, .out))
     (kjoins : ∀ g, P.joins g → S.place.ph g = (.out, .out))
@@ -286,7 +301,6 @@ theorem fitsS (W : FRw γ X Y M L C S) {okS : γ → Prop}
     (set_part : ∀ g p r, S.place.set (L.setPart g r) p = L.setPart (S.place.set g p) r)
     (mph_s : ∀ g q, M.ph (S.place.set g q) = M.ph g)
     (mheld_s : ∀ g q, M.held (S.place.set g q) = M.held g)
-    (hkey : ∀ m, C.Ep.key m ≠ M.key m)
     (hsleep : ∀ G rX m t, U₀ G rX m → (C.ph (G t)).waits = true →
       M.ph (G t) = .away ∨ (M.ph (G t) = .holdsAway ∧ M.nest C.Ep.ptr))
     (kstep : ∀ t G G' rX rX' m m' sB rL rH rX₀ rX₀', S.prim.Step t G rX m G' rX' m' →
@@ -339,7 +353,7 @@ theorem fitsS (W : FRw γ X Y M L C S) {okS : γ → Prop}
           · exact h (h1'.symm.trans h1)
           · omega
           · omega)
-        hkey hsleep fun sB rL rH rX₀ rX₀' => kstep t G G' rX rX' m m' sB rL rH rX₀ rX₀' hs)
+        (ep_key_ne W) hsleep fun sB rL rH rX₀ rX₀' => kstep t G G' rX rX' m m' sB rL rH rX₀ rX₀' hs)
     holdLive,
   fun g hok => okS_s g hok.1,
   fun G _ m ⟨_, _, _, _, _, _, _, hu⟩ => win G _ m hu⟩
