@@ -51,21 +51,21 @@ The client keeps its base `U₀` (`hcl`), which keeps the rwlock's invariant (`h
 theorem U_step {U₀ : (ThreadId → γ) → Res → Mem → Prop} {t : ThreadId} {G G' : ThreadId → γ}
     {rX rX' : Res} {m m' : Mem} (hs : W.Step t G rX m G' rX' m')
     (hU : FLock.Pair.U L U₀ G rX m) (hsub : ∀ G rX m, U₀ G rX m → W.Inv G rX m)
-    (hcl : ∀ rL rH rX₀ rX₀' rY rY', rX = rsum (FLock.side L m rL rH) rX₀ →
-      rX' = rsum (FLock.side L m' rL rH) rX₀' → L.Keeps G m rL rH rX₀ →
+    (hcl : ∀ sB rL rH rX₀ rX₀' rY rY', rX = rsum sB rX₀ → rX' = rsum sB rX₀' →
+      Res.Sim sB (FLock.side L m rL rH) → L.Keeps G m rL rH rX₀ →
       L.Keeps G' m' rL rH rX₀' → U₀ G rX₀ m → W.Inv G' rX₀' m' →
       rX₀ = rsum (W.st.cellsR m) rY → rX₀' = rsum (W.st.cellsR m') rY' →
       W.Moves G m rY G' m' rY' → U₀ G' rX₀' m') :
     FLock.Pair.U L U₀ G' rX' m' := by
   obtain ⟨hM, -, hM', hWI', -, ⟨hr, hfs⟩, hoth, hx, -, -, hlph, hlheld, -, -, hpost, rF, rF',
     rO, he, he', hsp, hsp'⟩ := hs
-  obtain ⟨rL, rH, rX₀, rfl, hk, hu⟩ := hU
+  obtain ⟨sB, rL, rH, rX₀, rfl, hsB, hk, hu⟩ := hU
   have hf := hk.facts
   have hbL : L.BlkOk m := hf.w.blk
   have hI₀ := hsub _ _ _ hu
   obtain ⟨rF₀, rO₀, rfl, hsp₀, -⟩ := hI₀.split
-  -- the pieces of the common rest, apart from `L`'s side
-  have hsX := hk.side_disj
+  -- the pieces of the common rest, apart from `L`'s side as the rest stores it (`sB`)
+  have hsX := hsB.disj hk.side_disj
   have hsX1 := FHeap.disjoint_union_right.mp hsX
   have hsX2 := FHeap.disjoint_union_right.mp hsX1.2
   -- `L`'s side owns no byte of the state word: the word's cells are in the common rest, and `M`'s
@@ -73,35 +73,33 @@ theorem U_step {U₀ : (ThreadId → γ) → Res → Mem → Prop} {t : ThreadId
   have hcell : ∀ l, W.st.In l →
       (rsum (W.st.cellsR m) (rsum rF₀ rO₀)).heap l ≠ none := fun l hl e =>
     cellsAt_some hl (hI₀.ok.cellIn hl) (rsum_heap_none.mp e).1
-  have hsW : ∀ l, W.st.In l → (FLock.side L m rL rH).heap l = none := fun l hl =>
+  have hsW : ∀ l, W.st.In l → sB.heap l = none := fun l hl =>
     (hsX l).resolve_right (hcell l hl)
   have hsO : ∀ l, W.st.In l → (FLock.side L m rL rH).owned l = none := by
     intro l hl
     obtain ⟨rLM, hoM, -⟩ := hM.rest
-    have hne : (rsum (M.wordR m) (rsum rLM (rsum (FLock.side L m rL rH)
+    have hne : (rsum (M.wordR m) (rsum rLM (rsum sB
         (rsum (W.st.cellsR m) (rsum rF₀ rO₀))))).heap l ≠ none := fun e =>
       hcell l hl (rsum_heap_none.mp (rsum_heap_none.mp (rsum_heap_none.mp e).2).2).2
-    have hns : ¬ ((FLock.side L m rL rH).gh.share l).Pos := fun hp' =>
+    have hns : ¬ (sB.gh.share l).Pos := fun hp' =>
       hoM.rest_noShare hne (by
-        show (((M.wordR m).gh.add (rLM.gh.add ((FLock.side L m rL rH).gh.add
+        show (((M.wordR m).gh.add (rLM.gh.add (sB.gh.add
           (rsum (W.st.cellsR m) (rsum rF₀ rO₀)).gh))).share l).Pos
         simp only [Ghost.add_share]
         exact SCell.pos_add_iff.mpr (.inr (SCell.pos_add_iff.mpr (.inr
           (SCell.pos_add_iff.mpr (.inl hp'))))))
-    exact Classical.byContradiction fun hn =>
-      (Res.owned_ne.mp hn).elim (fun h => h (hsW l hl)) hns
+    exact hsB.owned_none.mp (Classical.byContradiction fun hn =>
+      (Res.owned_ne.mp hn).elim (fun h => h (hsW l hl)) hns)
   -- `Step`'s split is the common rest's, with `L`'s side in the rest of the rest
-  have hrot : rsum (FLock.side L m rL rH) (rsum (W.st.cellsR m) (rsum rF₀ rO₀)) =
-      rsum (W.st.cellsR m) (rsum rF₀ (rsum (FLock.side L m rL rH) rO₀)) :=
+  have hrot : rsum sB (rsum (W.st.cellsR m) (rsum rF₀ rO₀)) =
+      rsum (W.st.cellsR m) (rsum rF₀ (rsum sB rO₀)) :=
     rsum_rot hsX1.1 hsX2.1
   obtain ⟨rfl, rfl⟩ := hsp.unique_cells (hsp₀.frame hsW hsX2.1.symm) (he.symm.trans hrot)
   -- the common rest after the step
-  have hFs : FHeap.Disjoint rF'.heap (FLock.side L m rL rH).heap :=
-    (FHeap.disjoint_union_right.mp hsp'.2.1).1
-  have hsC' : FHeap.Disjoint (FLock.side L m rL rH).heap (W.st.cellsR m').heap :=
-    disj_cellsAt hsW
-  have hrot' : rsum (W.st.cellsR m') (rsum rF' (rsum (FLock.side L m rL rH) rO₀)) =
-      rsum (FLock.side L m rL rH) (rsum (W.st.cellsR m') (rsum rF' rO₀)) :=
+  have hFs : FHeap.Disjoint rF'.heap sB.heap := (FHeap.disjoint_union_right.mp hsp'.2.1).1
+  have hsC' : FHeap.Disjoint sB.heap (W.st.cellsR m').heap := disj_cellsAt hsW
+  have hrot' : rsum (W.st.cellsR m') (rsum rF' (rsum sB rO₀)) =
+      rsum sB (rsum (W.st.cellsR m') (rsum rF' rO₀)) :=
     (rsum_rot hsC' hFs.symm).symm
   have hsp₀' : W.Split G' m' rF' rO₀ := hsp'.unframe
   have hI₀' : W.Inv G' (rsum (W.st.cellsR m') (rsum rF' rO₀)) m' :=
@@ -130,30 +128,32 @@ theorem U_step {U₀ : (ThreadId → γ) → Res → Mem → Prop} {t : ThreadId
     have hO : (rsum (M.wordR m') (rsum rLM' rX')).heap l ≠ none := fun e => by
       rw [he', hrot'] at e
       refine hsj l hn ?_
-      exact (rsum_heap_none.mp (rsum_heap_none.mp (rsum_heap_none.mp
-        (rsum_heap_none.mp (rsum_heap_none.mp e).2).2).1).2).2
+      have hsn := (rsum_heap_none.mp (rsum_heap_none.mp (rsum_heap_none.mp e).2).2).1
+      exact (rsum_heap_none.mp (rsum_heap_none.mp (hsB.none.mp hsn)).2).2
     have h0 := hoM'.part_off (u := t) (by rw [hthr]; exact hut) hO
     have hj' : joinedB m' t = false := by rw [LockWord.joinedB_congr hthr]; exact hju
     simp only [FLock.own, hj', Bool.false_eq_true, ↓reduceIte] at h0
     rw [← W.pair.part]
     exact (rsum_heap_none.mp h0).1
+  have hsC'' := hsB.symm.disj hsC'
+  have hFs' := hsB.symm.disj hFs.symm
   have hxd : FHeap.Disjoint (rsum rL rH).heap (rsum (W.st.cellsR m') (rsum rF' rO₀)).heap :=
-    FHeap.disjoint_union_right.mpr ⟨(FHeap.disjoint_union_left.mp hsC').2,
-      FHeap.disjoint_union_right.mpr ⟨(FHeap.disjoint_union_left.mp hFs.symm).2,
+    FHeap.disjoint_union_right.mpr ⟨(FHeap.disjoint_union_left.mp hsC'').2,
+      FHeap.disjoint_union_right.mpr ⟨(FHeap.disjoint_union_left.mp hFs').2,
         (FHeap.disjoint_union_right.mp (FHeap.disjoint_union_right.mp hk.xdisj).2).2⟩⟩
   have hxo : L.Off (rsum (W.st.cellsR m') (rsum rF' rO₀)).heap.erase :=
     LockWord.off_erase.mpr fun l hl => by
-      have hsl : (FLock.side L m rL rH).heap l ≠ none := fun e =>
-        LockWord.wordR_some hbL hl (rsum_heap_none.mp e).1
+      have hsl : sB.heap l ≠ none := fun e =>
+        LockWord.wordR_some hbL hl (rsum_heap_none.mp (hsB.none.mp e)).1
       refine rsum_heap_none.mpr ⟨cellsAt_none fun hw => hsl (hsW l hw),
         rsum_heap_none.mpr ⟨(hFs l).resolve_right hsl, ?_⟩⟩
       exact (rsum_heap_none.mp (rsum_heap_none.mp (LockWord.off_erase.mp hk.xoff l hl)).2).2
   obtain ⟨hside, hk'⟩ := FLock.Pair.Keeps.wordStep hk hr hfs hsO hG
     (fun r h => by rw [hLR]; exact h) hpd hxd hxo
-  have hrX' : rX' = rsum (FLock.side L m' rL rH) (rsum (W.st.cellsR m') (rsum rF' rO₀)) := by
-    rw [he', hrot', hside]
-  exact ⟨rL, rH, _, hrX', hk', hcl rL rH _ _ _ _ rfl hrX' hk hk' hu hI₀' rfl rfl
-    ⟨hpost, _, rF', rO₀, rfl, rfl, hsp₀, hsp₀'⟩⟩
+  have hrX' : rX' = rsum sB (rsum (W.st.cellsR m') (rsum rF' rO₀)) := by rw [he', hrot']
+  exact ⟨sB, rL, rH, _, hrX', by rw [hside]; exact hsB, hk',
+    hcl sB rL rH _ _ _ _ rfl hrX' hsB hk hk' hu hI₀' rfl rfl
+      ⟨hpost, _, rF', rO₀, rfl, rfl, hsp₀, hsp₀'⟩⟩
 
 /-! ## The outer mutex's view -/
 
@@ -187,8 +187,8 @@ theorem fitsM
     (set_l : ∀ g p q h, W.place.set (M.set g q h) p = M.set (W.place.set g p) q h)
     (ph_part : ∀ g r, W.place.ph (M.setPart g r) = W.place.ph g)
     (set_part : ∀ g p r, W.place.set (M.setPart g r) p = M.setPart (W.place.set g p) r)
-    (kstep : ∀ t G G' rX rX' m m' rL rH rX₀ rX₀' rY rY', W.Step t G rX m G' rX' m' →
-      rX = rsum (FLock.side L m rL rH) rX₀ → rX' = rsum (FLock.side L m' rL rH) rX₀' →
+    (kstep : ∀ t G G' rX rX' m m' sB rL rH rX₀ rX₀' rY rY', W.Step t G rX m G' rX' m' →
+      rX = rsum sB rX₀ → rX' = rsum sB rX₀' → Res.Sim sB (FLock.side L m rL rH) →
       L.Keeps G m rL rH rX₀ → L.Keeps G' m' rL rH rX₀' → U₀ G rX₀ m → W.Inv G' rX₀' m' →
       rX₀ = rsum (W.st.cellsR m) rY → rX₀' = rsum (W.st.cellsR m') rY' →
       W.Moves G m rY G' m' rY' → U₀ G' rX₀' m')
@@ -205,7 +205,7 @@ theorem fitsM
     (fun _ _ _ _ _ _ rL h l => .inr (by rw [W.mR] at h; exact FAssn.Unshared.emp _ h l))
     (fun g h => Prod.ext (kfin g h).1 (kfin g h).2)
     (fun g h => Prod.ext (kjoins g h).1 (kjoins g h).2)
-    (fun G rL rH rX m hk hu => (hsub G rX m hu).frame hk.side_disj)
+    (fun G _ _ _ rX m hsB hk hu => (hsub G rX m hu).frame (hsB.disj hk.side_disj))
     apart lph lpart lheld
     (fun G t p r h => by rw [W.mR] at h ⊢; exact h)
     ph_l set_l ph_part set_part (fun i => nomatch i) (fun i => nomatch i)
@@ -213,8 +213,8 @@ theorem fitsM
       show (okM (W.set (S.place.set g p.2) p.1) ∧ L.ph (W.set (S.place.set g p.2) p.1) = .away) ↔
         (okM (W.set (S.place.set g q.2) q.1) ∧ L.ph (W.set (S.place.set g q.2) q.1) = .away)
       rw [hp.2, hq.2, okM_set, okM_set, W.lph, W.lph])
-    (fun t G rX m G' rX' m' hs hU => U_step hs hU hsub fun rL rH rX₀ rX₀' rY rY' =>
-      kstep t G G' rX rX' m m' rL rH rX₀ rX₀' rY rY' hs)
+    (fun t G rX m G' rX' m' hs hU => U_step hs hU hsub fun sB rL rH rX₀ rX₀' rY rY' =>
+      kstep t G G' rX rX' m m' sB rL rH rX₀ rX₀' rY rY' hs)
     holdLive
 
 end FRw
