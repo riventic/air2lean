@@ -392,14 +392,13 @@ theorem body_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (t : Threa
   refine WP.bind ?_
   show P.WP t (ConcM.liftMem Zig.tick >>= fun a => pure (a, s)) _ _ _ _
   refine WP.bind (hW.m.wp_tick_unmetered hi hc hmg hu fun m₀ hc₀ hi₀ => WP.pure' ?_)
-  simp only [StateT.run_bind, StateT.run_get, pure_bind]
+  -- `rw`, not `simp`: `simp`'s `rfl` steps over the body leave the kernel a defeq check that
+  -- times out
+  rw [StateT.run_bind, StateT.run_get, pure_bind, StateT.run_bind]
   refine WP.bind ?_
   by_cases hgd : (C.getSt s &&& (4294967295 : BitVec 64) == (0 : BitVec 64)) = true
-  · -- `rw`, not `simp`: `simp`'s `rfl` steps over the CAS's body leave the kernel a defeq check
-    -- that times out
-    rw [ite_eq_left hgd]
-    rw [StateT.run_bind, StateT.run_get, pure_bind, StateT.run_bind, StateT.run_get, pure_bind,
-      StateT.run_bind, CNorm.run_liftR, ← CNorm.run_callRC]
+  · rw [ite_eq_left hgd, StateT.run_bind, StateT.run_get, pure_bind, StateT.run_bind,
+      StateT.run_get, pure_bind, StateT.run_bind, CNorm.run_liftR, ← CNorm.run_callRC]
     refine WP.bind (WP.callRC_ok (v := RwState.encode (rr + 1) ww aa)
       (by rw [hst, haddR rr ww aa hrr hww]; rfl) ?_)
     rw [StateT.run_bind]
@@ -582,7 +581,7 @@ theorem unlockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none)
         rwa [hxs] at this
     refine WP.bind (WP.callMC_ptrProject (hW.projW hi₁ (by decide) (by decide)) ?_)
     refine WP.bind (WP.callC (WP.mono (fun _ G₂ m₂ k₂ h₂ => ?_)
-      (C.S.post_wp_resource hW.s hcost (hLc.trans C.c_eq.symm) (by rw [W.ptr_s, ← W.ptr_st])
+      (C.S.post_wp hW.s hcost (hLc.trans C.c_eq.symm) (by rw [W.ptr_s, ← W.ptr_st])
         t g₁ gx r
         (by rw [hg₁, W.lph, W.pair.setPart, L.ph_setPart, hlo])
         (by rw [hg₁, FRw.cph_w, (hW.ph_part _ _).2.1, hco])
@@ -594,30 +593,23 @@ theorem unlockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none)
         (by rw [hgxd, FRw.sph_w, (hW.ph_part _ _).2.2, hso])
         (by rw [hgxd]; exact (hW.okS_set _ _).mpr ((hW.okS_part _ _).mpr hokS))
         hsplit (by rw [hpgx]; exact hdj)
-        (fun rᵢ hr G₂ rL m₂ h₂ => by
-          obtain rfl := C.S.post_unmetered_during t _ rᵢ hu' hr
-          rw [← hsplit, L.setPart_self] at h₂
+        (fun G₂ rL m₂ h₂ => by
           obtain ⟨hp, hnp, -⟩ := hst G₂ rL m₂ h₂
           rw [W.cnt_posted _ hp, W.cnt_idle _ hnp]
           decide)
-        (fun rᵢ hr G₂ rL m₂ h₂ x hx => by
-          obtain rfl := C.S.post_unmetered_during t _ rᵢ hu' hr
-          rw [← hsplit, L.setPart_self] at h₂
+        (fun G₂ rL m₂ h₂ x hx => by
           obtain ⟨hp, hnp, hR'⟩ := hst G₂ rL m₂ h₂
           rw [W.pool_idle _ hnp] at hx
           have hxr : x = r := (sep_emp.mp hx :)
           subst hxr
           rw [W.pool_posted _ hp]
           exact hR')
-        (fun rᵢ hr G₂ rX m₂ h₁ h₂ sh sc hUS hL hS hC => by
-          obtain rfl := C.S.post_unmetered_during t _ rᵢ hu' hr
-          rw [← hsplit, L.setPart_self] at hUS
-          rw [L.setPart_self, hgx] at hL hS hC ⊢
+        (fun G₂ rX m₂ h₁ h₂ sh sc hUS hL hS hC => by
+          rw [hgx] at hL hS hC ⊢
           exact hW.upost G₂ rX m₂ t g₁ r₀ r h₁ h₂ sh sc (by rw [hg₁, W.ph_set]) hUS hL hS hC)
-        io G₁ m₁ k₁ (C.S.post_unmetered_pre t _ hu') hi₁ hc₁)))
-    obtain ⟨hk₂, hc₂, r', hpp, hi₂⟩ := h₂
-    obtain rfl := C.S.post_unmetered_post t _ r' hu' hpp
-    rw [L.setPart_self, hgxd] at hi₂
+        io G₁ m₁ k₁ hu' hi₁ hc₁)))
+    obtain ⟨hk₂, hc₂, hi₂⟩ := h₂
+    rw [hgxd] at hi₂
     simp only [StateT.run_pure, pure_bind, hk2]
     exact WP.pure' ⟨rfl, by omega, hc₂, hi₂⟩
 

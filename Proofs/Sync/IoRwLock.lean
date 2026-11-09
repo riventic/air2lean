@@ -9,7 +9,9 @@ its `lockUncancelable`, `unlock`, `lockSharedUncancelable` and `unlockShared` ar
 code (`IoRwLockCode`, `ZigLean/Sep/Full/IoRwLock.lean`) over the program's `Io.Mutex` (`ioMutex`)
 and `Io.Semaphore` (`ioSem`, whose wait admits a positive unmetered fragment and keeps that part:
 `payUnmetered`, `keepPart`), so they satisfy the reader/writer contract (`RwLockImpl`) for every
-protocol that has the lock. This file gives the program's names and the unfolding equations.
+protocol that has the lock. This file gives the program's names and the unfolding equations. The
+continuations' equations at their exits are `by rfl` blocks: they run after the main equation's
+block has fixed the continuations (a term `rfl` would be elaborated first and guess them).
 -/
 
 open Zig Zig.Conc Zig.Full
@@ -30,14 +32,14 @@ def ioRwLockCode : IoRwLockCode Tgt where
   lock := Io_RwLock_lockUncancelable
   lock_eq := ⟨_, _, fun _ _ => by
     simp only [Io_RwLock_lockUncancelable, IoRwLockCode.lockOf, pure_bind]
-    rfl, rfl, rfl⟩
+    rfl, by rfl, by rfl⟩
   σU := Io_RwLock_unlockLocals
   EU := Io_RwLock_unlockExit
   uret := .ret
   unlock := Io_RwLock_unlock
   unlock_eq := ⟨_, fun _ _ => by
     simp only [Io_RwLock_unlock, IoRwLockCode.unlockOf, pure_bind]
-    rfl, rfl⟩
+    rfl, by rfl⟩
   σR := Io_RwLock_lockSharedUncancelableLocals
   ER := Io_RwLock_lockSharedUncancelableExit
   getSt s := s.state
@@ -68,7 +70,7 @@ def ioRwLockCode : IoRwLockCode Tgt where
   unlockShared := Io_RwLock_unlockShared
   unlockShared_eq := ⟨_, _, _, fun _ _ => by
     simp only [Io_RwLock_unlockShared, IoRwLockCode.unlockSharedOf, bind_assoc, pure_bind]
-    rfl, fun _ _ => rfl, fun _ _ => rfl, rfl, rfl⟩
+    rfl, fun _ _ => by rfl, fun _ _ => by rfl, by rfl, by rfl⟩
 
 /-- **`Io.RwLock` of this program is a reader/writer lock** (`RwLockImpl`). -/
 def ioRwLock : RwLockImpl Tgt := ioRwLockCode.impl
