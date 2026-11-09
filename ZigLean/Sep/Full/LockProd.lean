@@ -36,7 +36,8 @@ each lock's code then need only their own lock's `Fits`; the other lock rides in
   `Transfer.congrX` give the exact side back.
   `Pair.U_stable`, `U_setA`, `U_atStop`, `U_partStep` and `U_partTick` lift them to `Pair.U` for
   `A`'s `Fits.stable`, `Fits.nap`'s `hU`, `Fits.atStop`, a part step's continuation and
-  `Fits.kstep`'s `PartTick`.
+  `Fits.kstep`'s `PartTick`; `U_relabel` a relabel of one thread that keeps its place and held
+  resource at `B`.
 * **`B` kept across a primitive's own steps** (item (4)): `Keeps.stepIn` once for every native
   step whose frame (`FStepIn`) covers `B`'s side; `Keeps.partStep` is an instance, and
   `Keeps.wordStep`/`U_wordStep` the atomic op at another shared word (`Inv.wordStep`'s facts),
@@ -678,6 +679,32 @@ theorem U_setA (hp : A.Pair B) {U : (ThreadId → γ) → Res → Mem → Prop} 
   have hk' := Keeps.setA (t := t) (p := p) (h := h) hp hk
   rw [upd_self, upd_upd] at hk'
   exact ⟨sB, rL, rH, rX, rfl, hs, hk', hcl rX hu⟩
+
+/-- **A relabel of `t` that keeps its place and held resource at `B` keeps the product's rest**
+(`Keeps.relabel` at one thread, the same memory and rest; e.g. a primitive's step that moves a
+resource into `t`'s part, `FRw.Fits.utake`): `B`'s resource stays (`hR`) and `t`'s new part is
+apart from what it holds of `B` (`hpd`, given `B`'s facts), when the protocol's own `U` is kept. -/
+theorem U_relabel {U : (ThreadId → γ) → Res → Mem → Prop} {rXA : Res} {t : ThreadId} {g g' : γ}
+    (hU : Pair.U B U (upd G t g) rXA m) (hph : B.ph g' = B.ph g) (hheld : B.held g' = B.held g)
+    (hR : ∀ r, B.R (upd G t g) r → B.R (upd G t g') r)
+    (hpd : ∀ rL, B.Facts (upd G t g) m rL → FHeap.Disjoint (B.part g').heap (B.held g).heap)
+    (hcl : ∀ sB rL rH rX, rXA = rsum sB rX → Res.Sim sB (side B m rL rH) →
+      B.Keeps (upd G t g') m rL rH rX → U (upd G t g) rX m → U (upd G t g') rX m) :
+    Pair.U B U (upd G t g') rXA m := by
+  obtain ⟨sB, rL, rH, rX, rfl, hs, hk, hu⟩ := hU
+  have hk' : B.Keeps (upd G t g') m rL rH rX := Keeps.relabel hk
+    (fun u => by
+      by_cases e : u = t
+      · subst e; rw [upd_self, upd_self]; exact ⟨hph, hheld⟩
+      · rw [upd_ne _ _ e, upd_ne _ _ e]; exact ⟨rfl, rfl⟩)
+    hR
+    (fun u => by
+      by_cases e : u = t
+      · subst e; rw [upd_self, hheld]; exact hpd rL hk.facts
+      · have h := hk.facts.pdisj u
+        rw [upd_ne _ _ e] at h ⊢; exact h)
+    hk.xdisj hk.xoff
+  exact ⟨sB, rL, rH, rX, rfl, hs, hk', hcl sB rL rH rX rfl hs hk' hu⟩
 
 /-- **A change of the futex queue, the woken threads and the current thread keeps what the product
 keeps of `B`**, given `B`'s word invariant after it (`LockWord.WInv.requeue`, `WInv.push`,

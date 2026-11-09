@@ -36,6 +36,11 @@ the views from `U₀` and the client's obligations stated at `U₀`.
   of the condition's words (`M.R = emp` and the layout, `c_apart`), `L`'s resource shares no
   cell (`lR_unshared`), and a waiter of the condition is `away` from `M` or holds it at
   `holdsAway` with the epoch in `M`'s nest (the client's `hsleep`).
+- **The protocol** (`FRw.Fits.ofProduct`): both views, and the client's obligations at `U₀` for
+  the rest of `FRw.Fits`. A relabel of one lock around the other's code (the nap and unnap, the
+  `away` relabels) keeps the other lock (`FLock.Pair.U_setA`); the writer's take and the last
+  reader's give at the semaphore keep the outer mutex's place and held resource, which has no
+  bytes, so it stays kept (`FLock.Pair.U_relabel`).
 -/
 
 namespace Zig
@@ -352,6 +357,135 @@ theorem fitsS (W : FRw γ X Y M L C S) {okS : γ → Prop}
     holdLive,
   fun g hok => okS_s g hok.1,
   fun G _ m ⟨_, _, _, _, _, _, _, hu⟩ => win G _ m hu⟩
+
+/-! ## The protocol from the product -/
+
+/-- The semaphore's places alone, as the rwlock's primitive's place. -/
+theorem prim_sp (g : γ) (q : CPh × SPh) : W.prim.pl.set g (W.ph g, q) = S.place.set g q := by
+  show W.set (S.place.set g q) (W.ph g) = S.place.set g q
+  rw [← W.ph_sp g q, W.set_self]
+
+/-- What a thread holds of the outer mutex has no bytes (`M.R = emp`). -/
+theorem mheld_heap (W : FRw γ X Y M L C S) {G : ThreadId → γ} {m : Mem} {rL : Res}
+    (hf : M.Facts G m rL) (u : ThreadId) : (M.held (G u)).heap = FHeap.empty := by
+  cases e : (M.ph (G u)).held
+  · rw [hf.idle u e]
+  · have h := hf.res u e
+    rw [W.mR] at h
+    exact h.1
+
+/-- **The reader/writer protocol from the two-lock product** (module doc; ledger
+#two-lock-product, item (5)): the outer mutex's view (`fitsM`) and the semaphore's (`fitsS`), both
+at the client's base `U₀`, and the client's obligations at `U₀`. The relabels around the other
+lock's code (`mnap`, `munnap`, `maway`, `munaway` at the outer mutex; `laway`, `lunaway` at the
+semaphore's mutex) keep the other lock (`FLock.Pair.U_setA`); the writer's take and the last
+reader's give at the semaphore (`utake`, `upost`) keep the outer mutex's place and held resource,
+and it holds no bytes, so it stays kept (`FLock.Pair.U_relabel`); the client keeps `U₀` over each,
+and gives that only the writer at `ww` is at the semaphore's `wt` (`wtw`) and the writer's
+liveness (`wlive`). -/
+theorem Fits.ofProduct {okS : γ → Prop}
+    (hm : M.Fits W.prim P (FLock.Pair.U L U₀) (fun g => okM g ∧ L.ph g = .away))
+    (hs : S.Fits P (FLock.Pair.U M U₀) (fun g => okS g ∧ (M.ph g = .away ∨ M.ph g = .holdsAway)))
+    (okM_set : ∀ g a, okM (W.set g a) ↔ okM g) (okS_set : ∀ g a, okS (W.set g a) ↔ okS g)
+    (okS_m : ∀ g q h, okS (M.set g q h) ↔ okS g) (okS_part : ∀ g r, okS (M.setPart g r) ↔ okS g)
+    (okM_l : ∀ g q h, okM (L.set g q h) ↔ okM g)
+    (mnap : ∀ G rX m t g, W.ph g = .ww → L.ph g = .out → M.ph g = .holds →
+      U₀ (upd G t g) rX m → U₀ (upd G t (M.set g .holdsAway (M.held g))) rX m)
+    (munnap : ∀ G rX m t g, W.ph g = .wr → L.ph g = .out → M.ph g = .holdsAway →
+      U₀ (upd G t g) rX m → U₀ (upd G t (M.set g .holds (M.held g))) rX m)
+    (laway : ∀ G rX m t g, L.ph g = .out → (M.ph g = .out ∨ M.ph g = .holds) →
+      U₀ (upd G t g) rX m → U₀ (upd G t (L.set g .away rnil)) rX m)
+    (lunaway : ∀ G rX m t g, L.ph g = .away → (M.ph g = .out ∨ M.ph g = .holds) →
+      U₀ (upd G t g) rX m → U₀ (upd G t (L.set g .out rnil)) rX m)
+    (maway : ∀ G rX m t g, M.ph g = .out → L.ph g = .out →
+      U₀ (upd G t g) rX m → U₀ (upd G t (M.set g .away rnil)) rX m)
+    (munaway : ∀ G rX m t g, M.ph g = .away → L.ph g = .out →
+      U₀ (upd G t g) rX m → U₀ (upd G t (M.set g .out rnil)) rX m)
+    (utake : ∀ G rL rH rX m t g h₁ h₂ r sh sc, W.ph g = .ww → S.cnt (upd G t g) ≠ 0 →
+      S.Pool (S.xs (upd G t g)) r → FHeap.Disjoint (L.part g).heap r.heap →
+      U₀ (upd G t (S.set (L.set g .holds h₁) (.pst sh sc))) rX m →
+      M.Keeps (upd G t (S.set (L.set (L.setPart (W.set g .wr) (rsum (L.part g) r)) .holds h₂)
+        (.pst sh sc))) m rL rH rX →
+      L.Inv (upd G t (S.set (L.set (L.setPart (W.set g .wr) (rsum (L.part g) r)) .holds h₂)
+        (.pst sh sc))) (rsum (FLock.side M m rL rH) rX) m →
+      S.Inv (upd G t (S.set (L.set (L.setPart (W.set g .wr) (rsum (L.part g) r)) .holds h₂)
+        (.pst sh sc))) m →
+      C.Inv L (upd G t (S.set (L.set (L.setPart (W.set g .wr) (rsum (L.part g) r)) .holds h₂)
+        (.pst sh sc))) m →
+      U₀ (upd G t (S.set (L.set (L.setPart (W.set g .wr) (rsum (L.part g) r)) .holds h₂)
+        (.pst sh sc))) rX m)
+    (upost : ∀ G rL rH rX m t g r₀ rc h₁ h₂ sh sc, W.ph g = .rp rc →
+      U₀ (upd G t (S.set (L.set g .holds h₁) (.pst sh sc))) rX m →
+      M.Keeps (upd G t (S.set (L.set (W.set (L.setPart g r₀) .out) .holds h₂) (.pst sh sc))) m
+        rL rH rX →
+      L.Inv (upd G t (S.set (L.set (W.set (L.setPart g r₀) .out) .holds h₂) (.pst sh sc)))
+        (rsum (FLock.side M m rL rH) rX) m →
+      S.Inv (upd G t (S.set (L.set (W.set (L.setPart g r₀) .out) .holds h₂) (.pst sh sc))) m →
+      C.Inv L (upd G t (S.set (L.set (W.set (L.setPart g r₀) .out) .holds h₂) (.pst sh sc))) m →
+      U₀ (upd G t (S.set (L.set (W.set (L.setPart g r₀) .out) .holds h₂) (.pst sh sc))) rX m)
+    (wtw : ∀ G rX m u, U₀ G rX m → S.ph (G u) = .wt → W.ph (G u) = .ww)
+    (wlive : ∀ t G₁ m₁, W.ph (G₁ t) = .ww → (∃ i jr e, C.ph (G₁ t) = .reg i jr false e) →
+      L.ph (G₁ t) = .away → P.inv G₁ m₁ → FCond.sOf (C.lastS m₁) = 0 →
+      (∀ v, (C.ph (G₁ v)).sig = false) → S.cnt G₁ = 0 → P.Live t G₁ m₁) :
+    W.Fits P (FLock.Pair.U L U₀) (FLock.Pair.U M U₀) okM okS := by
+  -- the outer mutex's coordinates through the semaphore's, its mutex's, the part's and the
+  -- rwlock's (`hm.lph`/`lheld`, `FLock.Pair`)
+  have pS : ∀ g s, M.ph (S.set g s) = M.ph g := fun g s => by
+    rw [← S.place_s, ← prim_sp (W := W), hm.lph]
+  have hS : ∀ g s, M.held (S.set g s) = M.held g := fun g s => by
+    rw [← S.place_s, ← prim_sp (W := W), hm.lheld]
+  have pP : ∀ g r, M.ph (L.setPart g r) = M.ph g := fun g r => by
+    rw [← W.pair.setPart, M.ph_setPart]
+  have hP : ∀ g r, M.held (L.setPart g r) = M.held g := fun g r => by
+    rw [← W.pair.setPart, M.held_setPart]
+  have pW : ∀ g a, M.ph (W.set g a) = M.ph g := fun g a => by rw [← prim_set, hm.lph]
+  have hW : ∀ g a, M.held (W.set g a) = M.held g := fun g a => by rw [← prim_set, hm.lheld]
+  have hR : ∀ G G' : ThreadId → γ, ∀ r, M.R G r → M.R G' r := fun G G' r h => by
+    rw [W.mR] at h ⊢; exact h
+  -- `t`'s new part is apart from what it holds of the outer mutex, which has no bytes
+  have hpd : ∀ (G : ThreadId → γ) t g g' (m : Mem) rL, M.Facts (upd G t g) m rL →
+      FHeap.Disjoint (M.part g').heap (M.held g).heap := fun G t g g' m rL hf => by
+    have h := mheld_heap W hf t
+    rw [upd_self] at h
+    rw [h]; exact FHeap.disjoint_empty _
+  exact {
+    m := hm
+    s := hs
+    okM_set := okM_set
+    okS_set := okS_set
+    okS_m := okS_m
+    okS_part := okS_part
+    okM_l := okM_l
+    mnap := fun G rX m t g hw hl hg hU _ =>
+      W.pair.U_setA hU fun rX₀ hu => mnap G rX₀ m t g hw hl hg hu
+    munnap := fun G rX m t g hw hl hg hU _ =>
+      W.pair.U_setA hU fun rX₀ hu => munnap G rX₀ m t g hw hl hg hu
+    laway := fun G rX m t g hl hg hU _ =>
+      W.pair.symm.U_setA hU fun rX₀ hu => laway G rX₀ m t g hl hg hu
+    lunaway := fun G rX m t g hl hg hU _ =>
+      W.pair.symm.U_setA hU fun rX₀ hu => lunaway G rX₀ m t g hl hg hu
+    maway := fun G rX m t g hg hl hU _ =>
+      W.pair.U_setA hU fun rX₀ hu => maway G rX₀ m t g hg hl hu
+    munaway := fun G rX m t g hg hl hU _ =>
+      W.pair.U_setA hU fun rX₀ hu => munaway G rX₀ m t g hg hl hu
+    utake := fun G rX m t g h₁ h₂ r sh sc hw hc hp hd hU hL hS' hC =>
+      FLock.Pair.U_relabel hU (by simp only [pS, pP, pW, W.pair.ph_ba])
+        (by simp only [hS, hP, hW, W.pair.held_ba]) (hR _ _) (hpd G t _ _ m)
+        fun sB rL rH rX₀ he hsB hk hu => by
+          subst he
+          exact utake G rL rH rX₀ m t g h₁ h₂ r sh sc hw hc hp hd hu hk
+            (FLock.Pair.inv_side hL hsB) hS' hC
+    upost := fun G rX m t g r₀ rc h₁ h₂ sh sc hw hU hL hS' hC =>
+      FLock.Pair.U_relabel hU (by simp only [pS, pP, pW, W.pair.ph_ba])
+        (by simp only [hS, hP, hW, W.pair.held_ba]) (hR _ _) (hpd G t _ _ m)
+        fun sB rL rH rX₀ he hsB hk hu => by
+          subst he
+          exact upost G rL rH rX₀ m t g r₀ rc h₁ h₂ sh sc hw hu hk
+            (FLock.Pair.inv_side hL hsB) hS' hC
+    wtw := fun G m u hi hst => by
+      obtain ⟨_, -, _, _, _, rX₀, -, -, -, hu⟩ := (hm.inv G m).mp hi
+      exact wtw G rX₀ m u hu hst
+    wlive := wlive }
 
 end FRw
 
