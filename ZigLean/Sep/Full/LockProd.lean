@@ -911,10 +911,10 @@ theorem U_wordStep {U : (ThreadId → γ) → Res → Mem → Prop} {W : Zig.Loc
 /-- **A step in the frame of `A`'s word and a rest that stores `B`'s side keeps what the product
 keeps of `B`** (`Keeps.stepIn` at the frame of `Inv.wp_liftMem` and `FSem.Move.hold`: `A`'s word
 and rest, read at their partial shares): the same rest stores `B`'s side at the new memory. -/
-theorem Keeps.stepAt {sB rL rH rX rX' : Res} {G' : ThreadId → γ} {m' : Mem}
+theorem Keeps.stepAt {sB rL rH rX rX' : Res} {hO : Heap} {G' : ThreadId → γ} {m' : Mem}
     (hk : B.Keeps G m rL rH rX) (hsB : Res.Sim sB (side B m rL rH))
     (hs : FStepIn (rsum (A.wordR m) (rsum sB rX)).owned m m'
-      (rsum (A.wordR m) (rsum sB rX)).shared)
+      ((rsum (A.wordR m) (rsum sB rX)).shared.inter hO))
     (hcells : ∀ l, B.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm)
     (hG : ∀ u, B.ph (G' u) = B.ph (G u) ∧ B.held (G' u) = B.held (G u))
     (hRk : ∀ r, B.R G r → B.R G' r)
@@ -927,8 +927,8 @@ theorem Keeps.stepAt {sB rL rH rX rX' : Res} {G' : ThreadId → γ} {m' : Mem}
     h (hsB.excl_none.mp e)
   obtain ⟨hsim, hk'⟩ := Keeps.stepIn hk hs
     (fun l hl => (Res.owned_sep rfl rfl).mpr (.inr ((Res.owned_sep rfl rfl).mpr (.inl (hsO l hl)))))
-    (fun l hl => Res.excl_shared_disj
-      (Res.excl_sep rfl rfl (.inr (Res.excl_sep rfl rfl (.inl (hsX l hl))))))
+    (fun l hl => Heap.inter_none (Res.excl_shared_disj
+      (Res.excl_sep rfl rfl (.inr (Res.excl_sep rfl rfl (.inl (hsX l hl)))))))
     hcells hG hRk hpd hxd hxo
   exact ⟨hsB.trans ⟨hsim.symm, rfl, rfl⟩, hk'⟩
 
@@ -961,10 +961,10 @@ same rest stores `B`'s side at the new memory (`Res.Sim`), and `B` is kept at th
 resource and holders' resources, beside the protocol's rest `rX'` after the step (`hxd`, `hxo`;
 `rX` itself for a step that keeps it, `U_partStep`). The thread's new ghost value `g` keeps its
 place and its held resource at `B`, and `B`'s resource. -/
-theorem Keeps.partStep {sB rL rH rX rX' : Res} {t : ThreadId} {g : γ} {m' : Mem}
+theorem Keeps.partStep {sB rL rH rX rX' : Res} {hO : Heap} {t : ThreadId} {g : γ} {m' : Mem}
     (hp : A.Pair B) (hk : B.Keeps G m rL rH rX) (hsB : Res.Sim sB (side B m rL rH))
     (hs : FStepIn (rsum (A.wordR m) (rsum sB rX)).owned m m'
-      (rsum (A.wordR m) (rsum sB rX)).shared)
+      ((rsum (A.wordR m) (rsum sB rX)).shared.inter hO))
     (hi' : A.Inv (upd G t g) (rsum sB rX') m')
     (hph : B.ph g = B.ph (G t)) (hheld : B.held g = B.held (G t))
     (hR : ∀ r, B.R G r → B.R (upd G t g) r)
@@ -1007,8 +1007,8 @@ theorem Keeps.partStep {sB rL rH rX rX' : Res} {t : ThreadId} {g : γ} {m' : Mem
 continuation): the same rest stores `B`'s side at the new memory, when the protocol's own `U` is
 kept. -/
 theorem U_partStep (hp : A.Pair B) {U : (ThreadId → γ) → Res → Mem → Prop} {rXA : Res}
-    {t : ThreadId} {g : γ} {m' : Mem} (hU : Pair.U B U G rXA m)
-    (hs : FStepIn (rsum (A.wordR m) rXA).owned m m' (rsum (A.wordR m) rXA).shared)
+    {hO : Heap} {t : ThreadId} {g : γ} {m' : Mem} (hU : Pair.U B U G rXA m)
+    (hs : FStepIn (rsum (A.wordR m) rXA).owned m m' ((rsum (A.wordR m) rXA).shared.inter hO))
     (hi' : A.Inv (upd G t g) rXA m')
     (hph : B.ph g = B.ph (G t)) (hheld : B.held g = B.held (G t))
     (hR : ∀ r, B.R G r → B.R (upd G t g) r)
@@ -1027,7 +1027,8 @@ theorem U_partTick (hp : A.Pair B) {U : (ThreadId → γ) → Res → Mem → Pr
     (hcl : ∀ rX, U G rX m → U G' rX m') : Pair.U B U G' rXA' m' := by
   obtain ⟨-, -, -, r, -, rfl, rfl, rfl, hi'⟩ := htick
   have hpart : A.setPart (G t) r = B.setPart (G t) r := hp.setPart _ _
-  exact U_partStep hp hU (FStepIn.ticked m _).reads hi' (by rw [hpart, B.ph_setPart])
+  exact U_partStep (hO := Heap.empty) hp hU (FStepIn.ticked m _).reads hi'
+    (by rw [hpart, B.ph_setPart])
     (by rw [hpart, B.held_setPart]) (fun r' h => by rw [hpart]; exact (B.R_setPart G t r r').mpr h)
     fun _ _ _ rX _ _ _ hu => hcl rX hu
 

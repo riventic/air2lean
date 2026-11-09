@@ -809,17 +809,43 @@ concurrent readers each own their half share (`readers_ownsRes`), which `Mem.Own
 resource: `Res.owned_eq_erase`); `.ownsR` gives read ownership of every byte, and `.cells` gives
 ownership of the cells. The layer moves to it in one step:
 - `FTTriple` takes and returns `m.OwnsRes m.current r`; its frame relation is
-  `FStepIn rF.owned m m' rF.shared`.
+  `FStepIn rF.owned m m' (rF.shared.inter r.shared)`: the step reads only frame shares the
+  stepping resource `r` shares too (below, maintainer decision 2026-11-09). `ThreadLocal`,
+  `CTriple.Run` (which carries the segment's start part) and every rule that composes steps state
+  the same relation; a later step of the same thread reads only shares of its part then, which next
+  to the same frame are shares of the start part (`Holds.owned_sub'`, `FStepIn.transPart`).
 - `FStepIn hF m m' hR` gets a read heap `hR`: a new access of the thread touches no byte of the
-  frame `hF` except a *read* of the frame's partial shares `hR` (`FootprintEntry.ReadsIn`). Next
-  to a byte the resource holds, the frame holds at most a partial share (`Holds.frame_shared`), so
-  a load of the resource's bytes reads only `hR`.
+  frame `hF` except a *read* of the bytes `hR` (`FootprintEntry.ReadsIn`). Next to a byte the
+  resource holds, the frame holds at most a partial share (`Holds.frame_shared`), so a load of the
+  resource's bytes reads only frame shares the resource shares too.
 - The lock's and the sync primitives' rules hand this frame on to the protocol's rest `U`, never
   only its cells (`.heap.erase`, which drops another lock's share bytes): `Inv.wp_liftMem`'s
   continuation, `Fits.wp_hold`/`wp_holdParts`'s `hU`, `wp_liftPartW`'s continuation, the own-part
-  step of `FPrim.ofWords` (`Fits.wOwn`) and `FSem.Move.hold`. A two-lock product's `U` keeps the
-  other lock over such a step (`FLock.Pair.U_partStep`); a client that needs only the cells takes
-  them with `FStepIn.cells`.
+  step of `FPrim.ofWords` (`Fits.wOwn`) and `FSem.Move.hold`, each with the read set
+  `rest.shared.inter (rsum (part g) (held g)).shared` of the stepping thread. A two-lock product's
+  `U` keeps the other lock over such a step (`FLock.Pair.U_partStep`, over any read set); a client
+  that needs only the cells takes them with `FStepIn.cells`.
+- **Frame reads only at the stepping resource's shares** (maintainer decision 2026-11-09, option
+  (A), "the most long-term clean version"; #743, ledger `two-lock-product`). Before,
+  the frame admitted a read of *any* partial share of the rest (`hR := rF.shared`, since #735
+  forwarded from `WP.liftMem_fownedR` through `Inv.wp_liftMem`, `FSem.Move.hold`,
+  `FPrim.ofWords`' own-part case and the `wp_liftPart` family), although a real load needs a
+  positive fraction of every byte it reads (`Mem.BytesRead`). Counterexample (the RwLock product's
+  sixth obstruction): a reader `u` at `rd (1/2) H` with `shareRes H (1/2)` in the common rest; the
+  writer `t` at `ww`, holding `M` at `holdsAway` and `L` in the semaphore's wait; a staying
+  `Move.hold` whose step reads a byte of `H` is admitted, records an entry at `t`'s bumped clock
+  (`Mem.recordAt`) after the word's newest release and not below `u`'s clock, and `t` is no
+  reader, so `FRw.Owns` fails after it and no client rest `U₀` meets `fitsM`'s `hsub`. Now the
+  frame admits a read only of bytes the stepping resource itself shares
+  (`hR := frame.shared ∩ own.shared`, `Heap.inter`), from `FTTriple` and `WP.liftMem_fownedR`
+  through `Inv.wp_liftMem`, `Move.hold`, `ofWords` and the `wp_liftPart` family; a base invariant
+  "only readers hold shares of `H`" then keeps `FRw.Owns`. Every rule and client discharges it
+  from facts it already has: a load of the resource's bytes reads frame bytes only where the
+  resource holds a partial share (`Holds.frame_shared` both ways). Rejected: (B) `FRw.Owns`
+  orders only writes of shared bytes (as `LockWord.OwnsRes`): the writer's take makes the share
+  exclusive, so every earlier read must be ordered (`ShareRaceCX`); (C) narrowing only
+  `Move.hold`/`ofWords`: client part steps have the same problem, and those rules get their frame
+  from `Inv.wp_liftMem` anyway.
 - `FOwned.owns` is `∀ u < size, m.OwnsRes u (own u)`, and the free lock's resource is
   `LockWord.OwnsRes` (`LockWord.Owns … r.excl` and the write-only `LockWord.Owns … r.shared true`).
 - **Thread share load** (`ThreadLocal.loadOwned`, the locality provider `ThreadLocal.sload`): a

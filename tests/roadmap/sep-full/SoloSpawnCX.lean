@@ -37,7 +37,7 @@ theorem no_triple {Tgt : Type} (op : SyncOp Tgt) (hop : SyncOp.Solo op = false) 
   intro h
   obtain ⟨m, r, rF, hh, hp, hs, -⟩ := hP
   have := h 1 m r rF hh hp hs.fconc (.of_owns (hs.1.single.owns _))
-  change CTriple.Run Q m rF (.sync op m fun r m' => .leaf (some (.ok (r, m')))) at this
+  change CTriple.Run Q m r rF (.sync op m fun r m' => .leaf (some (.ok (r, m')))) at this
   exact absurd (CTriple.Run.sync_iff.mp this).1 (by rw [hop]; decide)
 
 /-- The memory at program start with no globals holds `emp`. -/

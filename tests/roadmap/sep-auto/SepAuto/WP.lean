@@ -137,7 +137,8 @@ theorem call_contract {Tgt γ : Type} (P : Proto Tgt γ) (t : ThreadId)
     (hloc : ∀ G m m' rO rR r', P.inv G m →
       sepN m.threads.size (partsBut (fun u => res (G u)) t) rR →
       FOwned (upd (fun u => res (G u)) t r') rO m' →
-      FStepIn (rsum rR rO).owned { m with current := t } m' (rsum rR rO).shared →
+      FStepIn (rsum rR rO).owned { m with current := t } m'
+        ((rsum rR rO).shared.inter (res (G t)).shared) →
       P.inv (upd G t (set (G t) r')) m')
     (q : Ptr) (f : ConcM Tgt Unit)
     (hf : CTriple (up (pts q 4 (0 : BitVec 32))) f (fun _ => up (pts q 4 (1 : BitVec 32))))

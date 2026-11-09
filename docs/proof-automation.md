@@ -586,7 +586,9 @@ backend):
   branches) is proved by one side, else by the solver. *Side goals* are solved with their unknowns (a
   ghost value at a stop, a segment's precondition): a goal with unknowns takes a hypothesis that
   unifies with it, with backtracking over the choices until all side goals are proved, or waits
-  until the others fix its unknowns; a determined goal goes to assumption, arithmetic and the
+  until the others fix its unknowns (only while another goal has one of them: an unknown that
+  no other goal has, the read set `hO` of a client's `U_hold` step, is solved at once, as no wait
+  can fix it); a determined goal goes to assumption, arithmetic and the
   providers after rewriting by the caller's simp terms, `upd_self`/`upd_upd`, the Boolean tests
   as propositions and the memory's equations of the context (`m'.threads = m.threads`); a user
   definition is unfolded. An automatic argument (`(h : T := by tac)`) runs its tactic. A segment's

@@ -1,4 +1,5 @@
 import ZigLean.Sep.Full.Extent
+import ZigLean.Conc.Base.Heap
 import ZigLean.Conc.Clock
 
 /-!
@@ -14,11 +15,15 @@ It replaces the legacy `TTriple` (`ZigLean/Conc/Own.lean`).
   its clock, `Mem.Owns`) and reads its partial shares (`Res.shared`: every recorded write before its
   clock, `Mem.OwnsR`), so concurrent readers each own their share. `Mem.OwnsRes.of_owns` gives it
   from ownership of all the bytes (`Res.owned`), as for any share-free resource.
-- **Race freedom** (`FStepIn rF.owned m m' rF.shared`): the frame, the other threads and the
-  atomic locations over the frame stay; a new access touches no frame byte except a read of the
-  frame's partial shares. Next to a byte the resource holds, the frame holds at most a partial share
-  (`Holds.frame_shared`), so a load of the resource's bytes is local (`ThreadLocal.loadOwned`;
-  the locality provider `ThreadLocal.sload` in `Share.lean`).
+- **Race freedom** (`FStepIn rF.owned m m' (rF.shared.inter r.shared)`): the frame, the other
+  threads and the atomic locations over the frame stay; a new access touches no frame byte except
+  a read of a partial share of the frame that the resource `r` shares too (`Heap.inter`). A real
+  load needs a positive fraction of every byte it reads (`Mem.BytesRead`), and next to a byte the
+  resource holds the frame holds at most a partial share (`Holds.frame_shared`), so a load of the
+  resource's bytes is local (`ThreadLocal.loadOwned`; the locality provider `ThreadLocal.sload` in
+  `Share.lean`). A frame that admitted a read of any of its shares would let a thread that holds no
+  share of a byte record a read of it, unordered with the writer who later takes the byte whole
+  (maintainer decision 2026-11-09, option (A); `docs/sep-full-state.md` §Read shares).
 - Which bytes a resource holds is fixed by the memory and the frame (`Holds.owned_sub`), so an
   update in a thread gains no byte. Gathering partial shares of different owners into a whole share
   fails closed (engine ledger `share-gather`).
@@ -238,27 +243,73 @@ theorem _root_.Zig.Mem.OwnsRes.fstepIn {u : ThreadId} {p rF : Res}
 
 end OwnsRes
 
+/-- **The frame reads of a step that reads only shares of `hO`** are among the frame's shares. -/
+theorem _root_.Zig.FStepIn.interL {hF hR hO : Heap} {m m' : Mem}
+    (hs : FStepIn hF m m' (hR.inter hO)) : FStepIn hF m m' hR :=
+  hs.weakenR (fun _ h => h) fun _ _ h => (Heap.inter_ne.mp h).1
+
+/-- A step whose frame reads are shares of `hO` reads only shares of `hO'`, if every frame byte
+of a frame share that `hO` has, `hO'` has. -/
+theorem _root_.Zig.FStepIn.interR {hF hR hO hO' : Heap} {m m' : Mem}
+    (hs : FStepIn hF m m' (hR.inter hO))
+    (h : ∀ l, hF l ≠ none → hR l ≠ none → hO l ≠ none → hO' l ≠ none) :
+    FStepIn hF m m' (hR.inter hO') :=
+  hs.weakenR (fun _ h => h) fun l hl hr =>
+    let ⟨a, b⟩ := Heap.inter_ne.mp hr; Heap.inter_ne.mpr ⟨a, h l hl a b⟩
+
+/-- **A step in the frame `rF` of `r` that reads only shares of `hO`** reads only `r`'s shares, if
+every byte of `rF` that `hO` has, `r` holds (next to a frame byte, only a partial share:
+`Holds.frame_shared`). -/
+theorem _root_.Zig.FStepIn.toShared {hO : Heap} {m m₁ m₂ : Mem} {r rF : Res} (hh : Holds m r rF)
+    (hs : FStepIn rF.owned m₁ m₂ (rF.shared.inter hO))
+    (ho : ∀ l, rF.owned l ≠ none → hO l ≠ none → r.owned l ≠ none) :
+    FStepIn rF.owned m₁ m₂ (rF.shared.inter r.shared) :=
+  hs.interR fun l hl _ hb => hh.swap.frame_shared hl (ho l hl hb)
+
+/-- Two steps next to the frame `rF`, of the part `r₀` and then of the part `r₁` it became: their
+frame reads are shares `r₀` shares (`Holds.owned_sub'`: next to the same frame `r₁` holds no frame
+byte `r₀` lacked). -/
+theorem _root_.Zig.FStepIn.transPart {m₀ m₁ m₂ : Mem} {r₀ r₁ rF : Res} (hh₀ : Holds m₀ r₀ rF)
+    (hh₁ : Holds m₁ r₁ rF) (hs : FStepIn rF.owned m₀ m₁ (rF.shared.inter r₀.shared))
+    (hs' : FStepIn rF.owned m₁ m₂ (rF.shared.inter r₁.shared)) :
+    FStepIn rF.owned m₀ m₂ (rF.shared.inter r₀.shared) :=
+  hs.trans (hs'.toShared hh₀ fun _ hl hb =>
+    hh₀.owned_sub' hh₁ (hh₀.swap.live_of_owned hl).1 (Res.owned_of_shared hb))
+
 /-- **The frame's bytes and read shares** of a resource's step: a step in the frame `⟨rR ⋆ rF⟩`
 is a step in `rF` (the shared bytes of the sum that `rF` holds are `rF`'s shared bytes). -/
-theorem _root_.Zig.FStepIn.frameRight {m m' : Mem} {rR rF : Res}
+theorem _root_.Zig.FStepIn.frameRight {m m' : Mem} {rR rF : Res} {hO : Heap}
     (hs : FStepIn (Res.owned ⟨rR.heap ∪ rF.heap, rR.know.union rF.know, rR.gh.add rF.gh⟩) m m'
-      (Res.shared ⟨rR.heap ∪ rF.heap, rR.know.union rF.know, rR.gh.add rF.gh⟩)) :
-    FStepIn rF.owned m m' rF.shared :=
+      ((Res.shared ⟨rR.heap ∪ rF.heap, rR.know.union rF.know, rR.gh.add rF.gh⟩).inter hO)) :
+    FStepIn rF.owned m m' (rF.shared.inter hO) :=
   hs.weakenR (fun _ hl => (Res.owned_sep rfl rfl).mpr (.inr hl))
-    fun _ hl hs => Res.shared_sep' rfl rfl hs hl
+    fun _ hl hs => let ⟨a, b⟩ := Heap.inter_ne.mp hs
+      Heap.inter_ne.mpr ⟨Res.shared_sep' rfl rfl a hl, b⟩
+
+/-- **The frame rule's step**: a step of the part `rP` in the frame `⟨rR ⋆ rF⟩`, reading only
+shares of `rP`, is a step of `rP ⋆ rR` in `rF` that reads only its shares (`frameRight`,
+`toShared`). -/
+theorem _root_.Zig.FStepIn.framePart {m m₁ m₂ : Mem} {rP rR rF : Res}
+    (hh : Holds m ⟨rP.heap ∪ rR.heap, rP.know.union rR.know, rP.gh.add rR.gh⟩ rF)
+    (hs : FStepIn (Res.owned ⟨rR.heap ∪ rF.heap, rR.know.union rF.know, rR.gh.add rF.gh⟩) m₁ m₂
+      ((Res.shared ⟨rR.heap ∪ rF.heap, rR.know.union rF.know, rR.gh.add rF.gh⟩).inter rP.shared)) :
+    FStepIn rF.owned m₁ m₂
+      (rF.shared.inter (Res.shared ⟨rP.heap ∪ rR.heap, rP.know.union rR.know, rP.gh.add rR.gh⟩)) :=
+  hs.frameRight.toShared hh fun _ _ hl => (Res.owned_sep rfl rfl).mpr (.inl (Res.owned_of_shared hl))
 
 /-! ## Thread triples -/
 
 /-- `FTriple` for a step of one thread inside a concurrent run (module doc). The thread owns the
 resource (`Mem.OwnsRes`: every access to its exclusive bytes, every write to its shared bytes
-before its clock), and the step may read the frame's partial read shares (`FStepIn`'s `hR`). -/
+before its clock), and the step may read the frame's partial read shares that the resource shares
+too (`FStepIn`'s `hR`, `rF.shared.inter r.shared`; module doc). -/
 def FTTriple {α : Type} (P : FAssn) (c : MemM α) (Q : α → FAssn) : Prop :=
   ∀ m r rF, Holds m r rF → P r → m.FConc → m.OwnsRes m.current r →
     match (c.run m).run with
     | none => True
     | some (.error e) => e = .stackOverflow
     | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
-        m'.OwnsRes m'.current r' ∧ FStepIn rF.owned m m' rF.shared
+        m'.OwnsRes m'.current r' ∧ FStepIn rF.owned m m' (rF.shared.inter r.shared)
 
 namespace FTTriple
 
@@ -267,7 +318,7 @@ variable {α β : Type} {P P' R : FAssn} {Q Q' : α → FAssn} {c : MemM α}
 theorem of_run
     (h : ∀ m r rF, Holds m r rF → P r → m.FConc → m.OwnsRes m.current r →
       ∃ v m' r', c.run m = pure (v, m') ∧ Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
-        m'.OwnsRes m'.current r' ∧ FStepIn rF.owned m m' rF.shared) :
+        m'.OwnsRes m'.current r' ∧ FStepIn rF.owned m m' (rF.shared.inter r.shared)) :
     FTTriple P c Q := by
   intro m r rF hh hp hc ho
   obtain ⟨v, m', r', hr, h'⟩ := h m r rF hh hp hc ho
@@ -312,13 +363,13 @@ theorem of_fix_on (Φ : Mem → Prop) (hP : ∀ m r rF, Holds m r rF → P r →
       | none => True
       | some (.error e) => e = .stackOverflow
       | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
-          m'.OwnsRes m'.current r' ∧ FStepIn rF.owned m m' rF.shared) :
+          m'.OwnsRes m'.current r' ∧ FStepIn rF.owned m m' (rF.shared.inter r.shared)) :
     ∀ m r rF, Φ m → Holds m r rF → P r → m.FConc → m.OwnsRes m.current r →
       match (c.run m).run with
       | none => True
       | some (.error e) => e = .stackOverflow
       | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
-          m'.OwnsRes m'.current r' ∧ FStepIn rF.owned m m' rF.shared := by
+          m'.OwnsRes m'.current r' ∧ FStepIn rF.owned m m' (rF.shared.inter r.shared) := by
   intro m r rF hΦ hh hp hc ho
   have := h m (r.fix m) (rF.fix m) hΦ hh.fix hh.fix_exact hh.fix_exactF (hP m r rF hh hp) hc
     (ho.sub (fun _ hl => Res.excl_fix.mp hl) fun _ hl => Res.owned_fix.mp (Res.owned_of_shared hl))
@@ -327,7 +378,9 @@ theorem of_fix_on (Φ : Mem → Prop) (hP : ∀ m r rF, Holds m r rF → P r →
   · exact this
   · obtain ⟨r', hh', hq, hc', ho', hst⟩ := this
     exact ⟨r', hh'.congrF hh.fix_sim.symm rfl rfl, hq, hc', ho',
-      hst.weakenR (fun _ hl => Res.owned_fix.mpr hl) fun _ _ hl => Res.shared_fix.mp hl⟩
+      hst.weakenR (fun _ hl => Res.owned_fix.mpr hl) fun _ _ hl =>
+        let ⟨a, b⟩ := Heap.inter_ne.mp hl
+        Heap.inter_ne.mpr ⟨Res.shared_fix.mp a, Res.shared_fix.mp b⟩⟩
 
 /-- **Thread rules from exact cells** (`FTriple.of_fix`): it is enough to prove a thread triple
 for resources whose cells are the memory's exact cells, if the precondition survives reading
@@ -339,7 +392,7 @@ theorem of_fix (hP : ∀ m r rF, Holds m r rF → P r → P (r.fix m))
       | none => True
       | some (.error e) => e = .stackOverflow
       | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
-          m'.OwnsRes m'.current r' ∧ FStepIn rF.owned m m' rF.shared) :
+          m'.OwnsRes m'.current r' ∧ FStepIn rF.owned m m' (rF.shared.inter r.shared)) :
     FTTriple P c Q :=
   fun m r rF hh hp hc ho =>
     of_fix_on (fun _ => True) hP (fun m r rF _ => h m r rF) m r rF trivial hh hp hc ho
@@ -358,7 +411,7 @@ theorem frame (ht : FTTriple P c Q) : FTTriple (P ⋆ R) c (fun v => Q v ⋆ R) 
     have hQR := (FHeap.disjoint_union_right.mp hh'.disj).1
     have hj := Holds.join hQR hRF hh'
     exact ⟨_, hj, ⟨r', rR, hQR, rfl, hq, hr⟩, hc', Mem.OwnsRes.frame hh hj ho ho' hst,
-      hst.frameRight⟩
+      hst.framePart hh⟩
 
 theorem frameL (ht : FTTriple P c Q) : FTTriple (R ⋆ P) c (fun v => R ⋆ Q v) :=
   conseq (frame (R := R) ht) (fun _ h => sep_comm h) (fun _ _ h => sep_comm h)
@@ -389,7 +442,7 @@ theorem bind {S : β → FAssn} {f : α → MemM β} (hc : FTTriple P c Q)
       · trivial
       · exact h2
       · obtain ⟨r'', a, b, d, e, hst'⟩ := h2
-        exact ⟨r'', a, b, d, e, hst.trans hst'⟩
+        exact ⟨r'', a, b, d, e, hst.transPart hh hh' hst'⟩
 
 theorem ex {γ : Type} {P : γ → FAssn} (h : ∀ x, FTTriple (P x) c Q) : FTTriple (FAssn.ex P) c Q :=
   fun m r rF hh ⟨x, hp⟩ hc ho => h x m r rF hh hp hc ho
@@ -403,7 +456,13 @@ theorem lift {φ : Prop} (h : φ → FTTriple P c Q) : FTTriple (⟪φ⟫ ⋆ P)
 theorem eupd (hu : EUpd P P') (ht : FTTriple P' c Q) : FTTriple P c Q := by
   intro m r rF hh hp hc ho
   obtain ⟨r', hh', hp'⟩ := hu m.noFp r rF hh.toNoFp hp hc.noFp
-  exact ht m r' rF hh'.ofNoFp hp' hc (ho.upd hh hh'.ofNoFp)
+  have := ht m r' rF hh'.ofNoFp hp' hc (ho.upd hh hh'.ofNoFp)
+  split at this
+  · trivial
+  · exact this
+  · obtain ⟨r'', a, b, d, e, hst⟩ := this
+    exact ⟨r'', a, b, d, e, hst.toShared hh fun _ _ hs =>
+      hh.owned_sub hh'.ofNoFp (Res.owned_of_shared hs)⟩
 
 /-- An update of the postcondition. -/
 theorem eupd_post (ht : FTTriple P c Q) (hu : ∀ v, EUpd (Q v) (Q' v)) : FTTriple P c Q' := by
@@ -435,7 +494,9 @@ theorem know_intro {b : BlockId} {A : Nat}
   have hres : (P ⋆ known b A) ⟨r.heap, r.know.union (Know.single (.addr b A)), r.gh⟩ :=
     ⟨r, ⟨FHeap.empty, Know.single (.addr b A), Ghost.unit⟩, FHeap.disjoint_empty _,
       by rw [FHeap.union_empty, Ghost.add_unit], hp, rfl, rfl, rfl⟩
-  exact ht m _ rF (hh.addKnow (Know.sub_single hkn)) hres hcm ho
+  -- the added knowledge changes no byte: the same shares (`Res.shared` reads heap and ghost)
+  exact ht m ⟨r.heap, r.know.union (Know.single (.addr b A)), r.gh⟩ rF
+    (hh.addKnow (Know.sub_single hkn)) hres hcm ho
 
 /-- Knowledge and ghost state (anything that owns no bytes and no stack token) can be forgotten
 (`FTriple.drop`). -/

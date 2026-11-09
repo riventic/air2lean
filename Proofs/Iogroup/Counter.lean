@@ -549,10 +549,11 @@ theorem shape_inc {t : ThreadId} {p₀ p₁ : Ph} (hinc : IncStep t p₀ p₁) {
 
 /-- The holder's step keeps `U` (the obligation of `FLock.Fits.wp_hold`): the same part, the
 shape at its new place `p₁`. -/
-theorem U_hold {G : ThreadId → Gh} {t : ThreadId} {rp rL r rX : Res} {p₀ p₁ : Ph} {m m' : Mem}
+theorem U_hold {G : ThreadId → Gh} {t : ThreadId} {rp rL r rX : Res} {hO : Heap} {p₀ p₁ : Ph}
+    {m m' : Mem}
     (hsh : Shape (upd (fun u => (G u).2) t p₁) m) (hu : U (upd G t (gHold rp p₀ rL)) rX m)
     (hc : m.current = t) (hjt : joinedB m t = false)
-    (hs : FStepIn (rsum (L.wordR m) rX).owned m m' (rsum (L.wordR m) rX).shared) :
+    (hs : FStepIn (rsum (L.wordR m) rX).owned m m' ((rsum (L.wordR m) rX).shared.inter hO)) :
     U (upd (upd G t (gHold rp p₀ rL)) t (gHold rp p₁ r)) rX m' :=
   U_step hu hc hjt hs.restX (by rw [upd_snd, upd_upd]; exact hsh)
 

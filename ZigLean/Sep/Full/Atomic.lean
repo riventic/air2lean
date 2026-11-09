@@ -810,7 +810,7 @@ theorem FTTriple.of_step_on {α : Type} {P : FAssn} {c : MemM α} {Q : α → FA
       | none => True
       | some (.error e) => e = .stackOverflow
       | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
-          m'.OwnsRes m'.current r' ∧ FStepIn rF.owned m m' rF.shared := by
+          m'.OwnsRes m'.current r' ∧ FStepIn rF.owned m m' (rF.shared.inter r.shared) := by
   refine FTTriple.of_fix_on Φ hP fun m r rF hΦ hh hxr hxF hp hc ho => ?_
   obtain ⟨hne, hok⟩ := h m r rF hΦ hh hxr hxF hp hc.1 ho hc.2.1 hc.2.2
   match e : (c.run m).run with
@@ -818,7 +818,7 @@ theorem FTTriple.of_step_on {α : Type} {P : FAssn} {c : MemM α} {Q : α → FA
   | some (.error er) => exact (hne er e).elim
   | some (.ok (v, m')) =>
     obtain ⟨r', hh', hq, hw', hl', hst, hnr⟩ := hok v m' e
-    exact ⟨r', hh', hq, ⟨hst.cur hc.1, hw', hl'⟩, owns_step hh ho hst.reads hnr.revivesOwned hh',
+    exact ⟨r', hh', hq, ⟨hst.cur hc.1, hw', hl'⟩, owns_step hh ho hst hnr.revivesOwned hh',
       hst.reads⟩
 
 /-- The run of a step of the current thread on an owned word, in a thread: from the analysis of

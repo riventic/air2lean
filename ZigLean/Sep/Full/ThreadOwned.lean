@@ -214,11 +214,11 @@ theorem _root_.Zig.FStepIn.unread {hF hR : Heap} {m m' : Mem} (hs : FStepIn hF m
   hs.weakenR (fun l hl => by unfold Heap.diff at hl; split at hl <;> simp_all)
     fun l hl hr => by unfold Heap.diff at hl; split at hl <;> simp_all
 
-/-- A step in a resource's bytes that may read its partial shares is a step in its cells, which
-are no share. -/
-theorem _root_.Zig.FStepIn.cells {r : Res} {m m' : Mem} (hs : FStepIn r.owned m m' r.shared) :
-    FStepIn r.heap.erase m m' :=
-  hs.unread.weaken fun l hl => by
+/-- A step in a resource's bytes that may read its partial shares (those `hO` has) is a step in
+its cells, which are no share. -/
+theorem _root_.Zig.FStepIn.cells {r : Res} {hO : Heap} {m m' : Mem}
+    (hs : FStepIn r.owned m m' (r.shared.inter hO)) : FStepIn r.heap.erase m m' :=
+  hs.interL.unread.weaken fun l hl => by
     have hh : r.heap l ≠ none := fun e => hl (by simp [FHeap.erase, e])
     unfold Heap.diff
     rw [if_pos (Res.excl_shared_disj (Res.excl_of_heap hh))]
@@ -226,15 +226,17 @@ theorem _root_.Zig.FStepIn.cells {r : Res} {m m' : Mem} (hs : FStepIn r.owned m 
 
 /-- **A step in a frame `a ⋆ b ⋆ c` is a step in `a ⋆ c`**: a byte that the whole frame holds as a
 partial share, and `a ⋆ c` holds, is a partial share of `a ⋆ c` (a whole share of `a ⋆ c` would
-be whole in the frame). -/
-theorem _root_.Zig.FStepIn.dropMid {a b c : Res} {m m' : Mem}
-    (hs : FStepIn (rsum a (rsum b c)).owned m m' (rsum a (rsum b c)).shared) :
-    FStepIn (rsum a c).owned m m' (rsum a c).shared :=
+be whole in the frame). The frame reads stay among the shares `hO` has. -/
+theorem _root_.Zig.FStepIn.dropMid {a b c : Res} {hO : Heap} {m m' : Mem}
+    (hs : FStepIn (rsum a (rsum b c)).owned m m' ((rsum a (rsum b c)).shared.inter hO)) :
+    FStepIn (rsum a c).owned m m' ((rsum a c).shared.inter hO) :=
   hs.weakenR (fun l hl => by
       rcases (Res.owned_sep rfl rfl).mp hl with h | h
       · exact (Res.owned_sep rfl rfl).mpr (.inl h)
       · exact (Res.owned_sep rfl rfl).mpr (.inr ((Res.owned_sep rfl rfl).mpr (.inr h))))
-    fun l hl hR => by
+    fun l hl hRO => by
+      obtain ⟨hR, hO⟩ := Heap.inter_ne.mp hRO
+      refine Heap.inter_ne.mpr ⟨?_, hO⟩
       obtain ⟨hn, hw, -⟩ := Res.shared_ne.mp hR
       simp only [FHeap.union_apply, Option.or_eq_none_iff] at hn
       have hn' : (rsum a c).heap l = none := by
@@ -836,7 +838,8 @@ theorem WP.liftMem_fownedS {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
     obtain ⟨r', hh', hq, hc', ho', hs⟩ := hx
     obtain ⟨hnc, hh'⟩ := hh'.dropCurF
     rw [Res.owned_addGh, Res.shared_addGh] at hs
-    exact ⟨by rw [hs.threads], h a m' r' _ hr (ho.step hc htl hR hRO hh' hc' ho' hs hnc) hq hs.unread⟩
+    exact ⟨by rw [hs.threads], h a m' r' _ hr (ho.step hc htl hR hRO hh' hc' ho' hs.interL hnc) hq
+      hs.unread⟩
   · obtain ⟨v, m', e⟩ := hr m (own t) _ hh hp hcs (hc ▸ ho.owns t htl)
     rw [e] at hn; simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at hn
 
@@ -853,7 +856,7 @@ theorem WP.liftMem_fownedCurR {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
     {Q : α → (ThreadId → γ) → Mem → Nat → Prop} (ht : FTTriple (Pa ⋆ cur t) x (fun a => Qa a ⋆ cur t))
     (ho : FOwned own rO m) (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
     (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' →
-      Qa a r' → FStepIn rO.owned m m' rO.shared → Q a G m' n)
+      Qa a r' → FStepIn rO.owned m m' (rO.shared.inter (own t).shared) → Q a G m' n)
     (hret : P.Partial ∨ FTTReturns (Pa ⋆ cur t) x := by
       first
         | exact .inl (.inl rfl)
@@ -884,9 +887,10 @@ theorem WP.liftMem_fownedCurR {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
       (rF := ⟨rR.heap ∪ rO.heap, rR.know.union rO.know, rR.gh.add rO.gh⟩) hsp
     have ho₂ : m'.OwnsRes m'.current r₁ := ho'.sepL rfl rfl
     exact ⟨by rw [hs.threads],
-      h a m' r₁ hr (ho.step hc htl hR hRO hh₂ hc' ho₂ hs hnc) hq₁
+      h a m' r₁ hr (ho.step hc htl hR hRO hh₂ hc' ho₂ hs.interL hnc) hq₁
         (hs.weakenR (fun _ hl => (Res.owned_sep rfl rfl).mpr (.inr hl))
-          fun _ hl hr => Res.shared_sep' rfl rfl hr hl)⟩
+          fun _ hl hr => let ⟨a, b⟩ := Heap.inter_ne.mp hr
+            Heap.inter_ne.mpr ⟨Res.shared_sep' rfl rfl a hl, by rwa [Res.shared_addGh] at b⟩)⟩
   · obtain ⟨v, m', e⟩ := hr m _ _ hh₁ hp₁ hcs (by rw [Mem.OwnsRes.addGh_iff, hc]; exact ho.owns t htl)
     rw [e] at hn; simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at hn
 

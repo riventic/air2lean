@@ -305,9 +305,10 @@ stores by `U_storeHeld`; `main` reads `v = 7` once the producer stored `ready` (
 
 /-- **The producer's stores of `v` and `ready`**, holding the mutex, keep `U` (the obligation of
 `FLock.Fits.wp_hold` from `x₀` to `x₁`). -/
-theorem U_storeHeld {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {rp rL r : Res} {x₀ x₁ : X}
+theorem U_storeHeld {G : ThreadId → Gh} {rX : Res} {hO : Heap} {m m' : Mem} {rp rL r : Res}
+    {x₀ x₁ : X}
     (hu : U Lo (upd G 1 (gH rp rL x₀)) rX m) (hiL : (L Lo).Inv (upd G 1 (gH rp rL x₀)) rX m)
-    (hs : FStepIn (rsum ((L Lo).wordR m) rX).owned m m' (rsum ((L Lo).wordR m) rX).shared)
+    (hs : FStepIn (rsum ((L Lo).wordR m) rX).owned m m' ((rsum ((L Lo).wordR m) rX).shared.inter hO))
     (hL : (L Lo).Inv (upd G 1 (gH rp r x₁)) rX m')
     (hp₀ : x₀ = { ph := .hl } ∨ x₀ = { ph := .v7 }) (hp₁ : x₁ = { ph := .v7 } ∨ x₁ = { ph := .rdy }) :
     U Lo (upd G 1 (gH rp r x₁)) rX m' :=

@@ -1175,15 +1175,17 @@ private theorem Inv.rebuildPartStep {G : ThreadId → γ} {rX rL r' : Res} {m m'
 /-- **A step of thread `t` on its own part** with a thread triple (`FTTriple`): after it, a new
 ghost value `g` for `t` with the same place, whose part and resource are the triple's post, gives
 the invariant; the step keeps the lock's word and the protocol's rest `rX`, and may only read
-the rest's partial read shares (`FStepIn` in its bytes, with its shares; `FStepIn.cells` for its
-cells alone). A `MemM` step does not stop, so the ghost values of the `WP` (`G₀`) are any. -/
+the rest's partial read shares that `t`'s part and held resource share too (`FStepIn` in its
+bytes, with those shares, `FTTriple`'s step relation; `FStepIn.cells` for its cells alone). A
+`MemM` step does not stop, so the ghost values of the `WP` (`G₀`) are any. -/
 theorem Inv.wp_liftMem {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : FAssn}
     {Qa : α → FAssn} {Q : α → (ThreadId → γ) → Mem → Nat → Prop} {G G₀ : ThreadId → γ}
     {rX : Res} {m : Mem} {n : Nat} {t : ThreadId}
     (hi : L.Inv G rX m) (hc : m.current = t) (ht : t < m.threads.size) (hjt : joinedB m t = false)
     (htt : FTTriple Pa x Qa) (hp : Pa (rsum (L.part (G t)) (L.held (G t))))
     (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' →
-      FStepIn (rsum (L.wordR m) rX).owned m m' (rsum (L.wordR m) rX).shared →
+      FStepIn (rsum (L.wordR m) rX).owned m m'
+        ((rsum (L.wordR m) rX).shared.inter (rsum (L.part (G t)) (L.held (G t))).shared) →
       m'.current = t →
       (∀ g, L.ph g = L.ph (G t) → rsum (L.part g) (L.held g) = r' →
         FHeap.Disjoint (L.part g).heap (L.held g).heap → ((L.ph g).held = false → L.held g = rnil) →
@@ -1202,9 +1204,10 @@ theorem Inv.wp_liftMem {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : FA
   obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
   refine WP.liftMem_fownedR htt ho hc ht (by rw [own_live hjt]; exact hp) ?_ hret
   intro a m' r' hr ho' hq hs
+  rw [own_live hjt] at hs
   exact h a m' r' hr hq hs.dropMid (hs.current.trans hc)
     (fun g hph hr' hpd hidle hRk hres =>
-      hi.rebuildPartStep hjt hLoff hLX hF hnF ho' hs hph hr' hpd hidle hRk hres)
+      hi.rebuildPartStep hjt hLoff hLX hF hnF ho' hs.interL hph hr' hpd hidle hRk hres)
 
 /-- A local step with `cur t` supplied only for the step. The actual-rest cur-aware rule
 returns its exact protected footprint; the SAME invariant reconstruction handles its post. -/
@@ -1215,7 +1218,9 @@ theorem Inv.wp_liftMemCur {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa :
     (htt : FTTriple (Pa ⋆ cur t) x (fun a => Qa a ⋆ cur t))
     (hp : Pa (rsum (L.part (G t)) (L.held (G t))))
     (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' →
-      FStepIn (rsum (L.wordR m) rX).owned m m' (rsum (L.wordR m) rX).shared → m'.current = t →
+      FStepIn (rsum (L.wordR m) rX).owned m m'
+        ((rsum (L.wordR m) rX).shared.inter (rsum (L.part (G t)) (L.held (G t))).shared) →
+      m'.current = t →
       (∀ g, L.ph g = L.ph (G t) → rsum (L.part g) (L.held g) = r' →
         FHeap.Disjoint (L.part g).heap (L.held g).heap → ((L.ph g).held = false → L.held g = rnil) →
         ((L.ph (G t)).held = false → ∀ r, L.R G r → L.R (upd G t g) r) →
@@ -1233,9 +1238,10 @@ theorem Inv.wp_liftMemCur {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa :
   obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
   refine WP.liftMem_fownedCurR htt ho hc ht (by rw [own_live hjt]; exact hp) ?_ hret
   intro a m' r' hr ho' hq hs
+  rw [own_live hjt] at hs
   exact h a m' r' hr hq hs.dropMid (hs.current.trans hc)
     (fun g hph hr' hpd hidle hRk hres =>
-      hi.rebuildPartStep hjt hLoff hLX hF hnF ho' hs hph hr' hpd hidle hRk hres)
+      hi.rebuildPartStep hjt hLoff hLX hF hnF ho' hs.interL hph hr' hpd hidle hRk hres)
 
 /-- `Inv.wp_liftMem` for a step of generated code (`liftM`). -/
 theorem Inv.wp_liftM {Tgt σ α : Type} {P : Proto Tgt γ} {x : MemM α} {s : σ} {Pa : FAssn}
@@ -1244,7 +1250,8 @@ theorem Inv.wp_liftM {Tgt σ α : Type} {P : Proto Tgt γ} {x : MemM α} {s : σ
     (hi : L.Inv G rX m) (hc : m.current = t) (ht : t < m.threads.size) (hjt : joinedB m t = false)
     (htt : FTTriple Pa x Qa) (hp : Pa (rsum (L.part (G t)) (L.held (G t))))
     (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' →
-      FStepIn (rsum (L.wordR m) rX).owned m m' (rsum (L.wordR m) rX).shared →
+      FStepIn (rsum (L.wordR m) rX).owned m m'
+        ((rsum (L.wordR m) rX).shared.inter (rsum (L.part (G t)) (L.held (G t))).shared) →
       m'.current = t →
       (∀ g, L.ph g = L.ph (G t) → rsum (L.part g) (L.held g) = r' →
         FHeap.Disjoint (L.part g).heap (L.held g).heap → ((L.ph g).held = false → L.held g = rnil) →
@@ -1302,7 +1309,8 @@ theorem Inv.wp_liftPartLive {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa
     (hi : L.Inv (upd G t g) rX m) (hc : m.current = t) (hgo : L.ph g ≠ .gone)
     (htt : FTTriple Pa x Qa) (hp : Pa (L.part g))
     (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' →
-      FStepIn (rsum (L.wordR m) rX).owned m m' (rsum (L.wordR m) rX).shared →
+      FStepIn (rsum (L.wordR m) rX).owned m m'
+        ((rsum (L.wordR m) rX).shared.inter (rsum (L.part g) (L.held g)).shared) →
       m'.current = t → L.Inv (upd G t (L.setPart g r')) rX m' → Q a G₀ m' n)
     (hret : P.Partial ∨ FTTReturns Pa x := by
       first
@@ -1323,6 +1331,7 @@ theorem Inv.wp_liftPartLive {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa
     (fun a m' r'' hr hq hs hc' hk => ?_)
     (hret.imp_right fun hr => (FTTotalTriple.frame (R := (· = L.held g)) ⟨htt, hr⟩).2)
   obtain ⟨r', rH, hd', rfl, hq', rfl⟩ := hq
+  rw [upd_self] at hs
   refine h a m' r' hr hq' hs hc' ?_
   exact hi.finishPartStep hd' hk
 
@@ -1334,7 +1343,8 @@ theorem Inv.wp_liftPartLiveCur {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} 
     (hi : L.Inv (upd G t g) rX m) (hc : m.current = t) (hgo : L.ph g ≠ .gone)
     (htt : FTTriple (Pa ⋆ cur t) x (fun a => Qa a ⋆ cur t)) (hp : Pa (L.part g))
     (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' →
-      FStepIn (rsum (L.wordR m) rX).owned m m' (rsum (L.wordR m) rX).shared →
+      FStepIn (rsum (L.wordR m) rX).owned m m'
+        ((rsum (L.wordR m) rX).shared.inter (rsum (L.part g) (L.held g)).shared) →
       m'.current = t → L.Inv (upd G t (L.setPart g r')) rX m' → Q a G₀ m' n)
     (hret : P.Partial ∨ FTTReturns (Pa ⋆ cur t) x := by
       first
@@ -1367,6 +1377,7 @@ theorem Inv.wp_liftPartLiveCur {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} 
     (by rw [upd_self]; exact ⟨_, _, hd, rfl, hp, rfl⟩)
     (fun a m' r'' hr hq hs hc' hk => ?_) hretF
   obtain ⟨r', rH, hd', rfl, hq', rfl⟩ := hq
+  rw [upd_self] at hs
   exact h a m' r' hr hq' hs hc' (hi.finishPartStep hd' hk)
 
 /-- A same-memory caller-part update, derived from the total rule for `pure`. This is the
@@ -1397,7 +1408,8 @@ theorem Inv.wp_liftPart {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa : F
     (hi : L.Inv (upd G t g) rX m) (hc : m.current = t) (hgo : L.ph g = .out ∨ L.ph g = .holds)
     (htt : FTTriple Pa x Qa) (hp : Pa (L.part g))
     (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' →
-      FStepIn (rsum (L.wordR m) rX).owned m m' (rsum (L.wordR m) rX).shared →
+      FStepIn (rsum (L.wordR m) rX).owned m m'
+        ((rsum (L.wordR m) rX).shared.inter (rsum (L.part g) (L.held g)).shared) →
       m'.current = t → L.Inv (upd G t (L.setPart g r')) rX m' → Q a G₀ m' n)
     (hret : P.Partial ∨ FTTReturns Pa x := by
       first
@@ -1417,7 +1429,8 @@ theorem Inv.wp_liftPartCur {Tgt α : Type} {P : Proto Tgt γ} {x : MemM α} {Pa 
     (hi : L.Inv (upd G t g) rX m) (hc : m.current = t) (hgo : L.ph g = .out ∨ L.ph g = .holds)
     (htt : FTTriple (Pa ⋆ cur t) x (fun a => Qa a ⋆ cur t)) (hp : Pa (L.part g))
     (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → Qa a r' →
-      FStepIn (rsum (L.wordR m) rX).owned m m' (rsum (L.wordR m) rX).shared →
+      FStepIn (rsum (L.wordR m) rX).owned m m'
+        ((rsum (L.wordR m) rX).shared.inter (rsum (L.part g) (L.held g)).shared) →
       m'.current = t → L.Inv (upd G t (L.setPart g r')) rX m' → Q a G₀ m' n)
     (hret : P.Partial ∨ FTTReturns (Pa ⋆ cur t) x := by
       first
