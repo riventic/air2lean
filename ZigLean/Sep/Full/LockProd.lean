@@ -891,7 +891,7 @@ theorem Keeps.partStep {sB rL rH rX : Res} {t : ThreadId} {g : γ} {m' : Mem}
             none := e
         simp only [Option.or_eq_none_iff] at e'
         have e'' : ((B.wordR m).heap l).or ((rL.heap l).or (rH.heap l)) = none :=
-          hsB.none.mp e'.2.2.1
+          hsB.heap_none.mp e'.2.2.1
         simp only [Option.or_eq_none_iff] at e''
         exact e''.2.2)
     have := ho'.part_off (u := t) (by rw [hs.threads]; exact ht) hO
