@@ -30,6 +30,12 @@ the views from `U₀` and the client's obligations stated at `U₀`.
   client's `okM` at `L`'s `away`. The product gives the queue premise (`away`), `M`'s `noGather`
   (`M.R = emp`), `ok_calm` (the calm places are out of the semaphore's code), `sub` and `kstep`;
   the client gives its own `U₀`'s obligations.
+- **The semaphore's view** (`FRw.fitsS`): `FLock.Pair.fits` of the swapped pair at
+  `K := S.prim` with `ok` the client's `okS` at `M`'s `away`/`holdsAway`. Its steps keep the
+  product by `FLock.Pair.U_semStep` (`ZigLean/Sep/Full/CondProd.lean`); `M`'s side owns no byte
+  of the condition's words (`M.R = emp` and the layout, `c_apart`), `L`'s resource shares no
+  cell (`lR_unshared`), and a waiter of the condition is `away` from `M` or holds it at
+  `holdsAway` with the epoch in `M`'s nest (the client's `hsleep`).
 -/
 
 namespace Zig
