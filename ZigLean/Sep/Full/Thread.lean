@@ -1,4 +1,5 @@
 import ZigLean.Sep.Full.Extent
+import ZigLean.Conc.Base.Heap
 import ZigLean.Conc.Clock
 
 /-!
