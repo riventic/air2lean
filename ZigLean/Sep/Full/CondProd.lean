@@ -77,21 +77,20 @@ theorem Keeps.mstep (hk : B.Keeps G m rL rH rX) (hs : C.MStep W t m m')
 
 /-- **A rest at a word's cells with `B`'s side in front** (module doc): the side as the rest
 stores it (`sB`, apart from the protocol's rest at the word's cells) has none of the word's bytes,
-and the rest beside the word's cells is the side next to the protocol's rest beside them, so after
+so the rest beside the word's cells is the side next to the protocol's rest beside them, and after
 a step at the word it is again the side next to the protocol's rest at the word's new cells. -/
 theorem rest_words {X : ThreadId → Prop} {sB rY₀ rY : Res} (hok : W.Ok m X)
     (hd : FHeap.Disjoint sB.heap (rsum (W.cellsR m) rY₀).heap)
     (hY₀ : ∀ l, W.In l → rY₀.heap l = none)
     (he : rsum sB (rsum (W.cellsR m) rY₀) = rsum (W.cellsR m) rY)
     (hY : ∀ l, W.In l → rY.heap l = none) (m' : Mem) :
-    (∀ l, W.In l → sB.heap l = none) ∧
-      rsum (W.cellsR m') rY = rsum sB (rsum (W.cellsR m') rY₀) := by
+    rsum (W.cellsR m') rY = rsum sB (rsum (W.cellsR m') rY₀) := by
   have hsW : ∀ l, W.In l → sB.heap l = none := fun l hl =>
     (hd l).resolve_right fun e => cellsAt_some hl (hok.cellIn hl) (rsum_heap_none.mp e).1
   have hY' : rY = rsum sB rY₀ := cellsAt_cancel
     (he.symm.trans (rsum_left_comm (disj_cellsAt hsW)))
     hY fun l hl => rsum_heap_none.mpr ⟨hsW l hl, hY₀ l hl⟩
-  exact ⟨hsW, by rw [hY', rsum_left_comm (disj_cellsAt hsW).symm]⟩
+  rw [hY', rsum_left_comm (disj_cellsAt hsW).symm]
 
 /-- **`B` kept beside a rest at a word's cells is kept beside the rest at its new cells**: the
 word's cells before the step lie in the rest, so `B`'s free and holders' resources and `B`'s word
@@ -189,30 +188,26 @@ theorem U_semStep (hp : L.Pair B) {U₀ : (ThreadId → γ) → Res → Mem → 
     fun G t q h' r h => (hp.R_ab G t q h' r).mpr h
   rcases hs with ⟨-, hcs | ⟨-, hmv⟩⟩
   · -- a step of the condition's code at one of its words
-    obtain ⟨Wd, rY, hWs, he, rfl, hY, hCI', hmv | hown⟩ := hcs
-    · obtain ⟨hok, rY₀, rfl, hY₀⟩ := (hsub G _ m hu).2 Wd hWs
-      obtain ⟨-, hrot⟩ := rest_words hok (hsB.disj hk.side_disj) hY₀ he hY m'
-      obtain ⟨hxd, hxo⟩ := Keeps.words hk hok m'
-      obtain ⟨p, q, h, ⟨hnext, -, hms, -, -⟩, -, rfl⟩ := hmv
-      have hEp := ((hsub G _ m hu).2 C.Ep (.inr rfl)).1
+    obtain ⟨Wd, rY, hWs, he, rfl, hY, hCI', hcase⟩ := hcs
+    have hS := hsub G _ m hu
+    obtain ⟨hok, rY₀, rfl, hY₀⟩ := hS.2 Wd hWs
+    have hrot := rest_words hok (hsB.disj hk.side_disj) hY₀ he hY m'
+    obtain ⟨hxd, hxo⟩ := Keeps.words hk hok m'
+    rcases hcase with hmv | hown
+    · obtain ⟨p, q, h, ⟨hnext, -, hms, -, -⟩, -, rfl⟩ := hmv
       have hWo' := hWo G m rL rH _ hk hu
       -- the sleep queues a waiter of the condition
-      have ht : (t, C.Ep.key m) ∉ m.waiters →
-          m' = { (({ m with current := t } : Mem).recordAt C.Ep.b C.Ep.o 4 .atomicRead) with
-            waiters := m.waiters.push (t, C.Ep.key m) } →
-          B.ph (G t) = .away ∨
-            (B.ph (G t) = .holdsAway ∧ B.toLockWord.NestKey m (C.Ep.key m)) := by
-        intro _ hm'
-        subst hm'
-        obtain ⟨i, jr, e, hreg, -⟩ := hCI'.q (t, C.Ep.key m) Array.mem_push_self rfl
-        rw [upd_self, cph_l, C.ph_set] at hreg
-        have hw : (C.ph (G t)).waits = true := hnext.waits (by rw [hreg]; rfl)
-        exact (hsleep G _ m t hu hw).imp id fun ⟨h1, h2⟩ => ⟨h1, C.Ep.ptr, h2, hEp.keyAt⟩
-      obtain ⟨hside, hk₁⟩ := Keeps.mstep hk hms (hWo' Wd hWs) (hWo' C.Ep (.inr rfl)) (hkey m) ht
-      have hg : B.ph (L.set (C.set (G t) p) q h) = B.ph (G t) ∧
-          B.held (L.set (C.set (G t) p) q h) = B.held (G t) ∧
-          B.part (L.set (C.set (G t) p) q h) = B.part (G t) := by
-        rw [(hl _ _ _).1, (hl _ _ _).2.1, (hl _ _ _).2.2]; exact hc _ _
+      obtain ⟨hside, hk₁⟩ := Keeps.mstep hk hms (hWo' Wd hWs) (hWo' C.Ep (.inr rfl)) (hkey m)
+        fun _ hm' => by
+          subst hm'
+          obtain ⟨i, jr, e, hreg, -⟩ := hCI'.q (t, C.Ep.key m) Array.mem_push_self rfl
+          rw [upd_self, cph_l, C.ph_set] at hreg
+          have hw : (C.ph (G t)).waits = true := hnext.waits (by rw [hreg]; rfl)
+          exact (hsleep G _ m t hu hw).imp id fun ⟨h1, h2⟩ =>
+            ⟨h1, C.Ep.ptr, h2, (hS.2 C.Ep (.inr rfl)).1.keyAt⟩
+      have hg := And.intro ((hl (C.set (G t) p) q h).1.trans (hc (G t) p).1)
+        (And.intro ((hl (C.set (G t) p) q h).2.1.trans (hc (G t) p).2.1)
+          ((hl (C.set (G t) p) q h).2.2.trans (hc (G t) p).2.2))
       have hk' := Keeps.relabel hk₁ (B.keep_upd hg.1 hg.2.1)
         (fun r h' => by
           have h₁ := hRL _ t q h r (hRC G t p r h')
@@ -221,9 +216,6 @@ theorem U_semStep (hp : L.Pair B) {U₀ : (ThreadId → γ) → Res → Mem → 
       exact ⟨sB, rL, rH, _, hrot, by rw [hside]; exact hsB, hk',
         hcl sB rL rH _ _ rfl hrot hsB hk hk' hu⟩
     · -- a native step on the thread's own part
-      obtain ⟨hok, rY₀, rfl, hY₀⟩ := (hsub G _ m hu).2 Wd hWs
-      obtain ⟨-, hrot⟩ := rest_words hok (hsB.disj hk.side_disj) hY₀ he hY m'
-      obtain ⟨hxd, hxo⟩ := Keeps.words hk hok m'
       obtain ⟨r, -, -, -, hfs, -, -, -, hLi', rfl⟩ := hown
       rw [hrot] at hLi'
       have hpart : L.setPart (G t) r = B.setPart (G t) r := hp.setPart _ _
@@ -240,10 +232,9 @@ theorem U_semStep (hp : L.Pair B) {U₀ : (ThreadId → γ) → Res → Mem → 
     | hold s h _ _ _ _ hfs hLi' _ _ =>
       -- the holder's step on the mutex's resource: `B`'s word cells from `L`'s invariant after it
       obtain ⟨G'', hLi''⟩ := hLi'
-      have hg : B.ph (S.set (L.set (G t) .holds h) s) = B.ph (G t) ∧
-          B.held (S.set (L.set (G t) .holds h) s) = B.held (G t) ∧
-          B.part (S.set (L.set (G t) .holds h) s) = B.part (G t) := by
-        rw [(hss _ _).1, (hss _ _).2.1, (hss _ _).2.2]; exact hl _ _ _
+      have hg := And.intro ((hss (L.set (G t) .holds h) s).1.trans (hl (G t) .holds h).1)
+        (And.intro ((hss (L.set (G t) .holds h) s).2.1.trans (hl (G t) .holds h).2.1)
+          ((hss (L.set (G t) .holds h) s).2.2.trans (hl (G t) .holds h).2.2))
       obtain ⟨hsB', hk'⟩ := Keeps.stepAt hk hsB hfs (Keeps.cellsOf hk hsB hLi'')
         (B.keep_upd hg.1 hg.2.1)
         (fun r h' => by

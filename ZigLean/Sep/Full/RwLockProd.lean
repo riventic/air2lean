@@ -235,9 +235,7 @@ theorem c_apart (W : FRw γ X Y M L C S) : ∀ Wd : Word 32 4, (Wd = C.S ∨ Wd 
   have h3 : (M.o : Int) = W.p.off + 32 := congrArg Ptr.off W.ptr_m
   have h4 : (L.o : Int) = S.p.off + 8 := congrArg Ptr.off S.ptr_l
   have h5 := C.ep_o
-  rintro Wd (rfl | rfl)
-  · exact ⟨Or.inr (Or.inl (by omega)), Or.inr (Or.inr (by omega))⟩
-  · exact ⟨Or.inr (Or.inl (by omega)), Or.inr (Or.inr (by omega))⟩
+  rintro Wd (rfl | rfl) <;> exact ⟨Or.inr (Or.inl (by omega)), Or.inr (Or.inr (by omega))⟩
 
 /-- **The condition's epoch and the outer mutex have other futex keys in every memory** (the
 layout: one block, at `p + 24` and `p + 32`; `Mem.wordKey_ne_off`). -/
@@ -312,6 +310,8 @@ theorem fitsS (W : FRw γ X Y M L C S) {okS : γ → Prop}
     (win : C.Win U₀) :
     S.Fits P (FLock.Pair.U M U₀) (fun g => okS g ∧ (M.ph g = .away ∨ M.ph g = .holdsAway)) :=
   have hRM : ∀ G, (M.R G).Unshared := fun G => by rw [W.mR]; exact FAssn.Unshared.emp
+  have hrole : ∀ {g g' : γ}, S.ph g' = S.ph g → (C.sx g' ↔ C.sx g) := fun e => by
+    rw [S.sx_iff, S.sx_iff, e]
   ⟨W.pair.symm.fits
     (W.pair.inv_swap (fun _ _ _ hf => FLock.NoGatherHeld.of_R hRM hf)
       (fun _ _ _ hf => FLock.NoGatherHeld.of_R (lR_unshared W) hf) inv)
@@ -328,14 +328,8 @@ theorem fitsS (W : FRw γ X Y M L C S) {okS : γ → Prop}
       ⟨FPrim.ofWords_sub_rsum (hsub G rX m hu).1 (hsB.disj hk.side_disj), (hsub G rX m hu).2⟩)
     (fun Wd hWd => (c_apart W Wd hWd).1)
     lph lpart lheld lR ph_l set_l ph_part set_part
-    (fun _ g q h => by
-      show C.sx _ ↔ C.sx _
-      rw [S.sx_iff, S.sx_iff, show S.ph (L.set g q h) = S.ph g from
-        congrArg Prod.snd (ph_l g q h)])
-    (fun _ g r => by
-      show C.sx _ ↔ C.sx _
-      rw [S.sx_iff, S.sx_iff, show S.ph (L.setPart g r) = S.ph g from
-        congrArg Prod.snd (ph_part g r)])
+    (fun _ g q h => hrole (congrArg Prod.snd (ph_l g q h)))
+    (fun _ g r => hrole (congrArg Prod.snd (ph_part g r)))
     (fun g p q hp hq => by
       show (okS (S.place.set g p) ∧
           (M.ph (S.place.set g p) = .away ∨ M.ph (S.place.set g p) = .holdsAway)) ↔
