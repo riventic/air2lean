@@ -229,10 +229,11 @@ theorem U_frame {G G'' : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId}
 /-- **The holder's load and store of the counter** keep `U` (the obligation of
 `FLock.Fits.wp_hold`): its step at `hl` (`U_frame`), then its next place, `hl` (a load) or `un`
 (the store). The places first: the walk tries the candidate places by them. -/
-theorem U_hold {G G' : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {rp rL r : Res}
+theorem U_hold {G G' : ThreadId → Gh} {rX : Res} {hO : Heap} {m m' : Mem} {t : ThreadId}
+    {rp rL r : Res}
     {x₀ x₁ : X} (hx : x₀ = { ph := .hl } ∧ (x₁ = { ph := .hl } ∨ x₁ = { ph := .un }))
     (hu : U (upd G t (gH rp rL x₀)) rX m) (hc : m.current = t)
-    {hO : Heap} (hs : FStepIn (rsum (L.wordR m) rX).owned m m' ((rsum (L.wordR m) rX).shared.inter hO))
+    (hs : FStepIn (rsum (L.wordR m) rX).owned m m' ((rsum (L.wordR m) rX).shared.inter hO))
     (hL : L.Inv G' rX m') :
     U (upd G t (gH rp r x₁)) rX m' := by
   obtain ⟨rfl, hx₁⟩ := hx

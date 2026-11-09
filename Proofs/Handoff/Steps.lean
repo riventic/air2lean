@@ -547,10 +547,10 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM : Res}
 /-- **A step of the mutex's holder `t` on its resource** keeps `U` at its places `x₀` (the frame
 of the library's `FLock.Fits.wp_hold`; the producer's stores then move it with `U_store`,
 `main`'s loads keep it). -/
-theorem U_holdStep {G G' : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {rp rL r : Res}
+theorem U_holdStep {G G' : ThreadId → Gh} {rX : Res} {hO : Heap} {m m' : Mem} {t : ThreadId}
+    {rp rL r : Res}
     {x₀ : X} (hiL : (L Lo).Inv (upd G t (gH rp rL x₀)) rX m)
     (hu : U Lo (upd G t (gH rp rL x₀)) rX m)
-    {hO : Heap}
     (hs : FStepIn (rsum ((L Lo).wordR m) rX).owned m m' ((rsum ((L Lo).wordR m) rX).shared.inter hO))
     (hL : (L Lo).Inv G' rX m') :
     U Lo (upd G t (gH rp r x₀)) rX m' := by
