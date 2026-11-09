@@ -109,6 +109,9 @@ theorem _root_.Zig.Heap.inter_ne {h h₁ : Heap} {l : Loc} :
     h.inter h₁ l ≠ none ↔ h l ≠ none ∧ h₁ l ≠ none := by
   unfold Heap.inter; split <;> simp_all
 
+theorem _root_.Zig.Heap.inter_none {h h₁ : Heap} {l : Loc} (e : h l = none) : h.inter h₁ l = none := by
+  unfold Heap.inter; split <;> simp_all
+
 /-- **The shares at a frame byte are fixed by the frame**: next to the same frame `rF`, a byte of
 `rF` that `r'` holds a partial share of, `r` holds a partial share of (`Holds.owned_sub'`; next to a
 frame byte only a partial share, `Holds.frame_shared`). -/
