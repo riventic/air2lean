@@ -94,6 +94,17 @@ client shows its views stable over these relabels (`laway`, `lunaway`, `maway`, 
 `hU` of `FLock.Fits.goAway`/`unaway`; rejected (a): callers at `away`). The writer's wait at the
 semaphore runs at the outer mutex's `holdsAway` (`mnap`).
 
+**The rwlock's own steps as the code takes them** (coordinator decision 2026-11-09 on #738).
+`M.Fits.kstep` keeps `P.inv`, and so the semaphore's view, over every `Step`. So `Step` states
+what each op at the word keeps: `t` is out of the semaphore's code, the resource is posted after
+the step exactly when before it, and the free resources are the invariants' own (`Split`, unique by
+`Split.unique`). Without them `Step` admits moves no op makes, and no protocol meets `Fits`:
+(A) the writer at `ww` in the semaphore's wait relabelled `wi` breaks `wtw`; (B) the writer's `-1`
+with no reader labelled `ww` makes the state `RwPosted` (count 1) while the count cell holds 0, so
+the semaphore's mutex's `R` fails; (C) a split whose `rF` is the semaphore's resource moves the count
+cell into `t`'s part. Rejected: (2') a list of the code's moves of `W.ph` (less abstract: it
+enumerates the code); (3') a frame form of the split (every instance would prove its uniqueness).
+
 ## Facts for every implementation
 
 Stated once here; an instance walks its code with them:
@@ -117,9 +128,12 @@ Stated once here; an instance walks its code with them:
   `Inv.takeW` (`-1` with no reader, `wi → wr`, `t` takes the free resource) and `Inv.giveW`
   (`and ~1`, `wr → out`, `t` gives it back) for the writer; `Inv.addR` (`+2^32`, `out → rd q H`,
   a share split) and `Inv.subR` (`-2^32`, the share joined; `out`, or the last reader at `rp`)
-  for the reader. Their shared part is `Inv.ofRmwMv` (the free resource may change). `Inv.frame`:
-  the invariant next to a resource apart from its rest (either lock's side in the two-lock
-  product, `FLock.Pair.U`).
+  for the reader. Their shared part is `Inv.ofRmwMv` (the free resource may change). Each also
+  gives `Moves`: the resource is posted after the op exactly when before it, and the rest before
+  and after are the invariants' own splits (`Split`) with one rest of the rest, as `Step` takes
+  them; `Split.unique` (over `rsum_cancel` and `Ghost.sharesOf_cancel`) says the split of a rest is
+  unique. `Inv.frame`: the invariant next to a resource apart from its rest (either lock's side in
+  the two-lock product, `FLock.Pair.U`).
 - **Ownership through the word** (`Owns`): `Owns.step` (a release write at the word), `Owns.mono`
   (fewer bytes), `Owns.ofThread` (a resource `t` gives to the rest), `Owns.toThread` (the free
   resource `t` takes with an acquire RMW, no other reader left: `FLock.Inv.takeRest`'s premise)
@@ -131,7 +145,9 @@ Stated once here; an instance walks its code with them:
   with the share `q` in `t`'s part (`Fits.enterR`), and `wp_subR` (`-2^32`: `out`, or the last
   reader at `rp` with the resource) for the reader. Each is the generic word rule at the outer
   mutex with `Fits.atWord` and the op's lemma; the code's literal operand is a default premise
-  (`by decide`). The part facts a give needs come from the outer mutex's invariant
+  (`by decide`). Each takes `t` out of the semaphore's code (`S.place.ph g = (.out, .out)`, from
+  the entry points' `Out` by `splace_out`, kept through the locks' relabels by `Fits.splace_m`,
+  `Fits.splace_l`, `sp_ph`). The part facts a give needs come from the outer mutex's invariant
   (`FLock.Inv.partApart`); a reader takes a share into a part that may hold shares of the same
   bytes with `FLock.Inv.takeRestR` and `FLock.Inv.ownsShare` (the rest keeps a positive share).
 - **The writer's wait at the semaphore** (`wp_waitW`, `lock`'s drain path): for a semaphore whose
@@ -383,15 +399,10 @@ frame without them (the word rules' `Word.atomicRmw_fstep`, …), the facts `FLo
 and `FLock.Pair.Keeps.wordStep` take, so a lock kept in the rest stays kept
 (`FLock.Pair.U_wordStep`; decision 2026-11-09, option (b), on #737).
 
-**As the code takes it** (coordinator decision 2026-11-09 on #738): `t` is out of the semaphore's
-code, the resource is posted after the step exactly when before it, and the rest beside the word's
-cells is the two invariants' splits (`Split`) with one rest of the rest. Without these a `Step`
-that no op takes breaks the semaphore's view, which `M.Fits.kstep` must keep: (A) the writer at
-`ww` in the semaphore's wait relabelled `wi` (`wtw` fails), (B) the writer's `-1` with no reader
-labelled `ww` (the state is `RwPosted`, so the count is 1 while its cell holds 0: the semaphore's
-mutex's `R` fails), (C) a split whose `rF` is the semaphore's free resource (the count cell moves
-into `t`'s part). Rejected: a list of the code's moves of `W.ph` (it enumerates the code), and a
-frame form of the split (every instance would prove the split's uniqueness). -/
+**As the code takes it** (module doc, coordinator decision 2026-11-09 on #738, counterexamples
+A/B/C there): `t` is out of the semaphore's code, the resource is posted after the step exactly
+when before it, and the rest beside the word's cells is the two invariants' splits (`Split`,
+unique: `Split.unique`) with one rest of the rest. -/
 def Step (t : ThreadId) (G : ThreadId → γ) (rX : Res) (m : Mem) (G' : ThreadId → γ) (rX' : Res)
     (m' : Mem) : Prop :=
   M.Inv G rX m ∧ W.Inv G rX m ∧ M.Inv G' rX' m' ∧ W.Inv G' rX' m' ∧ m.current = t ∧

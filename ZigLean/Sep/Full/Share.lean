@@ -258,7 +258,8 @@ theorem Ghost.sharesOf_cancel {H : FHeap} {q : Frac} {g₁ g₂ : Ghost}
       (Ghost.unit.add g₁).extent = (Ghost.unit.add g₂).extent ∧
       (Ghost.unit.add g₁).cl = (Ghost.unit.add g₂).cl ∧
       (Ghost.unit.add g₁).ac = (Ghost.unit.add g₂).ac :=
-    ⟨congrArg Ghost.led h, congrArg Ghost.extent h, congrArg Ghost.cl h, congrArg Ghost.ac h⟩
+    ⟨(congrArg Ghost.led h :), (congrArg Ghost.extent h :), (congrArg Ghost.cl h :),
+      (congrArg Ghost.ac h :)⟩
   rw [Ghost.unit_add, Ghost.unit_add] at hu
   obtain ⟨h1, h2, h3, h4⟩ := hu
   ext1
