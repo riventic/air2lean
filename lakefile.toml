@@ -25,6 +25,7 @@ globs = [
   "ZigLean.Basic",
   "ZigLean.BitCast",
   "ZigLean.Conc.AtomicWord",
+  "ZigLean.Conc.Base.Heap",
   "ZigLean.Conc.Basic",
   "ZigLean.Conc.Call",
   "ZigLean.Conc.Clock",
