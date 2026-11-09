@@ -57,14 +57,12 @@ theorem Keeps.mstep (hk : B.Keeps G m rL rH rX) (hs : C.MStep W t m m')
     subst hM
     obtain ⟨he, hkM⟩ := Keeps.wordRun (m := { m with current := t }) hk₁ hw hc
       (.inr (.inr (.inr (.inr rfl)))) hEo
-    refine ⟨he, Keeps.queue hkM (hkM.facts.w.push hkey fun hn => ht ?_)⟩
-    exact ⟨_, Array.mem_push_self, hn⟩
+    exact ⟨he, Keeps.queue hkM (hkM.facts.w.push hkey fun hn => ht ⟨_, Array.mem_push_self, hn⟩)⟩
   | woken => exact ⟨rfl, Keeps.queue hk₁ (hk₁.facts.w.requeue hk₁.facts.w.fq hk₁.facts.w.wit)⟩
   | resume => exact ⟨rfl, hk₁⟩
   | wake c cs h =>
     have hw := hk₁.facts.w.wakeOff hkey h
-    have hm' := Proto.modify_ok h
-    subst hm'
+    obtain rfl := Proto.modify_ok h
     exact ⟨rfl, Keeps.queue hk₁ hw⟩
 
 end FLock.Pair
@@ -82,14 +80,12 @@ theorem FPrim.ofWords_sub_rsum {γ Ph Rl : Type} {L : FLock γ} {pl : FPlace γ 
     (FPrim.ofWords L pl out calm role Ws Lv Inv Move ownAt).Sub G (rsum r rX) m := by
   refine ⟨hsub.1, fun W hW => ?_⟩
   obtain ⟨hok, rY, rfl, hY⟩ := hsub.2 W hW
+  have hdc := (FHeap.disjoint_union_right.mp hd).1
   have hrW : ∀ l, W.In l → r.heap l = none := fun l hl =>
-    (hd l).resolve_right fun e => by
-      have e' : ((W.cellsR m).heap l).or (rY.heap l) = none := e
-      exact cellsAt_some hl (hok.cellIn hl) (Option.or_eq_none_iff.mp e').1
-  refine ⟨hok, rsum r rY, ?_, fun l hl => by
+    (hdc l).resolve_right (cellsAt_some hl (hok.cellIn hl))
+  refine ⟨hok, rsum r rY, rsum_left_comm (disj_cellsAt hrW), fun l hl => by
     show (r.heap l).or (rY.heap l) = none
     rw [hrW l hl, hY l hl]; rfl⟩
-  rw [← rsum_assoc, rsum_comm (disj_cellsAt hrW), rsum_assoc]
 
 end Full
 end Zig

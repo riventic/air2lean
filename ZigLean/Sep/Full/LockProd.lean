@@ -560,12 +560,6 @@ theorem U_setA (hp : A.Pair B) {U : (ThreadId → γ) → Res → Mem → Prop} 
   rw [upd_self, upd_upd] at hk'
   exact ⟨rL, rH, rX, rfl, hk', hcl rX hu⟩
 
-/-- **A stop keeps what the product keeps of `B`** (`current := t`). -/
-theorem Keeps.cur {rL rH rX : Res} (hk : B.Keeps G m rL rH rX) (t : ThreadId) :
-    side B { m with current := t } rL rH = side B m rL rH ∧
-      B.Keeps G { m with current := t } rL rH rX :=
-  ⟨rfl, { hk with facts := { hk.facts with w := hk.facts.w.current t } }⟩
-
 /-- **A change of the futex queue, the woken threads and the current thread keeps what the product
 keeps of `B`**, given `B`'s word invariant after it (`LockWord.WInv.requeue`, `WInv.push`,
 `WInv.wakeOff`). -/
@@ -574,6 +568,12 @@ theorem Keeps.queue {rL rH rX : Res} (hk : B.Keeps G m rL rH rX) {c : ThreadId}
     (hw : B.WInv (B.pl G) { m with current := c, waiters := ws, woken := wk }) :
     B.Keeps G { m with current := c, waiters := ws, woken := wk } rL rH rX :=
   { hk with facts := { hk.facts with w := hw } }
+
+/-- **A stop keeps what the product keeps of `B`** (`current := t`). -/
+theorem Keeps.cur {rL rH rX : Res} (hk : B.Keeps G m rL rH rX) (t : ThreadId) :
+    side B { m with current := t } rL rH = side B m rL rH ∧
+      B.Keeps G { m with current := t } rL rH rX :=
+  ⟨rfl, Keeps.queue hk (hk.facts.w.current t)⟩
 
 /-- **A step of `A`'s code keeps the product's rest for `A`** (`FLock.Fits.stable` of `A` for
 `Pair.U B U`), when the protocol's own `U` is stable under it. -/
