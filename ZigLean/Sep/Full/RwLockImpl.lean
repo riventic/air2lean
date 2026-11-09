@@ -79,6 +79,19 @@ semaphore's view `US` is stable over the writer's take (`ww → wr`, `utake`) an
 give (`rp → out`, `upost`), and that only the writer at `ww` is in the semaphore's wait (`wtw`;
 decision 2026-11-08 on #729).
 
+**Where each lock's code runs** (maintainer decisions 2026-11-09 on #737). A futex wait in one
+lock's code queues the thread, and the other lock's queue admits a waiter at another futex only
+`away` from it or holding it at `holdsAway` (`LockWord.Queue`). So the two views are stated at
+those places (option (i)): the outer mutex's `ok` is the client's `okM` with `L.ph = away`, the
+semaphore's is `okS` with `M.ph = away` or `holdsAway` (`okM`, `okS` read neither lock's place:
+`okM_l`, `okS_m`, so without it a thread at the other lock's `out` would run the code; rejected
+(ii): the callers' `okM`/`okS` at the relabeled ghost value). The callers stay at `Out`; the
+implementation relabels the thread `out → away` at the semaphore's mutex around each call of the
+outer mutex and at the outer mutex around the last reader's post, and back (option (b)), and the
+client shows its views stable over these relabels (`laway`, `lunaway`, `maway`, `munaway`, the
+`hU` of `FLock.Fits.goAway`/`unaway`; rejected (a): callers at `away`). The writer's wait at the
+semaphore runs at the outer mutex's `holdsAway` (`mnap`).
+
 ## Facts for every implementation
 
 Stated once here; an instance walks its code with them:
@@ -86,8 +99,9 @@ Stated once here; an instance walks its code with them:
 - **The protocol.** `Fits.inRest` (the state word in the outer mutex's rest, for the generic word
   rules at `M`), `Fits.napW` / `Fits.unnapW` (the writer's nap and unnap), `Fits.wstep` (a step of
   the rwlock's own code keeps the protocol: `FLock.Fits.kstep` at `Step`), `Fits.atWord` (an
-  atomic op at the word moves `t` to a new place) and `Fits.winv` / `Fits.sinv` (the rwlock's and
-  the semaphore's invariants in a state of the protocol).
+  atomic op at the word moves `t` to a new place), `Fits.lAway` / `Fits.lUnaway` /
+  `Fits.mAway` / `Fits.mUnaway` (the relabels around the other lock's code) and `Fits.winv` /
+  `Fits.sinv` (the rwlock's and the semaphore's invariants in a state of the protocol).
 - **The counts over one thread's change**: `nrd_upd`, `nwi_upd` over `cnt_upd`; `writing_upd`,
   `fsum_upd`, `xs_set` over `upd_map`; for a move of `t` to `b`, `nrd_mv`, `nwi_mv`, `fsum_mv`
   (the counts move), `nrd_keep`, `nwi_keep`, `fsum_keep`, `writing_mv`, `xs_mv` (they stay),
@@ -337,15 +351,18 @@ def place : FPlace γ (RwPh × (CPh × SPh)) where
     show W.set (S.place.set g (S.place.ph g)) (W.ph g) = g
     rw [S.place.set_self, W.set_self]
 
-/-- **The rwlock's own steps** by thread `t` (module doc): an atomic step at the state word (or no
-memory step), which may move the free resource between the rest and `t`'s part and change `t`'s
-place in the rwlock's code; `t`'s places in the mutexes' and the semaphore's code, the client parts
-and the other threads stay, the rest of the rest stays, and both the outer mutex's invariant and
-the rwlock's hold before and after it. -/
+/-- **The rwlock's own steps** by thread `t` (module doc): an atomic step at the state word, which
+may move the free resource between the rest and `t`'s part and change `t`'s place in the rwlock's
+code; `t`'s places in the mutexes' and the semaphore's code, the client parts and the other threads
+stay, the rest of the rest stays, and both the outer mutex's invariant and the rwlock's hold before
+and after it. The step changes only the word's bytes (`RestStep`) and is an `FStepIn` in every
+frame without them (the word rules' `Word.atomicRmw_fstep`, …), the facts `FLock.Inv.wordStep`
+and `FLock.Pair.Keeps.wordStep` take, so a lock kept in the rest stays kept
+(`FLock.Pair.U_wordStep`; decision 2026-11-09, option (b), on #737). -/
 def Step (t : ThreadId) (G : ThreadId → γ) (rX : Res) (m : Mem) (G' : ThreadId → γ) (rX' : Res)
     (m' : Mem) : Prop :=
   M.Inv G rX m ∧ W.Inv G rX m ∧ M.Inv G' rX' m' ∧ W.Inv G' rX' m' ∧ m.current = t ∧
-  (m' = m ∨ RestStep W.st.In m m') ∧
+  (RestStep W.st.In m m' ∧ ∀ hF : Heap, (∀ l, W.st.In l → hF l = none) → FStepIn hF m m') ∧
   (∀ u, u ≠ t → G' u = G u) ∧ (∀ u, W.x (G' u) = W.x (G u)) ∧
   M.ph (G' t) = M.ph (G t) ∧ M.held (G' t) = M.held (G t) ∧
   L.ph (G' t) = L.ph (G t) ∧ L.held (G' t) = L.held (G t) ∧
@@ -377,8 +394,17 @@ its primitive, the semaphore next to its mutex (the two-lock product's interface
 writer's liveness at the semaphore. -/
 structure Fits {Tgt : Type} (P : Proto Tgt γ) (UM US : (ThreadId → γ) → Res → Mem → Prop)
     (okM okS : γ → Prop) : Prop where
-  m : M.Fits W.prim P UM okM
-  s : S.Fits P US okS
+  /-- **Each lock's view at the place where the code runs it** (maintainer decision 2026-11-09,
+  option (i), on #737): a thread runs the outer mutex's code `away` from the semaphore's mutex,
+  and the semaphore's code `away` from the outer mutex or holding it at `holdsAway`. A futex wait
+  in one lock's code queues the thread, and the other lock's queue admits a waiter at another
+  futex only there (`LockWord.Queue`; `FLock.Pair.fits`'s `away`). The client's `okM`, `okS` read
+  neither lock's place (`okM_l`, `okS_m`), so its obligations cannot exclude a thread at `out` of
+  the other lock (counterexample: after `lock`'s `+2` at `L.out`, the outer mutex's failed first
+  try at `wait`, then its futex wait, leaves the semaphore's mutex's queue invariant false);
+  the implementation relabels the thread to these places around its calls (`laway`, …). -/
+  m : M.Fits W.prim P UM (fun g => okM g ∧ L.ph g = .away)
+  s : S.Fits P US (fun g => okS g ∧ (M.ph g = .away ∨ M.ph g = .holdsAway))
   /-- The rwlock's place is read by neither `ok`: a thread runs either mutex's code at any of
   them (`M.Fits.ok_calm` covers only the calm places, and the writer moves `wr → out` before its
   outer unlock and `ww → wr` before it returns from `lock`). -/
@@ -405,6 +431,21 @@ structure Fits {Tgt : Type} (P : Proto Tgt γ) (UM US : (ThreadId → γ) → Re
   munnap : ∀ G rX m t g, W.ph g = .wr → L.ph g = .out → M.ph g = .holdsAway →
     UM (upd G t g) rX m → M.Inv (upd G t g) rX m →
     UM (upd G t (M.set g .holds (M.held g))) rX m
+  /-- **Away from one lock around the other's code** (`FLock.Fits.goAway`/`unaway`'s `hU`; the
+  places of `m` and `s`): the implementation moves a thread `out → away` at the semaphore's mutex
+  around each call of the outer mutex (its `lock` and `unlock`; it holds the outer mutex or not),
+  and `out → away` at the outer mutex around the last reader's post at the semaphore. Each view's
+  stability over the other lock's relabel is the nesting protocol's obligation, as `mnap`/`munnap`
+  (maintainer decision 2026-11-09, option (b), on #737: the callers stay at `Out`; rejected (a):
+  callers at `away`, which names the rwlock's internal semaphore mutex in its precondition). -/
+  laway : ∀ G rX m t g, L.ph g = .out → (M.ph g = .out ∨ M.ph g = .holds) →
+    US (upd G t g) rX m → L.WInv (L.pl (upd G t g)) m → US (upd G t (L.set g .away rnil)) rX m
+  lunaway : ∀ G rX m t g, L.ph g = .away → (M.ph g = .out ∨ M.ph g = .holds) →
+    US (upd G t g) rX m → L.WInv (L.pl (upd G t g)) m → US (upd G t (L.set g .out rnil)) rX m
+  maway : ∀ G rX m t g, M.ph g = .out → L.ph g = .out →
+    UM (upd G t g) rX m → M.WInv (M.pl (upd G t g)) m → UM (upd G t (M.set g .away rnil)) rX m
+  munaway : ∀ G rX m t g, M.ph g = .away → L.ph g = .out →
+    UM (upd G t g) rX m → M.WInv (M.pl (upd G t g)) m → UM (upd G t (M.set g .out rnil)) rX m
   /-- **The writer's take at the semaphore** (`SemImpl.wait_wp_resource`'s `hU` at the
   semaphore's view `US`, the pool `S.Pool` as `T`): at its store of the count the writer moves
   `ww → wr` and the posted resource joins its part (staying at `ww` keeps `RwPosted`, so the count
@@ -1571,6 +1612,48 @@ theorem Fits.unnapW (hW : W.Fits P UM US okM okS) {G : ThreadId → γ} {m : Mem
     (hL.w.notQ (by rw [hp]; decide) (by rw [hp]; decide) (by rw [hp]; decide))
     fun rX hU hI => hW.munnap G rX m t g hw hl hg hU hI
 
+/-- A thread out of a lock's futex wait (`out` or `holds`) is not in the futex queue
+(`LockWord.WInv.notQ`). -/
+theorem notQ_outHolds {K : FLock γ} {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId}
+    (hK : K.Inv G rX m) (h : K.ph (G t) = .out ∨ K.ph (G t) = .holds) :
+    m.waiters.any (·.1 == t) = false := by
+  have hn : ∀ q : LPh, (q = .out ∨ q = .holds) → q ≠ .wait ∧ q ≠ .away ∧ q ≠ .holdsAway := by
+    rintro q (rfl | rfl) <;> decide
+  obtain ⟨h1, h2, h3⟩ := hn (K.pl G t) h
+  exact hK.w.notQ h1 h2 h3
+
+/-- **Away from the semaphore's mutex** before a call of the outer mutex (`FLock.Fits.goAway` at
+the semaphore's mutex, with `laway`). -/
+theorem Fits.lAway (hW : W.Fits P UM US okM okS) {G : ThreadId → γ} {m : Mem} {t : ThreadId}
+    {g : γ} (hl : L.ph g = .out) (hm : M.ph g = .out ∨ M.ph g = .holds)
+    (hi : P.inv (upd G t g) m) : P.inv (upd G t (L.set g .away rnil)) m :=
+  FLock.Fits.goAway hW.s.toFits hl hi fun rX hU hw => hW.laway G rX m t g hl hm hU hw
+
+/-- **Back at the semaphore's mutex** after a call of the outer mutex (`FLock.Fits.unaway`, with
+`lunaway`): out of the outer mutex's futex wait, the thread is not in the futex queue. -/
+theorem Fits.lUnaway (hW : W.Fits P UM US okM okS) {G : ThreadId → γ} {m : Mem} {t : ThreadId}
+    {g : γ} (hl : L.ph g = .away) (hm : M.ph g = .out ∨ M.ph g = .holds)
+    (hi : P.inv (upd G t g) m) : P.inv (upd G t (L.set g .out rnil)) m := by
+  obtain ⟨rX, hM, -⟩ := (hW.m.inv _ _).mp hi
+  exact FLock.Fits.unaway hW.s.toFits hl hi (notQ_outHolds hM (by rw [upd_self]; exact hm))
+    fun rX hU hw => hW.lunaway G rX m t g hl hm hU hw
+
+/-- **Away from the outer mutex** before the last reader's post at the semaphore
+(`FLock.Fits.goAway` at the outer mutex, with `maway`). -/
+theorem Fits.mAway (hW : W.Fits P UM US okM okS) {G : ThreadId → γ} {m : Mem} {t : ThreadId}
+    {g : γ} (hm : M.ph g = .out) (hl : L.ph g = .out)
+    (hi : P.inv (upd G t g) m) : P.inv (upd G t (M.set g .away rnil)) m :=
+  FLock.Fits.goAway hW.m hm hi fun rX hU hw => hW.maway G rX m t g hm hl hU hw
+
+/-- **Back at the outer mutex** after the post (`FLock.Fits.unaway`, with `munaway`): out of the
+semaphore's mutex's code, the thread is not in the futex queue. -/
+theorem Fits.mUnaway (hW : W.Fits P UM US okM okS) {G : ThreadId → γ} {m : Mem} {t : ThreadId}
+    {g : γ} (hm : M.ph g = .away) (hl : L.ph g = .out)
+    (hi : P.inv (upd G t g) m) : P.inv (upd G t (M.set g .out rnil)) m := by
+  obtain ⟨rX, hL, -⟩ := (hW.s.inv _ _).mp hi
+  exact FLock.Fits.unaway hW.m hm hi (notQ_outHolds hL (by rw [upd_self]; exact .inl hl))
+    fun rX hU hw => hW.munaway G rX m t g hm hl hU hw
+
 /-- **A step of the rwlock's own code keeps the protocol** (`FLock.Fits.kstep` at `Step`): the
 step's facts, given the rwlock's invariant before it (`Fits.sub`). -/
 theorem Fits.wstep (hW : W.Fits P UM US okM okS) {t : ThreadId} {G G' : ThreadId → γ}
@@ -1621,7 +1704,10 @@ lemma's `upd G₁ t (W.set (G₁ t) a)`): it does not read the part (`Inv.congr`
 theorem Fits.atWord (hW : W.Fits P UM US okM okS) {t : ThreadId} {G₁ : ThreadId → γ} {g g₁ : γ}
     {a : RwPh} {rY rY' : Res} {m₁ m' : Mem} (hg₁ : G₁ t = g) (hc₁ : m₁.current = t)
     (hU : UM G₁ (rsum (W.st.cellsR m₁) rY) m₁) (hiL : M.Inv G₁ (rsum (W.st.cellsR m₁) rY) m₁)
-    (hrest : RestStep W.st.In m₁ m') (hL : M.Inv (upd G₁ t g₁) (rsum (W.st.cellsR m') rY') m')
+    (hrest : RestStep W.st.In m₁ m')
+    (hA : ∀ hF : Heap, (∀ x, W.st.o ≤ x → x < W.st.o + 8 → hF (W.st.b, x) = none) →
+      FStepIn hF m₁ m')
+    (hL : M.Inv (upd G₁ t g₁) (rsum (W.st.cellsR m') rY') m')
     (hg : W.x g₁ = W.x g ∧ M.ph g₁ = M.ph g ∧ M.held g₁ = M.held g ∧ L.ph g₁ = L.ph g ∧
       L.held g₁ = L.held g ∧ S.place.ph g₁ = S.place.ph g)
     (hY : ∃ rF rF' rO, rY = rsum rF rO ∧ rY' = rsum rF' rO)
@@ -1640,7 +1726,8 @@ theorem Fits.atWord (hW : W.Fits P UM US okM okS) {t : ThreadId} {G₁ : ThreadI
     · rw [upd_ne _ _ e, upd_ne _ _ e]
   have hI' := fun hI₁ => (hI hI₁).congr (hu W.ph (by rw [W.ph_set, W.ph_set]))
     (hu M.ph (by rw [hW.mph, hW.mph, hmp])) (hu W.x (by rw [W.x_set, W.x_set, hx]))
-  refine hW.wstep hU fun hI₁ => ⟨hiL, hI₁, hM, hI' hI₁, hc₁, .inr hrest,
+  refine hW.wstep hU fun hI₁ => ⟨hiL, hI₁, hM, hI' hI₁, hc₁,
+    ⟨hrest, fun hF h => hA hF fun x h1 h2 => h _ ⟨rfl, h1, h2⟩⟩,
     fun u hu => upd_ne _ _ hu, fun u => ?_, ?_, ?_, ?_, ?_, ?_,
     rF, rF', rO, rfl, rfl⟩
   · by_cases e : u = t
@@ -1667,11 +1754,14 @@ rest kept). -/
 theorem Fits.atWord_keep (hW : W.Fits P UM US okM okS) {t : ThreadId} {G₁ : ThreadId → γ} {g : γ}
     {a : RwPh} {rY : Res} {m₁ m' : Mem} (hg₁ : G₁ t = g) (hc₁ : m₁.current = t)
     (hU : UM G₁ (rsum (W.st.cellsR m₁) rY) m₁) (hiL : M.Inv G₁ (rsum (W.st.cellsR m₁) rY) m₁)
-    (hrest : RestStep W.st.In m₁ m') (hL : M.Inv G₁ (rsum (W.st.cellsR m') rY) m')
+    (hrest : RestStep W.st.In m₁ m')
+    (hA : ∀ hF : Heap, (∀ x, W.st.o ≤ x → x < W.st.o + 8 → hF (W.st.b, x) = none) →
+      FStepIn hF m₁ m')
+    (hL : M.Inv G₁ (rsum (W.st.cellsR m') rY) m')
     (hI : W.Inv G₁ (rsum (W.st.cellsR m₁) rY) m₁ →
       W.Inv (upd G₁ t (W.set g a)) (rsum (W.st.cellsR m') rY) m') :
     P.inv (upd G₁ t (W.set g a)) m' :=
-  hW.atWord hg₁ hc₁ hU hiL hrest (by rw [← hg₁, upd_same]; exact hL)
+  hW.atWord hg₁ hc₁ hU hiL hrest hA (by rw [← hg₁, upd_same]; exact hL)
     ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩ ⟨rY, rY, rnil, (rsum_rnil _).symm, (rsum_rnil _).symm⟩ hI
 
 /-! ## The rules of the ops at the state word
@@ -1741,7 +1831,7 @@ theorem wp_giveW (hW : W.Fits P UM US okM okS) {r₀ r : Res} {ord : AtomicOrder
   have hL' := hL.giveRest hgt (by rw [hg₁]; exact hpart) hd
   rw [← rsum_assoc, rsum_comm hrc, rsum_assoc, hg₁] at hL'
   have hop := hA (fun _ => none) (fun _ _ _ => rfl)
-  refine h k hk G₁ m' old (hop.current.trans hc₁) (hW.atWord hg₁ hc₁ hU hiL hrest hL'
+  refine h k hk G₁ m' old (hop.current.trans hc₁) (hW.atWord hg₁ hc₁ hU hiL hrest hA hL'
     (hW.setPart_keeps g r₀) ⟨rnil, r, rY, (rnil_rsum _).symm, rfl⟩ fun hI => ?_)
   have hR₁ : W.R (W.xs G₁) r := by have := hR G₁; rwa [← hg₁, upd_same] at this
   have := hI.giveW hY (by rw [hg₁]; exact hwr) ht (hW.mph _) hR₁ (hown.sepR rfl rfl).1 hoffr
@@ -1767,7 +1857,7 @@ theorem wp_addW (hW : W.Fits P UM US okM okS) {ord : AtomicOrder} {v : BitVec 64
   have hgt : M.ph (G₁ t) ≠ .gone := by rw [hg₁]; exact hmg
   have hop := hA (fun _ => none) (fun _ _ _ => rfl)
   refine h k hk G₁ m' old (hop.current.trans hc₁)
-    (hW.atWord_keep hg₁ hc₁ hU hiL hrest hL fun hI => ?_)
+    (hW.atWord_keep hg₁ hc₁ hU hiL hrest hA hL fun hI => ?_)
   have := hI.addW hY (by rw [hg₁]; exact hout) (hiL.ht hgt).1 (hW.mph _)
     (hroom G₁ m₁ ((hW.m.inv _ _).mpr ⟨_, hiL, hU⟩) (by rw [hg₁]; exact hout)) hrest hw' hv hh hrel
     hfp
@@ -1827,9 +1917,9 @@ theorem wp_decW (hW : W.Fits P UM US okM okS) {ord : AtomicOrder} {v : BitVec 64
     rw [hg₁] at hdp
     refine .inr ⟨by rw [hro]; exact hn, rF, by rw [← hg₁, upd_same]; exact hR,
       (FHeap.disjoint_union_right.mp (FHeap.disjoint_union_right.mp hdp).2).1,
-      hW.atWord hg₁ hc₁ hU hiL hrest hL' (hW.setPart_keeps g _)
+      hW.atWord hg₁ hc₁ hU hiL hrest hA hL' (hW.setPart_keeps g _)
         ⟨rF, rnil, rO, rfl, (rnil_rsum _).symm⟩ fun _ => hI'⟩
-  · refine .inl ⟨by rw [hro]; exact hn, hW.atWord_keep hg₁ hc₁ hU hiL hrest hL fun hI => ?_⟩
+  · refine .inl ⟨by rw [hro]; exact hn, hW.atWord_keep hg₁ hc₁ hU hiL hrest hA hL fun hI => ?_⟩
     have := hI.enterW hY hwi₁ ht (hW.mph _) hMt hnoW hn hrest hw' hv hh hrel hfp
     rwa [hg₁] at this
 
@@ -1848,7 +1938,8 @@ theorem wp_loadW (hW : W.Fits P UM US okM okS) {ord : AtomicOrder} (hmg : M.ph g
   have hrest := Word.atomicLoad_rest hw₀ hct' hr
   have hop := hA (fun _ => none) (fun _ _ _ => rfl)
   refine h k hk G₁ m' b (hop.current.trans hc₁) ((hW.m.sub _ _ _ hU).msgOk hj hv) ?_
-  have := hW.atWord_keep (a := W.ph g) hg₁ hc₁ hU hiL hrest hL fun hI => by rw [W.set_self, ← hg₁, upd_same]; exact hI.load hY hrest hw' hh
+  have := hW.atWord_keep (a := W.ph g) hg₁ hc₁ hU hiL hrest hA hL fun hI => by
+    rw [W.set_self, ← hg₁, upd_same]; exact hI.load hY hrest hw' hh
   rwa [W.set_self] at this
 
 /-- **A reader's `+2^32` at the word moves `t` to `rd q H` with the share `q` in its part** (the
@@ -1865,7 +1956,10 @@ theorem Fits.enterR (hW : W.Fits P UM US okM okS) {G₁ : ThreadId → γ} {rY :
     (hiL : M.Inv G₁ (rsum (W.st.cellsR m₁) rY) m₁) (hY : ∀ l, W.st.In l → rY.heap l = none)
     (hout : W.ph g = .out) (hmg : M.ph g ≠ .gone) (hnoW : ∀ u, (W.ph (G₁ u)).isW = false)
     (hroom : ∀ G m, P.inv G m → W.ph (G t) = .out → W.nrd G m + 1 < RwState.countBound)
-    (hrest : RestStep W.st.In m₁ m') (hok : W.st.Ok m' fun u => M.ph (G₁ u) ≠ .gone)
+    (hrest : RestStep W.st.In m₁ m')
+    (hA : ∀ hF : Heap, (∀ x, W.st.o ≤ x → x < W.st.o + 8 → hF (W.st.b, x) = none) →
+      FStepIn hF m₁ m')
+    (hok : W.st.Ok m' fun u => M.ph (G₁ u) ≠ .gone)
     (hv : (W.st.hist m₁)[(W.st.hist m₁).size - 1]!.Val old)
     (hh : W.st.hist m' = (W.st.hist m₁).push (Word.rmwEnt m' t ord
       (W.st.hist m₁)[(W.st.hist m₁).size - 1]! (old + BitVec.ofNat 64 RwState.readerUnit)))
@@ -1890,7 +1984,7 @@ theorem Fits.enterR (hW : W.Fits P UM US okM okS) {G₁ : ThreadId → γ} {rY :
   -- the rest keeps one half of `f`, `t`'s part gets the other
   suffices hM : M.Inv (upd G₁ t (M.setPart g (rsum (M.part g) (shareRes H f.half))))
       (rsum (W.st.cellsR m') (rsum (shareRes H f.half) rO)) m' by
-    refine ⟨f.half, H, Frac.half_pos hf, hR, hW.atWord hg₁ hc₁ hU hiL hrest hM
+    refine ⟨f.half, H, Frac.half_pos hf, hR, hW.atWord hg₁ hc₁ hU hiL hrest hA hM
       (hW.setPart_keeps g _) ⟨rF, shareRes H f.half, rO, rfl, rfl⟩ fun _ => ?_⟩
     have := hI' f.half f.half (Frac.half_pos hf) (Frac.half_pos hf) (Frac.half_add_half f)
     rwa [hg₁] at this
@@ -1978,11 +2072,11 @@ theorem wp_casR (hW : W.Fits P UM US okM okS) {succ fail : AtomicOrder} {exp new
       cases hu : (W.ph (G₁ u)).isW
       · rfl
       · rw [writing_of (hI₁.ex u fun e => by rw [e] at hu; cases hu) hu] at hwr; cases hwr
-    obtain ⟨q, H, hq, hR, hP⟩ := hW.enterR hg₁ hc₁ hc' hU hiL hY hout hmg hnoW hroom hrest hw'
-      hv hh hrel (hac hacq) hfp hL
+    obtain ⟨q, H, hq, hR, hP⟩ := hW.enterR hg₁ hc₁ hc' hU hiL hY hout hmg hnoW hroom hrest hA
+      hw' hv hh hrel (hac hacq) hfp hL
     exact hs k hk G₁ m' hc' q H hq hR hP
   · refine hf k hk G₁ m' b hc' (hI₁.msgOk hj hv) ?_
-    have := hW.atWord_keep (a := W.ph g) hg₁ hc₁ hU hiL hrest hL fun hI => by
+    have := hW.atWord_keep (a := W.ph g) hg₁ hc₁ hU hiL hrest hA hL fun hI => by
       rw [W.set_self, ← hg₁, upd_same]; exact hI.load hY hrest hw' hh
     rwa [W.set_self] at this
 
@@ -2016,8 +2110,8 @@ theorem wp_addR (hW : W.Fits P UM US okM okS) {ord : AtomicOrder} {v : BitVec 64
     · rfl
     · have := hiL.w.one u t (hI₁.wm u hu) hMt
       subst this; rw [hout₁] at hu; cases hu
-  obtain ⟨q, H, hq, hR, hP⟩ := hW.enterR hg₁ hc₁ hc' hU hiL hY hout hmg hnoW hroom hrest hw' hv
-    hh hrel (hac hacq) hfp hL
+  obtain ⟨q, H, hq, hR, hP⟩ := hW.enterR hg₁ hc₁ hc' hU hiL hY hout hmg hnoW hroom hrest hA hw'
+    hv hh hrel (hac hacq) hfp hL
   exact h k hk G₁ m' old hc' q H hq hR hP
 
 /-- **A reader's `-2^32`** (`unlockShared`, from `rd q H` with the share in its part beside `r₀`),
@@ -2077,7 +2171,7 @@ theorem wp_subR (hW : W.Fits P UM US okM okS) {r₀ : Res} {q : Frac} {H : FHeap
     by_cases hwt : W.writing G₁ m₁ = true
     · -- before a writer: at `rp`, holding the resource
       refine .inr ⟨by rw [hro]; exact h1, by rw [hwo]; exact hwt, ⟨H, Know.none, Ghost.unit⟩, hR,
-        hd₀, hW.atWord hg₁ hc₁ hU hiL hrest hL₂ (hW.setPart_keeps g _)
+        hd₀, hW.atWord hg₁ hc₁ hU hiL hrest hA hL₂ (hW.setPart_keeps g _)
           ⟨shareRes H f, rnil, rO, rfl, (rnil_rsum _).symm⟩ fun _ => ?_⟩
       have := hC h1 hwt
       rwa [hg₁] at this
@@ -2090,7 +2184,7 @@ theorem wp_subR (hW : W.Fits P UM US okM okS) {r₀ : Res} {q : Frac} {H : FHeap
       rw [upd_self, M.setPart_setPart, upd_upd,
         rsum_left_comm (a := ⟨H, Know.none, Ghost.unit⟩) (b := W.st.cellsR m') hHc] at hL₃
       refine .inl ⟨fun _ => by rw [hwo]; exact Bool.eq_false_iff.mpr hwt,
-        hW.atWord hg₁ hc₁ hU hiL hrest hL₃ (hW.setPart_keeps g r₀)
+        hW.atWord hg₁ hc₁ hU hiL hrest hA hL₃ (hW.setPart_keeps g r₀)
           ⟨shareRes H f, ⟨H, Know.none, Ghost.unit⟩, rO, rfl, rfl⟩ fun _ => ?_⟩
       have := hB h1 (Bool.eq_false_iff.mpr hwt) hHO
       rwa [hg₁] at this
@@ -2099,7 +2193,7 @@ theorem wp_subR (hW : W.Fits P UM US okM okS) {r₀ : Res} {q : Frac} {H : FHeap
     rw [hg₁, rsum_left_comm (a := shareRes H q) (b := W.st.cellsR m') fun _ => .inl rfl,
       ← rsum_assoc (a := shareRes H q), shareRes_add, Frac.add_comm q f] at hL₁
     refine .inl ⟨fun h1' => absurd (by rw [← hro]; exact h1') h1,
-      hW.atWord hg₁ hc₁ hU hiL hrest hL₁ (hW.setPart_keeps g r₀)
+      hW.atWord hg₁ hc₁ hU hiL hrest hA hL₁ (hW.setPart_keeps g r₀)
         ⟨shareRes H f, shareRes H (f.add q), rO, rfl, rfl⟩ fun _ => ?_⟩
     have := hA' h1
     rwa [hg₁] at this
@@ -2195,7 +2289,8 @@ theorem wp_waitW (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (I : SemI
   have hlN : L.ph gN = .out := by rw [hgN, W.pair.ph_ab, hlo]
   have hlhN : L.held gN = rnil := by rw [hgN, W.pair.held_ab, hlh]
   have hpN : L.part gN = M.part g := by rw [hgN, ← W.pair.part, M.part_set]
-  have hokN : okS gN := by rw [hgN]; exact (hW.okS_m _ _ _).mpr hok
+  have hokN : okS gN ∧ (M.ph gN = .away ∨ M.ph gN = .holdsAway) :=
+    ⟨by rw [hgN]; exact (hW.okS_m _ _ _).mpr hok, .inr hmN⟩
   have hu' : 0 < (L.part gN).gh.ac.frag .unmetered := by rw [hpN]; exact hu
   have hgw : ∀ rL, W.ph (L.set (S.set gN .wt) .holds rL) = .ww := fun _ => by
     rw [W.ph_l, ph_s, hwN]
@@ -2214,7 +2309,7 @@ theorem wp_waitW (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (I : SemI
     (fun Y r => S.Pool Y r ∧ ∃ G₀, W.R (W.xs (upd G₀ t g)) r) hlN hcN hsN
     ((W.wx_iff gN).mpr hwN) hokN (fun _ => by rw [W.lph, hlN]) (fun _ => by rw [W.lheld, hlhN])
     (fun _ => by rw [cph_w, hcN]) (fun _ => by rw [sph_w, hsN])
-    (fun _ => (hW.okS_set _ _).mpr hokN)
+    (fun _ => ⟨(hW.okS_set _ _).mpr hokN.1, by rw [hW.mph]; exact hokN.2⟩)
     (fun rᵢ hr G₁ rL m₁ h₁ h0 => by
       obtain rfl := (hkeep t _ rᵢ hu').1 hr
       rw [L.setPart_self] at h₁
