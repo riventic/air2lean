@@ -1020,7 +1020,7 @@ theorem fitsE : L.Fits (E.prim L) proto U ok := { fitsL with
       · exact estep G rY m m' t p q hlq hu hY hs hN hwL hI
       · exact U_own_native hu hY
           (fun h => absurd ((show L.ph (G t) = .gone from h).symm.trans hout) (by decide))
-          hc hs hcW hh hL
+          hc hs.cells hcW hh hL
     · exact tickStable t G rX m G' rX' m' hs hu }
 
 end Threadsync.WG

@@ -232,10 +232,11 @@ theorem U_frame {G G'' : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId}
 theorem U_hold {G G' : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {rp rL r : Res}
     {x₀ x₁ : X} (hx : x₀ = { ph := .hl } ∧ (x₁ = { ph := .hl } ∨ x₁ = { ph := .un }))
     (hu : U (upd G t (gH rp rL x₀)) rX m) (hc : m.current = t)
-    (hs : FStepIn (rsum (L.wordR m) rX).heap.erase m m') (hL : L.Inv G' rX m') :
+    (hs : FStepIn (rsum (L.wordR m) rX).owned m m' (rsum (L.wordR m) rX).shared)
+    (hL : L.Inv G' rX m') :
     U (upd G t (gH rp r x₁)) rX m' := by
   obtain ⟨rfl, hx₁⟩ := hx
-  have h1 := U_frame (g := gH rp r { ph := .hl }) hu hc (by rw [upd_self]; nofun) hs hL
+  have h1 := U_frame (g := gH rp r { ph := .hl }) hu hc (by rw [upd_self]; nofun) hs.cells hL
     (by rw [upd_self]; rfl) (by rw [upd_self]; rfl)
   rw [upd_upd] at h1
   have h2 := U_task (t := t) (g := gH rp r x₁) h1 (by rw [upd_self]; rfl)
