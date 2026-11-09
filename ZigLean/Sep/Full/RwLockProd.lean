@@ -242,15 +242,16 @@ theorem c_apart (W : FRw γ X Y M L C S) : ∀ Wd : Word 32 4, (Wd = C.S ∨ Wd 
 /-- **The condition's epoch and the outer mutex have other futex keys in every memory** (the
 layout: one block, at `p + 24` and `p + 32`; `Mem.wordKey_ne_off`). -/
 theorem ep_key_ne (W : FRw γ X Y M L C S) (m : Mem) : C.Ep.key m ≠ M.key m := by
-  have b1 : C.S.b = S.p.block := congrArg Ptr.block S.ptr_c
-  have b2 : S.p.block = W.p.block := congrArg Ptr.block W.ptr_s
-  have b3 : M.b = W.p.block := congrArg Ptr.block W.ptr_m
+  have b1 : some C.S.b = S.p.block := congrArg Ptr.block S.ptr_c
+  have b2 : S.p.block = W.p.block := by rw [W.ptr_s]; rfl
+  have b3 : some M.b = W.p.block := congrArg Ptr.block W.ptr_m
+  have hb : C.Ep.b = M.b := Option.some.inj (by rw [C.ep_b, b1, b2, ← b3])
   have h1 : (C.S.o : Int) = S.p.off + 12 := congrArg Ptr.off S.ptr_c
   have h2 : S.p.off = W.p.off + 8 := congrArg Ptr.off W.ptr_s
   have h3 : (M.o : Int) = W.p.off + 32 := congrArg Ptr.off W.ptr_m
   have h5 := C.ep_o
   show m.wordKey C.Ep.b C.Ep.o ≠ m.wordKey M.b M.o
-  rw [C.ep_b, b1, b2, ← b3]
+  rw [hb]
   exact Mem.wordKey_ne_off (by omega) (by omega) (by omega) _ _
 
 /-- The semaphore's mutex protects the count and the pool, without partial shares. -/
