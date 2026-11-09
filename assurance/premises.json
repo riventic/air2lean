@@ -268,6 +268,7 @@
     "ZigLean.Sep.Full.Sem": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "THR-08", "THR-05", "OSM-01"],
     "ZigLean.Sep.Full.RwLock": [],
     "ZigLean.Sep.Full.RwLockImpl": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "THR-08", "THR-05", "OSM-01"],
+    "ZigLean.Sep.Full.RwLockProd": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "THR-08", "THR-05", "OSM-01"],
     "ZigLean.Sep.Full.IoRwLock": ["THR-01", "SEM-02", "SEM-03", "SEM-04", "ORD-01", "THR-08", "THR-05", "OSM-01"],
     "ZigLean.Os.Mmap": ["OSM-01"],
     "ZigLean.Os.MmapRun": ["OSM-01"],
