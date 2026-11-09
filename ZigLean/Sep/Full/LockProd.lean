@@ -449,6 +449,28 @@ theorem Facts.pdisj_upd (hf : L.Facts G m rL) {t : ThreadId} {g : γ}
   · subst e; rw [upd_self, hpart, hheld]; exact hf.pdisj u
   · rw [upd_ne _ _ e]; exact hf.pdisj u
 
+/-- **The side of a lock that protects nothing owns only the lock's word** (`R = emp`): its free
+resource and its holders' resources are empty. -/
+theorem Keeps.side_owned {B : FLock γ} {rH : Res} (hR : ∀ G, B.R G = emp)
+    (hk : B.Keeps G m rL rH rX) {l : Zig.Loc} (h : (side B m rL rH).owned l ≠ none) : B.In l := by
+  have hemp : ∀ r, emp r → r.owned l = none := fun r ⟨he, -, hg⟩ =>
+    Res.owned_plain hg (by rw [he]; rfl)
+  have hf := hk.facts
+  rcases (Res.owned_sep rfl rfl).mp h with h | h
+  · exact Classical.byContradiction fun hn => h (cellsAt_owned_none hn)
+  rcases (Res.owned_sep rfl rfl).mp h with h | h
+  · refine absurd ?_ h
+    by_cases hF : B.Free G
+    · exact hemp _ (by have h' := (hf.free hF).1; rwa [hR] at h')
+    · rw [hf.busy hF]; exact hemp _ ⟨rfl, rfl, rfl⟩
+  · obtain ⟨j, -, rj, rfl, hj⟩ := sepN_cover_owned hk.held h
+    refine absurd ?_ hj
+    unfold FLock.heldOf; split
+    · exact hemp _ ⟨rfl, rfl, rfl⟩
+    · cases e : (B.ph (G j)).held
+      · rw [hf.idle j e]; exact hemp _ ⟨rfl, rfl, rfl⟩
+      · exact hemp _ (by have h' := hf.res j e; rwa [hR] at h')
+
 /-- **The free resource next to a rest alike** (`Res.Sim`, as `Inv.congrX`). -/
 theorem FreeRes.congrX {rX' : Res} (h : L.FreeRes G rX m rL) (hs : Res.Sim rX' rX) :
     L.FreeRes G rX' m rL :=
