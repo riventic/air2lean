@@ -814,6 +814,12 @@ ownership of the cells. The layer moves to it in one step:
   frame `hF` except a *read* of the frame's partial shares `hR` (`FootprintEntry.ReadsIn`). Next
   to a byte the resource holds, the frame holds at most a partial share (`Holds.frame_shared`), so
   a load of the resource's bytes reads only `hR`.
+- The lock's and the sync primitives' rules hand this frame on to the protocol's rest `U`, never
+  only its cells (`.heap.erase`, which drops another lock's share bytes): `Inv.wp_liftMem`'s
+  continuation, `Fits.wp_hold`/`wp_holdParts`'s `hU`, `wp_liftPartW`'s continuation, the own-part
+  step of `FPrim.ofWords` (`Fits.wOwn`) and `FSem.Move.hold`. A two-lock product's `U` keeps the
+  other lock over such a step (`FLock.Pair.U_partStep`); a client that needs only the cells takes
+  them with `FStepIn.cells`.
 - `FOwned.owns` is `∀ u < size, m.OwnsRes u (own u)`, and the free lock's resource is
   `LockWord.OwnsRes` (`LockWord.Owns … r.excl` and the write-only `LockWord.Owns … r.shared true`).
 - **Thread share load** (`ThreadLocal.loadOwned`, the locality provider `ThreadLocal.sload`): a

@@ -1029,10 +1029,10 @@ theorem fitsS : (S K).Fits (proto K) (U K) ok where
     · rcases hs with ⟨W, rY, hW, rfl, rfl, hY, hI,
         ⟨p, q, h, ⟨hn, hq, hms, hEp, hsg⟩, hwL, rfl⟩ | ⟨r, -, hi, -, hfs, -, hw', hh, hL, rfl⟩⟩
       · exact cstep G rY m m' t p q h W hW hn hq hms hEp hsg hwL hu hY hI hSI
-      · exact U_own hW hu hi hY hfs hw' hh hL rfl rfl hSI
+      · exact U_own hW hu hi hY hfs.cells hw' hh hL rfl rfl hSI
     · cases hmv with
       | enter _ _ _ _ _ => exact enterStep hu hC hSI
-      | hold s h hh _ hL _ hfs hL' _ hgo => exact holdStep hu hh hL hfs hL' hgo hC hSI
+      | hold s h hh _ hL _ hfs hL' _ hgo => exact holdStep hu hh hL hfs.cells hL' hgo hC hSI
     · exact tickStable t G rX m G' rX' m' hs hu
 
 end Sync.Mailbox

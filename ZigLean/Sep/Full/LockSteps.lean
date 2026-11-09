@@ -298,10 +298,12 @@ theorem Fits.wp_readRest (hF : L.Fits K P U ok) {T : Type} [Enc T] {p : Ptr} {b 
     hi hc hg trivial h
 
 /-- A step that keeps the protocol's rest with the lock's word keeps the rest alone (for a
-protocol's `U` step under `Fits.wp_hold`'s `hU`, which gets the step with the word). -/
+protocol's `U` step under `Fits.wp_hold`'s `hU`, which gets the step with the word and the
+rest's read shares). -/
 theorem _root_.Zig.FStepIn.restX {rX : Res} {m m' : Mem}
-    (hs : FStepIn (rsum (L.wordR m) rX).heap.erase m m') : FStepIn rX.heap.erase m m' :=
-  hs.weaken fun l hl => by
+    (hs : FStepIn (rsum (L.wordR m) rX).owned m m' (rsum (L.wordR m) rX).shared) :
+    FStepIn rX.heap.erase m m' :=
+  hs.cells.weaken fun l hl => by
     simp only [FHeap.erase, rsum, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
       Option.or_eq_none_iff, not_and] at hl ⊢
     exact fun _ => hl
@@ -324,7 +326,8 @@ theorem Fits.wp_holdParts (hF : L.Fits K P U ok) {α : Type} {x : MemM α}
     (hg' : ∀ a rp rh, Qp a rp → Qh a rh →
       L.ph (g' rp rh) = .holds ∧ L.part (g' rp rh) = rp ∧ L.held (g' rp rh) = rh)
     (hU : ∀ a rX m' rp rh, Qp a rp → Qh a rh → L.Inv G' rX m → U G' rX m →
-      joinedB m t = false → FStepIn (rsum (L.wordR m) rX).heap.erase m m' →
+      joinedB m t = false →
+      FStepIn (rsum (L.wordR m) rX).owned m m' (rsum (L.wordR m) rX).shared →
       m'.threads = m.threads → L.Inv (upd G' t (g' rp rh)) rX m' →
       U (upd G' t (g' rp rh)) rX m')
     (h : ∀ a m' rp rh, m'.current = t → m'.threads = m.threads → Qp a rp → Qh a rh →
@@ -346,7 +349,7 @@ theorem Fits.wp_holdParts (hF : L.Fits K P U ok) {α : Type} {x : MemM α}
     (fun h => by rw [hh] at h; cases h)
     (fun _ => by rw [hhd]; exact hR a rp rh hqp hqh)
   exact h a m' rp rh hc' hs.threads hqp hqh
-    ((hF.inv _ _).mpr ⟨rX, hl, hU a rX m' rp rh hqp hqh hiL hU₀ hjt hs.cells hs.threads hl⟩)
+    ((hF.inv _ _).mpr ⟨rX, hl, hU a rX m' rp rh hqp hqh hiL hU₀ hjt hs hs.threads hl⟩)
 
 /-- **A step of the lock's holder `t` on the lock's resource** (module doc): a thread triple from
 what the resource `L.R G'` gives (`hpa`; the holder's part framed); after it, the holder's new
@@ -362,7 +365,8 @@ theorem Fits.wp_hold (hF : L.Fits K P U ok) {α : Type} {x : MemM α} {G G' : Th
     (hg' : ∀ r, L.ph (g' r) = .holds ∧ L.part (g' r) = L.part (G' t) ∧
       L.held (g' r) = r)
     (hU : ∀ rX m' r, L.Inv G' rX m → U G' rX m → joinedB m t = false →
-      FStepIn (rsum (L.wordR m) rX).heap.erase m m' → m'.threads = m.threads →
+      FStepIn (rsum (L.wordR m) rX).owned m m' (rsum (L.wordR m) rX).shared →
+      m'.threads = m.threads →
       L.Inv (upd G' t (g' r)) rX m' → U (upd G' t (g' r)) rX m')
     (h : ∀ a m' r, m'.current = t → m'.threads = m.threads → Qa a r →
       P.inv (upd G' t (g' r)) m' → Q a G m' d)
