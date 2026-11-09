@@ -453,7 +453,7 @@ theorem Facts.pdisj_upd (hf : L.Facts G m rL) {t : ThreadId} {g : γ}
 resource and its holders' resources are empty. -/
 theorem Keeps.side_owned {B : FLock γ} {rH : Res} (hR : ∀ G, B.R G = emp)
     (hk : B.Keeps G m rL rH rX) {l : Zig.Loc} (h : (side B m rL rH).owned l ≠ none) : B.In l := by
-  have hemp : ∀ r, emp r → r.owned l = none := fun r ⟨he, -, hg⟩ =>
+  have hemp : ∀ r, emp r → r.owned l = none := fun r ⟨he, _, hg⟩ =>
     Res.owned_plain hg (by rw [he]; rfl)
   have hf := hk.facts
   rcases (Res.owned_sep rfl rfl).mp h with h | h
