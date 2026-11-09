@@ -1683,7 +1683,8 @@ private theorem liftPartPost (hC : L.Fits (C.prim L) P U ok) {rY r' : Res} {m' :
     (hU : U (upd G t g) (rsum (C.S.cellsR m) rY) m)
     (hL : L.Inv (upd G t g) (rsum (C.S.cellsR m) rY) m)
     (hY : ∀ l, C.S.In l → rY.heap l = none)
-    (hs : FStepIn (rsum (L.wordR m) (rsum (C.S.cellsR m) rY)).heap.erase m m')
+    (hs : FStepIn (rsum (L.wordR m) (rsum (C.S.cellsR m) rY)).owned m m'
+      (rsum (L.wordR m) (rsum (C.S.cellsR m) rY)).shared)
     (hcW : ∀ l, C.S.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm)
     (hw' : C.S.Ok m') (hhS : C.S.hist m' = C.S.hist m)
     (hL' : L.Inv (upd G t (L.setPart g r')) (rsum (C.S.cellsR m') rY) m') :
@@ -1707,7 +1708,7 @@ private theorem liftPartPost (hC : L.Fits (C.prim L) P U ok) {rY r' : Res} {m' :
     simp only [FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
       Option.or_eq_none_iff, not_and]
     intro _ h; exact absurd h this
-  have hhE := Word.hist_fstep hwE hs hwF hcE
+  have hhE := Word.hist_fstep hwE hs.cells hwF hcE
   have hI' : C.Inv L (upd G t (L.setPart g r')) m' := by
     have := (hC.wInv _ _ _ hU).other (t := t) (g' := L.setPart g r')
       (by rw [upd_self, hC.ph_part]) (fun _ => by rw [upd_self, L.ph_setPart])

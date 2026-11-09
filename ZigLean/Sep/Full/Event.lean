@@ -2070,7 +2070,8 @@ private theorem liftPartPost (hE : L.Fits (E.prim L) P U ok) {rY r' : Res} {m' :
     (hU : U (upd G t g) (rsum (E.W.cellsR m) rY) m)
     (hL : L.Inv (upd G t g) (rsum (E.W.cellsR m) rY) m)
     (hY : ∀ l, E.W.In l → rY.heap l = none)
-    (hs : FStepIn (rsum (L.wordR m) (rsum (E.W.cellsR m) rY)).heap.erase m m')
+    (hs : FStepIn (rsum (L.wordR m) (rsum (E.W.cellsR m) rY)).owned m m'
+      (rsum (L.wordR m) (rsum (E.W.cellsR m) rY)).shared)
     (hcW : ∀ l, E.W.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm)
     (hw' : E.W.Ok m' (fun u => E.Live (upd G t g u))) (hh : E.W.hist m' = E.W.hist m)
     (hL' : L.Inv (upd G t (L.setPart g r')) (rsum (E.W.cellsR m') rY) m') :
@@ -2090,7 +2091,7 @@ private theorem liftPartPost (hE : L.Fits (E.prim L) P U ok) {rY r' : Res} {m' :
       hh hs.waiters hs.clock (Nat.le_of_eq (by rw [hs.threads]))
       (fun h => by rw [upd_self] at h ⊢; exact (hE.role_part true _ _).mpr h)
       (fun h => by rw [upd_self] at h ⊢; exact (hE.role_part false _ _).mpr h)
-      ((hE.wInv _ _ _ hU).fresh.fstep hs hwF (fun i l hl => (hw.loc i l hl).1))
+      ((hE.wInv _ _ _ hU).fresh.fstep hs.cells hwF (fun i l hl => (hw.loc i l hl).1))
       (hw.key_of_addrs hs.addrs)
       (hL.w.blk.key_of_addrs hs.addrs)
   have hU' := hE.wOwn (G := upd G t g) (t := t) (r := r') rfl

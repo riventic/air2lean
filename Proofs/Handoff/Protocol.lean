@@ -1517,7 +1517,7 @@ theorem fitsC : (C Lo).Fits (L Lo) (proto Lo prodOf) (U Lo) ok where
         rw [e1, e2] at hsg
         obtain ⟨-, x, e⟩ := hsg
         rw [e, Array.size_push]
-      · exact U_own_native (hW.imp id .inl) hu hi hY hs hcW hL rfl rfl
+      · exact U_own_native (hW.imp id .inl) hu hi hY hs.cells hcW hL rfl rfl
     · exact tickStable t G rX m G' rX' m' hs hu }
 
 /-- **The protocol has the event** (the lock's laws as for `fitsL`). -/
@@ -1550,7 +1550,7 @@ theorem fitsE : (L Lo).Fits ((E Lo).prim (L Lo)) (proto Lo prodOf) (U Lo) ok := 
     · rcases hs with ⟨W, rY, rfl, rfl, rfl, hY, hI,
       ⟨p, q, h, ⟨hlq, rfl, hs, -⟩, -, rfl⟩ | ⟨r, -, hi, -, hs, hcW, -, -, hL, rfl⟩⟩
       · exact estep G rY m m' t p q hlq hu hY hs hI
-      · exact U_own_native (.inr (.inr rfl)) hu hi hY hs hcW hL rfl rfl
+      · exact U_own_native (.inr (.inr rfl)) hu hi hY hs.cells hcW hL rfl rfl
     · exact tickStable t G rX m G' rX' m' hs hu }
 
 end Handoff

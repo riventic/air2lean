@@ -675,10 +675,10 @@ theorem kstep (t : ThreadId) (G : ThreadId → Gh) (rX : Res) (m : Mem) (G' : Th
   · rcases hs with ⟨W, rY, hW, rfl, rfl, hY, hI,
       ⟨p, q, h, ⟨hn, hq, hs, hEp, hsg⟩, hWI, rfl⟩ | ⟨r, -, hi, -, hs, -, hw', hh, hL, rfl⟩⟩
     · exact cstep G rY m m' t p q h W hW hn hq hu hY hs hEp hsg hWI hI hsi
-    · exact U_own hW hu hi hY hs hw' hh hL rfl rfl hI hsi
+    · exact U_own hW hu hi hY hs.cells hw' hh hL rfl rfl hI hsi
   · cases hs with
     | enter _ hct hst hwx hcnt => exact U_enter hu hct hst hwx hcnt hci hsi
-    | hold s h hlt _ hL _ hfs hL' _ hgo => exact U_hold hu hL hfs hL' hgo hlt hci hsi
+    | hold s h hlt _ hL _ hfs hL' _ hgo => exact U_hold hu hL hfs.cells hL' hgo hlt hci hsi
   · exact tickStable t G rX m G' rX' m' hs hu
 
 /-- `R` reads the threads' places in the program only. -/
