@@ -365,15 +365,6 @@ theorem prim_sp (g : γ) (q : CPh × SPh) : W.prim.pl.set g (W.ph g, q) = S.plac
   show W.set (S.place.set g q) (W.ph g) = S.place.set g q
   rw [← W.ph_sp g q, W.set_self]
 
-/-- What a thread holds of the outer mutex has no bytes (`M.R = emp`). -/
-theorem mheld_heap (W : FRw γ X Y M L C S) {G : ThreadId → γ} {m : Mem} {rL : Res}
-    (hf : M.Facts G m rL) (u : ThreadId) : (M.held (G u)).heap = FHeap.empty := by
-  cases e : (M.ph (G u)).held
-  · rw [hf.idle u e]
-  · have h := hf.res u e
-    rw [W.mR] at h
-    exact h.1
-
 /-- **The reader/writer protocol from the two-lock product** (module doc; ledger
 #two-lock-product, item (5)): the outer mutex's view (`fitsM`) and the semaphore's (`fitsS`), both
 at the client's base `U₀`, and the client's obligations at `U₀`. The relabels around the other
@@ -440,12 +431,17 @@ theorem Fits.ofProduct {okS : γ → Prop}
     rw [← W.pair.setPart, M.held_setPart]
   have pW : ∀ g a, M.ph (W.set g a) = M.ph g := fun g a => by rw [← prim_set, hm.lph]
   have hW : ∀ g a, M.held (W.set g a) = M.held g := fun g a => by rw [← prim_set, hm.lheld]
-  have hR : ∀ G G' : ThreadId → γ, ∀ r, M.R G r → M.R G' r := fun G G' r h => by
-    rw [W.mR] at h ⊢; exact h
-  -- `t`'s new part is apart from what it holds of the outer mutex, which has no bytes
-  have hpd : ∀ (G : ThreadId → γ) t g g' (m : Mem) rL, M.Facts (upd G t g) m rL →
-      FHeap.Disjoint (M.part g').heap (M.held g).heap := fun G t g g' m rL hf => by
-    have h := mheld_heap W hf t
+  -- a relabel of `t` that keeps its place and held resource at the outer mutex keeps it: it
+  -- protects nothing, so `t`'s new part is apart from what it holds of it (`Facts.held_heap`)
+  have rel : ∀ {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {g g' : γ},
+      M.ph g' = M.ph g → M.held g' = M.held g → FLock.Pair.U M U₀ (upd G t g) rX m →
+      (∀ sB rL rH rX₀, rX = rsum sB rX₀ → Res.Sim sB (FLock.side M m rL rH) →
+        M.Keeps (upd G t g') m rL rH rX₀ → U₀ (upd G t g) rX₀ m → U₀ (upd G t g') rX₀ m) →
+      FLock.Pair.U M U₀ (upd G t g') rX m := by
+    intro G rX m t g g' hph hheld hU hcl
+    refine FLock.Pair.U_relabel hU hph hheld (fun r h => by rw [W.mR] at h ⊢; exact h)
+      (fun rL hf => ?_) hcl
+    have h := hf.held_heap W.mR t
     rw [upd_self] at h
     rw [h]; exact FHeap.disjoint_empty _
   exact {
@@ -469,15 +465,13 @@ theorem Fits.ofProduct {okS : γ → Prop}
     munaway := fun G rX m t g hg hl hU _ =>
       W.pair.U_setA hU fun rX₀ hu => munaway G rX₀ m t g hg hl hu
     utake := fun G rX m t g h₁ h₂ r sh sc hw hc hp hd hU hL hS' hC =>
-      FLock.Pair.U_relabel hU (by simp only [pS, pP, pW, W.pair.ph_ba])
-        (by simp only [hS, hP, hW, W.pair.held_ba]) (hR _ _) (hpd G t _ _ m)
+      rel (by simp only [pS, pP, pW, W.pair.ph_ba]) (by simp only [hS, hP, hW, W.pair.held_ba]) hU
         fun sB rL rH rX₀ he hsB hk hu => by
           subst he
           exact utake G rL rH rX₀ m t g h₁ h₂ r sh sc hw hc hp hd hu hk
             (FLock.Pair.inv_side hL hsB) hS' hC
     upost := fun G rX m t g r₀ rc h₁ h₂ sh sc hw hU hL hS' hC =>
-      FLock.Pair.U_relabel hU (by simp only [pS, pP, pW, W.pair.ph_ba])
-        (by simp only [hS, hP, hW, W.pair.held_ba]) (hR _ _) (hpd G t _ _ m)
+      rel (by simp only [pS, pP, pW, W.pair.ph_ba]) (by simp only [hS, hP, hW, W.pair.held_ba]) hU
         fun sB rL rH rX₀ he hsB hk hu => by
           subst he
           exact upost G rL rH rX₀ m t g r₀ rc h₁ h₂ sh sc hw hu hk

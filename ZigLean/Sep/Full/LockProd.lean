@@ -469,6 +469,15 @@ theorem Keeps.side_owned {B : FLock γ} {rH : Res} (hR : ∀ G, B.R G = emp)
       · rw [hf.idle j e]; exact hemp _ ⟨rfl, rfl, rfl⟩
       · exact hemp _ (by have h' := hf.res j e; rwa [hR] at h')
 
+/-- **What a thread holds of a lock that protects nothing has no bytes** (`R = emp`). -/
+theorem Facts.held_heap (hR : ∀ G, L.R G = emp) (hf : L.Facts G m rL) (u : ThreadId) :
+    (L.held (G u)).heap = FHeap.empty := by
+  cases e : (L.ph (G u)).held
+  · rw [hf.idle u e]
+  · have h := hf.res u e
+    rw [hR] at h
+    exact h.1
+
 /-- **The free resource next to a rest alike** (`Res.Sim`, as `Inv.congrX`). -/
 theorem FreeRes.congrX {rX' : Res} (h : L.FreeRes G rX m rL) (hs : Res.Sim rX' rX) :
     L.FreeRes G rX' m rL :=
