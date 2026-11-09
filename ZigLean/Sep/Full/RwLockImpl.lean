@@ -133,7 +133,9 @@ Stated once here; an instance walks its code with them:
   and after are the invariants' own splits (`Split`) with one rest of the rest, as `Step` takes
   them; `Split.unique` (over `rsum_cancel` and `Ghost.sharesOf_cancel`) says the split of a rest is
   unique. `Inv.frame`: the invariant next to a resource apart from its rest (either lock's side in
-  the two-lock product, `FLock.Pair.U`).
+  the two-lock product, `FLock.Pair.U`); `Split.frame`/`unframe`, `Inv.split`/`unframe`/
+  `owns_split` and `lR_eq` (the semaphore's mutex's resource over a step that keeps `RwPosted`)
+  for the product's views (`ZigLean/Sep/Full/RwLockProd.lean`).
 - **Ownership through the word** (`Owns`): `Owns.step` (a release write at the word), `Owns.mono`
   (fewer bytes), `Owns.ofThread` (a resource `t` gives to the rest), `Owns.toThread` (the free
   resource `t` takes with an acquire RMW, no other reader left: `FLock.Inv.takeRest`'s premise)
@@ -1383,6 +1385,70 @@ theorem Split.unique {G : ThreadId → γ} {m : Mem} {rF₁ rO₁ rF₂ rO₂ : 
       exact ⟨rfl, rfl, fun _ _ => Ghost.sharesOf_cancel⟩
   obtain ⟨rfl, hk, hg⟩ := key
   exact ⟨rfl, rsum_cancel hk hg hd₁ hd₂ he⟩
+
+/-- A sum has no cell at a byte exactly when neither summand has (here beside `rsum_cancel`). -/
+theorem rsum_heap_none {a b : Res} {l : Loc} :
+    (rsum a b).heap l = none ↔ a.heap l = none ∧ b.heap l = none := by
+  show (a.heap ∪ b.heap) l = none ↔ _
+  rw [FHeap.union_apply, Option.or_eq_none_iff]
+
+/-- A resource apart from the free resource and off the word joins the rest of the rest. -/
+theorem Split.frame {G : ThreadId → γ} {m : Mem} {rF rO r : Res} (hs : W.Split G m rF rO)
+    (hw : ∀ l, W.st.In l → r.heap l = none) (hd : FHeap.Disjoint rF.heap r.heap) :
+    W.Split G m rF (rsum r rO) :=
+  ⟨fun l hl => ⟨(hs.1 l hl).1, rsum_heap_none.mpr ⟨hw l hl, (hs.1 l hl).2⟩⟩,
+    FHeap.disjoint_union_right.mpr ⟨hd, hs.2.1⟩, hs.2.2⟩
+
+/-- A part of the rest of the rest leaves it. -/
+theorem Split.unframe {G : ThreadId → γ} {m : Mem} {rF rO r : Res}
+    (hs : W.Split G m rF (rsum r rO)) : W.Split G m rF rO :=
+  ⟨fun l hl => ⟨(hs.1 l hl).1, (rsum_heap_none.mp (hs.1 l hl).2).2⟩,
+    (FHeap.disjoint_union_right.mp hs.2.1).2, hs.2.2⟩
+
+/-- The rest beside the word's cells has none of their bytes. -/
+theorem Split.off {G : ThreadId → γ} {m : Mem} {rF rO : Res} (hs : W.Split G m rF rO) :
+    ∀ l, W.st.In l → (rsum rF rO).heap l = none := fun l hl =>
+  rsum_heap_none.mpr ⟨Res.heap_of_owned (hs.1 l hl).1, (hs.1 l hl).2⟩
+
+/-- **The invariant's split of its rest** (`Inv.rest`, `Split`). -/
+theorem Inv.split {G : ThreadId → γ} {rX : Res} {m : Mem} (hI : W.Inv G rX m) :
+    ∃ rF rO, rX = rsum (W.st.cellsR m) (rsum rF rO) ∧ W.Split G m rF rO ∧ W.Owns G m rF :=
+  let ⟨rF, rO, he, hoff, hd, hfr, how⟩ := hI.rest
+  ⟨rF, rO, he, ⟨hoff, hd, hfr⟩, how⟩
+
+/-- **The invariant at another rest** with a split of its own: the invariant reads its rest only
+through the split and the free resource's ownership. -/
+theorem Inv.unframe {G : ThreadId → γ} {rX : Res} {m : Mem} {rF rO : Res} (hI : W.Inv G rX m)
+    (hs : W.Split G m rF rO) (how : W.Owns G m rF) :
+    W.Inv G (rsum (W.st.cellsR m) (rsum rF rO)) m :=
+  { hI with rest := ⟨rF, rO, rfl, hs.1, hs.2.1, hs.2.2, how⟩ }
+
+/-- **Two splits of one rest are one** (`Split.unique` beside the word's cells, `cellsAt_cancel`). -/
+theorem Split.unique_cells {G : ThreadId → γ} {m : Mem} {rF₁ rO₁ rF₂ rO₂ : Res}
+    (h₁ : W.Split G m rF₁ rO₁) (h₂ : W.Split G m rF₂ rO₂)
+    (he : rsum (W.st.cellsR m) (rsum rF₁ rO₁) = rsum (W.st.cellsR m) (rsum rF₂ rO₂)) :
+    rF₁ = rF₂ ∧ rO₁ = rO₂ :=
+  h₁.unique h₂ (cellsAt_cancel he h₁.off h₂.off)
+
+/-- The free resource the invariant owns through the word is any split's (`Split.unique_cells`). -/
+theorem Inv.owns_split {G : ThreadId → γ} {rX : Res} {m : Mem} {rF rO : Res} (hI : W.Inv G rX m)
+    (he : rX = rsum (W.st.cellsR m) (rsum rF rO)) (hs : W.Split G m rF rO) : W.Owns G m rF := by
+  obtain ⟨rF₁, rO₁, he₁, hs₁, how⟩ := hI.split
+  obtain ⟨rfl, -⟩ := hs₁.unique_cells hs (he₁.symm.trans he)
+  exact how
+
+/-- **The semaphore's mutex's resource is the same over a step that keeps `RwPosted` and the
+client parts**: the count and the pool read only these (`cnt_posted`, `cnt_idle`, `pool_posted`,
+`pool_idle`). -/
+theorem lR_eq {G G' : ThreadId → γ} (hpost : RwPosted W.ph G' ↔ RwPosted W.ph G)
+    (hx : ∀ u, W.x (G' u) = W.x (G u)) : L.R G' = L.R G := by
+  rw [S.R_cnt, S.R_cnt]
+  by_cases hP : RwPosted W.ph G
+  · have hP' := hpost.mpr hP
+    rw [W.cnt_posted G hP, W.cnt_posted G' hP', W.pool_posted G hP, W.pool_posted G' hP']
+    simp only [hx]
+  · have hP' : ¬ RwPosted W.ph G' := fun h => hP (hpost.mp h)
+    rw [W.cnt_idle G hP, W.cnt_idle G' hP', W.pool_idle G hP, W.pool_idle G' hP']
 
 /-- With no reader counted, no thread is at `rd` (`Inv.ex`: a thread in the code exists). -/
 theorem Inv.noRd {G : ThreadId → γ} {rX : Res} {m : Mem} (hI : W.Inv G rX m)
