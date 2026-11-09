@@ -826,7 +826,7 @@ ownership of the cells. The layer moves to it in one step:
   `U` keeps the other lock over such a step (`FLock.Pair.U_partStep`, over any read set); a client
   that needs only the cells takes them with `FStepIn.cells`.
 - **Frame reads only at the stepping resource's shares** (maintainer decision 2026-11-09, option
-  (A), "the most long-term clean version"; PR FRAME_READS_PR, ledger `two-lock-product`). Before,
+  (A), "the most long-term clean version"; #743, ledger `two-lock-product`). Before,
   the frame admitted a read of *any* partial share of the rest (`hR := rF.shared`, since #735
   forwarded from `WP.liftMem_fownedR` through `Inv.wp_liftMem`, `FSem.Move.hold`,
   `FPrim.ofWords`' own-part case and the `wp_liftPart` family), although a real load needs a
