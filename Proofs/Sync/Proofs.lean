@@ -4,6 +4,7 @@ import Proofs.Sync.RwLockSnapshotPair
 import Proofs.Sync.Contracts
 import Proofs.Sync.SnapshotCache
 import Proofs.Sync.Mailbox
+import Proofs.Sync.NestedMutex
 
 /-!
 # Proofs about `examples/sync/sync.zig`

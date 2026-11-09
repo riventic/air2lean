@@ -830,21 +830,23 @@ theorem Owns.stepIn {P : ThreadId → LPh} {m m' : Mem} {hF hR h : Heap} {w : Bo
       | false => exact absurd (hd rfl _ h3) hr
     · exact absurd hb' (Nat.not_le.mpr hb)
 
-/-- A change of the place of thread `t` outside the lock's code: `t` is `out` before, and `out`,
-`gone` or `away` after. -/
-theorem WInv.ghost {P : ThreadId → LPh} {m : Mem} {t : ThreadId} {p : LPh} (hi : L.WInv P m)
-    (hph : P t = .out) (hg : p = .out ∨ p = .gone ∨ p = .away)
+/-- A change of the place of thread `t` outside the lock's code: `t` is `out` or `away` before
+and not in the futex queue (at `away` it may sleep at another object's futex, so the caller shows
+it awake), and `out`, `gone` or `away` after. -/
+theorem WInv.ghostOff {P : ThreadId → LPh} {m : Mem} {t : ThreadId} {p : LPh} (hi : L.WInv P m)
+    (hph : P t = .out ∨ P t = .away) (hq : ∀ w ∈ m.waiters, w.1 ≠ t)
+    (hg : p = .out ∨ p = .gone ∨ p = .away)
     (hlive : p ≠ .gone → t < m.threads.size ∧ joinedB m t = false) : L.WInv (upd P t p) m := by
-  have hnh : (P t).held = false := by rw [hph]; rfl
+  have hnh : (P t).held = false := by rcases hph with h | h <;> rw [h] <;> rfl
   have hgh : p.held = false := by rcases hg with h | h | h <;> rw [h] <;> rfl
-  have htb : (P t).busy = false := by rw [hph]; rfl
+  have htb : (P t).busy = false := by rcases hph with h | h <;> rw [h] <;> rfl
   have hphu : ∀ u, upd P t p u = if u = t then p else P u := fun u => upd_apply
   have hholds : ∀ u, (upd P t p u).held = true ↔ (P u).held = true := fun u => by
     rw [held_upd hnh hgh]
   have hfree : Free (upd P t p) ↔ Free P := free_upd hnh hgh
   have hgw : ∀ u, upd P t p u ≠ .gone → P u ≠ .gone := fun u h => by
     rw [hphu] at h; split at h
-    · rename_i e; subst e; rw [hph]; decide
+    · rename_i e; subst e; rcases hph with h' | h' <;> rw [h'] <;> decide
     · exact h
   refine ⟨hi.csize, fun u hu => ?_, hi.blk, ?_, fun u v hu hv => hi.one u v ((hholds u).mp hu)
     ((hholds v).mp hv), hi.loc, hi.wfpW hgw, fun i l hl => ?_, fun w hw => ?_, fun hp => ?_,
@@ -856,14 +858,28 @@ theorem WInv.ghost {P : ThreadId → LPh} {m : Mem} {t : ThreadId} {p : LPh} (hi
   · obtain ⟨w, hw, hu, hz⟩ := hi.word; exact ⟨w, hw, hu, hz.trans hfree.symm⟩
   · obtain ⟨h1, h2⟩ := hi.rel i l hl
     exact ⟨h1, fun u hu => h2 u ((hholds u).mp hu)⟩
-  · have hwt : w.1 ≠ t := fun e => by
-      rcases hi.fq w hw with ⟨-, h2⟩ | ⟨-, h2⟩ | ⟨-, h2, -⟩ <;>
-        rw [e, hph] at h2 <;> cases h2
-    rw [upd_ne _ _ hwt]; exact hi.fq w hw
+  · rw [upd_ne _ _ (hq w hw)]; exact hi.fq w hw
   · obtain ⟨v, hv, hq, h1, h2⟩ := hi.wit hp
     have hvt : v ≠ t := fun e => by rw [e, htb] at h1; cases h1
     exact ⟨v, hv, by rw [upd_ne _ _ hvt]; exact hq, by rw [upd_ne _ _ hvt]; exact h1,
       fun hh => h2 (by rw [upd_ne _ _ hvt] at hh; exact hh)⟩
+
+/-- A thread not at `wait`, `away` or `holdsAway` has no entry in the futex queue (`Queue`). -/
+theorem WInv.notQ_mem {P : ThreadId → LPh} {m : Mem} {t : ThreadId} (hi : L.WInv P m)
+    (hw : P t ≠ .wait) (ha : P t ≠ .away) (hh : P t ≠ .holdsAway) :
+    ∀ w ∈ m.waiters, w.1 ≠ t := fun w hw' e => by
+  rcases hi.fq w hw' with ⟨-, h2⟩ | ⟨-, h2⟩ | ⟨-, h2, -⟩ <;> rw [e] at h2
+  · exact hw h2
+  · exact ha h2
+  · exact hh h2
+
+/-- A change of the place of thread `t` outside the lock's code: `t` is `out` before, and `out`,
+`gone` or `away` after (`ghostOff`). -/
+theorem WInv.ghost {P : ThreadId → LPh} {m : Mem} {t : ThreadId} {p : LPh} (hi : L.WInv P m)
+    (hph : P t = .out) (hg : p = .out ∨ p = .gone ∨ p = .away)
+    (hlive : p ≠ .gone → t < m.threads.size ∧ joinedB m t = false) : L.WInv (upd P t p) m :=
+  hi.ghostOff (.inl hph) (hi.notQ_mem (by rw [hph]; decide) (by rw [hph]; decide)
+    (by rw [hph]; decide)) hg hlive
 
 /-! ## Spawn, join, start (`fork_clocks`: `ZigLean/Conc/Base/Lock.lean`) -/
 

@@ -779,15 +779,17 @@ theorem Inv.rel {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId} {p 
 
 /-! ## Steps outside the lock's code -/
 
-/-- A change of thread `t`'s ghost value outside the lock's code: `t` is `out` before, and `out`,
-`gone` or `away` after; it keeps its part and holds nothing. -/
-theorem Inv.ghost {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {g : γ}
-    (hi : L.Inv G rX m) (hph : L.ph (G t) = .out)
+/-- A change of thread `t`'s ghost value outside the lock's code: `t` is `out` or `away` before
+and not in the futex queue (`LockWord.WInv.ghostOff`), and `out`, `gone` or `away` after; it keeps
+its part and holds nothing. -/
+theorem Inv.ghostOff {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {g : γ}
+    (hi : L.Inv G rX m) (hph : L.ph (G t) = .out ∨ L.ph (G t) = .away)
+    (hq : ∀ w ∈ m.waiters, w.1 ≠ t)
     (hg : L.ph g = .out ∨ L.ph g = .gone ∨ L.ph g = .away)
     (hpart : L.part g = L.part (G t)) (hheld : L.held g = rnil)
     (hlive : L.ph g ≠ .gone → t < m.threads.size ∧ joinedB m t = false)
     (hRk : ∀ r, L.R G r → L.R (upd G t g) r) : L.Inv (upd G t g) rX m := by
-  have hnh : (L.ph (G t)).held = false := by rw [hph]; rfl
+  have hnh : (L.ph (G t)).held = false := by rcases hph with h | h <;> rw [h] <;> rfl
   have hgh : (L.ph g).held = false := by rcases hg with h | h | h <;> rw [h] <;> rfl
   have hown : L.own (upd G t g) m = L.own G m := by
     funext u; unfold FLock.own
@@ -803,10 +805,11 @@ theorem Inv.ghost {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {g :
   have hfree := free_iff_of (L := L) hholds
   have hgw : ∀ u, L.ph (upd G t g u) ≠ .gone → L.ph (G u) ≠ .gone := fun u h => by
     rw [hphu] at h; split at h
-    · rename_i e; subst e; rw [hph]; decide
+    · rename_i e; subst e; rcases hph with h' | h' <;> rw [h'] <;> decide
     · exact h
   obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest
-  refine ⟨by rw [pl_upd]; exact hi.w.ghost hph hg hlive, ⟨rL, hown ▸ ho, hLoff, hLX, fun hF' => ?_,
+  refine ⟨by rw [pl_upd]; exact hi.w.ghostOff hph hq hg hlive, ⟨rL, hown ▸ ho, hLoff, hLX,
+    fun hF' => ?_,
     fun h => hnF (fun h' => h (hfree.mpr h'))⟩, hi.xoff, fun u => ?_, fun u hu => ?_, fun u hu => ?_⟩
   · obtain ⟨h1, h2⟩ := hF (hfree.mp hF')
     refine ⟨hRk rL h1, ?_⟩
@@ -820,6 +823,18 @@ theorem Inv.ghost {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {g :
   · have hut : u ≠ t := fun e => by
       have := (hholds u).mp hu; rw [e, hnh] at this; cases this
     rw [upd_ne _ _ hut]; exact hRk _ (hi.res u ((hholds u).mp hu))
+
+/-- A change of thread `t`'s ghost value outside the lock's code: `t` is `out` before, and `out`,
+`gone` or `away` after; it keeps its part and holds nothing (`ghostOff`). -/
+theorem Inv.ghost {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {g : γ}
+    (hi : L.Inv G rX m) (hph : L.ph (G t) = .out)
+    (hg : L.ph g = .out ∨ L.ph g = .gone ∨ L.ph g = .away)
+    (hpart : L.part g = L.part (G t)) (hheld : L.held g = rnil)
+    (hlive : L.ph g ≠ .gone → t < m.threads.size ∧ joinedB m t = false)
+    (hRk : ∀ r, L.R G r → L.R (upd G t g) r) : L.Inv (upd G t g) rX m :=
+  hi.ghostOff (.inl hph) (hi.w.notQ_mem (t := t) (by show L.ph (G t) ≠ _; rw [hph]; decide)
+    (by show L.ph (G t) ≠ _; rw [hph]; decide) (by show L.ph (G t) ≠ _; rw [hph]; decide))
+    hg hpart hheld hlive hRk
 
 /-- A new split of a thread's complete resource at the same lock phase. Equality of `Res`
 preserves bytes, knowledge and ghost state together. A holder re-establishes the protected
