@@ -488,7 +488,9 @@ theorem know_intro {b : BlockId} {A : Nat}
   have hres : (P ⋆ known b A) ⟨r.heap, r.know.union (Know.single (.addr b A)), r.gh⟩ :=
     ⟨r, ⟨FHeap.empty, Know.single (.addr b A), Ghost.unit⟩, FHeap.disjoint_empty _,
       by rw [FHeap.union_empty, Ghost.add_unit], hp, rfl, rfl, rfl⟩
-  exact ht m _ rF (hh.addKnow (Know.sub_single hkn)) hres hcm ho
+  -- the added knowledge changes no byte: the same shares (`Res.shared` reads heap and ghost)
+  exact ht m ⟨r.heap, r.know.union (Know.single (.addr b A)), r.gh⟩ rF
+    (hh.addKnow (Know.sub_single hkn)) hres hcm ho
 
 /-- Knowledge and ghost state (anything that owns no bytes and no stack token) can be forgotten
 (`FTriple.drop`). -/
