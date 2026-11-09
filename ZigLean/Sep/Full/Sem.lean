@@ -669,7 +669,7 @@ theorem Inv.cstep (hS : L.Fits S.prim P U ok) {G G' : ThreadId → γ} {rX rX' :
       · exact .inr (.inr ⟨t, hk⟩)
   · obtain ⟨r, -, hL0, hc, hfs, hcW, -, hh, hL', rfl⟩ := hown
     replace hfs := hfs.cells
-    have hY': ∀ V, (V = C.S ∨ V = C.Ep) → V.hist m' = V.hist m := by
+    have hY' : ∀ V, (V = C.S ∨ V = C.Ep) → V.hist m' = V.hist m := by
       intro V hV
       rcases FCond.words_apart hV hW with rfl | hapW
       · exact hh
