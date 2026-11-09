@@ -2071,7 +2071,8 @@ private theorem liftPartPost (hE : L.Fits (E.prim L) P U ok) {rY r' : Res} {m' :
     (hL : L.Inv (upd G t g) (rsum (E.W.cellsR m) rY) m)
     (hY : ∀ l, E.W.In l → rY.heap l = none)
     (hs : FStepIn (rsum (L.wordR m) (rsum (E.W.cellsR m) rY)).owned m m'
-      (rsum (L.wordR m) (rsum (E.W.cellsR m) rY)).shared)
+      ((rsum (L.wordR m) (rsum (E.W.cellsR m) rY)).shared.inter
+        (rsum (L.part g) (L.held g)).shared))
     (hcW : ∀ l, E.W.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm)
     (hw' : E.W.Ok m' (fun u => E.Live (upd G t g u))) (hh : E.W.hist m' = E.W.hist m)
     (hL' : L.Inv (upd G t (L.setPart g r')) (rsum (E.W.cellsR m') rY) m') :
@@ -2095,7 +2096,7 @@ private theorem liftPartPost (hE : L.Fits (E.prim L) P U ok) {rY r' : Res} {m' :
       (hw.key_of_addrs hs.addrs)
       (hL.w.blk.key_of_addrs hs.addrs)
   have hU' := hE.wOwn (G := upd G t g) (t := t) (r := r') rfl
-    (by rw [upd_self]; exact hgo) hU hL hY hc hs hcW hw' hh
+    (by rw [upd_self]; exact hgo) hU hL hY hc (by rw [upd_self]; exact hs) hcW hw' hh
     (by rw [upd_self, upd_upd]; exact hL') (by rw [upd_self, upd_upd]; exact hI')
   rw [upd_self, upd_upd] at hU'
   exact (hE.inv _ _).mpr ⟨_, hL', hU'⟩
