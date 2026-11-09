@@ -910,7 +910,8 @@ theorem wp_liftPartW (hP : L.Fits K P U ok) (hW : W.InRest U A) {α : Type} {x :
       U (upd G t g) (rsum (W.cellsR m) rY) m → L.Inv (upd G t g) (rsum (W.cellsR m) rY) m →
       (∀ l, W.In l → rY.heap l = none) →
       FStepIn (rsum (L.wordR m) (rsum (W.cellsR m) rY)).owned m m'
-        (rsum (L.wordR m) (rsum (W.cellsR m) rY)).shared →
+        ((rsum (L.wordR m) (rsum (W.cellsR m) rY)).shared.inter
+          (rsum (L.part g) (L.held g)).shared) →
       (∀ l, W.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm) →
       W.Ok m' (fun u => A (upd G t g u)) → W.hist m' = W.hist m →
       L.Inv (upd G t (L.setPart g r')) (rsum (W.cellsR m') rY) m' → Q a G m' n)
@@ -939,7 +940,8 @@ theorem wp_liftPartWCur (hP : L.Fits K P U ok) (hW : W.InRest U A) {α : Type} {
       U (upd G t g) (rsum (W.cellsR m) rY) m → L.Inv (upd G t g) (rsum (W.cellsR m) rY) m →
       (∀ l, W.In l → rY.heap l = none) →
       FStepIn (rsum (L.wordR m) (rsum (W.cellsR m) rY)).owned m m'
-        (rsum (L.wordR m) (rsum (W.cellsR m) rY)).shared →
+        ((rsum (L.wordR m) (rsum (W.cellsR m) rY)).shared.inter
+          (rsum (L.part g) (L.held g)).shared) →
       (∀ l, W.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm) →
       W.Ok m' (fun u => A (upd G t g u)) → W.hist m' = W.hist m →
       L.Inv (upd G t (L.setPart g r')) (rsum (W.cellsR m') rY) m' → Q a G m' n)
@@ -1045,7 +1047,8 @@ abbrev FPrim.ofWords {γ Ph Rl : Type} (L : FLock γ) (pl : FPlace γ Ph) (out :
     ((∃ p q h, Move W t (G t) p q h m m' ∧ L.WInv (L.pl G) m ∧
         G' = upd G t (L.set (pl.set (G t) p) q h)) ∨
      (∃ r, ownAt (L.ph (G t)) ∧ L.Inv G rX m ∧ m.current = t ∧
-       FStepIn (rsum (L.wordR m) rX).owned m m' (rsum (L.wordR m) rX).shared ∧
+       FStepIn (rsum (L.wordR m) rX).owned m m'
+         ((rsum (L.wordR m) rX).shared.inter (rsum (L.part (G t)) (L.held (G t))).shared) ∧
        (∀ l, W.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm) ∧
        W.Ok m' (fun u => Lv W (G u)) ∧ W.hist m' = W.hist m ∧
        L.Inv G' rX' m' ∧
@@ -1100,7 +1103,8 @@ theorem Fits.wOwn (hK : L.Fits (FPrim.ofWords L pl out calm role Ws Lv Inv Move 
     (hL : L.Inv G (rsum (W.cellsR m) rY) m) (hY : ∀ l, W.In l → rY.heap l = none)
     (hc : m.current = t)
     (hs : FStepIn (rsum (L.wordR m) (rsum (W.cellsR m) rY)).owned m m'
-      (rsum (L.wordR m) (rsum (W.cellsR m) rY)).shared)
+      ((rsum (L.wordR m) (rsum (W.cellsR m) rY)).shared.inter
+        (rsum (L.part (G t)) (L.held (G t))).shared))
     (hcW : ∀ l, W.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm)
     (hw' : W.Ok m' (fun u => Lv W (G u))) (hh : W.hist m' = W.hist m)
     (hL' : L.Inv (upd G t (L.setPart (G t) r)) (rsum (W.cellsR m') rY) m')
@@ -1154,7 +1158,8 @@ theorem Fits.wOs (hK : L.Fits (FPrim.ofWords L pl out calm role Ws Lv Inv Move o
   have hset : upd G t (L.setPart (G t) (L.part (G t))) = G := by rw [L.setPart_self, upd_same]
   have hcl : W.cellsR { m with os := o } = W.cellsR m := Word.cellsR_congr rfl
   have hs := (FStepIn.os m (rsum (L.wordR m) (rsum (W.cellsR m) rY)).owned o).reads
-    (hR := (rsum (L.wordR m) (rsum (W.cellsR m) rY)).shared)
+    (hR := (rsum (L.wordR m) (rsum (W.cellsR m) rY)).shared.inter
+      (rsum (L.part (G t)) (L.held (G t))).shared)
   obtain ⟨hw', hh⟩ := hw.fields_native (m' := { m with os := o })
     rfl rfl rfl rfl (fun _ => VClock.le_refl _)
   have hU' := hK.wOwn (r := L.part (G t)) hW hat hU hL hY hc hs (fun _ _ => rfl)

@@ -224,7 +224,8 @@ inductive Move (t : ThreadId) (G : ThreadId → γ) (rX : Res) (m : Mem) :
       S.cnt G = 0 → Move t G rX m (upd G t (C.set (G t) .en)) rX m
   | hold {m' : Mem} (s : SPh) (h : Res) : L.ph (G t) = .holds → C.ph (G t) = .out →
       L.Inv G rX m → m.current = t →
-      FStepIn (rsum (L.wordR m) rX).owned m m' (rsum (L.wordR m) rX).shared →
+      FStepIn (rsum (L.wordR m) rX).owned m m'
+        ((rsum (L.wordR m) rX).shared.inter (rsum (L.part (G t)) (L.held (G t))).shared) →
       (∃ G'', L.Inv G'' rX m') →
       (∀ W, (W = C.S ∨ W = C.Ep) → ∀ l, W.In l →
         (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm) →
@@ -1100,7 +1101,8 @@ theorem Fits.move (hS : L.Fits S.prim P U ok) {G : ThreadId → γ} {m : Mem} {t
     P.inv (upd G t (S.set g s)) m := by
   obtain ⟨rX, hL, hU⟩ := (hS.inv _ m).mp hi
   have hsub := hS.sub _ rX m hU
-  have hfs := FStepIn.refl m (rsum (L.wordR m) rX).owned (hR := (rsum (L.wordR m) rX).shared)
+  have hfs := FStepIn.refl m (rsum (L.wordR m) rX).owned (hR := (rsum (L.wordR m) rX).shared.inter
+    (rsum (L.part (upd G t g t)) (L.held (upd G t g t))).shared)
   have hg : L.set (upd G t g t) .holds (L.held g) = g := by
     rw [upd_self, ← hh, L.set_self]
   have hcells : ∀ W, (W = C.S ∨ W = C.Ep) → ∀ l, W.In l →
@@ -1295,7 +1297,8 @@ theorem U_pst (hS : L.Fits S.prim P U ok) {G : ThreadId → γ} {t : ThreadId} {
       U (upd G t gf) rX m')
     (hL : L.Inv (upd G t (L.set g .holds rL)) rX m) (hU : U (upd G t (L.set g .holds rL)) rX m)
     (hc : m.current = t)
-    (hst : FStepIn (rsum (L.wordR m) rX).owned m m' (rsum (L.wordR m) rX).shared)
+    (hst : FStepIn (rsum (L.wordR m) rX).owned m m' ((rsum (L.wordR m) rX).shared.inter
+      (rsum (L.part (upd G t (L.set g .holds rL) t)) (L.held (upd G t (L.set g .holds rL) t))).shared))
     (hL' : L.Inv (upd G t gf) rX m') : U (upd G t gf) rX m' := by
   have hsub := hS.sub _ rX m hU
   have hht : L.ph (upd G t (L.set g .holds rL) t) = .holds := by rw [upd_self, L.ph_set]

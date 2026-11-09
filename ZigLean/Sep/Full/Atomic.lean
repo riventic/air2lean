@@ -818,7 +818,7 @@ theorem FTTriple.of_step_on {α : Type} {P : FAssn} {c : MemM α} {Q : α → FA
   | some (.error er) => exact (hne er e).elim
   | some (.ok (v, m')) =>
     obtain ⟨r', hh', hq, hw', hl', hst, hnr⟩ := hok v m' e
-    exact ⟨r', hh', hq, ⟨hst.cur hc.1, hw', hl'⟩, owns_step hh ho hst.reads hnr.revivesOwned hh',
+    exact ⟨r', hh', hq, ⟨hst.cur hc.1, hw', hl'⟩, owns_step hh ho hst hnr.revivesOwned hh',
       hst.reads⟩
 
 /-- The run of a step of the current thread on an owned word, in a thread: from the analysis of
