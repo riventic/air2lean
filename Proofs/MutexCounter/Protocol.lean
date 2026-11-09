@@ -382,7 +382,8 @@ theorem shape_next {X : ThreadId → Ph} {m : Mem} {t k : Nat} (h : Shape (upd X
 its new place `work k₁`. -/
 theorem U_hold {G : ThreadId → Gh} {t : ThreadId} {k₀ k₁ : Nat} {rp rL r rX : Res} {m m' : Mem}
     (hsh : Shape (upd (fun u => (G u).2) t (.work k₁)) m) (hu : U Lo (upd G t (gHold rp k₀ rL)) rX m)
-    (hs : FStepIn (rsum ((L Lo).wordR m) rX).owned m m' (rsum ((L Lo).wordR m) rX).shared) :
+    {hO : Heap}
+    (hs : FStepIn (rsum ((L Lo).wordR m) rX).owned m m' ((rsum ((L Lo).wordR m) rX).shared.inter hO)) :
     U Lo (upd (upd G t (gHold rp k₀ rL)) t (gHold rp k₁ r)) rX m' :=
   U_step hu hs.restX (by rw [upd_snd, upd_upd]; exact hsh)
 

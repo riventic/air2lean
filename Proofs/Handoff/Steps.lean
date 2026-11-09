@@ -550,7 +550,8 @@ of the library's `FLock.Fits.wp_hold`; the producer's stores then move it with `
 theorem U_holdStep {G G' : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {rp rL r : Res}
     {x₀ : X} (hiL : (L Lo).Inv (upd G t (gH rp rL x₀)) rX m)
     (hu : U Lo (upd G t (gH rp rL x₀)) rX m)
-    (hs : FStepIn (rsum ((L Lo).wordR m) rX).owned m m' (rsum ((L Lo).wordR m) rX).shared)
+    {hO : Heap}
+    (hs : FStepIn (rsum ((L Lo).wordR m) rX).owned m m' ((rsum ((L Lo).wordR m) rX).shared.inter hO))
     (hL : (L Lo).Inv G' rX m') :
     U Lo (upd G t (gH rp r x₀)) rX m' := by
   have := U_stepIn (g := gH rp r x₀) hu hiL hs.cells hL (by rw [upd_self]; rfl) (by rw [upd_self]; rfl)
