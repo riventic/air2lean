@@ -578,6 +578,27 @@ theorem Inv.congr {G G' : ThreadId → γ} {rX : Res} {m : Mem} (hI : W.Inv G rX
             fun u q H' hu => hq u q H' (by rwa [← hph u])⟩⟩,
       by simpa only [Owns, hpl, hph] using how⟩ }
 
+/-- **The invariant next to a resource apart from its rest** (ledger #two-lock-product, item (5)):
+a resource `r` apart from the rest `rX` joins the rest of the rest. In the two-lock product the
+outer mutex's rest is the semaphore's mutex's side next to the common rest (`FLock.Pair.U`), and
+the semaphore's mutex's rest is the outer mutex's side next to it, so the invariant at the common
+rest gives it in both views. -/
+theorem Inv.frame {G : ThreadId → γ} {rX r : Res} {m : Mem} (hI : W.Inv G rX m)
+    (hd : FHeap.Disjoint r.heap rX.heap) : W.Inv G (rsum r rX) m := by
+  obtain ⟨rF, rO, he, hoff, hdFO, hfr, how⟩ := hI.rest
+  subst he
+  have hd1 := FHeap.disjoint_union_right.mp hd
+  have hd2 := FHeap.disjoint_union_right.mp hd1.2
+  have hoffr : ∀ l, W.st.In l → r.heap l = none := fun l hl =>
+    (hd1.1 l).resolve_right (cellsAt_some hl (hI.ok.cellIn hl))
+  refine { hI with rest := ⟨rF, rsum r rO, ?_, fun l hl => ⟨(hoff l hl).1, ?_⟩,
+    FHeap.disjoint_union_right.mpr ⟨hd2.1.symm, hdFO⟩, hfr, how⟩ }
+  · rw [← rsum_assoc, rsum_comm hd1.1, rsum_assoc, ← rsum_assoc (a := r), rsum_comm hd2.1,
+      rsum_assoc]
+  · show (r.heap ∪ rO.heap) l = none
+    rw [FHeap.union_apply, hoffr l hl, (hoff l hl).2]
+    rfl
+
 /-! ## Counts over one thread's change -/
 
 /-- The client parts do not read the rwlock's place. -/
