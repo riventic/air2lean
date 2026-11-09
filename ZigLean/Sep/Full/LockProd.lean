@@ -610,9 +610,9 @@ theorem Keeps.wordStep {W : Zig.Loc → Prop} {G' : ThreadId → γ} {rL rH rX r
     (hxd : FHeap.Disjoint (rsum rL rH).heap rX'.heap) (hxo : B.Off rX'.heap.erase) :
     side B m' rL rH = side B m rL rH ∧ B.Keeps G' m' rL rH rX' := by
   have hbB : B.BlkOk m := hk.facts.w.blk
-  have hBW : ∀ l, B.In l → ¬ W l := fun l hl hw => hW l hw (Res.owned_of_heap fun hn => by
+  have hBW : ∀ l, B.In l → ¬ W l := fun l hl hw => Res.owned_of_heap (fun hn => by
     have hn' : ((B.wordR m).heap l).or ((rsum rL rH).heap l) = none := hn
-    exact LockWord.wordR_some hbB hl (Option.or_eq_none_iff.mp hn').1)
+    exact LockWord.wordR_some hbB hl (Option.or_eq_none_iff.mp hn').1) (hW l hw)
   have hwR : B.wordR m' = B.wordR m := cellsAt_congr fun l hl => hr.heap l (hBW l hl)
   obtain ⟨-, hk'⟩ := Keeps.stepIn hk (hs _ hW) (fun _ h => h) (fun _ _ => rfl)
     (fun l hl => by rw [hr.heap l (hBW l hl)]) hG hRk hpd hxd hxo
