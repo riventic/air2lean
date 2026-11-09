@@ -29,14 +29,14 @@ def ioRwLockCode : IoRwLockCode Tgt where
   lmid := .br8
   lock := Io_RwLock_lockUncancelable
   lock_eq := ⟨_, _, fun _ _ => by
-    simp only [Io_RwLock_lockUncancelable, IoRwLockCode.lockOf, bind_assoc, pure_bind]
+    simp only [Io_RwLock_lockUncancelable, IoRwLockCode.lockOf, pure_bind]
     rfl, rfl, rfl⟩
   σU := Io_RwLock_unlockLocals
   EU := Io_RwLock_unlockExit
   uret := .ret
   unlock := Io_RwLock_unlock
   unlock_eq := ⟨_, fun _ _ => by
-    simp only [Io_RwLock_unlock, IoRwLockCode.unlockOf, bind_assoc, pure_bind]
+    simp only [Io_RwLock_unlock, IoRwLockCode.unlockOf, pure_bind]
     rfl, rfl⟩
   σR := Io_RwLock_lockSharedUncancelableLocals
   ER := Io_RwLock_lockSharedUncancelableExit
@@ -55,11 +55,11 @@ def ioRwLockCode : IoRwLockCode Tgt where
   body := Io_RwLock_lockSharedUncancelable.loop8
   body_eq := ⟨_, _, fun _ => by
     simp only [Io_RwLock_lockSharedUncancelable.loop8, IoRwLockCode.bodyOf, bind_assoc, pure_bind]
-    rfl, fun _ => rfl, rfl, rfl, rfl, rfl⟩
+    rfl, fun _ => by rfl, by rfl, by rfl, by rfl, by rfl⟩
   lockShared := Io_RwLock_lockSharedUncancelable
   lockShared_eq := ⟨_, _, fun _ _ => by
-    simp only [Io_RwLock_lockSharedUncancelable, IoRwLockCode.lockSharedOf, bind_assoc, pure_bind]
-    rfl, fun _ _ => rfl, fun _ _ => rfl, rfl⟩
+    simp only [Io_RwLock_lockSharedUncancelable, IoRwLockCode.lockSharedOf, pure_bind]
+    rfl, fun _ _ => by rfl, fun _ _ => by rfl, by rfl⟩
   σS := Io_RwLock_unlockSharedLocals
   ES := Io_RwLock_unlockSharedExit
   sret := .ret
