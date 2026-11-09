@@ -1065,6 +1065,7 @@ theorem FLock.prodPair {X : Type} {bA oA bB oB : Nat} {RA RB : (ThreadId → X) 
     rw [upd_snd_keep]
   part _ := rfl
   setPart _ _ := rfl
+  set_comm _ _ _ _ _ := rfl
 
 end Full
 end Zig

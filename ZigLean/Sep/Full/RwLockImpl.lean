@@ -100,7 +100,9 @@ Stated once here; an instance walks its code with them:
   rules at `M`), `Fits.napW` / `Fits.unnapW` (the writer's nap and unnap), `Fits.wstep` (a step of
   the rwlock's own code keeps the protocol: `FLock.Fits.kstep` at `Step`), `Fits.atWord` (an
   atomic op at the word moves `t` to a new place), `Fits.lAway` / `Fits.lUnaway` /
-  `Fits.mAway` / `Fits.mUnaway` (the relabels around the other lock's code) and `Fits.winv` /
+  `Fits.mAway` / `Fits.mUnaway` (the relabels around the other lock's code; the relabel back is
+  exact by `FLock.Pair.set_around`), `Fits.okM_m` / `Fits.okM_part` (`okM` through the outer
+  mutex's `set` and `setPart`) and `Fits.winv` /
   `Fits.sinv` (the rwlock's and the semaphore's invariants in a state of the protocol).
 - **The counts over one thread's change**: `nrd_upd`, `nwi_upd` over `cnt_upd`; `writing_upd`,
   `fsum_upd`, `xs_set` over `upd_map`; for a move of `t` to `b`, `nrd_mv`, `nwi_mv`, `fsum_mv`
@@ -1653,6 +1655,27 @@ theorem Fits.mUnaway (hW : W.Fits P UM US okM okS) {G : ThreadId → γ} {m : Me
   obtain ⟨rX, hL, -⟩ := (hW.s.inv _ _).mp hi
   exact FLock.Fits.unaway hW.m hm hi (notQ_outHolds hL (by rw [upd_self]; exact .inl hl))
     fun rX hU hw => hW.munaway G rX m t g hm hl hU hw
+
+/-- The outer mutex's `set` keeps the client's `okM` (`FLock.Fits.ok_set` at `L.away`, where its
+`ok` is `okM`, with `okM_l` and `FLock.Pair.set_comm`). -/
+theorem Fits.okM_m (hW : W.Fits P UM US okM okS) (g : γ) (q : LPh) (h : Res) :
+    okM (M.set g q h) ↔ okM g := by
+  have e : L.set (M.set g q h) .away rnil = M.set (L.set g .away rnil) q h :=
+    (W.pair.set_comm g q h .away rnil).symm
+  have ho := hW.m.ok_set (L.set g .away rnil) q h
+  dsimp only at ho
+  rw [← e, L.ph_set, L.ph_set, hW.okM_l, hW.okM_l] at ho
+  exact (and_iff_left rfl).symm.trans (ho.trans (and_iff_left rfl))
+
+/-- The outer mutex's `setPart` keeps the client's `okM` (as `Fits.okM_m`). -/
+theorem Fits.okM_part (hW : W.Fits P UM US okM okS) (g : γ) (r : Res) :
+    okM (M.setPart g r) ↔ okM g := by
+  have e : L.set (M.setPart g r) .away rnil = M.setPart (L.set g .away rnil) r := by
+    rw [W.pair.setPart, W.pair.setPart, L.setPart_set]
+  have ho := hW.m.ok_setPart (L.set g .away rnil) r
+  dsimp only at ho
+  rw [← e, L.ph_set, L.ph_set, hW.okM_l, hW.okM_l] at ho
+  exact (and_iff_left rfl).symm.trans (ho.trans (and_iff_left rfl))
 
 /-- **A step of the rwlock's own code keeps the protocol** (`FLock.Fits.kstep` at `Step`): the
 step's facts, given the rwlock's invariant before it (`Fits.sub`). -/

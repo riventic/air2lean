@@ -19,7 +19,7 @@ product.
 * `FLock.Inv.otherStep`: the same for the lock over full-state resources, with `K`'s word in
   `L`'s rest; its cells are the new ones after the step.
 * `FLock.Pair A B`: two locks over one ghost value (apart words, each lock's `set` keeps the other's
-  place, held resource and `R`, a shared part); `Pair.otherInv` is `Inv.otherStep` for it. The
+  place, held resource and `R`, a shared part, the two `set`s commute: `set_comm`); `Pair.otherInv` is `Inv.otherStep` for it. The
   product invariant over a pair is not built yet (ledger #two-lock-product).
 * `FLock.Inv.nap`/`unnap` and `FLock.Fits.nap`/`unnap`: the holder of `L` goes to `holdsAway`
   before `K`'s code may put it to sleep, and back to `holds` after it. No memory step. The
@@ -321,6 +321,14 @@ structure Pair (A B : FLock γ) : Prop where
   R_ba : ∀ G t p h r, A.R (upd G t (B.set (G t) p h)) r ↔ A.R G r
   part : ∀ g, A.part g = B.part g
   setPart : ∀ g r, A.setPart g r = B.setPart g r
+  /-- The two locks' coordinates of one ghost value are independent: setting one lock's place and
+  held resource commutes with setting the other's (the family of `ph_ab`, `held_ab`, `setPart`).
+  A client that relabels one lock around a call of the other's code (a writer's `L` at `away`
+  while it runs `M.lock`) needs it to state the call's exact ghost value (coordinator decision
+  2026-11-09, option (A), on #737; rejected: the law as a field of one client's contract, which
+  every exact-ghost two-lock client would repeat, and existential ghosts in the posts, which are
+  weaker). -/
+  set_comm : ∀ g p h q h', A.set (B.set g q h') p h = B.set (A.set g p h) q h'
 
 namespace Pair
 
@@ -336,6 +344,17 @@ theorem symm (hp : L.Pair B) : B.Pair L where
   R_ba := hp.R_ab
   part g := (hp.part g).symm
   setPart g r := (hp.setPart g r).symm
+  set_comm g p h q h' := (hp.set_comm g q h' p h).symm
+
+/-- **A relabel of `B` around `L`'s code**: `B` set to any place and back to its old one, with an
+`L.set` between, is that `L.set` alone (`set_comm`). -/
+theorem set_around (hp : L.Pair B) {g : γ} {q₀ : LPh} {h₀ : Res} (hq : B.ph g = q₀)
+    (hh : B.held g = h₀) {p : LPh} {h : Res} {q : LPh} {h' : Res} :
+    B.set (L.set (B.set g q h') p h) q₀ h₀ = L.set g p h := by
+  subst hq hh
+  have e := B.set_self (L.set g p h)
+  rw [hp.ph_ab, hp.held_ab] at e
+  rw [hp.set_comm, B.set_set, e]
 
 /-- `B`'s `set` keeps `L`'s part (the shared part). -/
 theorem part_ba (hp : L.Pair B) (g : γ) (p : LPh) (h : Res) : L.part (B.set g p h) = L.part g := by
