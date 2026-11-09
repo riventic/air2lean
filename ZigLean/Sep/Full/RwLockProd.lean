@@ -37,88 +37,11 @@ namespace Full
 
 open FAssn Conc Proto
 
-/-! ## Heaps of sums -/
-
-theorem rsum_heap_none {a b : Res} {l : Loc} :
-    (rsum a b).heap l = none ↔ a.heap l = none ∧ b.heap l = none := by
-  show (a.heap ∪ b.heap) l = none ↔ _
-  rw [FHeap.union_apply, Option.or_eq_none_iff]
-
-namespace FLock
-
-variable {γ : Type} {B : FLock γ} {G : ThreadId → γ} {m : Mem} {rL rH rX : Res}
-
-/-- **`B`'s side is apart from the common rest** (`Keeps.xdisj`, `Keeps.xoff`). -/
-theorem Keeps.side_disj (hk : B.Keeps G m rL rH rX) :
-    FHeap.Disjoint (side B m rL rH).heap rX.heap :=
-  FHeap.disjoint_union_left.mpr ⟨LockWord.off_disj hk.xoff, hk.xdisj⟩
-
-end FLock
-
 namespace FRw
 
 variable {γ X Y : Type} {M L : FLock γ} {C : FCond γ} {S : FSem γ Y L C} {W : FRw γ X Y M L C S}
 
-/-! ## The rest beside the word's cells -/
-
-/-- A resource apart from the free resource and off the word joins the rest of the rest. -/
-theorem Split.frame {G : ThreadId → γ} {m : Mem} {rF rO r : Res} (hs : W.Split G m rF rO)
-    (hw : ∀ l, W.st.In l → r.heap l = none) (hd : FHeap.Disjoint rF.heap r.heap) :
-    W.Split G m rF (rsum r rO) :=
-  ⟨fun l hl => ⟨(hs.1 l hl).1, rsum_heap_none.mpr ⟨hw l hl, (hs.1 l hl).2⟩⟩,
-    FHeap.disjoint_union_right.mpr ⟨hd, hs.2.1⟩, hs.2.2⟩
-
-/-- A part of the rest of the rest leaves it. -/
-theorem Split.unframe {G : ThreadId → γ} {m : Mem} {rF rO r : Res}
-    (hs : W.Split G m rF (rsum r rO)) : W.Split G m rF rO :=
-  ⟨fun l hl => ⟨(hs.1 l hl).1, (rsum_heap_none.mp (hs.1 l hl).2).2⟩,
-    (FHeap.disjoint_union_right.mp hs.2.1).2, hs.2.2⟩
-
-/-- The rest beside the word's cells has none of their bytes. -/
-theorem Split.off {G : ThreadId → γ} {m : Mem} {rF rO : Res} (hs : W.Split G m rF rO) :
-    ∀ l, W.st.In l → (rsum rF rO).heap l = none := fun l hl =>
-  rsum_heap_none.mpr ⟨Res.heap_of_owned (hs.1 l hl).1, (hs.1 l hl).2⟩
-
-/-- **The invariant's split of its rest** (`Inv.rest`, `Split`). -/
-theorem Inv.split {G : ThreadId → γ} {rX : Res} {m : Mem} (hI : W.Inv G rX m) :
-    ∃ rF rO, rX = rsum (W.st.cellsR m) (rsum rF rO) ∧ W.Split G m rF rO ∧ W.Owns G m rF :=
-  let ⟨rF, rO, he, hoff, hd, hfr, how⟩ := hI.rest
-  ⟨rF, rO, he, ⟨hoff, hd, hfr⟩, how⟩
-
-/-- **The invariant at another rest** with a split of its own: the invariant reads its rest only
-through the split and the free resource's ownership. -/
-theorem Inv.unframe {G : ThreadId → γ} {rX : Res} {m : Mem} {rF rO : Res} (hI : W.Inv G rX m)
-    (hs : W.Split G m rF rO) (how : W.Owns G m rF) :
-    W.Inv G (rsum (W.st.cellsR m) (rsum rF rO)) m :=
-  { hI with rest := ⟨rF, rO, rfl, hs.1, hs.2.1, hs.2.2, how⟩ }
-
-/-- **Two splits of one rest are one** (`Split.unique` beside the word's cells, `cellsAt_cancel`). -/
-theorem Split.unique_cells {G : ThreadId → γ} {m : Mem} {rF₁ rO₁ rF₂ rO₂ : Res}
-    (h₁ : W.Split G m rF₁ rO₁) (h₂ : W.Split G m rF₂ rO₂)
-    (he : rsum (W.st.cellsR m) (rsum rF₁ rO₁) = rsum (W.st.cellsR m) (rsum rF₂ rO₂)) :
-    rF₁ = rF₂ ∧ rO₁ = rO₂ :=
-  h₁.unique h₂ (cellsAt_cancel he h₁.off h₂.off)
-
-/-- The free resource the invariant owns through the word is any split's (`Split.unique_cells`). -/
-theorem Inv.owns_split {G : ThreadId → γ} {rX : Res} {m : Mem} {rF rO : Res} (hI : W.Inv G rX m)
-    (he : rX = rsum (W.st.cellsR m) (rsum rF rO)) (hs : W.Split G m rF rO) : W.Owns G m rF := by
-  obtain ⟨rF₁, rO₁, he₁, hs₁, how⟩ := hI.split
-  obtain ⟨rfl, -⟩ := hs₁.unique_cells hs (he₁.symm.trans he)
-  exact how
-
 /-! ## The rwlock's own steps keep the product -/
-
-/-- **`L`'s resource is the same over a step that keeps `RwPosted` and the client parts**: the
-count and the pool read only these (`cnt_posted`, `cnt_idle`, `pool_posted`, `pool_idle`). -/
-theorem lR_eq {G G' : ThreadId → γ} (hpost : RwPosted W.ph G' ↔ RwPosted W.ph G)
-    (hx : ∀ u, W.x (G' u) = W.x (G u)) : L.R G' = L.R G := by
-  rw [S.R_cnt, S.R_cnt]
-  by_cases hP : RwPosted W.ph G
-  · have hP' := hpost.mpr hP
-    rw [W.cnt_posted G hP, W.cnt_posted G' hP', W.pool_posted G hP, W.pool_posted G' hP']
-    simp only [hx]
-  · have hP' : ¬ RwPosted W.ph G' := fun h => hP (hpost.mp h)
-    rw [W.cnt_idle G hP, W.cnt_idle G' hP', W.pool_idle G hP, W.pool_idle G' hP']
 
 /-- **A step of the rwlock's own code keeps the two-lock product's rest** at the outer mutex
 (`M.Fits.kstep` at `Step`, module doc): `L` stays kept at the same free and holders' resources,
@@ -139,7 +62,8 @@ theorem U_step {U₀ : (ThreadId → γ) → Res → Mem → Prop} {t : ThreadId
   obtain ⟨rL, rH, rX₀, rfl, hk, hu⟩ := hU
   have hf := hk.facts
   have hbL : L.BlkOk m := hf.w.blk
-  obtain ⟨rF₀, rO₀, rfl, hsp₀, -⟩ := (hsub _ _ _ hu).split
+  have hI₀ := hsub _ _ _ hu
+  obtain ⟨rF₀, rO₀, rfl, hsp₀, -⟩ := hI₀.split
   -- the pieces of the common rest, apart from `L`'s side
   have hsX := hk.side_disj
   have hsX1 := FHeap.disjoint_union_right.mp hsX
@@ -148,7 +72,7 @@ theorem U_step {U₀ : (ThreadId → γ) → Res → Mem → Prop} {t : ThreadId
   -- rest holds them as cells, so no share of them
   have hcell : ∀ l, W.st.In l →
       (rsum (W.st.cellsR m) (rsum rF₀ rO₀)).heap l ≠ none := fun l hl e =>
-    cellsAt_some hl ((hsub _ _ _ hu).ok.cellIn hl) (rsum_heap_none.mp e).1
+    cellsAt_some hl (hI₀.ok.cellIn hl) (rsum_heap_none.mp e).1
   have hsW : ∀ l, W.st.In l → (FLock.side L m rL rH).heap l = none := fun l hl =>
     (hsX l).resolve_right (hcell l hl)
   have hsO : ∀ l, W.st.In l → (FLock.side L m rL rH).owned l = none := by
@@ -174,10 +98,8 @@ theorem U_step {U₀ : (ThreadId → γ) → Res → Mem → Prop} {t : ThreadId
   -- the common rest after the step
   have hFs : FHeap.Disjoint rF'.heap (FLock.side L m rL rH).heap :=
     (FHeap.disjoint_union_right.mp hsp'.2.1).1
-  have hsC' : FHeap.Disjoint (FLock.side L m rL rH).heap (W.st.cellsR m').heap := fun l => by
-    by_cases hl : W.st.In l
-    · exact .inl (hsW l hl)
-    · exact .inr (cellsAt_none hl)
+  have hsC' : FHeap.Disjoint (FLock.side L m rL rH).heap (W.st.cellsR m').heap :=
+    disj_cellsAt hsW
   have hrot' : rsum (W.st.cellsR m') (rsum rF' (rsum (FLock.side L m rL rH) rO₀)) =
       rsum (FLock.side L m rL rH) (rsum (W.st.cellsR m') (rsum rF' rO₀)) :=
     (rsum_rot hsC' hFs.symm).symm
@@ -192,16 +114,18 @@ theorem U_step {U₀ : (ThreadId → γ) → Res → Mem → Prop} {t : ThreadId
   have hLR := lR_eq (W := W) hpost hx
   have hthr : m'.threads = m.threads := hr.threads
   have hpd : ∀ u, FHeap.Disjoint (L.part (G' u)).heap (L.held (G' u)).heap := fun u => by
-    by_cases e : u ≠ t
-    · rw [hoth u e]; exact hf.pdisj u
-    rw [Classical.not_not.mp e, hlheld]
+    by_cases e : u = t
+    case neg => rw [hoth u e]; exact hf.pdisj u
+    rw [e, hlheld]
     by_cases hg : L.ph (G t) = .gone
     · rw [hf.idle t (by rw [hg]; rfl)]; exact fun _ => .inr rfl
     obtain ⟨hut, hju⟩ := hf.w.live t hg
     obtain ⟨rj, hrj, hsj⟩ := sepN_mem hk.held hut
     simp only [partOf, FLock.heldOf, hju, Bool.false_eq_true, ↓reduceIte] at hrj; subst hrj
     intro l
-    refine (Classical.em ((L.held (G t)).heap l = none)).symm.imp (fun hn => ?_) id
+    by_cases hn : (L.held (G t)).heap l = none
+    · exact .inr hn
+    refine .inl ?_
     obtain ⟨rLM', hoM', -⟩ := hM'.rest
     have hO : (rsum (M.wordR m') (rsum rLM' rX')).heap l ≠ none := fun e => by
       rw [he', hrot'] at e

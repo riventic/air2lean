@@ -341,6 +341,11 @@ structure Keeps (B : FLock γ) (G : ThreadId → γ) (m : Mem) (rL rH rX : Res) 
   xdisj : FHeap.Disjoint (rsum rL rH).heap rX.heap
   xoff : B.Off rX.heap.erase
 
+/-- **`B`'s side is apart from the protocol's own rest** (`Keeps.xdisj`, `Keeps.xoff`). -/
+theorem Keeps.side_disj {B : FLock γ} {G : ThreadId → γ} {m : Mem} {rL rH rX : Res}
+    (hk : B.Keeps G m rL rH rX) : FHeap.Disjoint (side B m rL rH).heap rX.heap :=
+  FHeap.disjoint_union_left.mpr ⟨LockWord.off_disj hk.xoff, hk.xdisj⟩
+
 end FLock
 
 namespace FLock.Pair
