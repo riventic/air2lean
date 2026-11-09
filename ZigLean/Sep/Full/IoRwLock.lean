@@ -33,6 +33,13 @@ semaphore's (`SemImpl.post_wp_resource`, with the protocol's `upost`):
 - `unlockShared_wp`: `-2^32`; the last reader before a writer (`RwState.Family.last_guard`,
   `writing_guard`) posts the resource at the semaphore.
 
+Each lock's code runs where the contract states its view (`FRw.Fits`, "Where each lock's code
+runs"): the walks move the caller `out → away` at the semaphore's mutex around each call of the
+outer mutex (`lock`'s and `unlock`'s, and `lockShared`'s slow path from before its lock until after
+its unlock) and at the outer mutex around the last reader's post (`FRw.Fits.lAway`, `lUnaway`,
+`mAway`, `mUnaway`); the two locks' `set`s commute (`FLock.Pair.set_comm`), so the relabel back
+gives the exact ghost value (`FRw.Fits.lBack`, `FLock.Pair.set_around`).
+
 A program instantiates it with its names and `simp`/`rfl` proofs of the equations
 (`Proofs/Sync/IoRwLock.lean`).
 
@@ -257,12 +264,17 @@ theorem lock_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc : M.c
     fun k₁ hk₁ G₁ m₁ _ hc₁ hi₁ => ?_)
   rw [StateT.run_bind]
   refine WP.bind (WP.callMC_ptrProject (hW.projW hi₁ (by decide) (by decide)) ?_)
+  -- the outer mutex's lock runs `away` from the semaphore's mutex (`Fits.lAway`, `lUnaway`)
+  have hlx : L.ph (W.set g .wi) = .out := by rw [W.lph, hlo]
+  have hmx : M.ph (W.set g .wi) = .out := by rw [hW.mph, hmo]
   rw [StateT.run_bind]
   refine WP.bind (WP.callC (WP.mono (fun _ G₂ m₂ k₂ h₂ => ?_)
-    (C.M.lock_wp hW.m hcost (by rw [W.ptr_m, ← W.ptr_st]) hMc t (W.set g .wi)
-      (by rw [hW.mph, hmo]) ((hW.okM_set _ _).mpr hokM) (by rw [hW.mpart]; exact hu)
-      io G₁ m₁ k₁ hi₁)))
+    (C.M.lock_wp hW.m hcost (by rw [W.ptr_m, ← W.ptr_st]) hMc t (L.set (W.set g .wi) .away rnil)
+      (by rw [W.pair.ph_ba, hmx]) (hW.okM_away ((hW.okM_set _ _).mpr hokM))
+      (by rw [W.pair.part_ba, hW.mpart]; exact hu)
+      io G₁ m₁ k₁ (hW.lAway hlx (.inl hmx) hi₁))))
   obtain ⟨hk₂, hc₂, rL, hi₂⟩ := h₂
+  replace hi₂ := hW.lBack hlx (by rw [W.lheld, hlh]) (.inr rfl) hi₂
   -- `t` holds the outer mutex at `wi`
   have hpart₂ : M.part (M.set (W.set g .wi) .holds rL) = M.part g := by
     rw [M.part_set, hW.mpart]
@@ -323,7 +335,7 @@ theorem lock_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc : M.c
 (`FRw.wp_giveW`), then the outer mutex's unlock. -/
 theorem unlock_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc : M.c = C.M.c)
     (_hLc : L.c = C.M.c) {p : Ptr} (hp : p = W.p) (t : ThreadId) (g : γ) (r₀ r : Res)
-    (hwr : W.ph g = .wr) (hmh : M.ph g = .holds) (_hlo : L.ph g = .out) (_hlh : L.held g = rnil)
+    (hwr : W.ph g = .wr) (hmh : M.ph g = .holds) (hlo : L.ph g = .out) (hlh : L.held g = rnil)
     (_hco : Cn.ph g = .out) (_hso : S.ph g = .out) (hpart : M.part g = rsum r₀ r)
     (hd : FHeap.Disjoint r₀.heap r.heap) (hokM : okM g) (_hokS : okS g)
     (_hu : 0 < r₀.gh.ac.frag .unmetered) (hR : ∀ G, W.R (W.xs (upd G t g)) r)
@@ -340,12 +352,19 @@ theorem unlock_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc : M
     fun k₁ hk₁ G₁ m₁ _ hc₁ hi₁ => ?_)
   rw [StateT.run_bind]
   refine WP.bind (WP.callMC_ptrProject (hW.projW hi₁ (by decide) (by decide)) ?_)
+  -- the outer mutex's unlock runs `away` from the semaphore's mutex (`Fits.lAway`, `lUnaway`)
+  have hlx : L.ph (W.set (M.setPart g r₀) .out) = .out := by
+    rw [W.lph, W.pair.setPart, L.ph_setPart, hlo]
+  have hmx : M.ph (W.set (M.setPart g r₀) .out) = .holds := by rw [hW.mph, M.ph_setPart, hmh]
   rw [StateT.run_bind]
   refine WP.bind (WP.callC (WP.mono (fun _ G₂ m₂ k₂ h₂ => ?_)
-    (C.M.unlock_wp hW.m hcost (by rw [W.ptr_m, ← W.ptr_st]) hMc t _
-      (by rw [hW.mph, M.ph_setPart, hmh])
-      ((hW.okM_set _ _).mpr ((hW.m.ok_setPart _ _).mpr hokM)) io G₁ m₁ k₁ hi₁ hc₁)))
+    (C.M.unlock_wp hW.m hcost (by rw [W.ptr_m, ← W.ptr_st]) hMc t
+      (L.set (W.set (M.setPart g r₀) .out) .away rnil) (by rw [W.pair.ph_ba, hmx])
+      (hW.okM_away ((hW.okM_set _ _).mpr ((hW.okM_part _ _).mpr hokM)))
+      io G₁ m₁ k₁ (hW.lAway hlx (.inr hmx) hi₁) hc₁)))
   obtain ⟨hk₂, hc₂, hi₂⟩ := h₂
+  replace hi₂ :=
+    hW.lBack hlx (by rw [W.lheld, W.pair.setPart, L.held_setPart, hlh]) (.inl rfl) hi₂
   rw [StateT.run_pure]
   exact WP.pure' ⟨rfl, by omega, hc₂, hi₂⟩
 
@@ -448,7 +467,7 @@ theorem lockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc
       ∃ (q : Frac) (H : FHeap), 0 < q.val ∧ W.R (W.xs (upd G' t g)) ⟨H, Know.none, Ghost.unit⟩ ∧
         P.inv (upd G' t (W.set (M.setPart g (rsum (M.part g) (shareRes H q))) (.rd q H))) m')
       G m d := by
-  obtain ⟨hwo, hmo, hmh, -, -, -, -⟩ := hg
+  obtain ⟨hwo, hmo, hmh, hlo, hlh, -, -⟩ := hg
   have hmg : M.ph g ≠ .gone := by rw [hmo]; decide
   obtain rfl : p = W.st.ptr := hp.trans W.ptr_st.symm
   have hret : ∀ G' m' q H, P.inv (upd G' t
@@ -471,24 +490,43 @@ theorem lockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc
   · -- the fast path's return
     simp only [hkret, StateT.run_pure]
     exact WP.pure' ⟨rfl, hk₂, hc₂, q, H, hq, hret _ _ q H hi₂, hi₂⟩
-  · -- the slow path: `+2^32` under the outer mutex
+  · -- the slow path: `+2^32` under the outer mutex, `away` from the semaphore's mutex from
+    -- before the outer lock until after the outer unlock (`Fits.lAway`, `lUnaway`)
     simp only [hslow, slowOf, StateT.run_bind]
     refine WP.bind (WP.callMC_ptrProject (hW.projW hi₂ (by decide) (by decide)) ?_)
     refine WP.bind (WP.callC (WP.mono (fun _ G₃ m₃ k₃ h₃ => ?_)
-      (C.M.lock_wp hW.m hcost (by rw [W.ptr_m, ← W.ptr_st]) hMc t g hmo hokM hu
-        io G₂ m₂ k₂ hi₂)))
+      (C.M.lock_wp hW.m hcost (by rw [W.ptr_m, ← W.ptr_st]) hMc t (L.set g .away rnil)
+        (by rw [W.pair.ph_ba, hmo]) (hW.okM_away hokM)
+        (by rw [W.pair.part_ba]; exact hu) io G₂ m₂ k₂ (hW.lAway hlo (.inl hmo) hi₂))))
     obtain ⟨hk₃, hc₃, rL, hi₃⟩ := h₃
-    refine WP.bind (FRw.wp_addR hW (g := M.set g .holds rL) (by rw [(hW.ph_m _ _ _).1, hwo])
-      (M.ph_set _ _ _) hroom hi₃ fun k₄ hk₄ G₄ m₄ _ hc₄ q H hq _ hi₄ => ?_)
+    refine WP.bind (FRw.wp_addR hW (g := M.set (L.set g .away rnil) .holds rL)
+      (by rw [(hW.ph_m _ _ _).1, W.ph_l, hwo]) (M.ph_set _ _ _) hroom hi₃
+      fun k₄ hk₄ G₄ m₄ _ hc₄ q H hq _ hi₄ => ?_)
+    rw [M.part_set, W.pair.part_ba] at hi₄
+    -- `t`'s ghost value at the reader's place `y`, `away` from the semaphore's mutex
+    obtain ⟨y, hyd⟩ : ∃ y, y = W.set (M.setPart g (rsum (M.part g) (shareRes H q))) (.rd q H) :=
+      ⟨_, rfl⟩
+    have hy : W.set (M.setPart (M.set (L.set g .away rnil) .holds rL)
+        (rsum (M.part g) (shareRes H q))) (.rd q H) = M.set (L.set y .away rnil) .holds rL := by
+      rw [hyd, M.setPart_set, hW.wset_m, W.pair.setPart (L.set g .away rnil), L.setPart_set,
+        ← W.pair.setPart g, W.set_l]
+    rw [hy] at hi₄
+    have hly : L.ph y = .out := by rw [hyd, W.lph, W.pair.setPart, L.ph_setPart, hlo]
+    have hlhy : L.held y = rnil := by rw [hyd, W.lheld, W.pair.setPart, L.held_setPart, hlh]
     refine WP.bind (WP.callMC_ptrProject (hW.projW hi₄ (by decide) (by decide)) ?_)
     refine WP.bind (WP.callC (WP.mono (fun _ G₅ m₅ k₅ h₅ => ?_)
-      (C.M.unlock_wp hW.m hcost (by rw [W.ptr_m, ← W.ptr_st]) hMc t _
-        (by rw [hW.mph, M.ph_setPart, M.ph_set])
-        ((hW.okM_set _ _).mpr ((hW.m.ok_setPart _ _).mpr ((hW.m.ok_set _ _ _).mpr hokM)))
+      (C.M.unlock_wp hW.m hcost (by rw [W.ptr_m, ← W.ptr_st]) hMc t
+        (M.set (L.set y .away rnil) .holds rL) (M.ph_set _ _ _)
+        ((hW.m.ok_set _ _ _).mpr (hW.okM_away (by
+          rw [hyd]; exact (hW.okM_set _ _).mpr ((hW.okM_part _ _).mpr hokM))))
         io G₄ m₄ k₄ hi₄ hc₄)))
     obtain ⟨hk₅, hc₅, hi₅⟩ := h₅
-    have hgo : M.set g .out rnil = g := by rw [← hmo, ← hmh, M.set_self]
-    rw [M.part_set, ← hW.wset_m, M.setPart_set, M.set_set, ← M.setPart_set, hgo] at hi₅
+    rw [M.set_set] at hi₅
+    replace hi₅ := hW.lBack hly hlhy (.inl rfl) hi₅
+    have hmy : M.ph y = .out := by rw [hyd, hW.mph, M.ph_setPart, hmo]
+    have hmhy : M.held y = rnil := by rw [hyd, hW.mheld, M.held_setPart, hmh]
+    have hgo : M.set y .out rnil = y := by rw [← hmy, ← hmhy, M.set_self]
+    rw [hgo, hyd] at hi₅
     simp only [StateT.run_pure]
     exact WP.pure' ⟨rfl, by omega, hc₅, q, H, hq, hret _ _ q H hi₅, hi₅⟩
 
@@ -502,7 +540,7 @@ the protocol's `upost`. -/
 theorem unlockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none)
     (_hMc : M.c = C.M.c) (hLc : L.c = C.M.c) {p : Ptr} (hp : p = W.p) (t : ThreadId) (g : γ)
     (r₀ : Res) (q : Frac) (H : FHeap) (hrd : W.ph g = .rd q H) (hmo : M.ph g = .out)
-    (_hmh : M.held g = rnil) (hlo : L.ph g = .out) (hlh : L.held g = rnil) (hco : Cn.ph g = .out)
+    (hmh : M.held g = rnil) (hlo : L.ph g = .out) (hlh : L.held g = rnil) (hco : Cn.ph g = .out)
     (hso : S.ph g = .out) (hpart : M.part g = rsum r₀ (shareRes H q)) (_hokM : okM g)
     (hokS : okS g) (hu : 0 < r₀.gh.ac.frag .unmetered)
     (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m)
@@ -534,23 +572,41 @@ theorem unlockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none)
       refine WP.pure' ?_
       simp only [hk1f, pure_bind, hk2, StateT.run_pure]
       exact WP.pure' ⟨rfl, by omega, hc₁, hi₁⟩
-  · -- the last reader before the writer: it posts the resource
-    obtain ⟨g₁, hg₁⟩ : ∃ g₁, g₁ = W.set (M.setPart g (rsum r₀ r)) (.rp r) := ⟨_, rfl⟩
-    obtain ⟨gx, hgxd⟩ : ∃ gx, gx = W.set (M.setPart g r₀) .out := ⟨_, rfl⟩
+  · -- the last reader before the writer: it posts the resource, `away` from the outer mutex
+    -- (`Fits.mAway`, `mUnaway`)
+    obtain ⟨g₀, hg₀⟩ : ∃ g₀, g₀ = W.set (M.setPart g (rsum r₀ r)) (.rp r) := ⟨_, rfl⟩
+    obtain ⟨g₁, hg₁⟩ : ∃ g₁, g₁ = M.set g₀ .away rnil := ⟨_, rfl⟩
+    obtain ⟨gy, hgy⟩ : ∃ gy, gy = W.set (M.setPart g r₀) .out := ⟨_, rfl⟩
+    obtain ⟨gx, hgxd⟩ : ∃ gx, gx = M.set gy .away rnil := ⟨_, rfl⟩
+    rw [← hg₀] at hi₁
+    replace hi₁ := hW.mAway (by rw [hg₀, hW.mph, M.ph_setPart, hmo])
+      (by rw [hg₀, W.lph, W.pair.setPart, L.ph_setPart, hlo]) hi₁
     rw [← hg₁] at hi₁
     have hcd : (old &&& (9223372032559808512 : BitVec 64) == (4294967296 : BitVec 64)) = true :=
       by rw [hlg, h1]; rfl
     rw [ite_eq_left hcd, hwg, hwt, StateT.run_pure]
     refine WP.pure' ?_
     simp only [hk1t, bind_assoc, StateT.run_bind]
-    have hpgx : L.part gx = r₀ := by rw [hgxd, ← W.pair.part, hW.mpart, M.part_setPart]
+    have hpgx : L.part gx = r₀ := by
+      rw [hgxd, hgy, ← W.pair.part, M.part_set, hW.mpart, M.part_setPart]
     have hsplit : L.part g₁ = rsum (L.part gx) r := by
-      rw [hpgx, hg₁, ← W.pair.part, hW.mpart, M.part_setPart]
+      rw [hpgx, hg₁, hg₀, ← W.pair.part, M.part_set, hW.mpart, M.part_setPart]
     have hu' : 0 < (L.part gx).gh.ac.frag .unmetered := by rw [hpgx]; exact hu
     have hgx : gx = W.set (L.setPart g₁ r₀) .out := by
-      rw [hgxd, hg₁, ← W.pair.setPart, ← hW.wset_part, M.setPart_setPart, W.set_set]
+      rw [hgxd, hgy, hg₁, hg₀, ← W.pair.setPart, M.setPart_set, hW.wset_m, ← hW.wset_part,
+        M.setPart_setPart, W.set_set]
+    have hwg₁ : W.ph g₁ = .rp r := by rw [hg₁, (hW.ph_m _ _ _).1, hg₀, W.ph_set]
+    have hlg₁ : L.ph g₁ = .out := by
+      rw [hg₁, W.pair.ph_ab, hg₀, W.lph, W.pair.setPart, L.ph_setPart, hlo]
+    have hlgx : L.ph gx = .out := by
+      rw [hgxd, W.pair.ph_ab, hgy, W.lph, W.pair.setPart, L.ph_setPart, hlo]
+    have hokg₁ : okS g₁ ∧ (M.ph g₁ = .away ∨ M.ph g₁ = .holdsAway) := by
+      rw [hg₁]; exact hW.okS_away (by rw [hg₀, hW.okS_set, hW.okS_part]; exact hokS)
+    have hokgx : okS gx ∧ (M.ph gx = .away ∨ M.ph gx = .holdsAway) := by
+      rw [hgxd]; exact hW.okS_away (by rw [hgy, hW.okS_set, hW.okS_part]; exact hokS)
     have hxs : ∀ G₂ rL, W.xs (upd G₂ t (L.set g₁ .holds rL)) = W.xs (upd G₂ t gx) :=
-      fun G₂ rL => upd_map W.x G₂ t (by rw [hgxd, hg₁, W.x_l, W.x_set, W.x_part, W.x_set, W.x_part])
+      fun G₂ rL => upd_map W.x G₂ t (by
+        rw [hgxd, hgy, hg₁, hg₀, W.x_l, W.x_m, W.x_set, W.x_part, W.x_m, W.x_set, W.x_part])
     -- at the post the state becomes `RwPosted` and the pool the resource
     have hst : ∀ G₂ rL m₂, P.inv (upd G₂ t (L.set g₁ .holds rL)) m₂ →
         RwPosted W.ph (upd G₂ t gx) ∧ ¬ RwPosted W.ph (upd G₂ t g₁) ∧
@@ -558,10 +614,10 @@ theorem unlockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none)
       intro G₂ rL m₂ h
       obtain ⟨rX, hI⟩ := hW.winv h
       have hrp : W.ph (upd G₂ t (L.set g₁ .holds rL) t) = .rp r := by
-        rw [upd_self, W.ph_l, hg₁, W.ph_set]
+        rw [upd_self, W.ph_l, hwg₁]
       obtain ⟨h0, ⟨w, hw⟩, huq⟩ := hI.rp t (by rw [hrp]; rfl)
       have hwne : w ≠ t := by rintro rfl; rw [hrp] at hw; cases hw
-      have hgo : W.ph gx = .out := by rw [hgxd, W.ph_set]
+      have hgo : W.ph gx = .out := by rw [hgxd, (hW.ph_m _ _ _).1, hgy, W.ph_set]
       refine ⟨⟨⟨w, by rwa [upd_ne _ _ hwne] at hw ⊢⟩, fun u => ?_, fun u => ?_⟩,
         fun ⟨_, _, h⟩ => ?_, ?_⟩
       · by_cases e : u = t
@@ -575,24 +631,21 @@ theorem unlockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none)
           · rfl
           · exact absurd (huq u (by rw [upd_ne _ _ e]; exact hr)) e
       · have := h t
-        rw [upd_self, hg₁, W.ph_set] at this
+        rw [upd_self, hwg₁] at this
         cases this
       · have := hI.rpR t r hrp
         rwa [hxs] at this
     refine WP.bind (WP.callMC_ptrProject (hW.projW hi₁ (by decide) (by decide)) ?_)
     refine WP.bind (WP.callC (WP.mono (fun _ G₂ m₂ k₂ h₂ => ?_)
       (C.S.post_wp hW.s hcost (hLc.trans C.c_eq.symm) (by rw [W.ptr_s, ← W.ptr_st])
-        t g₁ gx r
-        (by rw [hg₁, W.lph, W.pair.setPart, L.ph_setPart, hlo])
-        (by rw [hg₁, FRw.cph_w, (hW.ph_part _ _).2.1, hco])
-        (by rw [hg₁, FRw.sph_w, (hW.ph_part _ _).2.2, hso])
-        (by rw [hg₁]; exact (hW.okS_set _ _).mpr ((hW.okS_part _ _).mpr hokS))
-        (by rw [hgxd, W.lph, W.pair.setPart, L.ph_setPart, hlo])
-        (by rw [hgxd, W.lheld, W.pair.setPart, L.held_setPart, hlh])
-        (by rw [hgxd, FRw.cph_w, (hW.ph_part _ _).2.1, hco])
-        (by rw [hgxd, FRw.sph_w, (hW.ph_part _ _).2.2, hso])
-        (by rw [hgxd]; exact (hW.okS_set _ _).mpr ((hW.okS_part _ _).mpr hokS))
-        hsplit (by rw [hpgx]; exact hdj)
+        t g₁ gx r hlg₁
+        (by rw [hg₁, (hW.ph_m _ _ _).2.1, hg₀, FRw.cph_w, (hW.ph_part _ _).2.1, hco])
+        (by rw [hg₁, (hW.ph_m _ _ _).2.2, hg₀, FRw.sph_w, (hW.ph_part _ _).2.2, hso])
+        hokg₁ hlgx
+        (by rw [hgxd, W.pair.held_ab, hgy, W.lheld, W.pair.setPart, L.held_setPart, hlh])
+        (by rw [hgxd, (hW.ph_m _ _ _).2.1, hgy, FRw.cph_w, (hW.ph_part _ _).2.1, hco])
+        (by rw [hgxd, (hW.ph_m _ _ _).2.2, hgy, FRw.sph_w, (hW.ph_part _ _).2.2, hso])
+        hokgx hsplit (by rw [hpgx]; exact hdj)
         (fun G₂ rL m₂ h₂ => by
           obtain ⟨hp, hnp, -⟩ := hst G₂ rL m₂ h₂
           rw [W.cnt_posted _ hp, W.cnt_idle _ hnp]
@@ -606,10 +659,15 @@ theorem unlockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none)
           exact hR')
         (fun G₂ rX m₂ h₁ h₂ sh sc hUS hL hS hC => by
           rw [hgx] at hL hS hC ⊢
-          exact hW.upost G₂ rX m₂ t g₁ r₀ r h₁ h₂ sh sc (by rw [hg₁, W.ph_set]) hUS hL hS hC)
+          exact hW.upost G₂ rX m₂ t g₁ r₀ r h₁ h₂ sh sc hwg₁ hUS hL hS hC)
         io G₁ m₁ k₁ hu' hi₁ hc₁)))
     obtain ⟨hk₂, hc₂, hi₂⟩ := h₂
-    rw [hgxd] at hi₂
+    -- back at the outer mutex's `out`
+    replace hi₂ := hW.mUnaway (by rw [hgxd, M.ph_set]) hlgx hi₂
+    have hmy : M.ph gy = .out := by rw [hgy, hW.mph, M.ph_setPart, hmo]
+    have hmhy : M.held gy = rnil := by rw [hgy, hW.mheld, M.held_setPart, hmh]
+    have hgo : M.set gx .out rnil = gy := by rw [hgxd, M.set_set, ← hmy, ← hmhy, M.set_self]
+    rw [hgo, hgy] at hi₂
     simp only [StateT.run_pure, pure_bind, hk2]
     exact WP.pure' ⟨rfl, by omega, hc₂, hi₂⟩
 
