@@ -260,7 +260,7 @@ theorem lock_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc : M.c
   rw [hlock, lockOf]
   refine wp_frame hfin ?_
   rw [StateT.run_bind]
-  refine WP.bind (FRw.wp_addW hW hwo (by rw [hmo]; decide) hroom hi
+  refine WP.bind (FRw.wp_addW hW hwo (by rw [hmo]; decide) (FRw.splace_out hco hso) hroom hi
     fun k₁ hk₁ G₁ m₁ _ hc₁ hi₁ => ?_)
   rw [StateT.run_bind]
   refine WP.bind (WP.callMC_ptrProject (hW.projW hi₁ (by decide) (by decide)) ?_)
@@ -285,7 +285,8 @@ theorem lock_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc : M.c
     rw [M.setPart_set, ← hW.wset_part, hW.wset_m, W.set_set]
   rw [StateT.run_bind]
   refine WP.bind (FRw.wp_decW hW (g := M.set (W.set g .wi) .holds rL)
-    (by rw [(hW.ph_m _ _ _).1, W.ph_set]) (M.ph_set _ _ _) hi₂
+    (by rw [(hW.ph_m _ _ _).1, W.ph_set]) (M.ph_set _ _ _)
+    (by rw [hW.splace_m, W.sp_ph]; exact FRw.splace_out hco hso) hi₂
     fun k₃ hk₃ G₃ m₃ old hc₃ hcase => ?_)
   have hgo : (old &&& (9223372032559808512 : BitVec 64) != (0 : BitVec 64)) =
       (RwState.readers old != 0) := RwState.Family.drain_guard 31 1 old
@@ -336,7 +337,7 @@ theorem lock_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc : M.c
 theorem unlock_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc : M.c = C.M.c)
     (_hLc : L.c = C.M.c) {p : Ptr} (hp : p = W.p) (t : ThreadId) (g : γ) (r₀ r : Res)
     (hwr : W.ph g = .wr) (hmh : M.ph g = .holds) (hlo : L.ph g = .out) (hlh : L.held g = rnil)
-    (_hco : Cn.ph g = .out) (_hso : S.ph g = .out) (hpart : M.part g = rsum r₀ r)
+    (hco : Cn.ph g = .out) (hso : S.ph g = .out) (hpart : M.part g = rsum r₀ r)
     (hd : FHeap.Disjoint r₀.heap r.heap) (hokM : okM g) (_hokS : okS g)
     (_hu : 0 < r₀.gh.ac.frag .unmetered) (hR : ∀ G, W.R (W.xs (upd G t g)) r)
     (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m)
@@ -348,7 +349,8 @@ theorem unlock_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc : M
   rw [hunlock, unlockOf]
   refine wp_frame hfin ?_
   rw [StateT.run_bind]
-  refine WP.bind (FRw.wp_giveW hW hwr (by rw [hmh]; decide) hpart hd hR hi
+  refine WP.bind (FRw.wp_giveW hW hwr (by rw [hmh]; decide) hpart hd hR
+    (FRw.splace_out hco hso) hi
     fun k₁ hk₁ G₁ m₁ _ hc₁ hi₁ => ?_)
   rw [StateT.run_bind]
   refine WP.bind (WP.callMC_ptrProject (hW.projW hi₁ (by decide) (by decide)) ?_)
@@ -389,7 +391,8 @@ def lsPost (P : Proto Tgt γ) (W : FRw γ X Y M L Cn S) (t : ThreadId) (g : γ) 
 weak CAS (`FRw.wp_casR`): its success ends the loop with the share, its failure stores the value
 read (`MsgOk`) and repeats (a stop: the depth gets smaller). -/
 theorem body_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (t : ThreadId) (g : γ)
-    (hout : W.ph g = .out) (hmg : M.ph g ≠ .gone) (hu : 0 < (M.part g).gh.ac.frag .unmetered)
+    (hout : W.ph g = .out) (hmg : M.ph g ≠ .gone) (hsc : S.place.ph g = (.out, .out))
+    (hu : 0 < (M.part g).gh.ac.frag .unmetered)
     (hroom : ∀ G m, P.inv G m → W.ph (G t) = .out → W.nrd G m + 1 < RwState.countBound)
     (D : Nat) (s : C.σR) (G : ThreadId → γ) (m : Mem) (d : Nat) (h : C.lsInv P t g D s G m d) :
     P.WP t ((C.body W.st.ptr).run s) (fun r G' m' d' =>
@@ -421,7 +424,7 @@ theorem body_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (t : Threa
     refine WP.bind (WP.callRC_ok (v := RwState.encode (rr + 1) ww aa)
       (by rw [hst, haddR rr ww aa hrr hww]; rfl) ?_)
     rw [StateT.run_bind]
-    refine WP.bind (FRw.wp_casR hW hout hmg hroom (beq_iff_eq.mp hgd)
+    refine WP.bind (FRw.wp_casR hW hout hmg hsc hroom (beq_iff_eq.mp hgd)
       (by rw [hst]; exact (RwState.Family.add_reader 31 1 rr ww aa).symm) hi₀
       (fun k hk G₁ m₁ hc₁ q H hq _ hi₁ => ?_) (fun k hk G₁ m₁ b hc₁ hb hi₁ => ?_))
     · -- success: the reader is in
@@ -467,7 +470,7 @@ theorem lockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc
       ∃ (q : Frac) (H : FHeap), 0 < q.val ∧ W.R (W.xs (upd G' t g)) ⟨H, Know.none, Ghost.unit⟩ ∧
         P.inv (upd G' t (W.set (M.setPart g (rsum (M.part g) (shareRes H q))) (.rd q H))) m')
       G m d := by
-  obtain ⟨hwo, hmo, hmh, hlo, hlh, -, -⟩ := hg
+  obtain ⟨hwo, hmo, hmh, hlo, hlh, hco, hso⟩ := hg
   have hmg : M.ph g ≠ .gone := by rw [hmo]; decide
   obtain rfl : p = W.st.ptr := hp.trans W.ptr_st.symm
   have hret : ∀ G' m' q H, P.inv (upd G' t
@@ -481,10 +484,11 @@ theorem lockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc
   rw [hls, lockSharedOf]
   refine wp_frame hfin ?_
   rw [StateT.run_bind]
-  refine WP.bind (FRw.wp_loadW hW hmg hi fun k₁ hk₁ G₁ m₁ b hc₁ hb hi₁ => ?_)
+  refine WP.bind (FRw.wp_loadW hW hmg (FRw.splace_out hco hso) hi
+    fun k₁ hk₁ G₁ m₁ b hc₁ hb hi₁ => ?_)
   simp only [StateT.run_bind, StateT.run_modify, pure_bind]
   refine WP.bind (WP.mono ?_ (WP.loop _ _ (C.lsInv P t g d) (fun _ => 0) (C.lsPost P W t g d)
-    (C.body_wp hW hcost t g hwo hmg hu hroom d) _ G₁ m₁ k₁
+    (C.body_wp hW hcost t g hwo hmg (FRw.splace_out hco hso) hu hroom d) _ G₁ m₁ k₁
     ⟨by omega, hc₁, by rw [C.get_set]; exact hb, hi₁⟩))
   rintro ⟨_, _⟩ G₂ m₂ k₂ ⟨hk₂, hc₂, ⟨rfl, q, H, hq, hi₂⟩ | ⟨rfl, hi₂⟩⟩
   · -- the fast path's return
@@ -500,7 +504,8 @@ theorem lockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc
         (by rw [W.pair.part_ba]; exact hu) io G₂ m₂ k₂ (hW.lAway hlo (.inl hmo) hi₂))))
     obtain ⟨hk₃, hc₃, rL, hi₃⟩ := h₃
     refine WP.bind (FRw.wp_addR hW (g := M.set (L.set g .away rnil) .holds rL)
-      (by rw [(hW.ph_m _ _ _).1, W.ph_l, hwo]) (M.ph_set _ _ _) hroom hi₃
+      (by rw [(hW.ph_m _ _ _).1, W.ph_l, hwo]) (M.ph_set _ _ _)
+      (by rw [hW.splace_m, hW.splace_l]; exact FRw.splace_out hco hso) hroom hi₃
       fun k₄ hk₄ G₄ m₄ _ hc₄ q H hq _ hi₄ => ?_)
     rw [M.part_set, W.pair.part_ba] at hi₄
     -- `t`'s ghost value at the reader's place `y`, `away` from the semaphore's mutex
@@ -552,7 +557,7 @@ theorem unlockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none)
   rw [hus, unlockSharedOf]
   refine wp_frame hfin ?_
   rw [StateT.run_bind]
-  refine WP.bind (FRw.wp_subR hW hrd (by rw [hmo]; decide) hpart hi
+  refine WP.bind (FRw.wp_subR hW hrd (by rw [hmo]; decide) hpart (FRw.splace_out hco hso) hi
     fun k₁ hk₁ G₁ m₁ old hc₁ hcase => ?_)
   have hlg : (old &&& (9223372032559808512 : BitVec 64) == (4294967296 : BitVec 64)) =
       (RwState.readers old == 1) := RwState.Family.last_guard (c := 31) (by decide) 1 old
