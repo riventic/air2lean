@@ -129,7 +129,7 @@ theorem U_step {U₀ : (ThreadId → γ) → Res → Mem → Prop} {t : ThreadId
       rw [he', hrot'] at e
       refine hsj l hn ?_
       have hsn := (rsum_heap_none.mp (rsum_heap_none.mp (rsum_heap_none.mp e).2).2).1
-      exact (rsum_heap_none.mp (rsum_heap_none.mp (hsB.none.mp hsn)).2).2
+      exact (rsum_heap_none.mp (rsum_heap_none.mp (hsB.heap_none.mp hsn)).2).2
     have h0 := hoM'.part_off (u := t) (by rw [hthr]; exact hut) hO
     have hj' : joinedB m' t = false := by rw [LockWord.joinedB_congr hthr]; exact hju
     simp only [FLock.own, hj', Bool.false_eq_true, ↓reduceIte] at h0
@@ -144,7 +144,7 @@ theorem U_step {U₀ : (ThreadId → γ) → Res → Mem → Prop} {t : ThreadId
   have hxo : L.Off (rsum (W.st.cellsR m') (rsum rF' rO₀)).heap.erase :=
     LockWord.off_erase.mpr fun l hl => by
       have hsl : sB.heap l ≠ none := fun e =>
-        LockWord.wordR_some hbL hl (rsum_heap_none.mp (hsB.none.mp e)).1
+        LockWord.wordR_some hbL hl (rsum_heap_none.mp (hsB.heap_none.mp e)).1
       refine rsum_heap_none.mpr ⟨cellsAt_none fun hw => hsl (hsW l hw),
         rsum_heap_none.mpr ⟨(hFs l).resolve_right hsl, ?_⟩⟩
       exact (rsum_heap_none.mp (rsum_heap_none.mp (LockWord.off_erase.mp hk.xoff l hl)).2).2

@@ -208,18 +208,27 @@ theorem trans (h₁ : Res.Sim a b) (h₂ : Res.Sim b c) : Res.Sim a c :=
   ⟨fun l => (h₁.heap l).trans (h₂.heap l), h₁.know.trans h₂.know, h₁.gh.trans h₂.gh⟩
 
 theorem union (ha : Res.Sim a a') (hb : Res.Sim b b') : Res.Sim (rsum a b) (rsum a' b') :=
-  ⟨ha.heap.union hb.heap, by rw [ha.know, hb.know], by rw [ha.gh, hb.gh]⟩
+  ⟨ha.heap.union hb.heap, by show a.know.union b.know = _; rw [ha.know, hb.know],
+    by show a.gh.add b.gh = _; rw [ha.gh, hb.gh]⟩
 
-theorem none (h : Res.Sim a b) {l : Zig.Loc} : a.heap l = none ↔ b.heap l = none := h.heap.none
+theorem heap_none (h : Res.Sim a b) {l : Zig.Loc} : a.heap l = Option.none ↔ b.heap l = Option.none :=
+  h.heap.none
 
 theorem disj (h : Res.Sim a b) {x : FHeap} (hd : FHeap.Disjoint b.heap x) :
-    FHeap.Disjoint a.heap x := fun l => (hd l).imp h.none.mpr id
+    FHeap.Disjoint a.heap x := fun l => (hd l).imp h.heap_none.mpr id
 
-theorem owned_none (h : Res.Sim a b) {l : Zig.Loc} : a.owned l = none ↔ b.owned l = none :=
-  not_iff_not.mp (by rw [Res.owned_ne, Res.owned_ne, h.gh, ne_eq, ne_eq, h.none])
+private theorem none_iff {α β : Type} {x : Option α} {y : Option β}
+    (h : x ≠ Option.none ↔ y ≠ Option.none) : x = Option.none ↔ y = Option.none :=
+  ⟨fun e => Classical.byContradiction fun n => h.mpr n e,
+    fun e => Classical.byContradiction fun n => h.mp n e⟩
 
-theorem excl_none (h : Res.Sim a b) {l : Zig.Loc} : a.excl l = none ↔ b.excl l = none :=
-  not_iff_not.mp (by rw [Res.excl_ne, Res.excl_ne, h.gh, ne_eq, ne_eq, h.none])
+theorem owned_none (h : Res.Sim a b) {l : Zig.Loc} :
+    a.owned l = Option.none ↔ b.owned l = Option.none :=
+  none_iff (by rw [Res.owned_ne, Res.owned_ne, h.gh, ne_eq, ne_eq, h.heap_none])
+
+theorem excl_none (h : Res.Sim a b) {l : Zig.Loc} :
+    a.excl l = Option.none ↔ b.excl l = Option.none :=
+  none_iff (by rw [Res.excl_ne, Res.excl_ne, h.gh, ne_eq, ne_eq, h.heap_none])
 
 end Res.Sim
 
@@ -427,7 +436,7 @@ theorem Keeps.side_disj {B : FLock γ} {G : ThreadId → γ} {m : Mem} {rL rH rX
 theorem FreeRes.congrX {rX' : Res} (h : L.FreeRes G rX m rL) (hs : Res.Sim rX' rX) :
     L.FreeRes G rX' m rL :=
   have hw := (Res.Sim.refl (L.wordR m)).union ((Res.Sim.refl rL).union hs)
-  ⟨h.1.congrRest hw.heap hw.know hw.gh, h.2.1, fun l => (h.2.2.1 l).imp id hs.none.mpr, h.2.2.2⟩
+  ⟨h.1.congrRest hw.heap hw.know hw.gh, h.2.1, fun l => (h.2.2.1 l).imp id hs.heap_none.mpr, h.2.2.2⟩
 
 /-- **The resource a step moves, next to a rest alike** (`FreeRes.congrX`). -/
 theorem Transfer.congrX {rX' : Res} {m' : Mem} {t : ThreadId} {p : LPh} {h : Res}
