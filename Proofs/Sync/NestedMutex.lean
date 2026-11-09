@@ -90,9 +90,10 @@ generic relabels between the calls. -/
 theorem nested_wp (mi : MutexImpl Tgt) (hcA : A.c = mi.c) (hcB : B.c = mi.c) (t : ThreadId)
     (g : γ) (hgA : A.ph g = .out) (hgB : B.ph g = .away)
     (hu : 0 < (A.part g).gh.ac.frag .unmetered) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hi : (proto A B).inv (upd G t g) m) :
+    (hi : (proto (Tgt := Tgt) A B).inv (upd G t g) m) :
     (proto A B).WP t (nested mi.lock mi.unlock A.ptr B.ptr io) (fun _ G' m' _ =>
-      m'.current = t ∧ ∃ g', Back A B g g' ∧ (proto A B).inv (upd G' t g') m') G m d := by
+      m'.current = t ∧ ∃ g', Back A B g g' ∧ (proto (Tgt := Tgt) A B).inv (upd G' t g') m')
+      G m d := by
   obtain ⟨hA, hB⟩ := fits (Tgt := Tgt) hp hnA hnB hRA hRB
   -- a relabel of `t` at one lock keeps the other kept (`Pair.U_setA`)
   have setA : ∀ {G₀ : ThreadId → γ} {m₀ : Mem} {g₀ : γ} {rX : Res} (q : LPh) (h : Res),
@@ -178,16 +179,18 @@ theorem nested_prod (mi : MutexImpl Tgt) (hmc : c = mi.c)
     (hRA : ∀ xs, (RA xs).Unshared) (hRB : ∀ xs, (RB xs).Unshared) (t : ThreadId) (rp : Res)
     (x : X) (hu : 0 < rp.gh.ac.frag .unmetered) (io : Io) (G : ThreadId → FLG2 × X) (m : Mem)
     (d : Nat)
-    (hi : (proto (lockA bA oA bB oB RA RB c hc) (lockB bB oB RB c hc)).inv
+    (hi : (proto (Tgt := Tgt) (lockA bA oA bB oB RA RB c hc) (lockB bB oB RB c hc)).inv
       (upd G t ({ phA := .out, phB := .away, part := rp }, x)) m) :
     (proto (lockA bA oA bB oB RA RB c hc) (lockB bB oB RB c hc)).WP t
       (nested mi.lock mi.unlock (lockA bA oA bB oB RA RB c hc).ptr (lockB bB oB RB c hc).ptr io)
       (fun _ G' m' _ => m'.current = t ∧ ∃ g', Back (lockA bA oA bB oB RA RB c hc)
         (lockB bB oB RB c hc) ({ phA := .out, phB := .away, part := rp }, x) g' ∧
-        (proto (lockA bA oA bB oB RA RB c hc) (lockB bB oB RB c hc)).inv (upd G' t g') m')
+        (proto (Tgt := Tgt) (lockA bA oA bB oB RA RB c hc) (lockB bB oB RB c hc)).inv
+          (upd G' t g') m')
       G m d :=
   nested_wp (FLock.prodPair hap) (fun _ => Iff.rfl) (fun _ h => h) (fun _ => hRA _)
-    (fun _ => hRB _) mi hmc hmc t _ rfl rfl hu io G m d hi
+    (fun _ => hRB _) mi hmc hmc t ({ phA := .out, phB := .away, part := rp }, x) rfl rfl hu io G
+    m d hi
 
 end Prod
 
