@@ -1663,7 +1663,6 @@ theorem Fits.okM_m (hW : W.Fits P UM US okM okS) (g : γ) (q : LPh) (h : Res) :
   have e : L.set (M.set g q h) .away rnil = M.set (L.set g .away rnil) q h :=
     (W.pair.set_comm g q h .away rnil).symm
   have ho := hW.m.ok_set (L.set g .away rnil) q h
-  dsimp only at ho
   rw [← e, L.ph_set, L.ph_set, hW.okM_l, hW.okM_l] at ho
   exact (and_iff_left rfl).symm.trans (ho.trans (and_iff_left rfl))
 
@@ -1673,7 +1672,6 @@ theorem Fits.okM_part (hW : W.Fits P UM US okM okS) (g : γ) (r : Res) :
   have e : L.set (M.setPart g r) .away rnil = M.setPart (L.set g .away rnil) r := by
     rw [W.pair.setPart, W.pair.setPart, L.setPart_set]
   have ho := hW.m.ok_setPart (L.set g .away rnil) r
-  dsimp only at ho
   rw [← e, L.ph_set, L.ph_set, hW.okM_l, hW.okM_l] at ho
   exact (and_iff_left rfl).symm.trans (ho.trans (and_iff_left rfl))
 
