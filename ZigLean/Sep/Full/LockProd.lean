@@ -501,14 +501,17 @@ theorem Keeps.setA (hp : A.Pair B) {rL rH rX : Res} {t : ThreadId} {p : LPh} {h 
       hf.w (fun hF => (hf.free hF).2) (fun u => by rw [(hU u).2.1, (hU u).2.2]; exact hf.pdisj u),
     by rw [hheld]; exact hk.held, by rw [hheld]; exact hk.owns, hk.hoff, hk.xdisj, hk.xoff⟩
 
-/-- **The nap or unnap of `A`'s holder keeps the product's rest** (`FLock.Fits.nap`/`unnap`'s
-`hU`), when the protocol's own `U` is kept. -/
+/-- **A relabel of `t` at `A` keeps the product's rest** (the `hU` of `FLock.Fits.nap`, `unnap`,
+`goAway` and `unaway` at `A`, in their form: `t`'s ghost value `g`), when the protocol's own `U`
+is kept. -/
 theorem U_setA (hp : A.Pair B) {U : (ThreadId → γ) → Res → Mem → Prop} {rXA : Res} {t : ThreadId}
-    {p : LPh} {h : Res} (hU : Pair.U B U G rXA m)
-    (hcl : ∀ rX, U G rX m → U (upd G t (A.set (G t) p h)) rX m) :
-    Pair.U B U (upd G t (A.set (G t) p h)) rXA m := by
+    {g : γ} {p : LPh} {h : Res} (hU : Pair.U B U (upd G t g) rXA m)
+    (hcl : ∀ rX, U (upd G t g) rX m → U (upd G t (A.set g p h)) rX m) :
+    Pair.U B U (upd G t (A.set g p h)) rXA m := by
   obtain ⟨rL, rH, rX, rfl, hk, hu⟩ := hU
-  exact ⟨rL, rH, rX, rfl, Keeps.setA hp hk, hcl rX hu⟩
+  have hk' := Keeps.setA (t := t) (p := p) (h := h) hp hk
+  rw [upd_self, upd_upd] at hk'
+  exact ⟨rL, rH, rX, rfl, hk', hcl rX hu⟩
 
 /-- **A stop keeps what the product keeps of `B`** (`current := t`). -/
 theorem Keeps.cur {rL rH rX : Res} (hk : B.Keeps G m rL rH rX) (t : ThreadId) :

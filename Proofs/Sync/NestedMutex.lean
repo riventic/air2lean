@@ -45,7 +45,8 @@ def nested (lk ul : Ptr → Io → ConcM Tgt Unit) (pA pB : Ptr) (io : Io) : Con
   ul pB io
   ul pA io
 
-/-- The two-lock product of `A` and `B` with no rest of the client's own. -/
+/-- The two-lock product of `A` and `B` with no rest of the client's own. No state is initial
+(`init`): the fixture is one thread's triple from the invariant, not a program run (module doc). -/
 def proto (A B : FLock γ) : Proto Tgt γ where
   inv G m := ∃ rX, A.Inv G rX m ∧ FLock.Pair.U B (fun _ _ _ => True) G rX m
   init _ _ := False
@@ -95,34 +96,22 @@ theorem nested_wp (mi : MutexImpl Tgt) (hcA : A.c = mi.c) (hcB : B.c = mi.c) (t 
       m'.current = t ∧ ∃ g', Back A B g g' ∧ (proto (Tgt := Tgt) A B).inv (upd G' t g') m')
       G m d := by
   obtain ⟨hA, hB⟩ := fits (Tgt := Tgt) hp hnA hnB hRA hRB
-  -- a relabel of `t` at one lock keeps the other kept (`Pair.U_setA`)
-  have setA : ∀ {G₀ : ThreadId → γ} {m₀ : Mem} {g₀ : γ} {rX : Res} (q : LPh) (h : Res),
-      FLock.Pair.U B (fun _ _ _ => True) (upd G₀ t g₀) rX m₀ →
-      FLock.Pair.U B (fun _ _ _ => True) (upd G₀ t (A.set g₀ q h)) rX m₀ := by
-    intro G₀ m₀ g₀ rX q h hU
-    have := FLock.Pair.U_setA (t := t) (p := q) (h := h) hp hU fun _ _ => trivial
-    rwa [upd_self, upd_upd] at this
-  have setB : ∀ {G₀ : ThreadId → γ} {m₀ : Mem} {g₀ : γ} {rX : Res} (q : LPh) (h : Res),
-      FLock.Pair.U A (fun _ _ _ => True) (upd G₀ t g₀) rX m₀ →
-      FLock.Pair.U A (fun _ _ _ => True) (upd G₀ t (B.set g₀ q h)) rX m₀ := by
-    intro G₀ m₀ g₀ rX q h hU
-    have := FLock.Pair.U_setA (t := t) (p := q) (h := h) hp.symm hU fun _ _ => trivial
-    rwa [upd_self, upd_upd] at this
+  -- each relabel of `t` at one lock keeps the other kept: `Pair.U_setA` (at `hp.symm` for `B`)
   unfold nested
   -- `lock A`, away from `B`
   refine WP.bind (WP.mono ?_ (mi.lock_wp hA rfl rfl hcA t g hgA hgB hu io G m d hi))
   rintro _ G₁ m₁ d₁ ⟨-, -, rL, hi₁⟩
   -- back at `B`'s `out`: `t` holds `A`, so it is not in the futex queue
-  have hq₁ : ∀ w ∈ m₁.waiters, w.1 ≠ t := by
+  have hq₁ : m₁.waiters.any (·.1 == t) = false := by
     obtain ⟨rX, hiA, -⟩ := (hA.inv _ _).mp hi₁
     have h : A.pl (upd G₁ t (A.set g .holds rL)) t = .holds := by
       show A.ph _ = _; rw [upd_self, A.ph_set]
-    exact hiA.w.notQ_mem (by rw [h]; decide) (by rw [h]; decide) (by rw [h]; decide)
+    exact hiA.w.notQ (by rw [h]; decide) (by rw [h]; decide) (by rw [h]; decide)
   have hi₂ := hB.unaway (g := A.set g .holds rL) (by rw [hp.ph_ab]; exact hgB) hi₁ hq₁
-    fun _ hU _ => setB .out rnil hU
+    fun _ hU _ => hp.symm.U_setA hU fun _ _ => trivial
   -- `A`'s nap: its holder may now sleep at `B`'s word
   have hi₃ := hA.nap (g := B.set (A.set g .holds rL) .out rnil) (by rw [hp.ph_ba, A.ph_set]) hi₂
-    fun _ hU _ => setA .holdsAway _ hU
+    fun _ hU _ => hp.U_setA hU fun _ _ => trivial
   generalize hg₃ : A.set (B.set (A.set g .holds rL) .out rnil) .holdsAway
     (A.held (B.set (A.set g .holds rL) .out rnil)) = g₃ at hi₃
   have h3A : A.ph g₃ = .holdsAway := by rw [← hg₃, A.ph_set]
@@ -143,10 +132,10 @@ theorem nested_wp (mi : MutexImpl Tgt) (hcA : A.c = mi.c) (hcB : B.c = mi.c) (t 
     obtain ⟨rX, hiB, -⟩ := (hB.inv _ _).mp hi₅
     have h : B.pl (upd G₃ t g₃) t = .out := by show B.ph _ = _; rw [upd_self, h3B]
     exact hiB.w.notQ (by rw [h]; decide) (by rw [h]; decide) (by rw [h]; decide)
-  have hi₆ := hA.unnap (g := g₃) h3A hi₅ hq₃ fun _ hU _ => setA .holds _ hU
+  have hi₆ := hA.unnap (g := g₃) h3A hi₅ hq₃ fun _ hU _ => hp.U_setA hU fun _ _ => trivial
   -- away from `B` again
   have hi₇ := hB.goAway (g := A.set g₃ .holds (A.held g₃)) (by rw [hp.ph_ab, h3B]) hi₆
-    fun _ hU _ => setB .away rnil hU
+    fun _ hU _ => hp.symm.U_setA hU fun _ _ => trivial
   -- `unlock A`
   refine WP.mono ?_ (mi.unlock_wp hA rfl rfl hcA t _ (by rw [hp.ph_ba, A.ph_set])
     (B.ph_set _ _ _) io G₃ m₃ d₃ hi₇ hc₃)
