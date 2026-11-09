@@ -101,24 +101,6 @@ theorem erase_sub {h hF : Heap} (hh : Holds m r rF) (hm : m.heap = h ∪ hF)
 
 end Holds
 
-/-- The bytes of `h` that `h₁` has too: a frame's partial read shares that the stepping resource
-shares too (`FTTriple`'s step relation). -/
-def _root_.Zig.Heap.inter (h h₁ : Heap) : Heap := fun l => if h₁ l = none then none else h l
-
-theorem _root_.Zig.Heap.inter_ne {h h₁ : Heap} {l : Loc} :
-    h.inter h₁ l ≠ none ↔ h l ≠ none ∧ h₁ l ≠ none := by
-  unfold Heap.inter; split <;> simp_all
-
-theorem _root_.Zig.Heap.inter_none {h h₁ : Heap} {l : Loc} (e : h l = none) : h.inter h₁ l = none := by
-  unfold Heap.inter; split <;> simp_all
-
-/-- **The shares at a frame byte are fixed by the frame**: next to the same frame `rF`, a byte of
-`rF` that `r'` holds a partial share of, `r` holds a partial share of (`Holds.owned_sub'`; next to a
-frame byte only a partial share, `Holds.frame_shared`). -/
-theorem Holds.shared_sub' {m m' : Mem} {r r' rF : Res} (hh : Holds m r rF) (hh' : Holds m' r' rF)
-    {l : Loc} (hF : rF.owned l ≠ none) (hl : r'.owned l ≠ none) : r.shared l ≠ none :=
-  hh.swap.frame_shared hF (hh.owned_sub' hh' (hh.swap.live_of_owned hF).1 hl)
-
 theorem FHeap.erase_fix_ne {m : Mem} {h : FHeap} {l : Loc} :
     (h.fix m).erase l ≠ none ↔ h.erase l ≠ none := by
   simp [FHeap.erase, FHeap.fix]
@@ -283,6 +265,16 @@ theorem _root_.Zig.FStepIn.toShared {hO : Heap} {m m₁ m₂ : Mem} {r rF : Res}
     FStepIn rF.owned m₁ m₂ (rF.shared.inter r.shared) :=
   hs.interR fun l hl _ hb => hh.swap.frame_shared hl (ho l hl hb)
 
+/-- Two steps next to the frame `rF`, of the part `r₀` and then of the part `r₁` it became: their
+frame reads are shares `r₀` shares (`Holds.owned_sub'`: next to the same frame `r₁` holds no frame
+byte `r₀` lacked). -/
+theorem _root_.Zig.FStepIn.transPart {m₀ m₁ m₂ : Mem} {r₀ r₁ rF : Res} (hh₀ : Holds m₀ r₀ rF)
+    (hh₁ : Holds m₁ r₁ rF) (hs : FStepIn rF.owned m₀ m₁ (rF.shared.inter r₀.shared))
+    (hs' : FStepIn rF.owned m₁ m₂ (rF.shared.inter r₁.shared)) :
+    FStepIn rF.owned m₀ m₂ (rF.shared.inter r₀.shared) :=
+  hs.trans (hs'.toShared hh₀ fun _ hl hb =>
+    hh₀.owned_sub' hh₁ (hh₀.swap.live_of_owned hl).1 (Res.owned_of_shared hb))
+
 /-- **The frame's bytes and read shares** of a resource's step: a step in the frame `⟨rR ⋆ rF⟩`
 is a step in `rF` (the shared bytes of the sum that `rF` holds are `rF`'s shared bytes). -/
 theorem _root_.Zig.FStepIn.frameRight {m m' : Mem} {rR rF : Res} {hO : Heap}
@@ -292,6 +284,17 @@ theorem _root_.Zig.FStepIn.frameRight {m m' : Mem} {rR rF : Res} {hO : Heap}
   hs.weakenR (fun _ hl => (Res.owned_sep rfl rfl).mpr (.inr hl))
     fun _ hl hs => let ⟨a, b⟩ := Heap.inter_ne.mp hs
       Heap.inter_ne.mpr ⟨Res.shared_sep' rfl rfl a hl, b⟩
+
+/-- **The frame rule's step**: a step of the part `rP` in the frame `⟨rR ⋆ rF⟩`, reading only
+shares of `rP`, is a step of `rP ⋆ rR` in `rF` that reads only its shares (`frameRight`,
+`toShared`). -/
+theorem _root_.Zig.FStepIn.framePart {m m₁ m₂ : Mem} {rP rR rF : Res}
+    (hh : Holds m ⟨rP.heap ∪ rR.heap, rP.know.union rR.know, rP.gh.add rR.gh⟩ rF)
+    (hs : FStepIn (Res.owned ⟨rR.heap ∪ rF.heap, rR.know.union rF.know, rR.gh.add rF.gh⟩) m₁ m₂
+      ((Res.shared ⟨rR.heap ∪ rF.heap, rR.know.union rF.know, rR.gh.add rF.gh⟩).inter rP.shared)) :
+    FStepIn rF.owned m₁ m₂
+      (rF.shared.inter (Res.shared ⟨rP.heap ∪ rR.heap, rP.know.union rR.know, rP.gh.add rR.gh⟩)) :=
+  hs.frameRight.toShared hh fun _ _ hl => (Res.owned_sep rfl rfl).mpr (.inl (Res.owned_of_shared hl))
 
 /-! ## Thread triples -/
 
@@ -407,7 +410,7 @@ theorem frame (ht : FTTriple P c Q) : FTTriple (P ⋆ R) c (fun v => Q v ⋆ R) 
     have hQR := (FHeap.disjoint_union_right.mp hh'.disj).1
     have hj := Holds.join hQR hRF hh'
     exact ⟨_, hj, ⟨r', rR, hQR, rfl, hq, hr⟩, hc', Mem.OwnsRes.frame hh hj ho ho' hst,
-      hst.frameRight.toShared hh fun _ _ hl => (Res.owned_sep rfl rfl).mpr (.inl (Res.owned_of_shared hl))⟩
+      hst.framePart hh⟩
 
 theorem frameL (ht : FTTriple P c Q) : FTTriple (R ⋆ P) c (fun v => R ⋆ Q v) :=
   conseq (frame (R := R) ht) (fun _ h => sep_comm h) (fun _ _ h => sep_comm h)
@@ -438,8 +441,7 @@ theorem bind {S : β → FAssn} {f : α → MemM β} (hc : FTTriple P c Q)
       · trivial
       · exact h2
       · obtain ⟨r'', a, b, d, e, hst'⟩ := h2
-        exact ⟨r'', a, b, d, e, hst.trans (hst'.toShared hh fun _ hl hs =>
-          hh.owned_sub' hh' (hh.swap.live_of_owned hl).1 (Res.owned_of_shared hs))⟩
+        exact ⟨r'', a, b, d, e, hst.transPart hh hh' hst'⟩
 
 theorem ex {γ : Type} {P : γ → FAssn} (h : ∀ x, FTTriple (P x) c Q) : FTTriple (FAssn.ex P) c Q :=
   fun m r rF hh ⟨x, hp⟩ hc ho => h x m r rF hh hp hc ho

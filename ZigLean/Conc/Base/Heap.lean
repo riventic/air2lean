@@ -9,6 +9,17 @@ open Assn
 /-- The cells of `h` that `h₁` does not have. -/
 def Heap.diff (h h₁ : Heap) : Heap := fun l => if h₁ l = none then h l else none
 
+/-- The cells of `h` that `h₁` has too (a frame's partial read shares that the stepping resource
+shares too: `FTTriple`'s step relation). -/
+def Heap.inter (h h₁ : Heap) : Heap := fun l => if h₁ l = none then none else h l
+
+theorem Heap.inter_ne {h h₁ : Heap} {l : Loc} :
+    h.inter h₁ l ≠ none ↔ h l ≠ none ∧ h₁ l ≠ none := by
+  unfold Heap.inter; split <;> simp_all
+
+theorem Heap.inter_none {h h₁ : Heap} {l : Loc} (e : h l = none) : h.inter h₁ l = none := by
+  unfold Heap.inter; split <;> simp_all
+
 /-- A part of the memory's heap: the heap is that part with the rest as a frame. -/
 theorem heap_eq_union_of_sub {m : Mem} {h : Heap} (hs : h.Sub m.heap) : m.heap = h ∪ m.heap := by
   funext l; simp only [Heap.union_apply]

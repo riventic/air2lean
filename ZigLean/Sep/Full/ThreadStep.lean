@@ -279,8 +279,7 @@ theorem frame (hl : ThreadLocal P c) : ThreadLocal (P ⋆ R) c := by
   obtain ⟨h1, h2⟩ := hl m rP _ (Holds.split hd hh) hp hc (ho.sepL rfl rfl)
   refine ⟨h1, fun v m₀ e => ?_⟩
   obtain ⟨hst, hrev⟩ := h2 v m₀ e
-  exact ⟨hst.frameRight.toShared hh fun _ _ hl =>
-    (Res.owned_sep rfl rfl).mpr (.inl (Res.owned_of_shared hl)), hrev⟩
+  exact ⟨hst.framePart hh, hrev⟩
 
 theorem frameL (hl : ThreadLocal P c) : ThreadLocal (R ⋆ P) c :=
   hl.frame.pre fun _ h => sep_comm h

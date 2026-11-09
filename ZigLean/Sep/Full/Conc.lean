@@ -286,16 +286,6 @@ theorem Run.mono {Q' : α → FAssn} (hq : ∀ v r, Q v r → Q' v r) :
     exact Run.sync_iff.mpr ⟨hs, r', hh, hc, ho, hst, fun m₂ rF₂ e hh₂ hc₂ ho₂ ρ hρ hm =>
       Run.mono hq (k ρ m₂) (hk m₂ rF₂ e hh₂ hc₂ ho₂ ρ hρ hm)⟩
 
-/-- Two steps next to the frame `rF`, of the part `r₀` and then of the part `r₁` it became: their
-frame reads are shares `r₀` shares (`Holds.owned_sub'`: next to the same frame `r₁` holds no frame
-byte `r₀` lacked). -/
-theorem _root_.Zig.FStepIn.transPart {m₀ m₁ m₂ : Mem} {r₀ r₁ rF : Res} (hh₀ : Holds m₀ r₀ rF)
-    (hh₁ : Holds m₁ r₁ rF) (hs : FStepIn rF.owned m₀ m₁ (rF.shared.inter r₀.shared))
-    (hs' : FStepIn rF.owned m₁ m₂ (rF.shared.inter r₁.shared)) :
-    FStepIn rF.owned m₀ m₂ (rF.shared.inter r₀.shared) :=
-  hs.trans (hs'.toShared hh₀ fun _ hl hb =>
-    hh₀.owned_sub' hh₁ (hh₀.swap.live_of_owned hl).1 (Res.owned_of_shared hb))
-
 /-- A step before the segment: the segment starts earlier. -/
 theorem Run.prefix {n : Nat} {t : CoN Tgt (α × Mem) n} {m₀ m₁ : Mem} {r₀ r₁ rF : Res}
     (hh₀ : Holds m₀ r₀ rF) (hh₁ : Holds m₁ r₁ rF)
@@ -346,16 +336,13 @@ theorem Run.frame {R : FAssn} {rR : Res} (hR : R rR) :
     have hQR := (FHeap.disjoint_union_right.mp hh.disj).1
     have hj := Holds.join hQR hRF hh
     exact Run.ok_iff.mpr ⟨_, hj, ⟨r', rR, hQR, rfl, hq, hR⟩, hc,
-      Mem.OwnsRes.frame hh₀ hj ho₀ ho hst, hst.frameRight.toShared hh₀ fun _ _ hl =>
-        (Res.owned_sep rfl rfl).mpr (.inl (Res.owned_of_shared hl))⟩
+      Mem.OwnsRes.frame hh₀ hj ho₀ ho hst, hst.framePart hh₀⟩
   | _, .sync _ _ k, _, _, _, hRF, hh₀, ho₀, h => by
     obtain ⟨hs, r', hh, hc, ho, hst, hk⟩ := Run.sync_iff.mp h
     have hQR := (FHeap.disjoint_union_right.mp hh.disj).1
     have hj := Holds.join hQR hRF hh
     exact Run.sync_iff.mpr ⟨hs, _, hj, hc, Mem.OwnsRes.frame hh₀ hj ho₀ ho hst,
-      hst.frameRight.toShared hh₀ fun _ _ hl =>
-        (Res.owned_sep rfl rfl).mpr (.inl (Res.owned_of_shared hl)),
-      fun m₂ rF₂ e hh₂ hc₂ ho₂ ρ hρ hm =>
+      hst.framePart hh₀, fun m₂ rF₂ e hh₂ hc₂ ho₂ ρ hρ hm =>
         Run.frame hR (k ρ m₂) (FHeap.disjoint_union_left.mp hh₂.disj).2 hh₂ ho₂
           (hk m₂ _ e (Holds.split hQR hh₂) hc₂ (ho₂.sepL rfl rfl) ρ hρ hm)⟩
 
