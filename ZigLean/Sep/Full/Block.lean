@@ -548,7 +548,7 @@ theorem ThreadLocal.remapByteBuffer {P : FAssn} {s : Slice} {n : Nat}
   have hacc0 : m.noFp.access s.ptr s.len.toNat 1 = m.access s.ptr s.len.toNat 1 := rfl
   have hst₀ : ∀ v m', (Zig.remapByteBuffer s n).run m = Pure.pure (v, m') →
       (Zig.remapByteBuffer s n).run m = Pure.pure (none, m) →
-      FStepIn rF.owned m m' rF.shared ∧ m.RevivesOwned m' := fun v m' e h1 => by
+      FStepIn rF.owned m m' (rF.shared.inter r.shared) ∧ m.RevivesOwned m' := fun v m' e h1 => by
     rw [h1] at e
     obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
     exact ⟨FStepIn.refl _ _, (Mem.NoRevive.refl m).revivesOwned⟩

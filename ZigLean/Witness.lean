@@ -78,10 +78,10 @@ def nonvacuityType (type : Expr) : MetaM Expr :=
 
 /-- `∃ r, d = some (.ok r)` for the discriminant `d : Option (Except ε β)` of the match that
 ends the unfolded conclusion head, or for a call's run tree stop by stop
-(`CTriple.Run Q m rF t`) of its reading in the thread (`Sched.soloTree t`); `none` if there is
+(`CTriple.Run Q m r rF t`) of its reading in the thread (`Sched.soloTree t`); `none` if there is
 no such match. -/
 def returnsBody? (body : Expr) : MetaM (Option Expr) := do
-  let d ← if body.isAppOfArity `Zig.Full.CTriple.Run 7 then
+  let d ← if body.isAppOfArity `Zig.Full.CTriple.Run 8 then
       mkAppM `Zig.Sched.soloTree #[body.appArg!]
     else
       let some app ← matchMatcherApp? body | return none

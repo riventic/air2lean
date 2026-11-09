@@ -494,12 +494,15 @@ open Full
 variable {Tgt γ α : Type} {P : Proto Tgt γ} {t : ThreadId} {G : ThreadId → γ} {m : Mem}
   {n : Nat} {own : ThreadId → Res} {rO : Res}
 
-/-- `WP.liftMem_fownedS` whose step keeps the rest's bytes (`FStepIn` of the rest). -/
+/-- `WP.liftMem_fownedS` whose step keeps the rest's bytes (`FStepIn` of the rest) and reads only
+the rest's partial shares that the thread's part shares too (`FTTriple`'s step relation: a load
+needs a positive fraction, `Mem.BytesRead`; maintainer decision 2026-11-09, option (A),
+`docs/sep-full-state.md` §Read shares). -/
 theorem WP.liftMem_fownedR {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
     {Q : α → (ThreadId → γ) → Mem → Nat → Prop} (ht : FTTriple Pa x Qa) (ho : FOwned own rO m)
     (hc : m.current = t) (htl : t < m.threads.size) (hp : Pa (own t))
     (h : ∀ a m' r', (x.run m).run = some (.ok (a, m')) → FOwned (upd own t r') rO m' →
-      Qa a r' → FStepIn rO.owned m m' rO.shared → Q a G m' n)
+      Qa a r' → FStepIn rO.owned m m' (rO.shared.inter (own t).shared) → Q a G m' n)
     (hret : P.Partial ∨ FTTReturns Pa x := by
       first
         | exact .inl (.inl rfl)
@@ -518,7 +521,7 @@ theorem WP.liftMem_fownedR {x : MemM α} {Pa : FAssn} {Qa : α → FAssn}
     obtain ⟨r', hh', hq, hc', ho', hs⟩ := hx
     obtain ⟨hnc, hh'⟩ := hh'.dropCurF
     rw [Res.owned_addGh, Res.shared_addGh] at hs
-    exact ⟨by rw [hs.threads], h a m' r' hr (ho.step hc htl hR hRO hh' hc' ho' hs hnc) hq
+    exact ⟨by rw [hs.threads], h a m' r' hr (ho.step hc htl hR hRO hh' hc' ho' hs.interL hnc) hq
       hs.frameRight⟩
   · obtain ⟨v, m', e⟩ := hr m (own t) _ hh hp hcs (hc ▸ ho.owns t htl)
     rw [e] at hn; simp [pure, ExceptT.pure, ExceptT.mk, ExceptT.run] at hn

@@ -196,8 +196,8 @@ theorem owns_step_of {m m' : Mem} {h h' hF hR : Heap} (hs : FStepIn hF m m' hR)
 next to the frame. An exclusive byte of it was an exclusive byte of the resource before
 (`Holds.excl_sub'`), any byte of it a byte of it before (the frame keeps its own), or it is in a
 new block, or came alive with no access but the thread's (`RevivesOwned`). -/
-theorem owns_step {m m' : Mem} {r r' rF : Res} (hh : Holds m r rF)
-    (ho : m.OwnsRes m.current r) (hs : FStepIn rF.owned m m' rF.shared)
+theorem owns_step {m m' : Mem} {r r' rF : Res} {hR : Heap} (hh : Holds m r rF)
+    (ho : m.OwnsRes m.current r) (hs : FStepIn rF.owned m m' hR)
     (hrev : m.RevivesOwned m') (hh' : Holds m' r' rF) :
     m'.OwnsRes m'.current r' := by
   have hlive : ∀ l, r'.owned l ≠ none → m'.heap l ≠ none := fun l h3 => by
@@ -212,12 +212,14 @@ theorem owns_step {m m' : Mem} {r r' rF : Res} (hh : Holds m r rF)
 
 /-- **A step local to the thread that owns `P`** (module doc): its run from `m` is its run from
 `m.noFp` up to the record of accesses, and a result of it is a step of the thread outside the
-frame that revives only bytes the thread owns. -/
+frame that revives only bytes the thread owns, and reads only frame shares the resource shares
+too (`FTTriple`). -/
 def ThreadLocal {α : Type} (P : FAssn) (c : MemM α) : Prop :=
   ∀ m r rF, Holds m r rF → P r → m.FConc → m.OwnsRes m.current r →
     (c.run m).run.map (Except.map fun p => (p.1, p.2.noFp)) =
       ((c.run m.noFp).run).map (Except.map fun p => (p.1, p.2.noFp)) ∧
-    ∀ v m', c.run m = pure (v, m') → FStepIn rF.owned m m' rF.shared ∧ m.RevivesOwned m'
+    ∀ v m', c.run m = pure (v, m') →
+      FStepIn rF.owned m m' (rF.shared.inter r.shared) ∧ m.RevivesOwned m'
 
 /-- The run from `m` agrees with the run from `m.noFp` up to the record: a result of one is a
 result of the other with the same value and the same memory up to the record. -/
@@ -277,7 +279,8 @@ theorem frame (hl : ThreadLocal P c) : ThreadLocal (P ⋆ R) c := by
   obtain ⟨h1, h2⟩ := hl m rP _ (Holds.split hd hh) hp hc (ho.sepL rfl rfl)
   refine ⟨h1, fun v m₀ e => ?_⟩
   obtain ⟨hst, hrev⟩ := h2 v m₀ e
-  exact ⟨hst.frameRight, hrev⟩
+  exact ⟨hst.frameRight.toShared hh fun _ _ hl =>
+    (Res.owned_sep rfl rfl).mpr (.inl (Res.owned_of_shared hl)), hrev⟩
 
 theorem frameL (hl : ThreadLocal P c) : ThreadLocal (R ⋆ P) c :=
   hl.frame.pre fun _ h => sep_comm h
@@ -550,7 +553,8 @@ makes no byte of an old block alive. The memory primitives are local this way. -
 theorem ThreadLocal.intro {α : Type} {P : FAssn} {c : MemM α}
     (h : ∀ m r rF, Holds m r rF → P r → m.FConc → m.OwnsRes m.current r →
       RunFp m.footprint m.noFp c ∧
-      ∀ v m₀, c.run m.noFp = pure (v, m₀) → FStepIn rF.owned m.noFp m₀ rF.shared ∧ m.NoRevive m₀) :
+      ∀ v m₀, c.run m.noFp = pure (v, m₀) →
+        FStepIn rF.owned m.noFp m₀ (rF.shared.inter r.shared) ∧ m.NoRevive m₀) :
     ThreadLocal P c := by
   intro m r rF hh hp hc ho
   obtain ⟨hr, hl⟩ := h m r rF hh hp hc ho
@@ -794,7 +798,8 @@ theorem loadOwned {T : Type} [Enc T]
   · obtain ⟨b, blk, o, h, -, -, rfl⟩ := Proto.load_ok (m := m.noFp) e
     obtain ⟨hpb, rfl, -, hb⟩ := access_at h
     exact ⟨FStepIn.readAt_reads hc.1 rfl
-        (fun x h1 h2 hF => hh.frame_shared (hin b hpb r hp x h1 h2) hF) hb,
+        (fun x h1 h2 hF => Heap.inter_ne.mpr ⟨hh.frame_shared (hin b hpb r hp x h1 h2) hF,
+          hh.swap.frame_shared hF (hin b hpb r hp x h1 h2)⟩) hb,
       fun _ _ _ h => by rwa [Mem.heap_readAt] at h⟩
 
 /-- **An owned typed load** is local (`loadOwned`: a cell is a byte the resource holds). -/
@@ -881,7 +886,7 @@ theorem bind {Q : α → FAssn} {c : MemM α} {f : α → MemM β} (hc : ThreadL
       ((f v).run m₁').run.map (Except.map fun p => (p.1, p.2.noFp)) =
         ((f v).run m₁).run.map (Except.map fun p => (p.1, p.2.noFp)) ∧
       ∀ w m₂', (f v).run m₁' = Pure.pure (w, m₂') →
-        FStepIn rF.owned m₁' m₂' rF.shared ∧ m₁'.RevivesOwned m₂' := by
+        FStepIn rF.owned m₁' m₂' (rF.shared.inter r.shared) ∧ m₁'.RevivesOwned m₂' := by
     intro v m₁' e
     obtain ⟨m₁, e₁, hm⟩ := run_noFp_ok hrun e
     obtain ⟨r₀, hh₀, hq₀, hs₀⟩ := hq m.noFp r rF hh.toNoFp hp hcm.noFp v m₁ e₁
@@ -889,7 +894,10 @@ theorem bind {Q : α → FAssn} {c : MemM α} {f : α → MemM β} (hc : ThreadL
     have hh₀' := hh₀.of_noFp_eq hm
     obtain ⟨h1, h1'⟩ := hf v m₁' r₀ rF hh₀' hq₀ (hs₀.fconc.of_noFp hm) (owns_step hh ho hst hrev hh₀')
     obtain ⟨h0, -⟩ := hf v m₁ r₀ rF hh₀ hq₀ hs₀.fconc (.of_owns (hs₀.1.single.owns _))
-    exact ⟨m₁, e₁, by rw [h1, h0, hm], h1'⟩
+    refine ⟨m₁, e₁, by rw [h1, h0, hm], fun w m₂' e₂ => ?_⟩
+    obtain ⟨hst₂, hrev₂⟩ := h1' w m₂' e₂
+    exact ⟨hst₂.toShared hh fun _ hl hs =>
+      hh.owned_sub' hh₀' (hh.swap.live_of_owned hl).1 (Res.owned_of_shared hs), hrev₂⟩
   refine ⟨?_, fun w m₂' e => ?_⟩
   · rw [StateT.run_bind, ExceptT.run_bind, StateT.run_bind, ExceptT.run_bind]
     have hr := hrun

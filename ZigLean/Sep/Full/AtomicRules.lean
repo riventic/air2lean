@@ -1516,13 +1516,13 @@ theorem weakCasPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α] [AtomicP
   cases n with
   | zero => trivial
   | succ n =>
-    show Run _ m rF (.sync (.pick (weakCasPtrCount 8 p v)) m fun ρ m' =>
+    show Run _ m r rF (.sync (.pick (weakCasPtrCount 8 p v)) m fun ρ m' =>
       (ConcM.liftMem (cmpxchgWeakPtrAt ρ succ fail 8 p v new) : ConcM Tgt (Option α)) n m')
     refine Run.sync_iff.mpr ⟨rfl, r, hh, hc, ho, FStepIn.refl m _,
       fun m₂ rF₂ _ hh₂ hc₂ ho₂ ρ hρ hm => ?_⟩
     revert ρ
     show ∀ (c : Nat), (c < weakCasPtrCount 8 p v m₂ ∨ weakCasPtrCount 8 p v m₂ = 0 ∧ c = 0) →
-      ((some 0 : Option Nat) = some c ∨ m₂.MsgCov) → Run _ m₂ rF₂
+      ((some 0 : Option Nat) = some c ∨ m₂.MsgCov) → Run _ m₂ r rF₂
         ((ConcM.liftMem (cmpxchgWeakPtrAt c succ fail 8 p v new) : ConcM Tgt (Option α)) n m₂)
     intro c hρ hm
     have h01 : c = 0 ∨ c = 1 ∧ m₂.MsgCov := by

@@ -38,7 +38,7 @@ theorem FTTriple.admissible {P : FAssn} {Q : α → FAssn} :
       | none => True
       | some (.error e) => e = .stackOverflow
       | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ Q v r' ∧ m'.FConc ∧
-          m'.OwnsRes m'.current r' ∧ FStepIn rF.owned m m' rF.shared)
+          m'.OwnsRes m'.current r' ∧ FStepIn rF.owned m m' (rF.shared.inter r.shared))
     fun _ => by
       change Lean.Order.admissible fun x : FlatOrder none => _
       exact admissible_flatOrder _ fun _ _ _ _ _ _ => trivial

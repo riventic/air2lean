@@ -108,7 +108,7 @@ theorem cload_thread :
     | none => True
     | some (.error e) => e = .stackOverflow
     | some (.ok (v, m')) => ∃ r', Holds m' r' rF ∧ (⟪v = 0⟫ ⋆ cpts p 1 (0 : BitVec 8)) r' ∧
-        m'.FConc ∧ m'.OwnsRes m'.current r' ∧ FStepIn rF.owned m m' rF.shared :=
+        m'.FConc ∧ m'.OwnsRes m'.current r' ∧ FStepIn rF.owned m m' (rF.shared.inter rC.shared) :=
   (FTTotalTriple.cload (p := p) (a := 1) (v := (0 : BitVec 8)) (by decide)).1 m rC rF holds hc
     fconc (.of_owns owns)
 

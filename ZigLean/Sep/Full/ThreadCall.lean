@@ -58,17 +58,19 @@ theorem Run.safe (hcost : P.cost = none) (hres : ∀ g r, res (set g r) = r)
     (hloc : ∀ G m m' rO rR r', P.inv G m →
       sepN m.threads.size (partsBut (fun u => res (G u)) t) rR →
       FOwned (upd (fun u => res (G u)) t r') rO m' →
-      FStepIn (rsum rR rO).owned { m with current := t } m' (rsum rR rO).shared →
+      FStepIn (rsum rR rO).owned { m with current := t } m'
+        ((rsum rR rO).shared.inter (res (G t)).shared) →
       P.inv (upd G t (set (G t) r')) m')
     (hpost : ∀ G m m' rO rR r' v d, P.inv G m →
       sepN m.threads.size (partsBut (fun u => res (G u)) t) rR →
       FOwned (upd (fun u => res (G u)) t r') rO m' →
-      FStepIn (rsum rR rO).owned { m with current := t } m' (rsum rR rO).shared → Qa v r' →
+      FStepIn (rsum rR rO).owned { m with current := t } m'
+        ((rsum rR rO).shared.inter (res (G t)).shared) → Qa v r' →
       Q v G m' d) :
     ∀ {n} (tr : CoN Tgt (α × Mem) n) {G : ThreadId → γ} {m : Mem} {rO rR : Res},
       P.inv G m → t < m.threads.size → FOwned (fun u => res (G u)) rO m →
       sepN m.threads.size (partsBut (fun u => res (G u)) t) rR → FHeap.Disjoint rR.heap rO.heap →
-      CTriple.Run Qa { m with current := t }
+      CTriple.Run Qa { m with current := t } (res (G t))
         ⟨rR.heap ∪ rO.heap, rR.know.union rO.know, (rR.gh.add rO.gh).add (Ghost.cur t)⟩ tr →
       P.Safe t Q m.threads.size G tr
   | _, .leaf none, _, _, _, _, _, _, _, _, _, _ => by simp only [Safe]; exact .inl (.inr hcost)
@@ -79,7 +81,7 @@ theorem Run.safe (hcost : P.cost = none) (hres : ∀ g r, res (set g r) = r)
     obtain ⟨hnc, hh'⟩ := Holds.dropCurF
       (rF := ⟨rR.heap ∪ rO.heap, rR.know.union rO.know, rR.gh.add rO.gh⟩) hh'
     rw [Res.owned_addGh, Res.shared_addGh] at hst
-    have hs := (ho.current t).step rfl htl hR hRO hh' hc' ho' hst hnc
+    have hs := (ho.current t).step rfl htl hR hRO hh' hc' ho' hst.interL hnc
     simp only [Safe]
     exact ⟨by rw [hst.threads], hpost G m m' rO rR r' v _ hi hR hs hst hq⟩
   | _, .sync op m₁ k, G, m, rO, rR, hi, htl, ho, hR, hRO, h => by
@@ -87,7 +89,7 @@ theorem Run.safe (hcost : P.cost = none) (hres : ∀ g r, res (set g r) = r)
     obtain ⟨hnc, hh₁⟩ := Holds.dropCurF
       (rF := ⟨rR.heap ∪ rO.heap, rR.know.union rO.know, rR.gh.add rO.gh⟩) hh₁
     rw [Res.owned_addGh, Res.shared_addGh] at hst
-    have hs := (ho.current t).step rfl htl hR hRO hh₁ hc₁ ho₁ hst hnc
+    have hs := (ho.current t).step rfl htl hR hRO hh₁ hc₁ ho₁ hst.interL hnc
     refine (Safe.sync_none hcost).mpr ⟨by rw [hst.threads], set (G t) r',
       hloc G m m₁ rO rR r' hi hR hs hst, fun G₁ m₂ hg hi₂ _ => Step.of_solo hso fun ρ hρ => ?_⟩
     obtain ⟨htl₂, rO₂, ho₂⟩ := hinv G₁ m₂ hi₂
@@ -98,9 +100,10 @@ theorem Run.safe (hcost : P.cost = none) (hres : ∀ g r, res (set g r) = r)
     have hc₂ : ({ m₂ with current := t } : Mem).FConc :=
       ⟨by show t < m₂.clocks.size; rw [ho₂.csize]; exact htl₂, ho₂.conc.1, ho₂.conc.2.1⟩
     have hown : ({ m₂ with current := t } : Mem).OwnsRes t r' := e ▸ ho₂.owns t htl₂
+    have hk₂ := hk { m₂ with current := t } _ hst.current.symm hh₂ hc₂ hown ρ hρ (.inr ho₂.conc.2.2)
+    rw [← e] at hk₂
     exact Run.safe hcost hres hinv hloc hpost (k ρ { m₂ with current := t }) (m := m₂) hi₂ htl₂ ho₂
-      hR₂ hRO₂
-      (hk { m₂ with current := t } _ hst.current.symm hh₂ hc₂ hown ρ hρ (.inr ho₂.conc.2.2))
+      hR₂ hRO₂ hk₂
 
 /-- **A call of a concurrent function by thread `t` of a protocol** (module doc): the call's
 `CTriple` on the thread's part, with an invariant that keeps the parts (`hinv`) and is local to
@@ -111,12 +114,14 @@ theorem WP.call_fowned {x : ConcM Tgt α} {Pa : FAssn} (hx : CTriple Pa x Qa)
     (hloc : ∀ G m m' rO rR r', P.inv G m →
       sepN m.threads.size (partsBut (fun u => res (G u)) t) rR →
       FOwned (upd (fun u => res (G u)) t r') rO m' →
-      FStepIn (rsum rR rO).owned { m with current := t } m' (rsum rR rO).shared →
+      FStepIn (rsum rR rO).owned { m with current := t } m'
+        ((rsum rR rO).shared.inter (res (G t)).shared) →
       P.inv (upd G t (set (G t) r')) m')
     (hpost : ∀ G m m' rO rR r' v d, P.inv G m →
       sepN m.threads.size (partsBut (fun u => res (G u)) t) rR →
       FOwned (upd (fun u => res (G u)) t r') rO m' →
-      FStepIn (rsum rR rO).owned { m with current := t } m' (rsum rR rO).shared → Qa v r' →
+      FStepIn (rsum rR rO).owned { m with current := t } m'
+        ((rsum rR rO).shared.inter (res (G t)).shared) → Qa v r' →
       Q v G m' d)
     {G : ThreadId → γ} {m : Mem} {n : Nat} (hi : P.inv G m) (hc : m.current = t)
     (hp : Pa (res (G t))) : P.WP t x Q G m n := by
