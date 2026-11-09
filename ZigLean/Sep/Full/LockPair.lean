@@ -20,7 +20,7 @@ product.
   `L`'s rest; its cells are the new ones after the step.
 * `FLock.Pair A B`: two locks over one ghost value (apart words, each lock's `set` keeps the other's
   place, held resource and `R`, a shared part, the two `set`s commute: `set_comm`); `Pair.otherInv` is `Inv.otherStep` for it. The
-  product invariant over a pair is not built yet (ledger #two-lock-product).
+  product invariant over a pair is `ZigLean/Sep/Full/LockProd.lean`'s (`Pair.U`, `Pair.fits`).
 * `FLock.Inv.nap`/`unnap` and `FLock.Fits.nap`/`unnap`: the holder of `L` goes to `holdsAway`
   before `K`'s code may put it to sleep, and back to `holds` after it. No memory step. The
   protocol's `U` must be stable under this relabel: a hypothesis of `Fits.nap`/`unnap` that each
@@ -235,6 +235,16 @@ theorem Inv.congrG {G G' : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G r
   have hpl : L.pl G' = L.pl G := funext fun u => (hG u).1
   hi.reghost (hpl ▸ hi.w) (fun u => (hG u).2.1) (fun u => (hG u).2.2)
     (fun u => by rw [(hG u).1]) (fun u h => by rwa [(hG u).1] at h) hR
+
+/-- A thread out of the lock's futex wait (`out` or `holds`) is not in the futex queue
+(`LockWord.WInv.notQ`). -/
+theorem Inv.notQ_outHolds {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId}
+    (hi : L.Inv G rX m) (h : L.ph (G t) = .out ∨ L.ph (G t) = .holds) :
+    m.waiters.any (·.1 == t) = false := by
+  have hn : ∀ q : LPh, (q = .out ∨ q = .holds) → q ≠ .wait ∧ q ≠ .away ∧ q ≠ .holdsAway := by
+    rintro q (rfl | rfl) <;> decide
+  obtain ⟨h1, h2, h3⟩ := hn (L.pl G t) h
+  exact hi.w.notQ h1 h2 h3
 
 section
 

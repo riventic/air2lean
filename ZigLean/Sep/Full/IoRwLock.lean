@@ -38,7 +38,7 @@ runs"): the walks move the caller `out → away` at the semaphore's mutex around
 outer mutex (`lock`'s and `unlock`'s, and `lockShared`'s slow path from before its lock until after
 its unlock) and at the outer mutex around the last reader's post (`FRw.Fits.lAway`, `lUnaway`,
 `mAway`, `mUnaway`); the two locks' `set`s commute (`FLock.Pair.set_comm`), so the relabel back
-gives the exact ghost value (`FLock.Pair.set_around`).
+gives the exact ghost value (`FRw.Fits.lBack`, `FLock.Pair.set_around`).
 
 A program instantiates it with its names and `simp`/`rfl` proofs of the equations
 (`Proofs/Sync/IoRwLock.lean`).
@@ -270,14 +270,11 @@ theorem lock_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc : M.c
   rw [StateT.run_bind]
   refine WP.bind (WP.callC (WP.mono (fun _ G₂ m₂ k₂ h₂ => ?_)
     (C.M.lock_wp hW.m hcost (by rw [W.ptr_m, ← W.ptr_st]) hMc t (L.set (W.set g .wi) .away rnil)
-      (by rw [W.pair.ph_ba, hmx]) ⟨(hW.okM_l _ _ _).mpr ((hW.okM_set _ _).mpr hokM), L.ph_set _ _ _⟩
+      (by rw [W.pair.ph_ba, hmx]) (hW.okM_away ((hW.okM_set _ _).mpr hokM))
       (by rw [W.pair.part_ba, hW.mpart]; exact hu)
       io G₁ m₁ k₁ (hW.lAway hlx (.inl hmx) hi₁))))
   obtain ⟨hk₂, hc₂, rL, hi₂⟩ := h₂
-  replace hi₂ := hW.lUnaway (g := M.set (L.set (W.set g .wi) .away rnil) .holds rL)
-    (by rw [W.pair.ph_ab, L.ph_set]) (.inr (M.ph_set _ _ _)) hi₂
-  have hlhx : L.held (W.set g .wi) = rnil := by rw [W.lheld, hlh]
-  rw [W.pair.set_around hlx hlhx] at hi₂
+  replace hi₂ := hW.lBack hlx (by rw [W.lheld, hlh]) (.inr rfl) hi₂
   -- `t` holds the outer mutex at `wi`
   have hpart₂ : M.part (M.set (W.set g .wi) .holds rL) = M.part g := by
     rw [M.part_set, hW.mpart]
@@ -363,14 +360,11 @@ theorem unlock_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc : M
   refine WP.bind (WP.callC (WP.mono (fun _ G₂ m₂ k₂ h₂ => ?_)
     (C.M.unlock_wp hW.m hcost (by rw [W.ptr_m, ← W.ptr_st]) hMc t
       (L.set (W.set (M.setPart g r₀) .out) .away rnil) (by rw [W.pair.ph_ba, hmx])
-      ⟨(hW.okM_l _ _ _).mpr ((hW.okM_set _ _).mpr ((hW.okM_part _ _).mpr hokM)), L.ph_set _ _ _⟩
+      (hW.okM_away ((hW.okM_set _ _).mpr ((hW.okM_part _ _).mpr hokM)))
       io G₁ m₁ k₁ (hW.lAway hlx (.inr hmx) hi₁) hc₁)))
   obtain ⟨hk₂, hc₂, hi₂⟩ := h₂
-  replace hi₂ := hW.lUnaway
-    (g := M.set (L.set (W.set (M.setPart g r₀) .out) .away rnil) .out rnil) (by rw [W.pair.ph_ab, L.ph_set]) (.inl (M.ph_set _ _ _)) hi₂
-  have hlhx : L.held (W.set (M.setPart g r₀) .out) = rnil := by
-    rw [W.lheld, W.pair.setPart, L.held_setPart, hlh]
-  rw [W.pair.set_around hlx hlhx] at hi₂
+  replace hi₂ :=
+    hW.lBack hlx (by rw [W.lheld, W.pair.setPart, L.held_setPart, hlh]) (.inl rfl) hi₂
   rw [StateT.run_pure]
   exact WP.pure' ⟨rfl, by omega, hc₂, hi₂⟩
 
@@ -502,7 +496,7 @@ theorem lockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc
     refine WP.bind (WP.callMC_ptrProject (hW.projW hi₂ (by decide) (by decide)) ?_)
     refine WP.bind (WP.callC (WP.mono (fun _ G₃ m₃ k₃ h₃ => ?_)
       (C.M.lock_wp hW.m hcost (by rw [W.ptr_m, ← W.ptr_st]) hMc t (L.set g .away rnil)
-        (by rw [W.pair.ph_ba, hmo]) ⟨(hW.okM_l _ _ _).mpr hokM, L.ph_set _ _ _⟩
+        (by rw [W.pair.ph_ba, hmo]) (hW.okM_away hokM)
         (by rw [W.pair.part_ba]; exact hu) io G₂ m₂ k₂ (hW.lAway hlo (.inl hmo) hi₂))))
     obtain ⟨hk₃, hc₃, rL, hi₃⟩ := h₃
     refine WP.bind (FRw.wp_addR hW (g := M.set (L.set g .away rnil) .holds rL)
@@ -519,22 +513,20 @@ theorem lockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc
     rw [hy] at hi₄
     have hly : L.ph y = .out := by rw [hyd, W.lph, W.pair.setPart, L.ph_setPart, hlo]
     have hlhy : L.held y = rnil := by rw [hyd, W.lheld, W.pair.setPart, L.held_setPart, hlh]
-    have hmy : M.ph y = .out := by rw [hyd, hW.mph, M.ph_setPart, hmo]
-    have hmhy : M.held y = rnil := by rw [hyd, hW.mheld, M.held_setPart, hmh]
-    have hoky : okM y := by
-      rw [hyd]; exact (hW.okM_set _ _).mpr ((hW.okM_part _ _).mpr hokM)
     refine WP.bind (WP.callMC_ptrProject (hW.projW hi₄ (by decide) (by decide)) ?_)
     refine WP.bind (WP.callC (WP.mono (fun _ G₅ m₅ k₅ h₅ => ?_)
       (C.M.unlock_wp hW.m hcost (by rw [W.ptr_m, ← W.ptr_st]) hMc t
         (M.set (L.set y .away rnil) .holds rL) (M.ph_set _ _ _)
-        ⟨(hW.okM_m _ _ _).mpr ((hW.okM_l _ _ _).mpr hoky), by rw [W.pair.ph_ab, L.ph_set]⟩
+        ((hW.m.ok_set _ _ _).mpr (hW.okM_away (by
+          rw [hyd]; exact (hW.okM_set _ _).mpr ((hW.okM_part _ _).mpr hokM))))
         io G₄ m₄ k₄ hi₄ hc₄)))
     obtain ⟨hk₅, hc₅, hi₅⟩ := h₅
     rw [M.set_set] at hi₅
-    replace hi₅ := hW.lUnaway (g := M.set (L.set y .away rnil) .out rnil)
-      (by rw [W.pair.ph_ab, L.ph_set]) (.inl (M.ph_set _ _ _)) hi₅
+    replace hi₅ := hW.lBack hly hlhy (.inl rfl) hi₅
+    have hmy : M.ph y = .out := by rw [hyd, hW.mph, M.ph_setPart, hmo]
+    have hmhy : M.held y = rnil := by rw [hyd, hW.mheld, M.held_setPart, hmh]
     have hgo : M.set y .out rnil = y := by rw [← hmy, ← hmhy, M.set_self]
-    rw [W.pair.set_around hly hlhy, hgo, hyd] at hi₅
+    rw [hgo, hyd] at hi₅
     simp only [StateT.run_pure]
     exact WP.pure' ⟨rfl, by omega, hc₅, q, H, hq, hret _ _ q H hi₅, hi₅⟩
 
@@ -608,12 +600,10 @@ theorem unlockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none)
       rw [hg₁, W.pair.ph_ab, hg₀, W.lph, W.pair.setPart, L.ph_setPart, hlo]
     have hlgx : L.ph gx = .out := by
       rw [hgxd, W.pair.ph_ab, hgy, W.lph, W.pair.setPart, L.ph_setPart, hlo]
-    have hokg₁ : okS g₁ ∧ (M.ph g₁ = .away ∨ M.ph g₁ = .holdsAway) :=
-      ⟨by rw [hg₁, hW.okS_m, hg₀, hW.okS_set, hW.okS_part]; exact hokS,
-        .inl (by rw [hg₁, M.ph_set])⟩
-    have hokgx : okS gx ∧ (M.ph gx = .away ∨ M.ph gx = .holdsAway) :=
-      ⟨by rw [hgxd, hW.okS_m, hgy, hW.okS_set, hW.okS_part]; exact hokS,
-        .inl (by rw [hgxd, M.ph_set])⟩
+    have hokg₁ : okS g₁ ∧ (M.ph g₁ = .away ∨ M.ph g₁ = .holdsAway) := by
+      rw [hg₁]; exact hW.okS_away (by rw [hg₀, hW.okS_set, hW.okS_part]; exact hokS)
+    have hokgx : okS gx ∧ (M.ph gx = .away ∨ M.ph gx = .holdsAway) := by
+      rw [hgxd]; exact hW.okS_away (by rw [hgy, hW.okS_set, hW.okS_part]; exact hokS)
     have hxs : ∀ G₂ rL, W.xs (upd G₂ t (L.set g₁ .holds rL)) = W.xs (upd G₂ t gx) :=
       fun G₂ rL => upd_map W.x G₂ t (by
         rw [hgxd, hgy, hg₁, hg₀, W.x_l, W.x_m, W.x_set, W.x_part, W.x_m, W.x_set, W.x_part])

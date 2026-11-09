@@ -84,8 +84,10 @@ lock's code queues the thread, and the other lock's queue admits a waiter at ano
 `away` from it or holding it at `holdsAway` (`LockWord.Queue`). So the two views are stated at
 those places (option (i)): the outer mutex's `ok` is the client's `okM` with `L.ph = away`, the
 semaphore's is `okS` with `M.ph = away` or `holdsAway` (`okM`, `okS` read neither lock's place:
-`okM_l`, `okS_m`, so without it a thread at the other lock's `out` would run the code; rejected
-(ii): the callers' `okM`/`okS` at the relabeled ghost value). The callers stay at `Out`; the
+`okM_l`, `okS_m`, so without it a thread at the other lock's `out` would run the code:
+after `lock`'s `+2` at `L.out`, the outer mutex's failed first try and its futex wait leave the
+semaphore's mutex's queue invariant false; rejected (ii): the callers' `okM`/`okS` at the
+relabeled ghost value). The callers stay at `Out`; the
 implementation relabels the thread `out → away` at the semaphore's mutex around each call of the
 outer mutex and at the outer mutex around the last reader's post, and back (option (b)), and the
 client shows its views stable over these relabels (`laway`, `lunaway`, `maway`, `munaway`, the
@@ -100,10 +102,11 @@ Stated once here; an instance walks its code with them:
   rules at `M`), `Fits.napW` / `Fits.unnapW` (the writer's nap and unnap), `Fits.wstep` (a step of
   the rwlock's own code keeps the protocol: `FLock.Fits.kstep` at `Step`), `Fits.atWord` (an
   atomic op at the word moves `t` to a new place), `Fits.lAway` / `Fits.lUnaway` /
-  `Fits.mAway` / `Fits.mUnaway` (the relabels around the other lock's code; the relabel back is
-  exact by `FLock.Pair.set_around`), `Fits.okM_m` / `Fits.okM_part` (`okM` through the outer
-  mutex's `set` and `setPart`) and `Fits.winv` /
-  `Fits.sinv` (the rwlock's and the semaphore's invariants in a state of the protocol).
+  `Fits.mAway` / `Fits.mUnaway` (the relabels around the other lock's code; `Fits.lBack`, the
+  relabel back after an outer-mutex call, exact by `FLock.Pair.set_around`), `Fits.okM_away` /
+  `Fits.okS_away` (each view's `ok` after the relabel), `Fits.okM_m` / `Fits.okM_part` (`okM`
+  through the outer mutex's `set` and `setPart`) and `Fits.winv` / `Fits.sinv` (the rwlock's and the semaphore's
+  invariants in a state of the protocol).
 - **The counts over one thread's change**: `nrd_upd`, `nwi_upd` over `cnt_upd`; `writing_upd`,
   `fsum_upd`, `xs_set` over `upd_map`; for a move of `t` to `b`, `nrd_mv`, `nwi_mv`, `fsum_mv`
   (the counts move), `nrd_keep`, `nwi_keep`, `fsum_keep`, `writing_mv`, `xs_mv` (they stay),
@@ -164,8 +167,9 @@ A client with a fixed set of threads discharges both `hroom` premises from its t
 `tryLock`, `tryLockShared` and the cancelable `lock` / `lockShared` have no rule here, so a client
 that calls them cannot be walked and its proof fails closed (`ZigLean/Sep/Full/RwLock.lean`, module
 doc: their two open protocol obligations). The proof that a version's `Io.RwLock` code satisfies
-`RwLockImpl` is the instance's (it needs the two-lock product; ledger `two-lock-product`); no
-instance and no client is in this module.
+`RwLockImpl` is the instance's (`ZigLean/Sep/Full/IoRwLock.lean`); a client builds `FRw.Fits` for
+its protocol from the two-lock product (ledger `two-lock-product`, item (5)). No instance and no
+client is in this module.
 -/
 
 namespace Zig
@@ -396,15 +400,9 @@ its primitive, the semaphore next to its mutex (the two-lock product's interface
 writer's liveness at the semaphore. -/
 structure Fits {Tgt : Type} (P : Proto Tgt γ) (UM US : (ThreadId → γ) → Res → Mem → Prop)
     (okM okS : γ → Prop) : Prop where
-  /-- **Each lock's view at the place where the code runs it** (maintainer decision 2026-11-09,
-  option (i), on #737): a thread runs the outer mutex's code `away` from the semaphore's mutex,
-  and the semaphore's code `away` from the outer mutex or holding it at `holdsAway`. A futex wait
-  in one lock's code queues the thread, and the other lock's queue admits a waiter at another
-  futex only there (`LockWord.Queue`; `FLock.Pair.fits`'s `away`). The client's `okM`, `okS` read
-  neither lock's place (`okM_l`, `okS_m`), so its obligations cannot exclude a thread at `out` of
-  the other lock (counterexample: after `lock`'s `+2` at `L.out`, the outer mutex's failed first
-  try at `wait`, then its futex wait, leaves the semaphore's mutex's queue invariant false);
-  the implementation relabels the thread to these places around its calls (`laway`, …). -/
+  /-- **Each lock's view at the place where the code runs it** (module doc, "Where each lock's
+  code runs"; decision (i) on #737): the outer mutex's code `away` from the semaphore's mutex, the
+  semaphore's code `away` from the outer mutex or holding it at `holdsAway` (`LockWord.Queue`). -/
   m : M.Fits W.prim P UM (fun g => okM g ∧ L.ph g = .away)
   s : S.Fits P US (fun g => okS g ∧ (M.ph g = .away ∨ M.ph g = .holdsAway))
   /-- The rwlock's place is read by neither `ok`: a thread runs either mutex's code at any of
@@ -438,8 +436,7 @@ structure Fits {Tgt : Type} (P : Proto Tgt γ) (UM US : (ThreadId → γ) → Re
   around each call of the outer mutex (its `lock` and `unlock`; it holds the outer mutex or not),
   and `out → away` at the outer mutex around the last reader's post at the semaphore. Each view's
   stability over the other lock's relabel is the nesting protocol's obligation, as `mnap`/`munnap`
-  (maintainer decision 2026-11-09, option (b), on #737: the callers stay at `Out`; rejected (a):
-  callers at `away`, which names the rwlock's internal semaphore mutex in its precondition). -/
+  (module doc; decision (b) on #737). -/
   laway : ∀ G rX m t g, L.ph g = .out → (M.ph g = .out ∨ M.ph g = .holds) →
     US (upd G t g) rX m → L.WInv (L.pl (upd G t g)) m → US (upd G t (L.set g .away rnil)) rX m
   lunaway : ∀ G rX m t g, L.ph g = .away → (M.ph g = .out ∨ M.ph g = .holds) →
@@ -1607,22 +1604,8 @@ theorem Fits.unnapW (hW : W.Fits P UM US okM okS) {G : ThreadId → γ} {m : Mem
     {g : γ} (hw : W.ph g = .wr) (hl : L.ph g = .out) (hg : M.ph g = .holdsAway)
     (hi : P.inv (upd G t g) m) : P.inv (upd G t (M.set g .holds (M.held g))) m := by
   obtain ⟨rX, hL, -⟩ := (hW.s.inv _ _).mp hi
-  have hp : L.pl (upd G t g) t = .out := by
-    show L.ph (upd G t g t) = .out
-    rw [upd_self, hl]
-  exact FLock.Fits.unnap hW.m hg hi
-    (hL.w.notQ (by rw [hp]; decide) (by rw [hp]; decide) (by rw [hp]; decide))
+  exact FLock.Fits.unnap hW.m hg hi (hL.notQ_outHolds (by rw [upd_self]; exact .inl hl))
     fun rX hU hI => hW.munnap G rX m t g hw hl hg hU hI
-
-/-- A thread out of a lock's futex wait (`out` or `holds`) is not in the futex queue
-(`LockWord.WInv.notQ`). -/
-theorem notQ_outHolds {K : FLock γ} {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId}
-    (hK : K.Inv G rX m) (h : K.ph (G t) = .out ∨ K.ph (G t) = .holds) :
-    m.waiters.any (·.1 == t) = false := by
-  have hn : ∀ q : LPh, (q = .out ∨ q = .holds) → q ≠ .wait ∧ q ≠ .away ∧ q ≠ .holdsAway := by
-    rintro q (rfl | rfl) <;> decide
-  obtain ⟨h1, h2, h3⟩ := hn (K.pl G t) h
-  exact hK.w.notQ h1 h2 h3
 
 /-- **Away from the semaphore's mutex** before a call of the outer mutex (`FLock.Fits.goAway` at
 the semaphore's mutex, with `laway`). -/
@@ -1637,7 +1620,7 @@ theorem Fits.lUnaway (hW : W.Fits P UM US okM okS) {G : ThreadId → γ} {m : Me
     {g : γ} (hl : L.ph g = .away) (hm : M.ph g = .out ∨ M.ph g = .holds)
     (hi : P.inv (upd G t g) m) : P.inv (upd G t (L.set g .out rnil)) m := by
   obtain ⟨rX, hM, -⟩ := (hW.m.inv _ _).mp hi
-  exact FLock.Fits.unaway hW.s.toFits hl hi (notQ_outHolds hM (by rw [upd_self]; exact hm))
+  exact FLock.Fits.unaway hW.s.toFits hl hi (hM.notQ_outHolds (by rw [upd_self]; exact hm))
     fun rX hU hw => hW.lunaway G rX m t g hl hm hU hw
 
 /-- **Away from the outer mutex** before the last reader's post at the semaphore
@@ -1653,7 +1636,7 @@ theorem Fits.mUnaway (hW : W.Fits P UM US okM okS) {G : ThreadId → γ} {m : Me
     {g : γ} (hm : M.ph g = .away) (hl : L.ph g = .out)
     (hi : P.inv (upd G t g) m) : P.inv (upd G t (M.set g .out rnil)) m := by
   obtain ⟨rX, hL, -⟩ := (hW.s.inv _ _).mp hi
-  exact FLock.Fits.unaway hW.m hm hi (notQ_outHolds hL (by rw [upd_self]; exact .inl hl))
+  exact FLock.Fits.unaway hW.m hm hi (hL.notQ_outHolds (by rw [upd_self]; exact .inl hl))
     fun rX hU hw => hW.munaway G rX m t g hm hl hU hw
 
 /-- The outer mutex's `set` keeps the client's `okM` (`FLock.Fits.ok_set` at `L.away`, where its
@@ -1674,6 +1657,26 @@ theorem Fits.okM_part (hW : W.Fits P UM US okM okS) (g : γ) (r : Res) :
   have ho := hW.m.ok_setPart (L.set g .away rnil) r
   rw [← e, L.ph_set, L.ph_set, hW.okM_l, hW.okM_l] at ho
   exact (and_iff_left rfl).symm.trans (ho.trans (and_iff_left rfl))
+
+/-- The outer mutex's `ok` after the relabel `away` from the semaphore's mutex (`Fits.lAway`). -/
+theorem Fits.okM_away (hW : W.Fits P UM US okM okS) {g : γ} (h : okM g) :
+    okM (L.set g .away rnil) ∧ L.ph (L.set g .away rnil) = .away :=
+  ⟨(hW.okM_l _ _ _).mpr h, L.ph_set _ _ _⟩
+
+/-- The semaphore's `ok` after the relabel `away` from the outer mutex (`Fits.mAway`). -/
+theorem Fits.okS_away (hW : W.Fits P UM US okM okS) {g : γ} (h : okS g) :
+    okS (M.set g .away rnil) ∧ (M.ph (M.set g .away rnil) = .away ∨
+      M.ph (M.set g .away rnil) = .holdsAway) :=
+  ⟨(hW.okS_m _ _ _).mpr h, .inl (M.ph_set _ _ _)⟩
+
+/-- **Back at the semaphore's mutex after a call of the outer mutex** (`Fits.lUnaway`): the
+relabel back gives the exact ghost value of the call's post (`FLock.Pair.set_around`). -/
+theorem Fits.lBack (hW : W.Fits P UM US okM okS) {G : ThreadId → γ} {m : Mem} {t : ThreadId}
+    {g : γ} {q : LPh} {h : Res} (hl : L.ph g = .out) (hlh : L.held g = rnil)
+    (hq : q = .out ∨ q = .holds) (hi : P.inv (upd G t (M.set (L.set g .away rnil) q h)) m) :
+    P.inv (upd G t (M.set g q h)) m := by
+  have := hW.lUnaway (by rw [W.pair.ph_ab, L.ph_set]) (by rw [M.ph_set]; exact hq) hi
+  rwa [W.pair.set_around hl hlh] at this
 
 /-- **A step of the rwlock's own code keeps the protocol** (`FLock.Fits.kstep` at `Step`): the
 step's facts, given the rwlock's invariant before it (`Fits.sub`). -/
