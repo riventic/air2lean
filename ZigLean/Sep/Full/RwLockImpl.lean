@@ -1075,6 +1075,21 @@ theorem not_busy_rd {G : ThreadId → γ} {m : Mem} (hwr : ∀ u, W.ph (G u) ≠
   · exact hrp u hu
   · exact hnr (tsum_eq_zero fun u _ => by simp [hall u])
 
+/-- **A reader's heap has `R` at the current client parts**: with a reader the resource is not away
+(`Inv.wr`, `Inv.rp`: neither a writer at `wr` nor a last reader at `rp` has a reader), so the free
+resource is a share of the readers' one heap, which has `R` (`FreeRes`'s third clause). A reader's
+`lockShared` returns this at its return's client parts. -/
+theorem Inv.rdR {G : ThreadId → γ} {rX : Res} {m : Mem} {u : ThreadId} {q : Frac} {H : FHeap}
+    (hI : W.Inv G rX m) (hu : W.ph (G u) = .rd q H) :
+    W.R (W.xs G) ⟨H, Know.none, Ghost.unit⟩ := by
+  have hn : W.nrd G m ≠ 0 :=
+    nrd_pos (hI.ex u (by rw [hu]; nofun)) (by rw [hu]; rfl)
+  obtain ⟨rF, rO, -, -, -, hF, -⟩ := hI.rest
+  obtain ⟨H', f, hR, -, -, -, hall⟩ :=
+    hF.2.2 (not_busy_rd (fun v hv => hn (hI.wr v hv)) (fun v hv => hn (hI.rp v hv).1) hn) hn
+  obtain ⟨rfl, -⟩ := hall u q H hu
+  exact hR
+
 /-- With no thread holding the writing bit and none at `rp`, the resource is not away. -/
 theorem not_busy_noW {G : ThreadId → γ} (hnoW : ∀ u, (W.ph (G u)).isW = false)
     (hrp : ∀ u, (W.ph (G u)).isRp ≠ true) : ¬ W.Busy G := by
@@ -1572,6 +1587,27 @@ theorem prim_set (g : γ) (a : RwPh) : W.prim.pl.set g (a, S.place.ph g) = W.set
 /-- The rwlock's place is not the outer mutex's. -/
 theorem Fits.mph (hW : W.Fits P UM US okM okS) (g : γ) (a : RwPh) : M.ph (W.set g a) = M.ph g := by
   rw [← prim_set, hW.m.lph]
+
+/-- The rwlock's place is not the outer mutex's part (nor the semaphore's mutex's: `Pair.part`). -/
+theorem Fits.mpart (hW : W.Fits P UM US okM okS) (g : γ) (a : RwPh) :
+    M.part (W.set g a) = M.part g := by
+  rw [← prim_set, hW.m.lpart]
+
+/-- **The rwlock's field pointers** (`&rw.semaphore` at `+ 8`, `&rw.mutex` at `+ 32`, and any
+offset up to the outer mutex): the outer mutex's block is live and holds them (`LockWord.BlkOk`),
+and the state word's offset is a byte offset of that block. -/
+theorem Fits.projW (hW : W.Fits P UM US okM okS) {G : ThreadId → γ} {m : Mem} (hi : P.inv G m)
+    {k : Int} (h0 : 0 ≤ k) (hk : k ≤ 32) :
+    (ptrProject W.st.ptr (·.add k)).run m = pure (W.st.ptr.add k, m) := by
+  obtain ⟨rX, hM, -⟩ := (hW.m.inv G m).mp hi
+  obtain ⟨blk, hblk, -, hsz, -⟩ := hM.w.blk
+  have hb := congrArg Ptr.block W.ptr_m
+  have ho := congrArg Ptr.off W.ptr_m
+  rw [← W.ptr_st] at hb ho
+  simp only [LockWord.ptr, Word.ptr, Ptr.add] at hb ho
+  obtain ⟨n, rfl⟩ := Int.eq_ofNat_of_zero_le h0
+  exact ptrProject_block_run hblk (by simp only [Word.ptr]; exact hb.symm)
+    (by simp only [Word.ptr]; omega) (by simp only [Word.ptr]; omega)
 
 /-- **An atomic op at the state word moves `t` to `a`** (`Fits.wstep` with the facts of the word
 rules at `M`, `FLock.wp_wordRmw`, `wp_wordWeakCas`, `wp_wordLoad`): the outer mutex's invariant

@@ -1978,6 +1978,20 @@
    ],
    "deletion_plan": "Replace the no-gather premises `hg`/`hgat`/`NoGather` of `FOwned.join`, `FCapture.join_regain`, `FLock.Inv.join`, `FLock.Inv.acq` and `FLock.Inv.take` by the `Mem.Owns` premise of the gathered bytes (`Mem.OwnsRes.addOwns` shape), and delete `FLock.NoGather`.",
    "note": "Fail closed, not a weakening: without the premise the rules reject the gathering step; every share-free resource discharges it by `Res.excl_eq_erase` (autoParam) or `NoGather.of_R`. Counterexample to dropping it: tests/roadmap/sep-full/ShareRaceCX.lean (`twoReaders`)."
+  },
+  {
+   "id": "fsym-abstract-shape",
+   "title": "fsym walks over an abstract code shape (continuations as hypotheses)",
+   "status": "open",
+   "requester": "B3 lane (Io.RwLock as RwLockImpl, PR #734)",
+   "progress": "Open. `IoMutexCode` and `IoRwLockCode` state a std module's code once for every program as a shape: the program's functions with unfolding equations over a normal form, the generated matches on the code's own exits as continuations of which only their values at the taken exits are known (hypotheses such as `kW lmid = pure lret`), and the callee contracts (`MutexImpl`, `SemImpl`) as fields. `fsym` walks only code it can unfold: it cannot step through a continuation by its local equation, so the walks of these shapes are rule-by-rule term proofs (`WP.bind` with the contracts' rules). Two kernel hazards shape `IoRwLockCode.body_wp`'s term walk: the checked add `Zig.add false state 2^32` of an open `state` unfolds its overflow test unary on the literal whenever it is reduced, so `bodyOf` takes the add as a parameter `addR` (`body_eq` instantiates it) and the walk generalizes it; and `simp only [StateT.run_bind, StateT.run_get, pure_bind]` over the body containing the weak CAS leaves its `rfl` steps to the kernel, which times out (bisected 2026-11-09), so the walk rewrites with `rw` only.",
+   "request": "Let `fsym` walk a code shape whose functions are given by unfolding equations (`lock_eq`, `body_eq`) and whose continuations are hypotheses with equations at their exits: rewrite the entry by the shape's equation, step through the normal form with the registered rules (the callee fields' contract rules, the protocol's op rules), and close a continuation step by its local equation, as it closes a generated `match` today.",
+   "workaround_sites": [
+    "ZigLean/Sep/Full/IoMutex.lean",
+    "ZigLean/Sep/Full/IoRwLock.lean"
+   ],
+   "deletion_plan": "Replace the term walks of `IoMutexCode` (`body_wp`, `lock_wp`, `unlock_wp`) and `IoRwLockCode` (`wp_frame`, `lock_wp`, `unlock_wp`, `body_wp`, `lockShared_wp`, `unlockShared_wp`) by `fsym` walks with the same statements, and delete the hand steps; with them goes `bodyOf`'s `addR` parameter once the walk's steps are proof steps that do not reduce the checked add against an open term (`kernel-proj-ctor`).",
+   "note": "Not a weakening: the shapes' statements are the contracts' (`MutexImpl`, `RwLockImpl`); only the proof style is transitional."
   }
  ],
  "mechanisms": [
