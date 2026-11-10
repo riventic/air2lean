@@ -1108,7 +1108,7 @@ theorem Owns.lockStep {K : LockWord} {G G' : ThreadId → γ} {m m' : Mem} {r : 
     rcases hT with ⟨x, h1, h2, h3⟩ | ⟨x, h1, h2, h3⟩ | h
     · exact Res.owned_of_excl h3 (hK x h1 h2)
     · exact Res.owned_of_shared h3 (hK x h1 h2)
-    · rw [hs.bsize, hb] at h; omega
+    · rw [hs.bsize, hb] at h; exact absurd hbl (Nat.not_lt.mpr h)
 
 /-- **The invariant over a step of another lock's code** (`LockWord.Step` of a word `K` apart from
 the state word: the outer mutex's or the semaphore's mutex's, in a client's rest over that lock's
@@ -1141,8 +1141,8 @@ theorem Inv.lockStep {K : LockWord} {G G' : ThreadId → γ} {rX : Res} {m m' : 
   have hFK : ∀ l, K.In l → rF.owned l = none := fun l hl => by
     have h := hoff l hl
     rw [he] at h
-    exact Classical.byContradiction fun hn => h ((Res.owned_sep rfl rfl).mpr
-      (.inr ((Res.owned_sep rfl rfl).mpr (.inl hn))))
+    exact Classical.byContradiction fun hn => (Res.owned_sep rfl rfl).mpr
+      (.inr ((Res.owned_sep rfl rfl).mpr (.inl hn))) h
   exact {
     ok := by rw [hA]; exact hok
     ex := fun u h => by rw [hth]; exact hI.ex u (by rwa [← hph u])

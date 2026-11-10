@@ -167,6 +167,34 @@ theorem U_step {U₀ : (ThreadId → γ) → Res → Mem → Prop} {t : ThreadId
     hcl sB rL rH _ _ _ _ rfl hrX' hsB hk hk' hu hI₀' rfl rfl
       ⟨hpost, _, rF', rO₀, rfl, rfl, hsp₀, hsp₀'⟩⟩
 
+/-- **The rwlock's invariant at the common rest over a step of either lock's code** (`Inv.lockStep`;
+a client's `U₀` over `FLock.Fits.stable` of the outer mutex's view, `fitsM`, or of the semaphore's,
+`fitsS`): the stepping lock `A`'s invariant has the other lock's side `sB` next to the common rest
+`rX`, so `rX` owns no byte of `A`'s word, not even a share (`A`'s word is in `A`'s own rest:
+`FOwned.rest_noShare`). The places, the client parts, which threads have ended and the writer's
+hold of the outer mutex stay. -/
+theorem Inv.otherStep {A : FLock γ} {G G' : ThreadId → γ} {sB rX : Res} {m m' : Mem}
+    {t : ThreadId} (hA : A.Inv G (rsum sB rX) m) (hI : W.Inv G rX m) (hs : A.Step t m m')
+    (hap : W.st.ApartL A.toLockWord)
+    (hph : ∀ u, W.ph (G' u) = W.ph (G u)) (hx : ∀ u, W.x (G' u) = W.x (G u))
+    (hg : ∀ u, M.ph (G' u) = .gone ↔ M.ph (G u) = .gone)
+    (hwm : ∀ u, (W.ph (G u)).isW = true → (M.ph (G' u)).held = true) : W.Inv G' rX m' := by
+  obtain ⟨blk, hb, -⟩ := hA.w.blk
+  have hbl : A.b < m.blocks.size := Classical.byContradiction fun hn => by
+    rw [Array.getElem?_eq_none (Nat.not_lt.mp hn)] at hb; cases hb
+  refine hI.lockStep hs hap (fun l hl => ?_) hbl hph hx hg hwm
+  have hX : rX.heap l = none := (rsum_heap_none.mp (LockWord.off_erase.mp hA.xoff l hl)).2
+  obtain ⟨rL, hoA, -⟩ := hA.rest
+  have hne : (rsum (A.wordR m) (rsum rL (rsum sB rX))).heap l ≠ none := fun e =>
+    LockWord.wordR_some hA.w.blk hl (rsum_heap_none.mp e).1
+  have hns : ¬ (rX.gh.share l).Pos := fun hp => hoA.rest_noShare hne (by
+    show (((A.wordR m).gh.add (rL.gh.add (sB.gh.add rX.gh))).share l).Pos
+    simp only [Ghost.add_share]
+    exact SCell.pos_add_iff.mpr (.inr (SCell.pos_add_iff.mpr (.inr
+      (SCell.pos_add_iff.mpr (.inr hp))))))
+  exact Classical.byContradiction fun hn =>
+    (Res.owned_ne.mp hn).elim (fun h => h hX) hns
+
 /-! ## The outer mutex's view -/
 
 variable {Tgt : Type} {P : Proto Tgt γ} {U₀ : (ThreadId → γ) → Res → Mem → Prop} {okM : γ → Prop}
