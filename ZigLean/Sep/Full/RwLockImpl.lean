@@ -1090,7 +1090,7 @@ semaphore's mutex's step, `LockWord.Step`): an old access keeps its clause (the 
 reader stays one, no thread ends), and a new access is at the lock's word, of which `r` owns no
 byte (`hoff`), in a block that exists (`hbl`). -/
 theorem Owns.lockStep {K : LockWord} {G G' : ThreadId → γ} {m m' : Mem} {r : Res} {t : ThreadId}
-    (ho : W.Owns G m r) (hs : K.Step t m m') (hoff : ∀ l, K.In l → r.owned l = none)
+    (ho : W.Owns G m r) (hs : K.Step t m m') (hoff : K.Off r.owned)
     (hbl : K.b < m.blocks.size) (hhist : W.st.hist m' = W.st.hist m)
     (hph : ∀ u, W.ph (G' u) = W.ph (G u)) (hM : ∀ u, M.ph (G' u) ≠ .gone → M.ph (G u) ≠ .gone) :
     W.Owns G' m' r := by
@@ -1103,14 +1103,12 @@ theorem Owns.lockStep {K : LockWord} {G G' : ThreadId → γ} {m m' : Mem} {r : 
     · exact .inr (.inl (by rw [hhist]; exact h))
     · exact .inr (.inr ⟨hw, hsh, u, by rw [hph u]; exact hu, VClock.le_trans hc (hs.clocks u)⟩)
   · exfalso
-    rcases hs.fp e he with h | ⟨hb, ho', hl, -⟩
-    · exact hm h
-    have hK : ∀ x, e.off ≤ x → x < e.off + e.len → r.owned (e.block, x) = none := fun x h1 h2 =>
-      hoff _ ⟨hb, by omega, by omega⟩
-    rcases hT with ⟨x, h1, h2, h3⟩ | ⟨x, h1, h2, h3⟩ | h
-    · exact Res.owned_of_excl h3 (hK x h1 h2)
-    · exact Res.owned_of_shared h3 (hK x h1 h2)
-    · rw [hs.bsize, hb] at h; exact absurd hbl (Nat.not_lt.mpr h)
+    rcases hT with htc | htc | h
+    · exact hs.fpOff hoff.excl he hm htc
+    · exact hs.fpOff hoff.shared he hm htc
+    · rcases hs.fp e he with h' | ⟨hb, -⟩
+      · exact hm h'
+      · rw [hs.bsize, hb] at h; exact absurd hbl (Nat.not_lt.mpr h)
 
 /-- **The invariant over a step of another lock's code** (`LockWord.Step` of a word `K` apart from
 the state word: the outer mutex's or the semaphore's mutex's, in a client's rest over that lock's
@@ -1119,7 +1117,7 @@ which threads have ended and the writer's hold of the outer mutex stay (`hph`, `
 the rest owns no byte of `K`'s word, which exists (`hoff`, `hbl`). -/
 theorem Inv.lockStep {K : LockWord} {G G' : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId}
     (hI : W.Inv G rX m) (hs : K.Step t m m') (hap : W.st.ApartL K)
-    (hoff : ∀ l, K.In l → rX.owned l = none) (hbl : K.b < m.blocks.size)
+    (hoff : K.Off rX.owned) (hbl : K.b < m.blocks.size)
     (hph : ∀ u, W.ph (G' u) = W.ph (G u)) (hx : ∀ u, W.x (G' u) = W.x (G u))
     (hg : ∀ u, M.ph (G' u) = .gone ↔ M.ph (G u) = .gone)
     (hwm : ∀ u, (W.ph (G u)).isW = true → (M.ph (G' u)).held = true) : W.Inv G' rX m' := by
@@ -1127,21 +1125,16 @@ theorem Inv.lockStep {K : LockWord} {G G' : ThreadId → γ} {rX : Res} {m m' : 
   have hth := hs.threads
   have hA : (fun u => M.ph (G' u) ≠ .gone) = fun u => M.ph (G u) ≠ .gone :=
     funext fun u => propext (not_congr (hg u))
-  have hnot : ∀ l, W.st.In l → ¬ K.In l := by
-    rintro ⟨b, x⟩ ⟨hb, h1, h2⟩ ⟨hb', h3, h4⟩
-    rcases hap with h | h | h
-    · exact h (hb'.symm.trans hb)
-    · omega
-    · omega
-  have hcells : W.st.cellsR m' = W.st.cellsR m := cellsAt_congr fun l hl => hs.heap (hnot l hl)
+  have hcells : W.st.cellsR m' = W.st.cellsR m :=
+    cellsAt_congr fun l hl => hs.heap (hap.not_in hl)
   have hnrd : W.nrd G' m' = W.nrd G m := by rw [nrd_threads hth]; simp only [nrd, hph]
   have hnwi : W.nwi G' m' = W.nwi G m := by rw [nwi_threads hth]; simp only [nwi, hph]
   have hwr : W.writing G' m' = W.writing G m := by
     rw [writing_threads hth]; simp only [writing, hph]
   have hxs : W.xs G' = W.xs G := funext hx
   obtain ⟨rF, rO, he, hoffF, hd, hfr, how⟩ := hI.rest
-  have hFK : ∀ l, K.In l → rF.owned l = none := fun l hl => by
-    have h := hoff l hl
+  have hFK : K.Off rF.owned := fun x h1 h2 => by
+    have h := hoff x h1 h2
     rw [he] at h
     exact Classical.byContradiction fun hn => (Res.owned_sep rfl rfl).mpr
       (.inr ((Res.owned_sep rfl rfl).mpr (.inl hn))) h

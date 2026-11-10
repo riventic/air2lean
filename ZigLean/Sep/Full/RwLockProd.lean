@@ -184,16 +184,15 @@ theorem Inv.otherStep {A : FLock γ} {G G' : ThreadId → γ} {sB rX : Res} {m m
     (hwm : ∀ u, (W.ph (G u)).isW = true → (M.ph (G' u)).held = true) : W.Inv G' rX m' := by
   have hbl : A.b < m.blocks.size := by
     obtain ⟨blk, hb, -⟩ := hA.w.blk; exact (Array.getElem?_eq_some_iff.mp hb).1
-  refine hI.lockStep hs hap (fun l hl => ?_) hbl hph hx hg hwm
-  have hX : rX.heap l = none := (rsum_heap_none.mp (LockWord.off_erase.mp hA.xoff l hl)).2
+  refine hI.lockStep hs hap (fun x h1 h2 => ?_) hbl hph hx hg hwm
+  have hl : A.In (A.b, x) := ⟨rfl, h1, h2⟩
+  have hX : rX.heap (A.b, x) = none :=
+    (rsum_heap_none.mp (LockWord.off_erase.mp hA.xoff _ hl)).2
   obtain ⟨rL, hoA, -⟩ := hA.rest
-  have hne : (rsum (A.wordR m) (rsum rL (rsum sB rX))).heap l ≠ none := fun e =>
+  have hne : (rsum (A.wordR m) (rsum rL (rsum sB rX))).heap (A.b, x) ≠ none := fun e =>
     LockWord.wordR_some hA.w.blk hl (rsum_heap_none.mp e).1
-  have hns : ¬ (rX.gh.share l).Pos := fun hp => hoA.rest_noShare hne (by
-    show (((A.wordR m).gh.add (rL.gh.add (sB.gh.add rX.gh))).share l).Pos
-    simp only [Ghost.add_share]
-    exact SCell.pos_add_iff.mpr (.inr (SCell.pos_add_iff.mpr (.inr
-      (SCell.pos_add_iff.mpr (.inr hp))))))
+  have hns : ¬ (rX.gh.share (A.b, x)).Pos := fun hp => hoA.rest_noShare hne (by
+    simp only [rsum, Ghost.add_share, SCell.pos_add_iff]; exact .inr (.inr (.inr hp)))
   exact Classical.byContradiction fun hn =>
     (Res.owned_ne.mp hn).elim (fun h => h hX) hns
 

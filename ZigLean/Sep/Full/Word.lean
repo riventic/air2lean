@@ -111,6 +111,16 @@ theorem ApartL.ne {L : LockWord} (hap : W.ApartL L) : L.b ≠ W.b ∨ L.o ≠ W.
   · exact .inr (by omega)
   · exact .inr (by omega)
 
+/-- A byte of a word apart from the lock's is not a byte of the lock's word. -/
+theorem ApartL.not_in {L : LockWord} (hap : W.ApartL L) {l : Zig.Loc} (hl : W.In l) :
+    ¬ L.In l := by
+  obtain ⟨b, x⟩ := l
+  rintro ⟨hb', h3, h4⟩
+  obtain ⟨hb, h1, h2⟩ := hl
+  rcases hap with h | h | h
+  · exact h (hb'.symm.trans hb)
+  · omega
+  · omega
 
 /-- The word's private futex key is `Word.key`. -/
 theorem Ok.keyAt {m : Mem} (hW : W.Ok m A) : m.keyAt W.ptr false = some (W.key m) := by
@@ -1114,14 +1124,8 @@ theorem Ok.fork_native {m m' : Mem} {t c : ThreadId} {gt : Bool}
 proof uses its native array effect and frame facts, without a preservation packet. -/
 theorem Ok.lockStep {L : LockWord} {t : ThreadId} {m m' : Mem} (hw : W.Ok m A)
     (hs : L.Step t m m') (hap : W.ApartL L) : W.Ok m' A ∧ W.hist m' = W.hist m := by
-  have hnot : ∀ l, W.In l → ¬ L.In l := by
-    rintro ⟨b, x⟩ ⟨hb, h1, h2⟩ ⟨hb', h3, h4⟩
-    rcases hap with h | h | h
-    · exact h (hb'.symm.trans hb)
-    · omega
-    · omega
   have hcells : ∀ l, W.In l → m'.heap l = m.heap l :=
-    fun l hl => hs.heap (hnot l hl)
+    fun l hl => hs.heap (hap.not_in hl)
   obtain ⟨hb', hcur⟩ := Word.congr
     (fun x h1 h2 => congrArg (Option.map cellKey) (hcells (W.b, x) ⟨rfl, h1, h2⟩)) hw.blk
   have hloc : ∀ i l, W.Loc m' i l ↔ W.Loc m i l :=
