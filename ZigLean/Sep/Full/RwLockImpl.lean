@@ -2553,8 +2553,9 @@ theorem Fits.wset_part (hW : W.Fits P UM US okM okS) (g : γ) (a : RwPh) (r : Re
 /-- **A calm place of the rwlock's primitive** (`prim.calm`, where the outer mutex's code runs:
 `FRw.Fits.m`): `t` moved to `out`, `wi` or `rd`, out of the semaphore's code. -/
 theorem calm_set {g : γ} {a : RwPh} (ha : a = .out ∨ a = .wi ∨ a.isRd = true)
-    (hs : S.place.ph g = (.out, .out)) : W.prim.calm (W.place.ph (W.set g a)) :=
-  ⟨by rw [W.ph_set]; exact ha, by rw [W.sp_ph]; exact hs⟩
+    (hs : S.place.ph g = (.out, .out)) : W.prim.calm (W.place.ph (W.set g a)) := by
+  rw [show W.place.ph (W.set g a) = (a, S.place.ph g) from Prod.ext (W.ph_set g a) (W.sp_ph g a)]
+  exact ⟨ha, hs⟩
 
 /-- The rwlock's and the semaphore's places through the semaphore's mutex's `set`. -/
 theorem Fits.place_l (hW : W.Fits P UM US okM okS) (g : γ) (q : LPh) (h : Res) :
