@@ -26,6 +26,9 @@ the views from `U₀` and the client's obligations stated at `U₀`.
   the rest, which the op keeps, so the common rest after the step is the word's new cells, the
   new free resource and the same rest of the rest, and the rwlock's invariant holds there
   (`Inv.unframe`). The client keeps `U₀` given these facts (`W.Moves` at the common rest).
+- **Either lock's own steps keep the rwlock's invariant at the common rest** (`FRw.Inv.otherStep`,
+  for a client's `U₀` over `FLock.Fits.stable` in either view): the common rest owns no byte of the
+  stepping lock's word, so `Inv.lockStep` applies.
 - **The outer mutex's view** (`FRw.fitsM`): `FLock.Pair.fits` at `K := W.prim` with `ok` the
   client's `okM` at `L`'s `away` and the rwlock's calm places (`FRw.Fits.m`). The product gives
   the queue premise (`away`), `M`'s `noGather` (`M.R = emp`), `ok_calm` (the calm places are out
@@ -167,6 +170,41 @@ theorem U_step {U₀ : (ThreadId → γ) → Res → Mem → Prop} {t : ThreadId
     hcl sB rL rH _ _ _ _ rfl hrX' hsB hk hk' hu hI₀' rfl rfl
       ⟨hpost, _, rF', rO₀, rfl, rfl, hsp₀, hsp₀'⟩⟩
 
+/-- **The rwlock's invariant at the common rest over a step of either lock's code** (`Inv.lockStep`;
+a client's `U₀` over `FLock.Fits.stable` of the outer mutex's view, `fitsM`, or of the semaphore's,
+`fitsS`): the stepping lock `A`'s invariant has the other lock's side `sB` next to the common rest
+`rX`, so `rX` owns no byte of `A`'s word, not even a share (`A`'s word is in `A`'s own rest:
+`LockWord.off_owned_of_rest`). The places and the client parts stay, no thread ends and the
+writer's hold of the outer mutex stays. -/
+theorem Inv.otherStep {A : FLock γ} {G G' : ThreadId → γ} {sB rX : Res} {m m' : Mem}
+    {t : ThreadId} (hA : A.Inv G (rsum sB rX) m) (hI : W.Inv G rX m) (hs : A.Step t m m')
+    (hap : W.st.ApartL A.toLockWord)
+    (hph : ∀ u, W.ph (G' u) = W.ph (G u)) (hx : ∀ u, W.x (G' u) = W.x (G u))
+    (hM : ∀ u, M.ph (G' u) ≠ .gone → M.ph (G u) ≠ .gone)
+    (hwm : ∀ u, (W.ph (G u)).isW = true → (M.ph (G' u)).held = true) : W.Inv G' rX m' := by
+  have hbl : A.b < m.blocks.size := by
+    obtain ⟨blk, hb, -⟩ := hA.w.blk; exact (Array.getElem?_eq_some_iff.mp hb).1
+  obtain ⟨rLA, ⟨ho, hLoffA, -, -, -⟩, -⟩ := hA.facts
+  have hO : A.Off (rsum rLA (rsum sB rX)).heap.erase :=
+    LockWord.off_erase.mpr fun l hl => by
+      show (rLA.heap ∪ (rsum sB rX).heap) l = none
+      rw [FHeap.union_apply, LockWord.off_erase.mp hLoffA l hl,
+        LockWord.off_erase.mp hA.xoff l hl]; rfl
+  exact hI.lockStep hs hap (LockWord.off_owned_of_rest ho hA.w.blk hO fun l hl =>
+      (Res.owned_sep rfl rfl).mpr (.inr ((Res.owned_sep rfl rfl).mpr (.inr hl))))
+    hbl hph hx hM hwm
+
+/-- **The state word lies before both mutexes** (the layout: the word's 8 bytes at `p`, the
+semaphore's mutex at `p + 16`, the outer mutex at `p + 32`): `Inv.otherStep`'s and `fitsM`'s
+apartness. -/
+theorem st_apart (W : FRw γ X Y M L C S) :
+    W.st.ApartL L.toLockWord ∧ W.st.ApartL M.toLockWord := by
+  have h1 : (W.st.o : Int) = W.p.off := congrArg Ptr.off W.ptr_st
+  have h2 : S.p.off = W.p.off + 8 := congrArg Ptr.off W.ptr_s
+  have h3 : (M.o : Int) = W.p.off + 32 := congrArg Ptr.off W.ptr_m
+  have h4 : (L.o : Int) = S.p.off + 8 := congrArg Ptr.off S.ptr_l
+  exact ⟨Or.inr (Or.inr (by omega)), Or.inr (Or.inr (by omega))⟩
+
 /-! ## The outer mutex's view -/
 
 variable {Tgt : Type} {P : Proto Tgt γ} {U₀ : (ThreadId → γ) → Res → Mem → Prop} {okM : γ → Prop}
@@ -193,7 +231,7 @@ theorem fitsM
       U₀ (upd G t (M.set (G t) p h)) rX m')
     (atStop : ∀ G rX m t, t < m.threads.size → U₀ G rX m → U₀ G rX { m with current := t })
     (tick : ∀ t G rX m r, U₀ G rX m → U₀ (upd G t (M.setPart (G t) r)) rX m.ticked)
-    (hsub : ∀ G rX m, U₀ G rX m → W.Inv G rX m) (apart : W.st.ApartL M.toLockWord)
+    (hsub : ∀ G rX m, U₀ G rX m → W.Inv G rX m)
     (lph : ∀ g p, M.ph (W.place.set g p) = M.ph g)
     (lpart : ∀ g p, M.part (W.place.set g p) = M.part g)
     (lheld : ∀ g p, M.held (W.place.set g p) = M.held g)
@@ -221,7 +259,7 @@ theorem fitsM
     (fun g h => Prod.ext (kfin g h).1 (kfin g h).2)
     (fun g h => Prod.ext (kjoins g h).1 (kjoins g h).2)
     (fun G _ _ _ rX m hsB hk hu => (hsub G rX m hu).frame (hsB.disj hk.side_disj))
-    apart lph lpart lheld
+    (st_apart W).2 lph lpart lheld
     (fun G t p r h => by rw [W.mR] at h ⊢; exact h)
     ph_l set_l ph_part set_part (fun i => nomatch i) (fun i => nomatch i)
     (fun g p q hp hq => by
