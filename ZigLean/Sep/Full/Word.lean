@@ -373,13 +373,7 @@ theorem Inv.wordStep {G : ThreadId → γ} {rY : Res} {m m' : Mem}
     (hap : W.ApartL L.toLockWord) : L.Inv G (rsum (W.cellsR m') rY) m' := by
   have hjb : joinedB m' = joinedB m := LockWord.joinedB_congr hr.threads
   have hown : L.own G m' = L.own G m := by funext u; unfold FLock.own; rw [hjb]
-  have hnw : ∀ l, L.In l → ¬ W.In l := by
-    rintro ⟨b, x⟩ ⟨h1, h2, h3⟩ ⟨h4, h5, h6⟩
-    simp only at h1 h2 h3 h4 h5 h6
-    rcases hap with h | h | h
-    · exact h (h1.symm.trans h4)
-    · omega
-    · omega
+  have hnw : ∀ l, L.In l → ¬ W.In l := fun _ hL hW => hap.not_in hW hL
   have hLcells : ∀ x, L.o ≤ x → x < L.o + 4 → m'.heap (L.b, x) = m.heap (L.b, x) :=
     fun x h1 h2 => hr.heap _ (hnw _ ⟨rfl, h1, h2⟩)
   obtain ⟨rL, ho, hLoff, hLX, hF, hnF⟩ := hi.rest

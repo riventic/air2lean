@@ -1112,19 +1112,17 @@ theorem Owns.lockStep {K : LockWord} {G G' : ThreadId → γ} {m m' : Mem} {r : 
 
 /-- **The invariant over a step of another lock's code** (`LockWord.Step` of a word `K` apart from
 the state word: the outer mutex's or the semaphore's mutex's, in a client's rest over that lock's
-`FLock.Fits.stable`): the state word, its history and cells stay; the places, the client parts,
-which threads have ended and the writer's hold of the outer mutex stay (`hph`, `hx`, `hg`, `hwm`);
+`FLock.Fits.stable`): the state word, its history and cells stay; the places and the client parts
+stay, no thread ends and the writer's hold of the outer mutex stays (`hph`, `hx`, `hM`, `hwm`);
 the rest owns no byte of `K`'s word, which exists (`hoff`, `hbl`). -/
 theorem Inv.lockStep {K : LockWord} {G G' : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId}
     (hI : W.Inv G rX m) (hs : K.Step t m m') (hap : W.st.ApartL K)
     (hoff : K.Off rX.owned) (hbl : K.b < m.blocks.size)
     (hph : ∀ u, W.ph (G' u) = W.ph (G u)) (hx : ∀ u, W.x (G' u) = W.x (G u))
-    (hg : ∀ u, M.ph (G' u) = .gone ↔ M.ph (G u) = .gone)
+    (hM : ∀ u, M.ph (G' u) ≠ .gone → M.ph (G u) ≠ .gone)
     (hwm : ∀ u, (W.ph (G u)).isW = true → (M.ph (G' u)).held = true) : W.Inv G' rX m' := by
   obtain ⟨hok, hhist⟩ := hI.ok.lockStep hs hap
   have hth := hs.threads
-  have hA : (fun u => M.ph (G' u) ≠ .gone) = fun u => M.ph (G u) ≠ .gone :=
-    funext fun u => propext (not_congr (hg u))
   have hcells : W.st.cellsR m' = W.st.cellsR m :=
     cellsAt_congr fun l hl => hs.heap (hap.not_in hl)
   have hnrd : W.nrd G' m' = W.nrd G m := by rw [nrd_threads hth]; simp only [nrd, hph]
@@ -1139,7 +1137,7 @@ theorem Inv.lockStep {K : LockWord} {G G' : ThreadId → γ} {rX : Res} {m m' : 
     exact Classical.byContradiction fun hn => (Res.owned_sep rfl rfl).mpr
       (.inr ((Res.owned_sep rfl rfl).mpr (.inl hn))) h
   exact {
-    ok := by rw [hA]; exact hok
+    ok := hok.anti hM
     ex := fun u h => by rw [hth]; exact hI.ex u (by rwa [← hph u])
     room := by rw [hnrd, hnwi]; exact hI.room
     word := by rw [hnrd, hnwi, hwr, hhist]; exact hI.word
@@ -1153,7 +1151,7 @@ theorem Inv.lockStep {K : LockWord} {G G' : ThreadId → γ} {rX : Res} {m m' : 
         fun v hv => h3 v (by rwa [← hph v])⟩
     rpR := fun u r hu => by rw [hxs]; exact hI.rpR u r (by rwa [← hph u])
     rest := ⟨rF, rO, by rw [hcells]; exact he, hoffF, hd, (hfr.congr hph hx).threads hth,
-      how.lockStep hs hFK hbl hhist hph fun u h e => h ((hg u).mpr e)⟩ }
+      how.lockStep hs hFK hbl hhist hph hM⟩ }
 
 /-- **The invariant after a release RMW of `t` at the state word that moves `t` to `b`** (the
 shared part of the op lemmas): the op's word facts (`wp_wordRmw`, `Word.atomicRmw_fpNew`), the

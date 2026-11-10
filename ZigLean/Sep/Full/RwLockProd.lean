@@ -174,27 +174,25 @@ theorem U_step {U₀ : (ThreadId → γ) → Res → Mem → Prop} {t : ThreadId
 a client's `U₀` over `FLock.Fits.stable` of the outer mutex's view, `fitsM`, or of the semaphore's,
 `fitsS`): the stepping lock `A`'s invariant has the other lock's side `sB` next to the common rest
 `rX`, so `rX` owns no byte of `A`'s word, not even a share (`A`'s word is in `A`'s own rest:
-`FOwned.rest_noShare`). The places, the client parts, which threads have ended and the writer's
-hold of the outer mutex stay. -/
+`LockWord.off_owned_of_rest`). The places and the client parts stay, no thread ends and the
+writer's hold of the outer mutex stays. -/
 theorem Inv.otherStep {A : FLock γ} {G G' : ThreadId → γ} {sB rX : Res} {m m' : Mem}
     {t : ThreadId} (hA : A.Inv G (rsum sB rX) m) (hI : W.Inv G rX m) (hs : A.Step t m m')
     (hap : W.st.ApartL A.toLockWord)
     (hph : ∀ u, W.ph (G' u) = W.ph (G u)) (hx : ∀ u, W.x (G' u) = W.x (G u))
-    (hg : ∀ u, M.ph (G' u) = .gone ↔ M.ph (G u) = .gone)
+    (hM : ∀ u, M.ph (G' u) ≠ .gone → M.ph (G u) ≠ .gone)
     (hwm : ∀ u, (W.ph (G u)).isW = true → (M.ph (G' u)).held = true) : W.Inv G' rX m' := by
   have hbl : A.b < m.blocks.size := by
     obtain ⟨blk, hb, -⟩ := hA.w.blk; exact (Array.getElem?_eq_some_iff.mp hb).1
-  refine hI.lockStep hs hap (fun x h1 h2 => ?_) hbl hph hx hg hwm
-  have hl : A.In (A.b, x) := ⟨rfl, h1, h2⟩
-  have hX : rX.heap (A.b, x) = none :=
-    (rsum_heap_none.mp (LockWord.off_erase.mp hA.xoff _ hl)).2
-  obtain ⟨rL, hoA, -⟩ := hA.rest
-  have hne : (rsum (A.wordR m) (rsum rL (rsum sB rX))).heap (A.b, x) ≠ none := fun e =>
-    LockWord.wordR_some hA.w.blk hl (rsum_heap_none.mp e).1
-  have hns : ¬ (rX.gh.share (A.b, x)).Pos := fun hp => hoA.rest_noShare hne (by
-    simp only [rsum, Ghost.add_share, SCell.pos_add_iff]; exact .inr (.inr (.inr hp)))
-  exact Classical.byContradiction fun hn =>
-    (Res.owned_ne.mp hn).elim (fun h => h hX) hns
+  obtain ⟨rLA, ⟨ho, hLoffA, -, -, -⟩, -⟩ := hA.facts
+  have hO : A.Off (rsum rLA (rsum sB rX)).heap.erase :=
+    LockWord.off_erase.mpr fun l hl => by
+      show (rLA.heap ∪ (rsum sB rX).heap) l = none
+      rw [FHeap.union_apply, LockWord.off_erase.mp hLoffA l hl,
+        LockWord.off_erase.mp hA.xoff l hl]; rfl
+  exact hI.lockStep hs hap (LockWord.off_owned_of_rest ho hA.w.blk hO fun l hl =>
+      (Res.owned_sep rfl rfl).mpr (.inr ((Res.owned_sep rfl rfl).mpr (.inr hl))))
+    hbl hph hx hM hwm
 
 /-- **The state word lies before both mutexes** (the layout: the word's 8 bytes at `p`, the
 semaphore's mutex at `p + 16`, the outer mutex at `p + 32`): `Inv.otherStep`'s and `fitsM`'s
@@ -233,7 +231,7 @@ theorem fitsM
       U₀ (upd G t (M.set (G t) p h)) rX m')
     (atStop : ∀ G rX m t, t < m.threads.size → U₀ G rX m → U₀ G rX { m with current := t })
     (tick : ∀ t G rX m r, U₀ G rX m → U₀ (upd G t (M.setPart (G t) r)) rX m.ticked)
-    (hsub : ∀ G rX m, U₀ G rX m → W.Inv G rX m) (apart : W.st.ApartL M.toLockWord)
+    (hsub : ∀ G rX m, U₀ G rX m → W.Inv G rX m)
     (lph : ∀ g p, M.ph (W.place.set g p) = M.ph g)
     (lpart : ∀ g p, M.part (W.place.set g p) = M.part g)
     (lheld : ∀ g p, M.held (W.place.set g p) = M.held g)
@@ -261,7 +259,7 @@ theorem fitsM
     (fun g h => Prod.ext (kfin g h).1 (kfin g h).2)
     (fun g h => Prod.ext (kjoins g h).1 (kjoins g h).2)
     (fun G _ _ _ rX m hsB hk hu => (hsub G rX m hu).frame (hsB.disj hk.side_disj))
-    apart lph lpart lheld
+    (st_apart W).2 lph lpart lheld
     (fun G t p r h => by rw [W.mR] at h ⊢; exact h)
     ph_l set_l ph_part set_part (fun i => nomatch i) (fun i => nomatch i)
     (fun g p q hp hq => by
