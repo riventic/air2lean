@@ -380,10 +380,10 @@ theorem wp_xchgLockOn (hP : L.Fits K P U ok) (S : States α) (hS : S.c = L.c) {s
   obtain ⟨hst, hcu, hcase⟩ := hiL.w.xchgLock S hS hph rfl hr
   refine ⟨hst.threads, h k hk G₁ m' r hcu ?_⟩
   rcases hcase with ⟨hr', hF, hw, hacq⟩ | ⟨hr', hw⟩
-  · exact .inl ⟨hr', hP.stepAcq hg₁ hok (.next_of_eq hg rfl) (fun h => nomatch hg.symm.trans h)
-      (by rw [hg]; decide) hiL hU hst hF hacq hw⟩
-  · exact .inr ⟨hr', hP.stepAt hg₁ hok (.next_of_eq hg rfl) (fun h => nomatch hg.symm.trans h)
-      (by rw [hg]; decide) (by decide) hiL hU hst hw⟩
+  · exact .inl ⟨hr', hP.stepAcq hg₁ hok (LPh.next_of_eq hg rfl)
+      (fun h => nomatch hg.symm.trans h) (by rw [hg]; decide) hiL hU hst hF hacq hw⟩
+  · exact .inr ⟨hr', hP.stepAt hg₁ hok (LPh.next_of_eq hg rfl)
+      (fun h => nomatch hg.symm.trans h) (by rw [hg]; decide) (by decide) hiL hU hst hw⟩
 
 /-- `unlock`'s `xchg(unlocked)`, by the holder `t` (`g`). -/
 theorem wp_xchgUnlockOn (hP : L.Fits K P U ok) (S : States α) (hS : S.c = L.c) {s : σ}
@@ -430,14 +430,14 @@ theorem wp_futexWaitOn (hP : L.Fits K P U ok) {ε : Type} {w : Nat} [Packed ε w
   cases b
   · simp only [Bool.false_eq_true, ↓reduceIte] at hb ⊢
     exact h k hk G₁ m' hb.1
-      (hP.stepAt hg₁ hok (.next_of_eq hg rfl) (fun h => nomatch hg.symm.trans h)
+      (hP.stepAt hg₁ hok (LPh.next_of_eq hg rfl) (fun h => nomatch hg.symm.trans h)
         (by rw [hg]; decide) (by decide) hiL hU hst hb.2)
   · simp only [↓reduceIte] at hb ⊢
     obtain ⟨hst', hcu', hl'⟩ := hiL.w.spurious hph hq
     exact ⟨hP.stay hiL hU hok₁ hng (by rw [hg₁, hg]; decide) (by rw [hg₁, hg]; decide)
         (fun h => by rw [hg₁, hg] at h; cases h) hst (hiL.lstay hst hb),
       h k hk G₁ _ hcu'
-        (hP.stepAt hg₁ hok (.next_of_eq hg rfl) (fun h => nomatch hg.symm.trans h)
+        (hP.stepAt hg₁ hok (LPh.next_of_eq hg rfl) (fun h => nomatch hg.symm.trans h)
           (by rw [hg]; decide) (by decide) hiL hU hst' hl')⟩
 
 /-- `lock`'s futex wait for `contended`, by thread `t` at `wait` (`g`): it goes on at `spin`. -/
@@ -463,7 +463,7 @@ theorem wp_wakeOn (hP : L.Fits K P U ok) {io : Io} {s : σ} {t : ThreadId} {G : 
   have hph : L.pl G₁ t = .wake := by show L.ph (G₁ t) = _; rw [hg₁, hg]
   obtain ⟨hst, hcu, hl⟩ := hiL.w.wakePtr hph (by decide) hw
   exact h k hk G₁ m' hcu
-    (hP.stepAt hg₁ hok (.next_of_eq hg rfl) (fun h => nomatch hg.symm.trans h)
+    (hP.stepAt hg₁ hok (LPh.next_of_eq hg rfl) (fun h => nomatch hg.symm.trans h)
       (by rw [hg]; decide) (by decide) hiL hU hst hl)
 
 /-! ### `ok = True`: every thread runs the lock's code -/
@@ -546,7 +546,7 @@ theorem Fits.toWait (hP : L.Fits K P U ok) {t : ThreadId} {G : ThreadId → γ} 
   have hm : ({ m with current := m.current, waiters := m.waiters, woken := m.woken } : Mem) = m := by
     cases m; rfl
   rw [hm] at hl
-  have := hP.stepAt (G₁ := upd G t g) (upd_self _ _ _) hok (.next_of_eq hg rfl)
+  have := hP.stepAt (G₁ := upd G t g) (upd_self _ _ _) hok (LPh.next_of_eq hg rfl)
     (fun h => nomatch hg.symm.trans h) (by rw [hg]; decide) (by decide) hiL hU
     (Step.same rfl rfl rfl rfl rfl rfl rfl) hl
   rwa [upd_upd] at this
@@ -574,9 +574,9 @@ theorem wp_orLock (hP : L.Fits K P U ok) (hc3 : L.c = 3) {s : σ} {t : ThreadId}
   obtain ⟨hst, hcu, hcase⟩ := hiL.w.orLock hc3 hph rfl hr
   refine ⟨hst.threads, h k hk G₁ m' r hcu ?_⟩
   rcases hcase with ⟨hr', hF, hw, hacq⟩ | ⟨hr', hw⟩
-  · exact .inl ⟨hr', hP.stepAcq hg₁ hok (.next_of_eq hg rfl) (fun _ => hen)
+  · exact .inl ⟨hr', hP.stepAcq hg₁ hok (LPh.next_of_eq hg rfl) (fun _ => hen)
       (by rw [hg]; decide) hiL hU hst hF hacq hw⟩
-  · exact .inr ⟨hr', hP.stepAt hg₁ hok (.next_of_eq hg rfl) (fun _ => hen)
+  · exact .inr ⟨hr', hP.stepAt hg₁ hok (LPh.next_of_eq hg rfl) (fun _ => hen)
       (by rw [hg]; decide) (by decide) hiL hU hst hw⟩
 
 /-- `tryLock` off x86, a weak acquire `cmpxchg` `0 → 1` (`WInv.casWeakLock`), by thread `t` at
@@ -603,9 +603,9 @@ theorem wp_casWeakLock (hP : L.Fits K P U ok) {s : σ} {t : ThreadId} {G : Threa
   obtain ⟨hst, hcu, hcase⟩ := hiL.w.casWeakLock hph rfl hr
   refine ⟨hst.threads, h k hk G₁ m' r hcu ?_⟩
   rcases hcase with ⟨hr', hF, hw, hacq⟩ | ⟨hr', hw⟩
-  · exact .inl ⟨hr', hP.stepAcq hg₁ hok (.next_of_eq hg rfl) (fun _ => hen)
+  · exact .inl ⟨hr', hP.stepAcq hg₁ hok (LPh.next_of_eq hg rfl) (fun _ => hen)
       (by rw [hg]; decide) hiL hU hst hF hacq hw⟩
-  · exact .inr ⟨hr', hP.stepAt hg₁ hok (.next_of_eq hg rfl) (fun _ => hen)
+  · exact .inr ⟨hr', hP.stepAt hg₁ hok (LPh.next_of_eq hg rfl) (fun _ => hen)
       (by rw [hg]; decide) (by decide) hiL hU hst hw⟩
 
 /-- A relaxed load of the word by thread `t` (`g`, not `gone`, `away` or `holdsAway`; at `out`
@@ -795,13 +795,13 @@ theorem wp_osWait (hP : L.Fits K P U ok) {e : BitVec 32} (he : e = BitVec.ofNat 
   obtain ⟨hst, hb⟩ := hiL₃.w.wait hph hq hw
   cases b
   · simp only [Bool.false_eq_true, ↓reduceIte] at hb ⊢
-    have := hP.stepAt hg₂ hokw (.next_of_eq hgw rfl) (fun h => nomatch hgw.symm.trans h)
+    have := hP.stepAt hg₂ hokw (LPh.next_of_eq hgw rfl) (fun h => nomatch hgw.symm.trans h)
       (by rw [hgw]; decide) (by decide) hiL₃ hU₃ hst hb.2
     rw [hgs] at this
     exact hend m' hb.1 this
   · simp only [↓reduceIte] at hb ⊢
     obtain ⟨hst', hcu', hl'⟩ := hiL₃.w.spurious hph hq
-    have := hP.stepAt hg₂ hokw (.next_of_eq hgw rfl) (fun h => nomatch hgw.symm.trans h)
+    have := hP.stepAt hg₂ hokw (LPh.next_of_eq hgw rfl) (fun h => nomatch hgw.symm.trans h)
       (by rw [hgw]; decide) (by decide) hiL₃ hU₃ hst' hl'
     rw [hgs] at this
     exact ⟨hP.stay hiL₃ hU₃ hok₃ hng₃ (by rw [hg₂, hgw]; decide) (by rw [hg₂, hgw]; decide)
@@ -838,7 +838,7 @@ theorem wp_osWake (hP : L.Fits K P U ok) {w : Option Nat} (hw : ∀ k, w = some 
   · have hph : L.pl G₁ t = .wake := by show L.ph (G₁ t) = _; rw [hg₁, hg]
     obtain ⟨c, hc, hr'⟩ := Os.futexWake_pos (m := { m₁ with current := t }) hw hr
     obtain ⟨hst, hcu, hl⟩ := hiL.w.wake hph hc hr'
-    exact h k hk _ G₁ m' hcu (.inl ⟨⟨_, rfl⟩, hP.stepAt hg₁ hok (.next_of_eq hg rfl)
+    exact h k hk _ G₁ m' hcu (.inl ⟨⟨_, rfl⟩, hP.stepAt hg₁ hok (LPh.next_of_eq hg rfl)
       (fun h => nomatch hg.symm.trans h) (by rw [hg]; decide) (by decide) hiL hU hst hl⟩)
   · obtain ⟨-, -, -, hic⟩ := hP.curT t hi₁ ht
     exact h k hk none G₁ _ rfl (.inr ⟨hs, rfl, by rw [← hg₁, upd_same]; exact hic⟩)

@@ -371,7 +371,7 @@ structure Fits (K : FPrim γ) {Tgt : Type} (P : Proto Tgt γ)
   `R`), a ghost free resource (changes `Inv`), fixed footprints and strict nesting only.
 
   **Only the code's own place transitions** (maintainer decision 2026-11-09, seventh RwLock
-  obstruction, part (b), option A; ledger #two-lock-product): the step goes from `t`'s place to
+  obstruction, part (b), option A, #745; ledger #two-lock-product): the step goes from `t`'s place to
   `p` as the lock's code goes (`LPh.next`: `out` to `spin`, `wait`, `holds`; `spin`, `wait` on in
   `lock`; `holds` to `wake`, `out`; `wake` to `out`; each place to itself; never from `gone`,
   `away` or `holdsAway`), and a step from `out` enters the lock's code at one of the primitive's

@@ -789,6 +789,27 @@ discharges it. The facts every
 implementation walks its code with (`Fits.inRest`, `Fits.napW`/`unnapW`, `Fits.wstep`,
 `Owns.step`) are in the module; no instance or client is there.
 
+**A lock's steps are the code's place transitions** (maintainer decision 2026-11-09, seventh
+RwLock obstruction, part (b), option A, #745; ledger `two-lock-product`). `FLock.Fits.stable` admits a
+step of the lock's code only along the code's own transitions (`LPh.next`: `out` to `spin`,
+`wait` or `holds`; `spin` to `wait` or `holds`; `wait` to `spin`; `holds` to `wake` or `out`;
+`wake` to `out`; each place to itself) and, from `out`, only at an entry place of the primitive
+next to the lock (`FPrim.enter`: where the primitive's code calls `lock`). Before, it quantified
+over every place change. Counterexample (`Zig.Full.FRw.cx_nap_wait`, kernel-checked): the writer
+naps `M` (`holdsAway`) asleep in the semaphore's wait at `C.Ep`, in `M`'s nest; the slow reader
+just out of its `M.unlock` (at `M.out`, `rd`, the semaphore's mutex `away`) took any step into
+`M`'s futex queue, so with both asleep `M.holdLive` at the writer and `FRw.Fits.wlive` were
+unprovable for every rwlock protocol, the strict ones included. With the decision, the rwlock's
+primitive enters `M` only at `out` and `wi` (`FRw.prim`), so a reader at `rd` never reaches `M`'s
+`spin` or `wait`. The entry is a field of `FPrim` (as `calm`) rather than a parameter of `Fits`
+or a premise of the rules alone: every rule and contract is generic in `K` already, so it reaches
+each of them with no new parameter; `FPrim.empty`, `FPrim.ofWords` and the semaphore enter
+everywhere. The rules that step from `out` (`wp_casOn`, `wp_orLock`, `wp_casWeakLock`, `wp_casD`,
+`wp_loadLock`, `MutexImpl.lock_wp`) take the entry place; every client gets fewer obligations.
+Rejected: liveness only for strict protocols (weakens `noDeadlock`/`not_ABBA`), a liveness
+premise (false: the counterexample is reachable), a new lock place after `unlock` (`stable` still
+admitted the step from it into the wait).
+
 **Read ownership** (`ZigLean/Conc/Clock.lean` §Read ownership, regressions
 `tests/roadmap/sep-full/ShareRaceCX.lean`). Two reads never race (`racePair`), so a share holder
 needs only that every recorded *write* to its bytes happened before its clock (`Mem.OwnsR`); a
