@@ -35,18 +35,18 @@ variable {γ X Y : Type} {M L : FLock γ} {C : FCond γ} {S : FSem γ Y L C}
 
 /-- **The rejected filter is vacuous for writers**: the outer mutex's view at `okM ∧ L.away`
 admits no state of `P.inv` with the writer at `wr` holding `M`, `away` from `L`, from which `M`
-takes a release step. -/
+takes a release step (one of the code's transitions, `LPh.next`). -/
 theorem writer_release (hm : M.Fits W.prim P UM (fun g => okM g ∧ L.ph g = .away))
     {G : ThreadId → γ} {m : Mem} {t : ThreadId} {g : γ} (hw : W.ph g = .wr)
     (hmh : M.ph g = .holds) (hl : L.ph g = .away) (hok : okM g) (hi : P.inv (upd G t g) m)
-    (hstep : ∀ rX, M.Inv (upd G t g) rX m → ∃ m' p h, p.held = false ∧ M.Step t m m' ∧
-      (M.ph g = .holds → p ≠ .holds → M.Before m' (m.clocks[t]!)) ∧
+    (hstep : ∀ rX, M.Inv (upd G t g) rX m → ∃ m' p h, p.held = false ∧ (M.ph g).next p = true ∧
+      M.Step t m m' ∧ (M.ph g = .holds → p ≠ .holds → M.Before m' (m.clocks[t]!)) ∧
       M.Transfer (upd G t g) rX m m' t p h) : False := by
   obtain ⟨rX, hM, hU⟩ := (hm.inv _ _).mp hi
-  obtain ⟨m', p, h, hp, hs, hb, htr⟩ := hstep rX hM
+  obtain ⟨m', p, h, hp, hn, hs, hb, htr⟩ := hstep rX hM
   have hU' := hm.stable _ rX m m' t p h (by rw [upd_self]; exact ⟨hok, hl⟩)
-    (by rw [upd_self, hmh]; decide) (by rw [upd_self, hmh]; decide)
-    (by rw [upd_self, hmh]; decide) hM hU hs (by rw [upd_self]; exact hb) htr
+    (by rw [upd_self]; exact hn) (by rw [upd_self, hmh]; nofun) hM hU hs
+    (by rw [upd_self]; exact hb) htr
   rw [upd_self] at hU'
   have hwph : W.ph (M.set g p h) = .wr := by
     rw [show W.ph (M.set g p h) = W.ph g from congrArg Prod.fst (hm.ph_l g p h), hw]
