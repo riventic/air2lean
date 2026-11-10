@@ -1108,8 +1108,9 @@ theorem fits (hp : A.Pair B) {K : FPrim γ} {ok : γ → Prop}
     (away : ∀ G rXA m m' t, ok (G t) → A.Inv G rXA m → Pair.U B U G rXA m → A.Step t m m' →
       (∃ w ∈ m'.waiters, w ∉ m.waiters) →
       B.ph (G t) = .away ∨ (B.ph (G t) = .holdsAway ∧ B.toLockWord.NestKey m (A.key m)))
-    (stable : ∀ G rL rH rX m m' t p h, ok (G t) → A.ph (G t) ≠ .gone → A.ph (G t) ≠ .away →
-      A.ph (G t) ≠ .holdsAway → A.Inv G (rsum (side B m rL rH) rX) m → B.Keeps G m rL rH rX →
+    (stable : ∀ G rL rH rX m m' t p h, ok (G t) → (A.ph (G t)).next p = true →
+      (A.ph (G t) = .out → K.enter (K.pl.ph (G t))) →
+      A.Inv G (rsum (side B m rL rH) rX) m → B.Keeps G m rL rH rX →
       U G rX m → A.Step t m m' → (A.ph (G t) = .holds → p ≠ .holds → A.Before m' (m.clocks[t]!)) →
       A.Transfer G (rsum (side B m rL rH) rX) m m' t p h → U (upd G t (A.set (G t) p h)) rX m')
     (atStop : ∀ G rX m t, t < m.threads.size → U G rX m → U G rX { m with current := t })
@@ -1139,10 +1140,10 @@ theorem fits (hp : A.Pair B) {K : FPrim γ} {ok : γ → Prop}
   joins := joins
   ok_set := ok_set
   ok_setPart := ok_setPart
-  stable G rXA m m' t p h hok hg ha hh hi hU hs hb htr :=
+  stable G rXA m m' t p h hok hn hen hi hU hs hb htr :=
     U_stable hp hi hU hs (away G rXA m m' t hok hi hU hs) fun sB rL rH rX he hsB hk hu => by
       subst he
-      exact stable G rL rH rX m m' t p h hok hg ha hh (inv_side hi hsB) hk hu hs hb
+      exact stable G rL rH rX m m' t p h hok hn hen (inv_side hi hsB) hk hu hs hb
         (htr.congrX (hsB.symm.union (Res.Sim.refl rX)))
   atStop G _ m t ht hU := U_atStop t hU fun rX hu => atStop G rX m t ht hu
   noGather := noGather
@@ -1178,8 +1179,8 @@ theorem fitsEmpty (hp : A.Pair B) {ok : γ → Prop}
     (away : ∀ G rXA m m' t, ok (G t) → A.Inv G rXA m → Pair.U B U G rXA m → A.Step t m m' →
       (∃ w ∈ m'.waiters, w ∉ m.waiters) →
       B.ph (G t) = .away ∨ (B.ph (G t) = .holdsAway ∧ B.toLockWord.NestKey m (A.key m)))
-    (stable : ∀ G rL rH rX m m' t p h, ok (G t) → A.ph (G t) ≠ .gone → A.ph (G t) ≠ .away →
-      A.ph (G t) ≠ .holdsAway → A.Inv G (rsum (side B m rL rH) rX) m → B.Keeps G m rL rH rX →
+    (stable : ∀ G rL rH rX m m' t p h, ok (G t) → (A.ph (G t)).next p = true →
+      A.Inv G (rsum (side B m rL rH) rX) m → B.Keeps G m rL rH rX →
       U G rX m → A.Step t m m' → (A.ph (G t) = .holds → p ≠ .holds → A.Before m' (m.clocks[t]!)) →
       A.Transfer G (rsum (side B m rL rH) rX) m m' t p h → U (upd G t (A.set (G t) p h)) rX m')
     (atStop : ∀ G rX m t, t < m.threads.size → U G rX m → U G rX { m with current := t })
@@ -1188,7 +1189,9 @@ theorem fitsEmpty (hp : A.Pair B) {ok : γ → Prop}
     (holdLive : ∀ G rX m v, A.Inv G rX m → Pair.U B U G rX m → A.ph (G v) = .holdsAway →
       P.Live v G m) :
     A.Fits (FPrim.empty γ) P (Pair.U B U) ok :=
-  hp.fits inv fin joins ok_set ok_setPart away stable atStop tick noGather (fun _ _ => rfl)
+  hp.fits inv fin joins ok_set ok_setPart away
+    (fun G rL rH rX m m' t p h hok hn _ => stable G rL rH rX m m' t p h hok hn) atStop tick
+    noGather (fun _ _ => rfl)
     (fun _ _ => rfl) (fun _ _ _ _ _ _ _ _ _ => trivial) trivial (fun _ _ => rfl) (fun _ _ => rfl)
     (fun _ _ => rfl) (fun G t _ r h => by show A.R (upd G t (G t)) r; rwa [upd_same])
     (fun _ _ _ => rfl) (fun _ _ _ _ => rfl) (fun _ _ => rfl) (fun _ _ _ => rfl)
@@ -1213,12 +1216,12 @@ theorem fitsOrder (hp : A.Pair B) {okA okB : γ → Prop}
     (okB_setPart : ∀ g r, okB (B.setPart g r) ↔ okB g)
     (awayA : ∀ g, okA g → B.ph g = .away)
     (awayB : ∀ g, okB g → A.ph g = .away ∨ A.ph g = .holdsAway)
-    (stableA : ∀ G rL rH rX m m' t p h, okA (G t) → A.ph (G t) ≠ .gone → A.ph (G t) ≠ .away →
-      A.ph (G t) ≠ .holdsAway → A.Inv G (rsum (side B m rL rH) rX) m → B.Keeps G m rL rH rX →
+    (stableA : ∀ G rL rH rX m m' t p h, okA (G t) → (A.ph (G t)).next p = true →
+      A.Inv G (rsum (side B m rL rH) rX) m → B.Keeps G m rL rH rX →
       U G rX m → A.Step t m m' → (A.ph (G t) = .holds → p ≠ .holds → A.Before m' (m.clocks[t]!)) →
       A.Transfer G (rsum (side B m rL rH) rX) m m' t p h → U (upd G t (A.set (G t) p h)) rX m')
-    (stableB : ∀ G rL rH rX m m' t p h, okB (G t) → B.ph (G t) ≠ .gone → B.ph (G t) ≠ .away →
-      B.ph (G t) ≠ .holdsAway → B.Inv G (rsum (side A m rL rH) rX) m → A.Keeps G m rL rH rX →
+    (stableB : ∀ G rL rH rX m m' t p h, okB (G t) → (B.ph (G t)).next p = true →
+      B.Inv G (rsum (side A m rL rH) rX) m → A.Keeps G m rL rH rX →
       U G rX m → B.Step t m m' → (B.ph (G t) = .holds → p ≠ .holds → B.Before m' (m.clocks[t]!)) →
       B.Transfer G (rsum (side A m rL rH) rX) m m' t p h → U (upd G t (B.set (G t) p h)) rX m')
     (atStop : ∀ G rX m t, t < m.threads.size → U G rX m → U G rX { m with current := t })

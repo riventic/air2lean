@@ -1016,8 +1016,8 @@ theorem futexWake_waitersAt {p q : FutexKey} {n : Nat} {cs : List Nat} {m m' : M
 end FLock
 
 /-- **A sync primitive over futex words** next to the lock `L` (an event, a condition; module
-`ZigLean/Sep/Full/Lock.lean`, `FPrim`): its place `pl` (`out` out of its code), the calm places,
-the roles, its words `Ws`, its invariant `Inv`, the steps of its code at a word
+`ZigLean/Sep/Full/Lock.lean`, `FPrim`): its place `pl` (`out` out of its code), the calm places
+(a thread enters the lock's code at every place: `FPrim.enter`), the roles, its words `Ws`, its invariant `Inv`, the steps of its code at a word
 (`Move W t g p q h m m'`: thread `t` at `g` goes to the place `p`, the lock place `q` and the
 lock resource `h`) and the lock places `ownAt` at which a thread in its code steps on its own
 part. The rest has each word's cells (`Sub`, `Word.InRest`), the word `Ok` for its live set `Lv W`
@@ -1037,6 +1037,7 @@ abbrev FPrim.ofWords {γ Ph Rl : Type} (L : FLock γ) (pl : FPlace γ Ph) (out :
   pl := pl
   out := out
   calm := calm
+  enter _ := True
   Role := Rl
   role := role
   Sub G rX m := Inv G m ∧ ∀ W, Ws W →

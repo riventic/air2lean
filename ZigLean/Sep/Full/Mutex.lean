@@ -8,8 +8,9 @@ generic, prove individual items against it"): `MutexImpl Tgt` is a mutex's code 
 generated code (its `lock` and `unlock`, translated from the std code of the Zig version and
 target) with the two rules that a client uses:
 
-- `lock_wp`: a thread out of the lock's code that runs `lock` holds the lock afterwards, with a
-  resource `rL` in its part (`FLock.Inv.res`: `rL` has the lock's resource `R`);
+- `lock_wp`: a thread out of the lock's code, at an entry place of the primitive next to the lock
+  (`FPrim.enter`: where the client's code calls `lock`), that runs `lock` holds the lock
+  afterwards, with a resource `rL` in its part (`FLock.Inv.res`: `rL` has the lock's resource `R`);
 - `unlock_wp`: the holder that runs `unlock` is out of the lock's code afterwards; the resource is
   back in the protocol's rest. The holder is the running thread (`m.current = t`): an unlock
   from a thread that does not hold the mutex is illegal in Zig, and `Thread.Mutex`'s `unlock`
@@ -23,7 +24,8 @@ the lock) and counts no turns
 step: only the word's bytes, atomic accesses to them, the futex queue) keeps. The places of a
 thread inside the lock's code (`spin`, `wait`, `wake`) are the implementation's; a client sees
 `out` and `holds` (and `gone`, `away`, `holdsAway`), and the protocol's `U` must be stable under
-every lock step of a thread in the lock's code (not `gone`, `away` or `holdsAway`),
+every lock step of a thread in the lock's code along the code's place transitions (`LPh.next`,
+entering from `out` at the primitive's entry places: `FLock.Fits.stable`),
 so a client proof holds for each implementation of the family. A client takes the implementation
 of its program (`Io.Mutex` of 0.16.0: `IoMutexCode.impl`, `ZigLean/Sep/Full/IoMutex.lean`, once for
 every program, instantiated by `Proofs/Iogroup/Lock.lean` and `Proofs/Sync/IoMutex.lean`;
@@ -64,7 +66,7 @@ structure MutexImpl (Tgt : Type) where
     lock_post t r r' → r' = r
   lock_wp_resource : ∀ {γ : Type} {L : FLock γ} {P : Proto Tgt γ} {U : (ThreadId → γ) → Res → Mem → Prop}
     {ok : γ → Prop} {K : FPrim γ}, L.Fits K P U ok → P.cost = none → ∀ {p : Ptr}, p = L.ptr → L.c = c →
-    ∀ (t : ThreadId) (g : γ), L.ph g = .out → ok g → lock_pre t (L.part g) →
+    ∀ (t : ThreadId) (g : γ), L.ph g = .out → ok g → K.enter (K.pl.ph g) → lock_pre t (L.part g) →
     ∀ (io : Io) (G : ThreadId → γ) (m : Mem)
     (d : Nat), P.inv (upd G t g) m →
     P.WP t (lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
@@ -85,11 +87,12 @@ theorem lock_wp (C : MutexImpl Tgt) {γ : Type} {L : FLock γ} {P : Proto Tgt γ
     {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop} {K : FPrim γ}
     (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
     (hS : L.c = C.c) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g)
+    (hen : K.enter (K.pl.ph g))
     (hu : 0 < (L.part g).gh.ac.frag .unmetered) (io : Io) (G : ThreadId → γ) (m : Mem)
     (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (C.lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
-  refine WP.mono ?_ (C.lock_wp_resource hP hcost hp hS t g hg hok
+  refine WP.mono ?_ (C.lock_wp_resource hP hcost hp hS t g hg hok hen
     (C.lock_unmetered_pre t (L.part g) hu) io G m d hi)
   rintro _ G' m' d' ⟨hd, hc, r, rL, hr, hi'⟩
   have he := C.lock_unmetered_post t (L.part g) r hu hr

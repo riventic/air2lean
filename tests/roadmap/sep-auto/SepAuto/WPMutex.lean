@@ -65,10 +65,11 @@ theorem loop23_body (hP : L.Fits K P U ok) (hcost : P.cost = none) (hS : mutexS.
   fsym [hP.wp_tick_unmetered, wp_xchgLockOn hP mutexS hS, wp_waitOn hP mutexS hS, L.part_set,
     L.ph_set, L.set_set, hP.ok_set, Io_Mutex_lockUncancelable.again23, mutexS]
 
-/-- `lock` by thread `t` at `out` (`g`): it holds the mutex, with a resource `rL`. -/
+/-- `lock` by thread `t` at `out` (`g`), at an entry place of the primitive: it holds the mutex,
+with a resource `rL`. -/
 theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
     (hS : L.c = mutexS.c) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g)
-    (hu : 0 < (L.part g).gh.ac.frag .unmetered) (io : Io)
+    (hen : K.enter (K.pl.ph g)) (hu : 0 < (L.part g).gh.ac.frag .unmetered) (io : Io)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (Io_Mutex_lockUncancelable p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by

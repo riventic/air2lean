@@ -245,6 +245,7 @@ abbrev prim : FPrim γ where
   pl := S.place
   out := (.out, .out)
   calm q := q.1.busy = false ∧ (q.2 = .out ∨ q.2 = .wt)
+  enter _ := True
   Role := Unit
   role _ g := C.sx g
   Sub G rX m := (C.prim L).Sub G rX m ∧ S.Inv G m
@@ -1133,7 +1134,7 @@ theorem Fits.toC (hS : S.Fits P U ok) : C.Fits L P U ok where
   joins := hS.joins
   ok_set := hS.ok_set
   ok_setPart := hS.ok_setPart
-  stable := hS.stable
+  stable G rX m m' t p h hok hn _ := hS.stable G rX m m' t p h hok hn fun _ => trivial
   atStop := hS.atStop
   kfin g h := congrArg Prod.fst (hS.kfin g h)
   kjoins g h := congrArg Prod.fst (hS.kjoins g h)
@@ -1234,7 +1235,7 @@ theorem wp_lockWt (mi : MutexImpl Tgt) (hS : L.Fits S.prim P U ok) (hcost : P.co
     P.WP t (mi.lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ rL, P.inv (upd G' t (L.set (S.set g .wt) .holds rL)) m') G m d := by
   refine WP.mono (fun _ G' m' d' ⟨hd, hc, rL, hi'⟩ => ⟨hd, hc, rL, ?_⟩)
-    (mi.lock_wp hS hcost hp hLc t g hgo hok hu io G m d hi)
+    (mi.lock_wp hS hcost hp hLc t g hgo hok trivial hu io G m d hi)
   have := Fits.move hS .wt hi' hc (L.ph_set _ _ _) (by rw [cph_l hS]; exact hgx)
     (.inr (.inl ⟨rfl, by rw [upd_self, sph_l hS]; exact hgs,
       by rw [upd_self, S.wx_l]; exact hwx⟩))

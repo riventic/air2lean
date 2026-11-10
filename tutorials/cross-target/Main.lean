@@ -32,11 +32,11 @@ may run the lock's code (`FLock.Fits`), `hu` gives the thread's part the unmeter
 that pays a retry loop's ticks (the contract's caller resource), and `io` is
 the `Io` argument of the contract's `lock`, which `Thread.Mutex.lock` ignores. -/
 theorem lock_keeps_current (hP : L.Fits K P U ok) (hc : L.c = mutexC) {p : Ptr} (hp : p = L.ptr)
-    (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g)
+    (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g) (hen : K.enter (K.pl.ph g))
     (hu : 0 < (L.part g).gh.ac.frag .unmetered) (io : Io) (G : ThreadId → γ)
     (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) (hcost : P.cost = none) :
     P.WP t (Thread_Mutex_lock p) (fun _ _ m' _ => m'.current = t) G m d :=
   WP.mono (fun _ _ _ _ h => h.2.1)
-    (threadMutex.lock_wp hP hcost hp hc t g hg hok hu io G m d hi)
+    (threadMutex.lock_wp hP hcost hp hc t g hg hok hen hu io G m d hi)
 
 end CrossTarget

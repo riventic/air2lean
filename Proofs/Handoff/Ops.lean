@@ -219,7 +219,7 @@ theorem wp_lockP (hLc : Lo.c = mi.c) {p : Ptr} (hp : p = (L Lo).ptr) (io : Io)
     (proto Lo prodOf).WP 1 (mi.lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = 1 ∧
       ∃ rL, (proto Lo prodOf).inv (upd G' 1 (gH rp rL { ph := .hl })) m') G m d :=
   WP.mono (fun _ _ _ _ ⟨hd, hc, rL, hi'⟩ => ⟨hd, hc, rL, inv_hl hi'⟩)
-    (mi.lock_wp fitsL rfl hp hLc 1 (gO rp { ph := .lk }) rfl ⟨rfl, rfl, nofun, nofun⟩
+    (mi.lock_wp fitsL rfl hp hLc 1 (gO rp { ph := .lk }) rfl ⟨rfl, rfl, nofun, nofun⟩ trivial
       hpP.unmetered io G m d hi)
 
 /-- **The producer's `unlock`** at `rdy`: it is out of the mutex, to its `signal`. -/
@@ -238,8 +238,8 @@ theorem wp_lockM (hLc : Lo.c = mi.c) {p : Ptr} (hp : p = (L Lo).ptr) (io : Io)
     (hi : (proto Lo prodOf).inv (upd G 0 (gO rM { ph := .run })) m) :
     (proto Lo prodOf).WP 0 (mi.lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = 0 ∧
       ∃ rL, (proto Lo prodOf).inv (upd G' 0 (gH rM rL { ph := .run })) m') G m d :=
-  mi.lock_wp fitsL rfl hp hLc 0 (gO rM { ph := .run }) rfl ⟨rfl, rfl, nofun, nofun⟩ hpM.unmetered io G
-    m d hi
+  mi.lock_wp fitsL rfl hp hLc 0 (gO rM { ph := .run }) rfl ⟨rfl, rfl, nofun, nofun⟩ trivial
+    hpM.unmetered io G m d hi
 
 /-- **`main`'s `unlock`** at `run`: out of the mutex, to the event's wait. -/
 theorem wp_unlockM (hLc : Lo.c = mi.c) {p : Ptr} (hp : p = (L Lo).ptr) (io : Io)

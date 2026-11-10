@@ -45,6 +45,38 @@ def LPh.held : LPh → Bool
   | .holds | .holdsAway => true
   | _ => false
 
+/-- **The places a step of the lock's code goes to** from a place (`FLock.Fits.stable`): `lock`'s
+first try from `out` to `spin`, `wait` or `holds`; `lock`'s loop from `spin` to `wait` or `holds`
+and its futex wait from `wait` to `spin`; `unlock`'s release from `holds` to `out` or `wake`, and
+its futex wake from `wake` to `out`; and every step that keeps the place (a load, a spurious wake,
+an interrupt's delivery). No step of the lock's code starts at `gone`, `away` or `holdsAway`. The
+set is the rules' (`ZigLean/Sep/Full/LockRules.lean`, its table). -/
+def LPh.next : LPh → LPh → Bool
+  | .out, .out | .out, .spin | .out, .wait | .out, .holds => true
+  | .spin, .spin | .spin, .wait | .spin, .holds => true
+  | .wait, .wait | .wait, .spin => true
+  | .holds, .holds | .holds, .wake | .holds, .out => true
+  | .wake, .wake | .wake, .out => true
+  | _, _ => false
+
+theorem LPh.ne_gone_of_next {p q : LPh} (h : p.next q = true) : p ≠ .gone := by
+  rintro rfl; cases q <;> cases h
+
+theorem LPh.ne_away_of_next {p q : LPh} (h : p.next q = true) : p ≠ .away := by
+  rintro rfl; cases q <;> cases h
+
+theorem LPh.ne_holdsAway_of_next {p q : LPh} (h : p.next q = true) : p ≠ .holdsAway := by
+  rintro rfl; cases q <;> cases h
+
+/-- A transition from a place given by an equation (`h`), for the rules at a fixed place. -/
+theorem LPh.next_of_eq {a b p : LPh} (h : a = b) (hn : b.next p = true) : a.next p = true :=
+  h ▸ hn
+
+/-- A step of the lock's code that keeps the place. -/
+theorem LPh.next_self {p : LPh} (hg : p ≠ .gone) (ha : p ≠ .away) (hz : p ≠ .holdsAway) :
+    p.next p = true := by
+  cases p <;> first | rfl | exact absurd rfl hg | exact absurd rfl ha | exact absurd rfl hz
+
 theorem LPh.held_of_holds {p : LPh} (h : p = .holds) : p.held = true := by
   rw [h]; rfl
 
@@ -54,9 +86,6 @@ theorem LPh.ne_gone_of_held {p : LPh} (h : p.held = true) : p ≠ .gone := by
 /-- A holder that is not at `holdsAway` is awake. -/
 theorem LPh.holds_of_held {p : LPh} (h : p.held = true) (hz : p ≠ .holdsAway) : p = .holds := by
   cases p <;> first | rfl | exact absurd rfl hz | cases h
-
-theorem LPh.ne_holdsAway_of_not_held {p : LPh} (h : p.held = false) : p ≠ .holdsAway := by
-  rintro rfl; cases h
 
 theorem LPh.busy_of_held {p : LPh} (h : p.held = true) : p.busy = true := by
   cases p <;> first | rfl | cases h

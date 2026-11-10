@@ -165,10 +165,11 @@ def QM : Except ErrName (BitVec 32) → (ThreadId → Gh) → Mem → Nat → Pr
 /-! ## The protocol has the lock -/
 
 theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p : LPh) (h : Res)
-    (hg : L.ph (G t) ≠ .gone) (_ : L.ph (G t) ≠ .holdsAway) (_ : L.Inv G rX m) (hu : U G rX m)
+    (hn : (L.ph (G t)).next p = true) (_ : L.Inv G rX m) (hu : U G rX m)
     (hs : L.Step t m m')
     (_ : L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!))
     (_ : L.Transfer G rX m m' t p h) : U (upd G t (L.set (G t) p h)) rX m' := by
+  have hg := LPh.ne_gone_of_next hn
   obtain ⟨hsh, hio, hrest, hjle⟩ := hu
   have hjb : joinedB m' = joinedB m := LockWord.joinedB_congr hs.threads
   refine ⟨?_, fun e he hr => ?_, hrest, fun v hv => ?_⟩
@@ -571,7 +572,8 @@ theorem add_spec (t : ThreadId) (rp : Res) (hp : rp.Plain) (p₀ p₁ : Ph) (hin
   fsym [WP.liftMem_pure (projC (hb0 _) _) rfl,
     fits.wp_readRest rfl (by decide) io_rest (fun _ _ _ hu => hu.io) covers_io
       fun _ _ _ hu ht hjt hcs => U_read hu ht hjt hcs,
-    ioMutex.lock_wp fits rfl rfl rfl _ (gOut rp p₀) _ _ hp.unmetered, ioMutex.unlock_wp fits rfl rfl rfl,
+    ioMutex.lock_wp fits rfl rfl rfl _ (gOut rp p₀) _ _ trivial hp.unmetered,
+    ioMutex.unlock_wp fits rfl rfl rfl,
     fits.wp_hold (g' := gHold rp p₀), fits.wp_hold (g' := gHold rp p₁), U_hold, shape_inc hinc,
     sum_inc hinc, set_out, set_hold, ph_out, ph_hold]
 

@@ -80,8 +80,8 @@ theorem fits :
     (fun _ _ _ => by rw [okA, hp.ph_ab]) (fun _ _ => by rw [okA, hp.setPart, B.ph_setPart])
     (fun _ _ _ => by rw [okB, hp.ph_ba]) (fun _ _ => by rw [okB, ← hp.setPart, A.ph_setPart])
     (fun _ h => h) (fun _ h => h)
-    (fun _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ => trivial)
-    (fun _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ => trivial)
+    (fun _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ => trivial)
+    (fun _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ => trivial)
     (fun _ _ _ _ _ _ => trivial) (fun _ _ _ _ _ _ => trivial)
     (fun _ _ _ _ _ _ => FLock.NoGather.of_R _ hRA) (fun _ _ _ _ _ _ => FLock.NoGather.of_R _ hRB)
 
@@ -99,7 +99,7 @@ theorem nested_wp (mi : MutexImpl Tgt) (hcA : A.c = mi.c) (hcB : B.c = mi.c) (t 
   -- each relabel of `t` at one lock keeps the other kept: `Pair.U_setA` (at `hp.symm` for `B`)
   unfold nested
   -- `lock A`, away from `B`
-  refine WP.bind (WP.mono ?_ (mi.lock_wp hA rfl rfl hcA t g hgA hgB hu io G m d hi))
+  refine WP.bind (WP.mono ?_ (mi.lock_wp hA rfl rfl hcA t g hgA hgB trivial hu io G m d hi))
   rintro _ G₁ m₁ d₁ ⟨-, -, rL, hi₁⟩
   -- back at `B`'s `out`: `t` holds `A`, so it is not in the futex queue
   have hq₁ : m₁.waiters.any (·.1 == t) = false := by
@@ -120,7 +120,7 @@ theorem nested_wp (mi : MutexImpl Tgt) (hcA : A.c = mi.c) (hcB : B.c = mi.c) (t 
   have h3p : A.part g₃ = A.part g := by
     rw [← hg₃, A.part_set, hp.part_ba, A.part_set]
   -- `lock B`, holding `A` at `holdsAway`
-  refine WP.bind (WP.mono ?_ (mi.lock_wp hB rfl rfl hcB t g₃ h3B (Or.inr h3A)
+  refine WP.bind (WP.mono ?_ (mi.lock_wp hB rfl rfl hcB t g₃ h3B (Or.inr h3A) trivial
     (by rw [← hp.part, h3p]; exact hu) io G₁ m₁ d₁ hi₃))
   rintro _ G₂ m₂ d₂ ⟨-, hc₂, rL', hi₄⟩
   -- `unlock B`

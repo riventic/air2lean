@@ -175,8 +175,7 @@ def QM : Except ErrName (BitVec 32) → (ThreadId → Gh) → Mem → Nat → Pr
 /-! ## The protocol has the lock -/
 
 theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p : LPh) (h : Res)
-    (hok : ok (G t)) (_ : L.ph (G t) ≠ .gone) (_ : L.ph (G t) ≠ .away)
-    (_ : L.ph (G t) ≠ .holdsAway) (_ : L.Inv G rX m) (hu : U G rX m)
+    (hok : ok (G t)) (_ : (L.ph (G t)).next p = true) (_ : L.Inv G rX m) (hu : U G rX m)
     (hs : L.Step t m m')
     (_ : L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!))
     (_ : L.Transfer G rX m m' t p h) : U (upd G t (L.set (G t) p h)) rX m' := by
@@ -353,7 +352,7 @@ theorem update_spec (rp : Res) (hp : rp.Plain) {k : Nat} (hk : k < 2)
     proto.WP 1 ((update mi.lock mi.unlock cPtr).run ()) (fun _ G' m' _ => m'.current = 1 ∧
       proto.inv (upd G' 1 (gOut rp (.wk (k + 1) false))) m') G m d := by
   unfold update
-  fsym [mi.lock_wp fits rfl rfl hmc.symm _ (gOut rp (.wk k false)) _ _ hp.unmetered,
+  fsym [mi.lock_wp fits rfl rfl hmc.symm _ (gOut rp (.wk k false)) _ _ trivial hp.unmetered,
     mi.unlock_wp fits rfl rfl hmc.symm,
     fits.wp_hold (g' := gH rp (.wk k false)), fits.wp_hold (g' := gH rp (.wk k true)),
     fits.wp_hold (g' := gH rp (.wk (k + 1) false)), U_hold, shape_mid, shape_done,
@@ -708,7 +707,7 @@ theorem main_spec (σ : Placement) (io : Io) (d : Nat) :
   -- the cache. The holder's step names `main`'s caller part `?rp` in both `G'` and `g'`, so the
   -- invariant's hypothesis fixes it before the post's obligations (`hR`) mention it.
   fsym [FTriple.allocStack', inv_start, inv_spawn,
-    (fun {w : Res} (hw : w.Plain) => mi.lock_wp fits rfl rfl hmc.symm 0 (gRun w) rfl rfl hw.unmetered io),
+    (fun {w : Res} (hw : w.Plain) => mi.lock_wp fits rfl rfl hmc.symm 0 (gRun w) rfl rfl trivial hw.unmetered io),
     snapshot_ok,
     fits.wp_hold (G' := upd _ 0 (gH ?rp .run _)) (g' := gH ?rp .run), U_hold, mi.unlock_wp fits rfl rfl hmc.symm, wp_join,
     main_join, wp_free, joinedAll_of_threads, set_out, set_hold, ph_hold, part_gOut, gRun, gJoin,

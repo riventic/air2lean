@@ -437,13 +437,16 @@ def Step (t : ThreadId) (G : ThreadId → γ) (rX : Res) (m : Mem) (G' : ThreadI
 
 /-- **The rwlock as a primitive next to its outer mutex** `M` (module doc): its places with the
 semaphore's; a thread runs `M`'s code at `out` (a slow reader's lock, a writer's unlock tail), `wi`
-(a writer's lock) or `rd` (a slow reader's unlock), out of the semaphore's code; no role; the rest
-keeps the rwlock's invariant; a step is the rwlock's own (`Step`). -/
+(a writer's lock) or `rd` (a slow reader's unlock), out of the semaphore's code, and it enters
+`M`'s code (calls `M.lock`) only at `out` and `wi` (`FPrim.enter`, decision (b)A on the seventh
+obstruction: so a slow reader at `rd` just out of `M.unlock` never steps into `M`'s wait); no
+role; the rest keeps the rwlock's invariant; a step is the rwlock's own (`Step`). -/
 abbrev prim : FPrim γ where
   Ph := RwPh × (CPh × SPh)
   pl := W.place
   out := (.out, (.out, .out))
   calm q := (q.1 = .out ∨ q.1 = .wi ∨ q.1.isRd = true) ∧ q.2 = (.out, .out)
+  enter q := q.1 = .out ∨ q.1 = .wi
   Role := Empty
   role i := nomatch i
   Sub G rX m := W.Inv G rX m

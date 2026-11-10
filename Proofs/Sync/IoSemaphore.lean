@@ -199,7 +199,7 @@ theorem ioSem_post_wp (hS : S.Fits P U ok) (hcost : P.cost = none) (hLc : L.c = 
   have hbound : ∀ {G rL m}, P.inv (upd G t (L.set g .holds rL)) m →
       (S.cnt (upd G t g)).toNat + 1 < 2 ^ 64 := fun hi => (hcnt _ _ _ hi).2
   fsym [WP.liftMem_pure (projI hF _ _ _) rfl,
-    ioMutex.lock_wp hF hcost S.ptr_l.symm hLc t g hgo hokg hug,
+    ioMutex.lock_wp hF hcost S.ptr_l.symm hLc t g hgo hokg trivial hug,
     Fits.wp_cnt hF hcost, hbound, Fits.wp_give hF hcost hcnt hpool hU hgx hgs hxx hsplit hdj,
     wp_csignal ioCond hS hcost S.ptr_c.symm t,
     ioMutex.unlock_wp_to hF hcost S.ptr_l.symm hLc t, hokx, hu,

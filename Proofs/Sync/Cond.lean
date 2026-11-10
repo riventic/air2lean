@@ -332,7 +332,7 @@ theorem loop56_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
       rw [gR_out hC hgx] at hi₁
       simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte, StateT.run_bind]
       refine WP.bind (WP.bind (WP.callC (WP.mono ?_ (ioMutex.lock_wp hC hcost rfl hLc t _
-        (L.ph_set _ _ _) ((hC.ok_set _ _ _).mpr hok) (by simpa only [L.part_set] using hu)
+        (L.ph_set _ _ _) ((hC.ok_set _ _ _).mpr hok) trivial (by simpa only [L.part_set] using hu)
         io G₁ m₁ k hi₁))))
       rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, rL, hi₂⟩
       rw [L.set_set] at hi₂
@@ -582,7 +582,7 @@ theorem loop45_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
       rw [gR_out hC hgx] at hi₁
       simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte, StateT.run_bind]
       refine WP.bind (WP.bind (WP.callC (WP.mono ?_ (ioMutex.lock_wp hC hcost rfl hLc t _
-        (L.ph_set _ _ _) ((hC.ok_set _ _ _).mpr hok) (by simpa only [L.part_set] using hu)
+        (L.ph_set _ _ _) ((hC.ok_set _ _ _).mpr hok) trivial (by simpa only [L.part_set] using hu)
         io G₁ m₁ k hi₁))))
       rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, rL, hi₂⟩
       rw [L.set_set] at hi₂
