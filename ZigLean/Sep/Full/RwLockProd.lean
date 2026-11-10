@@ -26,6 +26,9 @@ the views from `U₀` and the client's obligations stated at `U₀`.
   the rest, which the op keeps, so the common rest after the step is the word's new cells, the
   new free resource and the same rest of the rest, and the rwlock's invariant holds there
   (`Inv.unframe`). The client keeps `U₀` given these facts (`W.Moves` at the common rest).
+- **Either lock's own steps keep the rwlock's invariant at the common rest** (`FRw.Inv.otherStep`,
+  for a client's `U₀` over `FLock.Fits.stable` in either view): the common rest owns no byte of the
+  stepping lock's word, so `Inv.lockStep` applies.
 - **The outer mutex's view** (`FRw.fitsM`): `FLock.Pair.fits` at `K := W.prim` with `ok` the
   client's `okM` at `L`'s `away` and the rwlock's calm places (`FRw.Fits.m`). The product gives
   the queue premise (`away`), `M`'s `noGather` (`M.R = emp`), `ok_calm` (the calm places are out
