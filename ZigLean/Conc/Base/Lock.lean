@@ -87,9 +87,6 @@ theorem LPh.ne_gone_of_held {p : LPh} (h : p.held = true) : p ≠ .gone := by
 theorem LPh.holds_of_held {p : LPh} (h : p.held = true) (hz : p ≠ .holdsAway) : p = .holds := by
   cases p <;> first | rfl | exact absurd rfl hz | cases h
 
-theorem LPh.ne_holdsAway_of_not_held {p : LPh} (h : p.held = false) : p ≠ .holdsAway := by
-  rintro rfl; cases h
-
 theorem LPh.busy_of_held {p : LPh} (h : p.held = true) : p.busy = true := by
   cases p <;> first | rfl | cases h
 

@@ -435,7 +435,7 @@ theorem wp_futexWaitOn (hP : L.Fits K P U ok) {ε : Type} {w : Nat} [Packed ε w
   · simp only [↓reduceIte] at hb ⊢
     obtain ⟨hst', hcu', hl'⟩ := hiL.w.spurious hph hq
     exact ⟨hP.stay hiL hU hok₁ hng (by rw [hg₁, hg]; decide) (by rw [hg₁, hg]; decide)
-        (fun h => by rw [hg₁, hg] at h; cases h) hst (hiL.lstay hst hb),
+        (by rw [hg₁, hg]; nofun) hst (hiL.lstay hst hb),
       h k hk G₁ _ hcu'
         (hP.stepAt hg₁ hok (LPh.next_of_eq hg rfl) (fun h => nomatch hg.symm.trans h)
           (by rw [hg]; decide) (by decide) hiL hU hst' hl')⟩
@@ -768,7 +768,7 @@ theorem wp_osWait (hP : L.Fits K P U ok) {e : BitVec 32} (he : e = BitVec.ofNat 
   have hi₂ : P.inv (upd G₁ t g) m₂ := by
     rw [← hg₁, upd_same]
     exact hP.stay hiL hU' hok₁ hng₁ (by rw [hg₁]; exact hna) (by rw [hg₁]; exact hz)
-      (fun h => by rw [hg₁, hg] at h; cases h) hst (hiL.lstay hst hl)
+      (by rw [hg₁, hg]; nofun) hst (hiL.lstay hst hl)
   refine ⟨by rw [hst.threads], fun _ => h k (by omega) _ G₁ m₂ hcu (by decide) hi₂,
     fun _ => ⟨h k (by omega) _ G₁ m₂ hcu (by decide) hi₂, fun k' hk' => ?_⟩⟩
   -- the sleep: `t` goes to `wait`, then the scheduler's wait
@@ -805,7 +805,7 @@ theorem wp_osWait (hP : L.Fits K P U ok) {e : BitVec 32} (he : e = BitVec.ofNat 
       (by rw [hgw]; decide) (by decide) hiL₃ hU₃ hst' hl'
     rw [hgs] at this
     exact ⟨hP.stay hiL₃ hU₃ hok₃ hng₃ (by rw [hg₂, hgw]; decide) (by rw [hg₂, hgw]; decide)
-        (fun h => by rw [hg₂, hgw] at h; cases h) hst (hiL₃.lstay hst hb),
+        (by rw [hg₂, hgw]; nofun) hst (hiL₃.lstay hst hb),
       hend _ hcu' this⟩
 
 /-- **A macOS wait's return code** (`Darwin.ulockResult`, OSF-01) by thread `t` with the ghost

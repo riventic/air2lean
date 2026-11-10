@@ -186,7 +186,7 @@ theorem fitsM
     (okM_part : ∀ g r, okM (M.setPart g r) ↔ okM g)
     (stable : ∀ G rL rH rX m m' t p h, okM (G t) → L.ph (G t) = .away →
       W.prim.calm (W.place.ph (G t)) → (M.ph (G t)).next p = true →
-      (M.ph (G t) = .out → W.ph (G t) = .out ∨ W.ph (G t) = .wi) →
+      (M.ph (G t) = .out → W.prim.enter (W.place.ph (G t))) →
       M.Inv G (rsum (FLock.side L m rL rH) rX) m → L.Keeps G m rL rH rX → U₀ G rX m →
       M.Step t m m' → (M.ph (G t) = .holds → p ≠ .holds → M.Before m' (m.clocks[t]!)) →
       M.Transfer G (rsum (FLock.side L m rL rH) rX) m m' t p h →

@@ -808,7 +808,8 @@ primitive enters `M` only at `out` and `wi` (`FRw.prim`), so a reader at `rd` ne
 `spin` or `wait`. The entry is a field of `FPrim` (as `calm`) rather than a parameter of `Fits`
 or a premise of the rules alone: every rule and contract is generic in `K` already, so it reaches
 each of them with no new parameter; `FPrim.empty`, `FPrim.ofWords` and the semaphore enter
-everywhere. The rules that step from `out` (`wp_casOn`, `wp_orLock`, `wp_casWeakLock`, `wp_casD`,
+everywhere. The rules that may step from `out` (`Fits.step`, `stay`, `stepAt`, `stepAcq`,
+`osState`, `takeInterrupt`; `wp_casOn`, `wp_cas`, `wp_orLock`, `wp_casWeakLock`, `wp_casD`,
 `wp_loadLock`, `MutexImpl.lock_wp`) take the entry place; every client gets fewer obligations.
 Rejected: liveness only for strict protocols (weakens `noDeadlock`/`not_ABBA`), a liveness
 premise (false: the counterexample is reachable), a new lock place after `unlock` (`stable` still
