@@ -70,7 +70,8 @@ theorem loop4_body (rp : Res) (hp : rp.Plain) (t : ThreadId) (s : workLocals)
     (fits (Lo := lo) (workOf := workOf)).wp_readRest rfl (by decide)
       (io_rest (a := 8) rfl (by decide)) (fun _ _ _ hu => hu.io) (io_cov rfl)
       (fun _ _ _ hu ht _ => U_rec _ hu ht),
-    ioMutex.lock_wp (fits (Lo := lo) (workOf := workOf)) rfl rfl rfl _ (gOut rp k) _ _ hp.unmetered,
+    ioMutex.lock_wp (fits (Lo := lo) (workOf := workOf)) rfl rfl rfl _ (gOut rp k) _ _ trivial
+      hp.unmetered,
     ioMutex.unlock_wp (fits (Lo := lo) (workOf := workOf)) rfl rfl rfl,
     (fits (Lo := lo) (workOf := workOf)).wp_hold (g' := gHold rp k),
     (fits (Lo := lo) (workOf := workOf)).wp_hold (g' := gHold rp (k + 1)),

@@ -85,10 +85,13 @@ theorem Lg.congr {G G' : ThreadId → Gh} {m m' : Mem} (hl : Lg G m)
 
 /-- **A step of the lock's code keeps `U`** (`FLock.Fits.stable`). -/
 theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p : LPh) (h : Res)
-    (hok : ok (G t)) (hg : L.ph (G t) ≠ .gone) (hna : L.ph (G t) ≠ .away)
-    (hz : L.ph (G t) ≠ .holdsAway) (_ : L.Inv G rX m) (hu : U G rX m) (hs : L.Step t m m')
+    (hok : ok (G t)) (hn : (L.ph (G t)).next p = true) (_ : L.Inv G rX m) (hu : U G rX m)
+    (hs : L.Step t m m')
     (hrel : L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!))
     (_ : L.Transfer G rX m m' t p h) : U (upd G t (L.set (G t) p h)) rX m' := by
+  have hg := LPh.ne_gone_of_next hn
+  have hna := LPh.ne_away_of_next hn
+  have hz := LPh.ne_holdsAway_of_next hn
   have hX : ∀ u, (upd G t (L.set (G t) p h) u).2 = (G u).2 := fun u =>
     congrFun (FLock.snd_set G t p h) u
   have hst : (S.ph (G t)).isPst = false := by
@@ -701,7 +704,7 @@ theorem fits : S.Fits (proto semOf) U ok where
     joins := fun _ h => h.1
     ok_set := fun _ _ _ => Iff.rfl
     ok_setPart := fun _ _ => Iff.rfl
-    stable := stable
+    stable G rX m m' t p h hok hn _ := stable G rX m m' t p h hok hn
     atStop := fun _ _ _ t _ hu => atStop t hu
     kfin := fun g h => by show (g.2.c, g.2.sp) = (CPh.out, SPh.out); rw [h.2.1]
     kjoins := fun g h => by show (g.2.c, g.2.sp) = (CPh.out, SPh.out); rw [h.2]

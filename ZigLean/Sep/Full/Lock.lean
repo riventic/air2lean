@@ -28,8 +28,8 @@ own reasoning is `ZigLean/Sep/Full/LockWord.lean`, the lock's code
   buffers); the holder's resource has `R`.
 - **A protocol with the lock and a sync primitive next to it** (`FLock.Fits L K P U ok`, the one
   judgment for every sync primitive): its invariant is `∃ rX, Inv G rX m ∧ U G rX m`; a step of
-  the lock's code (`LockWord.Step`) by a thread with `ok`, not `gone`, `away` or `holdsAway`, keeps
-  `U`
+  the lock's code (`LockWord.Step`) by a thread with `ok`, along the code's place transitions
+  (`LPh.next`) and from `out` only at the primitive's entry places (`FPrim.enter`), keeps `U`
   with the same `rX`. The primitive `K` (`FPrim`) is data: a thread's place in its code
   (`FPlace`), its roles, what the rest keeps for it (`Sub`: its invariant, its cells), and its steps (`Step`); `U` keeps `Sub`
   and every step, and the primitive's place is a part of the ghost value independent of the
@@ -148,6 +148,9 @@ structure FPrim (γ : Type) where
   /-- The places at which a thread may run the lock's code: the protocol's `ok` does not tell
   them apart. -/
   calm : Ph → Prop
+  /-- The places from which a thread enters the lock's code (its code calls `lock` there): a step
+  of the lock's code by a thread at the lock's `out` is one at such a place (`Fits.stable`). -/
+  enter : Ph → Prop
   /-- The threads' roles (which threads may wait, signal, set). -/
   Role : Type
   role : Role → γ → Prop
@@ -166,6 +169,7 @@ def FPrim.empty (γ : Type) : FPrim γ where
           set_set := fun _ _ _ => rfl, set_self := fun _ => rfl }
   out := ()
   calm _ := True
+  enter _ := True
   Role := Empty
   role i := nomatch i
   Sub _ _ _ := True
@@ -364,9 +368,29 @@ structure Fits (K : FPrim γ) {Tgt : Type} (P : Proto Tgt γ)
   resource lies in lock B's rest, which B's invariant needs after a critical-section step.
   Counterexample: at A's acquire take `h := {d ↦ w}` with `d` outside B's rest; the coupling is
   false, yet `stable` demanded `U`. Rejected: the post-step invariant (pins `h` only for precise
-  `R`), a ghost free resource (changes `Inv`), fixed footprints and strict nesting only. -/
-  stable : ∀ G rX m m' t p h, ok (G t) → L.ph (G t) ≠ .gone → L.ph (G t) ≠ .away →
-    L.ph (G t) ≠ .holdsAway → L.Inv G rX m → U G rX m → L.Step t m m' →
+  `R`), a ghost free resource (changes `Inv`), fixed footprints and strict nesting only.
+
+  **Only the code's own place transitions** (maintainer decision 2026-11-09, seventh RwLock
+  obstruction, part (b), option A; ledger #two-lock-product): the step goes from `t`'s place to
+  `p` as the lock's code goes (`LPh.next`: `out` to `spin`, `wait`, `holds`; `spin`, `wait` on in
+  `lock`; `holds` to `wake`, `out`; `wake` to `out`; each place to itself; never from `gone`,
+  `away` or `holdsAway`), and a step from `out` enters the lock's code at one of the primitive's
+  entry places (`FPrim.enter`: the client's code calls `lock` only there). Before, `stable`
+  quantified over every place change, so a thread just out of `unlock` (at `out`) could step
+  straight into the lock's futex queue. Counterexample (`Zig.Full.FRw.cx_nap_wait`,
+  kernel-checked): a writer `t` naps the outer mutex `M` (`holdsAway`) asleep in the semaphore's
+  wait at `C.Ep`, in `M`'s nest; the slow reader `u` is at `M.out` after its `M.unlock` with the
+  semaphore's mutex `away` and `ok`; `stable` admitted `u`'s step into `M`'s queue, so with both
+  asleep `holdLive` at `t` (and `FRw.Fits.wlive`) was false for every rwlock protocol. The entry
+  places are the primitive's (a field of `FPrim`, as `calm`), not a parameter of `Fits` or a
+  premise of the rules alone: every rule and contract is generic in `K` already, so the entry
+  reaches each of them without a new parameter, a protocol of the lock alone (`FPrim.empty`) and
+  every primitive whose code does not restrict it enter everywhere, and the rwlock's code calls
+  `M.lock` only at its `out` and `wi` (`FRw.prim`). Rejected: liveness only for strict protocols
+  (weakens `noDeadlock`/`not_ABBA`), a liveness premise (false: the counterexample is reachable),
+  a new lock place after `unlock` (`stable` still admitted the step from it into the wait). -/
+  stable : ∀ G rX m m' t p h, ok (G t) → (L.ph (G t)).next p = true →
+    (L.ph (G t) = .out → K.enter (K.pl.ph (G t))) → L.Inv G rX m → U G rX m → L.Step t m m' →
     (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
     L.Transfer G rX m m' t p h → U (upd G t (L.set (G t) p h)) rX m'
   /-- A stop of any thread (`current := t`, a thread that exists) keeps `U`: a thread without `ok`
@@ -427,9 +451,8 @@ theorem Fits.ofLock {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → R
     {ok : γ → Prop} (inv : ∀ G m, P.inv G m ↔ ∃ rX, L.Inv G rX m ∧ U G rX m)
     (fin : ∀ g, P.fin g → L.ph g = .gone) (joins : ∀ g, P.joins g → L.ph g = .out)
     (ok_set : ∀ g p h, ok (L.set g p h) ↔ ok g) (ok_setPart : ∀ g r, ok (L.setPart g r) ↔ ok g)
-    (stable : ∀ G rX m m' t p h, ok (G t) → L.ph (G t) ≠ .gone → L.ph (G t) ≠ .away →
-      L.ph (G t) ≠ .holdsAway → L.Inv G rX m → U G rX m → L.Step t m m' →
-      (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
+    (stable : ∀ G rX m m' t p h, ok (G t) → (L.ph (G t)).next p = true → L.Inv G rX m →
+      U G rX m → L.Step t m m' → (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
       L.Transfer G rX m m' t p h → U (upd G t (L.set (G t) p h)) rX m')
     (atStop : ∀ G rX m t, t < m.threads.size → U G rX m → U G rX { m with current := t })
     (tick : ∀ t G rX m G' rX' m', L.PartTick t G rX m G' rX' m' → U G rX m → U G' rX' m')
@@ -441,7 +464,7 @@ theorem Fits.ofLock {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → R
   joins := joins
   ok_set := ok_set
   ok_setPart := ok_setPart
-  stable := stable
+  stable G rX m m' t p h hok hnx _ := stable G rX m m' t p h hok hnx
   atStop := atStop
   noGather := noGather
   kfin _ _ := rfl
@@ -467,7 +490,7 @@ theorem Fits.ofLock {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → R
 theorem Fits.ofLockAll {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) → Res → Mem → Prop}
     (inv : ∀ G m, P.inv G m ↔ ∃ rX, L.Inv G rX m ∧ U G rX m)
     (fin : ∀ g, P.fin g → L.ph g = .gone) (joins : ∀ g, P.joins g → L.ph g = .out)
-    (stable : ∀ G rX m m' t p h, L.ph (G t) ≠ .gone → L.ph (G t) ≠ .holdsAway → L.Inv G rX m →
+    (stable : ∀ G rX m m' t p h, (L.ph (G t)).next p = true → L.Inv G rX m →
       U G rX m → L.Step t m m' → (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
       L.Transfer G rX m m' t p h → U (upd G t (L.set (G t) p h)) rX m')
     (atStop : ∀ G rX m t, t < m.threads.size → U G rX m → U G rX { m with current := t })
@@ -476,7 +499,7 @@ theorem Fits.ofLockAll {Tgt : Type} {P : Proto Tgt γ} {U : (ThreadId → γ) �
     (hn : ∀ p, ¬ L.nest p := by exact fun _ h => h) :
     L.Fits (FPrim.empty γ) P U fun _ => True :=
   .ofLock inv fin joins (fun _ _ _ => Iff.rfl) (fun _ _ => Iff.rfl)
-    (fun G rX m m' t p h _ hg _ hz => stable G rX m m' t p h hg hz) atStop tick noGather hn
+    (fun G rX m m' t p h _ => stable G rX m m' t p h) atStop tick noGather hn
 
 /-! ## Basic facts -/
 

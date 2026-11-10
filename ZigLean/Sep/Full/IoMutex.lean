@@ -165,11 +165,12 @@ theorem body_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) (hS : C.st.c = L.
     rw [L.set_set] at hi₂
     exact ⟨⟨by omega, hc₂, hi₂⟩, .inl (by omega)⟩
 
-/-- `lock` by thread `t` at `out` (`g`), whose part pays the retry loop's ticks from its unmetered
-fragment: it holds the mutex, with a resource `rL`. -/
+/-- `lock` by thread `t` at `out` (`g`), at an entry place of the primitive (`hen`), whose part
+pays the retry loop's ticks from its unmetered fragment: it holds the mutex, with a resource
+`rL`. -/
 theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
     (hS : L.c = C.st.c) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g)
-    (hu : 0 < (L.part g).gh.ac.frag .unmetered) (io : Io)
+    (hen : K.enter (K.pl.ph g)) (hu : 0 < (L.part g).gh.ac.frag .unmetered) (io : Io)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (C.lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ rL, P.inv (upd G' t (L.set g .holds rL)) m') G m d := by
@@ -181,7 +182,7 @@ theorem lock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p
   rw [StateT.run'_eq]
   refine WP.map ?_
   rw [StateT.run_bind]
-  refine WP.bind (wp_casOn hP C.st hS (g := g) hg hok hi fun k₁ hk₁ G₁ m₁ r hc₁ hcase => ?_)
+  refine WP.bind (wp_casOn hP C.st hS (g := g) hg hok hen hi fun k₁ hk₁ G₁ m₁ r hc₁ hcase => ?_)
   -- the loop, from `spin`
   have hloop : ∀ G₃ m₃ d₃, C.lockInv P L t g d default G₃ m₃ d₃ →
       P.WP t ((do let y ← loop (C.body L.ptr io) C.again; kL y : CM Tgt C.σ C.E).run default)
@@ -217,12 +218,12 @@ unbounded retry loop pays from the caller's unmetered fragment and returns its e
 including stack budgets. This is this code family's proved profile, not a generic default. -/
 theorem lock_wp_resource (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
     (hS : L.c = C.st.c) (t : ThreadId) (g : γ) (hg : L.ph g = .out) (hok : ok g)
-    (hu : payUnmetered t (L.part g)) (io : Io)
+    (hen : K.enter (K.pl.ph g)) (hu : payUnmetered t (L.part g)) (io : Io)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (C.lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ r rL, keepPart t (L.part g) r ∧
         P.inv (upd G' t (L.set (L.setPart g r) .holds rL)) m') G m d := by
-  refine WP.mono ?_ (C.lock_wp hP hcost hp hS t g hg hok hu io G m d hi)
+  refine WP.mono ?_ (C.lock_wp hP hcost hp hS t g hg hok hen hu io G m d hi)
   rintro _ G' m' d' ⟨hd, hc, rL, hi'⟩
   exact ⟨hd, hc, L.part g, rL, rfl, by simpa only [L.setPart_self] using hi'⟩
 

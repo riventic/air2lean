@@ -182,8 +182,8 @@ theorem fitsM
     (kjoins : ∀ g, P.joins g → W.ph g = .out ∧ S.place.ph g = (.out, .out))
     (okM_set : ∀ g a, okM (W.set g a) ↔ okM g) (okM_m : ∀ g p h, okM (M.set g p h) ↔ okM g)
     (okM_part : ∀ g r, okM (M.setPart g r) ↔ okM g)
-    (stable : ∀ G rL rH rX m m' t p h, okM (G t) → L.ph (G t) = .away → M.ph (G t) ≠ .gone →
-      M.ph (G t) ≠ .away → M.ph (G t) ≠ .holdsAway →
+    (stable : ∀ G rL rH rX m m' t p h, okM (G t) → L.ph (G t) = .away →
+      (M.ph (G t)).next p = true → (M.ph (G t) = .out → W.ph (G t) = .out ∨ W.ph (G t) = .wi) →
       M.Inv G (rsum (FLock.side L m rL rH) rX) m → L.Keeps G m rL rH rX → U₀ G rX m →
       M.Step t m m' → (M.ph (G t) = .holds → p ≠ .holds → M.Before m' (m.clocks[t]!)) →
       M.Transfer G (rsum (FLock.side L m rL rH) rX) m m' t p h →
@@ -210,8 +210,8 @@ theorem fitsM
     (fun g p h => by rw [okM_m, W.pair.ph_ab])
     (fun g r => by rw [okM_part, W.pair.setPart, L.ph_setPart])
     (fun _ _ _ _ _ hok _ _ _ _ => .inl hok.2)
-    (fun G rL rH rX m m' t p h hok hg ha hh hi hk hu hs hb htr =>
-      stable G rL rH rX m m' t p h hok.1 hok.2 hg ha hh hi hk hu hs hb htr)
+    (fun G rL rH rX m m' t p h hok hn hen hi hk hu hs hb htr =>
+      stable G rL rH rX m m' t p h hok.1 hok.2 hn hen hi hk hu hs hb htr)
     atStop tick
     (fun _ _ _ _ _ _ rL h l => .inr (by rw [W.mR] at h; exact FAssn.Unshared.emp _ h l))
     (fun g h => Prod.ext (kfin g h).1 (kfin g h).2)
@@ -286,8 +286,7 @@ theorem fitsS (W : FRw γ X Y M L C S) {okS : γ → Prop}
       (okS (S.place.set g p) ↔ okS (S.place.set g q)))
     (hnM : M.nest L.ptr)
     (stable : ∀ G rL rH rX m m' t p h, okS (G t) →
-      (M.ph (G t) = .away ∨ M.ph (G t) = .holdsAway) → L.ph (G t) ≠ .gone →
-      L.ph (G t) ≠ .away → L.ph (G t) ≠ .holdsAway →
+      (M.ph (G t) = .away ∨ M.ph (G t) = .holdsAway) → (L.ph (G t)).next p = true →
       L.Inv G (rsum (FLock.side M m rL rH) rX) m → M.Keeps G m rL rH rX → U₀ G rX m →
       L.Step t m m' → (L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!)) →
       L.Transfer G (rsum (FLock.side M m rL rH) rX) m m' t p h →
@@ -324,8 +323,8 @@ theorem fitsS (W : FRw γ X Y M L C S) {okS : γ → Prop}
     (fun g p h => by rw [okS_l, W.pair.ph_ba])
     (fun g r => by rw [okS_lpart, ← W.pair.setPart, M.ph_setPart])
     (fun _ _ _ _ _ hok hi _ _ _ => FLock.Pair.away_of hi (hok.2.imp id fun h => ⟨h, hnM⟩))
-    (fun G rL rH rX m m' t p h hok hg ha hh hi hk hu hs hb htr =>
-      stable G rL rH rX m m' t p h hok.1 hok.2 hg ha hh hi hk hu hs hb htr)
+    (fun G rL rH rX m m' t p h hok hn _ hi hk hu hs hb htr =>
+      stable G rL rH rX m m' t p h hok.1 hok.2 hn hi hk hu hs hb htr)
     atStop tick
     (fun _ _ _ _ _ _ => FLock.NoGather.of_R _ (lR_unshared W))
     kfin kjoins

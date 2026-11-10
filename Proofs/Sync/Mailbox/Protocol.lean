@@ -448,11 +448,13 @@ theorem U.congr {G G' : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} (hu : U K G
 
 /-- **A step of the lock's code keeps `U`** (`FLock.Fits.stable`). -/
 theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p : LPh) (h : Res)
-    (hok : ok (G t)) (hng : (L K).ph (G t) ≠ .gone) (hna : (L K).ph (G t) ≠ .away)
-    (hz : (L K).ph (G t) ≠ .holdsAway) (_ : (L K).Inv G rX m) (hu : U K G rX m)
-    (hs : (L K).Step t m m')
+    (hok : ok (G t)) (hn : ((L K).ph (G t)).next p = true) (_ : (L K).Inv G rX m)
+    (hu : U K G rX m) (hs : (L K).Step t m m')
     (hrel : (L K).ph (G t) = .holds → p ≠ .holds → (L K).Before m' (m.clocks[t]!))
     (_ : (L K).Transfer G rX m m' t p h) : U K (upd G t ((L K).set (G t) p h)) rX m' := by
+  have hng := LPh.ne_gone_of_next hn
+  have hna := LPh.ne_away_of_next hn
+  have hz := LPh.ne_holdsAway_of_next hn
   have hX : ∀ u, (upd G t ((L K).set (G t) p h) u).2 = (G u).2 :=
     fun u => congrFun (FLock.snd_set G t p h) u
   obtain ⟨hwS, hhS⟩ := hu.ws.lockStep hs apS
@@ -993,7 +995,7 @@ theorem fitsS : (S K).Fits (proto K) (U K) ok where
   joins _ h := h.1
   ok_set _ _ _ := Iff.rfl
   ok_setPart _ _ := Iff.rfl
-  stable := stable
+  stable G rX m m' t p h hok hn _ := stable G rX m m' t p h hok hn
   atStop _ _ _ t _ hu := atStop t hu
   kfin g h := by show ((g.2.c, g.2.s) : CPh × SPh) = (.out, .out); rw [h.2]
   kjoins g h := by show ((g.2.c, g.2.s) : CPh × SPh) = (.out, .out); rw [h.2]

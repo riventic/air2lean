@@ -271,6 +271,7 @@ theorem lock_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc : M.c
   refine WP.bind (WP.callC (WP.mono (fun _ G₂ m₂ k₂ h₂ => ?_)
     (C.M.lock_wp hW.m hcost (by rw [W.ptr_m, ← W.ptr_st]) hMc t (L.set (W.set g .wi) .away rnil)
       (by rw [W.pair.ph_ba, hmx]) (hW.okM_away ((hW.okM_set _ _).mpr hokM))
+      (Or.inr (by show W.ph (L.set (W.set g .wi) .away rnil) = .wi; rw [W.ph_l, W.ph_set]))
       (by rw [W.pair.part_ba, hW.mpart]; exact hu)
       io G₁ m₁ k₁ (hW.lAway hlx (.inl hmx) hi₁))))
   obtain ⟨hk₂, hc₂, rL, hi₂⟩ := h₂
@@ -501,6 +502,7 @@ theorem lockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc
     refine WP.bind (WP.callC (WP.mono (fun _ G₃ m₃ k₃ h₃ => ?_)
       (C.M.lock_wp hW.m hcost (by rw [W.ptr_m, ← W.ptr_st]) hMc t (L.set g .away rnil)
         (by rw [W.pair.ph_ba, hmo]) (hW.okM_away hokM)
+        (Or.inl (by show W.ph (L.set g .away rnil) = .out; rw [W.ph_l, hwo]))
         (by rw [W.pair.part_ba]; exact hu) io G₂ m₂ k₂ (hW.lAway hlo (.inl hmo) hi₂))))
     obtain ⟨hk₃, hc₃, rL, hi₃⟩ := h₃
     refine WP.bind (FRw.wp_addR hW (g := M.set (L.set g .away rnil) .holds rL)

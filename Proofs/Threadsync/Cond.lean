@@ -313,7 +313,7 @@ theorem loop107_body [Zig.Os.HasEnv] (hC : L.Fits (C.prim L) P U ok) (hcost : P.
       simp only [Option.isSome_none, Bool.false_eq_true, ↓reduceIte, StateT.run_bind]
       refine WP.bind (WP.bind (WP.callC (WP.mono ?_ (threadMutex.lock_wp hC hcost rfl hLc t _
         (by rw [L.ph_setPart, L.ph_set]) ((hC.ok_setPart _ _).mpr ((hC.ok_set _ _ _).mpr hok))
-        (by rw [L.part_setPart]; exact DPart.unmetered hu hdp) ⟨⟩ G₁ m₁ k hi₁))))
+        trivial (by rw [L.part_setPart]; exact DPart.unmetered hu hdp) ⟨⟩ G₁ m₁ k hi₁))))
       rintro _ G₂ m₂ d₂ ⟨hd₂, hc₂, rL, hi₂⟩
       rw [gD_lock] at hi₂
       repeat (first

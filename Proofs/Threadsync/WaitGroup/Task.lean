@@ -646,7 +646,8 @@ theorem wp_lockT (hLc : L.c = mi.c) {p : Ptr} (hp : p = L.ptr) (io : Io) {t : Th
     proto.WP t (mi.lock p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ rL, proto.inv (upd G' t (gH rp rL { ph := .hl })) m') G m d :=
   WP.mono (fun _ _ _ _ ⟨hd, hc, rL, hi'⟩ => ⟨hd, hc, rL, inv_hl hi'⟩)
-    (mi.lock_wp fitsL rfl hp hLc t (gO rp { ph := .lk }) rfl ⟨rfl, nofun⟩ hpP.unmetered io G m d hi)
+    (mi.lock_wp fitsL rfl hp hLc t (gO rp { ph := .lk }) rfl ⟨rfl, nofun⟩ trivial hpP.unmetered io G m
+      d hi)
 
 theorem wp_unlockT (hLc : L.c = mi.c) {p : Ptr} (hp : p = L.ptr) (io : Io) {t : ThreadId}
     {G : ThreadId → Gh} {m : Mem} {d : Nat} {rp rL : Res}
