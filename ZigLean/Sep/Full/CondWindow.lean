@@ -191,6 +191,21 @@ theorem post_facts {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId}
 
 /-! ## A step of the condition's code -/
 
+/-- `WordHB` over a relabel that keeps every thread's lock place and the memory. -/
+theorem _root_.Zig.Full.FLock.WordHB.relabel {n nb : Nat} {W : Word n nb} {G G' : ThreadId → γ}
+    {m : Mem} (hE : L.WordHB W G m) (hph : ∀ u, L.ph (G' u) = L.ph (G u)) : L.WordHB W G' m :=
+  hE.step (fun _ hc => hc.mono (fun u hu => .inl (by rw [hph]; exact hu))
+    (fun _ => VClock.le_refl _) (fun _ h => h) rfl fun u hg => by rwa [hph] at hg) (.inl rfl)
+
+/-- `WordHB` over a step in the lock's word and the rest (`FStepIn`, the cells frame of a hold or
+own-part step) that keeps every thread's lock place and the word's writes. -/
+theorem _root_.Zig.Full.FLock.WordHB.fstep {n nb : Nat} {W : Word n nb} {G G' : ThreadId → γ}
+    {rX : Res} {m m' : Mem} (hE : L.WordHB W G m) (hL : L.Inv G rX m)
+    (hfs : FStepIn (rsum (L.wordR m) rX).heap.erase m m') (hph : ∀ u, L.ph (G' u) = L.ph (G u))
+    (hh : W.hist m' = W.hist m) : L.WordHB W G' m' :=
+  hE.step (fun _ hc => hc.mono (fun u hu => .inl (by rw [hph]; exact hu)) hfs.clock
+    (hL.before_fstep hfs) hfs.threads fun u hg => by rwa [hph] at hg) (.inl hh)
+
 /-- A place is not both in the critical and in the signal code. -/
 theorem crit_sig {p : CPh} (h1 : p.crit = true) (h2 : p.sig = true) : False := by
   cases p <;> simp_all [CPh.crit, CPh.sig]
@@ -243,8 +258,7 @@ theorem Win1.step {G G' : ThreadId → γ} {rX rX' : Res} {m m' : Mem} {t : Thre
       · rw [upd_ne _ _ e]
     have hE := hist_hold hsub hfs' hcells (.inr rfl)
     refine hw.keep (fun u => ?_) (hist_hold hsub hfs' hcells (.inl rfl)) hE
-      (hw.ehb.step (fun _ hc => hc.mono (fun u hu => .inl (by rw [hlp]; exact hu)) hfs'.clock
-        (hL.before_fstep hfs') hfs'.threads fun u hg => by rwa [hlp] at hg) (.inl hE))
+      (hw.ehb.fstep hL hfs' hlp hE)
     by_cases e : u = t
     · subst e; rw [upd_self, hphp]
     · rw [upd_ne _ _ e]
@@ -319,11 +333,9 @@ theorem Win1.step {G G' : ThreadId → γ} {rX rX' : Res} {m m' : Mem} {t : Thre
           · subst e; rw [hct] at hr''; exact absurd hr'' hr'
           · rwa [hcu u e] at hr''
   -- no registration of `t` while another thread is registered (`rc`)
-  have hnr1 : ∀ u, u ≠ t → (C.ph (G u)).isReg = true →
-      ∀ v, (C.ph (G' v)).isReg = true → (C.ph (G v)).isReg = true := fun u _ hu => by
-    rcases hnr with hnr | ⟨_, _, e'⟩
-    · exact hnr
-    · exact (hw.rc u t hu (by rw [e']; rfl)).elim
+  have hkeep : (∀ i e, C.ph (G t) = .ld i e → False) →
+      ∀ v, (C.ph (G' v)).isReg = true → (C.ph (G v)).isReg = true := fun h =>
+    hnr.elim id fun ⟨i, e, e'⟩ => (h i e e').elim
   have hld : ∀ i e, p = .ld i e → C.ph (G t) = .en → (C.Ep.hist m).size = i + 1 ∧
       C.Ep.hist m' = C.Ep.hist m := fun i e hp hen => by
     obtain ⟨hi, hh⟩ := ld_newest hw.ehb hphl hphp hst hI hen (by rw [hct, hp])
@@ -462,14 +474,12 @@ theorem Win1.step {G G' : ThreadId → γ} {rX rX' : Res} {m m' : Mem} {t : Thre
           · rw [hc] at e'; cases e'
         rw [hE] at hsz
         have h2 := hw.f2 u i₀ jr₀ sn₀ e₀ hc
-        have hnr' : ∀ u, (C.ph (G' u)).isReg = true → (C.ph (G u)).isReg = true := by
-          rcases hnr with hnr | ⟨_, _, e'⟩
-          · exact hnr
-          · rw [hc] at e'; cases e'
-        exact Sated.keep hI hI' hnr' hSh (hw.f4 u i₀ jr₀ sn₀ e₀ hc (by omega))
+        exact Sated.keep hI hI' (hkeep fun _ _ e' => by rw [hc] at e'; cases e') hSh
+          (hw.f4 u i₀ jr₀ sn₀ e₀ hc (by omega))
       | _ => rw [hc] at hn; cases hn
     · rw [hcu u et] at h'
-      have hnr' := hnr1 u et (by rw [h']; rfl)
+      -- no registration of `t` while `u` is registered (`rc`)
+      have hnr' := hkeep fun _ _ e' => hw.rc u t (by rw [h']; rfl) (by rw [e']; rfl)
       rcases hEw with e' | ⟨⟨q₀, n₀, h₀, e'⟩, -, -⟩
       · rw [e'] at hsz; exact Sated.keep hI hI' hnr' hSh (hw.f4 u i jr sn e h' hsz)
       · exact Sated.keep hI hI' hnr' hSh (hw.incS t q₀ n₀ h₀ e')
@@ -482,17 +492,11 @@ theorem Win1.step {G G' : ThreadId → γ} {rX rX' : Res} {m m' : Mem} {t : Thre
       · -- `t`'s post, with at most one registered waiter
         exact (post_facts hI hI' hG hc (hct.trans hv) (by rw [hct]; exact hsg)).2.1
           (wOf_le_one hI' hone)
-      · have hnr' : ∀ u, (C.ph (G' u)).isReg = true → (C.ph (G u)).isReg = true := by
-          rcases hnr with hnr | ⟨_, _, e'⟩
-          · exact hnr
-          · rw [hc] at e'; cases e'
-        exact Sated.keep hI hI' hnr' hSh (hw.incS v q' n h' hc)
+      · exact Sated.keep hI hI' (hkeep fun _ _ e' => by rw [hc] at e'; cases e') hSh
+          (hw.incS v q' n h' hc)
     · rw [hcu v ev] at hv
-      have hnr' : ∀ u, (C.ph (G' u)).isReg = true → (C.ph (G u)).isReg = true := by
-        rcases hnr with hnr | ⟨_, _, e'⟩
-        · exact hnr
-        · exact (hcp t v (by rw [e']; rfl) (by rw [hv]; rfl)).elim
-      exact Sated.keep hI hI' hnr' hSh (hw.incS v q' n h' hv)
+      exact Sated.keep hI hI' (hkeep fun _ _ e' => hcp t v (by rw [e']; rfl) (by rw [hv]; rfl))
+        hSh (hw.incS v q' n h' hv)
 
 end FCond
 
@@ -528,9 +532,7 @@ theorem Win1.semStep {G G' : ThreadId → γ} {rX rX' : Res} {m m' : Mem} {t : T
       · subst e; rw [upd_self, ← S.place_c, hlph]
       · rw [upd_ne _ _ e]
     exact hw.enter (by rw [upd_self, C.ph_set]) (fun u e => by rw [upd_ne _ _ e])
-      (hent hcnt hst hwx hct)
-      (hw.ehb.step (fun _ hc => hc.mono (fun u hu => .inl (by rw [hlc]; exact hu))
-        (fun _ => VClock.le_refl _) (fun _ h => h) rfl fun u hg => by rwa [hlc] at hg) (.inl rfl))
+      (hent hcnt hst hwx hct) (hw.ehb.relabel hlc)
   | hold s h hlt _ hL _ hfs _ hcells _ =>
     have hfs' := hfs.cells
     have hls : ∀ g s, L.ph (S.set g s) = L.ph g := fun g s => by rw [← S.place_s, hlph]
@@ -543,9 +545,7 @@ theorem Win1.semStep {G G' : ThreadId → γ} {rX rX' : Res} {m m' : Mem} {t : T
         by_cases e : u = t
         · subst e; rw [upd_self, S.cph_set, hcl]
         · rw [upd_ne _ _ e])
-      (FCond.hist_hold hsub.1 hfs' hcells (.inl rfl)) hE
-      (hw.ehb.step (fun _ hc => hc.mono (fun u hu => .inl (by rw [hlc]; exact hu)) hfs'.clock
-        (hL.before_fstep hfs') hfs'.threads fun u hg => by rwa [hlc] at hg) (.inl hE))
+      (FCond.hist_hold hsub.1 hfs' hcells (.inl rfl)) hE (hw.ehb.fstep hL hfs' hlc hE)
 
 end FSem
 
