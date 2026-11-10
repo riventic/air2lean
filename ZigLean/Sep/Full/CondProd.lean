@@ -244,5 +244,182 @@ theorem U_semStep (hp : L.Pair B) {U₀ : (ThreadId → γ) → Res → Mem → 
 
 end FLock.Pair
 
+/-! ## The condition and the semaphore over a step of a thread out of their code
+
+A step of a thread `t` out of the condition's and the semaphore's code that keeps both words'
+writes and the mutex's word keeps both invariants. Two such steps occur in a two-lock product: a
+step of the other lock `K`'s code (`LockWord.Step`, its `FLock.Fits.stable`), whose words are apart
+from the condition's and the mutex's and whose futex wait queues only its caller, which waits at
+no condition and takes no permit (`Inv.otherLock`, `Sub.otherLock`); and a step in a frame with the
+condition's words and the mutex's word, which changes no queue (`FStepIn`: a primitive's atomic
+op at its own word, `Inv.fstepOut`). -/
+
+namespace FCond
+
+variable {γ : Type} {L : FLock γ} {C : FCond γ}
+
+/-- **A step of a thread out of the condition's code keeps its invariant** (`Inv.other`): `t` is
+out of the condition's code before and after it, its signalling role stays, both words' writes and
+keys stay, the epoch's part of the queue stays, a new queue entry off the mutex is `t`'s, the
+pending wakes of the others stay, the threads stay and the clocks grow. -/
+theorem Inv.outStep {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g' : γ}
+    (hI : C.Inv L G m) (hc : C.ph (G t) = .out) (hph : C.ph g' = .out)
+    (hsx : C.sx (G t) → C.sx g') (hS : C.S.hist m' = C.S.hist m)
+    (hE : C.Ep.hist m' = C.Ep.hist m) (hk : C.Ep.key m' = C.Ep.key m)
+    (hkL : L.key m' = L.key m)
+    (hwq : m'.waiters.filter (·.2 == C.Ep.key m) = m.waiters.filter (·.2 == C.Ep.key m))
+    (hnew : ∀ w ∈ m'.waiters, w ∉ m.waiters → w.1 = t)
+    (hwk : ∀ u, u ≠ t → m.woken.contains u = true → m'.woken.contains u = true)
+    (hth : m'.threads = m.threads)
+    (hclk : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true) :
+    C.Inv L (upd G t g') m' :=
+  hI.other (by rw [hph, hc]) (fun h => absurd h (by rw [hc]; decide))
+    (fun h => absurd h (by rw [hc]; decide)) hsx hS hE hk hkL hwq
+    (fun w hw _ => by
+      by_cases h : w ∈ m.waiters
+      · exact .inl h
+      · exact .inr ⟨hnew w hw h, by rw [hc]; rfl⟩)
+    (fun u hr _ hw => hwk u (fun e => absurd hr (by rw [e, hc]; decide)) hw)
+    (Nat.le_of_eq (by rw [hth])) hclk
+
+/-- **A step of another lock's code keeps the condition's invariant** (`Inv.outStep`): the
+condition's words are apart from `K`'s, and the epoch's key is not `K`'s. -/
+theorem Inv.otherLock {K : LockWord} {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g' : γ}
+    {A A' : ThreadId → Prop} (hI : C.Inv L G m) (hwS : C.S.Ok m A) (hwE : C.Ep.Ok m A')
+    (hapS : C.S.ApartL K) (hapE : C.Ep.ApartL K) (hkne : C.Ep.key m ≠ K.key m)
+    (hc : C.ph (G t) = .out) (hph : C.ph g' = .out) (hsx : C.sx (G t) → C.sx g')
+    (hkL : L.key m' = L.key m) (hs : K.Step t m m') : C.Inv L (upd G t g') m' :=
+  hI.outStep hc hph hsx (hwS.lockStep hs hapS).2 (hwE.lockStep hs hapE).2
+    (hwE.key_of_addrs hs.addrs) hkL (hs.waitersAt hkne) hs.newQ hs.woken hs.threads hs.clocks
+
+/-- **A step in a frame with the condition's words keeps its invariant** (`Inv.outStep`;
+`FStepIn` keeps the queue, the pending wakes and the threads). -/
+theorem Inv.fstepOut {hF hR : Heap} {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g' : γ}
+    (hI : C.Inv L G m) (hfs : FStepIn hF m m' hR) (hc : C.ph (G t) = .out)
+    (hph : C.ph g' = .out) (hsx : C.sx (G t) → C.sx g') (hS : C.S.hist m' = C.S.hist m)
+    (hE : C.Ep.hist m' = C.Ep.hist m) (hk : C.Ep.key m' = C.Ep.key m)
+    (hkL : L.key m' = L.key m) : C.Inv L (upd G t g') m' :=
+  hI.outStep hc hph hsx hS hE hk hkL (by rw [hfs.waiters])
+    (fun w hw hn => absurd (by rwa [hfs.waiters] at hw) hn)
+    (fun _ _ hw => by rw [hfs.woken]; exact hw) hfs.threads hfs.clock
+
+end FCond
+
+namespace FSem
+
+variable {γ Y : Type} {L : FLock γ} {C : FCond γ} {S : FSem γ Y L C}
+
+/-- **A step of a thread out of the semaphore's wait keeps its invariant** (`Inv.monoTk`): `t`
+keeps its places in the condition, the semaphore and the mutex `L`, the count stays, a new queue
+entry is `t`'s and `t` is no taker, the mutex's word keeps its newest release and its key, the
+state's writes stay, the threads stay and the clocks grow. -/
+theorem Inv.outStep {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g' : γ} (hI : S.Inv G m)
+    (hsph : S.ph g' = S.ph (G t)) (hcph : C.ph g' = C.ph (G t)) (hlph : L.ph g' = L.ph (G t))
+    (hpv : S.cnt (upd G t g') = S.cnt G)
+    (hcl : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
+    (hbef : ∀ c, L.Before m c → L.Before m' c) (hth : m'.threads = m.threads)
+    (hnew : ∀ w ∈ m'.waiters, w ∉ m.waiters → w.1 = t ∧ S.ph (G t) ≠ .wt)
+    (hkL : L.key m' = L.key m) (hS : C.S.hist m' = C.S.hist m) : S.Inv (upd G t g') m' := by
+  have hup : ∀ {α : Type} (f : γ → α), f g' = f (G t) → ∀ u, f (upd G t g' u) = f (G u) :=
+    fun f h u => by have := congrFun (upd_map f G t h) u; rwa [upd_same] at this
+  refine hI.monoTk (hup S.ph hsph) (hup C.ph hcph) hpv
+    (fun u hu => by rw [hup L.ph hlph u]; exact hI.pst u hu)
+    (fun u hu => .inl (by rw [hup L.ph hlph u]; exact hu)) hcl hbef hth
+    (fun u h => by rwa [hup L.ph hlph u] at h) (fun w hw hk => ?_) hkL hS
+  by_cases h : w ∈ m.waiters
+  · exact .inl h
+  · obtain ⟨e, hnt⟩ := hnew w hw h
+    exact absurd hk.1 (by rw [e, upd_self, hsph]; exact hnt)
+
+/-- **A step of another lock's code keeps the semaphore's invariant** (`Inv.outStep`): `t` is no
+taker, and the state word and `L`'s word are apart from `K`'s. -/
+theorem Inv.otherLock {K : LockWord} {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g' : γ}
+    {A : ThreadId → Prop} (hI : S.Inv G m) (hwS : C.S.Ok m A) (hapS : C.S.ApartL K)
+    (hapL : L.ApartL K) (hbL : L.BlkOk m) (hsph : S.ph g' = S.ph (G t))
+    (hcph : C.ph g' = C.ph (G t)) (hlph : L.ph g' = L.ph (G t))
+    (hpv : S.cnt (upd G t g') = S.cnt G) (hnt : S.ph (G t) ≠ .wt) (hs : K.Step t m m') :
+    S.Inv (upd G t g') m' := by
+  obtain ⟨blk, hb, -⟩ := hbL
+  exact hI.outStep hsph hcph hlph hpv hs.clocks (fun _ h => LockWord.Before.otherStep hs hapL h)
+    hs.threads (fun w hw hn => ⟨hs.newQ w hw hn, hnt⟩) (L.key_of_addrs hs.addrs hb)
+    (hwS.lockStep hs hapS).2
+
+/-- **A step in a frame with the state word and the mutex's word keeps the semaphore's invariant**
+(`Inv.outStep`; `FStepIn` keeps the queue and the threads). -/
+theorem Inv.fstepOut {hF hR : Heap} {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {g' : γ}
+    (hI : S.Inv G m) (hfs : FStepIn hF m m' hR) (hsph : S.ph g' = S.ph (G t))
+    (hcph : C.ph g' = C.ph (G t)) (hlph : L.ph g' = L.ph (G t))
+    (hpv : S.cnt (upd G t g') = S.cnt G) (hbef : ∀ c, L.Before m c → L.Before m' c)
+    (hkL : L.key m' = L.key m) (hS : C.S.hist m' = C.S.hist m) : S.Inv (upd G t g') m' :=
+  hI.outStep hsph hcph hlph hpv hfs.clock hbef hfs.threads
+    (fun w hw hn => absurd (by rwa [hfs.waiters] at hw) hn) hkL hS
+
+/-- **A step of another lock's code keeps the semaphore's primitive's rest** (`FSem.prim`'s `Sub`:
+the condition's and the semaphore's invariants, `Inv.otherLock`, and the condition's words with
+their cells in the rest, which the step keeps): `t` is out of both components' code before and
+after it, its mutex place stays, the count stays, and the condition's words and `L`'s word are
+apart from `K`'s, the epoch's key not `K`'s. -/
+theorem Sub.otherLock {K : LockWord} {G : ThreadId → γ} {rX : Res} {m m' : Mem} {t : ThreadId}
+    {g' : γ} (hsub : S.prim.Sub G rX m)
+    (hap : ∀ Wd : Word 32 4, (Wd = C.S ∨ Wd = C.Ep) → Wd.ApartL K) (hapL : L.ApartL K)
+    (hbL : L.BlkOk m) (hkne : C.Ep.key m ≠ K.key m) (hsp : S.place.ph (G t) = (.out, .out))
+    (hsp' : S.place.ph g' = (.out, .out)) (hlph : L.ph g' = L.ph (G t))
+    (hpv : S.cnt (upd G t g') = S.cnt G) (hs : K.Step t m m') :
+    S.prim.Sub (upd G t g') rX m' := by
+  obtain ⟨⟨hC, hW⟩, hI⟩ := hsub
+  have hc : C.ph (G t) = .out := congrArg Prod.fst hsp
+  have hs0 : S.ph (G t) = .out := congrArg Prod.snd hsp
+  obtain ⟨blk, hb, -⟩ := id hbL
+  refine ⟨⟨hC.otherLock (hW C.S (.inl rfl)).1 (hW C.Ep (.inr rfl)).1 (hap _ (.inl rfl))
+      (hap _ (.inr rfl)) hkne hc (congrArg Prod.fst hsp')
+      (fun h => absurd ((S.sx_iff _).mp h) (by rw [hs0]; decide)) (L.key_of_addrs hs.addrs hb) hs,
+    fun Wd hWd => ?_⟩,
+    hI.otherLock (hW C.S (.inl rfl)).1 (hap _ (.inl rfl)) hapL hbL
+      (by rw [hs0]; exact congrArg Prod.snd hsp') (by rw [hc]; exact congrArg Prod.fst hsp')
+      hlph hpv (by rw [hs0]; nofun) hs⟩
+  obtain ⟨hok, rY, rfl, hY⟩ := hW Wd hWd
+  have hcl : Wd.cellsR m' = Wd.cellsR m :=
+    cellsAt_congr fun l hl => hs.heap ((hap Wd hWd).not_in hl)
+  exact ⟨(hok.lockStep hs (hap Wd hWd)).1, rY, by rw [hcl], hY⟩
+
+/-- **A step in a frame with the condition's words and the mutex's word keeps the semaphore's
+primitive's rest** (`FSem.prim`'s `Sub`: `Inv.fstepOut` for both invariants, and the condition's
+words with their cells, which the step keeps, `cellsAt_swap`): `t` is out of both components' code
+before and after it, its mutex place stays, the count stays, and the rest's part `rA` beside `rO`,
+which becomes `rA'`, has no cell of the condition's words. -/
+theorem Sub.fstepOut {hF : Heap} {P : ThreadId → LPh} {G : ThreadId → γ} {rA rA' rO : Res}
+    {m m' : Mem} {t : ThreadId} {g' : γ} (hsub : S.prim.Sub G (rsum rA rO) m)
+    (hfs : FStepIn hF m m') (hLw : L.WInv P m)
+    (hwF : ∀ Wd : Word 32 4, (Wd = C.S ∨ Wd = C.Ep) → ∀ l, Wd.In l → hF l ≠ none)
+    (hwL : ∀ x, L.o ≤ x → x < L.o + 4 → hF (L.b, x) ≠ none)
+    (hm : ∀ Wd : Word 32 4, (Wd = C.S ∨ Wd = C.Ep) → ∀ l, Wd.In l → m'.heap l = m.heap l)
+    (hA : ∀ Wd : Word 32 4, (Wd = C.S ∨ Wd = C.Ep) → ∀ l, Wd.In l → rA.heap l = none)
+    (hA' : ∀ Wd : Word 32 4, (Wd = C.S ∨ Wd = C.Ep) → ∀ l, Wd.In l → rA'.heap l = none)
+    (hsp : S.place.ph (G t) = (.out, .out)) (hsp' : S.place.ph g' = (.out, .out))
+    (hlph : L.ph g' = L.ph (G t)) (hpv : S.cnt (upd G t g') = S.cnt G) :
+    S.prim.Sub (upd G t g') (rsum rA' rO) m' := by
+  obtain ⟨⟨hC, hW⟩, hI⟩ := hsub
+  have hc : C.ph (G t) = .out := congrArg Prod.fst hsp
+  have hs0 : S.ph (G t) = .out := congrArg Prod.snd hsp
+  have hcells : ∀ Wd : Word 32 4, (Wd = C.S ∨ Wd = C.Ep) → ∀ l, Wd.In l →
+      (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm := fun Wd hWd l hl => by
+    rw [hm Wd hWd l hl]
+  have hhist : ∀ Wd : Word 32 4, (Wd = C.S ∨ Wd = C.Ep) → Wd.hist m' = Wd.hist m := fun Wd hWd =>
+    Word.hist_fstep (hW Wd hWd).1 hfs (hwF Wd hWd) (hcells Wd hWd)
+  obtain ⟨blk, hb, -⟩ := hLw.blk
+  have hkL : L.key m' = L.key m := L.key_of_addrs hfs.addrs hb
+  refine ⟨⟨hC.fstepOut hfs hc (congrArg Prod.fst hsp')
+      (fun h => absurd ((S.sx_iff _).mp h) (by rw [hs0]; decide)) (hhist _ (.inl rfl))
+      (hhist _ (.inr rfl)) ((hW _ (.inr rfl)).1.key_of_addrs hfs.addrs) hkL,
+    fun Wd hWd => ?_⟩,
+    hI.fstepOut hfs (by rw [hs0]; exact congrArg Prod.snd hsp')
+      (by rw [hc]; exact congrArg Prod.fst hsp') hlph hpv (hLw.before_fstep hfs hwL) hkL
+      (hhist _ (.inl rfl))⟩
+  obtain ⟨hok, rY, hrY, hY⟩ := hW Wd hWd
+  obtain ⟨rY', h', hY'⟩ := cellsAt_swap hrY hY (hA Wd hWd) (hA' Wd hWd) (hm Wd hWd)
+  exact ⟨hok.fstep hfs (hwF Wd hWd) (hcells Wd hWd), rY', h', hY'⟩
+
+end FSem
+
 end Full
 end Zig

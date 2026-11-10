@@ -1641,14 +1641,7 @@ theorem Inv.lstep {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {p : LPh} {h
     · subst e; exact hs.mine
     · rw [hs.others u e]; exact VClock.le_refl _
   -- the epoch's part of the queue is in the part off the mutex, which the step keeps
-  have hwq : m'.waiters.filter (·.2 == C.Ep.key m) = m.waiters.filter (·.2 == C.Ep.key m) := by
-    have key : ∀ M : Mem, M.waiters.filter (·.2 == C.Ep.key m) =
-        (M.waiters.filter (·.2 != L.key m)).filter (·.2 == C.Ep.key m) := fun M => by
-      rw [Array.filter_filter, Array.filter_and_of_imp]
-      intro a _ hae
-      have : a.2 = C.Ep.key m := by simpa using hae
-      simpa [this] using hkne
-    rw [key m', key m, hs.waiters]
+  have hwq := hs.waitersAt hkne
   have hk : C.Ep.key m' = C.Ep.key m := hwE.key_of_addrs hs.addrs
   have hqd := qd_filter (C := C) hk hwq
   have hnq : C.qd m t = false := by

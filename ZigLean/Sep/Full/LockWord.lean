@@ -532,6 +532,18 @@ theorem _root_.Array.filter_and_of_imp {α : Type _} {xs : Array α} {p q : α �
   · simp
   · simp [h a (Array.mem_toList_iff.mp ha) hp]
 
+/-- **A lock step keeps the queue at another futex exactly** (from `Step.waiters`, its part off the
+word's key). -/
+theorem Step.waitersAt {t : ThreadId} {m m' : Mem} (hs : L.Step t m m') {k : FutexKey}
+    (hk : k ≠ L.key m) : m'.waiters.filter (·.2 == k) = m.waiters.filter (·.2 == k) := by
+  have key : ∀ M : Mem, M.waiters.filter (·.2 == k) =
+      (M.waiters.filter (·.2 != L.key m)).filter (·.2 == k) := fun M => by
+    rw [Array.filter_filter, Array.filter_and_of_imp]
+    intro a _ hae
+    have : a.2 = k := by simpa using hae
+    simpa [this] using hk
+  rw [key m', key m, hs.waiters]
+
 /-- The same memory, but `current`, `seen`, `nextMsg` and `woken`. -/
 theorem WInv.same {P : ThreadId → LPh} {m : Mem} (hi : L.WInv P m) (c : ThreadId)
     (s : Array (ThreadId × Nat × Nat)) (k : Nat) (w : Array ThreadId) :
@@ -743,6 +755,14 @@ theorem loc_fstep {m m' : Mem} {hF hR : Heap} (hs : FStepIn hF m m' hR)
     rw [hp.1]; exact hwF x (by omega) (by omega)
   · simp only [Bool.and_eq_true, beq_iff_eq] at hp
     rw [hp.1, hp.2]; exact hwF L.o (Nat.le_refl _) (by omega)
+
+/-- **The word's releases stay** over a step whose frame `hF` has the word (`loc_fstep`). -/
+theorem WInv.before_fstep {P : ThreadId → LPh} {m m' : Mem} {hF hR : Heap} (hi : L.WInv P m)
+    (hs : FStepIn hF m m' hR) (hwF : ∀ x, L.o ≤ x → x < L.o + 4 → hF (L.b, x) ≠ none) :
+    ∀ c, L.Before m c → L.Before m' c := by
+  rintro c ⟨i, l, hl, hle⟩
+  obtain ⟨i', hl'⟩ := (L.loc_fstep hs hwF (fun i l hl => (hi.loc.ok i l hl).1) l).mpr ⟨i, hl⟩
+  exact ⟨i', l, hl', hle⟩
 
 /-- A new access that may read the frame's shares `hR` (`FootprintEntry.ReadsIn`) does not hit the
 word, which is in the frame and not a share of it. -/

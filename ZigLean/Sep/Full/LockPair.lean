@@ -51,6 +51,33 @@ theorem cellsAt_congr {W : Zig.Loc → Prop} [DecidablePred W] {m m' : Mem}
   · rename_i hl; rw [h l hl]
   · rfl
 
+/-- **The cells at bytes `W` stay in a rest whose other part changes**: a rest `rsum rA rO` with
+the cells beside a resource without them, where `rA` has none of the bytes, has them in `rO`; so
+after a step that keeps the bytes the rest `rsum rA' rO`, with `rA'` again without them, has the
+new cells beside a resource without them. -/
+theorem cellsAt_swap {W : Zig.Loc → Prop} [DecidablePred W] {m m' : Mem} {rA rA' rO rZ : Res}
+    (h : rsum rA rO = rsum (cellsAt W m) rZ) (hZ : ∀ l, W l → rZ.heap l = none)
+    (hA : ∀ l, W l → rA.heap l = none) (hA' : ∀ l, W l → rA'.heap l = none)
+    (hm : ∀ l, W l → m'.heap l = m.heap l) :
+    ∃ rZ', rsum rA' rO = rsum (cellsAt W m') rZ' ∧ ∀ l, W l → rZ'.heap l = none := by
+  refine ⟨⟨fun l => if W l then none else (rsum rA' rO).heap l, (rsum rA' rO).know,
+    (rsum rA' rO).gh⟩, ?_, fun l hl => by simp only [hl, ↓reduceIte]⟩
+  -- the cells are in `rO`
+  have hO : ∀ l, W l → rO.heap l = (cellsAt W m).heap l := fun l hl => by
+    have e : (rA.heap l).or (rO.heap l) = ((cellsAt W m).heap l).or (rZ.heap l) :=
+      congrFun (congrArg Res.heap h) l
+    rwa [hA l hl, hZ l hl, Option.none_or, Option.or_none] at e
+  show Res.mk (rA'.heap ∪ rO.heap) (rA'.know.union rO.know) (rA'.gh.add rO.gh) =
+    Res.mk ((cellsAt W m').heap ∪ _) (Know.none.union _) (Ghost.unit.add _)
+  rw [Know.none_union, Ghost.unit_add]
+  congr 1
+  funext l
+  rw [FHeap.union_apply, FHeap.union_apply]
+  by_cases hl : W l
+  · simp only [hA' l hl, hO l hl, cellsAt_of hl, hm l hl, hl, ↓reduceIte, Option.none_or,
+      Option.or_none]
+  · simp only [cellsAt_none hl, hl, ↓reduceIte, Option.none_or, FHeap.union_apply]
+
 namespace LockWord
 
 /-- The words of the locks `L` and `K` do not overlap. -/

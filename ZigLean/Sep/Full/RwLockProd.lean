@@ -25,7 +25,9 @@ the views from `U₀` and the client's obligations stated at `U₀`.
   `Step`'s free resources with the common rest's (`Split.unique`): `L`'s side lies in the rest of
   the rest, which the op keeps, so the common rest after the step is the word's new cells, the
   new free resource and the same rest of the rest, and the rwlock's invariant holds there
-  (`Inv.unframe`). The client keeps `U₀` given these facts (`W.Moves` at the common rest).
+  (`Inv.unframe`). The client keeps `U₀` given these facts (`W.Moves` at the common rest); the
+  semaphore's primitive's rest there stays (`FRw.semSub_step`), when the protected resource is off
+  the condition's words.
 - **Either lock's own steps keep the rwlock's invariant at the common rest** (`FRw.Inv.otherStep`,
   for a client's `U₀` over `FLock.Fits.stable` in either view): the common rest owns no byte of the
   stepping lock's word, so `Inv.lockStep` applies.
@@ -301,6 +303,65 @@ theorem ep_key_ne (W : FRw γ X Y M L C S) (m : Mem) : C.Ep.key m ≠ M.key m :=
   show m.wordKey C.Ep.b C.Ep.o ≠ m.wordKey M.b M.o
   rw [hb]
   exact Mem.wordKey_ne_off (by omega) (by omega) (by omega) _ _
+
+/-- **The condition's words lie after the state word** (the layout: the state word's 8 bytes at
+`p`, the condition's state and epoch at `p + 20` and `p + 24`). -/
+theorem st_c_apart (W : FRw γ X Y M L C S) : ∀ Wd : Word 32 4, (Wd = C.S ∨ Wd = C.Ep) →
+    ∀ l, Wd.In l → ¬ W.st.In l := by
+  have h1 : (W.st.o : Int) = W.p.off := congrArg Ptr.off W.ptr_st
+  have h2 : (C.S.o : Int) = S.p.off + 12 := congrArg Ptr.off S.ptr_c
+  have h3 : S.p.off = W.p.off + 8 := congrArg Ptr.off W.ptr_s
+  have h4 := C.ep_o
+  rintro Wd (rfl | rfl) l hl <;> exact W.st.notIn_apart (.inr (.inl (by omega))) hl
+
+/-- **The rwlock's own steps keep the semaphore's primitive's rest** (`FSem.prim`'s `Sub` at the
+common rest, which a client's `U₀` keeps for `fitsS`; the `kstep` of `fitsM`): the step is a
+thread's out of the condition's and the semaphore's code (`Step`), an `FStepIn` in the frame of
+every byte but the state word's (`FSem.Sub.fstepOut`; the condition's words and the semaphore's
+mutex's word are apart from it: `st_c_apart`, `st_apart`), with the count kept
+(`cnt_posted`/`cnt_idle`). The common rest is the state word's cells, the free resource and the
+rest of the rest (`Moves`), and the free resource has no cell of the condition's words when no
+resource with `R` has one (`hRoff`, the client's: the protected resource is off the semaphore's
+words). -/
+theorem semSub_step {P : ThreadId → LPh} {t : ThreadId} {G G' : ThreadId → γ}
+    {rX rX' rX₀ rX₀' rY rY' : Res} {m m' : Mem} (hs : W.Step t G rX m G' rX' m')
+    (hsub : S.prim.Sub G rX₀ m) (hLw : L.WInv P m)
+    (hRoff : ∀ xs r l, W.R xs r → (C.S.In l ∨ C.Ep.In l) → r.heap l = none)
+    (he : rX₀ = rsum (W.st.cellsR m) rY) (he' : rX₀' = rsum (W.st.cellsR m') rY')
+    (hmv : W.Moves G m rY G' m' rY') : S.prim.Sub G' rX₀' m' := by
+  obtain ⟨-, -, -, -, -, ⟨hr, hfs⟩, hoth, -, -, -, hlph, -, hspe, hsp, hpost, -⟩ := hs
+  obtain ⟨-, rF, rF', rO, rfl, rfl, ⟨-, -, hFR⟩, ⟨-, -, hFR'⟩⟩ := hmv
+  subst he he'
+  have hG : G' = upd G t (G' t) := funext fun u => by
+    by_cases e : u = t
+    · rw [e, upd_self]
+    · rw [upd_ne _ _ e, hoth u e]
+  -- the frame: every byte of `m` but the state word's
+  obtain ⟨hF, hF0, hFm⟩ : ∃ hF : Heap, (∀ l, W.st.In l → hF l = none) ∧
+      ∀ l, ¬ W.st.In l → hF l = m.heap l :=
+    ⟨fun l => if W.st.In l then none else m.heap l, fun l hl => by simp only [hl, ↓reduceIte],
+      fun l hl => by simp only [hl, ↓reduceIte]⟩
+  have hap := st_c_apart W
+  have hpv : S.cnt (upd G t (G' t)) = S.cnt G := by
+    rw [← hG]
+    by_cases hp : RwPosted W.ph G
+    · rw [W.cnt_posted _ hp, W.cnt_posted _ (hpost.mpr hp)]
+    · rw [W.cnt_idle _ hp, W.cnt_idle _ fun h => hp (hpost.mp h)]
+  -- the free resources have no cell of the condition's words
+  have hoff : ∀ {rF : Res} {G : ThreadId → γ} {m : Mem}, W.FreeRes G m rF →
+      ∀ Wd, (Wd = C.S ∨ Wd = C.Ep) → ∀ l, Wd.In l →
+        (rsum (W.st.cellsR m) rF).heap l = none := fun hf Wd hW l hl =>
+    rsum_heap_none.mpr ⟨cellsAt_none (hap Wd hW l hl), hf.heap_none fun xs r h =>
+      hRoff xs r l h (by rcases hW with rfl | rfl <;> first | exact .inl hl | exact .inr hl)⟩
+  have hsub' : S.prim.Sub G (rsum (rsum (W.st.cellsR m) rF) rO) m := by
+    rw [rsum_assoc]; exact hsub
+  rw [hG, ← rsum_assoc]
+  exact FSem.Sub.fstepOut hsub' (hfs hF hF0) hLw
+    (fun Wd hW l hl => by rw [hFm l (hap Wd hW l hl)]; exact (hsub.1.2 Wd hW).1.cellIn hl)
+    (fun x h1 h2 => by
+      rw [hFm _ fun h => (st_apart W).1.not_in h ⟨rfl, h1, h2⟩]; exact hLw.blk.cell h1 h2)
+    (fun Wd hW l hl => hr.heap l (hap Wd hW l hl)) (hoff hFR) (hoff hFR') hsp (hspe.trans hsp)
+    hlph hpv
 
 /-- The semaphore's mutex protects the count and the pool, without partial shares. -/
 theorem lR_unshared (W : FRw γ X Y M L C S) (G : ThreadId → γ) : (L.R G).Unshared := by
