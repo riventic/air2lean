@@ -233,7 +233,7 @@ theorem Win1.step {G G' : ThreadId → γ} {rX rX' : Res} {m m' : Mem} {t : Thre
   have hI := hsub.1
   obtain ⟨W, rY, hW, rfl, rfl, hY, hI', ⟨p, q, h, ⟨hn, hq, hs, hEp, hsg⟩, hWI, rfl⟩ |
     ⟨r, -, hL, -, hfs, hcW, -, -, hL', rfl⟩⟩ := id hst
-  swap
+  rotate_left
   · -- the own part: the same places, the same writes
     have hfs' := hfs.cells
     have hcells := cells_own hsub hL hL' hcW
