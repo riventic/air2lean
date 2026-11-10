@@ -95,7 +95,7 @@ client shows its views stable over these relabels (`laway`, `lunaway`, `maway`, 
 semaphore runs at the outer mutex's `holdsAway` (`mnap`).
 
 **The outer mutex's code at the calm places** (maintainer decision 2026-11-09, seventh RwLock
-obstruction, part (a), option A; #NNN). The implementation runs the outer mutex's code only at the
+obstruction, part (a), option A; #744). The implementation runs the outer mutex's code only at the
 primitive's calm places (`prim.calm`: `out`, `wi` or `rd`, out of the semaphore's code): `lock`
 at `wi`, the slow reader's lock at `out`, the writer's unlock at `out` after its `and ~1`, the slow
 reader's unlock at `rd`. So the outer mutex's `ok` is `okM` at `L.away` and a calm place, and the
