@@ -772,7 +772,11 @@ uncancelable entry points of `std.Io.RwLock` for every protocol with the compone
 `FRw γ X Y M L C S` (`FRw.Fits`): the outer mutex `M` with the rwlock as its primitive
 (`M.Fits W.prim`) and the semaphore next to its mutex `L` (`S.Fits`), `M` and `L` one pair over
 the ghost value (`FLock.Pair`). Building both views for one protocol is the two-lock product
-(ledger `two-lock-product`), which the contract takes as its interface. A reader gets
+(ledger `two-lock-product`), which the contract takes as its interface. `M`'s view runs only at
+the rwlock's calm places (`out`, `wi`, `rd`, out of the semaphore's code), where an implementation
+calls `M` (maintainer decision 2026-11-09, #744): at the writer's `wr`, which `okM` cannot tell
+apart, a release step of `M` would break `FRw.Inv.wm`, and no protocol would meet the view
+(`tests/roadmap/sync-contracts/RwLockFitsCX.lean`). A reader gets
 `shareRes H q` (`sheap H q`) in its part at `rd q H`; the writer gets `r` exclusively, holding
 `M`. `FRw.Inv` keeps the state word's newest message at `RwState.encode` of the threads' places,
 the free resource in `M`'s rest (`R` with no reader, the share `1 - Σ q` of the readers' one heap

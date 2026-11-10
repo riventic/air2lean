@@ -27,9 +27,10 @@ the views from `U₀` and the client's obligations stated at `U₀`.
   new free resource and the same rest of the rest, and the rwlock's invariant holds there
   (`Inv.unframe`). The client keeps `U₀` given these facts (`W.Moves` at the common rest).
 - **The outer mutex's view** (`FRw.fitsM`): `FLock.Pair.fits` at `K := W.prim` with `ok` the
-  client's `okM` at `L`'s `away`. The product gives the queue premise (`away`), `M`'s `noGather`
-  (`M.R = emp`), `ok_calm` (the calm places are out of the semaphore's code), `sub` and `kstep`;
-  the client gives its own `U₀`'s obligations.
+  client's `okM` at `L`'s `away` and the rwlock's calm places (`FRw.Fits.m`). The product gives
+  the queue premise (`away`), `M`'s `noGather` (`M.R = emp`), `ok_calm` (the calm places are out
+  of the semaphore's code), `sub` and `kstep`; the client gives its own `U₀`'s obligations, its
+  stability only over the steps of `M`'s code at a calm place.
 - **The semaphore's view** (`FRw.fitsS`): `FLock.Pair.fits` of the swapped pair at
   `K := S.prim` with `ok` the client's `okS` at `M`'s `away`/`holdsAway`. Its steps keep the
   product by `FLock.Pair.U_semStep` (`ZigLean/Sep/Full/CondProd.lean`); `M`'s side owns no byte
@@ -171,8 +172,9 @@ theorem U_step {U₀ : (ThreadId → γ) → Res → Mem → Prop} {t : ThreadId
 variable {Tgt : Type} {P : Proto Tgt γ} {U₀ : (ThreadId → γ) → Res → Mem → Prop} {okM : γ → Prop}
 
 /-- **The outer mutex's view of the two-lock product** (module doc; `FRw.Fits.m`):
-`FLock.Pair.fits` at the rwlock's primitive, where the outer mutex's code runs at `L`'s `away`.
-The client gives its base `U₀`'s obligations at the common rest (`stable`, `atStop`, `tick`,
+`FLock.Pair.fits` at the rwlock's primitive, where the outer mutex's code runs at `L`'s `away` and
+the rwlock's calm places. The client gives its base `U₀`'s obligations at the common rest
+(`stable` at a calm place, `atStop`, `tick`,
 `kstep` with `U_step`'s facts, `holdLive`), that `U₀` keeps the rwlock's invariant (`hsub`), the
 laws of the rwlock's and the semaphore's places next to `M` (`lph` … `set_part`) and of `okM`. -/
 theorem fitsM
@@ -183,7 +185,8 @@ theorem fitsM
     (okM_set : ∀ g a, okM (W.set g a) ↔ okM g) (okM_m : ∀ g p h, okM (M.set g p h) ↔ okM g)
     (okM_part : ∀ g r, okM (M.setPart g r) ↔ okM g)
     (stable : ∀ G rL rH rX m m' t p h, okM (G t) → L.ph (G t) = .away →
-      (M.ph (G t)).next p = true → (M.ph (G t) = .out → W.ph (G t) = .out ∨ W.ph (G t) = .wi) →
+      W.prim.calm (W.place.ph (G t)) → (M.ph (G t)).next p = true →
+      (M.ph (G t) = .out → W.ph (G t) = .out ∨ W.ph (G t) = .wi) →
       M.Inv G (rsum (FLock.side L m rL rH) rX) m → L.Keeps G m rL rH rX → U₀ G rX m →
       M.Step t m m' → (M.ph (G t) = .holds → p ≠ .holds → M.Before m' (m.clocks[t]!)) →
       M.Transfer G (rsum (FLock.side L m rL rH) rX) m m' t p h →
@@ -205,13 +208,14 @@ theorem fitsM
       W.Moves G m rY G' m' rY' → U₀ G' rX₀' m')
     (holdLive : ∀ G rX m v, M.Inv G rX m → FLock.Pair.U L U₀ G rX m → M.ph (G v) = .holdsAway →
       P.Live v G m) :
-    M.Fits W.prim P (FLock.Pair.U L U₀) (fun g => okM g ∧ L.ph g = .away) :=
+    M.Fits W.prim P (FLock.Pair.U L U₀)
+      (fun g => okM g ∧ L.ph g = .away ∧ W.prim.calm (W.place.ph g)) :=
   W.pair.fits inv fin joins
-    (fun g p h => by rw [okM_m, W.pair.ph_ab])
-    (fun g r => by rw [okM_part, W.pair.setPart, L.ph_setPart])
-    (fun _ _ _ _ _ hok _ _ _ _ => .inl hok.2)
+    (fun g p h => by rw [okM_m, W.pair.ph_ab, ph_l])
+    (fun g r => by rw [okM_part, ph_part, W.pair.setPart, L.ph_setPart])
+    (fun _ _ _ _ _ hok _ _ _ _ => .inl hok.2.1)
     (fun G rL rH rX m m' t p h hok hn hen hi hk hu hs hb htr =>
-      stable G rL rH rX m m' t p h hok.1 hok.2 hn hen hi hk hu hs hb htr)
+      stable G rL rH rX m m' t p h hok.1 hok.2.1 hok.2.2 hn hen hi hk hu hs hb htr)
     atStop tick
     (fun _ _ _ _ _ _ rL h l => .inr (by rw [W.mR] at h; exact FAssn.Unshared.emp _ h l))
     (fun g h => Prod.ext (kfin g h).1 (kfin g h).2)
@@ -221,9 +225,12 @@ theorem fitsM
     (fun G t p r h => by rw [W.mR] at h ⊢; exact h)
     ph_l set_l ph_part set_part (fun i => nomatch i) (fun i => nomatch i)
     (fun g p q hp hq => by
-      show (okM (W.set (S.place.set g p.2) p.1) ∧ L.ph (W.set (S.place.set g p.2) p.1) = .away) ↔
-        (okM (W.set (S.place.set g q.2) q.1) ∧ L.ph (W.set (S.place.set g q.2) q.1) = .away)
-      rw [hp.2, hq.2, okM_set, okM_set, W.lph, W.lph])
+      show (okM (W.set (S.place.set g p.2) p.1) ∧ L.ph (W.set (S.place.set g p.2) p.1) = .away ∧
+          W.prim.calm (W.place.ph (W.place.set g p))) ↔
+        (okM (W.set (S.place.set g q.2) q.1) ∧ L.ph (W.set (S.place.set g q.2) q.1) = .away ∧
+          W.prim.calm (W.place.ph (W.place.set g q)))
+      rw [W.place.ph_set, W.place.ph_set, hp.2, hq.2, okM_set, okM_set, W.lph, W.lph]
+      exact ⟨fun h => ⟨h.1, h.2.1, hq⟩, fun h => ⟨h.1, h.2.1, hp⟩⟩)
     (fun t G rX m G' rX' m' hs hU => U_step hs hU hsub fun sB rL rH rX₀ rX₀' rY rY' =>
       kstep t G G' rX rX' m m' sB rL rH rX₀ rX₀' rY rY' hs)
     holdLive
@@ -374,7 +381,8 @@ and it holds no bytes, so it stays kept (`FLock.Pair.U_relabel`); the client kee
 and gives that only the writer at `ww` is at the semaphore's `wt` (`wtw`) and the writer's
 liveness (`wlive`). -/
 theorem Fits.ofProduct {okS : γ → Prop}
-    (hm : M.Fits W.prim P (FLock.Pair.U L U₀) (fun g => okM g ∧ L.ph g = .away))
+    (hm : M.Fits W.prim P (FLock.Pair.U L U₀)
+      (fun g => okM g ∧ L.ph g = .away ∧ W.prim.calm (W.place.ph g)))
     (hs : S.Fits P (FLock.Pair.U M U₀) (fun g => okS g ∧ (M.ph g = .away ∨ M.ph g = .holdsAway)))
     (okM_set : ∀ g a, okM (W.set g a) ↔ okM g) (okS_set : ∀ g a, okS (W.set g a) ↔ okS g)
     (okS_m : ∀ g q h, okS (M.set g q h) ↔ okS g) (okS_part : ∀ g r, okS (M.setPart g r) ↔ okS g)
