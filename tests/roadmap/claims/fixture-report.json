@@ -12575,7 +12575,7 @@
      }
     ],
     "head": {
-     "fingerprint": "a4175cea55c7d4b506856827eb6e0167",
+     "fingerprint": "09bab934c338192ce216f423f057d3dc",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Conc",
      "name": "Zig.Full.CTriple"
@@ -12616,6 +12616,7 @@
    ],
    "runtime_modules": [
     "ZigLean.Basic",
+    "ZigLean.Conc.Base.Heap",
     "ZigLean.Conc.Basic",
     "ZigLean.Conc.Clock",
     "ZigLean.Env.Host",
@@ -16296,7 +16297,7 @@
      }
     ],
     "head": {
-     "fingerprint": "4a3115777497e93b057a77360974daf8",
+     "fingerprint": "dbf536d63058251377bdd05d87bb3f62",
      "kind": "definition",
      "module": "ZigLean.Sep.Full.Thread",
      "name": "Zig.Full.FTTriple"
@@ -16337,6 +16338,7 @@
    ],
    "runtime_modules": [
     "ZigLean.Basic",
+    "ZigLean.Conc.Base.Heap",
     "ZigLean.Conc.Clock",
     "ZigLean.Env.Host",
     "ZigLean.Mem.Basic",
@@ -16689,6 +16691,7 @@
    ],
    "runtime_modules": [
     "ZigLean.Basic",
+    "ZigLean.Conc.Base.Heap",
     "ZigLean.Conc.Clock",
     "ZigLean.Env.Host",
     "ZigLean.Mem.Basic",
