@@ -182,9 +182,8 @@ theorem Inv.otherStep {A : FLock γ} {G G' : ThreadId → γ} {sB rX : Res} {m m
     (hph : ∀ u, W.ph (G' u) = W.ph (G u)) (hx : ∀ u, W.x (G' u) = W.x (G u))
     (hg : ∀ u, M.ph (G' u) = .gone ↔ M.ph (G u) = .gone)
     (hwm : ∀ u, (W.ph (G u)).isW = true → (M.ph (G' u)).held = true) : W.Inv G' rX m' := by
-  obtain ⟨blk, hb, -⟩ := hA.w.blk
-  have hbl : A.b < m.blocks.size := Classical.byContradiction fun hn => by
-    rw [Array.getElem?_eq_none (Nat.not_lt.mp hn)] at hb; cases hb
+  have hbl : A.b < m.blocks.size := by
+    obtain ⟨blk, hb, -⟩ := hA.w.blk; exact (Array.getElem?_eq_some_iff.mp hb).1
   refine hI.lockStep hs hap (fun l hl => ?_) hbl hph hx hg hwm
   have hX : rX.heap l = none := (rsum_heap_none.mp (LockWord.off_erase.mp hA.xoff l hl)).2
   obtain ⟨rL, hoA, -⟩ := hA.rest
@@ -197,6 +196,17 @@ theorem Inv.otherStep {A : FLock γ} {G G' : ThreadId → γ} {sB rX : Res} {m m
       (SCell.pos_add_iff.mpr (.inr hp))))))
   exact Classical.byContradiction fun hn =>
     (Res.owned_ne.mp hn).elim (fun h => h hX) hns
+
+/-- **The state word lies before both mutexes** (the layout: the word's 8 bytes at `p`, the
+semaphore's mutex at `p + 16`, the outer mutex at `p + 32`): `Inv.otherStep`'s and `fitsM`'s
+apartness. -/
+theorem st_apart (W : FRw γ X Y M L C S) :
+    W.st.ApartL L.toLockWord ∧ W.st.ApartL M.toLockWord := by
+  have h1 : (W.st.o : Int) = W.p.off := congrArg Ptr.off W.ptr_st
+  have h2 : S.p.off = W.p.off + 8 := congrArg Ptr.off W.ptr_s
+  have h3 : (M.o : Int) = W.p.off + 32 := congrArg Ptr.off W.ptr_m
+  have h4 : (L.o : Int) = S.p.off + 8 := congrArg Ptr.off S.ptr_l
+  exact ⟨Or.inr (Or.inr (by omega)), Or.inr (Or.inr (by omega))⟩
 
 /-! ## The outer mutex's view -/
 

@@ -153,8 +153,8 @@ Stated once here; an instance walks its code with them:
   unique. `Inv.frame`: the invariant next to a resource apart from its rest (either lock's side in
   the two-lock product, `FLock.Pair.U`); `Inv.lockStep` (with `Owns.lockStep`): the invariant
   over a step of another lock's code (`LockWord.Step`); `Split.frame`/`unframe`,
-  `Inv.split`/`unframe`/
-  `owns_split` and `lR_eq` (the semaphore's mutex's resource over a step that keeps `RwPosted`)
+  `Inv.split`/`unframe`/`owns_split` and `lR_eq` (the semaphore's mutex's resource over a step
+  that keeps `RwPosted`)
   for the product's views (`ZigLean/Sep/Full/RwLockProd.lean`).
 - **Ownership through the word** (`Owns`): `Owns.step` (a release write at the word), `Owns.mono`
   (fewer bytes), `Owns.ofThread` (a resource `t` gives to the rest), `Owns.toThread` (the free
