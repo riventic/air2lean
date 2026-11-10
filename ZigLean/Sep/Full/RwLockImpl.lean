@@ -1200,6 +1200,17 @@ theorem FreeRes.bytes {G : ThreadId → γ} {m : Mem} {rF : Res} (hf : W.FreeRes
   exact absurd (Res.excl_shared_disj h)
     (shareRes_shared hf0 hf1 ((shareRes_owned hf0).mp (Res.owned_of_excl h)))
 
+/-- **The free resource has no cell at a byte that no resource with `R` has** (`FreeRes`: `rnil`,
+a resource with `R`, or a share, which has no cell). -/
+theorem FreeRes.heap_none {G : ThreadId → γ} {m : Mem} {rF : Res} (hf : W.FreeRes G m rF)
+    {l : Zig.Loc} (hR : ∀ xs r, W.R xs r → r.heap l = none) : rF.heap l = none := by
+  by_cases hb : W.Busy G
+  · rw [hf.1 hb]; rfl
+  by_cases h0 : W.nrd G m = 0
+  · exact hR _ _ (hf.2.1 hb h0)
+  obtain ⟨H, f, -, -, -, rfl, -⟩ := hf.2.2 hb h0
+  rfl
+
 /-- **Ownership over a step on a thread's own part** (`Owns`; `FStepIn`, the step relation of
 `FTTriple`, in a frame `hF` with `r`'s bytes, reading only the frame's shares `hR`): an old access
 or a narrowing of one keeps its clause (the clocks grow, the word's history stays; a narrowed
@@ -2067,6 +2078,96 @@ theorem Inv.subR {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
     rw [rnil_rsum] at hI'
     exact ⟨hI', iff_of_false (not_posted_rp hGt) hnp0, shareRes H f, rnil, rO, rfl,
       (rnil_rsum _).symm, hS0, hS'⟩
+
+/-! ## The invariant over the semaphore's take and give
+
+The writer's take (`ww → wr`) and the last reader's give (`rp → out`) at the semaphore change no
+memory the rwlock's invariant reads and leave the resource away from its rest (`Busy`) before and
+after, so the free resource stays `rnil` (`FreeRes`): only the places move (`FRw.Fits`' `utake`
+and `upost`, at the client's base rest). -/
+
+/-- **A relabel of the places while the resource is away** (`Busy` before and after): each thread
+keeps whether it is a reader, a pending writer and the writing bit's holder, no thread enters the
+rwlock's code, the outer mutex's places stay, a writer at `wr` after it has no reader, and no
+thread is at `rp` after it (the free resource is `rnil`, so the invariant reads no share and no
+client part). -/
+theorem Inv.relabelBusy {G G' : ThreadId → γ} {rX : Res} {m : Mem} (hI : W.Inv G rX m)
+    (hrd : ∀ u, (W.ph (G' u)).isRd = (W.ph (G u)).isRd)
+    (hwi : ∀ u, (W.ph (G' u)).isWi = (W.ph (G u)).isWi)
+    (hw : ∀ u, (W.ph (G' u)).isW = (W.ph (G u)).isW)
+    (hex : ∀ u, W.ph (G' u) ≠ .out → W.ph (G u) ≠ .out) (hm : ∀ u, M.ph (G' u) = M.ph (G u))
+    (hwr : ∀ u, W.ph (G' u) = .wr → W.nrd G m = 0) (hnrp : ∀ u, (W.ph (G' u)).isRp = false)
+    (hb : W.Busy G) (hb' : W.Busy G') : W.Inv G' rX m := by
+  have hpl : M.pl G' = M.pl G := funext hm
+  have hnrd : W.nrd G' m = W.nrd G m := by simp only [nrd, hrd]
+  have hnwi : W.nwi G' m = W.nwi G m := by simp only [nwi, hwi]
+  have hwrt : W.writing G' m = W.writing G m := by simp only [writing, hw]
+  obtain ⟨rF, rO, he, hoff, hd, hfr₀, how⟩ := hI.rest
+  obtain rfl : rF = rnil := hfr₀.1 hb
+  exact {
+    ok := by simp only [hm]; exact hI.ok
+    ex := fun u h => hI.ex u (hex u h)
+    room := by rw [hnrd, hnwi]; exact hI.room
+    word := by rw [hnrd, hnwi, hwrt]; exact hI.word
+    msgs := hI.msgs
+    one := fun u v hu hv => hI.one u v (by rwa [← hw u]) (by rwa [← hw v])
+    wm := fun u hu => by rw [hm u]; exact hI.wm u (by rwa [← hw u])
+    wr := fun u hu => by rw [hnrd]; exact hwr u hu
+    rp := fun u hu => by rw [hnrp u] at hu; cases hu
+    rpR := fun u r hu => by have := hnrp u; rw [hu] at this; cases this
+    rest := ⟨rnil, rO, he, hoff, hd,
+      ⟨fun _ => rfl, fun h => absurd hb' h, fun h => absurd hb' h⟩,
+      by simpa only [Owns, hpl, hrd] using how⟩ }
+
+/-- **The writer's take at the semaphore** (`FRw.Fits.utake`, `ww → wr` while the resource is
+posted): `t` moves from `g` at `ww` to `g'` at `wr` with the same outer-mutex place (its part
+gains the posted resource, which the invariant does not read). -/
+theorem Inv.take {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {g g' : γ}
+    (hI : W.Inv (upd G t g) rX m) (hpost : RwPosted W.ph (upd G t g)) (hww : W.ph g = .ww)
+    (hwr : W.ph g' = .wr) (hM : M.ph g' = M.ph g) : W.Inv (upd G t g') rX m := by
+  -- a property of the places that `ww` and `wr` share holds after the move as before it
+  have hph : ∀ {α : Type} (p : RwPh → α), p .wr = p .ww →
+      ∀ u, p (W.ph (upd G t g' u)) = p (W.ph (upd G t g u)) :=
+    fun p h => congrFun (upd_map (fun g => p (W.ph g)) G t (by rw [hwr, hww]; exact h))
+  refine hI.relabelBusy (hph RwPh.isRd rfl) (hph RwPh.isWi rfl) (hph RwPh.isW rfl)
+    (fun u h => ?_) (congrFun (upd_map M.ph G t hM)) (fun _ _ => nrd_noRd hpost.2.1)
+    (fun u => by rw [hph RwPh.isRp rfl u]; exact hpost.2.2 u) (.inr (.inr hpost))
+    (.inl ⟨t, by rw [upd_self]; exact hwr⟩)
+  by_cases e : u = t
+  · subst e; rw [upd_self, hww]; nofun
+  · rwa [upd_ne _ _ e] at h ⊢
+
+/-- **The last reader's give at the semaphore** (`FRw.Fits.upost`, `rp → out`): `t` moves from
+`g` at `rp` to `g'` at `out` with the same outer-mutex place (its part has given
+the whole resource to the pool, which the invariant does not read). The resource is then posted to
+the writer at `ww` (`Inv.rp`: no reader is left). -/
+theorem Inv.post {G : ThreadId → γ} {rX : Res} {m : Mem} {t : ThreadId} {g g' : γ}
+    (hI : W.Inv (upd G t g) rX m) (hrp : (W.ph g).isRp = true) (hout : W.ph g' = .out)
+    (hM : M.ph g' = M.ph g) : W.Inv (upd G t g') rX m ∧ RwPosted W.ph (upd G t g') := by
+  have hrpt : (W.ph (upd G t g t)).isRp = true := by rw [upd_self]; exact hrp
+  obtain ⟨h0, ⟨w, hw⟩, honly⟩ := hI.rp t hrpt
+  obtain ⟨r, hr⟩ : ∃ r, W.ph g = .rp r := by
+    cases e : W.ph g <;> rw [e] at hrp <;> first | exact ⟨_, rfl⟩ | cases hrp
+  have hph : ∀ {α : Type} (p : RwPh → α), p .out = p (.rp r) →
+      ∀ u, p (W.ph (upd G t g' u)) = p (W.ph (upd G t g u)) :=
+    fun p h => congrFun (upd_map (fun g => p (W.ph g)) G t (by rw [hout, hr]; exact h))
+  have hwt : w ≠ t := fun e => by subst e; rw [upd_self, hr] at hw; cases hw
+  have hrd := hph RwPh.isRd rfl
+  have hnrp : ∀ u, (W.ph (upd G t g' u)).isRp = false := fun u => by
+    by_cases e : u = t
+    · subst e; rw [upd_self, hout]; rfl
+    · rw [upd_ne _ _ e]
+      cases h : (W.ph (G u)).isRp
+      · rfl
+      · exact absurd (honly u (by rw [upd_ne _ _ e]; exact h)) e
+  have hpost : RwPosted W.ph (upd G t g') :=
+    ⟨⟨w, by rwa [upd_ne _ _ hwt] at hw ⊢⟩, fun u => by rw [hrd u]; exact hI.noRd h0 u, hnrp⟩
+  refine ⟨hI.relabelBusy hrd (hph RwPh.isWi rfl) (hph RwPh.isW rfl)
+    (fun u h => ?_) (congrFun (upd_map M.ph G t hM)) (fun _ _ => h0) hnrp
+    (.inr (.inl ⟨t, hrpt⟩)) (.inr (.inr hpost)), hpost⟩
+  by_cases e : u = t
+  · subst e; rw [upd_self, hr]; nofun
+  · rwa [upd_ne _ _ e] at h ⊢
 
 /-! ## The protocol's facts for every implementation -/
 

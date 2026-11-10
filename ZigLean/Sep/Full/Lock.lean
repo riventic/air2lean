@@ -1902,16 +1902,12 @@ theorem HB.le {G : ThreadId → γ} {m : Mem} {c : VClock} (hw : L.WInv (L.pl G)
 /-- The word's releases stay over a step that has the lock's word in its frame. -/
 theorem Inv.before_fstep {G : ThreadId → γ} {rX : Res} {m m' : Mem} (hL : L.Inv G rX m)
     (hfs : FStepIn (rsum (L.wordR m) rX).heap.erase m m') :
-    ∀ c, L.Before m c → L.Before m' c := by
-  rintro c ⟨i, l, hl, hle⟩
-  obtain ⟨i', hl'⟩ := (LockWord.loc_fstep (L := L.toLockWord) hfs
-    (fun x h1 h2 => by
-      have := LockWord.wordR_some hL.w.blk (L := L.toLockWord) (l := (L.b, x)) ⟨rfl, h1, h2⟩
-      simp only [FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
-        Option.or_eq_none_iff, not_and]
-      intro h; exact absurd h this)
-    (fun i l hl => (hL.w.loc.ok i l hl).1) l).mpr ⟨i, hl⟩
-  exact ⟨i', l, hl', hle⟩
+    ∀ c, L.Before m c → L.Before m' c :=
+  hL.w.before_fstep hfs fun x h1 h2 => by
+    have := LockWord.wordR_some hL.w.blk (L := L.toLockWord) (l := (L.b, x)) ⟨rfl, h1, h2⟩
+    simp only [FHeap.erase, FHeap.union_apply, ne_eq, Option.map_eq_none_iff,
+      Option.or_eq_none_iff, not_and]
+    intro h; exact absurd h this
 
 /-- **`HB` stays** over a step that keeps the holders (or releases with the release fact), grows
 the clocks, keeps the word's newest release and the threads that have not ended. -/
