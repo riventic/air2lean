@@ -486,7 +486,7 @@ theorem Win1.step {G G' : ThreadId → γ} {rX rX' : Res} {m m' : Mem} {t : Thre
       rw [hv] at hn
       rcases hn.to_inc with ⟨sh, c, hc⟩ | hc
       · -- `t`'s post, with at most one registered waiter
-        exact (post_facts hI hI' hG hc (hct.trans hv) (by rw [hct]; exact hsg)).2.1
+        exact (post_facts hI hI' hG hc (hct.trans hv) (by rw [hct]; exact hsg)).2
           (wOf_le_one hI' hone)
       · exact Sated.keep hI hI' (hkeep fun _ _ e' => by rw [hc] at e'; cases e') hSh
           (hw.incS v q' n h' hc)
