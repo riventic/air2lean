@@ -82,7 +82,7 @@ theorem Win1.keep {G G' : ThreadId → γ} {m m' : Mem} (hw : C.Win1 L G m)
     (hc : ∀ u, C.ph (G' u) = C.ph (G u)) (hS : C.S.hist m' = C.S.hist m)
     (hE : C.Ep.hist m' = C.Ep.hist m) (ehb : L.WordHB C.Ep G' m') : C.Win1 L G' m' := by
   have hsat : C.Sated m' ↔ C.Sated m := Sated.congr hS
-  exact ⟨fun u v hu hv => by rw [hc] at hu hv; exact hw.one u v hu hv, ehb,
+  exact ⟨fun u v hu hv => by rw [hc u] at hu; rw [hc v] at hv; exact hw.one u v hu hv, ehb,
     fun u i e h => by rw [hc u] at h; rw [hE]; exact hw.f0 u i e h,
     fun u v hr hc' => by rw [hc u] at hr; rw [hc v] at hc'; exact hw.rc u v hr hc',
     fun u i jr sn e h => by rw [hc u] at h; rw [hE]; exact hw.f2 u i jr sn e h,
@@ -103,9 +103,9 @@ theorem Win1.enter {G G' : ThreadId → γ} {m : Mem} {t : ThreadId} (hw : C.Win
     · subst e; exact absurd ht h
     · exact hG u e
   have hreg : ∀ u, (C.ph (G' u)).isReg = true → False := fun u h => by
-    have h' := h
-    rw [hne u fun e => by rw [e] at h; cases h, hnr u] at h'
-    cases h'
+    have hu : C.ph (G' u) ≠ .en := fun e => by rw [e] at h; cases h
+    rw [hne u hu, hnr u] at h
+    cases h
   exact ⟨fun u _ hu => (hreg u hu).elim, ehb,
     fun u i e h => by rw [hne u (by rw [h]; nofun)] at h; exact hw.f0 u i e h,
     fun u _ hr _ => hreg u hr,
@@ -207,16 +207,15 @@ theorem cells_own {G G' : ThreadId → γ} {rY : Res} {m m' : Mem} {W : Word 32 
   by_cases hlW : W.In l
   · exact hcW l hlW
   have hrl : (rsum (W.cellsR m') rY).heap l = (rsum (W.cellsR m) rY).heap l := by
-    show ((W.cellsR m').heap ∪ rY.heap) l = ((W.cellsR m).heap ∪ rY.heap) l
+    show ((cellsAt W.In m').heap ∪ rY.heap) l = ((cellsAt W.In m).heap ∪ rY.heap) l
     rw [FHeap.union_apply, FHeap.union_apply, cellsAt_none hlW, cellsAt_none hlW]
   obtain ⟨hv, rV, hrV, -⟩ := hsub.2 V hV
   cases e : (rsum (W.cellsR m) rY).heap l with
   | none =>
-    refine absurd ?_ (cellsAt_some hl (hv.cellIn hl))
-    have e' := e
-    rw [hrV] at e'
-    show (V.cellsR m).heap l = none
-    exact (Option.or_eq_none_iff.mp (by rw [← FHeap.union_apply]; exact e')).1
+    rw [hrV] at e
+    change ((cellsAt V.In m).heap ∪ rV.heap) l = none at e
+    rw [FHeap.union_apply, Option.or_eq_none_iff] at e
+    exact absurd e.1 (cellsAt_some hl (hv.cellIn hl))
   | some fc => rw [hL'.restCell (hrl.trans e), hL.restCell e]
 
 /-- **`Win1` over a step of the condition's code** (`FLock.Fits.kstep` of `FCond.prim`; module
@@ -233,23 +232,22 @@ theorem Win1.step {G G' : ThreadId → γ} {rX rX' : Res} {m m' : Mem} {t : Thre
     (hst : (C.prim L).Step t G rX m G' rX' m') : C.Win1 L G' m' := by
   have hI := hsub.1
   obtain ⟨W, rY, hW, rfl, rfl, hY, hI', ⟨p, q, h, ⟨hn, hq, hs, hEp, hsg⟩, hWI, rfl⟩ |
-    ⟨r, -, hL, -, hfs, hcW, -, hh, hL', rfl⟩⟩ := id hst
-  case inr =>
-    -- the own part: the same places, the same writes
+    ⟨r, -, hL, -, hfs, hcW, -, -, hL', rfl⟩⟩ := id hst
+  swap
+  · -- the own part: the same places, the same writes
     have hfs' := hfs.cells
     have hcells := cells_own hsub hL hL' hcW
-    have hsame : ∀ u, upd G t (L.setPart (G t) r) u = G u ∨
-        (u = t ∧ upd G t (L.setPart (G t) r) u = L.setPart (G t) r) := fun u => by
-      by_cases e : u = t
-      · subst e; exact .inr ⟨rfl, upd_self⟩
-      · exact .inl (upd_ne _ _ e)
     have hlp : ∀ u, L.ph (upd G t (L.setPart (G t) r) u) = L.ph (G u) := fun u => by
-      rcases hsame u with e | ⟨rfl, e⟩ <;> rw [e]; rw [L.ph_setPart]
-    refine hw.keep (fun u => by rcases hsame u with e | ⟨rfl, e⟩ <;> rw [e]; rw [hphp])
-      (hist_hold hsub hfs' hcells (.inl rfl)) (hist_hold hsub hfs' hcells (.inr rfl))
+      by_cases e : u = t
+      · subst e; rw [upd_self, L.ph_setPart]
+      · rw [upd_ne _ _ e]
+    have hE := hist_hold hsub hfs' hcells (.inr rfl)
+    refine hw.keep (fun u => ?_) (hist_hold hsub hfs' hcells (.inl rfl)) hE
       (hw.ehb.step (fun _ hc => hc.mono (fun u hu => .inl (by rw [hlp]; exact hu)) hfs'.clock
-        (hL.before_fstep hfs') hfs'.threads fun u hg => by rwa [hlp] at hg)
-        (.inl (hist_hold hsub hfs' hcells (.inr rfl))))
+        (hL.before_fstep hfs') hfs'.threads fun u hg => by rwa [hlp] at hg) (.inl hE))
+    by_cases e : u = t
+    · subst e; rw [upd_self, hphp]
+    · rw [upd_ne _ _ e]
   -- a step at the word `W`
   obtain ⟨G', hG'⟩ : ∃ G', G' = upd G t (L.set (C.set (G t) p) q h) := ⟨_, rfl⟩
   rw [← hG'] at hI' hst ⊢
@@ -279,7 +277,7 @@ theorem Win1.step {G G' : ThreadId → γ} {rX rX' : Res} {m m' : Mem} {t : Thre
   -- the state's and the epoch's writes
   have hSh : C.S.hist m' = C.S.hist m ∨ ∃ x, C.S.hist m' = (C.S.hist m).push x := by
     rcases (hs.word_rmw (hsub.2 C.S (.inl rfl)).1 (words_apart (.inl rfl) hW)
-      (words_apart (.inl rfl) (.inr rfl))).2 with e | ⟨-, -, -, e⟩
+      (words_apart (.inl rfl) (.inr rfl))).2 with e | ⟨-, _, _, e⟩
     · exact .inl e
     · exact .inr ⟨_, e⟩
   have hEh := (hs.word_rmw (hsub.2 C.Ep (.inr rfl)).1 (words_apart (.inr rfl) hW)
@@ -428,7 +426,7 @@ theorem Win1.step {G G' : ThreadId → γ} {rX rX' : Res} {m m' : Mem} {t : Thre
         rcases hn.to_inc with ⟨sh, c, hc⟩ | hc
         · -- `t`'s post: the epoch has at most one write after `u`'s saved one, else the state
           -- write before it is sated (`f4`), and no post follows a sated write
-          have hpf := post_facts hI hI' hG hc (by rw [hct, hv]) (by rw [hct]; exact hsg)
+          have hpf := post_facts hI hI' hG hc (hct.trans hv) (by rw [hct]; exact hsg)
           have hE : C.Ep.hist m' = C.Ep.hist m := by
             rcases hEw with e' | ⟨⟨_, _, _, e'⟩, -⟩
             · exact e'
@@ -464,8 +462,11 @@ theorem Win1.step {G G' : ThreadId → γ} {rX rX' : Res} {m m' : Mem} {t : Thre
           · rw [hc] at e'; cases e'
         rw [hE] at hsz
         have h2 := hw.f2 u i₀ jr₀ sn₀ e₀ hc
-        exact Sated.keep hI hI' (hnr1 u (by omega) (by rw [hc]; rfl) |>.elim id id) hSh
-          (hw.f4 u i₀ jr₀ sn₀ e₀ hc (by omega))
+        have hnr' : ∀ u, (C.ph (G' u)).isReg = true → (C.ph (G u)).isReg = true := by
+          rcases hnr with hnr | ⟨_, _, e'⟩
+          · exact hnr
+          · rw [hc] at e'; cases e'
+        exact Sated.keep hI hI' hnr' hSh (hw.f4 u i₀ jr₀ sn₀ e₀ hc (by omega))
       | _ => rw [hc] at hn; cases hn
     · rw [hcu u et] at h'
       have hnr' := hnr1 u et (by rw [h']; rfl)
@@ -479,7 +480,7 @@ theorem Win1.step {G G' : ThreadId → γ} {rX rX' : Res} {m m' : Mem} {t : Thre
       rw [hv] at hn
       rcases hn.to_inc with ⟨sh, c, hc⟩ | hc
       · -- `t`'s post, with at most one registered waiter
-        exact (post_facts hI hI' hG hc (by rw [hct, hv]) (by rw [hct]; exact hsg)).2.1
+        exact (post_facts hI hI' hG hc (hct.trans hv) (by rw [hct]; exact hsg)).2.1
           (wOf_le_one hI' hone)
       · have hnr' : ∀ u, (C.ph (G' u)).isReg = true → (C.ph (G u)).isReg = true := by
           rcases hnr with hnr | ⟨_, _, e'⟩
