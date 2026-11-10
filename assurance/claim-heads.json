@@ -25,7 +25,7 @@
     },
     "Zig.Full.FTTriple": {
       "module": "ZigLean.Sep.Full.Thread",
-      "fingerprint": "4a3115777497e93b057a77360974daf8",
+      "fingerprint": "dbf536d63058251377bdd05d87bb3f62",
       "claims": ["no-panic", "correct-if-returned"],
       "program": 2,
       "state": []
