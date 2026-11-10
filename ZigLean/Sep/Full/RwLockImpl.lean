@@ -1194,7 +1194,7 @@ theorem FreeRes.bytes {G : ThreadId → γ} {m : Mem} {rF : Res} (hf : W.FreeRes
     ⟨u, q, H, by rw [hu', hH], (shareRes_owned hf0).mp (Res.owned_of_shared h)⟩⟩
   obtain ⟨h1, h2, -⟩ := Res.shared_ne.mp
     (shareRes_shared hf0 hf1 ((shareRes_owned hf0).mp (Res.owned_of_excl h)))
-  exact (Res.excl_ne.mp h).elim (· h1) h2
+  exact ((Res.excl_ne.mp h).elim (· h1) h2).elim
 
 /-- **Ownership over a step on a thread's own part** (`Owns`; `FStepIn`, the step relation of
 `FTTriple`, in a frame `hF` with `r`'s bytes, reading only the frame's shares `hR`): an old access
