@@ -562,6 +562,11 @@ variable {W}
 theorem nrd_out {G : ThreadId → γ} {m : Mem} (h : ∀ u, W.ph (G u) = .out) : W.nrd G m = 0 :=
   tsum_eq_zero fun u _ => by simp [h u, RwPh.isRd]
 
+/-- With no thread at `rd` there is no reader. -/
+theorem nrd_noRd {G : ThreadId → γ} {m : Mem} (h : ∀ u, (W.ph (G u)).isRd = false) :
+    W.nrd G m = 0 :=
+  tsum_eq_zero fun u _ => by simp [h u]
+
 /-- With every thread out of the rwlock's code there is no pending writer. -/
 theorem nwi_out {G : ThreadId → γ} {m : Mem} (h : ∀ u, W.ph (G u) = .out) : W.nwi G m = 0 :=
   tsum_eq_zero fun u _ => by simp [h u, RwPh.isWi]
@@ -648,7 +653,7 @@ theorem not_posted_rp {G : ThreadId → γ} {u : ThreadId} (h : (W.ph (G u)).isR
     ¬ RwPosted W.ph G := fun ⟨_, _, hp⟩ => by rw [hp u] at h; cases h
 
 theorem not_posted_nrd {G : ThreadId → γ} {m : Mem} (h : W.nrd G m ≠ 0) : ¬ RwPosted W.ph G :=
-  fun ⟨_, hall, _⟩ => h (tsum_eq_zero fun u _ => by simp [hall u])
+  fun ⟨_, hall, _⟩ => h (nrd_noRd hall)
 
 theorem not_posted_noW {G : ThreadId → γ} (h : ∀ u, (W.ph (G u)).isW = false) :
     ¬ RwPosted W.ph G := fun ⟨⟨u, hu⟩, _⟩ => by have := h u; rw [hu] at this; cases this
@@ -1183,7 +1188,7 @@ theorem FreeRes.bytes {G : ThreadId → γ} {m : Mem} {rF : Res} (hf : W.FreeRes
   obtain ⟨H, f, -, hf0, hs, rfl, hq⟩ := hf.2.2 hb h0
   -- a reader is in, with a positive share of `H`, so the free share is below the whole
   obtain ⟨u, hu⟩ : ∃ u, (W.ph (G u)).isRd = true := Classical.byContradiction fun hn =>
-    h0 (tsum_eq_zero fun v _ => by simp [Bool.eq_false_iff.mpr fun h => hn ⟨v, h⟩])
+    h0 (nrd_noRd fun v => Bool.eq_false_iff.mpr fun h => hn ⟨v, h⟩)
   obtain ⟨q, H', hu'⟩ : ∃ q H', W.ph (G u) = .rd q H' := by
     cases e : W.ph (G u) <;> rw [e] at hu <;> first | exact ⟨_, _, rfl⟩ | cases hu
   obtain ⟨hH, hq0⟩ := hq u q H' hu'
@@ -1192,9 +1197,8 @@ theorem FreeRes.bytes {G : ThreadId → γ} {m : Mem} {rF : Res} (hf : W.FreeRes
     grind
   refine ⟨fun l h => ?_, fun l h =>
     ⟨u, q, H, by rw [hu', hH], (shareRes_owned hf0).mp (Res.owned_of_shared h)⟩⟩
-  obtain ⟨h1, h2, -⟩ := Res.shared_ne.mp
+  exact absurd (Res.excl_shared_disj h)
     (shareRes_shared hf0 hf1 ((shareRes_owned hf0).mp (Res.owned_of_excl h)))
-  exact ((Res.excl_ne.mp h).elim (· h1) h2).elim
 
 /-- **Ownership over a step on a thread's own part** (`Owns`; `FStepIn`, the step relation of
 `FTTriple`, in a frame `hF` with `r`'s bytes, reading only the frame's shares `hR`): an old access
@@ -1245,9 +1249,11 @@ theorem Owns.stepIn {G G' : ThreadId → γ} {m m' : Mem} {r : Res} {hF hR : Hea
   · exact absurd hb (Nat.not_lt.mpr hb')
 
 /-- **The invariant over a step on a thread's own part** (`FStepIn` in a frame `hF` with the rest's
-bytes, reading only the frame's shares `hR`, none of the rest's cells: `FLock.Inv.wp_liftPart`,
-`FSem.Move.hold`, a primitive's step on its own part, in a client's rest over that lock's
-`FLock.Fits.kstep`): the state word's cells stay exactly (`hcells`), so its history does; the rest's
+bytes, reading only the frame's shares `hR`, none of the rest's cells: a client's own step,
+`FLock.Inv.wp_liftPart`'s continuation, and in a client's rest over a lock's `FLock.Fits.kstep`
+the holder's step `FSem.Move.hold` and a primitive's step on its own part): the state word's
+cells stay exactly (`hcells`: the rest is exact in them, so a step that keeps them only up to
+`Cell.norm` needs the client's pin of the word's block), so its history does; the rest's
 bytes are live (`hbl`); a step that may read a byte of a reader's heap is a reader's (`hrd`: the
 client's "only readers share the readers' heap", decision 2026-11-09 on the sixth obstruction);
 the places and the client parts stay, no thread ends and the writer's hold of the outer mutex
@@ -1442,7 +1448,7 @@ theorem not_busy_rd {G : ThreadId → γ} {m : Mem} (hwr : ∀ u, W.ph (G u) ≠
   rintro (⟨u, hu⟩ | ⟨u, hu⟩ | ⟨-, hall, -⟩)
   · exact hwr u hu
   · exact hrp u hu
-  · exact hnr (tsum_eq_zero fun u _ => by simp [hall u])
+  · exact hnr (nrd_noRd hall)
 
 /-- **A reader's heap has `R` at the current client parts**: with a reader the resource is not away
 (`Inv.wr`, `Inv.rp`: neither a writer at `wr` nor a last reader at `rp` has a reader), so the free
@@ -1969,8 +1975,7 @@ theorem Inv.subR {G : ThreadId → γ} {rY : Res} {m m' : Mem} {t : ThreadId}
     rintro (⟨u, hu⟩ | ⟨u, hu⟩ | ⟨⟨w, hw⟩, hall', -⟩)
     · exact hnowr u (ph_mv (· = .wr) hu).2
     · exact hnorp u (ph_mv (·.isRp = true) hu).2
-    · have h0 : W.nrd (upd G t (W.set (G t) .out)) m = 0 :=
-        tsum_eq_zero fun u _ => by simp [hall' u]
+    · have h0 : W.nrd (upd G t (W.set (G t) .out)) m = 0 := nrd_noRd hall'
       obtain ⟨-, hw⟩ := ph_mv (· = .ww) hw
       have hwx : W.writing G m = true :=
         writing_of (hI.ex w (by rw [hw]; nofun)) (by rw [hw]; rfl)
