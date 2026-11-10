@@ -170,8 +170,7 @@ theorem post_facts {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId}
     (hI : C.Inv L G m) (hI' : C.Inv L G' m') (hG : ∀ u, u ≠ t → G' u = G u)
     (ht : C.ph (G t) = .sl sh c) (ht' : C.ph (G' t) = .inc q n h)
     (hsg : C.SigStep t (C.ph (G t)) (C.ph (G' t)) m m') :
-    ¬ C.Sated m ∧ (wOf (C.lastS m') ≤ 1 → C.Sated m') ∧
-      ∃ x, C.S.hist m' = (C.S.hist m).push x := by
+    ¬ C.Sated m ∧ (wOf (C.lastS m') ≤ 1 → C.Sated m') := by
   obtain ⟨hq, ⟨x, hx⟩, -, hq0, hlt⟩ := SigStep.inc_fresh ht ht' hG hsg hI hI'
   have hlast' : C.lastS m' = (C.S.hist m')[q]! := by
     rw [lastS_push hx, hx, hq]; exact Word.get_push_eq.symm
@@ -185,7 +184,7 @@ theorem post_facts {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId}
   have hsv := (hI'.sv q (by rw [hx, hq, Array.size_push]; omega)).2
   rw [← hlast'] at hsv
   rw [← hlast', ← hlast] at hlt
-  refine ⟨fun hs => ?_, fun h1 => ?_, x, hx⟩
+  refine ⟨fun hs => ?_, fun h1 => ?_⟩
   · unfold Sated at hs; omega
   · unfold Sated; omega
 
@@ -307,6 +306,9 @@ theorem Win1.step {G G' : ThreadId → γ} {rX rX' : Res} {m m' : Mem} {t : Thre
       · exact .inr ⟨⟨q₀, n₀, h₀, e⟩, by rw [e', Array.size_push], _, rfl, e'⟩
   have hincE : ∀ q n h', C.ph (G t) = .inc q n h' → (C.ph (G t)).sig = true := fun _ _ _ e => by
     rw [e]; rfl
+  -- out of `inc` the epoch's writes stay
+  have hEk : (∀ q n h', C.ph (G t) = .inc q n h' → False) → C.Ep.hist m' = C.Ep.hist m :=
+    fun hne => hEw.resolve_right fun ⟨⟨_, _, _, e⟩, _⟩ => hne _ _ _ e
   -- two threads in the signal code are one (both hold the mutex)
   have hsig1 : ∀ u v, (C.ph (G u)).sig = true → (C.ph (G v)).sig = true → u = v := fun u v h1 h2 =>
     hWI.one u v (LPh.held_of_holds (hsh u h1)) (LPh.held_of_holds (hsh v h2))
@@ -439,10 +441,7 @@ theorem Win1.step {G G' : ThreadId → γ} {rX rX' : Res} {m m' : Mem} {t : Thre
         · -- `t`'s post: the epoch has at most one write after `u`'s saved one, else the state
           -- write before it is sated (`f4`), and no post follows a sated write
           have hpf := post_facts hI hI' hG hc (hct.trans hv) (by rw [hct]; exact hsg)
-          have hE : C.Ep.hist m' = C.Ep.hist m := by
-            rcases hEw with e' | ⟨⟨_, _, _, e'⟩, -⟩
-            · exact e'
-            · rw [hc] at e'; cases e'
+          have hE := hEk fun _ _ _ e' => by rw [hc] at e'; cases e'
           rw [hE]
           have h2 := hw.f2 u i jr sn e hu'
           exact Classical.byContradiction fun hne => hpf.1 (hw.f4 u i jr sn e hu' (by omega))
@@ -468,10 +467,7 @@ theorem Win1.step {G G' : ThreadId → γ} {rX rX' : Res} {m m' : Mem} {t : Thre
         · rw [hc] at e'; cases e'
       | reg i₀ jr₀ sn₀ e₀ =>
         rw [hc] at hn; obtain ⟨-, hi⟩ := hn
-        have hE : C.Ep.hist m' = C.Ep.hist m := by
-          rcases hEw with e' | ⟨⟨_, _, _, e'⟩, -⟩
-          · exact e'
-          · rw [hc] at e'; cases e'
+        have hE := hEk fun _ _ _ e' => by rw [hc] at e'; cases e'
         rw [hE] at hsz
         have h2 := hw.f2 u i₀ jr₀ sn₀ e₀ hc
         exact Sated.keep hI hI' (hkeep fun _ _ e' => by rw [hc] at e'; cases e') hSh
