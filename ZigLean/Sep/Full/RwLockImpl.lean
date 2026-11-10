@@ -65,9 +65,10 @@ rules, with the state word's value equations of `RwState.Family` (`ZigLean/Sep/F
 
 ## The protocol (`FRw.Fits P UM US okM okS`)
 
-The protocol keeps the outer mutex with the rwlock as its primitive (`M.Fits W.prim P UM okM`: the
+The protocol keeps the outer mutex with the rwlock as its primitive (`M.Fits W.prim P UM _`: the
 rwlock's and the semaphore's places next to `M`, the rwlock's own steps `Step` keep `UM`) and the
-semaphore next to its mutex (`S.Fits P US okS`). Both views are views of one invariant `P.inv`
+semaphore next to its mutex (`S.Fits P US _`), each at the client's `okM`/`okS` where its code
+runs (below, "Where each lock's code runs"). Both views are views of one invariant `P.inv`
 (`FLock.Fits.inv`, `FSem.Fits`'s): building both for one protocol is the two-lock product of `M`
 and `L` (ledger `two-lock-product`, item (5)), which this contract takes as its interface and does
 not construct. The client also shows that a writer asleep at the semaphore is not in a deadlock
@@ -99,7 +100,7 @@ obstruction, part (a), option A; #744). The implementation runs the outer mutex'
 primitive's calm places (`prim.calm`: `out`, `wi` or `rd`, out of the semaphore's code): `lock`
 at `wi`, the slow reader's lock at `out`, the writer's unlock at `out` after its `and ~1`, the slow
 reader's unlock at `rd`. So the outer mutex's `ok` is `okM` at `L.away` and a calm place, and the
-instance shows the calm place at each call (`Fits.okM_away`, `calm_of`). Without it the view is
+instance shows the calm place at each call (`Fits.okM_away`, `Fits.okM_awaySet`). Without it the view is
 vacuous for writers: `okM` is blind to the rwlock's place (`okM_set`), so the writer at `wr`
 holding the outer mutex (the post of `lock_wp`), relabelled `away` from the semaphore's mutex
 (`laway`), is `ok`, and `FLock.Fits.stable` asks `UM` after any release step of the outer mutex
@@ -132,8 +133,8 @@ Stated once here; an instance walks its code with them:
   `Fits.mAway` / `Fits.mUnaway` (the relabels around the other lock's code; `Fits.lBack`, the
   relabel back after an outer-mutex call, exact by `FLock.Pair.set_around`), `Fits.okM_away` /
   `Fits.okS_away` (each view's `ok` after the relabel; the outer mutex's at a calm place,
-  `calm_of`), `Fits.okM_m` / `Fits.okM_part` (`okM` through the outer mutex's `set` and `setPart`,
-  out of the semaphore's code) and `Fits.winv` / `Fits.sinv` (the rwlock's and the semaphore's
+  `calm_set`, `Fits.okM_awaySet`), `Fits.okM_m` / `Fits.okM_part` (`okM` through the outer
+  mutex's `set` and `setPart`, out of the semaphore's code; `Fits.okM_map`) and `Fits.winv` / `Fits.sinv` (the rwlock's and the semaphore's
   invariants in a state of the protocol).
 - **The counts over one thread's change**: `nrd_upd`, `nwi_upd` over `cnt_upd`; `writing_upd`,
   `fsum_upd`, `xs_set` over `upd_map`; for a move of `t` to `b`, `nrd_mv`, `nwi_mv`, `fsum_mv`
@@ -2550,10 +2551,10 @@ theorem Fits.wset_part (hW : W.Fits P UM US okM okS) (g : γ) (a : RwPh) (r : Re
 /-! ## The outer mutex's `ok` -/
 
 /-- **A calm place of the rwlock's primitive** (`prim.calm`, where the outer mutex's code runs:
-`FRw.Fits.m`): `out`, `wi` or `rd`, out of the semaphore's code. -/
-theorem calm_of {g : γ} (ha : W.ph g = .out ∨ W.ph g = .wi ∨ (W.ph g).isRd = true)
-    (hs : S.place.ph g = (.out, .out)) : W.prim.calm (W.place.ph g) :=
-  ⟨ha, hs⟩
+`FRw.Fits.m`): `t` moved to `out`, `wi` or `rd`, out of the semaphore's code. -/
+theorem calm_set {g : γ} {a : RwPh} (ha : a = .out ∨ a = .wi ∨ a.isRd = true)
+    (hs : S.place.ph g = (.out, .out)) : W.prim.calm (W.place.ph (W.set g a)) :=
+  ⟨by rw [W.ph_set]; exact ha, by rw [W.sp_ph]; exact hs⟩
 
 /-- The rwlock's and the semaphore's places through the semaphore's mutex's `set`. -/
 theorem Fits.place_l (hW : W.Fits P UM US okM okS) (g : γ) (q : LPh) (h : Res) :
@@ -2568,43 +2569,52 @@ theorem Fits.okM_away (hW : W.Fits P UM US okM okS) {g : γ} (h : okM g)
       W.prim.calm (W.place.ph (L.set g .away rnil)) :=
   ⟨(hW.okM_l _ _ _).mpr h, L.ph_set _ _ _, by rw [hW.place_l]; exact hc⟩
 
-/-- `t` relabelled `out` at the rwlock and `away` from the semaphore's mutex is at a calm place
-of the outer mutex's view, out of the semaphore's code. -/
-theorem Fits.calm_away (hW : W.Fits P UM US okM okS) {g : γ} (hs : S.place.ph g = (.out, .out)) :
-    W.prim.calm (W.place.ph (L.set (W.set g .out) .away rnil)) := by
-  rw [hW.place_l]
-  exact calm_of (.inl (W.ph_set _ _)) (by rw [W.sp_ph]; exact hs)
+/-- The outer mutex's `ok` for `t` moved to the calm place `a` and `away` from the semaphore's mutex
+before a call of the outer mutex (`Fits.okM_away`, `calm_set`). -/
+theorem Fits.okM_awaySet (hW : W.Fits P UM US okM okS) {g : γ} {a : RwPh} (h : okM g)
+    (ha : a = .out ∨ a = .wi ∨ a.isRd = true) (hs : S.place.ph g = (.out, .out)) :
+    okM (L.set (W.set g a) .away rnil) ∧ L.ph (L.set (W.set g a) .away rnil) = .away ∧
+      W.prim.calm (W.place.ph (L.set (W.set g a) .away rnil)) :=
+  hW.okM_away ((hW.okM_set _ _).mpr h) (calm_set ha hs)
 
-/-- The outer mutex's `set` keeps the client's `okM` out of the semaphore's code
-(`FLock.Fits.ok_set` at `L.away` and the calm place `out`, where its `ok` is `okM`, with `okM_l`,
-`okM_set` and `FLock.Pair.set_comm`). Out of the calm places the view says nothing of `okM`. -/
+/-- A change `f` of `t`'s ghost value that keeps the semaphore's places and commutes with the
+relabels to `out` and `away` keeps the client's `okM` out of the semaphore's code when the outer
+mutex's `ok` is kept by it (`FLock.Fits.ok_set`/`ok_setPart`, at the calm place `out`). Out of the
+calm places the view says nothing of `okM`. -/
+theorem Fits.okM_map (hW : W.Fits P UM US okM okS) {f : γ → γ}
+    (hs' : ∀ g, S.place.ph (f g) = S.place.ph g)
+    (he : ∀ g, L.set (W.set (f g) .out) .away rnil = f (L.set (W.set g .out) .away rnil))
+    (hok : ∀ g, (okM (f g) ∧ L.ph (f g) = .away ∧ W.prim.calm (W.place.ph (f g))) ↔
+      (okM g ∧ L.ph g = .away ∧ W.prim.calm (W.place.ph g)))
+    {g : γ} (hs : S.place.ph g = (.out, .out)) : okM (f g) ↔ okM g := by
+  have ho := hok (L.set (W.set g .out) .away rnil)
+  rw [← he] at ho
+  have back : okM (L.set (W.set g .out) .away rnil) → okM g := fun h' =>
+    (hW.okM_set _ _).mp ((hW.okM_l _ _ _).mp h')
+  have back' : okM (L.set (W.set (f g) .out) .away rnil) → okM (f g) := fun h' =>
+    (hW.okM_set _ _).mp ((hW.okM_l _ _ _).mp h')
+  exact ⟨fun h' => back (ho.mp (hW.okM_awaySet h' (.inl rfl) (by rw [hs']; exact hs))).1,
+    fun h' => back' (ho.mpr (hW.okM_awaySet h' (.inl rfl) hs)).1⟩
+
+/-- The outer mutex's `set` keeps the client's `okM` out of the semaphore's code (`Fits.okM_map`
+with `FLock.Pair.set_comm`). -/
 theorem Fits.okM_m (hW : W.Fits P UM US okM okS) (g : γ) (q : LPh) (h : Res)
-    (hs : S.place.ph g = (.out, .out)) : okM (M.set g q h) ↔ okM g := by
-  have e : L.set (W.set (M.set g q h) .out) .away rnil =
-      M.set (L.set (W.set g .out) .away rnil) q h := by
-    rw [hW.wset_m]; exact (W.pair.set_comm (W.set g .out) q h .away rnil).symm
-  have h₁ := hW.calm_away (g := M.set g q h) (by rw [hW.splace_m]; exact hs)
-  have h₂ := hW.calm_away hs
-  have ho := hW.m.ok_set (L.set (W.set g .out) .away rnil) q h
-  rw [← e, L.ph_set, L.ph_set, hW.okM_l, hW.okM_l, hW.okM_set, hW.okM_set] at ho
-  exact ⟨fun h' => (ho.mp ⟨h', rfl, h₁⟩).1, fun h' => (ho.mpr ⟨h', rfl, h₂⟩).1⟩
+    (hs : S.place.ph g = (.out, .out)) : okM (M.set g q h) ↔ okM g :=
+  hW.okM_map (f := (M.set · q h)) (fun g => hW.splace_m g q h)
+    (fun g => by rw [hW.wset_m]; exact (W.pair.set_comm (W.set g .out) q h .away rnil).symm)
+    (fun g => hW.m.ok_set g q h) hs
 
 /-- The semaphore's places through the outer mutex's `setPart`. -/
 theorem Fits.splace_part (hW : W.Fits P UM US okM okS) (g : γ) (r : Res) :
     S.place.ph (M.setPart g r) = S.place.ph g := congrArg Prod.snd (hW.m.ph_part g r)
 
-/-- The outer mutex's `setPart` keeps the client's `okM` out of the semaphore's code (as
-`Fits.okM_m`). -/
+/-- The outer mutex's `setPart` keeps the client's `okM` out of the semaphore's code
+(`Fits.okM_map`). -/
 theorem Fits.okM_part (hW : W.Fits P UM US okM okS) (g : γ) (r : Res)
-    (hs : S.place.ph g = (.out, .out)) : okM (M.setPart g r) ↔ okM g := by
-  have e : L.set (W.set (M.setPart g r) .out) .away rnil =
-      M.setPart (L.set (W.set g .out) .away rnil) r := by
-    rw [hW.wset_part, W.pair.setPart, W.pair.setPart, L.setPart_set]
-  have h₁ := hW.calm_away (g := M.setPart g r) (by rw [hW.splace_part]; exact hs)
-  have h₂ := hW.calm_away hs
-  have ho := hW.m.ok_setPart (L.set (W.set g .out) .away rnil) r
-  rw [← e, L.ph_set, L.ph_set, hW.okM_l, hW.okM_l, hW.okM_set, hW.okM_set] at ho
-  exact ⟨fun h' => (ho.mp ⟨h', rfl, h₁⟩).1, fun h' => (ho.mpr ⟨h', rfl, h₂⟩).1⟩
+    (hs : S.place.ph g = (.out, .out)) : okM (M.setPart g r) ↔ okM g :=
+  hW.okM_map (f := (M.setPart · r)) (fun g => hW.splace_part g r)
+    (fun g => by rw [hW.wset_part, W.pair.setPart, W.pair.setPart, L.setPart_set])
+    (fun g => hW.m.ok_setPart g r) hs
 
 /-- The rwlock's invariant in a state of the protocol (the outer mutex's view, `Fits.sub`). -/
 theorem Fits.winv (hW : W.Fits P UM US okM okS) {G : ThreadId → γ} {m : Mem}

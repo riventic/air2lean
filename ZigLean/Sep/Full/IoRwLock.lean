@@ -39,8 +39,9 @@ outer mutex (`lock`'s and `unlock`'s, and `lockShared`'s slow path from before i
 its unlock) and at the outer mutex around the last reader's post (`FRw.Fits.lAway`, `lUnaway`,
 `mAway`, `mUnaway`); the two locks' `set`s commute (`FLock.Pair.set_comm`), so the relabel back
 gives the exact ghost value (`FRw.Fits.lBack`, `FLock.Pair.set_around`). Each call of the outer
-mutex is at a calm place of the rwlock (`FRw.calm_of`): `lock` at `wi`, `unlock` at `out` after
-its `and ~1`, and `lockShared`'s slow path at `out` for the lock and at `rd` for the unlock.
+mutex is at a calm place of the rwlock (`FRw.Fits.okM_awaySet`, `okM_away`): `lock` at `wi`,
+`unlock` at `out` after its `and ~1`, and `lockShared`'s slow path at `out` for the lock and at
+`rd` for the unlock.
 
 A program instantiates it with its names and `simp`/`rfl` proofs of the equations
 (`Proofs/Sync/IoRwLock.lean`).
@@ -257,12 +258,13 @@ theorem lock_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc : M.c
         P.inv (upd G' t (M.set (W.set (M.setPart g (rsum (M.part g) r)) .wr) .holds rM)) m')
       G m d := by
   obtain ⟨hwo, hmo, -, hlo, hlh, hco, hso⟩ := hg
+  have hsc := FRw.splace_out hco hso
   obtain rfl : p = W.st.ptr := hp.trans W.ptr_st.symm
   obtain ⟨kW, fin, hlock, hkW, hfin⟩ := C.lock_eq
   rw [hlock, lockOf]
   refine wp_frame hfin ?_
   rw [StateT.run_bind]
-  refine WP.bind (FRw.wp_addW hW hwo (by rw [hmo]; decide) (FRw.splace_out hco hso) hroom hi
+  refine WP.bind (FRw.wp_addW hW hwo (by rw [hmo]; decide) hsc hroom hi
     fun k₁ hk₁ G₁ m₁ _ hc₁ hi₁ => ?_)
   rw [StateT.run_bind]
   refine WP.bind (WP.callMC_ptrProject (hW.projW hi₁ (by decide) (by decide)) ?_)
@@ -272,8 +274,7 @@ theorem lock_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc : M.c
   rw [StateT.run_bind]
   refine WP.bind (WP.callC (WP.mono (fun _ G₂ m₂ k₂ h₂ => ?_)
     (C.M.lock_wp hW.m hcost (by rw [W.ptr_m, ← W.ptr_st]) hMc t (L.set (W.set g .wi) .away rnil)
-      (by rw [W.pair.ph_ba, hmx]) (hW.okM_away ((hW.okM_set _ _).mpr hokM)
-        (FRw.calm_of (.inr (.inl (W.ph_set _ _))) (by rw [W.sp_ph]; exact FRw.splace_out hco hso)))
+      (by rw [W.pair.ph_ba, hmx]) (hW.okM_awaySet hokM (.inr (.inl rfl)) hsc)
       (by rw [W.pair.part_ba, hW.mpart]; exact hu)
       io G₁ m₁ k₁ (hW.lAway hlx (.inl hmx) hi₁))))
   obtain ⟨hk₂, hc₂, rL, hi₂⟩ := h₂
@@ -289,7 +290,7 @@ theorem lock_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc : M.c
   rw [StateT.run_bind]
   refine WP.bind (FRw.wp_decW hW (g := M.set (W.set g .wi) .holds rL)
     (by rw [(hW.ph_m _ _ _).1, W.ph_set]) (M.ph_set _ _ _)
-    (by rw [hW.splace_m, W.sp_ph]; exact FRw.splace_out hco hso) hi₂
+    (by rw [hW.splace_m, W.sp_ph]; exact hsc) hi₂
     fun k₃ hk₃ G₃ m₃ old hc₃ hcase => ?_)
   have hgo : (old &&& (9223372032559808512 : BitVec 64) != (0 : BitVec 64)) =
       (RwState.readers old != 0) := RwState.Family.drain_guard 31 1 old
@@ -365,8 +366,8 @@ theorem unlock_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc : M
   refine WP.bind (WP.callC (WP.mono (fun _ G₂ m₂ k₂ h₂ => ?_)
     (C.M.unlock_wp hW.m hcost (by rw [W.ptr_m, ← W.ptr_st]) hMc t
       (L.set (W.set (M.setPart g r₀) .out) .away rnil) (by rw [W.pair.ph_ba, hmx])
-      (hW.okM_away ((hW.okM_set _ _).mpr ((hW.okM_part _ _ hsc).mpr hokM))
-        (FRw.calm_of (.inl (W.ph_set _ _)) (by rw [W.sp_ph, hW.splace_part]; exact hsc)))
+      (hW.okM_awaySet ((hW.okM_part _ _ hsc).mpr hokM) (.inl rfl)
+        (by rw [hW.splace_part]; exact hsc))
       io G₁ m₁ k₁ (hW.lAway hlx (.inr hmx) hi₁) hc₁)))
   obtain ⟨hk₂, hc₂, hi₂⟩ := h₂
   replace hi₂ :=
@@ -505,7 +506,7 @@ theorem lockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc
     refine WP.bind (WP.callMC_ptrProject (hW.projW hi₂ (by decide) (by decide)) ?_)
     refine WP.bind (WP.callC (WP.mono (fun _ G₃ m₃ k₃ h₃ => ?_)
       (C.M.lock_wp hW.m hcost (by rw [W.ptr_m, ← W.ptr_st]) hMc t (L.set g .away rnil)
-        (by rw [W.pair.ph_ba, hmo]) (hW.okM_away hokM (FRw.calm_of (.inl hwo) hsc))
+        (by rw [W.pair.ph_ba, hmo]) (hW.okM_away hokM ⟨.inl hwo, hsc⟩)
         (by rw [W.pair.part_ba]; exact hu) io G₂ m₂ k₂ (hW.lAway hlo (.inl hmo) hi₂))))
     obtain ⟨hk₃, hc₃, rL, hi₃⟩ := h₃
     refine WP.bind (FRw.wp_addR hW (g := M.set (L.set g .away rnil) .holds rL)
@@ -527,11 +528,10 @@ theorem lockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc
     refine WP.bind (WP.callC (WP.mono (fun _ G₅ m₅ k₅ h₅ => ?_)
       (C.M.unlock_wp hW.m hcost (by rw [W.ptr_m, ← W.ptr_st]) hMc t
         (M.set (L.set y .away rnil) .holds rL) (M.ph_set _ _ _)
-        ((hW.m.ok_set _ _ _).mpr (hW.okM_away (by
-          rw [hyd]; exact (hW.okM_set _ _).mpr ((hW.okM_part _ _ hsc).mpr hokM)) (by
+        ((hW.m.ok_set _ _ _).mpr (by
           rw [hyd]
-          exact FRw.calm_of (.inr (.inr (by rw [W.ph_set]; rfl)))
-            (by rw [W.sp_ph, hW.splace_part]; exact hsc))))
+          exact hW.okM_awaySet ((hW.okM_part _ _ hsc).mpr hokM) (.inr (.inr rfl))
+            (by rw [hW.splace_part]; exact hsc)))
         io G₄ m₄ k₄ hi₄ hc₄)))
     obtain ⟨hk₅, hc₅, hi₅⟩ := h₅
     rw [M.set_set] at hi₅
