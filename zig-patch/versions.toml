@@ -2,10 +2,10 @@
 # for every version). One table per version. `hook` (the per-version call into the exporter) is
 # relative to this file's directory.
 
-["0.17.0"]
-url = "https://ziglang.org/download/0.17.0/zig-0.17.0.tar.xz"
-sha256 = "b6c7f1728f043700d6529bac980800792f824256a9d2f1839b3d62beed0b8abd"
-hook = "0.17.0/hook.patch"
+["0.17.1"]
+url = "https://ziglang.org/download/0.17.1/zig-0.17.1.tar.xz"
+sha256 = "1e89bf06610b769a8c77676c6c8d54b093a0db60f4891f2f91014829012f0e24"
+hook = "0.17.1/hook.patch"
 # The LLVM major version of this Zig (cmake/Findllvm.cmake), for AIR2LEAN_LLVM=1 builds.
 llvm = "22"
 
@@ -38,9 +38,9 @@ llvm = "19"
 # zig-patch/build.sh (which needs a host zig of the exact target version on PATH).
 # sha256 from https://ziglang.org/download/index.json ("<version>" -> "x86_64-linux".shasum),
 # confirmed by downloading the tarball and hashing it.
-[ci.host-zig."0.17.0"]
-url = "https://ziglang.org/download/0.17.0/zig-x86_64-linux-0.17.0.tar.xz"
-sha256 = "1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026"
+[ci.host-zig."0.17.1"]
+url = "https://ziglang.org/download/0.17.1/zig-x86_64-linux-0.17.1.tar.xz"
+sha256 = "3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a"
 
 # sha256 from index.json ("0.16.0" -> "x86_64-linux".shasum), confirmed by downloading the
 # tarball and hashing it.
