@@ -1,6 +1,6 @@
 --- zig-0.17.1-pristine/src/Zcu/PerThread.zig
 +++ zig-0.17.1/src/Zcu/PerThread.zig
-@@ -2295,6 +2295,7 @@
+@@ -2299,6 +2299,7 @@
      tracy_trace.addTextFmt("func_ip_index={d}", .{func_index});
  
      var air = try pt.analyzeFuncBodyInner(func_index, reason);
@@ -52,7 +52,7 @@
  /// or error union pointed to, initializing these pointers along the way.
 --- zig-0.17.1-pristine/src/Compilation.zig
 +++ zig-0.17.1/src/Compilation.zig
-@@ -2987,6 +2987,8 @@
+@@ -2988,6 +2988,8 @@
          const active = zcu.acquire();
          defer active.release();
          const pt = active.pt;
