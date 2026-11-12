@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # L07/L08 packed representations and logical casts (README.md). Sources and their versions:
-#   packed_casts.zig   0.14.1 0.15.2 0.16.0 0.17.0   (PackedCasts/<version>/PackedCasts.lean, Model.lean)
-#   logical017.zig     0.17.0                        (PackedCasts/<version>/Logical017.lean, ModelLogical.lean)
+#   packed_casts.zig   0.14.1 0.15.2 0.16.0 0.17.1   (PackedCasts/<version>/PackedCasts.lean, Model.lean)
+#   logical017.zig     0.17.1                        (PackedCasts/<version>/Logical017.lean, ModelLogical.lean)
 #   vector_fields.zig  0.14.1 0.15.2                 (PackedCasts/<version>/VectorFields.lean, ModelVector.lean)
 #   auto_items.zig     0.14.1 0.15.2                 (PackedCasts/<version>/AutoItems.lean, ModelAuto.lean)
 #   reject_lanes.zig   0.14.1 0.15.2                 (rejected: docs/upstream/packed-vector-lane-ptr.md)
-# (<version> as a name: V0_17_0). Each model is written for the newest version of its source; the
+# (<version> as a name: V0_17_1). Each model is written for the newest version of its source; the
 # other versions' models are that one with the version renamed (scripts/fixtures.py instance).
 #
 #   check.sh [--check]            translate every retained export, compare with the retained
@@ -29,11 +29,11 @@ set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
 dir=tests/roadmap/packed-casts
-versions=(0.14.1 0.15.2 0.16.0 0.17.0)
+versions=(0.14.1 0.15.2 0.16.0 0.17.1)
 # source:translation:model:versions (the newest first: its model is the written one)
 sources=(
-  "packed_casts:PackedCasts:Model:0.17.0 0.16.0 0.15.2 0.14.1"
-  "logical017:Logical017:ModelLogical:0.17.0"
+  "packed_casts:PackedCasts:Model:0.17.1 0.16.0 0.15.2 0.14.1"
+  "logical017:Logical017:ModelLogical:0.17.1"
   "vector_fields:VectorFields:ModelVector:0.15.2 0.14.1"
   "auto_items:AutoItems:ModelAuto:0.15.2 0.14.1"
 )
@@ -126,13 +126,13 @@ for entry in "${sources[@]}"; do
     mains+=("PackedCasts.$t.$model:PackedCasts.$t.$model.main")
   done
 done
-for t in V0_14_1 V0_15_2 V0_16_0 V0_17_0; do
+for t in V0_14_1 V0_15_2 V0_16_0 V0_17_1; do
   theorems+=(--declaration "PackedCasts.$t.Model.setUnion_ok" --declaration "PackedCasts.$t.Model.floatField_nan")
 done
 for t in V0_14_1 V0_15_2; do
   theorems+=(--declaration "PackedCasts.$t.ModelVector.laneSum_ok" --declaration "PackedCasts.$t.ModelAuto.unionsToInt_padding")
 done
-theorems+=(--declaration PackedCasts.V0_17_0.ModelLogical.intToModes_unnamed)
+theorems+=(--declaration PackedCasts.V0_17_1.ModelLogical.intToModes_unnamed)
 python3 -B scripts/fixtures.py build PackedCasts
 # Compiled and audited (axioms, sorry, kernel replay), not only run: they are indexed (F2).
 python3 -B scripts/fixtures.py audit "${models[@]}" "${theorems[@]}"

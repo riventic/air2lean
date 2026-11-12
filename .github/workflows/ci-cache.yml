@@ -89,7 +89,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        zig: ["0.16.0", "0.17.0", "0.15.2", "0.14.1"]
+        zig: ["0.16.0", "0.17.1", "0.15.2", "0.14.1"]
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -139,7 +139,7 @@ jobs:
       matrix:
         include:
           - {zig: "0.16.0", part: golden, optimize: ReleaseSafe, backend: ""}
-          - {zig: "0.17.0", part: golden, optimize: ReleaseSafe, backend: ""}
+          - {zig: "0.17.1", part: golden, optimize: ReleaseSafe, backend: ""}
           - {zig: "0.15.2", part: golden, optimize: ReleaseSafe, backend: ""}
           - {zig: "0.16.0", part: Debug, optimize: Debug, backend: llvm}
           - {zig: "0.16.0", part: ReleaseFast, optimize: ReleaseFast, backend: llvm}
@@ -286,7 +286,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        zig: ["0.17.0", "0.16.0", "0.15.2"]
+        zig: ["0.17.1", "0.16.0", "0.15.2"]
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -297,7 +297,7 @@ jobs:
           set -euo pipefail
           version='${{ matrix.zig }}'
           case "$version" in
-            0.17.0) sha256=b607e9b9234790a008116ae5bdb71c6243b84b9fb42a53a9e70fde41c06c536a ;;
+            0.17.1) sha256=75f1bc7a1e9852f17ec9a0c1895f767c4ec56d46bc8a834920eece1d0359dd8d ;;
             0.16.0) sha256=b23d70deaa879b5c2d486ed3316f7eaa53e84acf6fc9cc747de152450d401489 ;;
             0.15.2) sha256=3cc2bab367e185cdfb27501c4b30b1b0653c28d9f73df8dc91488e66ece5fa6b ;;
             *) echo "no pinned aarch64-macos stock zig for $version" >&2; exit 1 ;;

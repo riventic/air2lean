@@ -57,7 +57,7 @@ def main():
     arm["profile"].update(target_triple="aarch64-linux.6.8...6.8-gnu.2.39", cpu="generic", features=["neon"])
     run(binary, [arm])
     arm17 = copy.deepcopy(arm)
-    arm17["zig_version"] = arm17["profile"]["zig_version"] = "0.17.0"
+    arm17["zig_version"] = arm17["profile"]["zig_version"] = "0.17.1"
     arm17["profile"]["build_mode"] = "safe"
     run(binary, [arm17])
     musl = copy.deepcopy(arm)

@@ -22,7 +22,7 @@ stems=("$@")
 if [ "${#stems[@]}" -eq 0 ]; then
   read -r -a stems <<< "$(python3 -c 'import json,sys; print(" ".join(sorted(json.load(open(sys.argv[1]))["sources"])))' "$here/provenance.json")"
 fi
-versions=(0.17.0 0.16.0 0.15.2 0.14.1)
+versions=(0.17.1 0.16.0 0.15.2 0.14.1)
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-lang-long-tail.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 sha256() { shasum -a 256 "$1" | cut -d' ' -f1; }

@@ -8,7 +8,7 @@
       "name": "coverage",
       "generator": "coverage",
       "note": "scripts/coverage.py generate --os linux over each version's pinned pristine compiler source",
-      "paths": ["coverage/0.14.1.json", "coverage/0.15.2.json", "coverage/0.16.0.json", "coverage/0.17.0.json"]
+      "paths": ["coverage/0.14.1.json", "coverage/0.15.2.json", "coverage/0.16.0.json", "coverage/0.17.1.json"]
     },
     {
       "name": "premise-index",

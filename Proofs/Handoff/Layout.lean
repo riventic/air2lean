@@ -3,7 +3,7 @@ import ZigLean.Sep.Full.Word
 /-!
 # The `Box` of `handoff`, abstractly
 
-`handoff` (examples/sync, Zig 0.16.0 and 0.17.0 `std.Io`; examples/threadsync, Zig 0.15.2
+`handoff` (examples/sync, Zig 0.16.0 and 0.17.1 `std.Io`; examples/threadsync, Zig 0.15.2
 `std.Thread`) is the same program in each version: `main` and a producer share a `Box` with a
 mutex, a condition (state and epoch), an event, `v` and `ready`. The versions differ in the
 `Box`'s layout (0.16.0 has `io` first), in the mutex's contended value, and in the generated code

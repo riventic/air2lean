@@ -8,7 +8,7 @@ The multi-waiter `FCond.Inv` of `ZigLean/Sep/Full/Cond.lean` (which imports this
 3 of the design on PR #575 (comments 6619561994 and 6625654179); it replaces the singleton places
 and invariant.
 
-The condition (`Io.Condition` of 0.16.0 and 0.17.0, `Thread.Condition.FutexImpl` of 0.15.2):
+The condition (`Io.Condition` of 0.16.0 and 0.17.1, `Thread.Condition.FutexImpl` of 0.15.2):
 a state word `S` (`waiters` in the low 16 bits, `signals` in the high 16) and an epoch word
 `Ep` after it. A waiter, holding the mutex, loads the epoch (acquire), does `waiters += 1`,
 unlocks the mutex and loops: a futex wait at the epoch with the saved value, an acquire reload

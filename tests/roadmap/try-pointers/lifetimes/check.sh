@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # L04 pointer-try lifetimes and native runs (README.md). Lake builds the library TryLifetimes
 # (tests/roadmap/lakefile.toml; scripts/fixtures.py, run it under scripts/build-guard.py).
-#   check.sh [--check]          translate air/<version>/ (0.14.1, 0.15.2, 0.16.0, 0.17.0), compare
+#   check.sh [--check]          translate air/<version>/ (0.14.1, 0.15.2, 0.16.0, 0.17.1), compare
 #                               with TryLifetimes/<version>/Gen.lean, check that each version's
-#                               Lifetimes.lean is the 0.17.0 one with the version renamed, build
+#                               Lifetimes.lean is the 0.17.1 one with the version renamed, build
 #                               the library, audit the axioms and run each version's Lifetimes
 #                               `main` (kernel-checked sequential theorems, 32 scheduler oracles)
 #   check.sh --native VERSION   with a stock Zig VERSION (AIR2LEAN_ZIG_NATIVE): the tests of
@@ -15,7 +15,7 @@ set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../.." && pwd)
 cd "$repo_root"
 dir=tests/roadmap/try-pointers/lifetimes
-versions=(0.14.1 0.15.2 0.16.0 0.17.0)
+versions=(0.14.1 0.15.2 0.16.0 0.17.1)
 case "${1:---check}" in
   --export)
     [ "$#" -eq 3 ] || { echo 'usage: check.sh --export VERSION DIR' >&2; exit 2; }
@@ -54,7 +54,7 @@ translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first (lake build air2lean)' >&2; exit 1; }
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-try-lifetimes.XXXXXX")
 trap 'rm -rf "$work"' EXIT
-primary="$dir/TryLifetimes/V0_17_0/Lifetimes.lean"
+primary="$dir/TryLifetimes/V0_17_1/Lifetimes.lean"
 modules=() mains=() theorems=()
 for v in "${versions[@]}"; do
   t="V${v//./_}"
@@ -62,8 +62,8 @@ for v in "${versions[@]}"; do
   "$translator" "$dir/air/$v" -o "$work/$t.lean" --namespace "TryLifetimes.$t" \
     --prefix try_lifetimes.
   cmp "$work/$t.lean" "$dir/TryLifetimes/$t/Gen.lean"
-  # Every version's module states the same theorems: the 0.17.0 one, the version renamed.
-  [ "$t" = V0_17_0 ] || python3 -B scripts/fixtures.py instance "$primary" --subst "V0_17_0=$t"
+  # Every version's module states the same theorems: the 0.17.1 one, the version renamed.
+  [ "$t" = V0_17_1 ] || python3 -B scripts/fixtures.py instance "$primary" --subst "V0_17_1=$t"
   modules+=("TryLifetimes.$t.Lifetimes")
   mains+=("TryLifetimes.$t.Lifetimes:TryLifetimes.$t.Lifetimes.main")
   theorems+=(--declaration "TryLifetimes.$t.Lifetimes.readDangling_illegal")

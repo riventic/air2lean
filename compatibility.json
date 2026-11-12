@@ -15,22 +15,22 @@
     }
   },
   "zig": {
-    "default": "0.17.0",
+    "default": "0.17.1",
     "ci_once": "0.16.0",
     "versions": [
       {
-        "version": "0.17.0",
+        "version": "0.17.1",
         "status": "qualified",
         "hosts": ["x86_64-linux", "aarch64-macos", "aarch64-linux"],
         "source": {
-          "url": "https://ziglang.org/download/0.17.0/zig-0.17.0.tar.xz",
-          "sha256": "b6c7f1728f043700d6529bac980800792f824256a9d2f1839b3d62beed0b8abd"
+          "url": "https://ziglang.org/download/0.17.1/zig-0.17.1.tar.xz",
+          "sha256": "1e89bf06610b769a8c77676c6c8d54b093a0db60f4891f2f91014829012f0e24"
         },
-        "hook": "0.17.0/hook.patch",
+        "hook": "0.17.1/hook.patch",
         "llvm": "22",
         "ci_host_zig": {
-          "url": "https://ziglang.org/download/0.17.0/zig-x86_64-linux-0.17.0.tar.xz",
-          "sha256": "1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026"
+          "url": "https://ziglang.org/download/0.17.1/zig-x86_64-linux-0.17.1.tar.xz",
+          "sha256": "3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a"
         }
       },
       {

@@ -10,7 +10,7 @@ import sys
 import tempfile
 
 HERE = Path(__file__).resolve().parent
-VERSIONS = ("0.17.0", "0.16.0", "0.15.2", "0.14.1")
+VERSIONS = ("0.17.1", "0.16.0", "0.15.2", "0.14.1")
 ALLOC = json.loads((HERE / "registry-alloc.json").read_text())
 RANDOM = json.loads((HERE / "registry-random.json").read_text())
 
@@ -75,9 +75,9 @@ def main(exe):
             assert result.returncode == 0, result.stderr
             assert "Zig.callC (Zig.extCall (Ext.call0 " in out.read_text()
             checks += 4
-        # Rejections (fail closed), on the 0.17.0 exports.
-        lists = HERE / "air" / "0.17.0" / "lists"
-        rnd = HERE / "air" / "0.17.0" / "rnd"
+        # Rejections (fail closed), on the 0.17.1 exports.
+        lists = HERE / "air" / "0.17.1" / "lists"
+        rnd = HERE / "air" / "0.17.1" / "rnd"
         base = ("--prefix", "lists.", *translated)
         fn = "fn (*anyopaque, usize, mem.Alignment, usize) ?[*]u8"
         cases = [

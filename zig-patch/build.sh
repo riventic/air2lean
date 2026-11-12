@@ -203,7 +203,7 @@ fi
 # built zig finds its own lib dir (self-exe-relative lookup) without --zig-lib-dir.
 # -Dcpu=baseline: the default is the build machine's CPU, and CI restores a cached build on
 # other runners; a newer CPU's instructions then crash it ("Illegal instruction").
-# -Dversion-string: the tarball has no .git; from 0.17.0 build.zig fails without one unless the
+# -Dversion-string: the tarball has no .git; from 0.17.1 build.zig fails without one unless the
 # version is given (older versions fall back to the same release string).
 # Rosetta (Docker Desktop, linux/amd64) cannot load the JIT-built build runner of Zig 0.17;
 # air2lean_rosetta_run patches it and runs again (scripts/rosetta.sh); elsewhere it just runs.

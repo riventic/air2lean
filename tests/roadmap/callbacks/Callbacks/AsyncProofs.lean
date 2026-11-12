@@ -7,7 +7,7 @@ import Proofs.Asm.Effects
 /-!
 # An asynchronous callback (E02, premise EXT-04)
 
-`Callbacks/Async.lean` is the translation of `air-async/0.17.0` (`async_cb.zig`): `runBoth`
+`Callbacks/Async.lean` is the translation of `air-async/0.17.1` (`async_cb.zig`): `runBoth`
 spawns a thread that calls a callback through a function pointer while the caller calls it on
 another context. The program is concurrent, so the registry binding of `ext_visit` needs a
 footprint, and the emitted model call first claims the context block for writing

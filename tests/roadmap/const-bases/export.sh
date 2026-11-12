@@ -11,7 +11,7 @@ root=${AIR2LEAN_ZIG_AIR:?set AIR2LEAN_ZIG_AIR to a directory of zig-air-<version
 mode=export
 if [ "${1:-}" = --check ]; then mode=--check; shift; fi
 # The versions to export: those given, else every version the fixture has exports for.
-if [ $# -gt 0 ]; then versions=$*; else versions="0.17.0 0.16.0 0.15.2 0.14.1"; fi
+if [ $# -gt 0 ]; then versions=$*; else versions="0.17.1 0.16.0 0.15.2 0.14.1"; fi
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-const-bases.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 common=(-fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux-musl -mcpu=baseline)

@@ -58,7 +58,7 @@ fn probe(comptime name: []const u8, comptime N: comptime_int, comptime T: type, 
 }
 
 /// `@sizeOf(T)` when a float vector holds its lanes at the array stride instead of bit-packed
-/// (Zig 0.17.0 `f80x2`, a declared divergence from the model's image: `aarch64-abi/Model.lean`);
+/// (Zig 0.17.1 `f80x2`, a declared divergence from the model's image: `aarch64-abi/Model.lean`);
 /// the bytes after each lane's bits are then padding, which the store fills from its register.
 /// 0 otherwise.
 fn laneStride(comptime N: comptime_int, comptime T: type, v: *const @Vector(N, T), lanes: [N]T) usize {

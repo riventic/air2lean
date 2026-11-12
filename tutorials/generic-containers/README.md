@@ -110,4 +110,4 @@ Remaining obligations: the caller supplies the list `alist I φ p xs`, the alloc
 `I.own`, a fee `I.fee φ`, its vtable `vtR vtp fns.toList`, the contract of the environment's entries at that
 vtable, and the room the grown buffer's request needs of the contract (`I.fits`). Only the `u32`
 instance is proved; another element type is another translated function with its own proof
-obligation. The proofs are about the committed 0.17.0 translation `Proofs/Lists/Open.lean`.
+obligation. The proofs are about the committed 0.17.1 translation `Proofs/Lists/Open.lean`.

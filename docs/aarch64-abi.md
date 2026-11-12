@@ -2,7 +2,7 @@
 
 Two aarch64 profiles are qualified separately: **aarch64-linux-gnu** (`-mcpu=baseline` =
 `generic`) and **aarch64-macos-none** (`-mcpu=baseline` = `apple_m1`). Both use stock Zig
-(0.17.0, 0.16.0, 0.15.2 and 0.14.1, each with its own expected file), the LLVM backend and
+(0.17.1, 0.16.0, 0.15.2 and 0.14.1, each with its own expected file), the LLVM backend and
 ReleaseSafe. Each profile has three pieces of evidence:
 
 1. A native probe run. `scripts/aarch64-abi.py` runs only on the profile's own host. It does
@@ -13,13 +13,13 @@ ReleaseSafe. Each profile has three pieces of evidence:
 
 The translator accepts both profiles (`Target.qualified` in `Air2Lean/Air/Dialect.lean`;
 [profiles.md](profiles.md#aarch64-abi-profiles-t04)). aarch64-linux only for the Zig versions
-with an expected file (`Target.aarch64Probed`: 0.17.0, 0.16.0, 0.15.2 and 0.14.1, on both
+with an expected file (`Target.aarch64Probed`: 0.17.1, 0.16.0, 0.15.2 and 0.14.1, on both
 profiles) and, on aarch64-linux, the `gnu` ABI: any other is a profile error.
 See [target-matrix.md](target-matrix.md) and §Translation below.
 
 ```sh
 # On the profile's host (aarch64 Linux or Apple silicon macOS), with a stock Zig whose version
-# has an expected file (0.17.0, 0.16.0, 0.15.2, 0.14.1):
+# has an expected file (0.17.1, 0.16.0, 0.15.2, 0.14.1):
 python3 scripts/aarch64-abi.py check --zig /path/to/zig --target aarch64-linux-gnu
 python3 scripts/aarch64-abi.py check --zig /path/to/zig --target aarch64-macos-none
 # Any host:
@@ -141,32 +141,32 @@ its `cmpxchg` may differ, and every later result must follow from the cell the f
 `rmw i24`/`i40` `Max` rows (negative cell, positive operand) diverge on both profiles, and are
 classified this way.
 
-A wider native probe (Zig 0.14.1 to 0.17.0 on aarch64-macos) shows that the rule must cover every
+A wider native probe (Zig 0.14.1 to 0.17.1 on aarch64-macos) shows that the rule must cover every
 padded width, not only whole padding bytes: on 0.14.1 to 0.16.0 a signed `.Max` diverges for
 `i7`, `i12`, `i40`, `i48` and `i56` as well, an unsigned `.Min` for `u24`, `u48` and `u56`, a
-`cmpxchg` with `ff` padding for `u24` to `u56`, and on every version including 0.17.0 a
+`cmpxchg` with `ff` padding for `u24` to `u56`, and on every version including 0.17.1 a
 `cmpxchg` after an `.Add` that carried into the padding fails for `u7`, `u12`, `u24`, `u40`,
 `u48` and `u56`. All of these are padded `cmpxchg`/`.Max`/`.Min` operations, which the translator
 rejects; widths without padding (`u8` to `u64`, `i8` to `i64`) agree with the model everywhere.
 
-### Zig 0.17.0
+### Zig 0.17.1
 
-The 0.17.0 files (recorded with the stock 0.17.0: natively on Apple silicon, and in a
+The 0.17.1 files (recorded with the stock 0.17.1: natively on Apple silicon, and in a
 `linux/arm64` container) differ from 0.16.0's in four ways, on both profiles unless noted:
 
-| Row | 0.17.0 | Model |
+| Row | 0.17.1 | Model |
 | --- | --- | --- |
 | `float f80` (and `float f128` on aarch64-macos-none, where it is not `c_longdouble`) | alignment 8 | 16 |
 | `vector f80x2` | alignment 8; the second lane's image is not `Vec.packedEnc`'s | 32, bit-packed |
 | `atomic u24`/`u40` `padff` | cmpxchg succeeds | succeeds (no padded-width row diverges) |
 | `rmw i24`/`i40` `Max` | the signed maximum | the signed maximum |
 
-`Model.lean` declares the layout rows as 0.17.0 divergences (`layoutDivergences017`): the file
+`Model.lean` declares the layout rows as 0.17.1 divergences (`layoutDivergences017`): the file
 must record alignment 8 there and the model's table elsewhere, and the CI step compares the
 vector images without `f80x2` (`vector-layouts/Model.lean --skip f80x2`). The translator rejects
-these types in memory on 0.17.0: `checkMemTy` compares the exporter's alignment with the model's.
+these types in memory on 0.17.1: `checkMemTy` compares the exporter's alignment with the model's.
 The padded `cmpxchg` and `.Max`/`.Min` stay rejected on every version. Only the two soft-float
-`f80` rows remain result divergences in 0.17.0.
+`f80` rows remain result divergences in 0.17.1.
 
 ## Per-profile observations (every recorded Zig version, ReleaseSafe)
 

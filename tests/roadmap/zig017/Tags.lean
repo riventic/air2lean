@@ -1,15 +1,15 @@
 import Air2Lean.Air.Normalize
 import ZigLean
 
-/-! Zig 0.17.0 tag-table and `@divCeil` regressions. Run: `lake env lean --run
-tests/roadmap/zig017/Tags.lean`. Synthetic checks against the 0.16.0/0.17.0 `src/Air.zig` tag
+/-! Zig 0.17.1 tag-table and `@divCeil` regressions. Run: `lake env lean --run
+tests/roadmap/zig017/Tags.lean`. Synthetic checks against the 0.16.0/0.17.1 `src/Air.zig` tag
 delta (`docs/zig-0.17-delta.md` §(a)); not compiler output. -/
 open Air2Lean Air2Lean.Raw
 
 private def require (ok : Bool) (message : String) : IO Unit :=
   unless ok do throw (IO.userError message)
 
-/-- `src/Air.zig` `Inst.Tag`: 0.17.0 members absent from 0.16.0, and the reverse. -/
+/-- `src/Air.zig` `Inst.Tag`: 0.17.1 members absent from 0.16.0, and the reverse. -/
 private def added017 : List String :=
   ["div_ceil", "div_ceil_optimized", "bit_cast", "bit_cast_safe", "ptr_cast", "ptr_from_int",
    "int_from_ptr", "error_cast", "error_from_int", "int_from_error", "union_from_enum", "int_cast",
@@ -38,29 +38,29 @@ def main : IO Unit := do
   -- Every tag delta is classified: renamed/split tags alias to a 0.16.0 tag, the rest reach the
   -- tag table or a stable rejection.
   for tag in added017 do
-    require ((tagsOnly017.contains tag)) s!"0.17.0 tag {tag} is not version-gated"
+    require ((tagsOnly017.contains tag)) s!"0.17.1 tag {tag} is not version-gated"
     for v in [ZigVersion.v0_14_1, .v0_15_2, .v0_16_0] do
       require ((tagReason? v tag).isSome) s!"{tag} accepted in {v}"
-    require ((tagReason? .v0_17_0 tag).isNone) s!"{tag} rejected in 0.17.0"
+    require ((tagReason? .v0_17_1 tag).isNone) s!"{tag} rejected in 0.17.1"
   for tag in removed017 do
-    require ((tagReason? .v0_17_0 tag).isSome) s!"removed {tag} accepted in 0.17.0"
+    require ((tagReason? .v0_17_1 tag).isSome) s!"removed {tag} accepted in 0.17.1"
     require ((tagReason? .v0_16_0 tag).isNone) s!"{tag} rejected in 0.16.0"
   require (tagsOnly017.length == added017.length) "tagsOnly017 differs from the Air.zig delta"
-  -- Each alias is a 0.16.0 spelling that 0.17.0 removed, or a canonical-only tag that no version
+  -- Each alias is a 0.16.0 spelling that 0.17.1 removed, or a canonical-only tag that no version
   -- writes (`bit_cast_safe` → `bitcast_safe`), which every version rejects as raw AIR.
   for (new, old) in tagAliases017 do
     require (removed017.contains old || canonicalOnlyTags.contains old)
-      s!"{new} aliases {old}, which 0.17.0 still has"
+      s!"{new} aliases {old}, which 0.17.1 still has"
   for tag in canonicalOnlyTags do
-    for v in [ZigVersion.v0_14_1, .v0_15_2, .v0_16_0, .v0_17_0] do
+    for v in [ZigVersion.v0_14_1, .v0_15_2, .v0_16_0, .v0_17_1] do
       require ((tagReason? v tag).isSome) s!"canonical-only {tag} accepted as raw AIR in {v}"
-  require (supportedVersions.contains "0.17.0" && supportedVersions.contains "0.16.0")
-    "0.17.0 must be supported alongside 0.16.0"
-  -- Build-mode spelling: 0.17.0's tags map to the version-independent spelling.
+  require (supportedVersions.contains "0.17.1" && supportedVersions.contains "0.16.0")
+    "0.17.1 must be supported alongside 0.16.0"
+  -- Build-mode spelling: 0.17.1's tags map to the version-independent spelling.
   for (new, old) in [("debug", "Debug"), ("safe", "ReleaseSafe"), ("fast", "ReleaseFast"),
       ("small", "ReleaseSmall")] do
-    require (BuildProfile.canonicalBuildMode "0.17.0" new == .ok old) s!"0.17.0 {new}"
-    require (BuildProfile.canonicalBuildMode "0.17.0" old == .ok old) s!"0.17.0 {old}"
+    require (BuildProfile.canonicalBuildMode "0.17.1" new == .ok old) s!"0.17.1 {new}"
+    require (BuildProfile.canonicalBuildMode "0.17.1" old == .ok old) s!"0.17.1 {old}"
     require ((BuildProfile.canonicalBuildMode "0.16.0" new).toOption.isNone) s!"0.16.0 {new}"
   -- `Zig.divCeil` against the reference on every 8-bit operand pair, both signednesses.
   let mut cases := 0
@@ -77,4 +77,4 @@ def main : IO Unit := do
         | none, some (.error e) => require (e == .illegal) s!"divCeil {s} {i} {j}: wrong error"
         | _, _ => throw (IO.userError s!"divCeil {s} {i} {j}: defined/undefined mismatch")
         cases := cases + 1
-  IO.println s!"Zig 0.17.0 tag and divCeil regressions passed ({cases} divCeil cases)"
+  IO.println s!"Zig 0.17.1 tag and divCeil regressions passed ({cases} divCeil cases)"

@@ -1,30 +1,33 @@
-# Zig 0.17.0 in CI and release metadata
+# Zig 0.17.1 in CI and release metadata
 
-Zig 0.17.0 (released 2026-10-01, LLVM 22) is **qualified**: `qualification/0.17.0.json`
-(from 0.16.0, `scripts/qualify-upgrade.py check` exit 0) records its upgrade obligations as
-passed, and `compatibility.json` gives it `status: qualified`. Zig 0.17.0 is the default
+Zig 0.17.1 (released 2026-11-02, LLVM 22) is **qualified**: `qualification/0.17.1.json`
+(from 0.17.0, `scripts/qualify-upgrade.py check` exit 0) records its upgrade obligations as
+passed, and `compatibility.json` gives it `status: qualified`. 0.17.1 replaced 0.17.0
+(released 2026-10-01, qualified from 0.16.0) on 2026-11-12: the patch release exports the same
+AIR for every example except generic-instance numbers and std `decl_line`s, so the 0.17.0
+translations, goldens and proofs carried over; the 0.17.0 record is in the git history. Zig 0.17.1 is the default
 (`compatibility.json` `zig.default`, read through `scripts/compat.py default`), and every gate that is qualified only on particular versions stays on those versions
-(the 0.17.0 job does not run them). This page covers the CI,
-metadata and version-list part of the 0.17.0 work. The exporter pin and hook
-(`zig-patch/`), the coverage inventory (`coverage/0.17.0.json`), the translator's
+(the 0.17.1 job does not run them). This page covers the CI,
+metadata and version-list part of the 0.17.1 work. The exporter pin and hook
+(`zig-patch/`), the coverage inventory (`coverage/0.17.1.json`), the translator's
 `supportedVersions` and CLI help, and the example and std-model version lists are owned
-by the other 0.17.0 tracks.
+by the other 0.17.1 tracks.
 
 ## CI matrix
 
 | Row | Decision |
 |---|---|
-| `0.17.0` full job | Added (`full: true`, every example `scripts/example-selection.sh` selects for 0.17.0). It runs every gate that applies to every version: the compiler inventory check, the float probe, the patched compiler build, golden AIR/translation/diff (`scripts/check.sh`), proofs, VCs, exporter review (`AIR2LEAN_REVIEW_ZIG17`), allocation policy, progress kernel and `no-sorry`. |
-| Once-per-run parts and mutation shards | Run on `zig.ci_once` (0.16.0), not on the default: their steps gate on the version they were qualified on and the T06 build-mode records exist for it. Moving them to 0.17.0 needs fresh evidence and is a separate decision. |
+| `0.17.1` full job | Added (`full: true`, every example `scripts/example-selection.sh` selects for 0.17.1). It runs every gate that applies to every version: the compiler inventory check, the float probe, the patched compiler build, golden AIR/translation/diff (`scripts/check.sh`), proofs, VCs, exporter review (`AIR2LEAN_REVIEW_ZIG17`), allocation policy, progress kernel and `no-sorry`. |
+| Once-per-run parts and mutation shards | Run on `zig.ci_once` (0.16.0), not on the default: their steps gate on the version they were qualified on and the T06 build-mode records exist for it. Moving them to 0.17.1 needs fresh evidence and is a separate decision. |
 | 0.16.0 / 0.15.2 / 0.14.1 rows | Unchanged. |
 
-The 0.17.0 job is a blocking job, not `continue-on-error`. Its inputs are the exporter pin
-and hook, `coverage/0.17.0.json`, golden overrides under `tests/golden/0.17.0/` where AIR or
-translations differ, and `tests/floatprobe/expected.0.17.0.txt`.
+The 0.17.1 job is a blocking job, not `continue-on-error`. Its inputs are the exporter pin
+and hook, `coverage/0.17.1.json`, golden overrides under `tests/golden/0.17.1/` where AIR or
+translations differ, and `tests/floatprobe/expected.0.17.1.txt`.
 
 Steps gated to one version (mostly `matrix.zig == '0.16.0'`, plus `0.15.2 || 0.16.0` for
 the proof API and typed outcomes) stay as they are. Their source/native qualification
-is version-specific (class b below), so they do not run on 0.17.0. One step ran on every
+is version-specific (class b below), so they do not run on 0.17.1. One step ran on every
 row but rejects unknown versions. Its condition now lists the qualified versions:
 
 - **Loop-switch dispatch regressions**: `tests/roadmap/dispatch/check.sh` accepts only the
@@ -37,20 +40,20 @@ row but rejects unknown versions. Its condition now lists the qualified versions
 
 ## Metadata (I09)
 
-`compatibility.json` lists 0.17.0 first, matching the newest-first order of
+`compatibility.json` lists 0.17.1 first, matching the newest-first order of
 `zig-patch/versions.toml` and `supportedVersions`:
 
-| Field | 0.17.0 |
+| Field | 0.17.1 |
 |---|---|
-| `status` | `qualified` (was `in-qualification` until the qualification record passed; `zig.default` is 0.17.0; `zig.ci_once` stays 0.16.0) |
+| `status` | `qualified` (was `in-qualification` until the qualification record passed; `zig.default` is 0.17.1; `zig.ci_once` stays 0.16.0) |
 | `hosts` | `x86_64-linux`, `aarch64-macos` |
-| `source` | `https://ziglang.org/download/0.17.0/zig-0.17.0.tar.xz`, sha256 `b6c7f1728f043700d6529bac980800792f824256a9d2f1839b3d62beed0b8abd` |
-| `hook` | `0.17.0/hook.patch` |
+| `source` | `https://ziglang.org/download/0.17.1/zig-0.17.1.tar.xz`, sha256 `1e89bf06610b769a8c77676c6c8d54b093a0db60f4891f2f91014829012f0e24` |
+| `hook` | `0.17.1/hook.patch` |
 | `llvm` | `22` |
-| `ci_host_zig` | `https://ziglang.org/download/0.17.0/zig-x86_64-linux-0.17.0.tar.xz`, sha256 `1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026` |
+| `ci_host_zig` | `https://ziglang.org/download/0.17.1/zig-x86_64-linux-0.17.1.tar.xz`, sha256 `3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a` |
 
 Both checksums match `index.json`. They were also confirmed by downloading each tarball
-and hashing it on 2026-10-07. `scripts/compat.py check` now also requires a `status`
+and hashing it on 2026-11-12 (the build host's sha256-checked fetch). `scripts/compat.py check` now also requires a `status`
 of `qualified` or `in-qualification` for every version, and requires `zig.default` to be
 `qualified`. `scripts/doctor.py` adds a `zig-version-status` note when the selected
 version is `in-qualification` (no pinned version is at present). `scripts/support-matrix.py`
@@ -59,7 +62,7 @@ regions, adds a Status column to
 `docs/support-matrix.md`, and checks that `compatibility.json` lists the same versions as
 `supportedVersions`.
 
-Version lists updated to include 0.17.0: `scripts/workflow-common.sh` (the
+Version lists updated to include 0.17.1: `scripts/workflow-common.sh` (the
 `workflow_version` case), `scripts/local-ci.sh`, `scripts/translate.sh` usage, the CI matrix,
 `compatibility.json`, and the README/PLAN prose.
 `assurance/target-matrix.json`, `assurance/build-modes.json` and `scripts/accounting.py`
@@ -73,9 +76,9 @@ Search: `grep -rn '0\.16\.0'` over `*.py *.sh *.json *.toml *.lean *.yml *.md`, 
 
 | Class | Lines | Files | Action |
 |---|---:|---:|---|
-| (a) version enumeration, this track | 38 | 10 | 0.17.0 added (CI full row and review env, workflow-common/local-ci/translate lists, `compatibility.json` entries, README/PLAN/support-matrix lists, the version-list tests) |
+| (a) version enumeration, this track | 38 | 10 | 0.17.1 added (CI full row and review env, workflow-common/local-ci/translate lists, `compatibility.json` entries, README/PLAN/support-matrix lists, the version-list tests) |
 | (a) version enumeration, other tracks | 10 | 5 | left for their owners: `zig-patch/versions.toml`, `zig-patch/README.md` LLVM list (Z1), `Air2Lean/Air/Normalize.lean` `supportedVersions` and `Air2Lean/Main.lean` help (Z3), `docs/coverage.md` inventory list (Z2) |
-| (c) default version | 46 | 12 | moved to 0.17.0 (one source: `zig.default`, read by `scripts/compat.py default`; `scripts/version-literals.py` rejects a default literal): check/mutate/translate, `local-ci.sh`, `doctor.py`, `clean-env.sh`; the rest was left on 0.16.0 (getting-started/README/distribution bootstrap instructions, doctor tests of the default, the five 0.16.0 mutation shard rows, and the "once per run" CI steps on the default row (support matrix, release record) |
+| (c) default version | 46 | 12 | moved to 0.17.1 (one source: `zig.default`, read by `scripts/compat.py default`; `scripts/version-literals.py` rejects a default literal): check/mutate/translate, `local-ci.sh`, `doctor.py`, `clean-env.sh`; the rest was left on 0.16.0 (getting-started/README/distribution bootstrap instructions, doctor tests of the default, the five 0.16.0 mutation shard rows, and the "once per run" CI steps on the default row (support matrix, release record) |
 | (b) qualified on specific versions | 587 | 178 | left: the evidence and gates are scoped to the versions they were run on |
 
 Class (b) by area: `tests/roadmap` 323 lines/95 files (per-feature qualification gates,
@@ -89,28 +92,28 @@ translation notes); `assurance` 15/2 (float labels `compiler-rt@0.14.1,0.15.2,0.
 perf budgets); `scripts` 15/7 (`flow-time.sh`, `diff.sh` notes, `normalize-generated.py`
 audited versions, `build-guard.py`, `abi-probe.py`, `review-checks.sh` fixtures);
 `REVIEW_STRATEGY.md` 12, `tests/*` 11/7, `case-studies` 6/2, `zig-patch` TAGS 5/2, and
-historical PLAN/README/ROADMAP/remaining-acceptance rows 9. Extending any of these to 0.17.0 is
-qualification work. It needs fresh evidence on 0.17.0, not a list edit.
+historical PLAN/README/ROADMAP/remaining-acceptance rows 9. Extending any of these to 0.17.1 is
+qualification work. It needs fresh evidence on 0.17.1, not a list edit.
 
 ## Integration
 
-The 0.17.0 inputs (exporter pin, `coverage/0.17.0.json`, `supportedVersions`, CLI help) are
+The 0.17.1 inputs (exporter pin, `coverage/0.17.1.json`, `supportedVersions`, CLI help) are
 merged. `python3 scripts/compat.py check`, `python3 scripts/support-matrix.py check` and the
 `distribution` and `support-matrix` unittest suites pass on the committed tree. After a change to
 the version metadata, run `python3 scripts/support-matrix.py generate` to refresh the committed
 README/PLAN/support-matrix regions.
 
-0.17.0 is qualified (`status: qualified`, `qualification/0.17.0.json`). Still open: extending each
-class (b) gate after running it on 0.17.0, and the decision whether to move the default and the
+0.17.1 is qualified (`status: qualified`, `qualification/0.17.1.json`). Still open: extending each
+class (b) gate after running it on 0.17.1, and the decision whether to move the default and the
 mutation shards.
 
-## Probe contracts (0.17.0)
+## Probe contracts (0.17.1)
 
 `scripts/abi-probe.py observe` selects `tests/roadmap/abi-probes/<version>/<profile>.json` for
-the stock compiler's `zig version`. The 0.17.0 contracts were recorded by running the probe with
-stock Zig 0.17.0 (checksums from `index.json`): aarch64-macos natively, aarch64-linux in a
+the stock compiler's `zig version`. The 0.17.1 contracts were recorded by running the probe with
+stock Zig 0.17.1 (checksums from `index.json`): aarch64-macos natively, aarch64-linux in a
 `linux/arm64` container, and x86_64-linux in a `linux/amd64` container (Rosetta; ReleaseFast, a
 [build mode](build-modes.md) the probe only observes, ran without the `bss_size overflow` that 0.14.1 hit). Layouts, offsets and values equal
 0.16.0's. The Linux contracts differ only in `zig_version`; the macOS ones also in LLVM 22's
-apple_m1 feature names. `tests/floatprobe/expected.0.17.0.txt` comes from the x86_64-linux
+apple_m1 feature names. `tests/floatprobe/expected.0.17.1.txt` comes from the x86_64-linux
 container run: the same two `f128 sqrt` lines as 0.16.0's override.

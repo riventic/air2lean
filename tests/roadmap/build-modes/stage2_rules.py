@@ -33,7 +33,7 @@ def diagnose(doc):
 
 class Stage2Rules(unittest.TestCase):
     def test_versions_present(self):
-        self.assertEqual(sorted(p.name for p in AIR.iterdir()), ['0.16.0', '0.17.0'])
+        self.assertEqual(sorted(p.name for p in AIR.iterdir()), ['0.16.0', '0.17.1'])
 
     def test_rejected_on_stage2_accepted_on_llvm(self):
         for version in sorted(AIR.iterdir()):

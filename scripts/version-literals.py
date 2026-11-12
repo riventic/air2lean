@@ -2,7 +2,7 @@
 """Lint: Zig version literals belong to the dialect registry (structure audit B3).
 
 Only `Air2Lean/Air/Dialect.lean` (`ZigVersion`, the translator's version registry) may write a
-Zig version as a Lean string literal (`"0.17.0"`, `"0.17"`). Every other translator module asks
+Zig version as a Lean string literal (`"0.17.1"`, `"0.17"`). Every other translator module asks
 the `Dialect` (or a `ZigVersion` fact) instead of comparing or listing version strings. Prose that
 mentions a version inside a longer literal (a diagnostic, a fixture path) and comments are not
 keys and are not checked. The registry's versions must
@@ -24,12 +24,12 @@ import re
 import sys
 
 REGISTRY = "Air2Lean/Air/Dialect.lean"
-# A literal that is a version (`"0.17.0"`, `"0.17"`): a comparison or a version list. Messages
-# and paths that mention a version (`"… Zig 0.17.0's …"`, `"air/0.16.0/…"`) are prose, not keys.
+# A literal that is a version (`"0.17.1"`, `"0.17"`): a comparison or a version list. Messages
+# and paths that mention a version (`"… Zig 0.17.1's …"`, `"air/0.16.0/…"`) are prose, not keys.
 VERSION = re.compile(r"\d+\.\d+(\.\d+)?")
 # A character literal that may hold a double quote (`'"'`, `'\\"'`), not a string delimiter.
 CHAR_LITERAL = re.compile(r"'(?:\\.|\")'")
-# The registry's spelling of each version: `| v0_17_0 => "0.17.0"`.
+# The registry's spelling of each version: `| v0_17_1 => "0.17.1"`.
 REGISTRY_ENTRY = re.compile(r'\|\s*\.?v(\d+)_(\d+)_(\d+)\s*=>\s*"(\d+\.\d+\.\d+)"')
 
 

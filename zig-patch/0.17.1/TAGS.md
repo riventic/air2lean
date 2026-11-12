@@ -1,10 +1,10 @@
-# Zig 0.17.0 vs 0.16.0
+# Zig 0.17.1 vs 0.16.0
 
 ## AIR tags (`Air.Inst.Tag`)
 
-214 tags in 0.16.0, 224 in 0.17.0 (16 added, 6 removed; a rename counts as both).
+214 tags in 0.16.0, 224 in 0.17.1 (16 added, 6 removed; a rename counts as both).
 
-| Only in 0.16.0 | Only in 0.17.0 | Exporter (`zig-patch/air-json/json.zig`) |
+| Only in 0.16.0 | Only in 0.17.1 | Exporter (`zig-patch/air-json/json.zig`) |
 |---|---|---|
 | `bitcast` | `bit_cast` (`@bitCast` only), `bit_cast_safe` (`@bitCast`/`@fromBackingInt` with the `invalid_enum_value` check for an exhaustive enum result) | `ty_op` operand (`Compat.isNewTyOp`) |
 | `bitcast` (pointer casts) | `ptr_cast` (pointer to pointer, slice to slice; `@ptrCast`, `@alignCast`, `@constCast`, read-only parameter copies, `&v[i]`), `ptr_from_int` (`@ptrFromInt`), `int_from_ptr` (`@intFromPtr`, pointer and slice `==`) | `ty_op` operand (`Compat.isNewTyOp`) |
@@ -19,8 +19,8 @@
 | | `spirv_runtime_array_len` (SPIR-V only) | `"unsupported": true` |
 
 The exporter writes each tag under its own name: `"tag"` is `bit_cast`, `int_cast`, `agg_field_val`
-and so on in a 0.17.0 dump. Mapping them onto the 0.16.0 translator paths is the translator's job
-(`Air2Lean/Air/Normalize.lean`, `Canon.lean`); until it knows 0.17.0, `supportedVersions` rejects
+and so on in a 0.17.1 dump. Mapping them onto the 0.16.0 translator paths is the translator's job
+(`Air2Lean/Air/Normalize.lean`, `Canon.lean`); until it knows 0.17.1, `supportedVersions` rejects
 these dumps. `splat` keeps its name but may now produce an array.
 
 ## Data layout and type changes
@@ -42,7 +42,7 @@ these dumps. `splat` keeps its name but may now produce an array.
 
 ## SPIR-V types (`spirv_type`, `spirv_runtime_array_len`)
 
-0.17.0 adds the InternPool key `spirv_type` (`std.lang.Type.spirv`) and the AIR tag
+0.17.1 adds the InternPool key `spirv_type` (`std.lang.Type.spirv`) and the AIR tag
 `spirv_runtime_array_len`. Their one source is `@SpirvType`: `InternPool.getReifiedSpirvType` has
 a single caller, `Sema.zirReifySpirvType`, which fails first unless the target is SPIR-V
 (`Sema.zig` 20849). So neither is reachable on a supported target (x86_64-linux, aarch64-macos).
@@ -50,7 +50,7 @@ Fixture, with the patched compiler:
 
 ```sh
 # spirv.zig: const T = @SpirvType(.sampler); export fn f(x: u32) u32 { _ = @sizeOf(T); return x; }
-zig-air-0.17.0/bin/zig build-obj -fno-emit-bin -OReleaseSafe -target x86_64-linux spirv.zig
+zig-air-0.17.1/bin/zig build-obj -fno-emit-bin -OReleaseSafe -target x86_64-linux spirv.zig
 # error: builtin @SpirvType is only available when targeting SPIR-V; targeted CPU architecture is x86_64
 ```
 
@@ -59,7 +59,7 @@ entry and the tag `"unsupported": true`, both rejected by the translator.
 
 ## Exporter port
 
-`zig-patch/air-json/json.zig` is shared by every version; its `Compat` section has the 0.17.0
+`zig-patch/air-json/json.zig` is shared by every version; its `Compat` section has the 0.17.1
 branch (`Compat.v17`; `v16` now means 0.16.0 or later, so the `std.Io` file and environment
 branches apply unchanged):
 
@@ -78,7 +78,7 @@ branches apply unchanged):
 
 ## Build
 
-`build.sh` passes `-Dversion-string=<version>`: 0.17.0's `build.zig` fails on a tarball tree
+`build.sh` passes `-Dversion-string=<version>`: 0.17.1's `build.zig` fails on a tarball tree
 (no `.git`) without it. The AIR-only build (`-Denable-llvm=false`, Debug, `-j1`) took about
 2-3 minutes with a peak RSS of about 3 GB on aarch64-macos.
 
@@ -97,7 +97,7 @@ on aarch64-macos:
 | `f128` `abi_align` is 8, not 16 (aarch64-macos host). | `floatconv` (`f16ToF128`, `f80ToF64`), `floatops` (`op128`, `op80`) |
 | std changes: `Io.Condition.wait` goes through `waitTimeout`; `waitUncancelable` inlines more; `Io.Condition.waitInner` is gone. | `sync` |
 
-Every exported example's differing files are in `tests/golden/0.17.0/<ex>/air/`. `threadsync`
-does not compile on 0.17.0 (it uses `Thread.Mutex`/`Thread.WaitGroup`, which 0.16.0 already
-removed). `lists` calls `dupeSentinel` instead of the removed `Allocator.dupeZ` on 0.17.0, and `asm`
+Every exported example's differing files are in `tests/golden/0.17.1/<ex>/air/`. `threadsync`
+does not compile on 0.17.1 (it uses `Thread.Mutex`/`Thread.WaitGroup`, which 0.16.0 already
+removed). `lists` calls `dupeSentinel` instead of the removed `Allocator.dupeZ` on 0.17.1, and `asm`
 uses the x86_64 clobber `cc`, so it is exported on x86_64 only (CI).

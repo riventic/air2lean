@@ -10,7 +10,7 @@ Eight rewrites of the raw JSON (`Raw.RawFunc`), the same for every Zig version, 
 `Normalize.lean` reads the tags. After them, the same Zig code gives the same `Func` in every
 supported version, so one translation (and the proofs over it) serves all versions.
 
-0. `versionTags`. The canonical tag vocabulary is 0.16.0's. Zig 0.17.0 renamed `intcast`,
+0. `versionTags`. The canonical tag vocabulary is 0.16.0's. Zig 0.17.1 renamed `intcast`,
    `intcast_safe` and `struct_field_val` (`int_cast`, `int_cast_safe`, `agg_field_val`) and split
    the overloaded `bitcast` by operand kind (`bit_cast`, `bit_cast_safe`, `ptr_cast`,
    `ptr_from_int`, `int_from_ptr`, `error_cast`, `error_from_int`, `int_from_error`); 0.16.0
@@ -19,7 +19,7 @@ supported version, so one translation (and the proofs over it) serves all versio
    the invalid-tag check for an exhaustive-enum destination; it becomes the canonical-only tag
    `bitcast_safe` (`Op.bitcast true`), so that check (`.panic`) stays apart from the unchecked
    `bit_cast`, whose unnamed tag is `.illegal`. The pass renames them back, so the
-   rewrites below match one vocabulary. 0.17.0 also dropped `bool_and`/`bool_or`: Sema's
+   rewrites below match one vocabulary. 0.17.1 also dropped `bool_and`/`bool_or`: Sema's
    safety checks combine their conditions with `bit_and`/`bit_or` on `bool` (or `bool` vector)
    operands, which the pass renames to `bool_and`/`bool_or` (both evaluate both operands, so
    the meaning is the same). A `ptr_cast` to a whole-byte vector lane becomes 0.16.0's
@@ -86,24 +86,24 @@ supported version, so one translation (and the proofs over it) serves all versio
 
 namespace Air2Lean.Raw
 
-/-- Zig 0.17.0 AIR tags renamed to their 0.16.0 spelling (`versionTags`, module doc). -/
+/-- Zig 0.17.1 AIR tags renamed to their 0.16.0 spelling (`versionTags`, module doc). -/
 def tagAliases017 : List (String × String) :=
   [("int_cast", "intcast"), ("int_cast_safe", "intcast_safe"), ("agg_field_val", "struct_field_val"),
    ("bit_cast", "bitcast"), ("bit_cast_safe", "bitcast_safe"), ("ptr_cast", "bitcast"),
    ("ptr_from_int", "bitcast"), ("int_from_ptr", "bitcast"), ("error_cast", "bitcast"),
    ("error_from_int", "bitcast"), ("int_from_error", "bitcast")]
 
-/-- Canonical tags that no Zig version writes: a 0.17.0 tag with no 0.16.0 spelling that `Normalize`
+/-- Canonical tags that no Zig version writes: a 0.17.1 tag with no 0.16.0 spelling that `Normalize`
 must still tell apart (`bit_cast_safe`, which checks an enum result's tag in the op; soundness
 audit 2026-10-14 S3). An AIR file with one of these is rejected (`airTagReason?`). -/
 def canonicalOnlyTags : List String := ["bitcast_safe"]
 
-/-- Zig 0.17.0 AIR tags without a 0.16.0 spelling. -/
+/-- Zig 0.17.1 AIR tags without a 0.16.0 spelling. -/
 def tagsOnly017 : List String :=
   ["div_ceil", "div_ceil_optimized", "array_to_vector", "union_from_enum", "spirv_runtime_array_len"] ++
     tagAliases017.map (·.1)
 
-/-- 0.16.0 AIR tags that Zig 0.17.0 removed or renamed (0.17.0 writes `bool_and`/`bool_or` as
+/-- 0.16.0 AIR tags that Zig 0.17.1 removed or renamed (0.17.1 writes `bool_and`/`bool_or` as
 `bit_and`/`bit_or` on `bool` operands). -/
 def tagsRemoved017 : List String :=
   ["bitcast", "intcast", "intcast_safe", "struct_field_val", "bool_and", "bool_or"]
@@ -119,10 +119,10 @@ def airTagReason? (tags : ZigVersion.AirTags) (zigVersion tag : String) : Option
     some s!"is not an AIR tag of any Zig version (the translator's canonical spelling only)"
   else if tags == .v017 then
     if tagsRemoved017.contains tag then
-      some s!"is not a Zig 0.17.0 AIR tag (removed or renamed in 0.17.0)"
+      some s!"is not a Zig 0.17.1 AIR tag (removed or renamed in 0.17.1)"
     else none
   else if tagsOnly017.contains tag then
-    some s!"is not a Zig {zigVersion} AIR tag (introduced in 0.17.0)"
+    some s!"is not a Zig {zigVersion} AIR tag (introduced in 0.17.1)"
   else none
 
 /-- Every instruction of `body`, nested bodies included, in body order. -/
@@ -140,7 +140,7 @@ partial def rewriteBody (g : RawInst → Option RawInst) (body : Array RawInst) 
       elseBody := rewriteBody g i.elseBody,
       cases := i.cases.map fun c => { c with body := rewriteBody g c.body } }
 
-/-- Zig 0.17.0 writes `&v[i]` as a `ptr_cast` of the vector pointer to a lane pointer
+/-- Zig 0.17.1 writes `&v[i]` as a `ptr_cast` of the vector pointer to a lane pointer
 (`Layout.vectorIndex`). 0.16.0 wrote `ptr_elem_ptr` of the vector pointer and the lane index,
 typed as a plain element pointer, when the lane is a power-of-two number of whole bytes. This
 gives those lanes the 0.16.0 form (adding the element pointer and `usize` types if the table
@@ -669,7 +669,7 @@ def renumber (f : RawFunc) : RawFunc := (renumberTraced f).afterDebug
 
 /-- Types whose parameter has no AIR `arg`: Zig still keeps their slot in the runtime
 function signature. Comptime parameters, in contrast, have no slot in `params`. This follows
-Zig's `Type.onePossibleValue` (0.14.1 to 0.17.0), which is null for every error set and error
+Zig's `Type.onePossibleValue` (0.14.1 to 0.17.1), which is null for every error set and error
 union: a one-name `error{A}` still has a runtime error code (L10), so its parameter has an `arg`.
 An enum has one value exactly when its integer tag has none (`u0`): a one-field `enum(u8)` does
 not. -/

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# P09 counted loops: retranslate the retained AIR of counted.zig (Zig 0.17.0), regenerate the
+# P09 counted loops: retranslate the retained AIR of counted.zig (Zig 0.17.1), regenerate the
 # loops' invariants, measures and exit posts (air2lean-invgen, `@[fsym_inv]`), kernel-check
 # counted/Proof.lean, whose bare `fsym` walks apply each loop's generated invariant, and its seeded
 # mutants (mutants.json: a wrong cell relation, a dropped bound under `!=`, a dropped `x ≤ b + 1`

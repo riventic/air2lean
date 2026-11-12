@@ -25,7 +25,7 @@ The sentinel invariant is proved over the translated code, for every allocator:
 `Interfaces.SentinelSpec` (`tests/roadmap/interfaces`) takes `source.zig` in the open
 translation (`--allocator-model translated`, the allocator from the environment, EXT-05) and
 walks `make`, `append`, `resize` and `release` and the generated `std.mem.Allocator` wrappers
-with `fsym`, from `CAllocSpec` of the environment's allocator alone, on Zig 0.17.0, 0.16.0,
+with `fsym`, from `CAllocSpec` of the environment's allocator alone, on Zig 0.17.1, 0.16.0,
 0.15.2 and 0.14.1: success is a buffer of the new length (`len + 1` bytes granted, the sentinel
 byte counted) with the retained bytes and the sentinel at its end, `error.OutOfMemory` leaves the
 old grant unchanged, and `release` returns the whole grant. The raw vtable contracts are the four

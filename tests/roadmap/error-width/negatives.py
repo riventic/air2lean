@@ -72,9 +72,9 @@ CASES = {
 
 # The same `@errorName` function is accepted by the other versions: the rejection is the
 # 0.14.1 dialect, not the operation.
-# 0.17.0 renamed AIR tags, so its own export of the same function is used.
+# 0.17.1 renamed AIR tags, so its own export of the same function is used.
 ACCEPTED = {f"@errorName on {v}": [with_version(ERROR_NAME, v)] for v in ("0.15.2", "0.16.0")}
-ACCEPTED["@errorName on 0.17.0"] = [error_name("0.17.0")]
+ACCEPTED["@errorName on 0.17.1"] = [error_name("0.17.1")]
 
 
 def translate(docs):

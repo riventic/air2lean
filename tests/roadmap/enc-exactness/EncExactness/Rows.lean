@@ -38,7 +38,7 @@ theorem row_u10_padding : view (BitVec 16) (0x2ab : BitVec 10) = some (.error .u
 theorem row_u10_set_padding : dec (BitVec 10) #[.int 0xab, .int 0x06] = some (.error .unspecified) := by
   decide +kernel
 
--- `i10`/`u24` from 0.17.0 (`intEncExt`): exact with the extension; padding that is not it is no value.
+-- `i10`/`u24` from 0.17.1 (`intEncExt`): exact with the extension; padding that is not it is no value.
 theorem row_i10_ext_exact :
     ((intEncExt .little true 10).decode ((intEncExt .little true 10).encode (-3))).run = some (.ok (-3)) := by
   decide +kernel

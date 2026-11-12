@@ -26,12 +26,12 @@
     "0.16.0/error_tracing.pass.json": "7d76484e15ca5f6f7e8e9e22c121c1b64bf6fc73987911c3f0732fabf489b1b7",
     "0.16.0/error_tracing.traceIndex.json": "60e9dea00577d40402d4fa3cdeb4570c78f916861bdacca80ba7bc225f0fc6f6",
     "0.16.0/error_tracing.traced.json": "99414d9044b7e9bb754149c20cb110da0c6283d3cc1bac6472d3ade53b7a48ed",
-    "0.17.0/error_tracing.bigRet.json": "c919cc512788f81e39a097daf3f9b8944440414322bbcb602f55facbd9fdff21",
-    "0.17.0/error_tracing.handledTwice.json": "3b09be353c42bb541f1ce81b9722f22d2c1f92160dd6fbc70940d6e06a2783c0",
-    "0.17.0/error_tracing.pass.json": "eafa0db7bf67cd4385118027cfd39ba598240d2925d0bbf9eeb31e89f71f570b",
-    "0.17.0/error_tracing.traceIndex.json": "cbcb04324762b3f9c9afb0017ff7afd6b3ffba0f4a524ce3d9c7e18d8142d83e",
-    "0.17.0/error_tracing.traced.json": "c8c056499f0f5c6d1b8fe569d39876dbdbeb6dba53f005949caa5ac837830b40",
-    "0.17.0/lang.returnError.json": "22122ad83113e829b11cf807a730e7d99ad327d5dd4c3a8064ee6dff56decb2f"
+    "0.17.1/error_tracing.bigRet.json": "c919cc512788f81e39a097daf3f9b8944440414322bbcb602f55facbd9fdff21",
+    "0.17.1/error_tracing.handledTwice.json": "3b09be353c42bb541f1ce81b9722f22d2c1f92160dd6fbc70940d6e06a2783c0",
+    "0.17.1/error_tracing.pass.json": "eafa0db7bf67cd4385118027cfd39ba598240d2925d0bbf9eeb31e89f71f570b",
+    "0.17.1/error_tracing.traceIndex.json": "cbcb04324762b3f9c9afb0017ff7afd6b3ffba0f4a524ce3d9c7e18d8142d83e",
+    "0.17.1/error_tracing.traced.json": "c8c056499f0f5c6d1b8fe569d39876dbdbeb6dba53f005949caa5ac837830b40",
+    "0.17.1/lang.returnError.json": "22122ad83113e829b11cf807a730e7d99ad327d5dd4c3a8064ee6dff56decb2f"
   },
   "exporter": "zig-patch/air-json/json.zig",
   "exporter_sha256": "9c5dd1583f3711cce9ff88013f34a56d156fb149fc3597152fd3d3f1e0c36f56",
@@ -39,9 +39,9 @@
     "0.14.1": "cbce6d3f0ead49085f83227f0fda72f5cb981fbfc3d6ad961bd2ddfc3b2b3ae6",
     "0.15.2": "5dbaf7083d6ec6518a32a847f908ec000761df32ead8dc26245bf90e435985cd",
     "0.16.0": "c18f6e23ad2efd9afd073ede358e213c901d48a609e422b027eb3517ec5b851c",
-    "0.17.0": "c5ebceb533f8b03abc4875c54180dba47386601150937da049a92bc15de06753"
+    "0.17.1": "c5ebceb533f8b03abc4875c54180dba47386601150937da049a92bc15de06753"
   },
-  "qualification": "Compiler exports of error_tracing.zig with error return tracing by patched 0.17.0, 0.16.0, 0.15.2 and 0.14.1 compilers built from the recorded exporter; check.sh translates each and compares the model's results with native runs.",
+  "qualification": "Compiler exports of error_tracing.zig with error return tracing by patched 0.17.1, 0.16.0, 0.15.2 and 0.14.1 compilers built from the recorded exporter; check.sh translates each and compares the model's results with native runs.",
   "source": "tests/roadmap/error-tracing/error_tracing.zig",
   "source_sha256": "3f9f3f780cb59da9eee3626089a34591796b5ab066766ea65832ece48844781e"
 }

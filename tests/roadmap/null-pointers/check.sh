@@ -67,7 +67,7 @@ mutation_status=0
 lake env lean "$work/mutant.lean" >"$work/mutation.log" 2>&1 || mutation_status=$?
 python3 tests/roadmap/null-pointers/classify_mutant.py "$mutation_status" \
   "$work/mutation.log" "$work/mutant.lean" "$work/generated/cNull.lean"
-for version in 0.17.0 0.16.0 0.15.2 0.14.1; do
+for version in 0.17.1 0.16.0 0.15.2 0.14.1; do
   "$translator" "$here/air/$version" -o "$work/Gen-$version.lean" --namespace NullableNative --prefix 'nullpointers.'
   cat "$here/Runner.lean" >> "$work/Gen-$version.lean"
   lake env lean --run "$work/Gen-$version.lean" > "$work/lean-$version.txt"
@@ -83,4 +83,4 @@ for version in 0.17.0 0.16.0 0.15.2 0.14.1; do
   done
 done
 python3 -B "$here/test_provenance.py"
-echo "nullable pointer gate passed: 30 semantic cases, 1 killed mutant, 4 versions x $(wc -l < "$here/expected/0.17.0.txt" | tr -d ' ') model lines (expected/<version>.txt), 2 compiler rejection roots per version"
+echo "nullable pointer gate passed: 30 semantic cases, 1 killed mutant, 4 versions x $(wc -l < "$here/expected/0.17.1.txt" | tr -d ' ') model lines (expected/<version>.txt), 2 compiler rejection roots per version"

@@ -149,13 +149,13 @@ bounds for a code of at least `2^(bits-1)`
 ([upstream note](upstream/zig-0.14.1-error-name-sign-extension.md)), unless the numbering shows
 every code below that bit. `tests/roadmap/lang-long-tail` (`error_ints`, `error_ints_w8`)
 exports the compilation of its native probe at 16 and 8 bits: codes, names and the round trip
-equal the native program on 0.14.1–0.17.0 (8 bits: 0.15.2–0.17.0; 0.14.1 is rejected there,
+equal the native program on 0.14.1–0.17.1 (8 bits: 0.15.2–0.17.1; 0.14.1 is rejected there,
 its codes reach the sign bit), with proofs for every code and every numbered error.
 
 | Configuration | `error_set_bits` | Status |
 | --- | --- | --- |
 | Default `--error-limit` (65534) | 16 | Qualified. Native/model observations come from the finite error-storage gate ([error-storage](../tests/roadmap/error-storage/README.md)), plus the width proofs and the hand-written fixtures |
-| `--error-limit` 1–255, 256–65535 (non-default), 65536–2³²−1 | 1–8, 9–16, 17–32 | Accepted by the translator, the project workflow (`scripts/project.py`) and the ABI probe (`scripts/abi-probe.py`: the `anyerror` and `anyerror!u8` layouts at 8 and 32 bits, observed natively on x86_64-linux-gnu and aarch64-macos-none with 0.16.0 and 0.17.0). The width proofs cover them, and hand-written fixtures at 8, 10 and 17 bits are translated, elaborated and executed. Compiler exports at 2, 8, 10, 17 and 32 bits from 0.14.1–0.17.0 are executed; `error_ints_w8` compares an 8-bit compilation with its native program. Stock-compiler observations on aarch64-macos match the model at 1–32 bits for 0.15.2–0.17.0, and at 4–32 bits for 0.14.1, where narrower widths cannot be observed ([error-width](../tests/roadmap/error-width/README.md)). 0.17.0 writes a `?E` code sign-extended into its padding bits where the width is not a whole number of bytes; the model leaves padding undefined, so this is a documented probe difference, not a model mismatch |
+| `--error-limit` 1–255, 256–65535 (non-default), 65536–2³²−1 | 1–8, 9–16, 17–32 | Accepted by the translator, the project workflow (`scripts/project.py`) and the ABI probe (`scripts/abi-probe.py`: the `anyerror` and `anyerror!u8` layouts at 8 and 32 bits, observed natively on x86_64-linux-gnu and aarch64-macos-none with 0.16.0 and 0.17.1). The width proofs cover them, and hand-written fixtures at 8, 10 and 17 bits are translated, elaborated and executed. Compiler exports at 2, 8, 10, 17 and 32 bits from 0.14.1–0.17.1 are executed; `error_ints_w8` compares an 8-bit compilation with its native program. Stock-compiler observations on aarch64-macos match the model at 1–32 bits for 0.15.2–0.17.1, and at 4–32 bits for 0.14.1, where narrower widths cannot be observed ([error-width](../tests/roadmap/error-width/README.md)). 0.17.1 writes a `?E` code sign-extended into its padding bits where the width is not a whole number of bytes; the model leaves padding undefined, so this is a documented probe difference, not a model mismatch |
 | `--error-limit 0` | 0 | Rejected (no error storage) |
 
 The project workflow (`scripts/project.py`), golden receipts (`scripts/normalize-generated.py`)
@@ -292,10 +292,10 @@ records a bounded candidate for T04/T05/T06.
   operation, the accepted orderings, `bool`/enum/pointer/float cells, and threaded litmus tests.
 
 The output must equal that profile's versioned expected file
-(`tests/roadmap/aarch64-abi/expected/<zig>/`, Zig 0.17.0, 0.16.0, 0.15.2 and 0.14.1). A wrong host or an unrecorded Zig version
+(`tests/roadmap/aarch64-abi/expected/<zig>/`, Zig 0.17.1, 0.16.0, 0.15.2 and 0.14.1). A wrong host or an unrecorded Zig version
 is `excluded`, which exits non-zero and never counts as a match. `tests/roadmap/aarch64-abi/Model.lean`
 kernel-checks each profile's layout table against the model and compares the file's float
-and atomic results with it. Six declared divergences (eight before Zig 0.16.0, two result and two or three layout rows in 0.17.0: [aarch64-abi.md](aarch64-abi.md#zig-0170)) are reported and
+and atomic results with it. Six declared divergences (eight before Zig 0.16.0, two result and two or three layout rows in 0.17.1: [aarch64-abi.md](aarch64-abi.md#zig-0171)) are reported and
 not counted as matches: soft-float f80 unnormal and pseudo-denormal handling, padding-sensitive
 `u24`/`u40` cmpxchg, signed `Max` of a negative `i24`/`i40` cell, and (before 0.16.0)
 f64-precision `@sqrt` of f80 and f128.
@@ -357,6 +357,6 @@ s390x-linux, mips64-linux and x86_64-linux (the AIR differs only in the profile)
 translations, proves byte-level facts of the s390x and x86_64 ones, and compares the model of each
 with the native program run on s390x-linux-musl (under qemu emulation), mips64-linux-muslabi64
 (qemu) and x86_64-linux-musl. `concurrency.sh` does the same for atomics, futexes, threads and the
-allocator model, exported with Zig 0.17.0 and 0.15.2, under 24 scheduler oracles per case. These
+allocator model, exported with Zig 0.17.1 and 0.15.2, under 24 scheduler oracles per case. These
 are bounded observations for those targets, backend and mode; they are not a binary
 correspondence claim.

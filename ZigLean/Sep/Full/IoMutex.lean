@@ -4,7 +4,7 @@ import ZigLean.Sep.Full.LockSteps
 /-!
 # `Io.Mutex` as a mutex (`MutexImpl`), once for every program
 
-`Io.Mutex`'s `lockUncancelable` and `unlock` (Zig 0.16.0's std code; 0.17.0 translates to the same
+`Io.Mutex`'s `lockUncancelable` and `unlock` (Zig 0.16.0's std code; 0.17.1 translates to the same
 code) are the same code in every program that uses them: only the names differ (each program's
 `Gen` defines its own `Io_Mutex_State`, exits and locals). `IoMutexCode Tgt` is that code passed
 as parameters: the functions of a program's `Gen` with their unfolding equations, stated over the

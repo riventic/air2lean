@@ -69,7 +69,7 @@ AIR2LEAN_ZIG_NATIVE=/path/to/zig bash tests/roadmap/const-bases/check.sh --nativ
 
 ## Fresh exports
 
-`air-fresh/<version>` (0.17.0, 0.16.0, 0.15.2, 0.14.1; `export.sh`) is the unmodified export of `const_bases.zig`
+`air-fresh/<version>` (0.17.1, 0.16.0, 0.15.2, 0.14.1; `export.sh`) is the unmodified export of `const_bases.zig`
 from a patched compiler of that version (stage2_x86_64, x86_64-linux-musl, baseline,
 ReleaseSafe). `provenance.json` records the source, exporter (`json.zig`, `pointer-offset.zig`),
 compiler and per-file hashes. The command was `ZIG_AIR_JSON_FILTER=const_bases. zig build-obj
@@ -92,7 +92,7 @@ hand-written fixtures:
   and also when downgraded to schema 11 (below).
 
 This is export and translation evidence. The native offsets are checked by `check.sh
---native`, which passed with stock 0.14.1, 0.15.2, 0.16.0 and 0.17.0 on x86_64-linux-musl
+--native`, which passed with stock 0.14.1, 0.15.2, 0.16.0 and 0.17.1 on x86_64-linux-musl
 (linux/amd64 container).
 
 ## The LLVM constant `eu_payload` offset
@@ -103,7 +103,7 @@ both. 38 is correct. Zig's semantics, Sema and the model put an alignment-1 payl
 2-byte error code (`codegen.errUnionPayloadOffset(payload)`). The 36 comes from an LLVM-backend
 bug, not from a model or exporter mismatch.
 
-* `src/codegen/llvm.zig` `lowerPtr`, `.eu_payload` arm (0.14.1, 0.15.2, 0.16.0 and 0.17.0),
+* `src/codegen/llvm.zig` `lowerPtr`, `.eu_payload` arm (0.14.1, 0.15.2, 0.16.0 and 0.17.1),
   calls `codegen.errUnionPayloadOffset(Value.fromInterned(eu_ptr).typeOf(zcu).childType(zcu))`.
   That argument is the error union type, not its payload. The error union's alignment is at
   least `anyerror`'s (2), so the function returns 0.
@@ -114,7 +114,7 @@ bug, not from a model or exporter mismatch.
   the `var` is `@storage.mutable + 38`. The global's LLVM type is `{ i16, i8, [1 x i8] }`, so
   offset 36 is the `i16` error code.
 * It is observable. `llvm_probe.zig` (`zig run llvm_probe.zig -fllvm -OReleaseSafe`, stock
-  0.16.0 and 0.17.0, aarch64-macos) prints
+  0.16.0 and 0.17.1, aarch64-macos) prints
   `constant=10 runtime=12 constant_read=20 runtime_read=22`. A read through
   `&(frozen.res catch unreachable)[2]` returns element 0. `const_bases.zig`'s test fails
   under `-fllvm` for the same reason.
@@ -155,9 +155,9 @@ a later field) are each compared with the same projection computed at run time f
 copy, the model's offset. The test asserts that only the first differs, and only on LLVM.
 
 * Native: `zig test llvm_correspondence.zig -OReleaseSafe` passes with `-fllvm` and `-fno-llvm`
-  for stock 0.14.1, 0.15.2, 0.16.0 and 0.17.0 on x86_64-linux-musl (linux/amd64 container), with
+  for stock 0.14.1, 0.15.2, 0.16.0 and 0.17.1 on x86_64-linux-musl (linux/amd64 container), with
   `-fllvm` on aarch64-linux (linux/arm64 container) for all four, and on aarch64-macos for
-  0.15.2–0.17.0. `check.sh --native` runs it on x86_64.
+  0.15.2–0.17.1. `check.sh --native` runs it on x86_64.
 * Translator: `air-llvm/<version>` is the export of the same file on the LLVM backend
   (`stage2_llvm` profile; `export.sh`, `provenance.json`'s `llvm_air_sha256`). For every version,
   `test_cli.py` accepts the five agreeing bases, together and one by one, and rejects the

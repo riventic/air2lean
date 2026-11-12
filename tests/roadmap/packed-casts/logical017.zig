@@ -1,4 +1,4 @@
-//! L07: Zig 0.17.0 `@bitCast` in logical bit order of aggregates whose elements are not plain
+//! L07: Zig 0.17.1 `@bitCast` in logical bit order of aggregates whose elements are not plain
 //! integers or `bool`s: nested arrays, arrays and vectors of floats, enums, packed structs and
 //! packed unions, and packed unions to and from arrays of narrower items. Each cast is a compile
 //! error (bit-size mismatch) or a different memory reinterpretation on Zig 0.16.0 and older.

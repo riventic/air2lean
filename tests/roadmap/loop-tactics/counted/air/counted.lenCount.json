@@ -1,6 +1,6 @@
 {
  "schema": 12,
- "zig_version": "0.17.0",
+ "zig_version": "0.17.1",
  "target_endian": "little",
  "unchecked_ib": [
   "for_len"
@@ -11,7 +11,7 @@
   "pointer_bits": 64,
   "endian": "little",
   "abi": "musl",
-  "zig_version": "0.17.0",
+  "zig_version": "0.17.1",
   "backend": "stage2_llvm",
   "cpu": "x86_64",
   "features": [

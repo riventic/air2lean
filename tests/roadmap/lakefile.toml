@@ -63,8 +63,8 @@ name = "AuditClaims"
 srcDir = "architecture-audit/claims"
 globs = ["AuditClaims.+"]
 
-# One retained translation and one model per Zig version (`NanBits.V0_17_0.Gen`, `.Model`); the
-# models of the older versions are instances of the 0.17.0 one (scripts/fixtures.py instance).
+# One retained translation and one model per Zig version (`NanBits.V0_17_1.Gen`, `.Model`); the
+# models of the older versions are instances of the 0.17.1 one (scripts/fixtures.py instance).
 [[lean_lib]]
 name = "NanBits"
 srcDir = "nan-bits"
@@ -84,7 +84,7 @@ name = "PackedCasts"
 srcDir = "packed-casts"
 globs = ["PackedCasts.+"]
 
-# big-endian/concurrency.sh: as NanBits, per Zig version and target (BigEndian.Conc.V0_17_0.X64.Gen).
+# big-endian/concurrency.sh: as NanBits, per Zig version and target (BigEndian.Conc.V0_17_1.X64.Gen).
 [[lean_lib]]
 name = "BigEndian"
 srcDir = "big-endian"

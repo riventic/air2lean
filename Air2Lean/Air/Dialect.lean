@@ -18,28 +18,28 @@ namespace Air2Lean
 
 /-- A Zig compiler whose AIR the translator reads. -/
 inductive ZigVersion where
-  | v0_14_1 | v0_15_2 | v0_16_0 | v0_17_0
+  | v0_14_1 | v0_15_2 | v0_16_0 | v0_17_1
   deriving DecidableEq, Repr, Inhabited, Hashable
 
 namespace ZigVersion
 
 /-- Every supported version, newest first (the order of `--help` and diagnostics). -/
-def all : List ZigVersion := [.v0_17_0, .v0_16_0, .v0_15_2, .v0_14_1]
+def all : List ZigVersion := [.v0_17_1, .v0_16_0, .v0_15_2, .v0_14_1]
 
 /-- The version as the exporter writes `zig_version`. -/
 def toString : ZigVersion → String
   | v0_14_1 => "0.14.1"
   | v0_15_2 => "0.15.2"
   | v0_16_0 => "0.16.0"
-  | v0_17_0 => "0.17.0"
+  | v0_17_1 => "0.17.1"
 
 instance : ToString ZigVersion := ⟨ZigVersion.toString⟩
 
 /-- The default version, the one the scripts and the CLI help name: `compatibility.json`'s
 `zig.default` (`scripts/version-literals.py` fails when they differ). -/
-def defaultVersion : ZigVersion := .v0_17_0
+def defaultVersion : ZigVersion := .v0_17_1
 
-/-- `all` as the CLI help lists it, the default marked: `0.17.0 (default), 0.16.0 and 0.15.2`. -/
+/-- `all` as the CLI help lists it, the default marked: `0.17.1 (default), 0.16.0 and 0.15.2`. -/
 def helpList : String :=
   let names := all.map fun v => if v == defaultVersion then s!"{v} (default)" else v.toString
   match names.reverse with
@@ -58,21 +58,21 @@ def unsupported (s : String) : String :=
 inductive BitCast where
   /-- Up to 0.16.0: a reinterpretation of the in-memory representation. -/
   | memory
-  /-- From 0.17.0: the logical bit order (arrays and vectors element 0 lowest, no padding). -/
+  /-- From 0.17.1: the logical bit order (arrays and vectors element 0 lowest, no padding). -/
   | logical
   deriving DecidableEq, Repr, Inhabited
 
 def bitCast : ZigVersion → BitCast
   | v0_14_1 | v0_15_2 | v0_16_0 => .memory
-  | v0_17_0 => .logical
+  | v0_17_1 => .logical
 
 /-- A store of an integer with padding bits (`u10`, `i24`, an `enum(u24)` tag) writes the whole
 ABI integer, zero- or sign-extended, and a load is poison unless the padding is that extension
-(`Zig.intEncExt`, `docs/architecture-audit/enc-exactness.md`). Before 0.17.0 a store leaves the
+(`Zig.intEncExt`, `docs/architecture-audit/enc-exactness.md`). Before 0.17.1 a store leaves the
 padding unspecified and a load ignores it (`Zig.intEncOf`). -/
 def intPaddingExtended : ZigVersion → Bool
   | v0_14_1 | v0_15_2 | v0_16_0 => false
-  | v0_17_0 => true
+  | v0_17_1 => true
 
 /-- The compiler_rt float routines whose results differ by version (`docs/floats.md`
 §Per-version differences; `--float-semantics compiler-rt`). -/
@@ -82,16 +82,16 @@ inductive CompilerRt where
   | legacy
   /-- 0.16.0: the correctly rounded square root and the 0.16.0 quotient (`Float.divRt016`). -/
   | v016
-  /-- 0.17.0: as 0.16.0, and `f80` `@trunc` keeps a pseudo-denormal (`Float.truncRt017Chk`). -/
+  /-- 0.17.1: as 0.16.0, and `f80` `@trunc` keeps a pseudo-denormal (`Float.truncRt017Chk`). -/
   | v017
   deriving DecidableEq, Repr, Inhabited
 
 def compilerRt : ZigVersion → CompilerRt
   | v0_14_1 | v0_15_2 => .legacy
   | v0_16_0 => .v016
-  | v0_17_0 => .v017
+  | v0_17_1 => .v017
 
-/-- The AIR tag spelling (`Air2Lean/Air/Canon.lean`'s `versionTags`): 0.17.0 renamed and split
+/-- The AIR tag spelling (`Air2Lean/Air/Canon.lean`'s `versionTags`): 0.17.1 renamed and split
 tags, which are read back in the 0.16.0 spelling. -/
 inductive AirTags where
   | base
@@ -100,38 +100,38 @@ inductive AirTags where
 
 def airTags : ZigVersion → AirTags
   | v0_14_1 | v0_15_2 | v0_16_0 => .base
-  | v0_17_0 => .v017
+  | v0_17_1 => .v017
 
-/-- The type `i0` exists (0.17.0 removed it; one in a 0.17.0 file is a malformed export). -/
+/-- The type `i0` exists (0.17.1 removed it; one in a 0.17.1 file is a malformed export). -/
 def hasI0 : ZigVersion → Bool
   | v0_14_1 | v0_15_2 | v0_16_0 => true
-  | v0_17_0 => false
+  | v0_17_1 => false
 
-/-- A generic function instance is named `<name>__func_<n>` (0.17.0) instead of
+/-- A generic function instance is named `<name>__func_<n>` (0.17.1) instead of
 `<name>__anon_<n>` (`Air2Lean/Air/Anon.lean`'s `funcInstances017`). -/
 def funcInstanceNames : ZigVersion → Bool
   | v0_14_1 | v0_15_2 | v0_16_0 => false
-  | v0_17_0 => true
+  | v0_17_1 => true
 
-/-- The exporter's `build_mode` tags that name `std.builtin.OptimizeMode` differently: 0.17.0
+/-- The exporter's `build_mode` tags that name `std.builtin.OptimizeMode` differently: 0.17.1
 renamed it `std.lang.Optimize` with the tags `debug`, `safe`, `fast`, `small`. Each pair is
 (this version's tag, the 0.16.0 spelling). -/
 def buildModeRenames : ZigVersion → List (String × String)
   | v0_14_1 | v0_15_2 | v0_16_0 => []
-  | v0_17_0 => [("debug", "Debug"), ("safe", "ReleaseSafe"), ("fast", "ReleaseFast"), ("small", "ReleaseSmall")]
+  | v0_17_1 => [("debug", "Debug"), ("safe", "ReleaseSafe"), ("fast", "ReleaseFast"), ("small", "ReleaseSmall")]
 
 /-- Sema checks a `@bitCast` operand's outer type only, so an array of `auto` structs or tagged
 unions is a memory reinterpretation (`reprBitSize`); 0.16.0 checks the items too. -/
 def bitCastAutoItems : ZigVersion → Bool
   | v0_14_1 | v0_15_2 => true
-  | v0_16_0 | v0_17_0 => false
+  | v0_16_0 | v0_17_1 => false
 
 /-- Comptime lane pointers into bit-packed vectors have native evidence
-(`tests/roadmap/vector-layouts`), so `normalize` models them as bit-pointers; 0.17.0 has none
+(`tests/roadmap/vector-layouts`), so `normalize` models them as bit-pointers; 0.17.1 has none
 yet. -/
 def lanePtrEvidence : ZigVersion → Bool
   | v0_14_1 | v0_15_2 | v0_16_0 => true
-  | v0_17_0 => false
+  | v0_17_1 => false
 
 /-- The versions with `lanePtrEvidence`, newest first. -/
 def lanePtrVersions : List ZigVersion := all.filter (·.lanePtrEvidence)
@@ -141,17 +141,17 @@ error integer's top bit set reads out of bounds (`tests/roadmap/error-width`,
 `docs/upstream/zig-0.14.1-error-name-sign-extension.md`); fixed from 0.15.2. -/
 def errorNameSignExtends : ZigVersion → Bool
   | v0_14_1 => true
-  | v0_15_2 | v0_16_0 | v0_17_0 => false
+  | v0_15_2 | v0_16_0 | v0_17_1 => false
 
 /-- `Thread.spawn`'s `SpawnConfig` layout was audited for the fallible spawn policy
 (`docs/spawn-failure.md`). -/
 def spawnConfigAudited : ZigVersion → Bool
-  | v0_14_1 | v0_15_2 | v0_16_0 | v0_17_0 => true
+  | v0_14_1 | v0_15_2 | v0_16_0 | v0_17_1 => true
 
 /-- `Io.Group` exists, and its caller fallback is audited for the fallible spawn policy. -/
 def ioGroup : ZigVersion → Bool
   | v0_14_1 | v0_15_2 => false
-  | v0_16_0 | v0_17_0 => true
+  | v0_16_0 | v0_17_1 => true
 
 end ZigVersion
 
@@ -216,7 +216,7 @@ structure Target where
   deriving Repr, BEq
 
 /-- The Zig versions with T04 probe records for both aarch64 profiles. -/
-def Target.aarch64Probed : List ZigVersion := [.v0_17_0, .v0_16_0, .v0_15_2, .v0_14_1]
+def Target.aarch64Probed : List ZigVersion := [.v0_17_1, .v0_16_0, .v0_15_2, .v0_14_1]
 
 /-- The qualified targets: 64-bit little endian (`ZigLean/Mem`), 64-bit big endian (s390x,
 mips64; `ZigLean/Endian.lean`) and 32-bit little endian (`ZigLean/Mem/Width.lean`). wasm32
@@ -295,7 +295,7 @@ tag; `docs/architecture-audit/enc-exactness.md`):
 
 * `loose`: LLVM up to 0.16.0; a store leaves the padding unspecified, a load ignores it
   (`Zig.intEncOf`).
-* `extended`: LLVM from 0.17.0 (`ZigVersion.intPaddingExtended`) and the self-hosted x86_64
+* `extended`: LLVM from 0.17.1 (`ZigVersion.intPaddingExtended`) and the self-hosted x86_64
   backend at every version (Debug x86_64 from 0.15.2, `tests/roadmap/enc-exactness`); a store
   writes the extension of the whole ABI integer, a load is poison (LLVM) or reads the whole
   integer (self-hosted) unless the padding is that extension (`Zig.intEncExt`).
@@ -340,7 +340,7 @@ def lanePtrTargets : List String :=
   Target.qualified.filterMap fun t => if t.lanePtrProbe then some s!"{t.arch}-{t.os}" else none
 
 /-- The backends whose `lowerPtr` measures an `eu_payload` base with the error union type
-instead of its payload: `codegen/llvm.zig` (Zig 0.14.1–0.17.0) and `codegen/wasm/CodeGen.zig`
+instead of its payload: `codegen/llvm.zig` (Zig 0.14.1–0.17.1) and `codegen/wasm/CodeGen.zig`
 (observed in 0.16.0). `Check.lean`'s `checkLlvmPayloadConstant` fails closed for them. -/
 def euPayloadMisplacedBackends : List String := [Target.llvmBackend, "stage2_wasm"]
 

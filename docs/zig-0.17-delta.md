@@ -1,10 +1,10 @@
-# Zig 0.16.0 → 0.17.0 semantic delta
+# Zig 0.16.0 → 0.17.1 semantic delta
 
 Source-level comparison of the pinned `zig-0.16.0.tar.xz`
-(sha256 `43186959…bfdf`) and `zig-0.17.0.tar.xz` (sha256 `b6c7f172…8abd`) and the
-[0.17.0 release notes](https://ziglang.org/download/0.17.0/release-notes.html). No compiler was
-built or run. Line numbers are in the 0.17.0 tree unless marked 0.16. The inventory is
-`coverage/0.17.0.json`; the qualification plan is `qualification/0.17.0.json`.
+(sha256 `43186959…bfdf`) and `zig-0.17.1.tar.xz` (sha256 `b6c7f172…8abd`) and the
+[0.17.1 release notes](https://ziglang.org/download/0.17.1/release-notes.html). No compiler was
+built or run. Line numbers are in the 0.17.1 tree unless marked 0.16. The inventory is
+`coverage/0.17.1.json`; the qualification plan is `qualification/0.17.1.json`.
 
 Track owners: **Z1** exporter/pin, **Z3** translator (Normalize/Canon/Check/Emit), **Z4** bitcast
 semantics, **Z5** examples and std models, **Z6** CI/metadata.
@@ -29,7 +29,7 @@ Universe: 214 → 224 tags (16 added, 6 removed). Renames appear as remove + add
 | — | `spirv_runtime_array_len` (985) | SPIR-V only; unreachable on supported targets. | none (stays rejected) | Z1 |
 | `splat` (731) | `splat` (786) | Result may now be an array, including a sentinel array, not only a vector. | translator (`Check` must reject or model array splat) | Z3 |
 
-Inventory dispositions for 0.17.0 with the ported exporter (Z1, `zig-patch/0.17.0/TAGS.md`):
+Inventory dispositions for 0.17.1 with the ported exporter (Z1, `zig-patch/0.17.1/TAGS.md`):
 the 14 added tags the exporter decodes (`agg_field_val`, `array_to_vector`, `bit_cast`,
 `bit_cast_safe`, `div_ceil`, `error_cast`, `error_from_int`, `int_cast`, `int_cast_safe`,
 `int_from_error`, `int_from_ptr`, `ptr_cast`, `ptr_from_int`, `union_from_enum`) are
@@ -65,7 +65,7 @@ authority.
 - `@intFromEnum`/`@enumFromInt`, `std.fmt.bufPrint`/`allocPrint` and `std.builtin` still
   compile but are deprecated. `Type`/`Value`/`Zcu`/`InternPool` removed no other pub function the
   exporter calls.
-- Found by the build (done, `zig-patch/0.17.0/TAGS.md`): `Value.fmtValue`/`Type.fmt` take a
+- Found by the build (done, `zig-patch/0.17.1/TAGS.md`): `Value.fmtValue`/`Type.fmt` take a
   `*Zcu`; `Type.containerTypeName` returns `{ name, fqn }`; `std.lang.Optimize` tags are
   `debug`/`safe`/`fast`/`small` (`profile.build_mode` keeps the `-O` names); `build.zig` needs
   `-Dversion-string` on a tarball tree; `&v[i]` is a `ptr_cast` to a lane pointer whose lane is
@@ -170,7 +170,7 @@ Diffed `lib/std/{mem/Allocator,Thread,Io,Io/RwLock,Io/Semaphore,atomic,time,arra
 | Modelled / translated std surface | 0.16 → 0.17 | Impact | Owner |
 |---|---|---|---|
 | `mem.Allocator.create` | Now `createAdvancedWithRetAddr(T, null, @returnAddress())` (inline). New `alignedCreate`. Same signature and semantics. | Model name unchanged; re-qualify the instance name and signature. | Z5 |
-| `.alloc`, `.alignedAlloc`, `.dupe`, `.allocSentinel` | Bodies unchanged. Internal `allocBytesWithAlignment` → `pub allocBytesAligned` (same body). `allocWithOptionsRetAddr` unchanged. | `allocSentinel` model is qualified `#["0.16.0"]` only. Add `"0.17.0"` after re-qualification (same overflow and sentinel logic). | Z5 |
+| `.alloc`, `.alignedAlloc`, `.dupe`, `.allocSentinel` | Bodies unchanged. Internal `allocBytesWithAlignment` → `pub allocBytesAligned` (same body). `allocWithOptionsRetAddr` unchanged. | `allocSentinel` model is qualified `#["0.16.0"]` only. Add `"0.17.1"` after re-qualification (same overflow and sentinel logic). | Z5 |
 | `.free`, `.destroy` | `free` also accepts `*[N]T`/`*[N:s]T` (single pointer to array). Alignment is read from `attrs.@"align"`. Slice semantics unchanged. | `Check` signature: a single-pointer-to-array `free` must stay rejected or be modelled (len = N(+1)). | Z5, Z3 |
 | `.remap` | Return type `?@TypeOf(allocation)` → `?Slice(AbsorbSentinel(@TypeOf(allocation)))`. A sentinel slice now returns a non-sentinel slice. Also accepts `*[N]T`. | Equal for `[]T`. Sentinel remap stays outside the model. Signature check needs re-qualification. | Z5 |
 | `.dupeZ` | **Removed** (use `dupeSentinel(T, m, 0)`, unchanged). | `examples/lists/lists.zig` 76 (`dupeZLen`) and `examples/lists/filter` (`mem.Allocator.dupeZ`) break on 0.17. Gate or switch to `dupeSentinel`. | Z5 |
@@ -208,7 +208,7 @@ Diffed `lib/std/{mem/Allocator,Thread,Io,Io/RwLock,Io/Semaphore,atomic,time,arra
     `div_ceil`.
   - Fix `ty_pl.ty` (already a `Type`) and `intTagType` → `backingIntType`.
   - Write the 0.17 hook against `PerThread.zig` 2297. Pin LLVM 22.
-  - Regenerate `coverage/0.17.0.json` and discharge `support:constants:spirv_type` (SPIR-V
+  - Regenerate `coverage/0.17.1.json` and discharge `support:constants:spirv_type` (SPIR-V
     unreachable).
 - **Z3 translator:**
   - Normalize: `int_cast(_safe)`, `agg_field_val`, and `bit_cast`/`ptr_cast`/`ptr_from_int`/
@@ -238,5 +238,5 @@ Diffed `lib/std/{mem/Allocator,Thread,Io,Io/RwLock,Io/Semaphore,atomic,time,arra
   - CI matrix entry and host-zig pin.
   - `abi-probe` build-mode tag rename (`safe`).
   - `i0` byte-permutation probe gated to ≤0.16.
-  - Run the `qualification/0.17.0.json` obligations: 7 reviews, 5 probes, 19 translations, 19
+  - Run the `qualification/0.17.1.json` obligations: 7 reviews, 5 probes, 19 translations, 19
     proof sets.

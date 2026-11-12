@@ -10,22 +10,22 @@ Calls through an interface value that the caller passes in (docs/interfaces.md).
   interface);
 - `callbacks`: E02's `callbacks.zig`, from `tests/roadmap/callbacks` (exports and the
   per-version registries of the foreign `ext_visit`), with the `interfaces` entry of
-  `registry-callbacks-0.17.0.json` (that fixture's 0.17.0 registry plus the entry; `check.sh`
+  `registry-callbacks-0.17.1.json` (that fixture's 0.17.1 registry plus the entry; `check.sh`
   checks the models agree) merged in: a bare callback type opened;
 - `sentinel`: M04's `tests/roadmap/sentinel-realloc/source.zig` (`make`, `append`, `resize`,
   `release` of a `[:0]u8`), whose `std.mem.Allocator` parameter can be any allocator.
 
 `registry-alloc.json` opens `mem.Allocator.VTable` and `registry-random.json` opens `Random`
 (the `interfaces` array of docs/external-models.md, premise EXT-05). `air/<version>/<program>`
-are the patched-compiler exports for Zig 0.17.0, 0.16.0, 0.15.2 and 0.14.1, cut to the call
+are the patched-compiler exports for Zig 0.17.1, 0.16.0, 0.15.2 and 0.14.1, cut to the call
 closure of each program's roots (`closure.py`); `provenance.json` records their digests.
 
 `check.sh` translates every program on every version, elaborates each translation, keeps the
-0.17.0 translations byte for byte (`lists` as `Proofs/Lists/Open.lean`, the program of the
+0.17.1 translations byte for byte (`lists` as `Proofs/Lists/Open.lean`, the program of the
 list proofs; the others as `Interfaces/{Mix,Rnd,Callbacks,Sentinel}.lean`), and runs `test_cli.py`:
 an unused entry, a type opened twice, a struct without function-pointer fields, a non-EXT-05
 premise and `--proof-api` are rejected; without the registry every call keeps the closed
-`.illegal` arm. It then checks the proofs over the 0.17.0 translations (`fsym`, only the
+`.illegal` arm. It then checks the proofs over the 0.17.1 translations (`fsym`, only the
 standard axioms):
 
 - `Proofs/Lists/Alloc.lean` (built with the `Proofs` library, not here): `push` and `freeAll` of

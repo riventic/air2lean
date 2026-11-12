@@ -33,7 +33,7 @@ private def keysOf (s : String) : Except String (Array String) := do
   require (Identity.key (some "other") "util.helper" == "other:util.helper") "dependency key"
   require (Identity.key none "Thread.spawn" == "Thread.spawn") "legacy key"
   -- Every lib/std namespace, not only those some lookup uses (soundness audit 2026-10-14 S2: a
-  -- user `posix.zig` bound the OS model `posix.mmap`; 0.17.0 adds `lang` and `spirv`).
+  -- user `posix.zig` bound the OS model `posix.mmap`; 0.17.1 adds `lang` and `spirv`).
   for ns in #["posix", "heap", "lang", "spirv", "os", "c"] do
     require (Identity.key (some "root") s!"{ns}.f" == s!"root:{ns}.f") s!"root {ns} key"
   require (Identity.namespaceOf "@typeInfo(Io.Terminal.Mode).@\"union\".tag_type.?" == "Io")

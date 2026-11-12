@@ -260,12 +260,12 @@ class HostRules(unittest.TestCase):
         self.assertTrue(self.selection('aarch64-macos', '0.15.2')[0])
 
     def test_in_qualification_version_is_noted(self):
-        ok, check = self.selection('x86_64-linux', '0.17.0', status='in-qualification')
+        ok, check = self.selection('x86_64-linux', '0.17.1', status='in-qualification')
         self.assertTrue(ok)
         self.assertEqual((check['id'], check['status']), ('zig-version-status', 'note'))
         self.assertIn(DEFAULT, check['hint'])
-        # No pinned version is in qualification now: 0.17.0 (qualified) gets no note.
-        ok, check = self.selection('x86_64-linux', '0.17.0')
+        # No pinned version is in qualification now: 0.17.1 (qualified) gets no note.
+        ok, check = self.selection('x86_64-linux', '0.17.1')
         self.assertEqual((check['id'], check['status']), ('zig-version', 'ok'))
         ok, check = self.selection('x86_64-linux', '0.16.0')
         self.assertEqual(check['id'], 'zig-version')

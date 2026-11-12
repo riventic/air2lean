@@ -10,9 +10,9 @@ tag table lives here; every other version or target fact is the function's `Dial
 a `Raw.RawFunc` or a tag string.
 
 One tag table serves every supported version: no subset tag differs between 0.14.1, 0.15.2 and
-0.16.0 (`zig-patch/<version>/TAGS.md`). Zig 0.17.0's renamed and split tags are mapped back to
+0.16.0 (`zig-patch/<version>/TAGS.md`). Zig 0.17.1's renamed and split tags are mapped back to
 the 0.16.0 spelling by `Canon.lean`'s `versionTags`, which also rejects a tag that the file's
-version does not have; the table below reads the result, plus `div_ceil`, which only 0.17.0
+version does not have; the table below reads the result, plus `div_ceil`, which only 0.17.1
 has (`array_to_vector`, `union_from_enum` and `spirv_runtime_array_len` stay rejected). To add a
 Zig version: add it to `ZigVersion` (`Air2Lean/Air/Dialect.lean`); if a subset tag differs, add a
 version case to `normalizeOp` (`PLAN.md` §Zig version support).
@@ -77,9 +77,9 @@ def runtimeTagReasons : Array (Array String × String) := #[
   (#["spirv_runtime_array_len"],
     "SPIR-V runtime arrays exist only on SPIR-V targets, outside the x86_64-linux/aarch64-macos model"),
   (#["array_to_vector"],
-    "Zig 0.17.0's array-to-vector coercion is outside the subset; the vector model has no array conversion"),
+    "Zig 0.17.1's array-to-vector coercion is outside the subset; the vector model has no array conversion"),
   (#["union_from_enum"],
-    "Zig 0.17.0's enum-to-tagged-union coercion is outside the subset; the union model has no tag-only conversion")]
+    "Zig 0.17.1's enum-to-tagged-union coercion is outside the subset; the union model has no tag-only conversion")]
 
 /-- The reason for a tag in `runtimeTagReasons`. -/
 def runtimeTagReason? (tag : String) : Option String :=
@@ -275,7 +275,7 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
   | "intcast_safe" => let a ← arg1 fnName raw; return .intCast true a
   | "trunc" => let a ← arg1 fnName raw; return .trunc a
   | "bitcast" => let a ← arg1 fnName raw; return .bitcast false a
-  -- 0.17.0's `bit_cast_safe` (Canon keeps it apart from `bit_cast`, `Canon.tagAliases017`).
+  -- 0.17.1's `bit_cast_safe` (Canon keeps it apart from `bit_cast`, `Canon.tagAliases017`).
   | "bitcast_safe" => let a ← arg1 fnName raw; return .bitcast true a
   | "is_null" => let a ← arg1 fnName raw; return .isNull a
   | "is_non_null" => let a ← arg1 fnName raw; return .isNonNull a

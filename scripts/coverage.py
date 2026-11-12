@@ -312,7 +312,7 @@ def producer_literals(source, cache):
 
 
 def canon_aliases(text):
-    """Canon.lean's `tagAliases017`: Zig 0.17.0 tags read in their 0.16.0 spelling."""
+    """Canon.lean's `tagAliases017`: Zig 0.17.1 tags read in their 0.16.0 spelling."""
     section = text.split('def tagAliases017', 1)[1].split('\n\n', 1)[0]
     pairs = re.findall(r'\("([^"]+)", "([^"]+)"\)', section)
     if not pairs:
@@ -473,8 +473,8 @@ NON_COMPILER_AIR = {
     'tests/roadmap/architecture-audit': 'audit counterexamples (compiler exports and hand edits), not coverage evidence',
     'tests/roadmap/illegal-behavior': 'illegal-behaviour fixtures (compiler exports; docs/illegal-behavior.md), not coverage evidence',
     'tests/roadmap/noalias': 'noalias fixtures (compiler exports; docs/illegal-behavior.md), not coverage evidence',
-    'tests/roadmap/zig017/air': 'synthetic 0.17.0 AIR in the exporter schema (tests/roadmap/zig017/test_cli.py)',
-    'tests/roadmap/zig017/reject': 'synthetic 0.17.0 rejection inputs (tests/roadmap/zig017/test_cli.py)',
+    'tests/roadmap/zig017/air': 'synthetic 0.17.1 AIR in the exporter schema (tests/roadmap/zig017/test_cli.py)',
+    'tests/roadmap/zig017/reject': 'synthetic 0.17.1 rejection inputs (tests/roadmap/zig017/test_cli.py)',
 }
 
 
@@ -889,7 +889,7 @@ def generate(version, source, os_name='linux'):
     rejection_reasons = table_reasons(table, 'runtime_reason')
     exporter_reasons = table_reasons(table, 'exporter_reason')
     fast_guidance = table['fast_math_reason']
-    # Canon.versionTags renames 0.17.0's split and renamed tags to the 0.16.0 spelling before
+    # Canon.versionTags renames 0.17.1's split and renamed tags to the 0.16.0 spelling before
     # normalizeOp reads them: such a tag has its canonical tag's constructors.
     for alias, canonical in canon_aliases(cache.text(ROOT/'Air2Lean/Air/Canon.lean')).items():
         if canonical in norms:

@@ -1303,7 +1303,7 @@
   {"tag": "array_to_vector",
    "sem_outside_reason": null,
    "runtime_reason":
-   "Zig 0.17.0's array-to-vector coercion is outside the subset; the vector model has no array conversion",
+   "Zig 0.17.1's array-to-vector coercion is outside the subset; the vector model has no array conversion",
    "exporter_reason": null,
    "emit": null,
    "effect": null,
@@ -1311,7 +1311,7 @@
   {"tag": "union_from_enum",
    "sem_outside_reason": null,
    "runtime_reason":
-   "Zig 0.17.0's enum-to-tagged-union coercion is outside the subset; the union model has no tag-only conversion",
+   "Zig 0.17.1's enum-to-tagged-union coercion is outside the subset; the union model has no tag-only conversion",
    "exporter_reason": null,
    "emit": null,
    "effect": null,

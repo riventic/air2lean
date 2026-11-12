@@ -7,7 +7,7 @@ import ZigLean.Conc.RunResult
 # `mutexCounter` over all schedules
 
 `mutexCounter` spawns one thread; each of the two threads adds 1 two times to a counter, under
-an `Io.Mutex` (translated from Zig 0.16.0's std code; the 0.17.0 translation of this program is
+an `Io.Mutex` (translated from Zig 0.16.0's std code; the 0.17.1 translation of this program is
 the same code; the futex under it is the model). The result is 4 under every schedule
 (`mutexCounter_spec`), and no schedule gives an error (`mutexCounter_safe`): no data race on the
 counter, and no deadlock at the futex.

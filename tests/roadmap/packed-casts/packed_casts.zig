@@ -1,6 +1,6 @@
 //! L07/L08: packed unions and floats as packed-struct fields, and `@bitCast` of packed unions,
 //! floats and float arrays/vectors. Every function compiles and gives the same result on Zig
-//! 0.14.1, 0.15.2, 0.16.0 and 0.17.0 (`README.md`); `logical017.zig` has the 0.17-only casts.
+//! 0.14.1, 0.15.2, 0.16.0 and 0.17.1 (`README.md`); `logical017.zig` has the 0.17-only casts.
 pub const Mode = enum(u2) { off, low, high };
 pub const Half = packed struct(u16) { lo: u8, hi: u8 };
 /// Three 16-bit views of one backing integer.

@@ -1,6 +1,6 @@
 import DivCeil.Gen
 
-/-! Runs the translation of the compiler-exported `@divCeil` AIR (`air/0.17.0`) on each line
+/-! Runs the translation of the compiler-exported `@divCeil` AIR (`air/0.17.1`) on each line
 `fn a b` of the inputs file and prints `fn a b result`, or `fn a b panic:<error>` when the
 generated code throws (`check.sh` compares this with the native run). -/
 

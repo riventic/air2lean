@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# L14: export runtime_tags.zig with the patched compilers (0.17.0, 0.16.0, 0.15.2, 0.14.1) into
+# L14: export runtime_tags.zig with the patched compilers (0.17.1, 0.16.0, 0.15.2, 0.14.1) into
 # air/<version>, or with --check compare a fresh export byte for byte with the committed one.
 #
 # The compilers must be built by zig-patch/build.sh from the zig-patch tree of this checkout;
@@ -18,7 +18,7 @@ mode=${1:-export}
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-runtime-tags.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 sha256() { shasum -a 256 "$1" | cut -d' ' -f1; }
-for version in 0.17.0 0.16.0 0.15.2 0.14.1; do
+for version in 0.17.1 0.16.0 0.15.2 0.14.1; do
   if [ "$mode" = --check ]; then
     recorded=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["patched_compiler_sha256"][sys.argv[2]])' \
       "$here/provenance.json" "$version")

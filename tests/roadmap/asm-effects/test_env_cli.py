@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """CLI regressions for A01's environment reads, memory inputs and memory-region contracts.
 
-`air-env/<version>` are fresh exports of `asm_env.zig` (provenance.json). The 0.17.0 translation
+`air-env/<version>` are fresh exports of `asm_env.zig` (provenance.json). The 0.17.1 translation
 is the retained `AsmEnv/Gen.lean`; 0.16.0 and 0.15.2 translate to the same text apart from the
 profile header. Mutations outside the reviewed allowlist entries (`Air2Lean/AsmAllowlist.lean`)
 are rejected, and a device contract that declares `rdtsc` keeps it a device event (L13).
@@ -62,14 +62,14 @@ def reject(binary, docs, name, mutate, marker):
 def main(binary):
     checks = 0
     retained = (HERE / "AsmEnv" / "Gen.lean").read_text()
-    for version in ("0.17.0", "0.16.0", "0.15.2"):
+    for version in ("0.17.1", "0.16.0", "0.15.2"):
         result, text = run(binary, load(version))
         assert result.returncode == 0, (version, result.stderr)
-        if version == "0.17.0":
-            assert text == retained, "AsmEnv/Gen.lean is not the fresh 0.17.0 translation"
+        if version == "0.17.1":
+            assert text == retained, "AsmEnv/Gen.lean is not the fresh 0.17.1 translation"
         assert body(text) == body(retained), version
         checks += 1
-    docs = load("0.17.0")
+    docs = load("0.17.1")
     # Environment reads are oracle queries, never opaques; region contracts read and write.
     for token in ("Zig.Asm.envWord 64", "Zig.Asm.readRegion", "Zig.Asm.writeRegion", "Zig.Asm.movePtr"):
         assert token in retained, token

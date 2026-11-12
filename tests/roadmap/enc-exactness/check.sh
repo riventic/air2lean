@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Encode/decode exactness (docs/architecture-audit/enc-exactness.md, README.md).
 #
-#   check.sh [--check]            translate each retained export (0.14.1 0.15.2 0.16.0 0.17.0) of
+#   check.sh [--check]            translate each retained export (0.14.1 0.15.2 0.16.0 0.17.1) of
 #                                 enc_exactness.zig and opaque_bytes.zig, compare with
 #                                 EncExactness/<version>/{Gen,Opaque}.lean, check that each
-#                                 version's Model.lean is the 0.17.0 one with the version renamed,
+#                                 version's Model.lean is the 0.17.1 one with the version renamed,
 #                                 build the library EncExactness (tests/roadmap/lakefile.toml: the
 #                                 translations, the kernel proofs of the models and of
 #                                 EncExactness/Rows.lean), audit their axioms, and compare each
@@ -26,7 +26,7 @@ set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
 dir=tests/roadmap/enc-exactness
-versions=(0.14.1 0.15.2 0.16.0 0.17.0)
+versions=(0.14.1 0.15.2 0.16.0 0.17.1)
 arches=(x86_64:amd64 aarch64:arm64)
 
 # `model` against `native`: equal lines, except that `unspecified` matches any value.
@@ -90,7 +90,7 @@ translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first (lake build air2lean)' >&2; exit 1; }
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-enc-exactness.XXXXXX")
 trap 'rm -rf "$work"' EXIT
-primary="$dir/EncExactness/V0_17_0/Model.lean"
+primary="$dir/EncExactness/V0_17_1/Model.lean"
 modules=(EncExactness.Rows) mains=() theorems=()
 for v in "${versions[@]}"; do
   t="V${v//./_}"
@@ -103,8 +103,8 @@ for v in "${versions[@]}"; do
   "$translator" "$dir/air/$v/opaque_bytes" -o "$w/Opaque.lean" \
     --namespace "EncExactness.$t.Opaque" --prefix opaque_bytes.
   cmp "$w/Opaque.lean" "$dir/EncExactness/$t/Opaque.lean"
-  # Every version's model states the same theorems: the 0.17.0 one, the version renamed.
-  [ "$t" = V0_17_0 ] || python3 -B scripts/fixtures.py instance "$primary" --subst "V0_17_0=$t"
+  # Every version's model states the same theorems: the 0.17.1 one, the version renamed.
+  [ "$t" = V0_17_1 ] || python3 -B scripts/fixtures.py instance "$primary" --subst "V0_17_1=$t"
   modules+=("EncExactness.$t.Model")
   mains+=("EncExactness.$t.Model:EncExactness.$t.Model.main")
   theorems+=(--declaration "EncExactness.$t.Model.i24RoundTrip_exact"

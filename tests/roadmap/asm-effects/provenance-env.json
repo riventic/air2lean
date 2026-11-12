@@ -27,12 +27,12 @@
     "air-env/0.16.0/asm_env.rand64.json": "bf9ff23b9e433f77cdeebc1cc588b095616b89bd0c15416b5bcb2ec546c310ca",
     "air-env/0.16.0/asm_env.random.json": "e6721ac1189cb5c1b719c11d8b91283d02ef05f807c1cf41fcb52f8dfe237f54",
     "air-env/0.16.0/asm_env.ticks.json": "cb68a9bd35b81ab885e574a036a041a0017dd844938cd2970964aa9760140d75",
-    "air-env/0.17.0/asm_env.copy.json": "d4f042496f4b99f8968b2d877dd93f9bb93184984736f8933c41009c0c54e978",
-    "air-env/0.17.0/asm_env.elapsed.json": "51e5ace11496b4786d4d542382d52835dc693af8403e87b3a513fa36d46d5a39",
-    "air-env/0.17.0/asm_env.fill.json": "f803efcb677e8a974040553a9d540bc23154610170455b509abe39e886714222",
-    "air-env/0.17.0/asm_env.loadm.json": "c82e2b0de0985553a33d768597b71ab14af6652a654efc78ed0a8fb85a115123",
-    "air-env/0.17.0/asm_env.rand64.json": "c5fa5b2dee475bab8c4db28fe48dcadf20de244086024aeb99ffc2d3077371ed",
-    "air-env/0.17.0/asm_env.random.json": "8fe4bc77485b955d058cc19bf0f47e9590d042c6babd5eee15d7f65c3652ffc6",
-    "air-env/0.17.0/asm_env.ticks.json": "1416e40756e25e4e4e73481cbb8af096f8b408d1dd7b77cc531ba809c16f6d5d"
+    "air-env/0.17.1/asm_env.copy.json": "d4f042496f4b99f8968b2d877dd93f9bb93184984736f8933c41009c0c54e978",
+    "air-env/0.17.1/asm_env.elapsed.json": "51e5ace11496b4786d4d542382d52835dc693af8403e87b3a513fa36d46d5a39",
+    "air-env/0.17.1/asm_env.fill.json": "f803efcb677e8a974040553a9d540bc23154610170455b509abe39e886714222",
+    "air-env/0.17.1/asm_env.loadm.json": "c82e2b0de0985553a33d768597b71ab14af6652a654efc78ed0a8fb85a115123",
+    "air-env/0.17.1/asm_env.rand64.json": "c5fa5b2dee475bab8c4db28fe48dcadf20de244086024aeb99ffc2d3077371ed",
+    "air-env/0.17.1/asm_env.random.json": "8fe4bc77485b955d058cc19bf0f47e9590d042c6babd5eee15d7f65c3652ffc6",
+    "air-env/0.17.1/asm_env.ticks.json": "1416e40756e25e4e4e73481cbb8af096f8b408d1dd7b77cc531ba809c16f6d5d"
   }
 }

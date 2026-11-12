@@ -2,7 +2,7 @@
 """Gate for the L04 compiler-export qualification record (compiler-qualification.json).
 
 `air-fresh/<version>` and `aliases/air-fresh/<version>` are unmodified schema-12 exports of
-`try_pointers.zig` and `try_aliases.zig` from patched 0.14.1, 0.15.2, 0.16.0 and 0.17.0 compilers
+`try_pointers.zig` and `try_aliases.zig` from patched 0.14.1, 0.15.2, 0.16.0 and 0.17.1 compilers
 (`versions`). The retained schema-11
 `air/` files and their `Gen.lean` stay as they are (their hashes are pinned by `provenance.json`
 and the integration manifests). This gate checks the fresh files' hashes, inventory, Linux/baseline

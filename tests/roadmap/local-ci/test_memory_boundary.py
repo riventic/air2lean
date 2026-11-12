@@ -343,10 +343,10 @@ class MemoryBoundary(unittest.TestCase):
             'jobs': {
                 'test': {'runs-on': 'ubuntu-24.04', 'needs': ['producer'],
                          'strategy': {'matrix': {'include': [
-                             {'zig': '0.17.0', 'part': 'lean', 'examples': 'selected'},
+                             {'zig': '0.17.1', 'part': 'lean', 'examples': 'selected'},
                              {'zig': '0.16.0', 'part': 'lean', 'examples': 'OTHER_ROW_DATA'}]}},
                          'steps': [
-                             {'name': 'selected', 'if': "matrix.zig == '0.17.0'", 'run': 'selected text'},
+                             {'name': 'selected', 'if': "matrix.zig == '0.17.1'", 'run': 'selected text'},
                              {'name': 'other row', 'if': "matrix.zig == '0.16.0'", 'run': 'OTHER_ROW_TEXT'},
                              {'name': 'never', 'if': False, 'run': 'NEVER_RUN_TEXT'}]},
                 'producer': {'runs-on': 'ubuntu-24.04', 'needs': ['grandproducer'],
@@ -356,7 +356,7 @@ class MemoryBoundary(unittest.TestCase):
                 'other': {'runs-on': 'ubuntu-24.04',
                           'steps': [{'name': 'unrelated', 'run': 'UNRELATED_JOB_TEXT'}]},
             }}
-        payload = runner.job_payload(self.workflow, 'test/0.17.0/lean', self.digest, self.workflow_digest)
+        payload = runner.job_payload(self.workflow, 'test/0.17.1/lean', self.digest, self.workflow_digest)
         encoded = runner.CR.canonical(payload)
         for unkeyed in ('OTHER_ROW_DATA', 'OTHER_ROW_TEXT', 'NEVER_RUN_TEXT',
                         'TRANSITIVE_UNKEYED_TEXT', 'UNRELATED_JOB_TEXT'):
@@ -366,7 +366,7 @@ class MemoryBoundary(unittest.TestCase):
         self.assertEqual(payload['definitions']['needs'], {'producer': self.workflow['jobs']['producer']})
         self.assertEqual(payload['definitions']['workflow'],
                          {'name': self.workflow['name'], 'permissions': self.workflow['permissions']})
-        self.assertEqual(payload['row'], {'zig': '0.17.0', 'part': 'lean', 'examples': 'selected'})
+        self.assertEqual(payload['row'], {'zig': '0.17.1', 'part': 'lean', 'examples': 'selected'})
         legacy_projection = {
             'job': runner.CR.job_definition(self.workflow['jobs']['test'], payload['row'], 'test'),
             'needs': {name: self.workflow['jobs'][name]
@@ -433,7 +433,7 @@ class MemoryBoundary(unittest.TestCase):
              self.assertRaisesRegex(ValueError, 'payload digest'):
             runner.WorkflowRun(None, self.artifacts, self.snapshot, row_only=True)
         for change in ({'snapshot_sha256': '0' * 64}, {'part': 'other'}, {'job_id': 'other'},
-                       {'row': {'zig': '0.17.0'}}, {'workflow_sha256': 'not a digest'}):
+                       {'row': {'zig': '0.17.1'}}, {'workflow_sha256': 'not a digest'}):
             raw = (runner.CR.canonical(payload | change) + '\n').encode()
             path.write_bytes(raw)
             with self.subTest(change=change), \

@@ -33,7 +33,7 @@ def nested (n : Nat) : Array Inst :=
     ⟨6, 2, .«try» (.inst 0) child⟩, ⟨7, 2, .tryPtr (.inst 0) child⟩]
 
 def sample (name : String) (body : Array Inst) : Func :=
-  { dialect := .ofVersion .v0_17_0, name, params := #[0], ret := 0, body,
+  { dialect := .ofVersion .v0_17_1, name, params := #[0], ret := 0, body,
     types := #[.int false 64, .bool, .void],
     layouts := #[{ size := some 8, align := some 8 },
       { size := some 1, align := some 1 }, { size := some 0, align := some 1 }],

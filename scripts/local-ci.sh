@@ -344,7 +344,7 @@ esac
 if [ "$mode" = part ] || [ "$mode" = discover ]; then
   case "$version" in *[!a-zA-Z0-9_./-]*|'') usage ;; esac
 else
-  case "$version" in 0.17.0|0.16.0|0.15.2|0.14.1) ;; *) usage ;; esac
+  case "$version" in 0.17.1|0.16.0|0.15.2|0.14.1) ;; *) usage ;; esac
 fi
 snapshot=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-local-ci.XXXXXX")
 container=

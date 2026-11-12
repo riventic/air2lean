@@ -6,7 +6,7 @@ usage: native-transcript.py VERSION EXIT_CODE STDERR [CASE EXIT_CODE STDERR]... 
 The first run is `main`. The model is `.illegal` where Zig 0.14.1/0.15.2 type a field pointer of
 address zero as a nonnullable `*F` (`allowzeroNextPtr`, `nullNextPtr`): a non-`allowzero` pointer
 must not be zero, so forming it is illegal behaviour that no check catches, and the native run
-prints address 0 (docs/null-pointers.md §Address-zero projection policy). Zig 0.17.0 checks
+prints address 0 (docs/null-pointers.md §Address-zero projection policy). Zig 0.17.1 checks
 `&n.*.next` of a null `[*c]Node` and panics, which ends the run: the last line becomes
 `nullNextPtr panic`.
 

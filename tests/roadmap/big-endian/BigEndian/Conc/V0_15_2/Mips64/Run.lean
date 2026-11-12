@@ -2,9 +2,9 @@ import BigEndian.Conc.V0_15_2.Mips64.Gen
 
 /-! T03: the model of `concurrency.zig` (atomics, futexes, threads, the allocator model) on
 `concurrency_native.zig`'s inputs, one line per case in its format, from the translation of one
-export (`BigEndian.Conc.V0_15_2.Mips64.Gen`; one per Zig version, 0.17.0 and 0.15.2, and target,
+export (`BigEndian.Conc.V0_15_2.Mips64.Gen`; one per Zig version, 0.17.1 and 0.15.2, and target,
 s390x-linux and mips64-linux, big endian, and x86_64-linux, little endian; `Futex.lean` adds the
-futex case of 0.15.2). It is written for 0.17.0 on x86_64-linux; the other modules are that one
+futex case of 0.15.2). It is written for 0.17.1 on x86_64-linux; the other modules are that one
 with the version and target renamed (`concurrency.sh`, `scripts/fixtures.py instance`). Each
 concurrent case runs under 24 scheduler oracles from the translation's initial memory and must
 give the same result under every one; the line is that result. -/

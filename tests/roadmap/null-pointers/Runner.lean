@@ -227,7 +227,7 @@ def main : IO Unit := do
   IO.println s!"mmioIsNull {bit zeroOffset} {if wraps then "illegal" else "address"}"
   IO.println s!"nullNextPtr {← outcome (do addr (← NullableNative.nextPtr Zig.Ptr.null))}"
   -- Model only: nonzero offsets from address zero that native code never executes (LLVM poison;
-  -- Zig 0.17.0 checks the field pointer of a null C pointer first and panics).
+  -- Zig 0.17.1 checks the field pointer of a null C pointer first and panics).
   let mut line := "model nonzeroFromNull"
   for (name, x) in [("cAdd", NullableNative.cAdd Zig.Ptr.null 1), ("cSub", NullableNative.cSub Zig.Ptr.null 1),
       ("cIndex", NullableNative.cIndex Zig.Ptr.null 3), ("valPtr", NullableNative.valPtr Zig.Ptr.null),

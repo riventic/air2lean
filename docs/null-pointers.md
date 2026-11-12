@@ -53,7 +53,7 @@ stores through an `allowzero` pointer, so `allowzero` does not change the projec
 
 | Case | Zig 0.14.1–0.16.0 (native, aarch64-macos) | Model |
 | --- | --- | --- |
-| `&p.*.first` (offset 0), `p + 0`, `&p[0]`, `p - 0` from a null `[*c]T` | defined, address 0 (ReleaseSafe and Debug); Zig 0.17.0 checks `&p.*.f` of a C pointer (`is_non_null` in the AIR) and panics (`attempt to use null value`) | `Ptr.null` (0.14.1/0.15.2 `&p.*.first`, typed `*F`: `.illegal`; 0.17.0 `&p.*.f`: `.panic`) |
+| `&p.*.first` (offset 0), `p + 0`, `&p[0]`, `p - 0` from a null `[*c]T` | defined, address 0 (ReleaseSafe and Debug); Zig 0.17.1 checks `&p.*.f` of a C pointer (`is_non_null` in the AIR) and panics (`attempt to use null value`) | `Ptr.null` (0.14.1/0.15.2 `&p.*.first`, typed `*F`: `.illegal`; 0.17.1 `&p.*.f`: `.panic`) |
 | the same from `*allowzero T`/`[*]allowzero T` at address 0 | defined, address 0 | `Ptr.null` (0.14.1/0.15.2 `&p.first`, typed `*F`: `.illegal`) |
 | nonzero field offset, `p + n`, `&p[n]`, `p - n` (n ≠ 0) from address zero, C or `allowzero` | not address arithmetic: ReleaseSafe folds `(p + n) == null` to `p == null` (also for `allowzero`; 0.14.1 even in a `null_pointer_is_valid` function); Debug happens to yield `0 + offset` | `.illegal` |
 | load/store through a projection of address zero (C or `allowzero`) | segmentation fault; no safety check in ReleaseSafe or Debug (the langref calls a C-pointer dereference of address 0 safety-checked on hosted targets; these compilers emit no check) | `.illegal` (`Mem.access`) |
@@ -92,7 +92,7 @@ The model follows each version's analyzed AIR; at address zero it says:
 | --- | --- | --- |
 | offset 0 into a nullable result (`[*c]`, `allowzero`) | address zero | no `getelementptr` is emitted; native runs agree |
 | offset 0 into a nonnullable result (0.14.1/0.15.2 `&p.*.f` typed `*F`) | `.illegal` | a non-`allowzero` pointer must not be zero (illegal behaviour that no check catches: the compiler mistypes the field pointer, 0.16.0 keeps `allowzero`) |
-| a field of a null C pointer in 0.17.0 | `.panic` | Sema's `is_non_null` safety check, translated |
+| a field of a null C pointer in 0.17.1 | `.panic` | Sema's `is_non_null` safety check, translated |
 | any nonzero offset | `.illegal` | `getelementptr inbounds` without an allocated object is poison; the native ReleaseSafe build folds `(p + n) == null` to `p == null` (`addIsNull`) |
 
 These are not over-approximations of the native result but the language's and the backend's
@@ -123,7 +123,7 @@ address is the same rule.
 ## Fresh exports and native observations
 
 `tests/roadmap/null-pointers/air/<version>` and `air-reject/<version>` are the exports of
-`nullpointers.zig` (47 roots) and `reject.zig` by patched 0.17.0, 0.16.0, 0.15.2 and 0.14.1
+`nullpointers.zig` (47 roots) and `reject.zig` by patched 0.17.1, 0.16.0, 0.15.2 and 0.14.1
 compilers (x86_64-linux, baseline, ReleaseSafe; `export.sh`, `provenance.json`,
 `test_provenance.py`; `COMPILER_FIXTURE_ROOTS`). `check.sh` translates each version, runs the
 model on the native `main`'s inputs and compares with `expected/<version>.txt` (39 native `main`
@@ -135,9 +135,9 @@ address zero (`sliceCNull`, `memsetCNull`: the null-check panic, also with a non
 unwrap of a null `?*allowzero u8` (`optUnwrapNull`: panic) and a one-item `@memset` through a
 null `[]allowzero u8` (`memsetAzNull`: a segmentation fault, illegal behaviour that no check
 catches, recorded as `illegal`). It compares the transcript with the same file. It passed for
-stock 0.14.1, 0.15.2, 0.16.0 and 0.17.0 on x86_64-linux (linux/amd64 container) and
-aarch64-linux (linux/arm64 container), and for 0.15.2, 0.16.0 and 0.17.0 on aarch64-macos (stock
-0.14.1 does not link on this macOS), 43 lines each. The 0.17.0 `main` ends with the null-field
+stock 0.14.1, 0.15.2, 0.16.0 and 0.17.1 on x86_64-linux (linux/amd64 container) and
+aarch64-linux (linux/arm64 container), and for 0.15.2, 0.16.0 and 0.17.1 on aarch64-macos (stock
+0.14.1 does not link on this macOS), 43 lines each. The 0.17.1 `main` ends with the null-field
 panic, its last line. The model-only lines are illegal behaviour that native code runs without a
 check: a nonzero start from a null `[*]allowzero u8`, `@fieldParentPtr` of a nonzero field offset
 from address zero and from a provenance-free address, a one-item `@memset` at address zero, and

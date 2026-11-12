@@ -4,7 +4,7 @@ import ZigLean.Sep.Full.WordNewest
 /-!
 # The epoch ABA of the futex-epoch condition, as a schedule
 
-The condition's waiter (`Io.Condition` of 0.16.0 and 0.17.0, `Thread.Condition.FutexImpl` of
+The condition's waiter (`Io.Condition` of 0.16.0 and 0.17.1, `Thread.Condition.FutexImpl` of
 0.15.2; `ZigLean/Sep/Full/Cond.lean`) saves the epoch before it registers and then sleeps at the
 futex for that value. The futex compares values, not writes (`Thread.futexWait`: the kernel
 reads the word's newest bytes). So after `2^32` increments of the 32-bit epoch the value is the

@@ -2,7 +2,7 @@
 //! `[n]T` ↔ `@Vector(n, T)` is lane `i` = item `i`, for whole-byte and for padded items alike;
 //! any other vector cast reinterprets the vector's memory image (bit-packed lanes, LLVM backend).
 //! `eqlChunk` is the shape of `std.mem.eqlBytes`, which `std.mem.eql(u8, …)` calls for slices
-//! of more than 16 bytes (`stdEql`). Zig 0.17.0 uses the logical bit order instead
+//! of more than 16 bytes (`stdEql`). Zig 0.17.1 uses the logical bit order instead
 //! (`docs/bitcast-semantics.md`); its exports translate with those rules. The functions are
 //! `pub` and referenced in a `comptime` block: array and vector parameters are not C ABI types.
 const std = @import("std");

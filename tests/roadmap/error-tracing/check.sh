@@ -21,7 +21,7 @@ if [ "${1:-}" = --native ]; then
   exit 0
 fi
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
-for version in 0.17.0 0.16.0 0.15.2 0.14.1; do
+for version in 0.17.1 0.16.0 0.15.2 0.14.1; do
   "$translator" "$here/air/$version" -o "$work/$version.lean" --namespace ErrorTracing
   cat "$here/Runner.lean" >> "$work/$version.lean"
   lake env lean --run "$work/$version.lean" > "$work/$version.txt"

@@ -244,7 +244,7 @@
    "peak_mib": 838,
    "sha256": "dd0983dc2513d887aee5022653e4ebc8e5437f5934d56fb634f69f87c8690231"
   },
-  "Proofs/Basic/Gen/V0_17_0/H_6c696e7578/Gen.lean": {
+  "Proofs/Basic/Gen/V0_17_1/H_6c696e7578/Gen.lean": {
    "peak_mib": 838,
    "sha256": "6c53805c95c29ecd690fb5c43cd7126625f2c1c6678638feb25fb46d998b8719"
   },
@@ -532,7 +532,7 @@
    "peak_mib": 990,
    "sha256": "378b08703a1c49dfc4f2d8359c29e3bcfdbcd57e447eeee7773a1f3673f68cf2"
   },
-  "Proofs/Sync/Gen/V0_17_0/H_6c696e7578/Gen.lean": {
+  "Proofs/Sync/Gen/V0_17_1/H_6c696e7578/Gen.lean": {
    "peak_mib": 984,
    "sha256": "3bfc7c9d4fabebb36f42efd71ea2c11e9ba996abde95ba99e3d6053edebea71e"
   },
@@ -1688,35 +1688,35 @@
    "peak_mib": 829,
    "sha256": "4d70eaac559b6ada95b12475c8246bcf72b99451d81e54d8bd3f492f6f1a6790"
   },
-  "tests/golden/0.17.0/floatconv/Gen-darwin.lean": {
+  "tests/golden/0.17.1/floatconv/Gen-darwin.lean": {
    "peak_mib": 807,
    "sha256": "8158c3e12d311d1bb6174be404dbe09e0c8e346b0e1cfc2bdd549a967955395e"
   },
-  "tests/golden/0.17.0/floatconv/Gen-linux-aarch64.lean": {
+  "tests/golden/0.17.1/floatconv/Gen-linux-aarch64.lean": {
    "peak_mib": 807,
    "sha256": "8158c3e12d311d1bb6174be404dbe09e0c8e346b0e1cfc2bdd549a967955395e"
   },
-  "tests/golden/0.17.0/floatops/Gen-darwin.lean": {
+  "tests/golden/0.17.1/floatops/Gen-darwin.lean": {
    "peak_mib": 827,
    "sha256": "d81ea3a19dc4df2434a773dfedff5557b9c3ff4ea8e5f0dabb7ef41b98017b92"
   },
-  "tests/golden/0.17.0/floatops/Gen-linux-aarch64.lean": {
+  "tests/golden/0.17.1/floatops/Gen-linux-aarch64.lean": {
    "peak_mib": 831,
    "sha256": "4e1b7886a20aca6d4379492d1174c4216bbcf3513e1cbf95dd06d0e0d7c54727"
   },
-  "tests/golden/0.17.0/floatops/Gen.lean": {
+  "tests/golden/0.17.1/floatops/Gen.lean": {
    "peak_mib": 829,
    "sha256": "a02019a5ee040517a28d064443199970a0a5fa59fa3ef8601c48bd875026f874"
   },
-  "tests/golden/0.17.0/layout/Gen.lean": {
+  "tests/golden/0.17.1/layout/Gen.lean": {
    "peak_mib": 906,
    "sha256": "d2665235f5b2d22c7c53043f0b4f27aec7958c9d6fb4c9e6b044eb6ff5aaaba1"
   },
-  "tests/golden/0.17.0/lists/Gen.lean": {
+  "tests/golden/0.17.1/lists/Gen.lean": {
    "peak_mib": 873,
    "sha256": "d80b13d2c39b3a1cb788f92fa3cd9d3cbfa598f1466d2fd91f38cd421198f774"
   },
-  "tests/golden/0.17.0/sync/Gen.lean": {
+  "tests/golden/0.17.1/sync/Gen.lean": {
    "peak_mib": 906,
    "sha256": "ac6de3d01c96c9515ba8fb0bfaef4dc20159dcad20cbd093c3a6aebec908fb79"
   },
@@ -2052,15 +2052,15 @@
    "peak_mib": 829,
    "sha256": "b7cbd86740c4e8c9b702de88451281b51f2d4f7282c61fdb0f61b5bbe6fe35a5"
   },
-  "tests/roadmap/big-endian/conc-gen/0.17.0-mips64-linux.lean": {
+  "tests/roadmap/big-endian/conc-gen/0.17.1-mips64-linux.lean": {
    "peak_mib": 848,
    "sha256": "645da1979a16a47fb6fb9255d365aca10d895ca50c6b80cacf1e47479545af09"
   },
-  "tests/roadmap/big-endian/conc-gen/0.17.0-s390x-linux.lean": {
+  "tests/roadmap/big-endian/conc-gen/0.17.1-s390x-linux.lean": {
    "peak_mib": 846,
    "sha256": "7dc74af46540d4e4721bb6b202bf549e8988e6149f79f47e5bbcbf2d58ce9666"
   },
-  "tests/roadmap/big-endian/conc-gen/0.17.0-x86_64-linux.lean": {
+  "tests/roadmap/big-endian/conc-gen/0.17.1-x86_64-linux.lean": {
    "peak_mib": 839,
    "sha256": "7862c5fbd0ac28a4919cb5ffcdd9b57327e2069e85fbca13506acbb9305691db"
   },
@@ -2248,11 +2248,11 @@
    "peak_mib": 801,
    "sha256": "b552b96036d665525d84146b77fd8ce6088afecdfbb0fda46aad6b72d38a27c7"
   },
-  "tests/roadmap/enc-exactness/gen/0.17.0/EncExactness.lean": {
+  "tests/roadmap/enc-exactness/gen/0.17.1/EncExactness.lean": {
    "peak_mib": 814,
    "sha256": "97c2de304d565f088d38b7fa1ebd5741e0cc3365cb87616a1785ca646720cef9"
   },
-  "tests/roadmap/enc-exactness/gen/0.17.0/Opaque.lean": {
+  "tests/roadmap/enc-exactness/gen/0.17.1/Opaque.lean": {
    "peak_mib": 801,
    "sha256": "31f7b9d210db85361f720638cae6c03a481af52ee64f59508a95fe86da49cb05"
   },
@@ -2396,7 +2396,7 @@
    "peak_mib": 875,
    "sha256": "8d61f9e2cf2bef0d04c55de3330775bc6a9fe2255c9fde7c4056591adb518187"
   },
-  "tests/roadmap/lang-long-tail/LangLongTail/ErrorInts-0.17.0.lean": {
+  "tests/roadmap/lang-long-tail/LangLongTail/ErrorInts-0.17.1.lean": {
    "peak_mib": 879,
    "sha256": "f190272e373b4b21dd01921b3cd470aab305b2bcde1400b9065378d27aa3d0c6"
   },
@@ -2408,7 +2408,7 @@
    "peak_mib": 868,
    "sha256": "eca50e2399083ac1758156a7afa667ce4a82fcf7bf8f16b6d10d49e9a4487217"
   },
-  "tests/roadmap/lang-long-tail/LangLongTail/ErrorIntsW8-0.17.0.lean": {
+  "tests/roadmap/lang-long-tail/LangLongTail/ErrorIntsW8-0.17.1.lean": {
    "peak_mib": 879,
    "sha256": "1ff289a6d8d90e80faa1eb505123b288300b4c3280a11322f098bc0050d619ff"
   },
@@ -2464,7 +2464,7 @@
    "peak_mib": 853,
    "sha256": "f7c8a330df949e3a4e9545b5cca1f04459b4633c51a699713dd0b0123ef38eae"
   },
-  "tests/roadmap/lang-long-tail/LangLongTail/VectorCasts-0.17.0.lean": {
+  "tests/roadmap/lang-long-tail/LangLongTail/VectorCasts-0.17.1.lean": {
    "peak_mib": 864,
    "sha256": "1e745be19ab73c1e2030a2a7164eb26919cf866f12cc9b3a93c08f6ae21d3cf6"
   },
@@ -2564,7 +2564,7 @@
    "peak_mib": 826,
    "sha256": "6a3cab68af2332894bb5949c1704aa7ffa1cf050492858913e727d21266a9cf6"
   },
-  "tests/roadmap/nan-bits/gen/0.17.0/NanBits.lean": {
+  "tests/roadmap/nan-bits/gen/0.17.1/NanBits.lean": {
    "peak_mib": 824,
    "sha256": "a8a27470fefc8488556c7f9fe4941536e6db2b39f25c2675db2e964b14b49b38"
   },
@@ -2660,11 +2660,11 @@
    "peak_mib": 841,
    "sha256": "0d6d37f2a2a2dcc5036ed34fdec1a893a929be43f1e1253b8679c712c9799418"
   },
-  "tests/roadmap/packed-casts/gen/0.17.0/Logical017.lean": {
+  "tests/roadmap/packed-casts/gen/0.17.1/Logical017.lean": {
    "peak_mib": 826,
    "sha256": "d5a2f2568f86c52fa64b385138da10f24cb07c9a865321ebd3141e6980c368e0"
   },
-  "tests/roadmap/packed-casts/gen/0.17.0/PackedCasts.lean": {
+  "tests/roadmap/packed-casts/gen/0.17.1/PackedCasts.lean": {
    "peak_mib": 841,
    "sha256": "e8a96f685204df69afff5c85a61c52a5fb0712d5be3f4000c1722ba4d69eb8a1"
   },
@@ -3064,7 +3064,7 @@
    "peak_mib": 833,
    "sha256": "d234f26672d89cb5bceec7bd5f2d904b8c38d24751f1659cfcca335a9ad99496"
   },
-  "tests/roadmap/try-pointers/lifetimes/gen/0.17.0.lean": {
+  "tests/roadmap/try-pointers/lifetimes/gen/0.17.1.lean": {
    "peak_mib": 836,
    "sha256": "09f7c846a82fe610cb95d4bf48238c8e1b129a865a56e3e3635cb47155d50d22"
   },

@@ -18,7 +18,7 @@ import tempfile
 HERE = Path(__file__).resolve().parent
 AIR = HERE / "air" / "0.16.0"
 FRESH_ROOT = HERE / "air-fresh"
-VERSIONS = ["0.17.0", "0.16.0", "0.15.2", "0.14.1"]
+VERSIONS = ["0.17.1", "0.16.0", "0.15.2", "0.14.1"]
 LLVM_ROOT = HERE / "air-llvm"
 # llvm_correspondence.zig: the one base that the LLVM backend misplaces (the native test checks it).
 MISPLACED = "resElem"

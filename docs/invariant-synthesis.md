@@ -600,7 +600,7 @@ fact that the counter's step there does not wrap (`b + 1 < 2 ^ w`, resp. `1 ≤ 
 `vₖ + cₖ * d` (`d` the iterations so far: `x - x₀` going up, `x₀ - x` going down) with the
 no-overflow fact `vₖ + cₖ * n < 2 ^ w` (`n` all iterations); the measure is the iterations left.
 
-Client: `tests/roadmap/loop-tactics/counted`, the retained Zig 0.17.0 AIR of `counted.zig`, one
+Client: `tests/roadmap/loop-tactics/counted`, the retained Zig 0.17.1 AIR of `counted.zig`, one
 exported function per shape (`down`: `i > 0`, `i -= 1`, `acc.* += 3`; `upNe`; `upLe`; `lenCount`
 over `xs.len`; `readBound` over `lim.*`). `Proof.lean` proves each function's total triple
 (`F_total`) by `fsym` alone, with the generated invariant, measure and exit post: no hand

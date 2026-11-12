@@ -159,7 +159,7 @@ Every type is an object with `"k"`. Child types are type IDs (integers), never n
 | `int` | `signed: bool`, `bits: int` |
 | `float` | `bits: int` (16, 32, 64, 80, 128; `c_longdouble` resolves to the target's width) |
 | `bool`, `void`, `noreturn` | — |
-| `ptr` | `size: "one"\|"many"\|"slice"\|"c"`, `const: bool`, `child: id`, `ptr_align: int` (the `align(N)` of the pointer type: explicit, or the child's ABI alignment; missing if the child has no layout yet), `volatile: bool`, `allowzero: bool`, `address_space: string` (the `std.builtin.AddressSpace` tag; the translator accepts only `generic`), `sentinel: bool`, optional `sentinel_byte: decimal string` (0.16.0 and later exports only: exact comptime sentinel for a u8 pointer; required by the byte allocSentinel model), `host_size: int` (a bit-pointer `&packed.field`: the host integer's size in bytes; else 0) (schema 5), `bit_offset: int` (a bit-pointer only: its field's first bit in the host integer) (schema 11), `vector_index: null\|int\|"runtime"` (present when `host_size` is nonzero or the pointer is a vector lane pointer: `null` for a packed field pointer, else the lane index of `&v[i]` into a vector, whose `host_size` is the lane count, not bytes (0.17.0 for every lane, earlier versions only for a lane that is not a power-of-two number of whole bytes; `Canon.lean` turns 0.17.0's whole-byte lanes back into 0.16.0's element pointers); `"runtime"` on 0.14.1/0.15.2 only. The translator models a comptime lane pointer into an integer or `bool` vector of an LLVM-backend x86_64/aarch64 profile as a bit-pointer into the vector's integer (`host_size` becomes `⌈n * w / 8⌉` bytes, `bit_offset` `i * w`, `docs/vector-proofs.md` §Lane pointers) and rejects every other lane pointer. An export without the field cannot tell the two apart, so the translator accepts a bit-pointer without it only as the result of a `struct_field_ptr` of a packed struct or union, never as a parameter, constant, load result or other value) |
+| `ptr` | `size: "one"\|"many"\|"slice"\|"c"`, `const: bool`, `child: id`, `ptr_align: int` (the `align(N)` of the pointer type: explicit, or the child's ABI alignment; missing if the child has no layout yet), `volatile: bool`, `allowzero: bool`, `address_space: string` (the `std.builtin.AddressSpace` tag; the translator accepts only `generic`), `sentinel: bool`, optional `sentinel_byte: decimal string` (0.16.0 and later exports only: exact comptime sentinel for a u8 pointer; required by the byte allocSentinel model), `host_size: int` (a bit-pointer `&packed.field`: the host integer's size in bytes; else 0) (schema 5), `bit_offset: int` (a bit-pointer only: its field's first bit in the host integer) (schema 11), `vector_index: null\|int\|"runtime"` (present when `host_size` is nonzero or the pointer is a vector lane pointer: `null` for a packed field pointer, else the lane index of `&v[i]` into a vector, whose `host_size` is the lane count, not bytes (0.17.1 for every lane, earlier versions only for a lane that is not a power-of-two number of whole bytes; `Canon.lean` turns 0.17.1's whole-byte lanes back into 0.16.0's element pointers); `"runtime"` on 0.14.1/0.15.2 only. The translator models a comptime lane pointer into an integer or `bool` vector of an LLVM-backend x86_64/aarch64 profile as a bit-pointer into the vector's integer (`host_size` becomes `⌈n * w / 8⌉` bytes, `bit_offset` `i * w`, `docs/vector-proofs.md` §Lane pointers) and rejects every other lane pointer. An export without the field cannot tell the two apart, so the translator accepts a bit-pointer without it only as the result of a `struct_field_ptr` of a packed struct or union, never as a parameter, constant, load result or other value) |
 | `array` | `len: int`, `child: id`, `sentinel: bool` (`[N:s]T`; schema 6) |
 | `vector` | `len: int`, `child: id` (`@Vector(len, child)`; schema 9). The checked subset permits integer, float and bool lanes. Pointer vectors and nonidentity vector bitcasts are rejected. |
 | `optional` | `child: id` |
@@ -187,7 +187,7 @@ Example: `error{NotDigit}!u8` is `{"k": "error_union", "error": 5, "payload": 0}
 | Field | When |
 |---|---|
 | `id` | always. AIR instruction index, unique in the function. |
-| `tag` | always. AIR tag name, verbatim. Zig 0.17.0's renamed and split tags (`int_cast`, `bit_cast`, `ptr_cast`, `error_cast`, `agg_field_val`, …, `Canon.tagAliases017`) and `div_ceil` have the payload of the 0.16.0 tag they replace; the schema table lists them, and `Canon.versionTags` maps them to the 0.16.0 spelling after validation. |
+| `tag` | always. AIR tag name, verbatim. Zig 0.17.1's renamed and split tags (`int_cast`, `bit_cast`, `ptr_cast`, `error_cast`, `agg_field_val`, …, `Canon.tagAliases017`) and `div_ceil` have the payload of the 0.16.0 tag they replace; the schema table lists them, and `Canon.versionTags` maps them to the 0.16.0 spelling after validation. |
 | `ty` | result type ID. Missing only for `inferred_alloc*`. |
 | `args` | operands, in AIR order |
 | `param` | `arg`: ZIR parameter index |
@@ -234,7 +234,7 @@ exporter writes:
 
 | Key or tag | Meaning |
 |---|---|
-| file `err_trace: T` | the function takes the hidden trace parameter, of type `T` (`?*std.builtin.StackTrace`; `std.lang` in 0.17.0) |
+| file `err_trace: T` | the function takes the hidden trace parameter, of type `T` (`?*std.builtin.StackTrace`; `std.lang` in 0.17.1) |
 | call `err_trace: T` | the callee receives the caller's current trace, of type `T` |
 | `err_trace_unresolved: true` | the same, but `StackTrace` was not yet resolved when the function was exported; the translator rejects the file |
 | `err_return_trace` | the current trace; no operands |
@@ -356,7 +356,7 @@ success they return that payload's address without reading or copying its bytes.
 `error-table.air2lean`, beside the function files (not a `.json` name: it describes no
 function). The patched compiler writes it once, after analysis (`Compilation.update`,
 `zig-patch/<version>/hook.patch`), if an exported function converts between errors and integers:
-an `int_from_error`/`error_from_int` (0.17.0), a `bitcast` between an error set and an integer
+an `int_from_error`/`error_from_int` (0.17.1), a `bitcast` between an error set and an integer
 (earlier versions), the `@errorFromInt` bound check `cmp_lt_errors_len`/`cmp_lte_errors_len`
 (whose operand the exporter writes as `args`), or a 0.14.1 `error_name`.
 

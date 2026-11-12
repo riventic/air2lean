@@ -119,44 +119,44 @@ class Instance(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory(prefix="air2lean-fixtures-instance-test.")
         self.addCleanup(tmp.cleanup)
         self.dir = Path(tmp.name)
-        self.primary = self.dir / "Fix/V0_17_0/Model.lean"
+        self.primary = self.dir / "Fix/V0_17_1/Model.lean"
         self.primary.parent.mkdir(parents=True)
-        self.primary.write_text("import Fix.V0_17_0.Gen\nnamespace Fix.V0_17_0.Model\n"
-                                "-- XV0_17_0 V0_17_0x stay\nend Fix.V0_17_0.Model\n")
+        self.primary.write_text("import Fix.V0_17_1.Gen\nnamespace Fix.V0_17_1.Model\n"
+                                "-- XV0_17_1 V0_17_1x stay\nend Fix.V0_17_1.Model\n")
         self.instance = self.dir / "Fix/V0_14_1/Model.lean"
 
     def test_write_then_check(self):
-        self.assertEqual(fx.instance(self.primary, ["V0_17_0=V0_14_1"], True), 0)
+        self.assertEqual(fx.instance(self.primary, ["V0_17_1=V0_14_1"], True), 0)
         self.assertEqual(self.instance.read_text(), "import Fix.V0_14_1.Gen\nnamespace Fix.V0_14_1.Model\n"
-                         "-- XV0_17_0 V0_17_0x stay\nend Fix.V0_14_1.Model\n")
-        self.assertEqual(fx.instance(self.primary, ["V0_17_0=V0_14_1"], False), 0)
+                         "-- XV0_17_1 V0_17_1x stay\nend Fix.V0_14_1.Model\n")
+        self.assertEqual(fx.instance(self.primary, ["V0_17_1=V0_14_1"], False), 0)
 
     def test_drift_fails(self):
-        fx.instance(self.primary, ["V0_17_0=V0_14_1"], True)
+        fx.instance(self.primary, ["V0_17_1=V0_14_1"], True)
         self.instance.write_text(self.instance.read_text() + "theorem extra : True := trivial\n")
-        self.assertEqual(fx.instance(self.primary, ["V0_17_0=V0_14_1"], False), 1)
+        self.assertEqual(fx.instance(self.primary, ["V0_17_1=V0_14_1"], False), 1)
 
     def test_missing_instance_fails(self):
-        self.assertEqual(fx.instance(self.primary, ["V0_17_0=V0_14_1"], False), 1)
+        self.assertEqual(fx.instance(self.primary, ["V0_17_1=V0_14_1"], False), 1)
 
     def test_absent_name_fails(self):
         with self.assertRaises(SystemExit):
             fx.instance(self.primary, ["V0_16_0=V0_14_1"], False)
 
     def test_primary_naming_a_new_version_is_refused(self):
-        # A 0.17.0 model importing the 0.16.0 translation would make every instance agree.
+        # A 0.17.1 model importing the 0.16.0 translation would make every instance agree.
         self.primary.write_text(self.primary.read_text() + "open Fix.V0_14_1\n")
         with self.assertRaisesRegex(SystemExit, "already names V0_14_1"):
-            fx.instance(self.primary, ["V0_17_0=V0_14_1"], True)
+            fx.instance(self.primary, ["V0_17_1=V0_14_1"], True)
 
     def test_identity_is_refused(self):
         with self.assertRaisesRegex(SystemExit, "unchanged"):
-            fx.instance(self.primary, ["V0_17_0=V0_17_0"], False)
+            fx.instance(self.primary, ["V0_17_1=V0_17_1"], False)
 
     def test_chained_substitutions_are_refused(self):
-        # V0_17_0 -> Model -> Raw would rename both to Raw; Model is in the primary: refused.
+        # V0_17_1 -> Model -> Raw would rename both to Raw; Model is in the primary: refused.
         with self.assertRaisesRegex(SystemExit, "already names Model"):
-            fx.instance(self.primary, ["V0_17_0=Model", "Model=Raw"], True)
+            fx.instance(self.primary, ["V0_17_1=Model", "Model=Raw"], True)
 
 
 class Run(Repo):

@@ -112,7 +112,7 @@ def Ty.head : Ty → Ty
   | .tuple fs => .tuple (fs.map fun _ => 0)
   | t => t
 
-/-- `a` and `b` are the same type although the exporter gave it two ids (Zig 0.17.0 interns
+/-- `a` and `b` are the same type although the exporter gave it two ids (Zig 0.17.1 interns
 `*align(8) T` and `*T` apart even where the alignments agree): equal heads and layouts and,
 pairwise, the same children. Each pair is compared once and assumed equal from then on; any
 mismatch makes the answer `false`, so `true` is a bisimulation of the two regular trees (linear
@@ -475,7 +475,7 @@ inductive ArithOp where
   | add | sub | mul
   deriving Repr, Inhabited, BEq
 
-/-- `divCeil` is `@divCeil` (Zig 0.17.0's `div_ceil`). -/
+/-- `divCeil` is `@divCeil` (Zig 0.17.1's `div_ceil`). -/
 inductive DivOp where
   | divTrunc | divFloor | divExact | rem | mod | divCeil
   deriving Repr, Inhabited, BEq
@@ -537,7 +537,7 @@ inductive Op where
   | shlWithOverflow (a b : Val)
   | countBits (op : BitCountOp) (a : Val)
   | permuteBits (op : BitPermuteOp) (a : Val)
-  /-- `splat`: a vector with every lane equal to the scalar `a`. Zig 0.17.0 also splats to an
+  /-- `splat`: a vector with every lane equal to the scalar `a`. Zig 0.17.1 also splats to an
   array; `Check.lean` rejects that. -/
   | splat (a : Val)
   /-- `select`: a vector built lane-wise from `a` (where the bool-vector `pred`'s lane is true)
@@ -566,7 +566,7 @@ inductive Op where
   /-- `@truncate`. -/
   | trunc (a : Val)
   /-- Same bits, other type with the same representation (for example `usize` → `u64`); also
-  int ↔ float bit reinterpretation (`Emit` looks at the types on each side). `safe`: 0.17.0's
+  int ↔ float bit reinterpretation (`Emit` looks at the types on each side). `safe`: 0.17.1's
   `bit_cast_safe`, which checks an exhaustive-enum result's tag in the op (`invalidEnumValue`);
   without it an unnamed tag is illegal behaviour (`.illegal`). -/
   | bitcast (safe : Bool) (a : Val)

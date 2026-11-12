@@ -3,7 +3,7 @@ import PackedCasts.Show
 
 /-! `packed_casts.zig` from the translation of one Zig version's export
 (`PackedCasts.V0_15_2.PackedCasts`): kernel-checked results, then `main` prints the lines of
-`native.zig`'s cases. It is written for Zig 0.17.0; the modules of 0.14.1, 0.15.2 and 0.16.0 are
+`native.zig`'s cases. It is written for Zig 0.17.1; the modules of 0.14.1, 0.15.2 and 0.16.0 are
 that one with the version renamed (`check.sh`, `scripts/fixtures.py instance`). -/
 
 open Zig PackedCasts.V0_15_2.PackedCasts PackedCastsShow

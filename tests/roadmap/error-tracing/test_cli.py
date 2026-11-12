@@ -14,7 +14,7 @@ import tempfile
 import unittest
 
 HERE = Path(__file__).resolve().parent
-VERSIONS = ("0.17.0", "0.16.0", "0.15.2", "0.14.1")
+VERSIONS = ("0.17.1", "0.16.0", "0.15.2", "0.14.1")
 TRANSLATOR = None
 
 

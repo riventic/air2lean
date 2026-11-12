@@ -36,7 +36,7 @@ fn rt(comptime T: type, x: T) T {
     return p.*;
 }
 
-/// `std.meta.Int` is gone from 0.17.0 (`compat.Bits`).
+/// `std.meta.Int` is gone from 0.17.1 (`compat.Bits`).
 const Bits = compat.Bits;
 
 fn hex(out: *Out, comptime T: type, x: T) !void {

@@ -1,4 +1,4 @@
-//! Native probe of `error_params.zig` (stock Zig 0.14.1-0.17.0). Each line is
+//! Native probe of `error_params.zig` (stock Zig 0.14.1-0.17.1). Each line is
 //! `<function> <input> <result>`: a value, `error.<Name>`, or `panic` (a safety check fired; the
 //! probe runs each panicking case last). `Model.lean` prints the same lines from the translation.
 const std = @import("std");

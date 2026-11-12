@@ -6,7 +6,7 @@
 #   check.sh [--native]
 #
 # For every fixture source: the committed exports match provenance.json; the export of every
-# supported Zig version (0.17.0, 0.16.0, 0.15.2, 0.14.1) translates to its retained translation
+# supported Zig version (0.17.1, 0.16.0, 0.15.2, 0.14.1) translates to its retained translation
 # (`retained_of` below); each elaborates and its model lines equal the committed native output
 # of its version; the proofs check; the negative tests reject and the semantic mutants
 # (mutants.py) are killed. `--native` also runs each probe
@@ -38,7 +38,7 @@ fixtures=(
   "runtime_lanes RuntimeLanes"
   "float_lanes FloatLanes"
 )
-versions=(0.17.0 0.16.0 0.15.2 0.14.1)
+versions=(0.17.1 0.16.0 0.15.2 0.14.1)
 # The retained translation of a version: LangLongTail/<Key>-<version>.lean where the version's
 # export translates to another text (std code that differs by version, 0.17's bit-cast rules,
 # the error numbering), else LangLongTail/<Key>.lean, the 0.16.0 translation. Each is compared

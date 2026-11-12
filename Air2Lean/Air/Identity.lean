@@ -62,7 +62,7 @@ def validInstanceKey (k : String) : Bool :=
   k.length == 64 && k.all fun c => c.isDigit || ('a' ≤ c && c ≤ 'f')
 
 /-- Every top-level namespace of `lib/std` (its files and directories) in every supported Zig
-version (0.14.1, 0.15.2, 0.16.0, 0.17.0). A std name starts with one of them, so a `root` name
+version (0.14.1, 0.15.2, 0.16.0, 0.17.1). A std name starts with one of them, so a `root` name
 that starts with one gets the key `root:<name>`, and no std model, OS primitive, special std type
 or panic handler, whichever namespace it is in, can match a root name. The list is complete, not
 the namespaces some lookup happens to use: `rewrite` rejects a std identity in any other

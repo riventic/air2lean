@@ -16,7 +16,7 @@ sha256, the Lean toolchain by its exact version in `lean-toolchain` (elan instal
 | `lean.elan` | elan release, asset URL and sha256 | `zig-patch/versions.toml` `[ci.elan]` |
 | `zig.versions[]` | supported Zig versions in order, source tarball URL/sha256, hook, LLVM major, CI host Zig URL/sha256 | `zig-patch/versions.toml` |
 | `zig.versions[].hosts` | supported build hosts (`x86_64-linux`, `aarch64-macos`) | the Linux-only rule in `scripts/workflow-common.sh` |
-| `zig.versions[].status` | `qualified` (every pinned version, including 0.17.0: [zig-0.17-ci.md](zig-0.17-ci.md)), or `in-qualification` for a newly pinned version (CI runs it; version-specific gates and evidence incomplete) | — (checked: one of the two) |
+| `zig.versions[].status` | `qualified` (every pinned version, including 0.17.1: [zig-0.17-ci.md](zig-0.17-ci.md)), or `in-qualification` for a newly pinned version (CI runs it; version-specific gates and evidence incomplete) | — (checked: one of the two) |
 | `zig.default` | default Zig version; must be `qualified`. The one place the default is written: scripts read it with `scripts/compat.py default` (`scripts/zig-default.sh`), the translator repeats it as `ZigVersion.defaultVersion` | `Air2Lean/Air/Dialect.lean` |
 | `zig.ci_once` | the version the CI once-per-run parts and mutation shards run on (their steps gate on the version they were qualified on); `qualified`, x86_64-linux | `.github/workflows/ci.yml` rows |
 | `air2lean.air_json_schemas` | accepted AIR-JSON schemas | `Air2Lean/Air/Profile.lean` |

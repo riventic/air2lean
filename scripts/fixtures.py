@@ -41,7 +41,7 @@ Every Lean file of a converted fixture is elaborated by Lake, in one mode:
   rejection of the mutant.
 - `instance`: a module stated once for several Zig versions or targets (one module per
   translation, as Lake needs distinct module names). PRIMARY is the hand-written instance;
-  another instance is PRIMARY with each OLD identifier token (`V0_17_0`, a whole name component)
+  another instance is PRIMARY with each OLD identifier token (`V0_17_1`, a whole name component)
   replaced by NEW, in its text and its path. Fails unless the instance file equals that text
   byte for byte (`--write`: writes it). Every OLD must occur in both text and path.
 - `run`: runs each DECL (an `IO Unit`, of the built fixture MODULE) in one `lean --run` of the
@@ -357,7 +357,7 @@ def token(name: str) -> re.Pattern:
 
 def instance(primary: Path, substs: list[str], write: bool) -> int:
     """`primary` with each OLD replaced by its NEW (all at once, so substitutions never chain).
-    A primary that already names a NEW (the 0.17.0 model importing the 0.16.0 translation) would
+    A primary that already names a NEW (the 0.17.1 model importing the 0.16.0 translation) would
     make the instance agree while checking the wrong version, so it is refused."""
     text, path = primary.read_text(encoding="utf-8"), primary.as_posix()
     mapping = {}

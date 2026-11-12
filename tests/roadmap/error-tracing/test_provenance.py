@@ -13,7 +13,7 @@ import unittest
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
-VERSIONS = ("0.17.0", "0.16.0", "0.15.2", "0.14.1")
+VERSIONS = ("0.17.1", "0.16.0", "0.15.2", "0.14.1")
 PROVENANCE = HERE / "provenance.json"
 COMMAND = ("ZIG_AIR_JSON_DIR=air/<version> ZIG_AIR_JSON_FILTER=<roots>,builtin.returnError,lang.returnError "
            "<patched zig> build-obj -fno-emit-bin -OReleaseSafe -ferror-tracing -target x86_64-linux "
@@ -44,7 +44,7 @@ def refresh():
     zig_root = Path(os.environ["AIR2LEAN_ZIG_AIR"])
     record["patched_compiler_sha256"] = {v: sha(zig_root / f"zig-air-{v}/bin/zig-unlocked") for v in VERSIONS}
     record["qualification"] = ("Compiler exports of error_tracing.zig with error return tracing by patched "
-                               "0.17.0, 0.16.0, 0.15.2 and 0.14.1 compilers built from the recorded exporter; "
+                               "0.17.1, 0.16.0, 0.15.2 and 0.14.1 compilers built from the recorded exporter; "
                                "check.sh translates each and compares the model's results with native runs.")
     PROVENANCE.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
 

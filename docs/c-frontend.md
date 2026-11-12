@@ -118,15 +118,15 @@ Shapes are quoted from the translated corpus (`.zig` files in the heavy work dir
 | libc calls | `pub extern fn strlen([*c]const u8) usize;` (0.15.2: `c_ulong` for `size_t`) | |
 | struct layout | `extern struct`, so C layout; `sizeof`/`_Alignof`/`offsetof` are `@sizeOf`, `@alignOf`, `@offsetOf` | |
 
-**Zig 0.17.0 translate-c is no better.** Its `Translator.zig` keeps the same refusals
+**Zig 0.17.1 translate-c is no better.** Its `Translator.zig` keeps the same refusals
 (`.goto_stmt, .computed_goto_stmt, .labeled_stmt => fail "TODO goto"`, bitfield records
 demoted to `opaque`, variadic definitions demoted, "TODO complex switch"), and running the
-0.17.0 translator on the eight affected corpus files gives the same warnings and demotions;
+0.17.1 translator on the eight affected corpus files gives the same warnings and demotions;
 `sort_callback` still gets the `u1` comparator subtraction (G8).
 
 ### goto
 
-translate-c (0.15.2, 0.16.0 and 0.17.0) never produces a labeled-switch dispatch loop
+translate-c (0.15.2, 0.16.0 and 0.17.1) never produces a labeled-switch dispatch loop
 from C `goto`: any function containing a `goto` or a label is demoted to `extern fn`,
 so a goto state machine reaches air2lean only as a call to a missing symbol (G1, then
 `CALLEE_MISSING`). air2lean's L03 loop-switch support would consume such a dispatch loop if
@@ -144,7 +144,7 @@ the error-cleanup idiom), general goto only with upstream acceptance (Phase 3).
 **Zig 0.16.0 compiler bug (not translate-c).** Indexing an array that is reached through a
 dereferenced C pointer, `p.*.data[i]` with `p: [*c]S` or `r.*[i]` with `r: [*c][3]T`,
 has the *array* type instead of the element type in stock Zig 0.16.0 (a four-line repro
-fails to compile; the same code through `*S` compiles; Zig 0.15.2 and 0.17.0 compile it).
+fails to compile; the same code through `*S` compiles; Zig 0.15.2 and 0.17.1 compile it).
 translate-c emits exactly this shape for `p->data[i]`. Mostly it is a compile error
 (`arrays_2d`, `ring_buffer`, `struct_layout`), but `&p->e[i]` coerces the wrong
 `*[N]T` to `[*c]T` and **silently miscompiles**: `hash_table` returns a different value
@@ -300,11 +300,11 @@ blocked (alone or with other gaps).
 |---|---|---|---|---|---|---|
 | G1 | **calls to `extern` C functions** (libc, and every function translate-c demoted) | `pub extern fn strlen([*c]const u8) usize;`, called directly; variadic `snprintf(…, ...)` | the exporter writes the callee as a constant `{"ty": <fn type>, "val": "(extern 'memset')"}` whose type is `k: other` (`"fn (…) callconv(.c) …"`); `Air2Lean/Air/Json.lean` `parseLeafVal` → `AIR_DECODE` "constant of unsupported type" | 9 (`AIR_DECODE`) | M (exporter callee/fn-type schema, decoder, checker binding to the E01 registry by exact symbol) + per-symbol models below | E01, E03, E04, L01, Q07 (schema bump), zig-patch |
 | G2 | **pointer casts through `void *`/`char *` views and self-referential structs** | `@ptrCast(@alignCast(p))` to/from `?*anyopaque`, `[*c]u8`; `struct node **link = &head` | `Air2Lean/Check.lean` `errorCapabilityScan`: an opaque child (`.other`) or a type cycle gives "unresolved or cyclic symbolic storage provenance" (`INSTRUCTION_FAILURE`), a guard of the finite error-storage fragment | 5 | S–M: prove absence of error storage for error-free type graphs (reuse `closedErrorFreeAliasGraph`, or a whole-program "no error types" fact; translated C has none) and admit `anyopaque` as an opaque byte view | L10, L07, L05 |
-| G3 | **Zig 0.16.0 `p.*.f[i]` through `[*c]` pointers** (compiler bug, trusted base) | `r.*.data[i]`, `o.*.in[0].a`, `row.*[2]` | stock Zig: compile error or **silent miscompile** (`&p.*.e[i]` points at item 0); patched Debug compiler: `reached unreachable` | 4 | S for a fail-closed gate (reject translated sources with the shape, or rewrite it and re-verify natively); upstream fix; 0.15.2 and 0.17.0 compile the repro correctly | Q07, T06, V03 |
+| G3 | **Zig 0.16.0 `p.*.f[i]` through `[*c]` pointers** (compiler bug, trusted base) | `r.*.data[i]`, `o.*.in[0].a`, `row.*[2]` | stock Zig: compile error or **silent miscompile** (`&p.*.e[i]` points at item 0); patched Debug compiler: `reached unreachable` | 4 | S for a fail-closed gate (reject translated sources with the shape, or rewrite it and re-verify natively); upstream fix; 0.15.2 and 0.17.1 compile the repro correctly | Q07, T06, V03 |
 | G4 | **negative `[*c]` index** | `p[@bitCast(@as(isize, @intCast(-1)))]` = index 2⁶⁴−1 | accepted, but the model's `p.elem 4 (2^64-1)` is past the block, so `entry` is `.illegal` while native Zig and C are defined (conservative, not unsound) | 1 (`ptr_arith`) | S: wrap the C-pointer offset modulo 2⁶⁴ (two's-complement index) in the `[*c]` `ptr_elem_*`/`ptr_add` emission | L05 |
 | G5 | **zero-initialised globals whose address escapes** | `pub var pool: [8]struct_node = std.mem.zeroes([8]struct_node);` with `&pool[i]` / `@intFromPtr(&data[1])` | AIR global without `init` → `STRUCTURE_FAILURE` "global has no initial value" (the same `mem.zeroes([4]c_uint)` global without escaping address exports its init) | 2 | M (exporter global-init emission; root cause not yet isolated) | L12, L06 |
 | G6 | **std callees other than `zig.c_translation`** | `std.mem.zeroes(T)` in function bodies (compound literals), `debug.assert` inside `signedRemainder` | `CALLEE_MISSING`; widening the AIR filter to `mem.zeroes`/`debug.assert` also selects std's own instances (`mem.asBytes`), which regressed 13 passing files and all 30 generated programs | 2 | S–M: select exactly the instances reachable from the C module, or a typed std model for `mem.zeroes` | I02, E04 |
-| G7 | **translate-c refusals** | `goto`/labels: function demoted ("TODO goto"); bitfields: record `opaque`, users demoted; variadic definitions: demoted; case labels inside nested statements (Duff): "TODO complex switch" | translate-c 0.15.2/0.16.0/0.17.0 alike (the demoted functions then reach G1) | 6 | goto: gate S now, forward-only Aro patch M, general L (§goto); bitfields M–L (C ABI storage units as packed host integers); variadic definitions L (`@cVaStart`/`@cVaArg` and AIR va tags); Duff M | upstream Aro translate-c or a pinned patch (joins the trusted base); L03, L08, L14 |
+| G7 | **translate-c refusals** | `goto`/labels: function demoted ("TODO goto"); bitfields: record `opaque`, users demoted; variadic definitions: demoted; case labels inside nested statements (Duff): "TODO complex switch" | translate-c 0.15.2/0.16.0/0.17.1 alike (the demoted functions then reach G1) | 6 | goto: gate S now, forward-only Aro patch M, general L (§goto); bitfields M–L (C ABI storage units as packed host integers); variadic definitions L (`@cVaStart`/`@cVaArg` and AIR va tags); Duff M | upstream Aro translate-c or a pinned patch (joins the trusted base); L03, L08, L14 |
 | G8 | **translate-c semantic divergences** | `(a > b) - (a < b)` → `@intFromBool(a > b) - @intFromBool(a < b)` (`u1` arithmetic); `setjmp`/`longjmp` as plain calls | ReleaseSafe `integerOverflow` panic natively where C yields −1 (the standard `qsort` comparator idiom); `setjmp` loses a `volatile` local (Zig has no `returns_twice`) | 3 | S: upstream promotion fix; reject `setjmp`/`longjmp`/`sigsetjmp` at the libc boundary | upstream translate-c; G1 |
 | G9 | **patched compiler on invalid Zig** | any compile error (G3, demotions) | the Debug-built AIR exporter reaches `unreachable` instead of exiting with the compile error | 4 | S | V03, I08 |
 

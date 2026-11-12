@@ -2103,7 +2103,7 @@ theorem Inv.see {G : ThreadId → SGh X} {m : Mem} {t i jr : Nat} {e : BitVec 32
     (fun y h1 h2 => hi.off t y h1 h2) htq
 
 -- `Condition.waitUncancelable` per translation (`ZigLean.VersionGate`): Zig 0.16.0 calls
--- `waitInner(…, true)`, whose loops also hold the cancelable path; Zig 0.17.0 inlines the
+-- `waitInner(…, true)`, whose loops also hold the cancelable path; Zig 0.17.1 inlines the
 -- uncancelable loops (`loop22`, `loop45`). Each proves `condWait_spec_v*`; `condWait_spec` is the
 -- version-neutral statement.
 when_defined Io_Condition_waitInner
@@ -2537,7 +2537,7 @@ theorem loop22_body (hP : S.Fits P U) (hinS : S.inS x) (hcost : P.cost = none) (
     rw [ptr_epoch]
   refine WP.bind (wp_ewait hP hinS hi fun k hk G₁ m₁ hc₁ hi₁ => ?_)
   dsimp only
-  -- Zig 0.17.0 forms the epoch pointer again before the load.
+  -- Zig 0.17.1 forms the epoch pointer again before the load.
   try (refine WP.bind (WP.callMC_ptrProject (hP.projCE hi₁) ?_)
        simp only [StateT.run_bind, StateT.run_pure, pure_bind]
        rw [ptr_epoch])

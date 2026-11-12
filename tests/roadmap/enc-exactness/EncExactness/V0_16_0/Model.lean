@@ -4,11 +4,11 @@ import EncExactness.V0_16_0.Opaque
 /-! `enc_exactness.zig` and `opaque_bytes.zig` from the translations of one Zig version's exports
 (`EncExactness.V0_16_0.Gen` and `EncExactness.V0_16_0.Opaque`): kernel-checked results that hold
 at every version, then `main` prints the lines of `native.zig`'s cases (`unspecified` matches any
-native value). It is written for Zig 0.17.0; the modules of 0.14.1, 0.15.2 and 0.16.0 are that one
+native value). It is written for Zig 0.17.1; the modules of 0.14.1, 0.15.2 and 0.16.0 are that one
 with the version renamed (`check.sh`, `scripts/fixtures.py instance`).
 
 The padded-integer reads are the counterexample of `docs/architecture-audit/enc-exactness.md`:
-before the fix the 0.17.0 model read the `u16` `0x0200` as the `i10` `-512`, where native 0.17.0
+before the fix the 0.17.1 model read the `u16` `0x0200` as the `i10` `-512`, where native 0.17.1
 ReleaseSafe code reads `512` on aarch64 (no `i10` at all: `trunc nsw` poison) and `-512` on
 x86_64. The per-version statements are `ZigLean/EndianLemmas.lean`'s `intEncExt_*` and
 `EncExactness/Rows.lean`. -/
@@ -22,7 +22,7 @@ def result {α : Type} (f : MemM α) : Option (Except Error α) :=
   ((f.run (mem0 .fresh)).run).map (·.map Prod.fst)
 
 /-- A stored `i24` reads back as stored at every version: the store and the load use one
-encoding (`intEncOf` up to 0.16.0, `intEncExt` from 0.17.0). -/
+encoding (`intEncOf` up to 0.16.0, `intEncExt` from 0.17.1). -/
 theorem i24RoundTrip_exact : result (i24RoundTrip (-2)) = some (.ok (-2)) := by decide +kernel
 
 /-- A stored `bool` reads back as the byte 1 at every version. -/

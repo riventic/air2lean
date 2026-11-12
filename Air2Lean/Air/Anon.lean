@@ -115,8 +115,8 @@ partial def mapIdentities (f : String → String) (j : Lean.Json) (root : Bool :
 def renameIdentities (map : Std.HashMap Inst String) (marker : String) (j : Lean.Json) : Lean.Json :=
   mapIdentities (rename map · marker) j
 
-/-- Zig 0.17.0 names a generic function instance `<name>__func_<n>` where 0.16.0 and older
-write `<name>__anon_<n>` (`InternPool.zig`'s instance naming). A 0.17.0 file's instance names
+/-- Zig 0.17.1 names a generic function instance `<name>__func_<n>` where 0.16.0 and older
+write `<name>__anon_<n>` (`InternPool.zig`'s instance naming). A 0.17.1 file's instance names
 are read in the older spelling, so the renumbering below, the std models and the panic table
 see one spelling in every version. -/
 def funcInstances017 (j : Lean.Json) : Lean.Json :=
@@ -243,7 +243,7 @@ private def renumberAllParsed (texts : Array String)
     first := false
   return current
 
-/-- Each text parsed, with 0.17.0 instance names in the older spelling (`funcInstances017`);
+/-- Each text parsed, with 0.17.1 instance names in the older spelling (`funcInstances017`);
 a text with a `__func_` marker is re-serialized so the marker scan reads the same names. -/
 private def parseInstances (texts : Array String) : Array String × Array (Option Lean.Json) :=
   let pairs := texts.map fun text =>

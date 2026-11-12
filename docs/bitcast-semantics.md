@@ -1,12 +1,12 @@
-# `@bitCast` semantics: Zig 0.16.0 vs 0.17.0
+# `@bitCast` semantics: Zig 0.16.0 vs 0.17.1
 
-Zig 0.17.0 changed what `@bitCast` means. 0.16.0 reinterpreted the **in-memory**
-representation. 0.17.0 reinterprets the **logical bit representation**, which is the same on
+Zig 0.17.1 changed what `@bitCast` means. 0.16.0 reinterpreted the **in-memory**
+representation. 0.17.1 reinterprets the **logical bit representation**, which is the same on
 every target. The translator selects the rules from the function's `zig_version`
 (`ZigVersion.bitCast` in `Air2Lean/Air/Dialect.lean`, `Air2Lean/BitCast.lean`). ≤0.16 inputs keep the existing rules
 unchanged, including the memory representation casts of arrays and `extern` aggregates
-(`Zig.reprCast`, [aggregate-casts.md](aggregate-casts.md)). Sources: the 0.16.0 and 0.17.0 release tarballs (sha256 pins in
-`zig-patch/versions.toml`; 0.17.0 `b6c7f172…8abd`) and the 0.17.0 release notes
+(`Zig.reprCast`, [aggregate-casts.md](aggregate-casts.md)). Sources: the 0.16.0 and 0.17.1 release tarballs (sha256 pins in
+`zig-patch/versions.toml`; 0.17.1 `b6c7f172…8abd`) and the 0.17.1 release notes
 ("@bitCast changes").
 
 ## The two definitions
@@ -24,7 +24,7 @@ unchanged, including the memory representation casts of arrays and `extern` aggr
   which LLVM packs: lane 0 goes in the low bits on little-endian and the high bits on
   big-endian. An array is stored with each element in its ABI slot.
 
-**0.17.0.**
+**0.17.1.**
 - `zirBitcast` (0.17 `src/Sema.zig` 9403) accepts every type with
   `Type.hasBitRepresentation` (0.17 `src/Type.zig` 3242). That is void, bool, int, float, an enum
   with an *explicit* tag type, a packed struct or union, and an array or vector of these.
@@ -50,7 +50,7 @@ unchanged, including the memory representation casts of arrays and `extern` aggr
 The "Same bits?" column is measured with stock Zig on aarch64-macos (§Evidence). "CE" means
 compile error.
 
-| Source → destination | 0.16.0 | 0.17.0 | Same bits? |
+| Source → destination | 0.16.0 | 0.17.1 | Same bits? |
 |---|---|---|---|
 | int ↔ int, int ↔ float, `bool` ↔ `u1`, packed struct/union ↔ backing int | bit copy | bit copy | yes |
 | `@Vector(n, uW)` ↔ `u(n*W)`, any `W` (`@Vector(4,u5)`→`u20`, `@Vector(3,u9)`→`u27`) | LLVM packed vector, lane 0 low | logical, lane 0 low | yes (LE). On BE, 0.16 puts lane 0 high |
@@ -113,7 +113,7 @@ docs/bitcast-semantics.md)". No 0.17 aggregate cast falls back to the ≤0.16 ru
 
 ## Evidence
 
-- 0.17.0 behaviour tests (`test/behavior/bitcast.zig`) checked against `ZigLean.BitCast`
+- 0.17.1 behaviour tests (`test/behavior/bitcast.zig`) checked against `ZigLean.BitCast`
   (`tests/roadmap/bitcast-017/Semantics.lean`):
   - "@bitCast vector to array with different element size": `0x65e2`, `[2,14,5,6,0]`.
   - "bitcast vector to integer and back": `0xfffd`.
@@ -123,7 +123,7 @@ docs/bitcast-semantics.md)". No 0.17 aggregate cast falls back to the ≤0.16 ru
 - The safety case `test/cases/safety/bitcast_to_enum_no_matching_tag_value.zig` panics with
   `invalid enum value`. The compile-error cases `bitcast_to_enum_invalid_tag_value.zig` and
   `bitCast_extern_struct.zig` are errors.
-- Native probes with stock 0.17.0 aarch64-macos (sha256 `b607e9b9…c536a`) and 0.16.0, in Debug
+- Native probes with stock 0.17.1 aarch64-macos (sha256 `b607e9b9…c536a`) and 0.16.0, in Debug
   and ReleaseSafe:
   - Both versions give `vec4u5→u20 = 0x65e2`, `vec3u9→u27 = 0x6a9ff01`,
     `[4]u8→u32 = 0x44332211` and `[2]f32→u64 = 0xc00000003f800000`.
@@ -134,11 +134,11 @@ docs/bitcast-semantics.md)". No 0.17 aggregate cast falls back to the ≤0.16 ru
     `[2]u24→u48` is the reverse. An extern struct cast passes on 0.16 and fails on 0.17.
   - 0.17 `@bitCast(@as(u8, 3))` to `enum(u8){a,b,c}` panics with `invalid enum value` (exit 134).
 - `tests/roadmap/bitcast-017/check.sh`:
-  - It translates real 0.17.0 AIR of `bitcast017.zig` (patched exporter, ReleaseSafe, all
+  - It translates real 0.17.1 AIR of `bitcast017.zig` (patched exporter, ReleaseSafe, all
     `bit_cast_safe`) and pins `BitCastReal/Gen.lean`.
   - It runs that translation against the values `zig test` checks natively.
   - It runs the synthetic accept/reject, ≤0.16-unchanged and emitted-runtime regressions
     (`Pipeline.lean`).
-- `tests/roadmap/packed-casts`: real 0.17.0 AIR of `logical017.zig` (nested arrays, arrays and
+- `tests/roadmap/packed-casts`: real 0.17.1 AIR of `logical017.zig` (nested arrays, arrays and
   vectors of floats, enums, packed structs and packed unions, packed union ↔ `[4]u4`) with
   kernel-checked results equal to the native x86_64-linux output.

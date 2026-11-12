@@ -66,7 +66,7 @@ def Error.nativeStops : Error → Bool
   | .unspecified | .unsupportedTimer => false
 
 /-- The outcome of an op whose illegal-behaviour precondition fails. `safe` (the `_safe` AIR form,
-`add_safe`, `intcast_safe`, 0.17.0's `bit_cast_safe`) carries Sema's check in the op, which fires
+`add_safe`, `intcast_safe`, 0.17.1's `bit_cast_safe`) carries Sema's check in the op, which fires
 with the handler's panic `e`. The plain form has no check in it, and none before it (runtime
 safety off, or a Sema-internal op that cannot fail), so the failure is unchecked illegal
 behaviour: `.illegal` (`docs/illegal-behavior.md` rows 6, 7, 18). -/
@@ -206,7 +206,7 @@ behaviour, `.illegal` (`docs/illegal-behavior.md` rows 7, 8). -/
                   else pure (.ofInt n (Int.fdiv a.toInt b.toInt)))
   else pure (a.udiv b)
 
-/-- `@divCeil` (Zig 0.17.0): the quotient rounded toward positive infinity. Division by zero
+/-- `@divCeil` (Zig 0.17.1): the quotient rounded toward positive infinity. Division by zero
 and `minInt / -1` are illegal, as for `@divFloor`. -/
 @[inline] def divCeil (s : Bool) (a b : BitVec n) : Result (BitVec n) :=
   if b = 0 then throw .illegal
@@ -410,7 +410,7 @@ that the op checks itself (`.illegal`), as `unwrapPayload`. -/
 
 /-- `@enumFromInt`, `@bitCast` to an enum: `o` is the enum's `ofInt?` of the value (generated per
 enum). An unnamed value of an exhaustive enum is the safety panic `invalidEnumValue` when the op
-checks it (`safe`: `intcast_safe`, 0.17.0's `bit_cast_safe`), else unchecked illegal behaviour,
+checks it (`safe`: `intcast_safe`, 0.17.1's `bit_cast_safe`), else unchecked illegal behaviour,
 `.illegal` (`Error.ifSafe`, `docs/illegal-behavior.md` row 18). -/
 @[inline] def enumOf {α : Type} (o : Option α) (safe : Bool := true) : Result α :=
   match o with

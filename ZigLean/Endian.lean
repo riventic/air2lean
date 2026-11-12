@@ -80,7 +80,7 @@ def intExtend (signed : Bool) {n : Nat} (m : Nat) (v : BitVec n) : BitVec m :=
   if signed then v.signExtend m else v.setWidth m
 
 /-- `uN`/`iN` with padding bits (`N ≠ 8 * intSize N`: `u10`, `i24`, an `enum(u24)` tag) at order
-`o`, as Zig 0.17.0 stores and loads it (`docs/architecture-audit/enc-exactness.md`). A store writes
+`o`, as Zig 0.17.1 stores and loads it (`docs/architecture-audit/enc-exactness.md`). A store writes
 the whole ABI integer, zero- or sign-extended (`FuncGen.store`), so every byte is defined and, at
 `.big`, the padding comes first; a load reads the ABI integer and truncates it with
 `trunc nuw`/`trunc nsw` (`FuncGen.load`), which is poison unless the padding is that extension.

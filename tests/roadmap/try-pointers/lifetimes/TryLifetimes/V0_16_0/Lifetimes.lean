@@ -1,7 +1,7 @@
 import TryLifetimes.V0_16_0.Gen
 
 /-! L04 lifetimes of addressed error unions (`try_lifetimes.zig`), on the translation of the
-retained export of one Zig version (`TryLifetimes.V0_16_0.Gen`; written for Zig 0.17.0, the
+retained export of one Zig version (`TryLifetimes.V0_16_0.Gen`; written for Zig 0.17.1, the
 modules of 0.14.1, 0.15.2 and 0.16.0 are this one with the version renamed: `check.sh`,
 `scripts/fixtures.py instance`):
 

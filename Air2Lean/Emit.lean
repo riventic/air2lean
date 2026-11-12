@@ -241,7 +241,7 @@ def errOp (errBits : Nat) (name : String) : String :=
   if errBits == 16 then s!"Zig.{name}" else s!"Zig.{name}W {errBits}"
 
 /-- The storage dictionary of an integer with padding bits (`bits ≠ 8 * intSize bits`) where the
-dialect stores it extended (`Dialect.intExtOrder?`, Zig 0.17.0): `Zig.intEncExt`. -/
+dialect stores it extended (`Dialect.intExtOrder?`, Zig 0.17.1): `Zig.intEncExt`. -/
 def intExtEnc (intExt : Option String) (signed : Bool) (bits : Nat) : Option String :=
   match intExt with
   | some o => if bits != 8 * Zig.intSize bits then some s!"Zig.intEncExt {o} {signed} {bits}" else none
@@ -2759,7 +2759,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     -- Only f80's legacy extension changes rounding; vector lanes carry their scalar type here.
     let legacyRt := fc.zigBefore016 && fc.floatSemantics == .compilerRt &&
       fc.tyOfId inst.ty == .float 80
-    -- Zig 0.17.0's f80 `@trunc` keeps a pseudo-denormal whose f128 extension is zero.
+    -- Zig 0.17.1's f80 `@trunc` keeps a pseudo-denormal whose f128 extension is zero.
     let trunc017 := fc.dialect.version.compilerRt == .v017 && fc.floatSemantics == .compilerRt &&
       fc.tyOfId inst.ty == .float 80
     let f := match op with

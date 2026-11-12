@@ -13,10 +13,10 @@ root=${AIR2LEAN_ZIG_AIR:?set AIR2LEAN_ZIG_AIR to a directory of zig-air-<version
 mode=export
 if [ "${1:-}" = --check ]; then mode=--check; shift; fi
 # The versions to export: those given, else every version the fixture has exports for.
-if [ $# -gt 0 ]; then versions=$*; else versions="0.17.0 0.16.0 0.15.2 0.14.1"; fi
+if [ $# -gt 0 ]; then versions=$*; else versions="0.17.1 0.16.0 0.15.2 0.14.1"; fi
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-error-tracing.XXXXXX")
 trap 'rm -rf "$work"' EXIT
-# The roots and the std function every error return calls (`std.lang` in 0.17.0).
+# The roots and the std function every error return calls (`std.lang` in 0.17.1).
 filter=error_tracing.bigRet,error_tracing.pass,error_tracing.traceIndex,error_tracing.traced
 filter=$filter,error_tracing.handledTwice,builtin.returnError,lang.returnError
 for version in $versions; do

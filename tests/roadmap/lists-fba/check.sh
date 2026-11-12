@@ -12,7 +12,7 @@
 # The modules are the fixture's library ListsFba (tests/roadmap/lakefile.toml) and what it imports:
 # the FixedBufferAllocator of the library AllocFba (alloc-fba/check.sh checks that its translation
 # is the translator's output) and M04's sentinel program and proofs of the library Interfaces (the
-# retained 0.17.0 open translation; interfaces/check.sh checks it is the translator's output).
+# retained 0.17.1 open translation; interfaces/check.sh checks it is the translator's output).
 # Lake builds them (scripts/fixtures.py; run it under scripts/build-guard.py); runs no compiler.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)

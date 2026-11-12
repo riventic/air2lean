@@ -29,11 +29,11 @@ const std = @import("std");
 const crt = @import("crt");
 
 const v16 = @import("builtin").zig_version.minor >= 16;
-/// 0.17.0's compiler_rt/<op>.zig has a `pub fn <op>_f<N>` (Zig calling convention) per width and
+/// 0.17.1's compiler_rt/<op>.zig has a `pub fn <op>_f<N>` (Zig calling convention) per width and
 /// keeps its C-ABI wrappers private.
 const v17 = @import("builtin").zig_version.minor >= 17;
 
-/// The unsigned integer type with `@bitSizeOf(T)` bits. Not `std.meta.Int`: Zig 0.17.0 removed it
+/// The unsigned integer type with `@bitSizeOf(T)` bits. Not `std.meta.Int`: Zig 0.17.1 removed it
 /// (for `@Int`, which 0.15.2 does not parse).
 fn FloatBits(comptime T: type) type {
     return std.math.IntFittingRange(0, (1 << @bitSizeOf(T)) - 1);

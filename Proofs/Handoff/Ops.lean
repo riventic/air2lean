@@ -12,7 +12,7 @@ Each version's walk of `main` and the producer (`Proofs/Sync/Handoff.lean`,
 every layout (`Layout`) and every implementation of the sync objects (`MutexImpl`, `CondImpl`,
 `EventImpl`):
 
-- **`io`** (0.16.0 and 0.17.0 only): a read of the `Box`'s `io` prefix, which is read-shared in the
+- **`io`** (0.16.0 and 0.17.1 only): a read of the `Box`'s `io` prefix, which is read-shared in the
   protocol's rest (`io_rest`, read by the library's `FLock.Fits.wp_readRest`). Its alignment comes from the rest's bytes of `io` (`IoRest`), so the
   layout needs an `io` prefix whose load alignment divides the `Box`'s.
 - **Field pointers** (`proj`): the `Box` is block 0 (`BlkOk`).

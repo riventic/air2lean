@@ -4,7 +4,7 @@ import ZigLean.Sep.Full.Sem
 /-!
 # `Io.Semaphore` of `examples/sync` as a semaphore (`SemImpl`)
 
-The per-item obligation of `Io.Semaphore` (Zig 0.16.0's std code; 0.17.0's `waitUncancelable` and
+The per-item obligation of `Io.Semaphore` (Zig 0.16.0's std code; 0.17.1's `waitUncancelable` and
 `post` are the same code, and its `waitTimeout` is not covered) in this program's generated code:
 `waitUncancelable` and `post` walked with the rules of a semaphore next to its mutex and condition
 (`ZigLean/Sep/Full/Sem.lean`), with the program's `Io.Mutex` (`ioMutex`) and `Io.Condition`

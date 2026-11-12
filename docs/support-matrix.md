@@ -41,7 +41,7 @@ history (M0–T5) as historical scope; current open work is the register below.
 
 | Zig | Default | Status | Translator | Exporter pin | Coverage inventory | CI |
 |---|---|---|---|---|---|---|
-| 0.17.0 | yes | qualified | `ZigVersion.all` | `zig-patch/versions.toml` | `coverage/0.17.0.json` | full job (pipeline, diff test, proofs) |
+| 0.17.1 | yes | qualified | `ZigVersion.all` | `zig-patch/versions.toml` | `coverage/0.17.1.json` | full job (pipeline, diff test, proofs) |
 | 0.16.0 | no | qualified | `ZigVersion.all` | `zig-patch/versions.toml` | `coverage/0.16.0.json` | full job (pipeline, diff test, proofs); 5 mutation shards |
 | 0.15.2 | no | qualified | `ZigVersion.all` | `zig-patch/versions.toml` | `coverage/0.15.2.json` | full job (pipeline, diff test, proofs) |
 | 0.14.1 | no | qualified | `ZigVersion.all` | `zig-patch/versions.toml` | `coverage/0.14.1.json` | restricted job (pipeline, diff test, proofs on the listed examples) |
@@ -50,7 +50,7 @@ history (M0–T5) as historical scope; current open work is the register below.
 
 From `examples/*/zig-versions` through `scripts/example-selection.sh` (x86_64). An explicit `AIR2LEAN_EXAMPLES` selection bypasses it.
 
-| Example | 0.17.0 | 0.16.0 | 0.15.2 | 0.14.1 |
+| Example | 0.17.1 | 0.16.0 | 0.15.2 | 0.14.1 |
 |---|---|---|---|---|
 | `asm` (x86_64 only) | yes | yes | yes | — |
 | `atomics` | yes | yes | yes | — |
@@ -78,7 +78,7 @@ Counts from `coverage/<version>.json` (`scripts/coverage.py`). This is a source 
 
 | Zig | AIR tags | `emitted-unqualified` | `erased-at-emission` | `rejected-compiler-state-or-effect` | `rejected-exporter-unsupported` | `rejected-fast-math` | `resolved-in-canon` | `unreachable-at-export` | Type tags | Intern keys | Pointer bases | Model boundaries | Rejected model calls |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| 0.17.0 | 224 | 169 | 5 | 9 | 15 | 20 | 3 | 3 | 25 | 34 | 9 | 28 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
+| 0.17.1 | 224 | 169 | 5 | 9 | 15 | 20 | 3 | 3 | 25 | 34 | 9 | 28 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
 | 0.16.0 | 214 | 163 | 5 | 6 | 15 | 19 | 3 | 3 | 24 | 33 | 9 | 28 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
 | 0.15.2 | 212 | 164 | 5 | 3 | 15 | 19 | 3 | 3 | 24 | 34 | 9 | 28 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
 | 0.14.1 | 207 | 160 | 5 | 2 | 15 | 19 | 3 | 3 | 24 | 34 | 9 | 28 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |

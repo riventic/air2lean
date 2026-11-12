@@ -5,16 +5,16 @@
     "0.14.1",
     "0.15.2",
     "0.16.0",
-    "0.17.0"
+    "0.17.1"
   ],
   "exporter": {
-    "compiler": "patched AIR-only Zig 0.14.1, 0.15.2, 0.16.0 and 0.17.0 (scripts/zig-air.sh, aarch64-macos host); the 0.16.0 export was first made with zig-unlocked sha256 3dfc96ba1575e81d7d6b0b600789f67608c1cae796af760f8881439c1b886a99 and is byte-identical with the current exporter",
+    "compiler": "patched AIR-only Zig 0.14.1, 0.15.2, 0.16.0 and 0.17.1 (scripts/zig-air.sh, aarch64-macos host); the 0.16.0 export was first made with zig-unlocked sha256 3dfc96ba1575e81d7d6b0b600789f67608c1cae796af760f8881439c1b886a99 and is byte-identical with the current exporter",
     "zig_patch_json_zig": "zig-patch/air-json/json.zig of the soundness-wave-3 tree (rebuilt after merging main)",
     "json_zig_sha256": "a6bc0386947b1dd857dfd3ec151de55db18d97d832a7bb4120b8e2d1fb7091e3",
     "install": "built by zig-patch/build.sh from that tree"
   },
   "export_command": "ZIG_AIR_JSON_FILTER=<try_pointers.|try_aliases.> zig build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline <source>",
-  "native_command": "zig test <source> -OReleaseSafe (stock 0.16.0, aarch64-macos host); check.sh --native-linux (stock 0.14.1-0.17.0, x86_64-linux-musl ReleaseSafe and Debug, Docker linux/amd64)",
+  "native_command": "zig test <source> -OReleaseSafe (stock 0.16.0, aarch64-macos host); check.sh --native-linux (stock 0.14.1-0.17.1, x86_64-linux-musl ReleaseSafe and Debug, Docker linux/amd64)",
   "fixtures": {
     "try_pointers": {
       "source": "tests/roadmap/try-pointers/try_pointers.zig",
@@ -71,18 +71,18 @@
     "air-fresh/0.16.0/try_pointers.payload64.json": "b61781136d93a91235e685e0e30b155361ace78b3bb51654965024da6a3152ea",
     "air-fresh/0.16.0/try_pointers.payload8.json": "aae46e9404796d499ba5598b1be1b431f5e041c926fba81e85a19f1904a73601",
     "air-fresh/0.16.0/try_pointers.writeAlias.json": "77b52562b188d1bbc3282bff2051a8081c4ab7dbd0bf943bcd2fc6a7a53a170e",
-    "air-fresh/0.17.0/try_pointers.cleanup.json": "a09291ffba96f44f0cd65958d296653511060d7eb6cc3c23992d42a10ba464e9",
-    "air-fresh/0.17.0/try_pointers.coldPayload.json": "15a925d46a94d8f573f7e4466af64ab5caffdd65a3efde033deadddeb07880dd",
-    "air-fresh/0.17.0/try_pointers.payload64.json": "be38fbc07498b95bb1882f14a765114a4ee8a6848ee5a18a7bc60ded4bf5286b",
-    "air-fresh/0.17.0/try_pointers.payload8.json": "55522eb5a49a47a5253d539798748e150928ead043e69f807510fc005db85828",
-    "air-fresh/0.17.0/try_pointers.writeAlias.json": "294f063617b09ab07332ad948236eba180597f05cf6abf359e8058a9803b1897",
+    "air-fresh/0.17.1/try_pointers.cleanup.json": "a09291ffba96f44f0cd65958d296653511060d7eb6cc3c23992d42a10ba464e9",
+    "air-fresh/0.17.1/try_pointers.coldPayload.json": "15a925d46a94d8f573f7e4466af64ab5caffdd65a3efde033deadddeb07880dd",
+    "air-fresh/0.17.1/try_pointers.payload64.json": "be38fbc07498b95bb1882f14a765114a4ee8a6848ee5a18a7bc60ded4bf5286b",
+    "air-fresh/0.17.1/try_pointers.payload8.json": "55522eb5a49a47a5253d539798748e150928ead043e69f807510fc005db85828",
+    "air-fresh/0.17.1/try_pointers.writeAlias.json": "294f063617b09ab07332ad948236eba180597f05cf6abf359e8058a9803b1897",
     "aliases/air-fresh/0.14.1/try_aliases.resetOnError.json": "d6db339949052f523f6f9b1c91349d33e90e0dccf190b27a2c65e89c2447aa2c",
     "aliases/air-fresh/0.14.1/try_aliases.twoPaths.json": "d7e8c4f0da8571af3c1d3651f2143dd5aabbd4a596ffcd20fb330a24c16b7e9a",
     "aliases/air-fresh/0.15.2/try_aliases.resetOnError.json": "6fc4efcc346d0214501b55d0bd42867a97da32506b2c2a1262e1e9999873951c",
     "aliases/air-fresh/0.15.2/try_aliases.twoPaths.json": "c63050bdab482a0e55c29f5faa8e80c4fd007599c98481ce0d30e1e217ecbd22",
     "aliases/air-fresh/0.16.0/try_aliases.resetOnError.json": "1ebc03299c68bf7528517e143568a3a0dd17b816ae646d915b14c12f7a36412b",
     "aliases/air-fresh/0.16.0/try_aliases.twoPaths.json": "e81ebeebb1e924cb9bf3dd17c60bd145af3d94e4231325076638bc89a3e10e5b",
-    "aliases/air-fresh/0.17.0/try_aliases.resetOnError.json": "3c80bf93ff2f0dfb7723ea9b42e4c85ddf005fe86804350aa7de9e9b47d00a2c",
-    "aliases/air-fresh/0.17.0/try_aliases.twoPaths.json": "231f917fdb89eafe9825fa300c922cca6af9f27af935856507a92aefb0b4bcc5"
+    "aliases/air-fresh/0.17.1/try_aliases.resetOnError.json": "3c80bf93ff2f0dfb7723ea9b42e4c85ddf005fe86804350aa7de9e9b47d00a2c",
+    "aliases/air-fresh/0.17.1/try_aliases.twoPaths.json": "231f917fdb89eafe9825fa300c922cca6af9f27af935856507a92aefb0b4bcc5"
   }
 }

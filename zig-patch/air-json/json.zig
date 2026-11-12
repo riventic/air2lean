@@ -25,11 +25,11 @@ const target_util = @import("../target.zig");
 const PtrOffset = @import("pointer-offset.zig");
 const Identity = @import("identity.zig");
 
-/// The differences between the supported Zig versions (0.14.1, 0.15.2, 0.16.0, 0.17.0). The
+/// The differences between the supported Zig versions (0.14.1, 0.15.2, 0.16.0, 0.17.1). The
 /// compiler is built by a host zig of its own version (`zig-patch/build.sh`), so
 /// `builtin.zig_version` is the version being patched. Each `if` on `v14`/`v16`/`v17` is
 /// comptime-known, so a version analyses only its own branch. `v16` and `v17` mean "this
-/// version or later": 0.17.0 keeps every 0.16.0 API the exporter uses unless a `v17` branch
+/// version or later": 0.17.1 keeps every 0.16.0 API the exporter uses unless a `v17` branch
 /// says otherwise.
 const Compat = struct {
     const zv = @import("builtin").zig_version;
@@ -128,7 +128,7 @@ const Compat = struct {
         }
     };
 
-    /// `std.builtin.StackTrace` (`std.lang` in 0.17.0), or null while it is not resolved.
+    /// `std.builtin.StackTrace` (`std.lang` in 0.17.1), or null while it is not resolved.
     fn stackTraceType(zcu: *Zcu) ?Type {
         const index = if (v17)
             zcu.std_lang_decl_values.get(.StackTrace)
@@ -175,9 +175,9 @@ const Compat = struct {
     }
 
     /// A `ty_op` tag that does not exist in every version: `int_from_float_safe` (0.15.2+).
-    /// 0.17.0 renamed `bitcast`/`intcast`/`intcast_safe` to `bit_cast`/`int_cast`/
+    /// 0.17.1 renamed `bitcast`/`intcast`/`intcast_safe` to `bit_cast`/`int_cast`/
     /// `int_cast_safe` and split the other casts that `bitcast` covered into their own tags
-    /// (`zig-patch/0.17.0/TAGS.md`). Each branch names only its own version's tags.
+    /// (`zig-patch/0.17.1/TAGS.md`). Each branch names only its own version's tags.
     fn isNewTyOp(tag: Air.Inst.Tag) bool {
         return if (v14)
             tag == .bitcast or tag == .intcast or tag == .intcast_safe
@@ -192,7 +192,7 @@ const Compat = struct {
     }
 
     /// A `bin_op` tag that does not exist in every version: `memmove` (0.15.2+), `div_ceil`
-    /// (0.17.0+), `bool_and`/`bool_or` (before 0.17.0).
+    /// (0.17.1+), `bool_and`/`bool_or` (before 0.17.1).
     fn isNewBinOp(tag: Air.Inst.Tag) bool {
         return if (v14)
             tag == .bool_and or tag == .bool_or
@@ -202,7 +202,7 @@ const Compat = struct {
             tag == .memmove or tag == .bool_and or tag == .bool_or;
     }
 
-    /// `struct_field_val`, renamed `agg_field_val` in 0.17.0 (`ty_pl`, payload `StructField`).
+    /// `struct_field_val`, renamed `agg_field_val` in 0.17.1 (`ty_pl`, payload `StructField`).
     fn isFieldVal(tag: Air.Inst.Tag) bool {
         return if (v17) tag == .agg_field_val else tag == .struct_field_val;
     }
@@ -213,7 +213,7 @@ const Compat = struct {
         return if (v16) tag == .cmp_lte_errors_len else tag == .cmp_lt_errors_len;
     }
 
-    /// A tag that always converts between errors and integers (`dumpErrorTable`): 0.17.0's
+    /// A tag that always converts between errors and integers (`dumpErrorTable`): 0.17.1's
     /// `int_from_error`/`error_from_int`, the errors_len check, and 0.14.1's `error_name`, which
     /// indexes the name table with the sign-extended code.
     fn isErrorIntTag(tag: Air.Inst.Tag) bool {
@@ -225,7 +225,7 @@ const Compat = struct {
             false;
     }
 
-    /// The `bitcast` that before 0.17.0 also lowers `@intFromError`/`@errorFromInt`.
+    /// The `bitcast` that before 0.17.1 also lowers `@intFromError`/`@errorFromInt`.
     fn isBitcast(tag: Air.Inst.Tag) bool {
         return if (v17) false else tag == .bitcast;
     }
@@ -241,17 +241,17 @@ const Compat = struct {
         return if (v16) false else vector_index == .runtime;
     }
 
-    /// The type of a `ty_pl` instruction: an `Air.Inst.Ref` before 0.17.0, a `Type` since.
+    /// The type of a `ty_pl` instruction: an `Air.Inst.Ref` before 0.17.1, a `Type` since.
     fn tyPlType(ty_pl: anytype) Type {
         return if (v17) ty_pl.ty else ty_pl.ty.toType();
     }
 
-    /// The integer tag type of an enum: `intTagType` was renamed `backingIntType` in 0.17.0.
+    /// The integer tag type of an enum: `intTagType` was renamed `backingIntType` in 0.17.1.
     fn enumTagType(ty: Type, zcu: *Zcu) Type {
         return if (v17) ty.backingIntType(zcu) else ty.intTagType(zcu);
     }
 
-    /// The printers of a value and a type take a `Zcu.PerThread` before 0.17.0, a `*Zcu` since.
+    /// The printers of a value and a type take a `Zcu.PerThread` before 0.17.1, a `*Zcu` since.
     fn fmtValue(pt: Zcu.PerThread, val: Value) @TypeOf(val.fmtValue(if (v17) pt.zcu else pt)) {
         return val.fmtValue(if (v17) pt.zcu else pt);
     }
@@ -259,14 +259,14 @@ const Compat = struct {
         return ty.fmt(if (v17) pt.zcu else pt);
     }
 
-    /// The fully qualified name of a container type. 0.17.0 returns both the short `name` and
+    /// The fully qualified name of a container type. 0.17.1 returns both the short `name` and
     /// the `fqn`; before, the one name it returns is the fully qualified one.
     fn containerTypeName(ty: Type, ip: *const InternPool) []const u8 {
         const name = ty.containerTypeName(ip);
         return (if (v17) name.fqn else name).toSlice(ip);
     }
 
-    /// `profile.build_mode`. 0.17.0 renamed the `std.lang.Optimize` tags (`debug`, `safe`,
+    /// `profile.build_mode`. 0.17.1 renamed the `std.lang.Optimize` tags (`debug`, `safe`,
     /// `fast`, `small`); the JSON keeps the build-mode names of `-O`.
     fn buildMode(mode: anytype) []const u8 {
         return if (v17) switch (mode) {
@@ -971,7 +971,7 @@ const W = struct {
         try w.j.endObject();
     }
 
-    /// An integer/error conversion (`dumpErrorTable`): 0.17.0's `int_from_error` and
+    /// An integer/error conversion (`dumpErrorTable`): 0.17.1's `int_from_error` and
     /// `error_from_int`, before that a `bitcast` between an error set and an integer, and the
     /// `@errorFromInt` bound check `cmp_lt_errors_len` (`cmp_lte_errors_len` from 0.16.0). Also
     /// 0.14.1's `error_name`, which indexes the name table with the sign-extended code: only the
@@ -1405,7 +1405,7 @@ const W = struct {
         try w.j.endObject();
     }
 
-    /// `struct_field_ptr`, `struct_field_val` (`agg_field_val` in 0.17.0): operand and index.
+    /// `struct_field_ptr`, `struct_field_val` (`agg_field_val` in 0.17.1): operand and index.
     fn writeStructField(w: *W, inst: Air.Inst.Index) Error!void {
         const extra = w.air.extraData(Air.StructField, w.data(inst).ty_pl.payload).data;
         try w.writeArgs(&.{extra.struct_operand});
@@ -2059,8 +2059,8 @@ const W = struct {
                     try w.j.write(info.packed_offset.bit_offset);
                 }
                 // A pointer to one lane of a vector (`&v[i]`): its `host_size` is the vector
-                // length, not bytes, and the lane is only in the type. Before 0.17.0 only a lane
-                // that is not a whole power-of-two number of bytes gets one; 0.17.0 uses it for
+                // length, not bytes, and the lane is only in the type. Before 0.17.1 only a lane
+                // that is not a whole power-of-two number of bytes gets one; 0.17.1 uses it for
                 // every lane. A bit-pointer always has the field, `null` for a packed field
                 // pointer: an export without it cannot tell the two apart, so the translator
                 // then accepts only bit-pointers that it sees made.

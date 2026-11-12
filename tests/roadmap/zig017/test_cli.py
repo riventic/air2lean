@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Zig 0.17.0 translator regressions on hand-written, 0.17-shaped AIR (not compiler output).
+"""Zig 0.17.1 translator regressions on hand-written, 0.17-shaped AIR (not compiler output).
 
 Usage: test_cli.py BINARY [--elaborate]
 
-1. `air/`: every new or renamed 0.17.0 tag that the subset admits translates; with
+1. `air/`: every new or renamed 0.17.1 tag that the subset admits translates; with
    `--elaborate` the generated Lean is checked by `lake env lean` together with kernel-checked
    semantic examples (`@divCeil`, `@fromBackingInt`'s enum check, ...).
 2. `reject/`: each file fails with exit status 1 and the stable diagnostic in `expect.json`, and
    leaves the output file untouched.
-3. Upgrade: the committed 0.16.0 golden AIR of every example, rewritten to 0.17.0 spelling (tag
+3. Upgrade: the committed 0.16.0 golden AIR of every example, rewritten to 0.17.1 spelling (tag
    renames, the `bitcast` split, `bool_and`/`bool_or` as `bit_and`/`bit_or`, the `safe` build
    mode), translates to the same Lean as the 0.16.0 AIR, apart from the profile's version and the
-   intended 0.17.0 semantic changes (integers with padding bits stored extended, the f80
+   intended 0.17.1 semantic changes (integers with padding bits stored extended, the f80
    `@trunc` routine).
 """
 import copy
@@ -31,7 +31,7 @@ example : divCeilU 7#32 2#32 = pure 4#32 := by rfl
 example : divCeilU 6#32 3#32 = pure 2#32 := by rfl
 example : divCeilU 0#32 5#32 = pure 0#32 := by rfl
 example : divCeilU 4294967295#32 2#32 = pure 2147483648#32 := by rfl
--- The hand-written `div_ceil` has no Sema check before it (real 0.17.0 AIR does, and
+-- The hand-written `div_ceil` has no Sema check before it (real 0.17.1 AIR does, and
 -- divceil/check.sh compares that export with native): a zero divisor and `minInt / -1` reach
 -- the op unchecked, illegal behaviour (S3, illegal-behavior.md rows 7, 8).
 example : divCeilU 1#32 0#32 = throw .illegal := by rfl
@@ -71,10 +71,10 @@ def positive(binary, elaborate):
         assert result.returncode == 0, result.stderr
         text = output.read_text()
         header = json.loads(text.splitlines()[0].removeprefix("-- air2lean-profile: "))
-        assert header["profile"]["zig_version"] == "0.17.0", header
-        # 0.17.0's `safe` build mode keeps the version-independent profile spelling.
+        assert header["profile"]["zig_version"] == "0.17.1", header
+        # 0.17.1's `safe` build mode keeps the version-independent profile spelling.
         assert header["profile"]["build_mode"] == "ReleaseSafe", header
-        assert "__func_" not in text, "a 0.17.0 instance name leaked into the translation"
+        assert "__func_" not in text, "a 0.17.1 instance name leaked into the translation"
         assert "Zig.store (α := BitVec 32) 16 i2" not in text, "a lane pointer kept the vector's alignment"
         for needle in ("Zig.divCeil false", "Zig.divCeil true", "Zig.Float.divCeil",
                        "Zig.Vec.map2M (fun x0 x1 => Zig.divCeil true x0 x1)",
@@ -124,7 +124,7 @@ def pointer_like(types, ty):
 
 
 def upgrade_tag(doc, inst, producers):
-    """The 0.17.0 spelling of a 0.16.0 instruction (`docs/zig-0.17-delta.md` §(a))."""
+    """The 0.17.1 spelling of a 0.16.0 instruction (`docs/zig-0.17-delta.md` §(a))."""
     tag, types = inst["tag"], doc["types"]
     renamed = {"intcast": "int_cast", "intcast_safe": "int_cast_safe",
                "struct_field_val": "agg_field_val", "bool_and": "bit_and", "bool_or": "bit_or"}
@@ -166,9 +166,9 @@ def upgraded(doc):
     producers = {i["id"]: i.get("ty") for i in walk(doc["body"])}
     for inst in walk(doc["body"]):
         inst["tag"] = upgrade_tag(doc, inst, producers)
-    doc["zig_version"] = "0.17.0"
+    doc["zig_version"] = "0.17.1"
     if "profile" in doc:
-        doc["profile"]["zig_version"] = "0.17.0"
+        doc["profile"]["zig_version"] = "0.17.1"
         doc["profile"]["build_mode"] = {"Debug": "debug", "ReleaseSafe": "safe", "ReleaseFast": "fast",
                                         "ReleaseSmall": "small"}[doc["profile"]["build_mode"]]
     return doc
@@ -220,7 +220,7 @@ EXT_ENC = re.compile(r"\(Zig\.intEncExt \.(?:little|big) (?:true|false) \d+\)\.(
 
 
 def without_int_ext(text):
-    """`text` with 0.17.0's extended encoding of integers with padding bits (`Zig.intEncExt`,
+    """`text` with 0.17.1's extended encoding of integers with padding bits (`Zig.intEncExt`,
     `Dialect.intPadding`) replaced by the default instance, as a 0.16.0 translation spells it."""
     text = EXT_ENC.sub(r"Zig.Enc.\1", text)
     while m := EXT_LET.search(text):
@@ -251,7 +251,7 @@ def upgrades(binary):
             directory = Path(directory)
             outputs = {}
             for version, rewrite in (("0.16.0", lambda d: as_version(d, "0.16.0")),
-                                     ("0.17.0", lambda d: upgraded(as_version(d, "0.16.0")))):
+                                     ("0.17.1", lambda d: upgraded(as_version(d, "0.16.0")))):
                 air = directory / version
                 air.mkdir()
                 for name, doc in files.items():
@@ -260,24 +260,24 @@ def upgrades(binary):
                                    extra + legacy_args(files))
                 outputs[version] = (result.returncode, result.stderr,
                                     (directory / f"{version}.lean").read_text() if result.returncode == 0 else "")
-            (old_rc, old_err, old), (new_rc, new_err, new) = outputs["0.16.0"], outputs["0.17.0"]
+            (old_rc, old_err, old), (new_rc, new_err, new) = outputs["0.16.0"], outputs["0.17.1"]
             if old_rc != 0:
-                # The relabelled set is outside the translator's 0.16.0 scope; 0.17.0 must agree.
+                # The relabelled set is outside the translator's 0.16.0 scope; 0.17.1 must agree.
                 assert new_rc == old_rc, (example, old_err, new_err)
                 # A std model reviewed only for older versions (threadsync: 0.15.2's
                 # Thread.Futex) is not qualified for the relabelled version, as intended.
                 skipped += "qualified Zig" in old_err
                 continue
-            if new_rc != 0 and not selectable(example, "0.17.0") and "qualified Zig" in new_err:
-                # A 0.17.0-unselected example whose std models are not qualified for 0.17.0
+            if new_rc != 0 and not selectable(example, "0.17.1") and "qualified Zig" in new_err:
+                # A 0.17.1-unselected example whose std models are not qualified for 0.17.1
                 # (threadsync: 0.15.2's Thread.Futex): the version table rejects it, as intended.
                 skipped += 1
                 continue
             assert new_rc == 0, (example, new_err)
             old_head, _, old_body = old.partition("\n")
             new_head, _, new_body = new.partition("\n")
-            assert new_head == old_head.replace('"zig_version":"0.16.0"', '"zig_version":"0.17.0"'), example
-            # The intended 0.17.0 semantic changes in these goldens: LLVM stores integers with
+            assert new_head == old_head.replace('"zig_version":"0.16.0"', '"zig_version":"0.17.1"'), example
+            # The intended 0.17.1 semantic changes in these goldens: LLVM stores integers with
             # padding bits extended (`Dialect.intPadding`, docs/architecture-audit/enc-exactness.md)
             # and compiler-rt f80 `@trunc` (docs/floats.md group I, `Zig.Float.truncRt017Chk`).
             # Anything else is a spelling bug.
@@ -286,7 +286,7 @@ def upgrades(binary):
             if "--float-semantics" in extra:
                 assert old_body.count("Zig.Float.truncChk") >= new_body.count("Zig.Float.truncRt017Chk"), example
                 new_body = new_body.replace("Zig.Float.truncRt017Chk", "Zig.Float.truncChk")
-            assert new_body == old_body, f"{example}: 0.17.0 spelling changed the translation"
+            assert new_body == old_body, f"{example}: 0.17.1 spelling changed the translation"
             compared += 1
     assert compared + skipped >= 19 and compared >= 18, f"only {compared} examples translated"
     return compared
@@ -298,7 +298,7 @@ def main():
     checks = positive(binary, elaborate)
     checks += rejections(binary)
     checks += upgrades(binary)
-    print(f"{checks} Zig 0.17.0 translator checks passed")
+    print(f"{checks} Zig 0.17.1 translator checks passed")
 
 
 if __name__ == "__main__":

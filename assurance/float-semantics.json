@@ -442,7 +442,7 @@
       ],
       "correspondence": "model"
     },
-    "NanBits.V0_17_0.Model::NanBits.V0_17_0.Model.arrayCast_nan": {
+    "NanBits.V0_17_1.Model::NanBits.V0_17_1.Model.arrayCast_nan": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -451,7 +451,7 @@
       ],
       "correspondence": "model"
     },
-    "NanBits.V0_17_0.Model::NanBits.V0_17_0.Model.constGlobal_ok": {
+    "NanBits.V0_17_1.Model::NanBits.V0_17_1.Model.constGlobal_ok": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -460,7 +460,7 @@
       ],
       "correspondence": "model"
     },
-    "NanBits.V0_17_0.Model::NanBits.V0_17_0.Model.constStore_ok": {
+    "NanBits.V0_17_1.Model::NanBits.V0_17_1.Model.constStore_ok": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -469,7 +469,7 @@
       ],
       "correspondence": "model"
     },
-    "NanBits.V0_17_0.Model::NanBits.V0_17_0.Model.copyBytes_nan": {
+    "NanBits.V0_17_1.Model::NanBits.V0_17_1.Model.copyBytes_nan": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -478,7 +478,7 @@
       ],
       "correspondence": "model"
     },
-    "NanBits.V0_17_0.Model::NanBits.V0_17_0.Model.f32_nan_u32": {
+    "NanBits.V0_17_1.Model::NanBits.V0_17_1.Model.f32_nan_u32": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -487,7 +487,7 @@
       ],
       "correspondence": "model"
     },
-    "NanBits.V0_17_0.Model::NanBits.V0_17_0.Model.finiteBits_ok": {
+    "NanBits.V0_17_1.Model::NanBits.V0_17_1.Model.finiteBits_ok": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -496,7 +496,7 @@
       ],
       "correspondence": "model"
     },
-    "NanBits.V0_17_0.Model::NanBits.V0_17_0.Model.reloadIsNaN_unspecified": {
+    "NanBits.V0_17_1.Model::NanBits.V0_17_1.Model.reloadIsNaN_unspecified": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -505,7 +505,7 @@
       ],
       "correspondence": "model"
     },
-    "NanBits.V0_17_0.Model::NanBits.V0_17_0.Model.storeLoad64_nan": {
+    "NanBits.V0_17_1.Model::NanBits.V0_17_1.Model.storeLoad64_nan": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -514,7 +514,7 @@
       ],
       "correspondence": "model"
     },
-    "NanBits.V0_17_0.Model::NanBits.V0_17_0.Model.storeLoad_nan": {
+    "NanBits.V0_17_1.Model::NanBits.V0_17_1.Model.storeLoad_nan": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -523,7 +523,7 @@
       ],
       "correspondence": "model"
     },
-    "NanBits.V0_17_0.Model::NanBits.V0_17_0.Model.storeLoad_no_value": {
+    "NanBits.V0_17_1.Model::NanBits.V0_17_1.Model.storeLoad_no_value": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -532,7 +532,7 @@
       ],
       "correspondence": "model"
     },
-    "NanBits.V0_17_0.Model::NanBits.V0_17_0.Model.structView_nan": {
+    "NanBits.V0_17_1.Model::NanBits.V0_17_1.Model.structView_nan": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -541,7 +541,7 @@
       ],
       "correspondence": "model"
     },
-    "NanBits.V0_17_0.Model::NanBits.V0_17_0.Model.sumBits_nan": {
+    "NanBits.V0_17_1.Model::NanBits.V0_17_1.Model.sumBits_nan": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -550,7 +550,7 @@
       ],
       "correspondence": "model"
     },
-    "NanBits.V0_17_0.Model::NanBits.V0_17_0.Model.sumBits_no_value": {
+    "NanBits.V0_17_1.Model::NanBits.V0_17_1.Model.sumBits_no_value": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -559,7 +559,7 @@
       ],
       "correspondence": "model"
     },
-    "NanBits.V0_17_0.Model::NanBits.V0_17_0.Model.unionView_nan": {
+    "NanBits.V0_17_1.Model::NanBits.V0_17_1.Model.unionView_nan": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -568,7 +568,7 @@
       ],
       "correspondence": "model"
     },
-    "NanBits.V0_17_0.Model::NanBits.V0_17_0.Model.vectorCast_nan": {
+    "NanBits.V0_17_1.Model::NanBits.V0_17_1.Model.vectorCast_nan": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -982,7 +982,7 @@
       ],
       "correspondence": "model"
     },
-    "PackedCasts.V0_17_0.Model::PackedCasts.V0_17_0.Model.floatField_nan": {
+    "PackedCasts.V0_17_1.Model::PackedCasts.V0_17_1.Model.floatField_nan": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -991,7 +991,7 @@
       ],
       "correspondence": "model"
     },
-    "PackedCasts.V0_17_0.Model::PackedCasts.V0_17_0.Model.floatInPlace_ok": {
+    "PackedCasts.V0_17_1.Model::PackedCasts.V0_17_1.Model.floatInPlace_ok": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -1000,7 +1000,7 @@
       ],
       "correspondence": "model"
     },
-    "PackedCasts.V0_17_0.Model::PackedCasts.V0_17_0.Model.floatKeepsNeighbours_ok": {
+    "PackedCasts.V0_17_1.Model::PackedCasts.V0_17_1.Model.floatKeepsNeighbours_ok": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -1009,7 +1009,7 @@
       ],
       "correspondence": "model"
     },
-    "PackedCasts.V0_17_0.Model::PackedCasts.V0_17_0.Model.floatsToInt_ok": {
+    "PackedCasts.V0_17_1.Model::PackedCasts.V0_17_1.Model.floatsToInt_ok": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -1018,7 +1018,7 @@
       ],
       "correspondence": "model"
     },
-    "PackedCasts.V0_17_0.Model::PackedCasts.V0_17_0.Model.halfToF16_ok": {
+    "PackedCasts.V0_17_1.Model::PackedCasts.V0_17_1.Model.halfToF16_ok": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -1027,7 +1027,7 @@
       ],
       "correspondence": "model"
     },
-    "PackedCasts.V0_17_0.Model::PackedCasts.V0_17_0.Model.intToFloats_ok": {
+    "PackedCasts.V0_17_1.Model::PackedCasts.V0_17_1.Model.intToFloats_ok": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -1036,7 +1036,7 @@
       ],
       "correspondence": "model"
     },
-    "PackedCasts.V0_17_0.Model::PackedCasts.V0_17_0.Model.makeR_ok": {
+    "PackedCasts.V0_17_1.Model::PackedCasts.V0_17_1.Model.makeR_ok": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -1045,7 +1045,7 @@
       ],
       "correspondence": "model"
     },
-    "PackedCasts.V0_17_0.Model::PackedCasts.V0_17_0.Model.rToInt_intToR": {
+    "PackedCasts.V0_17_1.Model::PackedCasts.V0_17_1.Model.rToInt_intToR": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -1054,7 +1054,7 @@
       ],
       "correspondence": "model"
     },
-    "PackedCasts.V0_17_0.Model::PackedCasts.V0_17_0.Model.setFloat_ok": {
+    "PackedCasts.V0_17_1.Model::PackedCasts.V0_17_1.Model.setFloat_ok": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -1063,7 +1063,7 @@
       ],
       "correspondence": "model"
     },
-    "PackedCasts.V0_17_0.Model::PackedCasts.V0_17_0.Model.setUnion_ok": {
+    "PackedCasts.V0_17_1.Model::PackedCasts.V0_17_1.Model.setUnion_ok": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -1072,7 +1072,7 @@
       ],
       "correspondence": "model"
     },
-    "PackedCasts.V0_17_0.Model::PackedCasts.V0_17_0.Model.unionFloatView_ok": {
+    "PackedCasts.V0_17_1.Model::PackedCasts.V0_17_1.Model.unionFloatView_ok": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -1081,7 +1081,7 @@
       ],
       "correspondence": "model"
     },
-    "PackedCasts.V0_17_0.Model::PackedCasts.V0_17_0.Model.unionHalfHi_ok": {
+    "PackedCasts.V0_17_1.Model::PackedCasts.V0_17_1.Model.unionHalfHi_ok": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -1090,7 +1090,7 @@
       ],
       "correspondence": "model"
     },
-    "PackedCasts.V0_17_0.Model::PackedCasts.V0_17_0.Model.unionKeepsA_ok": {
+    "PackedCasts.V0_17_1.Model::PackedCasts.V0_17_1.Model.unionKeepsA_ok": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -1099,7 +1099,7 @@
       ],
       "correspondence": "model"
     },
-    "PackedCasts.V0_17_0.Model::PackedCasts.V0_17_0.Model.vecToInt_ok": {
+    "PackedCasts.V0_17_1.Model::PackedCasts.V0_17_1.Model.vecToInt_ok": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -1108,7 +1108,7 @@
       ],
       "correspondence": "model"
     },
-    "PackedCasts.V0_17_0.Model::PackedCasts.V0_17_0.Model.wideFloat_ok": {
+    "PackedCasts.V0_17_1.Model::PackedCasts.V0_17_1.Model.wideFloat_ok": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -1153,7 +1153,7 @@
       ],
       "correspondence": "model"
     },
-    "PackedCasts.V0_17_0.ModelLogical::PackedCasts.V0_17_0.ModelLogical.fhToBytes_nan": {
+    "PackedCasts.V0_17_1.ModelLogical::PackedCasts.V0_17_1.ModelLogical.fhToBytes_nan": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -1162,7 +1162,7 @@
       ],
       "correspondence": "model"
     },
-    "PackedCasts.V0_17_0.ModelLogical::PackedCasts.V0_17_0.ModelLogical.halvesToVec_ok": {
+    "PackedCasts.V0_17_1.ModelLogical::PackedCasts.V0_17_1.ModelLogical.halvesToVec_ok": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -1171,7 +1171,7 @@
       ],
       "correspondence": "model"
     },
-    "PackedCasts.V0_17_0.ModelLogical::PackedCasts.V0_17_0.ModelLogical.vecToHalves_nan": {
+    "PackedCasts.V0_17_1.ModelLogical::PackedCasts.V0_17_1.ModelLogical.vecToHalves_nan": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -2488,7 +2488,7 @@
         "x86_64-linux"
       ],
       "zig_versions": [
-        "0.17.0"
+        "0.17.1"
       ],
       "correspondence": "model"
     },
@@ -4611,7 +4611,7 @@
       ],
       "correspondence": "model"
     },
-    "tests/roadmap/nan-bits/NanBits/V0_17_0/Model.lean": {
+    "tests/roadmap/nan-bits/NanBits/V0_17_1/Model.lean": {
       "labels": [
         "ieee"
       ],

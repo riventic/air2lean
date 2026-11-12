@@ -1,6 +1,6 @@
 //! Encode/decode exactness (docs/architecture-audit/enc-exactness.md): integers with padding bits
 //! read from bytes that a store of that type did not write, and written then read as bytes. Zig
-//! 0.17.0 stores such an integer zero- or sign-extended to its ABI size and loads it with
+//! 0.17.1 stores such an integer zero- or sign-extended to its ABI size and loads it with
 //! `trunc nuw`/`trunc nsw` (poison unless the padding is that extension); up to 0.16.0 a store
 //! leaves the padding unspecified and a load ignores it. `native.zig` prints each case.
 const std = @import("std");

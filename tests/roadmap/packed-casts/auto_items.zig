@@ -1,6 +1,6 @@
 //! L07: Zig 0.14.1 and 0.15.2 check only the outer types of a `@bitCast`, so an array of `auto`
 //! structs or tagged unions is a memory reinterpretation with the compiler's layout (padding and
-//! tag bytes included). Zig 0.16.0 and 0.17.0 reject these casts (`compile-errors/`).
+//! tag bytes included). Zig 0.16.0 and 0.17.1 reject these casts (`compile-errors/`).
 pub const S = struct { a: u16, b: u16 };
 pub const T = union(enum) { a: u16, b: u8 };
 

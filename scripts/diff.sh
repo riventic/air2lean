@@ -215,7 +215,7 @@ pub inline fn symbol(comptime func: *const anyopaque, comptime name: []const u8)
     _ = func;
     _ = name;
 }
-// 0.17.0's op files declare their (unexported, see `symbol`) C wrappers with these ABI types.
+// 0.17.1's op files declare their (unexported, see `symbol`) C wrappers with these ABI types.
 // Bytes, not the float: f80 is not a C-ABI parameter type on every host (aarch64).
 fn BytesAbi(comptime T: type) type {
     return struct {

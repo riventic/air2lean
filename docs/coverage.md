@@ -2,7 +2,7 @@
 
 `python3 scripts/coverage.py` inventories the actual Zig compiler sources, without
 starting Zig, Lake or Lean. The checked inventories in `coverage/` record Zig
-0.14.1, 0.15.2, 0.16.0 and 0.17.0. Every AIR enum field, `std.builtin.Type` field,
+0.14.1, 0.15.2, 0.16.0 and 0.17.1. Every AIR enum field, `std.builtin.Type` field,
 `InternPool.Key` field and pointer `BaseAddr` field receives a named disposition.
 InternPool keys include internal and comptime entries: this is an exhaustive
 compiler representation list, not a claim that every key reaches executable AIR.
@@ -19,7 +19,7 @@ It never substitutes a README or exporter tag list for missing compiler sources.
 ## Generate and check
 
 Pass a source root containing `src/Air.zig`, `src/InternPool.zig` and
-`lib/std/builtin.zig` (`lib/std/lang.zig` from 0.17.0, where `std.builtin.Type` moved
+`lib/std/builtin.zig` (`lib/std/lang.zig` from 0.17.1, where `std.builtin.Type` moved
 to `std.lang.Type`; with neither file the command fails). A patched source checkout
 is usable: the fingerprint will record that exact checkout. The release label is supplied by the caller; source
 fingerprints, rather than a compiler `--version` process, establish snapshot
@@ -225,7 +225,7 @@ Counts (AIR tags passing every source stage; `coverage.py l14`):
 | 0.14.1 | 157 | 0 | 38 |
 | 0.15.2 | 161 | 0 | 39 |
 | 0.16.0 | 161 | 0 | 41 |
-| 0.17.0 | 167 | 0 | 45 |
+| 0.17.1 | 167 | 0 | 45 |
 
 No emitted tag lacks a compiler fixture. `is_null_ptr`, `is_err` and `is_err_ptr` are
 `unreachable-at-export` in every version by the producer scan: Sema only produces the `is_non_*`
@@ -233,7 +233,7 @@ forms, and the backends' legalization runs after the hook. `is_non_err_ptr` on 0
 0.14.1 is produced only by `zirRetLoad` under error return tracing; the error-tracing export
 (`tests/roadmap/error-tracing`, every version, `-ferror-tracing`) contains it, together with the
 four trace tags (`resolved-in-canon`). Its model runs equal the native runs of all four versions
-on aarch64-macos (0.15.2–0.17.0), x86_64-linux and aarch64-linux.
+on aarch64-macos (0.15.2–0.17.1), x86_64-linux and aarch64-linux.
 
 **Stage decisions for rejected tags.** Each rejection message names the tag and
 appends its reason and guidance (the structured `EXPORTER_UNSUPPORTED` /
@@ -269,7 +269,7 @@ Some tags need a particular lowering, so a function can differ from what one wou
 safety check, and 0.16.0 lowers `p[i]` of a many-pointer to `ptr_elem_ptr` plus `load`, so its
 `ptr_elem_val` comes from the sentinel check of a comptime-length sentinel slice. A tag with a
 fixture drops out of the requests (`FIXTURE_REQUESTS` keeps rows only while an inventory
-still lacks an export; every version, 0.17.0 included, now has one).
+still lacks an export; every version, 0.17.1 included, now has one).
 
 ## Upgrade change impact
 

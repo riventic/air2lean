@@ -282,7 +282,7 @@ pub const panic = struct {
     pub fn noreturnReturned() noreturn {
         reportPanic("noreturnReturned");
     }
-    // Members added in Zig 0.17.0; earlier versions do not look them up.
+    // Members added in Zig 0.17.1; earlier versions do not look them up.
     pub fn unexpectedErrorCode(_: anyerror) noreturn {
         reportPanic("unexpectedErrorCode");
     }

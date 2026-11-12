@@ -1,4 +1,4 @@
-//! Native probe of `tls_pointers.zig` (stock Zig 0.15.2-0.17.0; 0.14.1 is rejected by the
+//! Native probe of `tls_pointers.zig` (stock Zig 0.15.2-0.17.1; 0.14.1 is rejected by the
 //! translator). `ModelTlsPointers.lean` prints the same lines from the translation under 16
 //! schedules. `leakedSlot` is not called: natively it reads a dead thread's instance (illegal
 //! behaviour), which the model reports as `.illegal`.

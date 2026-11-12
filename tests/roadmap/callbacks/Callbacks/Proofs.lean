@@ -7,7 +7,7 @@ import Proofs.Asm.Effects
 /-!
 # Function-pointer call sites bound to a callback contract (E02)
 
-`Callbacks/Gen.lean` is the translator's output for `air/0.17.0` under `registry-0.17.0.json`,
+`Callbacks/Gen.lean` is the translator's output for `air/0.17.1` under `registry-0.17.1.json`,
 which binds the address-taken `extern fn ext_visit` to the opaque `CallbackModel.visit` with
 the callback contract `visitCallback` (assumed: `air2lean_model_0_evidence`, premises EXT-02,
 EXT-03). Every call through a `*const fn (*u32, u32) callconv(.c) bool` dispatches over the

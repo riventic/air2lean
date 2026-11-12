@@ -548,7 +548,7 @@ def vectorLaneCast? (types : Array Ty) (src dst : TyId) : Option Bool :=
   | _, _ => none
 
 /-- A ≤0.16 `@bitCast` (`ZigVersion.BitCast.memory`: up to 0.16.0 `@bitCast` reinterprets the
-in-memory representation; 0.17.0 changed it to the logical bit order) from `src` to `dst` that the
+in-memory representation; 0.17.1 changed it to the logical bit order) from `src` to `dst` that the
 representation cast (`Zig.reprCast`) translates: different types, an array, `extern` struct or
 `extern` union on at least one side, or a vector on at least one side except the lane-wise
 `[n]T` ↔ `@Vector(n, T)` (`vectorLaneCast?`). The checker then requires both sides to have a
@@ -650,7 +650,7 @@ def checkErrorTable (fnName : String) (table : Option (Array String)) (bits : Na
 def CheckCtx.errBits (cx : CheckCtx) : Nat := (cx.dialect.map (·.errorSetBits)).getD 16
 
 /-- The function's `@bitCast` semantics (`Dialect.bitCast`). Up to 0.16.0 it reinterprets
-memory (`reprCastApplies`); from 0.17.0 it uses the logical bit order
+memory (`reprCastApplies`); from 0.17.1 it uses the logical bit order
 (`Air2Lean/BitCast.lean`). `none` in a bare context, which then rejects representation casts. -/
 def CheckCtx.bitCast (cx : CheckCtx) : Option ZigVersion.BitCast := cx.dialect.map (·.bitCast)
 
@@ -821,7 +821,7 @@ def CheckCtx.checkPaddedAtomic (cx : CheckCtx) (line : Nat) (op : Op) : Except S
   if cx.types[c]? == some .bool then return
   let some bits := packedBits cx.types c | return
   if bits != 8 * Zig.intSize bits then
-    -- A signed `.Max`/`.Min` is wrong even with zero padding (natively on 0.14.1-0.17.0,
+    -- A signed `.Max`/`.Min` is wrong even with zero padding (natively on 0.14.1-0.17.1,
     -- x86_64 and aarch64; `docs/upstream/padded-rmw-minmax.md`): LLVM gets the sign-extended
     -- operand but the cell's raw bytes, so a negative cell orders as a large unsigned value.
     let signedMinMax := match op, cx.types[c]? with
@@ -838,7 +838,7 @@ def CheckCtx.checkPaddedAtomic (cx : CheckCtx) (line : Nat) (op : Op) : Except S
       width is a power-of-two number of bytes (u8, u16, u32, u64, u128) or a type backed by one"
 
 /-- The constructs whose native code under the self-hosted x86_64 backend (`stage2_x86_64`,
-Zig 0.16.0 and 0.17.0) differs from the model on legal inputs (`docs/build-modes.md`
+Zig 0.16.0 and 0.17.1) differs from the model on legal inputs (`docs/build-modes.md`
 §stage2_x86_64, `tests/roadmap/build-modes/reproducers/stage2-x86_64-divergences.zig`); on a
 `stage2_x86_64` profile they are outside the subset. Every other backend is unaffected.
 
@@ -1297,9 +1297,9 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         throw s!"{fnName}: near line {line}: wrapping/saturating float arithmetic is outside the subset"
     pure line
   | .splat _ =>
-    -- From Zig 0.17.0 a runtime `@splat` to an array is also `splat`; the model splats vectors only.
+    -- From Zig 0.17.1 a runtime `@splat` to an array is also `splat`; the model splats vectors only.
     unless (cx.types[ty]? matches some (.vector ..)) do
-      cx.fail line "splat to a non-vector (Zig 0.17.0 array splat) is outside the subset"
+      cx.fail line "splat to a non-vector (Zig 0.17.1 array splat) is outside the subset"
     pure line
   | .permuteBits op a =>
     let some aty := cx.valTy? a | cx.fail line "bit permutation operand has no known type"
@@ -1492,7 +1492,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       let isUsize (t : TyId) : Bool := cx.types[t]? == some (.int false 64)
       let memCast := cx.bitCast == some .memory
       let nullable (t : TyId) := nullablePtrTy cx.types cx.layouts t
-      -- `?*allowzero T`/`?[*c]T` (payload and flag) is a value only: Zig 0.16.0 and 0.17.0
+      -- `?*allowzero T`/`?[*c]T` (payload and flag) is a value only: Zig 0.16.0 and 0.17.1
       -- miscompile its `@ptrCast` and `@ptrFromInt` (`docs/upstream/optional-nullable-casts.md`),
       -- so no cast to, from or between such optionals is translated.
       let optNullable := optNullablePtrTy cx.types cx.layouts
@@ -2284,7 +2284,7 @@ private def homogeneousGlobalItems (f : Func) (root target off : Nat) : Bool :=
 
 /-- Whether a value of type `id` holds, by value, an error union whose payload has nonzero size
 and alignment below the error code's (2 for the default 16-bit error integer, `Zig.errCodeAlign`
-of the profile's `error_set_bits` in general). Zig 0.14.1–0.17.0's LLVM backend
+of the profile's `error_set_bits` in general). Zig 0.14.1–0.17.1's LLVM backend
 (`codegen/llvm.zig` `lowerPtr`) measures an `eu_payload` constant base with the error union type
 instead of its payload, so it addresses such a payload at the error code
 (`Zig.ConstPtr.llvmPayloadOffset_ne_iff`, `tests/roadmap/const-bases`). A shared budget bounds the

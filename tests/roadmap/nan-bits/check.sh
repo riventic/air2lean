@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # NaN bits observed through memory (docs/architecture-audit/nan-bits.md, README.md).
 #
-#   check.sh [--check]            translate each retained export (0.14.1 0.15.2 0.16.0 0.17.0),
+#   check.sh [--check]            translate each retained export (0.14.1 0.15.2 0.16.0 0.17.1),
 #                                 compare with NanBits/<version>/Gen.lean, check that each
-#                                 version's Model.lean is the 0.17.0 one with the version renamed,
+#                                 version's Model.lean is the 0.17.1 one with the version renamed,
 #                                 build the library NanBits (tests/roadmap/lakefile.toml: the
 #                                 translations and the kernel proofs of the models), audit the
 #                                 models' axioms, and compare the lines each model's `main` prints
@@ -22,7 +22,7 @@ set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
 dir=tests/roadmap/nan-bits
-versions=(0.14.1 0.15.2 0.16.0 0.17.0)
+versions=(0.14.1 0.15.2 0.16.0 0.17.1)
 arches=(x86_64:amd64 aarch64:arm64)
 
 # `model` against `native`: equal lines, except that `unspecified` matches any value.
@@ -85,15 +85,15 @@ translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first (lake build air2lean)' >&2; exit 1; }
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-nan-bits.XXXXXX")
 trap 'rm -rf "$work"' EXIT
-primary="$dir/NanBits/V0_17_0/Model.lean"
+primary="$dir/NanBits/V0_17_1/Model.lean"
 models=() mains=() theorems=()
 for v in "${versions[@]}"; do
   t="V${v//./_}"
   # The retained translation is the fresh one, byte for byte (Lake builds the retained file).
   "$translator" "$dir/air/$v/nan_bits" -o "$work/$t.lean" --namespace "NanBits.$t" --prefix nan_bits.
   cmp "$work/$t.lean" "$dir/NanBits/$t/Gen.lean"
-  # Every version's model states the same theorems: the 0.17.0 one, the version renamed.
-  [ "$t" = V0_17_0 ] || python3 -B scripts/fixtures.py instance "$primary" --subst "V0_17_0=$t"
+  # Every version's model states the same theorems: the 0.17.1 one, the version renamed.
+  [ "$t" = V0_17_1 ] || python3 -B scripts/fixtures.py instance "$primary" --subst "V0_17_1=$t"
   models+=("NanBits.$t.Model")
   mains+=("NanBits.$t.Model:NanBits.$t.Model.main")
   theorems+=(--declaration "NanBits.$t.Model.storeLoad_nan" --declaration "NanBits.$t.Model.f32_nan_u32")

@@ -11,7 +11,7 @@
   "commands": {
     "llvm": "ZIG_AIR_JSON_FILTER=packed_fields. zig build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline packed_fields.zig",
     "x86_64": "ZIG_AIR_JSON_FILTER=packed_fields.hostAbi zig build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -fno-llvm -fno-lld -target x86_64-linux -mcpu=baseline packed_fields.zig",
-    "native": "zig test packed_fields.zig -OReleaseSafe  (stock 0.16.0, aarch64-macos host); compiler.sh --native-linux (stock 0.14.1-0.17.0, x86_64-linux-musl LLVM ReleaseSafe/Debug and the self-hosted backend, Docker linux/amd64)"
+    "native": "zig test packed_fields.zig -OReleaseSafe  (stock 0.16.0, aarch64-macos host); compiler.sh --native-linux (stock 0.14.1-0.17.1, x86_64-linux-musl LLVM ReleaseSafe/Debug and the self-hosted backend, Docker linux/amd64)"
   },
   "functions": {
     "llvm": [
@@ -63,7 +63,7 @@
   },
   "qualification": {
     "compiler_export": "passed",
-    "native": "passed (aarch64-macos host, ReleaseSafe and Debug; x86_64-linux-musl with 0.14.1-0.17.0, compiler.sh --native-linux)",
+    "native": "passed (aarch64-macos host, ReleaseSafe and Debug; x86_64-linux-musl with 0.14.1-0.17.1, compiler.sh --native-linux)",
     "lean": "passed"
   }
 }

@@ -136,25 +136,25 @@ def StdModel.qualifies (m : StdModel) (zigVersion : ZigVersion) : Bool :=
 below cites the files whose definition of its symbol was compared with the model. -/
 private def review (file : String) (hashes : List (ZigVersion × String)) : Array StdReview :=
   (hashes.map fun (zigVersion, sha256) => { zigVersion, file, sha256 }).toArray
-/-- 0.17.0 rows: the std source (name, signature and semantics) did not change from 0.16.0 for
-the models that list 0.17.0 (`docs/std-models.md` §Zig 0.17.0 audit). -/
+/-- 0.17.1 rows: the std source (name, signature and semantics) did not change from 0.16.0 for
+the models that list 0.17.1 (`docs/std-models.md` §Zig 0.17.1 audit). -/
 private def allocatorZig (versions : List ZigVersion := ZigVersion.all) : Array StdReview :=
   review "mem/Allocator.zig" <| [
     (.v0_14_1, "2abc46d48236f1914c5cb9f1a8d526210c1159613bdf19bb57dda054c4f408b5"),
     (.v0_15_2, "679b9ca1d9314e138a7c7303bce1520c7a8fd7de7cfaf3d47659e23c3ae3aa77"),
     (.v0_16_0, "f6ad8a10185701ef1399350f127692ed5e89141773ea3c7e5ccc54a652120397"),
-    (.v0_17_0, "25099a1aaed1fe80b811e1eaedf8c3e2059a3fe7b6c29db868a68da3085b7997")].filter
+    (.v0_17_1, "25099a1aaed1fe80b811e1eaedf8c3e2059a3fe7b6c29db868a68da3085b7997")].filter
     (versions.contains ·.1)
 private def threadZig : Array StdReview := review "Thread.zig" [
   (.v0_14_1, "6cc77eb377153ac08394e7422984bbb684c1ba7b0118dee33c9be50b6184f12d"),
   (.v0_15_2, "d5c5453d21967d531575ae2809aeda8848468a9d202aad4c4d2596e746a46f8a"),
   (.v0_16_0, "14260c03063b52821c5369fc09ec32456062b0366a8e1510c0f853a204ff7eeb"),
-  (.v0_17_0, "36dab581ad0a30b2ac9fc3321db6b071331c3893f3811f1ec6628d59020c7f87")]
+  (.v0_17_1, "36dab581ad0a30b2ac9fc3321db6b071331c3893f3811f1ec6628d59020c7f87")]
 /-- `std.Io` has the futex and `Group` API only from 0.16.0 (0.14.1/0.15.2 `Io.zig` is the
 reader/writer namespace). -/
 private def ioZig : Array StdReview := review "Io.zig" [
   (.v0_16_0, "2d452f28cbeca10280f471b8e1962cdfe2a01000535050af6f6ebcc1a56365d6"),
-  (.v0_17_0, "382a4e343017183eff88e311f983066f88306e7bfcd85a890723b3697f4b2732")]
+  (.v0_17_1, "382a4e343017183eff88e311f983066f88306e7bfcd85a890723b3697f4b2732")]
 /-- `std.Thread.Futex` is removed in 0.16.0 (replaced by `Io.futex*`). -/
 private def futexZig : Array StdReview := review "Thread/Futex.zig" [
   (.v0_14_1, "f1f8fd850c94e0eb99a9332a2e51dd793f4057e35b6e8f7a04efd46a65c04960"),
@@ -174,14 +174,14 @@ private def linuxZig : Array StdReview := review "os/linux.zig" [
   (.v0_14_1, "36e1b68b9c747a426c110fa8ce588253ca8a895a5241ab1452e8340901ee7d81"),
   (.v0_15_2, "49e632c05b4b5e3333ed318b8ae9ad26997fd507bcea111d88cabc628ba748d3"),
   (.v0_16_0, "54d019f38778161dfd57e0da36fcf9ed0cd25e4ac792617dff2dc35b7513f185"),
-  (.v0_17_0, "34f8a2301eb7f01c4747d70440c773790284dd074861086aab52bdaac75090a0")]
+  (.v0_17_1, "34f8a2301eb7f01c4747d70440c773790284dd074861086aab52bdaac75090a0")]
 /-- libc's `extern "c" fn sched_yield() c_int`, `fn __error() *c_int` and
 `fn clock_gettime(clk_id: clockid_t, tp: *timespec) c_int` (unchanged in every version). -/
 private def cZig : Array StdReview := review "c.zig" [
   (.v0_14_1, "d4139b4464d840a2cb538970edbeffee386bee6ef3122512ef2d2410be69c5ef"),
   (.v0_15_2, "a8138d10955a61fae402e1235e81685732f46e4cacca1e922609034183824bb1"),
   (.v0_16_0, "f7062a55808aac78c515abd8bee5d36a596ee2de4116f61a51125107f84be158"),
-  (.v0_17_0, "b1046cea3ed2f6310ba251b74da05faa323222779942ec7d11285979d48d71db")]
+  (.v0_17_1, "b1046cea3ed2f6310ba251b74da05faa323222779942ec7d11285979d48d71db")]
 /-- macOS libc's `extern "c" fn __ulock_wait2(op: UL, addr: ?*const anyopaque, val: u64,
 timeout_ns: u64, val2: u64) c_int` and `__ulock_wait(…, timeout_us: u32) c_int` (unchanged in
 every version). -/
@@ -189,7 +189,7 @@ private def darwinZig : Array StdReview := review "c/darwin.zig" [
   (.v0_14_1, "ab9b468c43a73ab1ea9ae46911adf3c8cf2b049761cf4e5476ae50748e3885ac"),
   (.v0_15_2, "4565e4abbe32fa6cdbdcee67d52376dacee82aa7c489d0048e509663500358c9"),
   (.v0_16_0, "82eb9ed604a1adcf34be1e961caaa7395fd20d6ee90daec26af67f6a8c869be1"),
-  (.v0_17_0, "cc262eee5afb345b3ff2628bcd0d645fa0bc95d81effc85524cb2bd8d9976fbc")]
+  (.v0_17_1, "cc262eee5afb345b3ff2628bcd0d645fa0bc95d81effc85524cb2bd8d9976fbc")]
 
 /-- The row is active under `--allocator-model mode`. -/
 def StdModel.activeIn (m : StdModel) (mode : AllocatorModel) : Bool :=
@@ -221,15 +221,15 @@ private def only (versions : List ZigVersion) (reviewed : Array StdReview) : Arr
 private def asyncReason (symbol reason : String) : String :=
   s!"{symbol} is not a qualified async API: {reason} (docs/futures.md)"
 
-/-- The one table of built-in std models. Rows without a 0.17.0 review are 0.17.0-unqualified on
-purpose (`docs/std-models.md` §Zig 0.17.0 audit): the `Thread.Futex`, `Thread.Mutex.DarwinImpl`,
-`time.Timer` and `Thread.spinLoopHint` rows name std declarations that 0.17.0 no longer has. -/
+/-- The one table of built-in std models. Rows without a 0.17.1 review are 0.17.1-unqualified on
+purpose (`docs/std-models.md` §Zig 0.17.1 audit): the `Thread.Futex`, `Thread.Mutex.DarwinImpl`,
+`time.Timer` and `Thread.spinLoopHint` rows name std declarations that 0.17.1 no longer has. -/
 def stdModels : Array StdModel := #[
   allocModel "mem.Allocator.create" "STD-01" .create #["create"],
   allocModel "mem.Allocator.destroy" "STD-01" .destroy #["destroy"],
   allocModel "mem.Allocator.alloc" "STD-01" .alloc #["alloc"],
   allocModel "mem.Allocator.alignedAlloc" "STD-01" .alignedAlloc #["alloc"],
-  allocModel "mem.Allocator.allocSentinel" "STD-01" .allocSentinel #["allocSentinel"] (allocatorZig [.v0_16_0, .v0_17_0]),
+  allocModel "mem.Allocator.allocSentinel" "STD-01" .allocSentinel #["allocSentinel"] (allocatorZig [.v0_16_0, .v0_17_1]),
   allocModel "mem.Allocator.free" "STD-01" .free #["free", "freeSentinel"],
   allocModel "mem.Allocator.dupe" "STD-01" .dupe #["dupe"],
   allocModel "mem.Allocator.remap" "STD-01" .remap #["remap"],
@@ -294,7 +294,7 @@ def stdModels : Array StdModel := #[
   osModel "extern:clock_gettime" "OSK-01" .cClockGettime #["Darwin.clock_gettime", "HasEnv.env"] cZig none,
   -- `Thread.Futex.timedWait` (0.14.1, 0.15.2) is translated from std (`LinuxImpl.wait`,
   -- `DarwinImpl.wait`) down to these.
-  osModel "os.linux.futex_4arg" "OSF-01" .futex4 #["Linux.futex_4arg"] (only [.v0_15_2, .v0_16_0, .v0_17_0] linuxZig) none,
+  osModel "os.linux.futex_4arg" "OSF-01" .futex4 #["Linux.futex_4arg"] (only [.v0_15_2, .v0_16_0, .v0_17_1] linuxZig) none,
   osModel "os.linux.futex_wait" "OSF-01" .futexWaitRaw #["Linux.futex_4arg"] (only [.v0_14_1] linuxZig) none,
   osModel "extern:__ulock_wait2" "OSF-01" .ulockWait2 #["Darwin.__ulock_wait2"] darwinZig none,
   osModel "extern:__ulock_wait" "OSF-01" .ulockWait #["Darwin.__ulock_wait"] darwinZig none,
@@ -381,7 +381,7 @@ unlock (`Zig.mutexOwnerCheck p0`, `ZigLean/Conc/Call.lean`): `.illegal` unless t
 made the most recent successful acquire of the mutex word, at offset 0 of the first argument.
 They are translated, not modelled; the check is ghost (it reads no byte and writes nothing).
 `Thread.Mutex.FutexImpl.unlock` (0.14.1, 0.15.2): std makes an unlock from another thread undefined
-behavior. `Io.Mutex.unlock` (0.16.0, 0.17.0) is not listed: std names no owner, so an unlock by
+behavior. `Io.Mutex.unlock` (0.16.0, 0.17.1) is not listed: std names no owner, so an unlock by
 another thread of a held `Io.Mutex` is legal (`docs/std-models.md` §Thread model). -/
 def ownerCheckedUnlocks : Array String := #["Thread.Mutex.FutexImpl.unlock"]
 

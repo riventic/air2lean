@@ -1,5 +1,5 @@
-//! Zig 0.17.0 `@bitCast` in logical bit order (docs/bitcast-semantics.md). Values are the
-//! 0.17.0 behaviour tests' (test/behavior/bitcast.zig) and the native probes'.
+//! Zig 0.17.1 `@bitCast` in logical bit order (docs/bitcast-semantics.md). Values are the
+//! 0.17.1 behaviour tests' (test/behavior/bitcast.zig) and the native probes'.
 const std = @import("std");
 const expectEqual = std.testing.expectEqual;
 

@@ -243,7 +243,7 @@ def step_exports(check):
                      ' stale; run scripts/regen.sh --only exports')
     root = Path(tempfile.mkdtemp(prefix='air2lean-export-zig.'))
     try:
-        for version in ('0.17.0', '0.16.0', '0.15.2', '0.14.1'):
+        for version in ('0.17.1', '0.16.0', '0.15.2', '0.14.1'):
             (root / ('zig-air-' + version)).mkdir()
             (root / ('zig-air-' + version) / 'bin').symlink_to(Path(cas.zig_air(ROOT, version)).parent)
         # On macOS, 0.15.2/0.14.1 must not find Apple's SDK through `xcrun` (zig-patch/README.md).

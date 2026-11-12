@@ -1,4 +1,4 @@
-//! Version compat shim for Zig 0.15.2 vs 0.16.0 (0.14.1's writers, and 0.17.0's type reflection,
+//! Version compat shim for Zig 0.15.2 vs 0.16.0 (0.14.1's writers, and 0.17.1's type reflection,
 //! at the end) —
 //! the only file in tests/diff/ and
 //! tests/floatprobe/ with a Zig-version or OS switch; every other file there imports this and
@@ -93,7 +93,7 @@ pub fn waitpid(pid: posix.pid_t, flags: u32) WaitPidResult {
         return .{ .pid = r.pid, .status = r.status };
     }
     // The status pointee of this std's waitpid: c_int with libc; on Linux u32 (0.16.0) or i32
-    // (0.17.0, `std.os.linux.waitpid`).
+    // (0.17.1, `std.os.linux.waitpid`).
     const Status = if (builtin.link_libc) c_int else if (v17) i32 else u32;
     var status: Status = undefined;
     while (true) {
@@ -291,14 +291,14 @@ pub fn stdoutWriter(buffer: []u8) StdoutWriter {
     return std.fs.File.stdout().writer(buffer);
 }
 
-// -- types (0.17.0) -------------------------------------------------------------------------
+// -- types (0.17.1) -------------------------------------------------------------------------
 
-/// True from 0.17.0 onward: `@typeInfo` struct info is struct-of-arrays (`field_names`,
+/// True from 0.17.1 onward: `@typeInfo` struct info is struct-of-arrays (`field_names`,
 /// `field_types`) instead of one `fields` array, and `std.meta.Int` is gone.
 const v17 = builtin.zig_version.minor >= 17;
 
 /// The unsigned integer type with `@bitSizeOf(T)` bits: `std.meta.Int(.unsigned, …)` before
-/// 0.17.0, which removed it for `@Int` (a builtin that 0.15.2 does not parse).
+/// 0.17.1, which removed it for `@Int` (a builtin that 0.15.2 does not parse).
 pub fn Bits(comptime T: type) type {
     return std.math.IntFittingRange(0, (1 << @bitSizeOf(T)) - 1);
 }

@@ -19,7 +19,7 @@ statement names the translation's profile; where the targets differ (`@mulAdd`, 
   (`FloatTarget.fmaRt`). `opN_other`: a `sel` of 26 or more returns `a` unchanged.
 - `f80` differs by target (`docs/floats.md` §Targets): `op80_spec` (premise
   `floatopsTarget = .x86_64`, the x87) is `opSpec`, and excludes a pseudo-denormal numerator
-  because f80 floor/ceil changed in 0.16.0 and f80 trunc in 0.17.0 (`docs/floats.md` groups H
+  because f80 floor/ceil changed in 0.16.0 and f80 trunc in 0.17.1 (`docs/floats.md` groups H
   and I); `op80_spec_aarch64` (premise `floatopsTarget ≠ .x86_64`: both aarch64 targets, soft float)
   is `opSpec80A64`: `.unspecified` on a noncanonical operand, `__divxf3` division, and before
   0.16.0 `@sqrt` through `f64`.
@@ -363,7 +363,7 @@ theorem op80_spec (ht : floatopsTarget = .x86_64) (sel : BitVec 8) (a b c : Zig.
       | 12, _ =>
         show _ = Zig.Float.truncChk a
         unfold op80
-        -- 0.17.0 output keeps a zero-extension pseudo-denormal (`truncRt017Chk`, group I).
+        -- 0.17.1 output keeps a zero-extension pseudo-denormal (`truncRt017Chk`, group I).
         try rw [Zig.Float.truncRt017Chk_eq a ha]
         generalize Zig.Float.truncChk a = x; rcases x with _ | _ | _ <;> rfl
       | n + 26, h => omega
@@ -408,7 +408,7 @@ theorem softF80Chk_ceilRtLegacy (a : Zig.F80) :
   · rw [Zig.Float.ceilRtLegacyChk_eq a h]
   · simp [Zig.Float.isNoncanonicalF80, h]
 
-/-- The same for 0.17.0's f80 `@trunc` (`truncRt017Chk`, group I). -/
+/-- The same for 0.17.1's f80 `@trunc` (`truncRt017Chk`, group I). -/
 theorem softF80Chk_truncRt017 (a : Zig.F80) :
     (Zig.Float.softF80Chk [a] (Zig.Float.truncRt017Chk a) : Zig.Result Zig.F80) =
       Zig.Float.softF80Chk [a] (Zig.Float.truncChk a) := by

@@ -4,7 +4,7 @@ import Proofs.Asm.Effects
 /-!
 # Environment reads, memory inputs and memory-region contracts (A01)
 
-`AsmEnv/Gen.lean` is the translator's output for the fresh Zig 0.17.0 export in `air-env/0.17.0`
+`AsmEnv/Gen.lean` is the translator's output for the fresh Zig 0.17.1 export in `air-env/0.17.1`
 (`asm_env.zig`; 0.16.0 and 0.15.2 translate identically, 0.14.1 has no inline asm export).
 Every theorem is about that unchanged text.
 

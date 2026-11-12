@@ -15,7 +15,7 @@ programs=(
   "rnd|$here/rnd.zig|rnd.,Random.|rnd.roll"
   "sentinel|tests/roadmap/sentinel-realloc/source.zig|source.,mem.,math.,debug.assert|source.make,source.append,source.resize,source.release"
 )
-for version in 0.17.0 0.16.0 0.15.2 0.14.1; do
+for version in 0.17.1 0.16.0 0.15.2 0.14.1; do
   zig=$(scripts/zig-air.sh "$version" | tail -1)
   for entry in "${programs[@]}"; do
     IFS='|' read -r name source filter roots <<< "$entry"

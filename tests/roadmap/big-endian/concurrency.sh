@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # T03 concurrency and allocator models at both byte orders (`concurrency.zig`, README.md
 # §Concurrency). Exports for s390x-linux and mips64-linux (big endian) and x86_64-linux (little
-# endian) with Zig 0.17.0, and 0.15.2 (which also has `std.Thread.Futex`).
+# endian) with Zig 0.17.1, and 0.15.2 (which also has `std.Thread.Futex`).
 #
 #   concurrency.sh [--check]          translate air/<version>/concurrency/<target>, compare with
 #                                     BigEndian/Conc/<version>/<target>/Gen.lean, check that every
 #                                     version's and target's Run, Diff and Futex modules are the
-#                                     written ones (0.17.0 x86_64-linux; Futex: 0.15.2) renamed,
+#                                     written ones (0.17.1 x86_64-linux; Futex: 0.15.2) renamed,
 #                                     build the library BigEndian (tests/roadmap/lakefile.toml),
 #                                     run Diff's and Futex's `main` (24 scheduler oracles per
 #                                     case) and compare with observed/concurrency-<version>-<target>.txt
@@ -24,7 +24,7 @@ set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
 dir=tests/roadmap/big-endian
-versions=(0.15.2 0.17.0)
+versions=(0.15.2 0.17.1)
 targets=(s390x-linux mips64-linux x86_64-linux)
 case "${1:---check}" in
   --export)
@@ -86,9 +86,9 @@ for v in "${versions[@]}"; do
       --prefix concurrency.
     cmp "$work/$V-$T.lean" "$conc/$V/$T/Gen.lean"
     # One model for every version and target: the written one, the version and target renamed.
-    if [ "$V/$T" != V0_17_0/X64 ]; then
+    if [ "$V/$T" != V0_17_1/X64 ]; then
       for m in Run Diff; do
-        python3 -B scripts/fixtures.py instance "$conc/V0_17_0/X64/$m.lean" --subst "V0_17_0=$V" --subst "X64=$T"
+        python3 -B scripts/fixtures.py instance "$conc/V0_17_1/X64/$m.lean" --subst "V0_17_1=$V" --subst "X64=$T"
       done
     fi
     mains+=("BigEndian.Conc.$V.$T.Diff:BigEndian.Conc.$V.$T.Diff.main")
