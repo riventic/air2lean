@@ -548,7 +548,7 @@ def vectorLaneCast? (types : Array Ty) (src dst : TyId) : Option Bool :=
   | _, _ => none
 
 /-- A ≤0.16 `@bitCast` (`ZigVersion.BitCast.memory`: up to 0.16.0 `@bitCast` reinterprets the
-in-memory representation; 0.17.1 changed it to the logical bit order) from `src` to `dst` that the
+in-memory representation; 0.17.0 changed it to the logical bit order) from `src` to `dst` that the
 representation cast (`Zig.reprCast`) translates: different types, an array, `extern` struct or
 `extern` union on at least one side, or a vector on at least one side except the lane-wise
 `[n]T` ↔ `@Vector(n, T)` (`vectorLaneCast?`). The checker then requires both sides to have a
@@ -650,7 +650,7 @@ def checkErrorTable (fnName : String) (table : Option (Array String)) (bits : Na
 def CheckCtx.errBits (cx : CheckCtx) : Nat := (cx.dialect.map (·.errorSetBits)).getD 16
 
 /-- The function's `@bitCast` semantics (`Dialect.bitCast`). Up to 0.16.0 it reinterprets
-memory (`reprCastApplies`); from 0.17.1 it uses the logical bit order
+memory (`reprCastApplies`); from 0.17.0 it uses the logical bit order
 (`Air2Lean/BitCast.lean`). `none` in a bare context, which then rejects representation casts. -/
 def CheckCtx.bitCast (cx : CheckCtx) : Option ZigVersion.BitCast := cx.dialect.map (·.bitCast)
 
@@ -1297,7 +1297,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         throw s!"{fnName}: near line {line}: wrapping/saturating float arithmetic is outside the subset"
     pure line
   | .splat _ =>
-    -- From Zig 0.17.1 a runtime `@splat` to an array is also `splat`; the model splats vectors only.
+    -- From Zig 0.17.0 a runtime `@splat` to an array is also `splat`; the model splats vectors only.
     unless (cx.types[ty]? matches some (.vector ..)) do
       cx.fail line "splat to a non-vector (Zig 0.17.1 array splat) is outside the subset"
     pure line

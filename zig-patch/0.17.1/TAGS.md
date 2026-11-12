@@ -1,10 +1,16 @@
-# Zig 0.17.1 vs 0.16.0
+# Zig 0.17.0 vs 0.16.0
+
+Zig 0.17.1, the pinned 0.17 release, has the same AIR tags, type tags, intern keys and pointer
+bases as 0.17.0 (`scripts/coverage.py diff`: no universe obligation in `qualification/0.17.1.json`);
+`hook.patch` moved only its line offsets. Every example's AIR is the 0.17.0 AIR up to generic
+instance numbers (`__func_N`) and std `decl_line`s. The differences below are 0.17.0's and hold
+for 0.17.1.
 
 ## AIR tags (`Air.Inst.Tag`)
 
-214 tags in 0.16.0, 224 in 0.17.1 (16 added, 6 removed; a rename counts as both).
+214 tags in 0.16.0, 224 in 0.17.0 (16 added, 6 removed; a rename counts as both).
 
-| Only in 0.16.0 | Only in 0.17.1 | Exporter (`zig-patch/air-json/json.zig`) |
+| Only in 0.16.0 | Only in 0.17.0 | Exporter (`zig-patch/air-json/json.zig`) |
 |---|---|---|
 | `bitcast` | `bit_cast` (`@bitCast` only), `bit_cast_safe` (`@bitCast`/`@fromBackingInt` with the `invalid_enum_value` check for an exhaustive enum result) | `ty_op` operand (`Compat.isNewTyOp`) |
 | `bitcast` (pointer casts) | `ptr_cast` (pointer to pointer, slice to slice; `@ptrCast`, `@alignCast`, `@constCast`, read-only parameter copies, `&v[i]`), `ptr_from_int` (`@ptrFromInt`), `int_from_ptr` (`@intFromPtr`, pointer and slice `==`) | `ty_op` operand (`Compat.isNewTyOp`) |

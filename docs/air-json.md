@@ -234,7 +234,7 @@ exporter writes:
 
 | Key or tag | Meaning |
 |---|---|
-| file `err_trace: T` | the function takes the hidden trace parameter, of type `T` (`?*std.builtin.StackTrace`; `std.lang` in 0.17.1) |
+| file `err_trace: T` | the function takes the hidden trace parameter, of type `T` (`?*std.builtin.StackTrace`; `std.lang` in 0.17.0) |
 | call `err_trace: T` | the callee receives the caller's current trace, of type `T` |
 | `err_trace_unresolved: true` | the same, but `StackTrace` was not yet resolved when the function was exported; the translator rejects the file |
 | `err_return_trace` | the current trace; no operands |

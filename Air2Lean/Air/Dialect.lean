@@ -58,7 +58,7 @@ def unsupported (s : String) : String :=
 inductive BitCast where
   /-- Up to 0.16.0: a reinterpretation of the in-memory representation. -/
   | memory
-  /-- From 0.17.1: the logical bit order (arrays and vectors element 0 lowest, no padding). -/
+  /-- From 0.17.0: the logical bit order (arrays and vectors element 0 lowest, no padding). -/
   | logical
   deriving DecidableEq, Repr, Inhabited
 
@@ -68,7 +68,7 @@ def bitCast : ZigVersion → BitCast
 
 /-- A store of an integer with padding bits (`u10`, `i24`, an `enum(u24)` tag) writes the whole
 ABI integer, zero- or sign-extended, and a load is poison unless the padding is that extension
-(`Zig.intEncExt`, `docs/architecture-audit/enc-exactness.md`). Before 0.17.1 a store leaves the
+(`Zig.intEncExt`, `docs/architecture-audit/enc-exactness.md`). Before 0.17.0 a store leaves the
 padding unspecified and a load ignores it (`Zig.intEncOf`). -/
 def intPaddingExtended : ZigVersion → Bool
   | v0_14_1 | v0_15_2 | v0_16_0 => false
@@ -91,7 +91,7 @@ def compilerRt : ZigVersion → CompilerRt
   | v0_16_0 => .v016
   | v0_17_1 => .v017
 
-/-- The AIR tag spelling (`Air2Lean/Air/Canon.lean`'s `versionTags`): 0.17.1 renamed and split
+/-- The AIR tag spelling (`Air2Lean/Air/Canon.lean`'s `versionTags`): 0.17.0 renamed and split
 tags, which are read back in the 0.16.0 spelling. -/
 inductive AirTags where
   | base
@@ -102,7 +102,7 @@ def airTags : ZigVersion → AirTags
   | v0_14_1 | v0_15_2 | v0_16_0 => .base
   | v0_17_1 => .v017
 
-/-- The type `i0` exists (0.17.1 removed it; one in a 0.17.1 file is a malformed export). -/
+/-- The type `i0` exists (0.17.0 removed it; one in a 0.17.1 file is a malformed export). -/
 def hasI0 : ZigVersion → Bool
   | v0_14_1 | v0_15_2 | v0_16_0 => true
   | v0_17_1 => false
@@ -113,7 +113,7 @@ def funcInstanceNames : ZigVersion → Bool
   | v0_14_1 | v0_15_2 | v0_16_0 => false
   | v0_17_1 => true
 
-/-- The exporter's `build_mode` tags that name `std.builtin.OptimizeMode` differently: 0.17.1
+/-- The exporter's `build_mode` tags that name `std.builtin.OptimizeMode` differently: 0.17.0
 renamed it `std.lang.Optimize` with the tags `debug`, `safe`, `fast`, `small`. Each pair is
 (this version's tag, the 0.16.0 spelling). -/
 def buildModeRenames : ZigVersion → List (String × String)
@@ -295,7 +295,7 @@ tag; `docs/architecture-audit/enc-exactness.md`):
 
 * `loose`: LLVM up to 0.16.0; a store leaves the padding unspecified, a load ignores it
   (`Zig.intEncOf`).
-* `extended`: LLVM from 0.17.1 (`ZigVersion.intPaddingExtended`) and the self-hosted x86_64
+* `extended`: LLVM from 0.17.0 (`ZigVersion.intPaddingExtended`) and the self-hosted x86_64
   backend at every version (Debug x86_64 from 0.15.2, `tests/roadmap/enc-exactness`); a store
   writes the extension of the whole ABI integer, a load is poison (LLVM) or reads the whole
   integer (self-hosted) unless the padding is that extension (`Zig.intEncExt`).

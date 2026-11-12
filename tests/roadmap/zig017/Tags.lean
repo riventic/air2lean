@@ -46,7 +46,7 @@ def main : IO Unit := do
     require ((tagReason? .v0_17_1 tag).isSome) s!"removed {tag} accepted in 0.17.1"
     require ((tagReason? .v0_16_0 tag).isNone) s!"{tag} rejected in 0.16.0"
   require (tagsOnly017.length == added017.length) "tagsOnly017 differs from the Air.zig delta"
-  -- Each alias is a 0.16.0 spelling that 0.17.1 removed, or a canonical-only tag that no version
+  -- Each alias is a 0.16.0 spelling that 0.17.0 removed, or a canonical-only tag that no version
   -- writes (`bit_cast_safe` → `bitcast_safe`), which every version rejects as raw AIR.
   for (new, old) in tagAliases017 do
     require (removed017.contains old || canonicalOnlyTags.contains old)

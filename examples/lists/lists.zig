@@ -2,7 +2,7 @@
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-/// Zig 0.17.1 removed `Allocator.dupeZ` (it called `dupeSentinel(T, m, 0)`); 0.15.2 has no
+/// Zig 0.17.0 removed `Allocator.dupeZ` (it called `dupeSentinel(T, m, 0)`); 0.15.2 has no
 /// `dupeSentinel`.
 const has_dupe_z = @hasDecl(Allocator, "dupeZ");
 

@@ -22,7 +22,7 @@ def result {α : Type} (f : MemM α) : Option (Except Error α) :=
   ((f.run (mem0 .fresh)).run).map (·.map Prod.fst)
 
 /-- A stored `i24` reads back as stored at every version: the store and the load use one
-encoding (`intEncOf` up to 0.16.0, `intEncExt` from 0.17.1). -/
+encoding (`intEncOf` up to 0.16.0, `intEncExt` from 0.17.0). -/
 theorem i24RoundTrip_exact : result (i24RoundTrip (-2)) = some (.ok (-2)) := by decide +kernel
 
 /-- A stored `bool` reads back as the byte 1 at every version. -/

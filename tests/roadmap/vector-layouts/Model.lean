@@ -108,7 +108,7 @@ def lineVector (line : String) : String := ((line.splitOn " ").drop 1).headD ""
 
 def main (args : List String) : IO UInt32 := do
   -- `--skip NAME`: a vector whose layout is a declared divergence of the file's Zig version
-  -- (`f80x2` in 0.17.1, tests/roadmap/aarch64-abi/Model.lean); neither side's lines are compared.
+  -- (`f80x2` in 0.17.0, tests/roadmap/aarch64-abi/Model.lean); neither side's lines are compared.
   let (args, skip) := match args with
     | [path, "--skip", name] => ([path], some name)
     | _ => (args, none)

@@ -92,7 +92,7 @@ The model follows each version's analyzed AIR; at address zero it says:
 | --- | --- | --- |
 | offset 0 into a nullable result (`[*c]`, `allowzero`) | address zero | no `getelementptr` is emitted; native runs agree |
 | offset 0 into a nonnullable result (0.14.1/0.15.2 `&p.*.f` typed `*F`) | `.illegal` | a non-`allowzero` pointer must not be zero (illegal behaviour that no check catches: the compiler mistypes the field pointer, 0.16.0 keeps `allowzero`) |
-| a field of a null C pointer in 0.17.1 | `.panic` | Sema's `is_non_null` safety check, translated |
+| a field of a null C pointer in 0.17.0 | `.panic` | Sema's `is_non_null` safety check, translated |
 | any nonzero offset | `.illegal` | `getelementptr inbounds` without an allocated object is poison; the native ReleaseSafe build folds `(p + n) == null` to `p == null` (`addIsNull`) |
 
 These are not over-approximations of the native result but the language's and the backend's

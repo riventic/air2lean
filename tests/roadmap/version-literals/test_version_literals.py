@@ -62,7 +62,7 @@ class VersionLiterals(unittest.TestCase):
         self.write('Air2Lean/Extra.lean',
                    '/-! Zig "0.17.1" in a module doc. /- nested "0.16.0" -/ -/\n'
                    '-- a comment: "0.15.2"\n'
-                   'def msg : String := s!"Zig 0.17.1 renamed it \\\n  (since 0.17.1)"\n'
+                   'def msg : String := s!"Zig 0.17.0 renamed it \\\n  (since 0.17.0)"\n'
                    "def quote : Char := '\"'\n"
                    'def path : String := "air/0.16.0/x.json"\n')
         result = run(self.tmp)

@@ -166,7 +166,7 @@ must record alignment 8 there and the model's table elsewhere, and the CI step c
 vector images without `f80x2` (`vector-layouts/Model.lean --skip f80x2`). The translator rejects
 these types in memory on 0.17.1: `checkMemTy` compares the exporter's alignment with the model's.
 The padded `cmpxchg` and `.Max`/`.Min` stay rejected on every version. Only the two soft-float
-`f80` rows remain result divergences in 0.17.1.
+`f80` rows remain result divergences in 0.17.0.
 
 ## Per-profile observations (every recorded Zig version, ReleaseSafe)
 

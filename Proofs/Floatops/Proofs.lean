@@ -19,7 +19,7 @@ statement names the translation's profile; where the targets differ (`@mulAdd`, 
   (`FloatTarget.fmaRt`). `opN_other`: a `sel` of 26 or more returns `a` unchanged.
 - `f80` differs by target (`docs/floats.md` §Targets): `op80_spec` (premise
   `floatopsTarget = .x86_64`, the x87) is `opSpec`, and excludes a pseudo-denormal numerator
-  because f80 floor/ceil changed in 0.16.0 and f80 trunc in 0.17.1 (`docs/floats.md` groups H
+  because f80 floor/ceil changed in 0.16.0 and f80 trunc in 0.17.0 (`docs/floats.md` groups H
   and I); `op80_spec_aarch64` (premise `floatopsTarget ≠ .x86_64`: both aarch64 targets, soft float)
   is `opSpec80A64`: `.unspecified` on a noncanonical operand, `__divxf3` division, and before
   0.16.0 `@sqrt` through `f64`.

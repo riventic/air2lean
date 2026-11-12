@@ -33,7 +33,7 @@ const v16 = @import("builtin").zig_version.minor >= 16;
 /// keeps its C-ABI wrappers private.
 const v17 = @import("builtin").zig_version.minor >= 17;
 
-/// The unsigned integer type with `@bitSizeOf(T)` bits. Not `std.meta.Int`: Zig 0.17.1 removed it
+/// The unsigned integer type with `@bitSizeOf(T)` bits. Not `std.meta.Int`: Zig 0.17.0 removed it
 /// (for `@Int`, which 0.15.2 does not parse).
 fn FloatBits(comptime T: type) type {
     return std.math.IntFittingRange(0, (1 << @bitSizeOf(T)) - 1);

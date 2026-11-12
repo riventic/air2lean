@@ -1,6 +1,6 @@
-# `@bitCast` semantics: Zig 0.16.0 vs 0.17.1
+# `@bitCast` semantics: Zig 0.16.0 vs 0.17.0
 
-Zig 0.17.1 changed what `@bitCast` means. 0.16.0 reinterpreted the **in-memory**
+Zig 0.17.0 changed what `@bitCast` means. 0.16.0 reinterpreted the **in-memory**
 representation. 0.17.1 reinterprets the **logical bit representation**, which is the same on
 every target. The translator selects the rules from the function's `zig_version`
 (`ZigVersion.bitCast` in `Air2Lean/Air/Dialect.lean`, `Air2Lean/BitCast.lean`). ≤0.16 inputs keep the existing rules

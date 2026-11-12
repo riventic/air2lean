@@ -10,7 +10,7 @@ fn rt(comptime T: type, value: T) T {
     return pointer.*;
 }
 /// `builtin.mode` in the 0.16.0 tag spelling (`ReleaseSafe`), which scripts/abi-probe.py expects:
-/// Zig 0.17.1 renamed the tags (`safe`) and kept the old names as declarations.
+/// Zig 0.17.0 renamed the tags (`safe`) and kept the old names as declarations.
 fn modeName() []const u8 {
     const Mode = @TypeOf(builtin.mode);
     inline for (.{ "Debug", "ReleaseSafe", "ReleaseFast", "ReleaseSmall" }) |name| {

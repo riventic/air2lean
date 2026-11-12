@@ -381,7 +381,7 @@ def main (args : List String) : IO UInt32 := do
     return 1
   if version == "0.17.1" then
     for row in layoutDivergences017 triple do
-      IO.println s!"divergence (not a match) {row}: 8-aligned in Zig 0.17.1, 16 in the model"
+      IO.println s!"divergence (not a match) {row}: 8-aligned in Zig 0.17.0, 16 in the model"
   let mut matched := 0
   let mut rejected : List String := []
   let mut diverged : List String := []

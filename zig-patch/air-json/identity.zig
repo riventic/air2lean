@@ -18,11 +18,11 @@ const InternPool = @import("../InternPool.zig");
 
 const zv = @import("builtin").zig_version;
 
-// Zig 0.17.1 changed the reflection and naming APIs this file uses; each helper names only the
+// Zig 0.17.0 changed the reflection and naming APIs this file uses; each helper names only the
 // API of the version being built (comptime-known `zv`).
 
-/// The bits of the integer `x` (`bits` wide), zero-extended. No `std.meta.Int` (gone in 0.17.1)
-/// and no `@Int` (absent before 0.17.1): through a 128-bit integer of `x`'s signedness.
+/// The bits of the integer `x` (`bits` wide), zero-extended. No `std.meta.Int` (gone in 0.17.0)
+/// and no `@Int` (absent before 0.17.0): through a 128-bit integer of `x`'s signedness.
 fn intBits(x: anytype, comptime signed: bool, comptime bits: u16) u128 {
     const wide: u128 = @bitCast(@as(if (signed) i128 else u128, x));
     return if (bits >= 128) wide else wide & ((@as(u128, 1) << bits) - 1);
@@ -40,12 +40,12 @@ fn FloatBits(comptime T: type) type {
     };
 }
 
-/// `@typeInfo` of an enum: exhaustive (`mode` from 0.17.1, `is_exhaustive` before).
+/// `@typeInfo` of an enum: exhaustive (`mode` from 0.17.0, `is_exhaustive` before).
 fn enumExhaustive(comptime info: anytype) bool {
     return if (zv.minor >= 17) info.mode == .exhaustive else info.is_exhaustive;
 }
 
-/// `@typeInfo` of a struct: its field names in order (`field_names` from 0.17.1).
+/// `@typeInfo` of a struct: its field names in order (`field_names` from 0.17.0).
 fn structFieldNames(comptime info: anytype) []const []const u8 {
     return if (zv.minor >= 17) names: {
         var names: [info.field_names.len][]const u8 = undefined;
@@ -60,7 +60,7 @@ fn structFieldNames(comptime info: anytype) []const []const u8 {
     };
 }
 
-/// The fully qualified name of a container type (0.17.1 returns `{name, fqn}`).
+/// The fully qualified name of a container type (0.17.0 returns `{name, fqn}`).
 fn containerFqn(t: Type, ip: *const InternPool) []const u8 {
     const name = t.containerTypeName(ip);
     return (if (zv.minor >= 17) name.fqn else name).toSlice(ip);

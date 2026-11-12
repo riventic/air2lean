@@ -2194,7 +2194,7 @@ jobs:
             lake env lean --run tests/roadmap/vector-layouts/Model.lean "$RUNNER_TEMP/vectors.txt"
           done
 
-      # Zig 0.17.1 aligns f80 (and f128 on macOS) and the f80x2 vector to 8: declared layout
+      # Zig 0.17.0 aligns f80 (and f128 on macOS) and the f80x2 vector to 8: declared layout
       # divergences (Model.lean); the f80x2 image is not compared.
       - name: aarch64 ABI profile proofs (T04, 0.17.1)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}

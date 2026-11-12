@@ -295,7 +295,7 @@ The output must equal that profile's versioned expected file
 (`tests/roadmap/aarch64-abi/expected/<zig>/`, Zig 0.17.1, 0.16.0, 0.15.2 and 0.14.1). A wrong host or an unrecorded Zig version
 is `excluded`, which exits non-zero and never counts as a match. `tests/roadmap/aarch64-abi/Model.lean`
 kernel-checks each profile's layout table against the model and compares the file's float
-and atomic results with it. Six declared divergences (eight before Zig 0.16.0, two result and two or three layout rows in 0.17.1: [aarch64-abi.md](aarch64-abi.md#zig-0171)) are reported and
+and atomic results with it. Six declared divergences (eight before Zig 0.16.0, two result and two or three layout rows in 0.17.0: [aarch64-abi.md](aarch64-abi.md#zig-0171)) are reported and
 not counted as matches: soft-float f80 unnormal and pseudo-denormal handling, padding-sensitive
 `u24`/`u40` cmpxchg, signed `Max` of a negative `i24`/`i40` cell, and (before 0.16.0)
 f64-precision `@sqrt` of f80 and f128.

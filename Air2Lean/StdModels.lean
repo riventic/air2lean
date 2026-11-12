@@ -223,7 +223,7 @@ private def asyncReason (symbol reason : String) : String :=
 
 /-- The one table of built-in std models. Rows without a 0.17.1 review are 0.17.1-unqualified on
 purpose (`docs/std-models.md` §Zig 0.17.1 audit): the `Thread.Futex`, `Thread.Mutex.DarwinImpl`,
-`time.Timer` and `Thread.spinLoopHint` rows name std declarations that 0.17.1 no longer has. -/
+`time.Timer` and `Thread.spinLoopHint` rows name std declarations that 0.17.0 no longer has. -/
 def stdModels : Array StdModel := #[
   allocModel "mem.Allocator.create" "STD-01" .create #["create"],
   allocModel "mem.Allocator.destroy" "STD-01" .destroy #["destroy"],

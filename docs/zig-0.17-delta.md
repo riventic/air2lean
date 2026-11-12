@@ -1,4 +1,4 @@
-# Zig 0.16.0 → 0.17.1 semantic delta
+# Zig 0.16.0 → 0.17.0 semantic delta
 
 Source-level comparison of the pinned `zig-0.16.0.tar.xz`
 (sha256 `43186959…bfdf`) and `zig-0.17.1.tar.xz` (sha256 `b6c7f172…8abd`) and the

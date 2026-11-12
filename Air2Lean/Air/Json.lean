@@ -840,7 +840,7 @@ def parseFuncWith (j : Json) (profile : BuildProfile) (allocatorModel : Allocato
   let typesJ ← (← j.getObjVal? "types").getArr?
   let types ← typesJ.mapM (parseTy · allocatorModel)
   let version? := ZigVersion.ofString? zigVersion
-  -- Zig 0.17.1 removed the `i0` type; one in a 0.17.1 file is a malformed export.
+  -- Zig 0.17.0 removed the `i0` type; one in a 0.17.1 file is a malformed export.
   if let some v := version? then
     if !v.hasI0 && types.any (· matches .int true 0) then
       throw s!"{name}: type i0 does not exist in Zig {v}"

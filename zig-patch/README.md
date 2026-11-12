@@ -21,7 +21,7 @@ explicitly non-little-endian dumps; older dumps without this optional field assu
 endian. Memory layout checks also enforce the model's 64-bit ABI.
 
 A pointer to one vector lane (`&v[i]`) exports `vector_index`; its `host_size` is then the
-vector length. Zig 0.17.1 makes every such pointer a lane pointer (earlier versions only for
+vector length. Zig 0.17.0 makes every such pointer a lane pointer (earlier versions only for
 lanes that are not whole power-of-two bytes), so a reader must not take it as a bit-pointer.
 
 Zig 0.16.0 and 0.17.1 byte sentinel pointer types additionally export `sentinel_byte` as decimal text, read

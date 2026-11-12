@@ -5,7 +5,7 @@ import ZigLean.Mem.Null
 # Zig ≤0.16 representation casts and optional-pointer conversions
 
 Up to 0.16.0, `@bitCast` of an array, `extern` struct or `extern` union reinterprets the
-in-memory representation (`docs/aggregate-casts.md`; 0.17.1 changed `@bitCast` to the logical
+in-memory representation (`docs/aggregate-casts.md`; 0.17.0 changed `@bitCast` to the logical
 bit order and made `extern` struct and union casts compile errors). `reprCast β x` is that
 reinterpretation: the bytes of `x` (`Enc.encode`, padding bytes `.undef`), then `β` decoded
 from them. A destination part that needs a padding-derived (undefined) bit throws

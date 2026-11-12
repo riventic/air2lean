@@ -537,7 +537,7 @@ inductive Op where
   | shlWithOverflow (a b : Val)
   | countBits (op : BitCountOp) (a : Val)
   | permuteBits (op : BitPermuteOp) (a : Val)
-  /-- `splat`: a vector with every lane equal to the scalar `a`. Zig 0.17.1 also splats to an
+  /-- `splat`: a vector with every lane equal to the scalar `a`. Zig 0.17.0 also splats to an
   array; `Check.lean` rejects that. -/
   | splat (a : Val)
   /-- `select`: a vector built lane-wise from `a` (where the bool-vector `pred`'s lane is true)

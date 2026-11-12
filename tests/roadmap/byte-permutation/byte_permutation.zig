@@ -28,7 +28,7 @@ pub export fn reverseNarrowLanes(x: @Vector(3, u8)) @Vector(3, u8) {
     return @bitReverse(@as(@Vector(3, u3), @truncate(x)));
 }
 pub export fn reverseZero() u0 { return @bitReverse(@as(u0, 0)); }
-/// `i0`. Zig 0.17.1 removed `i0` (a compile error, also in an unused branch, so it is not spelled
+/// `i0`. Zig 0.17.0 removed `i0` (a compile error, also in an unused branch, so it is not spelled
 /// here); there the signed zero-width cases are `u0` and check.sh does not qualify the version.
 const I0 = if (@import("builtin").zig_version.minor < 17) @import("std").meta.Int(.signed, 0) else u0;
 pub export fn reverseSignedZero() I0 { return @bitReverse(@as(I0, 0)); }

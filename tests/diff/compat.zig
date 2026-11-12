@@ -293,7 +293,7 @@ pub fn stdoutWriter(buffer: []u8) StdoutWriter {
 
 // -- types (0.17.1) -------------------------------------------------------------------------
 
-/// True from 0.17.1 onward: `@typeInfo` struct info is struct-of-arrays (`field_names`,
+/// True from 0.17.0 onward: `@typeInfo` struct info is struct-of-arrays (`field_names`,
 /// `field_types`) instead of one `fields` array, and `std.meta.Int` is gone.
 const v17 = builtin.zig_version.minor >= 17;
 

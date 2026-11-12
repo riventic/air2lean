@@ -23,7 +23,7 @@ write through the bytes view (`up_pts_iff`). The strength log
 open Layout Zig Zig.Full FAssn
 
 /-- The hidden tag of `Num`: its `BitVec 1`, stored as the version stores a `u1` (`intEncOf` up to
-0.16.0, `intEncExt` from 0.17.1); each of its two values reads back. -/
+0.16.0, `intEncExt` from 0.17.0); each of its two values reads back. -/
 instance : LawfulEnc NumTag where
   size_encode v := by cases v <;> decide +kernel
   decode_encode v := by apply ExceptT.ext; cases v <;> decide +kernel
