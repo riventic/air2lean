@@ -1,5 +1,5 @@
---- zig-0.17.0-pristine/src/Zcu/PerThread.zig
-+++ zig-0.17.0/src/Zcu/PerThread.zig
+--- zig-0.17.1-pristine/src/Zcu/PerThread.zig
++++ zig-0.17.1/src/Zcu/PerThread.zig
 @@ -2295,6 +2295,7 @@
      tracy_trace.addTextFmt("func_ip_index={d}", .{func_index});
  
@@ -8,8 +8,8 @@
      var air_owned = true;
      defer if (air_owned) air.deinit(gpa);
  
---- zig-0.17.0-pristine/src/Sema.zig
-+++ zig-0.17.0/src/Sema.zig
+--- zig-0.17.1-pristine/src/Sema.zig
++++ zig-0.17.1/src/Sema.zig
 @@ -4170,8 +4170,9 @@
          return sema.failWithOwnedErrorMsg(block, msg);
      }
@@ -50,8 +50,8 @@
  
  /// Given any single pointer, retrieve a pointer to the payload of any optional
  /// or error union pointed to, initializing these pointers along the way.
---- zig-0.17.0-pristine/src/Compilation.zig
-+++ zig-0.17.0/src/Compilation.zig
+--- zig-0.17.1-pristine/src/Compilation.zig
++++ zig-0.17.1/src/Compilation.zig
 @@ -2987,6 +2987,8 @@
          const active = zcu.acquire();
          defer active.release();
