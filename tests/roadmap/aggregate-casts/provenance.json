@@ -52,11 +52,11 @@
     "0.16.0/aggregate_casts.u64ToPair.json": "4b8d2111e2054366cbd0ed2d6d1346fc2145d1875bc71444e70a9d785e85aee7"
   },
   "exporter": "zig-patch/air-json/json.zig",
-  "exporter_sha256": "9c5dd1583f3711cce9ff88013f34a56d156fb149fc3597152fd3d3f1e0c36f56",
+  "exporter_sha256": "7d5cfbcf6c32ff600fa1cd5f1d69fc70872eeea6df758cddffd29eb18d80be27",
   "patched_compiler_sha256": {
-    "0.14.1": "cbce6d3f0ead49085f83227f0fda72f5cb981fbfc3d6ad961bd2ddfc3b2b3ae6",
-    "0.15.2": "5dbaf7083d6ec6518a32a847f908ec000761df32ead8dc26245bf90e435985cd",
-    "0.16.0": "c18f6e23ad2efd9afd073ede358e213c901d48a609e422b027eb3517ec5b851c"
+    "0.14.1": "5a80995b34b78adb87ead74f7c7f2a5539d09b2254efd3225ffe1b5d5bab3be9",
+    "0.15.2": "aee273604e8d7ecddf49e7540a7b26450804c50e1ac6ba2ba85702cfb9371c8c",
+    "0.16.0": "3bb199f7d6053b27db36d93892d4314c32befc17581c6f56edbb84c1fd8bc437"
   },
   "pointer_offset_sha256": "426b60f70a5d49e402e97d1a6334e683715e5e4a3eac04b5bddddf38b427e01a",
   "qualification": "Compiler exports of every function in aggregate_casts.zig with patched 0.16.0, 0.15.2 and 0.14.1 compilers built from the recorded exporter. The representation casts and optional-pointer conversions are the model's evidence for `Zig.reprCast` and the null rules on x86_64-linux ReleaseSafe; casts of other shapes are not covered.",
