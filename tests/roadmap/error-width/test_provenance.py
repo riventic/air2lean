@@ -3,9 +3,12 @@
 provenance.json byte for byte, and each export is the profile it claims.
 
 Runs no compiler. `--refresh` rewrites provenance.json after `export.sh` and `native.py`: it
-records the hashes of the patched compilers (AIR2LEAN_ZIG_AIR, default /opt/dev/air2lean-build)
-and of the stock compilers that produced `native/` (AIR2LEAN_NATIVE_ZIG, a `version=path,...`
-list; default: the three versions of this host's `~/.cache/air2lean`).
+records the hashes of the patched compilers that exported `air-fresh/` (AIR2LEAN_ZIG_AIR, the
+directory of `zig-air-<version>/`) and of the stock compilers that produced `native/`
+(AIR2LEAN_NATIVE_ZIG, a `version=path,...` list). The two come from different hosts
+(x86_64-linux exports on the build host, aarch64-macos runs on a Mac), so each family is
+re-hashed only where its variable is set; otherwise its recorded hashes stay, which is allowed
+only while the files it produced are the recorded ones.
 """
 import hashlib
 import json
@@ -55,23 +58,26 @@ def current():
     }
 
 
-def tool_hashes():
-    root = Path(os.environ.get("AIR2LEAN_ZIG_AIR", "/opt/dev/air2lean-build"))
-    patched = {v: sha(root / f"zig-air-{v}/bin/zig-unlocked") for v in VERSIONS}
-    home = Path.home() / ".cache/air2lean"
-    default = {"0.17.1": home / "host-0.17.1/zig", "0.16.0": home / "host-0.16.0/zig", "0.15.2": home / "host-0.15.2/zig",
-               "0.14.1": Path("/opt/dev/air2lean-build/0.14.1/zig-aarch64-macos-0.14.1/zig")}
-    given = os.environ.get("AIR2LEAN_NATIVE_ZIG")
-    paths = dict(item.split("=", 1) for item in given.split(",")) if given else default
-    stock = {v: sha(paths[v]) for v in VERSIONS}
-    return patched, stock
-
-
 def refresh():
     record = current()
     old = json.loads(PROVENANCE.read_text()) if PROVENANCE.exists() else {}
-    record["patched_compiler_sha256"], record["native"]["stock_compiler_sha256"] = tool_hashes()
-    record["native"]["target"] = old.get("native", {}).get("target", "aarch64-macos")
+    old_native = old.get("native", {})
+    root = os.environ.get("AIR2LEAN_ZIG_AIR")
+    if root:
+        record["patched_compiler_sha256"] = {v: sha(Path(root) / f"zig-air-{v}/bin/zig-unlocked") for v in VERSIONS}
+    elif old.get("air_sha256") == record["air_sha256"]:
+        record["patched_compiler_sha256"] = old["patched_compiler_sha256"]
+    else:
+        sys.exit("air-fresh/ changed: set AIR2LEAN_ZIG_AIR to the patched compilers that exported it")
+    given = os.environ.get("AIR2LEAN_NATIVE_ZIG")
+    if given:
+        paths = dict(item.split("=", 1) for item in given.split(","))
+        record["native"]["stock_compiler_sha256"] = {v: sha(paths[v]) for v in VERSIONS}
+    elif old_native.get("observations_sha256") == record["native"]["observations_sha256"]:
+        record["native"]["stock_compiler_sha256"] = old_native["stock_compiler_sha256"]
+    else:
+        sys.exit("native/ changed: set AIR2LEAN_NATIVE_ZIG to the stock compilers that produced it")
+    record["native"]["target"] = old_native.get("target", "aarch64-macos")
     PROVENANCE.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
 
 
