@@ -8,7 +8,8 @@ directory of `zig-air-<version>/`) and of the stock compilers that produced `nat
 (AIR2LEAN_NATIVE_ZIG, a `version=path,...` list). The two come from different hosts
 (x86_64-linux exports on the build host, aarch64-macos runs on a Mac), so each family is
 re-hashed only where its variable is set; otherwise its recorded hashes stay, which is allowed
-only while the files it produced are the recorded ones.
+only while the files it produced are the recorded ones. When both changed, a stock compiler
+on the other host is given by its hash (`version=sha256:<hex>`, `shasum -a 256` there).
 """
 import hashlib
 import json
@@ -72,7 +73,8 @@ def refresh():
     given = os.environ.get("AIR2LEAN_NATIVE_ZIG")
     if given:
         paths = dict(item.split("=", 1) for item in given.split(","))
-        record["native"]["stock_compiler_sha256"] = {v: sha(paths[v]) for v in VERSIONS}
+        record["native"]["stock_compiler_sha256"] = {
+            v: paths[v][len("sha256:"):] if paths[v].startswith("sha256:") else sha(paths[v]) for v in VERSIONS}
     elif old_native.get("observations_sha256") == record["native"]["observations_sha256"]:
         record["native"]["stock_compiler_sha256"] = old_native["stock_compiler_sha256"]
     else:
