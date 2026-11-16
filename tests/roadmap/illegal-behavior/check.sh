@@ -4,8 +4,9 @@
 #   - translates each probe.zig function alone (probe-air/) and checks expected.json;
 #   - runs Runtime.lean (runtime ops) and Cases.lean (generated functions) and the
 #     emitter-output mutants of mutations.py, each of which Cases.lean must reject.
-# Optional: AIR2LEAN_ZIG_AIR=patched-0.16/bin/zig re-exports the AIR and compares it with air/;
-# AIR2LEAN_ZIG=stock 0.16.0 zig reruns native.zig in ReleaseSafe and ReleaseFast and compares
+# The AIR (air/, probe-air/, for-air/<version>/) is declared in exports.json and pinned by
+# exports.lock.json (checked here; scripts/fixture-exports.py verify illegal-behavior re-exports it).
+# Optional: AIR2LEAN_ZIG=stock 0.16.0 zig reruns native.zig in ReleaseSafe and ReleaseFast and compares
 # its rows with native/<mode>.txt.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
@@ -16,15 +17,7 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-illegal.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 lake build ZigLean Air2Lean air2lean
 
-if [ -n "${AIR2LEAN_ZIG_AIR:-}" ]; then
-  for src in ib probe; do
-    dir=air; [ "$src" = probe ] && dir=probe-air
-    mkdir "$work/$dir"
-    ZIG_AIR_JSON_DIR="$work/$dir" ZIG_AIR_JSON_FILTER="$src." "$AIR2LEAN_ZIG_AIR" build-obj \
-      -fno-emit-bin -OReleaseSafe -target x86_64-linux -mcpu=baseline -fno-error-tracing "$here/$src.zig"
-    diff -r "$here/$dir" "$work/$dir"
-  done
-fi
+python3 -B scripts/fixture-exports.py check illegal-behavior
 
 lake exe air2lean "$here/air" -o "$work/Gen.lean" --namespace IllegalBehavior --prefix ib.
 cmp "$work/Gen.lean" "$here/Gen.lean"

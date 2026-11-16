@@ -16,8 +16,12 @@ safety check before it.
 
 ```sh
 tests/roadmap/illegal-behavior/check.sh
-# optional: AIR2LEAN_ZIG_AIR=<patched 0.16.0 zig> re-exports the AIR; AIR2LEAN_ZIG=<stock 0.16.0 zig> reruns native.zig
+# optional: AIR2LEAN_ZIG=<stock 0.16.0 zig> reruns native.zig
+python3 scripts/fixture-exports.py verify illegal-behavior   # re-exports the AIR (patched compilers)
 ```
+
+The AIR is declared in `exports.json` and pinned by `exports.lock.json`; `check.sh` checks the
+lock.
 
 The native rows are illegal behaviour, so the builds may disagree with each other (for
 example a float `@divExact` of `2^-1074` by `1` is `0` in ReleaseSafe and `2^-1074` in

@@ -159,7 +159,8 @@ compiler without that patch (no `unchecked_ib`) is accepted only for functions w
   their retained 0.16.0 AIR (`air/`, `probe-air/`), the translation, `Cases.lean` on the
   generated functions, and `Runtime.lean` on the runtime ops. `forlen.zig` and its AIR from every
   supported version (`for-air/<version>/`) show the `for` length check (row 27) in each, and a
-  copy without `unchecked_ib` is rejected.
+  copy without `unchecked_ib` is rejected. Every AIR directory is declared in the fixture's
+  `exports.json` and pinned by its `exports.lock.json` (`scripts/fixture-exports.py`).
 - Native: `native.zig` prints what a ReleaseSafe and a ReleaseFast build return for each input
   class (`native/*.txt`; [build-modes.md](build-modes.md)). The differential harness (`scripts/diff.sh`) counts every
   `.illegal` row as an `illegal` exclusion in every mode, so it compares none of them:
