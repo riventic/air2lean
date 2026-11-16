@@ -175,7 +175,9 @@ def document_problems(fixture, data):
         if not files:
             problems.append('%s: no exported file' % out)
         mode = next((a[2:] for a in entry['args'] if a.startswith('-O')), 'Debug')
-        tracing = '-fno-error-tracing' not in entry['args']
+        # Without either flag the default follows the build mode; it is not checked then.
+        tracing = (True if '-ferror-tracing' in entry['args'] else
+                   False if '-fno-error-tracing' in entry['args'] else None)
         target = entry['args'][entry['args'].index('-target') + 1] if '-target' in entry['args'] else None
         # Zig's error integer is as wide as the bit length of --error-limit (16 bits by default).
         limit = entry['args'][entry['args'].index('--error-limit') + 1] if '--error-limit' in entry['args'] else None
@@ -191,7 +193,7 @@ def document_problems(fixture, data):
             profile = document.get('profile') or {}
             if profile.get('build_mode') not in BUILD_MODES.get(mode, {mode}):
                 problems.append('%s: build_mode %r, expected -O%s' % (name, profile.get('build_mode'), mode))
-            if '-ferror-tracing' not in entry['args'] and profile.get('error_tracing') not in (tracing, None):
+            if tracing is not None and profile.get('error_tracing') not in (tracing, None):
                 problems.append('%s: error_tracing %r' % (name, profile.get('error_tracing')))
             if target and not profile.get('target_triple', '').startswith(target.split('-')[0] + '-'):
                 problems.append('%s: target %r, expected %s' % (name, profile.get('target_triple'), target))
@@ -214,13 +216,14 @@ def check(fixture):
     now = lock_of(fixture, data, outputs(fixture, data))
     problems = []
     for key, what in (('manifest_sha256', 'exports.json changed'), ('sources_sha256', 'a source changed'),
-                      ('compilers', 'the exporter (zig-patch/) changed'),
-                      ('air_sha256', 'the committed AIR differs from the lock')):
+                      ('compilers', 'the exporter (zig-patch/) changed')):
         if recorded.get(key) != now[key]:
             problems.append('%s since the export (%s): run scripts/fixture-exports.py export %s'
-                            % (what, key, fixture) if key != 'air_sha256' else
-                            '%s: %s' % (what, ', '.join(sorted(set(recorded.get(key, {})) ^ set(now[key]))
-                                                       or [k for k in now[key] if recorded[key].get(k) != now[key][k]])))
+                            % (what, key, fixture))
+    pinned = recorded.get('air_sha256') or {}
+    changed = sorted(k for k in set(pinned) | set(now['air_sha256']) if pinned.get(k) != now['air_sha256'].get(k))
+    if changed:
+        problems.append('the committed AIR differs from the lock: %s' % ', '.join(changed))
     if recorded.get('schema') != SCHEMA:
         problems.append('lock schema %r, expected %d' % (recorded.get('schema'), SCHEMA))
     return problems + document_problems(fixture, data)

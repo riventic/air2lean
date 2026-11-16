@@ -81,6 +81,7 @@ class Synthetic(unittest.TestCase):
     def test_a_file_must_be_its_versions_export(self):
         cases = [(document('demo.add', version='0.0.0'), 'zig_version'),
                  (document('demo.add', build_mode='ReleaseFast'), 'build_mode'),
+                 (document('demo.add', error_tracing=True), 'error_tracing'),
                  (document('demo.add', target_triple='aarch64-linux-gnu'), 'target'),
                  (document('demo.add', error_set_bits=8), 'error_set_bits'),
                  (document('demo.sub'), 'not declared')]
