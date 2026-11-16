@@ -111,7 +111,7 @@ def manifest(fixture):
             raise Error('%s: cwd is "fixture" or "repo"' % where)
         if entry.get('command', 'build-obj') not in ('build-obj', 'build-exe'):
             raise Error('%s: command is "build-obj" or "build-exe"' % where)
-        closure = entry.get('closure', [''])
+        closure = entry.get('closure', ['-'])
         if not isinstance(closure, list) or not closure or not all(isinstance(c, str) and c for c in closure):
             raise Error('%s: closure is a non-empty list of name prefixes' % where)
         if not (FIXTURES / fixture / entry['source']).is_file():
