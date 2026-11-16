@@ -402,6 +402,34 @@ class SyntheticTests(unittest.TestCase):
         self.assertIn("demo 0.14.1 darwin: supported golden case withdrawn", err)
         self.assertIn("demo 0.14.1 linux: supported golden case withdrawn", err)
 
+    def test_a_version_retired_from_compatibility_json_takes_its_cases(self):
+        cases = self.enroll()
+        compat = self.fx.root / "compatibility.json"
+        kept = compat.read_text()
+        listed = json.loads(kept)
+        listed["zig"]["versions"].append({"version": "0.14.1"})
+        compat.write_text(json.dumps(listed))
+        for path in (self.fx.root / "tests/golden/demo/air").glob("*.json"):
+            doc = json.loads(path.read_text())
+            other = dict(doc, zig_version="0.14.1", profile=profile("0.14.1", "x86_64-linux-gnu"))
+            self.fx.write(f"tests/golden/0.14.1/demo/air-linux/{path.name}", json.dumps(other))
+        self.assertEqual(self.fx.run("write")[0], 0)
+        self.fx.git("add", "-A")
+        self.fx.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "cases")
+        base = subprocess.check_output(["git", "-C", str(self.fx.root), "rev-parse", "HEAD"], text=True).strip()
+        compat.write_text(kept)  # 0.14.1 retired
+        shutil.rmtree(self.fx.root / "tests/golden/0.14.1")
+        for path in (self.fx.root / "Proofs/Demo/Gen/V0_14_1").rglob("*.lean"):
+            path.unlink()
+        shutil.rmtree(self.fx.root / "tests/golden/0.15.2/demo/air-darwin")
+        (self.fx.root / next(c.path for c in cases if c.host == "darwin")).unlink()
+        for rel, content in gi.case_aggregates(c.path for c in gi.all_cases() if c.namespaced).items():
+            self.fx.write(rel, content.decode())
+        status, _, err = self.fx.run("enrollment", "--base", base)
+        self.assertEqual(status, 1, err)
+        self.assertNotIn("0.14.1", err)
+        self.assertIn("demo 0.15.2 darwin: supported golden case withdrawn", err)
+
     def test_baseline_retains_an_air_only_host_with_git_quoted_unicode_filenames(self):
         cases = self.enroll()
         self.fx.git("config", "core.quotePath", "true")

@@ -597,6 +597,9 @@ Locally, preflight defaults to fetched `origin/main`; `AIR2LEAN_CASE_BASE` can p
 comparison commit. Equal HEAD is a no-transition comparison, not an error. The ratchet retains
 both whole families and each family's actual version/host identities, so deleting a golden
 overlay, its module and aggregate import together cannot erase the expected case.
+The one exception is a retired Zig version: the baseline's `compatibility.json` lists it and
+HEAD's does not (for example, 0.17.1 replacing 0.17.0). Its cases go with it. A version that the
+baseline never listed keeps its recorded cases.
 The two-commit withdrawal control compares the actual push baseline, never an assumed first
 parent. Schedule and dispatch are not transitions: main already arrived through a ratcheted
 push, so they skip this history comparison while keeping all producer and check steps.

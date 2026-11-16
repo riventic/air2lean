@@ -591,8 +591,15 @@ def enrollment_errors(base):
     if before - {family for family, _, _ in previous_cases}:
         raise ValueError(f"case enrollment baseline {base} has an enrolled family without golden identities")
     current_cases = {(family, version, host) for family, version, host, _ in golden_profiles(families=current)}
+    # A Zig version that the base supports and HEAD's compatibility.json drops is retired: its cases
+    # go with it. A version the base never listed keeps its cases (they are recorded goldens).
+    def supported(text):
+        return {v["version"] for v in json.loads(text)["zig"]["versions"]}
+    retired = (supported(read_base("compatibility.json")) - supported((ROOT / "compatibility.json").read_text())
+               if "compatibility.json" in paths else set())
     errors += [f"{' '.join(identity)}: supported golden case withdrawn since {base}"
-               for identity in sorted(previous_cases - current_cases) if identity[0] in current]
+               for identity in sorted(previous_cases - current_cases)
+               if identity[0] in current and identity[1] not in retired]
     return errors
 
 
