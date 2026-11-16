@@ -9,14 +9,310 @@ ok threadsync 0.15.2 darwin namespaced: Proofs/Threadsync/Gen/V0_15_2/H_64617277
 ok threadsync 0.15.2 linux namespaced: Proofs/Threadsync/Gen/V0_15_2/H_6c696e7578/Gen.lean
 ok threadsync 0.15.2 linux-aarch64 namespaced: Proofs/Threadsync/Gen/V0_15_2/H_6c696e75782d61617263683634/Gen.lean
 == asm: dumping AIR ==
-examples/asm/asm.zig:34:15: error: no field named 'cc' in struct 'lang.assembly.Clobbers__struct_0'
-        : .{ .cc = true }
-              ^~
-/Users/konstantinrr/.cache/air2lean/cas/zig/0.17.1-8d68a6aaf77c716609f0aaa00e7b0ef7/prefix/lib/zig/std/lang/assembly.zig:204:37: note: struct declared here
-    .aarch64, .aarch64_be => packed struct {
-                             ~~~~~~~^~~~~~
-referenced by:
-    comptime: examples/asm/asm.zig:54:10
-    root: /Users/konstantinrr/.cache/air2lean/cas/zig/0.17.1-8d68a6aaf77c716609f0aaa00e7b0ef7/prefix/lib/zig/std/start.zig:13:22
-    3 reference(s) hidden; use '-freference-trace=5' to see all references
-par: 1 of 1 jobs failed: asm (exit 1)
+== asm: validating profiles and translating to Lean ==
+⚠ [13/220] Replayed Air2Lean.Air.Effects
+warning: Air2Lean/Air/Effects.lean:306:35: This simp argument is unused:
+  Effects.pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp_all [Control.bodies]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/Air/Effects.lean:306:49: This simp argument is unused:
+  Control.bodies
+
+Hint: Omit it from the simp argument list.
+  [apply] simp_all [Effects.pure]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/Air/Effects.lean:308:35: This simp argument is unused:
+  Effects.pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp_all [Control.bodies]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/Air/Effects.lean:308:49: This simp argument is unused:
+  Control.bodies
+
+Hint: Omit it from the simp argument list.
+  [apply] simp_all [Effects.pure]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [32/220] Replayed Air2Lean.Program
+warning: Air2Lean/Program.lean:121:45: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: Air2Lean/Program.lean:125:27: This simp argument is unused:
+  hfind
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [Option.map_none]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/Program.lean:127:19: This simp argument is unused:
+  hfind
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [Option.map_some]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/Program.lean:222:8: This simp argument is unused:
+  Array.map_map
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [stepA, stepB, liftGroups, Array.filter_map, Array.any_map, Array.all_map, Function.comp_def,
+    Array.map_push]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/Program.lean:222:42: This simp argument is unused:
+  Array.map_push
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [stepA, stepB, liftGroups, Array.filter_map, Array.any_map, Array.all_map, Array.map_map,
+    Function.comp_def]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/Program.lean:224:47: This simp argument is unused:
+  Bool.false_eq_true
+
+Hint: Omit it from the simp argument list.
+  [apply] simp_all only [Array.map_push, ite_false, ite_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/Program.lean:224:67: This simp argument is unused:
+  ite_false
+
+Hint: Omit it from the simp argument list.
+  [apply] simp_all only [Array.map_push, Bool.false_eq_true, ite_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/Program.lean:224:78: This simp argument is unused:
+  ite_true
+
+Hint: Omit it from the simp argument list.
+  [apply] simp_all only [Array.map_push, Bool.false_eq_true, ite_false]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [34/220] Replayed Air2Lean.Emit
+warning: Air2Lean/Emit.lean:4026:77: `String.trimRight` has been deprecated: Use `String.trimAsciiEnd` instead
+
+Note: The updated constant has a different type:
+  String → String.Slice
+instead of
+  String → String
+⚠ [100/220] Replayed Air2Lean.Sem
+warning: Air2Lean/Sem.lean:1313:32: This simp argument is unused:
+  ite_false
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [h, ite_true, StateT.run_pure]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/Sem.lean:1313:43: This simp argument is unused:
+  StateT.run_pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [h, ite_true, ite_false]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/Sem.lean:1373:32: This simp argument is unused:
+  ite_false
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [h, ite_true, StateT.run_pure]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/Sem.lean:1373:43: This simp argument is unused:
+  StateT.run_pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [h, ite_true, ite_false]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/Sem.lean:1769:8: `dif_pos` has been deprecated: Use `dite_eq_left` instead
+warning: Air2Lean/Sem.lean:1769:36: `dif_pos` has been deprecated: Use `dite_eq_left` instead
+warning: Air2Lean/Sem.lean:1770:8: `dif_neg` has been deprecated: Use `dite_eq_right` instead
+warning: Air2Lean/Sem.lean:1770:36: `dif_neg` has been deprecated: Use `dite_eq_right` instead
+warning: Air2Lean/Sem.lean:1780:63: This simp argument is unused:
+  Function.comp_def
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [StateT.run_lift, bind_pure_comp, Functor.map_map]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [101/220] Replayed Air2Lean.SemView
+warning: Air2Lean/SemView.lean:487:32: This simp argument is unused:
+  bind_assoc
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [StateT.run_pure, pure_bind, bind_pure_comp, Functor.map_map, Function.comp_def]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/SemView.lean:487:44: This simp argument is unused:
+  pure_bind
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [StateT.run_pure, bind_assoc, bind_pure_comp, Functor.map_map, Function.comp_def]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/SemView.lean:487:88: This simp argument is unused:
+  Function.comp_def
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [StateT.run_pure, bind_assoc, pure_bind, bind_pure_comp, Functor.map_map]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/SemView.lean:677:74: This simp argument is unused:
+  pure_bind
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [execLoop, iteration, hpure, Bool.false_eq_true, ite_false]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/SemView.lean:926:88: This simp argument is unused:
+  pure_bind
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [Program.entryTicked, hpure, Bool.and_false, Bool.false_eq_true, ite_false]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/SemView.lean:1127:8: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: Air2Lean/SemView.lean:1140:14: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: Air2Lean/SemView.lean:1163:35: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: Air2Lean/SemView.lean:1188:28: `dif_neg` has been deprecated: Use `dite_eq_right` instead
+warning: Air2Lean/SemView.lean:1194:8: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: Air2Lean/SemView.lean:1199:6: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: Air2Lean/SemView.lean:1201:8: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: Air2Lean/SemView.lean:1207:6: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: Air2Lean/SemView.lean:1232:28: `dif_pos` has been deprecated: Use `dite_eq_left` instead
+warning: Air2Lean/SemView.lean:1202:15: This simp argument is unused:
+  StateT.run_bind
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [StateT.run_pure, pure_bind] at hread
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/SemView.lean:1202:32: This simp argument is unused:
+  StateT.run_pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [StateT.run_bind, pure_bind] at hread
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/SemView.lean:1235:49: This simp argument is unused:
+  StateT.run_bind
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [Zig.checkIndex, hj, ↓reduceIte, StateT.run_pure, pure_bind, hload, StateT.run_map,
+    Zig.load_const hacc' (Result.eq_pure_of_run hd) hK]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/SemView.lean:1235:66: This simp argument is unused:
+  StateT.run_pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [Zig.checkIndex, hj, ↓reduceIte, StateT.run_bind, pure_bind, hload, StateT.run_map,
+    Zig.load_const hacc' (Result.eq_pure_of_run hd) hK]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/SemView.lean:1241:47: This simp argument is unused:
+  StateT.run_bind
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [Zig.checkIndex, hj, ↓reduceIte, StateT.run_pure, pure_bind, hload, StateT.run_map,
+    Zig.load_run hacc' (Result.eq_pure_of_run hd) hK hrc']
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/SemView.lean:1241:64: This simp argument is unused:
+  StateT.run_pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [Zig.checkIndex, hj, ↓reduceIte, StateT.run_bind, pure_bind, hload, StateT.run_map,
+    Zig.load_run hacc' (Result.eq_pure_of_run hd) hK hrc']
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [103/220] Replayed Air2Lean.Certificate
+warning: Air2Lean/Certificate.lean:1460:6: Variable name `concFuncs` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _concFuncs
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+⚠ [106/220] Replayed Air2Lean.Renumber
+warning: Air2Lean/Renumber.lean:285:23: `dif_pos` has been deprecated: Use `dite_eq_left` instead
+warning: Air2Lean/Renumber.lean:293:15: `dif_pos` has been deprecated: Use `dite_eq_left` instead
+warning: Air2Lean/Renumber.lean:299:10: `dif_neg` has been deprecated: Use `dite_eq_right` instead
+warning: Air2Lean/Renumber.lean:303:21: `dif_pos` has been deprecated: Use `dite_eq_left` instead
+warning: Air2Lean/Renumber.lean:311:15: `dif_pos` has been deprecated: Use `dite_eq_left` instead
+warning: Air2Lean/Renumber.lean:317:10: `dif_neg` has been deprecated: Use `dite_eq_right` instead
+warning: Air2Lean/Renumber.lean:1033:15: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: Air2Lean/Renumber.lean:1034:15: `if_neg` has been deprecated: Use `ite_eq_right` instead
+⚠ [107/220] Replayed Air2Lean.RenumberProgram
+warning: Air2Lean/RenumberProgram.lean:195:32: This simp argument is unused:
+  List.size_toArray
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [List.foldl_cons, List.length_cons]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/RenumberProgram.lean:195:51: This simp argument is unused:
+  List.length_cons
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [List.foldl_cons, List.size_toArray]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/RenumberProgram.lean:367:34: This simp argument is unused:
+  ren2
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [Function.comp_def, beq_ren hρ]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/RenumberProgram.lean:410:32: This simp argument is unused:
+  ren2
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [Function.comp_def, beq_ren hρ]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/RenumberProgram.lean:452:25: This simp argument is unused:
+  renInst_id
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [renInst_op, renInst_ty, valueOperands_renOp]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/RenumberProgram.lean:460:61: This simp argument is unused:
+  Option.map_map
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [renVal, find?_id_ren hρ, Function.comp_def, renFunc, Func.withBody, Option.bind_map, renInst_ty]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+== asm: checking against golden (tests/golden/asm/air, then tests/golden/0.17.1/asm/air, tests/golden/0.17.1/asm/air-linux, tests/golden/0.17.1/asm/air-linux-x86_64) ==
+== building Lean ==
+⚠ [79/82] Built Proofs.Threadsync.Gen.V0_15_2.H_64617277696e.Gen (7.5s)
+warning: Proofs/Threadsync/Gen/V0_15_2/H_64617277696e/Gen.lean:507:27: Variable name `p0` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _p0
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+⚠ [80/82] Built Proofs.Threadsync.Gen.V0_15_2.H_6c696e75782d61617263683634.Gen (8.4s)
+warning: Proofs/Threadsync/Gen/V0_15_2/H_6c696e75782d61617263683634/Gen.lean:581:27: Variable name `p0` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _p0
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+⚠ [81/82] Built Proofs.Threadsync.Gen.V0_15_2.H_6c696e7578.Gen (8.5s)
+warning: Proofs/Threadsync/Gen/V0_15_2/H_6c696e7578/Gen.lean:581:27: Variable name `p0` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _p0
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+✔ [82/82] Built Proofs.Threadsync.Cases (378ms)
+Build completed successfully (82 jobs).
+== differential testing ==
+scripts/diff.sh: line 117: zig: command not found
