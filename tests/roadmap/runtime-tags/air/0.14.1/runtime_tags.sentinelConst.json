@@ -42,7 +42,7 @@
  "src": {
   "file": "runtime_tags.zig",
   "module": "runtime_tags",
-  "decl_line": 105
+  "decl_line": 108
  },
  "params": [
   0
@@ -290,7 +290,7 @@
        "ty": 8,
        "callee": {
         "ty": 12,
-        "func": "debug.FullPanic((function 'defaultPanic')).sentinelMismatch__anon_6764",
+        "func": "debug.FullPanic((function 'defaultPanic')).sentinelMismatch__anon_6777",
         "module": "std",
         "instance_key": "1459dd027f9da3b39ee94bd2218d5a090eaba2b99f58f03696bdd91af2d96a1e",
         "noreturn": true
