@@ -17,16 +17,7 @@ work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-callbacks.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/Callbacks"
 export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
-python3 - "$here" <<'PY'
-import hashlib, json, pathlib, sys
-here = pathlib.Path(sys.argv[1])
-record = json.loads((here / 'provenance.json').read_text())
-for name, digest in record['source_sha256'].items():
-    assert hashlib.sha256((here / name).read_bytes()).hexdigest() == digest, name
-files = {str(p.relative_to(here)): hashlib.sha256(p.read_bytes()).hexdigest()
-         for d in ('air', 'air-async') for p in sorted((here / d).rglob('*.json'))}
-assert files == record['air_sha256'], 'AIR fixtures differ from provenance.json'
-PY
+python3 -B scripts/fixture-exports.py check callbacks
 cp "$here/CallbackModel.lean" "$work/CallbackModel.lean"
 "${lean_cmd[@]}" -R "$work" -o "$work/CallbackModel.olean" "$work/CallbackModel.lean"
 for version in 0.17.0 0.16.0 0.15.2 0.14.1; do

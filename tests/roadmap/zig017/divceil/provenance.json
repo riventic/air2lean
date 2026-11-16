@@ -1,12 +1,7 @@
 {
   "fixture": "Zig 0.17.0 @divCeil, compiler-exported AIR (support:tags:div_ceil)",
-  "source": {"path": "tests/roadmap/zig017/divceil/divceil.zig", "sha256": "8ca8cf69957a7d14f843a78f42126fe4b1b4c007e795528acd9c9f61eea7129b"},
   "export": {
-    "command": "AIR2LEAN_ZIG_AIR=zig-air-0.17.0/bin/zig tests/roadmap/zig017/divceil/check.sh --export DIR",
-    "flags": "build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline",
-    "patched_compiler_sha256": "439daa7fc41d3177334e204ec61561506214e9932332127463b7e3ae75308762",
-    "exporter_json_zig_sha256": "06a9a52f00c99a734b5d645830f3083a6d75fb8922ebe2c690f3a238a9855e31",
-    "export_host": "aarch64-macos",
+    "manifest": "tests/roadmap/zig017/exports.json (source, flags, versions), pinned by exports.lock.json (scripts/fixture-exports.py)",
     "air_shape": "each function: arg, arg, the signed minInt/-1 overflow check (signed types), the divide-by-zero check, div_ceil, ret_safe"
   },
   "inputs": {"path": "tests/roadmap/zig017/divceil/inputs.txt", "generator": "gen_inputs.py (seed 17)", "count": 1652,

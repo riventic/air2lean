@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Zig 0.17.0 `@divCeil` gate (`support:tags:div_ceil`, qualification/0.17.0.json).
-#   check.sh --export DIR   dump divceil.zig's AIR with a patched 0.17.0 compiler (AIR2LEAN_ZIG_AIR),
-#                           ReleaseSafe, x86_64-linux baseline: the committed air/0.17.0
-#   check.sh [--check]      translate the committed AIR, compare with the committed DivCeil/Gen.lean,
+#   check.sh [--check]      check the committed AIR's lock (../exports.json, scripts/fixture-exports.py
+#                           verify|export zig017 re-exports it), translate it, compare with the committed DivCeil/Gen.lean,
 #                           run it on inputs.txt and compare every line with the stock Zig 0.17.0
 #                           build (AIR2LEAN_ZIG_NATIVE) of native.zig; for the inputs that reach a
 #                           safety check, run the native call alone and require Zig's panic message
@@ -12,17 +11,10 @@ repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../.." && pwd)
 cd "$repo_root"
 dir=tests/roadmap/zig017/divceil
 case "${1:---check}" in
-  --export)
-    [ "$#" -eq 2 ] || { echo 'usage: check.sh --export OUTPUT_DIR' >&2; exit 2; }
-    : "${AIR2LEAN_ZIG_AIR:?set a patched Zig 0.17.0 with the AIR exporter}"
-    mkdir -p "$2"
-    out=$(cd -- "$2" && pwd)
-    ZIG_AIR_JSON_DIR="$out" ZIG_AIR_JSON_FILTER=divceil. "$AIR2LEAN_ZIG_AIR" build-obj -fno-emit-bin \
-      -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline "$dir/divceil.zig"
-    exit ;;
   --check) ;;
-  *) echo 'usage: check.sh [--check|--export OUTPUT_DIR]' >&2; exit 2 ;;
+  *) echo 'usage: check.sh [--check]' >&2; exit 2 ;;
 esac
+python3 -B scripts/fixture-exports.py check zig017
 : "${AIR2LEAN_ZIG_NATIVE:?set a stock Zig 0.17.0}"
 [ "$("$AIR2LEAN_ZIG_NATIVE" version)" = 0.17.0 ] || { echo 'AIR2LEAN_ZIG_NATIVE is not Zig 0.17.0' >&2; exit 1; }
 python3 -B scripts/lean-deps.py --build "$dir"

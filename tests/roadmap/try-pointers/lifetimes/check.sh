@@ -10,22 +10,12 @@
 #                               try_pointers.zig, try_aliases.zig and try_lifetimes.zig for
 #                               x86_64-linux-musl, ReleaseSafe and Debug, in Docker linux/amd64
 #                               (AIR2LEAN_X86_64_RUN overrides the runner; empty: the host)
-#   check.sh --export VERSION DIR   fresh AIR of try_lifetimes.zig (AIR2LEAN_ZIG_AIR)
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../.." && pwd)
 cd "$repo_root"
 dir=tests/roadmap/try-pointers/lifetimes
 versions=(0.14.1 0.15.2 0.16.0 0.17.0)
 case "${1:---check}" in
-  --export)
-    [ "$#" -eq 3 ] || { echo 'usage: check.sh --export VERSION DIR' >&2; exit 2; }
-    : "${AIR2LEAN_ZIG_AIR:?set a patched Zig with the repository exporter}"
-    mkdir -p "$3"
-    [ -z "$(find "$3" -mindepth 1 -maxdepth 1 -print -quit)" ] || { echo "$3 must be empty" >&2; exit 1; }
-    ZIG_AIR_JSON_DIR="$(cd -- "$3" && pwd)" ZIG_AIR_JSON_FILTER=try_lifetimes. \
-      "$AIR2LEAN_ZIG_AIR" build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing \
-      -target x86_64-linux -mcpu=baseline "$dir/try_lifetimes.zig"
-    exit ;;
   --native)
     [ "$#" -eq 2 ] || { echo 'usage: check.sh --native VERSION' >&2; exit 2; }
     : "${AIR2LEAN_ZIG_NATIVE:?set a stock Zig of that version}"
@@ -48,8 +38,10 @@ case "${1:---check}" in
     done
     exit ;;
   --check) [ "$#" -le 1 ] || { echo 'usage: check.sh [--check]' >&2; exit 2; } ;;
-  *) echo 'usage: check.sh [--check|--native VERSION|--export VERSION DIR]' >&2; exit 2 ;;
+  *) echo 'usage: check.sh [--check|--native VERSION]' >&2; exit 2 ;;
 esac
+# air/<version>: try-pointers/exports.json, pinned by its exports.lock.json.
+python3 -B scripts/fixture-exports.py check try-pointers
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first (lake build air2lean)' >&2; exit 1; }
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-try-lifetimes.XXXXXX")

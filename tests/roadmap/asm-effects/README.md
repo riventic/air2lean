@@ -67,6 +67,13 @@ lake build air2lean ZigLean Proofs.Asm.Effects
 bash tests/roadmap/asm-effects/check.sh
 ```
 
+`air-env/<version>` are the patched-compiler exports of `asm_env.zig` (environment reads, memory
+inputs, memory regions; docs/generated-code.md), declared in `exports.json` and pinned by
+`exports.lock.json` (`scripts/fixture-exports.py`). The CPU is `x86_64+rdrnd` because the
+allowlisted `rdrand` needs it (ASM-09; `--assume-asm-cpu-features` is not passed). 0.14.1 is not
+exported: its exporter has no inline asm (docs/air-json.md), and the 0.15+ clobber syntax does not
+parse there.
+
 Scope: x86_64 GPR families for clobber/pin aliasing; one registry entry; no `m`/immediate
 inputs. Zig 0.16.0's LLVM backend fails module verification on `+m` (the self-hosted x86_64
 backend compiles it); the translator's contract concerns the AIR, not a backend.

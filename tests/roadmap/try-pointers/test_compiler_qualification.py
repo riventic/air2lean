@@ -20,7 +20,8 @@ class CompilerQualificationTests(unittest.TestCase):
         self.case = Path(temp.name) / 'case'
         for name in ('air-fresh', 'aliases/air-fresh'):
             shutil.copytree(HERE / name, self.case / name)
-        for name in ('TryPointers/Gen.lean', 'aliases/TryAliases/Gen.lean', 'compiler-qualification.json'):
+        for name in ('TryPointers/Gen.lean', 'aliases/TryAliases/Gen.lean', 'compiler-qualification.json',
+                     'exports.json'):
             (self.case / name).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(HERE / name, self.case / name)
 
@@ -31,10 +32,10 @@ class CompilerQualificationTests(unittest.TestCase):
         self.assertEqual(len(gate.inspect()), 7 * 4)  # 7 functions, 4 Zig versions
         self.assertEqual(len(gate.inspect(self.case)), 7 * 4)
 
-    def test_changed_air_is_stale(self):
-        path = self.air('try_pointers.writeAlias')
-        path.write_text(path.read_text() + ' ')
-        with self.assertRaisesRegex(ValueError, 'stale or incomplete'):
+    # A changed file is the lock's finding (scripts/fixture-exports.py check try-pointers).
+    def test_record_needs_its_export(self):
+        (self.case / 'exports.json').write_text('{"exports": []}')
+        with self.assertRaisesRegex(ValueError, 'declares no air-fresh'):
             gate.inspect(self.case)
 
     def test_missing_function_changes_the_inventory(self):

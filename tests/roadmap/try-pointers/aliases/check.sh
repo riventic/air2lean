@@ -10,18 +10,8 @@ case "${1:---check-artifacts}" in
     : "${AIR2LEAN_ZIG_NATIVE:?set a qualified stock host Zig}"
     "$AIR2LEAN_ZIG_NATIVE" test tests/roadmap/try-pointers/try_aliases.zig -OReleaseSafe
     exit ;;
-  --export)
-    [ "$#" -eq 2 ] || { echo 'usage: check.sh --export OUTPUT_DIR' >&2; exit 2; }
-    : "${AIR2LEAN_ZIG_AIR:?set a qualified patched compiler with the updated exporter}"
-    mkdir -p "$2"
-    [ -z "$(find "$2" -mindepth 1 -maxdepth 1 -print -quit)" ] || { echo 'AIR output must be empty' >&2; exit 1; }
-    air_output=$(cd -- "$2" && pwd)
-    ZIG_AIR_JSON_DIR="$air_output" ZIG_AIR_JSON_FILTER=try_aliases. \
-      "$AIR2LEAN_ZIG_AIR" build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing \
-      -target x86_64-linux -mcpu=baseline tests/roadmap/try-pointers/try_aliases.zig
-    exit ;;
   --check-artifacts) [ "$#" -le 1 ] || { echo 'usage: check.sh [--check-artifacts]' >&2; exit 2; } ;;
-  *) echo 'usage: check.sh [--check-artifacts|--native|--export OUTPUT_DIR]' >&2; exit 2 ;;
+  *) echo 'usage: check.sh [--check-artifacts|--native]' >&2; exit 2 ;;
 esac
 python3 -B scripts/lean-deps.py --build "$case_dir"
 python3 "$case_dir/check-artifacts.py"
