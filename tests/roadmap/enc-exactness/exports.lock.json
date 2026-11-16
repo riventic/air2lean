@@ -1,0 +1,53 @@
+{
+  "air_sha256": {
+    "air/0.14.1/enc_exactness/enc_exactness.boolByte.json": "a6267c3924ac3f4cf494d64544fe5f0019a197a68f335a1e25e5a8279600a297",
+    "air/0.14.1/enc_exactness/enc_exactness.e24SetPad.json": "3322ff78559b3703c295fb17849fd156a11aa0a0a5a674cb2048870f85282526",
+    "air/0.14.1/enc_exactness/enc_exactness.i10StoreBytes.json": "64ea84e970ac696819fd01a7cb830aba3d8e2ef751b8dbcbf40bca8f44fa0432",
+    "air/0.14.1/enc_exactness/enc_exactness.i10ZeroPad.json": "44c65a59363b398dfc9b2b9a15b96cf89a10731d8139bda4a283bf87e658a54c",
+    "air/0.14.1/enc_exactness/enc_exactness.i24RoundTrip.json": "3e1056edf9f845761fd6820bebe7ed985e1ce5762742ca0d64338d6c2532bd3b",
+    "air/0.14.1/enc_exactness/enc_exactness.i24ZeroPad.json": "770f211868c0f120aa767fd7e4375f41d84c97a1e774da3e616f8ae238dfb616",
+    "air/0.14.1/enc_exactness/enc_exactness.u24SetPad.json": "0eee49afe3bac187943d2b292e55cb3aa72fc0c36e3e68d18b1fd96e9617b93c",
+    "air/0.14.1/enc_exactness/enc_exactness.u24StoreBytes.json": "496a58070a49e79e8eff41200e090b42fce42e118c148e2a3093273aad183960",
+    "air/0.14.1/opaque_bytes/opaque_bytes.allocatorWord.json": "dfe50538a2abf556a970615c4b071637cc79bff76fa84cf28c9695eea9a84e87",
+    "air/0.15.2/enc_exactness/enc_exactness.boolByte.json": "4103061e5a5540f2a3d629d31f4918a65ef23d814c525bac61856cd11f3c4108",
+    "air/0.15.2/enc_exactness/enc_exactness.e24SetPad.json": "b0051baca01b4779289baee23c8597d9b07220a985f7c14068df91b21f16e07e",
+    "air/0.15.2/enc_exactness/enc_exactness.i10StoreBytes.json": "2532bb7f95e99bec6421200d41b65ac394db8bfc6df0bf5f5adb5d5f32e68b02",
+    "air/0.15.2/enc_exactness/enc_exactness.i10ZeroPad.json": "9ebdf0762a950416bec958a9ea1bf58d6dd5c6158fb1d4e4215f3797d487030e",
+    "air/0.15.2/enc_exactness/enc_exactness.i24RoundTrip.json": "664d33e30a50922e9c7e47d1f8f5b9bb59d41ff73c07ae86ff7ea2042f3378c2",
+    "air/0.15.2/enc_exactness/enc_exactness.i24ZeroPad.json": "0725772a81ca07b31ac580096a3441142757588ef04d0f1d6c4901b5094d9912",
+    "air/0.15.2/enc_exactness/enc_exactness.u24SetPad.json": "cc2cb0c0d73b9b93ba36f649257c4fd8f708fe9431c89d816d0e566aa8b4dbc8",
+    "air/0.15.2/enc_exactness/enc_exactness.u24StoreBytes.json": "0ba3674a066b7f1d53d6dd226457ee77bd82cbbb3f74d0ed86ea2795f4a0eb3a",
+    "air/0.15.2/opaque_bytes/opaque_bytes.allocatorWord.json": "760572060c71442e78f9a7b48396352f4082a637e077c3955af998bfcfffc65c",
+    "air/0.16.0/enc_exactness/enc_exactness.boolByte.json": "824a5796f7eb9bb2a020c8f2ef2ef0f0f7bfa5585eaf6abdf47cd9b0ff560faa",
+    "air/0.16.0/enc_exactness/enc_exactness.e24SetPad.json": "8fb6ee5297bf1889ddf744d37db510cbed404a7ad166317dd6f6083049127afd",
+    "air/0.16.0/enc_exactness/enc_exactness.i10StoreBytes.json": "d2779493fc83826dd70052d1208ece15eb6b594526868ff11fc1a1cefe1a6a0e",
+    "air/0.16.0/enc_exactness/enc_exactness.i10ZeroPad.json": "180857cfcd6e7ce21e12ccdcc67d1006c8fc1a167e24459eee16570a47c946a5",
+    "air/0.16.0/enc_exactness/enc_exactness.i24RoundTrip.json": "8d01c4908d05ad550ad5892d4771a3e223c8c9993ad8252617951ad3d6896bb2",
+    "air/0.16.0/enc_exactness/enc_exactness.i24ZeroPad.json": "1caf044e55e9aaacebae6851d35f01a1f108ddf5ba58c86930e43765847d2078",
+    "air/0.16.0/enc_exactness/enc_exactness.u24SetPad.json": "834452284f4a4b11e2a31e1d231470fbaeed6bb35531aa6ca8b23cb4009058d2",
+    "air/0.16.0/enc_exactness/enc_exactness.u24StoreBytes.json": "4751ec6849f12fd590799c232751b25f3937d1353cb90f97f466bfbb6ee37232",
+    "air/0.16.0/opaque_bytes/opaque_bytes.allocatorWord.json": "8d7646dcd518d0ee692e3961d646a6444cdb3bdf201d5d7387696bfb1f47d43c",
+    "air/0.17.0/enc_exactness/enc_exactness.boolByte.json": "05adb989de9ed7c31ab700e0d919040df75b1eb7c842a3e47d05aff4c5a24122",
+    "air/0.17.0/enc_exactness/enc_exactness.e24SetPad.json": "8b78bd154e840e32dc6555da8e950812cd103bd519bc7f0d2d04a7d41f5ebf12",
+    "air/0.17.0/enc_exactness/enc_exactness.i10StoreBytes.json": "861e31aebfaa5029fc4c261614f9a625c1823b78dd64afe791b7b0a236f40155",
+    "air/0.17.0/enc_exactness/enc_exactness.i10ZeroPad.json": "5f240273ed000ce1ba0b47769353bc1ba6e2a88aadf99efa43d9094f9538e98d",
+    "air/0.17.0/enc_exactness/enc_exactness.i24RoundTrip.json": "f20ca36af9564e0441d4efc3bdbc026951f9b53a29f427ec1e81c8bebce26839",
+    "air/0.17.0/enc_exactness/enc_exactness.i24ZeroPad.json": "a5ebde4a796bfad575750e2abf861c1de2c6a6ce1758747c7bc9fab69e17aa1c",
+    "air/0.17.0/enc_exactness/enc_exactness.u24SetPad.json": "f9a326bbc37999e71749e6579ccfb117a3f2e153b5e55996ba83444da8336f2f",
+    "air/0.17.0/enc_exactness/enc_exactness.u24StoreBytes.json": "d928469796471891e02d9ab2757535a26d565841285470b53671b989674615ec",
+    "air/0.17.0/opaque_bytes/opaque_bytes.allocatorWord.json": "94e7273cc78e8669ab8c001c2aeff3958507d6504885543aa596016c05ee7bf8"
+  },
+  "compilers": {
+    "0.14.1": "de0fff4117985708efbd803bb1e53fe37ebf0596853e68633ac66d7f6dbd1d89",
+    "0.15.2": "08fabea60c770d7c034a9dbe78e816beb0d8a17a9b9a0ed5c8bdcbd112cffc05",
+    "0.16.0": "d49dbe58d9fd83d9fdedc5270fa3a5a34ab9661ebc63b52070027a00bdec6954",
+    "0.17.0": "321ab894d2a5d5784afdba19137ed24abf39c62825b440f9a4f82e53958d9b24"
+  },
+  "manifest_sha256": "c2266c6ebf01555bccc07dfde912e74ea53b23b99712f77ab221edbda663f250",
+  "schema": 1,
+  "sources_sha256": {
+    "enc_exactness.zig": "ad4d0f681777ab05d6552c796d6ccd89de4a884afca284b3427a4a8819e6991c",
+    "native.zig": "3af7064abda84969464f6ac7ac04e28b2d58243d155b56e0c2d91ff4d09fddef",
+    "opaque_bytes.zig": "17feadd72c0b75ea3c0a6f312461667303501e618c5a284a4329a5dd2f16db55"
+  }
+}

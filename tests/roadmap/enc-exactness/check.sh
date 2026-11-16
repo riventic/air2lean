@@ -18,8 +18,9 @@
 #                                 (Debug x86_64 from 0.15.2 is the self-hosted backend; the
 #                                 exports are LLVM, so those lines are the native evidence for
 #                                 `Dialect.intExtOrder?` on that backend)
-#   check.sh --export VERSION DIR write fresh AIR with a patched Zig VERSION (AIR2LEAN_ZIG_AIR)
 #
+# The exports are declared in exports.json and pinned by exports.lock.json
+# (scripts/fixture-exports.py check|verify|export enc-exactness; the default run checks the lock).
 # A model line `unspecified` matches any native value. Needs a built translator; Lake builds the
 # library with what it imports (scripts/fixtures.py; run it under scripts/build-guard.py).
 set -euo pipefail
@@ -46,18 +47,6 @@ PY
 }
 
 case "${1:---check}" in
-  --export)
-    [ "$#" -eq 3 ] || { echo 'usage: check.sh --export VERSION DIR' >&2; exit 2; }
-    : "${AIR2LEAN_ZIG_AIR:?set a patched Zig with the repository exporter}"
-    for name in enc_exactness opaque_bytes; do
-      out="$3/$name"
-      mkdir -p "$out"
-      [ -z "$(find "$out" -mindepth 1 -maxdepth 1 -print -quit)" ] || { echo "$out must be empty" >&2; exit 1; }
-      ZIG_AIR_JSON_DIR="$(cd -- "$out" && pwd)" ZIG_AIR_JSON_FILTER="$name." \
-        "$AIR2LEAN_ZIG_AIR" build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing \
-        -target x86_64-linux -mcpu=baseline "$dir/$name.zig"
-    done
-    exit ;;
   --native)
     [ "$#" -eq 2 ] || { echo 'usage: check.sh --native VERSION' >&2; exit 2; }
     : "${AIR2LEAN_ZIG_NATIVE:?set a stock Zig of that version}"
@@ -84,8 +73,9 @@ case "${1:---check}" in
     done
     exit ;;
   --check) [ "$#" -le 1 ] || { echo 'usage: check.sh [--check]' >&2; exit 2; } ;;
-  *) echo 'usage: check.sh [--check|--native VERSION|--export VERSION DIR]' >&2; exit 2 ;;
+  *) echo 'usage: check.sh [--check|--native VERSION]' >&2; exit 2 ;;
 esac
+python3 -B scripts/fixture-exports.py check enc-exactness
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first (lake build air2lean)' >&2; exit 1; }
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-enc-exactness.XXXXXX")
