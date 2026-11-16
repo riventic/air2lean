@@ -45,7 +45,7 @@ LOAD  0x01be60 0x101ee60 0x101ee60 0x004a80 0x0071b8 RW  0x1000
 GNU_RELRO ... 0x000000 0x0001a0 R 0x1
 ```
 
-Evidence (Docker Desktop 29.8, Rosetta, stock Zig 0.17.1 and 0.16.0, tiny program, static musl;
+Evidence (Docker Desktop 29.8, Rosetta, stock Zig 0.17.0 and 0.16.0, tiny program, static musl;
 the modes are those of [build-modes.md](build-modes.md)):
 
 Debug, ReleaseSafe and ReleaseFast run with and without `-z norelro`; ReleaseSmall fails with

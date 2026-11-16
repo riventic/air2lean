@@ -2,7 +2,11 @@
 
 Status: draft, **not filed**. Found by the soundness audit 2026-10-14, S3b
 ([soundness-2026-10-14.md](../architecture-audit/soundness-2026-10-14.md), §S3). Zig 0.14.1, 0.15.2,
-0.16.0 and 0.17.0, LLVM backend.
+0.16.0 and 0.17.0, LLVM backend. **Fixed upstream in 0.17.1**: with safety on, `zirShr` emits
+`shr` (not `shr_exact`) before the check (`.shr` if `!exact or safety`), so the check no longer
+reads poison. Without safety it still emits `shr_exact`
+(`tests/roadmap/runtime-tags/runtime_tags.zig`'s `shrExact` uses `@setRuntimeSafety(false)` for
+that reason).
 
 ## Summary
 

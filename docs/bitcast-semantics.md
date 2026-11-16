@@ -5,9 +5,9 @@ representation. 0.17.1 reinterprets the **logical bit representation**, which is
 every target. The translator selects the rules from the function's `zig_version`
 (`ZigVersion.bitCast` in `Air2Lean/Air/Dialect.lean`, `Air2Lean/BitCast.lean`). ≤0.16 inputs keep the existing rules
 unchanged, including the memory representation casts of arrays and `extern` aggregates
-(`Zig.reprCast`, [aggregate-casts.md](aggregate-casts.md)). Sources: the 0.16.0 and 0.17.1 release tarballs (sha256 pins in
-`zig-patch/versions.toml`; 0.17.1 `b6c7f172…8abd`) and the 0.17.1 release notes
-("@bitCast changes").
+(`Zig.reprCast`, [aggregate-casts.md](aggregate-casts.md)). Sources: the 0.16.0 and 0.17.0 release tarballs (0.17.0 `b6c7f172…8abd`) and the 0.17.0
+release notes ("@bitCast changes"). 0.17.1 changes none of it
+([zig-0.17-delta.md](zig-0.17-delta.md) §0.17.0 → 0.17.1).
 
 ## The two definitions
 
@@ -113,7 +113,7 @@ docs/bitcast-semantics.md)". No 0.17 aggregate cast falls back to the ≤0.16 ru
 
 ## Evidence
 
-- 0.17.1 behaviour tests (`test/behavior/bitcast.zig`) checked against `ZigLean.BitCast`
+- 0.17.0 behaviour tests (`test/behavior/bitcast.zig`) checked against `ZigLean.BitCast`
   (`tests/roadmap/bitcast-017/Semantics.lean`):
   - "@bitCast vector to array with different element size": `0x65e2`, `[2,14,5,6,0]`.
   - "bitcast vector to integer and back": `0xfffd`.
@@ -123,7 +123,7 @@ docs/bitcast-semantics.md)". No 0.17 aggregate cast falls back to the ≤0.16 ru
 - The safety case `test/cases/safety/bitcast_to_enum_no_matching_tag_value.zig` panics with
   `invalid enum value`. The compile-error cases `bitcast_to_enum_invalid_tag_value.zig` and
   `bitCast_extern_struct.zig` are errors.
-- Native probes with stock 0.17.1 aarch64-macos (sha256 `b607e9b9…c536a`) and 0.16.0, in Debug
+- Native probes with stock 0.17.0 aarch64-macos (sha256 `b607e9b9…c536a`) and 0.16.0, in Debug
   and ReleaseSafe:
   - Both versions give `vec4u5→u20 = 0x65e2`, `vec3u9→u27 = 0x6a9ff01`,
     `[4]u8→u32 = 0x44332211` and `[2]f32→u64 = 0xc00000003f800000`.

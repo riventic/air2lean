@@ -118,10 +118,10 @@ Shapes are quoted from the translated corpus (`.zig` files in the heavy work dir
 | libc calls | `pub extern fn strlen([*c]const u8) usize;` (0.15.2: `c_ulong` for `size_t`) | |
 | struct layout | `extern struct`, so C layout; `sizeof`/`_Alignof`/`offsetof` are `@sizeOf`, `@alignOf`, `@offsetOf` | |
 
-**Zig 0.17.1 translate-c is no better.** Its `Translator.zig` keeps the same refusals
+**Zig 0.17.0 translate-c is no better.** Its `Translator.zig` keeps the same refusals
 (`.goto_stmt, .computed_goto_stmt, .labeled_stmt => fail "TODO goto"`, bitfield records
 demoted to `opaque`, variadic definitions demoted, "TODO complex switch"), and running the
-0.17.1 translator on the eight affected corpus files gives the same warnings and demotions;
+0.17.0 translator on the eight affected corpus files gives the same warnings and demotions;
 `sort_callback` still gets the `u1` comparator subtraction (G8).
 
 ### goto
