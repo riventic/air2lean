@@ -4038,9 +4038,9 @@
       "git_head": "6cbd5ce8e64bda774fd9545479a024e472bef962"
     },
     "translation:asm": {
-      "status": "fail",
+      "status": "pass",
       "source": "run",
-      "exit_code": 127,
+      "exit_code": 0,
       "argv": [
         "scripts/check.sh"
       ],
@@ -4050,9 +4050,9 @@
         "AIR2LEAN_EXAMPLES": "asm"
       },
       "log": "0.17.1.d/logs/translation_asm.log",
-      "log_sha256": "1c23cef27d49a804d53e11cfd81a8c12d3e19ee64ea226f0211e689a9a856523",
-      "recorded_at": "2026-11-16T17:07:30+00:00",
-      "git_head": "28cd28ca31eea2f1c1eef4a47bcd6ffc62ea6432"
+      "log_sha256": "d8e4577ec446a8de99cb0d5d20eeda4966dfd8b5621caceadd281f3064a0a1c2",
+      "recorded_at": "2026-11-16T17:10:38+00:00",
+      "git_head": "3d876a4f24938b13c41bc41a34b7165c88b75a76"
     },
     "translation:atomics": {
       "status": "pass",
