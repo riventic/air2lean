@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # L07: Zig ≤0.16 representation casts and optional-pointer conversions. Needs a built translator
-# and `lake build ZigLean ZigLean.ReprCast Air2Lean`; runs no compiler (`export.sh --check`
-# re-exports with the recorded patched compilers). `--native` also runs
+# and `lake build ZigLean ZigLean.ReprCast Air2Lean`; runs no compiler
+# (`scripts/fixture-exports.py verify aggregate-casts` re-exports with the patched compilers). `--native` also runs
 # `probe.zig` with a stock Zig (AIR2LEAN_ZIG_NATIVE, 0.14.1-0.16.0) and compares its output.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
@@ -17,7 +17,7 @@ trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/AggregateCasts"
 export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
 # The committed exports are the recorded compiler outputs (no compiler runs here).
-python3 "$here/test_provenance.py"
+python3 -B scripts/fixture-exports.py check aggregate-casts
 # The retained translation is the fresh 0.16.0 export's, byte for byte; the 0.15.2 and 0.14.1
 # exports translate to the same text except the profile header (the version).
 "$translator" "$here/air/0.16.0" -o "$work/AggregateCasts/Gen.lean" \

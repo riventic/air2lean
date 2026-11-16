@@ -222,43 +222,21 @@ def step_pins(check):
         sync(rel, {g: digest(Path(rel).parent / g) for g in gens}, section='artifacts')
 
 
-def exported_fixtures():
-    """The fixtures whose committed AIR exports are pinned to the exporter and the patched
-    compilers: an `export.sh` next to a `test_provenance.py` that has `--refresh`."""
-    return sorted(str(p.parent.relative_to(ROOT)) for p in (ROOT / 'tests/roadmap').glob('*/export.sh')
-                  if (p.parent / 'test_provenance.py').exists()
-                  and '--refresh' in (p.parent / 'test_provenance.py').read_text())
-
-
 def step_exports(check):
-    """tests/roadmap/<fixture>/provenance.json of every exported fixture: the exporter hash and
-    the patched compilers' hashes the exports were taken with. When a fixture's pins are stale,
-    it is re-exported with the compilers built from this checkout (export.sh), then its record
-    is refreshed (test_provenance.py --refresh); a changed export is a reviewed diff."""
-    stale = [d for d in exported_fixtures() if not ok([PY, '-B', d + '/test_provenance.py'])]
+    """tests/roadmap/<fixture>/exports.lock.json of every fixture with an export manifest
+    (scripts/fixture-exports.py): when a lock is stale (the exporter, a source or the manifest
+    changed), the fixture is re-exported with the patched compilers of this checkout and its lock
+    rewritten; a changed export is a reviewed diff."""
+    tool = [PY, '-B', 'scripts/fixture-exports.py']
+    names = run(tool + ['list'], quiet=True, stdout=subprocess.PIPE, text=True).stdout.split()
+    stale = [n for n in names if not ok(tool + ['check', n])]
     if not stale:
         return
     if check:
-        raise Failed(', '.join(d + '/provenance.json' for d in stale) +
+        raise Failed(', '.join('tests/roadmap/%s/exports.lock.json' % n for n in stale) +
                      ' stale; run scripts/regen.sh --only exports')
-    root = Path(tempfile.mkdtemp(prefix='air2lean-export-zig.'))
-    try:
-        for version in ('0.17.0', '0.16.0', '0.15.2', '0.14.1'):
-            (root / ('zig-air-' + version)).mkdir()
-            (root / ('zig-air-' + version) / 'bin').symlink_to(Path(cas.zig_air(ROOT, version)).parent)
-        # On macOS, 0.15.2/0.14.1 must not find Apple's SDK through `xcrun` (zig-patch/README.md).
-        (root / 'shim').mkdir()
-        (root / 'shim' / 'xcrun').write_text('#!/bin/sh\nexit 1\n')
-        (root / 'shim' / 'xcrun').chmod(0o755)
-        env = dict(os.environ, AIR2LEAN_ZIG_AIR=str(root),
-                   PATH=str(root / 'shim') + os.pathsep + os.environ.get('PATH', ''))
-        for d in stale:
-            run(['bash', d + '/export.sh'], env=env)
-            run([PY, '-B', d + '/test_provenance.py', '--refresh'], env=env)
-    finally:
-        shutil.rmtree(root, ignore_errors=True)
-    for d in stale:
-        run([PY, '-B', d + '/test_provenance.py'])
+    run(tool + ['export'] + stale)
+    run(tool + ['check'] + stale)
 
 
 def step_claims(check):
@@ -441,7 +419,8 @@ STEPS = [
     ('coverage', 'tree', ['coverage/<version>.json'], step_coverage),
     ('pins', 'pr', ['tests/roadmap/try-pointers/emitter-integration.json',
                       'tests/roadmap/try-pointers/integration-qualification.json'], step_pins),
-    ('exports', 'pr', ['tests/roadmap/<fixture>/provenance.json and air/ of every exported fixture'],
+    ('exports', 'pr', ['tests/roadmap/<fixture>/exports.lock.json and the AIR of every fixture with an '
+                       'exports.json (scripts/fixture-exports.py)'],
      step_exports),
     ('premises', 'tree', ['docs/premise-index.md'],
      simple([PY, '-B', 'scripts/premises.py', 'check'], [PY, '-B', 'scripts/premises.py', 'write'])),

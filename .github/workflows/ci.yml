@@ -655,9 +655,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
           python3 scripts/coverage.py l14 coverage/0.14.1.json coverage/0.15.2.json coverage/0.16.0.json coverage/0.17.0.json
-          python3 -B tests/roadmap/runtime-tags/test_provenance.py
-          python3 -B tests/roadmap/error-tracing/test_provenance.py
-          python3 -B tests/roadmap/null-pointers/test_provenance.py
+          python3 -B scripts/fixture-exports.py check
 
       - name: Schedule exploration cap accounting regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
@@ -847,6 +845,12 @@ jobs:
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: python3 tests/roadmap/upgrade-qualification/test_qualify.py
+
+      # Fixture exports (docs/coverage.md#fixture-exports): the manifest/lock tool on synthetic
+      # fixtures, then every committed lock; runs no compiler.
+      - name: Fixture export manifests and locks
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
+        run: python3 -B tests/roadmap/fixture-exports/test_fixture_exports.py
 
       # Q02: every register ID maps to negative tests and designated mutants; complete rows
       # need both. The Python-side mutants run in memory against existing regressions.
@@ -1924,9 +1928,8 @@ jobs:
         run: |
           set -euo pipefail
           lake build ZigLean air2lean
-          python3 -B tests/roadmap/error-tracing/test_provenance.py
           tests/roadmap/error-tracing/check.sh
-          tests/roadmap/error-tracing/export.sh --check ${{ matrix.zig }}
+          python3 -B scripts/fixture-exports.py verify error-tracing --version ${{ matrix.zig }}
           tests/roadmap/error-tracing/check.sh --native "$GITHUB_WORKSPACE/host-zig/zig"
 
       - name: Byte sentinel allocation source, ownership and kernel mutations

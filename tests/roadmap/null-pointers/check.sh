@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # L05 gate: offline AIR/checker/emitter cases and a mutant (Generate.lean), then the committed
-# compiler exports of every supported version (air/<version>, provenance.json): each translates,
-# its model run on the native `main`'s inputs prints expected/<version>.txt, and the compiler
-# rejection roots (air-reject/<version>) stay rejected.
+# compiler exports of every supported version (air/<version>, exports.lock.json): each
+# translates, its model run on the native `main`'s inputs prints expected/<version>.txt, and the
+# compiler rejection roots (air-reject/<version>) stay rejected.
 #   check.sh                 the gate above (needs `lake`; no compiler)
-#   check.sh --export [V..]  export.sh --check: a fresh export equals the committed one
-#                            (AIR2LEAN_ZIG_AIR: directory of zig-air-<version> compilers)
+#   check.sh --export [V..]  scripts/fixture-exports.py verify: a fresh export with the patched
+#                            compilers (AIR2LEAN_ZIG_AIR/zig-air-<version>, else
+#                            scripts/zig-air.sh) of versions V (default all) equals the committed one
 #   check.sh --native ZIG    run nullpointers.zig with a stock Zig on this host and compare its
 #                            transcript (native-transcript.py) with expected/<version>.txt
 set -euo pipefail
@@ -15,7 +16,11 @@ here=tests/roadmap/null-pointers
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-null-pointers.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 case "${1:-}" in
-  --export) shift; exec bash "$here/export.sh" --check "$@" ;;
+  --export)
+    shift
+    versions=()
+    for version in "$@"; do versions+=(--version "$version"); done
+    exec python3 -B scripts/fixture-exports.py verify null-pointers ${versions[@]+"${versions[@]}"} ;;
   --native)
     zig=${2:?usage: check.sh --native ZIG}
     version=$("$zig" version)
@@ -82,5 +87,5 @@ for version in 0.17.0 0.16.0 0.15.2 0.14.1; do
     grep -q "$expected" "$work/reject.log" || { echo "wrong rejection: $(cat "$work/reject.log")" >&2; exit 1; }
   done
 done
-python3 -B "$here/test_provenance.py"
+python3 -B scripts/fixture-exports.py check null-pointers
 echo "nullable pointer gate passed: 30 semantic cases, 1 killed mutant, 4 versions x $(wc -l < "$here/expected/0.17.0.txt" | tr -d ' ') model lines (expected/<version>.txt), 2 compiler rejection roots per version"

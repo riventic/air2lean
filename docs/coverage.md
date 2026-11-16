@@ -249,19 +249,29 @@ appends its reason and guidance (the structured `EXPORTER_UNSUPPORTED` /
 | `assembly` (0.14.1) | Exporter does not decode the 0.14.1 layout | Use 0.15.2/0.16.0 for assembly wrappers |
 
 **Runtime-tags export.** `tests/roadmap/runtime-tags/runtime_tags.zig` holds one function
-per tag that no golden or earlier roadmap export contained. `export.sh` exports it with each
-patched compiler into `tests/roadmap/runtime-tags/air/<version>` (a `COMPILER_FIXTURE_ROOTS`
-entry; `provenance.json` records the source, exporter and compiler hashes and every file's
-hash, checked by `test_provenance.py`):
+per tag that no golden or earlier roadmap export contained. Each patched compiler exports it
+into `tests/roadmap/runtime-tags/air/<version>`, as its `exports.json` declares (see
+[Fixture exports](#fixture-exports)).
+
+## Fixture exports
+
+Committed compiler-exported AIR of a roadmap fixture is made and pinned by one tool,
+`scripts/fixture-exports.py` (its docstring has the format). The fixture's `exports.json`
+declares each export (source, filter, flags, versions, output directory, optional call-closure
+selection); `exports.lock.json`, written only by the tool, pins the manifest, the fixture's
+`.zig` sources, each version's patched compiler (the digest of exactly what `zig-patch/build.sh`
+reads, so the same on every host) and every exported file. Each output directory is a
+`COMPILER_FIXTURE_ROOTS` entry derived from the manifest.
 
 ```sh
-AIR2LEAN_ZIG_AIR=<dir holding zig-air-<version>/bin/zig> tests/roadmap/runtime-tags/export.sh
-python3 tests/roadmap/runtime-tags/test_provenance.py --refresh
+python3 -B scripts/fixture-exports.py check [FIXTURE...]    # no compiler: lock and files agree
+python3 -B scripts/fixture-exports.py verify [FIXTURE...]   # a fresh export equals the files
+python3 -B scripts/fixture-exports.py export [FIXTURE...]   # re-export, rewrite the lock
 ```
 
-The canonical compilers are built by `zig-patch/build.sh` from this checkout's `zig-patch` tree;
-`export.sh --check` refuses a compiler whose `bin/zig-unlocked` hash differs from
-`provenance.json` and otherwise compares a fresh export byte for byte.
+`check` runs in each fixture's `check.sh` and in CI. A changed exporter, source or manifest makes
+it fail until `export` (`scripts/regen.sh --only exports` re-exports every stale fixture);
+the AIR diff is reviewed like any other change.
 
 Some tags need a particular lowering, so a function can differ from what one would expect:
 `div_exact` and `shl_exact` appear only with runtime safety off (safe builds lower them to

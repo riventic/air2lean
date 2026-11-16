@@ -1,0 +1,23 @@
+{
+  "exports": [
+    {
+      "out": "air/{version}",
+      "source": "runtime_tags.zig",
+      "filter": "runtime_tags.",
+      "versions": [
+        "0.17.0",
+        "0.16.0",
+        "0.15.2",
+        "0.14.1"
+      ],
+      "args": [
+        "-OReleaseSafe",
+        "-fno-error-tracing",
+        "-target",
+        "x86_64-linux",
+        "-mcpu=baseline"
+      ],
+      "cwd": "repo"
+    }
+  ]
+}

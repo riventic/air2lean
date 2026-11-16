@@ -45,6 +45,7 @@ python3 "$case_dir/negatives.py" "$translator"
 
 # Compiler exports (air-fresh): the patched 0.17.0, 0.16.0, 0.15.2 and 0.14.1 at six widths each are
 # translated, elaborated and executed with the same checks as the hand-written fixtures.
+python3 -B "$repo_root/scripts/fixture-exports.py" check error-width
 python3 "$case_dir/test_provenance.py"
 export_imports=
 export_runs=

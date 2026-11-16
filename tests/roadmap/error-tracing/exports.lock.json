@@ -1,0 +1,39 @@
+{
+  "air_sha256": {
+    "air/0.14.1/builtin.returnError.json": "674e222d15e9731f2831699d85a8182bf9d276505c1213ee9345a193e46905b6",
+    "air/0.14.1/error_tracing.bigRet.json": "7767123f0641d8698fe77283aa49df6c094fadf9e62d288eb63b5d8a8b28c620",
+    "air/0.14.1/error_tracing.handledTwice.json": "dd1fdca1bf4ff954b8d97dc7198d2971c23693b5f7f33384deb9e2b7745c09c0",
+    "air/0.14.1/error_tracing.pass.json": "97bb7dde406c4e9056b58c03cab18bb4818e4a32789432ba0195f412424eedda",
+    "air/0.14.1/error_tracing.traceIndex.json": "68a287d61c7e8f4cead2136247e13e45536c5ef46985aa6c15de5b5f729bbf74",
+    "air/0.14.1/error_tracing.traced.json": "eca1052006581eee8c839740b88832be535697b4eceb3f9cbf45c652559c99f9",
+    "air/0.15.2/builtin.returnError.json": "457ac3f410222fa311f814095f3bee59ddb679918c9b2c5f8aa61d1f65ce3e43",
+    "air/0.15.2/error_tracing.bigRet.json": "8db0f450f52f6a8b368ad33ac3df9f331348bae3e692f464f4ef877cd4891102",
+    "air/0.15.2/error_tracing.handledTwice.json": "2b0d2e24d3cb6fa89184e15eafb6fac4444c1e31a0fc7a7a6bb48c1c36fbf333",
+    "air/0.15.2/error_tracing.pass.json": "7e8ab2a5cdcaabcb1e70d9bbfe3ba53b79d1cf29a90f799700b62bfb20ed7dcd",
+    "air/0.15.2/error_tracing.traceIndex.json": "4e824c117c79a4a740d9737e40a525e497c78d449b83db10c9be30751e252b9e",
+    "air/0.15.2/error_tracing.traced.json": "5cf592debd362e54b9d6671fd9ab5f6393c4dacf16ede856dc4b9c2e65685d14",
+    "air/0.16.0/builtin.returnError.json": "14a8c54eb2825be3ff9bd12d6851cc2cfac70cdf9f8fc785a34dce33c78a18ce",
+    "air/0.16.0/error_tracing.bigRet.json": "c948ae862483ebb9fecf1c69f45ad092d91e1b97892a409acb58a42275c87010",
+    "air/0.16.0/error_tracing.handledTwice.json": "e08786f597b9181f05ddf4f0c3888b3d29eb8e3450154a37cc42efa0dca7a4cf",
+    "air/0.16.0/error_tracing.pass.json": "7d76484e15ca5f6f7e8e9e22c121c1b64bf6fc73987911c3f0732fabf489b1b7",
+    "air/0.16.0/error_tracing.traceIndex.json": "60e9dea00577d40402d4fa3cdeb4570c78f916861bdacca80ba7bc225f0fc6f6",
+    "air/0.16.0/error_tracing.traced.json": "99414d9044b7e9bb754149c20cb110da0c6283d3cc1bac6472d3ade53b7a48ed",
+    "air/0.17.0/error_tracing.bigRet.json": "c919cc512788f81e39a097daf3f9b8944440414322bbcb602f55facbd9fdff21",
+    "air/0.17.0/error_tracing.handledTwice.json": "3b09be353c42bb541f1ce81b9722f22d2c1f92160dd6fbc70940d6e06a2783c0",
+    "air/0.17.0/error_tracing.pass.json": "eafa0db7bf67cd4385118027cfd39ba598240d2925d0bbf9eeb31e89f71f570b",
+    "air/0.17.0/error_tracing.traceIndex.json": "cbcb04324762b3f9c9afb0017ff7afd6b3ffba0f4a524ce3d9c7e18d8142d83e",
+    "air/0.17.0/error_tracing.traced.json": "c8c056499f0f5c6d1b8fe569d39876dbdbeb6dba53f005949caa5ac837830b40",
+    "air/0.17.0/lang.returnError.json": "22122ad83113e829b11cf807a730e7d99ad327d5dd4c3a8064ee6dff56decb2f"
+  },
+  "compilers": {
+    "0.14.1": "de0fff4117985708efbd803bb1e53fe37ebf0596853e68633ac66d7f6dbd1d89",
+    "0.15.2": "08fabea60c770d7c034a9dbe78e816beb0d8a17a9b9a0ed5c8bdcbd112cffc05",
+    "0.16.0": "d49dbe58d9fd83d9fdedc5270fa3a5a34ab9661ebc63b52070027a00bdec6954",
+    "0.17.0": "321ab894d2a5d5784afdba19137ed24abf39c62825b440f9a4f82e53958d9b24"
+  },
+  "manifest_sha256": "e759252c361005cefe4007e1c0d8a19bedc9101a3eff2b421de503b72ba3fea8",
+  "schema": 1,
+  "sources_sha256": {
+    "error_tracing.zig": "3f9f3f780cb59da9eee3626089a34591796b5ab066766ea65832ece48844781e"
+  }
+}

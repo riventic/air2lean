@@ -124,8 +124,8 @@ address is the same rule.
 
 `tests/roadmap/null-pointers/air/<version>` and `air-reject/<version>` are the exports of
 `nullpointers.zig` (47 roots) and `reject.zig` by patched 0.17.0, 0.16.0, 0.15.2 and 0.14.1
-compilers (x86_64-linux, baseline, ReleaseSafe; `export.sh`, `provenance.json`,
-`test_provenance.py`; `COMPILER_FIXTURE_ROOTS`). `check.sh` translates each version, runs the
+compilers (x86_64-linux, baseline, ReleaseSafe; `exports.json`, `exports.lock.json`,
+[fixture exports](coverage.md#fixture-exports); `COMPILER_FIXTURE_ROOTS`). `check.sh` translates each version, runs the
 model on the native `main`'s inputs and compares with `expected/<version>.txt` (39 native `main`
 lines, four `case` lines and two model-only lines), and checks both rejection roots of each
 version (`optionalCast`, a cast of `?*allowzero u8`; `fixed`, a nonzero constant address).

@@ -20,6 +20,7 @@ if [ "${1:-}" = --native ]; then
   echo "error tracing native: $("$zig" version) ok"
   exit 0
 fi
+python3 -B scripts/fixture-exports.py check error-tracing
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 for version in 0.17.0 0.16.0 0.15.2 0.14.1; do
   "$translator" "$here/air/$version" -o "$work/$version.lean" --namespace ErrorTracing

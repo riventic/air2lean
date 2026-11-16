@@ -1,0 +1,42 @@
+{
+  "exports": [
+    {
+      "out": "air/{version}",
+      "source": "nullpointers.zig",
+      "filter": "nullpointers.cNull,nullpointers.allowzeroAddress,nullpointers.allowzeroManyAddress,nullpointers.castChecked,nullpointers.cRead,nullpointers.cZero,nullpointers.storeLoad,nullpointers.storedIsNull,nullpointers.allowzeroStoreLoad,nullpointers.nodeNext,nullpointers.nodeVal,nullpointers.nodeRoundTrip,nullpointers.arrayItem,nullpointers.cAdd,nullpointers.cSub,nullpointers.cIndex,nullpointers.cElem,nullpointers.nextPtr,nullpointers.valPtr,nullpointers.allowzeroNextPtr,nullpointers.allowzeroAdd,nullpointers.toOptional,nullpointers.fromOptional,nullpointers.addIsNull,nullpointers.optIsNull,nullpointers.optUnwrap,nullpointers.optWrap,nullpointers.optEq,nullpointers.optStoreLoad,nullpointers.optPayloadPtr,nullpointers.optCIsNull,nullpointers.optFromOrdinary,nullpointers.boxPtr,nullpointers.boxSet,nullpointers.pairMake,nullpointers.pairFirst,nullpointers.errPtr,nullpointers.errStore,nullpointers.sliceAz,nullpointers.arrayAz,nullpointers.sliceC,nullpointers.memsetAz,nullpointers.memcpyAz,nullpointers.memsetC,nullpointers.parentFirst,nullpointers.parentSecond,nullpointers.mmioIsNull",
+      "versions": [
+        "0.17.0",
+        "0.16.0",
+        "0.15.2",
+        "0.14.1"
+      ],
+      "args": [
+        "-OReleaseSafe",
+        "-fno-error-tracing",
+        "-target",
+        "x86_64-linux",
+        "-mcpu=baseline"
+      ],
+      "cwd": "repo"
+    },
+    {
+      "out": "air-reject/{version}",
+      "source": "reject.zig",
+      "filter": "reject.",
+      "versions": [
+        "0.17.0",
+        "0.16.0",
+        "0.15.2",
+        "0.14.1"
+      ],
+      "args": [
+        "-OReleaseSafe",
+        "-fno-error-tracing",
+        "-target",
+        "x86_64-linux",
+        "-mcpu=baseline"
+      ],
+      "cwd": "repo"
+    }
+  ]
+}

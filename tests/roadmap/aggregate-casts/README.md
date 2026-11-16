@@ -11,7 +11,7 @@ and their scope.
 | `aarch64-macos-ReleaseSafe.txt` | Its output with stock Zig 0.16.0 (Debug and ReleaseFast print the same) |
 | `aggregate_casts.zig` | Source of the exported functions: the probe's casts on runtime operands |
 | `air/<version>` | Compiler exports of `aggregate_casts.zig` (0.16.0, 0.15.2, 0.14.1; x86_64-linux ReleaseSafe) |
-| `export.sh`, `provenance.json`, `test_provenance.py` | Export command (`--check` re-exports and compares), the recorded source, exporter and compiler hashes, and the offline test that the files match them |
+| `exports.json`, `exports.lock.json` | The export (`scripts/fixture-exports.py`) and its pins: manifest, sources, compilers and every file |
 | `air-handwritten/0.16.0` | The earlier hand-written AIR; it translates but is no evidence of the compiler's lowering |
 | `AggregateCasts/Gen.lean` | Retained translation of `air/0.16.0` (the 0.15.2 and 0.14.1 exports translate to the same text apart from the profile header) |
 | `AggregateCasts/Proofs.lean` | Round trips without padding, `.unspecified` padding results, failed round trips, optional-pointer rules |
@@ -42,6 +42,6 @@ musl), so `Gen.lean` records a verified profile where the hand-written one recor
 `unverified`.
 
 ```sh
-tests/roadmap/aggregate-casts/export.sh --check      # AIR2LEAN_ZIG_AIR=<dir of zig-air-<version>>
-python3 tests/roadmap/aggregate-casts/test_provenance.py
+python3 -B scripts/fixture-exports.py verify aggregate-casts   # a fresh export equals air/
+python3 -B scripts/fixture-exports.py check aggregate-casts    # no compiler: the lock
 ```

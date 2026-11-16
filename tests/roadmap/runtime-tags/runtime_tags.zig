@@ -2,15 +2,15 @@
 //! `emitted-unfixtured` (no selected golden or reviewed roadmap compiler export contains
 //! them). `scripts/coverage.py` FIXTURE_REQUESTS maps each such tag to one function here.
 //!
-//! Exported by `export.sh` with the patched 0.16.0, 0.15.2 and 0.14.1 compilers into
-//! `air/<version>` (`provenance.json`, `test_provenance.py`). Each export is a reviewed
+//! Exported with the patched compilers of every supported version into `air/<version>`
+//! (`exports.json`, pinned by `exports.lock.json`). Each export is a reviewed
 //! `COMPILER_FIXTURE_ROOTS` entry, so the tags it contains are `emitted-unqualified`. Only
 //! `is_null_ptr`, `is_err`, `is_err_ptr` (no Sema producer in any version) and, on 0.15.2 and
 //! 0.14.1, `is_non_err_ptr` (see `scripts/coverage.py` NO_ERROR_TRACE_PRODUCER) stay requests.
 //! One lowering per tag is not universal tag semantics.
 //!
-//!   tests/roadmap/runtime-tags/export.sh          # re-export (AIR2LEAN_ZIG_AIR=<dir of zig-air-<v>>)
-//!   tests/roadmap/runtime-tags/export.sh --check  # compare with the committed export
+//!   python3 -B scripts/fixture-exports.py export runtime-tags   # re-export
+//!   python3 -B scripts/fixture-exports.py verify runtime-tags   # compare with the committed export
 
 pub const Failure = error{ Bad, Other };
 pub const Pair = struct { a: u32, b: u32 };

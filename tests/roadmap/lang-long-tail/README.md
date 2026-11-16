@@ -17,7 +17,7 @@ their closures (`--diagnostics-json`, Zig 0.16.0, x86_64-linux ReleaseSafe):
 
 | File | Content |
 |---|---|
-| `air/<stem>/<version>` | exports of `<stem>.zig` by the patched 0.17.0, 0.16.0, 0.15.2 and 0.14.1 compilers (`export.sh`; `<stem>.filter` adds the std prefixes the fixture calls, and only the call closure of the fixture's own functions is kept), pinned by `provenance.json`. `<stem>.export` sets the exported program (`root_src`, as an executable), its name prefix (`module`), compiler flags (`args`), the native build's extra inputs (`native_extra`) and the versions that compile it (`only_versions`); `<stem>.reject` lists versions the translator must reject, with the diagnostic |
+| `air/<stem>/<version>` | exports of `<stem>.zig` by the patched 0.17.0, 0.16.0, 0.15.2 and 0.14.1 compilers, one `exports.json` entry per stem (its filter adds the std prefixes the fixture calls, and its `closure` keeps only the call closure of the fixture's own functions), pinned by `exports.lock.json`. The entry also gives the exported program (a `build-exe` source), the compiler flags, which the native build shares, and the versions that compile it; `<stem>.export` sets the native build's extra inputs (`native_extra`); `<stem>.reject` lists versions the translator must reject, with the diagnostic |
 | `LangLongTail/<Key>.lean` | the retained 0.16.0 translation (or of the newest version that compiles the source); `LangLongTail/<Key>-<version>.lean` where a version translates to another text (std code that differs by version, 0.17's bit casts, the error numbering) |
 | `Proofs<Ns>.lean` | kernel-checked properties of the 0.16.0 translation |
 | `Model<Ns>.lean`, `probe_<stem>.zig`, `native/<stem>-<version>.txt` | the model's lines against the native probe of each version (`error_params`, `vector_casts` recorded with stock compilers on aarch64-macos; the batch-G fixtures built for x86_64-linux with the export's flags and run in a `linux/amd64` container; CI re-runs the 0.16.0 probes on x86_64-linux) |
@@ -30,6 +30,5 @@ bash tests/roadmap/lang-long-tail/check.sh
 AIR2LEAN_ZIG_NATIVE_0_16=/path/to/zig-0.16.0/zig bash tests/roadmap/lang-long-tail/check.sh --native
 ```
 
-To re-export: build the four patched compilers with `zig-patch/build.sh`, point
-`AIR2LEAN_ZIG_AIR` at their parent directory, run `export.sh [STEM...]`, then
-`python3 test_provenance.py --refresh`, retranslate the retained files and re-record `native/`.
+To re-export: `python3 -B scripts/fixture-exports.py export lang-long-tail` (the patched compilers
+come from `scripts/zig-air.sh`), then retranslate the retained files and re-record `native/`.

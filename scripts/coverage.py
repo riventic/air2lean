@@ -363,9 +363,6 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/const-bases/air-fresh/{version}': 'tests/roadmap/const-bases/provenance.json',
     'tests/roadmap/union-bases/air/{version}': 'tests/roadmap/union-bases/provenance.json',
     'tests/roadmap/const-bases/air-llvm/{version}': 'tests/roadmap/const-bases/provenance.json',
-    'tests/roadmap/error-tracing/air/{version}': 'tests/roadmap/error-tracing/provenance.json',
-    'tests/roadmap/null-pointers/air/{version}': 'tests/roadmap/null-pointers/provenance.json',
-    'tests/roadmap/null-pointers/air-reject/{version}': 'tests/roadmap/null-pointers/provenance.json',
     'tests/roadmap/loop-tactics/nested/air': 'tests/roadmap/loop-tactics/nested/provenance.json',
     'tests/roadmap/loop-tactics/counted/air': 'tests/roadmap/loop-tactics/counted/provenance.json',
     'tests/roadmap/vector-layouts/air/{version}': 'tests/roadmap/vector-layouts/README.md',
@@ -416,13 +413,6 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/callbacks/air-async/{version}': 'tests/roadmap/callbacks/provenance.json',
     'tests/roadmap/asm-effects/air-env/{version}': 'tests/roadmap/asm-effects/provenance-env.json',
     'tests/roadmap/noreturn-variants/air/{version}': 'tests/roadmap/noreturn-variants/provenance.json',
-    # L10: patched-compiler exports of error_width.zig at six `--error-limit` widths (export.sh).
-    'tests/roadmap/error-width/air-fresh/{version}/bits2': 'tests/roadmap/error-width/provenance.json',
-    'tests/roadmap/error-width/air-fresh/{version}/bits8': 'tests/roadmap/error-width/provenance.json',
-    'tests/roadmap/error-width/air-fresh/{version}/bits10': 'tests/roadmap/error-width/provenance.json',
-    'tests/roadmap/error-width/air-fresh/{version}/bits16': 'tests/roadmap/error-width/provenance.json',
-    'tests/roadmap/error-width/air-fresh/{version}/bits17': 'tests/roadmap/error-width/provenance.json',
-    'tests/roadmap/error-width/air-fresh/{version}/bits32': 'tests/roadmap/error-width/provenance.json',
     'tests/roadmap/alloc-translated/air/{version}/page-linux': 'tests/roadmap/alloc-translated/provenance.json',
     'tests/roadmap/alloc-translated/air/{version}/page-macos': 'tests/roadmap/alloc-translated/provenance.json',
     'tests/roadmap/alloc-translated/air/{version}/fba-linux': 'tests/roadmap/alloc-translated/provenance.json',
@@ -431,23 +421,28 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/alloc-arena/air/{version}/arena-linux': 'tests/roadmap/alloc-arena/provenance.json',
     'tests/roadmap/alloc-arena/air/{version}/arena-macos': 'tests/roadmap/alloc-arena/provenance.json',
     'tests/roadmap/alloc-arena/air/{version}/arena-fixed-linux': 'tests/roadmap/alloc-arena/provenance.json',
-    'tests/roadmap/runtime-tags/air/{version}': 'tests/roadmap/runtime-tags/provenance.json',
-    'tests/roadmap/aggregate-casts/air/{version}': 'tests/roadmap/aggregate-casts/provenance.json',
-    # L-series long tail: one directory per fixture source (export.sh, provenance.json).
-    'tests/roadmap/lang-long-tail/air/error_params/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
-    'tests/roadmap/lang-long-tail/air/vector_casts/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
-    'tests/roadmap/lang-long-tail/air/tls_pointers/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
-    'tests/roadmap/lang-long-tail/air/extern_storage/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
-    'tests/roadmap/lang-long-tail/air/error_ints/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
-    'tests/roadmap/lang-long-tail/air/error_ints_w8/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
-    'tests/roadmap/lang-long-tail/air/runtime_lanes/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
-    'tests/roadmap/lang-long-tail/air/float_lanes/{version}': 'tests/roadmap/lang-long-tail/provenance.json',
     # B10 L04/L08: patched-compiler exports with their qualification records.
     'tests/roadmap/try-pointers/air-fresh/{version}': 'tests/roadmap/try-pointers/compiler-qualification.json',
     'tests/roadmap/try-pointers/aliases/air-fresh/{version}': 'tests/roadmap/try-pointers/compiler-qualification.json',
     'tests/roadmap/packed-fields/air-fresh/{version}/llvm': 'tests/roadmap/packed-fields/compiler-provenance.json',
     'tests/roadmap/packed-fields/air-fresh/{version}/x86_64': 'tests/roadmap/packed-fields/compiler-provenance.json',
 }
+
+
+def manifest_roots():
+    """The output directories of every fixture export manifest (scripts/fixture-exports.py),
+    each recorded by its fixture's exports.lock.json."""
+    roots = {}
+    for path in sorted((ROOT / 'tests/roadmap').glob('*/exports.json')):
+        fixture = path.parent.relative_to(ROOT).as_posix()
+        for entry in json.loads(path.read_text())['exports']:
+            roots['%s/%s' % (fixture, entry['out'])] = fixture + '/exports.lock.json'
+    return roots
+
+
+_MANIFEST_ROOTS = manifest_roots()
+assert not set(_MANIFEST_ROOTS) & set(COMPILER_FIXTURE_ROOTS), 'a manifest output is also hand-listed'
+COMPILER_FIXTURE_ROOTS.update(_MANIFEST_ROOTS)
 NON_COMPILER_AIR = {
     'tests/roadmap/undef-operands/air': 'hand-written AIR in the exporter schema (README)',
     'tests/roadmap/global-init/air': 'hand-written AIR in the exporter schema (README)',
