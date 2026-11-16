@@ -1,0 +1,20 @@
+{
+  "exports": [
+    {
+      "out": "air/{version}",
+      "source": "callbacks.zig",
+      "filter": "callbacks.",
+      "versions": ["0.17.0", "0.16.0", "0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air-async/{version}",
+      "source": "async_cb.zig",
+      "filter": "async_cb.",
+      "versions": ["0.17.0", "0.16.0", "0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    }
+  ]
+}
