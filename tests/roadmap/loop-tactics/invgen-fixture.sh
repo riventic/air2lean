@@ -3,8 +3,8 @@
 #
 #   invgen_fixture DIR NAMESPACE PREFIX WORK
 #
-# checks the retained AIR in DIR/air against its fixture's exports.lock.json, retranslates it and compares the
-# result with the committed DIR/NAMESPACE/Gen.lean, regenerates the loop invariants and measures
+# checks the retained AIR in DIR/air against its fixture's exports.lock.json, retranslates it and
+# compares the result with the committed DIR/NAMESPACE/Gen.lean, regenerates the loop invariants and measures
 # (air2lean-invgen, the fixture's target of scripts/invgen.py) and compares them with the committed
 # DIR/NAMESPACE/Inv.lean, kernel-checks DIR/Proof.lean, and runs the seeded mutants of
 # DIR/mutants.json (invgen_mutants.py): the generator is untrusted, and only the check accepts its

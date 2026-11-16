@@ -12,8 +12,8 @@ A fixture whose AIR is a patched-compiler export declares how it is made in
                      Each entry is one `zig COMMAND -fno-emit-bin ARGS SOURCE` per version with
                      ZIG_AIR_JSON_FILTER=FILTER, its files written to OUT ({version} substituted;
                      an entry of one version may omit it; the tool owns OUT: nothing else may
-                     live there). SOURCE is relative to the
-                     fixture and may lie elsewhere in the repository (`../../../examples/x/x.zig`);
+                     live there). SOURCE is relative to the fixture and may lie elsewhere in the
+                     repository (`../../../examples/x/x.zig`);
                      `cwd` (default "fixture") is where the compiler runs; `command` defaults to
                      build-obj (build-exe exports a whole program, e.g. for its error numbering).
                      `closure`, if given, keeps only the functions that its roots reach through
