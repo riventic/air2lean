@@ -111,7 +111,7 @@ for entry in "${fixtures[@]}"; do
   # that compiles the source.
   if [ -f "$here/Proofs$key.lean" ]; then
     proved=0.16.0
-    [ -n "$only_versions" ] && proved=${only_versions%% *}
+    in_versions "$proved" || proved=${only_versions%% *}
     LEAN_PATH="$work/$key/$proved:$base_path" "${lean_cmd[@]}" "$here/Proofs$key.lean"
   fi
 done
