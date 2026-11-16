@@ -4,8 +4,9 @@
 # translates, its model run on the native `main`'s inputs prints expected/<version>.txt, and the
 # compiler rejection roots (air-reject/<version>) stay rejected.
 #   check.sh                 the gate above (needs `lake`; no compiler)
-#   check.sh --export        scripts/fixture-exports.py verify: a fresh export with the patched
-#                            compilers (scripts/zig-air.sh) equals the committed one
+#   check.sh --export [V..]  scripts/fixture-exports.py verify: a fresh export with the patched
+#                            compilers (AIR2LEAN_ZIG_AIR/zig-air-<version>, else
+#                            scripts/zig-air.sh) of versions V (default all) equals the committed one
 #   check.sh --native ZIG    run nullpointers.zig with a stock Zig on this host and compare its
 #                            transcript (native-transcript.py) with expected/<version>.txt
 set -euo pipefail
@@ -15,7 +16,11 @@ here=tests/roadmap/null-pointers
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-null-pointers.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 case "${1:-}" in
-  --export) exec python3 -B scripts/fixture-exports.py verify null-pointers ;;
+  --export)
+    shift
+    versions=()
+    for version in "$@"; do versions+=(--version "$version"); done
+    exec python3 -B scripts/fixture-exports.py verify null-pointers ${versions[@]+"${versions[@]}"} ;;
   --native)
     zig=${2:?usage: check.sh --native ZIG}
     version=$("$zig" version)
