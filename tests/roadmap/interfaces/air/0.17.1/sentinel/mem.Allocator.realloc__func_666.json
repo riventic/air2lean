@@ -37,7 +37,7 @@
   "error_tracing": false,
   "export_stage": "analyzed-air"
  },
- "name": "mem.Allocator.realloc__func_662",
+ "name": "mem.Allocator.realloc__func_666",
  "module": "std",
  "src": {
   "file": "mem/Allocator.zig",
@@ -134,7 +134,7 @@
    "ty": 3,
    "callee": {
     "ty": 7,
-    "func": "mem.Allocator.reallocAdvanced__func_663",
+    "func": "mem.Allocator.reallocAdvanced__func_667",
     "module": "std",
     "instance_key": "0df1ef68623eb8cc2b55624588742de616305f11bc0e7fd1f9d3f2a9583135d3",
     "noreturn": false

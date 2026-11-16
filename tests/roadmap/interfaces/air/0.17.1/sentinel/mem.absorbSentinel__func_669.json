@@ -37,7 +37,7 @@
   "error_tracing": false,
   "export_stage": "analyzed-air"
  },
- "name": "mem.absorbSentinel__func_665",
+ "name": "mem.absorbSentinel__func_669",
  "module": "std",
  "src": {
   "file": "mem.zig",

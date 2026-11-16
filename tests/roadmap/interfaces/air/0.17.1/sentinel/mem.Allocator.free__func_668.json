@@ -37,7 +37,7 @@
   "error_tracing": false,
   "export_stage": "analyzed-air"
  },
- "name": "mem.Allocator.free__func_664",
+ "name": "mem.Allocator.free__func_668",
  "module": "std",
  "src": {
   "file": "mem/Allocator.zig",
@@ -112,7 +112,7 @@
    "ty": 1,
    "callee": {
     "ty": 5,
-    "func": "mem.absorbSentinel__func_665",
+    "func": "mem.absorbSentinel__func_669",
     "module": "std",
     "instance_key": "7342b53a30ed5047ec91039edea814cdc01d94e10127775cd607a33832861686",
     "noreturn": false

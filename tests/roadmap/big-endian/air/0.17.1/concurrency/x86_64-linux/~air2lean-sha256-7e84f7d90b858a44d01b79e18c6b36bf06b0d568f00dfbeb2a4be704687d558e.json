@@ -181,7 +181,7 @@
   },
   {
    "k": "enum",
-   "name": "Io.Threaded.Future.Status__enum_656",
+   "name": "Io.Threaded.Future.Status__enum_660",
    "module": "std",
    "tag": 8,
    "exhaustive": true,

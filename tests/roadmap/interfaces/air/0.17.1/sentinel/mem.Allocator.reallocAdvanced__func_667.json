@@ -37,7 +37,7 @@
   "error_tracing": false,
   "export_stage": "analyzed-air"
  },
- "name": "mem.Allocator.reallocAdvanced__func_663",
+ "name": "mem.Allocator.reallocAdvanced__func_667",
  "module": "std",
  "src": {
   "file": "mem/Allocator.zig",
@@ -720,7 +720,7 @@
        "ty": 5,
        "callee": {
         "ty": 25,
-        "func": "mem.Allocator.free__func_664",
+        "func": "mem.Allocator.free__func_668",
         "module": "std",
         "instance_key": "1e60e7ef40f59acd6795fd81f42091e44c787acf2cbfbffc765022fefac09670",
         "noreturn": false
@@ -844,7 +844,7 @@
    "ty": 1,
    "callee": {
     "ty": 28,
-    "func": "mem.absorbSentinel__func_665",
+    "func": "mem.absorbSentinel__func_669",
     "module": "std",
     "instance_key": "7342b53a30ed5047ec91039edea814cdc01d94e10127775cd607a33832861686",
     "noreturn": false

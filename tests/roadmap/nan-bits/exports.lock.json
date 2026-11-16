@@ -36,29 +36,29 @@
     "air/0.16.0/nan_bits/nan_bits.sumBits.json": "1e1d9873bc51c5432a853bc5b0b42c64fe5e6f193d9bca60ef888d88031b10f7",
     "air/0.16.0/nan_bits/nan_bits.unionView.json": "1b54b8e8838a178544a4cf361648b86535f233a101f46fe0e29161389492fb29",
     "air/0.16.0/nan_bits/nan_bits.vectorCast.json": "dd2d8c42c94bdcf45ec489792011caadcd6e64f224108712bd2fd0a8fc739cf0",
-    "air/0.17.1/nan_bits/nan_bits.arrayCast.json": "e68bce37814ce6b38b6fe938c955f997903e27dcf816a2cef156cccdf270cbf8",
-    "air/0.17.1/nan_bits/nan_bits.constGlobal.json": "af6d94028a2cde0e1da4bd001ce233ee3f380289e9e416f38ce32969bb0fa7cc",
-    "air/0.17.1/nan_bits/nan_bits.constStore.json": "a10aaf050b31730f6508b57a38139a91476c06913231967ccd7452358ee57905",
-    "air/0.17.1/nan_bits/nan_bits.copyBytes.json": "92883699d3793b97e4b8ddf0b88018674030709ec3d88a2ba195ca280f74d157",
-    "air/0.17.1/nan_bits/nan_bits.finiteBits.json": "81a99175daaf8dda4a88aaa080c6902c53987823c802f1b764b74f966b9c4eae",
-    "air/0.17.1/nan_bits/nan_bits.reloadIsNaN.json": "24058708034cf10cc51296c42180357be687a442b7c8c2f66f7390d9a4fd3ea4",
-    "air/0.17.1/nan_bits/nan_bits.storeLoad.json": "da3155fe33dd498672cb7a203749851436d8c1d613ccfc87f6cc2bacb9393d6c",
-    "air/0.17.1/nan_bits/nan_bits.storeLoad64.json": "b33d4a6f3f85d55efbdac337f20462a8f58af794adb5b3ccee9149983061db0a",
-    "air/0.17.1/nan_bits/nan_bits.structView.json": "deff9a8971a497e83f449b2873bdf912f5fdb0064aa5cd59f142f3e9e0a72d5b",
-    "air/0.17.1/nan_bits/nan_bits.sumBits.json": "6835f766fe4bba2521e07262d3b966fd8af91e3c01c9a372602db0b4db47dd85",
-    "air/0.17.1/nan_bits/nan_bits.unionView.json": "9b583e25eb1e78e9cb6482fad99439ccc1360d0d482ad1c6de38b582245e6090",
-    "air/0.17.1/nan_bits/nan_bits.vectorCast.json": "f57b066e84f4f70abd4c071bf04d8fee4ecf1943a3786d37028220c6d5e98265"
+    "air/0.17.1/nan_bits/nan_bits.arrayCast.json": "5dfcb328a328297d849bbc2f578f4494884bbbfd7594b28f702f2d2ea3b5e462",
+    "air/0.17.1/nan_bits/nan_bits.constGlobal.json": "e5a8bce547972b9d785eed4cbcc4b9ebfed014481cca351bc5ad966156cf4c75",
+    "air/0.17.1/nan_bits/nan_bits.constStore.json": "6dc842b25be44469141781d9bffb98bf4f6e830d14a23b3ed044e31c16d02e32",
+    "air/0.17.1/nan_bits/nan_bits.copyBytes.json": "68444152b5b19dda48c34b8641cb09363ff7b2aa9b911041529cfc53090e68e7",
+    "air/0.17.1/nan_bits/nan_bits.finiteBits.json": "1af0d821b7a8bb9ac251aef5c7c9d88f85f9373cee9eb245bde0859ccbebc40e",
+    "air/0.17.1/nan_bits/nan_bits.reloadIsNaN.json": "39f82de34950d8ee543c5f30d19c4453fa5b9e6cf1e7659663cb3dd27e1ddf3a",
+    "air/0.17.1/nan_bits/nan_bits.storeLoad.json": "9d18902c7855801f4cac6668685ec2861d9f2b473781e7253e1cc7f40ff4f1a0",
+    "air/0.17.1/nan_bits/nan_bits.storeLoad64.json": "d4499b3b3132acfb534a40a2ea0603f2162b9c0d6ccd3c4291b193c2d79f220b",
+    "air/0.17.1/nan_bits/nan_bits.structView.json": "0fcae8076ecf19b4288eaee86ce87f4d191d224450b75693829bc1c02729b2b0",
+    "air/0.17.1/nan_bits/nan_bits.sumBits.json": "654b466acc5f00986a9d7be27299e473ac520ff94f7de60cfe93293cf2e633ba",
+    "air/0.17.1/nan_bits/nan_bits.unionView.json": "ef03a4a765afe7b0e98be2345a53ff54769fa54c2c172adae354bc51d0e25e08",
+    "air/0.17.1/nan_bits/nan_bits.vectorCast.json": "141cf24f099b96879dc1af1c496cf8573ce17cc74856fdff2e4d29e0ec931b5a"
   },
   "compilers": {
-    "0.14.1": "de0fff4117985708efbd803bb1e53fe37ebf0596853e68633ac66d7f6dbd1d89",
-    "0.15.2": "08fabea60c770d7c034a9dbe78e816beb0d8a17a9b9a0ed5c8bdcbd112cffc05",
-    "0.16.0": "d49dbe58d9fd83d9fdedc5270fa3a5a34ab9661ebc63b52070027a00bdec6954",
-    "0.17.1": "321ab894d2a5d5784afdba19137ed24abf39c62825b440f9a4f82e53958d9b24"
+    "0.14.1": "398f3c0aecbe5a90957606eba157d9a7e69eebc0516779ba51ac2f53c0003433",
+    "0.15.2": "2e1e05ae07d5a5f629ad79d8f7c36c09c99356a875531405c4a2d3b561d69086",
+    "0.16.0": "413c774df80a4580621ae9b3cb7ff5299322a98cb051f9cc2cd4a9c91cad4ce7",
+    "0.17.1": "a4b56f33ac0b5fbafae85e023f692a3cdb85df8ce7028d7d3e725dfd3404ed52"
   },
-  "manifest_sha256": "5ca59c060b45055c43c96dbf7f17d2af8ef0395a6ca9d9d478601a2a1269d841",
+  "manifest_sha256": "377eaa3b9481941e986bf5f64969a9773a341eb961e37146ec6fef6c35a77d9b",
   "schema": 1,
   "sources_sha256": {
-    "nan_bits.zig": "f2063a858ca284b57240b58d36250169d00613f4876dd5bb5d114dc2b7be93f4",
+    "nan_bits.zig": "2810f3dfe472c7ab7bc7a79aaa81ddc6c4710ed1eef4c85d9f7e7a396c94edeb",
     "native.zig": "09dc550e0a6c48a55a14a6a325482b75d3497f03567c8c619f83b2c7b9510ad8"
   }
 }

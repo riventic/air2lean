@@ -327,7 +327,7 @@
    "ty": 14,
    "callee": {
     "ty": 15,
-    "func": "mem.Allocator.realloc__func_662",
+    "func": "mem.Allocator.realloc__func_666",
     "module": "std",
     "instance_key": "af0c43114565d1f44736f723b95f3df9ab3a301ddc492c1832d27d0b92f4b22d",
     "noreturn": false
