@@ -64,7 +64,8 @@ Only the root's serialized compiler queue should run the following commands:
 
 ```sh
 lake build Air2Lean.Check Air2Lean.Emit air2lean ZigLean.Sep.Full.Try
-AIR2LEAN_ZIG_AIR=/qualified/patched/zig bash tests/roadmap/try-pointers/check.sh --export tests/roadmap/try-pointers/air/0.16.0
+# air/0.16.0 is the retained schema-11 export; today's exporter writes schema 12 (air-fresh,
+# exports.json: scripts/fixture-exports.py verify|export try-pointers).
 .lake/build/bin/air2lean tests/roadmap/try-pointers/air/0.16.0 -o tests/roadmap/try-pointers/TryPointers/Gen.lean --namespace TryPointers --prefix try_pointers.
 python3 tests/roadmap/try-pointers/check-artifacts.py --record
 AIR2LEAN_ZIG_NATIVE=/qualified/stock/zig bash tests/roadmap/try-pointers/check.sh --native
@@ -199,8 +200,7 @@ lake build ZigLean.Sep.Full.Try ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Strength
 python3 tests/roadmap/try-pointers/aliases/check-artifacts.py
 bash tests/roadmap/try-pointers/aliases/check.sh --check-artifacts
 AIR2LEAN_ZIG_NATIVE=/qualified/stock/zig bash tests/roadmap/try-pointers/aliases/check.sh --native
-AIR2LEAN_ZIG_AIR=/qualified/patched/zig bash tests/roadmap/try-pointers/aliases/check.sh --export "$fresh/air"
-python3 tests/roadmap/try-pointers/aliases/check-artifacts.py --fresh-air "$fresh/air"
+python3 tests/roadmap/try-pointers/aliases/check-artifacts.py --fresh-air tests/roadmap/try-pointers/aliases/air-fresh/0.16.0
 ```
 
 A fresh export differs from the hand-written AIR in instruction IDs, debug lines and the schema-12
@@ -211,8 +211,9 @@ profile; its translation is the retained `Gen.lean` up to the profile header (se
 `air-fresh/0.16.0` (`try_pointers.zig`: `payload8`, `payload64`, `writeAlias`, `cleanup`,
 `coldPayload`) and `aliases/air-fresh/0.16.0` (`try_aliases.zig`: `twoPaths`, `resetOnError`) are
 unmodified schema-12 exports from a patched 0.16.0 compiler (Linux x86_64, baseline CPU,
-ReleaseSafe, no error tracing; build tree and commands in `compiler-qualification.json`).
-`compiler-qualification.py` checks their hashes, exact inventory, profile and pointer-try tags, and
+ReleaseSafe, no error tracing), one per version of `exports.json`; `exports.lock.json` pins the
+sources, the exporter and every file (`scripts/fixture-exports.py`). `compiler-qualification.py`
+checks their exact inventory, profile and pointer-try tags, and
 with `--translator` that each translates to the retained `TryPointers/Gen.lean` and
 `aliases/TryAliases/Gen.lean` up to the profile header (`normalize-generated.py report`/`compare`).
 The translated bodies are identical, so the proofs about the retained modules, including the
@@ -223,5 +224,5 @@ an aarch64-macos host; no x86_64 Linux run.
 ```sh
 bash tests/roadmap/try-pointers/check.sh --check-qualification
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests/roadmap/try-pointers/test_compiler_qualification.py
-python3 tests/roadmap/try-pointers/compiler-qualification.py --fresh "$root"   # $root/try_pointers, $root/try_aliases from the --export commands
+python3 -B scripts/fixture-exports.py verify try-pointers   # fresh exports equal the committed ones (export: rewrite)
 ```

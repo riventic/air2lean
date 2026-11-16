@@ -23,17 +23,9 @@ cmp "$work/AsmEffects/Gen.lean" tests/roadmap/asm-effects/AsmEffects/Gen.lean
 PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/asm-effects/test_cli.py "$translator"
 PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/asm-effects/harness.py
 # A01 environment reads, memory inputs and memory-region contracts on fresh 0.17.0/0.16.0/0.15.2
-# exports of asm_env.zig (provenance-env.json): retained translation, proofs, CLI rejections.
-python3 - <<'PY'
-import hashlib, json, pathlib
-here = pathlib.Path('tests/roadmap/asm-effects')
-record = json.loads((here / 'provenance-env.json').read_text())
-for name, digest in record['source_sha256'].items():
-    assert hashlib.sha256((here / name).read_bytes()).hexdigest() == digest, name
-files = {str(p.relative_to(here)): hashlib.sha256(p.read_bytes()).hexdigest()
-         for p in sorted((here / 'air-env').rglob('*.json'))}
-assert files == record['air_sha256'], 'AIR fixtures differ from provenance-env.json'
-PY
+# exports of asm_env.zig (exports.json, pinned by exports.lock.json): retained translation, proofs,
+# CLI rejections.
+python3 -B scripts/fixture-exports.py check asm-effects
 mkdir -p "$work/AsmEnv"
 "$translator" tests/roadmap/asm-effects/air-env/0.17.0 --profile abi64-le-v1 -o "$work/AsmEnv/Gen.lean" \
   --namespace AsmEnv --prefix asm_env.

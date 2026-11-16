@@ -18,7 +18,7 @@
 
 | File | Role |
 |---|---|
-| `air/<version>/` | Patched-compiler exports for 0.14.1, 0.15.2, 0.16.0 and 0.17.0 (x86_64-linux, baseline, ReleaseSafe; `check.sh --export`) |
+| `air/<version>/` | Patched-compiler exports for 0.14.1, 0.15.2, 0.16.0 and 0.17.0 (x86_64-linux, baseline, ReleaseSafe), declared in `../exports.json` and pinned by `../exports.lock.json` (`scripts/fixture-exports.py`) |
 | `TryLifetimes/<version>/Gen.lean` | Their retained translations (`<version>` as a name: `V0_17_0`). They are identical apart from the profile header and the namespace, except that 0.14.1 has one extra `unwrapPayload` read in `danglingPayload` |
 | `TryLifetimes/<version>/Lifetimes.lean` | Written for 0.17.0; the older versions' modules are that one with the version renamed (`scripts/fixtures.py instance ... --write` after an edit). Kernel-checked results of `freeOnError` and `readDangling` (the memory ends with every heap block freed). Then 32 scheduler oracles for each concurrent case: the native results, and `.illegal` for the race |
 
@@ -30,7 +30,7 @@ fixture) and `try_lifetimes.zig` on x86_64-linux-musl, ReleaseSafe and Debug, in
 lake build ZigLean Air2Lean air2lean
 bash tests/roadmap/try-pointers/lifetimes/check.sh
 AIR2LEAN_ZIG_NATIVE=<stock zig V> bash tests/roadmap/try-pointers/lifetimes/check.sh --native V
-AIR2LEAN_ZIG_AIR=<patched zig V> bash tests/roadmap/try-pointers/lifetimes/check.sh --export V DIR
+python3 -B scripts/fixture-exports.py verify try-pointers   # fresh exports equal air/ (export: rewrite)
 ```
 
 The exports of `try_pointers.zig` and `try_aliases.zig` for every version are in
