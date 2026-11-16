@@ -5117,6 +5117,94 @@
       "log_sha256": "0e3d50ebff23ca71a08a01a947171723446450a361ef3c6f5b4330969c7fc744",
       "recorded_at": "2026-11-16T17:06:21+00:00",
       "git_head": "28cd28ca31eea2f1c1eef4a47bcd6ffc62ea6432"
+    },
+    "probe:layout:aarch64-linux-gnu-ReleaseFast": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "python3",
+        "scripts/abi-probe.py",
+        "observe",
+        "--zig",
+        "/zig/zig",
+        "--profile",
+        "tests/roadmap/abi-probes/aarch64-linux-gnu-ReleaseFast.json",
+        "--output",
+        "/opt/dev/air2lean/.claude/worktrees/zig-0171/qualification/0.17.1.d/abi/aarch64-linux-gnu-ReleaseFast.json"
+      ],
+      "env": {},
+      "log": "0.17.1.d/logs/probe_layout_aarch64-linux-gnu-ReleaseFast.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "recorded_at": "2026-11-16T17:10:04+00:00",
+      "git_head": "3d876a4f24938b13c41bc41a34b7165c88b75a76"
+    },
+    "probe:layout:aarch64-linux-gnu-ReleaseSafe": {
+      "status": "pass",
+      "source": "run",
+      "exit_code": 0,
+      "argv": [
+        "python3",
+        "scripts/abi-probe.py",
+        "observe",
+        "--zig",
+        "/zig/zig",
+        "--profile",
+        "tests/roadmap/abi-probes/aarch64-linux-gnu-ReleaseSafe.json",
+        "--output",
+        "/opt/dev/air2lean/.claude/worktrees/zig-0171/qualification/0.17.1.d/abi/aarch64-linux-gnu-ReleaseSafe.json"
+      ],
+      "env": {},
+      "log": "0.17.1.d/logs/probe_layout_aarch64-linux-gnu-ReleaseSafe.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "recorded_at": "2026-11-16T17:10:13+00:00",
+      "git_head": "3d876a4f24938b13c41bc41a34b7165c88b75a76"
+    },
+    "model-boundary": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": "Claude Opus 5.5 (0.17.1 migration)",
+      "decision": "accepted",
+      "evidence": [
+        "docs/zig-0.17-delta.md",
+        "docs/std-models.md",
+        "Air2Lean/StdModels.lean",
+        "qualification/0.17.1.d/logs/translation_sync.log",
+        "qualification/0.17.1.d/logs/translation_lists.log"
+      ],
+      "note": "lib/std/Io.zig 0.17.0->0.17.1: Event.waitTimeout loops to the deadline instead of returning Timeout on a spurious wakeup, and failingFileWritePositional rejects a non-empty header; both are translated std code (no model row covers them); Io.futexWaitTimeout and Io.Clock.now keep their timed model (STD-10). Memory.lean/StdModels.lean/std-models.md changed only by the version rename (rows keyed 0.17.1 instead of 0.17.0); model recognition unchanged. sync and lists translations and differential tests pass on 0.17.1.",
+      "recorded_at": "2026-11-16T17:10:36+00:00",
+      "git_head": "3d876a4f24938b13c41bc41a34b7165c88b75a76"
+    },
+    "evidence:tags": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": "Claude Opus 5.5 (0.17.1 migration)",
+      "decision": "accepted",
+      "evidence": [
+        "tests/golden/0.17.1",
+        "tests/roadmap/zig017",
+        "qualification/0.17.1.d/logs",
+        "docs/zig-0.17-delta.md"
+      ],
+      "note": "The AIR universes (tags, intern keys, types, pointer bases) are identical between 0.17.0 and 0.17.1 (plan impact.universes). Every tag row changed only because its evidence paths moved from 0.17.0 to 0.17.1 keys. The evidence behind them is fresh: every committed 0.17.1 AIR file is a patched-0.17.1 export pinned by exports.lock.json (scripts/fixture-exports.py), differing from 0.17.0 only by generic-instance renumbering, except shr_exact, which 0.17.1 emits only without runtime safety (runtime_tags.shrExact is safety-off). Goldens, translations and differential tests pass on aarch64-macos (16 examples + floatops) and x86_64-linux.",
+      "recorded_at": "2026-11-16T17:10:36+00:00",
+      "git_head": "3d876a4f24938b13c41bc41a34b7165c88b75a76"
+    },
+    "compiler-sources": {
+      "status": "pass",
+      "source": "record",
+      "reviewer": "Claude Opus 5.5 (0.17.1 migration)",
+      "decision": "accepted",
+      "evidence": [
+        "docs/zig-0.17-delta.md",
+        "docs/floats.md",
+        "docs/upstream/shr-exact-check-poison.md",
+        "tests/floatmodel/FloatModel.lean"
+      ],
+      "note": "Release diff of Io.zig, InternPool.zig, Sema.zig, Type.zig, codegen/llvm.zig (and lib/compiler_rt) reviewed in docs/zig-0.17-delta.md section 0.17.0 -> 0.17.1: Sema.zirShr emits shr (not shr_exact) under safety; compiler_rt fma.zig fixes modelled version-keyed (Float.fmaRt017, checked against fma.zig's own tests); vector abiSize on ARM-capped alignment is rejected by checkMemTy on every version; other Sema/InternPool/llvm changes are bug fixes with no new AIR form or native-only.",
+      "recorded_at": "2026-11-16T17:10:36+00:00",
+      "git_head": "3d876a4f24938b13c41bc41a34b7165c88b75a76"
     }
   },
   "plan_sha256": "a1469de4a0c92f2b73094fa651ee241c7a6582d415a9e2bc53dba673025b8cff"

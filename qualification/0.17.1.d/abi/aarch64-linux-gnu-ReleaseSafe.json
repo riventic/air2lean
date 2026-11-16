@@ -1,0 +1,157 @@
+{
+  "schema": 1,
+  "kind": "air2lean-native-abi-fragment",
+  "profile": {
+    "name": "abi64-le-v1",
+    "target_triple": "aarch64-linux-gnu",
+    "pointer_bits": 64,
+    "endian": "little",
+    "abi": "gnu",
+    "zig_version": "0.17.1",
+    "backend": "stage2_llvm",
+    "cpu": "generic",
+    "features": [
+      "enable_select_opt",
+      "ete",
+      "fp_armv8",
+      "fuse_adrp_add",
+      "fuse_aes",
+      "neon",
+      "trbe",
+      "use_postra_scheduler"
+    ],
+    "build_mode": "ReleaseSafe",
+    "float_mode": "per-instruction",
+    "error_set_bits": 16,
+    "error_layout": "type-table",
+    "error_tracing": false,
+    "export_stage": "analyzed-air"
+  },
+  "source_sha256": {
+    "tests/roadmap/abi-probes/probe.zig": "8275b2e06916183a63ed76da07715b95427816f42c1c93770a9a6280ec4fe22d",
+    "tests/diff/compat.zig": "adcd8ed56886d97b632a9213ba240c1eb83cfa6a67f5ea656f12d73a9c5c76b7"
+  },
+  "compiler_sha256": "e7eef14c4b674845fa65bbd6ad0dbf82037f6cb4364db7973ed23579a5fc26c0",
+  "binary_sha256": "6e9da5bc32fa808fe5e1f7de80cd2ad47ba4a98f7737c3aa5bccb1a923d8a503",
+  "command": [
+    "/zig/zig",
+    "build-exe",
+    "-fllvm",
+    "-OReleaseSafe",
+    "-fno-error-tracing",
+    "-target",
+    "aarch64-linux-gnu",
+    "-mcpu=baseline",
+    "-femit-bin=/tmp/air2lean-abi-hnae02gt/probe",
+    "--dep",
+    "compat",
+    "-Mroot=/opt/dev/air2lean/.claude/worktrees/zig-0171/tests/roadmap/abi-probes/probe.zig",
+    "-Mcompat=/opt/dev/air2lean/.claude/worktrees/zig-0171/tests/diff/compat.zig"
+  ],
+  "observations": {
+    "meta": {
+      "arch": "aarch64",
+      "os": "linux",
+      "abi": "gnu",
+      "endian": "little",
+      "backend": "stage2_llvm",
+      "mode": "ReleaseSafe",
+      "cpu": "generic",
+      "zig": "0.17.1",
+      "pointer_bits": "64",
+      "error_set_bits": "16",
+      "error_tracing": "false"
+    },
+    "layout": {
+      "u9": [
+        2,
+        2
+      ],
+      "u24": [
+        4,
+        4
+      ],
+      "u40": [
+        8,
+        8
+      ],
+      "u128": [
+        16,
+        16
+      ],
+      "pointer": [
+        8,
+        8
+      ],
+      "anyerror": [
+        2,
+        2
+      ],
+      "error_union_u8": [
+        4,
+        2
+      ],
+      "packed32": [
+        4,
+        4
+      ],
+      "vector4": [
+        16,
+        16
+      ],
+      "vector_u9x4": [
+        8,
+        8
+      ],
+      "vector_u24x3": [
+        16,
+        16
+      ],
+      "vector_u40x2": [
+        16,
+        16
+      ],
+      "vector_bool5": [
+        1,
+        1
+      ],
+      "record": [
+        16,
+        8
+      ]
+    },
+    "offset": {
+      "record_count": 4,
+      "record_pointer": 8
+    },
+    "value": {
+      "vector_u9_image": 268173823,
+      "vector_u9_lane_write": 178782719,
+      "vector_u24_image": 20016001699311,
+      "wrapping24": 1,
+      "packed_bits": 1793,
+      "vector_sum": 10,
+      "pointer_load": 1234567
+    },
+    "feature": {
+      "enable_select_opt": 1,
+      "ete": 1,
+      "fp_armv8": 1,
+      "fuse_adrp_add": 1,
+      "fuse_aes": 1,
+      "neon": 1,
+      "trbe": 1,
+      "use_postra_scheduler": 1
+    }
+  },
+  "scope": "listed integer/pointer/layout observations only",
+  "execution_host": {
+    "system": "Linux",
+    "machine": "aarch64"
+  },
+  "native_execution_attested": false,
+  "float_abi_qualified": false,
+  "synchronization_qualified": false,
+  "translation_qualified": false,
+  "wasm_qualified": false
+}
