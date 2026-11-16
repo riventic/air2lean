@@ -10,7 +10,7 @@ The regressions of [`docs/architecture-audit/enc-exactness.md`](../../../docs/ar
 |---|---|
 | `enc_exactness.zig` | Integers with padding bits (`i10`, `u24`, `i24`, an `enum(u24)`) read from bytes their own store did not write, stored over other bytes, and round-tripped; a `bool` byte. Compiles on 0.14.1, 0.15.2, 0.16.0 and 0.17.0 |
 | `opaque_bytes.zig` | An allocator's `vtable` word read as a `u64` |
-| `air/<version>/{enc_exactness,opaque_bytes}/` | Patched-compiler exports (x86_64-linux, baseline, ReleaseSafe; `check.sh --export`) |
+| `air/<version>/{enc_exactness,opaque_bytes}/` | Patched-compiler exports (x86_64-linux, baseline, ReleaseSafe), declared in `exports.json` and pinned by `exports.lock.json` (`scripts/fixture-exports.py`) |
 | `EncExactness/<version>/{Gen,Opaque}.lean` | Their retained translations (`<version>` as a name: `V0_17_0`) |
 | `EncExactness/<version>/Model.lean` | Kernel-checked results (`decide +kernel`) of each version's translations, then `main` prints `native.zig`'s lines. Written for 0.17.0; the older versions' modules are that one with the version renamed (`scripts/fixtures.py instance ... --write` after an edit) |
 | `EncExactness/Rows.lean` | One kernel-checked row per value kind of the memory model: exact round trip, undetermined bits `.unspecified` |
@@ -20,7 +20,7 @@ The regressions of [`docs/architecture-audit/enc-exactness.md`](../../../docs/ar
 lake build ZigLean Air2Lean air2lean
 bash tests/roadmap/enc-exactness/check.sh                  # every version: translate, compare, prove, model = both targets
 AIR2LEAN_ZIG_NATIVE=<stock zig V> bash tests/roadmap/enc-exactness/check.sh --native V
-AIR2LEAN_ZIG_AIR=<patched zig V> bash tests/roadmap/enc-exactness/check.sh --export V DIR
+python3 -B scripts/fixture-exports.py verify enc-exactness   # fresh exports equal air/ (export: rewrite)
 ```
 
 `--native` runs in Docker `linux/amd64` and `linux/arm64`; `AIR2LEAN_X86_64_RUN` and

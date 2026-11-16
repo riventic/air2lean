@@ -13,8 +13,9 @@
 #                                 Debug), run them (Docker linux/amd64 and linux/arm64, unless
 #                                 AIR2LEAN_X86_64_RUN / AIR2LEAN_AARCH64_RUN is set; empty: the
 #                                 host), and compare with expected/VERSION-<arch>.txt
-#   check.sh --export VERSION DIR write fresh AIR with a patched Zig VERSION (AIR2LEAN_ZIG_AIR)
 #
+# The exports are declared in exports.json and pinned by exports.lock.json
+# (scripts/fixture-exports.py check|verify|export nan-bits; the default run checks the lock).
 # A model line `unspecified` matches any native value (a NaN's bits). Needs a built translator;
 # Lake builds the library with what it imports (scripts/fixtures.py; run it under
 # scripts/build-guard.py).
@@ -42,16 +43,6 @@ PY
 }
 
 case "${1:---check}" in
-  --export)
-    [ "$#" -eq 3 ] || { echo 'usage: check.sh --export VERSION DIR' >&2; exit 2; }
-    : "${AIR2LEAN_ZIG_AIR:?set a patched Zig with the repository exporter}"
-    out="$3/nan_bits"
-    mkdir -p "$out"
-    [ -z "$(find "$out" -mindepth 1 -maxdepth 1 -print -quit)" ] || { echo "$out must be empty" >&2; exit 1; }
-    ZIG_AIR_JSON_DIR="$(cd -- "$out" && pwd)" ZIG_AIR_JSON_FILTER="nan_bits." \
-      "$AIR2LEAN_ZIG_AIR" build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing \
-      -target x86_64-linux -mcpu=baseline "$dir/nan_bits.zig"
-    exit ;;
   --native)
     [ "$#" -eq 2 ] || { echo 'usage: check.sh --native VERSION' >&2; exit 2; }
     : "${AIR2LEAN_ZIG_NATIVE:?set a stock Zig of that version}"
@@ -79,8 +70,9 @@ case "${1:---check}" in
     done
     exit ;;
   --check) [ "$#" -le 1 ] || { echo 'usage: check.sh [--check]' >&2; exit 2; } ;;
-  *) echo 'usage: check.sh [--check|--native VERSION|--export VERSION DIR]' >&2; exit 2 ;;
+  *) echo 'usage: check.sh [--check|--native VERSION]' >&2; exit 2 ;;
 esac
+python3 -B scripts/fixture-exports.py check nan-bits
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first (lake build air2lean)' >&2; exit 1; }
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-nan-bits.XXXXXX")

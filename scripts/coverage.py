@@ -378,18 +378,6 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/big-endian/air/{version}/concurrency/s390x-linux': 'tests/roadmap/big-endian/README.md',
     'tests/roadmap/big-endian/air/{version}/concurrency/mips64-linux': 'tests/roadmap/big-endian/README.md',
     'tests/roadmap/big-endian/air/{version}/concurrency/x86_64-linux': 'tests/roadmap/big-endian/README.md',
-    # L07/L08: one directory per source and version (check.sh --export).
-    'tests/roadmap/packed-casts/air/{version}/packed_casts': 'tests/roadmap/packed-casts/README.md',
-    'tests/roadmap/packed-casts/air/{version}/logical017': 'tests/roadmap/packed-casts/README.md',
-    'tests/roadmap/packed-casts/air/{version}/vector_fields': 'tests/roadmap/packed-casts/README.md',
-    'tests/roadmap/packed-casts/air/{version}/auto_items': 'tests/roadmap/packed-casts/README.md',
-    'tests/roadmap/packed-casts/air/{version}/reject_lanes': 'tests/roadmap/packed-casts/README.md',
-    # nan_bits.zig (nan-bits/check.sh --export; docs/architecture-audit/nan-bits.md).
-    'tests/roadmap/nan-bits/air/{version}/nan_bits': 'tests/roadmap/nan-bits/README.md',
-    # enc_exactness.zig, opaque_bytes.zig (enc-exactness/check.sh --export).
-    'tests/roadmap/enc-exactness/air/{version}/enc_exactness': 'tests/roadmap/enc-exactness/README.md',
-    'tests/roadmap/enc-exactness/air/{version}/opaque_bytes': 'tests/roadmap/enc-exactness/README.md',
-    'tests/roadmap/bitcast-017/air/{version}': 'docs/bitcast-semantics.md',
     # T06: self-hosted (stage2_x86_64) exports of the backend-divergence reproducers.
     'tests/roadmap/build-modes/stage2-air/{version}': 'tests/roadmap/build-modes/stage2_rules.py',
     'tests/roadmap/extern-calls/air/{version}': 'tests/roadmap/extern-calls/provenance.json',

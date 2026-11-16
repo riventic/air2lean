@@ -1,0 +1,12 @@
+{
+  "exports": [
+    {
+      "out": "air/{version}/nan_bits",
+      "source": "nan_bits.zig",
+      "filter": "nan_bits.",
+      "versions": ["0.17.0", "0.16.0", "0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    }
+  ]
+}

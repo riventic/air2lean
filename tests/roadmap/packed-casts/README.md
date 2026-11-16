@@ -33,7 +33,7 @@ instances of `ZigLean/PackedRepr.lean` for floats, packed unions, arrays and vec
 | `auto_items.zig` | 0.14.1 and 0.15.2 check only the outer types of a `@bitCast`. An array of `auto` structs or tagged unions is then a memory reinterpretation with the compiler's layout (`ZigVersion.bitCastAutoItems`) |
 | `reject_lanes.zig` | Rejected: a lane pointer into a vector field of a packed struct, which 0.14.1 and 0.15.2 miscompile ([upstream draft](../../../docs/upstream/packed-vector-lane-ptr.md)) |
 | `compile-errors/` | Casts that Sema rejects, with `expected.txt` per version. An `auto` struct, tuple or tagged union fails on every version. Arrays of `auto` structs and tagged unions fail from 0.16.0, and an `extern` struct from 0.17.0 |
-| `air/<version>/<source>/` | Patched-compiler exports (x86_64-linux, baseline, ReleaseSafe; `check.sh --export`) |
+| `air/<version>/<source>/` | Patched-compiler exports (x86_64-linux, baseline, ReleaseSafe), declared in `exports.json` and pinned by `exports.lock.json` (`scripts/fixture-exports.py`) |
 | `PackedCasts/<version>/<Source>.lean` | Their retained translations (`<version>` as a name: `V0_17_0`; `<Source>` one of `PackedCasts`, `Logical017`, `VectorFields`, `AutoItems`) |
 | `PackedCasts/<version>/{Model,ModelLogical,ModelVector,ModelAuto}.lean` | Kernel-checked results (`decide +kernel`) of the translations, then `main` prints `native.zig`'s lines. Each is written for the newest version of its source; the older versions' modules are that one with the version renamed (`scripts/fixtures.py instance ... --write` after an edit) |
 | `PackedCasts/Show.lean` | The models' formatting of results as `native.zig` prints them |
@@ -44,7 +44,7 @@ lake build ZigLean Air2Lean air2lean
 bash tests/roadmap/packed-casts/check.sh                       # every version: translate, compare, prove, model = observed, rejection
 AIR2LEAN_ZIG_NATIVE=<stock zig V> bash tests/roadmap/packed-casts/check.sh --native V
 AIR2LEAN_ZIG_NATIVE=<stock zig V> bash tests/roadmap/packed-casts/check.sh --compile-errors V
-AIR2LEAN_ZIG_AIR=<patched zig V> bash tests/roadmap/packed-casts/check.sh --export V DIR
+python3 -B scripts/fixture-exports.py verify packed-casts   # fresh exports equal air/ (export: rewrite)
 ```
 
 `--native` runs in Docker `linux/amd64`. Set `AIR2LEAN_X86_64_RUN` to change the runner; empty

@@ -1,0 +1,44 @@
+{
+  "exports": [
+    {
+      "out": "air/{version}/packed_casts",
+      "source": "packed_casts.zig",
+      "filter": "packed_casts.",
+      "versions": ["0.17.0", "0.16.0", "0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/logical017",
+      "source": "logical017.zig",
+      "filter": "logical017.",
+      "versions": ["0.17.0"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/vector_fields",
+      "source": "vector_fields.zig",
+      "filter": "vector_fields.",
+      "versions": ["0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/auto_items",
+      "source": "auto_items.zig",
+      "filter": "auto_items.",
+      "versions": ["0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/reject_lanes",
+      "source": "reject_lanes.zig",
+      "filter": "reject_lanes.",
+      "versions": ["0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    }
+  ]
+}
