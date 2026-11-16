@@ -3,8 +3,8 @@
 #
 #   invgen_fixture DIR NAMESPACE PREFIX WORK
 #
-# checks the retained AIR in DIR/air against DIR/provenance.json, retranslates it and compares the
-# result with the committed DIR/NAMESPACE/Gen.lean, regenerates the loop invariants and measures
+# checks the retained AIR in DIR/air against its fixture's exports.lock.json, retranslates it and
+# compares the result with the committed DIR/NAMESPACE/Gen.lean, regenerates the loop invariants and measures
 # (air2lean-invgen, the fixture's target of scripts/invgen.py) and compares them with the committed
 # DIR/NAMESPACE/Inv.lean, kernel-checks DIR/Proof.lean, and runs the seeded mutants of
 # DIR/mutants.json (invgen_mutants.py): the generator is untrusted, and only the check accepts its
@@ -14,18 +14,9 @@
 invgen_fixture() {
   local dir=$1 ns=$2 prefix=$3 work=$4
   python3 -B scripts/lean-deps.py --build "$dir"
-  python3 - "$dir" <<'PY'
-import hashlib, json, pathlib, sys
-d = pathlib.Path(sys.argv[1])
-prov = json.loads((d / "provenance.json").read_text())
-for rel, want in prov["artifacts"].items():
-    got = hashlib.sha256((d / rel).read_bytes()).hexdigest()
-    if got != want:
-        sys.exit(f"{rel}: sha256 {got} != provenance {want}")
-src = pathlib.Path(prov["source"])
-if hashlib.sha256(src.read_bytes()).hexdigest() != prov["source_sha256"]:
-    sys.exit(f"{src} changed since the retained export; re-export and update provenance.json")
-PY
+  # DIR/air is an export of the fixture's exports.json (tests/roadmap/<fixture>/...), pinned by its
+  # exports.lock.json.
+  python3 -B scripts/fixture-exports.py check "$(cut -d/ -f3 <<<"$dir")"
   local translator=${AIR2LEAN_TRANSLATOR:-"$PWD/.lake/build/bin/air2lean"}
   [ -x "$translator" ] || { echo 'build the translator first: lake build air2lean' >&2; return 1; }
   "$translator" "$dir/air" -o "$work/Gen.lean" --namespace "$ns" --prefix "$prefix"

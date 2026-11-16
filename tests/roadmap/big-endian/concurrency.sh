@@ -18,7 +18,7 @@
 #                                     matches ELF ABI version 0: the copy that runs has
 #                                     EI_ABIVERSION cleared, the code is unchanged);
 #                                     AIR2LEAN_<ARCH>_RUN names a direct runner (empty: the host)
-#   concurrency.sh --export VERSION DIR   fresh AIR (AIR2LEAN_ZIG_AIR)
+#   the AIR: exports.json, pinned by exports.lock.json (scripts/fixture-exports.py)
 # Lake builds the library (scripts/fixtures.py): run it under scripts/build-guard.py.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
@@ -27,20 +27,6 @@ dir=tests/roadmap/big-endian
 versions=(0.15.2 0.17.0)
 targets=(s390x-linux mips64-linux x86_64-linux)
 case "${1:---check}" in
-  --export)
-    [ "$#" -eq 3 ] || { echo 'usage: concurrency.sh --export VERSION DIR' >&2; exit 2; }
-    : "${AIR2LEAN_ZIG_AIR:?set a patched Zig with the repository exporter}"
-    for t in "${targets[@]}"; do
-      out="$3/$t"
-      mkdir -p "$out"
-      [ -z "$(find "$out" -mindepth 1 -maxdepth 1 -print -quit)" ] || { echo "$out must be empty" >&2; exit 1; }
-      cpu=()
-      [ "$t" = x86_64-linux ] && cpu=(-mcpu=baseline)
-      ZIG_AIR_JSON_DIR="$(cd -- "$out" && pwd)" ZIG_AIR_JSON_FILTER=concurrency.,atomic.Value \
-        "$AIR2LEAN_ZIG_AIR" build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing \
-        -target "$t" "${cpu[@]}" "$dir/concurrency.zig"
-    done
-    exit ;;
   --native)
     [ "$#" -eq 2 ] || { echo 'usage: concurrency.sh --native VERSION' >&2; exit 2; }
     : "${AIR2LEAN_ZIG_NATIVE:?set a stock Zig of that version}"
@@ -68,8 +54,9 @@ case "${1:---check}" in
     done
     exit ;;
   --check) [ "$#" -le 1 ] || { echo 'usage: concurrency.sh [--check]' >&2; exit 2; } ;;
-  *) echo 'usage: concurrency.sh [--check|--native VERSION|--export VERSION DIR]' >&2; exit 2 ;;
+  *) echo 'usage: concurrency.sh [--check|--native VERSION]' >&2; exit 2 ;;
 esac
+python3 -B scripts/fixture-exports.py check big-endian
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first (lake build air2lean)' >&2; exit 1; }
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-be-conc.XXXXXX")

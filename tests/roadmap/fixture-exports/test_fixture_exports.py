@@ -91,6 +91,13 @@ class Synthetic(unittest.TestCase):
                 self.lock()
                 self.assertTrue(any(what in p for p in fx.check('demo')), fx.check('demo'))
 
+    def test_one_version_needs_no_version_directory(self):
+        (self.here / 'air' / VERSION).rename(self.root / 'moved')
+        (self.root / 'moved').rename(self.here / 'flat')
+        self.write_manifest([dict(self.entry, out='flat')])
+        self.lock()
+        self.assertEqual(fx.check('demo'), [])
+
     def test_error_limit_sets_the_width(self):
         self.write_manifest([dict(self.entry, args=ARGS + ['--error-limit', '255'])])
         self.write_air('demo.add.json', document('demo.add', error_set_bits=8))
@@ -105,7 +112,7 @@ class Synthetic(unittest.TestCase):
     def test_manifest_rejects(self):
         bad = [{'exports': []},
                {'exports': [dict(self.entry, extra=1)]},
-               {'exports': [dict(self.entry, out='air')]},
+               {'exports': [dict(self.entry, out='air', versions=fx.versions()[:2])]},
                {'exports': [dict(self.entry, out='../air/{version}')]},
                {'exports': [dict(self.entry, versions=['0.0.0'])]},
                {'exports': [dict(self.entry, source='missing.zig')]},

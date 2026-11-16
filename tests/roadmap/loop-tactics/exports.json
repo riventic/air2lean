@@ -1,0 +1,18 @@
+{
+  "exports": [
+    {
+      "out": "counted/air",
+      "source": "counted/counted.zig",
+      "filter": "counted.",
+      "versions": ["0.17.0"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"]
+    },
+    {
+      "out": "nested/air",
+      "source": "nested/nested.zig",
+      "filter": "nested.",
+      "versions": ["0.16.0"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"]
+    }
+  ]
+}

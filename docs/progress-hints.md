@@ -96,10 +96,10 @@ selection. CI kernel-checks it with plain `lake env lean` in full non-mutation r
 
 `tests/roadmap/idle-loops` checks the translated `progress.idle` loop
 (`while (@atomicLoad(u32, flag, .acquire) == 0) { spinLoopHint(); Thread.yield() catch {}; }`).
-The AIR is the retained 0.16.0 `x86_64-linux` baseline `ReleaseSafe` export from
-full progress-hint qualifications. Three clean revisions produced byte-identical AIR
-(`provenance.json`), with the translated std code under `Thread.yield` (`Thread.yield`,
-`os.linux.errno`). `IdleLoop/Gen.lean` is the unmodified translator output, and the
+The AIR is the 0.16.0 `x86_64-linux` baseline `ReleaseSafe` export of `progress.idle`'s call
+closure in `tests/roadmap/progress/progress.zig`, with the translated std code under
+`Thread.yield` (`Thread.yield`, `os.linux.errno`), declared in `exports.json` and pinned by
+`exports.lock.json` ([coverage.md](coverage.md#fixture-exports)). `IdleLoop/Gen.lean` is the unmodified translator output, and the
 gate retranslates and compares it. `threadYield_eq` shows that the translated
 `Thread.yield` is the `sched_yield` stop followed by `ok`, and `wLoop_eq` unfolds one
 iteration of the generated loop: an acquire load (a `pick` stop), then on 0 the spin `yield`

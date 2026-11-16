@@ -1,0 +1,22 @@
+{
+  "air_sha256": {
+    "counted/air/counted.down.json": "943e6e523bcdcdb57b3a90d84622aadd2ce4dfdbd7386c092828360907635dae",
+    "counted/air/counted.lenCount.json": "4ab89a191155bbc66e09f75120bb3707faf5db18f3bdcca1b06c9624bc787ff5",
+    "counted/air/counted.pairAt.json": "6444bc16bf5d5eb56276a2a9081460d97ef8b14c08e8d9e92d0bb5f2624d034b",
+    "counted/air/counted.readBound.json": "37121d6bca2a75a4dd60ac75b9d89537f508d64dd1cb060002832c87f92822d8",
+    "counted/air/counted.tri.json": "fd67acc8affa89cd548edbe84031148f2d00a3621460de7e38a29e0d7963eb02",
+    "counted/air/counted.upLe.json": "231f9379e1f67a0b551a9db0130c51224fa82e3663b8fa653d787b507b451241",
+    "counted/air/counted.upNe.json": "298dff02073395b09f197ad43cf13dc9a283dc7f224649c7520e1e45819a428e",
+    "nested/air/nested.pairs.json": "d72a27edfe36e9aefc899508439836a37c9c2cfb4b55e0d32fd7e98f308746b3"
+  },
+  "compilers": {
+    "0.16.0": "d49dbe58d9fd83d9fdedc5270fa3a5a34ab9661ebc63b52070027a00bdec6954",
+    "0.17.0": "321ab894d2a5d5784afdba19137ed24abf39c62825b440f9a4f82e53958d9b24"
+  },
+  "manifest_sha256": "bbab493fe27b27cf92bf0bc99f3d7e3b9e4d995069d69cd4b7f0366c220968f1",
+  "schema": 1,
+  "sources_sha256": {
+    "counted/counted.zig": "b33a243b325c68d9552b0b47aecd058e88aa9be486a9faab7e8510ecceef20a9",
+    "nested/nested.zig": "fb72e5d37ab5042dec5fd283aa6ec3305dd5418aa53deddc7aa93db789faaf41"
+  }
+}

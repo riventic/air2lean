@@ -5,7 +5,8 @@ stage2-air/<version>/ holds the patched compilers' exports (`-fno-llvm -target x
 -mcpu=baseline`) of reproducers/stage2-x86_64-divergences.zig's `modF16` (a float `@mod`) and
 `setNib` (an `i4` read from a packed union). Each is rejected under its stage2_x86_64 profile
 with the rule's message, and the same file with the profile's backend set to stage2_llvm is
-accepted: the rule is keyed on the backend, not on the construct.
+accepted: the rule is keyed on the backend, not on the construct. The exports are declared in
+../exports.json and pinned by ../exports.lock.json (scripts/fixture-exports.py).
 
 Usage: stage2_rules.py [AIR2LEAN_BINARY]  (default .lake/build/bin/air2lean)
 """

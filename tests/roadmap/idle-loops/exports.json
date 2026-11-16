@@ -1,0 +1,13 @@
+{
+  "exports": [
+    {
+      "out": "air",
+      "source": "../progress/progress.zig",
+      "filter": "progress.,Thread.yield,os.linux.errno",
+      "versions": ["0.16.0"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo",
+      "closure": ["progress.idle"]
+    }
+  ]
+}
