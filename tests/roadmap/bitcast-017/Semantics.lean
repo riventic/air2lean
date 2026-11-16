@@ -1,7 +1,7 @@
 import ZigLean.BitCast
 
-/-! `ZigLean/BitCast.lean` on the Zig 0.17.0 behaviour-test values
-(`test/behavior/bitcast.zig` in the 0.17.0 source tarball; docs/bitcast-semantics.md §Evidence). -/
+/-! `ZigLean/BitCast.lean` on the Zig 0.17.1 behaviour-test values
+(`test/behavior/bitcast.zig` in the 0.17.1 source tarball; docs/bitcast-semantics.md §Evidence). -/
 
 open Zig Zig.BitCast
 
@@ -23,7 +23,7 @@ open Zig Zig.BitCast
 #guard ofLanes (#v[0x1, 0x5, 0xF, 0x0, 0x4, 0xD, 0xE, 0xF, 0xE, 0x1, 0xC, 0xA, 0x7, 0xE, 0x0,
   0x0, 0x2, 0x0, 0x4, 0xF, 0xF, 0x6, 0xF, 0xB, 0x5, 0xB, 0x3, 0x7, 0x8, 0x8] :
   Vector (BitVec 4) 30) = 0x8873B_5BF6F_F4020_0E7AC_1EFED_40F51#120
--- padded elements (native probe, stock 0.17.0): [2]u24 → u48, [3]u9 → u27; 0.16 differs
+-- padded elements (native probe, stock 0.17.1): [2]u24 → u48, [3]u9 → u27; 0.16 differs
 #guard ofLanes (#v[0x112233, 0x445566] : Vector (BitVec 24) 2) = 0x445566112233#48
 #guard ofLanes (#v[0x101, 0x0ff, 0x1aa] : Vector (BitVec 9) 3) = 0x6a9ff01#27
 -- byte-multiple lanes: the ≤0.16 memory bytes are the logical integer's bytes

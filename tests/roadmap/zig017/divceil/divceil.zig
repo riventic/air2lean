@@ -1,4 +1,4 @@
-//! `@divCeil` (Zig 0.17.0) on signed and unsigned integers: the compiler-exported fixture of the
+//! `@divCeil` (Zig 0.17.1) on signed and unsigned integers: the compiler-exported fixture of the
 //! `support:tags:div_ceil` qualification obligation (`check.sh`). Sema guards the `div_ceil`
 //! instruction with the `@divFloor` safety checks: division by zero, and `minInt / -1` for a
 //! signed type.

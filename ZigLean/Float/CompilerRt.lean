@@ -130,11 +130,11 @@ extension (`__extendxftf2`) is a signed zero. -/
 def Float.isZeroExtPseudoDenormalF80 {fmt : FloatFmt} (x : Float fmt) : Bool :=
   x.isPseudoDenormalF80 && x.bits.toNat % 2 ^ 63 == 0
 
-/-- Zig 0.17.0's f80 `@trunc` (`truncl` → `trunc_f80`, `@floatCast(trunc_f128(x))`): when the
+/-- Zig 0.17.1's f80 `@trunc` (`truncl` → `trunc_f80`, `@floatCast(trunc_f128(x))`): when the
 f128 extension has no fraction bits to clear, `trunc_f128` returns its argument, and LLVM 22 folds
 `fptrunc (fpext x)` back to the original f80 `x`. For a value that is its own truncation this is
 the same result; for a pseudo-denormal whose extension is a signed zero the original encoding is
-returned instead of zero. Observed with stock 0.17.0 on x86_64-linux (`truncl`'s
+returned instead of zero. Observed with stock 0.17.1 on x86_64-linux (`truncl`'s
 disassembly reloads the saved operand; a 200,000-encoding scan finds no other difference from
 0.16.0, which returns the signed zero). -/
 def Float.truncRt017Chk {fmt : FloatFmt} (x : Float fmt) : Result (Float fmt) :=
@@ -312,8 +312,11 @@ private def addAdjusted {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
 
 /-- `add_and_denorm(a, b, scale)`: `ldexp(a + b, scale)` with a single rounding error, assuming
 the result is subnormal — the same sticky-bit adjustment as `addAdjusted`, but keyed on how many
-bits `scalbn scale` will shift out rather than on `hi`'s last bit directly. -/
-private def addAndDenorm {fmt : FloatFmt} (a b : Float fmt) (scale : Int) : Float fmt :=
+bits `scalbn scale` will shift out rather than on `hi`'s last bit directly. Before Zig 0.17.1 the
+source adjusts exactly when `(bits_lost != 1) == (hi odd)`; `fixed017` (0.17.1's `fma.zig`) when
+the two differ. -/
+private def addAndDenorm {fmt : FloatFmt} (fixed017 : Bool) (a b : Float fmt) (scale : Int) :
+    Float fmt :=
   let sum := ddAdd a b
   let uloi := sum.lo.bits.toNat
   let hi :=
@@ -322,7 +325,7 @@ private def addAndDenorm {fmt : FloatFmt} (a b : Float fmt) (scale : Int) : Floa
       let uhii := sum.hi.bits.toNat
       let expField : Nat := (uhii >>> fmt.fracBits) % 2 ^ fmt.expBits
       let bitsLost : Int := -(expField : Int) - scale + 1
-      if (bitsLost != 1) == (uhii % 2 == 1) then
+      if ((bitsLost != 1) == (uhii % 2 == 1)) != fixed017 then
         let x := ((uhii ^^^ uloi) >>> (fmt.width - 2)) &&& 2
         ⟨.ofNat fmt.width (uhii + (2 ^ fmt.width + 1 - x))⟩
       else
@@ -334,8 +337,17 @@ private def addAndDenorm {fmt : FloatFmt} (a b : Float fmt) (scale : Int) : Floa
 /-- `fma`/`fmaq`: `x * y + z` with one rounding error, via Dekker's technique. One generic core
 for `f64` and `f128` — like `ddMul`, the two source functions are the same algorithm apart from
 the split constant — called at each concrete format by `Float.fmaRt` below; `f80` goes through
-this at `f128` and rounds down once more (`__fmax`, same as `Float.fma`'s own `f80` case). -/
-private def fmaCore {fmt : FloatFmt} (split : Float fmt) (x y z : Float fmt) : Float fmt :=
+this at `f128` and rounds down once more (`__fmax`, same as `Float.fma`'s own `f80` case).
+
+`fixed017` selects Zig 0.17.1's `fma.zig`, which fixed three cases of the earlier source (one
+algorithm before, `fma_f64`/`fma_f128` in 0.17.1): an addend whose exponent exceeds the
+product's by more than the precision is returned as is (`spread < -53`/`-113`; before, scaling
+it by `-spread` overflowed to infinity and the result was NaN, e.g. `fmaq(min subnormal, 1,
+1.5)`); a zero `r.hi` returns `xy.hi + zs` when `xy.lo` is zero and `scalbn(xy.lo, spread)`
+otherwise (before: the sum of all three); and `add_and_denorm`'s adjustment condition is negated
+(`addAndDenorm`). -/
+private def fmaCore {fmt : FloatFmt} (fixed017 : Bool) (split : Float fmt) (x y z : Float fmt) :
+    Float fmt :=
   if !x.isFinite || !y.isFinite then
     Float.add (Float.mulRt x y) z
   else if !z.isFinite then
@@ -349,6 +361,7 @@ private def fmaCore {fmt : FloatFmt} (split : Float fmt) (x y z : Float fmt) : F
     let (ys, ey) := Float.frexp y
     let (zs0, ez) := Float.frexp z
     let spread0 := ex + ey - ez
+    if fixed017 && spread0 < -(fmt.prec : Int) then z else
     let zs :=
       if spread0 ≤ 2 * (fmt.prec : Int) then Float.scalbn zs0 (-spread0)
       else Float.copysign Float.floatMin zs0
@@ -356,41 +369,67 @@ private def fmaCore {fmt : FloatFmt} (split : Float fmt) (x y z : Float fmt) : F
     let r := ddAdd xy.hi zs
     let spread := ex + ey
     if r.hi.isZero then
-      Float.add (Float.add xy.hi zs) (Float.scalbn xy.lo spread)
+      if !fixed017 then Float.add (Float.add xy.hi zs) (Float.scalbn xy.lo spread)
+      else if xy.lo.isZero then Float.add xy.hi zs
+      else Float.scalbn xy.lo spread
     else
       let adj := addAdjusted r.lo xy.lo
       if spread + Float.ilogb r.hi > fmt.emin - 1 then
         Float.scalbn (Float.add r.hi adj) spread
       else
-        addAndDenorm r.hi adj spread
+        addAndDenorm fixed017 r.hi adj spread
 
-/-- `fma.zig:32-43` (`fmaf`): the product in `f64` (exact: 24 + 24 bits), plus `z` rounded once
-to `f64`, then rounded to `f32`. Both branches of the source return the same value (its TODO:
-no double-rounding fix), so the result can differ from one rounding by an ulp. -/
-private def fmaf (x y z : Float .f32) : Float .f32 :=
-  Float.conv .f32 (Float.add (Float.mul (Float.conv .f64 x) (Float.conv .f64 y)) (Float.conv .f64 z))
+/-- `fmaf` (`fma_f32` from 0.17.0): the product in `f64` (exact: 24 + 24 bits), plus `z` rounded
+once to `f64`, then rounded to `f32`. Before Zig 0.17.1 both branches of the source return that
+value (its TODO: no double-rounding fix), so the result can differ from one rounding by an ulp.
+`fixed017` (0.17.1): when the `f64` sum is inexact and lies exactly on an `f32` midpoint (its low
+29 bits are `0x10000000`), it is first moved one `f64` ulp towards the exact sum, so the final
+rounding to `f32` is the correct one. -/
+private def fmaf (fixed017 : Bool) (x y z : Float .f32) : Float .f32 :=
+  let xy := Float.mul (Float.conv .f64 x) (Float.conv .f64 y)
+  let z64 := Float.conv .f64 z
+  let xyz := Float.add xy z64
+  if !fixed017 then Float.conv .f32 xyz else
+  let u := xyz.bits.toNat
+  let e := (u >>> 52) % 2 ^ 11
+  if u % 2 ^ 29 != 2 ^ 28 || e == 2 ^ 11 - 1 ||
+      (Float.eq (Float.sub xyz xy) z64 && Float.eq (Float.sub xyz z64) xy) then
+    Float.conv .f32 xyz
+  else
+    let negative := u >>> 63 != 0
+    let err := if negative == Float.gt z64 xy then Float.add (Float.sub xy xyz) z64
+      else Float.add (Float.sub z64 xyz) xy
+    let u' := if negative == Float.lt err (Float.zero false) then u + 1 else u - 1
+    Float.conv .f32 (⟨.ofNat _ u'⟩ : Float .f64)
 
-/-- `@mulAdd` in `compiler-rt` mode. x86-64 baseline has no FMA instruction, so every format
-calls compiler_rt: `f32` `fmaf`, `f16` `__fmah` (`fmaf` on the `f32` extensions, then rounded
-to `f16`), `f64` `fma`, `f128` `fmaq`, `f80` `__fmax` (`fmaq` on the `f128` extensions, then
-rounded to `f80`). -/
-def Float.fmaRt {fmt : FloatFmt} (a b c : Float fmt) : Float fmt :=
+/-- `@mulAdd` in `compiler-rt` mode, the source of Zig version `fixed017` selects (`fmaCore`,
+`fmaf`). x86-64 baseline has no FMA instruction, so every format calls compiler_rt: `f32`
+`fmaf`, `f16` `__fmah` (`fmaf` on the `f32` extensions, then rounded to `f16`), `f64` `fma`,
+`f128` `fmaq`, `f80` `__fmax` (`fmaq` on the `f128` extensions, then rounded to `f80`). -/
+private def fmaRtOf (fixed017 : Bool) {fmt : FloatFmt} (a b c : Float fmt) : Float fmt :=
   if h : fmt = .f32 then
-    h ▸ fmaf (h ▸ a) (h ▸ b) (h ▸ c)
+    h ▸ fmaf fixed017 (h ▸ a) (h ▸ b) (h ▸ c)
   else if h : fmt = .f16 then
-    h ▸ Float.conv .f16 (fmaf (Float.conv .f32 a) (Float.conv .f32 b) (Float.conv .f32 c))
+    h ▸ Float.conv .f16
+        (fmaf fixed017 (Float.conv .f32 a) (Float.conv .f32 b) (Float.conv .f32 c))
   else if h : fmt = .f64 then
-    h ▸ fmaCore (Float.roundRat .f64 false ((2 : Rat) ^ 27 + 1))
+    h ▸ fmaCore fixed017 (Float.roundRat .f64 false ((2 : Rat) ^ 27 + 1))
         (Float.conv .f64 a) (Float.conv .f64 b) (Float.conv .f64 c)
   else if h : fmt = .f128 then
-    h ▸ fmaCore (Float.roundRat .f128 false ((2 : Rat) ^ 57 + 1))
+    h ▸ fmaCore fixed017 (Float.roundRat .f128 false ((2 : Rat) ^ 57 + 1))
         (Float.conv .f128 a) (Float.conv .f128 b) (Float.conv .f128 c)
   else if h : fmt = .f80 then
     h ▸ Float.conv .f80
-        (fmaCore (Float.roundRat .f128 false ((2 : Rat) ^ 57 + 1))
+        (fmaCore fixed017 (Float.roundRat .f128 false ((2 : Rat) ^ 57 + 1))
           (Float.conv .f128 a) (Float.conv .f128 b) (Float.conv .f128 c))
   else
     Float.fma a b c
+
+/-- `@mulAdd` in `compiler-rt` mode before Zig 0.17.1 (`fmaRtOf false`). -/
+def Float.fmaRt {fmt : FloatFmt} (a b c : Float fmt) : Float fmt := fmaRtOf false a b c
+
+/-- `@mulAdd` in `compiler-rt` mode from Zig 0.17.1 (`fmaRtOf true`: 0.17.1's `fma.zig`). -/
+def Float.fmaRt017 {fmt : FloatFmt} (a b c : Float fmt) : Float fmt := fmaRtOf true a b c
 
 /-! ## `f128` division (`divtf3.zig`) -/
 
@@ -511,7 +550,7 @@ def Float.divTruncRt016 {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
 def Float.divFloorRt016 {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
   Float.floor (Float.divRt016 a b)
 
-/-- `@divCeil` in `compiler-rt` mode from Zig 0.16.0 (`@divCeil` itself is 0.17.0's; 0.17.0's
+/-- `@divCeil` in `compiler-rt` mode from Zig 0.16.0 (`@divCeil` itself is 0.17.1's; 0.17.1's
 `divtf3.zig` keeps 0.16.0's algorithm). -/
 def Float.divCeilRt016 {fmt : FloatFmt} (a b : Float fmt) : Float fmt :=
   Float.ceil (Float.divRt016 a b)
@@ -603,7 +642,14 @@ def Float.fmaRtFused {fmt : FloatFmt} (a b c : Float fmt) : Float fmt :=
   | .f80 | .f128 => Float.fmaRt a b c
   | .f16 | .f32 | .f64 => Float.fmaFused a b c
 
-/-- `@divCeil` (Zig 0.17.0) on aarch64 `f80` in `compiler-rt` mode: `__divxf3`, then ceiled. -/
+/-- `Float.fmaRtFused` from Zig 0.17.1: `f80`/`f128` through 0.17.1's `fma.zig`
+(`Float.fmaRt017`). -/
+def Float.fmaRt017Fused {fmt : FloatFmt} (a b c : Float fmt) : Float fmt :=
+  match fmt with
+  | .f80 | .f128 => Float.fmaRt017 a b c
+  | .f16 | .f32 | .f64 => Float.fmaFused a b c
+
+/-- `@divCeil` (Zig 0.17.1) on aarch64 `f80` in `compiler-rt` mode: `__divxf3`, then ceiled. -/
 def Float.divCeilXf3 (a b : Float .f80) : Float .f80 := Float.ceil (Float.divXf3 a b)
 
 /-- `@mulAdd` in `compiler-rt` mode, guarded against group C on any operand — the same guard as
@@ -613,6 +659,13 @@ def Float.fmaRtChk {fmt : FloatFmt} (a b c : Float fmt) : Result (Float fmt) :=
       a.isPseudoDenormalF80 || b.isPseudoDenormalF80 || c.isPseudoDenormalF80 then
     throw .unspecified
   else pure (Float.fmaRt a b c)
+
+/-- `Float.fmaRtChk` from Zig 0.17.1 (`Float.fmaRt017`, the same guard). -/
+def Float.fmaRt017Chk {fmt : FloatFmt} (a b c : Float fmt) : Result (Float fmt) :=
+  if a.isInvalidF80 || b.isInvalidF80 || c.isInvalidF80 ||
+      a.isPseudoDenormalF80 || b.isPseudoDenormalF80 || c.isPseudoDenormalF80 then
+    throw .unspecified
+  else pure (Float.fmaRt017 a b c)
 
 /-! ## `f128` division per Zig version: what each port computes
 

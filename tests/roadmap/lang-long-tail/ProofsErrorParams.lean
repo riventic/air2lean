@@ -3,7 +3,7 @@ import LangLongTail.ErrorParams
 /-!
 # L10: error values as runtime parameters, on the retained translation
 
-`LangLongTail.ErrorParams` is the translation of `air/error_params/0.16.0`; the 0.17.0, 0.15.2
+`LangLongTail.ErrorParams` is the translation of `air/error_params/0.16.0`; the 0.17.1, 0.15.2
 and 0.14.1 exports translate to the same text apart from the profile header (`check.sh`). A
 one-name error set (`error{Boom}`) is a runtime parameter like any other: the error passed in is
 the error returned, whatever its name, and the generic `fail(tag, err: anytype)` instances keep

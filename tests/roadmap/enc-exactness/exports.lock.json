@@ -27,26 +27,26 @@
     "air/0.16.0/enc_exactness/enc_exactness.u24SetPad.json": "834452284f4a4b11e2a31e1d231470fbaeed6bb35531aa6ca8b23cb4009058d2",
     "air/0.16.0/enc_exactness/enc_exactness.u24StoreBytes.json": "4751ec6849f12fd590799c232751b25f3937d1353cb90f97f466bfbb6ee37232",
     "air/0.16.0/opaque_bytes/opaque_bytes.allocatorWord.json": "8d7646dcd518d0ee692e3961d646a6444cdb3bdf201d5d7387696bfb1f47d43c",
-    "air/0.17.0/enc_exactness/enc_exactness.boolByte.json": "05adb989de9ed7c31ab700e0d919040df75b1eb7c842a3e47d05aff4c5a24122",
-    "air/0.17.0/enc_exactness/enc_exactness.e24SetPad.json": "8b78bd154e840e32dc6555da8e950812cd103bd519bc7f0d2d04a7d41f5ebf12",
-    "air/0.17.0/enc_exactness/enc_exactness.i10StoreBytes.json": "861e31aebfaa5029fc4c261614f9a625c1823b78dd64afe791b7b0a236f40155",
-    "air/0.17.0/enc_exactness/enc_exactness.i10ZeroPad.json": "5f240273ed000ce1ba0b47769353bc1ba6e2a88aadf99efa43d9094f9538e98d",
-    "air/0.17.0/enc_exactness/enc_exactness.i24RoundTrip.json": "f20ca36af9564e0441d4efc3bdbc026951f9b53a29f427ec1e81c8bebce26839",
-    "air/0.17.0/enc_exactness/enc_exactness.i24ZeroPad.json": "a5ebde4a796bfad575750e2abf861c1de2c6a6ce1758747c7bc9fab69e17aa1c",
-    "air/0.17.0/enc_exactness/enc_exactness.u24SetPad.json": "f9a326bbc37999e71749e6579ccfb117a3f2e153b5e55996ba83444da8336f2f",
-    "air/0.17.0/enc_exactness/enc_exactness.u24StoreBytes.json": "d928469796471891e02d9ab2757535a26d565841285470b53671b989674615ec",
-    "air/0.17.0/opaque_bytes/opaque_bytes.allocatorWord.json": "94e7273cc78e8669ab8c001c2aeff3958507d6504885543aa596016c05ee7bf8"
+    "air/0.17.1/enc_exactness/enc_exactness.boolByte.json": "3cee15f78b0fc65484a9d57bdd17b789ce15dedd0e16034993ad4dcd05d00e3c",
+    "air/0.17.1/enc_exactness/enc_exactness.e24SetPad.json": "0a4a6c9ca224c440499fe22bb2281680ddd8856e2bf77cbacb6d72df23c6ff0e",
+    "air/0.17.1/enc_exactness/enc_exactness.i10StoreBytes.json": "b7814b2811911e9fcdbbd63c28a429eefb7b079663c1ee5708c001c05222e827",
+    "air/0.17.1/enc_exactness/enc_exactness.i10ZeroPad.json": "bd1e8af5ac9a4d01b0080599a47ef8fd16c5b819384e5abe8fb1398bd8f3d43f",
+    "air/0.17.1/enc_exactness/enc_exactness.i24RoundTrip.json": "516b63464ba6aee7a33eb5df13fc621b45573c29b386cd7e84bfea9f64342e6f",
+    "air/0.17.1/enc_exactness/enc_exactness.i24ZeroPad.json": "542a08c44e70cd185d73d1e20ebc38f991ca9fe99fbf93bc84c3a7f7c319997d",
+    "air/0.17.1/enc_exactness/enc_exactness.u24SetPad.json": "b9e5015b12a7b5beabac1ee645e42eaa9bcb1c78fbb60863a4ca0da966c42101",
+    "air/0.17.1/enc_exactness/enc_exactness.u24StoreBytes.json": "f06ab51e247e3e661b9fac4488ae36999c4733e4dc15a5a507c7b2bd0f73bab7",
+    "air/0.17.1/opaque_bytes/opaque_bytes.allocatorWord.json": "f33c212d64794ae7c22487617dc4263f155fa1c69660fffdbd8141d9d83c0a3b"
   },
   "compilers": {
-    "0.14.1": "de0fff4117985708efbd803bb1e53fe37ebf0596853e68633ac66d7f6dbd1d89",
-    "0.15.2": "08fabea60c770d7c034a9dbe78e816beb0d8a17a9b9a0ed5c8bdcbd112cffc05",
-    "0.16.0": "d49dbe58d9fd83d9fdedc5270fa3a5a34ab9661ebc63b52070027a00bdec6954",
-    "0.17.0": "321ab894d2a5d5784afdba19137ed24abf39c62825b440f9a4f82e53958d9b24"
+    "0.14.1": "398f3c0aecbe5a90957606eba157d9a7e69eebc0516779ba51ac2f53c0003433",
+    "0.15.2": "2e1e05ae07d5a5f629ad79d8f7c36c09c99356a875531405c4a2d3b561d69086",
+    "0.16.0": "413c774df80a4580621ae9b3cb7ff5299322a98cb051f9cc2cd4a9c91cad4ce7",
+    "0.17.1": "a4b56f33ac0b5fbafae85e023f692a3cdb85df8ce7028d7d3e725dfd3404ed52"
   },
-  "manifest_sha256": "c2266c6ebf01555bccc07dfde912e74ea53b23b99712f77ab221edbda663f250",
+  "manifest_sha256": "70578c6d2d50d674018a61d6881d286c898a876250171685efb233464ca2f520",
   "schema": 1,
   "sources_sha256": {
-    "enc_exactness.zig": "ad4d0f681777ab05d6552c796d6ccd89de4a884afca284b3427a4a8819e6991c",
+    "enc_exactness.zig": "316be9fe412fd6089519fdf00e5334d2d837e89792f3a4362c337c207ddd74e7",
     "native.zig": "3af7064abda84969464f6ac7ac04e28b2d58243d155b56e0c2d91ff4d09fddef",
     "opaque_bytes.zig": "17feadd72c0b75ea3c0a6f312461667303501e618c5a284a4329a5dd2f16db55"
   }

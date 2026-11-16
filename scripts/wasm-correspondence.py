@@ -309,7 +309,7 @@ def ordered(bits: int, fmt: str) -> int:
 
 
 def expect_env(args: list[int], bits: int, zig: int = 17) -> dict:
-    """`zig` is the minor version (0.17.0: 17)."""
+    """`zig` is the minor version (0.17.1: 17)."""
     env = {'bits': bits, 'zig': zig, 'NONE': MASK64, 'TRAP': TRAP}
     env.update(zip('abc', args))
     return env

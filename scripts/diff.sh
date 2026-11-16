@@ -215,7 +215,7 @@ pub inline fn symbol(comptime func: *const anyopaque, comptime name: []const u8)
     _ = func;
     _ = name;
 }
-// 0.17.0's op files declare their (unexported, see `symbol`) C wrappers with these ABI types.
+// 0.17.1's op files declare their (unexported, see `symbol`) C wrappers with these ABI types.
 // Bytes, not the float: f80 is not a C-ABI parameter type on every host (aarch64).
 fn BytesAbi(comptime T: type) type {
     return struct {
@@ -233,6 +233,15 @@ pub const @"f32" = BytesAbi(f32);
 pub const @"f64" = BytesAbi(f64);
 pub const @"f80" = BytesAbi(f80);
 pub const @"f128" = BytesAbi(f128);
+// 0.17.1's op files register their long-double C names only when this holds (lib/compiler_rt.zig,
+// copied; declarations are analysed lazily, so the other versions never evaluate it).
+pub const have_c_longdouble = if (builtin.target.cTypeBitSize(.longdouble)) |bits| switch (bits) {
+    else => true,
+    80 => switch (@import("std").zig.target.compilerRtFloatAbi(&builtin.target, bits)) {
+        .soft => false,
+        .hard => true,
+    },
+} else false;
 EOF
 cat >"$crt_root/air2lean_root.zig" <<'EOF'
 pub const sin = @import("compiler_rt/sin.zig");

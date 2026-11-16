@@ -176,7 +176,7 @@ class SyntheticTests(unittest.TestCase):
         original = path.read_bytes()
         path.write_bytes(original + b"def extra := 1\n")
         self.assertFails(case.label, "case-check")
-        path.write_bytes(original.replace(b'"0.15.2"', b'"0.17.0"', 1))
+        path.write_bytes(original.replace(b'"0.15.2"', b'"0.17.1"', 1))
         self.assertFails(case.label, "case-check")
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
             gi.main(["case-check", "--only", "linux"])
@@ -276,20 +276,20 @@ class SyntheticTests(unittest.TestCase):
                 source, output = Path(work) / "air", Path(work) / "output"
                 source.mkdir()
                 output.mkdir()
-                doc = json.loads(air("demo.f", "0.17.0", 12))
-                doc["profile"] = profile("0.17.0", target)
+                doc = json.loads(air("demo.f", "0.17.1", 12))
+                doc["profile"] = profile("0.17.1", target)
                 (source / "demo.f.json").write_text(json.dumps(doc))
-                gi.compose([source], output, "0.17.0", require_profile=True, host=host)
+                gi.compose([source], output, "0.17.1", require_profile=True, host=host)
                 self.assertEqual(json.loads((output / "demo.f.json").read_text()), doc)
 
     def test_namespaced_composition_requires_explicit_valid_host(self):
         source = self.fx.write("single-air/demo.f.json", json.dumps(dict(
-            schema=12, zig_version="0.17.0", name="demo.f", body=[], profile=profile("0.17.0")))).parent
+            schema=12, zig_version="0.17.1", name="demo.f", body=[], profile=profile("0.17.1")))).parent
         output = self.fx.root / "single-output"
         output.mkdir()
         for host in (None, "", "linux-", "Linux", "linux/aarch64"):
             with self.subTest(host=host), self.assertRaisesRegex(ValueError, "explicit valid golden host identity"):
-                gi.compose([source], output, "0.17.0", require_profile=True, host=host)
+                gi.compose([source], output, "0.17.1", require_profile=True, host=host)
         self.assertEqual(list(output.iterdir()), [])
 
     def test_selected_write_does_not_rewrite_an_unselected_aggregate(self):
@@ -401,6 +401,34 @@ class SyntheticTests(unittest.TestCase):
         self.assertIn("demo 0.15.2 darwin: supported golden case withdrawn", err)
         self.assertIn("demo 0.14.1 darwin: supported golden case withdrawn", err)
         self.assertIn("demo 0.14.1 linux: supported golden case withdrawn", err)
+
+    def test_a_version_retired_from_compatibility_json_takes_its_cases(self):
+        cases = self.enroll()
+        compat = self.fx.root / "compatibility.json"
+        kept = compat.read_text()
+        listed = json.loads(kept)
+        listed["zig"]["versions"].append({"version": "0.14.1"})
+        compat.write_text(json.dumps(listed))
+        for path in (self.fx.root / "tests/golden/demo/air").glob("*.json"):
+            doc = json.loads(path.read_text())
+            other = dict(doc, zig_version="0.14.1", profile=profile("0.14.1", "x86_64-linux-gnu"))
+            self.fx.write(f"tests/golden/0.14.1/demo/air-linux/{path.name}", json.dumps(other))
+        self.assertEqual(self.fx.run("write")[0], 0)
+        self.fx.git("add", "-A")
+        self.fx.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-qm", "cases")
+        base = subprocess.check_output(["git", "-C", str(self.fx.root), "rev-parse", "HEAD"], text=True).strip()
+        compat.write_text(kept)  # 0.14.1 retired
+        shutil.rmtree(self.fx.root / "tests/golden/0.14.1")
+        for path in (self.fx.root / "Proofs/Demo/Gen/V0_14_1").rglob("*.lean"):
+            path.unlink()
+        shutil.rmtree(self.fx.root / "tests/golden/0.15.2/demo/air-darwin")
+        (self.fx.root / next(c.path for c in cases if c.host == "darwin")).unlink()
+        for rel, content in gi.case_aggregates(c.path for c in gi.all_cases() if c.namespaced).items():
+            self.fx.write(rel, content.decode())
+        status, _, err = self.fx.run("enrollment", "--base", base)
+        self.assertEqual(status, 1, err)
+        self.assertNotIn("0.14.1", err)
+        self.assertIn("demo 0.15.2 darwin: supported golden case withdrawn", err)
 
     def test_baseline_retains_an_air_only_host_with_git_quoted_unicode_filenames(self):
         cases = self.enroll()

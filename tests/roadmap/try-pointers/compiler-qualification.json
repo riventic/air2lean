@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "status": "retained-export-and-native-run; the exports and their hashes are exports.json/exports.lock.json",
-  "native_command": "zig test <source> -OReleaseSafe (stock 0.16.0, aarch64-macos host); check.sh --native-linux (stock 0.14.1-0.17.0, x86_64-linux-musl ReleaseSafe and Debug, Docker linux/amd64)",
+  "native_command": "zig test <source> -OReleaseSafe (stock 0.16.0, aarch64-macos host); check.sh --native-linux (stock 0.14.1-0.17.1, x86_64-linux-musl ReleaseSafe and Debug, Docker linux/amd64)",
   "fixtures": {
     "try_pointers": {
       "source": "tests/roadmap/try-pointers/try_pointers.zig",

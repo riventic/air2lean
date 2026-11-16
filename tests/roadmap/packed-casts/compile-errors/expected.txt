@@ -19,10 +19,10 @@
 0.16.0 array_of_auto_structs.zig error
 0.16.0 array_of_tagged_unions.zig error
 0.16.0 extern_struct.zig compiles
-0.17.0 auto_struct.zig error
-0.17.0 auto_struct_dest.zig error
-0.17.0 tuple.zig error
-0.17.0 tagged_union.zig error
-0.17.0 array_of_auto_structs.zig error
-0.17.0 array_of_tagged_unions.zig error
-0.17.0 extern_struct.zig error
+0.17.1 auto_struct.zig error
+0.17.1 auto_struct_dest.zig error
+0.17.1 tuple.zig error
+0.17.1 tagged_union.zig error
+0.17.1 array_of_auto_structs.zig error
+0.17.1 array_of_tagged_unions.zig error
+0.17.1 extern_struct.zig error

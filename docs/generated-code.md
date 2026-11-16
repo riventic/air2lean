@@ -288,7 +288,7 @@ blocks are static storage: never freed, a `const` one read-only. A pointer-beari
 program with error-bearing globals is rejected: the finite error-storage fragment tracks every
 pointer into those. `tests/roadmap/lang-long-tail` links `extern_storage.zig` natively with
 `provider_extern_storage.c` and runs the translation with the provider's definitions as `ext`
-(`ModelExternStorage.lean`): the outputs agree on Zig 0.14.1 to 0.17.0.
+(`ModelExternStorage.lean`): the outputs agree on Zig 0.14.1 to 0.17.1.
 
 ### Thread-local storage
 
@@ -358,7 +358,7 @@ A detached thread is outside the subset. `tests/roadmap/thread-locals` has the p
 | `@ptrCast`, `@constCast`, `@volatileCast`, `@alignCast` | `bitcast` pointer → pointer (`@alignCast` after its `incorrectAlignment` check) | the same `Zig.Ptr`. A load through the new type reads the same bytes as the new type. A cast to a stricter alignment first runs `Zig.checkAlign align p` (misaligned: `.illegal`). A cast between a vector and another pointee is rejected |
 | `@fieldParentPtr("f", p)` | `field_parent_ptr` | memory: `Zig.callM (Zig.ptrProject p (·.add (-offset)))`, then `Zig.checkParent` for a parent without a defined layout (no live, aligned parent object there: `.illegal`); local place: remove the proven terminal struct field |
 | `@bitCast` of a packed struct | `bitcast` packed struct ↔ backing integer | `Zig.Packed.toBits`, `Zig.Packed.ofBits?` |
-| `@bitCast` with an array, vector or enum side (Zig 0.17.0 only: logical bit order, [bitcast-semantics.md](bitcast-semantics.md)) | `bit_cast`/`bit_cast_safe` (canonical `bitcast`) | `Zig.BitCast.ofLanes`/`toLanes`/`ofBools`/`toBools`, enum tag bits with `Zig.enumOf`; ≤0.16 translates array and `extern` casts and vector casts by the rows below and rejects enum casts |
+| `@bitCast` with an array, vector or enum side (Zig 0.17.1 only: logical bit order, [bitcast-semantics.md](bitcast-semantics.md)) | `bit_cast`/`bit_cast_safe` (canonical `bitcast`) | `Zig.BitCast.ofLanes`/`toLanes`/`ofBools`/`toBools`, enum tag bits with `Zig.enumOf`; ≤0.16 translates array and `extern` casts and vector casts by the rows below and rejects enum casts |
 | `[n]T` ↔ `@Vector(n, T)` (Zig ≤0.16) | `bitcast` | lane-wise: `⟨a⟩ : Zig.Vec T n`, `v.lanes` (lane `i` is item `i`, also for padded items) |
 | `@bitCast` with another vector side (Zig ≤0.16) | `bitcast` | `Zig.reprCast T x` through the vector's bit-packed memory image (`Vec.packedEnc`; `ZigLean/VecCast.lean`) |
 | `@bitCast` of an array, `extern` struct or `extern` union (Zig ≤0.16) | `bitcast` with one on either side | `Zig.reprCast T x`: the memory bytes of `x`, padding undefined, decoded as `T` (`docs/aggregate-casts.md`) |
@@ -624,7 +624,7 @@ opaque airAsmFx_2096841937 (i0 : BitVec 64) (r0 : Array Zig.Byte) : BitVec 64 ×
     modify (fun s => { s with d := (Zig.Asm.movePtr a9o0 a9.1) })
 ```
 
-`tests/roadmap/asm-effects/AsmEnv` (fresh 0.17.0 export of `asm_env.zig`; 0.16.0 and 0.15.2
+`tests/roadmap/asm-effects/AsmEnv` (fresh 0.17.1 export of `asm_env.zig`; 0.16.0 and 0.15.2
 translate identically, 0.14.1 exports no inline asm) proves `elapsed_counter` and
 `elapsed_not_repeatable` (two `rdtsc`), `random_reads`, `loadm_eq`, `fill_frame`, `fill_zero` and
 `copy_frame` (only the declared destination region changes; `copy_overlap`; `Frame.of_readRegion_run`,
@@ -678,7 +678,7 @@ Verification never writes a tracked file, so a receipt or release record binds e
 
 `scripts/check.sh` builds and differentially tests the checkout itself when every selected `Proofs/<Ex>/Gen.lean` already holds the new translation's body (the reference Linux job). Otherwise (another Zig version's or host OS's translation, or a translator change outside CI) it runs `scripts/check-tree.py create .lake/check-tree/<v> --replace Proofs/<Ex>/Gen.lean=<new translation> ...`: a copy of the tracked files with the new translations in place, whose Lake build caches are cloned from the checkout's (Lake traces are content-based, so only the replaced modules and their dependents rebuild), and builds and tests there. `.lake/check-reports/<v>/build-tree` names the tree it used; CI steps that build that version's proofs, tutorials and VC checks `cd` into it. The `0.15.2` darwin `threadsync` proofs and `scripts/theorem-inventory.py swap-build` use check trees too. To commit a new translation, copy it from `.lake/check-reports/<v>/<ex>.Gen.lean` (`check.sh` prints the command).
 
-`scripts/diff.sh` compares a tree's translations only with native code of the Zig version they translate (`scripts/check-tree.py check-models <version of AIR2LEAN_ZIG> <examples>`, after the builds and before the Lean side runs): a module with a profile record must name that version, and a committed body must equal the translation `check.sh` compares for that version on this host (the `--host-goldens` file, else the checkout's `Proofs/<Ex>/Gen.lean`, the x86_64-linux Zig 0.16.0 translation). Otherwise it fails in phase `check_models` before any comparison. A run of `check.sh` with `AIR2LEAN_ZIG_VERSION=V` therefore needs `AIR2LEAN_ZIG` set to a stock Zig V (`docs/architecture-audit/soft-float-darwin.md`: a stock Zig 0.15.2 on `PATH` reported 266 false `f80`/`f128` mismatches against the Zig 0.17.0 model).
+`scripts/diff.sh` compares a tree's translations only with native code of the Zig version they translate (`scripts/check-tree.py check-models <version of AIR2LEAN_ZIG> <examples>`, after the builds and before the Lean side runs): a module with a profile record must name that version, and a committed body must equal the translation `check.sh` compares for that version on this host (the `--host-goldens` file, else the checkout's `Proofs/<Ex>/Gen.lean`, the x86_64-linux Zig 0.16.0 translation). Otherwise it fails in phase `check_models` before any comparison. A run of `check.sh` with `AIR2LEAN_ZIG_VERSION=V` therefore needs `AIR2LEAN_ZIG` set to a stock Zig V (`docs/architecture-audit/soft-float-darwin.md`: a stock Zig 0.15.2 on `PATH` reported 266 false `f80`/`f128` mismatches against the Zig 0.17.1 model).
 
 ### Protocol
 

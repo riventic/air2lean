@@ -170,20 +170,20 @@ def asmAllowlist : List AsmAllowEntry := [
     reason := "time-stamp counter read, combined into rax: the value comes from outside the \
       model (an environment read, not a function of inputs); it writes rdx and the flags, both \
       clobbered. rdtsc faults (#GP) only when the OS sets CR4.TSD: a target premise (ASM-05)",
-    reviewerNote := "A01 tests/roadmap/asm-effects/air/0.17.0/asm_env.ticks.json; L13 \
+    reviewerNote := "A01 tests/roadmap/asm-effects/air/0.17.1/asm_env.ticks.json; L13 \
       device_asm.elapsed/ticksPlain (a device contract that declares it keeps it a device event)" },
   { template := "rdrand %[ret]", constraints := ["=r"], clobbers := ["cc"], target := "x86_64",
     semantics := .envRead, fault := .never, features := ["rdrnd"],
     reason := "hardware random number: an environment read. A failed rdrand (CF = 0) writes 0, \
       which is one of the oracle's values; only the flags are clobbered. #UD without RDRAND, so the \
       entry requires the `rdrnd` feature (`features`, ASM-09)",
-    reviewerNote := "A01 tests/roadmap/asm-effects/air/0.17.0/asm_env.random.json; L13 \
+    reviewerNote := "A01 tests/roadmap/asm-effects/air/0.17.1/asm_env.random.json; L13 \
       device_asm.random" },
   { template := "rdrand %[v]\n\tsetc %[ok]", constraints := ["=r", "=r"], clobbers := ["cc"],
     target := "x86_64", semantics := .envRead, fault := .never, features := ["rdrnd"],
     reason := "rdrand with its success flag: both outputs are environment reads (the flag is any \
       byte in the model, a superset of setc's 0 or 1); only the flags are clobbered",
-    reviewerNote := "A01 tests/roadmap/asm-effects/air/0.17.0/asm_env.rand64.json; two lvalue outputs" },
+    reviewerNote := "A01 tests/roadmap/asm-effects/air/0.17.1/asm_env.rand64.json; two lvalue outputs" },
   -- A01's memory input: an integer `m` input is the value, spilled by the compiler to a private
   -- stack slot (`codegen/llvm/FuncGen.zig` `airAssembly`: a non-by-ref operand under a
   -- memory-only constraint is stored to a fresh alloca), so it is a value input.
@@ -191,7 +191,7 @@ def asmAllowlist : List AsmAllowEntry := [
     semantics := .opaque, fault := .never,
     reason := "load of a memory input operand into a register: the output is the input value \
       (the compiler's private copy of it)",
-    reviewerNote := "A01 tests/roadmap/asm-effects/air/0.17.0/asm_env.loadm.json; non-volatile" },
+    reviewerNote := "A01 tests/roadmap/asm-effects/air/0.17.1/asm_env.loadm.json; non-volatile" },
   -- A01's memory-region contracts (premise ASM-06): the block reads and writes memory through
   -- pointer operands only within its declared regions; the `"memory"` clobber is then accounted
   -- for by the regions.
@@ -202,7 +202,7 @@ def asmAllowlist : List AsmAllowEntry := [
       and nothing else; the new rdi and rcx are functions of the old ones (rdi moves by rcx, \
       rcx becomes 0). A bad address faults natively and is `.illegal` in the model's checked \
       access",
-    reviewerNote := "A01 tests/roadmap/asm-effects/air/0.17.0/asm_env.fill.json; volatile" },
+    reviewerNote := "A01 tests/roadmap/asm-effects/air/0.17.1/asm_env.fill.json; volatile" },
   { template := "rep movsb", constraints := ["+{rdi}", "+{rsi}", "+{rcx}"], clobbers := ["memory"],
     target := "x86_64", semantics := .opaque, fault := .never,
     regions := [{ base := 1, len := { operand := 2 }, access := .read },
@@ -211,7 +211,7 @@ def asmAllowlist : List AsmAllowEntry := [
       else; for disjoint regions the written bytes are a function of the read ones (an \
       overlapping forward copy depends on the distance, so the wrapper's guard makes overlap \
       `.unspecified`), the new pointers move by rcx and rcx becomes 0",
-    reviewerNote := "A01 tests/roadmap/asm-effects/air/0.17.0/asm_env.copy.json; volatile" }]
+    reviewerNote := "A01 tests/roadmap/asm-effects/air/0.17.1/asm_env.copy.json; volatile" }]
 
 /-- The entry for an asm op on the target `arch` (empty: a legacy profile, the x86_64
 reference model), if any. -/

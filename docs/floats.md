@@ -43,7 +43,7 @@ The reference target uses compiler_rt software routines for f128 arithmetic and 
 - **Group F — f128 multiplication**: `__multf3` uses `wideMultiply(u128)`, whose limb sum omits a carry from the low half into the high half. For example, squaring `0x401dffffffffffffffffffffffffffff` returns `0x403cfffffffffffffffffffffffffffd`; correctly-rounded multiplication returns `0x403cfffffffffffffffffffffffffffe`. `Float.mulRt` ports both helpers; `Float.mul` remains correctly rounded. The f128 multiplications inside `Float.fmaRt` use the same port, including f80 FMA's intermediate f128 computation. These helper algorithms are the same in 0.14.1, 0.15.2 and 0.16.0.
 - **Group G — f80 remainder of a pseudo-denormal**: `__fmodx` first compares the signless raw representations and returns the original numerator when its representation is smaller. This retains a pseudo-denormal's bits, and can also return it when its numerical magnitude is greater than the divisor's. `Float.remRt` follows that early return; `Float.modRt` uses it for both remainder steps. IEEE mode uses numerical remainder.
 - **Group H — f80 floor/ceil before 0.16.0**: the helpers extend to f128 before rounding. That extension discards a pseudo-denormal's explicit integer bit, so the zero-fraction pseudo-denormal becomes signed zero. A positive such operand's ceiling is therefore +0, while its IEEE ceiling is 1; a negative one's floor is −0, while its IEEE floor is −1. `Float.floorRtLegacyChk`/`Float.ceilRtLegacyChk` model this path. In 0.16.0 the helpers operate on f80 directly and retain the IEEE value.
-- **Group I — f80 trunc of a zero-extension pseudo-denormal in 0.17.0**: `trunc_f80` is still `@floatCast(trunc_f128(x))`. For `±0x0000_8000000000000000` the f128 extension is a signed zero, `trunc_f128` returns it, and LLVM 22 folds `fptrunc (fpext x)` back to the original operand, so 0.17.0 returns the pseudo-denormal unchanged where 0.16.0 returns the signed zero (stock 0.17.0 on x86_64-linux; a 200,000-encoding scan finds no other change). `Float.truncRt017Chk` models it in compiler-rt mode for 0.17.0; IEEE mode returns the mathematical truncation.
+- **Group I — f80 trunc of a zero-extension pseudo-denormal in 0.17.0**: `trunc_f80` is still `@floatCast(trunc_f128(x))`. For `±0x0000_8000000000000000` the f128 extension is a signed zero, `trunc_f128` returns it, and LLVM 22 folds `fptrunc (fpext x)` back to the original operand, so 0.17.0 returns the pseudo-denormal unchanged where 0.16.0 returns the signed zero (stock 0.17.1 on x86_64-linux; a 200,000-encoding scan finds no other change). `Float.truncRt017Chk` models it in compiler-rt mode for 0.17.1; IEEE mode returns the mathematical truncation.
 
 `ieee` (default; what a proof assumes) returns the model's mathematical result for groups A, B and E–I. `compiler-rt` uses the target helper ports (`ZigLean/Float/CompilerRt.lean`) — needed by code that must match the reference target exactly, e.g. a differential test. Opt in per example via `examples/<ex>/translate.args` (`docs/generated-code.md`); a proof about an example that opts in states the target helper's behavior. Every numerical theorem is labeled `ieee`, `compiler-rt@<versions>` or `abstract-spec` in `assurance/float-semantics.json`. The audit checks each label against the theorem's dependencies, and no label claims binary correspondence (`docs/float-semantics.md`). `opSpec` in `Proofs/Floatops/Proofs.lean` uses compiler-rt multiplication and remainder; its `op80_spec` additionally excludes a pseudo-denormal numerator so the floor/ceil specification holds across all three versions. `op128_spec_full` covers every `f128` selector: `opSpec128` takes the division and `@sqrt` helpers of the translation's profile (§Per-version differences).
 
@@ -93,7 +93,7 @@ A stored NaN read back *as a float* is `.unspecified` too. Native code reads a N
 
 Bits that are determined stay exact. A NaN **constant** (`std.math.nan(f32)`, `@bitCast(@as(u32, 0x7fa00001))`) has the bits that the compiler stores: a store of a constant (to memory or a byte local), a `@memset` of a scalar NaN constant, and a global initializer write its exact bytes (`Air2Lean/Memory.lean`'s `nanConstParts`, `Emit.lean`'s `FCtx.nanConstBytes?`), as the value itself or at its offset in an array, a non-`packed` struct or a tuple. Elsewhere (in an optional, union, vector or packed struct, in an aggregate `@memset` item, or once the constant is a runtime value that is stored again) its bits are undefined: never a wrong value. Bytes copied as bytes (`@memcpy`, a byte local, a struct copy of raw bytes) keep whatever they hold. Target-exact NaN payloads of operations are follow-up F04.
 
-`tests/roadmap/nan-bits/` checks every path on Zig 0.14.1, 0.15.2, 0.16.0 and 0.17.0 against x86_64-linux and aarch64-linux natively.
+`tests/roadmap/nan-bits/` checks every path on Zig 0.14.1, 0.15.2, 0.16.0 and 0.17.1 against x86_64-linux and aarch64-linux natively.
 
 ### Allowed results
 
@@ -149,6 +149,17 @@ The model is one set of defs. Where a Zig version gives a different result, the 
 | f128 `@sqrt` | `fpext(sqrt(fptrunc x to f64))`: `Zig.Float.sqrtF128ViaF64` | correctly rounded: `Zig.Float.sqrt` | compiler_rt `sqrtq` (`sqrt.zig`, a musl port since 0.16.0) |
 | f80 `@floor`/`@ceil`, `compiler-rt` mode | f128 extension reads a zero-fraction pseudo-denormal as zero: `Float.floorRtLegacyChk`/`Float.ceilRtLegacyChk` | direct f80 rounding: `Float.floorChk`/`Float.ceilChk` | compiler_rt `floor.zig`/`ceil.zig`, replaced by `floor_ceil.zig` in 0.16.0 |
 | f128 `/`, `@divExact`, `@divTrunc`, `@divFloor`, `compiler-rt` mode | subnormal quotient flushed to ±0 (group A): `Zig.Float.divRt` … | subnormal quotient rounded from a 113-bit quotient that can be one unit low, and a deep underflow wraps its shift amount (the unchecked `@intCast` to `u7`): `Zig.Float.divRt016` …, a bit-exact port, equal to 0.16.0 on 80,000 random quotients and 3,145,632 edge cases (every divisor exponent) | compiler_rt `__divtf3` (`divtf3.zig`) |
+
+Zig 0.17.1 fixed compiler_rt's `fma.zig` (group B, `compiler-rt` mode), and the emitter calls
+`Zig.Float.fmaRt017Chk`/`fmaRt017Fused` for a 0.17.1 translation, `fmaRtChk`/`fmaRtFused` for an
+earlier one. Three things changed. First, `fma`/`fmaq` return `z` when its exponent exceeds the
+product's by more than the precision, so the NaN of group B is gone: for example,
+`fmaq(min subnormal, 1, 1.5)` is `1.5`. Second, a zero high part of `x·y + z` returns the
+product's low part, scaled. Third, the subnormal adjustment condition of `add_and_denorm` is
+negated. In addition, `fmaf` corrects the double rounding at an `f32` midpoint. The diff test
+(`floatops`) found the f80/f128 cases on aarch64-macos: 27 inputs that 0.17.0's source gave as
+NaN and 0.17.1 rounds correctly. `Proofs/Floatops/Proofs.lean` reads the profile off `Gen.lean`
+(`fmaProfile`).
 
 The probe checks the `sqrt` rows on the reference target (`tests/floatprobe/expected.0.16.0.txt`); the diff test (`floatops`, `compiler-rt` mode) checks the division rows.
 

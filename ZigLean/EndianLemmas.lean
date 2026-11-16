@@ -47,7 +47,7 @@ theorem intEncOf_lawful (o : ByteOrder) (n : Nat) : @LawfulEnc (BitVec n) (intEn
   have := intBytes_le_intSize n
   omega
 
-/-- An integer with padding bits stored and loaded as Zig 0.17.0 does (`intEncExt`) reads back as
+/-- An integer with padding bits stored and loaded as Zig 0.17.1 does (`intEncExt`) reads back as
 stored, at both orders and both signednesses. -/
 theorem intEncExt_decode_encode (o : ByteOrder) (signed : Bool) {n : Nat} (v : BitVec n) :
     (intEncExt o signed n).decode ((intEncExt o signed n).encode v) = pure v := by
@@ -71,7 +71,7 @@ theorem intEncExt_decode_encode (o : ByteOrder) (signed : Bool) {n : Nat} (v : B
   simp [hv]
 
 /-- A padding bit that is not the extension of the value is `.unspecified` (`trunc nuw`/`trunc nsw`
-poison): the bytes of the `u16` `0x0200` are no `i10` (native 0.17.0 ReleaseSafe reads 512, no
+poison): the bytes of the `u16` `0x0200` are no `i10` (native 0.17.1 ReleaseSafe reads 512, no
 `i10` at all), and those of the `u32` `0x01000005` no `u24`. -/
 theorem intEncExt_i10_zero_padding :
     ((intEncExt .little true 10).decode (Enc.encode (0x0200 : BitVec 16))).run =

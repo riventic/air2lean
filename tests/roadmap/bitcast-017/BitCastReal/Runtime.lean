@@ -1,8 +1,8 @@
 import BitCastReal.Gen
 
-/-! Runs the translation of real Zig 0.17.0 AIR (`air/0.17.0`, patched compiler, ReleaseSafe,
-x86_64-linux) and compares each result with the stock Zig 0.17.0 test in `bitcast017.zig`
-(`zig test` passes natively) and the 0.17.0 behaviour tests it cites. -/
+/-! Runs the translation of real Zig 0.17.1 AIR (`air/0.17.1`, patched compiler, ReleaseSafe,
+x86_64-linux) and compares each result with the stock Zig 0.17.1 test in `bitcast017.zig`
+(`zig test` passes natively) and the 0.17.1 behaviour tests it cites. -/
 
 open Zig BitCastReal
 
@@ -35,4 +35,4 @@ def main : IO Unit := do
   unless (intToEnum 3#8).run = some (.error .panic) do
     throw (IO.userError "intToEnum 3: no invalidEnumValue panic")
   ok "enumToSigned" (enumToSigned E.c) 2#8
-  IO.println "real 0.17.0 AIR bitcast translations passed"
+  IO.println "real 0.17.1 AIR bitcast translations passed"

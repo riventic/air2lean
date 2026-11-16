@@ -5,7 +5,7 @@
       "source": "error_tracing.zig",
       "filter": "error_tracing.bigRet,error_tracing.pass,error_tracing.traceIndex,error_tracing.traced,error_tracing.handledTwice,builtin.returnError,lang.returnError",
       "versions": [
-        "0.17.0",
+        "0.17.1",
         "0.16.0",
         "0.15.2",
         "0.14.1"

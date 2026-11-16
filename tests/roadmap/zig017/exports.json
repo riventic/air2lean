@@ -4,7 +4,7 @@
       "out": "casts/air/{version}",
       "source": "casts/casts.zig",
       "filter": "casts.",
-      "versions": ["0.17.0"],
+      "versions": ["0.17.1"],
       "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
       "cwd": "repo"
     },
@@ -12,7 +12,7 @@
       "out": "divceil/air/{version}",
       "source": "divceil/divceil.zig",
       "filter": "divceil.",
-      "versions": ["0.17.0"],
+      "versions": ["0.17.1"],
       "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
       "cwd": "repo"
     },
@@ -20,7 +20,7 @@
       "out": "overflow/air/{version}",
       "source": "overflow/overflow.zig",
       "filter": "overflow.",
-      "versions": ["0.17.0"],
+      "versions": ["0.17.1"],
       "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
       "cwd": "repo"
     }

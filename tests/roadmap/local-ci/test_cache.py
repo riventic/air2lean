@@ -306,7 +306,7 @@ class Workflow(unittest.TestCase):
         self.assertFalse((self.root/'wrong-platform').exists())
 
     def test_conditions_and_unsupported_expressions(self):
-        values={'env.AIR2LEAN_REUSED':'','matrix':{'zig':'0.17.0'}}
+        values={'env.AIR2LEAN_REUSED':'','matrix':{'zig':'0.17.1'}}
         self.assertTrue(runner.TM.condition("${{ !env.AIR2LEAN_REUSED && (matrix.zig != '0.16.0' || failure()) }}",values))
         for expression in ('success() &&',"unknown()", "'missing parenthesis' && ("):
             with self.assertRaises(runner.TM.Unknown):runner.TM.condition(expression,values)
@@ -650,7 +650,7 @@ except runner.Cancelled as error:
         work,source,content=self.reset_fixture()
         outside=self.root/'outside';outside.mkdir()
         sentinel=outside/'removed-from-next-version.zig';sentinel.write_bytes(b'outside compiler')
-        compilers=('host-zig','zig-air-0.14.1','zig-air-0.17.0')
+        compilers=('host-zig','zig-air-0.14.1','zig-air-0.17.1')
         for symlink in (False,True):
             with self.subTest(symlink=symlink):
                 for name in compilers:
@@ -729,7 +729,7 @@ class Capture(unittest.TestCase):
     def revision(self):
         return self.git('rev-parse','HEAD').decode().strip()
 
-    def capture(self,error=None,mode='full',version='0.17.0'):
+    def capture(self,error=None,mode='full',version='0.17.1'):
         script=ROOT/'scripts/local-ci-steps.py'
         argv=[str(script),'--snapshot',str(self.snapshot),str(self.artifacts),mode,version]
         with patch.object(sys,'argv',argv),self.assertRaises(SystemExit) as stopped:
@@ -744,7 +744,7 @@ class Capture(unittest.TestCase):
         stamp=(self.artifacts/'source-revision').read_text()
         self.assertEqual((self.snapshot/'source-revision').read_text(),stamp)
         values=dict(line.split('=',1) for line in stamp.splitlines())
-        self.assertEqual(values['mode'],'full');self.assertEqual(values['version'],'0.17.0')
+        self.assertEqual(values['mode'],'full');self.assertEqual(values['version'],'0.17.1')
         self.assertEqual(values['snapshot_sha256'],hashlib.sha256((self.snapshot/'source.tar').read_bytes()).hexdigest())
         return values
 
@@ -769,7 +769,7 @@ class Capture(unittest.TestCase):
         (self.repo/'symbolic').symlink_to('120000')
         (self.repo/'directory-link').symlink_to('directory',target_is_directory=True)
         excluded=('.lake/cache','nested/.lake/cache','.aws/private','.codex/private','.agents/private',
-                  'host-zig/bin/zig','zig-air-0.17.0/bin/zig')
+                  'host-zig/bin/zig','zig-air-0.17.1/bin/zig')
         for name in excluded:self.write(name,b'excluded tracked bytes')
         self.commit();self.pinned=self.revision()
         self.write('directory/untracked',b'must not follow directory symlink')
@@ -867,7 +867,7 @@ class Capture(unittest.TestCase):
 
     def test_multiline_stamp_labels_fail_without_preserving_a_stale_stamp(self):
         for separator in ('\n','\r','\v','\f','\x1c','\x1d','\x1e','\x85','\u2028','\u2029'):
-            for key,prefix in (('mode','full'),('version','0.17.0')):
+            for key,prefix in (('mode','full'),('version','0.17.1')):
                 with self.subTest(separator=repr(separator),key=key):
                     self.fail_capture('source stamp labels must be single lines',
                                       **{key:prefix+separator+'tracked_clean=yes'})
@@ -967,7 +967,7 @@ class Capture(unittest.TestCase):
         self.assertFalse((self.repo/'.lake-original/check-tree').exists())
 
     def part_fixture(self,duplicate=False):
-        row='''          - zig: "0.17.0"
+        row='''          - zig: "0.17.1"
             part: "isolation"
             examples: ""
             full: false
@@ -997,7 +997,7 @@ jobs:
 '''
         self.write('.github/workflows/ci.yml',workflow.encode())
         declaration={'schema':'air2lean-ci-inputs/2','parts':{
-            'test/0.17.0/isolation':{'inputs':['gate.txt','scripts/**','lean-toolchain','lakefile.toml']}}}
+            'test/0.17.1/isolation':{'inputs':['gate.txt','scripts/**','lean-toolchain','lakefile.toml']}}}
         self.write('.github/ci-inputs.json',json.dumps(declaration).encode())
         for name in ('ci-reuse.py','release-record.py','generated.py','target-matrix.py','cas.py','build-guard.py',
                      'linux-ci-tools.sh'):
@@ -1021,7 +1021,7 @@ jobs:
             return workflow
         def popen(command,*args,**kwargs):
             executed.append(command)
-            if command==['bash','scripts/local-ci.sh','--prepare','0.17.0']:
+            if command==['bash','scripts/local-ci.sh','--prepare','0.17.1']:
                 command=[sys.executable,'-B','-c','pass']
             # The host test has no container cache lock on FD9. All Git and protected
             # shell commands still execute normally in their own process groups.
@@ -1044,7 +1044,7 @@ jobs:
                          AIR2LEAN_TEST_RECOVERY=str(recovery),AIR2LEAN_LOCAL_MODE=local_mode,
                         AIR2LEAN_LOCAL_ARTIFACTS=str(self.artifacts),
                         AIR2LEAN_LOCAL_SNAPSHOT=str(self.snapshot)):
-            runner.main(['part','test/0.17.0/isolation'])
+            runner.main(['part','test/0.17.1/isolation'])
         if workflow is not None:self.assertEqual(len(decoded),1,'decoded-DATA expression fixture was not consumed once')
         return executed,recovery
 
@@ -1056,15 +1056,15 @@ jobs:
             self.assertEqual(archive.extractfile('withheld.txt').read(),b'unique committed source canary\n')
         executed,recovery=self.run_part_interpreter(workflow)
         self.assertTrue(recovery.exists());self.assertEqual(recovery.read_bytes(),b'')
-        self.assertIn(['python3','scripts/ci-reuse.py','restrict','--part','test/0.17.0/isolation','--seal'],executed)
+        self.assertIn(['python3','scripts/ci-reuse.py','restrict','--part','test/0.17.1/isolation','--seal'],executed)
         with self.assertRaises(subprocess.CalledProcessError):
             self.git('show',self.pinned+':withheld.txt')
 
     def test_actual_part_request_restricts_without_wrapper_mode_environment(self):
         workflow=self.part_fixture()
         executed,_recovery=self.run_part_interpreter(workflow,local_mode='')
-        self.assertIn(['python3','scripts/ci-reuse.py','restrict','--part','test/0.17.0/isolation','--seal'],executed)
-        report=json.loads((self.artifacts/'test-0.17.0-isolation/row.json').read_text())
+        self.assertIn(['python3','scripts/ci-reuse.py','restrict','--part','test/0.17.1/isolation','--seal'],executed)
+        report=json.loads((self.artifacts/'test-0.17.1-isolation/row.json').read_text())
         self.assertEqual(report['restriction'],{'requested':True,'qualified':True,'files_withheld':True})
 
     def test_actual_bad_restriction_metadata_retains_the_failed_row_receipt(self):
@@ -1074,7 +1074,7 @@ jobs:
             +workflow['jobs']['test']['steps'][0]['run'])
         with self.assertRaises(subprocess.CalledProcessError):
             self.run_part_interpreter(workflow)
-        report=json.loads((self.artifacts/'test-0.17.0-isolation/row.json').read_text())
+        report=json.loads((self.artifacts/'test-0.17.1-isolation/row.json').read_text())
         self.assertFalse(report['success']);self.assertFalse(report['restriction']['qualified'])
         self.assertIn('check-restricted',report['error'])
         self.assertIn('cannot read restriction state',report['restriction']['error'])
@@ -1094,7 +1094,7 @@ jobs:
                  if (match:=runner.CR.RR.HEADER.fullmatch(line))]
         self.assertEqual([match[2] for match in headers],['Original Git source must be unavailable'])
         self.assertEqual(ast.literal_eval(headers[0][1])['part'],'isolation')
-        report=json.loads((self.artifacts/'test-0.17.0-isolation/row.json').read_text())
+        report=json.loads((self.artifacts/'test-0.17.1-isolation/row.json').read_text())
         self.assertTrue(report['success'])
         self.assertEqual(report['steps'][0]['name'],'Checkout')
         self.assertEqual(report['steps'][0]['status'],'passed')
@@ -1129,7 +1129,7 @@ jobs:
     def test_duplicate_part_rows_fail_before_preparation_or_workflow_execution(self):
         workflow=self.part_fixture(duplicate=True)
         with patch.object(subprocess,'Popen') as started,\
-             self.assertRaisesRegex(ValueError,'duplicate CI part test/0.17.0/isolation'):
+             self.assertRaisesRegex(ValueError,'duplicate CI part test/0.17.1/isolation'):
             self.run_part_interpreter(workflow)
         started.assert_not_called()
 
@@ -1247,7 +1247,7 @@ jobs:
         self.write('.github/workflows/ci.yml',text.encode());self.commit();self.pinned=self.revision()
         self.capture()
         with self.assertRaisesRegex(ValueError,'workflow steps failed'):self.run_part_interpreter()
-        report=json.loads((self.artifacts/'test-0.17.0-isolation/row.json').read_text())
+        report=json.loads((self.artifacts/'test-0.17.1-isolation/row.json').read_text())
         self.assertFalse(report['success']);self.assertEqual(report['steps'][0]['status'],'failed')
         self.assertRegex(report['steps'][0]['error'],r'returned non-zero exit status 1\.$')
 
@@ -1261,7 +1261,7 @@ jobs:
         self.write('.github/workflows/ci.yml',text.encode());self.commit();self.pinned=self.revision()
         self.capture()
         with self.assertRaisesRegex(ValueError,'workflow steps failed'):self.run_part_interpreter()
-        report=json.loads((self.artifacts/'test-0.17.0-isolation/row.json').read_text())
+        report=json.loads((self.artifacts/'test-0.17.1-isolation/row.json').read_text())
         self.assertFalse(report['success']);self.assertEqual(report['steps'][0]['status'],'failed')
         self.assertRegex(report['steps'][0]['error'],r'returned non-zero exit status 73\.$')
 
@@ -1351,7 +1351,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - zig: 0.17.0
+          - zig: 0.17.1
     steps:
       - name: Actual unrestricted host probe
         run: |
@@ -1360,7 +1360,7 @@ jobs:
           git -C ../../../.. show HEAD:README.md > "$RUNNER_TEMP/caller-readme"
 ''')
         self.write('.github/ci-inputs.json',json.dumps({'schema':'air2lean-ci-inputs/2',
-            'parts':{'macos/0.17.0':{'inputs':['scripts/**','.github/**']}}}).encode())
+            'parts':{'macos/0.17.1':{'inputs':['scripts/**','.github/**']}}}).encode())
         self.commit();self.pinned=self.revision()
         home=self.root/'host-home';home.mkdir()
         results=self.repo/'.lake/local-ci-results'
@@ -1369,7 +1369,7 @@ jobs:
         for mode in ('discover','part'):
             with self.subTest(mode=mode):
                 previous=set(results.glob('run.*'))
-                with subprocess.Popen(['bash',str(self.repo/'scripts/local-ci.sh'),mode,'macos/0.17.0'],
+                with subprocess.Popen(['bash',str(self.repo/'scripts/local-ci.sh'),mode,'macos/0.17.1'],
                                       env=environment,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
                                       start_new_session=True) as result:
                     try:
@@ -1379,7 +1379,7 @@ jobs:
                             runner.stop_group(result,signal.SIGTERM)
                 added=set(results.glob('run.*'))-previous
                 self.assertEqual(len(added),1)
-                artifacts=added.pop();row=artifacts/'macos-0.17.0'
+                artifacts=added.pop();row=artifacts/'macos-0.17.1'
                 report=json.loads((row/'row.json').read_text())
                 self.assertFalse(report['restriction']['qualified'])
                 self.assertFalse(report['restriction']['files_withheld'])
@@ -1486,7 +1486,7 @@ else:
                          AIR2LEAN_LOCAL_TOOL_VOLUME='unit-test-toolchains',
                          AIR2LEAN_TEST_IMAGE_RECIPE=str(recipe),AIR2LEAN_TEST_CREATE_ARGS=str(arguments),
                          AIR2LEAN_TEST_BOOTSTRAP=str(bootstrap),AIR2LEAN_TEST_IMAGE_ID_FILE=str(image_id_file))
-        result=subprocess.run(['bash',str(self.repo/'scripts/local-ci.sh'),'full','0.17.0'],
+        result=subprocess.run(['bash',str(self.repo/'scripts/local-ci.sh'),'full','0.17.1'],
                               env=environment,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         self.assertEqual(result.returncode,1,result.stderr.decode(errors='replace'))
         self.assertIn(b'non-zero exit status 73',result.stderr)
@@ -1513,7 +1513,7 @@ else:
             with self.subTest(missing=missing):
                 self.git('reset','--hard',self.pinned)
                 (self.repo/missing).unlink();arguments.unlink(missing_ok=True)
-                result=subprocess.run(['bash',str(self.repo/'scripts/local-ci.sh'),'full','0.17.0'],
+                result=subprocess.run(['bash',str(self.repo/'scripts/local-ci.sh'),'full','0.17.1'],
                                       env=environment,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
                 self.assertNotEqual(result.returncode,0)
                 self.assertNotEqual(result.returncode,73,result.stderr.decode(errors='replace'))
@@ -1524,7 +1524,7 @@ else:
                 self.git('reset','--hard',self.pinned)
                 (self.repo/symbolic).unlink();(self.repo/symbolic).symlink_to('gate.txt')
                 arguments.unlink(missing_ok=True);recipe.unlink(missing_ok=True)
-                result=subprocess.run(['bash',str(self.repo/'scripts/local-ci.sh'),'full','0.17.0'],
+                result=subprocess.run(['bash',str(self.repo/'scripts/local-ci.sh'),'full','0.17.1'],
                                       env=environment,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
                 self.assertNotEqual(result.returncode,0)
                 self.assertFalse(arguments.exists());self.assertFalse(recipe.exists())
@@ -1559,7 +1559,7 @@ else:
             with self.subTest(override=override):
                 arguments.unlink(missing_ok=True)
                 result=subprocess.run(['bash',str(self.repo/'scripts/build-mode-docker.sh'),
-                                       '0.17.0','Debug','llvm',str(self.root/'build-mode-out'),'basic'],
+                                       '0.17.1','Debug','llvm',str(self.root/'build-mode-out'),'basic'],
                                       env=environment|{'AIR2LEAN_LOCAL_TOOL_VOLUME':override},capture_output=True)
                 self.assertEqual(result.returncode,73,result.stderr.decode(errors='replace'))
                 values=json.loads(arguments.read_text())
@@ -1650,7 +1650,7 @@ else:raise SystemExit('unexpected fixture executable: '+name)
         selector=self.write('zig-patch/toml-get.sh',('#!'+sys.executable+'\n'+'''
 import os,sys
 section,field=sys.argv[1:]
-prefix={'[ci.elan]':'ELAN','[ci.host-zig."0.17.0"]':'HOST'}[section]
+prefix={'[ci.elan]':'ELAN','[ci.host-zig."0.17.1"]':'HOST'}[section]
 if field=='sha256':print(os.environ['AIR2LEAN_TEST_'+prefix+'_SHA'])
 elif field=='url':print('fixture:'+prefix.lower())
 else:raise SystemExit('unexpected pinned field: '+field)
@@ -1663,7 +1663,7 @@ else:raise SystemExit('unexpected pinned field: '+field)
         for cold in (True,False):
             with self.subTest(cold=cold):
                 calls.unlink(missing_ok=True)
-                result=subprocess.run(['bash',str(launcher),'--inside','0.17.0','Debug','llvm','basic'],
+                result=subprocess.run(['bash',str(launcher),'--inside','0.17.1','Debug','llvm','basic'],
                                       env=environment,capture_output=True)
                 self.assertEqual(result.returncode,73,result.stderr.decode(errors='replace'))
                 recorded=[json.loads(line) for line in calls.read_text().splitlines()]
@@ -1700,11 +1700,11 @@ else:raise SystemExit('unexpected pinned field: '+field)
 ''')
         declarations_path=self.repo/'.github/ci-inputs.json'
         declarations=json.loads(declarations_path.read_text())
-        declarations['parts']['exporter/0.17.0/isolation']=declarations['parts'].pop('test/0.17.0/isolation')
+        declarations['parts']['exporter/0.17.1/isolation']=declarations['parts'].pop('test/0.17.1/isolation')
         declarations_path.write_text(json.dumps(declarations))
         self.commit();self.pinned=self.revision();self.capture()
         workflow=runner.TM.parse_workflow_yaml(workflow_path.read_text())
-        part='exporter/0.17.0/isolation';safe=part.replace('/','-');container_id='f'*64
+        part='exporter/0.17.1/isolation';safe=part.replace('/','-');container_id='f'*64
         image='sha256:'+'a'*64
         with patch.object(runner,'in_container',return_value=False),\
              patch.dict(os.environ,AIR2LEAN_LOCAL_IMAGE_ID=image):
@@ -1784,7 +1784,7 @@ owned=os.environ['AIR2LEAN_TEST_OWNED_CONTAINER']
 state=Path(os.environ['AIR2LEAN_TEST_DAEMON_STATE'])
 if arguments[0]=='create':
     cidfile=Path(arguments[arguments.index('--cidfile')+1])
-    expected=Path(os.environ['AIR2LEAN_LOCAL_SNAPSHOT'])/'containers/test-0.17.0-lean.id'
+    expected=Path(os.environ['AIR2LEAN_LOCAL_SNAPSHOT'])/'containers/test-0.17.1-lean.id'
     if cidfile!=expected:raise SystemExit('CID registry escaped the private host snapshot')
     if any(argument.startswith('type=volume,') for argument in arguments):
         raise SystemExit('undeclared persistent cache reached the row')
@@ -1813,7 +1813,7 @@ else:
                          AIR2LEAN_LOCAL_JOB_PAYLOAD_SHA256=hashlib.sha256(payload.read_bytes()).hexdigest(),
                          AIR2LEAN_TEST_DOCKER_CALLS=str(calls),AIR2LEAN_TEST_OWNED_CONTAINER=container_id,
                          AIR2LEAN_TEST_DAEMON_STATE=str(state))
-        result=subprocess.run(['bash',str(launcher),'--container-row','test/0.17.0/lean'],
+        result=subprocess.run(['bash',str(launcher),'--container-row','test/0.17.1/lean'],
                               env=environment,capture_output=True)
         self.assertEqual(result.returncode,143,result.stderr.decode(errors='replace'))
         commands=[json.loads(line) for line in calls.read_text().splitlines()]
@@ -1822,7 +1822,7 @@ else:
         self.assertIn('--cidfile',commands[0])
         self.assertEqual(commands[1],['ps','-aq','--no-trunc','--filter','id='+container_id])
         self.assertEqual(commands[2],['inspect','--format','{{.State.Running}}',container_id])
-        self.assertEqual((self.snapshot/'containers/test-0.17.0-lean.id').read_text(),container_id)
+        self.assertEqual((self.snapshot/'containers/test-0.17.1-lean.id').read_text(),container_id)
         self.assertEqual(state.read_text(),'false')
         self.assertEqual(list(self.artifacts.iterdir()),[])
 
@@ -2045,7 +2045,7 @@ exit 73
         environment=dict(os.environ,PATH=str(binary)+os.pathsep+os.environ['PATH'],
                          AIR2LEAN_LOCAL_ROOT_CACHE='0',AIR2LEAN_LOCAL_DIFF_CACHE='0',
                          AIR2LEAN_TEST_EXTRACTED=str(extracted),AIR2LEAN_TEST_INITIALIZED=str(initialized))
-        command=['bash',str(launcher),'--inside','part','test/0.17.0/lean','']
+        command=['bash',str(launcher),'--inside','part','test/0.17.1/lean','']
         for changed in (False,True):
             with self.subTest(changed_after_capture=changed):
                 if changed:

@@ -14,20 +14,20 @@
     "air-env/0.16.0/asm_env.rand64.json": "bf9ff23b9e433f77cdeebc1cc588b095616b89bd0c15416b5bcb2ec546c310ca",
     "air-env/0.16.0/asm_env.random.json": "e6721ac1189cb5c1b719c11d8b91283d02ef05f807c1cf41fcb52f8dfe237f54",
     "air-env/0.16.0/asm_env.ticks.json": "cb68a9bd35b81ab885e574a036a041a0017dd844938cd2970964aa9760140d75",
-    "air-env/0.17.0/asm_env.copy.json": "d4f042496f4b99f8968b2d877dd93f9bb93184984736f8933c41009c0c54e978",
-    "air-env/0.17.0/asm_env.elapsed.json": "51e5ace11496b4786d4d542382d52835dc693af8403e87b3a513fa36d46d5a39",
-    "air-env/0.17.0/asm_env.fill.json": "f803efcb677e8a974040553a9d540bc23154610170455b509abe39e886714222",
-    "air-env/0.17.0/asm_env.loadm.json": "c82e2b0de0985553a33d768597b71ab14af6652a654efc78ed0a8fb85a115123",
-    "air-env/0.17.0/asm_env.rand64.json": "c5fa5b2dee475bab8c4db28fe48dcadf20de244086024aeb99ffc2d3077371ed",
-    "air-env/0.17.0/asm_env.random.json": "8fe4bc77485b955d058cc19bf0f47e9590d042c6babd5eee15d7f65c3652ffc6",
-    "air-env/0.17.0/asm_env.ticks.json": "1416e40756e25e4e4e73481cbb8af096f8b408d1dd7b77cc531ba809c16f6d5d"
+    "air-env/0.17.1/asm_env.copy.json": "74cb5fdfd3359ff56121eb0aa472ec3ccedd4a0bd77641dc2d9726115357f2c5",
+    "air-env/0.17.1/asm_env.elapsed.json": "1d83448ad19be9c9d3fb6526e18f4d74576019a909ed2a5f6e8f63ca793e0893",
+    "air-env/0.17.1/asm_env.fill.json": "0bf2bfea62229ef56ce8444bcbede21484637b816458299659e516f29a30f7db",
+    "air-env/0.17.1/asm_env.loadm.json": "4c680b9c981abc843ee71419c4fa97e07bb9ddfd804cacc952b09e7c05ca4268",
+    "air-env/0.17.1/asm_env.rand64.json": "baa47307b16fc98fdbe4009a52209aad8ba15f8c892e30316922feff0697b7f1",
+    "air-env/0.17.1/asm_env.random.json": "2e4a5d5c488e9a7a35768f49675737dcc37c366d043e4d250e5fdc5d29e111d5",
+    "air-env/0.17.1/asm_env.ticks.json": "a52aaf25870ff6143889452084bfd666cabc980c3a8f0d8fc1c616603cca2271"
   },
   "compilers": {
-    "0.15.2": "08fabea60c770d7c034a9dbe78e816beb0d8a17a9b9a0ed5c8bdcbd112cffc05",
-    "0.16.0": "d49dbe58d9fd83d9fdedc5270fa3a5a34ab9661ebc63b52070027a00bdec6954",
-    "0.17.0": "321ab894d2a5d5784afdba19137ed24abf39c62825b440f9a4f82e53958d9b24"
+    "0.15.2": "2e1e05ae07d5a5f629ad79d8f7c36c09c99356a875531405c4a2d3b561d69086",
+    "0.16.0": "413c774df80a4580621ae9b3cb7ff5299322a98cb051f9cc2cd4a9c91cad4ce7",
+    "0.17.1": "a4b56f33ac0b5fbafae85e023f692a3cdb85df8ce7028d7d3e725dfd3404ed52"
   },
-  "manifest_sha256": "3e0b42ed603296155256bf174bff7dae6164f42ef1651672adef4d988228dc9b",
+  "manifest_sha256": "a7031a70bf7e3756bd0c4d4d9b3fe394c0cb4a6cb7727fdc4fb7eeff05e52461",
   "schema": 1,
   "sources_sha256": {
     "asm_env.zig": "acdde128bf0008e87d5457ee3e798e7b469c5bc84f69c1f329557c0c31943643"

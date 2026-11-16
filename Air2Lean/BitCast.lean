@@ -3,7 +3,7 @@ import Air2Lean.Memory
 /-!
 # Version-keyed `@bitCast` semantics
 
-Zig ≤0.16 defines `@bitCast` on the in-memory representation; Zig 0.17.0 defines it on the
+Zig ≤0.16 defines `@bitCast` on the in-memory representation; Zig 0.17.1 defines it on the
 *logical* bit representation (`docs/bitcast-semantics.md`): an array or vector is its elements'
 bits concatenated, element 0 in the lowest bits, with no padding, and an enum with an explicit
 tag type is its tag integer. `Check.lean` and `Emit.lean` share the classification here.

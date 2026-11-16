@@ -26,7 +26,7 @@ only `posix.mmap`/`munmap`/`mremap` are trusted (OSM-01), and there is no model 
 | Zig | `lib/std/heap` | status |
 |---|---|---|
 | 0.16.0 | `ArenaAllocator.zig`: lock-free (`used_list`/`free_list` atomics, `end_index` bumped by `@atomicRmw .Add`, `Node.Size` packed with a `resizing` bit) | translated (x86_64-linux, aarch64-macos); patched (`upstream/arena-fix.patch`): x86_64-linux |
-| 0.17.0 | the same implementation (only the tests differ) | same code; translated mode needs the 0.16.0 OS boundary rows |
+| 0.17.1 | the same implementation (only the tests differ) | same code; translated mode needs the 0.16.0 OS boundary rows |
 | 0.15.2 | `arena_allocator.zig`: the older single-threaded arena (`SinglyLinkedList` of `BufNode`s, `state.end_index`) | not translated: `@fieldParentPtr` over the cyclic list (parent recovery), and translated mode is 0.16.0-only |
 
 ## Translation

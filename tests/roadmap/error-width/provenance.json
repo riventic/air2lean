@@ -6,15 +6,15 @@
       "aarch64-macos-0.14.1.txt": "ee4a56c1d804e00152c5d292c928c72f1be95fb96b538e47a68356fc3dd81f55",
       "aarch64-macos-0.15.2.txt": "db3f08676848fe4fab854b0c349a835145df60bbd98d0fe5390a6380a211c527",
       "aarch64-macos-0.16.0.txt": "7525d3fac68b5af87baac5630c522a93a9d832728a41525ecbe163f85103c4e1",
-      "aarch64-macos-0.17.0.txt": "267e4d2d27234e3d08b86841d7b42d463625f4d32a955a143b283b0fdda35638",
-      "expected-mismatches-0.17.0.txt": "58e5ee465fb418c865dfae6b5977140c0c2a5d062f0b77d38f3723ad2add45dc"
+      "aarch64-macos-0.17.1.txt": "c80cdcfaae71948e1865d590ed35f1ff6c54cce47518c66764c15d3e22430510",
+      "expected-mismatches-0.17.1.txt": "58e5ee465fb418c865dfae6b5977140c0c2a5d062f0b77d38f3723ad2add45dc"
     },
     "probe_sha256": "3f8b56e0d89232c4e289095633b4dbb13092aa074ee8b2b8f7162d1b5b62a2d4",
     "stock_compiler_sha256": {
       "0.14.1": "b3de43be2f2a65738c11d6bba5520e3e2f75a3aadbedd4ac3640a6a107fcd593",
       "0.15.2": "c65cd34917923f575448cc0603dd7c2326da0af0e5c323043d090662dcdf351c",
       "0.16.0": "e6cd688d25664983833aae272f501d4bceeae304875b8f1741209d15fd13a4ec",
-      "0.17.0": "1c5f706db0ed6d55451940f31dc05a6177d05696bc1fa5d853696d04c718b523"
+      "0.17.1": "bb6397b497438ce9e9d0d668fbfb42e777082f2b0af87ab06dec5ec928e19df5"
     },
     "target": "aarch64-macos"
   }

@@ -6,7 +6,7 @@ import ZigLean.Sep.Full.LockSteps
 /-!
 # `Io.Event` of `examples/sync` as an event (`EventImpl`)
 
-The per-item obligation of `Io.Event` (Zig 0.16.0's std code; 0.17.0 translates to the same code)
+The per-item obligation of `Io.Event` (Zig 0.16.0's std code; 0.17.1 translates to the same code)
 in this program's generated code: `waitUncancelable` and `set` walked with the rules of the
 futex event (`ZigLean/Sep/Full/Event.lean`), for every protocol that has the event next to a lock.
 The wait's `fsym` walk pays each loop tick from a positive unmetered caller fragment while

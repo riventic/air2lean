@@ -211,6 +211,6 @@ pub fn main() void {
     std.debug.print("parent {d} {d}\n", .{ @intFromBool(parentSecond(&parent.second) == &parent), addr(parentFirst(@ptrFromInt(@as(*volatile usize, &runtime_zero).*))) });
     // Address arithmetic says `(2^64 - 4) + 4` is null; an observed `false` contradicts it.
     std.debug.print("mmioIsNull {d} {s}\n", .{ @intFromBool(mmioIsNull(4096, 0)), if (mmioIsNull(std.math.maxInt(usize) - 3, one)) "address" else "illegal" });
-    // Last: Zig 0.17.0 checks `&n.*.next` of a null `[*c]Node` and panics here.
+    // Last: Zig 0.17.1 checks `&n.*.next` of a null `[*c]Node` and panics here.
     std.debug.print("nullNextPtr {d}\n", .{addr(nextPtr(nul_node))});
 }

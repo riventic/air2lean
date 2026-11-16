@@ -61,6 +61,9 @@ export fn shlExact(a: u32, n8: u8) u32 {
     return @shlExact(a, n);
 }
 export fn shrExact(a: u32, n8: u8) u32 {
+    // With safety on, 0.17.1's Sema lowers @shrExact to shr plus a shl/cmp_eq exactness check
+    // (Sema.zirShr); without it, every version emits shr_exact.
+    @setRuntimeSafety(false);
     const n: u5 = @truncate(n8);
     return @shrExact(a, n);
 }

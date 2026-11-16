@@ -58,7 +58,7 @@ class Prune(unittest.TestCase):
             self.entry(1, 'lake-root-' + 'a' * 64 + '-' + 'b' * 64, created='2026-10-11T09:00:00Z'),
             self.entry(2, 'lake-root-' + 'a' * 64 + '-' + 'c' * 64, created='2026-10-11T11:00:00Z'),
             self.entry(3, 'zig-air-Linux-X64-0.16.0-' + 'd' * 64),
-            self.entry(4, 'zig-air-Linux-X64-0.17.0-' + 'd' * 64),
+            self.entry(4, 'zig-air-Linux-X64-0.17.1-' + 'd' * 64),
             self.entry(5, 'lake-root-' + 'a' * 64 + '-' + 'e' * 64, ref='refs/pull/9/merge',
                        created='2026-10-11T12:00:00Z'),
             self.entry(6, 'zig-diff-Linux-0.16.0-Debug-' + 'f' * 64, ref='refs/heads/gh-readonly-queue/main/pr-9'),

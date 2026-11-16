@@ -5,7 +5,7 @@ import ZigLean.Sep.Full.RwLockImpl
 # `Io.RwLock` as a reader/writer lock (`RwLockImpl`), once for every program
 
 `Io.RwLock`'s `lockUncancelable`, `unlock`, `lockSharedUncancelable` and `unlockShared` (Zig
-0.16.0's std code; 0.17.0 translates to the same code) are the same code in every program that
+0.16.0's std code; 0.17.1 translates to the same code) are the same code in every program that
 uses them: only the names differ (each program's `Gen` defines its own exits and locals) and the
 outer mutex and the semaphore they call are the program's `Io.Mutex` and `Io.Semaphore`.
 `IoRwLockCode Tgt` is that code passed as parameters, built like `IoMutexCode`

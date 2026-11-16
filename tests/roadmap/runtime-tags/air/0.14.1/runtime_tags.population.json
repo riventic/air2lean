@@ -42,7 +42,7 @@
  "src": {
   "file": "runtime_tags.zig",
   "module": "runtime_tags",
-  "decl_line": 83
+  "decl_line": 86
  },
  "params": [
   0

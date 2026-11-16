@@ -496,7 +496,7 @@ class ModelVersionTests(unittest.TestCase):
         self.module.parent.mkdir(parents=True)
         self.module.write_bytes(BODY)
         self.other = BODY.replace(b"42", b"17")
-        golden = self.checkout / "tests/golden/0.17.0/basic/Gen.lean"
+        golden = self.checkout / "tests/golden/0.17.1/basic/Gen.lean"
         golden.parent.mkdir(parents=True)
         golden.write_bytes(self.other)
         self.check = runpy.run_path(str(ROOT / "scripts/check-tree.py"))["check_models"]
@@ -513,20 +513,20 @@ class ModelVersionTests(unittest.TestCase):
 
     def test_checkout_holds_the_reference_translation_only(self):
         self.assert_model(self.checkout, "0.16.0", True)
-        self.assert_model(self.checkout, "0.17.0", False)  # 0.17.0 has its own translation
+        self.assert_model(self.checkout, "0.17.1", False)  # 0.17.1 has its own translation
 
     def test_check_tree_with_another_versions_committed_translation(self):
         tree = Path(self.temp.name) / "tree"
         shutil.copytree(self.checkout, tree)
         (tree / ".air2lean-check-tree.json").write_text(json.dumps({"checkout": str(self.checkout)}))
         (tree / "Proofs/Basic/Gen.lean").write_bytes(self.other)
-        self.assert_model(tree, "0.17.0", True)
+        self.assert_model(tree, "0.17.1", True)
         self.assert_model(tree, "0.16.0", False)  # not the checkout's translation
 
     def test_fresh_translation_names_its_version(self):
         self.module.write_bytes(generated(CURRENT, self.other))  # a 0.16.0 profile record
         self.assert_model(self.checkout, "0.16.0", True)
-        self.assert_model(self.checkout, "0.17.0", False)
+        self.assert_model(self.checkout, "0.17.1", False)
 
 
 if __name__ == "__main__":

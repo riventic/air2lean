@@ -29,7 +29,7 @@ Universe: 214 → 224 tags (16 added, 6 removed). Renames appear as remove + add
 | — | `spirv_runtime_array_len` (985) | SPIR-V only; unreachable on supported targets. | none (stays rejected) | Z1 |
 | `splat` (731) | `splat` (786) | Result may now be an array, including a sentinel array, not only a vector. | translator (`Check` must reject or model array splat) | Z3 |
 
-Inventory dispositions for 0.17.0 with the ported exporter (Z1, `zig-patch/0.17.0/TAGS.md`):
+Inventory dispositions for 0.17.0 with the ported exporter (Z1, `zig-patch/0.17.1/TAGS.md`):
 the 14 added tags the exporter decodes (`agg_field_val`, `array_to_vector`, `bit_cast`,
 `bit_cast_safe`, `div_ceil`, `error_cast`, `error_from_int`, `int_cast`, `int_cast_safe`,
 `int_from_error`, `int_from_ptr`, `ptr_cast`, `ptr_from_int`, `union_from_enum`) are
@@ -65,7 +65,7 @@ authority.
 - `@intFromEnum`/`@enumFromInt`, `std.fmt.bufPrint`/`allocPrint` and `std.builtin` still
   compile but are deprecated. `Type`/`Value`/`Zcu`/`InternPool` removed no other pub function the
   exporter calls.
-- Found by the build (done, `zig-patch/0.17.0/TAGS.md`): `Value.fmtValue`/`Type.fmt` take a
+- Found by the build (done, `zig-patch/0.17.1/TAGS.md`): `Value.fmtValue`/`Type.fmt` take a
   `*Zcu`; `Type.containerTypeName` returns `{ name, fqn }`; `std.lang.Optimize` tags are
   `debug`/`safe`/`fast`/`small` (`profile.build_mode` keeps the `-O` names); `build.zig` needs
   `-Dversion-string` on a tarball tree; `&v[i]` is a `ptr_cast` to a lane pointer whose lane is
@@ -240,3 +240,24 @@ Diffed `lib/std/{mem/Allocator,Thread,Io,Io/RwLock,Io/Semaphore,atomic,time,arra
   - `i0` byte-permutation probe gated to ≤0.16.
   - Run the `qualification/0.17.0.json` obligations: 7 reviews, 5 probes, 19 translations, 19
     proof sets.
+
+## 0.17.0 → 0.17.1
+
+0.17.1 replaces 0.17.0. This section compares the tarballs `zig-0.17.0.tar.xz`
+(sha256 `b6c7f172…8abd`) and `zig-0.17.1.tar.xz` (sha256 `1e89bf06…`). It covers the files that
+`qualification/0.17.1.json` selects, plus compiler_rt. The AIR universes are unchanged: tags,
+intern keys, types and pointer bases. Every committed 0.17.1 AIR file is a fresh 0.17.1 export
+(`scripts/fixture-exports.py`). Against 0.17.0 the exports differ only in the numbering of
+generic instances (`__func_N`, `__enum_N`), with one exception: `@shrExact` (below).
+
+| Change | Source (0.17.1) | Effect on the model |
+| --- | --- | --- |
+| With safety on, `@shrExact` lowers to `shr` and the exactness check. Without safety it still lowers to `shr_exact`. | `Sema.zirShr` | This fixes our draft [shr-exact-check-poison](upstream/shr-exact-check-poison.md). `runtime_tags.shrExact` turns safety off, so the fixture still emits `shr_exact`. |
+| `fma`/`fmaq`/`fmaf` fixes: a far smaller addend returns `z`, a zero high sum returns the scaled low part, `add_and_denorm`'s condition is negated, and `fmaf` corrects the `f32` midpoint. | `lib/compiler_rt/fma.zig` | Version-keyed: `Float.fmaRt017` (docs/floats.md §Per-version differences). |
+| The op files register their long-double C names only when `compiler_rt.have_c_longdouble` holds. | `lib/compiler_rt/*.zig` | The compiler_rt stub of the diff harness (`scripts/diff.sh`) defines it. |
+| A vector's ABI size with hard-float or integer lanes is `ceilPow2` of its bytes, then rounded up to its alignment. 0.17.0 used the bytes rounded up to the alignment. The two differ only where the alignment is capped below `ceilPow2`: on ARM, AArch64 and s390x, at the stack alignment. | `Type.abiSize` | `checkMemTy` compares the model's size and alignment with the exporter's. The model's alignment for a vector over 16 bytes is uncapped (`Zig.vecLayout`), so on aarch64 such a vector in memory is rejected on every version. |
+| A pointer's alignment comes from `std.zig.target.intAlignment` (it was `ptrBitWidth / 8` with an eZ80 case). | `Type.ptrAbiAlignment` | The value is the same on the modelled 64-bit and 32-bit targets. The ABI probes pass. |
+| Peer type resolution takes types as well as instructions, and array concatenation and coercion now include the sentinel element. A runtime `break` out of an inline block targets the enclosing runtime block. | `Sema` (`resolvePeerTypes`, `zirArrayCat`, `coerceArrayLike`, `coerceTupleToArray`, `ensurePostHoc`) | These are compiler bug fixes and add no new AIR form. A sentinel element arrives as an ordinary aggregate element. |
+| Union-capture and sentinel loop fixes, and `@syntheticField` spellings. | `InternPool` | Compiler internals, with no AIR change. |
+| The LLVM struct kind (`packed` vs `normal`) is chosen by one helper, `Object.structType`. Also: weak exports over an alias, and parameter iteration with an `sret` or error-trace slot. | `codegen/llvm.zig` | Native code only. Zig's ABI layout (`Type.zig`) decides memory, and the ABI probes and native observations were re-run with stock 0.17.1. |
+| `Io.Event.waitTimeout` loops until the deadline instead of returning `error.Timeout` on a spurious wakeup. A failing file write rejects a non-empty header. | `lib/std/Io.zig` | Translated std code. `Io.futexWaitTimeout` and `Io.Clock.now` keep their timed model (STD-10). |

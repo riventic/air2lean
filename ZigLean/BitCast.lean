@@ -2,9 +2,9 @@ import ZigLean.Mem.Enc
 import ZigLean.Vec
 
 /-!
-# `@bitCast` in logical bit order (Zig 0.17.0)
+# `@bitCast` in logical bit order (Zig 0.17.1)
 
-Zig 0.17.0 defines `@bitCast` on the *logical* bit representation, independent of the target
+Zig 0.17.1 defines `@bitCast` on the *logical* bit representation, independent of the target
 endianness (`docs/bitcast-semantics.md`): an integer is its two's-complement bits, a `bool` is
 one bit, a packed struct is its backing integer, and an array or vector is its elements
 concatenated in order, element 0 in the lowest bits, each element taking exactly its

@@ -4,7 +4,7 @@ open Air2Lean
 
 /-! L07 checker controls for `@bitCast` (`Air2Lean/Check.lean`): the representation cast and
 the optional-pointer rules hold for Zig 0.14.1, 0.15.2 and 0.16.0 only (`ZigVersion.BitCast.memory`);
-a context without a version rejects them; 0.17.0 redefined `@bitCast` (logical bit order,
+a context without a version rejects them; 0.17.1 redefined `@bitCast` (logical bit order,
 `docs/bitcast-semantics.md`), which admits only the equal-width integer-array casts here. Types without a guaranteed
 in-memory layout, pointers
 and optional pointers at any depth, and `@bitSizeOf` mismatches are rejected. The emitted text is pinned by `AggregateCasts/Gen.lean`.
@@ -64,17 +64,17 @@ def main : IO Unit := do
   for v in ["0.14.1", "0.15.2", "0.16.0"] do
     for (s, d) in casts do
       require (accepts v s d) s!"{v}: cast {s} → {d} is rejected: {result v s d}"
-  -- Only ≤0.16 has these rules: a context without a version rejects them all. 0.17.0 takes
+  -- Only ≤0.16 has these rules: a context without a version rejects them all. 0.17.1 takes
   -- the logical-bit-order path (`Air2Lean/BitCast.lean`, docs/bitcast-semantics.md): it admits
   -- `[4]u8` ↔ `u32` (equal logical bits) and rejects the rest (extern aggregates, `[2]u24` ↔ `u56`
   -- at 48 vs 56 logical bits, optional pointers).
   for (s, d) in casts do
     require (!accepts "" s d) s!"\"\": cast {s} → {d} is accepted"
     let logical := (s, d) == (2, 0) || (s, d) == (0, 2)
-    require (accepts "0.17.0" s d == logical)
-      s!"\"0.17.0\": cast {s} → {d} is {if logical then "rejected" else "accepted"}: {result "0.17.0" s d}"
+    require (accepts "0.17.1" s d == logical)
+      s!"\"0.17.1\": cast {s} → {d} is {if logical then "rejected" else "accepted"}: {result "0.17.1" s d}"
   -- The pointer wrap (`*T → ?*T`) is the existing coercion, for every version.
-  require (accepts "0.17.0" 12 13) "the optional wrap is rejected"
+  require (accepts "0.17.1" 12 13) "the optional wrap is rejected"
   let layoutMsg := "without a guaranteed in-memory layout"
   require (rejects "0.16.0" 4 6 "a type other than an integer") "[8]u8 → tuple is accepted"
   require (rejects "0.16.0" 7 4 "a type other than an integer") "auto struct → [8]u8 is accepted"
@@ -87,7 +87,7 @@ def main : IO Unit := do
   require (rejects "0.16.0" 16 0 "an aggregate other than a packed") "[4:0]u8 → u32 is accepted"
   require (rejects "0.16.0" 13 0 "optional pointer") "?*u32 → u32 is accepted"
   -- `?*T` ↔ `[*c]T` is L05's explicit null mapping (`docs/null-pointers.md`), for every version.
-  for v in ["0.16.0", "0.17.0"] do
+  for v in ["0.16.0", "0.17.1"] do
     require (accepts v 13 14) s!"{v}: ?*u32 → [*c]u32 is rejected: {result v 13 14}"
     require (accepts v 14 13) s!"{v}: [*c]u32 → ?*u32 is rejected: {result v 14 13}"
   IO.println "aggregate-casts checker controls: ok"

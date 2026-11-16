@@ -12,7 +12,7 @@ Export AIR, translate it and check the generated Lean. Publish OUTPUT only on su
 Run from any directory; input, output and --zig-air paths are relative to that directory.
 
 Options:
-  --zig-version VERSION     0.17.0, 0.16.0, 0.15.2 or 0.14.1 (Linux only); default: zig.default of
+  --zig-version VERSION     0.17.1, 0.16.0, 0.15.2 or 0.14.1 (Linux only); default: zig.default of
                             compatibility.json
   --zig-air PATH            Existing patched compiler (default: repo/zig-air-VERSION/bin/zig)
   --prefix PREFIX           Strip this prefix from Lean names (default: input basename + '.')

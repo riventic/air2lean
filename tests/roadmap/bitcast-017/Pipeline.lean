@@ -8,11 +8,11 @@ Each fixture is one function `fn (x: Src) Dst { return @bitCast(x); }`, written 
 canonical (0.16.0) tag vocabulary. The normalized `Func` is relabelled with each `zig_version`
 under test, which isolates the version gate of `Check.lean`/`Emit.lean` from the tag decoding.
 Canon renames 0.17's `bit_cast` to the canonical `bitcast` (the unchecked form these fixtures use)
-and `bit_cast_safe` to `bitcast_safe`; real 0.17.0 AIR is covered by `BitCastReal/` (docs/bitcast-semantics.md §What the translator does).
+and `bit_cast_safe` to `bitcast_safe`; real 0.17.1 AIR is covered by `BitCastReal/` (docs/bitcast-semantics.md §What the translator does).
 
 Usage: `lean --run Pipeline.lean OUT.lean` checks every accept/reject verdict and diagnostic,
 then writes the emitted 0.17 module plus a `main` that compares each function's result with the
-Zig 0.17.0 behaviour tests and native probes (`docs/bitcast-semantics.md` §Evidence). -/
+Zig 0.17.1 behaviour tests and native probes (`docs/bitcast-semantics.md` §Evidence). -/
 
 open Lean Air2Lean
 
@@ -117,12 +117,12 @@ def main (args : List String) : IO Unit := do
   let [output] := args | throw (IO.userError "usage: Pipeline.lean OUT.lean")
   let mut funcs : Array Func := #[]
   for (name, src, dst) in accepted do
-    let f ← load name src dst "0.17.0"
+    let f ← load name src dst "0.17.1"
     match verdict f with
     | .ok _ => funcs := funcs.push f
     | .error e => throw (IO.userError s!"0.17 cast rejected: {name}: {e}")
   for (name, src, dst, expected) in rejected do
-    match verdict (← load name src dst "0.17.0") with
+    match verdict (← load name src dst "0.17.1") with
     | .ok _ => throw (IO.userError s!"0.17 cast accepted: {name}")
     | .error e =>
       require ((e.splitOn "a Zig 0.17 `@bitCast`").length > 1 && (e.splitOn expected).length > 1)
@@ -146,7 +146,7 @@ def main (args : List String) : IO Unit := do
   let scalar (v : String) : IO String := do
     let f ← load "i8ToU8" 18 17 v
     pure (emit #[f] "Scalar" "")
-  require ((← scalar "0.16.0") == (← scalar "0.17.0")) "scalar bitcast emission depends on the version"
+  require ((← scalar "0.16.0") == (← scalar "0.17.1")) "scalar bitcast emission depends on the version"
   let generated := emit funcs "BitCast017" ""
   require ((generated.splitOn "Zig.BitCast.ofLanes").length > 1) "lane cast did not use ofLanes"
   IO.FS.writeFile output (generated ++ "\n" ++ runtime)

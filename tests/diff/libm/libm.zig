@@ -29,7 +29,7 @@ const std = @import("std");
 const crt = @import("crt");
 
 const v16 = @import("builtin").zig_version.minor >= 16;
-/// 0.17.0's compiler_rt/<op>.zig has a `pub fn <op>_f<N>` (Zig calling convention) per width and
+/// 0.17.1's compiler_rt/<op>.zig has a `pub fn <op>_f<N>` (Zig calling convention) per width and
 /// keeps its C-ABI wrappers private.
 const v17 = @import("builtin").zig_version.minor >= 17;
 

@@ -5,7 +5,7 @@
 #                                                        # ThreadStack.lean: MM-19, Tokens.lean:
 #                                                        # stack depth tokens, Rules.lean: their
 #                                                        # rules, `cur`, the start)
-#   AIR2LEAN_STACK_ZIG=$HOME/.cache/air2lean/host-0.17.0/zig \
+#   AIR2LEAN_STACK_ZIG=$HOME/.cache/air2lean/host-0.17.1/zig \
 #     tests/roadmap/stack-region/check.sh [--docker-linux] # + the native fixture (evidence.zig)
 #
 # The native fixture runs on the host; --docker-linux also cross-compiles it for x86_64-linux and

@@ -138,13 +138,13 @@ class Agreement(Scratch):
         text=prefix+separator+job.replace('        include:','        flag: [true]\n        include:',1)
         self.assertIn('flag: [true]',text);path.write_text(text)
         with self.assertRaisesRegex(MATRIX['Stale'],'ci.yml: job test: only strategy.matrix.include is supported'):
-            MATRIX['ci_jobs'](self.root,'0.17.0')
+            MATRIX['ci_jobs'](self.root,'0.17.1')
 
     def test_shared_data_flags_preserve_boolean_spelling_equivalence(self):
-        before=MATRIX['ci_jobs'](self.root,'0.17.0')
+        before=MATRIX['ci_jobs'](self.root,'0.17.1')
         path=self.root/'.github/workflows/ci.yml'
         path.write_text(path.read_text().replace('full: true','full: TRUE').replace('mutate: false','mutate: FALSE'))
-        self.assertEqual(MATRIX['ci_jobs'](self.root,'0.17.0'),before)
+        self.assertEqual(MATRIX['ci_jobs'](self.root,'0.17.1'),before)
 
     def test_shared_flag_truthiness_keeps_quoted_false_truthy(self):
         path=self.root/'.github/workflows/ci.yml'
@@ -153,17 +153,17 @@ class Agreement(Scratch):
     strategy:
       matrix:
         include:
-          - zig: "0.17.0"
+          - zig: "0.17.1"
             full: "false"
             mutate: FALSE
-          - zig: "0.17.0"
+          - zig: "0.17.1"
             full: FALSE
             mutate: "false"
-          - zig: "0.17.0"
+          - zig: "0.17.1"
             full: 0.0
             mutate: null
 ''')
-        full,restricted,shards=MATRIX['ci_jobs'](self.root,'0.17.0')
+        full,restricted,shards=MATRIX['ci_jobs'](self.root,'0.17.1')
         self.assertEqual([row['full'] for row in full],['false'])
         self.assertEqual([row['full'] for row in restricted],[0.0])
         self.assertEqual([row['mutate'] for row in shards],['false'])
@@ -175,16 +175,16 @@ class Agreement(Scratch):
     strategy:
       matrix:
         include:
-          - zig: "0.17.0"
+          - zig: "0.17.1"
             full: VALUE
 '''
         for value in ('[unsupported]','.inf'):
             path.write_text(template.replace('VALUE',value))
             with self.subTest(value=value),self.assertRaisesRegex(MATRIX['Stale'],r'ci.yml:.*(?:row 0|:[0-9]+|[0-9]+:)'):
-                MATRIX['ci_jobs'](self.root,'0.17.0')
+                MATRIX['ci_jobs'](self.root,'0.17.1')
         for field in ('zig','examples'):
             path.write_text(template.replace('full: VALUE',field+': null') if field=='examples'
-                            else template.replace('"0.17.0"','null').replace('VALUE','true'))
+                            else template.replace('"0.17.1"','null').replace('VALUE','true'))
             with self.subTest(field=field),self.assertRaisesRegex(MATRIX['Stale'],'row 0 '+field+' must be a string'):
                 MATRIX['ci_matrix'](self.root)
 
@@ -192,11 +192,11 @@ class Agreement(Scratch):
         path = self.root/'Air2Lean/Main.lean'
         text = path.read_text(encoding='utf-8')
         path.write_text(text.replace('"Supported AIR: Zig " ++ ZigVersion.helpList ++ ", a checked subset only;\\n" ++',
-                                     '"Supported AIR: Zig 0.17.0 (default), 0.16.0 and 0.15.2, a checked subset only;\\n" ++'),
+                                     '"Supported AIR: Zig 0.17.1 (default), 0.16.0 and 0.15.2, a checked subset only;\\n" ++'),
                         encoding='utf-8')
         self.assertProblem('help does not name Zig 0.14.1')
-        self.edit('Air2Lean/Main.lean', '0.17.0 (default)', '0.17.0')
-        self.assertProblem('help does not mark 0.17.0 as the default')
+        self.edit('Air2Lean/Main.lean', '0.17.1 (default)', '0.17.1')
+        self.assertProblem('help does not mark 0.17.1 as the default')
 
     def test_cli_help_must_describe_usage_flags(self):
         self.edit('Air2Lean/Main.lean', '  --model-registry-template    Write',
@@ -215,8 +215,8 @@ class Agreement(Scratch):
     def test_translator_version_must_be_pinned_and_inventoried(self):
         self.edit('Air2Lean/Air/Dialect.lean', 'def all : List ZigVersion := [',
                   'def all : List ZigVersion := [.v0_99_0, ')
-        self.edit('Air2Lean/Air/Dialect.lean', '  | v0_17_0 => "0.17.0"\n',
-                  '  | v0_17_0 => "0.17.0"\n  | v0_99_0 => "0.99.0"\n')
+        self.edit('Air2Lean/Air/Dialect.lean', '  | v0_17_1 => "0.17.1"\n',
+                  '  | v0_17_1 => "0.17.1"\n  | v0_99_0 => "0.99.0"\n')
         status, output = run('generate', '--root', self.root)
         self.assertEqual(status, 1, output)
         self.assertIn('zig-patch/versions.toml pins', output)
@@ -231,18 +231,18 @@ class Agreement(Scratch):
         for row in rows:
             if status.get(row['version']) == 'in-qualification':
                 self.assertEqual(row['label'], row['version'] + ' (in qualification)')
-        self.assertEqual(MATRIX['version_label']('0.17.0', '0.16.0', {'0.17.0': 'in-qualification'}),
-                         '0.17.0 (in qualification)')
+        self.assertEqual(MATRIX['version_label']('0.17.1', '0.16.0', {'0.17.1': 'in-qualification'}),
+                         '0.17.1 (in qualification)')
         self.assertEqual(MATRIX['version_label']('0.16.0', '0.16.0', {'0.16.0': 'qualified'}),
                          '0.16.0 (default)')
 
     def test_dialect_default_must_agree(self):
-        self.edit('Air2Lean/Air/Dialect.lean', 'defaultVersion : ZigVersion := .v0_17_0',
+        self.edit('Air2Lean/Air/Dialect.lean', 'defaultVersion : ZigVersion := .v0_17_1',
                   'defaultVersion : ZigVersion := .v0_15_2')
         self.assertProblem('default Zig versions disagree', code=2)
 
     def test_release_metadata_default_must_agree(self):
-        self.edit('compatibility.json', '"default": "0.17.0"', '"default": "0.15.2"')
+        self.edit('compatibility.json', '"default": "0.17.1"', '"default": "0.15.2"')
         self.assertProblem('default Zig versions disagree', code=2)
 
     def test_ci_example_list_must_match_selection(self):

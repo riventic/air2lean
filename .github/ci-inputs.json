@@ -177,7 +177,7 @@
       ],
       "note": "narrowed to top-level directories from the traces of run 38187552806 under the former tracer"
     },
-    "test/0.17.0/golden": {
+    "test/0.17.1/golden": {
       "inputs": [
         "**",
         "docs/allocation-policy-report.json",
@@ -189,7 +189,7 @@
       ],
       "note": "every tracked file except the prose documentation (docs/**, top-level *.md), plus the documentation files its gates are known to read; conservative until narrowed (docs/ci.md#current-declarations); README.md: the host-accounting claims of the full golden rows"
     },
-    "test/0.17.0/lean": {
+    "test/0.17.1/lean": {
       "inputs": [
         "Air2Lean.lean",
         "Air2Lean/**",
@@ -363,7 +363,7 @@
       ],
       "note": "narrowed to top-level directories from the traces of run 38187552806 under the former tracer"
     },
-    "macos/0.17.0": {
+    "macos/0.17.1": {
       "inputs": [
         "**",
         "docs/allocation-policy-report.json"

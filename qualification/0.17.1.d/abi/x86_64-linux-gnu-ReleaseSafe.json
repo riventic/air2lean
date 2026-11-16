@@ -1,0 +1,169 @@
+{
+  "schema": 1,
+  "kind": "air2lean-native-abi-fragment",
+  "profile": {
+    "name": "abi64-le-v1",
+    "target_triple": "x86_64-linux-gnu",
+    "pointer_bits": 64,
+    "endian": "little",
+    "abi": "gnu",
+    "zig_version": "0.17.1",
+    "backend": "stage2_llvm",
+    "cpu": "x86_64",
+    "features": [
+      "64bit",
+      "cmov",
+      "cx8",
+      "fxsr",
+      "idivq_to_divl",
+      "macrofusion",
+      "mmx",
+      "nopl",
+      "slow_3ops_lea",
+      "slow_incdec",
+      "sse",
+      "sse2",
+      "vzeroupper",
+      "x87"
+    ],
+    "build_mode": "ReleaseSafe",
+    "float_mode": "per-instruction",
+    "error_set_bits": 16,
+    "error_layout": "type-table",
+    "error_tracing": false,
+    "export_stage": "analyzed-air"
+  },
+  "source_sha256": {
+    "tests/roadmap/abi-probes/probe.zig": "8275b2e06916183a63ed76da07715b95427816f42c1c93770a9a6280ec4fe22d",
+    "tests/diff/compat.zig": "adcd8ed56886d97b632a9213ba240c1eb83cfa6a67f5ea656f12d73a9c5c76b7"
+  },
+  "compiler_sha256": "58959f01285c05a74276f09327b551d42ed6006bf325a78dc661a024e314987b",
+  "binary_sha256": "0fcf3006e341a2b6dd99c801befa4614b17a13ed3e082b307daa3c9e9b18d1ef",
+  "command": [
+    "/home/arc/.cache/air2lean/host-0.17.1/zig",
+    "build-exe",
+    "-fllvm",
+    "-OReleaseSafe",
+    "-fno-error-tracing",
+    "-target",
+    "x86_64-linux-gnu",
+    "-mcpu=baseline",
+    "-femit-bin=/tmp/air2lean-abi-dc_4uqde/probe",
+    "--dep",
+    "compat",
+    "-Mroot=/home/arc/air2lean/wt/zig-0171-redo/tests/roadmap/abi-probes/probe.zig",
+    "-Mcompat=/home/arc/air2lean/wt/zig-0171-redo/tests/diff/compat.zig"
+  ],
+  "observations": {
+    "meta": {
+      "arch": "x86_64",
+      "os": "linux",
+      "abi": "gnu",
+      "endian": "little",
+      "backend": "stage2_llvm",
+      "mode": "ReleaseSafe",
+      "cpu": "x86_64",
+      "zig": "0.17.1",
+      "pointer_bits": "64",
+      "error_set_bits": "16",
+      "error_tracing": "false"
+    },
+    "layout": {
+      "u9": [
+        2,
+        2
+      ],
+      "u24": [
+        4,
+        4
+      ],
+      "u40": [
+        8,
+        8
+      ],
+      "u128": [
+        16,
+        16
+      ],
+      "pointer": [
+        8,
+        8
+      ],
+      "anyerror": [
+        2,
+        2
+      ],
+      "error_union_u8": [
+        4,
+        2
+      ],
+      "packed32": [
+        4,
+        4
+      ],
+      "vector4": [
+        16,
+        16
+      ],
+      "vector_u9x4": [
+        8,
+        8
+      ],
+      "vector_u24x3": [
+        16,
+        16
+      ],
+      "vector_u40x2": [
+        16,
+        16
+      ],
+      "vector_bool5": [
+        1,
+        1
+      ],
+      "record": [
+        16,
+        8
+      ]
+    },
+    "offset": {
+      "record_count": 4,
+      "record_pointer": 8
+    },
+    "value": {
+      "vector_u9_image": 268173823,
+      "vector_u9_lane_write": 178782719,
+      "vector_u24_image": 20016001699311,
+      "wrapping24": 1,
+      "packed_bits": 1793,
+      "vector_sum": 10,
+      "pointer_load": 1234567
+    },
+    "feature": {
+      "64bit": 1,
+      "cmov": 1,
+      "cx8": 1,
+      "fxsr": 1,
+      "idivq_to_divl": 1,
+      "macrofusion": 1,
+      "mmx": 1,
+      "nopl": 1,
+      "slow_3ops_lea": 1,
+      "slow_incdec": 1,
+      "sse": 1,
+      "sse2": 1,
+      "vzeroupper": 1,
+      "x87": 1
+    }
+  },
+  "scope": "listed integer/pointer/layout observations only",
+  "execution_host": {
+    "system": "Linux",
+    "machine": "x86_64"
+  },
+  "native_execution_attested": false,
+  "float_abi_qualified": false,
+  "synchronization_qualified": false,
+  "translation_qualified": false,
+  "wasm_qualified": false
+}

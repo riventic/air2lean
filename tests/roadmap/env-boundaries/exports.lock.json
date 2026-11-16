@@ -20,8 +20,8 @@
     "air/0.16.0/std_io16.readClose.json": "5c35aae072363844a1a6ad1faf2266fea0d1ef36d34bd190183908faa3f83fd6"
   },
   "compilers": {
-    "0.15.2": "08fabea60c770d7c034a9dbe78e816beb0d8a17a9b9a0ed5c8bdcbd112cffc05",
-    "0.16.0": "d49dbe58d9fd83d9fdedc5270fa3a5a34ab9661ebc63b52070027a00bdec6954"
+    "0.15.2": "2e1e05ae07d5a5f629ad79d8f7c36c09c99356a875531405c4a2d3b561d69086",
+    "0.16.0": "413c774df80a4580621ae9b3cb7ff5299322a98cb051f9cc2cd4a9c91cad4ce7"
   },
   "manifest_sha256": "cbae34cfcb4d20302302b39ad106edf6e37d081b17a956993056e3a2e47b2168",
   "schema": 1,

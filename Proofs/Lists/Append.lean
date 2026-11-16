@@ -144,7 +144,7 @@ theorem free_spec (s : Slice) (bs : Array Byte) (hlen : 4 * s.len.toNat = bs.siz
 
 /-! ## The list -/
 
--- Zig 0.17.0's header has a third field, `pointer_stability` (a `debug.SafetyLock`, which only
+-- Zig 0.17.1's header has a third field, `pointer_stability` (a `debug.SafetyLock`, which only
 -- that translation has); before 0.17.0 (`allocBytesWithAlignment`, renamed in 0.17.0) it has
 -- `items` and `capacity` only.
 when_defined debug_SafetyLock_assertUnlocked

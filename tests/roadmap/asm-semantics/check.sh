@@ -2,14 +2,14 @@
 # A02 probes (docs/research/A02.md): allowlisted and candidate instructions run natively, and the
 # backend asymmetry for inline asm, compared with the recorded observations.
 #
-#   check.sh [ZIG]   ZIG is a stock Zig 0.17.0 (default: `scripts/cas.py host-zig 0.17.0`).
+#   check.sh [ZIG]   ZIG is a stock Zig 0.17.1 (default: `scripts/cas.py host-zig 0.17.1`).
 #
 # x86_64-linux runs in `docker run --platform linux/amd64` (Rosetta on an aarch64 Mac); the
 # aarch64 probe runs on an aarch64 host (skipped elsewhere). Not part of any proof.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 dir=$repo_root/tests/roadmap/asm-semantics
-zig=${1:-$(python3 "$repo_root/scripts/cas.py" host-zig 0.17.0)}
+zig=${1:-$(python3 "$repo_root/scripts/cas.py" host-zig 0.17.1)}
 out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
 

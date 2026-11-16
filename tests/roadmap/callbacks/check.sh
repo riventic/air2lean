@@ -2,8 +2,8 @@
 # E02: function-pointer call sites bound to registry contracts. Needs a built translator and
 # `lake build ZigLean ZigLean.External.Callback ZigLean.Mem.Run Proofs.Asm.Effects`; runs no
 # compiler. For each Zig version the committed exports translate under their registries (the
-# 0.17.0 ones byte for byte to Callbacks/Gen.lean and Callbacks/Async.lean); the proofs check
-# against the fresh 0.17.0 translations; test_cli.py covers the rejections.
+# 0.17.1 ones byte for byte to Callbacks/Gen.lean and Callbacks/Async.lean); the proofs check
+# against the fresh 0.17.1 translations; test_cli.py covers the rejections.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
@@ -20,7 +20,7 @@ export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}
 python3 -B scripts/fixture-exports.py check callbacks
 cp "$here/CallbackModel.lean" "$work/CallbackModel.lean"
 "${lean_cmd[@]}" -R "$work" -o "$work/CallbackModel.olean" "$work/CallbackModel.lean"
-for version in 0.17.0 0.16.0 0.15.2 0.14.1; do
+for version in 0.17.1 0.16.0 0.15.2 0.14.1; do
   "$translator" "$here/air/$version" -o "$work/Callbacks/Gen.lean" --namespace Callbacks \
     --prefix callbacks. --profile abi64-le-v1 --model-registry "$here/registry-$version.json"
   "$translator" "$here/air-async/$version" -o "$work/Callbacks/Async.lean" --namespace Callbacks.Async \
@@ -28,8 +28,8 @@ for version in 0.17.0 0.16.0 0.15.2 0.14.1; do
   "${lean_cmd[@]}" -R "$work" -o "$work/Callbacks/Gen.olean" "$work/Callbacks/Gen.lean"
   "${lean_cmd[@]}" -R "$work" -o "$work/Callbacks/Async.olean" "$work/Callbacks/Async.lean"
 done
-# The proofs are about the fresh 0.17.0 translations, which are the retained ones.
-for version in 0.17.0; do
+# The proofs are about the fresh 0.17.1 translations, which are the retained ones.
+for version in 0.17.1; do
   "$translator" "$here/air/$version" -o "$work/Callbacks/Gen.lean" --namespace Callbacks \
     --prefix callbacks. --profile abi64-le-v1 --model-registry "$here/registry-$version.json"
   "$translator" "$here/air-async/$version" -o "$work/Callbacks/Async.lean" --namespace Callbacks.Async \

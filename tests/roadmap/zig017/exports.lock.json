@@ -1,27 +1,27 @@
 {
   "air_sha256": {
-    "casts/air/0.17.0/casts.errorCode.json": "998849ba0009e0cbdfe0aa2b56087686ce3cad28a5b4f7effac79478d039d3a4",
-    "casts/air/0.17.0/casts.errorOfCode.json": "1d7558cebd5bfcb0f6636d27ebb9b43419c4176b3ee2b5638bbd8588d7104be7",
-    "casts/air/0.17.0/error-table.air2lean": "9f9f6fc652839ba83d69a33769e6e8b1562643b422b41a72f103bb6aadde5617",
-    "divceil/air/0.17.0/divceil.divCeilI13.json": "54d96dedcd504fb330852d69550437694d9e36dcd448082f1e2bfcc85ed05c7f",
-    "divceil/air/0.17.0/divceil.divCeilI32.json": "0af4a5aea386ce17e7d271637856c767948ef8f5c9ecead1f012f0bd6369bcb9",
-    "divceil/air/0.17.0/divceil.divCeilI64.json": "9f0baa1630d37a26a3ef4afc44950860011f6febf6c18504e2e264f187ca851e",
-    "divceil/air/0.17.0/divceil.divCeilI8.json": "bccc00c3fabdbb6949d3c83eeb4f35cb3f1a5a4bd176015a13afc9ab06e6f10b",
-    "divceil/air/0.17.0/divceil.divCeilU32.json": "e83c1ed616c3178759ef1b0b998dd9dd44a9cbf91066f863e15d9692690a3783",
-    "divceil/air/0.17.0/divceil.divCeilU64.json": "d4a715b36cf30390442c4dbe98828a3913da9acecc623f48bc6d3704f25dbba3",
-    "divceil/air/0.17.0/divceil.divCeilU8.json": "34cca1226d138f48d3c6abd5bec5f6b0db1fd08bda4b35a392fd1a16d11ef81e",
-    "overflow/air/0.17.0/overflow.mulOverflowI16.json": "54ab007a62dfc16f84700772a0d5a2ff92591335924838f09ef4f033bd0c8d38",
-    "overflow/air/0.17.0/overflow.mulOverflowU32.json": "e8190bae08022e93fcd11e0a5bfa749709aa111cd4eb1a575a8f121781535cb7"
+    "casts/air/0.17.1/casts.errorCode.json": "752302c74a8c92c9d1cf66c7f057f292279c3e5559d3cb57e61728ca932c42ad",
+    "casts/air/0.17.1/casts.errorOfCode.json": "5782c6b8443ca6bdcfa131565d4f5414ad21ca4c44083e9146a81008a05573db",
+    "casts/air/0.17.1/error-table.air2lean": "48afbf360ac39ac855005d2c9a1238820cf90b0ef7e7a7d49d00753364f6c6c7",
+    "divceil/air/0.17.1/divceil.divCeilI13.json": "c8dbb770f112a3070c1a1668c65f3fb26bceb6e5f7d75bdb31d5e41e76d95999",
+    "divceil/air/0.17.1/divceil.divCeilI32.json": "de74078c8e30bec172639b16f31e3ee3c61c4eb67e93544338622424164813f4",
+    "divceil/air/0.17.1/divceil.divCeilI64.json": "184df54c6355f3377d3818af80f9070b0f08f1f1a536fb3df265c033fc2b4a5a",
+    "divceil/air/0.17.1/divceil.divCeilI8.json": "27d0e4ea6c99f85eb2f94aff060a20e959d88d508c0fa3dcd47d21bfc618e8d5",
+    "divceil/air/0.17.1/divceil.divCeilU32.json": "23b0f71a65054bfeb8d8b8b9136810a61dfcdaea80017f42f96a45e7e1cd94dc",
+    "divceil/air/0.17.1/divceil.divCeilU64.json": "eb3add66be540e4b6e29f0c54e80a874504f84b9c5a32874d5621c92e6dd067f",
+    "divceil/air/0.17.1/divceil.divCeilU8.json": "fb560a2be51dd2a41a821d9b30d380c00b4473bc515a226d22072570284951cf",
+    "overflow/air/0.17.1/overflow.mulOverflowI16.json": "ab15957c06304d3d92831f5f28aa51fc6ce19e437fae39e48e891179eaa95b0c",
+    "overflow/air/0.17.1/overflow.mulOverflowU32.json": "a592e988f8836c769df60578a44a4fc205abb6deeed91940943b6380efbfb984"
   },
   "compilers": {
-    "0.17.0": "321ab894d2a5d5784afdba19137ed24abf39c62825b440f9a4f82e53958d9b24"
+    "0.17.1": "a4b56f33ac0b5fbafae85e023f692a3cdb85df8ce7028d7d3e725dfd3404ed52"
   },
-  "manifest_sha256": "d74dbc524e1df7ff34f786bbc3f2c0fa2e32d5d327cbc6f050ac220e213431e4",
+  "manifest_sha256": "96d7a3415d7b9e74959595c06654e46ea4bf5dea51854b3317e159e824776abe",
   "schema": 1,
   "sources_sha256": {
-    "casts/casts.zig": "8b7810da816b326fad915df301d80192dd6d8baa06b8b388d00ede764fc37607",
-    "divceil/divceil.zig": "8ca8cf69957a7d14f843a78f42126fe4b1b4c007e795528acd9c9f61eea7129b",
-    "divceil/native.zig": "8cd3cb98711be39a2bdc78bc294b299ac7c4991f0a54be698b81b4ac329a1816",
-    "overflow/overflow.zig": "90565c602faf153ad6d72e434575ce636a3c40f77bf96c2c7f0030b1bcc278f0"
+    "casts/casts.zig": "0c521dd7a4956a63edee49b87295cb0c857c17ec9f8115a794cc4d7dda3041e5",
+    "divceil/divceil.zig": "130e9e776fb1e1346a5ebfdd0380e2b4ce93d6f957d834cdc81b00147578203b",
+    "divceil/native.zig": "8a2993fe9642772954d99002d9ad25a1d0c52f6f124ddb115339c2b629de3fe5",
+    "overflow/overflow.zig": "85ced20a690526e16ee754c004b2a666f9880ff86e07a2000e4254b4b128d717"
   }
 }

@@ -29,7 +29,7 @@ and its error code, a union's payload and its tag, and distinct globals are disj
 comptime-only roots never resolve (`resolve_int`, `resolve_comptimeOnly`), and the model
 memory rejects any access through a block-less pointer (`access_unbacked`).
 
-The LLVM section records the Zig 0.14.1–0.17.0 `codegen/llvm.zig` `lowerPtr` offset for an
+The LLVM section records the Zig 0.14.1–0.17.1 `codegen/llvm.zig` `lowerPtr` offset for an
 `eu_payload` constant (it measures the error union type instead of its payload) and proves
 exactly which payloads it misplaces (`llvmPayloadOffset_ne_iff`): a nonzero-size payload of
 alignment below 2, which it addresses at the error code. The translator rejects such
@@ -62,7 +62,7 @@ inductive Proj where
 
 /-- The payload offset of an `auto` union whose tag has size `ts` and alignment `ta`, and
 whose most aligned field has alignment `pa`: the more aligned of tag and payload first, the
-tag if equal. This is Zig 0.14.1–0.17.0's `Type.structFieldOffset` of a union with a runtime
+tag if equal. This is Zig 0.14.1–0.17.1's `Type.structFieldOffset` of a union with a runtime
 tag (also `codegen.lowerPtr` and `codegen/llvm.zig`), and the payload offset of
 `Air2Lean/Check.lean`'s `unionLayout`, which the generated `Zig.Enc` of a tagged union uses. -/
 def unionPayloadOffset (ts ta pa : Nat) : Nat := if pa ≤ ta then alignUp ts pa else 0
@@ -418,7 +418,7 @@ theorem access_unbacked (m : Mem) (off : Int) (n align : Nat) :
 
 /-! ## The LLVM backend's `eu_payload` constant offset
 
-`codegen.errUnionPayloadOffset(T)` (Zig 0.14.1–0.17.0, `src/codegen.zig`) is 0 for a payload
+`codegen.errUnionPayloadOffset(T)` (Zig 0.14.1–0.17.1, `src/codegen.zig`) is 0 for a payload
 without runtime bits or with alignment at least `anyerror`'s (2), else `2` aligned up to the
 payload alignment. The generic `codegen.lowerPtr` (self-hosted backends) passes the payload
 type. `codegen/llvm.zig` `lowerPtr` passes the error union type itself, whose alignment is

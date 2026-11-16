@@ -1,4 +1,4 @@
-//! Native probe of `error_ints.zig` (stock Zig 0.14.1-0.17.0), and the root of its AIR export:
+//! Native probe of `error_ints.zig` (stock Zig 0.14.1-0.17.1), and the root of its AIR export:
 //! the error numbering is per compilation, so `export.sh` exports this compilation
 //! (`error_ints.root`), with the same flags as the native build. `ModelErrorInts.lean` prints the
 //! same lines from the translation and the exported numbering.

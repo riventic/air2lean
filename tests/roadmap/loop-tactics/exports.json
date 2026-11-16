@@ -4,7 +4,7 @@
       "out": "counted/air",
       "source": "counted/counted.zig",
       "filter": "counted.",
-      "versions": ["0.17.0"],
+      "versions": ["0.17.1"],
       "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"]
     },
     {

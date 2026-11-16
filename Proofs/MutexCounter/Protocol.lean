@@ -9,7 +9,7 @@ import ZigLean.Sep.Full.LockSteps
 /-!
 # The protocol of `mutexCounter`, once for every version
 
-`mutexCounter` (examples/sync, Zig 0.16.0 and 0.17.0 `std.Io`; examples/threadsync, Zig 0.15.2
+`mutexCounter` (examples/sync, Zig 0.16.0 and 0.17.1 `std.Io`; examples/threadsync, Zig 0.15.2
 `std.Thread`) is the same program in each version: `main` spawns one thread; each of the two
 threads adds 1 two times to a counter under a mutex; `main` joins the kid and reads 4. The
 versions differ in the `Counter`'s layout (0.16.0 has `io` first), in the mutex's contended value,
@@ -22,7 +22,7 @@ walks `main` and `work` of its generated code with the steps here.
   or `work` (`Ph`), with its number of increments.
 - **The lock** (`L`, `FLock.prod`): the mutex owns the counter, whose value is the number of
   increments of both threads (`R`).
-- **The protocol's rest** (`IoRest`): the bytes of `io` (0.16.0 and 0.17.0: read-shared, `IoR`)
+- **The protocol's rest** (`IoRest`): the bytes of `io` (0.16.0 and 0.17.1: read-shared, `IoR`)
   and the `Counter`'s full extent, which pins the block for every thread's step (`blk_of`).
 - **The rest of the invariant** (`U`): the threads (`Shape`) and the read shares of `io`.
   Actual caller parts, including each thread's plain fragments, remain owned by `FLock.Inv`.

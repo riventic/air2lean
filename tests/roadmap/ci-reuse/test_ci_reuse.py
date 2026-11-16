@@ -78,7 +78,7 @@ class Workflow(unittest.TestCase):
     strategy:
       matrix:
         include:
-          - zig: "0.17.0"
+          - zig: "0.17.1"
             part: test
             shard: 1
             full: FALSE
@@ -88,8 +88,8 @@ class Workflow(unittest.TestCase):
         path=self.root/'.github/workflows/ci.yml';path.write_text(text)
         workflow=cr.load_workflow(self.root)
         parts=cr.parts(workflow)
-        self.assertEqual(list(parts),['test/0.17.0/test/1'])
-        row=parts['test/0.17.0/test/1'][1]
+        self.assertEqual(list(parts),['test/0.17.1/test/1'])
+        row=parts['test/0.17.1/test/1'][1]
         self.assertIs(type(row['shard']),int)
         self.assertIs(row['full'],False);self.assertIsNone(row['mutate'])
         self.assertIs(type(row['examples']),float)
@@ -412,7 +412,7 @@ class Keys(Repository):
 
         first = self.key(part)
         self.assertEqual(key_with_step("${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' }}"), first)
-        self.assertEqual(key_with_step("${{ !env.AIR2LEAN_REUSED && matrix.zig == '0.17.0' }}"), first)
+        self.assertEqual(key_with_step("${{ !env.AIR2LEAN_REUSED && matrix.zig == '0.17.1' }}"), first)
         for condition in ("${{ !env.AIR2LEAN_REUSED && matrix.part == 'mutation' }}",  # this row
                           "${{ !env.AIR2LEAN_REUSED }}",                                 # every row
                           "${{ !env.AIR2LEAN_REUSED && failure() }}",                    # a status function
@@ -587,10 +587,10 @@ class DataIdentity(Repository):
         self.workflow(self.ROW.replace('part: data','part: first')+
                       self.ROW.replace('part: data','part: second'))
         declarations={'schema':cr.DECLARATIONS_SCHEMA,'parts':{
-            'test/0.17.0/'+part:{'inputs':['scripts/**']} for part in ('first','second')}}
+            'test/0.17.1/'+part:{'inputs':['scripts/**']} for part in ('first','second')}}
         (self.root/cr.DECLARATIONS).write_text(json.dumps(declarations));self.commit()
         workflow=cr.load_workflow(self.root);parts=cr.parts(workflow)
-        target='test/0.17.0/first';row=parts[target][1]
+        target='test/0.17.1/first';row=parts[target][1]
         temp=self.root.parent/'decision-temp';temp.mkdir()
         environ={'GITHUB_RUN_ID':'100','GITHUB_RUN_ATTEMPT':'1','AIR2LEAN_EVENT':'pull_request',
                  'RUNNER_TEMP':str(temp),'GITHUB_REPOSITORY':Lookup.REPO,
@@ -730,7 +730,7 @@ class DataIdentity(Repository):
                  patch.object(cr, 'restrict') as restriction, \
                  patch.object(cr, 'append') as append:
                 for action in (lambda: cr.parts(workflow),
-                               lambda: cr.manifest(self.root, 'test/0.17.0/' + row['part'], {}),
+                               lambda: cr.manifest(self.root, 'test/0.17.1/' + row['part'], {}),
                                lambda: cr.decide(self.root, 'test', json.dumps(row), {'GITHUB_RUN_ID': '5'})):
                     with self.assertRaisesRegex(cr.ReuseError, 'part ID .*one environment-file value'):
                         action()
@@ -746,7 +746,7 @@ class DataIdentity(Repository):
                 self.commit()
                 workflow = cr.load_workflow(self.root)
                 row = cr.job_rows(workflow['jobs']['test'])[0]
-                expected = 'test/0.17.0/' + label
+                expected = 'test/0.17.1/' + label
                 self.assertEqual(cr.part_id('test', row), expected)
                 self.assertEqual(list(cr.parts(workflow)), [expected])
                 with contextlib.redirect_stdout(io.StringIO()):
@@ -780,7 +780,7 @@ class DataIdentity(Repository):
         (self.root/cr.WORKFLOW).write_text(first+first.replace('  test:','  other:').split('jobs:\n',1)[1])
         self.commit()
         workflow=cr.load_workflow(self.root)
-        self.assertEqual(set(cr.parts(workflow)),{'test/0.17.0/data/1.0','other/0.17.0/data/1.0'})
+        self.assertEqual(set(cr.parts(workflow)),{'test/0.17.1/data/1.0','other/0.17.1/data/1.0'})
         for job in ('test','other'):
             row=cr.job_rows(workflow['jobs'][job])[0]
             with contextlib.redirect_stdout(io.StringIO()):
@@ -842,7 +842,7 @@ class DataIdentity(Repository):
         (self.root/cr.WORKFLOW).write_text(text)
         return text
 
-    ROW='''          - zig: "0.17.0"
+    ROW='''          - zig: "0.17.1"
             part: data
             examples: ""
             full: true
@@ -857,9 +857,9 @@ class DataIdentity(Repository):
         text=self.workflow(self.ROW,condition='${{ !matrix.flag }}')
         (self.root/cr.WORKFLOW).write_text(text.replace('        include:',
                                                       '        flag: [true]\n        include:',1))
-        self.declarations('test/0.17.0/data');self.commit()
+        self.declarations('test/0.17.1/data');self.commit()
         with self.assertRaisesRegex(cr.RR.ReleaseError,'ci.yml: job test: only strategy.matrix.include is supported'):
-            cr.manifest(self.root,'test/0.17.0/data',{})
+            cr.manifest(self.root,'test/0.17.1/data',{})
 
     def test_real_yaml_repeated_part_ids_refuse_before_overwrite_in_all_consumers(self):
         for job in ('test','macos','bitops-native-arm'):
@@ -870,7 +870,7 @@ class DataIdentity(Repository):
                     self.workflow(self.ROW+first+self.ROW.replace('full: true','full: false')+second,job=job)
                     self.commit()
                     for action in (lambda:cr.parts(cr.load_workflow(self.root)),
-                                   lambda:cr.manifest(self.root,job+'/0.17.0/data',{}),
+                                   lambda:cr.manifest(self.root,job+'/0.17.1/data',{}),
                                    lambda:cr.check_workflow(self.root),
                                    lambda:cr.decide(self.root,job,'{}',{})):
                         with self.assertRaisesRegex(cr.ReuseError,'repeated part ID'):
@@ -885,7 +885,7 @@ class DataIdentity(Repository):
             with self.subTest(request=request),patch.object(cr,'_manifest',side_effect=AssertionError('manifest reached')):
                 with self.assertRaisesRegex(cr.ReuseError,'requested job/row does not match'):
                     cr.decide(self.root,'test',json.dumps(request),{'GITHUB_RUN_ID':'5'})
-        for raw in ('[]','false','{"zig":"0.17.0","zig":"0.17.0"}',
+        for raw in ('[]','false','{"zig":"0.17.1","zig":"0.17.1"}',
                     '{"x":NaN}','{"x":1e999}'):
             with self.subTest(raw=raw),self.assertRaisesRegex(cr.ReuseError,'unsupported request row'):
                 cr.decide(self.root,'test',raw,{'GITHUB_RUN_ID':'5'})
@@ -900,7 +900,7 @@ class DataIdentity(Repository):
 
     def test_real_null_collision_cannot_reuse_second_rows_result(self):
         self.workflow(self.ROW+'            shard: null\n'+self.ROW.replace('full: true','full: false'))
-        self.declarations('test/0.17.0/data');self.commit()
+        self.declarations('test/0.17.1/data');self.commit()
         requested=cr.job_rows(cr.load_workflow(self.root)['jobs']['test'])[0]
         with patch.object(cr,'lookup',side_effect=AssertionError('foreign row lookup')) as lookup,\
              patch.object(cr,'_manifest',side_effect=AssertionError('foreign row manifest')) as manifest:
@@ -913,9 +913,9 @@ class DataIdentity(Repository):
         lookup.assert_not_called();manifest.assert_not_called()
 
     def test_decide_uses_one_captured_workflow_for_validated_manifest(self):
-        self.workflow(self.ROW);self.declarations('test/0.17.0/data');self.commit()
+        self.workflow(self.ROW);self.declarations('test/0.17.1/data');self.commit()
         row=cr.job_rows(cr.load_workflow(self.root)['jobs']['test'])[0]
-        before=cr.manifest(self.root,'test/0.17.0/data',{})
+        before=cr.manifest(self.root,'test/0.17.1/data',{})
         temp=self.root.parent/'decision-temp';temp.mkdir()
         environ={'GITHUB_RUN_ID':'5','AIR2LEAN_EVENT':'schedule','RUNNER_TEMP':str(temp)}
         actual_load=cr.load_workflow
@@ -931,7 +931,7 @@ class DataIdentity(Repository):
         self.assertEqual(manifest.call_count,1)
         self.assertEqual(manifest.call_args.args[4]['jobs']['test']['strategy']['matrix']['include'][0],row)
         self.assertIn('Full proof',[step['name'] for step in before['definitions']['job']['steps']])
-        self.assertEqual(cr.manifest(self.root,'test/0.17.0/data',{}),before)
+        self.assertEqual(cr.manifest(self.root,'test/0.17.1/data',{}),before)
         with self.assertRaises(cr.RR.ReleaseError):cr.load_workflow(self.root)
 
     def test_all_current_numeric_rows_validate_without_transport_normalization(self):
@@ -944,7 +944,7 @@ class DataIdentity(Repository):
                     self.assertEqual(cr.decide(self.root,job,json.dumps(row),environ),0)
                 count+=1
         self.assertGreater(count,0)
-        self.workflow(self.ROW+'            shard: 1\n');self.declarations('test/0.17.0/data/1');self.commit()
+        self.workflow(self.ROW+'            shard: 1\n');self.declarations('test/0.17.1/data/1');self.commit()
         row=cr.job_rows(cr.load_workflow(self.root)['jobs']['test'])[0]
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(cr.decide(self.root,'test',json.dumps(row),environ),0)
@@ -962,14 +962,14 @@ class DataIdentity(Repository):
         for condition,included in (('null',True),('FALSE',False),('TRUE',True),
                                    ("steps.cache.outputs.hit == 'true'",True),('success()',True)):
             with self.subTest(condition=condition):
-                self.workflow(self.ROW,condition);self.declarations('test/0.17.0/data');self.commit()
-                preimage=cr.manifest(self.root,'test/0.17.0/data',{})
+                self.workflow(self.ROW,condition);self.declarations('test/0.17.1/data');self.commit()
+                preimage=cr.manifest(self.root,'test/0.17.1/data',{})
                 self.assertEqual(bool(preimage['definitions']['job']['steps']),included)
         for condition in ('0.0','0','[true]','\n          value: true'):
             with self.subTest(condition=condition):
-                self.workflow(self.ROW,condition);self.declarations('test/0.17.0/data');self.commit()
+                self.workflow(self.ROW,condition);self.declarations('test/0.17.1/data');self.commit()
                 with self.assertRaisesRegex(cr.ReuseError,"ci.yml: step 'Full proof': unsupported condition DATA:"):
-                    cr.manifest(self.root,'test/0.17.0/data',{})
+                    cr.manifest(self.root,'test/0.17.1/data',{})
         for value in (float('inf'),float('nan'),{}):
             with self.subTest(value=value),self.assertRaisesRegex(cr.ReuseError,"step 'Typed gate': unsupported condition DATA:"):
                 cr.may_run({'name':'Typed gate','if':value},{'matrix':{},'runner.os':'Linux'})

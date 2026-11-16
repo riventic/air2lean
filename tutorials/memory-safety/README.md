@@ -58,7 +58,7 @@ mismatch
 ## The code
 
 [`examples/lists/lists.zig`](../../examples/lists/lists.zig) is translated to
-[`Proofs/Lists/Open.lean`](../../Proofs/Lists/Open.lean) (Zig 0.17.0) with its
+[`Proofs/Lists/Open.lean`](../../Proofs/Lists/Open.lean) (Zig 0.17.1) with its
 `std.mem.Allocator` parameter as an open interface ([docs/interfaces.md](../../docs/interfaces.md)):
 every call through the allocator reaches the environment, which can be any allocator. The
 tutorial uses three of its generated functions unchanged: `push` (`a.create(Node)`, then two
@@ -197,7 +197,7 @@ about addresses, which the placement chooses.
   proof.
 * **Single-threaded.** `CTriple` reads the run in one thread; concurrent clients use the
   schedule-quantified proofs of [docs/proofs.md](../../docs/proofs.md#proofs-over-all-schedules).
-* **Supported versions.** The proofs are about the committed 0.17.0 translation
+* **Supported versions.** The proofs are about the committed 0.17.1 translation
   `Proofs/Lists/Open.lean`; `tests/roadmap/interfaces` translates the same functions for 0.16.0,
   0.15.2 and 0.14.1. Only code in the [supported subset](../../README.md#scope) translates.
 * **Refuted clients.** The properties are not vacuous:

@@ -65,7 +65,7 @@ def main : IO Unit := do
       require (!m.reviewed.isEmpty) s!"{m.symbol}: modelled row without reviewed Zig versions"
       require (m.zigVersions.toList.eraseDups.length == m.zigVersions.size) s!"{m.symbol}: duplicate reviewed version"
       require (m.reviewed.all fun r => r.sha256.length == 64 && !r.file.isEmpty) s!"{m.symbol}: malformed std review"
-    -- A Zig version qualifies exactly when the row has a reviewed std source for it (the 0.17.0
+    -- A Zig version qualifies exactly when the row has a reviewed std source for it (the 0.17.1
     -- audit, docs/std-models.md); an unreviewed release is never qualified.
     for v in ZigVersion.all do
       require (m.qualifies v == m.reviewed.any (·.zigVersion == v))
@@ -111,7 +111,7 @@ def main : IO Unit := do
     "OSF-01 projection"
   -- 0.14.1 has `futex_wait` where 0.15.2 has `futex_4arg`: the same system call, one row each.
   require ((stdModel? "os.linux.futex_wait").map (·.zigVersions) == some #[.v0_14_1] &&
-    (stdModel? "os.linux.futex_4arg").map (·.zigVersions) == some #[.v0_15_2, .v0_16_0, .v0_17_0])
+    (stdModel? "os.linux.futex_4arg").map (·.zigVersions) == some #[.v0_15_2, .v0_16_0, .v0_17_1])
     "futex wait rows per version"
   require ((rejectedThreadFn? "Io.futexWaitTimeout").isSome) "rejection projection"
   require (threadFn? "Thread.detach" == some .detach) "detach projection"
@@ -152,9 +152,9 @@ def main : IO Unit := do
   require (!qualifies "Thread.Futex.wait" .v0_16_0) "Thread.Futex.wait: not qualified for 0.16.0"
   for symbol in #["mem.Allocator.dupe", "mem.Allocator.allocSentinel", "Thread.spawn", "Io.futexWait",
       "Io.Group.await"] do
-    require (qualifies symbol .v0_17_0) s!"{symbol}: audited for 0.17.0"
+    require (qualifies symbol .v0_17_1) s!"{symbol}: audited for 0.17.1"
   for symbol in #["Thread.Futex.wait", "Thread.Futex.wake"] do
-    require (!qualifies symbol .v0_17_0) s!"{symbol}: not qualified for 0.17.0"
+    require (!qualifies symbol .v0_17_1) s!"{symbol}: not qualified for 0.17.1"
   -- An OS row with an environment (`OsFn.env`) checks its signature like any OS row, and every
   -- function that reaches it, and only those, takes the OS environment (`envFunctions`).
   expectError (checkProgram #[caller f "client" "os.linux.clock_gettime"]) "has an incompatible"
@@ -165,12 +165,12 @@ def main : IO Unit := do
     "envFunctions: the callers of an environment row, transitively"
   require (envFunctions #[other] == #[]) "envFunctions: sched_yield takes no environment"
   -- A rejection row qualifies no version; it is rejected in every version.
-  require (!qualifies "Io.futexWaitTimeout" .v0_17_0 && (rejectedThreadFn? "Io.futexWaitTimeout").isSome)
+  require (!qualifies "Io.futexWaitTimeout" .v0_17_1 && (rejectedThreadFn? "Io.futexWaitTimeout").isSome)
     "a rejection holds in every version"
   -- C07 detach and the C08 future API are audited for 0.16.0 only.
   for symbol in #["Thread.detach", "Io.async", "Io.checkCancel"] do
-    require (!qualifies symbol .v0_17_0) s!"{symbol}: not qualified for 0.17.0"
-  expectError (checkProgram #[atVersion .v0_17_0 (caller f "client" "Thread.Futex.wait")])
+    require (!qualifies symbol .v0_17_1) s!"{symbol}: not qualified for 0.17.1"
+  expectError (checkProgram #[atVersion .v0_17_1 (caller f "client" "Thread.Futex.wait")])
     "Thread.Futex.wait qualified Zig 0.14.1, 0.15.2"
   expectError (checkProgram #[atVersion .v0_15_2 (caller f "client" "mem.Allocator.realloc__anon_1")])
     "mem.Allocator.realloc qualified Zig 0.16.0"

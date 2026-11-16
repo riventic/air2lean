@@ -109,12 +109,12 @@ C/allowzero pointer and an optional slice, stay rejected.
   `00` in this run but is unspecified. The three casts the model leaves `.unspecified` are only
   recorded.
 - `Checker.lean`: every accepted cast is accepted for 0.14.1, 0.15.2 and 0.16.0 and rejected
-  for 0.17.0 or no version. It also checks the layout, bit-size and optional-pointer rejections.
+  for 0.17.1 or no version. It also checks the layout, bit-size and optional-pointer rejections.
 
 The native probe covers only the listed values on one host. Packed unions, floats and float
 arrays and vectors in casts, and arrays of `auto` structs and tagged unions (0.14.1, 0.15.2), are
 exported for every version in `tests/roadmap/packed-casts`, with kernel-checked results and native
 x86_64-linux outputs; casts of `auto` structs, tuples and tagged unions are compile errors there.
 Sentinel arrays and error storage in casts have no export. Vector casts are
-exported for 0.14.1-0.17.0 in `tests/roadmap/lang-long-tail` (`vector_casts.zig`, with
+exported for 0.14.1-0.17.1 in `tests/roadmap/lang-long-tail` (`vector_casts.zig`, with
 `std.mem.eql`'s `mem.eqlBytes`), with native probes of every version.

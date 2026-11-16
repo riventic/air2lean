@@ -25,11 +25,11 @@ const target_util = @import("../target.zig");
 const PtrOffset = @import("pointer-offset.zig");
 const Identity = @import("identity.zig");
 
-/// The differences between the supported Zig versions (0.14.1, 0.15.2, 0.16.0, 0.17.0). The
+/// The differences between the supported Zig versions (0.14.1, 0.15.2, 0.16.0, 0.17.1). The
 /// compiler is built by a host zig of its own version (`zig-patch/build.sh`), so
 /// `builtin.zig_version` is the version being patched. Each `if` on `v14`/`v16`/`v17` is
 /// comptime-known, so a version analyses only its own branch. `v16` and `v17` mean "this
-/// version or later": 0.17.0 keeps every 0.16.0 API the exporter uses unless a `v17` branch
+/// version or later": 0.17.1 keeps every 0.16.0 API the exporter uses unless a `v17` branch
 /// says otherwise.
 const Compat = struct {
     const zv = @import("builtin").zig_version;
@@ -177,7 +177,7 @@ const Compat = struct {
     /// A `ty_op` tag that does not exist in every version: `int_from_float_safe` (0.15.2+).
     /// 0.17.0 renamed `bitcast`/`intcast`/`intcast_safe` to `bit_cast`/`int_cast`/
     /// `int_cast_safe` and split the other casts that `bitcast` covered into their own tags
-    /// (`zig-patch/0.17.0/TAGS.md`). Each branch names only its own version's tags.
+    /// (`zig-patch/0.17.1/TAGS.md`). Each branch names only its own version's tags.
     fn isNewTyOp(tag: Air.Inst.Tag) bool {
         return if (v14)
             tag == .bitcast or tag == .intcast or tag == .intcast_safe
@@ -213,7 +213,7 @@ const Compat = struct {
         return if (v16) tag == .cmp_lte_errors_len else tag == .cmp_lt_errors_len;
     }
 
-    /// A tag that always converts between errors and integers (`dumpErrorTable`): 0.17.0's
+    /// A tag that always converts between errors and integers (`dumpErrorTable`): 0.17.1's
     /// `int_from_error`/`error_from_int`, the errors_len check, and 0.14.1's `error_name`, which
     /// indexes the name table with the sign-extended code.
     fn isErrorIntTag(tag: Air.Inst.Tag) bool {
@@ -971,7 +971,7 @@ const W = struct {
         try w.j.endObject();
     }
 
-    /// An integer/error conversion (`dumpErrorTable`): 0.17.0's `int_from_error` and
+    /// An integer/error conversion (`dumpErrorTable`): 0.17.1's `int_from_error` and
     /// `error_from_int`, before that a `bitcast` between an error set and an integer, and the
     /// `@errorFromInt` bound check `cmp_lt_errors_len` (`cmp_lte_errors_len` from 0.16.0). Also
     /// 0.14.1's `error_name`, which indexes the name table with the sign-extended code: only the

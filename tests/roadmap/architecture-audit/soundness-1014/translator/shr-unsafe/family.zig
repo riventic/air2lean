@@ -2,10 +2,10 @@
 //! no check runs: the integer safety checks with runtime safety on, each fed an input that
 //! violates it. `CASE=<n> ./family` runs case n and prints the result when the check did not fire.
 //! Inputs are loaded through volatile pointers, so nothing folds at compile time.
-//!   zig build-exe -OReleaseSafe -lc family.zig        (aarch64-macos: 0.16.0, 0.17.0)
+//!   zig build-exe -OReleaseSafe -lc family.zig        (aarch64-macos: 0.16.0, 0.17.1)
 //!   zig build-exe -OReleaseSafe -lc -target aarch64-linux-musl family.zig   (0.14.1, 0.15.2)
 //! In ReleaseSafe only the `@shrExact` exactness cases (1, 2, 3, 5) return a value; every other
-//! case panics, in 0.14.1 to 0.17.0.
+//! case panics, in 0.14.1 to 0.17.1.
 const std = @import("std");
 
 extern "c" fn getenv(name: [*:0]const u8) ?[*:0]const u8;

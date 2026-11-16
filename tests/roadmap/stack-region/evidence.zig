@@ -1,6 +1,6 @@
 // Native evidence for the stack-region model (docs/architecture-audit/memory-model.md MM-16).
 // Prints `key value` lines that check.sh compares; the same on every target and Zig version
-// (0.14.1-0.17.0) that was measured.
+// (0.14.1-0.17.1) that was measured.
 // E1:  an inlinable callee's escaping local lies above its caller's earlier local (LLVM inlining);
 //      a noinline callee's lies below.
 // E1': the inlined callee's local and a later local of the caller share one address.

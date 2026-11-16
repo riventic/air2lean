@@ -7,7 +7,7 @@ import ZigLean.VersionGate
 /-!
 # `Io.Condition` of `examples/sync` as a condition (`CondImpl`)
 
-The per-item obligation of `Io.Condition` (Zig 0.16.0's std code; 0.17.0 inlines the
+The per-item obligation of `Io.Condition` (Zig 0.16.0's std code; 0.17.1 inlines the
 uncancelable loops of `waitInner` into `waitUncancelable`) in this program's generated code:
 `waitUncancelable` and `signal` walked with the rules of the futex-epoch condition
 (`ZigLean/Sep/Full/Cond.lean`), with the program's `Io.Mutex` (`ioMutex`), for every protocol
@@ -514,7 +514,7 @@ end_when
 
 when_defined Io_Condition_waitUncancelable.loop22
 
-/-! ### Zig 0.17.0: the loops of `waitInner` inlined into `waitUncancelable` -/
+/-! ### Zig 0.17.1: the loops of `waitInner` inlined into `waitUncancelable` -/
 
 section
 variable {γ : Type} {L : FLock γ} {C : FCond γ} {P : Proto Tgt γ}
@@ -676,7 +676,7 @@ theorem loop22_body (hC' : C.Fits L P U ok) (hcost : P.cost = none)
           Io_Condition_waitUncancelable.again22, Bool.false_eq_true, ↓reduceIte])
     done
 
-/-- **`Io.Condition.waitUncancelable`** of Zig 0.17.0 (the loops inlined). -/
+/-- **`Io.Condition.waitUncancelable`** of Zig 0.17.1 (the loops inlined). -/
 theorem ioCond_wait_wp_v017 (hC' : C.Fits L P U ok)
     (hcost : P.cost = none) {p q : Ptr} (hp : p = C.S.ptr) (hq : q = L.ptr) (hLc : L.c = ioMutex.c)
     (t : ThreadId) (g : γ) (hgx : C.ph g = .out) (hgh : L.ph g = .holds) (hok : ok g)

@@ -14,7 +14,7 @@ pub fn push(a: Allocator, next: ?*Node, val: u32) !*Node {
 ```
 
 The translation is `Lists.Open.push` in [`Proofs/Lists/Open.lean`](../../Proofs/Lists/Open.lean)
-(Zig 0.17.0), with the `Allocator` parameter as an open interface
+(Zig 0.17.1), with the `Allocator` parameter as an open interface
 ([docs/interfaces.md](../../docs/interfaces.md)): `a.create` calls the environment's `alloc`
 entry, which can be any allocator. The theorems assume only that it meets the contract
 `CAllocSpec`, whose `alloc` may always return `null`, so they cover both outcomes.

@@ -1,4 +1,4 @@
-//! Native probe of `extern_storage.zig` (stock Zig 0.14.1-0.17.0), linked with
+//! Native probe of `extern_storage.zig` (stock Zig 0.14.1-0.17.1), linked with
 //! `provider_extern_storage.c`. `ModelExternStorage.lean` prints the same lines from the
 //! translation with the provider's values as `ext`.
 const std = @import("std");

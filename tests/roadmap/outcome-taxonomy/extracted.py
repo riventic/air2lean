@@ -130,7 +130,7 @@ cases = [('stateErrorOnly', 'stateFailed', 'total_correctness', ['valid'], 'fail
          ('concurrentProjected', 'concurrentFailed', 'partial_correctness', None, 'pass')]
 with tempfile.TemporaryDirectory() as temporary:
     base = Path(temporary)
-    (base / 'profile.json').write_text(json.dumps({'name': 'legacy-abi64-le', 'zig_version': '0.17.0'}))
+    (base / 'profile.json').write_text(json.dumps({'name': 'legacy-abi64-le', 'zig_version': '0.17.1'}))
     for name, definition, strength, admitted, status in cases:
         manifest = {'schema': 1, 'profile': 'profile.json', 'float_semantics': 'ieee',
                     'source_closure': ['fixture.zig'],

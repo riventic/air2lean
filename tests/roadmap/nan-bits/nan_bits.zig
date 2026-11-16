@@ -1,7 +1,7 @@
 //! A float's bits observed as an integer through memory (docs/architecture-audit/nan-bits.md).
 //! A NaN that an operation makes has target-specific sign and payload bits, so the model gives
 //! `.unspecified` wherever such bits become an integer; a NaN constant keeps its exact bits.
-//! Every function compiles on Zig 0.14.1, 0.15.2, 0.16.0 and 0.17.0 (`README.md`).
+//! Every function compiles on Zig 0.14.1, 0.15.2, 0.16.0 and 0.17.1 (`README.md`).
 var g32: f32 = 0;
 var g64: f64 = 0;
 /// A NaN constant in a global initializer: its bits are the constant's.

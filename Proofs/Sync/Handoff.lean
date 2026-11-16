@@ -11,7 +11,7 @@ import ZigLean.Sep.Full.LockSteps
 `handoff` spawns a producer. The producer sets `v = 7` and `ready = true` under an `Io.Mutex`,
 signals an `Io.Condition` and sets an `Io.Event`. `main` waits on the condition until `ready`,
 reads `v`, waits on the event and joins the producer. All three sync objects are translated from
-Zig's std code (0.16.0; the 0.17.0 translation of this program is the same code); the futex under
+Zig's std code (0.16.0; the 0.17.1 translation of this program is the same code); the futex under
 them is the model. The result is 7 under every schedule (`handoff_spec`), and no schedule gives an
 error (`handoff_safe`): no data race, no deadlock at a futex, no `unreachable`.
 
