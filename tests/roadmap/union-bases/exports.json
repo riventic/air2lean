@@ -1,0 +1,20 @@
+{
+  "exports": [
+    {
+      "out": "air/{version}",
+      "source": "union_bases.zig",
+      "filter": "union_bases.",
+      "versions": ["0.17.0", "0.16.0", "0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-fno-llvm", "-fno-lld", "-target", "x86_64-linux-musl",
+               "-mcpu=baseline"]
+    },
+    {
+      "out": "air-reject/{version}",
+      "source": "union_reject.zig",
+      "filter": "union_reject.",
+      "versions": ["0.17.0", "0.16.0", "0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-fno-llvm", "-fno-lld", "-target", "x86_64-linux-musl",
+               "-mcpu=baseline"]
+    }
+  ]
+}

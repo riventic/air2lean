@@ -14,6 +14,7 @@ trap 'rm -rf "$work"' EXIT
 export LEAN_PATH="$work:$repo/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
 
 python3 -B "$here/test_env_boundaries.py"
+python3 -B scripts/fixture-exports.py check env-boundaries
 "${lean_cmd[@]}" "$here/WriteAll.lean"
 "$here/translate.sh" "$work"
 for ns in EnvStd15 EnvStd16; do

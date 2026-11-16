@@ -46,11 +46,10 @@ A pointer constant into a member of a global union is resolved like the nested b
 | `projectWide`, `projectBare` | the same projections at run time from a `*const Holder`, with the tag checks | — |
 
 `air/<version>` holds the unmodified exports from patched 0.17.0, 0.16.0, 0.15.2 and 0.14.1
-compilers. `zig-patch/build.sh` built them from this tree's exporter. `export.sh` runs
-`ZIG_AIR_JSON_FILTER=union_bases. zig build-obj -fno-emit-bin -OReleaseSafe
--fno-error-tracing -fno-llvm -fno-lld -target x86_64-linux-musl -mcpu=baseline` (stage2_x86_64)
-for each version. `provenance.json` pins the source, the exporter, every export and each
-compiler binary (`test_cli.py --refresh-provenance <dir>` rewrites it). All four versions
+compilers (`-OReleaseSafe -fno-error-tracing -fno-llvm -fno-lld -target x86_64-linux-musl
+-mcpu=baseline`, stage2_x86_64). `exports.json` declares them and the `air-reject` exports, and
+`exports.lock.json` pins the sources, the exporter and every file (`scripts/fixture-exports.py`,
+[docs/coverage.md](../../../docs/coverage.md#fixture-exports)). All four versions
 export the same constants. Apart from the profile line, they translate to the same
 `UnionBases/Gen.lean`, which is the retained 0.16.0 translation.
 
@@ -91,4 +90,4 @@ AIR2LEAN_ZIG_NATIVE=/path/to/zig bash tests/roadmap/union-bases/check.sh --nativ
 
 `check.sh --native` passed with stock 0.14.1, 0.15.2, 0.16.0 and 0.17.0 x86_64-linux in a
 linux/amd64 container, on both backends. The `zig test` also passes on aarch64-macos with LLVM.
-`export.sh 0.17.0=… 0.16.0=… 0.15.2=… 0.14.1=…` re-exports every version.
+`scripts/fixture-exports.py export union-bases` re-exports every version.

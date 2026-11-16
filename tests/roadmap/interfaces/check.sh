@@ -19,18 +19,7 @@ if [ -n "${AIR2LEAN_LEAN:-}" ]; then lean_cmd=("$AIR2LEAN_LEAN"); fi
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-interfaces.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/Interfaces"
-python3 - "$here" <<'PY'
-import hashlib, json, pathlib, sys
-here = pathlib.Path(sys.argv[1])
-root = here.parents[2]
-record = json.loads((here / 'provenance.json').read_text())
-for name, digest in record['source_sha256'].items():
-    path = root / name if '/' in name else here / name
-    assert hashlib.sha256(path.read_bytes()).hexdigest() == digest, name
-files = {str(p.relative_to(here)): hashlib.sha256(p.read_bytes()).hexdigest()
-         for p in sorted((here / 'air').rglob('*.json'))}
-assert files == record['air_sha256'], 'AIR fixtures differ from provenance.json'
-PY
+python3 -B scripts/fixture-exports.py check interfaces
 export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
 # E02's callbacks (tests/roadmap/callbacks) with their `Visitor` type open: that fixture's
 # exports and per-version registries (the foreign `ext_visit` model) with the `interfaces` entry

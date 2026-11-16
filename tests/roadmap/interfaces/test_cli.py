@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """CLI regressions for open interfaces (docs/interfaces.md). Usage: test_cli.py <air2lean>.
 
-`air/<version>/<program>` are the closures of `export.sh`. Never invokes a compiler."""
+`air/<version>/<program>` are the closure exports of `exports.json`. Never invokes a compiler."""
 import json
 from pathlib import Path
 import re

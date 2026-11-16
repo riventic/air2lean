@@ -1,0 +1,20 @@
+{
+  "exports": [
+    {
+      "out": "air-fresh/{version}",
+      "source": "const_bases.zig",
+      "filter": "const_bases.",
+      "versions": ["0.17.0", "0.16.0", "0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux-musl", "-mcpu=baseline",
+               "-fno-llvm", "-fno-lld"]
+    },
+    {
+      "out": "air-llvm/{version}",
+      "source": "llvm_correspondence.zig",
+      "filter": "llvm_correspondence.",
+      "versions": ["0.17.0", "0.16.0", "0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux-musl", "-mcpu=baseline",
+               "-fllvm"]
+    }
+  ]
+}

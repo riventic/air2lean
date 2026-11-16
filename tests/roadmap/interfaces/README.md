@@ -18,7 +18,9 @@ Calls through an interface value that the caller passes in (docs/interfaces.md).
 `registry-alloc.json` opens `mem.Allocator.VTable` and `registry-random.json` opens `Random`
 (the `interfaces` array of docs/external-models.md, premise EXT-05). `air/<version>/<program>`
 are the patched-compiler exports for Zig 0.17.0, 0.16.0, 0.15.2 and 0.14.1, cut to the call
-closure of each program's roots (`closure.py`); `provenance.json` records their digests.
+closure of each program's roots. `exports.json` declares them and `exports.lock.json` pins the
+sources, the exporter and every file (`scripts/fixture-exports.py`,
+[docs/coverage.md](../../../docs/coverage.md#fixture-exports)).
 
 `check.sh` translates every program on every version, elaborates each translation, keeps the
 0.17.0 translations byte for byte (`lists` as `Proofs/Lists/Open.lean`, the program of the
@@ -52,4 +54,4 @@ standard axioms):
   of `len` items is a grant of `len + 1` bytes with the sentinel last, on success and on
   `error.OutOfMemory` (M04). It is also checked over the 0.16.0, 0.15.2 and 0.14.1 translations.
 
-Re-export (needs the patched compilers): `tests/roadmap/interfaces/export.sh`.
+Re-export (needs the patched compilers): `scripts/fixture-exports.py export interfaces`.

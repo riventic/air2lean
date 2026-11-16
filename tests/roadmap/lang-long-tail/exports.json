@@ -19,7 +19,7 @@
       ],
       "cwd": "repo",
       "closure": [
-        "error_ints."
+        "error_ints.*"
       ],
       "command": "build-exe"
     },
@@ -44,7 +44,7 @@
       ],
       "cwd": "repo",
       "closure": [
-        "error_ints."
+        "error_ints.*"
       ],
       "command": "build-exe"
     },
@@ -67,7 +67,7 @@
       ],
       "cwd": "repo",
       "closure": [
-        "error_params."
+        "error_params.*"
       ]
     },
     {
@@ -89,7 +89,7 @@
       ],
       "cwd": "repo",
       "closure": [
-        "extern_storage."
+        "extern_storage.*"
       ]
     },
     {
@@ -111,7 +111,7 @@
       ],
       "cwd": "repo",
       "closure": [
-        "float_lanes."
+        "float_lanes.*"
       ]
     },
     {
@@ -131,7 +131,7 @@
       ],
       "cwd": "repo",
       "closure": [
-        "runtime_lanes."
+        "runtime_lanes.*"
       ]
     },
     {
@@ -153,7 +153,7 @@
       ],
       "cwd": "repo",
       "closure": [
-        "tls_pointers."
+        "tls_pointers.*"
       ]
     },
     {
@@ -175,7 +175,7 @@
       ],
       "cwd": "repo",
       "closure": [
-        "vector_casts."
+        "vector_casts.*"
       ]
     }
   ]

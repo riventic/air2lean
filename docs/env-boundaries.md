@@ -24,7 +24,7 @@ lake build ZigLean ZigLean.Env.Linux air2lean
 lake env lean tests/roadmap/env-boundaries/WriteAll.lean
 python3 -B tests/roadmap/env-boundaries/test_env_boundaries.py
 tests/roadmap/env-boundaries/check.sh      # translate std I/O, elaborate, check StdIo.lean
-tests/roadmap/env-boundaries/export.sh     # fresh AIR with the patched 0.15.2/0.16.0 compilers
+scripts/fixture-exports.py verify env-boundaries   # fresh AIR with the patched 0.15.2/0.16.0 compilers
 ```
 
 ## Operations
@@ -121,10 +121,12 @@ binding, so no libc target is covered here.
 ## Translated std I/O
 
 `tests/roadmap/env-boundaries/` holds two sources and their committed AIR closures
-(`air/std15`, `air/std16`). `export.sh` re-exports the AIR with the patched compilers and
-compares it with the committed AIR (`--update` rewrites it). `refresh-air.py` keeps the
-direct-call closure of the roots without the three bound primitives and the `syscallN`
-wrappers below them. `translate.sh` translates the closures with the filled registry and
+(`air/0.15.2`, `air/0.16.0`), declared in `exports.json` and pinned by `exports.lock.json`
+([coverage.md](coverage.md#fixture-exports)). Each export keeps the call closure of its roots,
+cut (`stop`) at the three bound primitives, so the `syscallN` wrappers below them are not
+kept, and at the panic handlers, which the translator normalizes.
+`scripts/fixture-exports.py verify env-boundaries` re-exports the AIR with the patched
+compilers and compares it with the committed AIR (`export` rewrites it). `translate.sh` translates the closures with the filled registry and
 compares the output with `expected/` and `registry/`. `check.sh` then elaborates the output
 and checks `StdIo.lean`.
 
