@@ -1,0 +1,52 @@
+{
+  "exports": [
+    {
+      "out": "air",
+      "source": "ib.zig",
+      "filter": "ib.",
+      "versions": [
+        "0.16.0"
+      ],
+      "args": [
+        "-OReleaseSafe",
+        "-target",
+        "x86_64-linux",
+        "-mcpu=baseline",
+        "-fno-error-tracing"
+      ]
+    },
+    {
+      "out": "probe-air",
+      "source": "probe.zig",
+      "filter": "probe.",
+      "versions": [
+        "0.16.0"
+      ],
+      "args": [
+        "-OReleaseSafe",
+        "-target",
+        "x86_64-linux",
+        "-mcpu=baseline",
+        "-fno-error-tracing"
+      ]
+    },
+    {
+      "out": "for-air/{version}",
+      "source": "forlen.zig",
+      "filter": "forlen.",
+      "versions": [
+        "0.17.0",
+        "0.16.0",
+        "0.15.2",
+        "0.14.1"
+      ],
+      "args": [
+        "-OReleaseSafe",
+        "-target",
+        "x86_64-linux",
+        "-mcpu=baseline",
+        "-fno-error-tracing"
+      ]
+    }
+  ]
+}
