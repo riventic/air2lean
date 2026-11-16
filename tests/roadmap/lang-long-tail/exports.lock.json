@@ -213,7 +213,7 @@
     "0.16.0": "d49dbe58d9fd83d9fdedc5270fa3a5a34ab9661ebc63b52070027a00bdec6954",
     "0.17.0": "321ab894d2a5d5784afdba19137ed24abf39c62825b440f9a4f82e53958d9b24"
   },
-  "manifest_sha256": "4932fbe92871e3d793cca92ab24ef8c3e7c18f8620d8c85a20e976a0043dab14",
+  "manifest_sha256": "cda40657a48b81b17b6ef46b0fee3c3dcb9c88b9fbbb7be4a8ac04719d2b5950",
   "schema": 1,
   "sources_sha256": {
     "error_ints.zig": "db4f8b072e23f7189edf6216131c7dc67c9eb9d5a32c74ee42eb962bfc798417",
