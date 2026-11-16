@@ -279,13 +279,16 @@ def upgrades(binary):
             assert new_head == old_head.replace('"zig_version":"0.16.0"', '"zig_version":"0.17.1"'), example
             # The intended 0.17.1 semantic changes in these goldens: LLVM stores integers with
             # padding bits extended (`Dialect.intPadding`, docs/architecture-audit/enc-exactness.md)
-            # and compiler-rt f80 `@trunc` (docs/floats.md group I, `Zig.Float.truncRt017Chk`).
+            # compiler-rt f80 `@trunc` (docs/floats.md group I, `Zig.Float.truncRt017Chk`) and
+            # compiler-rt `@mulAdd` through 0.17.1's `fma.zig` (`Zig.Float.fmaRt017*` for `fmaRt*`).
             # Anything else is a spelling bug.
             assert "Zig.intEncExt" not in old_body, example
             new_body = without_int_ext(new_body)
             if "--float-semantics" in extra:
                 assert old_body.count("Zig.Float.truncChk") >= new_body.count("Zig.Float.truncRt017Chk"), example
                 new_body = new_body.replace("Zig.Float.truncRt017Chk", "Zig.Float.truncChk")
+                assert old_body.count("Zig.Float.fmaRt") == new_body.count("Zig.Float.fmaRt017"), example
+                new_body = new_body.replace("Zig.Float.fmaRt017", "Zig.Float.fmaRt")
             assert new_body == old_body, f"{example}: 0.17.1 spelling changed the translation"
             compared += 1
     assert compared + skipped >= 19 and compared >= 18, f"only {compared} examples translated"
