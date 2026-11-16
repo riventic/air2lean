@@ -8,19 +8,23 @@ A fixture whose AIR is a patched-compiler export declares how it is made in
   exports.json       {"exports": [{"out": "air/{version}", "source": "x.zig", "filter": "x.",
                                    "versions": ["0.16.0", ...], "args": ["-OReleaseSafe", ...],
                                    "cwd": "fixture" | "repo", "command": "build-obj" | "build-exe",
-                                   "closure": ["x."]}]}
+                                   "closure": ["x.*"], "stop": ["os.linux.read"]}]}
                      Each entry is one `zig COMMAND -fno-emit-bin ARGS SOURCE` per version with
                      ZIG_AIR_JSON_FILTER=FILTER, its files written to OUT ({version} substituted;
                      the tool owns OUT: nothing else may live there). SOURCE is relative to the
-                     fixture; `cwd` (default "fixture") is where the compiler runs (the AIR records
-                     source paths relative to it); `command` defaults to build-obj (build-exe
-                     exports a whole program, e.g. for its error numbering). `closure`, if given,
-                     keeps only the functions that the functions named with one of its prefixes
-                     reach through calls and function values (`"func"` references): the filter
-                     also matches std instances that only the compiler's panic and debug code
-                     reaches, and how many differs by version.
-  exports.lock.json  the manifest's hash, the hash of every .zig file of the fixture (an import
-                     may change an export), the identity of each version's patched compiler
+                     fixture and may lie elsewhere in the repository (`../../../examples/x/x.zig`);
+                     `cwd` (default "fixture") is where the compiler runs; `command` defaults to
+                     build-obj (build-exe exports a whole program, e.g. for its error numbering).
+                     `closure`, if given, keeps only the functions that its roots reach through
+                     calls and function values (`"func"` references): the filter also matches
+                     std instances that only the compiler's panic and debug code reaches, and how
+                     many differs by version. A root is a function name, which must be exported,
+                     or a name prefix ending in `*`. `stop` (needs `closure`; names and `*`
+                     prefixes) cuts the closure: a stopped function is neither kept nor followed
+                     (a primitive the model binds, the panic handlers the translator normalizes).
+  exports.lock.json  the manifest's hash, the hash of every .zig file of the fixture and of the
+                     directory of each SOURCE outside it (an import may change an export), the
+                     identity of each version's patched compiler
                      (the digest of exactly what zig-patch/build.sh reads, scripts/cas.py
                      zig_patch_inputs: host-independent, unlike the binary) and the hash of every
                      exported file.
@@ -59,7 +63,7 @@ import cas  # noqa: E402
 MANIFEST, LOCK = 'exports.json', 'exports.lock.json'
 SCHEMA = 1
 ENTRY_KEYS = {'out', 'source', 'filter', 'versions', 'args'}
-OPTIONAL_KEYS = {'cwd', 'command', 'closure'}
+OPTIONAL_KEYS = {'cwd', 'command', 'closure', 'stop'}
 # The exporter's `build_mode` for `-O<mode>` (0.17's `std.lang.Optimize` tags, Dialect.lean
 # buildModeRenames, or the 0.16.0 spelling).
 BUILD_MODES = {'Debug': {'Debug', 'debug'}, 'ReleaseSafe': {'ReleaseSafe', 'safe'},
@@ -111,11 +115,16 @@ def manifest(fixture):
             raise Error('%s: cwd is "fixture" or "repo"' % where)
         if entry.get('command', 'build-obj') not in ('build-obj', 'build-exe'):
             raise Error('%s: command is "build-obj" or "build-exe"' % where)
-        closure = entry.get('closure', ['-'])
-        if not isinstance(closure, list) or not closure or not all(isinstance(c, str) and c for c in closure):
-            raise Error('%s: closure is a non-empty list of name prefixes' % where)
-        if not (FIXTURES / fixture / entry['source']).is_file():
-            raise Error('%s: no source %s' % (where, entry['source']))
+        for key in ('closure', 'stop'):
+            names = entry.get(key, ['-'])
+            if not isinstance(names, list) or not names or not all(isinstance(c, str) and c != '*' and c
+                                                                   for c in names):
+                raise Error('%s: %s is a non-empty list of function names and `*` prefixes' % (where, key))
+        if 'stop' in entry and 'closure' not in entry:
+            raise Error('%s: stop cuts a closure: give closure too' % where)
+        source = (FIXTURES / fixture / entry['source']).resolve()
+        if not source.is_file() or FIXTURES.resolve().parents[1] not in source.parents:  # the repository
+            raise Error('%s: no source %s in the repository' % (where, entry['source']))
         if not all(isinstance(a, str) for a in entry['args']) or '-fno-emit-bin' in entry['args']:
             raise Error('%s: args are strings (build-obj -fno-emit-bin is implied)' % where)
         outs += [entry['out'].format(version=v) for v in entry['versions']]
@@ -145,10 +154,17 @@ def outputs(fixture, data):
 
 
 def sources(fixture, data):
+    """{path relative to the fixture: sha256} of the fixture's .zig files outside its OUTs and of
+    the .zig files of the directory of each SOURCE that lies outside the fixture."""
     here = FIXTURES / fixture
     owned = [here / out for _, _, out in jobs(fixture, data)]
-    return {p.relative_to(here).as_posix(): sha256(p) for p in sorted(here.rglob('*.zig'))
-            if not any(o in p.parents for o in owned)}
+    found = {p.relative_to(here).as_posix(): sha256(p) for p in sorted(here.rglob('*.zig'))
+             if not any(o in p.parents for o in owned)}
+    for entry in data['exports']:
+        directory = (here / entry['source']).resolve().parent
+        if here.resolve() != directory and here.resolve() not in directory.parents:
+            found.update({os.path.relpath(p, here.resolve()): sha256(p) for p in sorted(directory.rglob('*.zig'))})
+    return dict(sorted(found.items()))
 
 
 def compiler_identity(version):
@@ -229,23 +245,34 @@ def check(fixture):
     return problems + document_problems(fixture, data)
 
 
-def keep_closure(directory, prefixes):
-    """Delete every function file of DIRECTORY that no function named with one of PREFIXES
-    reaches through `"func"` references (calls, function values)."""
+def matches(name, patterns):
+    """NAME is one of PATTERNS: a function name, or a name prefix ending in `*`."""
+    return any(name.startswith(p[:-1]) if p.endswith('*') else name == p for p in patterns)
+
+
+def keep_closure(directory, roots, stop=()):
+    """Delete every function file of DIRECTORY that no function matching ROOTS reaches through
+    `"func"` references (calls, function values) without passing a function matching STOP."""
     texts = {p: p.read_text() for p in directory.glob('*.json')}
     by_name = {}
     for path, text in texts.items():
         name = json.loads(text).get('name')
         if name is not None:
             by_name.setdefault(name, []).append(path)
-    work = [p for name, paths in by_name.items() if name.startswith(tuple(prefixes)) for p in paths]
+    missing = [r for r in roots if not r.endswith('*') and r not in by_name]
+    if missing:
+        raise Error('%s: closure root %s was not exported' % (directory.name, ', '.join(missing)))
+    work = [p for name, paths in by_name.items() if matches(name, roots) and not matches(name, stop)
+            for p in paths]
     keep = set()
     while work:
         path = work.pop()
         if path not in keep:
             keep.add(path)
-            for ref in set(re.findall(r'"func":\s*"([^"]+)"', texts[path])):
-                work.extend(by_name.get(ref, []))
+            for raw in set(re.findall(r'"func":\s*("(?:[^"\\]|\\.)*")', texts[path])):
+                ref = json.loads(raw)
+                if not matches(ref, stop):
+                    work.extend(by_name.get(ref, []))
     for path, text in texts.items():
         if path not in keep and json.loads(text).get('name') is not None:
             path.unlink()
@@ -279,7 +306,7 @@ def run_exports(fixture, data, scratch, only=()):
             raise Error('%s %s (%s): export failed (exit %d)\n%s' % (fixture, out, version, done.returncode,
                                                                      done.stderr[-4000:]))
         if 'closure' in entry:
-            keep_closure(target, entry['closure'])
+            keep_closure(target, entry['closure'], entry.get('stop', ()))
         if not any(target.glob('*.json')):
             raise Error('%s %s: the export wrote no file (filter %r)' % (fixture, out, entry['filter']))
     return {out: digests(scratch / out) for _, version, out in jobs(fixture, data) if not only or version in only}

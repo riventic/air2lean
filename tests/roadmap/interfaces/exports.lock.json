@@ -1,18 +1,4 @@
 {
-  "source_sha256": {
-    "mix.zig": "b0d6b8e75d2a6f9906b523a02f53fcc0d8a46f6ec90819f4d38436b46380d60c",
-    "rnd.zig": "5ef1c9d44ce18e6ba9a154c3990c5617a41699d2a1b5dc38109b2aee5a460003",
-    "examples/lists/lists.zig": "1c40c4e067c79781fd2bbb85d02b05b8a57c1d816e185a230dc19c2c31552de5",
-    "tests/roadmap/sentinel-realloc/source.zig": "ae68695e76fa289445b0afb81b0933108c6d628b1c58cf5d38c4dba599b8a842"
-  },
-  "air": {
-    "exporter": "zig-patch/air-json/json.zig of this branch (patched compilers from scripts/zig-air.sh)",
-    "target": "x86_64-linux",
-    "cpu": "baseline",
-    "optimization": "ReleaseSafe",
-    "error_tracing": false,
-    "closure": "export.sh: closure.py of each program's roots"
-  },
   "air_sha256": {
     "air/0.14.1/lists/debug.assert.json": "cbff82e32e75a5789f5631b483065e76d8fd64ed56cef9744360f5e1de788d16",
     "air/0.14.1/lists/lists.evens.json": "287dcd3e5f2125a43316b433532f97670e2486706479727f5462c08627a8c24f",
@@ -288,5 +274,20 @@
     "air/0.17.0/sentinel/source.make.json": "2543959f0935e48d4218a095be2f98b927b513e1975acf76624f56d4155d0de7",
     "air/0.17.0/sentinel/source.release.json": "9c4966934e5679cf5d92cb08814113e761644aa7c0b48099d514a7ec82829934",
     "air/0.17.0/sentinel/source.resize.json": "27e3de97c87fa177998adfa4e32bf3a7ac03bf272bfe1470290ec988514786a9"
+  },
+  "compilers": {
+    "0.14.1": "de0fff4117985708efbd803bb1e53fe37ebf0596853e68633ac66d7f6dbd1d89",
+    "0.15.2": "08fabea60c770d7c034a9dbe78e816beb0d8a17a9b9a0ed5c8bdcbd112cffc05",
+    "0.16.0": "d49dbe58d9fd83d9fdedc5270fa3a5a34ab9661ebc63b52070027a00bdec6954",
+    "0.17.0": "321ab894d2a5d5784afdba19137ed24abf39c62825b440f9a4f82e53958d9b24"
+  },
+  "manifest_sha256": "8ac363b2e9ba876e7e8b007d195756da62a4c177f73f3e7d0d947440e848825b",
+  "schema": 1,
+  "sources_sha256": {
+    "../../../examples/lists/lists.zig": "1c40c4e067c79781fd2bbb85d02b05b8a57c1d816e185a230dc19c2c31552de5",
+    "../sentinel-realloc/native.zig": "f2d1682857b0d4786cabda85c862bc30d8999b913e3e689619f68d94c614cbe4",
+    "../sentinel-realloc/source.zig": "ae68695e76fa289445b0afb81b0933108c6d628b1c58cf5d38c4dba599b8a842",
+    "mix.zig": "b0d6b8e75d2a6f9906b523a02f53fcc0d8a46f6ec90819f4d38436b46380d60c",
+    "rnd.zig": "5ef1c9d44ce18e6ba9a154c3990c5617a41699d2a1b5dc38109b2aee5a460003"
   }
 }

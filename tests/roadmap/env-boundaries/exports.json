@@ -1,0 +1,22 @@
+{
+  "exports": [
+    {
+      "out": "air/{version}",
+      "source": "std_io15.zig",
+      "filter": "std_io15.,fs.File.,posix.,os.linux.",
+      "versions": ["0.15.2"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "closure": ["std_io15.writeAllClose", "std_io15.readAllClose"],
+      "stop": ["os.linux.read", "os.linux.write", "os.linux.close", "debug.FullPanic(*", "debug.defaultPanic"]
+    },
+    {
+      "out": "air/{version}",
+      "source": "std_io16.zig",
+      "filter": "std_io16.,posix.,os.linux.,Io.Threaded.closeFd,Io.Threaded.recoverableOsBugDetected",
+      "versions": ["0.16.0"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "closure": ["std_io16.readClose"],
+      "stop": ["os.linux.read", "os.linux.write", "os.linux.close", "debug.FullPanic(*", "debug.defaultPanic"]
+    }
+  ]
+}

@@ -62,7 +62,7 @@ elaborate() {
 # reject (fail closed), with a fragment of the diagnostic.
 rejected() { [ -f "$here/$1.reject" ] && grep -q "^$2 " "$here/$1.reject"; }
 # The export of <stem> (its exports.json entry, air/<stem>/{version}): `module` (the fixture's
-# name prefix, the entry's `closure`), `root_src` (the native probe that is also the exported
+# name prefix, the entry's `closure` prefix), `root_src` (the native probe that is also the exported
 # program, a build-exe entry's source), `args` (the compiler flags of both), `only_versions`
 # (the versions that compile the source). <stem>.export, if present, sets `native_extra` (more
 # inputs of the native build, a C file and -lc).
@@ -72,7 +72,7 @@ load_export() {
 import json, shlex, sys
 entry = next(e for e in json.load(open(sys.argv[1]))['exports'] if e['out'] == 'air/%s/{version}' % sys.argv[2])
 build_exe = entry.get('command') == 'build-exe'
-for key, value in (('module', entry['closure'][0]), ('root_src', entry['source'] if build_exe else ''),
+for key, value in (('module', entry['closure'][0].rstrip('*')), ('root_src', entry['source'] if build_exe else ''),
                    ('args', ' '.join(entry['args'])), ('only_versions', ' '.join(entry['versions']))):
     print('%s=%s' % (key, shlex.quote(value)))
 PY

@@ -259,9 +259,13 @@ Committed compiler-exported AIR of a roadmap fixture is made and pinned by one t
 `scripts/fixture-exports.py` (its docstring has the format). The fixture's `exports.json`
 declares each export (source, filter, flags, versions, output directory, optional call-closure
 selection); `exports.lock.json`, written only by the tool, pins the manifest, the fixture's
-`.zig` sources, each version's patched compiler (the digest of exactly what `zig-patch/build.sh`
-reads, so the same on every host) and every exported file. Each output directory is a
-`COMPILER_FIXTURE_ROOTS` entry derived from the manifest.
+`.zig` sources (and the directory of a source outside the fixture), each version's patched
+compiler (the digest of exactly what `zig-patch/build.sh` reads, so the same on every host) and
+every exported file. The closure keeps what its roots (function names, or `*` prefixes) reach
+through calls and function values; `stop` names cut it at a function the model binds or the
+translator normalizes (a bound OS primitive, the panic handlers). Each output directory is a
+`COMPILER_FIXTURE_ROOTS` entry derived from the manifest, unless `NON_COMPILER_AIR` reviews it as
+no coverage evidence (the AIR of a rejected program).
 
 ```sh
 python3 -B scripts/fixture-exports.py check [FIXTURE...]    # no compiler: lock and files agree

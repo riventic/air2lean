@@ -69,15 +69,12 @@ AIR2LEAN_ZIG_NATIVE=/path/to/zig bash tests/roadmap/const-bases/check.sh --nativ
 
 ## Fresh exports
 
-`air-fresh/<version>` (0.17.0, 0.16.0, 0.15.2, 0.14.1; `export.sh`) is the unmodified export of `const_bases.zig`
+`air-fresh/<version>` (0.17.0, 0.16.0, 0.15.2, 0.14.1) is the unmodified export of `const_bases.zig`
 from a patched compiler of that version (stage2_x86_64, x86_64-linux-musl, baseline,
-ReleaseSafe). `provenance.json` records the source, exporter (`json.zig`, `pointer-offset.zig`),
-compiler and per-file hashes. The command was `ZIG_AIR_JSON_FILTER=const_bases. zig build-obj
--fno-emit-bin -OReleaseSafe -fno-error-tracing -fno-llvm -fno-lld -target x86_64-linux-musl
--mcpu=baseline`. All four compilers were built by `zig-patch/build.sh` from the exporter of this
-tree, and `provenance.json` records each compiler binary's hash (the installs under
-`/opt/dev/air2lean-build` are older builds). `test_cli.py` checks every version against the
-hand-written fixtures:
+ReleaseSafe; `-fno-llvm -fno-lld`). `exports.json` declares it and the LLVM exports below, and
+`exports.lock.json` pins the sources, the exporter and every file
+(`scripts/fixture-exports.py`, [docs/coverage.md](../../../docs/coverage.md#fixture-exports)).
+`test_cli.py` checks every version against the hand-written fixtures:
 
 * Every returned constant pointer has the same global (`const_bases.table`), offset
   (24, 15, 15, slice 15, 20) and `payload_base` marker in all four versions. The generated
@@ -159,7 +156,7 @@ copy, the model's offset. The test asserts that only the first differs, and only
   `-fllvm` on aarch64-linux (linux/arm64 container) for all four, and on aarch64-macos for
   0.15.2–0.17.0. `check.sh --native` runs it on x86_64.
 * Translator: `air-llvm/<version>` is the export of the same file on the LLVM backend
-  (`stage2_llvm` profile; `export.sh`, `provenance.json`'s `llvm_air_sha256`). For every version,
+  (`stage2_llvm` profile, `-fllvm`; `exports.json`). For every version,
   `test_cli.py` accepts the five agreeing bases, together and one by one, and rejects the
   misplaced one with the `stage2_llvm` message; downgraded to legacy schema 11 the same files give
   the same accept/reject split with the legacy message.

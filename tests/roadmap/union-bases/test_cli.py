@@ -1,17 +1,13 @@
 #!/usr/bin/env python3
 """CLI regressions for union-member constant pointer bases (L06), for a root-built translator.
 
-`air/<version>` and `air-reject/<version>` are compiler exports (provenance.json) of
-`union_bases.zig` and `union_reject.zig` from patched 0.16.0, 0.15.2 and 0.14.1 compilers built
-from this tree's exporter. Every version translates to the retained `UnionBases/Gen.lean`; each
-union-member base is its global's block plus the exact total offset. The shapes outside the model
-stay explicit errors. Never builds or invokes compilers.
-
-`test_cli.py --refresh-provenance <dir>` rewrites provenance.json after `export.sh`, with the
-compilers `<dir>/zig-air-<version>/bin/zig-unlocked`.
+`air/<version>` and `air-reject/<version>` are the patched-compiler exports of `union_bases.zig`
+and `union_reject.zig` (exports.json, pinned by exports.lock.json: scripts/fixture-exports.py).
+Every version translates to the retained `UnionBases/Gen.lean`; each union-member base is its
+global's block plus the exact total offset. The shapes outside the model stay explicit errors.
+Never builds or invokes compilers.
 """
 import copy
-import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -22,12 +18,8 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 VERSIONS = ("0.17.0", "0.16.0", "0.15.2", "0.14.1")
 GEN = HERE / "UnionBases" / "Gen.lean"
-PROVENANCE = HERE / "provenance.json"
 ARGS = ["--namespace", "UnionBases", "--prefix", "union_bases.", "--allow-unqualified-build-mode"]
 REJECT_ARGS = ["--namespace", "UnionReject", "--prefix", "union_reject.", "--allow-unqualified-build-mode"]
-COMMAND = ("ZIG_AIR_JSON_DIR=<dir>/<version> ZIG_AIR_JSON_FILTER=<source>. <patched zig> build-obj "
-           "-fno-emit-bin -OReleaseSafe -fno-error-tracing -fno-llvm -fno-lld -target x86_64-linux-musl "
-           "-mcpu=baseline <source>.zig (export.sh)")
 # Each returned constant: (block, offset) of the global it is based on.
 CONSTANTS = {
     "extWordPtr": (0, 36), "extHiPtr": (0, 38), "extBytePtr": (0, 38), "wideCellPtr": (0, 48),
@@ -38,22 +30,6 @@ UNBACKED = "a pointer constant without a global (union_field) is outside the sub
 # A typed alias of error storage must name a matching subobject, which is not reconstructed
 # through a union member (`matchingGlobalSubobject`).
 ALIAS = "outside the finite error-storage fragment"
-
-
-def sha(path):
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
-
-
-def provenance():
-    """The current hashes of everything provenance.json pins, except the compilers."""
-    return {
-        "sources": {name: sha(HERE / name) for name in ("union_bases.zig", "union_reject.zig")},
-        "exporter_sha256": {name: sha(ROOT / "zig-patch/air-json" / name)
-                            for name in ("json.zig", "pointer-offset.zig", "identity.zig")},
-        "command": COMMAND,
-        "air_sha256": {f"{d}/{v}/{p.name}": sha(p) for d in ("air", "air-reject") for v in VERSIONS
-                       for p in sorted((HERE / d / v).glob("*.json"))},
-    }
 
 
 def fixtures(directory):
@@ -115,12 +91,8 @@ def main():
     binary = Path(sys.argv[1] if len(sys.argv) > 1 else ROOT / ".lake/build/bin/air2lean")
     checks = 0
 
-    recorded = json.loads(PROVENANCE.read_text())
-    now = provenance()
-    for key, value in now.items():
-        assert recorded[key] == value, f"provenance.json {key} is stale (export.sh, --refresh-provenance)"
-    compilers = recorded["patched_compiler_sha256"]
-    assert sorted(compilers) == sorted(VERSIONS) and len(set(compilers.values())) == len(VERSIONS)
+    subprocess.run([sys.executable, "-B", str(ROOT / "scripts/fixture-exports.py"), "check", HERE.name],
+                   check=True)
     checks += 1
 
     # Every version: the retained translation (up to the profile line), each union-member base
@@ -167,18 +139,5 @@ def main():
     print(f"{checks} union-member constant base CLI checks passed")
 
 
-def refresh(zig_root):
-    record = provenance()
-    record["patched_compiler_sha256"] = {v: sha(Path(zig_root) / f"zig-air-{v}/bin/zig-unlocked")
-                                         for v in VERSIONS}
-    record["note"] = ("Each compiler is zig-patch/build.sh <version> from this tree's exporter "
-                      "(exporter_sha256); patched_compiler_sha256 hashes bin/zig-unlocked behind the "
-                      "AIR-only lock wrapper.")
-    PROVENANCE.write_text(json.dumps(record, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
-
-
 if __name__ == "__main__":
-    if sys.argv[1:2] == ["--refresh-provenance"]:
-        refresh(sys.argv[2])
-    else:
-        main()
+    main()

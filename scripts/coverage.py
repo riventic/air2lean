@@ -360,9 +360,6 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/thread-locals/air/{version}': 'tests/roadmap/thread-locals/README.md',
     'tests/roadmap/futures/air/{version}': 'tests/roadmap/futures/check.sh',
     'tests/roadmap/pointer-width/air/{version}/x86_64-linux': 'tests/roadmap/pointer-width/README.md',
-    'tests/roadmap/const-bases/air-fresh/{version}': 'tests/roadmap/const-bases/provenance.json',
-    'tests/roadmap/union-bases/air/{version}': 'tests/roadmap/union-bases/provenance.json',
-    'tests/roadmap/const-bases/air-llvm/{version}': 'tests/roadmap/const-bases/provenance.json',
     'tests/roadmap/loop-tactics/nested/air': 'tests/roadmap/loop-tactics/nested/provenance.json',
     'tests/roadmap/loop-tactics/counted/air': 'tests/roadmap/loop-tactics/counted/provenance.json',
     'tests/roadmap/vector-layouts/air/{version}': 'tests/roadmap/vector-layouts/README.md',
@@ -394,7 +391,6 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/enc-exactness/air/{version}/opaque_bytes': 'tests/roadmap/enc-exactness/README.md',
     # L04: try_lifetimes.zig (lifetimes/check.sh --export).
     'tests/roadmap/try-pointers/lifetimes/air/{version}': 'tests/roadmap/try-pointers/lifetimes/README.md',
-    'tests/roadmap/env-boundaries/air/{version}': 'tests/roadmap/env-boundaries/air/provenance.json',
     'tests/roadmap/zig017/divceil/air/{version}': 'tests/roadmap/zig017/divceil/provenance.json',
     'tests/roadmap/bitcast-017/air/{version}': 'docs/bitcast-semantics.md',
     'tests/roadmap/zig017/casts/air/{version}': 'tests/roadmap/zig017/casts/provenance.json',
@@ -402,12 +398,6 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/build-modes/stage2-air/{version}': 'tests/roadmap/build-modes/stage2_rules.py',
     'tests/roadmap/zig017/overflow/air/{version}': 'tests/roadmap/zig017/overflow/provenance.json',
     'tests/roadmap/extern-calls/air/{version}': 'tests/roadmap/extern-calls/provenance.json',
-    # Open interfaces: closures of lists.zig, mix.zig, rnd.zig and sentinel-realloc/source.zig
-    # (interfaces/export.sh).
-    'tests/roadmap/interfaces/air/{version}/lists': 'tests/roadmap/interfaces/provenance.json',
-    'tests/roadmap/interfaces/air/{version}/mix': 'tests/roadmap/interfaces/provenance.json',
-    'tests/roadmap/interfaces/air/{version}/rnd': 'tests/roadmap/interfaces/provenance.json',
-    'tests/roadmap/interfaces/air/{version}/sentinel': 'tests/roadmap/interfaces/provenance.json',
     # E02/A01: patched-compiler exports of callbacks.zig, async_cb.zig and asm_env.zig.
     'tests/roadmap/callbacks/air/{version}': 'tests/roadmap/callbacks/provenance.json',
     'tests/roadmap/callbacks/air-async/{version}': 'tests/roadmap/callbacks/provenance.json',
@@ -440,9 +430,6 @@ def manifest_roots():
     return roots
 
 
-_MANIFEST_ROOTS = manifest_roots()
-assert not set(_MANIFEST_ROOTS) & set(COMPILER_FIXTURE_ROOTS), 'a manifest output is also hand-listed'
-COMPILER_FIXTURE_ROOTS.update(_MANIFEST_ROOTS)
 NON_COMPILER_AIR = {
     'tests/roadmap/undef-operands/air': 'hand-written AIR in the exporter schema (README)',
     'tests/roadmap/global-init/air': 'hand-written AIR in the exporter schema (README)',
@@ -460,7 +447,7 @@ NON_COMPILER_AIR = {
     'tests/roadmap/pointer-width/air/0.16.0/wasm32-reject':
         'wasm32 compiler export of rejected forms (reject.zig, README), not this inventory',
     'tests/roadmap/noreturn-variants/air-reject': 'compiler AIR for layout rejections (test_cli.py, provenance.json); not tag evidence',
-    'tests/roadmap/union-bases/air-reject': 'compiler AIR of rejected union-member bases (test_cli.py, provenance.json); not tag evidence',
+    'tests/roadmap/union-bases/air-reject': 'compiler AIR of rejected union-member bases (test_cli.py, exports.json); not tag evidence',
     'tests/roadmap/fuzz': 'fuzzer-mutated AIR regressions',
     'tests/roadmap/models': 'synthetic model-boundary inputs',
     'tests/roadmap/profiles': 'synthetic profile inputs',
@@ -471,6 +458,12 @@ NON_COMPILER_AIR = {
     'tests/roadmap/zig017/air': 'synthetic 0.17.0 AIR in the exporter schema (tests/roadmap/zig017/test_cli.py)',
     'tests/roadmap/zig017/reject': 'synthetic 0.17.0 rejection inputs (tests/roadmap/zig017/test_cli.py)',
 }
+# A manifest output is compiler AIR unless NON_COMPILER_AIR reviews it as no coverage evidence
+# (rejected programs).
+_MANIFEST_ROOTS = {out: lock for out, lock in manifest_roots().items()
+                   if not any(out == r or out.startswith(r + '/') for r in NON_COMPILER_AIR)}
+assert not set(_MANIFEST_ROOTS) & set(COMPILER_FIXTURE_ROOTS), 'a manifest output is also hand-listed'
+COMPILER_FIXTURE_ROOTS.update(_MANIFEST_ROOTS)
 
 
 def is_air_json(data):
