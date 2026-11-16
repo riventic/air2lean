@@ -1,0 +1,1026 @@
+ok basic 0.17.1 linux namespaced: Proofs/Basic/Gen/V0_17_1/H_6c696e7578/Gen.lean
+ok basic 0.16.0 linux namespaced: Proofs/Basic/Gen/V0_16_0/H_6c696e7578/Gen.lean
+ok basic 0.15.2 linux namespaced: Proofs/Basic/Gen/V0_15_2/H_6c696e7578/Gen.lean
+ok basic 0.14.1 linux namespaced: Proofs/Basic/Gen/V0_14_1/H_6c696e7578/Gen.lean
+ok sync 0.16.0 darwin namespaced: Proofs/Sync/Gen/V0_16_0/H_64617277696e/Gen.lean
+ok sync 0.16.0 linux namespaced: Proofs/Sync/Gen/V0_16_0/H_6c696e7578/Gen.lean
+ok sync 0.17.1 linux namespaced: Proofs/Sync/Gen/V0_17_1/H_6c696e7578/Gen.lean
+ok threadsync 0.15.2 darwin namespaced: Proofs/Threadsync/Gen/V0_15_2/H_64617277696e/Gen.lean
+ok threadsync 0.15.2 linux namespaced: Proofs/Threadsync/Gen/V0_15_2/H_6c696e7578/Gen.lean
+ok threadsync 0.15.2 linux-aarch64 namespaced: Proofs/Threadsync/Gen/V0_15_2/H_6c696e75782d61617263683634/Gen.lean
+== options: dumping AIR ==
+== options: validating profiles and translating to Lean ==
+⚠ [13/220] Replayed Air2Lean.Air.Effects
+warning: Air2Lean/Air/Effects.lean:306:35: This simp argument is unused:
+  Effects.pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp_all [Control.bodies]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/Air/Effects.lean:306:49: This simp argument is unused:
+  Control.bodies
+
+Hint: Omit it from the simp argument list.
+  [apply] simp_all [Effects.pure]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/Air/Effects.lean:308:35: This simp argument is unused:
+  Effects.pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp_all [Control.bodies]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/Air/Effects.lean:308:49: This simp argument is unused:
+  Control.bodies
+
+Hint: Omit it from the simp argument list.
+  [apply] simp_all [Effects.pure]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [27/220] Replayed ZigLean.Mem.Enc
+warning: ZigLean/Mem/Enc.lean:301:0: Definition `Zig.errorEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:312:0: Definition `Zig.optionalErrorEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:344:0: Definition `Zig.Enc.optionWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:349:0: Definition `Zig.Enc.vectorWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:380:0: Definition `Zig.Enc.errorUnionWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:385:0: Definition `Zig.errorUnionEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+⚠ [28/220] Replayed ZigLean.Mem.ErrWidth
+warning: ZigLean/Mem/ErrWidth.lean:80:0: Definition `Zig.errorEncW` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/ErrWidth.lean:91:0: Definition `Zig.optionalErrorEncW` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/ErrWidth.lean:128:0: Definition `Zig.Enc.errorUnionWithW` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/ErrWidth.lean:145:0: Definition `Zig.errorUnionEncW` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+⚠ [32/220] Replayed Air2Lean.Program
+warning: Air2Lean/Program.lean:121:45: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: Air2Lean/Program.lean:125:27: This simp argument is unused:
+  hfind
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [Option.map_none]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/Program.lean:127:19: This simp argument is unused:
+  hfind
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [Option.map_some]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/Program.lean:222:8: This simp argument is unused:
+  Array.map_map
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [stepA, stepB, liftGroups, Array.filter_map, Array.any_map, Array.all_map, Function.comp_def,
+    Array.map_push]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/Program.lean:222:42: This simp argument is unused:
+  Array.map_push
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [stepA, stepB, liftGroups, Array.filter_map, Array.any_map, Array.all_map, Array.map_map,
+    Function.comp_def]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/Program.lean:224:47: This simp argument is unused:
+  Bool.false_eq_true
+
+Hint: Omit it from the simp argument list.
+  [apply] simp_all only [Array.map_push, ite_false, ite_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/Program.lean:224:67: This simp argument is unused:
+  ite_false
+
+Hint: Omit it from the simp argument list.
+  [apply] simp_all only [Array.map_push, Bool.false_eq_true, ite_true]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/Program.lean:224:78: This simp argument is unused:
+  ite_true
+
+Hint: Omit it from the simp argument list.
+  [apply] simp_all only [Array.map_push, Bool.false_eq_true, ite_false]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [34/220] Replayed Air2Lean.Emit
+warning: Air2Lean/Emit.lean:4022:77: `String.trimRight` has been deprecated: Use `String.trimAsciiEnd` instead
+
+Note: The updated constant has a different type:
+  String → String.Slice
+instead of
+  String → String
+⚠ [42/220] Replayed ZigLean.Permutation
+warning: ZigLean/Permutation.lean:35:52: `dif_pos` has been deprecated: Use `dite_eq_left` instead
+⚠ [45/220] Replayed ZigLean.Mem.Thread
+warning: ZigLean/Mem/Thread.lean:242:24: Variable name `ord` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _ord
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: ZigLean/Mem/Thread.lean:293:25: Variable name `ord` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _ord
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: ZigLean/Mem/Thread.lean:432:24: Variable name `succ` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _succ
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: ZigLean/Mem/Thread.lean:485:28: Variable name `succ` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _succ
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+⚠ [51/220] Replayed ZigLean.Conc.Spawn
+warning: ZigLean/Conc/Spawn.lean:106:37: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Conc/Spawn.lean:109:38: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Conc/Spawn.lean:109:49: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Conc/Spawn.lean:110:38: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Conc/Spawn.lean:110:49: `if_neg` has been deprecated: Use `ite_eq_right` instead
+⚠ [52/220] Replayed ZigLean.Conc.Future
+warning: ZigLean/Conc/Future.lean:201:0: automatically included section variable(s) unused in theorem `Zig.monotone_asyncEagerC`:
+  [Enc α]
+consider restructuring your `variable` declarations so that the variables are not in scope or explicitly omit them:
+  omit [Enc α] in theorem ...
+
+Note: This linter can be disabled with `set_option linter.unusedSectionVars false`
+warning: ZigLean/Conc/Future.lean:234:33: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Conc/Future.lean:235:33: `if_neg` has been deprecated: Use `ite_eq_right` instead
+⚠ [59/220] Replayed ZigLean.Mem.Lemmas
+warning: ZigLean/Mem/Lemmas.lean:62:57: This simp argument is unused:
+  StateT.pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [enterFrame, h, this, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, set,
+    StateT.set, MonadStateOf.set, pure, ExceptT.pure, ExceptT.mk, ExceptT.bind, ExceptT.bindCont]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:83:6: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Mem/Lemmas.lean:92:6: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Mem/Lemmas.lean:342:6: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Mem/Lemmas.lean:356:16: This simp argument is unused:
+  StateT.pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [pure, ExceptT.pure, ExceptT.mk] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:359:18: This simp argument is unused:
+  StateT.pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [pure, ExceptT.pure, ExceptT.mk] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:845:8: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Mem/Lemmas.lean:846:8: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Mem/Lemmas.lean:849:10: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Mem/Lemmas.lean:850:10: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Mem/Lemmas.lean:1230:17: This simp argument is unused:
+  Option.bind_some
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1244:4: This simp argument is unused:
+  Function.comp
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [loadBytes, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, liftM,
+    monadLift, MonadLift.monadLift, StateT.lift, ExceptT.bind, ExceptT.mk, pure, StateT.pure, ExceptT.pure,
+    Option.bind_some, ExceptT.bindCont] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1257:53: This simp argument is unused:
+  pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [ExceptT.bindCont, Option.bind_some, ExceptT.pure, ExceptT.mk] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1257:59: This simp argument is unused:
+  ExceptT.pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [ExceptT.bindCont, Option.bind_some, pure, ExceptT.mk] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1257:73: This simp argument is unused:
+  ExceptT.mk
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [ExceptT.bindCont, Option.bind_some, pure, ExceptT.pure] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1285:53: This simp argument is unused:
+  Prod.mk.injEq
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [ExceptT.bindCont, Option.bind_some] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1429:8: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [hm, errOfBytes_errBytes, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1449:10: This simp argument is unused:
+  h x rfl
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [hm, errOfBytes_errBytes, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1456:55: This simp argument is unused:
+  e.property
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [Enc.encode, Enc.decode, errOfBytes_errBytes, hm, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk,
+    ExceptT.bindCont]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1467:57: This simp argument is unused:
+  x.property
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [Enc.encode, Enc.decode, errOfBytes_errBytes, hm, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk,
+    ExceptT.bindCont]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1761:10: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Mem/Lemmas.lean:1761:20: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Mem/Lemmas.lean:1762:10: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Mem/Lemmas.lean:1763:8: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Mem/Lemmas.lean:1763:27: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Mem/Lemmas.lean:1807:82: This simp argument is unused:
+  Bool.not_eq_true
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [Block.clearOf, Bool.not_or, Bool.and_eq_true, Bool.not_eq_true', beq_eq_false_iff_ne,
+    decide_eq_false_iff_not, Nat.not_le] at hp
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [60/220] Replayed ZigLean.Conc.Lemmas
+warning: ZigLean/Conc/Lemmas.lean:109:28: Variable name `hcost` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _hcost
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: ZigLean/Conc/Lemmas.lean:1601:8: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Conc/Lemmas.lean:1636:10: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Conc/Lemmas.lean:1907:49: This simp argument is unused:
+  MonadStateOf.get
+
+Hint: Omit it from the simp argument list.
+  [apply] simp_all [StateT.run, liftM, monadLift, MonadLift.monadLift, StateT.lift, set, StateT.set, pure, StateT.pure,
+    bind, StateT.bind, ExceptT.bind, ExceptT.mk, ExceptT.pure, ExceptT.bindCont, ExceptT.run, Mem.recordAt, StateT.get]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Conc/Lemmas.lean:1907:67: This simp argument is unused:
+  StateT.get
+
+Hint: Omit it from the simp argument list.
+  [apply] simp_all [StateT.run, liftM, monadLift, MonadLift.monadLift, StateT.lift, set, StateT.set, pure, StateT.pure,
+    bind, StateT.bind, ExceptT.bind, ExceptT.mk, ExceptT.pure, ExceptT.bindCont, ExceptT.run, Mem.recordAt,
+    MonadStateOf.get]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Conc/Lemmas.lean:1982:61: This simp argument is unused:
+  Option.bind_some
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [casMarkWrite, zig_unfold, ha, ExceptT.bindCont]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Conc/Lemmas.lean:2224:8: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Conc/Lemmas.lean:2228:8: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Conc/Lemmas.lean:2228:36: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Conc/Lemmas.lean:2245:4: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Conc/Lemmas.lean:2272:8: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Conc/Lemmas.lean:2276:8: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Conc/Lemmas.lean:2276:36: `if_neg` has been deprecated: Use `ite_eq_right` instead
+⚠ [76/220] Replayed ZigLean.Mem.Null
+warning: ZigLean/Mem/Null.lean:45:0: Definition `Zig.nullablePtrEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Null.lean:59:0: Definition `Zig.nullableSliceEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Null.lean:126:6: `if_neg` has been deprecated: Use `ite_eq_right` instead
+⚠ [100/220] Replayed Air2Lean.Sem
+warning: Air2Lean/Sem.lean:1313:32: This simp argument is unused:
+  ite_false
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [h, ite_true, StateT.run_pure]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/Sem.lean:1313:43: This simp argument is unused:
+  StateT.run_pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [h, ite_true, ite_false]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/Sem.lean:1373:32: This simp argument is unused:
+  ite_false
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [h, ite_true, StateT.run_pure]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/Sem.lean:1373:43: This simp argument is unused:
+  StateT.run_pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [h, ite_true, ite_false]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/Sem.lean:1769:8: `dif_pos` has been deprecated: Use `dite_eq_left` instead
+warning: Air2Lean/Sem.lean:1769:36: `dif_pos` has been deprecated: Use `dite_eq_left` instead
+warning: Air2Lean/Sem.lean:1770:8: `dif_neg` has been deprecated: Use `dite_eq_right` instead
+warning: Air2Lean/Sem.lean:1770:36: `dif_neg` has been deprecated: Use `dite_eq_right` instead
+warning: Air2Lean/Sem.lean:1780:63: This simp argument is unused:
+  Function.comp_def
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [StateT.run_lift, bind_pure_comp, Functor.map_map]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [101/220] Replayed Air2Lean.SemView
+warning: Air2Lean/SemView.lean:487:32: This simp argument is unused:
+  bind_assoc
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [StateT.run_pure, pure_bind, bind_pure_comp, Functor.map_map, Function.comp_def]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/SemView.lean:487:44: This simp argument is unused:
+  pure_bind
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [StateT.run_pure, bind_assoc, bind_pure_comp, Functor.map_map, Function.comp_def]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/SemView.lean:487:88: This simp argument is unused:
+  Function.comp_def
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [StateT.run_pure, bind_assoc, pure_bind, bind_pure_comp, Functor.map_map]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/SemView.lean:677:74: This simp argument is unused:
+  pure_bind
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [execLoop, iteration, hpure, Bool.false_eq_true, ite_false]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/SemView.lean:926:88: This simp argument is unused:
+  pure_bind
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [Program.entryTicked, hpure, Bool.and_false, Bool.false_eq_true, ite_false]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/SemView.lean:1127:8: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: Air2Lean/SemView.lean:1140:14: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: Air2Lean/SemView.lean:1163:35: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: Air2Lean/SemView.lean:1188:28: `dif_neg` has been deprecated: Use `dite_eq_right` instead
+warning: Air2Lean/SemView.lean:1194:8: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: Air2Lean/SemView.lean:1199:6: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: Air2Lean/SemView.lean:1201:8: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: Air2Lean/SemView.lean:1207:6: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: Air2Lean/SemView.lean:1232:28: `dif_pos` has been deprecated: Use `dite_eq_left` instead
+warning: Air2Lean/SemView.lean:1202:15: This simp argument is unused:
+  StateT.run_bind
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [StateT.run_pure, pure_bind] at hread
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/SemView.lean:1202:32: This simp argument is unused:
+  StateT.run_pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [StateT.run_bind, pure_bind] at hread
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/SemView.lean:1235:49: This simp argument is unused:
+  StateT.run_bind
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [Zig.checkIndex, hj, ↓reduceIte, StateT.run_pure, pure_bind, hload, StateT.run_map,
+    Zig.load_const hacc' (Result.eq_pure_of_run hd) hK]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/SemView.lean:1235:66: This simp argument is unused:
+  StateT.run_pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [Zig.checkIndex, hj, ↓reduceIte, StateT.run_bind, pure_bind, hload, StateT.run_map,
+    Zig.load_const hacc' (Result.eq_pure_of_run hd) hK]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/SemView.lean:1241:47: This simp argument is unused:
+  StateT.run_bind
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [Zig.checkIndex, hj, ↓reduceIte, StateT.run_pure, pure_bind, hload, StateT.run_map,
+    Zig.load_run hacc' (Result.eq_pure_of_run hd) hK hrc']
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/SemView.lean:1241:64: This simp argument is unused:
+  StateT.run_pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [Zig.checkIndex, hj, ↓reduceIte, StateT.run_bind, pure_bind, hload, StateT.run_map,
+    Zig.load_run hacc' (Result.eq_pure_of_run hd) hK hrc']
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [103/220] Replayed Air2Lean.Certificate
+warning: Air2Lean/Certificate.lean:1460:6: Variable name `concFuncs` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _concFuncs
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+⚠ [106/220] Replayed Air2Lean.Renumber
+warning: Air2Lean/Renumber.lean:285:23: `dif_pos` has been deprecated: Use `dite_eq_left` instead
+warning: Air2Lean/Renumber.lean:293:15: `dif_pos` has been deprecated: Use `dite_eq_left` instead
+warning: Air2Lean/Renumber.lean:299:10: `dif_neg` has been deprecated: Use `dite_eq_right` instead
+warning: Air2Lean/Renumber.lean:303:21: `dif_pos` has been deprecated: Use `dite_eq_left` instead
+warning: Air2Lean/Renumber.lean:311:15: `dif_pos` has been deprecated: Use `dite_eq_left` instead
+warning: Air2Lean/Renumber.lean:317:10: `dif_neg` has been deprecated: Use `dite_eq_right` instead
+warning: Air2Lean/Renumber.lean:1033:15: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: Air2Lean/Renumber.lean:1034:15: `if_neg` has been deprecated: Use `ite_eq_right` instead
+⚠ [107/220] Replayed Air2Lean.RenumberProgram
+warning: Air2Lean/RenumberProgram.lean:195:32: This simp argument is unused:
+  List.size_toArray
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [List.foldl_cons, List.length_cons]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/RenumberProgram.lean:195:51: This simp argument is unused:
+  List.length_cons
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [List.foldl_cons, List.size_toArray]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/RenumberProgram.lean:367:34: This simp argument is unused:
+  ren2
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [Function.comp_def, beq_ren hρ]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/RenumberProgram.lean:410:32: This simp argument is unused:
+  ren2
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [Function.comp_def, beq_ren hρ]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/RenumberProgram.lean:452:25: This simp argument is unused:
+  renInst_id
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [renInst_op, renInst_ty, valueOperands_renOp]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Air2Lean/RenumberProgram.lean:460:61: This simp argument is unused:
+  Option.map_map
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [renVal, find?_id_ren hρ, Function.comp_def, renFunc, Func.withBody, Option.bind_map, renInst_ty]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+== options: checking against golden (tests/golden/options/air, then tests/golden/0.17.1/options/air, tests/golden/0.17.1/options/air-darwin, tests/golden/0.17.1/options/air-darwin-arm64) ==
+== building Lean ==
+⚠ [8/82] Replayed ZigLean.Mem.Enc
+warning: ZigLean/Mem/Enc.lean:301:0: Definition `Zig.errorEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:312:0: Definition `Zig.optionalErrorEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:344:0: Definition `Zig.Enc.optionWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:349:0: Definition `Zig.Enc.vectorWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:380:0: Definition `Zig.Enc.errorUnionWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:385:0: Definition `Zig.errorUnionEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+⚠ [11/82] Replayed ZigLean.Permutation
+warning: ZigLean/Permutation.lean:35:52: `dif_pos` has been deprecated: Use `dite_eq_left` instead
+⚠ [14/82] Replayed ZigLean.Mem.Thread
+warning: ZigLean/Mem/Thread.lean:242:24: Variable name `ord` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _ord
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: ZigLean/Mem/Thread.lean:293:25: Variable name `ord` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _ord
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: ZigLean/Mem/Thread.lean:432:24: Variable name `succ` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _succ
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: ZigLean/Mem/Thread.lean:485:28: Variable name `succ` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _succ
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+⚠ [20/82] Replayed ZigLean.Conc.Spawn
+warning: ZigLean/Conc/Spawn.lean:106:37: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Conc/Spawn.lean:109:38: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Conc/Spawn.lean:109:49: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Conc/Spawn.lean:110:38: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Conc/Spawn.lean:110:49: `if_neg` has been deprecated: Use `ite_eq_right` instead
+⚠ [21/82] Replayed ZigLean.Conc.Future
+warning: ZigLean/Conc/Future.lean:201:0: automatically included section variable(s) unused in theorem `Zig.monotone_asyncEagerC`:
+  [Enc α]
+consider restructuring your `variable` declarations so that the variables are not in scope or explicitly omit them:
+  omit [Enc α] in theorem ...
+
+Note: This linter can be disabled with `set_option linter.unusedSectionVars false`
+warning: ZigLean/Conc/Future.lean:234:33: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Conc/Future.lean:235:33: `if_neg` has been deprecated: Use `ite_eq_right` instead
+⚠ [28/82] Replayed ZigLean.Mem.Lemmas
+warning: ZigLean/Mem/Lemmas.lean:62:57: This simp argument is unused:
+  StateT.pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [enterFrame, h, this, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, set,
+    StateT.set, MonadStateOf.set, pure, ExceptT.pure, ExceptT.mk, ExceptT.bind, ExceptT.bindCont]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:83:6: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Mem/Lemmas.lean:92:6: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Mem/Lemmas.lean:342:6: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Mem/Lemmas.lean:356:16: This simp argument is unused:
+  StateT.pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [pure, ExceptT.pure, ExceptT.mk] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:359:18: This simp argument is unused:
+  StateT.pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [pure, ExceptT.pure, ExceptT.mk] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:845:8: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Mem/Lemmas.lean:846:8: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Mem/Lemmas.lean:849:10: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Mem/Lemmas.lean:850:10: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Mem/Lemmas.lean:1230:17: This simp argument is unused:
+  Option.bind_some
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1244:4: This simp argument is unused:
+  Function.comp
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [loadBytes, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, liftM,
+    monadLift, MonadLift.monadLift, StateT.lift, ExceptT.bind, ExceptT.mk, pure, StateT.pure, ExceptT.pure,
+    Option.bind_some, ExceptT.bindCont] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1257:53: This simp argument is unused:
+  pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [ExceptT.bindCont, Option.bind_some, ExceptT.pure, ExceptT.mk] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1257:59: This simp argument is unused:
+  ExceptT.pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [ExceptT.bindCont, Option.bind_some, pure, ExceptT.mk] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1257:73: This simp argument is unused:
+  ExceptT.mk
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [ExceptT.bindCont, Option.bind_some, pure, ExceptT.pure] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1285:53: This simp argument is unused:
+  Prod.mk.injEq
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [ExceptT.bindCont, Option.bind_some] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1429:8: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [hm, errOfBytes_errBytes, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1449:10: This simp argument is unused:
+  h x rfl
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [hm, errOfBytes_errBytes, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1456:55: This simp argument is unused:
+  e.property
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [Enc.encode, Enc.decode, errOfBytes_errBytes, hm, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk,
+    ExceptT.bindCont]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1467:57: This simp argument is unused:
+  x.property
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [Enc.encode, Enc.decode, errOfBytes_errBytes, hm, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk,
+    ExceptT.bindCont]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1761:10: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Mem/Lemmas.lean:1761:20: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Mem/Lemmas.lean:1762:10: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Mem/Lemmas.lean:1763:8: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Mem/Lemmas.lean:1763:27: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Mem/Lemmas.lean:1807:82: This simp argument is unused:
+  Bool.not_eq_true
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [Block.clearOf, Bool.not_or, Bool.and_eq_true, Bool.not_eq_true', beq_eq_false_iff_ne,
+    decide_eq_false_iff_not, Nat.not_le] at hp
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [29/82] Replayed ZigLean.Conc.Lemmas
+warning: ZigLean/Conc/Lemmas.lean:109:28: Variable name `hcost` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _hcost
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: ZigLean/Conc/Lemmas.lean:1601:8: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Conc/Lemmas.lean:1636:10: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Conc/Lemmas.lean:1907:49: This simp argument is unused:
+  MonadStateOf.get
+
+Hint: Omit it from the simp argument list.
+  [apply] simp_all [StateT.run, liftM, monadLift, MonadLift.monadLift, StateT.lift, set, StateT.set, pure, StateT.pure,
+    bind, StateT.bind, ExceptT.bind, ExceptT.mk, ExceptT.pure, ExceptT.bindCont, ExceptT.run, Mem.recordAt, StateT.get]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Conc/Lemmas.lean:1907:67: This simp argument is unused:
+  StateT.get
+
+Hint: Omit it from the simp argument list.
+  [apply] simp_all [StateT.run, liftM, monadLift, MonadLift.monadLift, StateT.lift, set, StateT.set, pure, StateT.pure,
+    bind, StateT.bind, ExceptT.bind, ExceptT.mk, ExceptT.pure, ExceptT.bindCont, ExceptT.run, Mem.recordAt,
+    MonadStateOf.get]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Conc/Lemmas.lean:1982:61: This simp argument is unused:
+  Option.bind_some
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [casMarkWrite, zig_unfold, ha, ExceptT.bindCont]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Conc/Lemmas.lean:2224:8: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Conc/Lemmas.lean:2228:8: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Conc/Lemmas.lean:2228:36: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Conc/Lemmas.lean:2245:4: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Conc/Lemmas.lean:2272:8: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Conc/Lemmas.lean:2276:8: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Conc/Lemmas.lean:2276:36: `if_neg` has been deprecated: Use `ite_eq_right` instead
+⚠ [45/82] Replayed ZigLean.Mem.Null
+warning: ZigLean/Mem/Null.lean:45:0: Definition `Zig.nullablePtrEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Null.lean:59:0: Definition `Zig.nullableSliceEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Null.lean:126:6: `if_neg` has been deprecated: Use `ite_eq_right` instead
+⚠ [46/82] Replayed ZigLean.Mem.ErrWidth
+warning: ZigLean/Mem/ErrWidth.lean:80:0: Definition `Zig.errorEncW` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/ErrWidth.lean:91:0: Definition `Zig.optionalErrorEncW` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/ErrWidth.lean:128:0: Definition `Zig.Enc.errorUnionWithW` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/ErrWidth.lean:145:0: Definition `Zig.errorUnionEncW` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+⚠ [79/82] Replayed Proofs.Threadsync.Gen.V0_15_2.H_64617277696e.Gen
+warning: Proofs/Threadsync/Gen/V0_15_2/H_64617277696e/Gen.lean:507:27: Variable name `p0` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _p0
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+⚠ [80/82] Replayed Proofs.Threadsync.Gen.V0_15_2.H_6c696e7578.Gen
+warning: Proofs/Threadsync/Gen/V0_15_2/H_6c696e7578/Gen.lean:581:27: Variable name `p0` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _p0
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+⚠ [81/82] Replayed Proofs.Threadsync.Gen.V0_15_2.H_6c696e75782d61617263683634.Gen
+warning: Proofs/Threadsync/Gen/V0_15_2/H_6c696e75782d61617263683634/Gen.lean:581:27: Variable name `p0` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _p0
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+Build completed successfully (82 jobs).
+== differential testing ==
+== building zig harnesses ==
+== building libm ==
+== building asm archive ==
+== running zig harnesses ==
+== libm self-check ==
+libm self-check: 320/320 matched, 0 mismatched
+== building + running lean side ==
+⚠ [10/199] Replayed ZigLean.Mem.Enc
+warning: ZigLean/Mem/Enc.lean:301:0: Definition `Zig.errorEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:312:0: Definition `Zig.optionalErrorEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:344:0: Definition `Zig.Enc.optionWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:349:0: Definition `Zig.Enc.vectorWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:380:0: Definition `Zig.Enc.errorUnionWith` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Enc.lean:385:0: Definition `Zig.errorUnionEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+⚠ [13/199] Replayed ZigLean.Permutation
+warning: ZigLean/Permutation.lean:35:52: `dif_pos` has been deprecated: Use `dite_eq_left` instead
+⚠ [16/199] Replayed ZigLean.Mem.Thread
+warning: ZigLean/Mem/Thread.lean:242:24: Variable name `ord` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _ord
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: ZigLean/Mem/Thread.lean:293:25: Variable name `ord` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _ord
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: ZigLean/Mem/Thread.lean:432:24: Variable name `succ` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _succ
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: ZigLean/Mem/Thread.lean:485:28: Variable name `succ` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _succ
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+⚠ [22/199] Replayed ZigLean.Conc.Spawn
+warning: ZigLean/Conc/Spawn.lean:106:37: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Conc/Spawn.lean:109:38: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Conc/Spawn.lean:109:49: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Conc/Spawn.lean:110:38: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Conc/Spawn.lean:110:49: `if_neg` has been deprecated: Use `ite_eq_right` instead
+⚠ [23/199] Replayed ZigLean.Conc.Future
+warning: ZigLean/Conc/Future.lean:201:0: automatically included section variable(s) unused in theorem `Zig.monotone_asyncEagerC`:
+  [Enc α]
+consider restructuring your `variable` declarations so that the variables are not in scope or explicitly omit them:
+  omit [Enc α] in theorem ...
+
+Note: This linter can be disabled with `set_option linter.unusedSectionVars false`
+warning: ZigLean/Conc/Future.lean:234:33: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Conc/Future.lean:235:33: `if_neg` has been deprecated: Use `ite_eq_right` instead
+⚠ [30/199] Replayed ZigLean.Mem.Lemmas
+warning: ZigLean/Mem/Lemmas.lean:62:57: This simp argument is unused:
+  StateT.pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [enterFrame, h, this, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, set,
+    StateT.set, MonadStateOf.set, pure, ExceptT.pure, ExceptT.mk, ExceptT.bind, ExceptT.bindCont]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:83:6: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Mem/Lemmas.lean:92:6: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Mem/Lemmas.lean:342:6: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Mem/Lemmas.lean:356:16: This simp argument is unused:
+  StateT.pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [pure, ExceptT.pure, ExceptT.mk] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:359:18: This simp argument is unused:
+  StateT.pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [pure, ExceptT.pure, ExceptT.mk] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:845:8: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Mem/Lemmas.lean:846:8: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Mem/Lemmas.lean:849:10: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Mem/Lemmas.lean:850:10: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Mem/Lemmas.lean:1230:17: This simp argument is unused:
+  Option.bind_some
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1244:4: This simp argument is unused:
+  Function.comp
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [loadBytes, StateT.run, bind, StateT.bind, get, getThe, MonadStateOf.get, StateT.get, liftM,
+    monadLift, MonadLift.monadLift, StateT.lift, ExceptT.bind, ExceptT.mk, pure, StateT.pure, ExceptT.pure,
+    Option.bind_some, ExceptT.bindCont] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1257:53: This simp argument is unused:
+  pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [ExceptT.bindCont, Option.bind_some, ExceptT.pure, ExceptT.mk] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1257:59: This simp argument is unused:
+  ExceptT.pure
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [ExceptT.bindCont, Option.bind_some, pure, ExceptT.mk] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1257:73: This simp argument is unused:
+  ExceptT.mk
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [ExceptT.bindCont, Option.bind_some, pure, ExceptT.pure] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1285:53: This simp argument is unused:
+  Prod.mk.injEq
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [ExceptT.bindCont, Option.bind_some] at h
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1429:8: This simp argument is unused:
+  h
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [hm, errOfBytes_errBytes, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1449:10: This simp argument is unused:
+  h x rfl
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [hm, errOfBytes_errBytes, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1456:55: This simp argument is unused:
+  e.property
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [Enc.encode, Enc.decode, errOfBytes_errBytes, hm, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk,
+    ExceptT.bindCont]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1467:57: This simp argument is unused:
+  x.property
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [Enc.encode, Enc.decode, errOfBytes_errBytes, hm, bind, pure, ExceptT.bind, ExceptT.pure, ExceptT.mk,
+    ExceptT.bindCont]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Mem/Lemmas.lean:1761:10: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Mem/Lemmas.lean:1761:20: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Mem/Lemmas.lean:1762:10: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Mem/Lemmas.lean:1763:8: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Mem/Lemmas.lean:1763:27: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Mem/Lemmas.lean:1807:82: This simp argument is unused:
+  Bool.not_eq_true
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [Block.clearOf, Bool.not_or, Bool.and_eq_true, Bool.not_eq_true', beq_eq_false_iff_ne,
+    decide_eq_false_iff_not, Nat.not_le] at hp
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [31/199] Replayed ZigLean.Conc.Lemmas
+warning: ZigLean/Conc/Lemmas.lean:109:28: Variable name `hcost` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _hcost
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+warning: ZigLean/Conc/Lemmas.lean:1601:8: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Conc/Lemmas.lean:1636:10: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Conc/Lemmas.lean:1907:49: This simp argument is unused:
+  MonadStateOf.get
+
+Hint: Omit it from the simp argument list.
+  [apply] simp_all [StateT.run, liftM, monadLift, MonadLift.monadLift, StateT.lift, set, StateT.set, pure, StateT.pure,
+    bind, StateT.bind, ExceptT.bind, ExceptT.mk, ExceptT.pure, ExceptT.bindCont, ExceptT.run, Mem.recordAt, StateT.get]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Conc/Lemmas.lean:1907:67: This simp argument is unused:
+  StateT.get
+
+Hint: Omit it from the simp argument list.
+  [apply] simp_all [StateT.run, liftM, monadLift, MonadLift.monadLift, StateT.lift, set, StateT.set, pure, StateT.pure,
+    bind, StateT.bind, ExceptT.bind, ExceptT.mk, ExceptT.pure, ExceptT.bindCont, ExceptT.run, Mem.recordAt,
+    MonadStateOf.get]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Conc/Lemmas.lean:1982:61: This simp argument is unused:
+  Option.bind_some
+
+Hint: Omit it from the simp argument list.
+  [apply] simp only [casMarkWrite, zig_unfold, ha, ExceptT.bindCont]
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: ZigLean/Conc/Lemmas.lean:2224:8: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Conc/Lemmas.lean:2228:8: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Conc/Lemmas.lean:2228:36: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Conc/Lemmas.lean:2245:4: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Conc/Lemmas.lean:2272:8: `if_pos` has been deprecated: Use `ite_eq_left` instead
+warning: ZigLean/Conc/Lemmas.lean:2276:8: `if_neg` has been deprecated: Use `ite_eq_right` instead
+warning: ZigLean/Conc/Lemmas.lean:2276:36: `if_neg` has been deprecated: Use `ite_eq_right` instead
+⚠ [47/199] Replayed ZigLean.Mem.Null
+warning: ZigLean/Mem/Null.lean:45:0: Definition `Zig.nullablePtrEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Null.lean:59:0: Definition `Zig.nullableSliceEnc` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/Null.lean:126:6: `if_neg` has been deprecated: Use `ite_eq_right` instead
+⚠ [48/199] Replayed ZigLean.Mem.ErrWidth
+warning: ZigLean/Mem/ErrWidth.lean:80:0: Definition `Zig.errorEncW` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/ErrWidth.lean:91:0: Definition `Zig.optionalErrorEncW` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/ErrWidth.lean:128:0: Definition `Zig.Enc.errorUnionWithW` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+warning: ZigLean/Mem/ErrWidth.lean:145:0: Definition `Zig.errorUnionEncW` of class type is semireducible. Most type class instances should be instance-reducible, so consider marking this
+definition with `@[instance_reducible]`. If it is intentionally semireducible, this warning can be disabled with `set_option warn.classDefReducibility false`.
+⚠ [74/199] Replayed Proofs.Threadsync.Gen
+warning: Proofs/Threadsync/Gen.lean:580:27: Variable name `p0` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _p0
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+⚠ [99/199] Replayed Diff
+warning: Diff.lean:100:17: declaration uses `sorry`
+warning: Diff.lean:101:17: declaration uses `sorry`
+warning: Diff.lean:102:17: declaration uses `sorry`
+warning: Diff.lean:103:17: declaration uses `sorry`
+✔ [199/199] Built difftest:exe (471ms)
+Build completed successfully (199 jobs).
+schedule search regressions passed
+== comparing ==
+options.find: ok=300 fail_match=0 unspecified=0 capped=0 mismatch=0 (of 300)
+options.findOr: ok=300 fail_match=0 unspecified=0 capped=0 mismatch=0 (of 300)
+options.firstIndexPlusOne: ok=136 fail_match=164 unspecified=0 capped=0 mismatch=0 (of 300)
+TOTAL options: ok=736 fail_match=164 unspecified=0 capped=0 mismatch=0
+TOTAL: ok=736 fail_match=164 unspecified=0 capped=0 mismatch=0
+SCHEDULES: observed searched=0 unsearched=900 runs=0 witness=0 exhausted=0 bounded=0 capped=0 fuel=[] cap=[] | enumeration receipts=0 runs=0 complete=0 truncated=0 replay_seeds=0 replays=0 fuel=[] node_cap=[] prefix_cap=[] | correspondence_scopes=3 capped_scopes=0 reduction=none qualified=false

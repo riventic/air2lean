@@ -1,0 +1,34 @@
+ok basic 0.17.1 linux namespaced: Proofs/Basic/Gen/V0_17_1/H_6c696e7578/Gen.lean
+ok basic 0.16.0 linux namespaced: Proofs/Basic/Gen/V0_16_0/H_6c696e7578/Gen.lean
+ok basic 0.15.2 linux namespaced: Proofs/Basic/Gen/V0_15_2/H_6c696e7578/Gen.lean
+ok basic 0.14.1 linux namespaced: Proofs/Basic/Gen/V0_14_1/H_6c696e7578/Gen.lean
+ok sync 0.16.0 darwin namespaced: Proofs/Sync/Gen/V0_16_0/H_64617277696e/Gen.lean
+ok sync 0.16.0 linux namespaced: Proofs/Sync/Gen/V0_16_0/H_6c696e7578/Gen.lean
+ok sync 0.17.1 linux namespaced: Proofs/Sync/Gen/V0_17_1/H_6c696e7578/Gen.lean
+ok threadsync 0.15.2 darwin namespaced: Proofs/Threadsync/Gen/V0_15_2/H_64617277696e/Gen.lean
+ok threadsync 0.15.2 linux namespaced: Proofs/Threadsync/Gen/V0_15_2/H_6c696e7578/Gen.lean
+ok threadsync 0.15.2 linux-aarch64 namespaced: Proofs/Threadsync/Gen/V0_15_2/H_6c696e75782d61617263683634/Gen.lean
+== threadsync: dumping AIR ==
+examples/threadsync/threadsync.zig:10:14: error: root source file struct 'Thread' has no member named 'Mutex'
+    m: Thread.Mutex = .{},
+       ~~~~~~^~~~~~
+/Users/konstantinrr/.cache/air2lean/cas/zig/0.17.1-8d68a6aaf77c716609f0aaa00e7b0ef7/prefix/lib/zig/std/Thread.zig:1:1: note: struct declared here
+//! This struct represents a kernel thread.
+^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+referenced by:
+    mutexCounter: examples/threadsync/threadsync.zig:24:5
+    comptime: examples/threadsync/threadsync.zig:94:10
+    4 reference(s) hidden; use '-freference-trace=6' to see all references
+examples/threadsync/threadsync.zig:32:14: error: root source file struct 'Thread' has no member named 'Mutex'
+    m: Thread.Mutex = .{},
+       ~~~~~~^~~~~~
+/Users/konstantinrr/.cache/air2lean/cas/zig/0.17.1-8d68a6aaf77c716609f0aaa00e7b0ef7/prefix/lib/zig/std/Thread.zig:1:1: note: struct declared here
+//! This struct represents a kernel thread.
+^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+examples/threadsync/threadsync.zig:67:15: error: root source file struct 'Thread' has no member named 'WaitGroup'
+    wg: Thread.WaitGroup = .{},
+        ~~~~~~^~~~~~~~~~
+/Users/konstantinrr/.cache/air2lean/cas/zig/0.17.1-8d68a6aaf77c716609f0aaa00e7b0ef7/prefix/lib/zig/std/Thread.zig:1:1: note: struct declared here
+//! This struct represents a kernel thread.
+^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+par: 1 of 1 jobs failed: threadsync (exit 1)

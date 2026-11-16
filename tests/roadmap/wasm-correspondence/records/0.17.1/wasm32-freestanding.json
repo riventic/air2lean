@@ -1,6 +1,6 @@
 {
  "cases_sha256": "e8df1f437374bde85d4a2b3f6c5d894aec56931c8b5913ec907c0076491061b7",
- "compiler_sha256": "1c5f706db0ed6d55451940f31dc05a6177d05696bc1fa5d853696d04c718b523",
+ "compiler_sha256": "bb6397b497438ce9e9d0d668fbfb42e777082f2b0af87ab06dec5ec928e19df5",
  "optimize": "ReleaseSafe",
  "schema": 1,
  "sources_sha256": {

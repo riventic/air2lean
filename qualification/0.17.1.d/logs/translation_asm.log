@@ -1,0 +1,22 @@
+ok basic 0.17.1 linux namespaced: Proofs/Basic/Gen/V0_17_1/H_6c696e7578/Gen.lean
+ok basic 0.16.0 linux namespaced: Proofs/Basic/Gen/V0_16_0/H_6c696e7578/Gen.lean
+ok basic 0.15.2 linux namespaced: Proofs/Basic/Gen/V0_15_2/H_6c696e7578/Gen.lean
+ok basic 0.14.1 linux namespaced: Proofs/Basic/Gen/V0_14_1/H_6c696e7578/Gen.lean
+ok sync 0.16.0 darwin namespaced: Proofs/Sync/Gen/V0_16_0/H_64617277696e/Gen.lean
+ok sync 0.16.0 linux namespaced: Proofs/Sync/Gen/V0_16_0/H_6c696e7578/Gen.lean
+ok sync 0.17.1 linux namespaced: Proofs/Sync/Gen/V0_17_1/H_6c696e7578/Gen.lean
+ok threadsync 0.15.2 darwin namespaced: Proofs/Threadsync/Gen/V0_15_2/H_64617277696e/Gen.lean
+ok threadsync 0.15.2 linux namespaced: Proofs/Threadsync/Gen/V0_15_2/H_6c696e7578/Gen.lean
+ok threadsync 0.15.2 linux-aarch64 namespaced: Proofs/Threadsync/Gen/V0_15_2/H_6c696e75782d61617263683634/Gen.lean
+== asm: dumping AIR ==
+examples/asm/asm.zig:34:15: error: no field named 'cc' in struct 'lang.assembly.Clobbers__struct_0'
+        : .{ .cc = true }
+              ^~
+/Users/konstantinrr/.cache/air2lean/cas/zig/0.17.1-8d68a6aaf77c716609f0aaa00e7b0ef7/prefix/lib/zig/std/lang/assembly.zig:204:37: note: struct declared here
+    .aarch64, .aarch64_be => packed struct {
+                             ~~~~~~~^~~~~~
+referenced by:
+    comptime: examples/asm/asm.zig:54:10
+    root: /Users/konstantinrr/.cache/air2lean/cas/zig/0.17.1-8d68a6aaf77c716609f0aaa00e7b0ef7/prefix/lib/zig/std/start.zig:13:22
+    3 reference(s) hidden; use '-freference-trace=5' to see all references
+par: 1 of 1 jobs failed: asm (exit 1)
