@@ -9,7 +9,7 @@ exact bits, and so does every float that is not a NaN.
 | File | Role |
 |---|---|
 | `nan_bits.zig` | The cases: a store read back through `*const u32`/`*const u64`, an `extern union`, `@bitCast` of an array and a vector, an `extern struct` read as one integer, `@memcpy` into an integer, a finite quotient, NaN constants stored and in a global initializer, and a stored NaN read back as a float. Compiles on 0.14.1, 0.15.2, 0.16.0 and 0.17.0 |
-| `air/<version>/nan_bits/` | Patched-compiler exports (x86_64-linux, baseline, ReleaseSafe; `check.sh --export`) |
+| `air/<version>/nan_bits/` | Patched-compiler exports (x86_64-linux, baseline, ReleaseSafe), declared in `exports.json` and pinned by `exports.lock.json` (`scripts/fixture-exports.py`) |
 | `NanBits/<version>/Gen.lean` | Their retained translations (`<version>` as a name: `V0_17_0`) |
 | `NanBits/<version>/Model.lean` | Kernel-checked results (`decide +kernel`) of each translation, then `main` prints `native.zig`'s lines. Written for 0.17.0; the older versions' modules are that one with the version renamed (`scripts/fixtures.py instance ... --write` after an edit) |
 | `native.zig`, `expected/<version>-<arch>.txt` | The native program (volatile operands) and its output on x86_64-linux-musl and aarch64-linux-musl, ReleaseSafe and Debug |
@@ -18,7 +18,7 @@ exact bits, and so does every float that is not a NaN.
 lake build ZigLean Air2Lean air2lean
 bash tests/roadmap/nan-bits/check.sh                    # every version: translate, compare, prove, model = both targets
 AIR2LEAN_ZIG_NATIVE=<stock zig V> bash tests/roadmap/nan-bits/check.sh --native V
-AIR2LEAN_ZIG_AIR=<patched zig V> bash tests/roadmap/nan-bits/check.sh --export V DIR
+python3 -B scripts/fixture-exports.py verify nan-bits   # fresh exports equal air/ (export: rewrite)
 ```
 
 `--native` runs in Docker `linux/amd64` and `linux/arm64`; `AIR2LEAN_X86_64_RUN` and

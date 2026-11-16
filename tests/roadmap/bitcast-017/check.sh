@@ -9,18 +9,11 @@ case "${1:---check}" in
     : "${AIR2LEAN_ZIG_NATIVE:?set a stock Zig 0.17.0}"
     "$AIR2LEAN_ZIG_NATIVE" test "$dir/bitcast017.zig" -OReleaseSafe
     exit ;;
-  --export)
-    [ "$#" -eq 2 ] || { echo 'usage: check.sh --export OUTPUT_DIR' >&2; exit 2; }
-    : "${AIR2LEAN_ZIG_AIR:?set a patched Zig 0.17.0 with the AIR exporter}"
-    mkdir -p "$2"
-    air_output=$(cd -- "$2" && pwd)
-    ZIG_AIR_JSON_DIR="$air_output" ZIG_AIR_JSON_FILTER=bitcast017. \
-      "$AIR2LEAN_ZIG_AIR" build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing \
-      -target x86_64-linux -mcpu=baseline "$dir/bitcast017.zig"
-    exit ;;
   --check) ;;
-  *) echo 'usage: check.sh [--check|--native|--export OUTPUT_DIR]' >&2; exit 2 ;;
+  *) echo 'usage: check.sh [--check|--native]' >&2; exit 2 ;;
 esac
+# air/<version>: exports.json, pinned by exports.lock.json (scripts/fixture-exports.py).
+python3 -B scripts/fixture-exports.py check bitcast-017
 python3 -B scripts/lean-deps.py --build "$dir"
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build translator first' >&2; exit 1; }
