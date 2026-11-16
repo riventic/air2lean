@@ -1,0 +1,20 @@
+{
+  "exports": [
+    {
+      "out": "air/{version}/enc_exactness",
+      "source": "enc_exactness.zig",
+      "filter": "enc_exactness.",
+      "versions": ["0.17.0", "0.16.0", "0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/opaque_bytes",
+      "source": "opaque_bytes.zig",
+      "filter": "opaque_bytes.",
+      "versions": ["0.17.0", "0.16.0", "0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    }
+  ]
+}
