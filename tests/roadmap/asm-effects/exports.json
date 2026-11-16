@@ -1,0 +1,12 @@
+{
+  "exports": [
+    {
+      "out": "air-env/{version}",
+      "source": "asm_env.zig",
+      "filter": "asm_env.",
+      "versions": ["0.17.0", "0.16.0", "0.15.2"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=x86_64+rdrnd"],
+      "cwd": "repo"
+    }
+  ]
+}

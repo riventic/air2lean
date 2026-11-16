@@ -2,17 +2,15 @@
 """Gate for the L04 compiler-export qualification record (compiler-qualification.json).
 
 `air-fresh/<version>` and `aliases/air-fresh/<version>` are unmodified schema-12 exports of
-`try_pointers.zig` and `try_aliases.zig` from patched 0.14.1, 0.15.2, 0.16.0 and 0.17.0 compilers
-(`versions`). The retained schema-11
-`air/` files and their `Gen.lean` stay as they are (their hashes are pinned by `provenance.json`
-and the integration manifests). This gate checks the fresh files' hashes, inventory, Linux/baseline
-ReleaseSafe profile and pointer-try tags, and, with `--translator`, that translating them gives
-the retained generated module up to the profile header (the CI comparison). Hashes do not attest
-that a compiler ran. `--fresh ROOT` validates a new export (`ROOT/try_pointers`,
-`ROOT/try_aliases`, from `check.sh --export` and `aliases/check.sh --export`) the same way.
+`try_pointers.zig` and `try_aliases.zig`, one per version of their `exports.json` entry; the
+sources, the exporter and every file are pinned by `exports.lock.json`
+(scripts/fixture-exports.py). The retained schema-11 `air/` files and their `Gen.lean` stay as
+they are (their hashes are pinned by `provenance.json` and the integration manifests). This gate
+checks each fresh export's function inventory, Linux/baseline ReleaseSafe profile and
+pointer-try tags, and, with `--translator`, that translating it gives the retained generated
+module up to the profile header (the CI comparison).
 """
 import argparse
-import hashlib
 import json
 from pathlib import Path
 import runpy
@@ -23,10 +21,6 @@ REPO = Path(__file__).resolve().parents[3]
 CASE = Path(__file__).resolve().parent
 HELPERS = runpy.run_path(str(REPO / 'scripts/normalize-generated.py'))
 SCRIPT = REPO / 'scripts/normalize-generated.py'
-
-
-def digest(path):
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def tags_of(value, tags):
@@ -74,50 +68,28 @@ def translate_matches(translator, directory, entry, case):
                              + result.stderr.strip())
 
 
-def inspect(case=CASE, repo=REPO, fresh=None, translator=None, fresh_version='0.16.0'):
-    manifest = HELPERS['parse_json']((case / 'compiler-qualification.json').read_text())
-    inventory = {}
-    for key, entry in manifest['fixtures'].items():
-        source = repo / entry['source']
-        if digest(source) != entry['source_sha256']:
-            raise ValueError(f'stale {key} source')
-        for version in ([fresh_version] if fresh else manifest['versions']):
-            directory = Path(fresh) / key if fresh else case / entry['air_dir'].format(version=version)
-            files = check_air(directory, entry, version)
-            if fresh is None:
-                inventory.update({str(p.relative_to(case)): digest(p) for p in files})
+def inspect(case=CASE, translator=None):
+    """The checked files: every version's export of each fixture of the record."""
+    record = HELPERS['parse_json']((case / 'compiler-qualification.json').read_text())
+    exports = {e['out']: e for e in json.loads((case / 'exports.json').read_text())['exports']}
+    checked = []
+    for key, entry in record['fixtures'].items():
+        if entry['air_dir'] not in exports:
+            raise ValueError(f'{key}: exports.json declares no {entry["air_dir"]}')
+        for version in exports[entry['air_dir']]['versions']:
+            directory = case / entry['air_dir'].format(version=version)
+            checked += check_air(directory, entry, version)
             if translator is not None:
                 translate_matches(translator, directory, entry, case)
-    if fresh is None and inventory != manifest['artifacts']:
-        raise ValueError('stale or incomplete artifact inventory')
-    return inventory
-
-
-def record(case=CASE, repo=REPO):
-    path = case / 'compiler-qualification.json'
-    manifest = json.loads(path.read_text())
-    inventory = {}
-    for entry in manifest['fixtures'].values():
-        entry['source_sha256'] = digest(repo / entry['source'])
-        for version in manifest['versions']:
-            directory = case / entry['air_dir'].format(version=version)
-            inventory.update({str(p.relative_to(case)): digest(p)
-                              for p in sorted(directory.glob('*.json'))})
-    manifest['artifacts'] = inventory
-    path.write_text(json.dumps(manifest, indent=2) + '\n')
+    return checked
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--record', action='store_true')
-    parser.add_argument('--fresh', type=Path, metavar='ROOT')
-    parser.add_argument('--fresh-version', default='0.16.0', help='the Zig version of --fresh')
     parser.add_argument('--translator', type=Path)
     args = parser.parse_args()
     try:
-        if args.record:
-            record()
-        inspect(fresh=args.fresh, translator=args.translator, fresh_version=args.fresh_version)
+        inspect(translator=args.translator)
     except (KeyError, OSError, ValueError, TypeError, subprocess.CalledProcessError) as error:
         raise SystemExit(str(error))
     print('pointer-try compiler export record passed')

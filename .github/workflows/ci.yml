@@ -2248,7 +2248,7 @@ jobs:
       - name: Pointer try ownership, native and fresh source regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && !matrix.mutate && matrix.zig == '0.16.0' }}
         env:
-          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}
           AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
           AIR2LEAN_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
           PYTHONDONTWRITEBYTECODE: "1"
@@ -2259,20 +2259,15 @@ jobs:
           bash tests/roadmap/try-pointers/check.sh --check-artifacts
           bash tests/roadmap/try-pointers/check.sh --check-qualification
           bash tests/roadmap/try-pointers/check.sh --native
-          fresh=$(mktemp -d "$RUNNER_TEMP/air2lean-pointer-try-source.XXXXXX")
-          trap 'rm -rf "$fresh"' EXIT
-          bash tests/roadmap/try-pointers/check.sh --export "$fresh/air"
-          python3 tests/roadmap/try-pointers/check-artifacts.py --fresh-air "$fresh/air"
-          "$AIR2LEAN_TRANSLATOR" "$fresh/air" -o "$fresh/Gen.lean" \
-            --namespace TryPointers --prefix try_pointers.
-          python3 scripts/normalize-generated.py report "$fresh/Gen.lean" "$fresh/air" "$fresh/generated-report.json"
-          python3 scripts/normalize-generated.py compare tests/roadmap/try-pointers/TryPointers/Gen.lean "$fresh/Gen.lean" "$fresh/generated-report.json"
+          # Fresh exports equal the retained air-fresh, aliases/air-fresh and lifetimes/air byte for
+          # byte (exports.json); --check-qualification translated the retained ones.
+          python3 -B scripts/fixture-exports.py verify try-pointers --version ${{ matrix.zig }}
 
-      # L04 aliasing/cleanup: retained AIR is hand-written; export comparison is pending.
+      # L04 aliasing/cleanup: artifacts, proofs and native tests. Its fresh export
+      # (aliases/air-fresh) is re-exported by the ownership step's fixture-exports verify.
       - name: Pointer try alias and cleanup rules
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && !matrix.mutate && matrix.zig == '0.16.0' }}
         env:
-          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
           AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
           AIR2LEAN_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
           PYTHONDONTWRITEBYTECODE: "1"
@@ -2281,10 +2276,6 @@ jobs:
           lake build ZigLean.Sep.Full.Try ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Strength
           bash tests/roadmap/try-pointers/aliases/check.sh --check-artifacts
           bash tests/roadmap/try-pointers/aliases/check.sh --native
-          fresh=$(mktemp -d "$RUNNER_TEMP/air2lean-pointer-try-aliases.XXXXXX")
-          trap 'rm -rf "$fresh"' EXIT
-          bash tests/roadmap/try-pointers/aliases/check.sh --export "$fresh/air"
-          python3 tests/roadmap/try-pointers/aliases/check-artifacts.py --fresh-air "$fresh/air"
 
       # T02: wasm32 and x86_64 translations of one source, layouts, both-profile proofs and
       # the 32-bit rejections; native layout/boundary tests, wasm32-wasi under Node's WASI.

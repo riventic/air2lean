@@ -9,26 +9,18 @@ case "${1:---check-artifacts}" in
     : "${AIR2LEAN_ZIG_NATIVE:?set a qualified stock host Zig}"
     "$AIR2LEAN_ZIG_NATIVE" test tests/roadmap/try-pointers/try_pointers.zig -OReleaseSafe
     exit ;;
-  --export)
-    [ "$#" -eq 2 ] || { echo 'usage: check.sh --export OUTPUT_DIR' >&2; exit 2; }
-    : "${AIR2LEAN_ZIG_AIR:?set a qualified patched compiler with the updated exporter}"
-    mkdir -p "$2"
-    [ -z "$(find "$2" -mindepth 1 -maxdepth 1 -print -quit)" ] || { echo 'AIR output must be empty' >&2; exit 1; }
-    air_output=$(cd -- "$2" && pwd)
-    ZIG_AIR_JSON_DIR="$air_output" ZIG_AIR_JSON_FILTER=try_pointers. \
-      "$AIR2LEAN_ZIG_AIR" build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing \
-      -target x86_64-linux -mcpu=baseline tests/roadmap/try-pointers/try_pointers.zig
-    exit ;;
   --check-qualification)
-    # The retained fresh exports (air-fresh, aliases/air-fresh): hashes, profile, tags, and that
-    # they translate to the retained Gen modules up to the profile header. Runs no compiler.
+    # The retained fresh exports (air-fresh, aliases/air-fresh, lifetimes/air; exports.json): the
+    # lock (sources, exporter, every file), inventory, profile, tags, and that they translate to
+    # the retained Gen modules up to the profile header. Runs no compiler.
     [ "$#" -eq 1 ] || { echo 'usage: check.sh --check-qualification' >&2; exit 2; }
     translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
     [ -x "$translator" ] || { echo 'build translator first' >&2; exit 1; }
+    python3 -B scripts/fixture-exports.py check try-pointers
     PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/try-pointers/compiler-qualification.py --translator "$translator"
     exit ;;
   --check-artifacts) [ "$#" -le 1 ] || { echo 'usage: check.sh [--check-artifacts]' >&2; exit 2; } ;;
-  *) echo 'usage: check.sh [--check-artifacts|--check-qualification|--native|--export OUTPUT_DIR]' >&2; exit 2 ;;
+  *) echo 'usage: check.sh [--check-artifacts|--check-qualification|--native]' >&2; exit 2 ;;
 esac
 python3 -B scripts/lean-deps.py --build tests/roadmap/try-pointers
 python3 tests/roadmap/try-pointers/check-artifacts.py

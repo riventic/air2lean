@@ -3,7 +3,8 @@
 `callbacks.zig` declares `extern fn ext_visit` and takes its address, in a vtable
 (`ext_ops`) and as a callback; `async_cb.zig` calls a callback from a spawned thread.
 `air/<version>` and `air-async/<version>` are their patched-compiler exports for Zig 0.17.0,
-0.16.0, 0.15.2 and 0.14.1 (`provenance.json`). `registry-<version>.json` and
+0.16.0, 0.15.2 and 0.14.1, declared in `exports.json` and pinned by `exports.lock.json`
+(`scripts/fixture-exports.py`). `registry-<version>.json` and
 `registry-async-<version>.json` bind `extern:ext_visit` to `CallbackModel.lean`'s opaque
 `visit` with the contract `contract` (assumed evidence, EXT-02/EXT-03; the async registry adds
 the footprint that EXT-04 requires): given a writable `u32` context, a call fails only with a
@@ -17,10 +18,8 @@ them, requires the contract evidence to be the only assumption, and runs `test_c
 (unbound address, template, signature and library mismatches, the footprint requirement in a
 concurrent program). See docs/external-models.md §Binding call sites to contracts.
 
-Re-export (from the repository root, per version):
+Re-export (every version; `verify` compares a fresh export without writing):
 
 ```sh
-ZIG_AIR_JSON_DIR=tests/roadmap/callbacks/air/0.17.0 ZIG_AIR_JSON_FILTER=callbacks. \
-  "$(scripts/zig-air.sh 0.17.0)" build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing \
-  -target x86_64-linux -mcpu=baseline tests/roadmap/callbacks/callbacks.zig
+python3 -B scripts/fixture-exports.py export callbacks
 ```

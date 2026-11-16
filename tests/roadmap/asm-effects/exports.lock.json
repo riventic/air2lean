@@ -1,17 +1,4 @@
 {
-  "source_sha256": {
-    "asm_env.zig": "acdde128bf0008e87d5457ee3e798e7b469c5bc84f69c1f329557c0c31943643"
-  },
-  "air": {
-    "exporter": "zig-patch/air-json/json.zig of this branch (patched compilers from scripts/zig-air.sh)",
-    "target": "x86_64-linux",
-    "cpu": "x86_64+rdrnd",
-    "optimization": "ReleaseSafe",
-    "error_tracing": false,
-    "filter": "asm_env.",
-    "note": "0.14.1 is not exported: its exporter has no inline asm (docs/air-json.md), and the 0.15+ clobber syntax does not parse there; the CPU lists rdrnd because the allowlisted `rdrand` needs it (ASM-09, `--assume-asm-cpu-features` is not passed)",
-    "target_flags": "-target x86_64-linux -mcpu=x86_64+rdrnd"
-  },
   "air_sha256": {
     "air-env/0.15.2/asm_env.copy.json": "4fee3cde2b416ae30360b483cc94d03e7fc7d31d5585ffd0e0c60e6666d22d2a",
     "air-env/0.15.2/asm_env.elapsed.json": "742e17e35c2d671cf3936881eef2fb355485be2316cfd4b1ff0a41f95938b022",
@@ -34,5 +21,15 @@
     "air-env/0.17.0/asm_env.rand64.json": "c5fa5b2dee475bab8c4db28fe48dcadf20de244086024aeb99ffc2d3077371ed",
     "air-env/0.17.0/asm_env.random.json": "8fe4bc77485b955d058cc19bf0f47e9590d042c6babd5eee15d7f65c3652ffc6",
     "air-env/0.17.0/asm_env.ticks.json": "1416e40756e25e4e4e73481cbb8af096f8b408d1dd7b77cc531ba809c16f6d5d"
+  },
+  "compilers": {
+    "0.15.2": "08fabea60c770d7c034a9dbe78e816beb0d8a17a9b9a0ed5c8bdcbd112cffc05",
+    "0.16.0": "d49dbe58d9fd83d9fdedc5270fa3a5a34ab9661ebc63b52070027a00bdec6954",
+    "0.17.0": "321ab894d2a5d5784afdba19137ed24abf39c62825b440f9a4f82e53958d9b24"
+  },
+  "manifest_sha256": "3e0b42ed603296155256bf174bff7dae6164f42ef1651672adef4d988228dc9b",
+  "schema": 1,
+  "sources_sha256": {
+    "asm_env.zig": "acdde128bf0008e87d5457ee3e798e7b469c5bc84f69c1f329557c0c31943643"
   }
 }

@@ -1,0 +1,28 @@
+{
+  "exports": [
+    {
+      "out": "air-fresh/{version}",
+      "source": "try_pointers.zig",
+      "filter": "try_pointers.",
+      "versions": ["0.17.0", "0.16.0", "0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "aliases/air-fresh/{version}",
+      "source": "try_aliases.zig",
+      "filter": "try_aliases.",
+      "versions": ["0.17.0", "0.16.0", "0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "lifetimes/air/{version}",
+      "source": "lifetimes/try_lifetimes.zig",
+      "filter": "try_lifetimes.",
+      "versions": ["0.17.0", "0.16.0", "0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """CLI regressions for A01's environment reads, memory inputs and memory-region contracts.
 
-`air-env/<version>` are fresh exports of `asm_env.zig` (provenance.json). The 0.17.0 translation
+`air-env/<version>` are fresh exports of `asm_env.zig` (exports.json). The 0.17.0 translation
 is the retained `AsmEnv/Gen.lean`; 0.16.0 and 0.15.2 translate to the same text apart from the
 profile header. Mutations outside the reviewed allowlist entries (`Air2Lean/AsmAllowlist.lean`)
 are rejected, and a device contract that declares `rdtsc` keeps it a device event (L13).

@@ -2,7 +2,7 @@
 """CLI regressions for function-pointer call sites bound to registry contracts (E02).
 
 `air/<version>` and `air-async/<version>` are fresh exports of `callbacks.zig` and
-`async_cb.zig` (provenance.json). Usage: test_cli.py <air2lean>. Never invokes a compiler.
+`async_cb.zig` (exports.json). Usage: test_cli.py <air2lean>. Never invokes a compiler.
 """
 import json
 from pathlib import Path

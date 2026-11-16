@@ -378,18 +378,9 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/big-endian/air/{version}/concurrency/s390x-linux': 'tests/roadmap/big-endian/README.md',
     'tests/roadmap/big-endian/air/{version}/concurrency/mips64-linux': 'tests/roadmap/big-endian/README.md',
     'tests/roadmap/big-endian/air/{version}/concurrency/x86_64-linux': 'tests/roadmap/big-endian/README.md',
-    # L04: try_lifetimes.zig (lifetimes/check.sh --export).
-    'tests/roadmap/try-pointers/lifetimes/air/{version}': 'tests/roadmap/try-pointers/lifetimes/README.md',
-    'tests/roadmap/zig017/divceil/air/{version}': 'tests/roadmap/zig017/divceil/provenance.json',
-    'tests/roadmap/zig017/casts/air/{version}': 'tests/roadmap/zig017/casts/provenance.json',
     # T06: self-hosted (stage2_x86_64) exports of the backend-divergence reproducers.
     'tests/roadmap/build-modes/stage2-air/{version}': 'tests/roadmap/build-modes/stage2_rules.py',
-    'tests/roadmap/zig017/overflow/air/{version}': 'tests/roadmap/zig017/overflow/provenance.json',
     'tests/roadmap/extern-calls/air/{version}': 'tests/roadmap/extern-calls/provenance.json',
-    # E02/A01: patched-compiler exports of callbacks.zig, async_cb.zig and asm_env.zig.
-    'tests/roadmap/callbacks/air/{version}': 'tests/roadmap/callbacks/provenance.json',
-    'tests/roadmap/callbacks/air-async/{version}': 'tests/roadmap/callbacks/provenance.json',
-    'tests/roadmap/asm-effects/air-env/{version}': 'tests/roadmap/asm-effects/provenance-env.json',
     'tests/roadmap/noreturn-variants/air/{version}': 'tests/roadmap/noreturn-variants/provenance.json',
     'tests/roadmap/alloc-translated/air/{version}/page-linux': 'tests/roadmap/alloc-translated/provenance.json',
     'tests/roadmap/alloc-translated/air/{version}/page-macos': 'tests/roadmap/alloc-translated/provenance.json',
@@ -399,9 +390,7 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/alloc-arena/air/{version}/arena-linux': 'tests/roadmap/alloc-arena/provenance.json',
     'tests/roadmap/alloc-arena/air/{version}/arena-macos': 'tests/roadmap/alloc-arena/provenance.json',
     'tests/roadmap/alloc-arena/air/{version}/arena-fixed-linux': 'tests/roadmap/alloc-arena/provenance.json',
-    # B10 L04/L08: patched-compiler exports with their qualification records.
-    'tests/roadmap/try-pointers/air-fresh/{version}': 'tests/roadmap/try-pointers/compiler-qualification.json',
-    'tests/roadmap/try-pointers/aliases/air-fresh/{version}': 'tests/roadmap/try-pointers/compiler-qualification.json',
+    # B10 L08: patched-compiler exports with their qualification records.
     'tests/roadmap/packed-fields/air-fresh/{version}/llvm': 'tests/roadmap/packed-fields/compiler-provenance.json',
     'tests/roadmap/packed-fields/air-fresh/{version}/x86_64': 'tests/roadmap/packed-fields/compiler-provenance.json',
 }
