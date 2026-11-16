@@ -7,18 +7,9 @@ repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
 python3 -B scripts/lean-deps.py --build tests/roadmap/idle-loops
 dir=tests/roadmap/idle-loops
-python3 - "$dir" <<'PY'
-import hashlib, json, pathlib, sys
-d = pathlib.Path(sys.argv[1])
-prov = json.loads((d / "provenance.json").read_text())
-for rel, want in prov["artifacts"].items():
-    got = hashlib.sha256((d / rel).read_bytes()).hexdigest()
-    if got != want:
-        sys.exit(f"{rel}: sha256 {got} != provenance {want}")
-src = pathlib.Path(prov["source"])
-if hashlib.sha256(src.read_bytes()).hexdigest() != prov["source_sha256"]:
-    sys.exit(f"{src} changed since the retained export; re-export and update provenance.json")
-PY
+# air: progress.idle's call closure in tests/roadmap/progress/progress.zig (exports.json), pinned
+# by exports.lock.json.
+python3 -B scripts/fixture-exports.py check idle-loops
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first: lake build air2lean' >&2; exit 1; }
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-idle-loops.XXXXXX")

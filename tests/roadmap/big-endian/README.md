@@ -34,8 +34,12 @@ Run under the serialized build queue:
 lake build ZigLean Air2Lean air2lean ZigLean.EndianLemmas
 bash tests/roadmap/big-endian/check.sh          # translate, compare, prove, model = observed, reject
 AIR2LEAN_ZIG_NATIVE=<stock zig 0.16.0> bash tests/roadmap/big-endian/check.sh --native
-AIR2LEAN_ZIG_AIR=<patched zig> bash tests/roadmap/big-endian/check.sh --export DIR
+AIR2LEAN_ZIG_AIR=<patched zig> python3 scripts/fixture-exports.py verify big-endian
 ```
+
+The AIR is declared in `exports.json` and pinned by `exports.lock.json`; every `check.sh` and
+`concurrency.sh` run checks the lock, and `verify` re-exports with the patched compiler and
+compares byte for byte.
 
 `--native` builds `native.zig` for the three targets, runs it (Docker by default; set
 `AIR2LEAN_S390X_RUN=qemu-s390x-static`, `AIR2LEAN_MIPS64_RUN=qemu-mips64-static` or

@@ -186,7 +186,8 @@ Each is now outside the subset on a `stage2_x86_64` profile, or no longer a dive
   unspecified on every target since [PR143](https://github.com/riventic/air2lean/pull/143).
 
 `tests/roadmap/build-modes/stage2-air/<version>/` holds the patched compilers' self-hosted
-exports of the reproducer's `modF16` and `setNib` (0.16.0, 0.17.0); `stage2_rules.py` checks
+exports of the reproducer's `modF16` and `setNib` (0.16.0, 0.17.0; declared in
+`tests/roadmap/build-modes/exports.json`, pinned by its `exports.lock.json`); `stage2_rules.py` checks
 that both are rejected under their profile and accepted when the profile names stage2_llvm.
 
 A stage2_x86_64 run tests the backend's own translation. `scripts/build-mode-docker.sh` first

@@ -355,13 +355,10 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/thread-tuples/air/{version}': 'tests/roadmap/thread-tuples/provenance.json',
     'tests/roadmap/try-pointers/air/{version}': 'tests/roadmap/try-pointers/provenance.json',
     'tests/roadmap/bitops/qualified/{version}/air': 'tests/roadmap/bitops/qualified/0.16.0/manifest.json',
-    'tests/roadmap/idle-loops/air': 'tests/roadmap/idle-loops/provenance.json',
     'tests/roadmap/spawn-failure/air/{version}': 'tests/roadmap/spawn-failure/air/provenance.json',
     'tests/roadmap/thread-locals/air/{version}': 'tests/roadmap/thread-locals/README.md',
     'tests/roadmap/futures/air/{version}': 'tests/roadmap/futures/check.sh',
     'tests/roadmap/pointer-width/air/{version}/x86_64-linux': 'tests/roadmap/pointer-width/README.md',
-    'tests/roadmap/loop-tactics/nested/air': 'tests/roadmap/loop-tactics/nested/provenance.json',
-    'tests/roadmap/loop-tactics/counted/air': 'tests/roadmap/loop-tactics/counted/provenance.json',
     'tests/roadmap/vector-layouts/air/{version}': 'tests/roadmap/vector-layouts/README.md',
     'tests/roadmap/vector-layouts/air-reads/{version}': 'tests/roadmap/vector-layouts/README.md',
     'tests/roadmap/const-locals/air/{version}': 'tests/roadmap/const-locals/provenance.json',
@@ -369,21 +366,10 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/const-locals/air-fuzz_s19/{version}': 'tests/roadmap/const-locals/provenance.json',
     'tests/roadmap/volatile-effects/air/{version}': 'tests/roadmap/volatile-effects/air/provenance.json',
     'tests/roadmap/volatile-effects/air-asm/{version}': 'tests/roadmap/volatile-effects/air-asm/provenance.json',
-    # T03: patched-compiler exports of big_endian.zig/reject.zig (check.sh --export, README).
-    'tests/roadmap/big-endian/air/{version}/s390x-linux': 'tests/roadmap/big-endian/README.md',
-    'tests/roadmap/big-endian/air/{version}/x86_64-linux': 'tests/roadmap/big-endian/README.md',
-    'tests/roadmap/big-endian/air/{version}/s390x-reject': 'tests/roadmap/big-endian/README.md',
-    'tests/roadmap/big-endian/air/{version}/mips64-linux': 'tests/roadmap/big-endian/README.md',
-    # T03: concurrency.zig at both byte orders (concurrency.sh --export).
-    'tests/roadmap/big-endian/air/{version}/concurrency/s390x-linux': 'tests/roadmap/big-endian/README.md',
-    'tests/roadmap/big-endian/air/{version}/concurrency/mips64-linux': 'tests/roadmap/big-endian/README.md',
-    'tests/roadmap/big-endian/air/{version}/concurrency/x86_64-linux': 'tests/roadmap/big-endian/README.md',
     # L04: try_lifetimes.zig (lifetimes/check.sh --export).
     'tests/roadmap/try-pointers/lifetimes/air/{version}': 'tests/roadmap/try-pointers/lifetimes/README.md',
     'tests/roadmap/zig017/divceil/air/{version}': 'tests/roadmap/zig017/divceil/provenance.json',
     'tests/roadmap/zig017/casts/air/{version}': 'tests/roadmap/zig017/casts/provenance.json',
-    # T06: self-hosted (stage2_x86_64) exports of the backend-divergence reproducers.
-    'tests/roadmap/build-modes/stage2-air/{version}': 'tests/roadmap/build-modes/stage2_rules.py',
     'tests/roadmap/zig017/overflow/air/{version}': 'tests/roadmap/zig017/overflow/provenance.json',
     'tests/roadmap/extern-calls/air/{version}': 'tests/roadmap/extern-calls/provenance.json',
     # E02/A01: patched-compiler exports of callbacks.zig, async_cb.zig and asm_env.zig.

@@ -1,0 +1,16 @@
+{
+  "air_sha256": {
+    "air/Thread.yield.json": "ddbbd0d80b2c28d93448e9e1f762a9e49af8450d83fcf32be4e742bbd79a814d",
+    "air/os.linux.errno.json": "5af78bb541f5508f04a179b6229a8b3383b033c4e28f09bd0d3e0fa4c919844b",
+    "air/progress.idle.json": "3e64ccaa360182619d7a9f60c5668fa5df12a5babe4d3e57e706de6d5f51db4d"
+  },
+  "compilers": {
+    "0.16.0": "d49dbe58d9fd83d9fdedc5270fa3a5a34ab9661ebc63b52070027a00bdec6954"
+  },
+  "manifest_sha256": "8e93fbd36c9cc5d1877d26e334a3dde701f2c6989840a201ffbbde3c42e9e7ae",
+  "schema": 1,
+  "sources_sha256": {
+    "../progress/finite.zig": "8c66c9145396976441d0a8974914e2b9a7d658363d548fb8d505cc5ce542eca1",
+    "../progress/progress.zig": "c68767ef60935606cca95a4910ed0f6cb197a1ffa35d0e12a2a29bf13e5977f8"
+  }
+}

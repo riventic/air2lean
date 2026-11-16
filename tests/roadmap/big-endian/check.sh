@@ -9,8 +9,9 @@
 #   check.sh --native        also build native.zig with a stock Zig 0.16.0 (AIR2LEAN_ZIG_NATIVE)
 #                            for s390x-linux-musl and x86_64-linux-musl, run both, and compare
 #                            their output with the model and the retained observations
-#   check.sh --export DIR    write fresh AIR with a patched Zig 0.16.0 (AIR2LEAN_ZIG_AIR)
 #
+# The AIR is declared in exports.json and pinned by exports.lock.json (the default run checks the
+# lock; scripts/fixture-exports.py verify|export big-endian re-exports it).
 # Runners for --native: AIR2LEAN_S390X_RUN / AIR2LEAN_X86_64_RUN name a command prefix that runs
 # a static Linux binary (`qemu-s390x-static`, or empty for the host); `docker` (the default for
 # a target that is not the host) runs it in `alpine:3` with `--platform linux/<arch>`.
@@ -20,34 +21,13 @@ set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
 case_dir=tests/roadmap/big-endian
-src=$case_dir/big_endian.zig
 pairs=(S390x:s390x-linux:s390x Mips64:mips64-linux:mips64 X64:x86_64-linux:x86_64)
 mode=${1:---check}
 case "$mode" in
-  --export)
-    [ "$#" -eq 2 ] || { echo 'usage: check.sh --export OUTPUT_DIR' >&2; exit 2; }
-    : "${AIR2LEAN_ZIG_AIR:?set a patched Zig 0.16.0 with the repository exporter}"
-    for pair in "${pairs[@]}"; do
-      t=$(cut -d: -f2 <<<"$pair")
-      out="$2/$t"
-      mkdir -p "$out"
-      [ -z "$(find "$out" -mindepth 1 -maxdepth 1 -print -quit)" ] || { echo "$out must be empty" >&2; exit 1; }
-      cpu=()
-      [ "$t" = x86_64-linux ] && cpu=(-mcpu=baseline)
-      ZIG_AIR_JSON_DIR="$(cd -- "$out" && pwd)" ZIG_AIR_JSON_FILTER=big_endian. \
-        "$AIR2LEAN_ZIG_AIR" build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing \
-        -target "$t" "${cpu[@]}" "$src"
-    done
-    out="$2/s390x-reject"
-    mkdir -p "$out"
-    [ -z "$(find "$out" -mindepth 1 -maxdepth 1 -print -quit)" ] || { echo "$out must be empty" >&2; exit 1; }
-    ZIG_AIR_JSON_DIR="$(cd -- "$out" && pwd)" ZIG_AIR_JSON_FILTER=reject. \
-      "$AIR2LEAN_ZIG_AIR" build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing \
-      -target s390x-linux "$case_dir/reject.zig"
-    exit ;;
   --check|--native) [ "$#" -le 1 ] || { echo 'usage: check.sh [--check|--native]' >&2; exit 2; } ;;
-  *) echo 'usage: check.sh [--check|--native|--export OUTPUT_DIR]' >&2; exit 2 ;;
+  *) echo 'usage: check.sh [--check|--native]' >&2; exit 2 ;;
 esac
+python3 -B scripts/fixture-exports.py check big-endian
 python3 -B scripts/lean-deps.py --build tests/roadmap/big-endian
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first (lake build air2lean)' >&2; exit 1; }

@@ -1,0 +1,19 @@
+{
+  "air_sha256": {
+    "stage2-air/0.16.0/stage2-x86_64-divergences.modF16.json": "607cfec5fcb7098776cec2bcaffdb83b78663a6e0af7c8c8668341ff4b40cc74",
+    "stage2-air/0.16.0/stage2-x86_64-divergences.setNib.json": "0efa1b91dfe576068ba24cf5e67d9d9100cc27887bde3286c6a2a02be9125309",
+    "stage2-air/0.17.0/stage2-x86_64-divergences.modF16.json": "f65d4760b9694fb69aa7418f3221ef86741172eac965c52f5e9bd90e578a8347",
+    "stage2-air/0.17.0/stage2-x86_64-divergences.setNib.json": "89ce031888e8476aa87028b9ba5e7332488c5e67832fc3925095c6175fc557da"
+  },
+  "compilers": {
+    "0.16.0": "d49dbe58d9fd83d9fdedc5270fa3a5a34ab9661ebc63b52070027a00bdec6954",
+    "0.17.0": "321ab894d2a5d5784afdba19137ed24abf39c62825b440f9a4f82e53958d9b24"
+  },
+  "manifest_sha256": "0c8e6397bb95650872058e0b6db310cb8e9d4b19fc9fc3af381deaa779140fc9",
+  "schema": 1,
+  "sources_sha256": {
+    "reproducers/aarch64-linux-float-probe.zig": "c09ea45a2da6365c9bfa6dd9eacc53ef78ed39f58f13dc03796129edf245a48a",
+    "reproducers/float-divexact-inexact.zig": "bc7f2ded9f392803254a1d55b3be17aa573e89a08cdd1baa8b564c464ece4ac4",
+    "reproducers/stage2-x86_64-divergences.zig": "4578391af8be4cd9c7c77a1c3c82ac2e8823cbc0caec75440f0670ca5a0f8a20"
+  }
+}
