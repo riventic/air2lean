@@ -11,7 +11,8 @@ A fixture whose AIR is a patched-compiler export declares how it is made in
                                    "closure": ["x.*"], "stop": ["os.linux.read"]}]}
                      Each entry is one `zig COMMAND -fno-emit-bin ARGS SOURCE` per version with
                      ZIG_AIR_JSON_FILTER=FILTER, its files written to OUT ({version} substituted;
-                     the tool owns OUT: nothing else may live there). SOURCE is relative to the
+                     an entry of one version may omit it; the tool owns OUT: nothing else may
+                     live there). SOURCE is relative to the
                      fixture and may lie elsewhere in the repository (`../../../examples/x/x.zig`);
                      `cwd` (default "fixture") is where the compiler runs; `command` defaults to
                      build-obj (build-exe exports a whole program, e.g. for its error numbering).
@@ -107,10 +108,12 @@ def manifest(fixture):
         where = '%s: exports[%d]' % (path, i)
         if not ENTRY_KEYS <= set(entry) <= ENTRY_KEYS | OPTIONAL_KEYS:
             raise Error('%s: keys must be %s (optional %s)' % (where, sorted(ENTRY_KEYS), sorted(OPTIONAL_KEYS)))
-        if '{version}' not in entry['out'] or entry['out'].startswith('/') or '..' in Path(entry['out']).parts:
-            raise Error('%s: out must be a relative path with {version}' % where)
+        if entry['out'].startswith('/') or '..' in Path(entry['out']).parts:
+            raise Error('%s: out must be a relative path inside the fixture' % where)
         if not entry['versions'] or any(v not in supported for v in entry['versions']):
             raise Error('%s: versions must be supported Zig versions (%s)' % (where, ', '.join(supported)))
+        if '{version}' not in entry['out'] and len(entry['versions']) != 1:
+            raise Error('%s: out needs {version} unless the entry exports one version' % where)
         if entry.get('cwd', 'fixture') not in ('fixture', 'repo'):
             raise Error('%s: cwd is "fixture" or "repo"' % where)
         if entry.get('command', 'build-obj') not in ('build-obj', 'build-exe'):
