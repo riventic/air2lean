@@ -499,6 +499,71 @@ def runF80EncodingChecks : IO (Nat × Nat) := do
     IO.println "SPOT FAIL f80.pseudo-denormal: expected not NaN"
   pure (checked, fails)
 
+/-- `Float.fmaRt017` (compiler_rt's `fma.zig` from Zig 0.17.1) on that file's own tests
+(`test "32"`, `test "64"`, `test "128"`): the `expectEqual` cases, given as bits. A NaN case
+is checked with `isNaN` only, and a sign-of-zero case through the bits. -/
+def runFmaRt017Checks : IO (Nat × Nat) := do
+  let mut checked := 0
+  let mut fails := 0
+  let f32Cases : Array (String × Nat × Nat × Nat × Nat) :=
+    #[("midpoint", 0x3f800001, 0x3fc00000, 0xa1800000, 0x3fc00001)]
+  for (label, x, y, z, r) in f32Cases do
+    checked := checked + 1
+    let got := (Zig.Float.fmaRt017 (⟨.ofNat 32 x⟩ : Zig.Float .f32) ⟨.ofNat 32 y⟩ ⟨.ofNat 32 z⟩).bits.toNat
+    unless got == r do
+      fails := fails + 1
+      IO.println s!"SPOT FAIL fmaRt017.f32.{label}: got=0x{toHex 8 got} expected=0x{toHex 8 r}"
+  let inf64 := 0x7ff0000000000000
+  let max64 := 0x7fefffffffffffff
+  let f64Cases : Array (String × Nat × Nat × Nat × Option Nat) :=
+    #[("inf*0+1", inf64, 0, 0x3ff0000000000000, none),
+      ("inf*1-inf", inf64, 0x3ff0000000000000, 0xfff0000000000000, none),
+      ("2*3+inf", 0x4000000000000000, 0x4008000000000000, inf64, some inf64),
+      ("max*2+0", max64, 0x4000000000000000, 0, some inf64),
+      ("nan*1+1", 0x7ff8000000000000, 0x3ff0000000000000, 0x3ff0000000000000, none),
+      ("addend dominates (-0.6)", 0xbfe3333333333333, 1, 0xffe998e55ab0c0c1,
+        some 0xffe998e55ab0c0c1),
+      ("addend dominates (1)", 0x1a70000000000000, 0x1a70000000000000, 0x3ff0000000000000,
+        some 0x3ff0000000000000),
+      ("addend dominates (max)", 1, 1, max64, some max64),
+      ("subnormal 1", 0xbbbcae314558d732, 0x843d607d0e518063, 0x800000ba24d8f3ba,
+        some 0x000d2971831e2f43),
+      ("subnormal 2", 0x2af4b8a2ad5294f0, 0x14ef6dd2b62857c2, 0x000000248ff787f4,
+        some 0x000516a34ce113eb),
+      ("subnormal 3", 0x3e81368dcd4cb557, 0x817514ce659bdad8, 0x800075cba3b3043c,
+        some 0x800bccc9d0e68a53),
+      ("zero sign 1", 0x2001526ce7a829e5, 0xa00c9ac305fd618a, 0x001ef7cb10a75631,
+        some 0x8000000000000000),
+      ("1*1-1", 0x3ff0000000000000, 0x3ff0000000000000, 0xbff0000000000000, some 0),
+      ("-min*0.5+0", 0x8000000000000001, 0x3fe0000000000000, 0, some 0x8000000000000000),
+      ("-0*1-0", 0x8000000000000000, 0x3ff0000000000000, 0x8000000000000000,
+        some 0x8000000000000000)]
+  for (label, x, y, z, r) in f64Cases do
+    checked := checked + 1
+    let got := Zig.Float.fmaRt017 (⟨.ofNat 64 x⟩ : Zig.Float .f64) ⟨.ofNat 64 y⟩ ⟨.ofNat 64 z⟩
+    let ok := match r with
+      | some r => got.bits.toNat == r
+      | none => got.isNaN
+    unless ok do
+      fails := fails + 1
+      IO.println s!"SPOT FAIL fmaRt017.f64.{label}: got=0x{toHex 16 got.bits.toNat}"
+  let f128Cases : Array (String × Nat × Nat × Nat × Nat) :=
+    #[("addend dominates", 0xa4d80b69452301dd5a3efab045ca0371,
+        0x13a5efea97a6ece0f0b24ffab5fcdcb4, 0x8000f2eb9b403234570b698042da365d,
+        0x8000f2eb9b403234570b698042da365d),
+      ("subnormal", 0x2d83ef38da3dc9f883f14ecb887541ce, 0x123129a960f91ee507caa6a6702fc33e,
+        0x0000f5ea6135ffda377d6eff2506556b, 0x0000f5ea6135ffda377d6f2322102a7b),
+      ("zero sign", 0x1fd32f92b54d7cefc06df6f8521f1bc3, 0x202bb49b61ca93fdb382f78b6a2a32e2,
+        0x8000816f87a4a3a99ed5f1db8e4c0404, 0x80000000000000000000000000000000)]
+  for (label, x, y, z, r) in f128Cases do
+    checked := checked + 1
+    let got :=
+      (Zig.Float.fmaRt017 (⟨.ofNat 128 x⟩ : Zig.Float .f128) ⟨.ofNat 128 y⟩ ⟨.ofNat 128 z⟩).bits.toNat
+    unless got == r do
+      fails := fails + 1
+      IO.println s!"SPOT FAIL fmaRt017.f128.{label}: got=0x{toHex 32 got} expected=0x{toHex 32 r}"
+  pure (checked, fails)
+
 /-- `0.1 + 0.2 ≠ 0.3` in `f64`: `Float.roundRat` on the exact rationals `1/10`/`2/10`, added,
 must land on the same bits as Lean core's `Float.Model.add` on the same values built via
 `ofScientific` — both derive the value independently, so agreement is real evidence, not a
@@ -536,9 +601,10 @@ def main : IO Unit := do
   let (c4, f4) ← runSpotChecks .f80 "f80" expF80
   let (c5, f5) ← runSpotChecks .f128 "f128" expF128
   let (c6, f6) ← runF80EncodingChecks
-  IO.println s!"spot checks: {c1 + c2 + c3 + c4 + c5 + c6} checked, {f1 + f2 + f3 + f4 + f5 + f6} diffs"
-  totalChecked := totalChecked + c1 + c2 + c3 + c4 + c5 + c6
-  totalDiffs := totalDiffs + f1 + f2 + f3 + f4 + f5 + f6
+  let (c7, f7) ← runFmaRt017Checks
+  IO.println s!"spot checks: {c1 + c2 + c3 + c4 + c5 + c6 + c7} checked, {f1 + f2 + f3 + f4 + f5 + f6 + f7} diffs"
+  totalChecked := totalChecked + c1 + c2 + c3 + c4 + c5 + c6 + c7
+  totalDiffs := totalDiffs + f1 + f2 + f3 + f4 + f5 + f6 + f7
 
   let point1ok ← checkPoint1Plus0Point2
   totalChecked := totalChecked + 1
