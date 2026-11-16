@@ -1,0 +1,335 @@
+#!/usr/bin/env python3
+"""Committed AIR exports of the roadmap fixtures: one manifest format, one lock, one tool.
+
+A fixture whose AIR is a patched-compiler export declares how it is made in
+`tests/roadmap/<fixture>/exports.json` (hand-written) and pins the result in
+`exports.lock.json` (written by `export`, never by hand):
+
+  exports.json       {"exports": [{"out": "air/{version}", "source": "x.zig", "filter": "x.",
+                                   "versions": ["0.16.0", ...], "args": ["-OReleaseSafe", ...],
+                                   "cwd": "fixture" | "repo", "command": "build-obj" | "build-exe",
+                                   "closure": ["x."]}]}
+                     Each entry is one `zig COMMAND -fno-emit-bin ARGS SOURCE` per version with
+                     ZIG_AIR_JSON_FILTER=FILTER, its files written to OUT ({version} substituted;
+                     the tool owns OUT: nothing else may live there). SOURCE is relative to the
+                     fixture; `cwd` (default "fixture") is where the compiler runs (the AIR records
+                     source paths relative to it); `command` defaults to build-obj (build-exe
+                     exports a whole program, e.g. for its error numbering). `closure`, if given,
+                     keeps only the functions that the functions named with one of its prefixes
+                     reach through calls and function values (`"func"` references): the filter
+                     also matches std instances that only the compiler's panic and debug code
+                     reaches, and how many differs by version.
+  exports.lock.json  the manifest's hash, the hash of every .zig file of the fixture (an import
+                     may change an export), the identity of each version's patched compiler
+                     (the digest of exactly what zig-patch/build.sh reads, scripts/cas.py
+                     zig_patch_inputs: host-independent, unlike the binary) and the hash of every
+                     exported file.
+
+  fixture-exports.py list                         the fixtures with a manifest
+  fixture-exports.py check  [FIXTURE...]          no compiler: the lock equals what the manifest,
+                                                  sources, zig-patch/ inputs and OUT dirs give now,
+                                                  and every file is its version's export of SOURCE
+  fixture-exports.py verify [FIXTURE...]          export into a scratch directory and require the
+                                                  committed files byte for byte (nothing written)
+  fixture-exports.py export [FIXTURE...]          export, replace each OUT, write the lock
+
+FIXTURE is a directory name under tests/roadmap (default: every fixture with a manifest). The
+patched compilers come from scripts/cas.py zig-air (the shared cache with AIR2LEAN_CAS_DIR set,
+else <checkout>/zig-air-<version>). `check` is the per-PR gate (fixture checks, preflight); a
+`check` failure that names the exporter or a source means `export` (scripts/regen.sh --only
+exports), and the export diff is reviewed like any change.
+"""
+import argparse
+import hashlib
+import json
+import os
+import platform
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+FIXTURES = ROOT / 'tests/roadmap'
+sys.path.insert(0, str(ROOT / 'scripts'))
+import cas  # noqa: E402
+
+MANIFEST, LOCK = 'exports.json', 'exports.lock.json'
+SCHEMA = 1
+ENTRY_KEYS = {'out', 'source', 'filter', 'versions', 'args'}
+OPTIONAL_KEYS = {'cwd', 'command', 'closure'}
+# The exporter's `build_mode` for `-O<mode>` (0.17's `std.lang.Optimize` tags, Dialect.lean
+# buildModeRenames, or the 0.16.0 spelling).
+BUILD_MODES = {'Debug': {'Debug', 'debug'}, 'ReleaseSafe': {'ReleaseSafe', 'safe'},
+               'ReleaseFast': {'ReleaseFast', 'fast'}, 'ReleaseSmall': {'ReleaseSmall', 'small'}}
+
+
+class Error(Exception):
+    pass
+
+
+def sha256(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def canonical(value):
+    return json.dumps(value, sort_keys=True, separators=(',', ':')).encode()
+
+
+def versions():
+    return [v['version'] for v in json.loads((ROOT / 'compatibility.json').read_text())['zig']['versions']]
+
+
+def fixtures(names):
+    found = sorted(p.parent.name for p in FIXTURES.glob('*/' + MANIFEST))
+    if not names:
+        return found
+    missing = [n for n in names if n not in found]
+    if missing:
+        raise Error('no %s in tests/roadmap/%s' % (MANIFEST, ', tests/roadmap/'.join(missing)))
+    return names
+
+
+def manifest(fixture):
+    path = FIXTURES / fixture / MANIFEST
+    data = json.loads(path.read_text())
+    if set(data) != {'exports'} or not isinstance(data['exports'], list) or not data['exports']:
+        raise Error('%s: expected {"exports": [...]} with at least one entry' % path)
+    supported = versions()
+    outs = []
+    for i, entry in enumerate(data['exports']):
+        where = '%s: exports[%d]' % (path, i)
+        if not ENTRY_KEYS <= set(entry) <= ENTRY_KEYS | OPTIONAL_KEYS:
+            raise Error('%s: keys must be %s (optional %s)' % (where, sorted(ENTRY_KEYS), sorted(OPTIONAL_KEYS)))
+        if '{version}' not in entry['out'] or entry['out'].startswith('/') or '..' in Path(entry['out']).parts:
+            raise Error('%s: out must be a relative path with {version}' % where)
+        if not entry['versions'] or any(v not in supported for v in entry['versions']):
+            raise Error('%s: versions must be supported Zig versions (%s)' % (where, ', '.join(supported)))
+        if entry.get('cwd', 'fixture') not in ('fixture', 'repo'):
+            raise Error('%s: cwd is "fixture" or "repo"' % where)
+        if entry.get('command', 'build-obj') not in ('build-obj', 'build-exe'):
+            raise Error('%s: command is "build-obj" or "build-exe"' % where)
+        closure = entry.get('closure', [''])
+        if not isinstance(closure, list) or not closure or not all(isinstance(c, str) and c for c in closure):
+            raise Error('%s: closure is a non-empty list of name prefixes' % where)
+        if not (FIXTURES / fixture / entry['source']).is_file():
+            raise Error('%s: no source %s' % (where, entry['source']))
+        if not all(isinstance(a, str) for a in entry['args']) or '-fno-emit-bin' in entry['args']:
+            raise Error('%s: args are strings (build-obj -fno-emit-bin is implied)' % where)
+        outs += [entry['out'].format(version=v) for v in entry['versions']]
+    for a in outs:
+        for b in outs:
+            if a != b and (a + '/').startswith(b + '/'):
+                raise Error('%s: output %s lies inside output %s' % (path, a, b))
+    if len(set(outs)) != len(outs):
+        raise Error('%s: two entries write the same output directory' % path)
+    return data
+
+
+def jobs(fixture, data):
+    """(entry, version, out) of every export of the manifest."""
+    return [(e, v, e['out'].format(version=v)) for e in data['exports'] for v in e['versions']]
+
+
+def outputs(fixture, data):
+    """{out: {file name: sha256}} of the committed OUT directories (a missing one is empty)."""
+    here = FIXTURES / fixture
+    found = {}
+    for _, _, out in jobs(fixture, data):
+        directory = here / out
+        files = sorted(directory.rglob('*')) if directory.is_dir() else []
+        found[out] = {p.relative_to(directory).as_posix(): sha256(p) for p in files if p.is_file()}
+    return found
+
+
+def sources(fixture, data):
+    here = FIXTURES / fixture
+    owned = [here / out for _, _, out in jobs(fixture, data)]
+    return {p.relative_to(here).as_posix(): sha256(p) for p in sorted(here.rglob('*.zig'))
+            if not any(o in p.parents for o in owned)}
+
+
+def compiler_identity(version):
+    return hashlib.sha256(canonical(cas.zig_patch_inputs(ROOT, version))).hexdigest()
+
+
+def lock_of(fixture, data, air):
+    used = sorted({v for _, v, _ in jobs(fixture, data)})
+    return {'schema': SCHEMA,
+            'manifest_sha256': sha256(FIXTURES / fixture / MANIFEST),
+            'sources_sha256': sources(fixture, data),
+            'compilers': {v: compiler_identity(v) for v in used},
+            'air_sha256': {'%s/%s' % (out, name): digest for out, files in sorted(air.items())
+                           for name, digest in sorted(files.items())}}
+
+
+def document_problems(fixture, data):
+    """Each committed file is its version's export of SOURCE with the manifest's flags."""
+    here = FIXTURES / fixture
+    problems = []
+    for entry, version, out in jobs(fixture, data):
+        directory = here / out
+        files = sorted(directory.glob('*.json')) if directory.is_dir() else []
+        if not files:
+            problems.append('%s: no exported file' % out)
+        mode = next((a[2:] for a in entry['args'] if a.startswith('-O')), 'Debug')
+        tracing = '-fno-error-tracing' not in entry['args']
+        target = entry['args'][entry['args'].index('-target') + 1] if '-target' in entry['args'] else None
+        stem = Path(entry['source']).stem + '.'
+        text = (here / entry['source']).read_text()
+        for path in files:
+            document = json.loads(path.read_text())
+            name = '%s/%s' % (out, path.name)
+            if document.get('zig_version') != version:
+                problems.append('%s: zig_version %r, expected %s' % (name, document.get('zig_version'), version))
+                continue
+            profile = document.get('profile') or {}
+            if profile.get('build_mode') not in BUILD_MODES.get(mode, {mode}):
+                problems.append('%s: build_mode %r, expected -O%s' % (name, profile.get('build_mode'), mode))
+            if '-ferror-tracing' not in entry['args'] and profile.get('error_tracing') not in (tracing, None):
+                problems.append('%s: error_tracing %r' % (name, profile.get('error_tracing')))
+            if target and not profile.get('target_triple', '').startswith(target.split('-')[0] + '-'):
+                problems.append('%s: target %r, expected %s' % (name, profile.get('target_triple'), target))
+            function = document.get('name', '')
+            if function.startswith(stem):
+                local = function[len(stem):]
+                if '.' not in local and '__' not in local and not re.search(r'\bfn %s\(' % re.escape(local), text):
+                    problems.append('%s: %s is not declared in %s' % (name, function, entry['source']))
+    return problems
+
+
+def check(fixture):
+    data = manifest(fixture)
+    path = FIXTURES / fixture / LOCK
+    if not path.is_file():
+        return ['no %s: run scripts/fixture-exports.py export %s' % (LOCK, fixture)]
+    recorded = json.loads(path.read_text())
+    now = lock_of(fixture, data, outputs(fixture, data))
+    problems = []
+    for key, what in (('manifest_sha256', 'exports.json changed'), ('sources_sha256', 'a source changed'),
+                      ('compilers', 'the exporter (zig-patch/) changed'),
+                      ('air_sha256', 'the committed AIR differs from the lock')):
+        if recorded.get(key) != now[key]:
+            problems.append('%s since the export (%s): run scripts/fixture-exports.py export %s'
+                            % (what, key, fixture) if key != 'air_sha256' else
+                            '%s: %s' % (what, ', '.join(sorted(set(recorded.get(key, {})) ^ set(now[key]))
+                                                       or [k for k in now[key] if recorded[key].get(k) != now[key][k]])))
+    if recorded.get('schema') != SCHEMA:
+        problems.append('lock schema %r, expected %d' % (recorded.get('schema'), SCHEMA))
+    return problems + document_problems(fixture, data)
+
+
+def keep_closure(directory, prefixes):
+    """Delete every function file of DIRECTORY that no function named with one of PREFIXES
+    reaches through `"func"` references (calls, function values)."""
+    texts = {p: p.read_text() for p in directory.glob('*.json')}
+    by_name = {}
+    for path, text in texts.items():
+        name = json.loads(text).get('name')
+        if name is not None:
+            by_name.setdefault(name, []).append(path)
+    work = [p for name, paths in by_name.items() if name.startswith(tuple(prefixes)) for p in paths]
+    keep = set()
+    while work:
+        path = work.pop()
+        if path not in keep:
+            keep.add(path)
+            for ref in set(re.findall(r'"func":\s*"([^"]+)"', texts[path])):
+                work.extend(by_name.get(ref, []))
+    for path, text in texts.items():
+        if path not in keep and json.loads(text).get('name') is not None:
+            path.unlink()
+
+
+def run_exports(fixture, data, scratch):
+    """Export every job of FIXTURE into SCRATCH/<out>; returns {out: {file: sha256}}."""
+    here = FIXTURES / fixture
+    shim = scratch / '.shim'
+    shim.mkdir(parents=True, exist_ok=True)
+    (shim / 'xcrun').write_text('#!/bin/sh\nexit 1\n')
+    (shim / 'xcrun').chmod(0o755)
+    compilers = {}
+    for entry, version, out in jobs(fixture, data):
+        if version not in compilers:
+            compilers[version] = cas.zig_air(ROOT, version)
+        target = scratch / out
+        target.mkdir(parents=True)
+        cwd = here if entry.get('cwd', 'fixture') == 'fixture' else ROOT
+        source = os.path.relpath(here / entry['source'], cwd)
+        env = dict(os.environ, ZIG_AIR_JSON_DIR=str(target), ZIG_AIR_JSON_FILTER=entry['filter'])
+        if platform.system() == 'Darwin' and version in cas.DARWIN_NO_XCRUN:
+            env['PATH'] = str(shim) + os.pathsep + env.get('PATH', '')  # zig-patch/README.md
+        command = ([str(compilers[version]), entry.get('command', 'build-obj'), '-fno-emit-bin']
+                   + entry['args'] + [source])
+        done = subprocess.run(command, cwd=cwd, env=env, capture_output=True, text=True)
+        if done.returncode:
+            raise Error('%s %s (%s): export failed (exit %d)\n%s' % (fixture, out, version, done.returncode,
+                                                                     done.stderr[-4000:]))
+        if 'closure' in entry:
+            keep_closure(target, entry['closure'])
+        if not any(target.glob('*.json')):
+            raise Error('%s %s: the export wrote no file (filter %r)' % (fixture, out, entry['filter']))
+    return {out: {p.relative_to(scratch / out).as_posix(): sha256(p)
+                  for p in sorted((scratch / out).rglob('*')) if p.is_file()}
+            for _, _, out in jobs(fixture, data)}
+
+
+def verify(fixture):
+    data = manifest(fixture)
+    with tempfile.TemporaryDirectory(prefix='air2lean-fixture-exports.') as scratch:
+        fresh = run_exports(fixture, data, Path(scratch))
+    committed = outputs(fixture, data)
+    problems = []
+    for out in fresh:
+        for name in sorted(set(fresh[out]) | set(committed[out])):
+            if name not in committed[out]:
+                problems.append('%s/%s: exported, not committed' % (out, name))
+            elif name not in fresh[out]:
+                problems.append('%s/%s: committed, not exported' % (out, name))
+            elif fresh[out][name] != committed[out][name]:
+                problems.append('%s/%s: differs from a fresh export' % (out, name))
+    return problems
+
+
+def export(fixture):
+    data = manifest(fixture)
+    here = FIXTURES / fixture
+    with tempfile.TemporaryDirectory(prefix='air2lean-fixture-exports.') as scratch:
+        run_exports(fixture, data, Path(scratch))
+        for _, _, out in jobs(fixture, data):
+            shutil.rmtree(here / out, ignore_errors=True)
+            (here / out).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(Path(scratch) / out, here / out)
+    lock = lock_of(fixture, data, outputs(fixture, data))
+    (here / LOCK).write_text(json.dumps(lock, indent=2, sort_keys=True) + '\n')
+    return document_problems(fixture, data)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('action', choices=('list', 'check', 'verify', 'export'))
+    parser.add_argument('fixtures', nargs='*')
+    args = parser.parse_args()
+    try:
+        names = fixtures(args.fixtures)
+        if args.action == 'list':
+            print('\n'.join(names))
+            return 0
+        failed = 0
+        for name in names:
+            problems = {'check': check, 'verify': verify, 'export': export}[args.action](name)
+            for problem in problems:
+                print('fixture-exports: %s: %s' % (name, problem), file=sys.stderr)
+            failed += bool(problems)
+            if not problems:
+                print('fixture-exports: %s: %s ok' % (name, args.action))
+        return 1 if failed else 0
+    except (Error, cas.CasError, json.JSONDecodeError) as error:
+        print('fixture-exports: %s' % error, file=sys.stderr)
+        return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

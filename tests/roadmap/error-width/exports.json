@@ -1,0 +1,128 @@
+{
+  "exports": [
+    {
+      "out": "air-fresh/{version}/bits2",
+      "source": "error_width.zig",
+      "filter": "error_width.",
+      "versions": [
+        "0.17.0",
+        "0.16.0",
+        "0.15.2",
+        "0.14.1"
+      ],
+      "args": [
+        "-OReleaseSafe",
+        "-fno-error-tracing",
+        "-target",
+        "x86_64-linux",
+        "-mcpu=baseline",
+        "--error-limit",
+        "3"
+      ],
+      "cwd": "repo"
+    },
+    {
+      "out": "air-fresh/{version}/bits8",
+      "source": "error_width.zig",
+      "filter": "error_width.",
+      "versions": [
+        "0.17.0",
+        "0.16.0",
+        "0.15.2",
+        "0.14.1"
+      ],
+      "args": [
+        "-OReleaseSafe",
+        "-fno-error-tracing",
+        "-target",
+        "x86_64-linux",
+        "-mcpu=baseline",
+        "--error-limit",
+        "255"
+      ],
+      "cwd": "repo"
+    },
+    {
+      "out": "air-fresh/{version}/bits10",
+      "source": "error_width.zig",
+      "filter": "error_width.",
+      "versions": [
+        "0.17.0",
+        "0.16.0",
+        "0.15.2",
+        "0.14.1"
+      ],
+      "args": [
+        "-OReleaseSafe",
+        "-fno-error-tracing",
+        "-target",
+        "x86_64-linux",
+        "-mcpu=baseline",
+        "--error-limit",
+        "1000"
+      ],
+      "cwd": "repo"
+    },
+    {
+      "out": "air-fresh/{version}/bits16",
+      "source": "error_width.zig",
+      "filter": "error_width.",
+      "versions": [
+        "0.17.0",
+        "0.16.0",
+        "0.15.2",
+        "0.14.1"
+      ],
+      "args": [
+        "-OReleaseSafe",
+        "-fno-error-tracing",
+        "-target",
+        "x86_64-linux",
+        "-mcpu=baseline"
+      ],
+      "cwd": "repo"
+    },
+    {
+      "out": "air-fresh/{version}/bits17",
+      "source": "error_width.zig",
+      "filter": "error_width.",
+      "versions": [
+        "0.17.0",
+        "0.16.0",
+        "0.15.2",
+        "0.14.1"
+      ],
+      "args": [
+        "-OReleaseSafe",
+        "-fno-error-tracing",
+        "-target",
+        "x86_64-linux",
+        "-mcpu=baseline",
+        "--error-limit",
+        "100000"
+      ],
+      "cwd": "repo"
+    },
+    {
+      "out": "air-fresh/{version}/bits32",
+      "source": "error_width.zig",
+      "filter": "error_width.",
+      "versions": [
+        "0.17.0",
+        "0.16.0",
+        "0.15.2",
+        "0.14.1"
+      ],
+      "args": [
+        "-OReleaseSafe",
+        "-fno-error-tracing",
+        "-target",
+        "x86_64-linux",
+        "-mcpu=baseline",
+        "--error-limit",
+        "4294967295"
+      ],
+      "cwd": "repo"
+    }
+  ]
+}

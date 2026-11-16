@@ -1,0 +1,182 @@
+{
+  "exports": [
+    {
+      "out": "air/error_ints/{version}",
+      "source": "probe_error_ints.zig",
+      "filter": "error_ints.",
+      "versions": [
+        "0.17.0",
+        "0.16.0",
+        "0.15.2",
+        "0.14.1"
+      ],
+      "args": [
+        "-OReleaseSafe",
+        "-fno-error-tracing",
+        "-target",
+        "x86_64-linux",
+        "-mcpu=baseline"
+      ],
+      "cwd": "repo",
+      "closure": [
+        "error_ints."
+      ],
+      "command": "build-exe"
+    },
+    {
+      "out": "air/error_ints_w8/{version}",
+      "source": "probe_error_ints.zig",
+      "filter": "error_ints.",
+      "versions": [
+        "0.17.0",
+        "0.16.0",
+        "0.15.2",
+        "0.14.1"
+      ],
+      "args": [
+        "-OReleaseSafe",
+        "-fno-error-tracing",
+        "-target",
+        "x86_64-linux",
+        "-mcpu=baseline",
+        "--error-limit",
+        "255"
+      ],
+      "cwd": "repo",
+      "closure": [
+        "error_ints."
+      ],
+      "command": "build-exe"
+    },
+    {
+      "out": "air/error_params/{version}",
+      "source": "error_params.zig",
+      "filter": "error_params.",
+      "versions": [
+        "0.17.0",
+        "0.16.0",
+        "0.15.2",
+        "0.14.1"
+      ],
+      "args": [
+        "-OReleaseSafe",
+        "-fno-error-tracing",
+        "-target",
+        "x86_64-linux",
+        "-mcpu=baseline"
+      ],
+      "cwd": "repo",
+      "closure": [
+        "error_params."
+      ]
+    },
+    {
+      "out": "air/extern_storage/{version}",
+      "source": "extern_storage.zig",
+      "filter": "extern_storage.",
+      "versions": [
+        "0.17.0",
+        "0.16.0",
+        "0.15.2",
+        "0.14.1"
+      ],
+      "args": [
+        "-OReleaseSafe",
+        "-fno-error-tracing",
+        "-target",
+        "x86_64-linux",
+        "-mcpu=baseline"
+      ],
+      "cwd": "repo",
+      "closure": [
+        "extern_storage."
+      ]
+    },
+    {
+      "out": "air/float_lanes/{version}",
+      "source": "float_lanes.zig",
+      "filter": "float_lanes.",
+      "versions": [
+        "0.17.0",
+        "0.16.0",
+        "0.15.2",
+        "0.14.1"
+      ],
+      "args": [
+        "-OReleaseSafe",
+        "-fno-error-tracing",
+        "-target",
+        "x86_64-linux",
+        "-mcpu=baseline"
+      ],
+      "cwd": "repo",
+      "closure": [
+        "float_lanes."
+      ]
+    },
+    {
+      "out": "air/runtime_lanes/{version}",
+      "source": "runtime_lanes.zig",
+      "filter": "runtime_lanes.",
+      "versions": [
+        "0.15.2",
+        "0.14.1"
+      ],
+      "args": [
+        "-OReleaseSafe",
+        "-fno-error-tracing",
+        "-target",
+        "x86_64-linux",
+        "-mcpu=baseline"
+      ],
+      "cwd": "repo",
+      "closure": [
+        "runtime_lanes."
+      ]
+    },
+    {
+      "out": "air/tls_pointers/{version}",
+      "source": "tls_pointers.zig",
+      "filter": "tls_pointers.",
+      "versions": [
+        "0.17.0",
+        "0.16.0",
+        "0.15.2",
+        "0.14.1"
+      ],
+      "args": [
+        "-OReleaseSafe",
+        "-fno-error-tracing",
+        "-target",
+        "x86_64-linux",
+        "-mcpu=baseline"
+      ],
+      "cwd": "repo",
+      "closure": [
+        "tls_pointers."
+      ]
+    },
+    {
+      "out": "air/vector_casts/{version}",
+      "source": "vector_casts.zig",
+      "filter": "vector_casts.,mem.eql,mem.sliceAsBytes",
+      "versions": [
+        "0.17.0",
+        "0.16.0",
+        "0.15.2",
+        "0.14.1"
+      ],
+      "args": [
+        "-OReleaseSafe",
+        "-fno-error-tracing",
+        "-target",
+        "x86_64-linux",
+        "-mcpu=baseline"
+      ],
+      "cwd": "repo",
+      "closure": [
+        "vector_casts."
+      ]
+    }
+  ]
+}
