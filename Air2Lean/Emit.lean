@@ -1056,7 +1056,10 @@ def FCtx.divRtSuffix (fc : FCtx) : String :=
 
 /-- `rtSuffix` for `@mulAdd`: `fmaRt` before 0.17.1, `fmaRt017` (0.17.1's `fma.zig`) from it. -/
 def FCtx.fmaRtSuffix (fc : FCtx) : String :=
-  if fc.rtSuffix != "" && fc.dialect.version.compilerRt == .v017 then "Rt017" else fc.rtSuffix
+  if fc.rtSuffix == "" then "" else
+  match fc.dialect.version.compilerRt with
+  | .legacy | .v016 => fc.rtSuffix
+  | .v017 => "Rt017"
 
 /-- The profile targets aarch64 (`Dialect.floatRules`, `docs/floats.md` §Targets): `f80` is
 soft-float (`Zig.Float.softF80Chk`, and in `compiler-rt` mode `__divxf3`), and `@mulAdd` on
