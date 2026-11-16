@@ -133,15 +133,15 @@ def jobs(fixture, data):
     return [(e, v, e['out'].format(version=v)) for e in data['exports'] for v in e['versions']]
 
 
+def digests(directory):
+    """{file name: sha256} of every file under DIRECTORY (none if it is missing)."""
+    files = sorted(directory.rglob('*')) if directory.is_dir() else []
+    return {p.relative_to(directory).as_posix(): sha256(p) for p in files if p.is_file()}
+
+
 def outputs(fixture, data):
-    """{out: {file name: sha256}} of the committed OUT directories (a missing one is empty)."""
-    here = FIXTURES / fixture
-    found = {}
-    for _, _, out in jobs(fixture, data):
-        directory = here / out
-        files = sorted(directory.rglob('*')) if directory.is_dir() else []
-        found[out] = {p.relative_to(directory).as_posix(): sha256(p) for p in files if p.is_file()}
-    return found
+    """{out: {file name: sha256}} of the committed OUT directories."""
+    return {out: digests(FIXTURES / fixture / out) for _, _, out in jobs(fixture, data)}
 
 
 def sources(fixture, data):
@@ -282,9 +282,7 @@ def run_exports(fixture, data, scratch, only=()):
             keep_closure(target, entry['closure'])
         if not any(target.glob('*.json')):
             raise Error('%s %s: the export wrote no file (filter %r)' % (fixture, out, entry['filter']))
-    return {out: {p.relative_to(scratch / out).as_posix(): sha256(p)
-                  for p in sorted((scratch / out).rglob('*')) if p.is_file()}
-            for _, version, out in jobs(fixture, data) if not only or version in only}
+    return {out: digests(scratch / out) for _, version, out in jobs(fixture, data) if not only or version in only}
 
 
 def patched_compiler(version):
