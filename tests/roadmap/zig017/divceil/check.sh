@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Zig 0.17.0 `@divCeil` gate (`support:tags:div_ceil`, qualification/0.17.0.json).
-#   check.sh [--check]      check the committed AIR's lock (../exports.json, scripts/fixture-exports.py
-#                           verify|export zig017 re-exports it), translate it, compare with the committed DivCeil/Gen.lean,
+#   check.sh [--check]      check the committed AIR's lock (../exports.json; scripts/fixture-exports.py
+#                           verify|export zig017 re-exports it), translate it, compare with the
+#                           committed DivCeil/Gen.lean,
 #                           run it on inputs.txt and compare every line with the stock Zig 0.17.0
 #                           build (AIR2LEAN_ZIG_NATIVE) of native.zig; for the inputs that reach a
 #                           safety check, run the native call alone and require Zig's panic message
