@@ -88,7 +88,7 @@ C/allowzero pointer and an optional slice, stay rejected.
 `tests/roadmap/aggregate-casts/` (`check.sh`):
 
 - `air/<version>`: exports of `aggregate_casts.zig` (the probe's casts) by patched 0.16.0, 0.15.2
-  and 0.14.1 compilers (x86_64-linux, ReleaseSafe), pinned by `provenance.json`.
+  and 0.14.1 compilers (x86_64-linux, ReleaseSafe), pinned by `exports.lock.json`.
   `AggregateCasts/Gen.lean` is the 0.16.0 translation, compared byte for byte; the other two
   translate to the same text apart from the profile header. The compiler also emits the
   `@ptrFromInt` alignment check and the `?*T` unwrap null check, which the earlier hand-written

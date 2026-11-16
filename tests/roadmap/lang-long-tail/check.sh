@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # L-series long tail (tests/roadmap/lang-long-tail/README.md). Needs a built translator and
-# `lake build ZigLean ZigLean.VecCast Air2Lean`; runs no compiler unless --native (`export.sh --check`
-# re-exports with the recorded patched compilers).
+# `lake build ZigLean ZigLean.VecCast Air2Lean`; runs no compiler unless --native
+# (`scripts/fixture-exports.py verify lang-long-tail` re-exports with the patched compilers).
 #
 #   check.sh [--native]
 #
-# For every fixture source: the committed exports match provenance.json; the export of every
+# For every fixture source: the committed exports match exports.lock.json; the export of every
 # supported Zig version (0.17.0, 0.16.0, 0.15.2, 0.14.1) translates to its retained translation
 # (`retained_of` below); each elaborates and its model lines equal the committed native output
 # of its version; the proofs check; the negative tests reject and the semantic mutants
@@ -24,7 +24,7 @@ if [ -n "${AIR2LEAN_LEAN:-}" ]; then lean_cmd=("$AIR2LEAN_LEAN"); fi
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-lang-long-tail.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 base_path="$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
-python3 "$here/test_provenance.py"
+python3 -B scripts/fixture-exports.py check lang-long-tail
 
 # stem, Lean namespace (the module LangLongTail.<Ns> that Model<Ns>.lean imports), retained-file
 # key (LangLongTail/<Key>[-<version>].lean, default <Ns>), extra translator arguments.
@@ -61,18 +61,28 @@ elaborate() {
 # <stem>.reject: `<version> <message>` lines, the versions whose export the translator must
 # reject (fail closed), with a fragment of the diagnostic.
 rejected() { [ -f "$here/$1.reject" ] && grep -q "^$2 " "$here/$1.reject"; }
-# The settings of <stem>.export (export.sh): `module` (the fixture's name prefix), `root_src`
-# (the native probe that is also the exported program), `args` (compiler flags of both),
-# `native_extra` (more inputs of the native build, a C file and -lc), `only_versions` (the
-# versions that compile the source; default all).
+# The export of <stem> (its exports.json entry, air/<stem>/{version}): `module` (the fixture's
+# name prefix, the entry's `closure`), `root_src` (the native probe that is also the exported
+# program, a build-exe entry's source), `args` (the compiler flags of both), `only_versions`
+# (the versions that compile the source). <stem>.export, if present, sets `native_extra` (more
+# inputs of the native build, a C file and -lc).
 load_export() {
-  root_src="" module="$1." args="" native_extra="" only_versions=""
+  native_extra=""
+  eval "$(python3 -B - "$here/exports.json" "$1" <<'PY'
+import json, shlex, sys
+entry = next(e for e in json.load(open(sys.argv[1]))['exports'] if e['out'] == 'air/%s/{version}' % sys.argv[2])
+build_exe = entry.get('command') == 'build-exe'
+for key, value in (('module', entry['closure'][0]), ('root_src', entry['source'] if build_exe else ''),
+                   ('args', ' '.join(entry['args'])), ('only_versions', ' '.join(entry['versions']))):
+    print('%s=%s' % (key, shlex.quote(value)))
+PY
+)"
   # shellcheck disable=SC1090
   [ -f "$here/$1.export" ] && . "$here/$1.export"
   return 0
 }
 # The version compiles the loaded fixture's source (`only_versions`).
-in_versions() { [ -z "$only_versions" ] || [[ " $only_versions " == *" $1 "* ]]; }
+in_versions() { [[ " $only_versions " == *" $1 "* ]]; }
 for entry in "${fixtures[@]}"; do
   read -r stem ns key extra <<< "$entry"
   key=${key:-$ns}
@@ -125,9 +135,8 @@ if [ "${1:-}" = --native ]; then
       [ -n "$zig" ] || continue
       rejected "$stem" "$version" && continue
       # shellcheck disable=SC2086 # args, native_extra and the Rosetta link flags (scripts/rosetta.sh) hold whitespace-separated flags
-      (cd "$here" && "$zig" build-exe ${AIR2LEAN_ROSETTA_LINK_FLAGS:-} -OReleaseSafe -fno-error-tracing -target x86_64-linux \
-        -mcpu=baseline $args "${root_src:-probe_$stem.zig}" $native_extra \
-        -femit-bin="$work/probe-$stem-$version")
+      (cd "$here" && "$zig" build-exe ${AIR2LEAN_ROSETTA_LINK_FLAGS:-} $args \
+        "${root_src:-probe_$stem.zig}" $native_extra -femit-bin="$work/probe-$stem-$version")
       "$work/probe-$stem-$version" 2> "$work/$stem-$version.txt"
       LEAN_PATH="$work/$key/$version:$base_path" "${lean_cmd[@]}" --run "$here/Model$ns.lean" \
         "$work/$stem-$version.txt"

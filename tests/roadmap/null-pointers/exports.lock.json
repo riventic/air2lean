@@ -1,12 +1,4 @@
 {
-  "air": {
-    "command": "ZIG_AIR_JSON_DIR=<dir>/<version> ZIG_AIR_JSON_FILTER=<roots> <patched zig> build-obj -fno-emit-bin -OReleaseSafe -fno-error-tracing -target x86_64-linux -mcpu=baseline <source>.zig (export.sh)",
-    "cpu": "baseline",
-    "error_tracing": false,
-    "optimization": "ReleaseSafe",
-    "schema": 12,
-    "target": "x86_64-linux"
-  },
   "air_sha256": {
     "air-reject/0.14.1/reject.fixed.json": "b5ea68781e2cde44589e701f0ec1585f923a3128ee8ac7d74239af568282aec4",
     "air-reject/0.14.1/reject.optionalCast.json": "a4b19c0195226642bbbcb8b2de2b9ead6fed3bd07c30e76872c7ffc7dbff8d09",
@@ -205,16 +197,15 @@
     "air/0.17.0/nullpointers.toOptional.json": "38bd02aa54a9469a13a37a2f19e69af25282598a757cd592c7ef1e5fba597c9f",
     "air/0.17.0/nullpointers.valPtr.json": "6f73e207c04dbb2cf1412500d50ee4d4e708b27a261c84c42f848e35d9fca132"
   },
-  "exporter": "zig-patch/air-json/json.zig",
-  "exporter_sha256": "9c5dd1583f3711cce9ff88013f34a56d156fb149fc3597152fd3d3f1e0c36f56",
-  "patched_compiler_sha256": {
-    "0.14.1": "cbce6d3f0ead49085f83227f0fda72f5cb981fbfc3d6ad961bd2ddfc3b2b3ae6",
-    "0.15.2": "5dbaf7083d6ec6518a32a847f908ec000761df32ead8dc26245bf90e435985cd",
-    "0.16.0": "c18f6e23ad2efd9afd073ede358e213c901d48a609e422b027eb3517ec5b851c",
-    "0.17.0": "c5ebceb533f8b03abc4875c54180dba47386601150937da049a92bc15de06753"
+  "compilers": {
+    "0.14.1": "de0fff4117985708efbd803bb1e53fe37ebf0596853e68633ac66d7f6dbd1d89",
+    "0.15.2": "08fabea60c770d7c034a9dbe78e816beb0d8a17a9b9a0ed5c8bdcbd112cffc05",
+    "0.16.0": "d49dbe58d9fd83d9fdedc5270fa3a5a34ab9661ebc63b52070027a00bdec6954",
+    "0.17.0": "321ab894d2a5d5784afdba19137ed24abf39c62825b440f9a4f82e53958d9b24"
   },
-  "qualification": "Compiler exports of nullpointers.zig and reject.zig by patched 0.17.0, 0.16.0, 0.15.2 and 0.14.1 compilers built from the recorded exporter; check.sh translates each and compares the model with expected/<version>.txt, which check.sh --native compares with native runs.",
-  "sources": {
+  "manifest_sha256": "0928757c8330e6ec49955d3d425c8c41738dd5a11b863976781c19a003134475",
+  "schema": 1,
+  "sources_sha256": {
     "nullpointers.zig": "679e5c177cbf98b1d949fcffc48c8484bfee22d24c5de2caabc3340fbffd9574",
     "reject.zig": "698cffdddcc979ff8042c09c466114e14ed5ff05325601272c5d6343308388f1"
   }

@@ -177,6 +177,9 @@ def document_problems(fixture, data):
         mode = next((a[2:] for a in entry['args'] if a.startswith('-O')), 'Debug')
         tracing = '-fno-error-tracing' not in entry['args']
         target = entry['args'][entry['args'].index('-target') + 1] if '-target' in entry['args'] else None
+        # Zig's error integer is as wide as the bit length of --error-limit (16 bits by default).
+        limit = entry['args'][entry['args'].index('--error-limit') + 1] if '--error-limit' in entry['args'] else None
+        bits = int(limit).bit_length() if limit else 16
         stem = Path(entry['source']).stem + '.'
         text = (here / entry['source']).read_text()
         for path in files:
@@ -192,6 +195,8 @@ def document_problems(fixture, data):
                 problems.append('%s: error_tracing %r' % (name, profile.get('error_tracing')))
             if target and not profile.get('target_triple', '').startswith(target.split('-')[0] + '-'):
                 problems.append('%s: target %r, expected %s' % (name, profile.get('target_triple'), target))
+            if profile.get('error_set_bits', bits) != bits:
+                problems.append('%s: error_set_bits %r, expected %d' % (name, profile.get('error_set_bits'), bits))
             function = document.get('name', '')
             if function.startswith(stem):
                 local = function[len(stem):]
@@ -243,8 +248,9 @@ def keep_closure(directory, prefixes):
             path.unlink()
 
 
-def run_exports(fixture, data, scratch):
-    """Export every job of FIXTURE into SCRATCH/<out>; returns {out: {file: sha256}}."""
+def run_exports(fixture, data, scratch, only=()):
+    """Export every job of FIXTURE (of the versions in ONLY, if given) into SCRATCH/<out>;
+    returns {out: {file: sha256}}."""
     here = FIXTURES / fixture
     shim = scratch / '.shim'
     shim.mkdir(parents=True, exist_ok=True)
@@ -252,8 +258,10 @@ def run_exports(fixture, data, scratch):
     (shim / 'xcrun').chmod(0o755)
     compilers = {}
     for entry, version, out in jobs(fixture, data):
+        if only and version not in only:
+            continue
         if version not in compilers:
-            compilers[version] = cas.zig_air(ROOT, version)
+            compilers[version] = patched_compiler(version)
         target = scratch / out
         target.mkdir(parents=True)
         cwd = here if entry.get('cwd', 'fixture') == 'fixture' else ROOT
@@ -273,15 +281,27 @@ def run_exports(fixture, data, scratch):
             raise Error('%s %s: the export wrote no file (filter %r)' % (fixture, out, entry['filter']))
     return {out: {p.relative_to(scratch / out).as_posix(): sha256(p)
                   for p in sorted((scratch / out).rglob('*')) if p.is_file()}
-            for _, _, out in jobs(fixture, data)}
+            for _, version, out in jobs(fixture, data) if not only or version in only}
 
 
-def verify(fixture):
+def patched_compiler(version):
+    """bin/zig of the patched compiler of VERSION: AIR2LEAN_ZIG_AIR/zig-air-<version> when that
+    directory holds one (CI's compilers, restored by the key of exactly what zig-patch/build.sh
+    reads, scripts/ci-cache.py), else scripts/cas.py zig-air."""
+    given = os.environ.get('AIR2LEAN_ZIG_AIR')
+    if given and (Path(given) / ('zig-air-' + version) / 'bin/zig').is_file():
+        return Path(given) / ('zig-air-' + version) / 'bin/zig'
+    return cas.zig_air(ROOT, version)
+
+
+def verify(fixture, only=()):
     data = manifest(fixture)
     with tempfile.TemporaryDirectory(prefix='air2lean-fixture-exports.') as scratch:
-        fresh = run_exports(fixture, data, Path(scratch))
+        fresh = run_exports(fixture, data, Path(scratch), only)
     committed = outputs(fixture, data)
     problems = []
+    if not fresh:
+        return ['no export of version %s' % ', '.join(only)]
     for out in fresh:
         for name in sorted(set(fresh[out]) | set(committed[out])):
             if name not in committed[out]:
@@ -311,7 +331,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('action', choices=('list', 'check', 'verify', 'export'))
     parser.add_argument('fixtures', nargs='*')
+    parser.add_argument('--version', action='append', default=[],
+                        help='verify: only the exports of this Zig version (repeatable)')
     args = parser.parse_args()
+    if args.version and args.action != 'verify':
+        parser.error('--version is for verify only (export rewrites the whole lock)')
     try:
         names = fixtures(args.fixtures)
         if args.action == 'list':
@@ -319,7 +343,8 @@ def main():
             return 0
         failed = 0
         for name in names:
-            problems = {'check': check, 'verify': verify, 'export': export}[args.action](name)
+            problems = (verify(name, args.version) if args.action == 'verify' else
+                        {'check': check, 'export': export}[args.action](name))
             for problem in problems:
                 print('fixture-exports: %s: %s' % (name, problem), file=sys.stderr)
             failed += bool(problems)

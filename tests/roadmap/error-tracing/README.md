@@ -12,7 +12,7 @@ stored as undefined bytes.
 
 | File | Content |
 |---|---|
-| `air/<version>` | exports of the five roots and `returnError` by patched 0.17.0, 0.16.0, 0.15.2 and 0.14.1 compilers (`export.sh`; `provenance.json`, `test_provenance.py`) |
+| `air/<version>` | exports of the five roots and `returnError` by patched 0.17.0, 0.16.0, 0.15.2 and 0.14.1 compilers (`exports.json`, pinned by `exports.lock.json`) |
 | `Runner.lean`, `expected.txt` | the native `main`'s calls on the generated code, and their output |
 | `test_cli.py` | the exports translate; an unresolved `StackTrace`, a trace without one, a nested `set_err_return_trace` and a `@returnAddress()` read as a number are rejected |
 
@@ -20,7 +20,7 @@ stored as undefined bytes.
 lake build ZigLean air2lean
 tests/roadmap/error-tracing/check.sh                 # 4 versions: model == expected.txt, rejections
 tests/roadmap/error-tracing/check.sh --native ZIG    # stock Zig, this host: native == expected.txt
-AIR2LEAN_ZIG_AIR=<dir of zig-air-<version>> tests/roadmap/error-tracing/export.sh --check [VERSIONS]
+python3 -B scripts/fixture-exports.py verify error-tracing [--version V]   # fresh export == air/
 ```
 
 `traced(x)` returns the trace index inside the error branch (2 after `bigRet` and `pass` recorded
