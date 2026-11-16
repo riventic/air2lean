@@ -5,7 +5,7 @@ import ZigLean.Sep.Full.Mutex
 /-!
 # The semaphore, over full-state resources
 
-A semaphore (`Io.Semaphore`'s `waitUncancelable` and `post`, the same code in 0.16.0 and 0.17.0,
+A semaphore (`Io.Semaphore`'s `waitUncancelable` and `post`, the same code in 0.16.0 and 0.17.1,
 translated from its std code; the futex under it is the model) is a permit count, a mutex and a
 condition next to it: `wait` locks the mutex, waits at the condition while the count is 0, takes a
 permit (`count -= 1`), signals the condition if permits are left, and unlocks; `post` locks, gives

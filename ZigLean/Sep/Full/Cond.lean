@@ -3,7 +3,7 @@ import ZigLean.Sep.Full.CondInv
 /-!
 # The futex-epoch condition, over full-state resources
 
-A condition variable with a futex epoch (`Io.Condition` of 0.16.0 and 0.17.0,
+A condition variable with a futex epoch (`Io.Condition` of 0.16.0 and 0.17.1,
 `Thread.Condition.FutexImpl` of 0.15.2), for any number of waiters and signallers. The places
 (`CPh`), the condition's words and roles (`FCond`) and its invariant (`FCond.Inv`, the history
 fields H1–H3 and the count) are in `ZigLean/Sep/Full/CondInv.lean`; this module is the
@@ -33,9 +33,9 @@ write in its wait loop) keeps its saved write while the others go on, so that co
 for a long-running client (register C14, ledger `cond-window-multi-waiter`). A waiter that stays
 queued under an unfair wake, and its wake when it comes, are not asked (above).
 
-**Scope: the uncancelable wait.** `CondImpl.wait` is `waitUncancelable` (0.16.0, 0.17.0) and
+**Scope: the uncancelable wait.** `CondImpl.wait` is `waitUncancelable` (0.16.0, 0.17.1) and
 `Thread.Condition.wait` (0.15.2). The cancelable `Io.Condition.wait` (and `waitTimeout` in
-0.17.0) leaves on cancel with a waiter's `waiters -= 1` (in 0.17.0 `deregister`, with an
+0.17.1) leaves on cancel with a waiter's `waiters -= 1` (in 0.17.1 `deregister`, with an
 `epoch += 1`), which this primitive does not admit: a client calling them has no contract and is rejected (register C14).
 
 **The client's part.** Roles: `FCond.sx` are the ghost values that may signal (`Inv.sx`). A

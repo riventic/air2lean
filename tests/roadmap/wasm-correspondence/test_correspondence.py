@@ -42,7 +42,7 @@ class Relation(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertTrue(all(counts['exact'] and counts['tolerated'] and counts['target-specific']
                             for counts in summary.values()))
-        self.assertIn('0.17.0 x86_64-linux/wasm32-freestanding', summary)
+        self.assertIn('0.17.1 x86_64-linux/wasm32-freestanding', summary)
 
     def test_unclassified_export_fails(self):
         relation = copy.deepcopy(self.relation)
@@ -55,12 +55,12 @@ class Relation(unittest.TestCase):
         self.assertTrue(any('unknown class' in e for e in self.check(relation)))
 
     def test_changed_exact_observation_fails(self):
-        self.edit('0.17.0', 'wasm32-freestanding',
+        self.edit('0.17.1', 'wasm32-freestanding',
                   lambda d: d['results']['des_time_add64'].__setitem__(0, 12345))
         self.assertTrue(any('des_time_add64' in e and 'exact' in e for e in self.check()))
 
     def test_trap_against_value_fails(self):
-        self.edit('0.17.0', 'x86_64-linux', lambda d: d['results']['int_mix'].__setitem__(3, 'trap'))
+        self.edit('0.17.1', 'x86_64-linux', lambda d: d['results']['int_mix'].__setitem__(3, 'trap'))
         self.assertTrue(any('int_mix' in e for e in self.check()))
 
     def test_stale_record_fails(self):
@@ -69,13 +69,13 @@ class Relation(unittest.TestCase):
         self.assertTrue(any('stale record' in e for e in self.check()))
 
     def test_missing_record_fails(self):
-        (self.records / '0.17.0/x86_64-linux.json').unlink()
+        (self.records / '0.17.1/x86_64-linux.json').unlink()
         self.assertTrue(any('missing record' in e for e in self.check()))
 
     def test_target_specific_model_is_per_profile(self):
         # The wasm32 observation of the native width is refused: each side meets its own model.
-        native = json.loads((self.records / '0.17.0/x86_64-linux.json').read_text())
-        self.edit('0.17.0', 'wasm32-freestanding',
+        native = json.loads((self.records / '0.17.1/x86_64-linux.json').read_text())
+        self.edit('0.17.1', 'wasm32-freestanding',
                   lambda d: d['results'].__setitem__('usize_bits', native['results']['usize_bits']))
         self.assertTrue(any('usize_bits' in e and 'bits 32' in e for e in self.check()))
 
@@ -101,9 +101,9 @@ class Relation(unittest.TestCase):
         self.assertIsNotNone(wc.relate(entry, [5], 'trap', 'trap', bits, 17))
 
     def test_mislabelled_record_is_not_compared(self):
-        self.edit('0.16.0', 'x86_64-linux', lambda d: d.__setitem__('zig_version', '0.17.0'))
+        self.edit('0.16.0', 'x86_64-linux', lambda d: d.__setitem__('zig_version', '0.17.1'))
         errors, summary = wc.check(self.relation, ROOT, self.records)
-        self.assertTrue(any('records Zig 0.17.0' in e for e in errors))
+        self.assertTrue(any('records Zig 0.17.1' in e for e in errors))
         self.assertNotIn('0.16.0 x86_64-linux/wasm32-freestanding', summary)
 
     def test_reobservation_admits_another_nan_only(self):
@@ -119,7 +119,7 @@ class Relation(unittest.TestCase):
         fresh['results']['int_mix'][0] ^= 1
         self.assertTrue(any('int_mix' in e for e in wc.reobservation_errors(self.relation, record, fresh)))
         fresh['results']['int_mix'][0] ^= 1
-        fresh['zig_version'] = '0.17.0'
+        fresh['zig_version'] = '0.17.1'
         self.assertTrue(wc.reobservation_errors(self.relation, record, fresh))
 
     def test_illegal_cases_are_not_compared(self):

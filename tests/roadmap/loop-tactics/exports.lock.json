@@ -11,7 +11,7 @@
   },
   "compilers": {
     "0.16.0": "d49dbe58d9fd83d9fdedc5270fa3a5a34ab9661ebc63b52070027a00bdec6954",
-    "0.17.0": "321ab894d2a5d5784afdba19137ed24abf39c62825b440f9a4f82e53958d9b24"
+    "0.17.1": "321ab894d2a5d5784afdba19137ed24abf39c62825b440f9a4f82e53958d9b24"
   },
   "manifest_sha256": "bbab493fe27b27cf92bf0bc99f3d7e3b9e4d995069d69cd4b7f0366c220968f1",
   "schema": 1,

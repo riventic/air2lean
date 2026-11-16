@@ -16,7 +16,7 @@ import tempfile
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
-VERSIONS = ("0.17.0", "0.16.0", "0.15.2", "0.14.1")
+VERSIONS = ("0.17.1", "0.16.0", "0.15.2", "0.14.1")
 GEN = HERE / "UnionBases" / "Gen.lean"
 ARGS = ["--namespace", "UnionBases", "--prefix", "union_bases.", "--allow-unqualified-build-mode"]
 REJECT_ARGS = ["--namespace", "UnionReject", "--prefix", "union_reject.", "--allow-unqualified-build-mode"]

@@ -261,7 +261,7 @@ example : (bytesAfter (zeros 16) (Nullable.optStored block0 none)).map (·[8]!) 
 private def someZero : Zig.Mem := { blocks := #[{ bytes := Array.replicate 8 (.int 0) ++ #[.int 1] ++ Array.replicate 7 (.int 0), align := 8, kind := .heap, live := true, addr := 4096 }] }
 example : valueIn someZero (Nullable.optStoredIsNull block0) = some false := by native_decide")
     ["Zig.optIsSome"]
-  -- A cast to or from it is miscompiled by Zig 0.16.0/0.17.0: rejected.
+  -- A cast to or from it is miscompiled by Zig 0.16.0/0.17.1: rejected.
   reject (file "optionalNullableCast" optTypes #[2] 6
     #[inst 0 "arg" 2 #[] [("param", num 0)], inst 1 "bitcast" 6 #[ref 0], inst 2 "ret" 4 #[ref 1]])
     "Zig miscompiles it"

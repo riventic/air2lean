@@ -375,7 +375,7 @@ private def tickViewLoop : Json :=
 /-- Finite analysis controls use synthetic IR, not an asserted native correspondence.
 They are kernel reductions of the same original `Program` consumed by emission and semantics. -/
 private def graphFunc (name : String) (ops : Array Op := #[]) : Func :=
-  { dialect := .ofVersion .v0_17_0, name, params := #[], ret := 0,
+  { dialect := .ofVersion .v0_17_1, name, params := #[], ret := 0,
     body := (ops.mapIdx fun id op => { id, ty := 0, op }).push
       { id := ops.size, ty := 0, op := .ret .void },
     types := #[.void], layouts := #[{}], globals := #[] }

@@ -5,7 +5,7 @@ import ZigLean.Conc.Share
 /-!
 # The protocol of `semaphoreCounter`
 
-`semaphoreCounter` (examples/sync, Zig 0.16.0; the 0.17.0 translation of this program is the same
+`semaphoreCounter` (examples/sync, Zig 0.16.0; the 0.17.1 translation of this program is the same
 code): `main` spawns one thread; each of the two threads adds 1 two times to a counter `n`,
 between `wait` and `post` of an `Io.Semaphore` with one permit; `main` joins the kid and reads 4.
 The `SemCounter` (block 0, 48 bytes, align 8): `io` at 0, the semaphore at 16 (its count at 16,

@@ -10,7 +10,7 @@ CI confirms"); CI is the final, independent check.
 | quantity | value |
 | --- | --- |
 | jobs per run | 28 (21 test rows, 3 macOS rows, 3 aarch64-linux jobs, `lake`, `all-checks`) |
-| slowest rows | macOS 0.15.2 18.9 min, macOS 0.17.0 16.1 min, test receipt 14.6 min, test inputs 14.0 min |
+| slowest rows | macOS 0.15.2 18.9 min, macOS 0.17.1 16.1 min, test receipt 14.6 min, test inputs 14.0 min |
 | `lake` | 6.4 min cold, 1.0 min warm |
 | whole run | 49.8 min wall, queue-dominated (max queue 29.7 min) |
 | queue | median 35 min with 4-5 open PRs (Free plan: 20 concurrent jobs, 5 macOS) |
@@ -29,7 +29,7 @@ other step.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 38182713444 | workflow_dispatch | 30.8 | 332 (66) | 11.9 / 51 | 38 / 292 | 18.0 (golden 0.15.2) | 24.0 |
 | 38182983305 | pull_request (docs only) | 35.7 | 275 (43) | 16.0 / 197 | 25 / 249 | 16.1 | 16.2 |
-| 38180914212 | pull_request | 26.6 | 343 (60) | 6.0 / 36 | 39 / 302 | 20.6 (golden 0.17.0) | 24.2 |
+| 38180914212 | pull_request | 26.6 | 343 (60) | 6.0 / 36 | 39 / 302 | 20.6 (golden 0.17.1) | 24.2 |
 | 38178362017 | pull_request | 37.5 | 349 (72) | 11.7 / 81 | 39 / 308 | 19.4 | 25.6 |
 | 38179421984 | push (old workflow) | 32.2 | 265 (58) | 12.6 / 156 | 13 / 250 | 17.4 | 23.4 |
 
@@ -44,7 +44,7 @@ other step.
 - Sinks: (1) the macOS rows rebuilt all of `Proofs` (13.7 min of the 24-min 0.16.0 row): the
   `main` cache entry had been saved by the old workflow without `Proofs` under the same key, so
   `ci-cache.yml` saw a hit and never rebuilt it; (2) tracing cost 1.3-1.9x on the rows that
-  declare the whole tree (golden 0.17.0 17-19 min instead of 10-14) although such a row can only
+  declare the whole tree (golden 0.17.1 17-19 min instead of 10-14) although such a row can only
   be reused on an identical tree; (3) the docs-only PR #149 reused 3 of 35 jobs: every traced
   row observed every tracked file, because `git status` in the final "Checkout unchanged" step
   stats them from threads that the reducer did not attribute to git; and any edit of a `test`
@@ -52,16 +52,16 @@ other step.
 
 ### After PR #153 (2026-10-12)
 
-| run | event | wall | runner min (macOS) | queue max / sum | golden 0.15.2 / 0.17.0 / 0.14.1 | macOS rows |
+| run | event | wall | runner min (macOS) | queue max / sum | golden 0.15.2 / 0.17.1 / 0.14.1 | macOS rows |
 | --- | --- | --- | --- | --- | --- | --- |
 | 38220406483 | merge_group (#149, docs only) | 29.5 | 286 (53) | 6.2 / 43 | 9.3 / 10.0 / 4.5 | 14.6-20.3 |
 | 38221218328 | pull_request (#151, 94 Lean files) | 51.0 | 370 (61) | 18.9 / 215 | 10.0 / 10.3 / 6.9 | 17.5-21.6 |
 | before: 38182713444, 38180914212 | dispatch, PR | 26.6-30.8 | 332-343 (60-66) | 6-12 / 36-51 | 18.0-20.6 / 17.2-19.5 / 7.1-7.5 | 17.6-24.2 |
 
-- Golden rows of 0.15.2 and 0.17.0: 17-21 min to 9-10 min. Part of it is PR #152 (in-job
+- Golden rows of 0.15.2 and 0.17.1: 17-21 min to 9-10 min. Part of it is PR #152 (in-job
   parallelism, merged just before): the 0.16.0 golden row, untraced before and after, went from
   15 to 9 min; the rest is dropping the tracer (`commit_bound`).
-- The narrowed rows (mutation, build modes, lean of 0.14.1/0.15.2/0.17.0) are reusable for
+- The narrowed rows (mutation, build modes, lean of 0.14.1/0.15.2/0.17.1) are reusable for
   changes outside their directories; a `merge_group` run still executes them (see
   [reuse in the merge queue](#reuse-in-the-merge-queue)).
 - macOS: both runs above restored a `main` entry from before `ci-cache.yml` rebuilt it with
@@ -205,8 +205,8 @@ index advanced into a later second; no fixed sleep or Git stat-check configurati
 The final restricted-file check continues to reject an actual read of any withheld file.
 
 `scripts/local-ci.sh part <job/part>` selects the workflow's exact job row: for example,
-`test/0.16.0/inputs`, `macos/0.17.0`, `aarch64-linux`, `build-modes-aarch64-linux`,
-`bitops-native-arm`, `lake`, `zig-air/0.17.0`, `generated`, `provenance` or `preflight`.
+`test/0.16.0/inputs`, `macos/0.17.1`, `aarch64-linux`, `build-modes-aarch64-linux`,
+`bitops-native-arm`, `lake`, `zig-air/0.17.1`, `generated`, `provenance` or `preflight`.
 Ubuntu x86 rows run in the Rosetta `linux/amd64` container, ARM rows in a native `linux/arm64`
 container, and macOS rows on the Apple silicon host. An ARM row refuses an x86 Docker engine.
 Use `discover macos/<version>` for the explicitly unrestricted host diagnostic; a restricted
@@ -906,7 +906,7 @@ build; run it after every merge of `main` and before any check that elaborates L
   former tracer, then coarsened so that a new file in an already-read directory needs no
   declaration change): the three build-mode rows and the five mutation shards (`Air2Lean`,
   `Proofs`, `ZigLean`, `assurance`, `examples`, `scripts`, `tests`, `zig-patch` and the Lake
-  files), the lean rows of 0.14.1 (the same without `examples`), 0.15.2 and 0.17.0 (plus
+  files), the lean rows of 0.14.1 (the same without `examples`), 0.15.2 and 0.17.1 (plus
   `case-studies`, `tutorials` and `docs/allocation-policy-report.json`, the one file under
   `docs/` they read). `aarch64-linux`, `bitops-native-arm` and `build-modes-aarch64-linux` from
   the traces of runs 38166335511 and 38173731089.
@@ -916,7 +916,7 @@ build; run it after every merge of `main` and before any check that elaborates L
   host-accounting claims of the golden rows; `docs/premises.md` for `audit` and `receipt`;
   `docs/c-frontend.md`, `docs/env-boundaries.md`, `docs/premises.md`, `docs/std-models.md` and
   `docs/trust-report.md` for `inputs`. These are the 0.16.0 `golden`, `lean`, `inputs`,
-  `native` and `audit` parts, the golden rows of 0.14.1, 0.15.2 and 0.17.0, the macOS rows and
+  `native` and `audit` parts, the golden rows of 0.14.1, 0.15.2 and 0.17.1, the macOS rows and
   the aarch64-linux jobs. They were commit-bound (their gates read `HEAD`) or `"reuse": false`
   (`audit`: under the former tracer it exceeded the job limit); in the restricted checkout
   `HEAD` is a function of the key.

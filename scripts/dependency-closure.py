@@ -52,7 +52,7 @@ MODEL_ROW = re.compile(r'^  (allocModel|threadModel|osModel) "([^"\n]+)" "[A-Z]{
 ZIG_VERSION = re.compile(r'\.v(\d+)_(\d+)_(\d+)\b')
 REVIEW_HELPER = re.compile(r'^private def (\w+)(?: \([^)]*\))? : Array StdReview :=\s*review "[^"]+"\s*(?:<\|\s*)?\[(.*?)\]',
                            re.M | re.S)
-# Zig 0.17.0 names a generic instance `<fn>__func_<n>` (`Air2Lean/Air/Anon.lean` `funcInstances017`).
+# Zig 0.17.1 names a generic instance `<fn>__func_<n>` (`Air2Lean/Air/Anon.lean` `funcInstances017`).
 FUNC_017 = re.compile(r'__func_([0-9])')
 REJECTED_ROW = re.compile(r'symbol := "([^"\n]+)",\s*kind := \.rejected "([^"\n]*)"')
 # `Air2Lean/StdModels.lean`'s `asyncReason symbol reason` (C08 futures).
@@ -155,7 +155,7 @@ def scan(air):
     """References of one AIR function: calls, function values, indirect calls, globals."""
     if not isinstance(air, dict) or not isinstance(air.get('name'), str) or not isinstance(air.get('body'), list):
         raise Invalid('AIR must be an object with a function name and body')
-    if air.get('zig_version') == '0.17.0':
+    if air.get('zig_version') == '0.17.1':
         air = json.loads(FUNC_017.sub(r'__anon_\1', json.dumps(air)))
     types = air.get('types') if isinstance(air.get('types'), list) else []
     insts, calls, values, indirect = {}, [], [], []

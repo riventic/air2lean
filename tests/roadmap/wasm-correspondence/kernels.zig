@@ -3,7 +3,7 @@
 //! values and float bit patterns are `@bitCast` inside, so both drivers pass plain integers.
 //! A safety panic is the observation `trap` (native: the process dies on a signal; wasm: the
 //! `unreachable` trap). `relation.json` gives each export its observation class. The source
-//! uses only language features that Zig 0.14.1 to 0.17.0 share.
+//! uses only language features that Zig 0.14.1 to 0.17.1 share.
 const std = @import("std");
 const pw = @import("pointer_width");
 

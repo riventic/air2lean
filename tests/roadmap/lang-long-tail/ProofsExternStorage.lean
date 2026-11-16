@@ -3,7 +3,7 @@ import LangLongTail.ExternStorage
 /-!
 # L12: pointer-bearing `extern` storage, on the retained translation
 
-`LangLongTail.ExternStorage` is the translation of `air/extern_storage/0.16.0` (0.17.0 translates
+`LangLongTail.ExternStorage` is the translation of `air/extern_storage/0.16.0` (0.17.1 translates
 to the same text; 0.15.2 and 0.14.1 to their own retained files, `check.sh`). The program
 declares `extern var ext_counter: u32`, `extern const ext_name: [*:0]const u8`,
 `extern var ext_head: ?*Node` and `extern var ext_slot: *u32`; `mem0 σ ext` holds their initial

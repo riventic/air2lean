@@ -143,7 +143,7 @@ Steps, one PR each, in this order:
    gives the legacy-logic wrappers. Re-prove the std-mode allocation corpora (`Proofs/Lists`,
    `Proofs/Slices`, sentinel and realloc fixtures) in translated mode against it, and make
    `--allocator-model translated` the default for every Zig version whose `posix.zig` is
-   reviewed (0.16.0 now; 0.17.0 after its review of the three `posix` rows).
+   reviewed (0.16.0 now; 0.17.1 after its review of the three `posix` rows).
 4. **Remap and realloc behaviour from code** (L3). With step 3, `resize`/`remap`/`realloc`
    behaviour comes from the translated allocator (`PageAllocator`'s `mremap`, the fixed buffer's
    last-allocation growth), so delete `AllocPolicy.byteRemap`, `ByteRemapMode`, the byte remap

@@ -341,7 +341,7 @@ class FixtureTests(unittest.TestCase):
     def test_retained_translation(self):
         # A theorem over a retained translation (`gen`): only that file, its version from the
         # profile record; a run records it under its module, and an edit makes the run stale.
-        profile = {'profile': {'zig_version': '0.17.0', 'target_triple': 'x86_64-linux-musl'}}
+        profile = {'profile': {'zig_version': '0.17.1', 'target_triple': 'x86_64-linux-musl'}}
         (self.fx.root / 'Proofs/Demo/Open.lean').write_text(
             f'{ti.PROFILE_PREFIX}{json.dumps(profile)}\nnamespace Demo.Open\ndef g : Nat := 0\nend Demo.Open\n')
         (self.fx.root / 'Proofs/Demo/OpenProofs.lean').write_text(
@@ -350,14 +350,14 @@ class FixtureTests(unittest.TestCase):
         inv['theorems'].append({'name': 'Demo.g_spec', 'module': 'Proofs.Demo.OpenProofs', 'example': 'demo',
                                 'gen': 'Proofs/Demo/Open.lean', 'scope': 'sequential', 'domain': 'g'})
         self.fx.save(inv)
-        self.assertError('Demo.g_spec: no current check result for 0.17.0/linux (Proofs/Demo/Open.lean)')
+        self.assertError('Demo.g_spec: no current check result for 0.17.1/linux (Proofs/Demo/Open.lean)')
         self.fx.record_all()
         self.assertEqual(self.fx.errors(), [])
         self.assertEqual(self.fx.load()['runs']['committed']['gens']['Proofs.Demo.Open']['path'],
                          'Proofs/Demo/Open.lean')
         gen = self.fx.root / 'Proofs/Demo/Open.lean'
         gen.write_text(gen.read_text() + '\n')
-        self.assertError('Demo.g_spec: no current check result for 0.17.0/linux')
+        self.assertError('Demo.g_spec: no current check result for 0.17.1/linux')
         inv = self.fx.load()
         inv['theorems'][-1].update(name='Demo.f_spec', module='Proofs.Demo.Proofs')
         self.fx.save(inv)

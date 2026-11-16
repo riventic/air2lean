@@ -291,7 +291,7 @@ Deletable after 5a/5b: Sentinel, SentinelRealloc, RawAlloc, Remap, Owned, ArenaC
 **L5a note (2026-10-15):** Sep/Sentinel, Sep/SentinelRealloc, Sep/RawAlloc, Sep/Remap deleted on
 codex/l5a-sentinel. M04's sentinel invariant is restated over the translated code for every allocator:
 `Interfaces.SentinelSpec` (`tests/roadmap/interfaces`, the open translation of
-`tests/roadmap/sentinel-realloc/source.zig`, Zig 0.17.0/0.16.0/0.15.2/0.14.1, `fsym` from `CAllocSpec`);
+`tests/roadmap/sentinel-realloc/source.zig`, Zig 0.17.1/0.16.0/0.15.2/0.14.1, `fsym` from `CAllocSpec`);
 allocSentinel by the wrapper contract `allocSentinel_spec` (alloc-fba) and `make_spec`; the raw vtable
 contracts by the four `FAllocSpec` fields, the remap whole-block facts by `FAllocSpec.remap` of the translated
 allocators. The byte-sentinel, sentinel-realloc and resize-remap Check/Kernel files import `ZigLean/Mem/Alloc`
@@ -396,7 +396,7 @@ count it as legacy). L6 is done.
 | file | proves | legacy pieces | eff | class |
 | --- | --- | --- | --- | --- |
 | Proofs/Lists/Bounded.lean | restated: `sum_not_within`, `sum_loop_not_within` (tight), `sum_steps` (exactly `xs.length+1` steps, the sum, the frame untouched and the list in the final memory: `sum_cost`'s value and memory conjuncts) | none | done | proof |
-| Proofs/Lists/Cost.lean | deleted: exact loop counts restated (`sum_cost`: `Lists.Linked.sum_exact`, `sum_steps`; `freeAll_cost`'s loop-step count: `Lists.Alloc.freeAll_exact`, `freeAll_steps`, for every allocator); `append_run` restated for every allocator (`Lists.Append.append_spec`, checked against the 0.15.2, 0.16.0 and 0.17.0 translations by `tests/roadmap/interfaces/check.sh`); allocation counts (`push_cost`, `pushAll_cost`, `append_capacity`, `freeAll_cost`'s freed blocks) retired (`docs/alloc-spec.md`) | — | done | proof |
+| Proofs/Lists/Cost.lean | deleted: exact loop counts restated (`sum_cost`: `Lists.Linked.sum_exact`, `sum_steps`; `freeAll_cost`'s loop-step count: `Lists.Alloc.freeAll_exact`, `freeAll_steps`, for every allocator); `append_run` restated for every allocator (`Lists.Append.append_spec`, checked against the 0.15.2, 0.16.0 and 0.17.1 translations by `tests/roadmap/interfaces/check.sh`); allocation counts (`push_cost`, `pushAll_cost`, `append_capacity`, `freeAll_cost`'s freed blocks) retired (`docs/alloc-spec.md`) | — | done | proof |
 | ZigLean/Sep/Bounded.lean | deleted (`TotalTripleWithin` reserved in `assurance/claim-heads.json`) | — | done | library |
 | ZigLean/Sep/Cost.lean | deleted (`Mem.SameAllocs`, `LoopRuns`) | — | done | library |
 The translator puts a `Zig.tick` at every loop-body run and recursive entry (#562); the cost rules are `ZigLean/Sep/Full/Cost.lean`

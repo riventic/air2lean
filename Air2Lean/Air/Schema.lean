@@ -246,7 +246,7 @@ where
     "shr_exact", "min", "max", "set_union_tag", "memset", "memset_safe", "memcpy", "memmove",
     "atomic_store_unordered", "atomic_store_monotonic", "atomic_store_release",
     "atomic_store_seq_cst",
-    -- Zig 0.17.0 only (`Compat.isNewBinOp`).
+    -- Zig 0.17.1 only (`Compat.isNewBinOp`).
     "div_ceil"]
   unTags : List String := ["is_null", "is_non_null", "is_err", "is_non_err", "ret", "ret_safe",
     "ret_load", "neg", "is_named_enum_value", "is_null_ptr", "is_non_null_ptr", "tag_name",
@@ -263,7 +263,7 @@ where
     "int_from_float", "int_from_float_safe", "float_from_int", "get_union_tag",
     "optional_payload_ptr", "optional_payload_ptr_set", "splat", "unwrap_errunion_payload_ptr",
     "unwrap_errunion_err_ptr", "errunion_payload_ptr_set",
-    -- Zig 0.17.0's renamed and split casts (`Compat.isNewTyOp`; `Canon.tagAliases017`).
+    -- Zig 0.17.1's renamed and split casts (`Compat.isNewTyOp`; `Canon.tagAliases017`).
     "bit_cast", "bit_cast_safe", "int_cast", "int_cast_safe", "ptr_cast", "ptr_from_int",
     "int_from_ptr", "error_cast", "error_from_int", "int_from_error", "union_from_enum",
     "array_to_vector"]

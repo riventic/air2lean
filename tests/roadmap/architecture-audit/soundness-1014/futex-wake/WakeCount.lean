@@ -4,7 +4,7 @@ import ZigLean.Sep.Full.OsFutex
 /-!
 # Audit 2026-10-14, finding S5: the hand models' futex wake count is not the native one
 
-`Thread.Futex.wake` (0.14.1, 0.15.2) and `Io.futexWake` (0.16.0, 0.17.0) are hand models (STD-05,
+`Thread.Futex.wake` (0.14.1, 0.15.2) and `Io.futexWake` (0.16.0, 0.17.1) are hand models (STD-05,
 `Zig.threadFutexWakeC`, `Zig.futexWakeC`): the scheduler's `wake p n`, which wakes exactly
 `min n k` of the `k` threads queued at `p` (`Thread.wakePick_length`). Std's code calls the OS:
 

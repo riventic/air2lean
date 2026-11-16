@@ -154,17 +154,17 @@ class ContractTests(unittest.TestCase):
 
 class VersionContractTests(unittest.TestCase):
     def test_version_contract_differs_only_in_version_and_features(self):
-        for path in sorted((ROOT / 'tests/roadmap/abi-probes/0.17.0').glob('*.json')):
+        for path in sorted((ROOT / 'tests/roadmap/abi-probes/0.17.1').glob('*.json')):
             p = json.loads(path.read_text())
             abi.profile_check(p)
             base = json.loads((path.parent.parent / path.name).read_text())
-            self.assertEqual(p['zig_version'], '0.17.0')
+            self.assertEqual(p['zig_version'], '0.17.1')
             self.assertEqual({k: v for k, v in p.items() if k not in ('zig_version', 'features')},
                              {k: v for k, v in base.items() if k not in ('zig_version', 'features')})
 
     def test_observe_selects_the_compiler_version_contract(self):
         base = ROOT / 'tests/roadmap/abi-probes/aarch64-macos-none-ReleaseSafe.json'
-        for version, expected in (('0.17.0', base.parent / '0.17.0' / base.name), ('0.16.0', base),
+        for version, expected in (('0.17.1', base.parent / '0.17.1' / base.name), ('0.16.0', base),
                                   ('0.18.0', base)):
             done = subprocess.CompletedProcess([], 0, stdout=(version + '\n').encode(), stderr=b'')
             with patch.object(abi.subprocess, 'run', return_value=done):

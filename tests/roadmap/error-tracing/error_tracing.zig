@@ -8,7 +8,7 @@ const E = error{ Bad, Worse };
 pub const Big = struct { a: [6]u64 };
 
 /// A large error union is built in the result pointer and returned with `ret_load`: under error
-/// tracing Sema checks it with `is_non_err_ptr` before `returnError` (Zig 0.14.1, 0.15.2, 0.17.0).
+/// tracing Sema checks it with `is_non_err_ptr` before `returnError` (Zig 0.14.1, 0.15.2, 0.17.1).
 pub noinline fn bigRet(x: u64) E!Big {
     if (x == 0) return error.Bad;
     if (x == 1) return error.Worse;

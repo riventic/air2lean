@@ -76,14 +76,14 @@ class CommittedMatrix(Scratch):
         report = json.loads(output)
         paths = {row['path']: row for row in report['paths']}
         self.assertEqual(set(paths), {
-            '0.17.0/x86_64-linux/x86_64-linux/abi64-le-v1',
-            '0.17.0/aarch64-macos/aarch64-macos/abi64-le-v1',
+            '0.17.1/x86_64-linux/x86_64-linux/abi64-le-v1',
+            '0.17.1/aarch64-macos/aarch64-macos/abi64-le-v1',
             '0.16.0/x86_64-linux/x86_64-linux/abi64-le-v1',
             '0.15.2/x86_64-linux/x86_64-linux/abi64-le-v1',
             '0.14.1/x86_64-linux/x86_64-linux/abi64-le-v1',
             '0.16.0/aarch64-macos/aarch64-macos/abi64-le-v1',
             '0.15.2/aarch64-macos/aarch64-macos/abi64-le-v1',
-            '0.17.0/aarch64-linux/aarch64-linux/abi64-le-v1',
+            '0.17.1/aarch64-linux/aarch64-linux/abi64-le-v1',
         '0.16.0/aarch64-linux/aarch64-linux/abi64-le-v1',
             '0.15.2/aarch64-linux/aarch64-linux/abi64-le-v1',
             '0.14.1/aarch64-linux/aarch64-linux/abi64-le-v1'})
@@ -147,9 +147,9 @@ class Evidence(Scratch):
 
     def test_new_declared_host_without_a_job_fails(self):
         def change(data):
-            version(data, '0.17.0')['hosts'].append('aarch64-linux')
+            version(data, '0.17.1')['hosts'].append('aarch64-linux')
         self.edit_json('compatibility.json', change)
-        self.check_fails('0.17.0/aarch64-linux/aarch64-linux/abi64-le-v1: declared supported')
+        self.check_fails('0.17.1/aarch64-linux/aarch64-linux/abi64-le-v1: declared supported')
 
     def test_declared_target_listed_as_not_declared_fails(self):
         self.edit_json(TM['MAP'], lambda d: d['not_declared'].append(
@@ -211,8 +211,8 @@ class Evidence(Scratch):
         self.edit_text(TM['WORKFLOW'], '      - name: macOS proofs\n' + GUARD + '        env:\n'
                        '          AIR2LEAN_ZIG_VERSION: ${{ matrix.zig }}\n',
                        '      - name: macOS proofs\n' + GUARD + '        env:\n'
-                       '          AIR2LEAN_ZIG_VERSION: "0.17.0"\n')
-        self.check_fails('bound to Zig 0.17.0, not 0.16.0', 'bound to Zig 0.17.0, not 0.15.2')
+                       '          AIR2LEAN_ZIG_VERSION: "0.17.1"\n')
+        self.check_fails('bound to Zig 0.17.1, not 0.16.0', 'bound to Zig 0.17.1, not 0.15.2')
 
     def test_unbound_step_in_a_job_without_matrix_fails(self):
         # The macos job without its matrix: one version, bound by each step's environment.
@@ -326,7 +326,7 @@ class AbiProfiles(Scratch):
         self.assertEqual(code, 0, output)
         rows = {row['profile']: row for row in json.loads(output)['abi_profiles']}
         self.assertEqual(set(rows), {f'{version}/{triple}/ReleaseSafe'
-                                     for version in ('0.17.0', '0.16.0', '0.15.2', '0.14.1')
+                                     for version in ('0.17.1', '0.16.0', '0.15.2', '0.14.1')
                                      for triple in ('aarch64-linux-gnu', 'aarch64-macos-none')})
         self.assertEqual(rows['0.16.0/aarch64-linux-gnu/ReleaseSafe']['probe_job'], 'aarch64-linux')
 
@@ -373,15 +373,15 @@ class WorkflowData(unittest.TestCase):
       matrix:
         flag: [true]
         include:
-          - zig: "0.17.0"
+          - zig: "0.17.1"
     steps:
       - name: gate
         if: ${{ !matrix.flag }}
         run: lake build Proofs
 '''
-        entry={'job':'test','matrix':{'zig':'0.17.0'},'evidence':{'proof_check':['gate']}}
+        entry={'job':'test','matrix':{'zig':'0.17.1'},'evidence':{'proof_check':['gate']}}
         for reader in (TM['parse_workflow_yaml'],TM['parse_workflow'],
-                       lambda source:TM['check_entry'](entry,('0.17.0','x86_64-linux'),TM['parse_workflow'](source))):
+                       lambda source:TM['check_entry'](entry,('0.17.1','x86_64-linux'),TM['parse_workflow'](source))):
             with self.subTest(reader=reader),self.assertRaisesRegex(TM['Unreadable'],
                     'ci.yml: job test: only strategy.matrix.include is supported'):
                 reader(text)
@@ -406,32 +406,32 @@ class WorkflowData(unittest.TestCase):
         self.assertEqual(errors,[])
         self.assertEqual(TM['canonical'](context['matrix']),TM['canonical'](expected))
         entry={'job':'test','matrix':selector,'evidence':{kind:['gate'] for kind in TM['KINDS']}}
-        self.assertEqual(TM['check_entry'](entry,('0.17.0','x86_64-linux'),jobs),([],[]))
+        self.assertEqual(TM['check_entry'](entry,('0.17.1','x86_64-linux'),jobs),([],[]))
 
     def test_both_actual_selectors_preserve_numeric_boolean_data_identity(self):
-        rows='''          - zig: "0.17.0"
+        rows='''          - zig: "0.17.1"
             flag: 0.0
-          - zig: "0.17.0"
+          - zig: "0.17.1"
             flag: false
 '''
         jobs=self.selector_jobs(rows)
         for flag in (0.0,False):
             with self.subTest(flag=repr(flag)):
-                self.assert_selected(jobs,{'flag':flag},{'zig':'0.17.0','flag':flag})
-        numeric=self.selector_jobs('          - zig: "0.17.0"\n            flag: 0.0\n')
+                self.assert_selected(jobs,{'flag':flag},{'zig':'0.17.1','flag':flag})
+        numeric=self.selector_jobs('          - zig: "0.17.1"\n            flag: 0.0\n')
         entry={'job':'test','matrix':{'flag':False}}
-        self.assertIn('matches 0 rows',TM['check_entry'](entry,('0.17.0','x86_64-linux'),numeric)[0][0])
+        self.assertIn('matches 0 rows',TM['check_entry'](entry,('0.17.1','x86_64-linux'),numeric)[0][0])
         self.assertIn('matches 0 rows',TM['job_context'](numeric,'test',{'flag':False})[2][0])
 
     def test_both_actual_selectors_require_presence_for_explicit_null(self):
-        jobs=self.selector_jobs('''          - zig: "0.17.0"
-          - zig: "0.17.0"
+        jobs=self.selector_jobs('''          - zig: "0.17.1"
+          - zig: "0.17.1"
             optional: null
 ''')
-        self.assert_selected(jobs,{'optional':None},{'zig':'0.17.0','optional':None})
-        absent=self.selector_jobs('          - zig: "0.17.0"\n')
+        self.assert_selected(jobs,{'optional':None},{'zig':'0.17.1','optional':None})
+        absent=self.selector_jobs('          - zig: "0.17.1"\n')
         entry={'job':'test','matrix':{'optional':None}}
-        self.assertIn('matches 0 rows',TM['check_entry'](entry,('0.17.0','x86_64-linux'),absent)[0][0])
+        self.assertIn('matches 0 rows',TM['check_entry'](entry,('0.17.1','x86_64-linux'),absent)[0][0])
         self.assertIn('matches 0 rows',TM['job_context'](absent,'test',{'optional':None})[2][0])
 
     def test_projection_refuses_invalid_container_shapes_with_job_context(self):
@@ -512,12 +512,12 @@ class WorkflowData(unittest.TestCase):
     strategy:
       matrix:
         include:
-          - zig: "0.17.0"
+          - zig: "0.17.1"
             examples: |
               on'''
-        entry={'job':'test','matrix':{'zig':'0.17.0'},
+        entry={'job':'test','matrix':{'zig':'0.17.1'},
                'evidence':{kind:['EOF gate'] for kind in TM['KINDS']}}
-        self.assertEqual(TM['check_entry'](entry,('0.17.0','x86_64-linux'),TM['parse_workflow'](text)),([],[]))
+        self.assertEqual(TM['check_entry'](entry,('0.17.1','x86_64-linux'),TM['parse_workflow'](text)),([],[]))
         for value in ('left:','left: # comment'):
             with self.subTest(value=value),self.assertRaisesRegex(TM['Unreadable'],r'ci.yml:1: unsupported YAML syntax'):
                 TM['parse_workflow']('value: '+value+'\n')
@@ -526,7 +526,7 @@ class WorkflowData(unittest.TestCase):
         cases=(('0.0',float,0.0),('-0',int,0),('+12',int,12),('001',int,1),
                ('FALSE',bool,False),('True',bool,True),('Null',type(None),None),
                ('~',type(None),None),('１',str,'１'),('yes',str,'yes'),
-               ('on',str,'on'),('0.17.0',str,'0.17.0'),('\u00a00.0\u00a0',str,'\u00a00.0\u00a0'),("'FALSE'",str,'FALSE'),
+               ('on',str,'on'),('0.17.1',str,'0.17.1'),('\u00a00.0\u00a0',str,'\u00a00.0\u00a0'),("'FALSE'",str,'FALSE'),
                ('"null"',str,'null'),("'it''s exact'",str,"it's exact"))
         for source,kind,value in cases:
             with self.subTest(source=source):
@@ -535,7 +535,7 @@ class WorkflowData(unittest.TestCase):
                 self.assertEqual(result,value)
 
     def test_real_yaml_false_kinds_cannot_back_conditional_proof_evidence(self):
-        entry={'job':'test','matrix':{'zig':'0.17.0'},
+        entry={'job':'test','matrix':{'zig':'0.17.1'},
                'evidence':{'proof_check':['DATA-dependent proof']},
                'gaps':{'native_execution':'fixture','target_probe':'fixture'}}
         text='''jobs:
@@ -544,7 +544,7 @@ class WorkflowData(unittest.TestCase):
     strategy:
       matrix:
         include:
-          - zig: "0.17.0"
+          - zig: "0.17.1"
             flag: VALUE
     steps:
       - name: DATA-dependent proof
@@ -554,12 +554,12 @@ class WorkflowData(unittest.TestCase):
         for source,applies in (('0.0',False),('-0',False),('FALSE',False),('null',False),
                                ('1.5',True),('TRUE',True),('１',True),('\u00a00.0\u00a0',True),("'FALSE'",True)):
             with self.subTest(source=source):
-                errors,_=TM['check_entry'](entry,('0.17.0','x86_64-linux'),
+                errors,_=TM['check_entry'](entry,('0.17.1','x86_64-linux'),
                                           TM['parse_workflow'](text.replace('VALUE',source)))
                 self.assertEqual(any('its `if` is false' in error for error in errors),not applies,errors)
                 self.assertEqual([e for e in errors if 'proof_check' in e],[] if applies else [
-                    '0.17.0/x86_64-linux: proof_check step \'DATA-dependent proof\': its `if` is false for this row'])
-        errors,_=TM['check_entry'](entry,('0.17.0','x86_64-linux'),TM['parse_workflow'](
+                    '0.17.1/x86_64-linux: proof_check step \'DATA-dependent proof\': its `if` is false for this row'])
+        errors,_=TM['check_entry'](entry,('0.17.1','x86_64-linux'),TM['parse_workflow'](
             text.replace('VALUE','１').replace('if: matrix.flag','if: matrix.flag == 1')))
         self.assertTrue(any("unsupported numeric string '１'" in error for error in errors),errors)
 
@@ -596,14 +596,14 @@ class WorkflowData(unittest.TestCase):
   test:
     runs-on: ubuntu-24.04
     env:
-      AIR2LEAN_ZIG_VERSION: "0.17.0"
+      AIR2LEAN_ZIG_VERSION: "0.17.1"
     steps:
       - name: Native gate
         env:
           AIR2LEAN_DIFF: VALUE
         run: scripts/check.sh
 '''.replace('VALUE',source))['test']
-                errors=TM['check_step'](job['steps'],job,{'matrix':None},'0.17.0','native_execution','linux')
+                errors=TM['check_step'](job['steps'],job,{'matrix':None},'0.17.1','native_execution','linux')
                 self.assertEqual(errors,[] if enabled else ['its commands do not perform native_execution'])
                 if source=='FALSE':
                     self.assertEqual(TM['expression_string'](job['steps'][0]['env']['AIR2LEAN_DIFF']),'false')
@@ -766,22 +766,22 @@ class Expressions(unittest.TestCase):
                 self.assertEqual(self.value('matrix.' + name, {name: value}), value)
 
     def test_matrix_fields_are_ascii_case_insensitive_without_ambiguous_fallback(self):
-        self.assertTrue(self.value("matrix.ZIG == '0.17.0'", {'zig': '0.17.0'}))
-        self.assertTrue(self.value("matrix.zig == '0.17.0'", {'ZIG': '0.17.0'}))
-        self.assertEqual(self.value('matrix.missing', {'zig': '0.17.0'}), None)
-        self.assertTrue(self.value('matrix.missing == null', {'zig': '0.17.0'}))
-        for row in ({'zig': '0.17.0', 'ZIG': '0.16.0'}, {'zig': 'same', 'ZIG': 'same'}):
+        self.assertTrue(self.value("matrix.ZIG == '0.17.1'", {'zig': '0.17.1'}))
+        self.assertTrue(self.value("matrix.zig == '0.17.1'", {'ZIG': '0.17.1'}))
+        self.assertEqual(self.value('matrix.missing', {'zig': '0.17.1'}), None)
+        self.assertTrue(self.value('matrix.missing == null', {'zig': '0.17.1'}))
+        for row in ({'zig': '0.17.1', 'ZIG': '0.16.0'}, {'zig': 'same', 'ZIG': 'same'}):
             for reference in ('matrix.zig', 'matrix.ZIG'):
                 with self.subTest(row=row, reference=reference), self.assertRaisesRegex(TM['Unknown'], 'ambiguous case variants'):
                     self.value(reference, row)
         with self.assertRaisesRegex(TM['Unknown'], 'ambiguous case variants'):
-            self.value('matrix.zig', {'other': 1, 'OTHER': 2, 'zig': '0.17.0'})
+            self.value('matrix.zig', {'other': 1, 'OTHER': 2, 'zig': '0.17.1'})
         for row in ({'K': True}, {'é': True, 'key': True}, {1: True}):
             with self.subTest(row=row), self.assertRaisesRegex(TM['Unknown'], 'context key'):
                 self.value('matrix.key', row)
         for reference in ('Matrix.zig', 'MATRIX.missing', 'RUNNER.os'):
             with self.subTest(reference=reference), self.assertRaises(TM['Unknown']):
-                self.value(reference, {'zig': '0.17.0'})
+                self.value(reference, {'zig': '0.17.1'})
 
     def test_format_documented_examples_and_literal_braces(self):
         self.assertEqual(self.value("format('Hello {0} {1} {2}', 'Mona', 'the', 'Octocat')"),
@@ -796,12 +796,12 @@ class Expressions(unittest.TestCase):
         self.assertEqual(self.value("format('{0}', format('{0}!', 'nested'))"), 'nested!')
 
     def test_format_uses_explicit_workspace_temp_and_nested_matrix_context(self):
-        context = {'matrix': {'zig': '0.17.0'}, 'runner.os': 'Linux',
+        context = {'matrix': {'zig': '0.17.1'}, 'runner.os': 'Linux',
                    'github.workspace': '/work tree', 'runner.temp': '/tmp/CI run'}
         expression = "format('{0}/zig-air-{1}/bin/zig', github.workspace, matrix.zig)"
-        self.assertEqual(TM['evaluate'](expression, context), '/work tree/zig-air-0.17.0/bin/zig')
+        self.assertEqual(TM['evaluate'](expression, context), '/work tree/zig-air-0.17.1/bin/zig')
         self.assertEqual(TM['interpolate']('${{ '+expression+' }}', context),
-                         '/work tree/zig-air-0.17.0/bin/zig')
+                         '/work tree/zig-air-0.17.1/bin/zig')
         self.assertEqual(TM['evaluate']("format('{0}/{1}', runner.temp, runner.os)", context),
                          '/tmp/CI run/Linux')
         self.assertEqual(TM['evaluate']("format('{0}', env.AIR2LEAN_REUSED)",

@@ -113,7 +113,7 @@ must still be audited (for example with `#print axioms`) before claiming impleme
 verification. `dependencies` is the project's explicit semantic dependency inventory, not an
 automatically inferred proof-dependency closure. Each entry must be unique and name another
 binding in the same registry, a modelled built-in std model qualified for the binding's Zig
-version (for example `mem.Allocator.create`; `mem.Allocator.allocSentinel` needs 0.16.0 or 0.17.0), or
+version (for example `mem.Allocator.create`; `mem.Allocator.allocSentinel` needs 0.16.0 or 0.17.1), or
 a Lean identifier. A rejected std name (`Io.futexWaitTimeout`) and any cycle between bindings,
 including a self-dependency, are rejected before output is written.
 
@@ -245,11 +245,11 @@ address table, with no per-site annotation:
 If every target of a signature satisfies one contract, the call site satisfies it at every
 pointer: `Contract.Holds.dispatch` and `CallbackContract.Holds.dispatch` (the unknown-address
 arm is the contract's `.illegal` failure). A client then needs no callback body.
-`tests/roadmap/callbacks` (fresh 0.17.0, 0.16.0, 0.15.2 and 0.14.1 exports of `callbacks.zig`)
+`tests/roadmap/callbacks` (fresh 0.17.1, 0.16.0, 0.15.2 and 0.14.1 exports of `callbacks.zig`)
 binds the foreign `ext_visit` to an assumed contract (`CallbackModel.contract`: given a writable
 `u32` context, only a stack overflow fails and the memory after is a `u32` store to the context;
 `contract_weaker` gives the callback contract `visitCallback` of the type, which every target
-meets and which lets a call fail with any error) and proves on the 0.17.0
+meets and which lets a call fail with any error) and proves on the 0.17.1
 translation: `sumVisit_holds` (the translated target meets the same contract), `site_holds`,
 `evaluate_spec` (the evaluator, for every pointer), `callOps_spec` (a vtable field loaded from
 memory), `forEach_spec` (the observer loop: a run that returns gives `true`, keeps the context
@@ -353,7 +353,7 @@ Template mode produces JSON authoring data and intentionally does not certify pr
 `tests/roadmap/models/StdModels.lean` checks the built-in table (unique names, every typed
 model has a row, anonymous-instance lookup), rejection of a std call with an incompatible
 runtime signature, of an unqualified Zig version (every modelled row lists its reviewed
-versions; 0.17.0 is unreviewed), of a translated function or project binding reusing a std
+versions; 0.17.1 is unreviewed), of a translated function or project binding reusing a std
 name, of a project binding that hand-models std code (and acceptance of the OS-primitive
 allowlist and of user-module names), of a same-name project binding with a different second
 call site, and the semantic dependency rules. `tests/roadmap/models/StdDependencies.lean` elaborates against the

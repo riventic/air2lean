@@ -15,7 +15,7 @@ proof that a function never throws is then also a proof that it has no IB on tho
 ([build-modes.md](build-modes.md)).
 
 **Checked AIR forms.** Some AIR ops carry Sema's check inside themselves instead of before them:
-`add_safe`, `sub_safe`, `mul_safe`, `intcast_safe` (0.17.0 `int_cast_safe`) and 0.17.0's
+`add_safe`, `sub_safe`, `mul_safe`, `intcast_safe` (0.17.1 `int_cast_safe`) and 0.17.1's
 `bit_cast_safe`. Their model throws the handler's panic constructor; the plain form of the same op
 (`add`, `intcast`, `bit_cast`) throws `.illegal`, so the outcome follows from which form the AIR
 holds (`Zig.Error.ifSafe`; `Mode.checked`/`.unchecked`, `Op.intCast safe`, `Op.bitcast safe`).
@@ -45,8 +45,8 @@ or IB that Sema does not check. Rows marked **fixed** changed on this branch.
 | 3 | Index out of bounds: many-item pointer | none (no length) | `Mem.access`: `.illegal` outside the allocation | same |
 | 4 | Slice start greater than end | `startGreaterThanEnd` | `.outOfBounds` | the plain length `sub` overflows: `.illegal` (**fixed**, was `.overflow`) |
 | 5 | Slice end past the length | `outOfBounds` | `.outOfBounds` | `Zig.checkSliceEnd` on `slice(ptr_add(base, start), len)`, where `base` is a slice's `slice_ptr` or an array pointer: `.illegal` (**fixed**, was a slice past the operand). A many-item pointer has no length, so its slicing has no bound to break |
-| 6 | Cast negative to unsigned / cast truncates data (`@intCast`) | `integerOutOfBounds`, in the op (`intcast_safe`, 0.17.0 `int_cast_safe`) | `Zig.intCast`: `.overflow` | plain `intcast`: `Zig.intCast … (safe := false)`, `.illegal` (**fixed**, was `.overflow`) |
-| 7 | Integer overflow (`+ - *`, negation, `/`, `@divTrunc`, `@divFloor`, 0.17.0 `@divCeil` of `minInt / -1`) | `integerOverflow`: in the op for `+ - *` (`add_safe`, `sub_safe`, `mul_safe`), a `cond_br` before the op for the divisions | `+ - *`: `.overflow`; divisions: the handler's `.overflow` | plain `add`/`sub`/`mul`: `Zig.add … (safe := false)`, `.illegal`; `div_trunc`/`div_floor`/`div_ceil`: `.illegal` (**fixed**, was `.overflow`) |
+| 6 | Cast negative to unsigned / cast truncates data (`@intCast`) | `integerOutOfBounds`, in the op (`intcast_safe`, 0.17.1 `int_cast_safe`) | `Zig.intCast`: `.overflow` | plain `intcast`: `Zig.intCast … (safe := false)`, `.illegal` (**fixed**, was `.overflow`) |
+| 7 | Integer overflow (`+ - *`, negation, `/`, `@divTrunc`, `@divFloor`, 0.17.1 `@divCeil` of `minInt / -1`) | `integerOverflow`: in the op for `+ - *` (`add_safe`, `sub_safe`, `mul_safe`), a `cond_br` before the op for the divisions | `+ - *`: `.overflow`; divisions: the handler's `.overflow` | plain `add`/`sub`/`mul`: `Zig.add … (safe := false)`, `.illegal`; `div_trunc`/`div_floor`/`div_ceil`: `.illegal` (**fixed**, was `.overflow`) |
 | 8 | Division by zero (integers) | `divideByZero`, a `cond_br` before the op | the handler's `.divByZero` | `Zig.divTrunc`/`divFloor`/`divCeil`: `.illegal` (**fixed**, was `.divByZero`) |
 | 9 | Remainder division by zero (integers) | `divideByZero`, a `cond_br` before the op | the handler's `.divByZero` | `Zig.rem`/`Zig.mod`: `.illegal` (**fixed**, was `.divByZero`) |
 | 10 | Exact division remainder (integers) | `exactDivisionRemainder` (Sema emits `div_trunc` and `rem`) | `.panic` | `div_exact`: `Zig.divExact`, `.illegal` for a remainder, a zero divisor and `minInt / -1` (**fixed**, was `.panic`/`.divByZero`/`.overflow`) |
@@ -57,7 +57,7 @@ or IB that Sema does not check. Rows marked **fixed** changed on this branch.
 | 15 | Attempt to unwrap null | `unwrapNull` | `.panic` | `Zig.optPayload`, `Zig.optPtrUnwrap`: `.illegal` (**fixed**, was `.panic`) |
 | 16 | Attempt to unwrap error | `unwrapError` | `.panic` | `Zig.unwrapPayload`, `Zig.unwrapErr`: `.illegal` (**fixed**, was `.panic`) |
 | 17 | Invalid error code (`@errorFromInt`) | `cmp_lte_errors_len` | `.panic` against the export's error table (`errorTable.size`) | `Zig.errorFromIntIn`: `.illegal` (**fixed**, was *rejected*). Both need the error table (docs/air-json.md §Error table, docs/profiles.md); an export without it is *rejected* (probe `errorFromIntNoTable`) |
-| 18 | Invalid enum cast (`@enumFromInt`, 0.17.0 `@bitCast` to an enum) | `invalidEnumValue`, in the op (`intcast_safe`, 0.17.0 `int_cast_safe`, `bit_cast_safe`) | `Zig.enumOf`: `.panic` | plain `intcast`/`bit_cast`: `Zig.enumOf … (safe := false)`, `.illegal` (**fixed**, was `.panic`) |
+| 18 | Invalid enum cast (`@enumFromInt`, 0.17.1 `@bitCast` to an enum) | `invalidEnumValue`, in the op (`intcast_safe`, 0.17.1 `int_cast_safe`, `bit_cast_safe`) | `Zig.enumOf`: `.panic` | plain `intcast`/`bit_cast`: `Zig.enumOf … (safe := false)`, `.illegal` (**fixed**, was `.panic`) |
 | 19 | Invalid error set cast (`@errorCast`) | `error_set_has_value` | *rejected* (exporter) | error set: `Zig.errorIn`, `.illegal` (**fixed**, was the error). Error union: *rejected* with or without safety (the checker refuses a `bitcast` between error unions of different sets; probes `errorCastUnionSafe`, `errorCastUnionUnsafe`) |
 | 20 | Incorrect pointer alignment (`@alignCast`, `@ptrFromInt`) | `incorrectAlignment` | `.panic` | `Zig.checkAlign`, `Zig.checkAddr`: `.illegal` (**fixed**, was the pointer) |
 | 21 | Wrong union field access (tagged, bare) | `inactiveUnionField`, a `cond_br` on the (safety) tag before the access | the handler's `.panic` | `U.get_f`: `.illegal` (**fixed**, was `.panic`) |
@@ -92,12 +92,12 @@ or IB that Sema does not check. Rows marked **fixed** changed on this branch.
 ## noalias parameters
 
 **Rule.** The language reference has no text for `noalias` ("TODO add documentation for
-noalias" in 0.15.2, 0.16.0 and 0.17.0, 0.14.1 likewise). Sema records it as a bit of the
+noalias" in 0.15.2, 0.16.0 and 0.17.1, 0.14.1 likewise). Sema records it as a bit of the
 function type (`noalias_bits`: the first 32 parameters; "non-pointer parameter declared
 noalias" for any other type), and the LLVM backend lowers each set bit to LLVM's `noalias`
 argument attribute: on a pointer parameter, and on the pointer of a slice parameter
 (`src/codegen/llvm.zig` `addByValParamAttrs` and the `.slice` lowering; the call-site attributes
-in `src/codegen/llvm/FuncGen.zig`), in 0.14.1 to 0.17.0 alike. So the rule is LLVM's: during the
+in `src/codegen/llvm/FuncGen.zig`), in 0.14.1 to 0.17.1 alike. So the rule is LLVM's: during the
 execution of the call, memory accessed through a pointer *based on* the parameter is not also
 accessed through a pointer not based on it, if either access writes. Violating it is undefined
 behaviour; no Zig safety check exists. A parameter of an `inline fn` has no attribute (Sema

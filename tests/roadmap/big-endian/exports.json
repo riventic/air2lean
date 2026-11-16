@@ -36,7 +36,7 @@
       "out": "air/{version}/concurrency/s390x-linux",
       "source": "concurrency.zig",
       "filter": "concurrency.,atomic.Value",
-      "versions": ["0.17.0", "0.15.2"],
+      "versions": ["0.17.1", "0.15.2"],
       "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "s390x-linux"],
       "cwd": "repo"
     },
@@ -44,7 +44,7 @@
       "out": "air/{version}/concurrency/mips64-linux",
       "source": "concurrency.zig",
       "filter": "concurrency.,atomic.Value",
-      "versions": ["0.17.0", "0.15.2"],
+      "versions": ["0.17.1", "0.15.2"],
       "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "mips64-linux"],
       "cwd": "repo"
     },
@@ -52,7 +52,7 @@
       "out": "air/{version}/concurrency/x86_64-linux",
       "source": "concurrency.zig",
       "filter": "concurrency.,atomic.Value",
-      "versions": ["0.17.0", "0.15.2"],
+      "versions": ["0.17.1", "0.15.2"],
       "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
       "cwd": "repo"
     }

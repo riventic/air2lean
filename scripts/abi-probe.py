@@ -47,7 +47,7 @@ def error_limit(bits):
 # Zig versions with committed probe contracts: 0.16.0's profiles are
 # tests/roadmap/abi-probes/<triple>-<mode>.json, every other version's are under <version>/
 # (`observe` selects it from the stock compiler's `zig version`).
-VERSIONS = ('0.14.1', '0.15.2', '0.16.0', '0.17.0')
+VERSIONS = ('0.14.1', '0.15.2', '0.16.0', '0.17.1')
 
 
 def fingerprints():

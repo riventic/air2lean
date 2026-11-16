@@ -8,7 +8,7 @@ Draft text for a Zig issue. It has not been filed; filing needs the maintainer's
 
 ### Zig version
 
-0.16.0 and 0.17.0. The same `lowerPtr` code is in 0.14.1 and 0.15.2.
+0.16.0 and 0.17.1. The same `lowerPtr` code is in 0.14.1 and 0.15.2.
 
 ### Steps to reproduce
 
@@ -69,7 +69,7 @@ test "comptime pointer into error-union payload" {
 
 ### Actual behavior
 
-On aarch64-macos, stock 0.16.0 and 0.17.0, with `-fllvm` in ReleaseSafe or Debug:
+On aarch64-macos, stock 0.16.0 and 0.17.1, with `-fllvm` in ReleaseSafe or Debug:
 
 ```
 constant=10 runtime=12 constant_read=20 runtime_read=22

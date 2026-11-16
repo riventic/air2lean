@@ -4,7 +4,7 @@
       "out": "air/{version}",
       "source": "bitcast017.zig",
       "filter": "bitcast017.",
-      "versions": ["0.17.0"],
+      "versions": ["0.17.1"],
       "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
       "cwd": "repo"
     }

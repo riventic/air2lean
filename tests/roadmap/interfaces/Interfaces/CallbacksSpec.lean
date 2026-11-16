@@ -12,7 +12,7 @@ import ZigLean.Sep.Full.Region
 # E02's callbacks on the interface seam (`docs/interfaces.md`)
 
 `tests/roadmap/callbacks/callbacks.zig` with its callback type `Visitor` open
-(`registry-callbacks-0.17.0.json`): a call through a `Visitor` runs the foreign `ext_visit`'s
+(`registry-callbacks-0.17.1.json`): a call through a `Visitor` runs the foreign `ext_visit`'s
 model or `sumVisit` for their addresses, and the environment (`Ext.call0`, premise EXT-05) for
 any other pointer. `evaluate` is proved once, for every callback, from the callback contract
 (`∀ v, FnSpec (visitPre v) visitPost g`) of the function `g` the call runs (`Table.callOr`);

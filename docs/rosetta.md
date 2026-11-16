@@ -45,7 +45,7 @@ LOAD  0x01be60 0x101ee60 0x101ee60 0x004a80 0x0071b8 RW  0x1000
 GNU_RELRO ... 0x000000 0x0001a0 R 0x1
 ```
 
-Evidence (Docker Desktop 29.8, Rosetta, stock Zig 0.17.0 and 0.16.0, tiny program, static musl;
+Evidence (Docker Desktop 29.8, Rosetta, stock Zig 0.17.1 and 0.16.0, tiny program, static musl;
 the modes are those of [build-modes.md](build-modes.md)):
 
 Debug, ReleaseSafe and ReleaseFast run with and without `-z norelro`; ReleaseSmall fails with
@@ -54,7 +54,7 @@ Debug, ReleaseSafe and ReleaseFast run with and without `-z norelro`; ReleaseSma
 depends on its content, so a build that works today can fail after a source change. Turning that
 one segment into `PT_NULL` makes the failing ReleaseSmall binary run; so the segment, not the rest of
 the layout, is what Rosetta rejects. The official x86_64 `zig` itself runs (it has bytes in its first
-RW segment); the x86_64 `zig build` of Zig 0.17.0 does not, even for an empty `build.zig`: the
+RW segment); the x86_64 `zig build` of Zig 0.17.1 does not, even for an empty `build.zig`: the
 runner it compiles on the fly (`maker`; `zig build` of 0.16.0 does run) has the empty segment. This is a Rosetta limitation (and a Zig/LLD layout it does not handle), not an air2lean bug;
 what is ours is to link what we build and run in a way Rosetta accepts, in every path.
 

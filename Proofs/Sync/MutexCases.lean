@@ -12,11 +12,11 @@ and functions remain distinct. The public `Sync.ioMutex` instance is unchanged.
 
 open Zig Zig.Conc Zig.Full
 
-namespace Sync.CaseContracts.V0_17_0.H_6c696e7578
+namespace Sync.CaseContracts.V0_17_1.H_6c696e7578
 
-open Sync.Gen.V0_17_0.H_6c696e7578
+open Sync.Gen.V0_17_1.H_6c696e7578
 
-/-- The lock-word representation in the actual Zig 0.17.0 Linux translation. -/
+/-- The lock-word representation in the actual Zig 0.17.1 Linux translation. -/
 def states : LockWord.States Io_Mutex_State where
   unl := .unlocked
   one := .locked_once
@@ -63,7 +63,7 @@ def code : IoMutexCode Tgt where
 /-- This profile's translated mutex satisfies the existing general mutex contract. -/
 def mutex : MutexImpl Tgt := code.impl
 
-end Sync.CaseContracts.V0_17_0.H_6c696e7578
+end Sync.CaseContracts.V0_17_1.H_6c696e7578
 
 namespace Sync.CaseContracts.V0_16_0.H_6c696e7578
 

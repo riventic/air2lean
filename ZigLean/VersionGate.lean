@@ -5,7 +5,7 @@ import Lean.Elab.Command
 
 `Proofs/<Ex>/Gen.lean` is the translation for the Zig version that `scripts/check.sh` ran, and
 `lake build Proofs` builds every proof file against it. When a Zig release changes the std code
-that a proof steps through (Zig 0.17.0's `Io.Condition.waitUncancelable` no longer calls
+that a proof steps through (Zig 0.17.1's `Io.Condition.waitUncancelable` no longer calls
 `waitInner`), the proof needs one variant per translation:
 
 ```
@@ -13,7 +13,7 @@ when_defined Io_Condition_waitInner
   theorem condWait_spec_v016 ... -- steps through the 0.16.0 translation
 end_when
 when_defined Io_Condition_waitUncancelable.loop22
-  theorem condWait_spec_v017 ... -- the same statement, through the 0.17.0 translation
+  theorem condWait_spec_v017 ... -- the same statement, through the 0.17.1 translation
 end_when
 theorem condWait_spec ... := by
   first | exact condWait_spec_v016 ... | exact condWait_spec_v017 ...

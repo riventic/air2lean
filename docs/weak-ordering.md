@@ -39,7 +39,7 @@ The model outcomes no file observed are printed as `unobserved`.
 `scripts/weak-ordering.py observe` builds the litmus program with a stock compiler for the
 profile (ReleaseSafe, LLVM, baseline CPU) and runs it on that profile's own host only;
 `scripts/weak-ordering.py check` runs `Litmus.lean`. `tests/roadmap/weak-ordering/observed/`
-holds one observation per profile and Zig version (0.14.1 to 0.17.0): aarch64-macos-none on
+holds one observation per profile and Zig version (0.14.1 to 0.17.1): aarch64-macos-none on
 Apple silicon, aarch64-linux-gnu in a native `linux/arm64` container. CI observes again on every
 run (the `aarch64-linux` job for all four versions, the `macos` job for its row's version) and
 checks the fresh and the committed files; `test_weak.py` checks that a forbidden outcome, a

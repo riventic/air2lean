@@ -49,7 +49,7 @@ def main : IO Unit := do
       "custom allocator accepted"
     require ((checkFallibleSpawnCalls #[configVariant f 1048576 false true]).toOption.isNone)
       "runtime config accepted"
-  -- 0.17.0's `Thread.spawn`/`SpawnConfig` are unchanged and audited (docs/std-models.md). A
+  -- 0.17.1's `Thread.spawn`/`SpawnConfig` are unchanged and audited (docs/std-models.md). A
   -- version outside the registry has no dialect, so no `Func` of it reaches the check.
   require (ZigVersion.ofString? "0.18.0" == none) "unaudited version accepted"
   IO.println "audited spawn resource boundary passed"

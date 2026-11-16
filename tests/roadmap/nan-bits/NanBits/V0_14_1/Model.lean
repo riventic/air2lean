@@ -3,7 +3,7 @@ import ZigLean.EndianLemmas
 
 /-! `nan_bits.zig` from the translation of one Zig version's export (`NanBits.V0_14_1.Gen`):
 kernel-checked results, then `main` prints the lines of `native.zig`'s cases (`unspecified`
-matches any native value). It is written for Zig 0.17.0; the modules of 0.14.1, 0.15.2 and
+matches any native value). It is written for Zig 0.17.1; the modules of 0.14.1, 0.15.2 and
 0.16.0 are that one with the version renamed (`check.sh`, `scripts/fixtures.py instance`).
 
 The NaN cases are the counterexample of `docs/architecture-audit/nan-bits.md`: before the fix the

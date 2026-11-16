@@ -363,7 +363,7 @@ theorem op80_spec (ht : floatopsTarget = .x86_64) (sel : BitVec 8) (a b c : Zig.
       | 12, _ =>
         show _ = Zig.Float.truncChk a
         unfold op80
-        -- 0.17.0 output keeps a zero-extension pseudo-denormal (`truncRt017Chk`, group I).
+        -- 0.17.1 output keeps a zero-extension pseudo-denormal (`truncRt017Chk`, group I).
         try rw [Zig.Float.truncRt017Chk_eq a ha]
         generalize Zig.Float.truncChk a = x; rcases x with _ | _ | _ <;> rfl
       | n + 26, h => omega
@@ -408,7 +408,7 @@ theorem softF80Chk_ceilRtLegacy (a : Zig.F80) :
   · rw [Zig.Float.ceilRtLegacyChk_eq a h]
   · simp [Zig.Float.isNoncanonicalF80, h]
 
-/-- The same for 0.17.0's f80 `@trunc` (`truncRt017Chk`, group I). -/
+/-- The same for 0.17.1's f80 `@trunc` (`truncRt017Chk`, group I). -/
 theorem softF80Chk_truncRt017 (a : Zig.F80) :
     (Zig.Float.softF80Chk [a] (Zig.Float.truncRt017Chk a) : Zig.Result Zig.F80) =
       Zig.Float.softF80Chk [a] (Zig.Float.truncChk a) := by

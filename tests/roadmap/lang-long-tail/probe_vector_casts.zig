@@ -1,4 +1,4 @@
-//! Native probe of `vector_casts.zig` (stock Zig 0.14.1-0.17.0). Each line is
+//! Native probe of `vector_casts.zig` (stock Zig 0.14.1-0.17.1). Each line is
 //! `<function> <case> <result>`: an integer in decimal, a vector or array as its items in
 //! decimal separated by `,`, or a `bool`. `ModelVectorCasts.lean` prints the same lines from the
 //! translation.

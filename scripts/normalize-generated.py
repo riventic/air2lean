@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 PREFIX = b"-- air2lean-profile: "
-VERSIONS = {"0.14.1", "0.15.2", "0.16.0", "0.17.0"}
+VERSIONS = {"0.14.1", "0.15.2", "0.16.0", "0.17.1"}
 RAW_FIELDS = {"name", "target_triple", "pointer_bits", "endian", "abi", "zig_version",
               "backend", "cpu", "features", "build_mode", "float_mode", "error_set_bits",
               "error_layout", "error_tracing", "export_stage"}
@@ -82,7 +82,7 @@ def profile_for_air(doc):
                            ("wasm32", "wasi")}):
         raise ValueError("target triple is outside the supported model ABI scope")
     if target == ("aarch64", "linux") and (p["abi"] != "gnu" or
-                                           version not in ("0.14.1", "0.15.2", "0.16.0", "0.17.0")):
+                                           version not in ("0.14.1", "0.15.2", "0.16.0", "0.17.1")):
         raise ValueError("target triple is outside the supported model ABI scope")
     if p["pointer_bits"] != (32 if target[0] == "wasm32" else 64):
         raise ValueError("incompatible target profile")

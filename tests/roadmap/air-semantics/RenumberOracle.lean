@@ -15,7 +15,7 @@ namespace CanonRenumberOracle
 open Air2Lean Air2Lean.Sem
 
 def caller (base : Nat) (identities : Array Identity.Record := #[]) : Func :=
-  { dialect := .ofVersion .v0_17_0, name := "canon.caller", params := #[1], ret := 0,
+  { dialect := .ofVersion .v0_17_1, name := "canon.caller", params := #[1], ret := 0,
     types := #[.bool, .ptr "one" false 0, .void, .noreturn],
     layouts := #[{ size := some 1, align := some 1 },
       { size := some 8, align := some 8, ptrAlign := some 1 },
@@ -148,7 +148,7 @@ theorem same_oracle_not_preserved (records : Array Identity.Record) (m : Zig.Mem
   cases h'
 
 def source : String := r#"{
-  "schema": 11, "zig_version": "0.17.0", "name": "canon.caller", "params": [1], "ret": 0,
+  "schema": 11, "zig_version": "0.17.1", "name": "canon.caller", "params": [1], "ret": 0,
   "types": [
     {"k": "bool", "abi_size": 1, "abi_align": 1},
     {"k": "ptr", "size": "one", "const": false, "child": 0,

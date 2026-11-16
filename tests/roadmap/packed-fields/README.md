@@ -92,7 +92,7 @@ What the real compiler does differently from the hand-written AIR (the model is 
 
 `packed_fields.zig` has native tests for every defined-behaviour function: stock 0.16.0 on an
 aarch64-macos host, ReleaseSafe and Debug; and `compiler.sh --native-linux` on x86_64-linux-musl
-(Docker `linux/amd64`) with stock 0.14.1, 0.15.2, 0.16.0 and 0.17.0, LLVM ReleaseSafe and Debug
+(Docker `linux/amd64`) with stock 0.14.1, 0.15.2, 0.16.0 and 0.17.1, LLVM ReleaseSafe and Debug
 and the self-hosted x86_64 backend: all pass. These native results are the values that
 `PackedFields/Proofs.lean` proves for the hand-written AIR, including the byte-pointer form
 (`innerC` = `0xAB`, `innerCKeepsA` = 1) and the nested-base fix. Not run natively: `innerPartial`

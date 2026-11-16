@@ -1150,7 +1150,7 @@ deletion plan of each. No new hand model of std code is added (CLAUDE.md, Truste
 ### STD-05 — Hand model of the std futex interface
 
 - Kind: trusted.
-- Statement: `Io.futexWait`, `Io.futexWaitUncancelable`, `Io.futexWake` (0.16.0, 0.17.0) and
+- Statement: `Io.futexWait`, `Io.futexWaitUncancelable`, `Io.futexWake` (0.16.0, 0.17.1) and
   `Thread.Futex.wait`, `Thread.Futex.wake` (0.14.1, 0.15.2) are the futex ops of THR-05 instead
   of the `Io` implementation behind the vtable (`Io.Threaded`) or `lib/std/Thread/Futex.zig`
   over the OS futex (OSF-01, OSF-02).
@@ -1172,7 +1172,7 @@ deletion plan of each. No new hand model of std code is added (CLAUDE.md, Truste
 ### STD-08 — Hand model of `Io.Group`
 
 - Kind: trusted.
-- Statement: `Io.Group.async`, `concurrent`, `await` and `cancel` (0.16.0, 0.17.0) are the
+- Statement: `Io.Group.async`, `concurrent`, `await` and `cancel` (0.16.0, 0.17.1) are the
   group ops of THR-04 (`groupAsyncWithPolicyC`, `groupAsyncC`, `groupDeferC`,
   `groupConcurrentC`, `groupAwaitC`, `groupCancelC`) and the type `Io` is `Zig.Io`, instead of
   `lib/std/Io.zig` and the `Io` implementation behind its vtable (`Io.Threaded`).

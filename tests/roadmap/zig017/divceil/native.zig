@@ -1,4 +1,4 @@
-//! Native side of the `@divCeil` differential (`check.sh`), built with a stock Zig 0.17.0 in
+//! Native side of the `@divCeil` differential (`check.sh`), built with a stock Zig 0.17.1 in
 //! ReleaseSafe. `native`: one `fn a b result` line per line of `inputs.txt`, `panic` where the
 //! inputs reach a safety check (the process would stop there). `native --one fn a b`: call that
 //! one function, so a safety check ends the process with Zig's panic message.

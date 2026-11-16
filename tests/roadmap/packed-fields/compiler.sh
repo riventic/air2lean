@@ -4,7 +4,7 @@
 #                                     bit-pointer host widths) and OUTPUT_DIR/x86_64 (the
 #                                     self-hosted backend, `hostAbi` only: ABI host widths)
 #   compiler.sh --native              stock host Zig runs the source's tests
-#   compiler.sh --native-linux        stock Zig (any of 0.14.1-0.17.0) builds the tests for
+#   compiler.sh --native-linux        stock Zig (any of 0.14.1-0.17.1) builds the tests for
 #                                     x86_64-linux-musl (LLVM ReleaseSafe and Debug, and the
 #                                     self-hosted x86_64 backend) and runs them (Docker
 #                                     linux/amd64, or AIR2LEAN_X86_64_RUN; empty: the host)

@@ -1,18 +1,18 @@
 {
   "air_sha256": {
-    "air/0.17.0/bitcast017.boolsToInt.json": "d92a5c55dec2bac82c03fc9521f77e4db12fca993dd518e36b856593333aad23",
-    "air/0.17.0/bitcast017.bytesToInt.json": "b02141fb27fcfa0ff2f8e153e8f639fd14d27bdd740c0c3c9d2082fd663d036e",
-    "air/0.17.0/bitcast017.enumToSigned.json": "66f37d16ce03fe4745fe3aed663f28075c5975d1e434555137ffc6fb84fcb1fe",
-    "air/0.17.0/bitcast017.intToEnum.json": "d3a5d47fc3d4cc9b46d6a886fe7fd0275af1147d46ee3a323202041699c2b548",
-    "air/0.17.0/bitcast017.intToPadded.json": "c433405ffe33514f08f6a4bd0fd2387163856a6a7e1530e7b321879cebd24c4c",
-    "air/0.17.0/bitcast017.intToVec.json": "19cf899a7ae5158200060d518d256c75f2de676c33ea31d88f78a12ef4cf0fbe",
-    "air/0.17.0/bitcast017.packedToBits.json": "840fe2a06a5b95f54cdf08c36bf8507365d8ec56c4af491c88091e9e08e750b2",
-    "air/0.17.0/bitcast017.paddedToInt.json": "f514f9399da01e79b79d16342421c47f064045600c5cd7d29c04645e2476048c",
-    "air/0.17.0/bitcast017.vecToArray.json": "abfbb832e6e7ca3df2e1397e16fc867ee8d9fde811620505fa9c829dd53bbef3",
-    "air/0.17.0/bitcast017.vecToInt.json": "4f743b3f756d1eed4013b05da3b80a2e33a218181ab7668e5a0ba44df8c3c8d6"
+    "air/0.17.1/bitcast017.boolsToInt.json": "d92a5c55dec2bac82c03fc9521f77e4db12fca993dd518e36b856593333aad23",
+    "air/0.17.1/bitcast017.bytesToInt.json": "b02141fb27fcfa0ff2f8e153e8f639fd14d27bdd740c0c3c9d2082fd663d036e",
+    "air/0.17.1/bitcast017.enumToSigned.json": "66f37d16ce03fe4745fe3aed663f28075c5975d1e434555137ffc6fb84fcb1fe",
+    "air/0.17.1/bitcast017.intToEnum.json": "d3a5d47fc3d4cc9b46d6a886fe7fd0275af1147d46ee3a323202041699c2b548",
+    "air/0.17.1/bitcast017.intToPadded.json": "c433405ffe33514f08f6a4bd0fd2387163856a6a7e1530e7b321879cebd24c4c",
+    "air/0.17.1/bitcast017.intToVec.json": "19cf899a7ae5158200060d518d256c75f2de676c33ea31d88f78a12ef4cf0fbe",
+    "air/0.17.1/bitcast017.packedToBits.json": "840fe2a06a5b95f54cdf08c36bf8507365d8ec56c4af491c88091e9e08e750b2",
+    "air/0.17.1/bitcast017.paddedToInt.json": "f514f9399da01e79b79d16342421c47f064045600c5cd7d29c04645e2476048c",
+    "air/0.17.1/bitcast017.vecToArray.json": "abfbb832e6e7ca3df2e1397e16fc867ee8d9fde811620505fa9c829dd53bbef3",
+    "air/0.17.1/bitcast017.vecToInt.json": "4f743b3f756d1eed4013b05da3b80a2e33a218181ab7668e5a0ba44df8c3c8d6"
   },
   "compilers": {
-    "0.17.0": "321ab894d2a5d5784afdba19137ed24abf39c62825b440f9a4f82e53958d9b24"
+    "0.17.1": "321ab894d2a5d5784afdba19137ed24abf39c62825b440f9a4f82e53958d9b24"
   },
   "manifest_sha256": "c3012e2c2203c4b0f0bd5a79f7ad16da02670c05476edc7a4bb5e08d35dd0bf0",
   "schema": 1,

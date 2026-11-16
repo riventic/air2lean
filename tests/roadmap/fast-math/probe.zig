@@ -3,7 +3,7 @@
 // Built as a shared library and driven by `scripts/fast-math-probe.py` (ctypes). Every case exists twice,
 // `<name>.strict` and `<name>.fast`: the same function body, with `@setFloatMode(.strict)` or
 // `@setFloatMode(.optimized)`. Operands are runtime values (a global the compiler cannot see
-// through), so nothing is folded at comptime. The file builds with Zig 0.14.1 to 0.17.0.
+// through), so nothing is folded at comptime. The file builds with Zig 0.14.1 to 0.17.1.
 
 var seed: u64 = 0;
 

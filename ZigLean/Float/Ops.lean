@@ -364,7 +364,7 @@ def Float.divExactTrunc {fmt : FloatFmt} (a b q : Float fmt) : Result (Float fmt
 def Float.divExactChk {fmt : FloatFmt} (a b q : Float fmt) : Result (Float fmt) :=
   if Float.exactQuotient a b q then pure q else throw .illegal
 
-/-- `@divCeil` (Zig 0.17.0): division, rounded once, then ceiled (LLVM backend: `fdiv`, `ceil`). -/
+/-- `@divCeil` (Zig 0.17.1): division, rounded once, then ceiled (LLVM backend: `fdiv`, `ceil`). -/
 def Float.divCeil {fmt : FloatFmt} (a b : Float fmt) : Float fmt := Float.ceil (Float.div a b)
 
 /-! ## `.unspecified` guards (`docs/floats.md` §Semantics groups C and D; both modes, always)

@@ -113,9 +113,9 @@ FIXTURES = [
     ("case-studies/flow-time/FlowTime/Gen.lean", "case-studies/flow-time/air",
      ["--namespace", "FlowTime", "--prefix", "flow_time.", "--profile", "abi64-le-v1",
       "--float-semantics", "ieee"], "exact"),
-    ("tests/roadmap/bitcast-017/BitCastReal/Gen.lean", "tests/roadmap/bitcast-017/air/0.17.0",
+    ("tests/roadmap/bitcast-017/BitCastReal/Gen.lean", "tests/roadmap/bitcast-017/air/0.17.1",
      ["--namespace", "BitCastReal", "--prefix", "bitcast017."], "exact"),
-    ("tests/roadmap/zig017/divceil/DivCeil/Gen.lean", "tests/roadmap/zig017/divceil/air/0.17.0",
+    ("tests/roadmap/zig017/divceil/DivCeil/Gen.lean", "tests/roadmap/zig017/divceil/air/0.17.1",
      ["--namespace", "DivCeil", "--prefix", "divceil."], "body"),  # committed without the host header
     ("tests/roadmap/noreturn-variants/NoreturnVariants/Gen.lean", "tests/roadmap/noreturn-variants/air/0.16.0",
      ["--namespace", "NoreturnVariants", "--prefix", "noreturn_variants."], "exact"),
@@ -143,34 +143,34 @@ FIXTURES = [
     ("tests/roadmap/extern-calls/ExternCalls/Trusted.lean", "tests/roadmap/extern-calls/air/0.16.0-trusted",
      ["--namespace", "ExternCalls.Trusted", "--prefix", "trusted.", "--model-registry",
       "tests/roadmap/extern-calls/registry.json"], "exact"),
-    # Open interfaces (docs/interfaces.md): fresh 0.17.0 translations. The lists one is the
+    # Open interfaces (docs/interfaces.md): fresh 0.17.1 translations. The lists one is the
     # program of the full-state list proofs (Proofs/Lists), for every allocator.
-    ("Proofs/Lists/Open.lean", "tests/roadmap/interfaces/air/0.17.0/lists",
+    ("Proofs/Lists/Open.lean", "tests/roadmap/interfaces/air/0.17.1/lists",
      ["--namespace", "Lists.Open", "--prefix", "lists.", "--profile", "abi64-le-v1",
       "--model-registry", "tests/roadmap/interfaces/registry-alloc.json",
       "--allocator-model", "translated"], "exact"),
-    ("tests/roadmap/interfaces/Interfaces/Mix.lean", "tests/roadmap/interfaces/air/0.17.0/mix",
+    ("tests/roadmap/interfaces/Interfaces/Mix.lean", "tests/roadmap/interfaces/air/0.17.1/mix",
      ["--namespace", "Interfaces.Mix", "--prefix", "mix.", "--profile", "abi64-le-v1",
       "--model-registry", "tests/roadmap/interfaces/registry-alloc.json",
       "--allocator-model", "translated"], "exact"),
-    ("tests/roadmap/interfaces/Interfaces/Sentinel.lean", "tests/roadmap/interfaces/air/0.17.0/sentinel",
+    ("tests/roadmap/interfaces/Interfaces/Sentinel.lean", "tests/roadmap/interfaces/air/0.17.1/sentinel",
      ["--namespace", "Interfaces.Sentinel", "--prefix", "source.", "--profile", "abi64-le-v1",
       "--model-registry", "tests/roadmap/interfaces/registry-alloc.json",
       "--allocator-model", "translated"], "exact"),
-    ("tests/roadmap/interfaces/Interfaces/Rnd.lean", "tests/roadmap/interfaces/air/0.17.0/rnd",
+    ("tests/roadmap/interfaces/Interfaces/Rnd.lean", "tests/roadmap/interfaces/air/0.17.1/rnd",
      ["--namespace", "Interfaces.Rnd", "--prefix", "rnd.", "--profile", "abi64-le-v1",
       "--model-registry", "tests/roadmap/interfaces/registry-random.json"], "exact"),
-    ("tests/roadmap/interfaces/Interfaces/Callbacks.lean", "tests/roadmap/callbacks/air/0.17.0",
+    ("tests/roadmap/interfaces/Interfaces/Callbacks.lean", "tests/roadmap/callbacks/air/0.17.1",
      ["--namespace", "Interfaces.Callbacks", "--prefix", "callbacks.", "--profile", "abi64-le-v1",
-      "--model-registry", "tests/roadmap/interfaces/registry-callbacks-0.17.0.json"], "exact"),
-    # E02 callback contracts and A01 environment/region asm: fresh 0.17.0 translations.
-    ("tests/roadmap/callbacks/Callbacks/Gen.lean", "tests/roadmap/callbacks/air/0.17.0",
+      "--model-registry", "tests/roadmap/interfaces/registry-callbacks-0.17.1.json"], "exact"),
+    # E02 callback contracts and A01 environment/region asm: fresh 0.17.1 translations.
+    ("tests/roadmap/callbacks/Callbacks/Gen.lean", "tests/roadmap/callbacks/air/0.17.1",
      ["--namespace", "Callbacks", "--prefix", "callbacks.", "--profile", "abi64-le-v1",
-      "--model-registry", "tests/roadmap/callbacks/registry-0.17.0.json"], "exact"),
-    ("tests/roadmap/callbacks/Callbacks/Async.lean", "tests/roadmap/callbacks/air-async/0.17.0",
+      "--model-registry", "tests/roadmap/callbacks/registry-0.17.1.json"], "exact"),
+    ("tests/roadmap/callbacks/Callbacks/Async.lean", "tests/roadmap/callbacks/air-async/0.17.1",
      ["--namespace", "Callbacks.Async", "--prefix", "async_cb.", "--profile", "abi64-le-v1",
-      "--model-registry", "tests/roadmap/callbacks/registry-async-0.17.0.json"], "exact"),
-    ("tests/roadmap/asm-effects/AsmEnv/Gen.lean", "tests/roadmap/asm-effects/air-env/0.17.0",
+      "--model-registry", "tests/roadmap/callbacks/registry-async-0.17.1.json"], "exact"),
+    ("tests/roadmap/asm-effects/AsmEnv/Gen.lean", "tests/roadmap/asm-effects/air-env/0.17.1",
      ["--namespace", "AsmEnv", "--prefix", "asm_env.", "--profile", "abi64-le-v1"], "exact"),
     ("tests/roadmap/futures/Futures/Gen.lean", "tests/roadmap/futures/air/0.16.0",
      ["--namespace", "Futures", "--prefix", "futures."], "exact"),
@@ -213,7 +213,7 @@ FIXTURES = [
     (f"tests/roadmap/big-endian/BigEndian/Conc/V{v.replace('.', '_')}/{ns}/Gen.lean",
      f"tests/roadmap/big-endian/air/{v}/concurrency/{target}",
      ["--namespace", f"BigEndian.Conc.V{v.replace('.', '_')}.{ns}", "--prefix", "concurrency."], "exact")
-    for v in ("0.15.2", "0.17.0")
+    for v in ("0.15.2", "0.17.1")
     for target, ns in (("s390x-linux", "S390x"), ("mips64-linux", "Mips64"), ("x86_64-linux", "X64"))
 ] + [
     # L07/L08 packed-casts/check.sh: one translation per source and version.
@@ -221,8 +221,8 @@ FIXTURES = [
      f"tests/roadmap/packed-casts/air/{v}/{src}",
      ["--namespace", f"PackedCasts.V{v.replace('.', '_')}.{ns}", "--prefix", f"{src}."], "exact")
     for src, ns, versions in (
-        ("packed_casts", "PackedCasts", ("0.14.1", "0.15.2", "0.16.0", "0.17.0")),
-        ("logical017", "Logical017", ("0.17.0",)),
+        ("packed_casts", "PackedCasts", ("0.14.1", "0.15.2", "0.16.0", "0.17.1")),
+        ("logical017", "Logical017", ("0.17.1",)),
         ("vector_fields", "VectorFields", ("0.14.1", "0.15.2")),
         ("auto_items", "AutoItems", ("0.14.1", "0.15.2")))
     for v in versions
@@ -230,20 +230,20 @@ FIXTURES = [
     # nan-bits/check.sh (docs/architecture-audit/nan-bits.md): one translation per version.
     (f"tests/roadmap/nan-bits/NanBits/V{v.replace('.', '_')}/Gen.lean", f"tests/roadmap/nan-bits/air/{v}/nan_bits",
      ["--namespace", f"NanBits.V{v.replace('.', '_')}", "--prefix", "nan_bits."], "exact")
-    for v in ("0.14.1", "0.15.2", "0.16.0", "0.17.0")
+    for v in ("0.14.1", "0.15.2", "0.16.0", "0.17.1")
 ] + [
     # enc-exactness/check.sh (docs/architecture-audit/enc-exactness.md): two sources per version.
     (f"tests/roadmap/enc-exactness/EncExactness/V{v.replace('.', '_')}/{out}.lean",
      f"tests/roadmap/enc-exactness/air/{v}/{src}",
      ["--namespace", f"EncExactness.V{v.replace('.', '_')}{ns}", "--prefix", f"{src}."], "exact")
     for src, out, ns in (("enc_exactness", "Gen", ""), ("opaque_bytes", "Opaque", ".Opaque"))
-    for v in ("0.14.1", "0.15.2", "0.16.0", "0.17.0")
+    for v in ("0.14.1", "0.15.2", "0.16.0", "0.17.1")
 ] + [
     # L04 try-pointers/lifetimes/check.sh.
     (f"tests/roadmap/try-pointers/lifetimes/TryLifetimes/V{v.replace('.', '_')}/Gen.lean",
      f"tests/roadmap/try-pointers/lifetimes/air/{v}",
      ["--namespace", f"TryLifetimes.V{v.replace('.', '_')}", "--prefix", "try_lifetimes."], "exact")
-    for v in ("0.14.1", "0.15.2", "0.16.0", "0.17.0")
+    for v in ("0.14.1", "0.15.2", "0.16.0", "0.17.1")
 ] + [
     (f"tests/roadmap/pointer-width/PointerWidth/{ns}/Gen.lean", f"tests/roadmap/pointer-width/air/0.16.0/{target}",
      ["--namespace", f"PointerWidth.{ns}", "--prefix", "pointer_width."], "exact")
@@ -266,12 +266,12 @@ FIXTURES = [
     for stem, ns, key, prefix, base, versions in (
         ("error_params", "ErrorParams", "ErrorParams", "error_params.", "0.16.0", ("0.16.0",)),
         ("vector_casts", "VectorCasts", "VectorCasts", "vector_casts.", "0.16.0",
-         ("0.16.0", "0.17.0", "0.15.2", "0.14.1")),
+         ("0.16.0", "0.17.1", "0.15.2", "0.14.1")),
         ("tls_pointers", "TlsPointers", "TlsPointers", "tls_pointers.", "0.16.0", ("0.16.0", "0.15.2")),
         ("extern_storage", "ExternStorage", "ExternStorage", "extern_storage.", "0.16.0",
          ("0.16.0", "0.15.2", "0.14.1")),
-        ("error_ints", "ErrorInts", "ErrorInts", "error_ints.", "0.16.0", ("0.16.0", "0.17.0", "0.15.2", "0.14.1")),
-        ("error_ints_w8", "ErrorInts", "ErrorIntsW8", "error_ints.", "0.16.0", ("0.16.0", "0.17.0", "0.15.2")),
+        ("error_ints", "ErrorInts", "ErrorInts", "error_ints.", "0.16.0", ("0.16.0", "0.17.1", "0.15.2", "0.14.1")),
+        ("error_ints_w8", "ErrorInts", "ErrorIntsW8", "error_ints.", "0.16.0", ("0.16.0", "0.17.1", "0.15.2")),
         ("runtime_lanes", "RuntimeLanes", "RuntimeLanes", "runtime_lanes.", "0.15.2", ("0.15.2",)),
         ("float_lanes", "FloatLanes", "FloatLanes", "float_lanes.", "0.16.0", ("0.16.0", "0.15.2", "0.14.1")))
     for v in versions

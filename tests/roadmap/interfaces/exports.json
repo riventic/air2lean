@@ -4,7 +4,7 @@
       "out": "air/{version}/lists",
       "source": "../../../examples/lists/lists.zig",
       "filter": "lists.,mem.,math.,array_list.,debug.assert,debug.SafetyLock",
-      "versions": ["0.17.0", "0.16.0", "0.15.2", "0.14.1"],
+      "versions": ["0.17.1", "0.16.0", "0.15.2", "0.14.1"],
       "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
       "cwd": "repo",
       "closure": ["lists.push", "lists.reverse", "lists.freeAll", "lists.sum", "lists.evens"]
@@ -13,7 +13,7 @@
       "out": "air/{version}/mix",
       "source": "mix.zig",
       "filter": "mix.,mem.,math.,heap.FixedBufferAllocator,debug.assert",
-      "versions": ["0.17.0", "0.16.0", "0.15.2", "0.14.1"],
+      "versions": ["0.17.1", "0.16.0", "0.15.2", "0.14.1"],
       "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
       "cwd": "repo",
       "closure": ["mix.make", "mix.withFba"]
@@ -22,7 +22,7 @@
       "out": "air/{version}/rnd",
       "source": "rnd.zig",
       "filter": "rnd.,Random.",
-      "versions": ["0.17.0", "0.16.0", "0.15.2", "0.14.1"],
+      "versions": ["0.17.1", "0.16.0", "0.15.2", "0.14.1"],
       "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
       "cwd": "repo",
       "closure": ["rnd.roll"]
@@ -31,7 +31,7 @@
       "out": "air/{version}/sentinel",
       "source": "../sentinel-realloc/source.zig",
       "filter": "source.,mem.,math.,debug.assert",
-      "versions": ["0.17.0", "0.16.0", "0.15.2", "0.14.1"],
+      "versions": ["0.17.1", "0.16.0", "0.15.2", "0.14.1"],
       "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
       "cwd": "repo",
       "closure": ["source.make", "source.append", "source.resize", "source.release"]

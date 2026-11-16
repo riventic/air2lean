@@ -10,7 +10,7 @@ generates (`LawfulPacked`, derived by `lawfulPackedOf?` from the generated insta
 `mask` names), and a struct without fields. A store of `fromInt(b)` (`Packed.ofBits b`) to a word
 leaves the word `b` (the arena's `reset` storing a node's size). A packed union field has no
 round trip law here (fail closed). The types are written as the translator writes them
-(`tests/golden/0.17.0/layout/Gen.lean`).
+(`tests/golden/0.17.1/layout/Gen.lean`).
 -/
 
 namespace SepAuto.Packed
