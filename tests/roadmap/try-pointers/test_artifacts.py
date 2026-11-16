@@ -291,10 +291,15 @@ class ProvenanceTests(unittest.TestCase):
         workflow = (repo/'.github/workflows/ci.yml').read_text()
         step = workflow.split('- name: Pointer try ownership, native and fresh source regressions', 1)[1]
         step = step.split('- name:', 1)[0]
-        report = 'scripts/normalize-generated.py report "$fresh/Gen.lean" "$fresh/air" "$fresh/generated-report.json"'
-        compare = 'scripts/normalize-generated.py compare tests/roadmap/try-pointers/TryPointers/Gen.lean "$fresh/Gen.lean" "$fresh/generated-report.json"'
-        self.assertLess(step.index(report), step.index(compare))
-        self.assertNotIn('cmp "$fresh/Gen.lean"', step)
+        # The fresh export equals the retained air-fresh byte for byte (verify), and the retained
+        # air-fresh translates to Gen.lean through the receipt (report, then compare).
+        qualification = 'try-pointers/check.sh --check-qualification'
+        verify = 'scripts/fixture-exports.py verify try-pointers'
+        self.assertLess(step.index(qualification), step.index(verify))
+        source = Path(__file__).with_name('compiler-qualification.py').read_text()
+        translate = source.split('def translate_matches', 1)[1].split('\ndef ', 1)[0]
+        self.assertLess(translate.index("'report'"), translate.index("'compare'"))
+        self.assertNotIn("'cmp'", translate)
         gate = (Path(__file__).with_name('check.sh')).read_text()
         retained = gate.split('if [ -f tests/roadmap/try-pointers/integration-qualification.json ]; then', 1)[1]
         variant, standalone = retained.split('else', 1)
