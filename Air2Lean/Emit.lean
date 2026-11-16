@@ -1054,6 +1054,10 @@ def FCtx.zigBefore016 (fc : FCtx) : Bool := fc.dialect.version.compilerRt == .le
 def FCtx.divRtSuffix (fc : FCtx) : String :=
   if fc.rtSuffix == "" || fc.zigBefore016 then fc.rtSuffix else "Rt016"
 
+/-- `rtSuffix` for `@mulAdd`: `fmaRt` before 0.17.1, `fmaRt017` (0.17.1's `fma.zig`) from it. -/
+def FCtx.fmaRtSuffix (fc : FCtx) : String :=
+  if fc.rtSuffix != "" && fc.dialect.version.compilerRt == .v017 then "Rt017" else fc.rtSuffix
+
 /-- The profile targets aarch64 (`Dialect.floatRules`, `docs/floats.md` §Targets): `f80` is
 soft-float (`Zig.Float.softF80Chk`, and in `compiler-rt` mode `__divxf3`), and `@mulAdd` on
 `f32`/`f64` (`f16` with `fullfp16`: `fusedMulAdd`) is the fused instruction. A legacy profile and
@@ -2783,8 +2787,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     -- Group C's guard applies in both modes; group B's dispatch picks `fma` vs `fmaRt` under it.
     -- aarch64: a fused instruction; its f80 operands are guarded by `softF80Chk` instead.
     let fmt := match fc.valTy a with | .float n => n | _ => 0
-    let expr := if fc.fusedMulAdd fmt then s!"pure (Zig.Float.fma{fc.rtSuffix}Fused {rv a} {rv b} {rv c})"
-      else s!"Zig.Float.fma{fc.rtSuffix}Chk {rv a} {rv b} {rv c}"
+    let expr := if fc.fusedMulAdd fmt then s!"pure (Zig.Float.fma{fc.fmaRtSuffix}Fused {rv a} {rv b} {rv c})"
+      else s!"Zig.Float.fma{fc.fmaRtSuffix}Chk {rv a} {rv b} {rv c}"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .floatConv a =>
     let fmt := fc.floatFmtTerm inst.ty

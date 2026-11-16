@@ -150,6 +150,17 @@ The model is one set of defs. Where a Zig version gives a different result, the 
 | f80 `@floor`/`@ceil`, `compiler-rt` mode | f128 extension reads a zero-fraction pseudo-denormal as zero: `Float.floorRtLegacyChk`/`Float.ceilRtLegacyChk` | direct f80 rounding: `Float.floorChk`/`Float.ceilChk` | compiler_rt `floor.zig`/`ceil.zig`, replaced by `floor_ceil.zig` in 0.16.0 |
 | f128 `/`, `@divExact`, `@divTrunc`, `@divFloor`, `compiler-rt` mode | subnormal quotient flushed to ±0 (group A): `Zig.Float.divRt` … | subnormal quotient rounded from a 113-bit quotient that can be one unit low, and a deep underflow wraps its shift amount (the unchecked `@intCast` to `u7`): `Zig.Float.divRt016` …, a bit-exact port, equal to 0.16.0 on 80,000 random quotients and 3,145,632 edge cases (every divisor exponent) | compiler_rt `__divtf3` (`divtf3.zig`) |
 
+Zig 0.17.1 fixed compiler_rt's `fma.zig` (group B, `compiler-rt` mode), and the emitter calls
+`Zig.Float.fmaRt017Chk`/`fmaRt017Fused` for a 0.17.1 translation, `fmaRtChk`/`fmaRtFused` for an
+earlier one. Three things changed. First, `fma`/`fmaq` return `z` when its exponent exceeds the
+product's by more than the precision, so the NaN of group B is gone: for example,
+`fmaq(min subnormal, 1, 1.5)` is `1.5`. Second, a zero high part of `x·y + z` returns the
+product's low part, scaled. Third, the subnormal adjustment condition of `add_and_denorm` is
+negated. In addition, `fmaf` corrects the double rounding at an `f32` midpoint. The diff test
+(`floatops`) found the f80/f128 cases on aarch64-macos: 27 inputs that 0.17.0's source gave as
+NaN and 0.17.1 rounds correctly. `Proofs/Floatops/Proofs.lean` reads the profile off `Gen.lean`
+(`fmaProfile`).
+
 The probe checks the `sqrt` rows on the reference target (`tests/floatprobe/expected.0.16.0.txt`); the diff test (`floatops`, `compiler-rt` mode) checks the division rows.
 
 What each row computes in the model. Each "Equal to IEEE" and "Elsewhere" cell that names a theorem is proved; the other cells are the helper's own definition:

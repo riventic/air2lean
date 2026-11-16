@@ -148,7 +148,7 @@ def op128 (p0 : BitVec 8) (p1 : Zig.F128) (p2 : Zig.F128) (p3 : Zig.F128) : Zig.
                 pure (.br5 i14))
               else (do
                 if p0 == (4 : BitVec 8) then (do
-                  let i16 ← pure (Zig.Float.fmaRtFused p1 p2 p3)
+                  let i16 ← pure (Zig.Float.fmaRt017Fused p1 p2 p3)
                   pure (.br5 i16))
                 else (do
                   if p0 == (5 : BitVec 8) then (do
@@ -277,7 +277,7 @@ def op16 (p0 : BitVec 8) (p1 : Zig.F16) (p2 : Zig.F16) (p3 : Zig.F16) : Zig.Resu
                 pure (.br5 i14))
               else (do
                 if p0 == (4 : BitVec 8) then (do
-                  let i16 ← pure (Zig.Float.fmaRtFused p1 p2 p3)
+                  let i16 ← pure (Zig.Float.fmaRt017Fused p1 p2 p3)
                   pure (.br5 i16))
                 else (do
                   if p0 == (5 : BitVec 8) then (do
@@ -406,7 +406,7 @@ def op32 (p0 : BitVec 8) (p1 : Zig.F32) (p2 : Zig.F32) (p3 : Zig.F32) : Zig.Resu
                 pure (.br5 i14))
               else (do
                 if p0 == (4 : BitVec 8) then (do
-                  let i16 ← pure (Zig.Float.fmaRtFused p1 p2 p3)
+                  let i16 ← pure (Zig.Float.fmaRt017Fused p1 p2 p3)
                   pure (.br5 i16))
                 else (do
                   if p0 == (5 : BitVec 8) then (do
@@ -535,7 +535,7 @@ def op64 (p0 : BitVec 8) (p1 : Zig.F64) (p2 : Zig.F64) (p3 : Zig.F64) : Zig.Resu
                 pure (.br5 i14))
               else (do
                 if p0 == (4 : BitVec 8) then (do
-                  let i16 ← pure (Zig.Float.fmaRtFused p1 p2 p3)
+                  let i16 ← pure (Zig.Float.fmaRt017Fused p1 p2 p3)
                   pure (.br5 i16))
                 else (do
                   if p0 == (5 : BitVec 8) then (do
@@ -664,7 +664,7 @@ def op80 (p0 : BitVec 8) (p1 : Zig.F80) (p2 : Zig.F80) (p3 : Zig.F80) : Zig.Resu
                 pure (.br5 i14))
               else (do
                 if p0 == (4 : BitVec 8) then (do
-                  let i16 ← Zig.Float.softF80Chk [p1, p2, p3] (pure (Zig.Float.fmaRtFused p1 p2 p3))
+                  let i16 ← Zig.Float.softF80Chk [p1, p2, p3] (pure (Zig.Float.fmaRt017Fused p1 p2 p3))
                   pure (.br5 i16))
                 else (do
                   if p0 == (5 : BitVec 8) then (do

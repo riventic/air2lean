@@ -82,7 +82,8 @@ inductive CompilerRt where
   | legacy
   /-- 0.16.0: the correctly rounded square root and the 0.16.0 quotient (`Float.divRt016`). -/
   | v016
-  /-- 0.17.1: as 0.16.0, and `f80` `@trunc` keeps a pseudo-denormal (`Float.truncRt017Chk`). -/
+  /-- 0.17.1: as 0.16.0, `f80` `@trunc` keeps a pseudo-denormal (`Float.truncRt017Chk`), and
+  `@mulAdd`'s `fma.zig` has 0.17.1's fixes (`Float.fmaRt017Chk`). -/
   | v017
   deriving DecidableEq, Repr, Inhabited
 
