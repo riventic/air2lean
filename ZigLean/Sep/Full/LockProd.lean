@@ -416,14 +416,13 @@ theorem Inv.share_sum {G' : ThreadId → γ} {rX' : Res} {m' : Mem} {t : ThreadI
   obtain ⟨rL, ho, -, -, hfree, hbusy⟩ := hi.rest
   obtain ⟨rL', ho', -, -, hfree', hbusy'⟩ := hi'.rest
   -- the free resource holds no share of `l`, nor do the word's cells
-  have hL : rL.gh.share l = SCell.zero := by
+  have hz : ∀ (G : ThreadId → γ) (rL : Res), (L.Free G → L.R G rL) → (¬ L.Free G → rL = rnil) →
+      rL.gh.share l = SCell.zero := fun G rL h1 h2 => by
     by_cases hf : L.Free G
-    · exact hR _ _ (hfree hf).1
-    · have e := hbusy hf; subst e; rfl
-  have hL' : rL'.gh.share l = SCell.zero := by
-    by_cases hf : L.Free G'
-    · exact hR _ _ (hfree' hf).1
-    · have e := hbusy' hf; subst e; rfl
+    · exact hR _ _ (h1 hf)
+    · rw [h2 hf]; rfl
+  have hL := hz G rL (fun hf => (hfree hf).1) hbusy
+  have hL' := hz G' rL' (fun hf => (hfree' hf).1) hbusy'
   have hO : ∀ (m : Mem) (rL rX : Res), rL.gh.share l = SCell.zero →
       (rsum (L.wordR m) (rsum rL rX)).gh.share l = rX.gh.share l := fun m rL rX h => by
     show (SCell.zero).add ((rL.gh.share l).add (rX.gh.share l)) = _

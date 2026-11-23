@@ -379,7 +379,8 @@ semaphore's code runs `away` from the outer mutex or holding it at `holdsAway`
 (`FLock.Pair.U_semStep` for the semaphore's steps). The outer mutex protects nothing, so its side
 owns only its word, apart from the condition's (`c_apart`), and its key is not the epoch's
 (`ep_key_ne`). The client gives its base `U₀`'s
-obligations at the common rest (`stable`, `atStop`, `tick`, `kstep`, `holdLive`, the window), where
+obligations at the common rest (`stable`, `atStop`, `tick` with `L`'s invariant before and after
+it, `kstep`, `holdLive`, the window), where
 `U₀` keeps the condition and the semaphore (`hsub`), that a waiter of the condition is `away` from
 the outer mutex or holds it at `holdsAway` with the epoch in its nest (`hsleep`), the laws of the
 semaphore's places next to `L` and `M`, and of `okS`. -/
