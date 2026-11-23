@@ -264,6 +264,19 @@ theorem Shares.rd {G : ThreadId → γ} {m : Mem} (h : W.Shares G m) {u t : Thre
   rw [hf, SCell.of_zero, SCell.zero_val] at hc'
   exact absurd hc' (by decide)
 
+/-- **`Inv.stepIn`'s `hrd` from the shares** (`Shares.rd`): the step reads only shared bytes of
+the running thread's part and held resource (`hsub`: its read frame `hR`, as `FLock.PartTick`'s
+and `FSem.Move.hold`'s steps take it), and the thread is not joined. -/
+theorem Shares.hrd {G : ThreadId → γ} {m : Mem} (h : W.Shares G m) {hR : Heap}
+    (hj : joinedB m m.current = false)
+    (hsub : ∀ l, hR l ≠ none →
+      (rsum (M.part (G m.current)) (M.held (G m.current))).shared l ≠ none) :
+    ∀ u q H l, W.ph (G u) = .rd q H → H l ≠ none → hR l ≠ none →
+      (W.ph (G m.current)).isRd = true := fun u q H l hu hl hr =>
+  h.rd hu hl (by
+    simp only [FLock.own, hj, Bool.false_eq_true, ↓reduceIte]
+    exact hsub l hr)
+
 /-- **The shares over a relabel**: the rwlock's places stay, and each thread owns the same share
 of every byte. -/
 theorem Shares.congr {G G' : ThreadId → γ} {m m' : Mem} (h : W.Shares G m)
