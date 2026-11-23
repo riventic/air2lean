@@ -207,6 +207,87 @@ theorem st_apart (W : FRw γ X Y M L C S) :
   have h4 : (L.o : Int) = S.p.off + 8 := congrArg Ptr.off S.ptr_l
   exact ⟨Or.inr (Or.inr (by omega)), Or.inr (Or.inr (by omega))⟩
 
+/-! ## The readers' shares
+
+`Inv.stepIn` asks that a step on a thread's own part reads a byte of the readers' heap only when
+the thread is a reader (`hrd`). `FRw.Inv` does not say where the readers' shares are, and neither a
+tick nor a `Step` fixes the stepping thread's new part, so a client's base states it by counting
+(`Shares`): while a reader is in, each thread owns exactly its place's fraction of each cell of the
+readers' heap (none out of `rd`). The rest holds a positive share of the cell then
+(`Inv.rest_share`), so the clause is kept over a change of one thread's ghost value beside the same
+rest (`Shares.keep`, by `FLock.Inv.share_keep`) and over a relabel that keeps what each thread
+owns of it (`Shares.congr`). -/
+
+/-- The outer mutex's resource holds no share (it is `emp`). -/
+theorem mR_share (W : FRw γ X Y M L C S) (l : Zig.Loc) :
+    ∀ G r, M.R G r → r.gh.share l = SCell.zero := fun G r hr => by
+  rw [W.mR] at hr; rw [hr.2.2]; rfl
+
+/-- **Each thread owns exactly its reader's fraction of the readers' heap** (section doc), at the
+outer mutex (`M.own`: the part and the held resource of a thread that is not joined). -/
+def Shares (W : FRw γ X Y M L C S) (G : ThreadId → γ) (m : Mem) : Prop :=
+  ∀ u q H, W.ph (G u) = .rd q H → ∀ l c, H l = some c → ∀ v,
+    (M.own G m v).gh.share l = SCell.of c (W.ph (G v)).frac
+
+/-- **With a reader in, the rest holds a positive share of each cell of its heap**: the free
+resource is the share `1 - Σ q` of the readers' one heap (`FreeRes`'s third clause). -/
+theorem Inv.rest_share {G : ThreadId → γ} {rX : Res} {m : Mem} {u : ThreadId} {q : Frac}
+    {H : FHeap} {l : Zig.Loc} {c : FCell} (hI : W.Inv G rX m) (hu : W.ph (G u) = .rd q H)
+    (hl : H l = some c) : 0 < (rX.gh.share l c).val := by
+  have hn : W.nrd G m ≠ 0 := nrd_pos (hI.ex u (by rw [hu]; nofun)) (by rw [hu]; rfl)
+  obtain ⟨rF, rO, rfl, -, -, hF, -⟩ := hI.rest
+  obtain ⟨H', f, -, hf, -, rfl, hall⟩ :=
+    hF.2.2 (not_busy_rd (fun v hv => hn (hI.wr v hv)) (fun v hv => hn (hI.rp v hv).1) hn) hn
+  obtain ⟨rfl, -⟩ := hall u q H hu
+  have e : (rsum (W.st.cellsR m) (rsum (shareRes H f) rO)).gh.share l =
+      ((W.st.cellsR m).gh.share l).add (((Ghost.sharesOf H f).share l).add (rO.gh.share l)) := rfl
+  rw [e]
+  refine SCell.pos_add' _ (SCell.pos_add _ ?_)
+  rw [Ghost.sharesOf_share, hl, Option.elim_some, SCell.of_self]
+  exact hf
+
+/-- **Only a reader owns a shared byte of the readers' heap** (`Inv.stepIn`'s `hrd`, for a step
+that reads the shares of `t`'s part and held resource). -/
+theorem Shares.rd {G : ThreadId → γ} {m : Mem} (h : W.Shares G m) {u t : ThreadId} {q : Frac}
+    {H : FHeap} {l : Zig.Loc} (hu : W.ph (G u) = .rd q H) (hl : H l ≠ none)
+    (hs : (M.own G m t).shared l ≠ none) : (W.ph (G t)).isRd = true := by
+  obtain ⟨c, hc⟩ := Option.ne_none_iff_exists'.mp hl
+  obtain ⟨-, -, c', hc'⟩ := Res.shared_ne.mp hs
+  rw [h u q H hu l c hc t] at hc'
+  refine Classical.byContradiction fun hn => ?_
+  have hf : (W.ph (G t)).frac = Frac.zero := by
+    cases e : W.ph (G t) <;> first | rfl | (rw [e] at hn; exact absurd rfl hn)
+  rw [hf, SCell.of_zero, SCell.zero_val] at hc'
+  exact absurd hc' (by decide)
+
+/-- **The shares over a relabel**: the rwlock's places stay, and each thread owns the same share
+of every byte. -/
+theorem Shares.congr {G G' : ThreadId → γ} {m m' : Mem} (h : W.Shares G m)
+    (hph : ∀ u, W.ph (G' u) = W.ph (G u))
+    (hown : ∀ v l, (M.own G' m' v).gh.share l = (M.own G m v).gh.share l) : W.Shares G' m' :=
+  fun u q H hu l c hl v => by
+    rw [hown, hph v]; exact h u q H (by rw [← hph u]; exact hu) l c hl v
+
+/-- **The shares over a change of one thread's ghost value beside the same rest** (a tick, a step
+on its own part): the outer mutex's invariant holds before and after it at one rest `rXM`, which
+holds a positive share of each cell of the readers' heap (`Inv.rest_share` at the common rest), and
+`t`'s place stays (`FLock.Inv.share_keep`). -/
+theorem Shares.keep {G G' : ThreadId → γ} {rXM : Res} {m m' : Mem} {t : ThreadId}
+    (h : W.Shares G m) (hM : M.Inv G rXM m) (hM' : M.Inv G' rXM m')
+    (hpos : ∀ u q H l c, W.ph (G u) = .rd q H → H l = some c → 0 < (rXM.gh.share l c).val)
+    (hth : m'.threads = m.threads) (ht : t < m.threads.size) (hoth : ∀ u, u ≠ t → G' u = G u)
+    (hph : W.ph (G' t) = W.ph (G t)) : W.Shares G' m' := by
+  have hph' : ∀ u, W.ph (G' u) = W.ph (G u) := fun u => by
+    by_cases e : u = t
+    · rw [e, hph]
+    · rw [hoth u e]
+  intro u q H hu l c hl v
+  rw [hph' u] at hu
+  rw [hph' v, ← h u q H hu l c hl v]
+  by_cases e : v = t
+  · rw [e]; exact hM.share_keep hM' hth ht hoth (mR_share W l) (hpos u q H l c hu hl)
+  · rw [FLock.own_congr (L := M) hth hoth v e]
+
 /-! ## The outer mutex's view -/
 
 variable {Tgt : Type} {P : Proto Tgt γ} {U₀ : (ThreadId → γ) → Res → Mem → Prop} {okM : γ → Prop}
