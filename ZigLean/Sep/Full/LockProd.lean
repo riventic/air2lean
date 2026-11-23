@@ -119,7 +119,9 @@ shares of the byte stays (`FOwned.share_sum`; for a lock's invariant `FLock.Inv.
 with the same rest the part's own share stays, `FLock.Inv.share_keep`). A protocol whose rest
 holds a share of a byte (the reader/writer lock's free share of the readers' heap) so states what
 each thread's part holds of it and keeps that over a tick, a step on a thread's own part, and a
-move of a share between the part and the rest. -/
+move of a share between the part and the rest. Where the rest holds the byte as a cell, no part
+holds a share of it (`FOwned.share_zero_of_cell`), so when the rest splits the cell, the thread
+that takes a share and the rest hold the whole of it (`FOwned.share_of_cell`). -/
 
 /-- A total share with a positive fraction of the cell `c` is the whole of `c`. -/
 theorem SCell.Total.eq_of_pos {a : SCell} (h : a.Total) {c : FCell} (hc : 0 < (a c).val) :
@@ -141,20 +143,32 @@ theorem sepN_share_eq {f g : Nat → FAssn} {l : Loc} :
     rw [hfg n (Nat.lt_succ_self n) r₁ r₁' h1 h1',
       sepN_share_eq (fun j hj => hfg j (Nat.lt_succ_of_lt hj)) h2 h2']
 
+/-- Two shares that add up to none are none. -/
+theorem SCell.add_eq_zero {a b : SCell} (h : a.add b = SCell.zero) :
+    a = SCell.zero ∧ b = SCell.zero := by
+  have e : ∀ c, (a c).val + (b c).val = 0 := fun c =>
+    congrArg (fun s : SCell => (s c).val) h
+  refine ⟨SCell.ext fun c => ?_, SCell.ext fun c => ?_⟩ <;>
+    · have := e c; have := (a c).nonneg; have := (b c).nonneg
+      rw [SCell.zero_val]; grind
+
+/-- A share of fraction zero is none. -/
+theorem SCell.of_zero (c : FCell) : SCell.of c Frac.zero = SCell.zero :=
+  funext fun c' => by simp only [SCell.of, SCell.zero, ite_self]
+
 namespace FOwned
 
 variable {a b : ThreadId → Res} {rO rb : Res} {m : Mem}
 
-/-- **What a thread's part and the rest hold of a byte together is fixed by the other parts**
-(module section doc): in two states with the same other parts where `t`'s part and the rest hold
-a positive fraction of the cell `c` at `l`, the sum of their shares of `l` is the same (the whole
-of `c` less the other parts' shares). -/
-theorem share_sum {own own' : ThreadId → Res} {rO rO' : Res} {m m' : Mem} {t : ThreadId}
+/-- **The other parts' share of a byte**, in two states with the same other parts: with `t`'s part
+and the rest it is the byte's total (`Holds`), before and after; it is none where the rest holds
+the byte as a cell. -/
+theorem share_others {own own' : ThreadId → Res} {rO rO' : Res} {m m' : Mem} {t : ThreadId}
     (ho : FOwned own rO m) (ho' : FOwned own' rO' m') (hsz : m'.threads.size = m.threads.size)
-    (ht : t < m.threads.size) (hoth : ∀ u, u ≠ t → own' u = own u) {l : Loc} {c : FCell}
-    (hc : 0 < ((((own t).gh.share l).add (rO.gh.share l)) c).val)
-    (hc' : 0 < ((((own' t).gh.share l).add (rO'.gh.share l)) c).val) :
-    ((own' t).gh.share l).add (rO'.gh.share l) = ((own t).gh.share l).add (rO.gh.share l) := by
+    (ht : t < m.threads.size) (hoth : ∀ u, u ≠ t → own' u = own u) (l : Loc) :
+    ∃ a : SCell, (((own t).gh.share l).add (a.add (rO.gh.share l))).Total ∧
+      (((own' t).gh.share l).add (a.add (rO'.gh.share l))).Total ∧
+      (rO.heap l ≠ none → (own t).gh.share l = SCell.zero ∧ a = SCell.zero) := by
   obtain ⟨rR, hsR, -, hh⟩ := ho.part ht
   obtain ⟨rR', hsR', -, hh'⟩ := ho'.part (t := t) (by rw [hsz]; exact ht)
   rw [hsz] at hsR'
@@ -166,22 +180,56 @@ theorem share_sum {own own' : ThreadId → Res} {rO rO' : Res} {m m' : Mem} {t :
     · rw [show partsBut own t j = partOf own j from ite_eq_right e] at ha
       rw [show partsBut own' t j = partOf own' j from ite_eq_right e] at hb
       rw [ha, hb, hoth j e]) hsR hsR'
+  refine ⟨rR.gh.share l, hh.heap.total l, ?_, fun hl => ?_⟩
+  · rw [← hR]; exact hh'.heap.total l
+  · have hn := hh.not_pos_of_heap (l := l) (fun e => by
+      simp only [FHeap.union_apply, Option.or_eq_none_iff] at e
+      exact hl e.2.2)
+    rw [SCell.not_pos_iff] at hn
+    have e0 : ((own t).gh.share l).add ((rR.gh.share l).add (rO.gh.share l)) = SCell.zero := hn.eq
+    exact ⟨(SCell.add_eq_zero e0).1, (SCell.add_eq_zero (SCell.add_eq_zero e0).2).1⟩
+
+/-- **What a thread's part and the rest hold of a byte together is fixed by the other parts**
+(module section doc): in two states with the same other parts where `t`'s part and the rest hold
+a positive fraction of the cell `c` at `l`, the sum of their shares of `l` is the same (the whole
+of `c` less the other parts' shares). -/
+theorem share_sum {own own' : ThreadId → Res} {rO rO' : Res} {m m' : Mem} {t : ThreadId}
+    (ho : FOwned own rO m) (ho' : FOwned own' rO' m') (hsz : m'.threads.size = m.threads.size)
+    (ht : t < m.threads.size) (hoth : ∀ u, u ≠ t → own' u = own u) {l : Loc} {c : FCell}
+    (hc : 0 < ((((own t).gh.share l).add (rO.gh.share l)) c).val)
+    (hc' : 0 < ((((own' t).gh.share l).add (rO'.gh.share l)) c).val) :
+    ((own' t).gh.share l).add (rO'.gh.share l) = ((own t).gh.share l).add (rO.gh.share l) := by
+  obtain ⟨a, hT, hT', -⟩ := share_others ho ho' hsz ht hoth l
   -- both totals are the whole of `c`
   have hv : ∀ (a b d : SCell) (x : FCell),
       ((a.add (b.add d)) x).val = ((a.add d) x).val + (b x).val := fun a b d x => by
     simp only [SCell.add_val]; grind
-  have hT := (hh.heap.total l).eq_of_pos (c := c) (by
-    show 0 < ((((own t).gh.share l).add ((rR.gh.share l).add (rO.gh.share l))) c).val
-    rw [hv]; have := (rR.gh.share l c).nonneg; grind)
-  have hT' := (hh'.heap.total l).eq_of_pos (c := c) (by
-    show 0 < ((((own' t).gh.share l).add ((rR'.gh.share l).add (rO'.gh.share l))) c).val
-    rw [hv]; have := (rR'.gh.share l c).nonneg; grind)
+  have hT := hT.eq_of_pos (c := c) (by rw [hv]; have := (a c).nonneg; grind)
+  have hT' := hT'.eq_of_pos (c := c) (by rw [hv]; have := (a c).nonneg; grind)
   refine SCell.ext fun x => ?_
-  have e : ((((own' t).gh.share l).add ((rR'.gh.share l).add (rO'.gh.share l))) x).val =
-      ((((own t).gh.share l).add ((rR.gh.share l).add (rO.gh.share l))) x).val :=
-    congrArg (fun s : SCell => (s x).val) (hT'.trans hT.symm)
-  rw [hv, hv, hR] at e
+  have e := congrArg (fun s : SCell => (s x).val) (hT'.trans hT.symm)
+  rw [hv, hv] at e
   grind
+
+/-- **A thread's part and the rest hold the whole of a byte the rest held as a cell**: after a
+change of `t`'s part and of the rest alone, when they hold a positive fraction of the cell `c`
+(the first reader's share: the rest splits its cell, and no other part holds a share of it). -/
+theorem share_of_cell {own own' : ThreadId → Res} {rO rO' : Res} {m m' : Mem} {t : ThreadId}
+    (ho : FOwned own rO m) (ho' : FOwned own' rO' m') (hsz : m'.threads.size = m.threads.size)
+    (ht : t < m.threads.size) (hoth : ∀ u, u ≠ t → own' u = own u) {l : Loc} {c : FCell}
+    (hl : rO.heap l ≠ none)
+    (hc' : 0 < ((((own' t).gh.share l).add (rO'.gh.share l)) c).val) :
+    ((own' t).gh.share l).add (rO'.gh.share l) = SCell.of c Frac.one := by
+  obtain ⟨a, -, hT', ha⟩ := share_others ho ho' hsz ht hoth l
+  rw [(ha hl).2, SCell.zero_add] at hT'
+  exact hT'.eq_of_pos hc'
+
+/-- No part holds a share of a byte the rest holds as a cell. -/
+theorem share_zero_of_cell {own : ThreadId → Res} {rO : Res} {m : Mem} {t : ThreadId}
+    (ho : FOwned own rO m) (ht : t < m.threads.size) {l : Loc} (hl : rO.heap l ≠ none) :
+    (own t).gh.share l = SCell.zero :=
+  let ⟨_, _, _, ha⟩ := share_others ho ho rfl ht (fun _ _ => rfl) l
+  (ha hl).1
 
 /-- The parts own their resources: a part of an exact composition is in a part. -/
 theorem owns_right (ho : FOwned (fun u => rsum (a u) (b u)) rO m) {u : ThreadId}
@@ -401,6 +449,28 @@ theorem Facts.inv (hf : L.Facts G m rL)
     (hLX : FHeap.Disjoint rL.heap rX.heap) (hxoff : L.Off rX.heap.erase) : L.Inv G rX m :=
   ⟨hf.w, ⟨rL, ho, hf.loff, hLX, hf.free, hf.busy⟩, hxoff, hf.pdisj, hf.idle, hf.res⟩
 
+/-- The threads' parts beside the whole rest of the lock's invariant, which holds the protocol's
+rest's share of a byte when the lock's resource holds none (`hR`; the word's cells hold none), and
+the byte as a cell where the protocol's rest does. -/
+theorem Inv.owned_share {l : Loc} (hi : L.Inv G rX m)
+    (hR : ∀ G r, L.R G r → r.gh.share l = SCell.zero) :
+    ∃ rO, FOwned (L.own G m) rO m ∧ rO.gh.share l = rX.gh.share l ∧
+      (rX.heap l ≠ none → rO.heap l ≠ none) := by
+  obtain ⟨rL, ho, -, -, hfree, hbusy⟩ := hi.rest
+  have hL : rL.gh.share l = SCell.zero := by
+    by_cases hf : L.Free G
+    · exact hR _ _ (hfree hf).1
+    · rw [hbusy hf]; rfl
+  refine ⟨_, ho, ?_, fun hl e => hl (rsum_heap_none.mp (rsum_heap_none.mp e).2).2⟩
+  show (SCell.zero).add ((rL.gh.share l).add (rX.gh.share l)) = _
+  rw [hL, SCell.zero_add, SCell.zero_add]
+
+/-- The other threads own the same over a change of one thread's ghost value. -/
+theorem own_congr {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId}
+    (hth : m'.threads = m.threads) (hoth : ∀ u, u ≠ t → G' u = G u) :
+    ∀ u, u ≠ t → L.own G' m' u = L.own G m u := fun u e => by
+  unfold FLock.own; rw [LockWord.joinedB_congr hth, hoth u e]
+
 /-- **What a thread and the protocol's rest hold of a byte together is fixed by the other
 threads** (`FOwned.share_sum`, for a lock whose resource holds no share of the byte, `hR`): over a
 change of `t`'s ghost value and of the rest, with the invariant before and after, the sum of
@@ -413,25 +483,32 @@ theorem Inv.share_sum {G' : ThreadId → γ} {rX' : Res} {m' : Mem} {t : ThreadI
     (hc' : 0 < ((((L.own G' m' t).gh.share l).add (rX'.gh.share l)) c).val) :
     ((L.own G' m' t).gh.share l).add (rX'.gh.share l) =
       ((L.own G m t).gh.share l).add (rX.gh.share l) := by
-  obtain ⟨rL, ho, -, -, hfree, hbusy⟩ := hi.rest
-  obtain ⟨rL', ho', -, -, hfree', hbusy'⟩ := hi'.rest
-  -- the free resource holds no share of `l`, nor do the word's cells
-  have hz : ∀ (G : ThreadId → γ) (rL : Res), (L.Free G → L.R G rL) → (¬ L.Free G → rL = rnil) →
-      rL.gh.share l = SCell.zero := fun G rL h1 h2 => by
-    by_cases hf : L.Free G
-    · exact hR _ _ (h1 hf)
-    · rw [h2 hf]; rfl
-  have hL := hz G rL (fun hf => (hfree hf).1) hbusy
-  have hL' := hz G' rL' (fun hf => (hfree' hf).1) hbusy'
-  have hO : ∀ (m : Mem) (rL rX : Res), rL.gh.share l = SCell.zero →
-      (rsum (L.wordR m) (rsum rL rX)).gh.share l = rX.gh.share l := fun m rL rX h => by
-    show (SCell.zero).add ((rL.gh.share l).add (rX.gh.share l)) = _
-    rw [h, SCell.zero_add, SCell.zero_add]
-  have hown : ∀ u, u ≠ t → L.own G' m' u = L.own G m u := fun u e => by
-    unfold FLock.own; rw [LockWord.joinedB_congr hth, hoth u e]
-  have key := FOwned.share_sum ho ho' (by rw [hth]) ht hown (l := l) (c := c)
-    (by rw [hO m rL rX hL]; exact hc) (by rw [hO m' rL' rX' hL']; exact hc')
-  rwa [hO m rL rX hL, hO m' rL' rX' hL'] at key
+  obtain ⟨rO, ho, e, -⟩ := hi.owned_share hR
+  obtain ⟨rO', ho', e', -⟩ := hi'.owned_share hR
+  have key := FOwned.share_sum ho ho' (by rw [hth]) ht (own_congr hth hoth) (l := l) (c := c)
+    (by rw [e]; exact hc) (by rw [e']; exact hc')
+  rwa [e, e'] at key
+
+/-- **A thread and the protocol's rest hold the whole of a byte the rest held as a cell**
+(`FOwned.share_of_cell`): after a change of `t`'s ghost value and of the rest, when they hold a
+positive fraction of the cell `c` (the first reader's share). -/
+theorem Inv.share_of_cell {G' : ThreadId → γ} {rX' : Res} {m' : Mem} {t : ThreadId} {l : Loc}
+    {c : FCell} (hi : L.Inv G rX m) (hi' : L.Inv G' rX' m') (hth : m'.threads = m.threads)
+    (ht : t < m.threads.size) (hoth : ∀ u, u ≠ t → G' u = G u)
+    (hR : ∀ G r, L.R G r → r.gh.share l = SCell.zero) (hl : rX.heap l ≠ none)
+    (hc' : 0 < ((((L.own G' m' t).gh.share l).add (rX'.gh.share l)) c).val) :
+    ((L.own G' m' t).gh.share l).add (rX'.gh.share l) = SCell.of c Frac.one := by
+  obtain ⟨rO, ho, -, hO⟩ := hi.owned_share hR
+  obtain ⟨rO', ho', e', -⟩ := hi'.owned_share hR
+  have key := FOwned.share_of_cell ho ho' (by rw [hth]) ht (own_congr hth hoth) (l := l) (c := c)
+    (hO hl) (by rw [e']; exact hc')
+  rwa [e'] at key
+
+/-- No thread holds a share of a byte the protocol's rest holds as a cell. -/
+theorem Inv.share_zero_of_cell {t : ThreadId} {l : Loc} (hi : L.Inv G rX m)
+    (ht : t < m.threads.size) (hl : rX.heap l ≠ none) : (L.own G m t).gh.share l = SCell.zero := by
+  obtain ⟨rL, ho, -⟩ := hi.rest
+  exact ho.share_zero_of_cell ht fun e => hl (rsum_heap_none.mp (rsum_heap_none.mp e).2).2
 
 /-- **A thread's share of a byte the rest shares stays over a change of its ghost value alone**
 (`Inv.share_sum` with the same rest: a tick, a step on its own part). -/
