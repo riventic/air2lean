@@ -170,16 +170,16 @@ theorem share_sum {own own' : ThreadId → Res} {rO rO' : Res} {m m' : Mem} {t :
   have hv : ∀ (a b d : SCell) (x : FCell),
       ((a.add (b.add d)) x).val = ((a.add d) x).val + (b x).val := fun a b d x => by
     simp only [SCell.add_val]; grind
-  have ht := (hh.heap.total l).eq_of_pos (c := c) (by
+  have hT := (hh.heap.total l).eq_of_pos (c := c) (by
     show 0 < ((((own t).gh.share l).add ((rR.gh.share l).add (rO.gh.share l))) c).val
     rw [hv]; have := (rR.gh.share l c).nonneg; grind)
-  have ht' := (hh'.heap.total l).eq_of_pos (c := c) (by
+  have hT' := (hh'.heap.total l).eq_of_pos (c := c) (by
     show 0 < ((((own' t).gh.share l).add ((rR'.gh.share l).add (rO'.gh.share l))) c).val
     rw [hv]; have := (rR'.gh.share l c).nonneg; grind)
   refine SCell.ext fun x => ?_
   have e : ((((own' t).gh.share l).add ((rR'.gh.share l).add (rO'.gh.share l))) x).val =
       ((((own t).gh.share l).add ((rR.gh.share l).add (rO.gh.share l))) x).val :=
-    congrArg (fun s : SCell => (s x).val) (ht'.trans ht.symm)
+    congrArg (fun s : SCell => (s x).val) (hT'.trans hT.symm)
   rw [hv, hv, hR] at e
   grind
 
@@ -642,6 +642,17 @@ def U (B : FLock γ) (U : (ThreadId → γ) → Res → Mem → Prop) :
     (ThreadId → γ) → Res → Mem → Prop := fun G rXA m =>
   ∃ sB rL rH rX, rXA = rsum sB rX ∧ Res.Sim sB (side B m rL rH) ∧ B.Keeps G m rL rH rX ∧
     U G rX m
+
+/-- **The client's base is kept over a tick on a part** (the `tick` obligation of `Pair.fits`,
+`fitsEmpty`, `fitsOrder`; `A.PartTick`): the thread has not ended, and the client gets what the
+product has at the tick, `B`'s side and `B` kept as in `stable`, and `A`'s invariant at the stored
+rest before and after the tick (so a share of a byte in the rest keeps the part's own share,
+`FLock.Inv.share_keep`). -/
+abbrev TickKeeps (A B : FLock γ) (U : (ThreadId → γ) → Res → Mem → Prop) : Prop :=
+  ∀ t G sB rL rH rX m r, A.ph (G t) ≠ .gone → Res.Sim sB (side B m rL rH) →
+    B.Keeps G m rL rH rX → A.Inv G (rsum sB rX) m →
+    A.Inv (upd G t (A.setPart (G t) r)) (rsum sB rX) m.ticked → U G rX m →
+    U (upd G t (A.setPart (G t) r)) rX m.ticked
 
 /-- **`A`'s invariant at the exact side** (`Inv.congrX`): the rest of `Pair.U` is alike to `B`'s
 side next to `rX`. -/
@@ -1157,13 +1168,14 @@ which `PartTick` has at that rest: `FLock.Inv.share_keep`). -/
 theorem U_partTick (hp : A.Pair B) {U : (ThreadId → γ) → Res → Mem → Prop} {t : ThreadId}
     {rXA rXA' : Res} {G' : ThreadId → γ} {m' : Mem} (hU : Pair.U B U G rXA m)
     (htick : A.PartTick t G rXA m G' rXA' m')
-    (hcl : ∀ sB rX, rXA = rsum sB rX → U G rX m → U G' rX m') : Pair.U B U G' rXA' m' := by
+    (hcl : ∀ sB rL rH rX, rXA = rsum sB rX → Res.Sim sB (side B m rL rH) →
+      B.Keeps G m rL rH rX → U G rX m → U G' rX m') : Pair.U B U G' rXA' m' := by
   obtain ⟨-, -, -, r, -, rfl, rfl, rfl, hi'⟩ := htick
   have hpart : A.setPart (G t) r = B.setPart (G t) r := hp.setPart _ _
   exact U_partStep (hO := Heap.empty) hp hU (FStepIn.ticked m _).reads hi'
     (by rw [hpart, B.ph_setPart])
     (by rw [hpart, B.held_setPart]) (fun r' h => by rw [hpart]; exact (B.R_setPart G t r r').mpr h)
-    fun sB _ _ rX he _ _ hu => hcl sB rX he hu
+    hcl
 
 /-- **The two-lock product's invariant is the same in either lock's view**: a protocol whose
 invariant is `A`'s with `Pair.U B U` is also `B`'s with `Pair.U A U` (`FLock.Fits.inv` for both
@@ -1247,9 +1259,7 @@ theorem fits (hp : A.Pair B) {K : FPrim γ} {ok : γ → Prop}
       U G rX m → A.Step t m m' → (A.ph (G t) = .holds → p ≠ .holds → A.Before m' (m.clocks[t]!)) →
       A.Transfer G (rsum (side B m rL rH) rX) m m' t p h → U (upd G t (A.set (G t) p h)) rX m')
     (atStop : ∀ G rX m t, t < m.threads.size → U G rX m → U G rX { m with current := t })
-    (tick : ∀ t G sB rX m r, A.ph (G t) ≠ .gone → A.Inv G (rsum sB rX) m →
-      A.Inv (upd G t (A.setPart (G t) r)) (rsum sB rX) m.ticked → U G rX m →
-      U (upd G t (A.setPart (G t) r)) rX m.ticked)
+    (tick : TickKeeps A B U)
     (noGather : ∀ G rX m t, A.Inv G rX m → Pair.U B U G rX m → A.NoGather G m t)
     (kfin : ∀ g, P.fin g → K.pl.ph g = K.out) (kjoins : ∀ g, P.joins g → K.pl.ph g = K.out)
     (sub : ∀ G sB rL rH rX m, Res.Sim sB (side B m rL rH) → B.Keeps G m rL rH rX → U G rX m →
@@ -1300,10 +1310,10 @@ theorem fits (hp : A.Pair B) {K : FPrim γ} {ok : γ → Prop}
   role_part := role_part
   ok_calm := ok_calm
   kstep t G rXA m G' rXA' m' h hU := h.elim (fun h => kstep t G rXA m G' rXA' m' h hU) fun h =>
-    U_partTick hp hU h fun sB rX he hu => by
+    U_partTick hp hU h fun sB rL rH rX he hs hk hu => by
       obtain ⟨-, hg, hi, r, -, rfl, rfl, rfl, hi'⟩ := h
       subst he
-      exact tick t G sB rX m r hg hi hi' hu
+      exact tick t G sB rL rH rX m r hg hs hk hi hi' hu
   holdLive := holdLive
 
 /-- **The product's `Fits` for `A` alone with its word** (`FPrim.empty`; `fits`, as
@@ -1320,9 +1330,7 @@ theorem fitsEmpty (hp : A.Pair B) {ok : γ → Prop}
       U G rX m → A.Step t m m' → (A.ph (G t) = .holds → p ≠ .holds → A.Before m' (m.clocks[t]!)) →
       A.Transfer G (rsum (side B m rL rH) rX) m m' t p h → U (upd G t (A.set (G t) p h)) rX m')
     (atStop : ∀ G rX m t, t < m.threads.size → U G rX m → U G rX { m with current := t })
-    (tick : ∀ t G sB rX m r, A.ph (G t) ≠ .gone → A.Inv G (rsum sB rX) m →
-      A.Inv (upd G t (A.setPart (G t) r)) (rsum sB rX) m.ticked → U G rX m →
-      U (upd G t (A.setPart (G t) r)) rX m.ticked)
+    (tick : TickKeeps A B U)
     (noGather : ∀ G rX m t, A.Inv G rX m → Pair.U B U G rX m → A.NoGather G m t)
     (holdLive : ∀ G rX m v, A.Inv G rX m → Pair.U B U G rX m → A.ph (G v) = .holdsAway →
       P.Live v G m) :
@@ -1363,12 +1371,7 @@ theorem fitsOrder (hp : A.Pair B) {okA okB : γ → Prop}
       U G rX m → B.Step t m m' → (B.ph (G t) = .holds → p ≠ .holds → B.Before m' (m.clocks[t]!)) →
       B.Transfer G (rsum (side A m rL rH) rX) m m' t p h → U (upd G t (B.set (G t) p h)) rX m')
     (atStop : ∀ G rX m t, t < m.threads.size → U G rX m → U G rX { m with current := t })
-    (tickA : ∀ t G sB rX m r, A.ph (G t) ≠ .gone → A.Inv G (rsum sB rX) m →
-      A.Inv (upd G t (A.setPart (G t) r)) (rsum sB rX) m.ticked → U G rX m →
-      U (upd G t (A.setPart (G t) r)) rX m.ticked)
-    (tickB : ∀ t G sA rX m r, B.ph (G t) ≠ .gone → B.Inv G (rsum sA rX) m →
-      B.Inv (upd G t (B.setPart (G t) r)) (rsum sA rX) m.ticked → U G rX m →
-      U (upd G t (B.setPart (G t) r)) rX m.ticked)
+    (tickA : TickKeeps A B U) (tickB : TickKeeps B A U)
     (noGatherA : ∀ G rX m t, A.Inv G rX m → Pair.U B U G rX m → A.NoGather G m t)
     (noGatherB : ∀ G rX m t, B.Inv G rX m → Pair.U A U G rX m → B.NoGather G m t) :
     A.Fits (FPrim.empty γ) P (Pair.U B U) okA ∧ B.Fits (FPrim.empty γ) P (Pair.U A U) okB := by

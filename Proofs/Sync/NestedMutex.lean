@@ -82,8 +82,8 @@ theorem fits :
     (fun _ h => h) (fun _ h => h)
     (fun _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ => trivial)
     (fun _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ => trivial)
-    (fun _ _ _ _ _ _ => trivial) (fun _ _ _ _ _ _ _ _ _ _ => trivial)
-    (fun _ _ _ _ _ _ _ _ _ _ => trivial)
+    (fun _ _ _ _ _ _ => trivial) (fun _ _ _ _ _ _ _ _ _ _ _ _ _ _ => trivial)
+    (fun _ _ _ _ _ _ _ _ _ _ _ _ _ _ => trivial)
     (fun _ _ _ _ _ _ => FLock.NoGather.of_R _ hRA) (fun _ _ _ _ _ _ => FLock.NoGather.of_R _ hRB)
 
 /-- **`nested` over every mutex implementation** (module doc): walked by the contract's rules for
