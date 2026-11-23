@@ -160,11 +160,11 @@ theorem share_sum {own own' : ThreadId → Res} {rO rO' : Res} {m m' : Mem} {t :
   rw [hsz] at hsR'
   have hR : rR'.gh.share l = rR.gh.share l := sepN_share_eq (fun j _ a b ha hb => by
     by_cases e : j = t
-    · rw [show partsBut own t j = emp from if_pos e] at ha
-      rw [show partsBut own' t j = emp from if_pos e] at hb
+    · rw [show partsBut own t j = emp from ite_eq_left e] at ha
+      rw [show partsBut own' t j = emp from ite_eq_left e] at hb
       rw [ha.2.2, hb.2.2]
-    · rw [show partsBut own t j = partOf own j from if_neg e] at ha
-      rw [show partsBut own' t j = partOf own' j from if_neg e] at hb
+    · rw [show partsBut own t j = partOf own j from ite_eq_right e] at ha
+      rw [show partsBut own' t j = partOf own' j from ite_eq_right e] at hb
       rw [ha, hb, hoth j e]) hsR hsR'
   -- both totals are the whole of `c`
   have hv : ∀ (a b d : SCell) (x : FCell),
@@ -460,7 +460,7 @@ theorem Inv.own_share {u : ThreadId} {l : Loc} (hi : L.Inv G rX m)
       rw [e']
     · exact hR G _ (hi.res u e)
   unfold FLock.own
-  rw [if_neg (show ¬ (joinedB m u = true) by rw [hj]; exact Bool.false_ne_true)]
+  rw [ite_eq_right (show ¬ (joinedB m u = true) by rw [hj]; exact Bool.false_ne_true)]
   show ((L.part (G u)).gh.share l).add ((L.held (G u)).gh.share l) = _
   rw [hh, SCell.add_zero]
 
