@@ -110,9 +110,78 @@ theorem sepN_partOf_noCur {own : ThreadId → Res} {n : Nat} {r : Res}
   obtain ⟨rR, -, -, rfl⟩ := parts_pick hu h
   exact Res.NoCur.left (b := rR) hc
 
+/-! ## Share conservation
+
+`Holds` accounts for the read shares of a byte exactly (`SMatch`: none, or the whole of one cell,
+`SCell.Total`). So what one thread's part and the rest hold of a byte together is fixed by the
+other threads' parts: over a change of that thread's part and of the rest alone, the sum of their
+shares of the byte stays (`FOwned.share_sum`; for a lock's invariant `FLock.Inv.share_sum`, and
+with the same rest the part's own share stays, `FLock.Inv.share_keep`). A protocol whose rest
+holds a share of a byte (the reader/writer lock's free share of the readers' heap) so states what
+each thread's part holds of it and keeps that over a tick, a step on a thread's own part, and a
+move of a share between the part and the rest. -/
+
+/-- A total share with a positive fraction of the cell `c` is the whole of `c`. -/
+theorem SCell.Total.eq_of_pos {a : SCell} (h : a.Total) {c : FCell} (hc : 0 < (a c).val) :
+    a = SCell.of c Frac.one := by
+  rcases h with h | ⟨c', h⟩
+  · rw [h, SCell.zero_val] at hc; exact absurd hc (by decide)
+  · have e : c = c' := Classical.byContradiction fun hne => by
+      rw [h, SCell.of_ne Frac.one hne] at hc; exact absurd hc (by decide)
+    rw [e]; exact h
+
+/-- The shares of two `sepN`s whose conjuncts agree on their share of a byte agree on it. -/
+theorem sepN_share_eq {f g : Nat → FAssn} {l : Loc} :
+    ∀ {n : Nat} {r r' : Res},
+      (∀ j, j < n → ∀ a b, f j a → g j b → b.gh.share l = a.gh.share l) →
+      sepN n f r → sepN n g r' → r'.gh.share l = r.gh.share l
+  | 0, _, _, _, h, h' => by rw [h.2.2, h'.2.2]
+  | n + 1, _, _, hfg, ⟨r₁, r₂, _, rfl, h1, h2⟩, ⟨r₁', r₂', _, rfl, h1', h2'⟩ => by
+    show (r₁'.gh.share l).add (r₂'.gh.share l) = (r₁.gh.share l).add (r₂.gh.share l)
+    rw [hfg n (Nat.lt_succ_self n) r₁ r₁' h1 h1',
+      sepN_share_eq (fun j hj => hfg j (Nat.lt_succ_of_lt hj)) h2 h2']
+
 namespace FOwned
 
 variable {a b : ThreadId → Res} {rO rb : Res} {m : Mem}
+
+/-- **What a thread's part and the rest hold of a byte together is fixed by the other parts**
+(module section doc): in two states with the same other parts where `t`'s part and the rest hold
+a positive fraction of the cell `c` at `l`, the sum of their shares of `l` is the same (the whole
+of `c` less the other parts' shares). -/
+theorem share_sum {own own' : ThreadId → Res} {rO rO' : Res} {m m' : Mem} {t : ThreadId}
+    (ho : FOwned own rO m) (ho' : FOwned own' rO' m') (hsz : m'.threads.size = m.threads.size)
+    (ht : t < m.threads.size) (hoth : ∀ u, u ≠ t → own' u = own u) {l : Loc} {c : FCell}
+    (hc : 0 < ((((own t).gh.share l).add (rO.gh.share l)) c).val)
+    (hc' : 0 < ((((own' t).gh.share l).add (rO'.gh.share l)) c).val) :
+    ((own' t).gh.share l).add (rO'.gh.share l) = ((own t).gh.share l).add (rO.gh.share l) := by
+  obtain ⟨rR, hsR, -, hh⟩ := ho.part ht
+  obtain ⟨rR', hsR', -, hh'⟩ := ho'.part (t := t) (by rw [hsz]; exact ht)
+  rw [hsz] at hsR'
+  have hR : rR'.gh.share l = rR.gh.share l := sepN_share_eq (fun j _ a b ha hb => by
+    by_cases e : j = t
+    · rw [show partsBut own t j = emp from if_pos e] at ha
+      rw [show partsBut own' t j = emp from if_pos e] at hb
+      rw [ha.2.2, hb.2.2]
+    · rw [show partsBut own t j = partOf own j from if_neg e] at ha
+      rw [show partsBut own' t j = partOf own' j from if_neg e] at hb
+      rw [ha, hb, hoth j e]) hsR hsR'
+  -- both totals are the whole of `c`
+  have hv : ∀ (a b d : SCell) (x : FCell),
+      ((a.add (b.add d)) x).val = ((a.add d) x).val + (b x).val := fun a b d x => by
+    simp only [SCell.add_val]; grind
+  have ht := (hh.heap.total l).eq_of_pos (c := c) (by
+    show 0 < ((((own t).gh.share l).add ((rR.gh.share l).add (rO.gh.share l))) c).val
+    rw [hv]; have := (rR.gh.share l c).nonneg; grind)
+  have ht' := (hh'.heap.total l).eq_of_pos (c := c) (by
+    show 0 < ((((own' t).gh.share l).add ((rR'.gh.share l).add (rO'.gh.share l))) c).val
+    rw [hv]; have := (rR'.gh.share l c).nonneg; grind)
+  refine SCell.ext fun x => ?_
+  have e : ((((own' t).gh.share l).add ((rR'.gh.share l).add (rO'.gh.share l))) x).val =
+      ((((own t).gh.share l).add ((rR.gh.share l).add (rO.gh.share l))) x).val :=
+    congrArg (fun s : SCell => (s x).val) (ht'.trans ht.symm)
+  rw [hv, hv, hR] at e
+  grind
 
 /-- The parts own their resources: a part of an exact composition is in a part. -/
 theorem owns_right (ho : FOwned (fun u => rsum (a u) (b u)) rO m) {u : ThreadId}
@@ -331,6 +400,69 @@ theorem Facts.inv (hf : L.Facts G m rL)
     (ho : FOwned (L.own G m) (rsum (L.wordR m) (rsum rL rX)) m)
     (hLX : FHeap.Disjoint rL.heap rX.heap) (hxoff : L.Off rX.heap.erase) : L.Inv G rX m :=
   ⟨hf.w, ⟨rL, ho, hf.loff, hLX, hf.free, hf.busy⟩, hxoff, hf.pdisj, hf.idle, hf.res⟩
+
+/-- **What a thread and the protocol's rest hold of a byte together is fixed by the other
+threads** (`FOwned.share_sum`, for a lock whose resource holds no share of the byte, `hR`): over a
+change of `t`'s ghost value and of the rest, with the invariant before and after, the sum of
+`t`'s and the rest's shares of `l` stays, when both hold a positive fraction of the cell `c`. -/
+theorem Inv.share_sum {G' : ThreadId → γ} {rX' : Res} {m' : Mem} {t : ThreadId} {l : Loc}
+    {c : FCell} (hi : L.Inv G rX m) (hi' : L.Inv G' rX' m') (hth : m'.threads = m.threads)
+    (ht : t < m.threads.size) (hoth : ∀ u, u ≠ t → G' u = G u)
+    (hR : ∀ G r, L.R G r → r.gh.share l = SCell.zero)
+    (hc : 0 < ((((L.own G m t).gh.share l).add (rX.gh.share l)) c).val)
+    (hc' : 0 < ((((L.own G' m' t).gh.share l).add (rX'.gh.share l)) c).val) :
+    ((L.own G' m' t).gh.share l).add (rX'.gh.share l) =
+      ((L.own G m t).gh.share l).add (rX.gh.share l) := by
+  obtain ⟨rL, ho, -, -, hfree, hbusy⟩ := hi.rest
+  obtain ⟨rL', ho', -, -, hfree', hbusy'⟩ := hi'.rest
+  -- the free resource holds no share of `l`, nor do the word's cells
+  have hL : rL.gh.share l = SCell.zero := by
+    by_cases hf : L.Free G
+    · exact hR _ _ (hfree hf).1
+    · have e := hbusy hf; subst e; rfl
+  have hL' : rL'.gh.share l = SCell.zero := by
+    by_cases hf : L.Free G'
+    · exact hR _ _ (hfree' hf).1
+    · have e := hbusy' hf; subst e; rfl
+  have hO : ∀ (m : Mem) (rL rX : Res), rL.gh.share l = SCell.zero →
+      (rsum (L.wordR m) (rsum rL rX)).gh.share l = rX.gh.share l := fun m rL rX h => by
+    show (SCell.zero).add ((rL.gh.share l).add (rX.gh.share l)) = _
+    rw [h, SCell.zero_add, SCell.zero_add]
+  have hown : ∀ u, u ≠ t → L.own G' m' u = L.own G m u := fun u e => by
+    unfold FLock.own; rw [LockWord.joinedB_congr hth, hoth u e]
+  have key := FOwned.share_sum ho ho' (by rw [hth]) ht hown (l := l) (c := c)
+    (by rw [hO m rL rX hL]; exact hc) (by rw [hO m' rL' rX' hL']; exact hc')
+  rwa [hO m rL rX hL, hO m' rL' rX' hL'] at key
+
+/-- **A thread's share of a byte the rest shares stays over a change of its ghost value alone**
+(`Inv.share_sum` with the same rest: a tick, a step on its own part). -/
+theorem Inv.share_keep {G' : ThreadId → γ} {m' : Mem} {t : ThreadId} {l : Loc} {c : FCell}
+    (hi : L.Inv G rX m) (hi' : L.Inv G' rX m') (hth : m'.threads = m.threads)
+    (ht : t < m.threads.size) (hoth : ∀ u, u ≠ t → G' u = G u)
+    (hR : ∀ G r, L.R G r → r.gh.share l = SCell.zero) (hc : 0 < (rX.gh.share l c).val) :
+    (L.own G' m' t).gh.share l = (L.own G m t).gh.share l := by
+  have h := hi.share_sum hi' hth ht hoth hR (SCell.pos_add' _ hc) (SCell.pos_add' _ hc)
+  refine SCell.ext fun x => ?_
+  have e := congrArg (fun s : SCell => (s x).val) h
+  simp only [SCell.add_val] at e
+  grind
+
+/-- **What a thread that has not ended owns of a byte is its part's share**, for a lock whose
+resource holds no share of the byte: the resource it holds has none. -/
+theorem Inv.own_share {u : ThreadId} {l : Loc} (hi : L.Inv G rX m)
+    (hR : ∀ G r, L.R G r → r.gh.share l = SCell.zero) (hu : L.ph (G u) ≠ .gone) :
+    (L.own G m u).gh.share l = (L.part (G u)).gh.share l := by
+  obtain ⟨-, hj⟩ := hi.w.live u hu
+  have hh : (L.held (G u)).gh.share l = SCell.zero := by
+    cases e : (L.ph (G u)).held
+    · have e' := hi.idle u e
+      show (L.held (G u)).gh.share l = (rnil : Res).gh.share l
+      rw [e']
+    · exact hR G _ (hi.res u e)
+  unfold FLock.own
+  rw [if_neg (show ¬ (joinedB m u = true) by rw [hj]; exact Bool.false_ne_true)]
+  show ((L.part (G u)).gh.share l).add ((L.held (G u)).gh.share l) = _
+  rw [hh, SCell.add_zero]
 
 /-- **The facts at a new ghost value and memory**: the same places and held resources, the
 resource kept (`hR`), the word invariant and the free resource's ownership at the new memory, and
@@ -1020,17 +1152,19 @@ theorem U_partStep (hp : A.Pair B) {U : (ThreadId → γ) → Res → Mem → Pr
   exact ⟨sB, rL, rH, rX, rfl, hsB', hk', hcl sB rL rH rX rfl hsB hk hu⟩
 
 /-- **A tick on a part keeps the product's rest** (`A.PartTick`, for `A`'s `Fits.kstep`): the
-tick changes no byte; the protocol's own `U` must be kept. -/
+tick changes no byte; the protocol's own `U` must be kept, at the common rest `rX` beside `B`'s
+side as the rest stores it (so the client may use `A`'s invariant before and after the tick,
+which `PartTick` has at that rest: `FLock.Inv.share_keep`). -/
 theorem U_partTick (hp : A.Pair B) {U : (ThreadId → γ) → Res → Mem → Prop} {t : ThreadId}
     {rXA rXA' : Res} {G' : ThreadId → γ} {m' : Mem} (hU : Pair.U B U G rXA m)
     (htick : A.PartTick t G rXA m G' rXA' m')
-    (hcl : ∀ rX, U G rX m → U G' rX m') : Pair.U B U G' rXA' m' := by
+    (hcl : ∀ sB rX, rXA = rsum sB rX → U G rX m → U G' rX m') : Pair.U B U G' rXA' m' := by
   obtain ⟨-, -, -, r, -, rfl, rfl, rfl, hi'⟩ := htick
   have hpart : A.setPart (G t) r = B.setPart (G t) r := hp.setPart _ _
   exact U_partStep (hO := Heap.empty) hp hU (FStepIn.ticked m _).reads hi'
     (by rw [hpart, B.ph_setPart])
     (by rw [hpart, B.held_setPart]) (fun r' h => by rw [hpart]; exact (B.R_setPart G t r r').mpr h)
-    fun _ _ _ rX _ _ _ hu => hcl rX hu
+    fun sB _ _ rX he _ _ hu => hcl sB rX he hu
 
 /-- **The two-lock product's invariant is the same in either lock's view**: a protocol whose
 invariant is `A`'s with `Pair.U B U` is also `B`'s with `Pair.U A U` (`FLock.Fits.inv` for both
@@ -1114,7 +1248,9 @@ theorem fits (hp : A.Pair B) {K : FPrim γ} {ok : γ → Prop}
       U G rX m → A.Step t m m' → (A.ph (G t) = .holds → p ≠ .holds → A.Before m' (m.clocks[t]!)) →
       A.Transfer G (rsum (side B m rL rH) rX) m m' t p h → U (upd G t (A.set (G t) p h)) rX m')
     (atStop : ∀ G rX m t, t < m.threads.size → U G rX m → U G rX { m with current := t })
-    (tick : ∀ t G rX m r, U G rX m → U (upd G t (A.setPart (G t) r)) rX m.ticked)
+    (tick : ∀ t G sB rX m r, A.ph (G t) ≠ .gone → A.Inv G (rsum sB rX) m →
+      A.Inv (upd G t (A.setPart (G t) r)) (rsum sB rX) m.ticked → U G rX m →
+      U (upd G t (A.setPart (G t) r)) rX m.ticked)
     (noGather : ∀ G rX m t, A.Inv G rX m → Pair.U B U G rX m → A.NoGather G m t)
     (kfin : ∀ g, P.fin g → K.pl.ph g = K.out) (kjoins : ∀ g, P.joins g → K.pl.ph g = K.out)
     (sub : ∀ G sB rL rH rX m, Res.Sim sB (side B m rL rH) → B.Keeps G m rL rH rX → U G rX m →
@@ -1165,9 +1301,10 @@ theorem fits (hp : A.Pair B) {K : FPrim γ} {ok : γ → Prop}
   role_part := role_part
   ok_calm := ok_calm
   kstep t G rXA m G' rXA' m' h hU := h.elim (fun h => kstep t G rXA m G' rXA' m' h hU) fun h =>
-    U_partTick hp hU h fun rX hu => by
-      obtain ⟨-, -, -, r, -, rfl, -, rfl, -⟩ := h
-      exact tick t G rX m r hu
+    U_partTick hp hU h fun sB rX he hu => by
+      obtain ⟨-, hg, hi, r, -, rfl, rfl, rfl, hi'⟩ := h
+      subst he
+      exact tick t G sB rX m r hg hi hi' hu
   holdLive := holdLive
 
 /-- **The product's `Fits` for `A` alone with its word** (`FPrim.empty`; `fits`, as
@@ -1184,7 +1321,9 @@ theorem fitsEmpty (hp : A.Pair B) {ok : γ → Prop}
       U G rX m → A.Step t m m' → (A.ph (G t) = .holds → p ≠ .holds → A.Before m' (m.clocks[t]!)) →
       A.Transfer G (rsum (side B m rL rH) rX) m m' t p h → U (upd G t (A.set (G t) p h)) rX m')
     (atStop : ∀ G rX m t, t < m.threads.size → U G rX m → U G rX { m with current := t })
-    (tick : ∀ t G rX m r, U G rX m → U (upd G t (A.setPart (G t) r)) rX m.ticked)
+    (tick : ∀ t G sB rX m r, A.ph (G t) ≠ .gone → A.Inv G (rsum sB rX) m →
+      A.Inv (upd G t (A.setPart (G t) r)) (rsum sB rX) m.ticked → U G rX m →
+      U (upd G t (A.setPart (G t) r)) rX m.ticked)
     (noGather : ∀ G rX m t, A.Inv G rX m → Pair.U B U G rX m → A.NoGather G m t)
     (holdLive : ∀ G rX m v, A.Inv G rX m → Pair.U B U G rX m → A.ph (G v) = .holdsAway →
       P.Live v G m) :
@@ -1225,7 +1364,12 @@ theorem fitsOrder (hp : A.Pair B) {okA okB : γ → Prop}
       U G rX m → B.Step t m m' → (B.ph (G t) = .holds → p ≠ .holds → B.Before m' (m.clocks[t]!)) →
       B.Transfer G (rsum (side A m rL rH) rX) m m' t p h → U (upd G t (B.set (G t) p h)) rX m')
     (atStop : ∀ G rX m t, t < m.threads.size → U G rX m → U G rX { m with current := t })
-    (tick : ∀ t G rX m r, U G rX m → U (upd G t (A.setPart (G t) r)) rX m.ticked)
+    (tickA : ∀ t G sB rX m r, A.ph (G t) ≠ .gone → A.Inv G (rsum sB rX) m →
+      A.Inv (upd G t (A.setPart (G t) r)) (rsum sB rX) m.ticked → U G rX m →
+      U (upd G t (A.setPart (G t) r)) rX m.ticked)
+    (tickB : ∀ t G sA rX m r, B.ph (G t) ≠ .gone → B.Inv G (rsum sA rX) m →
+      B.Inv (upd G t (B.setPart (G t) r)) (rsum sA rX) m.ticked → U G rX m →
+      U (upd G t (B.setPart (G t) r)) rX m.ticked)
     (noGatherA : ∀ G rX m t, A.Inv G rX m → Pair.U B U G rX m → A.NoGather G m t)
     (noGatherB : ∀ G rX m t, B.Inv G rX m → Pair.U A U G rX m → B.NoGather G m t) :
     A.Fits (FPrim.empty γ) P (Pair.U B U) okA ∧ B.Fits (FPrim.empty γ) P (Pair.U A U) okB := by
@@ -1233,10 +1377,10 @@ theorem fitsOrder (hp : A.Pair B) {okA okB : γ → Prop}
     hp.symm.fitsEmpty (hp.inv_swap hgA hgB inv) finB joinsB okB_set okB_setPart
       (fun _ _ _ _ _ hok hi _ _ _ =>
         away_of hi ((awayB _ hok).imp id fun h => ⟨h, (hnA _).mpr rfl⟩))
-      stableB atStop (fun t G rX m r hu => by rw [← hp.setPart]; exact tick t G rX m r hu)
+      stableB atStop tickB
       noGatherB fun _ _ _ _ hi _ hv => holdLive_none hnB hi hv
   exact ⟨hp.fitsEmpty inv finA joinsA okA_set okA_setPart
-    (fun _ _ _ _ _ hok _ _ _ _ => .inl (awayA _ hok)) stableA atStop tick noGatherA
+    (fun _ _ _ _ _ hok _ _ _ _ => .inl (awayA _ hok)) stableA atStop tickA noGatherA
     (holdLive_inner hB (fun p h => (hnA p).mp h) fun G rX m hi hU => (inv G m).mpr ⟨rX, hi, hU⟩),
     hB⟩
 

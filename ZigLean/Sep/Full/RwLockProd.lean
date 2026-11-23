@@ -214,7 +214,7 @@ variable {Tgt : Type} {P : Proto Tgt γ} {U₀ : (ThreadId → γ) → Res → M
 /-- **The outer mutex's view of the two-lock product** (module doc; `FRw.Fits.m`):
 `FLock.Pair.fits` at the rwlock's primitive, where the outer mutex's code runs at `L`'s `away` and
 the rwlock's calm places. The client gives its base `U₀`'s obligations at the common rest
-(`stable` at a calm place, `atStop`, `tick`,
+(`stable` at a calm place, `atStop`, `tick` with the mutex's invariant before and after it,
 `kstep` with `U_step`'s facts, `holdLive`), that `U₀` keeps the rwlock's invariant (`hsub`), the
 laws of the rwlock's and the semaphore's places next to `M` (`lph` … `set_part`) and of `okM`. -/
 theorem fitsM
@@ -232,7 +232,9 @@ theorem fitsM
       M.Transfer G (rsum (FLock.side L m rL rH) rX) m m' t p h →
       U₀ (upd G t (M.set (G t) p h)) rX m')
     (atStop : ∀ G rX m t, t < m.threads.size → U₀ G rX m → U₀ G rX { m with current := t })
-    (tick : ∀ t G rX m r, U₀ G rX m → U₀ (upd G t (M.setPart (G t) r)) rX m.ticked)
+    (tick : ∀ t G sB rX m r, M.ph (G t) ≠ .gone → M.Inv G (rsum sB rX) m →
+      M.Inv (upd G t (M.setPart (G t) r)) (rsum sB rX) m.ticked → U₀ G rX m →
+      U₀ (upd G t (M.setPart (G t) r)) rX m.ticked)
     (hsub : ∀ G rX m, U₀ G rX m → W.Inv G rX m)
     (lph : ∀ g p, M.ph (W.place.set g p) = M.ph g)
     (lpart : ∀ g p, M.part (W.place.set g p) = M.part g)
@@ -398,7 +400,9 @@ theorem fitsS (W : FRw γ X Y M L C S) {okS : γ → Prop}
       L.Transfer G (rsum (FLock.side M m rL rH) rX) m m' t p h →
       U₀ (upd G t (L.set (G t) p h)) rX m')
     (atStop : ∀ G rX m t, t < m.threads.size → U₀ G rX m → U₀ G rX { m with current := t })
-    (tick : ∀ t G rX m r, U₀ G rX m → U₀ (upd G t (L.setPart (G t) r)) rX m.ticked)
+    (tick : ∀ t G sB rX m r, L.ph (G t) ≠ .gone → L.Inv G (rsum sB rX) m →
+      L.Inv (upd G t (L.setPart (G t) r)) (rsum sB rX) m.ticked → U₀ G rX m →
+      U₀ (upd G t (L.setPart (G t) r)) rX m.ticked)
     (hsub : ∀ G rX m, U₀ G rX m → (C.prim L).Sub G rX m ∧ S.Inv G m)
     (lph : ∀ g q, L.ph (S.place.set g q) = L.ph g)
     (lpart : ∀ g q, L.part (S.place.set g q) = L.part g)
