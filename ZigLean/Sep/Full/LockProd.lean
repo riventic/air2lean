@@ -119,7 +119,9 @@ shares of the byte stays (`FOwned.share_sum`; for a lock's invariant `FLock.Inv.
 with the same rest the part's own share stays, `FLock.Inv.share_keep`). A protocol whose rest
 holds a share of a byte (the reader/writer lock's free share of the readers' heap) so states what
 each thread's part holds of it and keeps that over a tick, a step on a thread's own part, and a
-move of a share between the part and the rest. -/
+move of a share between the part and the rest. Where the rest holds the byte as a cell, no part
+holds a share of it (`FOwned.share_zero_of_cell`), so when the rest splits the cell, the thread
+that takes a share and the rest hold the whole of it (`FOwned.share_of_cell`). -/
 
 /-- A total share with a positive fraction of the cell `c` is the whole of `c`. -/
 theorem SCell.Total.eq_of_pos {a : SCell} (h : a.Total) {c : FCell} (hc : 0 < (a c).val) :
