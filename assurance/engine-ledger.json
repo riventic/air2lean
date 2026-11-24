@@ -2008,6 +2008,20 @@
    ],
    "deletion_plan": "D2: delete the row `Thread.Futex.wake` and `ThreadFn.threadFutexWake` once `Proofs/Threadsync` (Linux, aarch64-linux and macOS translations) walks the translated `Thread.Futex.wake` over `futex_3arg`/`__ulock_wake` (needs the decision above for macOS). D3: delete the row `Thread.Futex.wait`, `ThreadFn.threadFutexWait`, `Zig.threadFutexWaitC`, `threadFutexWaitCOf` and `wp_waitD`'s use of it once `Proofs/Threadsync` and the big-endian 0.15.2 concurrency fixture walk the translated `Thread.Futex.wait` over `futex_4arg`/`__ulock_wait2` (the OS wait rows then need a byte order for the big-endian targets, or those targets reject the call). F: delete the rows `Thread.Mutex.DarwinImpl.*`, `Zig.osUnfair*C`, `Zig.threadFutexWakeC`, `wp_casD`/`wp_waitD`/`wp_xchgRel` and premise STD-06 once `os_unfair_lock_lock`/`unlock`/`trylock` are OS rows under OSL-01 and `Proofs/Threadsync/ThreadMutex.lean` (macOS half) is proved against them. E: delete the rows `Io.futexWait`/`Io.futexWaitUncancelable`/`Io.futexWake`, `Zig.futexWaitC`/`futexWaitCancelableC`/`futexWakeC`, the rules over them and premise STD-05 once the `Io` futex slots are a contract (docs/interfaces.md) that the translated `Io.Threaded` proves over OSF-01/02 and OSG-01 and every client is proved against it. Then close this row.",
    "note": "Kernel-checked counterexample of the hand wake: tests/roadmap/architecture-audit/soundness-1014/futex-wake/WakeCount.lean (`hand_wakes_more`, `hand_leaves_one`)."
+  },
+  {
+   "id": "device-read-rules",
+   "title": "full-state rules for volatile device accesses and the device trace",
+   "status": "open",
+   "requester": "device-proofs lane (fix-forward of tests/roadmap/volatile-effects/check-device.sh, 2026-11-24)",
+   "progress": "Open. The full-state logic has no rule for `Zig.vload`, `Zig.vstore`, `Zig.vasm`, `Zig.vasmEffect` or `Zig.ptrProjectDevice` and no assertion about `Mem.dev` (oracle, asm oracle, trace): `ZigLean/Sep/Full` does not mention them, so `fsym` cannot walk the generated UART driver or the rdtsc client. The L13 device proofs are therefore run equations over the whole memory (`(putc uart c).run m = pure ((), …)`) closed by `simp` with `zig_unfold`. Since the step ticks (f0f5ece09, 2026-11-03) the polling loop's body starts with `Zig.tick`; the run equations state the count in the final memory (`ticked m (vs.length + 1)`: one step per poll) instead of paying it with the framework's credits. The statements before that commit claimed an unchanged tick count and were false (red on main until 2026-11-24).",
+   "request": "`@[fsym]` rules for the device operations and an assertion for the device state: a trace resource (the events so far, with the oracle's answer to the next read as the rule's premise, DEV-01) so that `vload`/`vasm` append one read/asm event with the oracle's answer, `vstore`/`vasmEffect` append one write/asm event, and `ptrProjectDevice` forms an offset inside the declared window; total (`FTotalTriple`), with the loop's steps paid by `credits`/`unmetered` as for every other loop.",
+   "workaround_sites": [
+    "tests/roadmap/volatile-effects/DeviceEffects/Proofs.lean",
+    "tests/roadmap/volatile-effects/DeviceAsm/Proofs.lean"
+   ],
+   "deletion_plan": "Restate `putc_trace`, `putc_eventually`, `statusTwice_trace`, `clearStatus_trace`, `sendThenStatus_trace` and `elapsed_trace` as `FTotalTriple`s over the trace resource, walked by `fsym`; delete the run-equation lemmas (`status_read`, `data_write`, `data_ptr`, `loop_busy`, `loop_ready`, `poll_run`, `tsc_run`) and the local `after`/`ticked` memory updates. The semantic mutants (device-mutants.py) keep their expected failures against the new statements.",
+   "note": "Not a weakening: the run equations fix the whole final memory (trace, tick count, everything else unchanged), which is stronger than a triple with a frame; only the proof style is outside the framework."
   }
  ],
  "mechanisms": [

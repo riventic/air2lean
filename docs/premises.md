@@ -765,9 +765,10 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   `Zig.asmTrap`, which throws `Zig.Error.trap` exactly on that condition. A no-panic or
   guaranteed-return claim over an asm opaque holds on hardware only if the condition is the
   instruction's whole fault set on the target CPU. That the CPU has the instruction (`popcnt`
-  without POPCNT is #UD; `lzcnt` without LZCNT runs as `bsr`) is no longer part of ASM-04: each
-  entry declares its `features`, the translator rejects a block whose features the profile lacks
-  (`checkAsmCpuFeatures`), and ASM-09 admits them. `scripts/claims.py` lists ASM-04
+  without POPCNT is #UD; `lzcnt` without LZCNT runs as `bsr`) is not part of ASM-04 (maintainer
+  decision 2026-11-24, A02 D1): the feature table (`Air2Lean/AsmFeatures.lean`) names the CPU
+  features of every instruction, the translator rejects a block whose features the profile
+  lacks (`checkAsmCpuFeatures`), and ASM-09 admits named ones. `scripts/claims.py` lists ASM-04
   in the `premises` of every such goal.
 - Derived from: implied by ASM-01.
 - Sources: [volatile-effects.md](volatile-effects.md), `Air2Lean/AsmAllowlist.lean`,
@@ -810,16 +811,25 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 ### ASM-09 — The running CPU has the asm features that the profile lacks
 
 - Kind: environment.
-- Statement: An allowlisted asm entry names the CPU features it needs (`features`: `lzcnt`,
-  `popcnt`, `rdrnd`). The translator derives support from the profile's `features` and rejects
-  an asm block with a missing one (`checkAsmCpuFeatures`; `lzcnt` without LZCNT executes as
-  `bsr`, so `lzcnt(1)` would be 0, not 63). `--assume-asm-cpu-features` skips the check and states
-  that the CPU that runs the program has the features, although the profile's CPU does not list
-  them. The header records the admission `asm-cpu-features`.
+- Statement: One table (`Air2Lean/AsmFeatures.lean`) names, for every inline-asm instruction
+  of every target with asm (x86_64, aarch64), the CPU features it needs beyond the target's
+  base ISA (`lzcnt`, `popcnt`, `rdrnd`, `bmi`, `bmi2`, `crc32`, `cx16`, `sahf`, ...; aarch64
+  `crc`), under the names of `profile.features`. The profile's features are those of the CPU
+  the compiler targeted (the exporter writes `target.cpu.features`). The translator rejects
+  an asm block, allowlisted or declared by a device contract, that has an instruction with a
+  feature the profile does not list (`checkAsmCpuFeatures`; `lzcnt` without LZCNT executes as
+  `bsr`, so `lzcnt(1)` would be 0, not 63), and one with an instruction that is not in the
+  table. `--assume-asm-cpu-features <f,...>` admits the named features and no others: it
+  states that the CPU that runs the program has them, although the profile's CPU does not
+  list them. The header records the admission `asm-cpu-features` and the features
+  (`asm_cpu_features`). The table itself is trusted: the features of the x86-64 base (CMOV,
+  SSE2, TSC, ...; psABI level x86-64-v1) are not requirements, and
+  `tests/roadmap/asm-semantics/feature_table.py` compares the rest with the Zig compiler's
+  encoding tables.
 - Derived from: a reached generated module whose header records the admission `asm-cpu-features`
   (`assurance/premises.json` `admissions`).
-- Sources: [volatile-effects.md](volatile-effects.md), `Air2Lean/AsmAllowlist.lean`,
-  [research/A02.md](research/A02.md).
+- Sources: [volatile-effects.md](volatile-effects.md#cpu-features), `Air2Lean/AsmFeatures.lean`,
+  `Air2Lean/AsmAllowlist.lean`, [research/A02.md](research/A02.md).
 
 ## Core runtime semantics
 
