@@ -45,7 +45,7 @@ def BitShape.bits : BitShape → Nat
   | .boolLanes _ n => n
 
 /-- A type whose 0.17 `@bitCast` takes the logical-order path: an array, a vector or an enum
-(and `void`, which 0.17 newly accepts and the model rejects). Packed structs and unions, floats
+(and `void`, which 0.17 newly accepts: no bits). Packed structs and unions, floats
 and `bool` without one of these on the other side keep the existing rules, which are the same
 bits (`packedScalarCast`). -/
 def logicalBitCastTy (types : Array Ty) (id : TyId) : Bool :=
@@ -63,12 +63,30 @@ def logicalBitCastFailure (what : String) : String :=
   s!"a Zig 0.17 `@bitCast` {what} is outside the subset (logical bit order, docs/bitcast-semantics.md)"
 
 /-- Zig 0.17's `@bitSizeOf` of a type with a logical bit representation (`hasBitRepresentation`)
-that the model has: a packable type (`packedBits`), or an array (no sentinel) or vector of such
-types at any depth, `len * @bitSizeOf(E)` bits. -/
+that the model has: a packable type (`packedBits`), `void` (no bits), or an array (no sentinel)
+or vector of such types at any depth, `len * @bitSizeOf(E)` bits. -/
 partial def logicalBits (types : Array Ty) (id : TyId) : Option Nat :=
   match types[id]? with
   | some (.array len c false) | some (.vector len c) => (len * ·) <$> logicalBits types c
+  | some .void => some 0
   | _ => packedBits types id
+
+/-- A sentinel-terminated array in `id`, at any array or vector depth. -/
+partial def sentinelArrayIn? (types : Array Ty) (id : TyId) : Option TyId :=
+  match types[id]? with
+  | some (.array _ _ true) => some id
+  | some (.array _ c false) | some (.vector _ c) => sentinelArrayIn? types c
+  | _ => none
+
+/-- Why a 0.17 `@bitCast` of the sentinel-terminated array `id` is rejected: Zig 0.17.1 gives
+the sentinel's bits three meanings (`docs/upstream/bitcast-sentinel-array.md`). At comptime the
+source's sentinel is in the bits and the result's sentinel is the type's; the LLVM backend
+leaves the sentinel out of the source's bits (zero) and leaves the result's sentinel undefined;
+the self-hosted x86_64 backend reinterprets memory. No single model equals the native result. -/
+def sentinelBitCastFailure (id : TyId) : String :=
+  s!"of a sentinel-terminated array (type {id}): Zig 0.17's comptime evaluation and its \
+    backends disagree on the sentinel's bits (docs/upstream/bitcast-sentinel-array.md); cast an \
+    array without a sentinel"
 
 /-- The shape of `id` in a 0.17 `@bitCast`, or the diagnostic's description of why not. -/
 def bitShape? (types : Array Ty) (id : TyId) : Except String BitShape :=
@@ -76,10 +94,11 @@ def bitShape? (types : Array Ty) (id : TyId) : Except String BitShape :=
     match types[child]? with
     | some (.int _ w) => pure (.intLanes vector len w)
     | some .bool => pure (.boolLanes vector len)
-    | _ => match logicalBits types child with
-      | some w => pure (.value (len * w))
-      | none => throw s!"of an array or vector whose element has no logical bit representation \
-          in the model (type {child}: a pointer, optional, sentinel-terminated array or `void`)"
+    | _ => match logicalBits types child, sentinelArrayIn? types child with
+      | some w, _ => pure (.value (len * w))
+      | none, some s => throw (sentinelBitCastFailure s)
+      | none, none => throw s!"of an array or vector whose element has no logical bit \
+          representation in the model (type {child}: a pointer or an optional)"
   match types[id]? with
   | some (.int _ b) => pure (.int b)
   | some .bool => pure .bool
@@ -97,10 +116,13 @@ def bitShape? (types : Array Ty) (id : TyId) : Except String BitShape :=
     | some b => pure (.value b)
     | none => throw s!"of a packed union without a modelled backing integer (type {id})"
   | some (.array len child false) => lanes false len child
-  | some (.array ..) => throw s!"of a sentinel-terminated array (type {id})"
+  | some (.array ..) => throw (sentinelBitCastFailure id)
   | some (.vector len child) => lanes true len child
-  | _ => throw s!"to or from a type other than an integer, `bool`, float, packed struct or \
-      union, enum, or an array or vector of these (type {id}; an `auto` or `extern` struct, \
+  -- `void` has no bits (`Zig.Packed Unit 0`). Sema folds every cast of a zero-bit type, so the
+  -- compiler emits none.
+  | some .void => pure (.value 0)
+  | _ => throw s!"to or from a type other than an integer, `bool`, float, `void`, packed struct \
+      or union, enum, or an array or vector of these (type {id}; an `auto` or `extern` struct, \
       tuple, tagged or `extern` union, pointer, optional or error type has no logical bit \
       representation: Sema rejects its `@bitCast`)"
 
