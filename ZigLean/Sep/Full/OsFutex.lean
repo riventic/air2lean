@@ -26,7 +26,8 @@ other rules (`LockRules.lean`, `WordRules.lean`, `Event.lean`, `Cond.lean`).
 * **Rows** (`@[fsym]`): `WP.futex_4arg`, `WP.futex_3arg`, `WP.ulock_wait2`, `WP.ulock_wake` reduce
   a row with std's arguments to the generic op, with the row's return code of each result
   (`Linux.waitCode`, `Darwin.wakeCode`; macOS's wait result is one more oracle stop,
-  `WP.ulockResult`), after the row's address validation (`WP.futexKey`; the specializations take
+  `WP.ulockResult`, and a macOS wake stops once before it for its code's `live`,
+  `WP.pick_stay`), after the row's address validation (`WP.futexKey`; the specializations take
   the guard `m.wordAt p = true`).
 
 **The wake count** (audit soundness-2026-10-14 §S5). The scheduler's `wake p n` of the hand
@@ -192,6 +193,14 @@ theorem wakeAt_all_of_le {c n : Nat} {p : FutexKey} {m m' : Mem} {j : Nat}
   apply wakeAt_all
   simpa only [wakeAt, zig_unfold, ExceptT.run, hs] using h
 
+/-- An OS wake of up to `c` waiters wakes at most `c`: the count a row returns is within its
+request (Linux: `wakeLimit val ≤ 2^31 − 1`, so the result is never an errno). -/
+theorem wakeSize_le_some {n : Option Nat} {c : Nat} (h : n = some c) (k : Nat) :
+    wakeSize n k ≤ c := by
+  subst h
+  simp only [wakeSize, Option.map_some, Option.getD_some]
+  exact Nat.min_le_left _ _
+
 /-- An OS wake of up to `n ≥ 1` (or all) waiters takes the run of a scheduler wake of at least
 one (`WInv.wake`, `FEvent.Inv.wake`, …): with nobody queued, every count wakes nobody. -/
 theorem futexWake_pos {p : FutexKey} {n : Option Nat} (hn : ∀ k, n = some k → 1 ≤ k) {m m' : Mem}
@@ -264,15 +273,12 @@ end Linux
 
 namespace Darwin
 
-/-- `__ulock_wake`'s result for a wake's result. -/
-def wakeCode : Option Nat → BitVec 32
-  | none => negErrno32 E.INTR
-  | some 0 => negErrno32 E.NOENT
-  | some (_ + 1) => 0
-
 /-- `__ulock_wake`'s waiters: one, or all with `WAKE_ALL`. -/
 def wakeMax (op : BitVec 32) : Option Nat :=
   if op = UL_COMPARE_AND_WAIT_NO_ERRNO then some 1 else none
+
+/-- A spurious wake's code is `-EINTR`, whatever the oracle's `live`. -/
+@[simp] theorem wakeCode_none (live : Nat) : wakeCode live none = negErrno32 E.INTR := rfl
 
 /-- Each option of a wait's result pick is `-EFAULT` or a non-negative `c_int`: a return code of
 a wake or a mismatch (`WaitCode`). -/
@@ -443,6 +449,19 @@ theorem WP.ulockResult_stay {r : WaitResult} {g : γ}
   WP.ulockResult (fun _ k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ ht s hs =>
       h k (by omega) s G₁ _ hs rfl (by rw [← hg₁, upd_same]; exact hstay G₁ m₁ hi₁ ht)⟩)
     (fun _ s hs => h n (Nat.le_refl _) s G m hs hc hi) hcost
+
+/-- **An oracle stop** (`Os.pick`; the `live` choice of a macOS wake's code, `Darwin.wakeCode`)
+by thread `t` at a protocol whose invariant survives a stop: the thread keeps its ghost value `g`
+over the stop and goes on with any choice. A protocol supplies only `hstay`, as for
+`WP.ulockResult_stay`. -/
+theorem WP.pick_stay {c : Mem → Nat} {g : γ}
+    (hstay : ∀ G₁ m₁, P.inv G₁ m₁ → t < m₁.threads.size → P.inv G₁ { m₁ with current := t })
+    (hi : P.inv (upd G t g) m) {Q : Nat → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ a G₁ m', m'.current = t → P.inv (upd G₁ t g) m' → Q a G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t (Os.pick c : ConcM Tgt Nat) Q G m n :=
+  WP.sync (fun k hk => ⟨g, hi, fun G₁ m₁ hg₁ hi₁ ht a _ =>
+    h k hk a G₁ _ rfl (by rw [← hg₁, upd_same]; exact hstay G₁ m₁ hi₁ ht)⟩) hcost
 
 /-! ## Address validation -/
 
@@ -688,14 +707,16 @@ its return code (`Darwin.ulockResult`, `WP.ulockResult`). -/
 /-- libc `__ulock_wake(UL{ .op = .COMPARE_AND_WAIT, .NO_ERRNO = true, .WAKE_ALL = _ }, ptr, 0)`
 (OSF-02, std's `Thread.Futex.wake` on macOS, which sets `WAKE_ALL` for more than one waiter): the
 OS wake of one waiter or of all, with a spurious `EINTR`, at a live writable word, at its
-(private, `ULK_UADDR`) key, resolved when it wakes (`Os.futexWake`). -/
+(private, `ULK_UADDR`) key, resolved when it wakes (`Os.futexWake`), after the oracle's stop for
+its return code's `live` (`Darwin.wakeCode`; `WP.pick_stay`, `FLock.wp_pick`). -/
 @[fsym] theorem WP.ulock_wake {op : BitVec 32} {p : Ptr}
     (hop : op = Darwin.UL_COMPARE_AND_WAIT_NO_ERRNO ∨
       op = Darwin.UL_COMPARE_AND_WAIT_NO_ERRNO ||| Darwin.UL_WAKE_ALL)
     {Q : BitVec 32 → (ThreadId → γ) → Mem → Nat → Prop}
     (hword : m.wordAt p = true := by first | assumption | decide)
-    (h : P.WP t (Os.futexWake p false (Darwin.wakeMax op) true : ConcM Tgt (Option Nat))
-      (fun r => Q (Darwin.wakeCode r)) G m n) :
+    (h : P.WP t (Os.pick fun _ => 2 : ConcM Tgt Nat) (fun live =>
+      P.WP t (Os.futexWake p false (Darwin.wakeMax op) true : ConcM Tgt (Option Nat))
+        (fun r => Q (Darwin.wakeCode live r))) G m n) :
     P.WP t (Darwin.__ulock_wake op (some p) 0 : ConcM Tgt (BitVec 32)) Q G m n := by
   unfold Darwin.__ulock_wake
   have hc : ¬ ((op ≠ Darwin.UL_COMPARE_AND_WAIT_NO_ERRNO ∧
@@ -707,8 +728,8 @@ OS wake of one waiter or of all, with a spurious `EINTR`, at a live writable wor
     (fun hn => by rw [hk] at hn; cases hn))
   rw [hk] at he
   cases he
-  refine ⟨rfl, WP.bind (WP.mono (fun r _ _ _ hq => ?_) h)⟩
-  rcases r with _ | _ | j <;> exact WP.pure' hq
+  exact ⟨rfl, WP.bind (WP.mono (fun _ _ _ _ hq =>
+    WP.bind (WP.mono (fun _ _ _ _ hq' => WP.pure' hq') hq)) h)⟩
 
 end Proto
 end Conc

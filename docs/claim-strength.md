@@ -241,7 +241,9 @@ no-panic or guaranteed-return claim over one also [ASM-04](premises.md#asm-04), 
 fault conditions, S7; a theorem whose closure reaches the scheduler or the atomics model, by the
 audit's per-theorem `runtime_modules`, carries [ORD-06](premises.md#ord-06), the memory-model
 adequacy premise, C12). An audit without `runtime_modules`, or with a runtime module that has no
-premise mapping, leaves `premises` null and rejects the goal. `python3 scripts/claims.py check MANIFEST --assurance REPORT` checks
+premise mapping, leaves `premises` null and rejects the goal. A goal that rests on ORD-06 is
+rejected when the profile header of its root's generated module records a target without a
+qualification entry in the `memory_model` record of `assurance/premises.json`. `python3 scripts/claims.py check MANIFEST --assurance REPORT` checks
 every project goal (`docs/project-workflow.md`) against its root's generated definition
 `namespace.(function without prefix)`. A goal is rejected (exit 1) when:
 

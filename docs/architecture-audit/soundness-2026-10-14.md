@@ -500,9 +500,59 @@ regression elaborates; an elaboration failure prints `FAILED` and returns nonzer
 audit addition.
 
 <a id="s6-hand-rows"></a>
-### S6, finding 4: std's untimed futex calls bypass the OS rows (SOUNDNESS scope, open)
+### S6, finding 4: std's untimed futex calls bypass the OS rows (SOUNDNESS scope, in progress)
 
-Reported 2026-11-05 (lane S6b) for a maintainer decision. Nothing is implemented yet.
+Reported 2026-11-05 (lane S6b). **Maintainer decision 2026-11-24: the end state below is
+approved** (D, E and F; the refinement proof is rejected). Progress, slice by slice (engine-ledger
+row `s6-futex-hand-rows` lists what is still transitional and when it is deleted):
+
+| Slice | State |
+|---|---|
+| D1: the OS wake rows are bound (`os.linux.futex_3arg`, `os.linux.futex_wake` for 0.14.1, libc's `__ulock_wake`; OSF-02) | done |
+| D2: `Thread.Futex.wake` (0.14.1, 0.15.2) is translated down to them; its hand row is deleted | open, waits for a decision (below) |
+| D3: `Thread.Futex.wait` (0.14.1, 0.15.2) is translated down to the OS wait rows; its hand row is deleted | open |
+| F: `os_unfair_lock_*` are OS rows (OSL-01); the STD-06 rows are deleted | open |
+| E: the `Io` futex is a contract that `Io.Threaded`'s translated code proves; the last STD-05 rows are deleted | open |
+
+**Obstruction of D2 (2026-11-24, for the maintainer).** The hand wake has no loop. The translated
+macOS `Thread.Futex.DarwinImpl.wake` repeats `__ulock_wake` on `EINTR`, so it is a loop and each
+repeat ticks. `ResetEvent.set` reaches it, and two statements do not admit that tick:
+
+1. `EventImpl.set_wp` states no caller part, because `set` ticked in no implementation
+   (`ZigLean/Sep/Full/LockRules.lean`, §Caller parts). With the translated wake it ticks on
+   macOS, so the contract needs the caller part of an operation that may tick (`set_pre`,
+   `set_post`, `set_unmetered_pre`, as `wait` and `CondImpl.signal` have): a statement change
+   of the contract and of its clients (`Proofs/Handoff/Ops.lean`,
+   `Proofs/Threadsync/WaitGroup/Task.lean`).
+2. WaitGroup's last `finish` sets the event at the lock place `gone` (decision 2026-11-03,
+   engine-ledger row `l11-waitgroup-rwlock-impl`). The tick rule (`FLock.Fits.wp_tick_exact`)
+   needs a non-gone place: a lock-gone thread has no part that pays a tick, and the scheduler
+   gives it only existence, not "not joined". Failure scenario: `Proofs/Threadsync/WaitGroup`
+   on the macOS translation, at the first tick of `DarwinImpl.wake`'s loop in the finisher.
+
+A hand row for macOS only is not possible (a row has no target, and the example's `filter` is
+shared) and would keep the under-waking wake (`hand_leaves_one`). On Linux the translated wake
+has no loop: the branch `claude/s6-futex` deletes the row and proves the Linux translations.
+Options: (a) the `set` caller part in `EventImpl`, plus a tick rule for a lock-gone thread that
+still owns its part, with existence from the scheduler's resumption; (b) the `set` caller part,
+plus WaitGroup's finisher keeps a non-gone place until `set` returns (the waiter's whole-`Tally`
+read then needs another exclusion argument than "the only non-gone thread"). Recommended: (a).
+
+**Review finding of D1 (2026-11-24, fixed): a macOS wake of nobody may return `0`.** The OS
+model returned `-ENOENT` for every `__ulock_wake` that woke nobody. In xnu-12377.121.6
+`ulock_wake` (`bsd/kern/sys_ulock.c`), `-ENOENT` comes only from `ull_get(…, ULL_MUST_EXIST)`
+finding no `ull`; the wake-one result of `waitq_wakeup64_one` is discarded and `WAKE_ALL` leaves
+`ret` at `0`. A waiter holds its `ull` from the start of its wait until its cleanup after it runs
+again. Counterexample: A waits at `p`; B's `__ulock_wake(p)` wakes A; C's `__ulock_wake(p)` runs
+before A does, finds A's `ull`, wakes nobody and returns `0`, an outcome the model lacked, so a
+caller that reads `0` as "a waiter was woken" was proved against too few outcomes. Binding the row
+(D1) makes the model reachable from translated code. Fix: the code is `Darwin.wakeCode live r`,
+with `-ENOENT` or `0` after a wake of nobody by the oracle's `live`, picked at a stop before the
+wake (the model tracks no `ull`); rules `WP.ulock_wake`, `WP.pick_stay`, `FLock.wp_pick`;
+regressions `tests/roadmap/os-threads/Check.lean`, `SepAuto/WPOsFutex.lean`. Std's
+`DarwinImpl.wake` and `Io.Threaded`'s wake return on both codes, so std's behaviour is unchanged.
+
+The text below is the finding as reported.
 
 **Location.** Std's untimed futex calls bind to hand rows (STD-05,
 `Air2Lean/StdModels.lean:243–244` for 0.14.1/0.15.2 `Thread.Futex.wait`/`wake`, `:240–242` for

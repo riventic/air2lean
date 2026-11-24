@@ -205,6 +205,15 @@
       "premises": ["TRU-03", "PRF-02"],
       "summary": "Proofs concern AIR before code generation. Native behavior is related to the model only by bounded differential runs and ABI-probe observations for named targets.",
       "evidence": ["scripts/diff.sh", "scripts/abi-probe.py"]
+    },
+    {
+      "id": "publication",
+      "name": "Artifact publication (staged file, fsync, atomic rename or no-clobber link)",
+      "components": ["scripts/safe-output.py", "scripts/workflow-common.sh"],
+      "class": "unverified-assumption",
+      "premises": ["TRU-06"],
+      "summary": "A translation, check report, proof receipt or project report reaches its published path only by one atomic rename or no-clobber link of an fsynced temporary file, so a failed, interrupted or timed-out run leaves the prior artifact and no prefix there. The tests drive the real writers with stub tools; the atomicity and durability of rename, link and fsync are the host filesystem's.",
+      "evidence": ["docs/safe-output.md", "tests/roadmap/safe-output/test_safe_output.py"]
     }
   ]
 }
