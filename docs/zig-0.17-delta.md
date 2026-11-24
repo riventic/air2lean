@@ -27,7 +27,7 @@ Universe: 214 → 224 tags (16 added, 6 removed). Renames appear as remove + add
 | `bool_and` (543), `bool_or` (546) | removed | Sema safety conditions now use `bit_and`/`bit_or` on `bool` operands (Sema.zig 4181, 14472, 14485, 21681). | translator: `.bit .and/.or` must type-check and emit on `bool`; `.boolAnd/.boolOr` stay for ≤0.16 | Z3 |
 | — | `div_ceil` (150), `div_ceil_optimized` (152) | `@divCeil`, `bin_op`, see (c). | exporter, translator, ZigLean semantics | Z1, Z3 |
 | — | `spirv_runtime_array_len` (985) | SPIR-V only; unreachable on supported targets. | none (stays rejected) | Z1 |
-| `splat` (731) | `splat` (786) | Result may now be an array, including a sentinel array, not only a vector. | translator (`Check` must reject or model array splat) | Z3 |
+| `splat` (731) | `splat` (786) | Result may now be an array, including a sentinel array, not only a vector. | translator: an array splat is `Vector.replicate len a`; a sentinel array is rejected (the export does not carry the sentinel value) | Z3 |
 
 Inventory dispositions for 0.17.0 with the ported exporter (Z1, `zig-patch/0.17.1/TAGS.md`):
 the 14 added tags the exporter decodes (`agg_field_val`, `array_to_vector`, `bit_cast`,
@@ -217,7 +217,7 @@ Diffed `lib/std/{mem/Allocator,Thread,Io,Io/RwLock,Io/Semaphore,atomic,time,arra
   - New `div_ceil` op.
   - `bit_and`/`bit_or` on `bool`.
   - `Canon.forwardReadOnlyCopies` keyed on `ptr_cast`.
-  - Reject array `splat`, `union_from_enum`, `array_to_vector`, `noreturn`-tagged enums.
+  - Array `splat` (sentinel arrays rejected); reject `union_from_enum`, `array_to_vector`, `noreturn`-tagged enums.
   - Panic policy for `loadUninstantiableType`/`unexpectedErrorCode`.
 - **Z4 bitcast semantics:**
   - Version-gated logical bitcast: LSB-first concatenation, dense, endian-agnostic, for
