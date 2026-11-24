@@ -1032,8 +1032,12 @@ def withFailAt {α : Type} (fa : Json) (r : Zig.MemM α) : IO (Zig.MemM α) := d
       let rules ← match fa.getObjVal? "oracle" with
         | .ok j => do (← getArr j).toList.mapM allocationOracleRule
         | .error _ => pure []
-      pure (nat "fail_at", ({ maxBytes := (nat "max_bytes").getD Zig.maxAllocBytes, failures,
-        fails := fun i n => rules.any fun rule => rule i n, budget := nat "budget" } : Zig.AllocPolicy))
+      let policy : Zig.AllocPolicy :=
+        { maxBytes := (nat "max_bytes").getD Zig.maxAllocBytes
+          failures := failures
+          fails := fun i n => rules.any fun rule => rule i n
+          budget := nat "budget" }
+      pure (nat "fail_at", policy)
     | _ => throw (IO.userError "invalid allocator policy")
   return (do modify fun m => { m with failAt := f, allocPolicy := policy }; r)
 

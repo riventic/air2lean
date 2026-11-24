@@ -203,7 +203,9 @@ retired with the legacy logic; their replacements quantify over every allocator 
 remaining qualification/review gates.
 
 The diff test runs each function with `TestAllocator` (`tests/diff/common.zig`), which has the same rules (a mirror of the model, not a std allocator; see [Caller-supplied allocator and Io](#caller-supplied-allocator-and-io) for the real-allocator check). Its first argument is the allocation that fails (legacy null/index), or
-`{"fail_at": null, "failures": [0, 2], "max_bytes": 2097152}`. Missing object fields
+`{"fail_at": null, "failures": [0, 2], "max_bytes": 2097152}`, with an optional failure
+oracle over (attempt, bytes) and a live-byte budget (`oracle`, `budget`;
+[allocation-policy.md](allocation-policy.md#native-differential)). Missing object fields
 use legacy defaults. Policy integers in the test transport are nonnegative signed-64-bit
 JSON integers; semantic policy indices/caps are Lean naturals. The exact input policy is
 part of the differential evidence; each result line has the number of live allocations after the call (`docs/generated-code.md` §Protocol).
