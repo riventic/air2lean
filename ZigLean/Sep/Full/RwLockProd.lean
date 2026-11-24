@@ -308,8 +308,8 @@ theorem Shares.congr {G G' : ThreadId → γ} {m m' : Mem} (h : W.Shares G m)
 /-- **The shares over a change of one thread's ghost value beside rests with the same shares**
 (a tick, a step on its own part): the outer mutex's invariant holds before and after it at rests
 `rXM` and `rXM'` with the same shares (one rest in the outer mutex's view; in the semaphore's the
-common rest beside the semaphore's mutex's side, which holds no share: `FLock.Keeps.side_share`), which hold
-a positive share of each cell of the readers' heap (`Inv.rest_share` at the common rest), and
+common rest beside the semaphore's mutex's side, which holds no share:
+`FLock.Keeps.side_share`), which hold a positive share of each cell of the readers' heap (`Inv.rest_share` at the common rest), and
 `t`'s place stays (`FLock.Inv.share_keep`). -/
 theorem Shares.keep {G G' : ThreadId → γ} {rXM rXM' : Res} {m m' : Mem} {t : ThreadId}
     (h : W.Shares G m) (hM : M.Inv G rXM m) (hM' : M.Inv G' rXM' m')
@@ -437,6 +437,16 @@ theorem st_c_apart (W : FRw γ X Y M L C S) : ∀ Wd : Word 32 4, (Wd = C.S ∨ 
   have h4 := C.ep_o
   rintro Wd (rfl | rfl) l hl <;> exact W.st.notIn_apart (.inr (.inl (by omega))) hl
 
+/-- **The frame of a step of the rwlock's own code**: every byte but the state word's, which the
+step keeps (`Step`'s `RestStep` and `FStepIn`). -/
+theorem Step.frame {t : ThreadId} {G G' : ThreadId → γ} {rX rX' : Res} {m m' : Mem}
+    (hs : W.Step t G rX m G' rX' m') :
+    ∃ hF : Heap, FStepIn hF m m' ∧ ∀ l, ¬ W.st.In l → hF l = m.heap l ∧ m'.heap l = m.heap l := by
+  obtain ⟨-, -, -, -, -, ⟨hr, hfs⟩, -⟩ := hs
+  exact ⟨fun l => if W.st.In l then none else m.heap l,
+    hfs _ fun l hl => by simp only [hl, ↓reduceIte],
+    fun l hl => ⟨by simp only [hl, ↓reduceIte], hr.heap l hl⟩⟩
+
 /-- **The rwlock's own steps keep the semaphore's primitive's rest** (`FSem.prim`'s `Sub` at the
 common rest, which a client's `U₀` keeps for `fitsS`; the `kstep` of `fitsM`): the step is a
 thread's out of the condition's and the semaphore's code (`Step`), an `FStepIn` in the frame of
@@ -452,18 +462,14 @@ theorem semSub_step {P : ThreadId → LPh} {t : ThreadId} {G G' : ThreadId → �
     (hRoff : ∀ xs r l, W.R xs r → (C.S.In l ∨ C.Ep.In l) → r.heap l = none)
     (he : rX₀ = rsum (W.st.cellsR m) rY) (he' : rX₀' = rsum (W.st.cellsR m') rY')
     (hmv : W.Moves G m rY G' m' rY') : S.prim.Sub G' rX₀' m' := by
-  obtain ⟨-, -, -, -, -, ⟨hr, hfs⟩, hoth, -, -, -, hlph, -, hspe, hsp, hpost, -⟩ := hs
+  obtain ⟨hF, hfs, hFm⟩ := hs.frame
+  obtain ⟨-, -, -, -, -, -, hoth, -, -, -, hlph, -, hspe, hsp, hpost, -⟩ := hs
   obtain ⟨-, rF, rF', rO, rfl, rfl, ⟨-, -, hFR⟩, ⟨-, -, hFR'⟩⟩ := hmv
   subst he he'
   have hG : G' = upd G t (G' t) := funext fun u => by
     by_cases e : u = t
     · rw [e, upd_self]
     · rw [upd_ne _ _ e, hoth u e]
-  -- the frame: every byte of `m` but the state word's
-  obtain ⟨hF, hF0, hFm⟩ : ∃ hF : Heap, (∀ l, W.st.In l → hF l = none) ∧
-      ∀ l, ¬ W.st.In l → hF l = m.heap l :=
-    ⟨fun l => if W.st.In l then none else m.heap l, fun l hl => by simp only [hl, ↓reduceIte],
-      fun l hl => by simp only [hl, ↓reduceIte]⟩
   have hap := st_c_apart W
   have hpv : S.cnt (upd G t (G' t)) = S.cnt G := by
     rw [← hG]
@@ -479,11 +485,11 @@ theorem semSub_step {P : ThreadId → LPh} {t : ThreadId} {G G' : ThreadId → �
   have hsub' : S.prim.Sub G (rsum (rsum (W.st.cellsR m) rF) rO) m := by
     rw [rsum_assoc]; exact hsub
   rw [hG, ← rsum_assoc]
-  exact FSem.Sub.fstepOut hsub' (hfs hF hF0) hLw
-    (fun Wd hW l hl => by rw [hFm l (hap Wd hW l hl)]; exact (hsub.1.2 Wd hW).1.cellIn hl)
+  exact FSem.Sub.fstepOut hsub' hfs hLw
+    (fun Wd hW l hl => by rw [(hFm l (hap Wd hW l hl)).1]; exact (hsub.1.2 Wd hW).1.cellIn hl)
     (fun x h1 h2 => by
-      rw [hFm _ fun h => (st_apart W).1.not_in h ⟨rfl, h1, h2⟩]; exact hLw.blk.cell h1 h2)
-    (fun Wd hW l hl => hr.heap l (hap Wd hW l hl)) (hoff hFR) (hoff hFR') hsp (hspe.trans hsp)
+      rw [(hFm _ fun h => (st_apart W).1.not_in h ⟨rfl, h1, h2⟩).1]; exact hLw.blk.cell h1 h2)
+    (fun Wd hW l hl => (hFm l (hap Wd hW l hl)).2) (hoff hFR) (hoff hFR') hsp (hspe.trans hsp)
     hlph hpv
 
 /-- The semaphore's mutex protects the count and the pool, without partial shares. -/
@@ -499,8 +505,8 @@ theorem lR_unshared (W : FRw γ X Y M L C S) (G : ThreadId → γ) : (L.R G).Uns
 semaphore's code runs `away` from the outer mutex or holding it at `holdsAway`
 (`FLock.Pair.U_semStep` for the semaphore's steps). The outer mutex protects nothing, so its side
 owns only its word, apart from the condition's (`c_apart`), and its key is not the epoch's
-(`ep_key_ne`). The client gives its base `U₀`'s
-obligations at the common rest (`stable`, `atStop`, `tick` as `FLock.Pair.TickKeeps`, `kstep`, `holdLive`, the window), where
+(`ep_key_ne`). The client gives its base `U₀`'s obligations at the common rest (`stable`,
+`atStop`, `tick` as `FLock.Pair.TickKeeps`, `kstep`, `holdLive`, the window), where
 `U₀` keeps the condition and the semaphore (`hsub`), that a waiter of the condition is `away` from
 the outer mutex or holds it at `holdsAway` with the epoch in its nest (`hsleep`), the laws of the
 semaphore's places next to `L` and `M`, and of `okS`. -/

@@ -1211,6 +1211,17 @@ theorem FreeRes.heap_none {G : ThreadId → γ} {m : Mem} {rF : Res} (hf : W.Fre
   obtain ⟨H, f, -, -, -, rfl, -⟩ := hf.2.2 hb h0
   rfl
 
+/-- **The free resource claims no block's extent** (`FreeRes`: `rnil`, a resource with `R`, which
+has no ghost state, `R_plain`, or a share). -/
+theorem FreeRes.extent {G : ThreadId → γ} {m : Mem} {rF : Res} (hf : W.FreeRes G m rF)
+    (b : BlockId) : rF.gh.extent b = ECell.unit := by
+  by_cases hb : W.Busy G
+  · rw [hf.1 hb]; rfl
+  by_cases h0 : W.nrd G m = 0
+  · rw [(W.R_plain _ _ (hf.2.1 hb h0)).2]; rfl
+  obtain ⟨H, f, -, -, -, rfl, -⟩ := hf.2.2 hb h0
+  rfl
+
 /-- **Ownership over a step on a thread's own part** (`Owns`; `FStepIn`, the step relation of
 `FTTriple`, in a frame `hF` with `r`'s bytes, reading only the frame's shares `hR`): an old access
 or a narrowing of one keeps its clause (the clocks grow, the word's history stays; a narrowed

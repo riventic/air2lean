@@ -303,6 +303,79 @@ theorem tick {t : ThreadId} {r s s' : Res} (hu : W.Base Sz K G rX m)
       rw [hlph u, hup S.place.ph (fun g => congrArg Prod.snd (hpl g r)) u] at hq
       exact hu.nap u hq }
 
+/-- **A waiter of the condition is `away` from the outer mutex or holds it at `holdsAway`**
+(`fitsS`'s `hsleep`; `nap`), with the epoch in the outer mutex's nest (`hnE`, the lock's). -/
+theorem hsleep (hnE : M.nest C.Ep.ptr) {t : ThreadId} (hu : W.Base Sz K G rX m)
+    (hw : (C.ph (G t)).waits = true) :
+    M.ph (G t) = .away ∨ (M.ph (G t) = .holdsAway ∧ M.nest C.Ep.ptr) :=
+  (hu.nap t (.inr fun e => by
+    have hc : C.ph (G t) = .out := congrArg Prod.fst e
+    rw [hc] at hw; cases hw)).imp id fun h => ⟨h, hnE⟩
+
+/-- **A step of the rwlock's own code keeps the base** (`fitsM`'s `kstep`), but for the readers'
+shares after it (`hsh`; ledger #two-lock-product, the ninth obstruction: `Step` does not fix the
+stepping thread's new place). The rwlock's invariant after the step is `fitsM`'s; the semaphore's
+primitive's rest stays (`semSub_step`); the condition's writes stay in the step's frame
+(`Step.frame`), so the window stays; the free resource claims no extent (`FreeRes.extent`), so
+the pin stays in the rest of the rest; and the stepping thread is out of the semaphore's code,
+with its places at both mutexes kept. -/
+theorem wstep {t : ThreadId} {G' : ThreadId → γ} {rS rS' rX' rY rY' : Res} {m' : Mem}
+    {P : ThreadId → LPh} (hu : W.Base Sz K G rX m) (hs : W.Step t G rS m G' rS' m')
+    (hLw : L.WInv P m) (hI' : W.Inv G' rX' m') (he : rX = rsum (W.st.cellsR m) rY)
+    (he' : rX' = rsum (W.st.cellsR m') rY') (hmv : W.Moves G m rY G' m' rY')
+    (hRoff : ∀ xs r l, W.R xs r → (C.S.In l ∨ C.Ep.In l) → r.heap l = none)
+    (hsh : W.Shares G' m') : W.Base Sz K G' rX' m' := by
+  obtain ⟨⟨hC, hW⟩, hS⟩ := hu.sub
+  have hsub' := semSub_step hs hu.sub hLw hRoff he he' hmv
+  obtain ⟨hF, hfs, hFm⟩ := hs.frame
+  obtain ⟨-, -, -, -, -, -, hoth, -, hmph, -, hlph, -, hspe, hsp, -, -⟩ := hs
+  obtain ⟨-, rF, rF', rO, rfl, rfl, ⟨-, -, hFR⟩, ⟨-, -, hFR'⟩⟩ := hmv
+  subst he he'
+  have hap := st_c_apart W
+  have hhist : ∀ Wd : Word 32 4, (Wd = C.S ∨ Wd = C.Ep) → Wd.hist m' = Wd.hist m :=
+    fun Wd hWd => Word.hist_fstep (hW Wd hWd).1 hfs
+      (fun l hl => by rw [(hFm l (hap Wd hWd l hl)).1]; exact (hW Wd hWd).1.cellIn hl)
+      (fun l hl => by rw [(hFm l (hap Wd hWd l hl)).2])
+  have hup : ∀ {α : Type} (f : γ → α), f (G' t) = f (G t) → ∀ u, f (G' u) = f (G u) :=
+    fun f hf u => by
+      by_cases e : u = t
+      · rw [e, hf]
+      · rw [hoth u e]
+  have hlph' := hup L.ph hlph
+  have hmph' := hup M.ph hmph
+  have hspl := hup S.place.ph hspe
+  have hbef := hLw.before_fstep hfs fun x h1 h2 => by
+    rw [(hFm _ fun h => (st_apart W).1.not_in h ⟨rfl, h1, h2⟩).1]; exact hLw.blk.cell h1 h2
+  have hx : ∀ {m : Mem} {rF : Res} {G : ThreadId → γ}, W.FreeRes G m rF →
+      (rsum (W.st.cellsR m) (rsum rF rO)).gh.extent W.st.b = rO.gh.extent W.st.b :=
+    fun {_ rF _} hf => by
+      show ECell.unit.add ((rF.gh.extent _).add (rO.gh.extent _)) = _
+      rw [hf.extent, ECell.unit_add, ECell.unit_add]
+  exact {
+    winv := hI'
+    sub := hsub'
+    win := hu.win.keep (fun u => congrArg Prod.fst (hspl u)) (hhist _ (.inl rfl))
+      (hhist _ (.inr rfl))
+      (hu.win.ehb.step
+        (fun _ hc => hc.mono (fun u hh => .inl (by rw [hlph' u]; exact hh)) hfs.clock hbef
+          hfs.threads fun u hg => by rwa [hlph' u] at hg)
+        (.inl (hhist _ (.inr rfl))))
+    shares := hsh
+    pin := by
+      have h := hu.pin
+      unfold Res.Pins at h ⊢
+      rw [hx hFR']; rwa [hx hFR] at h
+    wt := fun u hq => by
+      by_cases e : u = t
+      · have hso : S.ph (G' t) = .out :=
+          (congrArg Prod.snd hspe).trans (congrArg Prod.snd hsp)
+        rw [e, hso] at hq; cases hq
+      · rw [hoth u e] at hq ⊢; exact hu.wt u hq
+    nap := fun u hq => by
+      rw [hmph' u]
+      rw [hlph' u, hspl u] at hq
+      exact hu.nap u hq }
+
 /-! ## The relabels around the other lock's code -/
 
 /-- **A relabel of one thread in the same memory keeps the base**: its places in the rwlock's,
