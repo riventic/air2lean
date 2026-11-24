@@ -2576,7 +2576,12 @@
           "anchor": "def test_typecheck_rejects_invalid_programs"
         }
       ],
-      "mutants": []
+      "mutants": [
+        {"name": "fuzz-typecheck-unreachable-code-accepted", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "fuzz-typecheck-literal-range-unchecked", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "fuzz-typecheck-shadowing-accepted", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "fuzz-eval-compound-assignment-order", "path": "tests/roadmap/mutation-map/mutants.py", "category": "operand-order"}
+      ]
     },
     "Q02": {
       "categories": [],

@@ -52,6 +52,7 @@ SCHEDULES = 'tests/roadmap/schedule-caps/test_exploration.py'
 AIR_VALIDATE = 'tests/roadmap/export-validation/test_validate_air.py'
 TRUST = 'tests/roadmap/export-validation/test_trust_report.py'
 ABI = 'tests/roadmap/abi-probes/test_probe.py'
+FUZZ = 'tests/roadmap/fuzz/test_fuzz.py'
 
 # name -> (script, anchor, replacement, test file, module global holding the script, killing tests)
 MUTANTS = {
@@ -529,6 +530,26 @@ MUTANTS = {
     'trust-checked-stage-without-checks': (
         'scripts/trust-report.py', "        if cls in ('kernel-checked', 'independently-checked-metadata') and not checks:\n",
         '        if False:\n', TRUST, 't', ('TrustReport.test_checked_classes_need_checks',)),
+    # Q01: the generator's type checker rejects code after an exit (the oracle must stay UB-free).
+    'fuzz-typecheck-unreachable-code-accepted': (
+        'tests/roadmap/fuzz/zig_gen.py', '            if _exits(s) and k != len(stmts) - 1:\n', '            if False:\n',
+        FUZZ, 'zig_gen', ('ZigGenerator.test_typecheck_rejects_invalid_programs',)),
+    # Q01: literals outside their type's range are rejected.
+    'fuzz-typecheck-literal-range-unchecked': (
+        'tests/roadmap/fuzz/zig_gen.py', '        if isinstance(v, bool) or not isinstance(v, int) or wrap(ty, v) != v:\n',
+        '        if isinstance(v, bool) or not isinstance(v, int):\n',
+        FUZZ, 'zig_gen', ('ZigGenerator.test_typecheck_rejects_invalid_programs',)),
+    # Q01: Zig forbids shadowing; a rendered program that shadows would not compile.
+    'fuzz-typecheck-shadowing-accepted': (
+        'tests/roadmap/fuzz/zig_gen.py', '        if not isinstance(name, str) or name in names:\n',
+        '        if not isinstance(name, str):\n',
+        FUZZ, 'zig_gen', ('ZigGenerator.test_typecheck_rejects_invalid_programs',)),
+    # Q01: the oracle evaluator loads a compound assignment's target before its operand.
+    'fuzz-eval-compound-assignment-order': (
+        'tests/roadmap/fuzz/zig_gen.py',
+        '                old = cell[0]\n                value = self.expr(s[3], env)\n',
+        '                value = self.expr(s[3], env)\n                old = cell[0]\n',
+        FUZZ, 'zig_gen', ('ZigGenerator.test_evaluator_semantics',)),
     # T04: the native probe profile is exactly 64-bit.
     'abi-probe-pointer-width-unchecked': (
         'scripts/abi-probe.py', " or profile['pointer_bits'] != 64\n", '\n',
