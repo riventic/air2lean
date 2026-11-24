@@ -624,6 +624,11 @@
           "category": "other"
         },
         {
+          "name": "optional_flag",
+          "path": "tests/roadmap/error-storage/mutations.py",
+          "category": "layout"
+        },
+        {
           "name": "error_param_constant",
           "path": "tests/roadmap/lang-long-tail/mutants.py",
           "category": "forwarding"
@@ -1107,9 +1112,9 @@
         },
         {
           "name": "spurious-failure-removed",
-          "path": "tests/roadmap/weak-cas/Mutation.lean",
+          "path": "tests/roadmap/weak-cas/qualify.py",
           "category": "other",
-          "anchor": "C11_ASSERTION: spurious failure branch removed"
+          "anchor": "\"weak-failure-mutant\""
         }
       ],
       "note": "Retry loops under permitted spurious failure: weak-cas Runtime.lean and the Mutation.lean spurious-failure-removed mutant (scripts/weak-cas.sh). Message precision: Messages.lean (kernel decide +kernel and runtime, run by the weak-CAS gate) checks repeated equal values as distinct write events, coherent read pairs, CAS on an older equal message, release sequences and the rejection (.unspecified) of overlapping atomic accesses of another size. Mutants v and ad (scripts/mutate.sh) change the CAS comparison and stale-message selection; their kill is the proof build."

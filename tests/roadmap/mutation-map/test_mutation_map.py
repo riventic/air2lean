@@ -11,10 +11,12 @@ import io
 import json
 from pathlib import Path
 import re
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 
 sys.dont_write_bytecode = True
 
@@ -30,6 +32,11 @@ def load(name, path):
 
 mm = load('mutation_map', 'scripts/mutation-map.py')
 runner = load('q02_mutants', 'tests/roadmap/mutation-map/mutants.py')
+helper = load('mutation_kill_log', 'scripts/mutation_kill_log.py')
+
+
+def mock_env(**values):
+    return unittest.mock.patch.dict(os.environ, values)
 
 REGISTER = {'T01': ('Profiles', 'complete'), 'L02': ('Bit operations', 'partial')}
 
@@ -41,6 +48,11 @@ def write_register(root, register=REGISTER):
 MUTATE = 'echo "== mutation (a) one"\necho "== mutation (b) two"\n'
 PY_MUTANTS = "MUTANTS = {\n    'pm': (\n    ),\n}\n"
 GEN = "MUTANTS = {'swap': 1, \"drop\": 2}\n"
+
+
+CI = '.github/workflows/ci.yml'
+CHECK = {'kind': 'check', 'target': 'tests/x/check.sh'}
+FIXTURE = {'tests/x/mutations.py#swap', 'tests/x/mutations.py#drop', 'tests/x/check.sh#inline'}
 
 
 def mutant(name, category, path='tests/x/mutations.py', **extra):
@@ -80,13 +92,18 @@ class Scratch(unittest.TestCase):
         write(self.root / 'tests/x/test_neg.py', 'def test_neg(self): pass\n')
         write(self.root / 'examples/ex/ex.zig', '')
         write(self.root / 'Proofs/Mod/Thm.lean', '')
+        write(self.root / CI, 'steps:\n  - run: bash tests/x/check.sh\n  - run: tests/a-b/check.sh --native\n')
+        write(self.root / 'tests/a-b/check.sh', '')
         self.data = scratch_map()
+        write(self.root / mm.MAP, json.dumps(self.data))  # `kills record|verify` read the map's mutants
         self.record()
 
     def record(self, **changes):
-        """Write the kill ledger for the scratch mutate.sh: a is killed by a diff, b by a proof build."""
-        blocks = mm.mutation_blocks(self.root)
-        by = {'a': {'kind': 'diff', 'target': 'ex'}, 'b': {'kind': 'proof', 'target': 'Proofs.Mod.Thm'}}
+        """Write the kill ledger: mutate.sh a is killed by a diff, b by a proof build, and the
+        fixture-local mutants by the CI check tests/x/check.sh."""
+        blocks = mm.mutant_blocks(self.root, FIXTURE)
+        by = {'a': {'kind': 'diff', 'target': 'ex'}, 'b': {'kind': 'proof', 'target': 'Proofs.Mod.Thm'},
+              **{k: CHECK for k in FIXTURE}}
         mutants = {n: {'killed_by': by[n], 'block_sha256': blocks[n]} for n in blocks if n in by}
         mutants.update(changes)
         write(self.root / mm.KILLS, json.dumps({'schema': mm.KILLS_SCHEMA, 'mutants': mutants}))
@@ -176,18 +193,94 @@ class Kills(Scratch):
         self.assertEqual(self.run_kills('record', 'a killed diff ex\n'), (0, ''))
         self.assertProblem('b: designated mutant has no recorded kill')
         self.assertEqual(self.run_kills('record', 'b killed proof Proofs.Mod.Thm\n'), (0, ''))
+        self.assertEqual(self.problems(), [f'{mm.KILLS}: {k}: designated mutant has no recorded kill' for k in sorted(FIXTURE)])
+        self.assertEqual(self.run_kills('record', ''.join(f'{k} killed check tests/x/check.sh\n' for k in FIXTURE)), (0, ''))
         self.assertEqual(self.problems(), [])
 
     def test_unrecorded_entry_is_a_listed_gap_until_a_kill_is_recorded(self):
         blocks = mm.mutation_blocks(self.root)
-        self.record(a={'unrecorded': 'x86_64 only', 'block_sha256': blocks['a']})
+        self.record(b={'unrecorded': 'x86_64 only', 'block_sha256': blocks['b']})
         report = mm.analyze(self.root, self.data)
-        self.assertEqual((report['problems'], report['kill_gaps']), ([], ['a: x86_64 only']))
-        self.assertEqual(self.run_kills('verify', 'a killed diff ex\n'), (0, ''))
-        self.assertEqual(self.run_kills('record', 'a killed diff ex\n'), (0, ''))
+        self.assertEqual((report['problems'], report['kill_gaps']), ([], ['b: x86_64 only']))
+        self.assertEqual(self.run_kills('verify', 'b killed proof Proofs.Mod.Thm\n'), (0, ''))
+        self.assertEqual(self.run_kills('record', 'b killed proof Proofs.Mod.Thm\n'), (0, ''))
         self.assertEqual(mm.analyze(self.root, self.data)['kill_gaps'], [])
-        self.record(a={'unrecorded': 'x86_64 only', 'block_sha256': 'stale'})
+        self.record(b={'unrecorded': 'x86_64 only', 'block_sha256': 'stale'})
         self.assertProblem('unrecorded entry is for a different version')
+
+    def test_complete_row_cannot_rely_on_an_unrecorded_kill(self):
+        # T01 is complete: its mutate.sh mutant a, and a fixture mutant once T01 designates one.
+        blocks = mm.mutant_blocks(self.root, FIXTURE)
+        self.record(a={'unrecorded': 'x86_64 only', 'block_sha256': blocks['a']})
+        self.assertEqual(self.problems(), ['T01: complete row relies on mutant a, whose kill is unrecorded'])
+        self.record(**{'tests/x/mutations.py#swap': {'unrecorded': 'no CI check runs it', 'block_sha256': blocks['tests/x/mutations.py#swap']}})
+        self.assertEqual(self.problems(), [])  # swap belongs to the partial row L02: a gap
+        self.data['requirements']['T01']['mutants'].append(mutant('swap', 'operand-order'))
+        self.assertEqual(self.problems(), ['T01: complete row relies on mutant tests/x/mutations.py#swap, whose kill is unrecorded'])
+
+    def test_fixture_mutant_without_recorded_kill_fails(self):
+        ledger = json.loads((self.root / mm.KILLS).read_text())
+        del ledger['mutants']['tests/x/mutations.py#swap']
+        write(self.root / mm.KILLS, json.dumps(ledger))
+        self.assertEqual(self.problems(), [f'{mm.KILLS}: tests/x/mutations.py#swap: designated mutant has no recorded kill'])
+
+    def test_edit_of_a_fixture_mutant_file_makes_its_kills_stale(self):
+        write(self.root / 'tests/x/mutations.py', GEN + '# edited\n')
+        self.assertEqual(sorted(self.problems()), [
+            f'{mm.KILLS}: tests/x/mutations.py#{n}: kill recorded for a different version of the mutation; '
+            'rerun it and `kills record`' for n in ('drop', 'swap')])
+
+    def test_ledger_entry_for_an_undesignated_fixture_mutant_fails(self):
+        self.record(**{'tests/x/mutations.py#gone': {'killed_by': CHECK, 'block_sha256': 'x'}})
+        self.assertProblem('kill recorded for tests/x/mutations.py#gone, which is no longer a designated mutant')
+
+    def test_check_killer_is_a_ci_run_script_also_in_a_hyphenated_fixture(self):
+        blocks = mm.mutant_blocks(self.root, FIXTURE)
+        swap = 'tests/x/mutations.py#swap'
+        # The widened rule: a hyphenated tests/roadmap/<a-b> fixture's check names a killer.
+        self.record(**{swap: {'killed_by': {'kind': 'check', 'target': 'tests/a-b/check.sh'}, 'block_sha256': blocks[swap]}})
+        self.assertEqual(self.problems(), [])
+        write(self.root / 'tests/x/other.sh', '')
+        write(self.root / 'tests/a-b/check.sh.orig', '')
+        for target in ('tests/x/other.sh',          # exists, but no workflow step runs it
+                       'tests/a-b/check.sh.orig',   # a CI-named path is not a prefix match
+                       'tests/x/gone.sh', '/tmp/check.sh', 'tests/x/../x/check.sh', 'examples/ex/ex.zig'):
+            self.record(**{swap: {'killed_by': {'kind': 'check', 'target': target}, 'block_sha256': blocks[swap]}})
+            self.assertProblem(f'killing check regression {target!r} does not exist')
+
+    def test_fixture_kill_log_records_and_verifies(self):
+        (self.root / mm.KILLS).unlink()
+        lines = ''.join(f'{k} killed check tests/x/check.sh\n' for k in sorted(FIXTURE))
+        self.assertEqual(self.run_kills('record', 'a killed diff ex\nb killed proof Proofs.Mod.Thm\n')[0], 0)
+        self.assertEqual(self.run_kills('record', lines), (0, ''))
+        self.assertEqual(self.problems(), [])
+        self.assertEqual(self.run_kills('verify', lines), (0, ''))
+        code, err = self.run_kills('verify', 'tests/x/mutations.py#swap killed check tests/a-b/check.sh\n')
+        self.assertEqual(code, 1)
+        self.assertIn('ledger records', err)
+        # Only a designated fixture mutant and an existing CI check can be recorded.
+        for line, needle in (('tests/x/mutations.py#nope killed check tests/x/check.sh\n', 'designated fixture mutant'),
+                             ('tests/x/mutations.py#swap killed check tests/x/gone.sh\n', 'does not exist')):
+            code, err = self.run_kills('record', line)
+            self.assertEqual(code, 1)
+            self.assertIn(needle, err)
+
+    def test_runner_helper_writes_the_ledger_format(self):
+        log = self.root / 'helper.log'
+        with mock_env(**{helper.ENV: str(log)}):
+            helper.killed('tests/roadmap/mutation-map/test_mutation_map.py', ['m1', 'm2'], 'scripts/mutation-map.py')
+        self.assertEqual(log.read_text().splitlines(), [
+            f'tests/roadmap/mutation-map/test_mutation_map.py#{n} killed check scripts/mutation-map.py' for n in ('m1', 'm2')])
+        self.assertEqual(sorted(mm.read_kill_log(log)), ['tests/roadmap/mutation-map/test_mutation_map.py#m1',
+                                                         'tests/roadmap/mutation-map/test_mutation_map.py#m2'])
+        with mock_env(**{helper.ENV: ''}):
+            helper.killed('scripts/mutation-map.py', 'm', 'scripts/mutation-map.py')  # unset: nothing written
+        for path, name, check in (('tests/gone.py', 'm', 'scripts/mutation-map.py'),
+                                  ('scripts/mutation-map.py', 'm', '/etc/passwd'),
+                                  ('scripts/mutation-map.py', 'a b', 'scripts/mutation-map.py'),
+                                  ('scripts/mutation-map.py', 'a#b', 'scripts/mutation-map.py')):
+            with mock_env(**{helper.ENV: str(log)}), self.assertRaises(ValueError):
+                helper.killed(path, [name], check)
 
     def test_malformed_log_is_an_input_error(self):
         err = io.StringIO()

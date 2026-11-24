@@ -39,6 +39,9 @@ set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
 python3 -B scripts/fixtures.py build SepAuto
+# The build elaborated each `fail_if_success` mutant: every one was rejected (Q02 kill evidence).
+python3 -B scripts/mutation_kill_log.py --check tests/roadmap/sep-auto/check.sh tests/roadmap/sep-auto/SepAuto/Steps.lean \
+  array-update-wrong-neighbor store-keeps-old-value frame-atom-dropped
 # Axioms of every theorem of every module, from the built environment: only the standard ones.
 python3 -B scripts/fixtures.py audit --library SepAuto
 echo "sep-auto: ok"

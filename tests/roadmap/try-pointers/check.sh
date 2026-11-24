@@ -70,4 +70,6 @@ if ! python3 tests/roadmap/try-pointers/mutate-offset.py classify \
   cat "$mutant/proof.log" >&2
   exit 1
 fi
+python3 -B scripts/mutation_kill_log.py --check tests/roadmap/try-pointers/check.sh \
+  tests/roadmap/try-pointers/mutate-offset.py payload8-success-offset
 echo 'pointer-try artifact, ownership, generated runtime, malformed-AIR and offset-mutant gates passed'

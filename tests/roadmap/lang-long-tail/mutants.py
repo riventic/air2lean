@@ -16,6 +16,8 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 LIB = HERE.parents[2] / ".lake/build/lib/lean"
+sys.path.insert(0, str(HERE.parents[2] / "scripts"))
+from mutation_kill_log import killed as log_kill  # noqa: E402
 
 MUTANTS = {
     # L10: the one-name error passed on is replaced by another name.
@@ -75,6 +77,7 @@ def main():
         killed = result.returncode == 1 and "differs from the model" in result.stderr
         assert killed, f"{name}: the mutant survived or failed otherwise\n{result.stdout}{result.stderr}"
         print(f"lang-long-tail mutant killed: {name}")
+        log_kill("tests/roadmap/lang-long-tail/mutants.py", name, "tests/roadmap/lang-long-tail/check.sh")
 
 
 if __name__ == "__main__":

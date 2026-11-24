@@ -47,6 +47,10 @@ MUTANTS = {
     },
 }
 ROOTS = {"callbacks": ROADMAP / "callbacks", "asm-env": ROADMAP / "asm-effects"}
+# The CI check that runs each fixture's mutants (the kill it reports: scripts/mutation_kill_log.py).
+CHECKS = {"callbacks": "tests/roadmap/callbacks/check.sh", "asm-env": "tests/roadmap/asm-effects/check.sh"}
+sys.path.insert(0, str(ROADMAP.parents[1] / "scripts"))
+from mutation_kill_log import killed as log_kill  # noqa: E402
 
 
 def mutate(source, edits):
@@ -75,8 +79,8 @@ def theorem_at(lines, number):
 
 
 def classify(name, status, log, proofs):
-    entry = next(t[name] for t in MUTANTS.values() if name in t)
-    _, _, _, required, allowed = entry
+    root = next(r for r, t in MUTANTS.items() if name in t)
+    _, _, _, required, allowed = MUTANTS[root][name]
     if status != "1":
         raise SystemExit(f"{name}: Lean exit {status}, want 1 (the proofs must reject the mutant)")
     lines = Path(proofs).read_text(encoding="utf-8").splitlines()
@@ -90,6 +94,7 @@ def classify(name, status, log, proofs):
         raise SystemExit(f"{name}: failing theorems {sorted(map(str, failed))}, want {sorted(required)} "
                          f"(allowed {sorted(allowed)})")
     print(f"{name}: rejected by {sorted(failed)}")
+    log_kill("tests/roadmap/callbacks/mutants.py", name, CHECKS[root])
 
 
 def self_test():

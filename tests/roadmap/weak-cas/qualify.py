@@ -16,6 +16,8 @@ import time
 
 ROOT = Path(__file__).resolve().parents[3]
 FIXTURES = ROOT / "tests/roadmap/weak-cas"
+sys.path.insert(0, str(ROOT / "scripts"))
+from mutation_kill_log import killed as log_kill  # noqa: E402
 
 
 def digest(path):
@@ -219,6 +221,7 @@ def main():
         mutant.write_text(original.replace(marker, "cmpxchgAt 0 .acqRel .acquire 1 p (42#8) (7#8)"))
         run("weak-failure-mutant", ["lake", "env", "lean", "-R", artifacts, "--run", mutant],
             expected_failure="C11_ASSERTION: spurious failure branch removed")
+        log_kill("tests/roadmap/weak-cas/qualify.py", "spurious-failure-removed", "scripts/weak-cas.sh")
         if args.mode == "full":
             patched = compiler("patched-zig", "AIR2LEAN_ZIG_AIR")
             stock = compiler("stock-zig", "AIR2LEAN_ZIG")
