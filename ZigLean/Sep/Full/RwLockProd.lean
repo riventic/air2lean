@@ -218,14 +218,27 @@ the thread is a reader (`hrd`). `FRw.Inv` does not say where the readers' shares
 tick nor a `Step` fixes the stepping thread's new part, so a client's base states it by counting
 (`Shares`): while a reader is in, each thread owns exactly its place's fraction of each cell of the
 readers' heap (none out of `rd`). The rest holds a positive share of the cell then
-(`Inv.rest_share`), so the clause is kept over a change of one thread's ghost value beside the same
-rest (`Shares.keep`, by `FLock.Inv.share_keep`) and over a relabel that keeps what each thread
-owns of it (`Shares.congr`). -/
+(`Inv.rest_share`), so the clause is kept over a change of one thread's ghost value beside rests
+with the same shares (`Shares.keep`, by `FLock.Inv.share_keep`) and over a relabel that keeps what
+each thread owns of it (`Shares.congr`). -/
 
 /-- The outer mutex's resource holds no share (it is `emp`). -/
 theorem mR_share (W : FRw γ X Y M L C S) (l : Zig.Loc) :
     ∀ G r, M.R G r → r.gh.share l = SCell.zero := fun G r hr => by
   rw [W.mR] at hr; rw [hr.2.2]; rfl
+
+/-- The semaphore's mutex's resource holds no share: the count and the pool, which is empty or the
+protected resource (`R_plain`). -/
+theorem lR_share (W : FRw γ X Y M L C S) (l : Zig.Loc) :
+    ∀ G r, L.R G r → r.gh.share l = SCell.zero := fun G r hr => by
+  rw [S.R_cnt G] at hr
+  obtain ⟨r₁, r₂, -, rfl, h1, h2⟩ := hr
+  have e2 : r₂.gh = Ghost.unit := by
+    by_cases h : RwPosted W.ph G
+    · rw [W.pool_posted G h] at h2; exact (W.R_plain _ _ h2).2
+    · rw [W.pool_idle G h] at h2; exact h2.2.2
+  show (r₁.gh.share l).add (r₂.gh.share l) = SCell.zero
+  rw [h1.2.2, e2, Ghost.unit_share, SCell.zero_add]
 
 /-- **Each thread owns exactly its reader's fraction of the readers' heap** (section doc), at the
 outer mutex (`M.own`: the part and the held resource of a thread that is not joined). -/
@@ -285,12 +298,15 @@ theorem Shares.congr {G G' : ThreadId → γ} {m m' : Mem} (h : W.Shares G m)
   fun u q H hu l c hl v => by
     rw [hown, hph v]; exact h u q H (by rw [← hph u]; exact hu) l c hl v
 
-/-- **The shares over a change of one thread's ghost value beside the same rest** (a tick, a step
-on its own part): the outer mutex's invariant holds before and after it at one rest `rXM`, which
-holds a positive share of each cell of the readers' heap (`Inv.rest_share` at the common rest), and
+/-- **The shares over a change of one thread's ghost value beside rests with the same shares**
+(a tick, a step on its own part): the outer mutex's invariant holds before and after it at rests
+`rXM` and `rXM'` with the same shares (one rest in the outer mutex's view; in the semaphore's the common rest
+beside the semaphore's mutex's side, which holds no share: `FLock.Keeps.side_share`), which hold
+a positive share of each cell of the readers' heap (`Inv.rest_share` at the common rest), and
 `t`'s place stays (`FLock.Inv.share_keep`). -/
-theorem Shares.keep {G G' : ThreadId → γ} {rXM : Res} {m m' : Mem} {t : ThreadId}
-    (h : W.Shares G m) (hM : M.Inv G rXM m) (hM' : M.Inv G' rXM m')
+theorem Shares.keep {G G' : ThreadId → γ} {rXM rXM' : Res} {m m' : Mem} {t : ThreadId}
+    (h : W.Shares G m) (hM : M.Inv G rXM m) (hM' : M.Inv G' rXM' m')
+    (hX : ∀ l, rXM'.gh.share l = rXM.gh.share l)
     (hpos : ∀ u q H l c, W.ph (G u) = .rd q H → H l = some c → 0 < (rXM.gh.share l c).val)
     (hth : m'.threads = m.threads) (ht : t < m.threads.size) (hoth : ∀ u, u ≠ t → G' u = G u)
     (hph : W.ph (G' t) = W.ph (G t)) : W.Shares G' m' := by
@@ -302,7 +318,7 @@ theorem Shares.keep {G G' : ThreadId → γ} {rXM : Res} {m m' : Mem} {t : Threa
   rw [hph' u] at hu
   rw [hph' v, ← h u q H hu l c hl v]
   by_cases e : v = t
-  · rw [e]; exact hM.share_keep hM' hth ht hoth (mR_share W l) (hpos u q H l c hu hl)
+  · rw [e]; exact hM.share_keep hM' hth ht hoth (mR_share W l) (hX l) (hpos u q H l c hu hl)
   · rw [FLock.own_congr (L := M) hth hoth v e]
 
 /-! ## The outer mutex's view -/
