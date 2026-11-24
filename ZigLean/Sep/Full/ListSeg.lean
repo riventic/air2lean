@@ -61,4 +61,29 @@ theorem listSeg_snoc_upd {hd q : Option Ptr} {p : Ptr} {v : V} {ys : List V} :
     EUpd (listSeg N hd (some p) ys ⋆ N p v q) (listSeg N hd q (ys ++ [v])) :=
   EUpd.of_imp fun _ h => listSeg_snoc h
 
+variable (N)
+
+/-- The segment from `hd` to `tl` of nodes `N`, told from its end: `vs` are its items, the last
+one first (its node points to `tl`). It is `listSeg N hd tl vs.reverse` (`listSeg_of_listSegRev`),
+defined by the cases of the node that a walk has passed last: the nodes that a walk has passed
+join it by the constructor, so `fsym` folds a node into it also when the layout `N` names neither
+the item nor the next pointer (what a call that frees the node leaves of it), where the update
+`listSeg_snoc_upd` has no atom to read them from. The generator states the nodes that a walk has
+handed to a call over it (`air2lean-invgen`, a list walk with a call). -/
+def listSegRev : Option Ptr → Option Ptr → List V → FAssn
+  | hd, tl, [] => ⟪hd = tl⟫
+  | hd, tl, v :: vs => FAssn.ex fun p => N p v tl ⋆ listSegRev hd (some p) vs
+
+variable {N}
+
+/-- A segment told from its end is the segment of its items in the list's order. -/
+theorem listSeg_of_listSegRev :
+    ∀ {vs : List V} {hd tl : Option Ptr} {r : Res},
+      listSegRev N hd tl vs r → listSeg N hd tl vs.reverse r
+  | [], _, _, _, h => h
+  | v :: vs, _, _, _, h => by
+    obtain ⟨p, h⟩ := h
+    rw [List.reverse_cons]
+    exact listSeg_snoc (sep_comm (sep_mono_right (fun _ => listSeg_of_listSegRev) h))
+
 end Zig.Full
