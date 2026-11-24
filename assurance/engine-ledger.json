@@ -139,13 +139,13 @@
   {
    "id": "9",
    "title": "engine support replacing arena_* macros, within (planner rule), unroll_solo (CTriple-backend rule)",
-   "status": "open",
+   "status": "closed",
    "requester": "arena lane",
-   "progress": "arena_* macros gone (#388); `unroll_solo` deleted (L16). Open until 9h closes and the `within` macro, whose fsym_entail replacement 9g landed, has no uses left (proof-framework.json tactic_uses)",
+   "progress": "arena_* macros gone (#388); `unroll_solo` deleted (L16); the `within` macro is deleted (branch claude/legacy-tactics): its six uses (AllocArena/Core, AllocArena/Reset, AllocFba/Full) are `fsym_entail` on the `Within X P` goal (9g), and its tactic and tactic-use entries left proof-framework.json",
    "request": "engine support replacing arena_* macros, `within` (planner rule), `unroll_solo` (CTriple-backend rule)",
    "workaround_sites": [],
-   "deletion_plan": "",
-   "note": "umbrella of 9a-9h; closes with 9h"
+   "deletion_plan": "Done: the `within` syntax and its macro_rules (ZigLean/Sep/Full/Extent.lean) are deleted with their last use.",
+   "note": "umbrella of 9a-9h; all closed"
   },
   {
    "id": "9a",
