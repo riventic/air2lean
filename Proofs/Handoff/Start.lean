@@ -231,8 +231,10 @@ theorem inv_start {m : Mem} {own : ThreadId → Res} {A : Nat} {wb : Array Byte}
         LawfulEnc.size_encode _, LawfulEnc.decode_encode _, hV.1, by decide⟩, hV.2.1, hV.2.2⟩,
       ⟨⟨A, Lo.size, .stack, Enc.encode false, Nat.mod_one _, LawfulEnc.size_encode _,
         LawfulEnc.decode_encode _, hRd.1, by decide⟩, hRd.2.1, hRd.2.2⟩⟩
-  · refine ⟨⟨by rw [hth]; rfl, .inl ⟨h1, hX0, fun u hu => hXu u (by unfold ThreadId at *; omega)⟩⟩,
-      fun e he hr => .inr fun u hu => ?_, ⟨rIO, ⟨A', bs, hA', hbs, hdec, hio⟩, hIOoff, rfl⟩,
+  · have hrest : Rest Lo _ m := ⟨rIO, ⟨A', bs, hA', hbs, hdec, hio⟩, hIOoff, rfl⟩
+    refine ⟨holds_of
+        ⟨by rw [hth]; rfl, .inl ⟨h1, hX0, fun u hu => hXu u (by unfold ThreadId at *; omega)⟩⟩
+        (fun e he hr => .inr fun u hu => ?_) hrest, hrest,
       ⟨blk, hblk, hl, hS, hK⟩, hwsOk, hweOk, hwvOk,
       FCond.Inv.start hwsz hwsv hwez hwev hc hq, FEvent.Inv.start _ hwvz hwvv he hq hFresh,
       by show ((upd G0 0 _ 1).2.c).waits = false; rw [hc]; rfl, fun _ => hwez,

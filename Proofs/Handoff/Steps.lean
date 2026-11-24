@@ -130,7 +130,8 @@ theorem U_relabel {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {g�
   have hJ := hu.einv.toOut (t := t) (g := g₁) (by rw [upd_self]; exact he₀) (.inl he₁)
     (fun h => absurd h hsd) (fun h => by rw [upd_self] at h; exact hwx h) (fun h => absurd h hsd)
   rw [upd_upd] at hJ
-  refine ⟨hsh, hu.io, hu.rest, hu.blk, hu.ws, hu.we, hu.wv, hI, hJ, by rw [hcu]; exact hu.places,
+  refine ⟨hu.cl.relabel hsh, hu.rest, hu.blk, hu.ws, hu.we, hu.wv, hI, hJ,
+    by rw [hcu]; exact hu.places,
     hep1, hu.ep2, hu.epS, fun q n h hq => hu.incE q n h (by rw [← hcu]; exact hq), hent, hhold,
     hreg, fun h => hu.w1 (by rw [← hcu]; exact h), hsnap, hlvc, hfin, hu.q, fun u hu' => ?_⟩
   · by_cases e : u = t
@@ -480,8 +481,9 @@ theorem inv_spawnParts {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM rP 
         rw [hG1] at h'; rcases h' with h' | h' <;> cases h'))
     (t := 0) (g := gO rM { ph := .run }) (by rw [upd1_0]; exact hG0e) rfl
     (fun h => by rw [upd1_0, hg] at h; rcases h with h | h <;> cases h)
-  refine ⟨rfl, rX, hL', ⟨⟨?_, .inr ⟨by simp [hs1], ?_, by dsimp only; rw [hX0]; rfl,
-      by dsimp only; rw [hX0]; decide, by dsimp only; rw [hX1]; rfl, hXu⟩⟩, ?_,
+  refine ⟨rfl, rX, hL', ⟨hu.cl.fork (t := 0) (gt := false) (by rw [hs1]; decide) hcs hf
+      ⟨?_, .inr ⟨by simp [hs1], ?_, by dsimp only; rw [hX0]; rfl,
+      by dsimp only; rw [hX0]; decide, by dsimp only; rw [hX1]; rfl, hXu⟩⟩,
       hu.rest.congr fun _ _ => rfl, hu.blk,
     hwS, hwE, hwV, hI', hJ', by rw [hX1]; rfl,
     fun _ => by rw [hhE]; exact hu.ep1 (by rw [hG1]; rfl),
@@ -492,9 +494,6 @@ theorem inv_spawnParts {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM rP 
     ?_, ?_, fun w hw => hu.q w hw, fun u hu' => ?_⟩⟩
   · simp only [Array.getElem?_push]; rw [ite_eq_right (by omega)]; exact h00
   · simp only [Array.getElem?_push, hs1, ↓reduceIte]
-  · obtain ⟨hcl, hcn, -⟩ := Conc.fork_clocks (cs := m.clocks) (t := 0) (by rw [hcs, hs1]; decide)
-    exact hu.io.fork (t := 0) (by rw [hs1]; decide) (by simp)
-      (fun u hu => hcl u (by rw [hcs]; exact hu)) (by rw [← hcs]; exact hcn) fun _ he _ => he
   · intro h; rw [hX0] at h; cases h
   · intro h; rw [hX1] at h; rcases h with h | h <;> cases h
   · -- a registration before the spawn happened before the producer's clock, an empty one
@@ -611,7 +610,8 @@ theorem cwait_ok {G : ThreadId → Gh} {m : Mem} {rM rL : Res}
     have hU2 := hU.ep1
     have hU3 := hU.places
     rw [upd0_1] at hU1 hU2 hU3
-    refine ⟨Shape.congr hU.shape rfl (fun u => ?_) (fun u hfr => ?_), hU.io, hU.rest, hU.blk,
+    refine ⟨hU.cl.relabel (Shape.congr hU.shape rfl (fun u => ?_) (fun u hfr => ?_)), hU.rest,
+      hU.blk,
       hU.ws, hU.we, hU.wv, hI, ?_, ?_, ?_, hU.ep2, hU.epS, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, hU.q,
       fun u hu' => ?_⟩
     · by_cases e : u = 0

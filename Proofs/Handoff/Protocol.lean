@@ -3,6 +3,8 @@ import ZigLean.Sep.Full.Cond
 import ZigLean.Sep.Full.Mutex
 import ZigLean.Sep.Full.ThreadFacts
 import ZigLean.Conc.Share
+import ZigLean.Sep.Full.RwLockThreads
+import ZigLean.Sep.Full.RwLockEnds
 
 /-!
 # The protocol of `handoff`, once for every version
@@ -25,7 +27,9 @@ generated code with the steps here.
   `io` for 0.16.0: read-shared); their invariants (`FCond.Inv`, `FEvent.Inv`) are part of `U`.
   Only the producer in its `signal` signals (`FCond.sx`); only `main` waits at the event
   (`FEvent.wx`).
-- **The rest `U`**: the threads (`Shape`), and what the contracts need: the epoch has its first
+- **The rest `U`**: the program's own facts (`Cl`, an `FClient`: the threads, `Shape`, and the
+  read shares of `io`; kept over every kind of step by `FClient.Holds`' lemmas), and what the
+  contracts need: the epoch has its first
   write only until the producer signals (`ep1`) and moves at most once, with no post possible
   after it (`ep2`, `epS`, `incE`: the window `Fits.win`); while `main` is in the condition's
   critical code the producer is before its lock (`ent`: `hent`; only `main` registers, so
@@ -193,18 +197,62 @@ def Rest (rX : Res) (m : Mem) : Prop :=
 def BlkOk (m : Mem) : Prop :=
   ∃ blk, m.blocks[0]? = some blk ∧ blk.live = true ∧ blk.bytes.size = Lo.size ∧ blk.kind = .stack
 
-/-- The threads: `main` alone before its spawn; then `main` and the producer, which `main`
-spawned and did not join yet. -/
-def Shape (Y : ThreadId → X) (m : Mem) : Prop :=
-  m.threads[0]? = some { spawner := 0, joined := true } ∧
-  ((m.threads.size = 1 ∧ Y 0 = { ph := .pre } ∧ ∀ u, 1 ≤ u → Y u = {}) ∨
-   (m.threads.size = 2 ∧ m.threads[1]? = some { spawner := 0, joined := false } ∧
+/-- The threads, over the thread table: `main` alone before its spawn; then `main` and the
+producer, which `main` spawned and did not join yet. -/
+def Threads (Y : ThreadId → X) (ts : Array ThreadRec) : Prop :=
+  ts[0]? = some { spawner := 0, joined := true } ∧
+  ((ts.size = 1 ∧ Y 0 = { ph := .pre } ∧ ∀ u, 1 ≤ u → Y u = {}) ∨
+   (ts.size = 2 ∧ ts[1]? = some { spawner := 0, joined := false } ∧
     (Y 0).ph.isMain ∧ (Y 0).ph ≠ .pre ∧ (Y 1).ph.isProd ∧ ∀ u, 2 ≤ u → Y u = {}))
+
+/-- The threads of a memory (`Threads`). -/
+def Shape (Y : ThreadId → X) (m : Mem) : Prop := Threads Y m.threads
+
+variable {Lo} in
+/-- `io`'s part of the rest has `io`'s bytes … -/
+theorem IoRest.has {r : Res} (h : IoRest Lo r) {x : Nat} (hx : x < Lo.io) :
+    r.heap (0, x) ≠ none := by
+  obtain ⟨A, bs, -, hbs, -, r₁, r₂, -, rfl, h1, -⟩ := h
+  have := (up_bytesAt_some h1 rfl (0, x)).mpr ⟨rfl, by simp [bPtr], by simp [bPtr, hbs]; omega⟩
+  simp only [FHeap.union_apply, ne_eq, Option.or_eq_none_iff, not_and]
+  intro h; exact absurd h this
+
+variable {Lo} in
+/-- … and no other byte. -/
+theorem IoRest.only {r : Res} (h : IoRest Lo r) {l : Zig.Loc} (hl : r.heap l ≠ none) :
+    l.1 = 0 ∧ l.2 < Lo.io := by
+  obtain ⟨A, bs, -, hbs, -, r₁, r₂, -, rfl, h1, h2⟩ := h
+  have e := bauth_eq h2
+  subst e
+  simp only [FHeap.union_apply, ne_eq, Option.or_eq_none_iff, not_and] at hl
+  obtain ⟨hb, -, hlt⟩ := (up_bytesAt_some h1 rfl l).mp fun e => hl e rfl
+  refine ⟨hb, ?_⟩
+  simp only [bPtr, hbs] at hlt
+  simpa using hlt
+
+/-- **The program's own facts** (`FClient`): its threads (`Threads`), and the `io` prefix of the
+`Box` (`IoR`), read-shared, whose bytes the protocol's rest holds. -/
+def Cl : FClient X := .pre Threads 0 Lo.io (IoRest Lo) fun _ hr _ hx => hr.has hx
+
+variable {Lo} in
+/-- The rest holds `io`'s part. -/
+theorem Rest.io {rX : Res} {m : Mem} (h : Rest Lo rX m) :
+    ∃ r, IoRest Lo r ∧ ∀ l fc, r.heap l = some fc → rX.heap l = some fc := by
+  obtain ⟨rIO, hIO, hoff, rfl⟩ := h
+  refine ⟨rIO, hIO, fun l fc hl => ?_⟩
+  have hb : ¬ Lo.BoxW l := fun hb => by rw [hoff l hb] at hl; cases hl
+  simp [FHeap.union_apply, cellsAt_none hb, hl]
+
+variable {Lo} in
+/-- The program's facts, from the threads, the read shares of `io` and the rest. -/
+theorem holds_of {Y : ThreadId → X} {rX : Res} {m : Mem} (shape : Shape Y m)
+    (io : ReadShared (IoR Lo) m) (rest : Rest Lo rX m) : (Cl Lo).Holds Y rX m :=
+  ⟨shape, io, rest.io⟩
 
 /-- The rest of the invariant (module doc). -/
 structure U (G : ThreadId → Gh) (rX : Res) (m : Mem) : Prop where
-  shape : Shape (fun u => (G u).2) m
-  io : ReadShared (IoR Lo) m
+  /-- The program's own facts: the threads and the read shares of `io`. -/
+  cl : (Cl Lo).Holds (fun u => (G u).2) rX m
   rest : Rest Lo rX m
   blk : BlkOk Lo m
   ws : Lo.WS.Ok m
@@ -269,6 +317,14 @@ theorem res_eq {a b : Res} (hh : a.heap = b.heap) (hk : a.know = b.know) (hg : a
   cases a; cases b; simp only at hh hk hg; subst hh hk hg; rfl
 
 variable {Lo}
+
+/-! ## The program's facts in `U` -/
+
+theorem U.shape {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U Lo G rX m) :
+    Shape (fun u => (G u).2) m := hu.cl.thr
+
+theorem U.io {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U Lo G rX m) :
+    ReadShared (IoR Lo) m := hu.cl.sh
 
 /-! ## The state's writes -/
 
@@ -405,9 +461,26 @@ theorem apV : Lo.WV.ApartL (L Lo).toLockWord := .inr (.inl (by have := Lo.ok; si
 theorem box_notL {l : Zig.Loc} (h : Lo.BoxW l) : ¬ (L Lo).In l := fun ⟨_, h2, h3⟩ => by
   have := Lo.ok; obtain ⟨-, h5, -⟩ := h; simp [L, FLock.prod] at h2 h3; omega
 
-/-- The access `e` of the mutex's word is not to `io`. -/
-theorem io_notL {e : FootprintEntry} (h : e.off = (L Lo).o) : ¬ IoR Lo e := fun ⟨_, _, h2⟩ => by
-  have := Lo.ok; simp [L, FLock.prod] at h; omega
+/-- The rest's bytes: the three words' cells, and `io`'s. -/
+theorem Rest.only {rX : Res} {m : Mem} (h : Rest Lo rX m) {l : Zig.Loc} (hl : rX.heap l ≠ none) :
+    Lo.BoxW l ∨ (l.1 = 0 ∧ l.2 < Lo.io) := by
+  obtain ⟨rIO, hIO, -, rfl⟩ := h
+  by_cases hb : Lo.BoxW l
+  · exact .inl hb
+  · refine .inr (hIO.only ?_)
+    simpa [FHeap.union_apply, cellsAt_none hb] using hl
+
+/-- The rest has no byte of the mutex's word. -/
+theorem Rest.notL {rX : Res} {m : Mem} (h : Rest Lo rX m) {l : Zig.Loc} (hl : rX.heap l ≠ none) :
+    ¬ (L Lo).In l := by
+  rcases h.only hl with hb | ⟨-, hio⟩
+  · exact box_notL hb
+  · rintro ⟨-, h2, -⟩; have := Lo.ok; simp [L, FLock.prod] at h2; omega
+
+/-- `io`'s bytes are none of the three words'. -/
+theorem io_box {r : Res} {l : Zig.Loc} (hr : (Cl Lo).Io r) (hb : Lo.BoxW l) : r.heap l = none :=
+  Classical.byContradiction fun h => by
+    have := ((show IoRest Lo r from hr).only h).2; have := hb.2.1; have := Lo.ok; omega
 
 /-- A step of the lock's code keeps the `Box`: it writes at most the mutex's bytes. -/
 theorem BlkOk.lstep {t : ThreadId} {m m' : Mem} (hb : BlkOk Lo m) (hs : (L Lo).Step t m m') :
@@ -431,7 +504,7 @@ at the old places and `reg` for the old registrations. -/
 theorem U.congrHist {G G' : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} (hu : U Lo G rX m)
     (hX : ∀ u, (G' u).2.ph = (G u).2.ph ∧ (G' u).2.c = (G u).2.c ∧ (G' u).2.sz = (G u).2.sz)
     (hhS : Lo.WS.hist m' = Lo.WS.hist m) (hhE : Lo.WE.hist m' = Lo.WE.hist m)
-    (shape : Shape (fun u => (G' u).2) m') (io : ReadShared (IoR Lo) m') (rest : Rest Lo rX' m')
+    (cl : (Cl Lo).Holds (fun u => (G' u).2) rX' m') (rest : Rest Lo rX' m')
     (blk : BlkOk Lo m') (ws : Lo.WS.Ok m') (we : Lo.WE.Ok m') (wv : Lo.WV.Ok m')
     (cinv : (C Lo).Inv (L Lo) G' m') (einv : (E Lo).Inv (L Lo) G' m')
     (hold : (G 1).2.ph = .hl ∨ (G 1).2.ph = .v7 → (G' 1).1.ph = .holds)
@@ -444,7 +517,7 @@ theorem U.congrHist {G G' : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} (hu : U
     (q : ∀ w ∈ m'.waiters, w.2 = (L Lo).key m' ∨ w.2 = Lo.WE.key m' ∨ w.2 = Lo.WV.key m') :
     U Lo G' rX' m' := by
   have hS : (C Lo).S.hist m' = (C Lo).S.hist m := hhS
-  refine ⟨shape, io, rest, blk, ws, we, wv, cinv, einv, by rw [(hX 1).2.1]; exact hu.places,
+  refine ⟨cl, rest, blk, ws, we, wv, cinv, einv, by rw [(hX 1).2.1]; exact hu.places,
     fun h => by rw [(hX 1).1] at h; rw [hhE]; exact hu.ep1 h, by rw [hhE]; exact hu.ep2,
     fun h => (FCond.Sated.congr hS).mpr (hu.epS (by rw [← hhE]; exact h)),
     fun q' n h hq => by
@@ -476,19 +549,13 @@ theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p :
   obtain ⟨hwS, hhS⟩ := hu.ws.lockStep hs apS
   obtain ⟨hwE, hhE⟩ := hu.we.lockStep hs apE
   obtain ⟨hwV, hhV⟩ := hu.wv.lockStep hs apV
-  refine hu.congrHist (fun u => by rw [hX u]; exact ⟨rfl, rfl, rfl⟩) hhS hhE ?_
-    (fun e he hr => ?_) (hu.rest.congr fun l hl => hs.heap (box_notL hl)) (hu.blk.lstep hs)
+  refine hu.congrHist (fun u => by rw [hX u]; exact ⟨rfl, rfl, rfl⟩) hhS hhE
+    (by rw [funext hX]; exact hu.cl.lstep hs fun _ hl => hu.rest.notL hl)
+    (hu.rest.congr fun l hl => hs.heap (box_notL hl)) (hu.blk.lstep hs)
     hwS hwE hwV (hu.cinv.lstep hu.ws hu.we apS apE (weKey_ne Lo m) hok.1 hna (fun _ _ _ => rfl) hs)
     (hu.einv.lstep hu.wv apV (wvKey_ne Lo m) hok.2.1 (fun _ _ _ => rfl) (fun _ _ _ => Iff.rfl)
       (fun _ _ _ => Iff.rfl) hs)
     (fun h1 => ?_) (fun j hj => ?_) (fun h1 => ?_) (fun w hw => ?_)
-  · have : (fun u => (upd G t ((L Lo).set (G t) p h) u).2) = fun u => (G u).2 := funext hX
-    rw [this]; unfold Shape at *; rw [hs.threads]; exact hu.shape
-  · rcases hs.fp e he with h' | ⟨-, ho', -⟩
-    · rcases hu.io e h' hr with ⟨hk, h''⟩ | h''
-      · exact .inl ⟨hk, hs.someLe h''⟩
-      · exact .inr (hs.allLe h'')
-    · exact absurd hr (io_notL ho')
   · by_cases ht : t = 1
     · subst ht; rcases h1 with h1 | h1
       · exact absurd h1 hok.2.2.1
@@ -518,7 +585,8 @@ theorem atStop {G : ThreadId → Gh} {rX : Res} {m : Mem} (t : ThreadId) (hu : U
   have wordOk : ∀ W : Word 32 4, W.Ok m → W.Ok { m with current := t } :=
     fun _ hw => (hw.fields_native (m' := { m with current := t })
       rfl rfl rfl rfl (fun _ => VClock.le_refl _)).1
-  ⟨hu.shape, hu.io, hu.rest, hu.blk, wordOk _ hu.ws, wordOk _ hu.we, wordOk _ hu.wv,
+  ⟨hu.cl.same rfl (fun _ => VClock.le_refl _) rfl, hu.rest, hu.blk, wordOk _ hu.ws,
+    wordOk _ hu.we, wordOk _ hu.wv,
     hu.cinv.stay (m' := { m with current := t }) rfl rfl rfl rfl rfl (fun _ hw _ => hw)
       (fun _ _ h => h) (Nat.le_refl _) (fun _ => VClock.le_refl _),
     hu.einv.frame (t := t) (fun _ _ => rfl) rfl rfl rfl rfl (fun _ => VClock.le_refl _)
@@ -582,8 +650,15 @@ theorem U_frame_native {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : Th
   have hkV : Lo.WV.key m' = Lo.WV.key m := hu.wv.key_of_addrs hs.addrs
   obtain ⟨_, hb₀, -⟩ := hu.blk
   have hkL : (L Lo).key m' = (L Lo).key m := (L Lo).key_of_addrs hs.addrs hb₀
-  refine hu.congrHist (fun u => by rw [hX' u]; exact ⟨rfl, rfl, rfl⟩) hhS hhE ?_
-    (fun e he hr => ?_) hrest hbk hwS hwE hwV
+  -- the program's facts at the old rest (the step reads none of `io`'s bytes), then at the new
+  have hcl := hu.cl.fstep (Lk := Lo.BoxW) (rX' := rX) (fun _ _ => io_box) hs
+    (fun l hl hb => ⟨by
+      obtain ⟨b, x⟩ := l
+      rcases hu.rest.only hl with h | ⟨h0, hx⟩
+      · exact absurd h hb
+      · simp only at h0; subst h0; exact hio x hx, rfl⟩) fun _ _ _ h => h
+  refine hu.congrHist (fun u => by rw [hX' u]; exact ⟨rfl, rfl, rfl⟩) hhS hhE
+    (by rw [funext hX']; exact holds_of hcl.thr hcl.sh hrest) hrest hbk hwS hwE hwV
     (hu.cinv.other (t := t) (g' := g) (congrArg (·.c) hX) (fun _ => hph)
       (fun _ h => by show g.1.ph = _; rw [hph]; exact h)
       (fun h => by show g.2.ph = .sg; rw [hX]; exact h) hhS hhE hkE hkL (by rw [hs.waiters])
@@ -597,18 +672,6 @@ theorem U_frame_native {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : Th
         (fun i l hl => (hu.wv.loc i l hl).1)) hkV hkL)
     (fun h1 => by rw [hP']; exact hu.hold h1) (fun j hj => ?_) (fun h1 => ?_)
     (fun w hw => by rw [hs.waiters] at hw; rw [hkL, hkE, hkV]; exact hu.q w hw)
-  · have : (fun u => (upd G t g u).2) = fun u => (G u).2 := funext hX'
-    rw [this]; unfold Shape at *; rw [hs.threads]; exact hu.shape
-  · rcases hs.fp e he with ⟨e₀, he₀, hn⟩ | ⟨-, hnt, -⟩
-    · obtain ⟨-, hb, hk, ho, hl, hc⟩ := hn
-      rcases hu.io e₀ he₀ ⟨hb.symm.trans hr.1, by have := hr.2.1; omega,
-        by have := hr.2.2; omega⟩ with ⟨hk', h''⟩ | h''
-      · exact .inl ⟨hk.trans hk', Conc.someLe_mono hs.threads (fun u _ => hs.clock u)
-          (LockWord.someLe_le hc h'')⟩
-      · exact .inr (Conc.allLe_mono hs.threads (fun u _ => hs.clock u)
-          fun u hu => VClock.le_trans hc (h'' u hu))
-    · refine absurd ⟨e.off, Nat.le_refl _, by have := hr.2.1; omega, ?_⟩ hnt.empty
-      rw [hr.1]; exact hio _ hr.2.2
   · rw [hP']
     rcases hu.reg j hj with h' | ⟨hlk, h'⟩
     · exact .inl (VClock.le_trans h' (hs.clock 1))
@@ -1038,7 +1101,16 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
         refine .inr ⟨rfl, hcw t ?_⟩
         have : (G' t).2.c = _ := h1
         rw [this]; rfl
-  refine ⟨?_, fun e he hr => ?_, Rest.step (three_box hW3) hu.rest rfl hY fun l _ hw => hcells l hw,
+  have hrest : Rest Lo (rsum (W.cellsR m') rY) m' :=
+    Rest.step (three_box hW3) hu.rest rfl hY fun l _ hw => hcells l hw
+  -- the step's accesses are at the condition's words: the read shares of `io` stay
+  have hcl := hu.cl.keep (Lk := Lo.BoxW) (rX' := rsum (W.cellsR m) rY) (fun _ _ => io_box) hth
+    hclk
+    (fun e he => (hfp e he).imp (fun h' => ⟨e, h', .refl e⟩) fun ⟨_, ho⟩ x h1 _ h3 =>
+      (hu.rest.only h3).resolve_right fun h => by
+        have hx : x < Lo.io := h.2; have := Lo.ok; omega)
+    fun _ _ _ h => h
+  refine ⟨holds_of ?_ hcl.sh hrest, hrest,
     hblk hu.blk, hok3 _ (.inl rfl) hu.ws, hok3 _ (.inr (.inl rfl)) hu.we,
     hok3 _ (.inr (.inr rfl)) hu.wv, hI, ?_, ?_, fun h1 => ?_, ?_, fun h2 => ?_,
     fun q' n h' hq' => ?_, fun h0 => ?_, fun h1 => ?_, fun j hj => ?_, fun h0 => ?_,
@@ -1055,12 +1127,6 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
           rcases hfr with h'' | h'' <;> rw [h''] at this <;> cases this
       rw [hXt, hp, ← hc]
     · rw [hG u e]
-  · -- io
-    rcases hfp e he with h' | ⟨hb, ho⟩
-    · rcases hu.io e h' hr with ⟨hk, h''⟩ | h''
-      · exact .inl ⟨hk, Conc.someLe_mono hth (fun u _ => hclk u) h''⟩
-      · exact .inr (Conc.allLe_mono hth (fun u _ => hclk u) h'')
-    · have := Lo.ok; have := hr.2.2; omega
   · -- the event's invariant
     refine hu.einv.other (fun u hu => hG u hu) (hph t).2.1 (fun hne => ?_) hV (fun w hw => ?_)
       hclk (Nat.le_of_eq (by rw [hth])) (fun h' => by show (_ = _ ∨ _ = _); rw [(hph t).1]; exact h')
@@ -1348,8 +1414,17 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     · exact .inl h'
     · have h1 := (hI.q _ hw hkV.symm).1
       rw [hEt] at h1; exact .inr ⟨rfl, h1⟩
-  refine hu.congrHist (fun u => ⟨(hph u).1, (hph u).2, hsz u⟩) hS hE ?_ (fun e he hr => ?_)
-    (Rest.step (fun _ => Lo.wv_box) hu.rest rfl hY fun l _ hw => hcells l hw)
+  have hrest : Rest Lo (rsum ((E Lo).W.cellsR m') rY) m' :=
+    Rest.step (fun _ => Lo.wv_box) hu.rest rfl hY fun l _ hw => hcells l hw
+  -- the step's accesses are at the event's word: the read shares of `io` stay
+  have hcl := hu.cl.keep (Lk := Lo.BoxW) (rX' := rsum ((E Lo).W.cellsR m) rY) (fun _ _ => io_box)
+    hth hclk
+    (fun e he => (hfp e he).imp (fun h' => ⟨e, h', .refl e⟩) fun ⟨_, ho⟩ x h1 _ h3 =>
+      (hu.rest.only h3).resolve_right fun h => by
+        have hx : x < Lo.io := h.2; have := Lo.ok; omega)
+    fun _ _ _ h => h
+  refine hu.congrHist (fun u => ⟨(hph u).1, (hph u).2, hsz u⟩) hS hE
+    (holds_of ?_ hcl.sh hrest) hrest
     (hblk hu.blk) (hok3 _ (.inl rfl) hu.ws) (hok3 _ (.inr (.inl rfl)) hu.we)
     (hok3 _ (.inr (.inr rfl)) hu.wv) ?_ hI (fun h1 => ?_) (fun j hj => ?_) (fun h1 => ?_)
     (fun w hw => ?_)
@@ -1372,12 +1447,6 @@ theorem estep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
       show (upd G u _ u).2 = (G u).2
       rw [hXt, hp, ← he]
     · rw [hG u e]
-  · -- io
-    rcases hfp e he with h' | ⟨hb, ho⟩
-    · rcases hu.io e h' hr with ⟨hk, h''⟩ | h''
-      · exact .inl ⟨hk, Conc.someLe_mono hth (fun u _ => hclk u) h''⟩
-      · exact .inr (Conc.allLe_mono hth (fun u _ => hclk u) h'')
-    · have := Lo.ok; have := hr.2.2; omega
   · -- the condition's invariant
     refine hu.cinv.other (t := t) rfl (fun hb => ?_)
       (fun hr ha => absurd ha (hnaw fun hc => by
