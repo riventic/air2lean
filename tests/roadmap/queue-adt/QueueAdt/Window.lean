@@ -55,18 +55,18 @@ theorem window_push {items : List α} {head n n' i : Nat} (v : α) (hh : head < 
   · have h1 : j < n + 1 := by omega
     by_cases hw : head + j < items.length
     · have hne : ¬ i = head + j := by omega
-      simp [hj, h1, hw, List.getElem?_set, hne]
+      simp [hj, h1, hw, hne]
     · have hne : ¬ i = head + j - items.length := by omega
-      simp [hj, h1, hw, List.getElem?_set, hne]
+      simp [hj, h1, hw, hne]
   · by_cases hjn : j = n
     · subst hjn
       have h1 : j < j + 1 := by omega
       by_cases hw : head + j < items.length
       · have he : i = head + j := hi1 hw
         subst he
-        simp [h1, hw, List.getElem?_set]
+        simp [h1, hw]
       · have he : head + j - items.length = i := by omega
-        simp [h1, hw, he, hi, List.getElem?_set]
+        simp [h1, hw, he, hi]
     · have h1 : ¬ j < n + 1 := by omega
       have hnone : [v][j - n]? = none := List.getElem?_eq_none (by show 1 ≤ j - n; omega)
       simp [hj, h1, hnone]

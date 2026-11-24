@@ -178,6 +178,9 @@ FIXTURES = [
      ["--namespace", "Nested", "--prefix", "nested."], "exact"),
     ("tests/roadmap/loop-tactics/counted/Counted/Gen.lean", "tests/roadmap/loop-tactics/counted/air",
      ["--namespace", "Counted", "--prefix", "counted."], "exact"),
+    # P04/P06: the ring-buffer queue (0.17.1).
+    ("tests/roadmap/queue-adt/QueueAdt/Gen.lean", "tests/roadmap/queue-adt/air",
+     ["--namespace", "QueueAdt", "--prefix", "queue."], "exact"),
     ("tests/roadmap/thread-locals/ThreadLocals/Gen.lean", "tests/roadmap/thread-locals/air/0.16.0",
      ["--namespace", "ThreadLocals", "--prefix", "thread_locals."], "exact"),
     ("tests/roadmap/vector-layouts/Lanes/Gen.lean", "tests/roadmap/vector-layouts/air/0.16.0",

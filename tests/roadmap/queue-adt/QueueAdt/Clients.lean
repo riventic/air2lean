@@ -51,13 +51,31 @@ variable (q : Ptr) (C : Nat) (xs ys : List (BitVec 32)) (vs : Slice)
 /-- The invariant of `pushAll`'s loop with `n` items left: the first `s.n` items of `ys` are
 pushed. -/
 def pushInv (s : pushAllLocals) (n : Nat) : FAssn :=
-  ⟪s.n.toNat + n = ys.length⟫ ⋆ (S.Rep q C (xs ++ ys.take s.n.toNat) ⋆ up (arr vs.ptr ys))
+  ⟪n = ys.length - s.n.toNat ∧ s.n.toNat ≤ ys.length⟫ ⋆
+    (S.Rep q C (xs ++ ys.take s.n.toNat) ⋆ up (arr vs.ptr ys))
 
 /-- The loop's exit: every item is pushed, and the counter is the slice's length. -/
 def pushPost (r : pushAllExit × pushAllLocals) : FAssn :=
   ⟪r.1 = .br4 ∧ r.2.n = vs.len⟫ ⋆ (S.Rep q C (xs ++ ys) ⋆ up (arr vs.ptr ys))
 
 attribute [local fsym_arith] List.length_take
+
+/-- A repetition's update: the pushed item `ys[k]` extends the pushed prefix of `ys`. -/
+theorem pushed_take_upd {k k' : Nat} (hk : k < ys.length) (hk' : k' = k + 1) :
+    EUpd (S.Rep q C (xs ++ ys.take k ++ [ys[k]])) (S.Rep q C (xs ++ ys.take k')) :=
+  EUpd.of_imp fun _ h => by
+    have e : xs ++ ys.take k ++ [ys[k]] = xs ++ ys.take k' := by
+      subst hk'
+      rw [List.append_assoc, List.take_append_getElem hk]
+    rw [← e]
+    exact h
+
+/-- The exit's update: the prefix of all items is `ys`. -/
+theorem pushed_all_upd {k : Nat} (hk : ys.length ≤ k) :
+    EUpd (S.Rep q C (xs ++ ys.take k)) (S.Rep q C (xs ++ ys)) :=
+  EUpd.of_imp fun _ h => by
+    rw [List.take_of_length_le hk] at h
+    exact h
 
 /-- One run of the loop body: one credit, one receipt, one item pushed or the exit. -/
 theorem pushAll_step (hlen : vs.len.toNat = ys.length) (hroom : xs.length + ys.length ≤ C)
@@ -66,7 +84,7 @@ theorem pushAll_step (hlen : vs.len.toNat = ys.length) (hroom : xs.length + ys.l
       (fun r => floopExact pushAll.again5 (pushInv S q C xs ys vs) (pushPost S q C xs ys vs) n r ⋆
         spent 1) := by
   unfold pushAll.loop5 pushInv
-  fsym [S.push_spec]
+  fsym [S.push_spec, pushed_take_upd S q C xs ys, pushed_all_upd S q C xs ys]
 
 /-- **The generated loop of `pushAll` with its exact step count**: with room for every item it
 exits after `ys.length + 1` body runs (one per item and the final test). -/
@@ -93,5 +111,37 @@ theorem pushAll_exact (hlen : vs.len.toNat = ys.length) (hroom : xs.length + ys.
         spent (ys.length + 1)) := by
   unfold pushAll
   fsym [pushAll_loop_exact S q C xs ys vs hlen hroom]
+
+/-- `pushAll` in the plain mode (no meter), from the cost statement. -/
+theorem pushAll_total (hlen : vs.len.toNat = ys.length) (hroom : xs.length + ys.length ≤ C) :
+    FTotalTriple ((S.Rep q C xs ⋆ up (arr vs.ptr ys)) ⋆ plain) (pushAll q vs)
+      (fun r => ((⟪r = vs.len⟫ ⋆ (S.Rep q C (xs ++ ys) ⋆ up (arr vs.ptr ys))) ⋆
+        spent (ys.length + 1)) ⋆ plain) :=
+  (pushAll_exact S q C xs ys vs hlen hroom).of_credits_plain
+
+/-- **`pushAll` runs exactly `ys.length + 1` steps under the capacity premise**: from any
+credit-free start `m` that holds the queue and the slice (`r`) and a frame `rF`, it returns the
+slice's length after exactly that many steps, and the live bytes of its final memory are the
+frame's and a part `r'` that holds the queue with every item pushed. -/
+theorem pushAll_steps (hlen : vs.len.toNat = ys.length) (hroom : xs.length + ys.length ≤ C)
+    {m : Mem} {r rF : Res} (hh : Holds m r rF) (hl : (S.Rep q C xs ⋆ up (arr vs.ptr ys)) r)
+    (hseq : m.FSeq) (hc : CreditFree r rF) :
+    ∃ m', (pushAll q vs).run m = pure (vs.len, m') ∧ m'.ticks = m.ticks + (ys.length + 1) ∧
+      ∃ r', FHeap.Disjoint r'.heap rF.heap ∧
+        SMatch m' (r'.heap ∪ rF.heap) (r'.gh.add rF.gh).share ∧
+        (S.Rep q C (xs ++ ys) ⋆ up (arr vs.ptr ys)) r' ∧ m'.FSeq := by
+  obtain ⟨v, m', hr, ht, r', hd', hm, hq, hs'⟩ :=
+    (pushAll_exact S q C xs ys vs hlen hroom).ticks_eq_post hh hl hseq hc
+  obtain ⟨rfl, hl'⟩ := sep_lift.mp hq
+  exact ⟨m', hr, ht, r', hd', hm, hl', hs'⟩
+
+/-- **The bound of `pushAll` is tight**: from any credit-free start that holds the queue and the
+slice, `ys.length` credits do not pay it, whatever the postcondition. -/
+theorem pushAll_not_within (hlen : vs.len.toNat = ys.length) (hroom : xs.length + ys.length ≤ C)
+    {m : Mem} {r rF : Res} (hh : Holds m r rF) (hl : (S.Rep q C xs ⋆ up (arr vs.ptr ys)) r)
+    (hseq : m.FSeq) (hc : CreditFree r rF) (Q : BitVec 64 → FAssn) :
+    ¬ FTotalTriple ((S.Rep q C xs ⋆ up (arr vs.ptr ys)) ⋆ credits ys.length) (pushAll q vs) Q :=
+  FTotalTriple.not_fewer_credits (pushAll_exact S q C xs ys vs hlen hroom) (Nat.lt_succ_self _)
+    hh hl hseq hc
 
 end QueueAdt
