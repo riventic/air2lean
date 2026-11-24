@@ -79,7 +79,7 @@
    "title": "ruleConcl? recognize generic FLogic.T L … rules (FAllocSpec generic in partial/total)",
    "status": "open",
    "requester": "coordinator for D2/allocator",
-   "progress": "open",
+   "progress": "STILL OPEN, reproduced 2026-11-24 (triage): a caller's rule whose conclusion is written `L.T P c Q` is not a rule for `fsym`. `ruleConcl?` (ZigLean/Sep/Full/Auto.lean) reads a conclusion only by the constants `FTotalTriple`, `FTriple`, `FTTotalTriple`, `FTTriple`, `CTriple`; `tryRule` then traces `rule …: not a triple` and the walk stops with `fsym: no rule for the command c`. Minimal repro, each rejected: (1) `(L : FLogic) (h : L.T P c fun r => ⟪r = 0⟫ ⋆ P) ⊢ L.T P (do let r ← c; pure (r + 1)) fun r => ⟪r = 1⟫ ⋆ P := by fsym [h]`; (2) the same with `h : ∀ L : FLogic, L.T P c …` against an `FTotalTriple` or `FTriple` goal; (3) `fsym [h FLogic.total]`, although its type is definitionally the `FTotalTriple` (the goal's own view `view` restates the other way, `FTotalTriple` as `FLogic.total.T`). So a field of `FAllocSpec L vt ctx I` cannot be passed as it is; the clients restate it: tests/roadmap/alloc-fba/AllocFba/Wrappers.lean takes per-entry hypotheses `hA`/`hM`/`hF : … → FTotalTriple …` and its `…_of` corollaries hand them `h.alloc …` by definitional equality; the concurrent clients use `CAllocSpec` (`CTriple` fields), which is read. Needed: `ruleConcl?` also reads `FLogic.T L α P c Q` and `TLogic.T L α P c Q` (arity 5), the kind from `L` (`FLogic.total`/`FLogic.partial`, or unified with the goal's logic when `L` is a variable). A change of about fifteen lines inside the engine, not a library rule, so it waits for the coordinator's approval (no plan was recorded here).",
    "request": "ruleConcl? recognize generic `FLogic.T L …` rules (FAllocSpec generic in partial/total)",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -118,9 +118,9 @@
   {
    "id": "7",
    "title": "document/plan rule preconditions ⟪φ⟫ from context facts",
-   "status": "open",
+   "status": "closed",
    "requester": "one-logic-tactics",
-   "progress": "open",
+   "progress": "CLOSED (triage 2026-11-24): `fsym` plans a pure fact of a rule's precondition as a side goal of the plan: from a hypothesis of the context, by arithmetic from the context's facts, and it fails closed without it. Regressions: tests/roadmap/sep-auto/SepAuto/Walk.lean `rule_fact_ctx`, `rule_fact_arith` and the rejected control after them (also Updates.lean, the caller-contract examples with `hφ`). Documented in docs/proof-automation.md (the bullet on a rule's planned precondition).",
    "request": "document/plan rule preconditions ⟪φ⟫ from context facts",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -264,7 +264,7 @@
    "title": "optPayload",
    "status": "open",
    "requester": "one-logic-tactics (Lists.sum)",
-   "progress": "open",
+   "progress": "PARTLY FIXED (triage 2026-11-24). The request's own case works: with the fact in the precondition (`⟪s.cur = some p⟫ ⋆ pts p 8 v ⋆ pts (p.add 8) 8 w`), `optPayload s.cur`, `ptrProject x (·.add 8)` and the load are walked by bare `fsym` (regression tests/roadmap/sep-auto/SepAuto/Facts.lean `payload_of_fact`). LEFT: the same fact as a hypothesis of the context (`hs : s.cur = some p`, precondition without it). After the step the walk rewrites it to `hs : some x = some p` and leaves it so; `fsym` stops with `no rule for the command ptrProject x fun x => x.add 8` with the precondition `up (pts p 8 v) ⋆ up (pts (p.add 8) 8 w)` (kept as an expected failure next to the regression in Facts.lean). Needed: a hypothesis that a substitution rewrites into a constructor equation is destructed like a new fact (`destruct`: injection, then the substitution). Engine change, not a library rule; no proof in the tree carries a workaround for it (state the fact in the precondition).",
    "request": "optPayload: after `optPayload_step` the fact `s.p = some x` plus precondition fact `s.p = some p` give `some x = some p`, which is not injected/substituted; a later `ptrProject x (·.add 8)` then finds no provider (facts are about `p`). Workaround: state the step on locals `⟨t, some p⟩`. Request: Option.some injectivity (`some a = some b → a = b`, subst) in fact normalisation",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -294,9 +294,9 @@
   {
    "id": "16",
    "title": "Keep path conditions",
-   "status": "open",
+   "status": "closed",
    "requester": "one-logic-vc",
-   "progress": "open",
+   "progress": "Closed as not planned (maintainer decision 2026-11-24, D7): presentation only, no proof waits on it. Behaviour unchanged (checked 2026-11-24): `FTotalTriple emp (if b then (if n = 0 then throw .panic else pure ()) else pure ()) (fun _ => emp)` leaves, after `fsym`, `case inl.inl ⊢ FLogic.total.T emp (throw Error.panic) fun x => emp` with an empty context: `b` and `n` are substituted and their equations dropped, so the residual names its branch only by the case tag. The origin of a residual goal is in the report instead (`set_option fsym.report true`, docs/vcs.md: `reachability`, `panic_not_refuted`, with the command). A presentation wish of the retired one-logic-vc lane with no proof waiting on it; an engine change (keep the substituted equations as hypotheses). Candidate to close as not planned: coordinator's decision.",
    "request": "(nice) Keep path conditions: an `if b` on a `Bool` variable is split and `destruct` substitutes `b`, so a VC under it (reachable panic `⊢ False`) shows no `b = true`",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -304,9 +304,9 @@
   {
    "id": "17",
    "title": "An undecided side condition φ is split by byCases",
-   "status": "open",
+   "status": "closed",
    "requester": "one-logic-vc",
-   "progress": "open",
+   "progress": "Closed as not planned (maintainer decision 2026-11-24, D7): presentation only, no proof waits on it. Behaviour unchanged (checked 2026-11-24): a checked `add` of a loaded word and an argument with no bound leaves `case h` with `hc : ¬e.toNat + n.toNat < 2 ^ 64 ⊢ e.toNat + n.toNat < 2 ^ 64` (`walk`'s split on the undecided side condition, `g.byCases φ` in ZigLean/Sep/Full/Auto.lean, then the negative branch's rule premise). The obligation is the right one, with a redundant hypothesis; the positive branch is walked once, so there is one walk. A presentation wish of the retired one-logic-vc lane with no proof waiting on it; an engine change (clear `hc` from the residual, or a mode without the split). Candidate to close as not planned: coordinator's decision.",
    "request": "(nice) An undecided side condition `φ` is split by `byCases`; the negative case leaves `hc : ¬φ ⊢ φ` (equivalent to `⊢ φ`). A mode that leaves `φ` unsplit gives one obligation and one walk",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -314,9 +314,9 @@
   {
    "id": "18",
    "title": "Binder names",
-   "status": "open",
+   "status": "closed",
    "requester": "one-logic-vc",
-   "progress": "open",
+   "progress": "closed 2026-11-24, no longer reproduces (the fixing commit was not identified): a command's result has the continuation's binder name in a residual goal and the name is accessible. Regression SepAuto/Walk.lean `result_name`: after `let e ← load …; let e' ← add e n`, the side goal that `fsym` leaves is closed by `exact h e`. The facts of an atom keep the walk's names (`right✝`, `w✝`, `h✝`); the request did not ask for those.",
    "request": "(nice) Binder names: command results are `x✝` in residual goals; use the generated local's name (`i2`, …) of the continuation lambda",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -357,20 +357,19 @@
    "title": "fsym_arith: disjunctive goals, user Nat functions on constructors, constructor injectivity",
    "status": "open",
    "requester": "one-logic-tactics (dispatch, PR #222)",
-   "progress": "open",
+   "progress": "all three parts are fixed in the engine (checked 2026-11-24, regressions in SepAuto/Arith.lean: (a) `or_goal`, `or_goal_imp`; (b) `rank_of_ctor`, an untagged user function on a constructor, by the `unfoldUserValue` simproc of `fsym_arith`; (c) `ctor_inj`, `ctor_inj_post`). `attribute [local fsym_arith] rank flatRank` is deleted from DispatchTemplate/Template.lean, which builds without it. Open only for the last site: `attribute [local fsym_arith] rank` in TokenizerProof.lean, which is elaborated against a fresh Zig 0.16.0 export (tests/roadmap/dispatch-templates/check.sh, not run in the triage). The measure `B * data + rank` of `loop_dispatch` stays: it is the rule's statement, not glue.",
    "request": "fsym_arith: (a) disjunctive goals are not proved (`n < n ∨ 1 < 2`, `m ≤ n → m < n ∨ m = n ∧ 1 < 2`): `omega` handles them, the pipeline does not; (b) a user Nat function on a constructor (`rank Phase.count`, a `match` on a constructor) is not evaluated unless tagged `attribute [local fsym_arith] rank`; (c) `machExit.ret acc = machExit.ret N` with `acc = N` in context is not closed (constructor injectivity in the return entailment; same family as #13). Workarounds in PR #222: `loop_dispatch` takes the measure `B * data + rank` (no Prod.Lex disjunction), local fsym_arith tags, unfold the invariant before `cases`",
    "workaround_sites": [
-    "tests/roadmap/dispatch-templates/DispatchTemplate/Template.lean",
     "tests/roadmap/dispatch-templates/TokenizerProof.lean"
    ],
-   "deletion_plan": "delete the local `attribute [local fsym_arith] rank` lines once fsym evaluates a user Nat function on a constructor (evalUserCtor covers non-Nat results only); run the two fixtures without them."
+   "deletion_plan": "delete `attribute [local fsym_arith] rank` from TokenizerProof.lean, run tests/roadmap/dispatch-templates/check.sh (Zig 0.16.0 compiler pair) and close the row."
   },
   {
    "id": "21a",
    "title": "a pure generated helper with literal args (mem_Alignment_fromByteUnits 8) is unfolded and sticks at enumOf...",
    "status": "open",
    "requester": "alloc-param (lists destroy)",
-   "progress": "open",
+   "progress": "open, reproduced 2026-11-24: `destroy_grant` (Proofs/Lists/Alloc.lean) without `simp only [fromByteUnits_8]` stops at `ConcM.liftMem (StateT.lift (enumOf (mem_Alignment.ofInt? (val false x))))` with `x : BitVec 6` and the fact `x.toNat = (BitVec.ofInt 6 (val false 3#7)).toNat`: the helper is unfolded, its `Zig.intCast false false 6 (Zig.ctz 7 8)` becomes an opaque result with an equation between `toNat`s of closed words, and `enumOf` of it does not evaluate. The second half of the request is fixed: a caller's rule about `StateT.lift (f 8)` applies (probe: `fsym [h]` with `h : FTotalTriple P (StateT.lift (f 8)) …` walks `do let r ← StateT.lift (f 8); pure (r + 1)`). Missing, an engine or simproc-set change (needs a decision, not a client lemma): a result whose equation is `x.toNat = <closed word>.toNat` is substituted by the literal (`x = 3#6`), or `fsym_norm` evaluates casts and `ctz` of closed words before the step.",
    "request": "a pure generated helper with literal args (`mem_Alignment_fromByteUnits 8`) is unfolded and sticks at `enumOf (E.ofInt? (val false x))` with x opaque (fact `x.toNat = 3`); either evaluate pure helpers on literals, or use the `x.toNat` fact to reduce `val false x`; also: a user step rule `FTotalTriple P (StateT.lift (f 8)) …` logs \"command unified\" but is not applied",
    "workaround_sites": [
     "Proofs/Lists/Append.lean",
@@ -433,14 +432,12 @@
   {
    "id": "26",
    "title": "Side goal from an equal hypothesis up to projection and proof irrelevance",
-   "status": "open",
+   "status": "closed",
    "requester": "mig-tests",
-   "progress": "open",
+   "progress": "closed 2026-11-24, fixed in the engine (a side goal is closed from a hypothesis equal up to reduction, `assumptionEq`, docs/proof-automation.md): the four `<;> exact hd` after `cases u <;> fsym` are deleted from TryPointers/AliasProofs.lean (`writeAlias`, `cleanup` twice, `coldPayload`), which elaborates as tests/roadmap/try-pointers/aliases/check.sh elaborates it (against the committed TryPointers/Gen.lean).",
    "request": "(was the mig-tests \"#21\" row below the NEXT list; renumbered, the ledger already had #21) Side goal not closed from an equal hypothesis up to structure projection + proof irrelevance: goal `{ names := #[\"Bad\",\"Other\"], unique := TryPointers.cleanup._proof_1, .. }.names.contains e = true` (domain literal of generated code), hypothesis `Option.all domain.names.contains (errTagOf (.error e)) = true` (or `domain.names.contains e = true` with the test's own `domain` abbrev: other aux proofs). fsym leaves it; `exact h` closes it (defeq). Request: reduce `{..}.field` projections of structure instances in fsym_arith/side goals, and try `assumption` up to defeq (default transparency, proof irrelevance) — same family as #4. Workaround: `cases u <;> fsym <;> exact hd` (tests/roadmap/try-pointers/TryPointers/AliasProofs.lean)",
-   "workaround_sites": [
-    "tests/roadmap/try-pointers/TryPointers/AliasProofs.lean"
-   ],
-   "deletion_plan": "drop `<;> exact hd` from the `cases u <;> fsym` steps; if fsym closes the side goal up to structure projection and proof irrelevance, delete them and close the row.",
+   "workaround_sites": [],
+   "deletion_plan": "",
    "note": "agent 3 reported the arith side-goal part handled by PR #250; the workaround is still in the tree"
   },
   {
@@ -448,7 +445,7 @@
    "title": "Planning a user rule whose precondition holds an if-guarded grant (I.owned 0 s.ptr bs = if bs.size = 0 then...",
    "status": "open",
    "requester": "one-logic-alloc",
-   "progress": "open",
+   "progress": "open, obstruction changed (checked 2026-11-24): `realloc_spec` as `fsym [fun ra => reallocAdvanced_spec ctx vtp I φ s n ra bs hlen hfit hA hM hF]` now fails with `AllocFba/Wrappers.lean:155:2: unknown free variable _fvar.…` (an elaboration error of the whole `fsym` call, no residual goal): the caller's rule term is a `fun` over hypotheses that the walk replaces (the opened state's `s.ptr.block = some b`, substitutions), and the term keeps a free variable of the old context; `refreshUser` does not map a term with a binder through this replacement. The planning failure of the request (the `if`-guarded grant against the opened state) is behind it and not re-checked. Engine fix in `refreshUser` (same family as the closed #current-thread-subst).",
    "request": "Planning a user rule whose precondition holds an `if`-guarded grant (`I.owned 0 s.ptr bs` = `if bs.size = 0 then emp else I.granted …`) against the same, already-normalized state: \"state if: split on bs.size = 0\", then \"entailment: the state has no atom for `bshare ?b q (s.ptr.off.toNat + bs.size) I.tag`\" → \"no plan for its precondition\" (the `pshare`'s block `?b` is not fixed by the fact `s.ptr.block = some b` of the opened state). Repro: `fsym [fun ra => reallocAdvanced_spec ctx vtp I s n ra bs hlen hfit hA hM hF]` on `mem_Allocator_reallocAdvanced… >>= pure` with pre `I.own ⋆ (I.owned 0 s.ptr bs ⋆ vtR …)` (tests/roadmap/alloc-fba Wrappers, branch codex/one-logic-alloc-w10). Workaround: realloc_spec walks the inlined reallocAdvanced with the same rules (no composition)",
    "workaround_sites": [
     "tests/roadmap/alloc-fba/AllocFba/Wrappers.lean"
@@ -740,9 +737,9 @@
   {
    "id": "55",
    "title": "Planning and facts whnf-evaluate concrete byte arrays",
-   "status": "open",
+   "status": "closed",
    "requester": "arena (codex/arena-reset)",
-   "progress": "open; a synthetic repro does NOT reproduce (agent 14 /tmp/fsym-eng/f14/E55.lean: store/load next to a region over `Enc.encode (some q)`, 10 s). Needs the arena's own case: scratch arena-reset6/L78.lean loop78_step without the `generalize hbs` (needs that file's Reset defs, not on arena-reset)",
+   "progress": "closed 2026-11-24, not reproducible and no site left: the arena's `reset` is merged without the `cb` variable or the `generalize hbs` (no such step in tests/roadmap/alloc-arena), pair facts no longer evaluate the bytes (Auto.lean: the struct's bytes stay behind their `abbrev`), regression SepAuto/Facts.lean `second_field_bytes_fact`. Earlier note: a synthetic repro does NOT reproduce (agent 14 /tmp/fsym-eng/f14/E55.lean: store/load next to a region over `Enc.encode (some q)`, 10 s). Needs the arena's own case: scratch arena-reset6/L78.lean loop78_step without the `generalize hbs` (needs that file's Reset defs, not on arena-reset)",
    "request": "**Planning and facts whnf-evaluate concrete byte arrays**: a region over `Enc.encode (some p)` or over a user definition of bytes (`Child.bytes = Enc.fields 16 [...]`) next to other regions: `whnf` timeout (4M heartbeats; `Enc.encode`/`Array.map` unfolded ~4M times) in the pair facts/joins. Needed: keep byte arrays opaque (sizes by `LawfulEnc.size_encode`/`fsym_arith` lemmas, never by evaluation). Workaround (arena `reset`, arena-reset-6, scratch arena-reset6/L78.lean): the struct's child bytes are a variable `cb` with `Enc.decode cb = …` and `cb.size = 16` hypotheses (`Cm`), a node's `next` bytes generalized with a decode fact before `fsym`.",
    "workaround_sites": [],
    "deletion_plan": "",
@@ -761,9 +758,9 @@
   {
    "id": "57",
    "title": "Rule order for a store into an owned atomic word",
-   "status": "open",
+   "status": "closed",
    "requester": "arena",
-   "progress": "NOT REPRODUCED on fsym-wp (agent 14 /tmp/fsym-eng/f14/T57.lean: word after/before regions over `Enc.encode`, plain fsym, <1 s); likely fixed by #42 refutedSide. Arena lane: drop the workaround and report",
+   "progress": "closed 2026-11-24: no proof passes `@FTotalTriple.aptsE_store` / `wpts_store` to `fsym` any more (the arena lane dropped it), regressions SepAuto/AtomicPlain.lean `store_beside_aptsE`, `store_beside_wpts`, `store_beside_packed`, `store_beside_bytes`. Earlier note: NOT REPRODUCED on fsym-wp (agent 14 /tmp/fsym-eng/f14/T57.lean: word after/before regions over `Enc.encode`, plain fsym, <1 s); likely fixed by #42 refutedSide. Arena lane: drop the workaround and report",
    "request": "**Rule order for a store into an owned atomic word**: `regionStoreAdd` is planned before `aptsE_store`/`wpts_store`; its planning joins neighbouring regions (one over `Enc.encode none`) and runs into #55's timeout. Needed: try the word rules of an atom that owns the target first (or #55). Workaround: `fsym [@FTotalTriple.aptsE_store, @FTotalTriple.wpts_store, …]`.",
    "workaround_sites": [],
    "deletion_plan": "",
@@ -784,7 +781,7 @@
    "title": "A rule's precondition fact that is an implication",
    "status": "open",
    "requester": "arena",
-   "progress": "open; the plain case WORKS on fsym-wp (agent 14 /tmp/fsym-eng/f14/T59.lean: the implication from a hypothesis, from the state's fact, or instantiated `none → …`). Needs the arena's loop78 case (locals `s.it` after `modify`) to reproduce",
+   "progress": "open for the client only (checked 2026-11-24): the engine plans the fact, regressions SepAuto/Walk.lean `rule_fact_implication` (from a hypothesis) and `rule_fact_implication_state` (a rule over every locals, the fact about a field of the locals in the state). The arena still states `loop78_ct` from the loop's start state (ArenaSpec.lean, ArenaSpecFixed.lean, ArenaSpecMacos.lean); to close, state it for the invariant and rebuild the three arena specs (heavy builds, not run in the triage). Earlier note: the plain case WORKS on fsym-wp (agent 14 /tmp/fsym-eng/f14/T59.lean: the implication from a hypothesis, from the state's fact, or instantiated `none → …`). Needs the arena's loop78 case (locals `s.it` after `modify`) to reproduce",
    "request": "**A rule's precondition fact that is an implication** (`⟪s.it = none → x0 = none⟫`) is never planned (\"no plan for its precondition\"). Workaround: state the rule from the loop's start state (`loop78_ct`, the fact discharged inside).",
    "workaround_sites": [],
    "deletion_plan": "",
@@ -805,7 +802,7 @@
    "title": "A rule whose precondition has an if the facts do not decide",
    "status": "open",
    "requester": "arena",
-   "progress": "open; the plain case WORKS on fsym-wp (agent 14 /tmp/fsym-eng/f14/T61.lean: a rule with `if n < len then … else …` in its pre, against the same undecided `if` in the state, framed). Needs the arena's resize (`relBytes`, a `callIndirect` rule) to reproduce",
+   "progress": "open, reproduced minimally 2026-11-24 (SepAuto/LedgerOpen.lean, row 61): the rule's precondition is `P ⋆ rel A n len` with `def rel A n len := if n < len then A else emp`, the state holds the part `A ⋆ P` and no fact decides `n < len`: `fsym [h]` reports `no rule for the command c with the precondition A ⋆ P`. With `rel A n len` (or the `if` itself) in the state the rule applies and frames. Missing in the engine's planner: a case split on a rule precondition's undecided condition when the state has no matching `if` (in the arena: `relBytes` at resize's `callIndirect`). Earlier note: the plain case WORKS on fsym-wp (agent 14 /tmp/fsym-eng/f14/T61.lean: a rule with `if n < len then … else …` in its pre, against the same undecided `if` in the state, framed). Needs the arena's resize (`relBytes`, a `callIndirect` rule) to reproduce",
    "request": "**A rule whose precondition has an `if` the facts do not decide** (`relBytes s.ptr … n len tl`: `if n < len`) is not applied; `fsym` then walks the `callIndirect` arms inline (into the page allocator's `munmap`) and stops with \"no rule\". Needed: split on the undecided condition, as for side conditions. Workaround: `resize_shrink`/`resize_grow` (Core), the condition a side goal of each.",
    "workaround_sites": [
     "ZigLean/Sep/Full/Dispatch.lean",
@@ -841,7 +838,7 @@
    "title": "An update at a return against a state with an undecided if",
    "status": "open",
    "requester": "fba-reset",
-   "progress": "open",
+   "progress": "open, reproduced minimally 2026-11-24 (SepAuto/LedgerOpen.lean, row 64): pre `apts p v ⋆ (if n < len then apts q w else emp)`, `pure ()`, post `Pub p ⋆ (if n < len then Pub q else emp)`, with one update for each case in the list. `fsym` leaves `hc : n < len ⊢ EUpd (apts p v ⋆ apts q w) (Pub p ⋆ if n < len then Pub q else emp)` and the same for `¬ n < len`: the return entailment splits the state's `if`, but in each case the post's `if` is not reduced by `hc` and the caller's updates are not tried again. Client check: AllocFba/Full.lean without its `by_cases` runs into the heartbeat limit (200000). Engine change in `closeEntail`/`tryUpd`.",
    "request": "**An update at a return against a state with an undecided `if`** (FBA `resize`: the spec's `relBytes … n len tl` = `if n < len then region ⋆ claim else emp`): the walk keeps the `if` to the return; `closeEntail` splits it, but `tryUpd` plans the update's P₀ in the unsplit state, so an update that applies in one branch (resize of the last grant: the released region joins the tail) applies in neither. Needed: split the state's undecided `if` before trying the caller's updates (each branch with its own update). WORKAROUND: `by_cases hc : n.toNat < s.len.toNat <;> fsym [...]` in tests/roadmap/alloc-fba/AllocFba/Full.lean `fresize_spec` (codex/fba-reset-ledger).",
    "workaround_sites": [
     "tests/roadmap/alloc-fba/AllocFba/Full.lean",
@@ -856,7 +853,7 @@
    "title": "An update's Q₀ is compared with library atoms only",
    "status": "open",
    "requester": "fba-reset",
-   "progress": "open",
+   "progress": "open, reproduction unstable (2026-11-24, scratch probes, not in the tree). With `def Pub64 p : FAssn := fun r => (FAssn.ex fun v => apts p v) r`, `def Fee65 q := apts q 0#64` and the update `pub65 : v.toNat < 10 → EUpd (apts p v ⋆ apts q 0#64) (Pub64 p ⋆ Fee65 q)`, the goal `FTotalTriple (apts q 0#64 ⋆ apts p x) (pure ()) (fun _ => Pub64 p ⋆ apts q 0#64)` under `hx : x.toNat < 5` is left by `fsym [pub65]` as `EUpd (apts q 0#64 ⋆ apts p x) (Pub64 p ⋆ apts q 0#64)`. The same goal with the definitions named `Pub`, `Zero` and the update `pub_zero`, in another file, is closed. The cause of the difference was not found (suspected: an order of heads by name in `tryUpd`); the next step is to find it with `set_option trace` on both.",
    "request": "**An update's Q₀ is compared with library atoms only**: `tryUpd` does not unfold Q₀'s user definitions, so a Q₀ written with a library definition (`allocPost`, `pshare`, `epFee`) does not close against Qv. WORKAROUND (FBA Full.lean): Q₀ written with explicit library atoms (`bshare`, `epTok ⋆ ⟪0 < φ⟫`, explicit tuples).",
    "workaround_sites": [
     "tests/roadmap/alloc-fba/AllocFba/Full.lean"
@@ -868,7 +865,7 @@
    "title": "The planner cannot produce an empty region",
    "status": "open",
    "requester": "fba-reset",
-   "progress": "open",
+   "progress": "open, reproduced minimally 2026-11-24 (SepAuto/LedgerOpen.lean, row 66), two goals: (1) from `regionIn p A S K 1 bs`, the post `(∃ pad, ⟪pad.size = 0⟫ ⋆ regionIn p A S K 1 pad) ⋆ regionIn p A S K 1 bs` is left as one `EUpd` (no empty region is made); (2) a carve at the start to a larger alignment that the start has (`8 ∣ p.off.toNat`, `8 ∣ A`): `regionIn p A S K 8 (bs.extract 0 k) ⋆ ∃ t, ⟪t.size = bs.size - k⟫ ⋆ regionIn (p.add k) A S K 1 t` is left as one `EUpd`. Planner work in the region provider (an empty-region producer, and a carve that raises the alignment from divisibility facts).",
    "request": "**The planner cannot produce an empty region** (a padding of size 0) nor carve a region at its exact start with a different alignment (`2^k ∣ 1`). WORKAROUND (FBA `alloc_upd`): the update takes the whole tail and outputs the grant region and the new tail.",
    "workaround_sites": [
     "tests/roadmap/alloc-fba/AllocFba/Full.lean"
@@ -880,7 +877,7 @@
    "title": "updHeads keeps a user head folded only at Qv's top level",
    "status": "open",
    "requester": "fba-reset",
-   "progress": "open",
+   "progress": "open, no discriminating repro yet (2026-11-24, scratch probes): with `Pub64` as in row 65 and `pub67 : v.toNat < 10 → EUpd (apts p v) (Pub64 p)`, the nested goal (post `Own67 p q`, `def Own67 p q := apts q 0#64 ⋆ Body67 p`, `def Body67 p := Pub64 p ⋆ emp`) is left as `EUpd (apts q 0#64 ⋆ apts p x) (Own67 p q)`, but so is the control with the head at the top level (post `apts q 0#64 ⋆ Pub64 p`): a one-atom update beside a framed atom is not applied in this form at all, so the probe does not isolate the nesting. FBA's `fown` is still written out (AllocFba/Full.lean). Next step: a control that passes (the shape of FBA's own update), then nest it.",
    "request": "**`updHeads` keeps a user head folded only at Qv's top level**: a head nested under another definition (`fbody`) is unfolded. WORKAROUND: FBA `fown` written out (no `fbody`).",
    "workaround_sites": [
     "tests/roadmap/alloc-fba/AllocFba/Full.lean"
@@ -892,13 +889,13 @@
    "title": "WP walk: a side goal whose unknown is fixed by a LATER conjunct is not re-solved",
    "status": "open",
    "requester": "L9",
-   "progress": "open",
+   "progress": "half fixed (checked 2026-11-24). `workInv` is back in its natural order in both files (`∃ k, s.local1.toNat = k ∧ k ≤ 2 ∧ P.inv (upd G t (gOut rp k)) m`): the deferred `?k` goals are solved once `P.inv` fixes `k` (both modules build). `workPost` still states `P.inv … ∧ k = 2`: in the order `k = 2 ∧ P.inv …` the first conjunct fixes `k := 2` and the walk leaves `(L lo).Inv (upd G m.current (gOut rp 2)) ?m m'` beside the hypothesis at `gOut rp s.local1.toNat` (with `s.local1.toNat = 2` only by arithmetic from the exit test). Missing in the WP backend: a hypothesis matched with a goal up to arithmetic in a ghost argument (`wpAtom`), or the equation `?k = 2` deferred like the other side goals.",
    "request": "**WP walk: a side goal whose unknown is fixed by a LATER conjunct is not re-solved**: post `∃ k, s.local1.toNat = k ∧ k ≤ 2 ∧ P.inv (upd G t (gOut k)) m` — the walk defers `s.local1.toNat = ?k` / `?k ≤ 2`, `P.inv` fixes `k` by unification, and the deferred goals (`s.local1.toNat = 2` from `¬ lt false a 2 = true`, `0 = 0`, `0 ≤ 2`) are left unsolved although `fsym_arith` proves each in the same context. Needed: retry deferred side goals with the arithmetic solver once their unknowns are assigned. WORKAROUND (deletion plan: reorder back once fixed): Proofs/Sync/Mutex.lean (and Threadsync/Mutex) `workInv`/`workPost` state the conjunct that fixes `k` (`P.inv …`) first. Repro: swap the conjunct order in `Sync.MutexCounter.workInv`.",
    "workaround_sites": [
     "Proofs/Sync/Mutex.lean",
     "Proofs/Threadsync/Mutex.lean"
    ],
-   "deletion_plan": "reorder `workInv` / `workPost` back (the conjunct that fixes k last) once the WP walk retries deferred side goals after their unknowns are assigned."
+   "deletion_plan": "`workInv` is reordered back. Reorder `workPost` back (`k = 2 ∧ P.inv …`) in both files once the WP backend matches a hypothesis up to arithmetic in a ghost argument, or defers an equation that fixes an unknown; then close the row."
   },
   {
    "id": "68d",
@@ -914,14 +911,12 @@
   {
    "id": "69",
    "title": "WP rules are tried on a command with a different head; the failed unification unfolds both generated functions",
-   "status": "open",
+   "status": "closed",
    "requester": "L9",
-   "progress": "open",
+   "progress": "closed 2026-11-24, fixed by the keyed WP rules (`wpRule` compares a rule's command with the goal's by head, `wpKey`, and unifies under the key only, `unifyKeyed`; batch PR #407, 707346c9a): `attribute [local irreducible] Thread_Mutex_lock Thread_Mutex_unlock` is deleted from Proofs/Threadsync/Mutex.lean and `loop4_body` walks at the default heartbeats (module built in 9.3 s). The walk still passes the instance's `ThreadMutex.lock_wp`/`unlock_wp`, stated on the program's names; that is the contract's rule for this instance, not glue.",
    "request": "**WP rules are tried on a command with a different head; the failed unification unfolds both generated functions**: in `Threadsync.MutexCounter.loop4_body` the rule `ThreadMutex.lock_wp …` (conclusion on `Thread_Mutex_lock p`) is tried on `Thread_Mutex_unlock cPtr` (and other rules on other commands); `isDefEq` unfolds the big generated loops and every rule hits the heartbeat limit (passes only with maxHeartbeats 2M). Needed: key WP rules by the command's head constant / unify generated functions at reducible transparency. WORKAROUND (deletion plan: drop it once keyed): `attribute [local irreducible] Thread_Mutex_lock Thread_Mutex_unlock` in Proofs/Threadsync/Mutex.lean (2.5 s at default heartbeats). Also: the contract form `threadMutex.lock_wp` (`threadMutex.lock p io`) does not match `Thread_Mutex_lock cPtr`, so the walk passes `ThreadMutex.lock_wp`/`unlock_wp` (the instance's proofs on the program's names).",
-   "workaround_sites": [
-    "Proofs/Threadsync/Mutex.lean"
-   ],
-   "deletion_plan": "drop `attribute [local irreducible] Thread_Mutex_lock Thread_Mutex_unlock` once WP rules are keyed by the command head (or unify generated functions at reducible transparency); then `threadMutex.lock_wp` can be passed directly."
+   "workaround_sites": [],
+   "deletion_plan": ""
   },
   {
    "id": "69d",
@@ -949,7 +944,7 @@
    "title": "Conc/Returns: no client yet",
    "status": "open",
    "requester": "csl/T-term",
-   "progress": "plan",
+   "progress": "plan. Triage 2026-11-24: unchanged, needs a maintainer decision (keep for T-term, or delete with `Proto.cost`). No module imports `ZigLean.Conc.Returns` and no proof uses `Proto.returnsWithin`; it is built only by name and cited by docs/sep-threads.md (Termination), docs/premises.md (THR-08, SEM-04: assurance/premises.json maps the module to them) and research C13. `Proto.cost` itself has users (every sync rule takes `P.cost = none`), so deleting the pair is a change to `Proto`, not a file removal.",
    "request": "`Conc/Returns` (`Proto.returnsWithin`, turn-cost adequacy, ROADMAP current goal text): target leaf result, no client yet. PLAN: first client = a turn-counting protocol proof (T-term, research C13); if T-term is dropped, delete with `Proto.cost`",
    "workaround_sites": [],
    "deletion_plan": "first client: a turn-counting protocol proof (T-term, research C13); if T-term is dropped, delete with Proto.cost.",
@@ -958,9 +953,9 @@
   {
    "id": "71",
    "title": "Conc/OsRules: premise evidence, standalone by design",
-   "status": "open",
+   "status": "closed",
    "requester": "os lane",
-   "progress": "plan; the full-state rules of the OS futex rows landed in `ZigLean/Sep/Full/OsFutex.lean` (STD-05 step A, PR #437), the target for OsRules' futex facts",
+   "progress": "plan; the full-state rules of the OS futex rows landed in `ZigLean/Sep/Full/OsFutex.lean` (STD-05 step A, PR #437), the target for OsRules' futex facts. CLOSED (triage 2026-11-24): the module is no longer standalone. `ZigLean/Sep/Full/OsFutex.lean` imports it and its rules `WP.osFutexWait`/`WP.osFutexWake` are proved from its facts (`wakeSize`, `wakeCount_pos`, `wakeSets_mem`, `wakeAt_frame`, `waitCount_eq`; `wakeSize` also in Full/WordRules), so it is a library module of the one framework with users (regression: tests/roadmap/sep-auto/SepAuto/WPOsFutex.lean); it holds no legacy judgment and is no workaround. What the plan still names, moving the file next to its user, is the mechanical directory step of the roadmap (ROADMAP.md, Current state, step 5), not an engine item.",
    "request": "`Conc/OsRules`: proof-only premise evidence for OSF-01/02, OST-01/02, OSG-01 (docs/premises.md \"Derived from\", docs/os-threads.md); standalone by design (not dead). PLAN: its facts move into the full-state futex rules (the `Io` futex slots as `CTriple` rules when those land, docs/thread-specs.md), then the module is absorbed",
    "workaround_sites": [],
    "deletion_plan": "move its futex facts into the full-state OS futex rules (ZigLean/Sep/Full/OsFutex.lean) and the `Io` futex-slot CTriple rules when those land (docs/thread-specs.md, STD-05), then absorb the module."
@@ -1023,7 +1018,7 @@
    "title": "A return whose Boolean value the postcondition matches on is not split",
    "status": "open",
    "requester": "arena-gen (arena macros -> fsym)",
-   "progress": "open; an update now takes its result unknowns from the return's value (ledger #update-result-unknowns), so only the split is missing",
+   "progress": "open, reproduced minimally 2026-11-24 (SepAuto/LedgerOpen.lean, row return-bool-split): `pure (decide (n ≤ len))` with the post `match r with | true => ⟪n ≤ len⟫ | false => ⟪len < n⟫` (⋆ `P`) leaves `EUpd P ((match decide (n ≤ len) with …) ⋆ P)`; with a post defined by cases (`PostB p n len r`) and an update it leaves `EUpd (apts p v) (PostB p n len (decide (n ≤ len)))`. Missing: a split of the return entailment on the undecided Boolean that the post matches on (engine, `closeEntail`). Earlier note: an update now takes its result unknowns from the return's value (ledger #update-result-unknowns), so only the split is missing",
    "request": "**A return of an undecided Boolean expression that the postcondition matches on is not split**: the arena's `resize` returns `pure (le false n len)` on the path of a grant that is not the first node's last; the postcondition `rresizePost … (le false n len)` matches on it, and with `n` against `len` undecided (`n ≥ len` known, `n = len` or `n > len` not) no update closes the return (`resize_other_upd` needs `n ≤ len`, `resize_false_upd` needs `n > len`). Needed: at a return, split on an undecided `Bool`/`Prop` that the postcondition matches on, as on an `if` of the program.",
    "workaround_sites": [
     "tests/roadmap/alloc-arena/ArenaSpec.lean",
@@ -1037,7 +1032,7 @@
    "title": "(perf) whole-state updates at every return: the arena's resize",
    "status": "open",
    "requester": "arena-gen (arena macros -> fsym)",
-   "progress": "open",
+   "progress": "open, unchanged (checked 2026-11-24): `resize_ct` still carries `set_option maxHeartbeats 4250000` (tests/roadmap/alloc-arena/ArenaSpec.lean), `free_ct` and its neighbours 2.6M to 3.1M. Both candidates of the request are engine work; the first is P09-E5 (pending the maintainer's approval), so this row waits for that decision.",
    "request": "**(perf)** the arena's `resize_ct` takes ~160 s and 8M heartbeats per module (free ~40 s), against ~13 s with the hand tactics it replaces: four whole-state updates (a 30-atom state) are planned at each return until one closes it, and a failed plan costs seconds. Candidates: try only the updates whose postcondition head matches the return's (P09-E5's registry keyed by heads), and reject a precondition early when an atom head of `P₀` is missing from the state.",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -1150,7 +1145,7 @@
    "title": "A recursive list predicate unfolded by the case the loop tests",
    "status": "open",
    "requester": "arena-retain (loop78 of the retaining reset)",
-   "progress": "open",
+   "progress": "open, unchanged (checked 2026-11-24): `loop78_step` still splits the list by hand (`rcases ns with _ | ⟨nd, _ | ⟨nd2, ns⟩⟩ <;> cases it`, ArenaSpec.lean) in the three arena specs. The uniform walk is the list-walk engine work of row list-walk-step (owned by running work); this row closes with it.",
    "request": "**A loop over a linked list whose invariant names the rest of the list as one recursive predicate is not walked uniformly.** The arena's `loop78` keeps the last node: its invariant is `Chain CI true (ns.map NodeV.full) s.it` (`Chain` recursive over the list, its next pointer null at the last node). `fsym` needs the list's cases split by hand (`rcases ns with _ | ⟨nd, _ | ⟨nd2, ns⟩⟩ <;> cases it`), `Chain` kept folded (`attribute [local fsym_atom] Chain FreeCl`) and, per case, a hand unfolding of the first node and the folded rest (`chain_one`, `chain_full_cons2`, Reset.lean) with its own rule list. Needed: unfold a recursive predicate of the state by one constructor at the step that tests its pointer (the `if next == null` of the body), keeping the rest folded where the invariant names it again; then `loop78_step` takes the shape of `loop19_step` (one `cases … <;> simp only … <;> fsym`).",
    "workaround_sites": [
     "tests/roadmap/alloc-arena/ArenaSpec.lean",
@@ -1356,7 +1351,7 @@
    "title": "Seven remaining hand ofSeq one-liners",
    "status": "open",
    "requester": "coordinator (critic run 9)",
-   "progress": "PR #352 (merged 2026-10-15) deleted the term-level copies in Block.lean and Local.lean; one remains: `FTTotalTriple.storeBytes_bytesAt` (ZigLean/Sep/Full/Ops.lean ~729, `ofSeq` plus `ThreadLocal.storeBytes`)",
+   "progress": "PR #352 (merged 2026-10-15) deleted the term-level copies in Block.lean and Local.lean; one remains: `FTTotalTriple.storeBytes_bytesAt` (ZigLean/Sep/Full/Ops.lean, section OwnedBytes: `ofSeq` plus `ThreadLocal.storeBytes`). Triage 2026-11-24: still there, and not deletable yet. Its users are the term-level thread store rules `FTTriple.storeBytesAt`/`storeAt`/`storeAt'` (ZigLean/Sep/Full/Local.lean), which the hand `WP.bind (WP.liftM_fowned …)`/`WP.callMC_fownedS …` walks call: Proofs/Threads/Disjoint.lean, Proofs/Iogroup/Counter.lean, Proofs/Detach/Worker.lean, Proofs/Cancel/Group.lean, Proofs/Threadsync/Deadline.lean, tests/roadmap/spawn-failure/SpawnFailure/Group.lean, and ZigLean/Sep/Full/ThreadTls.lean. `fsym` already applies the sequential rule in a thread goal itself (AutoThread), so the one-liner goes when those walks are `fsym` walks (rows fowned-bridges and errok-native); nothing to do in the engine for this row.",
    "request": "7 remaining hand ofSeq one-liners (Block.lean:378/383/391, Local.lean:164/169, Ops.lean:664/671) -> AutoThread providers, then delete.",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -1366,7 +1361,7 @@
    "title": "A spawned thread's stack budget, reserve and sp token",
    "status": "open",
    "requester": "stack-region lane (codex/stack-pr5)",
-   "progress": "main's budget, the token rules, cur t and its thread rules are done (Full/Stack, Full/Init run_init_stack, FOwned.noCur); open: the model side",
+   "progress": "main's budget, the token rules, cur t and its thread rules are done (Full/Stack, Full/Init run_init_stack, FOwned.noCur); open: the model side. Triage 2026-11-24: unchanged. `Mem.reserveAt?` (ZigLean/Mem/Basic.lean) is called for thread 0 only (`Mem.withStack`, Full/Init); no fork or clone path reserves a child's stack, so a spawned thread still has no `sp` token. A model change (memory model, premises STK-01/02), not an fsym rule: needs its own lane.",
    "request": "`Thread.forkWith`/`Os.Linux.clone` give a child no budget (MM-18 step 5): a spawned thread has no stack token, so its stack pushes are plain-mode only. Needed: the child's budget at fork (environment parameter first, `SpawnConfig.stack_size` later) with its reserve (`Mem.reserveAt?`; no fit: `SystemResources` where the spawn policy allows a failure, else `.stackOverflow`), the reserve released at thread end, the lifetime cells reserved up front; then a spawn rule that hands the child `sp c S_c k_c` (with `StackAuth` of the forked memory) and `FOwned.start` with a budgeted main (`sp 0 S 0` in main's part).",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -1376,7 +1371,7 @@
    "title": "The WP walk hands cur t to a thread's segment (WP.liftMem_fownedCurS)",
    "status": "open",
    "requester": "stack-region lane (codex/stack-pr5)",
-   "progress": "the rule exists (Full/ThreadOwned `WP.liftMem_fownedCurS`), not registered",
+   "progress": "the rule exists (Full/ThreadOwned `WP.liftMem_fownedCurS`), not registered. Triage 2026-11-24: unchanged and blocked on row stack-child-budget: no protocol client has a budgeted thread (only main gets a budget, and no protocol proof starts from a budgeted main), so there is no walk to register the rule for or to test it on. Registering it now would add an `@[fsym]` WP rule that every WP walk tries with no user.",
    "request": "fsym's WP backend applies `WP.liftMem_fowned` (@[fsym], AutoWP) with the segment's precondition the thread's part; a segment that pushes a stack block from a budget needs `cur t` (`FTTriple (Pa ⋆ cur t) x (fun a => Qa a ⋆ cur t)`). Register `WP.liftMem_fownedCurS` (or a `liftMem_fowned` form of it) once a protocol client has a budgeted thread (needs row stack-child-budget for any thread but main), and walk such a segment.",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -1425,7 +1420,6 @@
     "ZigLean/Conc/Lock.lean",
     "ZigLean/Conc/LockRules.lean",
     "ZigLean/Conc/Word.lean",
-    "ZigLean/Sep/Full/LockWord.lean",
     "ZigLean/Conc/Csl.lean"
    ],
    "deletion_plan": "Retire LocsKeep through the existing FStepIn/RestStep machinery and restate its lock consumers on FStepIn without weakening their contracts. Reuse the generic Conc.Base.Threads facts in the remaining legacy Owned.fork/join proofs while that layer remains, then delete those rules with Conc.Csl. If the lock migration needs a contract change, stop and post the exact obstruction with a counterexample for the maintainer. Keep LocsKeep legacy-to-retire and every real consumer in the structural gate until actual retirement."
@@ -1479,14 +1473,12 @@
   {
    "id": "current-thread-subst",
    "title": "A substituted `m.current = t` breaks the caller's rule terms (kernel type mismatch)",
-   "status": "open",
+   "status": "closed",
    "requester": "STD-05 step A (codex/std-retire-futex-rules, PR #437)",
-   "progress": "open (workaround)",
+   "progress": "closed 2026-11-24, no longer reproduces (the fixing commit was not identified): the `subst hc` before `fsym` is deleted from SepAuto/WPOsFutex.lean `event_wait`, which passes `hc : m.current = t` to `FEvent.wp_osWait` again and is the regression. A caller's term that is a `fun` over replaced hypotheses is still not mapped: row 27.",
    "request": "`fsym [r]` elaborates the caller's rule term `r` in the goal's context, then `destruct` substitutes a hypothesis `hc : m.current = t` away (`t := m.current`). A rule term that took `hc` (e.g. `FEvent.wp_osWait hE rfl hg hgo hc hi hlive`, whose premise is `m.current = t`) is then applied at the substituted type, and the kernel rejects the proof (\"application type mismatch: argument has type m.current = t but function has type m.current = m.current → …\") instead of `fsym` re-elaborating the term against the substitution (`refreshUser`, `substs`) or failing cleanly. Wanted: `refreshUser` maps the caller's terms through every substitution of the run, including one that eliminates a variable a term's argument mentions.",
-   "workaround_sites": [
-    "tests/roadmap/sep-auto/SepAuto/WPOsFutex.lean"
-   ],
-   "deletion_plan": "when fsym re-elaborates or maps the caller's rule terms through its substitutions, delete the `subst hc` before `fsym` in `WPOsFutex.event_wait` and pass `hc` to the rule again."
+   "workaround_sites": [],
+   "deletion_plan": ""
   },
   {
    "id": "word-family-views",
@@ -1822,7 +1814,7 @@
    "title": "fsym's post solver chooses an existential's witness by a disjunction before the conjunct that determines it",
    "status": "open",
    "requester": "claude/fsym-fvar (found closing row fsym-unknown-fvar-mutex-loop, 2026-11-05)",
-   "progress": "open",
+   "progress": "open, reproduced minimally 2026-11-24 (SepAuto/LedgerOpen.lean, row fsym-or-witness-order): `P.WP t (pure ()) (fun _ _ _ _ => ∃ x, (x = a ∨ x = b) ∧ R x) G m n` with `hR : R b` leaves `⊢ R a`. Engine change in `wpGoal`'s `And`/`Or` cases as the request says; when it lands the example becomes a theorem next to SepAuto/WP.lean `and_retry`.",
    "request": "A post `∃ x, (x = a ∨ x = b) ∧ Inv x` with a hypothesis `Inv b`: `wpGoal`'s `And` case proves the first part first, its `Or` case proves the side `?x = a` whole (`wpAtom`, `eqFixesUnknowns`: the unknown is a side) and commits `?x := a`, and `Inv a` is then left open. The `And` case retries a first part left open, but not a first part closed with a choice the second part refutes. Repro: `Proofs/Threadsync/ThreadMutex.lean`'s `lockInvD` with its original order `∃ g₀, (g₀ = g ∨ g₀ = L.set g .spin rnil) ∧ P.inv (upd G t g₀) m`, swap-built against `tests/golden/0.15.2/threadsync/Gen-darwin.lean`: the wait branch leaves `P.inv (upd G₁ c g) m'` with `P.inv (upd G₁ c (L.set g .spin rnil)) m'` in context. Needed (a separate engine PR): a conjunction whose second part fails after its first part committed an unknown is retried in the other order (the general form of the existing retry, not one more ordering special case); regression in SepAuto.WP next to `and_retry`.",
    "workaround_sites": ["Proofs/Threadsync/ThreadMutex.lean"],
    "deletion_plan": "Transitional: once the solver orders such a conjunction itself, state `lockInvD` (darwin) in its natural order `∃ g₀, (g₀ = g ∨ g₀ = L.set g .spin rnil) ∧ P.inv (upd G t g₀) m` again, swap-build `Proofs.Threadsync.ThreadMutex` against the darwin translation, and close this row.",
@@ -1866,7 +1858,7 @@
    "title": "fsym does not forward a hint term's Bool-equation fact, so a rule's autoParam guard cannot use it",
    "status": "open",
    "requester": "S6 (#649, futex address validation)",
-   "progress": "open (workaround)",
+   "progress": "open (workaround), reproduced 2026-11-24 (SepAuto/LedgerOpen.lean, row fsym-forward-bool-fact): the lock's futex wait with `fsym [hP.wordAt hi, wp_osWait hP rfl hg hok hi]` and no `have hw` leaves the address-error case `⊢ P.ErrOk er` and the wait result's side goals with unassigned unknowns (`⊢ ¬ ?w = WaitResult.timedOut`): the OS rule's guard did not see `m.wordAt p = true`, so the walk took the unguarded path. Engine change in the WP backend's forwarding (`wpForwardEx`), as the request says.",
    "request": "The OS futex rules `WP.futex_4arg_of_aligned`, `WP.futex_3arg_of_aligned`, `WP.ulock_wait2` and `WP.ulock_wake` (ZigLean/Sep/Full/OsFutex.lean) select on the autoParam guard `hword : m.wordAt p = true := by first | assumption | decide`, which `runAutoParam` closes in the goal's local context. A protocol supplies the fact as a hint term, `fsym [hP.wordAt hi, …]` (`FLock.Fits.wordAt`, `Fits.wordWordAt`), but fsym forwards a hint term's conclusion as a hypothesis only when it is an `∃` (`wpForwardEx`) or arithmetic (`wpForward`), and `wpChain` proves side goals backwards only for a conclusion that is not an equation. So the guard sees no `m.wordAt p = true` and the rule does not apply. Needed: a hint term whose conclusion is a fact about the current memory (a Bool equation such as `m.wordAt p = true`) is forwarded like an `∃` fact, at the stop where its premises hold, so that an autoParam guard's `assumption` finds it. Regression: SepAuto.WPOsFutex with the `have hw` lines removed and `hP.wordAt hi` in the list.",
    "workaround_sites": ["tests/roadmap/sep-auto/SepAuto/WPOsFutex.lean"],
    "deletion_plan": "Transitional: once fsym forwards such a fact, delete the `have hw := …` before each `fsym` in SepAuto.WPOsFutex, pass the term in the `fsym` list instead, and close this row.",
@@ -1930,7 +1922,7 @@
    "title": "build-guard mirrors a lifeline ticket in `merge/` for guards of checkouts before PR #661",
    "status": "open",
    "requester": "P1c (elastic build-guard admission, PR #661)",
-   "progress": "open: transitional compatibility with guards of older checkouts (not an fsym engine gap; recorded here as the deletion plan CLAUDE.md asks for).",
+   "progress": "open: transitional compatibility with guards of older checkouts (not an fsym engine gap; recorded here as the deletion plan CLAUDE.md asks for). Triage 2026-11-24: DUE. The plan's date (2026-11-19) has passed; `Admission.mirror`/`mirror_lifeline` are still in scripts/build-guard.py. What is left is the plan's check at a main-health run (every running build-guard on arc and on the Mac comes from a checkout that contains #661's merge) and then the deletion in one infrastructure PR. Not done in the triage: the check must run on both hosts at one moment and the change touches the guard every running lane shares.",
    "request": "PR #661 moved an elastic workload's lifeline ticket from `<lock>.d/merge/` (where guards before #661 read every ticket as a drain ticket, so a lifeline there drained the shared host beside free memory) to `<lock>.d/lifeline-tickets/`. Guards before #661 do not see that directory, so one of them as a large or exclusive queue head could keep the queue from a lifeline until its --lock-wait. Until no such guard runs, a lifeline whose turn it is mirrors its ticket in `merge/` under a time-0 name (`Admission.mirror_lifeline`) while no `lifeline_aware` head publishes a reservation.",
    "workaround_sites": [
     "scripts/build-guard.py",
