@@ -2,8 +2,10 @@ import Proofs.Lists.Gen
 import ZigLean.Mem.AllocLemmas
 
 /-! Lean-only M03 checks of the general policy: failure oracles, the live-heap budget, the
-list-to-oracle embedding, the uncapped model default and a large translated fixture. These
-cases have no native counterpart (`TestAllocator` keeps the harness cap and finite list). -/
+list-to-oracle embedding, the uncapped model default and a large translated fixture. The
+oracle and the budget are compared with native runs by `Check.lean` and the lists differential
+(docs/allocation-policy.md, §Native differential); the embedding, the uncapped default and the
+1 MiB fixture are Lean-only (the native harness keeps its cap). -/
 
 open Zig
 

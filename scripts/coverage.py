@@ -397,6 +397,8 @@ NON_COMPILER_AIR = {
     'tests/roadmap/undef-locals/air': 'hand-written AIR in the exporter schema (README)',
     'tests/roadmap/aggregate-casts/air-handwritten': 'earlier hand-written AIR in the exporter schema (README)',
     'tests/roadmap/packed-fields/air': 'hand-written AIR in the exporter schema (README)',
+    'tests/roadmap/packed-casts/air-handwritten':
+        'hand-written AIR of the zero-bit `bitcast`, which Sema folds and no compiler emits (README)',
     'tests/roadmap/try-pointers/aliases/air': 'hand-written AIR (provenance.json air_origin; the compiler export is aliases/air-fresh)',
     'tests/roadmap/error-width/air': 'hand-written AIR per error-code width (make-fixtures.py, README)',
     'tests/roadmap/asm-effects/air': 'hand-written AIR in the exporter schema (README)',
