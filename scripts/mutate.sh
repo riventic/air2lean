@@ -40,12 +40,10 @@
 # (h) Lean-runtime mutation, lists: `Zig.rawAlloc` (ZigLean/Mem/Alloc.lean) never fails at
 #     `Mem.failAt`. Every lists function then returns a value where Zig returns
 #     `error.OutOfMemory`.
-# (i) Diff-test-archive mutation, asm: `tests/diff/asm/asm.zig`'s `air2lean_asm_bswap32` returns
-#     `x` unchanged instead of `@byteSwap(x)`. This archive (docs/generated-code.md §Inline asm)
-#     is the diff test's own stand-in for `Asm.airAsm_*`'s opaque behaviour (M21: no defining
-#     equation exists to mutate on the Lean side, unlike (b)/(d)/(f)/(g)/(h) above) -- mutating
-#     it and comparing against `examples/asm/asm.zig`'s real inline asm checks that the
-#     comparison is live, not vacuous. x86_64 only, same as `asm` itself.
+# (i) Lean-runtime mutation, asm: the x86_64 instruction model's `bswap` (`UnOp.eval`,
+#     ZigLean/Isa/X86.lean) returns its operand unchanged. `Asm.bswap32` is a defined function
+#     over that model (A02, premise ASM-07), so the differential test of `examples/asm/asm.zig`'s
+#     real inline asm must see the wrong bytes. x86_64 only, same as `asm` itself.
 # (j) Lean-runtime mutation, vectors: `Vec.reduce` (ZigLean/Vec.lean) folds only lanes
 #     `1..n-1`, dropping the last lane. `maxLane`'s `@reduce(.Max)` then ignores the vector's
 #     last lane, so an input whose max is in that lane disagrees with Zig.
@@ -282,7 +280,7 @@ round_lean="ZigLean/Float/Round.lean"
 mem_lean="ZigLean/Mem/Basic.lean"
 enc_lean="ZigLean/Mem/Enc.lean"
 alloc_lean="ZigLean/Mem/Alloc.lean"
-asm_zig="tests/diff/asm/asm.zig"
+asm_zig="ZigLean/Isa/X86.lean"
 vec_lean="ZigLean/Vec.lean"
 thread_lean="ZigLean/Mem/Thread.lean"
 sched_lean="ZigLean/Conc/Sched.lean"
@@ -655,16 +653,16 @@ else
   cp "$alloc_backup" "$alloc_lean"
 fi
 
-echo "== mutation (i): air2lean_asm_bswap32 returns x unchanged (diff-test archive) ==" >&2
+echo "== mutation (i): the instruction model's bswap returns its operand unchanged (Lean runtime) ==" >&2
 if ! want_mutation i; then
   echo "mutation (i): skipped (not in this shard)"
 elif ! has_example asm; then
   echo "mutation (i): skipped (AIR2LEAN_EXAMPLES excludes asm)"
 else
-  sed -i.bak 's/return @byteSwap(x);/return x;/' "$asm_zig"
+  sed -i.bak 's/^  | \.bswap, a => Zig\.byteSwap a$/  | .bswap, a => a/' "$asm_zig"
   rm -f "$asm_zig.bak"
-  grep -q 'return x;' "$asm_zig" || {
-    echo "error: mutation (i): sed did not change air2lean_asm_bswap32" >&2
+  grep -q '^  | \.bswap, a => a$' "$asm_zig" || {
+    echo "error: mutation (i): sed did not change UnOp.eval's bswap" >&2
     exit 1
   }
 

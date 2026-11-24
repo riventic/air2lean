@@ -55,10 +55,13 @@ theorem random_reads {m m' : Mem} {v : BitVec 64} (locs : List Loc)
   rw [random_eq] at h
   exact Frame.of_envWord_run locs h
 
-/-- An `m` input is its value: with `movq` as the identity (ASM-02), `loadm` is the load. -/
-theorem loadm_eq (hmov : ∀ x, airAsm_1506351414 x = x) (p : Ptr) :
-    loadm p = load (BitVec 64) 8 p := by
-  simp [loadm, hmov, StateT.run'_eq, StateT.run_monadLift]
+/-- `movq %[x], %[ret]` from an `m` input is the identity: from the instruction model (the
+block is a defined function, A02), no hypothesis. -/
+theorem loadm_block (x : BitVec 64) : airIsa_1506351414 x = x := by simp [zig_unfold]
+
+/-- An `m` input is its value: `loadm` is the load. -/
+theorem loadm_eq (p : Ptr) : loadm p = load (BitVec 64) 8 p := by
+  simp [loadm, loadm_block, StateT.run'_eq, StateT.run_monadLift]
 
 theorem fill_eq (p : Ptr) (n : BitVec 64) (b : BitVec 8) :
     fill p n b = writeRegion p n.toNat (airAsmFx_2696465393 b n).2.2 := by
