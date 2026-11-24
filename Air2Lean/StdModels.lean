@@ -30,8 +30,9 @@ inductive ThreadFn where
   | detach
   /-- `Io.futexWait` (cancelable), `Io.futexWaitUncancelable`, `Io.futexWake` (0.16.0). -/
   | futexWait | futexWaitU | futexWake
-  /-- `Thread.Futex.wait`, `Thread.Futex.wake`. -/
-  | threadFutexWait | threadFutexWake
+  /-- `Thread.Futex.wait` (0.14.1, 0.15.2). `Thread.Futex.wake` has no model: it is translated
+  from std down to the OS wake rows (OSF-02; audit S6, finding 4). -/
+  | threadFutexWait
   /-- `Thread.Mutex.DarwinImpl.lock`, `.unlock`, `.tryLock` (0.15.2 on macOS): each is one call of
   `os_unfair_lock_*`, a C function (the exporter does not name an `extern` function). -/
   | osLock | osUnlock | osTryLock
@@ -251,7 +252,6 @@ def stdModels : Array StdModel := #[
   threadModel "Io.futexWaitUncancelable" "STD-05" .futexWaitU #["futexWaitC"] ioZig,
   threadModel "Io.futexWake" "STD-05" .futexWake #["futexWakeC"] ioZig,
   threadModel "Thread.Futex.wait" "STD-05" .threadFutexWait #["threadFutexWaitC"] futexZig,
-  threadModel "Thread.Futex.wake" "STD-05" .threadFutexWake #["threadFutexWakeC"] futexZig,
   threadModel "Thread.Mutex.DarwinImpl.lock" "STD-06" .osLock #["osUnfairLockC"] mutexZig,
   threadModel "Thread.Mutex.DarwinImpl.unlock" "STD-06" .osUnlock #["osUnfairUnlockC"] mutexZig,
   threadModel "Thread.Mutex.DarwinImpl.tryLock" "STD-06" .osTryLock #["osUnfairTryLockC"] mutexZig,

@@ -1,0 +1,231 @@
+{
+ "schema": 12,
+ "zig_version": "0.15.2",
+ "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.16-gnu.2.31",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "gnu",
+  "zig_version": "0.15.2",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "Thread.Futex.wake",
+ "module": "std",
+ "src": {
+  "file": "Thread/Futex.zig",
+  "module": "std",
+  "decl_line": 58
+ },
+ "params": [
+  0,
+  1
+ ],
+ "noalias": [],
+ "ret": 2,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 1,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 5,
+   "column": 9
+  },
+  {
+   "id": 3,
+   "tag": "block",
+   "ty": 2,
+   "body": [
+    {
+     "id": 4,
+     "tag": "cmp_eq",
+     "ty": 3,
+     "args": [
+      {
+       "inst": 1
+      },
+      {
+       "ty": 1,
+       "val": "0"
+      }
+     ]
+    },
+    {
+     "id": 8,
+     "tag": "cond_br",
+     "ty": 4,
+     "args": [
+      {
+       "inst": 4
+      }
+     ],
+     "then": [
+      {
+       "id": 5,
+       "tag": "dbg_stmt",
+       "ty": 2,
+       "line": 6,
+       "column": 9
+      },
+      {
+       "id": 6,
+       "tag": "ret_safe",
+       "ty": 4,
+       "args": [
+        {
+         "ty": 2,
+         "val": "{}"
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 7,
+       "tag": "br",
+       "ty": 4,
+       "target": 3,
+       "args": [
+        {
+         "ty": 2,
+         "val": "{}"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 9,
+   "column": 14
+  },
+  {
+   "id": 10,
+   "tag": "call",
+   "ty": 2,
+   "callee": {
+    "ty": 5,
+    "func": "Thread.Futex.LinuxImpl.wake",
+    "module": "std",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "tag": "ret_safe",
+   "ty": 4,
+   "args": [
+    {
+     "ty": 2,
+     "val": "{}"
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 6,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "other",
+   "name": "fn (*const atomic.Value(u32), u32) void"
+  },
+  {
+   "k": "struct",
+   "name": "atomic.Value(u32)",
+   "module": "std",
+   "layout": "extern",
+   "fields": [
+    {
+     "name": "raw",
+     "ty": 1,
+     "offset": 0
+    }
+   ],
+   "abi_size": 4,
+   "abi_align": 4
+  }
+ ]
+}

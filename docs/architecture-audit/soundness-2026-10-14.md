@@ -500,9 +500,21 @@ regression elaborates; an elaboration failure prints `FAILED` and returns nonzer
 audit addition.
 
 <a id="s6-hand-rows"></a>
-### S6, finding 4: std's untimed futex calls bypass the OS rows (SOUNDNESS scope, open)
+### S6, finding 4: std's untimed futex calls bypass the OS rows (SOUNDNESS scope, in progress)
 
-Reported 2026-11-05 (lane S6b) for a maintainer decision. Nothing is implemented yet.
+Reported 2026-11-05 (lane S6b). **Maintainer decision 2026-11-24: the end state below is
+approved** (D, E and F; the refinement proof is rejected). Progress, slice by slice (engine-ledger
+row `s6-futex-hand-rows` lists what is still transitional and when it is deleted):
+
+| Slice | State |
+|---|---|
+| D1: the OS wake rows are bound (`os.linux.futex_3arg`, `os.linux.futex_wake` for 0.14.1, libc's `__ulock_wake`; OSF-02) | done |
+| D2: `Thread.Futex.wake` (0.14.1, 0.15.2) is translated down to them; its hand row is deleted | open |
+| D3: `Thread.Futex.wait` (0.14.1, 0.15.2) is translated down to the OS wait rows; its hand row is deleted | open |
+| F: `os_unfair_lock_*` are OS rows (OSL-01); the STD-06 rows are deleted | open |
+| E: the `Io` futex is a contract that `Io.Threaded`'s translated code proves; the last STD-05 rows are deleted | open |
+
+The text below is the finding as reported.
 
 **Location.** Std's untimed futex calls bind to hand rows (STD-05,
 `Air2Lean/StdModels.lean:243–244` for 0.14.1/0.15.2 `Thread.Futex.wait`/`wake`, `:240–242` for
