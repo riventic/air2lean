@@ -254,6 +254,22 @@ class Publish(unittest.TestCase):
         self.assertEqual(self.dest.read_bytes(), PRIOR)
         self.assertEqual(self.leftovers(), [])
 
+    def test_no_clobber_is_atomic_against_a_concurrent_writer(self):
+        # The output appears after the early existence check, while the artifact is being written.
+        fresh = self.dest.parent / 'Raced.lean'
+        real = os.fsync
+        def race(fd):
+            fresh.write_bytes(b'-- concurrent writer\n')
+            real(fd)
+        os.fsync = race
+        try:
+            with self.assertRaises(safe.Refused):
+                safe.publish(self.staged, fresh, overwrite=False)
+        finally:
+            os.fsync = real
+        self.assertEqual(fresh.read_bytes(), b'-- concurrent writer\n')
+        self.assertEqual(sorted(self.leftovers()), ['Raced.lean'])
+
     def test_rejects_symlink_and_directory_destinations_and_missing_policy(self):
         link = self.dest.parent / 'Link.lean'
         link.symlink_to(self.dest)
