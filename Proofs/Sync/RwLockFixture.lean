@@ -106,12 +106,12 @@ theorem rwLockRead_spec (env : Env) (henv : env.spawn = .available) {σ : Placem
 
 /-- **No run of `rwLockRead` gives an error**: no data race on `n`, no deadlock, no panic, under
 every schedule. -/
-theorem rwLockRead_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat}
-    {e : Error} (io : Io) :
+theorem rwLockRead_safe (env : Env) (henv : env.spawn = .available) {σ : Placement}
+    {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
     e ≠ .stackOverflow →
       (Sched.run env dispatch fuel o (rwLockRead io) (mem0 σ)).run ≠ some (.error e) :=
   proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec
-    (fun _ _ _ _ hq => hq.2) rfl (hmain σ io)
+    (fun _ _ _ _ hq => hq.2) rfl (rwLockRead_main σ io)
 
 /-- One schedule completes: under the oracle that always picks option 0, the `Io.RwLock` reader
 returns 2 (it reads before the writer) within fuel 1000, from `mem0` with the translation's spawn
@@ -158,7 +158,7 @@ theorem snapshotPair_safe (env : Env) (henv : env.spawn = .available) {σ : Plac
     e ≠ .stackOverflow →
       (Sched.run env dispatch fuel o (rwLockSnapshotPair io) (mem0 σ)).run ≠ some (.error e) :=
   proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec
-    (fun _ _ _ _ hq => hq.2) rfl (hmain σ io)
+    (fun _ _ _ _ hq => hq.2) rfl (snapshotPair_main σ io)
 
 /-- One schedule completes: under the oracle that always picks option 0, the snapshot-pair reader
 returns 0 (both reads before the writer) within fuel 1000, from `mem0` with the translation's
