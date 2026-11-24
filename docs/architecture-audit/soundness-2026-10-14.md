@@ -538,6 +538,20 @@ still owns its part, with existence from the scheduler's resumption; (b) the `se
 plus WaitGroup's finisher keeps a non-gone place until `set` returns (the waiter's whole-`Tally`
 read then needs another exclusion argument than "the only non-gone thread"). Recommended: (a).
 
+**Review finding of D1 (2026-11-24, fixed): a macOS wake of nobody may return `0`.** The OS
+model returned `-ENOENT` for every `__ulock_wake` that woke nobody. In xnu-12377.121.6
+`ulock_wake` (`bsd/kern/sys_ulock.c`), `-ENOENT` comes only from `ull_get(…, ULL_MUST_EXIST)`
+finding no `ull`; the wake-one result of `waitq_wakeup64_one` is discarded and `WAKE_ALL` leaves
+`ret` at `0`. A waiter holds its `ull` from the start of its wait until its cleanup after it runs
+again. Counterexample: A waits at `p`; B's `__ulock_wake(p)` wakes A; C's `__ulock_wake(p)` runs
+before A does, finds A's `ull`, wakes nobody and returns `0`, an outcome the model lacked, so a
+caller that reads `0` as "a waiter was woken" was proved against too few outcomes. Binding the row
+(D1) makes the model reachable from translated code. Fix: the code is `Darwin.wakeCode live r`,
+with `-ENOENT` or `0` after a wake of nobody by the oracle's `live`, picked at a stop before the
+wake (the model tracks no `ull`); rules `WP.ulock_wake`, `WP.pick_stay`, `FLock.wp_pick`;
+regressions `tests/roadmap/os-threads/Check.lean`, `SepAuto/WPOsFutex.lean`. Std's
+`DarwinImpl.wake` and `Io.Threaded`'s wake return on both codes, so std's behaviour is unchanged.
+
 The text below is the finding as reported.
 
 **Location.** Std's untimed futex calls bind to hand rows (STD-05,

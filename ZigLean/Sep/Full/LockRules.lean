@@ -32,6 +32,7 @@ places before and after are the code's transitions (`LPh.next`, the table); a ru
 | `wp_osWait` | OS futex wait for `c` (`Os.futexWait`, OSF-01) | `spin` | `spin` |
 | `wp_ulockResult` | macOS wait's return code (`Os.Darwin.ulockResult`, OSF-01) | any | the same |
 | `wp_osWake` | OS futex wake of `w ≥ 1` or all (`Os.futexWake`, OSF-02) | `wake` | `out`, or `wake` (spurious `EINTR`) |
+| `wp_pick` | oracle stop (`Os.pick`; a macOS wake's `live`, OSF-02) | any | the same |
 -/
 
 namespace Zig
@@ -820,6 +821,17 @@ theorem wp_ulockResult (hP : L.Fits K P U ok) {r : Os.WaitResult} {t : ThreadId}
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Os.Darwin.ulockResult r : ConcM Tgt (BitVec 32)) Q G m n :=
   WP.ulockResult_stay (fun _ _ hi₁ ht => let ⟨_, _, _, h'⟩ := hP.curT t hi₁ ht; h') hc hi h hcost
+
+/-- **An oracle stop** (`Os.pick`; the `live` choice of a macOS wake's code before the wake,
+`Os.Darwin.wakeCode`) by thread `t` with the ghost value `g`, at any place: it keeps `g` over the
+stop and goes on with any choice. -/
+theorem wp_pick (hP : L.Fits K P U ok) {c : Mem → Nat} {t : ThreadId} {G : ThreadId → γ}
+    {m : Mem} {n : Nat} {g : γ} (hi : P.inv (upd G t g) m)
+    {Q : Nat → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ a G₁ m', m'.current = t → P.inv (upd G₁ t g) m' → Q a G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t (Os.pick c : ConcM Tgt Nat) Q G m n :=
+  WP.pick_stay (fun _ _ hi₁ ht => let ⟨_, _, _, h'⟩ := hP.curT t hi₁ ht; h') hi h hcost
 
 /-- **`unlock`'s OS futex wake** (`Os.futexWake`, OSF-02) of up to `w ≥ 1` waiters (or all) at the
 lock's word, by thread `t` at `wake` (`g`): after a wake of `j` waiters, within the request

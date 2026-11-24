@@ -1325,8 +1325,11 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   post-validation wake path, a wake of up to `n` waiters at an address wakes an oracle-chosen subset of
   `min n k` of the `k` threads queued there, in one step, and accesses no memory. On Linux `n`
   is `val`, at least 1 for `val ≤ 0`; on macOS it is 1, or all with `WAKE_ALL`. Linux's success
-  result is the number woken. macOS returns `0`, `-ENOENT` if nobody was woken, or, as an oracle option,
-  `-EINTR` with nobody woken. It gives no happens-before edge. The translator binds
+  result is the number woken. macOS returns `0` after a wake of one or more; after a wake of
+  nobody it returns `-ENOENT` or `0`, an oracle choice (xnu's `ulock_wake` returns `0` while the
+  key's `ull` lives, until its last waiter's cleanup, which the model does not track); as one more
+  oracle option it returns `-EINTR` with nobody woken (xnu's wake path never does; a conservative
+  extra outcome). It gives no happens-before edge. The translator binds
   `os.linux.futex_3arg` (0.15.2 on), `os.linux.futex_wake` (0.14.1, the same system call) and
   libc's `__ulock_wake` (macOS) to it in every allocator model (`Air2Lean/StdModels.lean`).
   `std.Thread.Futex.wake` (0.14.1, 0.15.2) itself still binds to its hand row (STD-05) until
