@@ -53,7 +53,8 @@ MUTATIONS = [
 
 # The certificate embeds each function's AIR once, as a `source_<i>` term printed with explicit
 # names (`@_root_.Air2Lean.Op.arith …`); loop lemmas restate a body in the short form above.
-# `explicit` renders a short-form mutation text in the embedded term's syntax.
+# `explicit` renders a short-form mutation text in the embedded term's syntax: every argument of
+# an application on a line of its own (`Reify.term`; one long line made the `.ilean` writer slow).
 CTOR_TYPES = {
     'Op': ('arith', 'cmp', 'div', 'ret', 'fieldPtr', 'store', 'isNonErr', 'isErr'),
     'ArithOp': ('mul', 'add', 'sub'), 'Mode': ('checked', 'wrap', 'sat'),
@@ -77,7 +78,7 @@ def explicit(short):
             while tokens[pos] != ')':
                 args.append(term())
             pos += 1
-            return '(' + ' '.join([head] + args) + ')'
+            return '(' + '\n'.join([head] + args) + ')'
         if tok.startswith('.'):
             return f'@_root_.Air2Lean.{CTOR_TYPE[tok[1:]]}.{tok[1:]}'
         if tok in ('true', 'false'):
@@ -86,9 +87,9 @@ def explicit(short):
             return tok
         if tok.endswith(': Int)'):
             n = tok[1:].split()[0]
-            return f'(@_root_.OfNat.ofNat @_root_.Int (nat_lit {n}) (@_root_.instOfNat (nat_lit {n})))'
+            return f'(@_root_.OfNat.ofNat\n@_root_.Int\n(nat_lit {n})\n(@_root_.instOfNat\n(nat_lit {n})))'
         assert tok.isdigit(), (short, tok)
-        return f'(@_root_.OfNat.ofNat @_root_.Nat (nat_lit {tok}) (@_root_.instOfNatNat (nat_lit {tok})))'
+        return f'(@_root_.OfNat.ofNat\n@_root_.Nat\n(nat_lit {tok})\n(@_root_.instOfNatNat\n(nat_lit {tok})))'
 
     rendered = term()
     assert pos == len(tokens), short
