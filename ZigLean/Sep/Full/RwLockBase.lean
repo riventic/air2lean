@@ -54,6 +54,9 @@ structure Base (Sz : Nat) (K : BlockKind) (G : ThreadId → γ) (rX : Res) (m : 
   nap : ∀ u, (L.ph (G u) ≠ .out ∧ L.ph (G u) ≠ .away ∧ L.ph (G u) ≠ .gone) ∨
       S.place.ph (G u) ≠ (.out, .out) →
     M.ph (G u) = .away ∨ M.ph (G u) = .holdsAway
+  /-- The rest's bytes are live (`Inv.stepIn`'s `hbl`; a step of the condition's code carries
+  no lock invariant to read it from, `FPrim.ofWords`). -/
+  live : ∀ l, rX.owned l ≠ none → m.heap l ≠ none
 
 namespace Base
 
@@ -105,7 +108,8 @@ theorem atStop (hu : W.Base Sz K G rX m) (t : ThreadId) :
     shares := hu.shares
     pin := hu.pin
     wt := hu.wt
-    nap := hu.nap }
+    nap := hu.nap
+    live := hu.live }
 
 /-- **A step of the outer mutex's code keeps the base** (`fitsM`'s `stable`): `t` runs it at a
 calm place of the rwlock, out of the semaphore's code. The rwlock's invariant stays
@@ -166,7 +170,9 @@ theorem stableM {t : ThreadId} {p : LPh} {h rL rH : Res} {m' : Mem} (hu : W.Base
         rcases hq with ⟨-, hq, -⟩ | hq
         · exact absurd hla hq
         · exact absurd hcalm.2 hq
-      · rw [upd_ne _ _ e]; exact hu.nap u hq }
+      · rw [upd_ne _ _ e]; exact hu.nap u hq
+    live := fun l hl => by
+      rw [hs.heap (off_of_side hM l hl)]; exact hu.live l hl }
 
 /-- **A step of the semaphore's mutex's code keeps the base** (`fitsS`'s `stable`): `t` runs it
 out of the condition's busy code and out of the semaphore's `pst` (the client's `okS`: `hb`,
@@ -221,7 +227,9 @@ theorem stableS {t : ThreadId} {p : LPh} {h s : Res} {m' : Mem} (hu : W.Base Sz 
       rw [hmph u]
       by_cases e : u = t
       · rw [e]; exact hma
-      · rw [upd_ne _ _ e] at hq; exact hu.nap u hq }
+      · rw [upd_ne _ _ e] at hq; exact hu.nap u hq
+    live := fun l hl => by
+      rw [hs.heap (off_of_side hL l hl)]; exact hu.live l hl }
 
 /-- **A tick of `t`'s part keeps the base** (the two locks have one part,
 `FLock.Pair.setPart`): the tick changes no byte, so the rwlock's invariant stays (`Inv.stepIn`;
@@ -288,7 +296,8 @@ theorem tick {t : ThreadId} {r s s' : Res} (hu : W.Base Sz K G rX m)
     nap := fun u hq => by
       rw [hmph u]
       rw [hlph u, hup S.place.ph (fun g => congrArg Prod.snd (hpl g r)) u] at hq
-      exact hu.nap u hq }
+      exact hu.nap u hq
+    live := hu.live }
 
 /-- **A waiter of the condition is `away` from the outer mutex or holds it at `holdsAway`**
 (`fitsS`'s `hsleep`; `nap`), with the epoch in the outer mutex's nest (`hnE`, the lock's). -/
@@ -306,14 +315,16 @@ primitive's rest stays (`semSub_step`); the condition's writes stay in the step'
 (`Step.frame`), so the window stays; the free resource claims no extent (`FreeRes.extent`), so
 the pin stays in the rest of the rest; and the stepping thread is out of the semaphore's code,
 with its places at both mutexes kept. -/
-theorem wstep {t : ThreadId} {G' : ThreadId → γ} {rS rS' rX' rY rY' : Res} {m' : Mem}
+theorem wstep {t : ThreadId} {G' : ThreadId → γ} {rS rS' sB rX' rY rY' : Res} {m' : Mem}
     {P : ThreadId → LPh} (hu : W.Base Sz K G rX m) (hs : W.Step t G rS m G' rS' m')
-    (hLw : L.WInv P m) (hI' : W.Inv G' rX' m') (he : rX = rsum (W.st.cellsR m) rY)
-    (he' : rX' = rsum (W.st.cellsR m') rY') (hmv : W.Moves G m rY G' m' rY')
+    (hS' : rS' = rsum sB rX') (hLw : L.WInv P m) (hI' : W.Inv G' rX' m')
+    (he : rX = rsum (W.st.cellsR m) rY) (he' : rX' = rsum (W.st.cellsR m') rY')
+    (hmv : W.Moves G m rY G' m' rY')
     (hRoff : ∀ xs r l, W.R xs r → (C.S.In l ∨ C.Ep.In l) → r.heap l = none)
     (hsh : W.Shares G' m') : W.Base Sz K G' rX' m' := by
   obtain ⟨⟨-, hW⟩, -⟩ := hu.sub
   have hsub' := semSub_step hs hu.sub hLw hRoff he he' hmv
+  have hM' : M.Inv G' (rsum sB rX') m' := hS' ▸ hs.2.2.1
   obtain ⟨hF, hfs, hFm⟩ := hs.frame
   obtain ⟨-, -, -, -, -, -, hoth, -, hmph, -, hlph, -, hspe, hsp, -, -⟩ := hs
   obtain ⟨-, rF, rF', rO, rfl, rfl, ⟨-, -, hFR⟩, ⟨-, -, hFR'⟩⟩ := hmv
@@ -361,7 +372,8 @@ theorem wstep {t : ThreadId} {G' : ThreadId → γ} {rS rS' rX' rY rY' : Res} {m
     nap := fun u hq => by
       rw [hmph' u]
       rw [hlph' u, hspl u] at hq
-      exact hu.nap u hq }
+      exact hu.nap u hq
+    live := fun l hl => hM'.rest_live ((Res.owned_sep rfl rfl).mpr (.inr hl)) }
 
 /-! ## The relabels around the other lock's code -/
 
@@ -454,7 +466,8 @@ theorem relabel {t : ThreadId} {g' : γ} (hu : W.Base Sz K G rX m)
     nap := fun u hq => by
       by_cases e : u = t
       · rw [e, upd_self] at hq ⊢; rw [spl] at hq; exact hnap hq
-      · rw [upd_ne _ _ e] at hq ⊢; exact hu.nap u hq }
+      · rw [upd_ne _ _ e] at hq ⊢; exact hu.nap u hq
+    live := hu.live }
 
 /-- **A relabel of one thread's place at the outer mutex keeps the base** (`relabel` at
 `M.set g q h`): the thread has not ended, a writer keeps its hold (`hwm`), and the new place

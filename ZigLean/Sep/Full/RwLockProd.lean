@@ -190,15 +190,16 @@ theorem Inv.otherStep {A : FLock γ} {G G' : ThreadId → γ} {sB rX : Res} {m m
     (hwm : ∀ u, (W.ph (G u)).isW = true → (M.ph (G' u)).held = true) : W.Inv G' rX m' := by
   have hbl : A.b < m.blocks.size := by
     obtain ⟨blk, hb, -⟩ := hA.w.blk; exact (Array.getElem?_eq_some_iff.mp hb).1
-  obtain ⟨rLA, ⟨ho, hLoffA, -, -, -⟩, -⟩ := hA.facts
-  have hO : A.Off (rsum rLA (rsum sB rX)).heap.erase :=
-    LockWord.off_erase.mpr fun l hl => by
-      show (rLA.heap ∪ (rsum sB rX).heap) l = none
-      rw [FHeap.union_apply, LockWord.off_erase.mp hLoffA l hl,
-        LockWord.off_erase.mp hA.xoff l hl]; rfl
-  exact hI.lockStep hs hap (LockWord.off_owned_of_rest ho hA.w.blk hO fun l hl =>
-      (Res.owned_sep rfl rfl).mpr (.inr ((Res.owned_sep rfl rfl).mpr (.inr hl))))
-    hbl hph hx hM hwm
+  exact hI.lockStep hs hap (FLock.Inv.off_side hA) hbl hph hx hM hwm
+
+/-- A byte the common rest owns is none of a lock's word's whose invariant has the common rest
+(`FLock.Inv.off_side`): a step of that lock's code keeps it (`LockWord.Step.heap`). -/
+theorem off_of_side {A : FLock γ} {G : ThreadId → γ} {sB rX : Res} {m : Mem}
+    (hA : A.Inv G (rsum sB rX) m) (l : Zig.Loc) (hl : rX.owned l ≠ none) : ¬ A.In l :=
+  fun hin => by
+    have e : l = (A.b, l.2) := Prod.ext hin.1 rfl
+    rw [e] at hl
+    exact hl (FLock.Inv.off_side hA l.2 hin.2.1 hin.2.2)
 
 /-- **The state word lies before both mutexes** (the layout: the word's 8 bytes at `p`, the
 semaphore's mutex at `p + 16`, the outer mutex at `p + 32`): `Inv.otherStep`'s and `fitsM`'s

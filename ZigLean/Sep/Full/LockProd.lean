@@ -520,6 +520,18 @@ theorem Inv.share_zero_of_cell {t : ThreadId} {l : Loc} (hi : L.Inv G rX m)
   obtain ⟨rL, ho, -⟩ := hi.rest
   exact ho.share_zero_of_cell ht fun e => hl (rsum_heap_none.mp (rsum_heap_none.mp e).2).2
 
+/-- **A part of the protocol's rest owns no byte of the lock's word**, not even a share: the word
+is in the lock's own rest (`LockWord.off_owned_of_rest`). -/
+theorem Inv.off_side {s r : Res} (hi : L.Inv G (rsum s r) m) : L.Off r.owned := by
+  obtain ⟨rLA, ⟨ho, hLoff, -, -, -⟩, -⟩ := hi.facts
+  have hO : L.Off (rsum rLA (rsum s r)).heap.erase :=
+    LockWord.off_erase.mpr fun l hl => by
+      show (rLA.heap ∪ (rsum s r).heap) l = none
+      rw [FHeap.union_apply, LockWord.off_erase.mp hLoff l hl,
+        LockWord.off_erase.mp hi.xoff l hl]; rfl
+  exact LockWord.off_owned_of_rest ho hi.w.blk hO fun l hl =>
+    (Res.owned_sep rfl rfl).mpr (.inr ((Res.owned_sep rfl rfl).mpr (.inr hl)))
+
 /-- **A thread's share of a byte the rest shares stays over a change of its ghost value alone**
 (`Inv.share_sum` with rests that hold the same share of the byte: a tick, a step on its own
 part; the rests differ when the invariants come from the other lock's view of a two-lock product,
