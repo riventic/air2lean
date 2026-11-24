@@ -464,8 +464,7 @@ theorem Inv.mstep {Wd : Word 32 4} {t : ThreadId} {G : ThreadId → γ} {rX : Re
       (∀ hF : Heap, (∀ l, V.In l → hF l = none) → FStepIn hF { m with current := t } M) →
       W.Inv G rX M := fun V _ hV hr hf =>
     hI₀.wordStep hr hf (st_c_apart W V hV)
-      (fun xs r l h hl => hRoff xs r l h (by
-        rcases hV with rfl | rfl <;> first | exact .inl hl | exact .inr hl))
+      (fun xs r l h hl => hRoff xs r l h (FCond.in_words hV hl))
       hbl (fun _ => rfl) (fun _ => rfl) (fun _ h => h) hI.wm
   cases hs with
   | same => exact hI
@@ -492,8 +491,8 @@ theorem Inv.stepRest {G G' : ThreadId → γ} {rX₀ rX₀' : Res} {m m' : Mem} 
   rcases hsh with rfl | ⟨Wd, rY, hWd, rfl, rfl, hY⟩
   · exact hst _ hI (fun _ h => h) fun _ h => h
   · have hI₁ := hst rY
-      (hI.dropCells hY (st_c_apart W Wd hWd) fun xs r l h hl => hRoff xs r l h (by
-        rcases hWd with rfl | rfl <;> first | exact .inl hl | exact .inr hl))
+      (hI.dropCells hY (st_c_apart W Wd hWd) fun xs r l h hl =>
+        hRoff xs r l h (FCond.in_words hWd hl))
       (fun l h => (Res.owned_sep rfl rfl).mpr (.inr h))
       fun l h e => h (rsum_heap_none.mp e).2
     exact hI₁.frame (disj_cellsAt hY).symm
@@ -542,7 +541,7 @@ theorem semSub_step {P : ThreadId → LPh} {t : ThreadId} {G G' : ThreadId → �
       ∀ Wd, (Wd = C.S ∨ Wd = C.Ep) → ∀ l, Wd.In l →
         (rsum (W.st.cellsR m) rF).heap l = none := fun hf Wd hW l hl =>
     rsum_heap_none.mpr ⟨cellsAt_none (hap Wd hW l hl), hf.heap_none fun xs r h =>
-      hRoff xs r l h (by rcases hW with rfl | rfl <;> first | exact .inl hl | exact .inr hl)⟩
+      hRoff xs r l h (FCond.in_words hW hl)⟩
   have hsub' : S.prim.Sub G (rsum (rsum (W.st.cellsR m) rF) rO) m := by
     rw [rsum_assoc]; exact hsub
   rw [hG, ← rsum_assoc]

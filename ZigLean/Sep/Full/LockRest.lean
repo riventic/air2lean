@@ -56,6 +56,11 @@ namespace Res.Pins
 
 variable {a c : Res} {b : BlockId} {S : Nat} {K : BlockKind}
 
+/-- The pin reads only the ghost state. -/
+theorem of_gh (h : a.Pins b S K) (e : c.gh = a.gh) : c.Pins b S K := by
+  unfold Res.Pins at h ⊢
+  rwa [e]
+
 theorem left (h : a.Pins b S K) : (rsum a c).Pins b S K :=
   Nat.lt_of_lt_of_le h (Nat.le_add_right _ _)
 

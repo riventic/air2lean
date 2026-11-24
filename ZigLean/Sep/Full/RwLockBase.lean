@@ -21,12 +21,15 @@ own beside the lock's: what every client's base keeps, for every reader/writer l
   `ww` waits at the semaphore (`Fits.ofProduct`'s `wtw`), and a thread in the semaphore's mutex's
   code or in the semaphore's is `away` from the outer mutex or holds it at `holdsAway` (`fitsS`'s
   `hsleep`: `Base.hsleep`).
+- `live`: the rest's owned bytes are live (`Inv.stepIn`'s `hbl`).
 
 The obligations of the builders, one theorem each: a stop (`Base.atStop`), a step of either
 lock's code (`Base.stableM`, `Base.stableS`), a tick of a thread's part in the outer mutex's view
 and in the semaphore's (`Base.tickM`, `Base.tickL`, from `Base.tick`), a step of the rwlock's own
-code (`Base.wstep`), and the relabels around the other lock's code (`Base.mnap`, `Base.munnap`,
-`Base.maway`, `Base.munaway`, `Base.lmove`, from `Base.relabel`).
+code (`Base.wstep`), a step of the semaphore's code (`Base.sstep`: `fitsS`'s `kstep`, from the
+assembler `Base.ofStepRest` over the rest the step leaves, `FCond.StepRest`, and `Base.natStep` for
+a step in the semaphore's mutex's frame), and the relabels around the other lock's code
+(`Base.mnap`, `Base.munnap`, `Base.maway`, `Base.munaway`, `Base.lmove`, from `Base.relabel`).
 -/
 
 namespace Zig
@@ -616,10 +619,7 @@ theorem ofStepRest {t : ThreadId} {G' : ThreadId → γ} {rX' : Res} {m' : Mem}
     sub := ⟨⟨hCI', fun V hV => ⟨hok V hV, hsh.words (fun V hV => (hW V hV).2) hE hV⟩⟩, hSI'⟩
     win := hwin
     shares := hshr
-    pin := by
-      have h := hu.pin
-      unfold Res.Pins at h ⊢
-      rwa [hsh.gh]
+    pin := hu.pin.of_gh hsh.gh
     wt := fun u hq => by
       by_cases e : u = t
       · rw [e] at hq ⊢; exact hwt hq
@@ -659,10 +659,7 @@ theorem natStep {t : ThreadId} {G' G'' : ThreadId → γ} {sB rL rH rX' : Res} {
     (∀ V : Word 32 4, (V = C.S ∨ V = C.Ep) → V.Ok m' fun _ => True) ∧
     ∀ l, (C.S.In l ∨ C.Ep.In l) → rX'.heap l = rX.heap l → m'.heap l = m.heap l := by
   obtain ⟨⟨-, hW⟩, -⟩ := hu.sub
-  have hpin' : rX'.Pins W.st.b Sz K := by
-    have h := hu.pin
-    unfold Res.Pins at h ⊢
-    rwa [hsh.gh]
+  have hpin' : rX'.Pins W.st.b Sz K := hu.pin.of_gh hsh.gh
   have hsBn : ∀ l, rX.heap l ≠ none → sB.heap l = none := fun l h =>
     (hsB.disj hk.side_disj l).resolve_right h
   -- a byte of the lock's block that the rest holds with its cell before and after the step
@@ -802,8 +799,7 @@ theorem sstep {t : ThreadId} {G' : ThreadId → γ} {rS rS' sB rL rH rX' : Res} 
       have hwph := hall W.ph hgw
       have hmph := hall M.ph hgm
       have hpart := hall M.part hgp
-      have hin : ∀ l, Wd.In l → C.S.In l ∨ C.Ep.In l := fun l hl => by
-        rcases hWs with rfl | rfl <;> first | exact .inl hl | exact .inr hl
+      have hin : ∀ l, Wd.In l → C.S.In l ∨ C.Ep.In l := fun l hl => FCond.in_words hWs hl
       refine hu.ofStepRest hsh hRoff hCI' hSI' hwin (fun u e => upd_ne _ _ e)
         (by rw [upd_self]; exact hgm)
         (fun rZ hIZ ho _ =>

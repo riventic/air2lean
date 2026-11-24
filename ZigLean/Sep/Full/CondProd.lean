@@ -143,6 +143,11 @@ def StepRest (C : FCond γ) (m m' : Mem) (rX rX' : Res) : Prop :=
   rX' = rX ∨ ∃ (Wd : Word 32 4) (rY : Res), (Wd = C.S ∨ Wd = C.Ep) ∧
     rX = rsum (Wd.cellsR m) rY ∧ rX' = rsum (Wd.cellsR m') rY ∧ ∀ l, Wd.In l → rY.heap l = none
 
+/-- A byte of one of the condition's two words. -/
+theorem in_words {V : Word 32 4} (hV : V = C.S ∨ V = C.Ep) {l : Zig.Loc} (hl : V.In l) :
+    C.S.In l ∨ C.Ep.In l := by
+  rcases hV with rfl | rfl <;> first | exact .inl hl | exact .inr hl
+
 /-- The rest keeps its ghost state (a word's cells have none). -/
 theorem StepRest.gh (h : C.StepRest m m' rX rX') : rX'.gh = rX.gh := by
   rcases h with rfl | ⟨Wd, rY, -, rfl, rfl, -⟩ <;> rfl
@@ -152,8 +157,7 @@ theorem StepRest.heap (h : C.StepRest m m' rX rX') {l : Zig.Loc}
     (hl : ¬ (C.S.In l ∨ C.Ep.In l)) : rX'.heap l = rX.heap l := by
   rcases h with rfl | ⟨Wd, rY, hWd, rfl, rfl, -⟩
   · rfl
-  · have hn : ¬ Wd.In l := fun h => hl (by
-      rcases hWd with rfl | rfl <;> first | exact .inl h | exact .inr h)
+  · have hn : ¬ Wd.In l := fun h => hl (in_words hWd h)
     show ((cellsAt Wd.In m').heap ∪ rY.heap) l = ((cellsAt Wd.In m).heap ∪ rY.heap) l
     rw [FHeap.union_apply, FHeap.union_apply, cellsAt_none hn, cellsAt_none hn]
 
@@ -162,8 +166,7 @@ theorem StepRest.owned (h : C.StepRest m m' rX rX') {l : Zig.Loc}
     (hl : ¬ (C.S.In l ∨ C.Ep.In l)) (ho : rX'.owned l ≠ none) : rX.owned l ≠ none := by
   rcases h with rfl | ⟨Wd, rY, hWd, rfl, rfl, -⟩
   · exact ho
-  · have hn : ¬ Wd.In l := fun h => hl (by
-      rcases hWd with rfl | rfl <;> first | exact .inl h | exact .inr h)
+  · have hn : ¬ Wd.In l := fun h => hl (in_words hWd h)
     rcases (Res.owned_sep rfl rfl).mp ho with h | h
     · exact absurd (cellsAt_owned_none hn) h
     · exact (Res.owned_sep rfl rfl).mpr (.inr h)
@@ -177,8 +180,7 @@ theorem StepRest.words (h : C.StepRest m m' rX rX')
     (hE : ∀ l, (C.S.In l ∨ C.Ep.In l) → rX'.heap l = rX.heap l → m'.heap l = m.heap l)
     {V : Word 32 4} (hV : V = C.S ∨ V = C.Ep) :
     ∃ rY, rX' = rsum (V.cellsR m') rY ∧ ∀ l, V.In l → rY.heap l = none := by
-  have hin : ∀ l, V.In l → C.S.In l ∨ C.Ep.In l := fun l hl => by
-    rcases hV with rfl | rfl <;> first | exact .inl hl | exact .inr hl
+  have hin : ∀ l, V.In l → C.S.In l ∨ C.Ep.In l := fun l hl => in_words hV hl
   obtain ⟨rA, hA, hoff⟩ := hsub V hV
   rcases h with rfl | ⟨Wd, rY, hWd, rfl, rfl, hY⟩
   · have hc : V.cellsR m' = V.cellsR m := cellsAt_congr fun l hl => hE l (hin l hl) rfl
@@ -227,8 +229,8 @@ theorem U_semStep (hp : L.Pair B) {U₀ : (ThreadId → γ) → Res → Mem → 
     (hsleep : ∀ G rX₀ m t, U₀ G rX₀ m → (C.ph (G t)).waits = true →
       B.ph (G t) = .away ∨ (B.ph (G t) = .holdsAway ∧ B.nest C.Ep.ptr))
     (hcl : ∀ sB rL rH rX₀ rX₀', rX = rsum sB rX₀ → rX' = rsum sB rX₀' →
-      C.StepRest m m' rX₀ rX₀' → Res.Sim sB (side B m rL rH) → B.Keeps G m rL rH rX₀ → B.Keeps G' m' rL rH rX₀' →
-      U₀ G rX₀ m → U₀ G' rX₀' m') :
+      C.StepRest m m' rX₀ rX₀' → Res.Sim sB (side B m rL rH) → B.Keeps G m rL rH rX₀ →
+      B.Keeps G' m' rL rH rX₀' → U₀ G rX₀ m → U₀ G' rX₀' m') :
     Pair.U B U₀ G' rX' m' := by
   obtain ⟨sB, rL, rH, rX₀, rfl, hsB, hk, hu⟩ := hU
   have hf := hk.facts
