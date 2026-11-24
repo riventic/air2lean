@@ -319,7 +319,7 @@ run_emitter() {
 }
 for name in parser1 parser2 parser3 parser4 parser5 parser6; do : > "$emitter/-fixtures/$name.lean"; done
 expect_pass "emitter checks 27 fixtures in leading-hyphen directory" run_emitter healthy
-expect_pass "all 26 emitter and caller fixtures elaborated" test "$(wc -l < "$emitter/checked" | tr -d ' ')" -eq 26
+expect_pass "all 27 emitter and caller fixtures elaborated" test "$(wc -l < "$emitter/checked" | tr -d ' ')" -eq 27
 expect_failure "failed emitter find" "find failed" run_emitter find-failure
 expect_failure "failed emitter sort" "sort failed" run_emitter sort-failure
 expect_failure "truncated emitter find" "listing incomplete" run_emitter truncated
