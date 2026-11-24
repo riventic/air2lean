@@ -15,8 +15,18 @@ import sys
 import tempfile
 
 HERE = Path(__file__).resolve().parent
-# Every Zig version `exports.json` exports `big_endian.zig` and `reject.zig` for.
-VERSIONS = ("0.17.1", "0.16.0")
+
+
+def exported_versions():
+    """Every Zig version `exports.json` exports `big_endian.zig` and `reject.zig` for (one set)."""
+    entries = json.loads((HERE / "exports.json").read_text())["exports"]
+    sets = {tuple(e["versions"]) for e in entries if e["source"] in ("big_endian.zig", "reject.zig")}
+    if len(sets) != 1:
+        raise SystemExit(f"exports.json: big_endian.zig and reject.zig differ in their versions: {sets}")
+    return sets.pop()
+
+
+VERSIONS = exported_versions()
 
 
 def load(version, target):

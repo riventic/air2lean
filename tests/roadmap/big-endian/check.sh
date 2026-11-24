@@ -28,7 +28,13 @@ set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
 case_dir=tests/roadmap/big-endian
-versions=(0.17.1 0.16.0)
+# The Zig versions exports.json exports big_endian.zig for.
+version_list=$(python3 -B -c 'import json, sys
+sets = {tuple(e["versions"]) for e in json.load(open(sys.argv[1]))["exports"] if e["source"] == "big_endian.zig"}
+assert len(sets) == 1, f"big_endian.zig entries differ in their versions: {sets}"
+print(*sets.pop())' "$case_dir/exports.json")
+read -ra versions <<<"$version_list"
+[ "${#versions[@]}" -gt 0 ] || { echo 'exports.json exports big_endian.zig for no version' >&2; exit 1; }
 pairs=(S390x:s390x-linux:s390x Mips64:mips64-linux:mips64 X64:x86_64-linux:x86_64)
 case "${1:---check}" in
   --native)

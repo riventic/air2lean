@@ -2000,20 +2000,25 @@ jobs:
           bash tests/roadmap/union-bases/check.sh --native
 
       # C01's checked source/export/proof fragment is qualified on 0.17.1 and 0.16.0: the
-      # artifact check below covers both committed exports; this row's fresh export and native
-      # tests use its pinned patched compiler and stock Zig.
+      # artifact check below covers both committed exports; the fresh export and native tests
+      # run once per qualified version (0.16.0 in `inputs`, 0.17.1 in `lean`) with that row's
+      # pinned patched compiler and stock Zig; the version-neutral tests and the artifact check
+      # run in `inputs` only.
       - name: Thread tuple source and ownership gate
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && !matrix.mutate && matrix.full && matrix.zig == '0.16.0' || !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate && matrix.full && matrix.zig == '0.17.1' }}
         env:
           AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
           AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
           AIR2LEAN_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
           AIR2LEAN_TUPLE_ZIG_VERSION: ${{ matrix.zig }}
+          AIR2LEAN_TUPLE_ONCE: ${{ matrix.part == 'inputs' && '1' || '' }}
         run: |
           set -euo pipefail
           lake build ZigLean.Sep.Full.ThreadSpawn
-          python3 tests/roadmap/thread-tuples/guard-tests.py
-          python3 tests/roadmap/thread-tuples/mutation-tests.py
+          if [ -n "$AIR2LEAN_TUPLE_ONCE" ]; then
+            python3 tests/roadmap/thread-tuples/guard-tests.py
+            python3 tests/roadmap/thread-tuples/mutation-tests.py
+          fi
           [ "$("$AIR2LEAN_ZIG_AIR" version)" = "$AIR2LEAN_TUPLE_ZIG_VERSION" ]
           [ "$("$AIR2LEAN_ZIG_NATIVE" version)" = "$AIR2LEAN_TUPLE_ZIG_VERSION" ]
           work=$(mktemp -d "$RUNNER_TEMP/thread-tuples.XXXXXX")
@@ -2024,7 +2029,7 @@ jobs:
           python3 scripts/normalize-generated.py compare tests/roadmap/thread-tuples/ThreadTuples/Gen.lean "$work/Gen.lean" "$work/generated-report.json"
           lake env lean -R "$work" "$work/Gen.lean"
           bash tests/roadmap/thread-tuples/check.sh --native
-          bash tests/roadmap/thread-tuples/check.sh --check-artifacts
+          [ -z "$AIR2LEAN_TUPLE_ONCE" ] || bash tests/roadmap/thread-tuples/check.sh --check-artifacts
           bash tests/roadmap/thread-tuples/check.sh --adapter-contract "$work/adapter-contract"
 
       - name: Fallible thread assignment and group fallback gate
