@@ -542,7 +542,11 @@ theorem fitsS (W : FRw γ X Y M L C S) {okS : γ → Prop}
     (hsleep : ∀ G rX m t, U₀ G rX m → (C.ph (G t)).waits = true →
       M.ph (G t) = .away ∨ (M.ph (G t) = .holdsAway ∧ M.nest C.Ep.ptr))
     (kstep : ∀ t G G' rX rX' m m' sB rL rH rX₀ rX₀', S.prim.Step t G rX m G' rX' m' →
-      rX = rsum sB rX₀ → rX' = rsum sB rX₀' → Res.Sim sB (FLock.side M m rL rH) →
+      rX = rsum sB rX₀ → rX' = rsum sB rX₀' →
+      (rX₀' = rX₀ ∨ ∃ (Wd : Word 32 4) (rY₀ : Res), (Wd = C.S ∨ Wd = C.Ep) ∧
+        rX₀ = rsum (Wd.cellsR m) rY₀ ∧ rX₀' = rsum (Wd.cellsR m') rY₀ ∧
+        ∀ l, Wd.In l → rY₀.heap l = none) →
+      Res.Sim sB (FLock.side M m rL rH) →
       M.Keeps G m rL rH rX₀ → M.Keeps G' m' rL rH rX₀' → U₀ G rX₀ m → U₀ G' rX₀' m')
     (holdLive : ∀ G rX m v, L.Inv G rX m → FLock.Pair.U M U₀ G rX m → L.ph (G v) = .holdsAway →
       P.Live v G m)

@@ -139,7 +139,9 @@ variable {γ Y : Type} {L B : FLock γ} {C : FCond γ} {S : FSem γ Y L C}
 /-- **A step of the semaphore keeps the two-lock product's rest** (module doc; `FSem.prim`'s
 `Step`, the `kstep` of `L.Fits S.prim` at `Pair.U B U₀`): `B` stays kept, the rest stores its side
 at the new memory, and the client keeps its own `U₀` at the protocol's rest after the step
-(`hcl`). The client gives where its `U₀` keeps the condition (`hsub`), `B`'s coordinates over the
+(`hcl`, which gets the rest after the step as the step fixes it: the same rest, or the rest at
+the new cells of one of the condition's words; the client cannot cancel `B`'s side to read it off
+the two equations). The client gives where its `U₀` keeps the condition (`hsub`), `B`'s coordinates over the
 semaphore's places (`bph`, `bheld`, `lpart`, `bR`) and the condition's over `L`'s (`cph_l`), that
 `B`'s side owns no byte of the condition's words (`hWo`), the keys apart (`hkey`), and that a
 waiter of the condition is `away` from `B` or holds it at `holdsAway` with the epoch in `B`'s nest
@@ -159,6 +161,9 @@ theorem U_semStep (hp : L.Pair B) {U₀ : (ThreadId → γ) → Res → Mem → 
     (hsleep : ∀ G rX₀ m t, U₀ G rX₀ m → (C.ph (G t)).waits = true →
       B.ph (G t) = .away ∨ (B.ph (G t) = .holdsAway ∧ B.nest C.Ep.ptr))
     (hcl : ∀ sB rL rH rX₀ rX₀', rX = rsum sB rX₀ → rX' = rsum sB rX₀' →
+      (rX₀' = rX₀ ∨ ∃ (Wd : Word 32 4) (rY₀ : Res), (Wd = C.S ∨ Wd = C.Ep) ∧
+        rX₀ = rsum (Wd.cellsR m) rY₀ ∧ rX₀' = rsum (Wd.cellsR m') rY₀ ∧
+        ∀ l, Wd.In l → rY₀.heap l = none) →
       Res.Sim sB (side B m rL rH) → B.Keeps G m rL rH rX₀ → B.Keeps G' m' rL rH rX₀' →
       U₀ G rX₀ m → U₀ G' rX₀' m') :
     Pair.U B U₀ G' rX' m' := by
@@ -213,7 +218,7 @@ theorem U_semStep (hp : L.Pair B) {U₀ : (ThreadId → γ) → Res → Mem → 
           rwa [upd_self, upd_upd] at h₁)
         (hf.pdisj_upd hg.2.2 hg.2.1) hxd hxo
       exact ⟨sB, rL, rH, _, hrot, by rw [hside]; exact hsB, hk',
-        hcl sB rL rH _ _ rfl hrot hsB hk hk' hu⟩
+        hcl sB rL rH _ _ rfl hrot (.inr ⟨Wd, rY₀, hWs, rfl, rfl, hY₀⟩) hsB hk hk' hu⟩
     · -- a native step on the thread's own part
       obtain ⟨r, -, -, -, hfs, -, -, -, hLi', rfl⟩ := hown
       rw [hrot] at hLi'
@@ -221,13 +226,15 @@ theorem U_semStep (hp : L.Pair B) {U₀ : (ThreadId → γ) → Res → Mem → 
       obtain ⟨hsB', hk'⟩ := Keeps.partStep hp hk hsB hfs hLi' (by rw [hpart, B.ph_setPart])
         (by rw [hpart, B.held_setPart])
         (fun r' h' => by rw [hpart]; exact (B.R_setPart G t r r').mpr h') hxd hxo
-      exact ⟨sB, rL, rH, _, hrot, hsB', hk', hcl sB rL rH _ _ rfl hrot hsB hk hk' hu⟩
+      exact ⟨sB, rL, rH, _, hrot, hsB', hk',
+        hcl sB rL rH _ _ rfl hrot (.inr ⟨Wd, rY₀, hWs, rfl, rfl, hY₀⟩) hsB hk hk' hu⟩
   · cases hmv with
     | enter =>
       -- the waiter's entry into the condition: a relabel
       have hk' := Keeps.relabel hk (B.keep_upd (hc _ _).1 (hc _ _).2.1) (hRC G t .en)
         (hf.pdisj_upd (hc _ _).2.2 (hc _ _).2.1) hk.xdisj hk.xoff
-      exact ⟨sB, rL, rH, rX₀, rfl, hsB, hk', hcl sB rL rH rX₀ rX₀ rfl rfl hsB hk hk' hu⟩
+      exact ⟨sB, rL, rH, rX₀, rfl, hsB, hk',
+        hcl sB rL rH rX₀ rX₀ rfl rfl (.inl rfl) hsB hk hk' hu⟩
     | hold s h _ _ _ _ hfs hLi' _ _ =>
       -- the holder's step on the mutex's resource: `B`'s word cells from `L`'s invariant after it
       obtain ⟨G'', hLi''⟩ := hLi'
@@ -240,7 +247,8 @@ theorem U_semStep (hp : L.Pair B) {U₀ : (ThreadId → γ) → Res → Mem → 
           have h₁ := hRS _ t s r (hRL G t .holds h r h')
           rwa [upd_self, upd_upd] at h₁)
         (hf.pdisj_upd hg.2.2 hg.2.1) hk.xdisj hk.xoff
-      exact ⟨sB, rL, rH, rX₀, rfl, hsB', hk', hcl sB rL rH rX₀ rX₀ rfl rfl hsB hk hk' hu⟩
+      exact ⟨sB, rL, rH, rX₀, rfl, hsB', hk',
+        hcl sB rL rH rX₀ rX₀ rfl rfl (.inl rfl) hsB hk hk' hu⟩
 
 end FLock.Pair
 
