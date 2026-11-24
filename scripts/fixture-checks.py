@@ -8,7 +8,10 @@
     python3 -B scripts/fixture-checks.py --prepare [--only TEXT]...
 
 The checks are derived from the workflow, not listed: a *proof-fixture check* is a
-`tests/**/check.sh` whose directory holds tracked `.lean` files, and its *unit* is the CI step
+`tests/**/check.sh` or `tests/**/check-NAME.sh` (a fixture's second gate:
+tests/roadmap/volatile-effects/check-device.sh, which no local run covered while only `check.sh`
+matched, so its proofs stayed red on main from 2026-11-03 to 2026-11-24) whose directory holds
+tracked `.lean` files, and its *unit* is the CI step
 that runs it (the whole `run:` script, with its `env:`), for every job row the step's `if:` may
 run for (scripts/ci-reuse.py's `may_run`). The step is rendered for that row (`matrix.*`,
 `github.workspace`, `runner.temp`); rows whose rendered step is the same run it once. So a new
@@ -102,7 +105,7 @@ GUARD = _load('air2lean_build_guard', 'scripts/build-guard.py')
 PEAKS = _load('air2lean_lean_peaks', 'scripts/lean-peaks.py')
 
 WS, TMP = '@WORKSPACE@', '@RUNNER_TEMP@'  # placeholders for the unit's scratch paths
-CHECK = re.compile(r'(?<![\w/.-])(tests/[\w/.-]+/check\.sh)\b')
+CHECK = re.compile(r'(?<![\w/.-])(tests/[\w/.-]+/check(?:-[\w-]+)?\.sh)\b')
 ARG = r'(?:[ \t]+(?:\\\n[ \t]*)?[^\s;&|()<>]+)'
 NATIVE = re.compile(r'(?<![\w/.:-])(?:bash[ \t]+)?tests/[\w/.-]+\.sh%s*?[ \t]+--native[\w-]*%s*' % (ARG, ARG))
 # A native row's runner (AIR2LEAN_<ARCH>_RUN, a command prefix; empty: the host): `_stage` fails a

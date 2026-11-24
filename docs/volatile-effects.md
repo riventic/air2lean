@@ -147,7 +147,8 @@ translations are identical except for the profile header, and the 0.16.0 one is 
 * `putc_trace`: for every memory and every oracle satisfying the polling contract `Answers`
   (busy answers `vs`, then a ready answer `r`), `putc uart c` returns and the final memory is the
   initial one with exactly the trace `putcSpec vs r c` appended: one status read per poll, in
-  order, then one data write of `c`. `putc_eventually`: every oracle that reports ready within
+  order, then one data write of `c`, and with its step count (`Mem.ticks`) raised by exactly one
+  per poll (`vs.length + 1`). `putc_eventually`: every oracle that reports ready within
   finitely many polls satisfies such a contract.
 * `statusTwice_trace`, `statusTwice_not_merged`: two read events; under a counting device the
   result is `0 ^^^ 1 = 1`, which a merged read (`a ^^^ a = 0`) can never give.
