@@ -903,19 +903,26 @@ theorem sepN_rnil : ∀ n : Nat, sepN n (partOf fun _ => rnil) rnil
 
 /-- **The start of two locks** (`FLock.Inv.make` for a pair): thread `t`, whose clock is above
 every thread's, gives of its part both words (`rWA`, `rWB`: exactly the words' bytes, which hold
-`0`), both resources (`rLA`, `rLB`) and the protocol's own rest `rY` to the rest. Every thread is
-out of both locks' code (and alive) or gone. Then `A`'s invariant holds with `B`'s side in its
-rest, and `B` is kept, at the protocol's own rest `rY` next to the old rest `rO`. -/
-theorem start {own : ThreadId → Res} {rO rLA rWA rLB rWB rY : Res} {t : ThreadId}
+`0`), both resources (`rLA`, `rLB`) and the protocol's own rest to the rest: its sync objects'
+words `rYw` (exactly the bytes `Wd`), which the rest then holds as the memory's cells, and the
+rest of it `rY`. Every thread is out of both locks' code (and alive) or gone. Then `A`'s invariant
+holds with `B`'s side in its rest, and `B` is kept, at the protocol's own rest: the cells at `Wd`,
+`rY` and the old rest `rO`. -/
+theorem start {own : ThreadId → Res} {rO rLA rWA rLB rWB rYw rY : Res} {t : ThreadId}
+    {Wd : Loc → Prop} [DecidablePred Wd]
     (ho : FOwned own rO m) (hjt : joinedB m t = false) (ht : t < m.threads.size)
     (hown : ∀ u, u ≠ t → A.own G m u = own u)
-    (hsplit : own t = rsum (A.part (G t)) (rsum (rsum rLA rWA) (rsum (rsum rLB rWB) rY)))
+    (hsplit : own t = rsum (A.part (G t))
+      (rsum (rsum rLA rWA) (rsum (rsum rLB rWB) (rsum rYw rY))))
     (hdP : FHeap.Disjoint (A.part (G t)).heap
-      (rsum (rsum rLA rWA) (rsum (rsum rLB rWB) rY)).heap)
+      (rsum (rsum rLA rWA) (rsum (rsum rLB rWB) (rsum rYw rY))).heap)
     (hdA : FHeap.Disjoint rLA.heap rWA.heap)
-    (hdAB : FHeap.Disjoint (rsum rLA rWA).heap (rsum (rsum rLB rWB) rY).heap)
+    (hdAB : FHeap.Disjoint (rsum rLA rWA).heap (rsum (rsum rLB rWB) (rsum rYw rY)).heap)
     (hdB : FHeap.Disjoint rLB.heap rWB.heap)
-    (hdBY : FHeap.Disjoint (rsum rLB rWB).heap rY.heap)
+    (hdBY : FHeap.Disjoint (rsum rLB rWB).heap (rsum rYw rY).heap)
+    (hdY : FHeap.Disjoint rYw.heap rY.heap)
+    (hYw : ∀ l, rYw.heap l ≠ none ↔ Wd l) (hYwk : rYw.know = Know.none)
+    (hYwg : rYw.gh = Ghost.unit)
     (hWA : ∀ l, rWA.heap l ≠ none ↔ A.In l) (hWAk : rWA.know = Know.none)
     (hWAg : rWA.gh = Ghost.unit)
     (hWB : ∀ l, rWB.heap l ≠ none ↔ B.In l) (hWBk : rWB.know = Know.none)
@@ -929,14 +936,16 @@ theorem start {own : ThreadId → Res} {rO rLA rWA rLB rWB rY : Res} {t : Thread
     (hblkA : A.BlkOk m) (h0A : A.U32 m 0) (hblkB : B.BlkOk m) (h0B : B.U32 m 0)
     (hat : ∀ l ∈ m.atomics, l.block ≠ A.b ∧ l.block ≠ B.b) (hq : m.waiters = #[])
     (hall : AllLe m (m.clocks[t]!)) :
-    A.Inv G (rsum (side B m rLB rnil) (rsum rY rO)) m ∧ B.Keeps G m rLB rnil (rsum rY rO) := by
+    A.Inv G (rsum (side B m rLB rnil) (rsum (cellsAt Wd m) (rsum rY rO))) m ∧
+      B.Keeps G m rLB rnil (rsum (cellsAt Wd m) (rsum rY rO)) := by
   -- the pieces of `t`'s part are apart from the old rest
   have hO : ∀ l, rO.heap l ≠ none →
-      rWB.heap l = none ∧ rLB.heap l = none ∧ rY.heap l = none := fun l hn => by
-    have h2 := ho.part_off ht hn
-    rw [hsplit] at h2
-    simp only [FHeap.union_apply, Option.or_eq_none_iff] at h2
-    exact ⟨h2.2.2.1.2, h2.2.2.1.1, h2.2.2.2⟩
+      rWB.heap l = none ∧ rLB.heap l = none ∧ rY.heap l = none ∧ rYw.heap l = none :=
+    fun l hn => by
+      have h2 := ho.part_off ht hn
+      rw [hsplit] at h2
+      simp only [FHeap.union_apply, Option.or_eq_none_iff] at h2
+      exact ⟨h2.2.2.1.2, h2.2.2.1.1, h2.2.2.2.2, h2.2.2.2.1⟩
   have hdis : ∀ {r : Res}, (∀ l, rO.heap l ≠ none → r.heap l = none) →
       FHeap.Disjoint r.heap rO.heap := fun h l => by
     cases e : rO.heap l with
@@ -944,11 +953,21 @@ theorem start {own : ThreadId → Res} {rO rLA rWA rLB rWB rY : Res} {t : Thread
     | some _ => exact .inl (h l (by rw [e]; simp))
   have hWBO : FHeap.Disjoint rWB.heap rO.heap := hdis fun l h => (hO l h).1
   have hLBO : FHeap.Disjoint rLB.heap rO.heap := hdis fun l h => (hO l h).2.1
-  have hYO : FHeap.Disjoint rY.heap rO.heap := hdis fun l h => (hO l h).2.2
+  have hYO : FHeap.Disjoint rY.heap rO.heap := hdis fun l h => (hO l h).2.2.1
+  have hYwO : FHeap.Disjoint rYw.heap rO.heap := hdis fun l h => (hO l h).2.2.2
   have hBY := FHeap.disjoint_union_left.mp hdBY
+  have hLBY := FHeap.disjoint_union_right.mp hBY.1
+  have hWBY := FHeap.disjoint_union_right.mp hBY.2
   have hdP' := FHeap.disjoint_union_right.mp hdP
+  -- the cells at `Wd` are apart from what `rYw` is apart from
+  have hcd : ∀ {r : Res}, FHeap.Disjoint rYw.heap r.heap →
+      FHeap.Disjoint (cellsAt Wd m).heap r.heap := fun h l => by
+    by_cases hl : Wd l
+    · exact .inr ((h l).resolve_left ((hYw l).mpr hl))
+    · exact .inl (cellsAt_none hl)
   -- `B`'s facts, from `t`'s ownership of its word and resource
-  have eB : own t = rsum (rsum (rsum (A.part (G t)) (rsum rLA rWA)) rY) (rsum rLB rWB) := by
+  have eB : own t = rsum (rsum (rsum (A.part (G t)) (rsum rLA rWA)) (rsum rYw rY))
+      (rsum rLB rWB) := by
     rw [hsplit, rsum_comm hdBY]; simp only [rsum_assoc]
   obtain ⟨hfreeB, hwB, hLBoff, hLBown⟩ :=
     FLock.make_word (L := B) (G := G) ho ht eB hdB hWB hphB hblkB h0B
@@ -958,23 +977,31 @@ theorem start {own : ThreadId → Res} {rO rLA rWA rLB rWB rY : Res} {t : Thread
     fun u hu => by
       have h : (B.ph (G u)).held = false := hfreeB.held u
       rw [h] at hu; cases hu⟩
-  -- give `B`'s word and resource and `rY` to the rest; read the word as the memory's cells
-  have eG : own t = rsum (rsum (A.part (G t)) (rsum rLA rWA)) (rsum (rsum rLB rWB) rY) := by
+  -- give `B`'s word and resource and the protocol's rest to the rest; read the protocol's words
+  -- and then `B`'s word as the memory's cells
+  have eG : own t = rsum (rsum (A.part (G t)) (rsum rLA rWA))
+      (rsum (rsum rLB rWB) (rsum rYw rY)) := by
     rw [hsplit]; simp only [rsum_assoc]
   have ho1 := ho.give ht eG (FHeap.disjoint_union_left.mpr ⟨hdP'.2, hdAB⟩)
-  have e1 : rsum (rsum (rsum rLB rWB) rY) rO = rsum rWB (rsum rLB (rsum rY rO)) := by
-    rw [rsum_comm hdB]; simp only [rsum_assoc]
+  have e1 : rsum (rsum (rsum rLB rWB) (rsum rYw rY)) rO =
+      rsum rYw (rsum rWB (rsum rLB (rsum rY rO))) := by
+    rw [rsum_left_comm (FHeap.disjoint_union_right.mp hdBY).1, rsum_comm hdB]
+    simp only [rsum_assoc]
   rw [e1] at ho1
+  have ho1' := ho1.restCells hYw hYwk hYwg (FHeap.disjoint_union_right.mpr ⟨hWBY.1.symm,
+    FHeap.disjoint_union_right.mpr ⟨hLBY.1.symm, FHeap.disjoint_union_right.mpr ⟨hdY, hYwO⟩⟩⟩)
+  rw [rsum_left_comm (hcd hWBY.1.symm)] at ho1'
   have ho2 : FOwned (upd own t (rsum (A.part (G t)) (rsum rLA rWA)))
-      (rsum (side B m rLB rnil) (rsum rY rO)) m := by
-    have h := ho1.restCells hWB hWBk hWBg (FHeap.disjoint_union_right.mpr ⟨hdB.symm,
-      FHeap.disjoint_union_right.mpr ⟨hBY.2, hWBO⟩⟩)
-    rw [show rsum (side B m rLB rnil) (rsum rY rO) =
-        rsum (B.wordR m) (rsum rLB (rsum rY rO)) by
+      (rsum (side B m rLB rnil) (rsum (cellsAt Wd m) (rsum rY rO))) m := by
+    have h := ho1'.restCells hWB hWBk hWBg (FHeap.disjoint_union_right.mpr
+      ⟨(hcd hWBY.1.symm).symm, FHeap.disjoint_union_right.mpr ⟨hdB.symm,
+        FHeap.disjoint_union_right.mpr ⟨hWBY.2, hWBO⟩⟩⟩)
+    rw [show rsum (side B m rLB rnil) (rsum (cellsAt Wd m) (rsum rY rO)) =
+        rsum (B.wordR m) (rsum (cellsAt Wd m) (rsum rLB (rsum rY rO))) by
       show rsum (rsum (B.wordR m) (rsum rLB rnil)) _ = _
-      rw [rsum_rnil, rsum_assoc]]
+      rw [rsum_rnil, rsum_assoc, rsum_left_comm (hcd hLBY.1.symm).symm]]
     exact h
-  have hi : A.Inv G (rsum (side B m rLB rnil) (rsum rY rO)) m :=
+  have hi : A.Inv G (rsum (side B m rLB rnil) (rsum (cellsAt Wd m) (rsum rY rO))) m :=
     FLock.Inv.make (t := t) (rL := rLA) (rW := rWA) ho2 hjt ht
       (fun u hu => by rw [upd_ne _ _ hu]; exact hown u hu) (by rw [upd_self]) hdP'.1 hdA hWA
       hWAk hWAg hphA hheldA hRA hblkA h0A (fun l hl => (hat l hl).1) hq hall
@@ -983,14 +1010,16 @@ theorem start {own : ThreadId → Res} {rO rLA rWA rLB rWB rY : Res} {t : Thread
     · rfl
     · exact hheldB u
   refine ⟨hi, hfB, by rw [hheld]; exact sepN_rnil _, fun u hu => ?_,
-    fun _ _ _ => rfl, FHeap.disjoint_union_left.mpr ⟨FHeap.disjoint_union_right.mpr ⟨hBY.1, hLBO⟩,
+    fun _ _ _ => rfl, FHeap.disjoint_union_left.mpr ⟨FHeap.disjoint_union_right.mpr
+      ⟨(hcd hLBY.1.symm).symm, FHeap.disjoint_union_right.mpr ⟨hLBY.2, hLBO⟩⟩,
       fun _ => .inl rfl⟩, LockWord.off_erase.mpr fun l hl => ?_⟩
   · rw [hheld]
     exact (ho.owns u hu).sepL (r₁ := rnil) (r₂ := own u)
       (congrArg Res.heap (rnil_rsum _)).symm (congrArg Res.gh (rnil_rsum _)).symm
   · have hWl := (hWB l).mpr hl
-    show (rY.heap ∪ rO.heap) l = none
-    rw [FHeap.union_apply, (hBY.2 l).resolve_left hWl, (hWBO l).resolve_left hWl]; rfl
+    show ((cellsAt Wd m).heap ∪ (rY.heap ∪ rO.heap)) l = none
+    rw [FHeap.union_apply, FHeap.union_apply, ((hcd hWBY.1.symm).symm l).resolve_left hWl,
+      (hWBY.2 l).resolve_left hWl, (hWBO l).resolve_left hWl]; rfl
 
 /-- `A`'s `set` is invisible to `B`: the same places, parts and resources. -/
 theorem B_upd (hp : A.Pair B) (G : ThreadId → γ) (t : ThreadId) (p : LPh) (h : Res)
