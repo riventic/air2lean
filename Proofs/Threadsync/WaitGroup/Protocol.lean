@@ -552,7 +552,8 @@ theorem stable (G : ThreadId → Gh) (rX : Res) (m m' : Mem) (t : ThreadId) (p :
 on its own stack block) keeps `U`, with the words' validity and histories and the rest. -/
 theorem U_own {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : ThreadId} {g : Gh}
     {hF : Heap} (hu : U G rX m) (hs : FStepIn hF m m') (hc : m.current = t)
-    (hng : (G t).1.ph ≠ .gone) (hrest : Rest rX' m') (hbk : BlkOk m')
+    (hng : (G t).1.ph ≠ .gone ∨ m'.footprint = m.footprint) (hrest : Rest rX' m')
+    (hbk : BlkOk m')
     (hwG : WG.Ok m' (fun u => WLive (G u))) (hwE : EV.Ok m' (fun u => ELive (G u)))
     (hhG : WG.hist m' = WG.hist m) (hhE : EV.hist m' = EV.hist m)
     (hfr : EV.Fresh m') (hX : g.2 = (G t).2) (hph : g.1.ph = (G t).1.ph) :
@@ -565,7 +566,6 @@ theorem U_own {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : ThreadId} {
     by_cases e : u = t
     · subst e; rw [upd_self, hph]
     · rw [upd_ne _ _ e]
-  obtain ⟨ht3, htf⟩ := live3 hu hng
   have hkE : EV.key m' = EV.key m := hu.ev.key_of_addrs hs.addrs
   obtain ⟨blk₀, hb₀, -⟩ := hu.blk
   have hkL : L.key m' = L.key m := L.key_of_addrs hs.addrs hb₀
@@ -576,19 +576,24 @@ theorem U_own {G : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {t : ThreadId} {
       (fun h => by rw [upd_self]; show g.2.sx = true ∧ g.2.ph = .st; rw [hX]; exact h) hfr hkE hkL)
     (fun u hfd => by rw [hP']; exact hu.lg u hfd) (fun u h3 => by rw [hP']; exact hu.out3 u h3)
     (fun e he _ _ => ?_) (fun w hw => by rw [hs.waiters] at hw; rw [hkL, hkE]; exact hu.q w hw)
-  rcases hs.fp e he with h' | ⟨-, -⟩
-  · exact .inl h'
-  rcases hs.fpc e he with h' | hle
-  · exact .inl h'
-  · exact .inr ⟨t, ht3, htf, by rw [← hc]; exact hle⟩
+  rcases hng with hng | hfe
+  · obtain ⟨ht3, htf⟩ := live3 hu hng
+    rcases hs.fp e he with h' | ⟨-, -⟩
+    · exact .inl h'
+    rcases hs.fpc e he with h' | hle
+    · exact .inl h'
+    · exact .inr ⟨t, ht3, htf, by rw [← hc]; exact hle⟩
+  · exact .inl ⟨e, by rw [← hfe]; exact he, .refl e⟩
 
-/-- The composite tick obligation: a native framed step on the caller's part. -/
+/-- The composite tick obligation: a native framed step on the caller's part. The tick records
+no access (the footprint stays), so `U` is kept for every ticking thread, also a finished task
+that is `gone` for the lock and still runs the event's `set` (`FLock.PartTick`). -/
 theorem tickStable (t : ThreadId) (G : ThreadId → Gh) (rX : Res) (m : Mem)
     (G' : ThreadId → Gh) (rX' : Res) (m' : Mem)
     (hs : L.PartTick t G rX m G' rX' m') (hu : U G rX m) : U G' rX' m' := by
-  obtain ⟨hc, hng, -, r, -, rfl, rfl, rfl, -⟩ := hs
-  exact U_own hu (FStepIn.ticked m (fun _ => none)) hc hng (hu.rest.congr fun _ _ => rfl) hu.blk
-    hu.wg.ticked hu.ev.ticked rfl rfl hu.einv.fresh rfl rfl
+  obtain ⟨hc, -, -, r, -, rfl, rfl, rfl, -⟩ := hs
+  exact U_own hu (FStepIn.ticked m (fun _ => none)) hc (.inr rfl) (hu.rest.congr fun _ _ => rfl)
+    hu.blk hu.wg.ticked hu.ev.ticked rfl rfl hu.einv.fresh rfl rfl
 
 /-! ## A step of the event's code -/
 
@@ -982,7 +987,7 @@ theorem U_own_native {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {t : ThreadId
     fun l hl => frame_box hu.rest hl (box_live hu hl)
   have hnG : ∀ l, WG.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm :=
     fun l hl => by rw [hcs l (wg_box hl) (wg_ev hl)]
-  exact U_own hu hs hc hng (Rest.step (fun _ => ev_box) hu.rest rfl hY hcs) hbk'
+  exact U_own hu hs hc (.inl hng) (Rest.step (fun _ => ev_box) hu.rest rfl hY hcs) hbk'
     (hu.wg.fstep hs (fun l hl => hcov l (wg_box hl)) hnG)
     (hu.ev.fstep hs (fun l hl => hcov l (ev_box hl)) hcW)
     (Word.hist_fstep hu.wg hs (fun l hl => hcov l (wg_box hl)) hnG) hh

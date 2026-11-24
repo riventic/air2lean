@@ -218,7 +218,7 @@ theorem U_frame {G G'' : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId}
     fun l hl => by rw [hcs l (wg_box hl)]
   have hnE : ∀ l, EV.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm :=
     fun l hl => by rw [hcs l (ev_box hl)]
-  exact U_own hu hs hc hng (hu.rest.congr hcs) hbk'
+  exact U_own hu hs hc (.inl hng) (hu.rest.congr hcs) hbk'
     (hu.wg.fstep hs (fun l hl => hcov l (wg_box hl)) hnG)
     (hu.ev.fstep hs (fun l hl => hcov l (ev_box hl)) hnE)
     (Word.hist_fstep hu.wg hs (fun l hl => hcov l (wg_box hl)) hnG)

@@ -694,7 +694,7 @@ theorem lmove (hpl : ∀ g q h, S.place.ph (L.set g q h) = S.place.ph g) {t : Th
 theorem tickM (hpl : ∀ g r, W.place.ph (M.setPart g r) = W.place.ph g) :
     FLock.Pair.TickKeeps M L (W.Base E Sz K) := by
   intro t G sB rL rH rX m r hg hsB hk hM hM' hu
-  exact hu.tick hM hM' (fun _ => rfl) (hM.w.live t hg).1 hpl
+  exact hu.tick hM hM' (fun _ => rfl) (hM.ht_or hg).1 hpl
 
 /-- **The tick obligation of the semaphore's view** (`fitsS`'s `tick`): the outer mutex's
 invariant before and after the tick is the product's (`FLock.Pair.swap`; the outer mutex stays
@@ -715,7 +715,7 @@ theorem tickL (hpl : ∀ g r, W.place.ph (M.setPart g r) = W.place.ph g) :
     (FLock.NoGatherHeld.of_R hRM hk'.facts)
   exact hu.tick hMi hMi'
     (fun l => by rw [hkL'.side_share (lR_share W l), hkL.side_share (lR_share W l)])
-    (hL.w.live t hg).1 hpl
+    (hL.ht_or hg).1 hpl
 
 /-! ## The places of a holder of the semaphore's mutex -/
 

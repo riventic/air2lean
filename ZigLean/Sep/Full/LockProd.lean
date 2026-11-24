@@ -805,12 +805,16 @@ def U (B : FLock γ) (U : (ThreadId → γ) → Res → Mem → Prop) :
     U G rX m
 
 /-- **The client's base is kept over a tick on a part** (the `tick` obligation of `Pair.fits`,
-`fitsEmpty`, `fitsOrder`; `A.PartTick`): the thread has not ended, and the client gets what the
+`fitsEmpty`, `fitsOrder`; `A.PartTick`): the thread is not `gone` for `A`, or it exists and was not
+joined (`PartTick`'s admission, decision 2026-11-24: a thread that left the lock still ticks on its
+own part; `FLock.Inv.ht_or` gives the two thread facts in both cases), and the client gets what the
 product has at the tick, `B`'s side and `B` kept as in `stable`, and `A`'s invariant at the stored
 rest before and after the tick (so a share of a byte in the rest keeps the part's own share,
 `FLock.Inv.share_keep`). -/
 abbrev TickKeeps (A B : FLock γ) (U : (ThreadId → γ) → Res → Mem → Prop) : Prop :=
-  ∀ t G sB rL rH rX m r, A.ph (G t) ≠ .gone → Res.Sim sB (side B m rL rH) →
+  ∀ t G sB rL rH rX m r,
+    (A.ph (G t) ≠ .gone ∨ (t < m.threads.size ∧ joinedB m t = false)) →
+    Res.Sim sB (side B m rL rH) →
     B.Keeps G m rL rH rX → A.Inv G (rsum sB rX) m →
     A.Inv (upd G t (A.setPart (G t) r)) (rsum sB rX) m.ticked → U G rX m →
     U (upd G t (A.setPart (G t) r)) rX m.ticked
