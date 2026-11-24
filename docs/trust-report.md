@@ -31,6 +31,7 @@ premise, checker or test, or a check whose test CI does not run.
 | Theorems over generated modules and the ZigLean library | `kernel-checked` | TRU-01, TRU-04 | `scripts/assumptions.sh` / `tests/roadmap/assurance/test_policy.py`<br>`scripts/theorem_universe.py` / `tests/roadmap/theorem-universe/test_universe.py`<br>`scripts/premises.py` / `tests/roadmap/premises/test_premises.py` |
 | Lean kernel and toolchain | `unverified-assumption` | TRU-01 | — |
 | Native backend, linker, OS and hardware | `unverified-assumption` | TRU-03, PRF-02 | — |
+| Artifact publication (staged file, fsync, atomic rename or no-clobber link) | `unverified-assumption` | TRU-06 | — |
 
 ## kernel-checked
 
@@ -158,3 +159,11 @@ Proofs concern AIR before code generation. Native behavior is related to the mod
 - Components: `zig-patch/versions.toml`
 - Premises: [TRU-03](premises.md#tru-03), [PRF-02](premises.md#prf-02)
 - Further evidence (not a check of this stage): `scripts/diff.sh`, `scripts/abi-probe.py`
+
+### Artifact publication (staged file, fsync, atomic rename or no-clobber link)
+
+A translation, check report, proof receipt or project report reaches its published path only by one atomic rename or no-clobber link of an fsynced temporary file, so a failed, interrupted or timed-out run leaves the prior artifact and no prefix there. The tests drive the real writers with stub tools; the atomicity and durability of rename, link and fsync are the host filesystem's.
+
+- Components: `scripts/safe-output.py`, `scripts/workflow-common.sh`
+- Premises: [TRU-06](premises.md#tru-06)
+- Further evidence (not a check of this stage): `docs/safe-output.md`, `tests/roadmap/safe-output/test_safe_output.py`

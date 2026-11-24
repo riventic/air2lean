@@ -1154,6 +1154,288 @@ def mem_Allocator_free__anon_1e60e7ef40f5 (p0 : mem_Allocator) (p1 : Zig.Slice) 
 
 attribute [zig_run] mem_Allocator_free__anon_1e60e7ef40f5
 
+structure mem_Allocator_reallocAdvanced__anon_0df1ef68623eLocals where
+  deriving Inhabited
+
+inductive mem_Allocator_reallocAdvanced__anon_0df1ef68623eExit where
+  | ret (v : Except Zig.ErrName (Zig.Slice))
+  | br9 (v : Except Zig.ErrName (Zig.Slice))
+  | br4
+  | br23
+  | br32 (v : BitVec 64)
+  | br42 (v : Option (Zig.Ptr))
+  | br40
+  | br61 (v : Option (Zig.Ptr))
+  | br59 (v : Zig.Ptr)
+  | br87
+  | br96
+  | br108
+  | br117
+
+def mem_Allocator_reallocAdvanced__anon_0df1ef68623e (p0 : mem_Allocator) (p1 : Zig.Slice) (p2 : BitVec 64) (p3 : BitVec 64) : Zig.ConcM Tgt (Except Zig.ErrName (Zig.Slice)) := do
+  let e ← ((do
+    match ← ((do
+      let i5 ← pure p1.len
+      let i6 ← pure (i5)
+      let i7 ← pure (i6 == (0 : BitVec 64))
+      if i7 then (do
+        match ← ((do
+          let i10 ← Zig.callC (mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43 p0 p2 p3)
+          match i10 with
+          | .error _ => (do
+            let i12 ← Zig.callRC (Zig.unwrapErr i10)
+            let i13 ← pure ((.error i12) : Except Zig.ErrName (Zig.Slice))
+            pure (.br9 i13))
+          | .ok v11 => (do
+            let i15 ← pure v11
+            let i16 ← Zig.sub false p2 (0 : BitVec 64) (safe := false)
+            let i17 ← pure (⟨i15, i16⟩ : Zig.Slice)
+            let i18 ← pure ((.ok i17) : Except Zig.ErrName (Zig.Slice))
+            pure (.br9 i18))) : Zig.CM Tgt mem_Allocator_reallocAdvanced__anon_0df1ef68623eLocals mem_Allocator_reallocAdvanced__anon_0df1ef68623eExit) with
+        | .br9 v9 => (do
+          let i20 ← pure (v9)
+          pure (.ret i20))
+        | e => pure e)
+      else (do
+        pure .br4)) : Zig.CM Tgt mem_Allocator_reallocAdvanced__anon_0df1ef68623eLocals mem_Allocator_reallocAdvanced__anon_0df1ef68623eExit) with
+    | .br4 => (do
+      match ← ((do
+        let i24 ← pure (p2)
+        let i25 ← pure (i24 == (0 : BitVec 64))
+        if i25 then (do
+          let _i27 ← Zig.callMC (mem_Allocator_free__anon_1e60e7ef40f5 p0 p1)
+          pure (.ret (.ok (⟨(⟨none, 18446744073709551615⟩ : Zig.Ptr), (0 : BitVec 64)⟩ : Zig.Slice) : Except Zig.ErrName (Zig.Slice))))
+        else (do
+          pure .br23)) : Zig.CM Tgt mem_Allocator_reallocAdvanced__anon_0df1ef68623eLocals mem_Allocator_reallocAdvanced__anon_0df1ef68623eExit) with
+      | .br23 => (do
+        let i30 ← Zig.callMC (mem_absorbSentinel__anon_7342b53a30ed p1)
+        let i31 ← pure (i30)
+        match ← ((do
+          let i33 ← Zig.callRC (math_mul__anon_44faaf286c79 (1 : BitVec 64) p2)
+          let i34 ← pure (Zig.isNonErr i33)
+          if i34 then (do
+            let i36 ← Zig.callRC (Zig.unwrapPayload i33)
+            pure (.br32 i36))
+          else (do
+            let _i38 ← Zig.callRC (Zig.unwrapErr i33)
+            pure (.ret (.error "OutOfMemory" : Except Zig.ErrName (Zig.Slice))))) : Zig.CM Tgt mem_Allocator_reallocAdvanced__anon_0df1ef68623eLocals mem_Allocator_reallocAdvanced__anon_0df1ef68623eExit) with
+        | .br32 v32 => (do
+          match ← ((do
+            let i41 ← Zig.callRC (mem_Alignment_fromByteUnits (1 : BitVec 64))
+            match ← ((do
+              let i43 ← pure ((p0).vtable)
+              let i44 ← Zig.callMC (Zig.ptrProject i43 (·.add 16))
+              let i45 ← Zig.load (Zig.Ptr) 8 i44
+              let i46 ← pure ((p0).ptr)
+              let i47 ← (if i45 == (⟨some 4, 0⟩ : Zig.Ptr) then Zig.callMC (heap_PageAllocator_remap i46 i31 i41 v32 p3) else throw .illegal)
+              pure (.br42 i47)) : Zig.CM Tgt mem_Allocator_reallocAdvanced__anon_0df1ef68623eLocals mem_Allocator_reallocAdvanced__anon_0df1ef68623eExit) with
+            | .br42 v42 => (do
+              let i49 ← pure ((v42).isSome)
+              if i49 then (do
+                let i51 ← Zig.optPayload v42
+                let i52 ← pure i51
+                let i53 ← Zig.sub false v32 (0 : BitVec 64) (safe := false)
+                let i54 ← pure (⟨i52, i53⟩ : Zig.Slice)
+                let i55 ← pure (i54)
+                let i56 ← pure ((.ok i55) : Except Zig.ErrName (Zig.Slice))
+                pure (.ret i56))
+              else (do
+                pure .br40))
+            | e => pure e) : Zig.CM Tgt mem_Allocator_reallocAdvanced__anon_0df1ef68623eLocals mem_Allocator_reallocAdvanced__anon_0df1ef68623eExit) with
+          | .br40 => (do
+            match ← ((do
+              let i60 ← Zig.callRC (mem_Alignment_fromByteUnits (1 : BitVec 64))
+              match ← ((do
+                let i62 ← pure ((p0).vtable)
+                let i63 ← pure i62
+                let i64 ← Zig.load (Zig.Ptr) 8 i63
+                let i65 ← pure ((p0).ptr)
+                let i66 ← (if i64 == (⟨some 2, 0⟩ : Zig.Ptr) then Zig.callC (heap_PageAllocator_alloc i65 v32 i60 p3) else throw .illegal)
+                pure (.br61 i66)) : Zig.CM Tgt mem_Allocator_reallocAdvanced__anon_0df1ef68623eLocals mem_Allocator_reallocAdvanced__anon_0df1ef68623eExit) with
+              | .br61 v61 => (do
+                let i68 ← pure ((v61).isSome)
+                if i68 then (do
+                  let i70 ← Zig.optPayload v61
+                  pure (.br59 i70))
+                else (do
+                  pure (.ret (.error "OutOfMemory" : Except Zig.ErrName (Zig.Slice)))))
+              | e => pure e) : Zig.CM Tgt mem_Allocator_reallocAdvanced__anon_0df1ef68623eLocals mem_Allocator_reallocAdvanced__anon_0df1ef68623eExit) with
+            | .br59 v59 => (do
+              let i73 ← pure i31.len
+              let i74 ← pure (v32)
+              let i75 ← pure (i73)
+              let i76 ← pure (Zig.min false i74 i75)
+              let i77 ← pure v59
+              let i78 ← pure (i76)
+              let i79 ← Zig.sub false i78 (0 : BitVec 64) (safe := false)
+              let i80 ← pure (⟨i77, i79⟩ : Zig.Slice)
+              let i81 ← pure i31.ptr
+              let i82 ← pure i81
+              let i83 ← pure (i76)
+              let i84 ← Zig.sub false i83 (0 : BitVec 64) (safe := false)
+              let i85 ← pure i31.len
+              let i86 ← pure (Zig.le false i83 i85)
+              match ← ((do
+                if i86 then (do
+                  pure .br87)
+                else (do
+                  throw .outOfBounds)) : Zig.CM Tgt mem_Allocator_reallocAdvanced__anon_0df1ef68623eLocals mem_Allocator_reallocAdvanced__anon_0df1ef68623eExit) with
+              | .br87 => (do
+                let i92 ← Zig.callMC (Zig.checkSliceEnd i31.len (0 : BitVec 64) i84 0 >>= fun _ => pure (⟨i82, i84⟩ : Zig.Slice))
+                let i93 ← pure i80.len
+                let i94 ← pure i92.len
+                let i95 ← pure (i93 == i94)
+                match ← ((do
+                  if i95 then (do
+                    pure .br96)
+                  else (do
+                    throw .panic)) : Zig.CM Tgt mem_Allocator_reallocAdvanced__anon_0df1ef68623eLocals mem_Allocator_reallocAdvanced__anon_0df1ef68623eExit) with
+                | .br96 => (do
+                  let i101 ← pure i92.ptr
+                  let i102 ← pure i80.ptr
+                  let i103 ← Zig.callMC (Zig.ptrProject i101 (·.elem 1 i93))
+                  let i104 ← Zig.callMC (Zig.ptrProject i102 (·.elem 1 i93))
+                  let i105 ← Zig.callMC (Zig.ptrLe i103 i102)
+                  let i106 ← Zig.callMC (Zig.ptrLe i104 i101)
+                  let i107 ← pure (i105 || i106)
+                  match ← ((do
+                    if i107 then (do
+                      pure .br108)
+                    else (do
+                      throw .panic)) : Zig.CM Tgt mem_Allocator_reallocAdvanced__anon_0df1ef68623eLocals mem_Allocator_reallocAdvanced__anon_0df1ef68623eExit) with
+                  | .br108 => (do
+                    Zig.callMC (Zig.memcpy 1 1 1 i80.ptr i101 i80.len i92.len)
+                    let _i114 ← pure i31.len
+                    Zig.callMC (Zig.memset (α := BitVec 8) 1 i31.ptr i31.len none)
+                    let i116 ← Zig.callRC (mem_Alignment_fromByteUnits (1 : BitVec 64))
+                    match ← ((do
+                      let i118 ← pure ((p0).vtable)
+                      let i119 ← Zig.callMC (Zig.ptrProject i118 (·.add 24))
+                      let i120 ← Zig.load (Zig.Ptr) 8 i119
+                      let i121 ← pure ((p0).ptr)
+                      let _i122 ← (if i120 == (⟨some 5, 0⟩ : Zig.Ptr) then Zig.callMC (heap_PageAllocator_free i121 i31 i116 p3) else throw .illegal)
+                      pure .br117) : Zig.CM Tgt mem_Allocator_reallocAdvanced__anon_0df1ef68623eLocals mem_Allocator_reallocAdvanced__anon_0df1ef68623eExit) with
+                    | .br117 => (do
+                      let i124 ← pure v59
+                      let i125 ← Zig.sub false v32 (0 : BitVec 64) (safe := false)
+                      let i126 ← pure (⟨i124, i125⟩ : Zig.Slice)
+                      let i127 ← pure (i126)
+                      let i128 ← pure ((.ok i127) : Except Zig.ErrName (Zig.Slice))
+                      pure (.ret i128))
+                    | e => pure e)
+                  | e => pure e)
+                | e => pure e)
+              | e => pure e)
+            | e => pure e)
+          | e => pure e)
+        | e => pure e)
+      | e => pure e)
+    | e => pure e) : Zig.CM Tgt mem_Allocator_reallocAdvanced__anon_0df1ef68623eLocals mem_Allocator_reallocAdvanced__anon_0df1ef68623eExit).run' (default : mem_Allocator_reallocAdvanced__anon_0df1ef68623eLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+attribute [zig_run] mem_Allocator_reallocAdvanced__anon_0df1ef68623e
+
+structure mem_Allocator_realloc__anon_af0c43114565Locals where
+  deriving Inhabited
+
+inductive mem_Allocator_realloc__anon_af0c43114565Exit where
+  | ret (v : Except Zig.ErrName (Zig.Slice))
+
+def mem_Allocator_realloc__anon_af0c43114565 (p0 : mem_Allocator) (p1 : Zig.Slice) (p2 : BitVec 64) : Zig.ConcM Tgt (Except Zig.ErrName (Zig.Slice)) := do
+  let e ← ((do
+    let i3 ← Zig.callMC Zig.returnAddress
+    let i4 ← Zig.callC (mem_Allocator_reallocAdvanced__anon_0df1ef68623e p0 p1 p2 i3)
+    pure (.ret i4)) : Zig.CM Tgt mem_Allocator_realloc__anon_af0c43114565Locals mem_Allocator_realloc__anon_af0c43114565Exit).run' (default : mem_Allocator_realloc__anon_af0c43114565Locals)
+  match e with
+  | .ret v => pure v
+
+attribute [zig_run] mem_Allocator_realloc__anon_af0c43114565
+
+structure mem_Allocator_remap__anon_e29e4a94db2bLocals where
+  deriving Inhabited
+
+inductive mem_Allocator_remap__anon_e29e4a94db2bExit where
+  | ret (v : Option (Zig.Slice))
+  | br3
+  | br16
+  | br25 (v : BitVec 64)
+  | br36 (v : Option (Zig.Ptr))
+  | br33 (v : Zig.Ptr)
+
+def mem_Allocator_remap__anon_e29e4a94db2b (p0 : mem_Allocator) (p1 : Zig.Slice) (p2 : BitVec 64) : Zig.MemM (Option (Zig.Slice)) := do
+  let e ← ((do
+    match ← ((do
+      let i4 ← pure (p2)
+      let i5 ← pure (i4 == (0 : BitVec 64))
+      if i5 then (do
+        let _i7 ← Zig.callM (mem_Allocator_free__anon_1e60e7ef40f5 p0 p1)
+        let i8 ← pure p1.ptr
+        let i9 ← pure i8
+        let i10 ← pure (i9)
+        let _i11 ← pure p1.len
+        let i12 ← pure (⟨i10, (0 : BitVec 64)⟩ : Zig.Slice)
+        let i13 ← pure (some i12)
+        pure (.ret i13))
+      else (do
+        pure .br3)) : Zig.MM mem_Allocator_remap__anon_e29e4a94db2bLocals mem_Allocator_remap__anon_e29e4a94db2bExit) with
+    | .br3 => (do
+      match ← ((do
+        let i17 ← pure p1.len
+        let i18 ← pure (i17)
+        let i19 ← pure (i18 == (0 : BitVec 64))
+        if i19 then (do
+          pure (.ret none))
+        else (do
+          pure .br16)) : Zig.MM mem_Allocator_remap__anon_e29e4a94db2bLocals mem_Allocator_remap__anon_e29e4a94db2bExit) with
+      | .br16 => (do
+        let i23 ← Zig.callM (mem_absorbSentinel__anon_7342b53a30ed p1)
+        let i24 ← pure (i23)
+        match ← ((do
+          let i26 ← Zig.callR (math_mul__anon_44faaf286c79 (1 : BitVec 64) p2)
+          let i27 ← pure (Zig.isNonErr i26)
+          if i27 then (do
+            let i29 ← Zig.callR (Zig.unwrapPayload i26)
+            pure (.br25 i29))
+          else (do
+            let _i31 ← Zig.callR (Zig.unwrapErr i26)
+            pure (.ret none))) : Zig.MM mem_Allocator_remap__anon_e29e4a94db2bLocals mem_Allocator_remap__anon_e29e4a94db2bExit) with
+        | .br25 v25 => (do
+          match ← ((do
+            let i34 ← Zig.callR (mem_Alignment_fromByteUnits (1 : BitVec 64))
+            let i35 ← Zig.callM Zig.returnAddress
+            match ← ((do
+              let i37 ← pure ((p0).vtable)
+              let i38 ← Zig.callM (Zig.ptrProject i37 (·.add 16))
+              let i39 ← Zig.load (Zig.Ptr) 8 i38
+              let i40 ← pure ((p0).ptr)
+              let i41 ← (if i39 == (⟨some 4, 0⟩ : Zig.Ptr) then Zig.callM (heap_PageAllocator_remap i40 i24 i34 v25 i35) else throw .illegal)
+              pure (.br36 i41)) : Zig.MM mem_Allocator_remap__anon_e29e4a94db2bLocals mem_Allocator_remap__anon_e29e4a94db2bExit) with
+            | .br36 v36 => (do
+              let i43 ← pure ((v36).isSome)
+              if i43 then (do
+                let i45 ← Zig.optPayload v36
+                pure (.br33 i45))
+              else (do
+                pure (.ret none)))
+            | e => pure e) : Zig.MM mem_Allocator_remap__anon_e29e4a94db2bLocals mem_Allocator_remap__anon_e29e4a94db2bExit) with
+          | .br33 v33 => (do
+            let i48 ← pure v33
+            let i49 ← Zig.sub false v25 (0 : BitVec 64) (safe := false)
+            let i50 ← pure (⟨i48, i49⟩ : Zig.Slice)
+            let i51 ← pure (i50)
+            pure (.ret i51))
+          | e => pure e)
+        | e => pure e)
+      | e => pure e)
+    | e => pure e) : Zig.MM mem_Allocator_remap__anon_e29e4a94db2bLocals mem_Allocator_remap__anon_e29e4a94db2bExit).run' (default : mem_Allocator_remap__anon_e29e4a94db2bLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+attribute [zig_run] mem_Allocator_remap__anon_e29e4a94db2b
+
 structure mem_Allocator_resize__anon_ec6bca265858Locals where
   deriving Inhabited
 
@@ -1217,6 +1499,255 @@ def mem_Allocator_resize__anon_ec6bca265858 (p0 : mem_Allocator) (p1 : Zig.Slice
 
 attribute [zig_run] mem_Allocator_resize__anon_ec6bca265858
 
+structure patternLocals where
+  deriving Inhabited
+
+inductive patternExit where
+  | ret (v : BitVec 8)
+
+def pattern (p0 : BitVec 64) : Zig.Result (BitVec 8) := do
+  let e ← ((do
+    let i1 ← pure (Zig.mulWrap p0 (31 : BitVec 64))
+    let i2 ← pure (Zig.addWrap i1 (7 : BitVec 64))
+    let i3 ← pure (Zig.trunc 8 i2)
+    pure (.ret i3)) : Zig.M patternLocals patternExit).run' (default : patternLocals)
+  match e with
+  | .ret v => pure v
+
+attribute [zig_run] pattern
+
+structure keptLocals where
+  local1 : BitVec 64
+  deriving Inhabited
+
+inductive keptExit where
+  | ret (v : Bool)
+  | br13
+  | br7
+  | br4
+  | rep5
+
+def kept.again5 : keptExit → Bool
+  | .rep5 => true
+  | _ => false
+
+def kept.loop5 (p0 : Array (BitVec 8)) (i3 : BitVec 64) : Zig.M keptLocals keptExit := do
+  let i6 ← pure ((← get).local1)
+  match ← ((do
+    let i8 ← pure (i6)
+    let i9 ← pure (i3)
+    let i10 ← pure (Zig.lt false i8 i9)
+    if i10 then (do
+      let i12 ← Zig.call (Zig.index p0 i6)
+      match ← ((do
+        let i14 ← Zig.call (pattern i6)
+        let i15 ← pure (i12 != i14)
+        if i15 then (do
+          pure (.ret false))
+        else (do
+          pure .br13)) : Zig.M keptLocals keptExit) with
+      | .br13 => (do
+        pure .br7)
+      | e => pure e)
+    else (do
+      pure .br4)) : Zig.M keptLocals keptExit) with
+  | .br7 => (do
+    let i21 ← Zig.add false i6 (1 : BitVec 64) (safe := false)
+    modify (fun s => { s with local1 := i21 })
+    pure .rep5)
+  | e => pure e
+
+def kept (p0 : Array (BitVec 8)) : Zig.Result (Bool) := do
+  let e ← ((do
+    modify (fun s => { s with local1 := (0 : BitVec 64) })
+    let i3 ← pure (Zig.len p0)
+    match ← ((do
+      Zig.loop (kept.loop5 p0 i3) kept.again5) : Zig.M keptLocals keptExit) with
+    | .br4 => (do
+      pure (.ret true))
+    | e => pure e) : Zig.M keptLocals keptExit).run' (default : keptLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+attribute [zig_run] kept.loop5 kept
+
+structure growLocals where
+  local4 : Zig.Slice
+  got : Option (Zig.Slice)
+  local36 : Zig.Slice
+  r : BitVec 64
+  deriving Inhabited
+
+inductive growExit where
+  | ret (v : BitVec 64)
+  | br14
+  | br20 (v : Option (Zig.Slice))
+  | br41
+  | br65
+  | br54
+  | br83
+  | br95
+  | br90
+  | br31
+  | br112 (v : BitVec 64)
+  | br122
+
+def grow (p0 : mem_Allocator) (p1 : Zig.Slice) (p2 : BitVec 64) (p3 : BitVec 8) : Zig.ConcM Tgt (BitVec 64) := do
+  let e ← ((do
+    modify (fun s => { s with local4 := p1 })
+    let i8 ← pure (((← get).local4).ptr)
+    let i9 ← Zig.callMC (do pure (BitVec.ofInt 64 (← Zig.ptrAddr i8)))
+    let i11 ← pure (((← get).local4).len)
+    modify (fun s => { s with got := none })
+    match ← ((do
+      let i15 ← pure (p3 == (0 : BitVec 8))
+      if i15 then (do
+        let i17 ← Zig.callMC (mem_Allocator_remap__anon_e29e4a94db2b p0 p1 p2)
+        modify (fun s => { s with got := i17 })
+        pure .br14)
+      else (do
+        match ← ((do
+          let i21 ← Zig.callC (mem_Allocator_realloc__anon_af0c43114565 p0 p1 p2)
+          let i22 ← pure (Zig.isNonErr i21)
+          if i22 then (do
+            let i24 ← Zig.callRC (Zig.unwrapPayload i21)
+            let i25 ← pure (some i24)
+            pure (.br20 i25))
+          else (do
+            let _i27 ← Zig.callRC (Zig.unwrapErr i21)
+            pure (.br20 none))) : Zig.CM Tgt growLocals growExit) with
+        | .br20 v20 => (do
+          modify (fun s => { s with got := v20 })
+          pure .br14)
+        | e => pure e)) : Zig.CM Tgt growLocals growExit) with
+    | .br14 => (do
+      match ← ((do
+        let i32 ← pure ((← get).got)
+        let i33 ← pure ((i32).isSome)
+        if i33 then (do
+          let i35 ← Zig.optPayload i32
+          modify (fun s => { s with local36 := i35 })
+          modify (fun s => { s with r := (1 : BitVec 64) })
+          match ← ((do
+            let i43 ← pure (((← get).local36).ptr)
+            let i44 ← Zig.callMC (do pure (BitVec.ofInt 64 (← Zig.ptrAddr i43)))
+            let i45 ← pure (i44)
+            let i46 ← pure (i9)
+            let i47 ← pure (i45 != i46)
+            if i47 then (do
+              let i49 ← pure ((← get).r)
+              let i50 ← pure (i49 ||| (2 : BitVec 64))
+              modify (fun s => { s with r := i50 })
+              pure .br41)
+            else (do
+              pure .br41)) : Zig.CM Tgt growLocals growExit) with
+          | .br41 => (do
+            match ← ((do
+              let i55 ← pure (i11)
+              let i56 ← pure (p2)
+              let i57 ← pure (Zig.min false i55 i56)
+              let i58 ← pure ((← get).local36)
+              let i59 ← pure i58.ptr
+              let i60 ← pure i59
+              let i61 ← pure (i57)
+              let i62 ← Zig.sub false i61 (0 : BitVec 64) (safe := false)
+              let i63 ← pure i58.len
+              let i64 ← pure (Zig.le false i61 i63)
+              match ← ((do
+                if i64 then (do
+                  pure .br65)
+                else (do
+                  throw .outOfBounds)) : Zig.CM Tgt growLocals growExit) with
+              | .br65 => (do
+                let i70 ← Zig.callMC (Zig.checkSliceEnd i58.len (0 : BitVec 64) i62 0 >>= fun _ => pure (⟨i60, i62⟩ : Zig.Slice))
+                let i71 ← pure (i70)
+                let i72 ← Zig.callRC (kept (← Zig.callMC (Zig.readSlice (BitVec 8) 1 i71)))
+                if i72 then (do
+                  let i74 ← pure ((← get).r)
+                  let i75 ← pure (i74 ||| (4 : BitVec 64))
+                  modify (fun s => { s with r := i75 })
+                  pure .br54)
+                else (do
+                  pure .br54))
+              | e => pure e) : Zig.CM Tgt growLocals growExit) with
+            | .br54 => (do
+              let i79 ← Zig.sub false p2 (1 : BitVec 64)
+              let i80 ← pure ((← get).local36)
+              let i81 ← pure i80.len
+              let i82 ← pure (Zig.lt false i79 i81)
+              match ← ((do
+                if i82 then (do
+                  pure .br83)
+                else (do
+                  throw .outOfBounds)) : Zig.CM Tgt growLocals growExit) with
+              | .br83 => (do
+                let i88 ← Zig.callMC (Zig.checkIndex i80.len i79) >>= fun _ => Zig.callMC (Zig.ptrProject i80.ptr (·.elem 1 i79))
+                Zig.store (α := BitVec 8) 1 i88 (165 : BitVec 8)
+                match ← ((do
+                  let i91 ← Zig.sub false p2 (1 : BitVec 64)
+                  let i92 ← pure ((← get).local36)
+                  let i93 ← pure i92.len
+                  let i94 ← pure (Zig.lt false i91 i93)
+                  match ← ((do
+                    if i94 then (do
+                      pure .br95)
+                    else (do
+                      throw .outOfBounds)) : Zig.CM Tgt growLocals growExit) with
+                  | .br95 => (do
+                    let i100 ← Zig.callMC (Zig.checkIndex i92.len i91 >>= fun _ => Zig.load (BitVec 8) 1 (i92.ptr.elem 1 i91))
+                    let i101 ← pure (i100 == (165 : BitVec 8))
+                    if i101 then (do
+                      let i103 ← pure ((← get).r)
+                      let i104 ← pure (i103 ||| (8 : BitVec 64))
+                      modify (fun s => { s with r := i104 })
+                      pure .br90)
+                    else (do
+                      pure .br90))
+                  | e => pure e) : Zig.CM Tgt growLocals growExit) with
+                | .br90 => (do
+                  let _i108 ← Zig.callMC (mem_Allocator_free__anon_1e60e7ef40f5 p0 i35)
+                  let i109 ← pure ((← get).r)
+                  pure (.ret i109))
+                | e => pure e)
+              | e => pure e)
+            | e => pure e)
+          | e => pure e)
+        else (do
+          pure .br31)) : Zig.CM Tgt growLocals growExit) with
+      | .br31 => (do
+        match ← ((do
+          let i113 ← pure (p1)
+          let i114 ← Zig.callRC (kept (← Zig.callMC (Zig.readSlice (BitVec 8) 1 i113)))
+          if i114 then (do
+            pure (.br112 (4 : BitVec 64)))
+          else (do
+            pure (.br112 (0 : BitVec 64)))) : Zig.CM Tgt growLocals growExit) with
+        | .br112 v112 => (do
+          let i118 ← Zig.sub false i11 (1 : BitVec 64)
+          let i119 ← pure ((← get).local4)
+          let i120 ← pure i119.len
+          let i121 ← pure (Zig.lt false i118 i120)
+          match ← ((do
+            if i121 then (do
+              pure .br122)
+            else (do
+              throw .outOfBounds)) : Zig.CM Tgt growLocals growExit) with
+          | .br122 => (do
+            let i127 ← Zig.callMC (Zig.checkIndex i119.len i118) >>= fun _ => Zig.callMC (Zig.ptrProject i119.ptr (·.elem 1 i118))
+            Zig.store (α := BitVec 8) 1 i127 (165 : BitVec 8)
+            let _i129 ← Zig.callMC (mem_Allocator_free__anon_1e60e7ef40f5 p0 p1)
+            pure (.ret v112))
+          | e => pure e)
+        | e => pure e)
+      | e => pure e)
+    | e => pure e) : Zig.CM Tgt growLocals growExit).run' (default : growLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+attribute [zig_run] grow
+
 structure page_createLocals where
   deriving Inhabited
 
@@ -1246,6 +1777,449 @@ def page_create (p0 : BitVec 32) : Zig.ConcM Tgt (BitVec 32) := do
   | _ => throw .panic
 
 attribute [zig_run] page_create
+
+structure page_growLocals where
+  s : Zig.Slice
+  local43 : BitVec 64
+  deriving Inhabited
+
+inductive page_growExit where
+  | ret (v : BitVec 64)
+  | br5 (v : Zig.Slice)
+  | br19
+  | br34
+  | br14
+  | br50
+  | br47
+  | rep48
+
+def page_grow.again48 : page_growExit → Bool
+  | .rep48 => true
+  | _ => false
+
+def page_grow.loop48 (i45 : Zig.Slice) (i46 : BitVec 64) : Zig.CM Tgt page_growLocals page_growExit := do
+  Zig.callMC Zig.tick
+  let i49 ← pure ((← get).local43)
+  match ← ((do
+    let i51 ← pure (i49)
+    let i52 ← pure (i46)
+    let i53 ← pure (Zig.lt false i51 i52)
+    if i53 then (do
+      let i55 ← Zig.callMC (Zig.checkIndex i45.len i49) >>= fun _ => Zig.callMC (Zig.ptrProject i45.ptr (·.elem 1 i49))
+      let i56 ← Zig.callRC (pattern i49)
+      Zig.store (α := BitVec 8) 1 i55 i56
+      pure .br50)
+    else (do
+      pure .br47)) : Zig.CM Tgt page_growLocals page_growExit) with
+  | .br50 => (do
+    let i60 ← Zig.add false i49 (1 : BitVec 64) (safe := false)
+    modify (fun s => { s with local43 := i60 })
+    pure .rep48)
+  | e => pure e
+
+def page_grow (p0 : BitVec 64) (p1 : BitVec 64) (p2 : BitVec 64) (p3 : BitVec 8) : Zig.ConcM Tgt (BitVec 64) := do
+  let e ← ((do
+    match ← ((do
+      let i6 ← Zig.callC (mem_Allocator_alloc__anon_a8254a5f2b74 ({ ptr := (← Zig.callMC Zig.undefPtr), vtable := (⟨some 1, 0⟩ : Zig.Ptr) } : mem_Allocator) p0)
+      let i7 ← pure (Zig.isNonErr i6)
+      if i7 then (do
+        let i9 ← Zig.callRC (Zig.unwrapPayload i6)
+        pure (.br5 i9))
+      else (do
+        let _i11 ← Zig.callRC (Zig.unwrapErr i6)
+        pure (.ret (32 : BitVec 64)))) : Zig.CM Tgt page_growLocals page_growExit) with
+    | .br5 v5 => (do
+      modify (fun s => { s with s := v5 })
+      match ← ((do
+        let i15 ← pure (p1)
+        let i16 ← pure (p0)
+        let i17 ← pure (Zig.lt false i15 i16)
+        if i17 then (do
+          match ← ((do
+            let i20 ← pure ((← get).s)
+            let i21 ← Zig.callMC (mem_Allocator_resize__anon_ec6bca265858 ({ ptr := (← Zig.callMC Zig.undefPtr), vtable := (⟨some 1, 0⟩ : Zig.Ptr) } : mem_Allocator) i20 p1)
+            let i22 ← pure (!i21)
+            if i22 then (do
+              let i24 ← pure ((← get).s)
+              let _i25 ← Zig.callMC (mem_Allocator_free__anon_1e60e7ef40f5 ({ ptr := (← Zig.callMC Zig.undefPtr), vtable := (⟨some 1, 0⟩ : Zig.Ptr) } : mem_Allocator) i24)
+              pure (.ret (64 : BitVec 64)))
+            else (do
+              pure .br19)) : Zig.CM Tgt page_growLocals page_growExit) with
+          | .br19 => (do
+            let i28 ← pure ((← get).s)
+            let i29 ← pure i28.ptr
+            let i30 ← pure i29
+            let i31 ← Zig.sub false p1 (0 : BitVec 64) (safe := false)
+            let i32 ← pure i28.len
+            let i33 ← pure (Zig.le false p1 i32)
+            match ← ((do
+              if i33 then (do
+                pure .br34)
+              else (do
+                throw .outOfBounds)) : Zig.CM Tgt page_growLocals page_growExit) with
+            | .br34 => (do
+              let i39 ← Zig.callMC (Zig.checkSliceEnd i28.len (0 : BitVec 64) i31 0 >>= fun _ => pure (⟨i30, i31⟩ : Zig.Slice))
+              modify (fun s => { s with s := i39 })
+              pure .br14)
+            | e => pure e)
+          | e => pure e)
+        else (do
+          pure .br14)) : Zig.CM Tgt page_growLocals page_growExit) with
+      | .br14 => (do
+        modify (fun s => { s with local43 := (0 : BitVec 64) })
+        let i45 ← pure ((← get).s)
+        let i46 ← pure i45.len
+        match ← ((do
+          Zig.loop (page_grow.loop48 i45 i46) page_grow.again48) : Zig.CM Tgt page_growLocals page_growExit) with
+        | .br47 => (do
+          let i63 ← pure ((← get).s)
+          let i64 ← Zig.callC (grow ({ ptr := (← Zig.callMC Zig.undefPtr), vtable := (⟨some 1, 0⟩ : Zig.Ptr) } : mem_Allocator) i63 p2 p3)
+          pure (.ret i64))
+        | e => pure e)
+      | e => pure e)
+    | e => pure e) : Zig.CM Tgt page_growLocals page_growExit).run' (default : page_growLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+attribute [zig_run] page_grow.loop48 page_grow
+
+structure page_grow_blockedLocals where
+  local10 : Zig.Slice
+  local22 : Zig.Slice
+  lo : Zig.Slice
+  hi : Zig.Slice
+  local44 : BitVec 64
+  r : BitVec 64
+  same : Bool
+  local81 : BitVec 64
+  deriving Inhabited
+
+inductive page_grow_blockedExit where
+  | ret (v : BitVec 64)
+  | br2 (v : Zig.Slice)
+  | br13 (v : Zig.Slice)
+  | br29
+  | br51
+  | br48
+  | br94
+  | br88
+  | br85
+  | br105
+  | rep49
+  | rep86
+
+def page_grow_blocked.again86 : page_grow_blockedExit → Bool
+  | .rep86 => true
+  | _ => false
+
+def page_grow_blocked.again49 : page_grow_blockedExit → Bool
+  | .rep49 => true
+  | _ => false
+
+def page_grow_blocked.loop86 (i83 : Zig.Slice) (i84 : BitVec 64) : Zig.CM Tgt page_grow_blockedLocals page_grow_blockedExit := do
+  Zig.callMC Zig.tick
+  let i87 ← pure ((← get).local81)
+  match ← ((do
+    let i89 ← pure (i87)
+    let i90 ← pure (i84)
+    let i91 ← pure (Zig.lt false i89 i90)
+    if i91 then (do
+      let i93 ← Zig.callMC (Zig.checkIndex i83.len i87 >>= fun _ => Zig.load (BitVec 8) 1 (i83.ptr.elem 1 i87))
+      match ← ((do
+        let i95 ← pure (i93 != (90 : BitVec 8))
+        if i95 then (do
+          modify (fun s => { s with same := false })
+          pure .br94)
+        else (do
+          pure .br94)) : Zig.CM Tgt page_grow_blockedLocals page_grow_blockedExit) with
+      | .br94 => (do
+        pure .br88)
+      | e => pure e)
+    else (do
+      pure .br85)) : Zig.CM Tgt page_grow_blockedLocals page_grow_blockedExit) with
+  | .br88 => (do
+    let i102 ← Zig.add false i87 (1 : BitVec 64) (safe := false)
+    modify (fun s => { s with local81 := i102 })
+    pure .rep86)
+  | e => pure e
+
+def page_grow_blocked.loop49 (i46 : Zig.Slice) (i47 : BitVec 64) : Zig.CM Tgt page_grow_blockedLocals page_grow_blockedExit := do
+  Zig.callMC Zig.tick
+  let i50 ← pure ((← get).local44)
+  match ← ((do
+    let i52 ← pure (i50)
+    let i53 ← pure (i47)
+    let i54 ← pure (Zig.lt false i52 i53)
+    if i54 then (do
+      let i56 ← Zig.callMC (Zig.checkIndex i46.len i50) >>= fun _ => Zig.callMC (Zig.ptrProject i46.ptr (·.elem 1 i50))
+      let i57 ← Zig.callRC (pattern i50)
+      Zig.store (α := BitVec 8) 1 i56 i57
+      pure .br51)
+    else (do
+      pure .br48)) : Zig.CM Tgt page_grow_blockedLocals page_grow_blockedExit) with
+  | .br51 => (do
+    let i61 ← Zig.add false i50 (1 : BitVec 64) (safe := false)
+    modify (fun s => { s with local44 := i61 })
+    pure .rep49)
+  | e => pure e
+
+def page_grow_blocked (p0 : BitVec 64) (p1 : BitVec 8) : Zig.ConcM Tgt (BitVec 64) := do
+  let e ← ((do
+    match ← ((do
+      let i3 ← Zig.callC (mem_Allocator_alloc__anon_a8254a5f2b74 ({ ptr := (← Zig.callMC Zig.undefPtr), vtable := (⟨some 1, 0⟩ : Zig.Ptr) } : mem_Allocator) p0)
+      let i4 ← pure (Zig.isNonErr i3)
+      if i4 then (do
+        let i6 ← Zig.callRC (Zig.unwrapPayload i3)
+        pure (.br2 i6))
+      else (do
+        let _i8 ← Zig.callRC (Zig.unwrapErr i3)
+        pure (.ret (32 : BitVec 64)))) : Zig.CM Tgt page_grow_blockedLocals page_grow_blockedExit) with
+    | .br2 v2 => (do
+      modify (fun s => { s with local10 := v2 })
+      match ← ((do
+        let i14 ← Zig.callC (mem_Allocator_alloc__anon_a8254a5f2b74 ({ ptr := (← Zig.callMC Zig.undefPtr), vtable := (⟨some 1, 0⟩ : Zig.Ptr) } : mem_Allocator) p0)
+        let i15 ← pure (Zig.isNonErr i14)
+        if i15 then (do
+          let i17 ← Zig.callRC (Zig.unwrapPayload i14)
+          pure (.br13 i17))
+        else (do
+          let _i19 ← Zig.callRC (Zig.unwrapErr i14)
+          let _i20 ← Zig.callMC (mem_Allocator_free__anon_1e60e7ef40f5 ({ ptr := (← Zig.callMC Zig.undefPtr), vtable := (⟨some 1, 0⟩ : Zig.Ptr) } : mem_Allocator) v2)
+          pure (.ret (32 : BitVec 64)))) : Zig.CM Tgt page_grow_blockedLocals page_grow_blockedExit) with
+      | .br13 v13 => (do
+        modify (fun s => { s with local22 := v13 })
+        modify (fun s => { s with lo := v2 })
+        modify (fun s => { s with hi := v13 })
+        match ← ((do
+          let i31 ← pure (((← get).local22).ptr)
+          let i32 ← Zig.callMC (do pure (BitVec.ofInt 64 (← Zig.ptrAddr i31)))
+          let i34 ← pure (((← get).local10).ptr)
+          let i35 ← Zig.callMC (do pure (BitVec.ofInt 64 (← Zig.ptrAddr i34)))
+          let i36 ← pure (i32)
+          let i37 ← pure (i35)
+          let i38 ← pure (Zig.lt false i36 i37)
+          if i38 then (do
+            modify (fun s => { s with lo := v13 })
+            modify (fun s => { s with hi := v2 })
+            pure .br29)
+          else (do
+            pure .br29)) : Zig.CM Tgt page_grow_blockedLocals page_grow_blockedExit) with
+        | .br29 => (do
+          modify (fun s => { s with local44 := (0 : BitVec 64) })
+          let i46 ← pure ((← get).lo)
+          let i47 ← pure i46.len
+          match ← ((do
+            Zig.loop (page_grow_blocked.loop49 i46 i47) page_grow_blocked.again49) : Zig.CM Tgt page_grow_blockedLocals page_grow_blockedExit) with
+          | .br48 => (do
+            let i64 ← pure ((← get).hi)
+            let _i65 ← pure i64.len
+            Zig.callMC (Zig.memset (α := BitVec 8) 1 i64.ptr i64.len (some (90 : BitVec 8)))
+            let i68 ← pure ((← get).lo)
+            let i70 ← pure (((← get).hi).ptr)
+            let i71 ← Zig.callMC (do pure (BitVec.ofInt 64 (← Zig.ptrAddr i70)))
+            let i73 ← pure (((← get).lo).ptr)
+            let i74 ← Zig.callMC (do pure (BitVec.ofInt 64 (← Zig.ptrAddr i73)))
+            let i75 ← Zig.sub false i71 i74
+            let i76 ← Zig.add false i75 (1 : BitVec 64)
+            let i77 ← Zig.callC (grow ({ ptr := (← Zig.callMC Zig.undefPtr), vtable := (⟨some 1, 0⟩ : Zig.Ptr) } : mem_Allocator) i68 i76 p1)
+            modify (fun s => { s with r := i77 })
+            modify (fun s => { s with same := true })
+            modify (fun s => { s with local81 := (0 : BitVec 64) })
+            let i83 ← pure ((← get).hi)
+            let i84 ← pure i83.len
+            match ← ((do
+              Zig.loop (page_grow_blocked.loop86 i83 i84) page_grow_blocked.again86) : Zig.CM Tgt page_grow_blockedLocals page_grow_blockedExit) with
+            | .br85 => (do
+              match ← ((do
+                let i106 ← pure ((← get).same)
+                if i106 then (do
+                  let i108 ← pure ((← get).r)
+                  let i109 ← pure (i108 ||| (16 : BitVec 64))
+                  modify (fun s => { s with r := i109 })
+                  pure .br105)
+                else (do
+                  pure .br105)) : Zig.CM Tgt page_grow_blockedLocals page_grow_blockedExit) with
+              | .br105 => (do
+                let i113 ← pure ((← get).hi)
+                let _i114 ← Zig.callMC (mem_Allocator_free__anon_1e60e7ef40f5 ({ ptr := (← Zig.callMC Zig.undefPtr), vtable := (⟨some 1, 0⟩ : Zig.Ptr) } : mem_Allocator) i113)
+                let i115 ← pure ((← get).r)
+                pure (.ret i115))
+              | e => pure e)
+            | e => pure e)
+          | e => pure e)
+        | e => pure e)
+      | e => pure e)
+    | e => pure e) : Zig.CM Tgt page_grow_blockedLocals page_grow_blockedExit).run' (default : page_grow_blockedLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+attribute [zig_run] page_grow_blocked.loop86 page_grow_blocked.loop49 page_grow_blocked
+
+structure page_grow_staleLocals where
+  local10 : Zig.Slice
+  local22 : Zig.Slice
+  lo : Zig.Slice
+  hi : Zig.Slice
+  got : Option (Zig.Slice)
+  r : BitVec 64
+  local90 : Zig.Slice
+  deriving Inhabited
+
+inductive page_grow_staleExit where
+  | ret (v : BitVec 64)
+  | br2 (v : Zig.Slice)
+  | br13 (v : Zig.Slice)
+  | br29
+  | br47
+  | br64
+  | br71 (v : Option (Zig.Slice))
+  | br107
+  | br93
+  | br85
+
+def page_grow_stale (p0 : BitVec 64) (p1 : BitVec 8) : Zig.ConcM Tgt (BitVec 64) := do
+  let e ← ((do
+    match ← ((do
+      let i3 ← Zig.callC (mem_Allocator_alloc__anon_a8254a5f2b74 ({ ptr := (← Zig.callMC Zig.undefPtr), vtable := (⟨some 1, 0⟩ : Zig.Ptr) } : mem_Allocator) p0)
+      let i4 ← pure (Zig.isNonErr i3)
+      if i4 then (do
+        let i6 ← Zig.callRC (Zig.unwrapPayload i3)
+        pure (.br2 i6))
+      else (do
+        let _i8 ← Zig.callRC (Zig.unwrapErr i3)
+        pure (.ret (0 : BitVec 64)))) : Zig.CM Tgt page_grow_staleLocals page_grow_staleExit) with
+    | .br2 v2 => (do
+      modify (fun s => { s with local10 := v2 })
+      match ← ((do
+        let i14 ← Zig.callC (mem_Allocator_alloc__anon_a8254a5f2b74 ({ ptr := (← Zig.callMC Zig.undefPtr), vtable := (⟨some 1, 0⟩ : Zig.Ptr) } : mem_Allocator) p0)
+        let i15 ← pure (Zig.isNonErr i14)
+        if i15 then (do
+          let i17 ← Zig.callRC (Zig.unwrapPayload i14)
+          pure (.br13 i17))
+        else (do
+          let _i19 ← Zig.callRC (Zig.unwrapErr i14)
+          let _i20 ← Zig.callMC (mem_Allocator_free__anon_1e60e7ef40f5 ({ ptr := (← Zig.callMC Zig.undefPtr), vtable := (⟨some 1, 0⟩ : Zig.Ptr) } : mem_Allocator) v2)
+          pure (.ret (0 : BitVec 64)))) : Zig.CM Tgt page_grow_staleLocals page_grow_staleExit) with
+      | .br13 v13 => (do
+        modify (fun s => { s with local22 := v13 })
+        modify (fun s => { s with lo := v2 })
+        modify (fun s => { s with hi := v13 })
+        match ← ((do
+          let i31 ← pure (((← get).local22).ptr)
+          let i32 ← Zig.callMC (do pure (BitVec.ofInt 64 (← Zig.ptrAddr i31)))
+          let i34 ← pure (((← get).local10).ptr)
+          let i35 ← Zig.callMC (do pure (BitVec.ofInt 64 (← Zig.ptrAddr i34)))
+          let i36 ← pure (i32)
+          let i37 ← pure (i35)
+          let i38 ← pure (Zig.lt false i36 i37)
+          if i38 then (do
+            modify (fun s => { s with lo := v13 })
+            modify (fun s => { s with hi := v2 })
+            pure .br29)
+          else (do
+            pure .br29)) : Zig.CM Tgt page_grow_staleLocals page_grow_staleExit) with
+        | .br29 => (do
+          let i44 ← pure ((← get).lo)
+          let i45 ← pure i44.len
+          let i46 ← pure (Zig.lt false (0 : BitVec 64) i45)
+          match ← ((do
+            if i46 then (do
+              pure .br47)
+            else (do
+              throw .outOfBounds)) : Zig.CM Tgt page_grow_staleLocals page_grow_staleExit) with
+          | .br47 => (do
+            let i52 ← Zig.callMC (Zig.checkIndex i44.len (0 : BitVec 64)) >>= fun _ => pure i44.ptr
+            Zig.store (α := BitVec 8) 1 i52 (7 : BitVec 8)
+            let i55 ← pure (((← get).hi).ptr)
+            let i56 ← Zig.callMC (do pure (BitVec.ofInt 64 (← Zig.ptrAddr i55)))
+            let i58 ← pure (((← get).lo).ptr)
+            let i59 ← Zig.callMC (do pure (BitVec.ofInt 64 (← Zig.ptrAddr i58)))
+            let i60 ← Zig.sub false i56 i59
+            let i61 ← Zig.add false i60 (1 : BitVec 64)
+            modify (fun s => { s with got := none })
+            match ← ((do
+              let i65 ← pure (p1 == (0 : BitVec 8))
+              if i65 then (do
+                let i67 ← pure ((← get).lo)
+                let i68 ← Zig.callMC (mem_Allocator_remap__anon_e29e4a94db2b ({ ptr := (← Zig.callMC Zig.undefPtr), vtable := (⟨some 1, 0⟩ : Zig.Ptr) } : mem_Allocator) i67 i61)
+                modify (fun s => { s with got := i68 })
+                pure .br64)
+              else (do
+                match ← ((do
+                  let i72 ← pure ((← get).lo)
+                  let i73 ← Zig.callC (mem_Allocator_realloc__anon_af0c43114565 ({ ptr := (← Zig.callMC Zig.undefPtr), vtable := (⟨some 1, 0⟩ : Zig.Ptr) } : mem_Allocator) i72 i61)
+                  let i74 ← pure (Zig.isNonErr i73)
+                  if i74 then (do
+                    let i76 ← Zig.callRC (Zig.unwrapPayload i73)
+                    let i77 ← pure (some i76)
+                    pure (.br71 i77))
+                  else (do
+                    let _i79 ← Zig.callRC (Zig.unwrapErr i73)
+                    pure (.br71 none))) : Zig.CM Tgt page_grow_staleLocals page_grow_staleExit) with
+                | .br71 v71 => (do
+                  modify (fun s => { s with got := v71 })
+                  pure .br64)
+                | e => pure e)) : Zig.CM Tgt page_grow_staleLocals page_grow_staleExit) with
+            | .br64 => (do
+              modify (fun s => { s with r := (0 : BitVec 64) })
+              match ← ((do
+                let i86 ← pure ((← get).got)
+                let i87 ← pure ((i86).isSome)
+                if i87 then (do
+                  let i89 ← Zig.optPayload i86
+                  modify (fun s => { s with local90 := i89 })
+                  match ← ((do
+                    let i95 ← pure (((← get).local90).ptr)
+                    let i96 ← Zig.callMC (do pure (BitVec.ofInt 64 (← Zig.ptrAddr i95)))
+                    let i98 ← pure (((← get).lo).ptr)
+                    let i99 ← Zig.callMC (do pure (BitVec.ofInt 64 (← Zig.ptrAddr i98)))
+                    let i100 ← pure (i96)
+                    let i101 ← pure (i99)
+                    let i102 ← pure (i100 != i101)
+                    if i102 then (do
+                      let i104 ← pure ((← get).lo)
+                      let i105 ← pure i104.len
+                      let i106 ← pure (Zig.lt false (0 : BitVec 64) i105)
+                      match ← ((do
+                        if i106 then (do
+                          pure .br107)
+                        else (do
+                          throw .outOfBounds)) : Zig.CM Tgt page_grow_staleLocals page_grow_staleExit) with
+                      | .br107 => (do
+                        let i112 ← Zig.callMC (Zig.checkIndex i104.len (0 : BitVec 64) >>= fun _ => Zig.load (BitVec 8) 1 (i104.ptr.elem 1 (0 : BitVec 64)))
+                        let i113 ← Zig.intCast false false 64 i112 (safe := false)
+                        let i114 ← Zig.add false i113 (1 : BitVec 64)
+                        modify (fun s => { s with r := i114 })
+                        pure .br93)
+                      | e => pure e)
+                    else (do
+                      pure .br93)) : Zig.CM Tgt page_grow_staleLocals page_grow_staleExit) with
+                  | .br93 => (do
+                    let _i118 ← Zig.callMC (mem_Allocator_free__anon_1e60e7ef40f5 ({ ptr := (← Zig.callMC Zig.undefPtr), vtable := (⟨some 1, 0⟩ : Zig.Ptr) } : mem_Allocator) i89)
+                    pure .br85)
+                  | e => pure e)
+                else (do
+                  let i120 ← pure ((← get).lo)
+                  let _i121 ← Zig.callMC (mem_Allocator_free__anon_1e60e7ef40f5 ({ ptr := (← Zig.callMC Zig.undefPtr), vtable := (⟨some 1, 0⟩ : Zig.Ptr) } : mem_Allocator) i120)
+                  pure .br85)) : Zig.CM Tgt page_grow_staleLocals page_grow_staleExit) with
+              | .br85 => (do
+                let i123 ← pure ((← get).hi)
+                let _i124 ← Zig.callMC (mem_Allocator_free__anon_1e60e7ef40f5 ({ ptr := (← Zig.callMC Zig.undefPtr), vtable := (⟨some 1, 0⟩ : Zig.Ptr) } : mem_Allocator) i123)
+                let i125 ← pure ((← get).r)
+                pure (.ret i125))
+              | e => pure e)
+            | e => pure e)
+          | e => pure e)
+        | e => pure e)
+      | e => pure e)
+    | e => pure e) : Zig.CM Tgt page_grow_staleLocals page_grow_staleExit).run' (default : page_grow_staleLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+attribute [zig_run] page_grow_stale
 
 structure page_resizeLocals where
   local10 : Zig.Slice
