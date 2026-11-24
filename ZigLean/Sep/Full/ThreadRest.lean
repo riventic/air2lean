@@ -49,6 +49,13 @@ theorem cellsAt_some {W : Loc → Prop} [DecidablePred W] {m : Mem} {l : Loc} (h
   | none => exact absurd e hl
   | some c => simp
 
+/-- The cells at either of two sets of bytes are the cells at each. -/
+theorem cellsAt_or {P Q : Loc → Prop} [DecidablePred P] [DecidablePred Q] (m : Mem) :
+    cellsAt (fun l => P l ∨ Q l) m = rsum (cellsAt P m) (cellsAt Q m) := by
+  simp only [cellsAt, rsum, Res.mk.injEq, Know.none_union, Ghost.unit_add, and_true]
+  funext l
+  by_cases hp : P l <;> by_cases hq : Q l <;> simp [FHeap.union_apply, hp, hq]
+
 /-- The rest beside the cells is determined by its sum with them, when it has none of their
 places. -/
 theorem cellsAt_cancel {W : Loc → Prop} [DecidablePred W] {m : Mem} {a b : Res}
