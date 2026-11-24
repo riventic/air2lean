@@ -22,6 +22,8 @@ own beside the lock's: what every client's base keeps, for every reader/writer l
   code or in the semaphore's is `away` from the outer mutex or holds it at `holdsAway` (`fitsS`'s
   `hsleep`: `Base.hsleep`).
 - `live`: the rest's owned bytes are live (`Inv.stepIn`'s `hbl`).
+- `rdm`, `mal`: where a reader is at the two mutexes, for liveness: not on the outer mutex's lock
+  path, and `away` from the outer mutex not `away` from the semaphore's.
 
 The obligations of the builders, one theorem each: a stop (`Base.atStop`), a step of either
 lock's code (`Base.stableM`, `Base.stableS`), a tick of a thread's part in the outer mutex's view
@@ -31,7 +33,12 @@ assembler `Base.ofStepRest` over the rest the step leaves, `FCond.StepRest`, and
 a step in the semaphore's mutex's frame), the relabels around the other lock's code
 (`Base.mnap`, `Base.munnap`, `Base.maway`, `Base.munaway`, `Base.lmove`, from `Base.relabel`), and
 the writer's take and the last reader's give at the semaphore (`Base.utake`, `Base.upost`, from
-`Base.handover`).
+`Base.handover`), and liveness (`Base.wlive`, `Base.holdLiveM`; at the semaphore's mutex, which
+has no nest, `FLock.holdLive_none`).
+
+`Base.wstep` takes two facts of the step as premises that `FRw.Step` does not state yet (ledger
+#two-lock-product, ninth and tenth obstruction): the readers' shares after it (`hsh`) and the
+stepping thread's place at the outer mutex (`hmt`).
 -/
 
 namespace Zig
@@ -62,6 +69,14 @@ structure Base (Sz : Nat) (K : BlockKind) (G : ThreadId → γ) (rX : Res) (m : 
   /-- The rest's bytes are live (`Inv.stepIn`'s `hbl`; a step of the condition's code carries
   no lock invariant to read it from, `FPrim.ofWords`). -/
   live : ∀ l, rX.owned l ≠ none → m.heap l ≠ none
+  /-- A reader (at `rd` or `rp`) is not on the outer mutex's lock path: it would sleep there
+  behind the writer that waits for it (`wlive`). The rwlock's code enters the outer mutex only at
+  `out` and `wi` (`FRw.prim`'s `enter`). -/
+  rdm : ∀ u, (W.ph (G u)).isRd = true ∨ (W.ph (G u)).isRp = true →
+    M.ph (G u) ≠ .spin ∧ M.ph (G u) ≠ .wait
+  /-- A thread `away` from the outer mutex (the last reader around its post) is not `away` from
+  the semaphore's mutex: asleep, it waits at the semaphore's mutex (`wlive`). -/
+  mal : ∀ u, M.ph (G u) = .away → L.ph (G u) ≠ .away ∧ L.ph (G u) ≠ .holdsAway
 
 namespace Base
 
@@ -112,7 +127,9 @@ theorem atStop (hu : W.Base Sz K G rX m) (t : ThreadId) :
     pin := hu.pin
     wt := hu.wt
     nap := hu.nap
-    live := hu.live }
+    live := hu.live
+    rdm := hu.rdm
+    mal := hu.mal }
 
 /-- **A step of the outer mutex's code keeps the base** (`fitsM`'s `stable`): `t` runs it at a
 calm place of the rwlock, out of the semaphore's code. The rwlock's invariant stays
@@ -122,7 +139,8 @@ still happened before the semaphore's mutex's holder), and the parts stay (`FLoc
 outer mutex's place is none of the rwlock's or the semaphore's (`hpm`). -/
 theorem stableM {t : ThreadId} {p : LPh} {h rL rH : Res} {m' : Mem} (hu : W.Base Sz K G rX m)
     (hM : M.Inv G (rsum (FLock.side L m rL rH) rX) m) (hk : L.Keeps G m rL rH rX)
-    (hs : M.Step t m m') (hn : (M.ph (G t)).next p = true) (hla : L.ph (G t) = .away)
+    (hs : M.Step t m m') (hn : (M.ph (G t)).next p = true)
+    (hen : M.ph (G t) = .out → W.prim.enter (W.place.ph (G t))) (hla : L.ph (G t) = .away)
     (hcalm : W.prim.calm (W.place.ph (G t)))
     (hpm : ∀ g q h, W.place.ph (M.set g q h) = W.place.ph g) :
     W.Base Sz K (upd G t (M.set (G t) p h)) rX m' := by
@@ -175,7 +193,26 @@ theorem stableM {t : ThreadId} {p : LPh} {h rL rH : Res} {m' : Mem} (hu : W.Base
         · exact absurd hcalm.2 hq
       · rw [upd_ne _ _ e]; exact hu.nap u hq
     live := fun l hl => by
-      rw [hs.heap (hM.notIn_side l hl)]; exact hu.live l hl }
+      rw [hs.heap (hM.notIn_side l hl)]; exact hu.live l hl
+    rdm := fun u hr => by
+      rw [hwph u] at hr
+      by_cases e : u = t
+      · rw [e, upd_self, M.ph_set]
+        rw [e] at hr
+        have h0 := hu.rdm t hr
+        have hne : M.ph (G t) ≠ .out := fun ho => by
+          rcases hen ho with h | h <;> rw [show (W.place.ph (G t)).1 = W.ph (G t) from rfl] at h <;>
+            rw [h] at hr <;> rcases hr with hr | hr <;> cases hr
+        revert hn h0 hne
+        cases M.ph (G t) <;> cases p <;> simp [LPh.next]
+      · rw [upd_ne _ _ e]; exact hu.rdm u hr
+    mal := fun u ha => by
+      rw [hlph u]
+      by_cases e : u = t
+      · rw [e, upd_self, M.ph_set] at ha
+        rw [ha] at hn
+        cases hm : M.ph (G t) <;> rw [hm] at hn <;> cases hn
+      · rw [upd_ne _ _ e] at ha; exact hu.mal u ha }
 
 /-- **A step of the semaphore's mutex's code keeps the base** (`fitsS`'s `stable`): `t` runs it
 out of the condition's busy code and out of the semaphore's `pst` (the client's `okS`: `hb`,
@@ -232,7 +269,15 @@ theorem stableS {t : ThreadId} {p : LPh} {h s : Res} {m' : Mem} (hu : W.Base Sz 
       · rw [e]; exact hma
       · rw [upd_ne _ _ e] at hq; exact hu.nap u hq
     live := fun l hl => by
-      rw [hs.heap (hL.notIn_side l hl)]; exact hu.live l hl }
+      rw [hs.heap (hL.notIn_side l hl)]; exact hu.live l hl
+    rdm := fun u hr => by rw [hmph u]; exact hu.rdm u (by rwa [hwph u] at hr)
+    mal := fun u ha => by
+      rw [hmph u] at ha
+      by_cases e : u = t
+      · rw [e, upd_self, L.ph_set]
+        revert hn
+        cases L.ph (G t) <;> cases p <;> simp [LPh.next]
+      · rw [upd_ne _ _ e]; exact hu.mal u ha }
 
 /-- **A tick of `t`'s part keeps the base** (the two locks have one part,
 `FLock.Pair.setPart`): the tick changes no byte, so the rwlock's invariant stays (`Inv.stepIn`;
@@ -300,7 +345,9 @@ theorem tick {t : ThreadId} {r s s' : Res} (hu : W.Base Sz K G rX m)
       rw [hmph u]
       rw [hlph u, hup S.place.ph (fun g => congrArg Prod.snd (hpl g r)) u] at hq
       exact hu.nap u hq
-    live := hu.live }
+    live := hu.live
+    rdm := fun u hr => by rw [hmph u]; exact hu.rdm u (by rwa [hwph u] at hr)
+    mal := fun u ha => by rw [hlph u]; exact hu.mal u (by rwa [hmph u] at ha) }
 
 /-- **A waiter of the condition is `away` from the outer mutex or holds it at `holdsAway`**
 (`fitsS`'s `hsleep`; `nap`), with the epoch in the outer mutex's nest (`hnE`, the lock's). -/
@@ -324,7 +371,8 @@ theorem wstep {t : ThreadId} {G' : ThreadId → γ} {rS rS' sB rX' rY rY' : Res}
     (he : rX = rsum (W.st.cellsR m) rY) (he' : rX' = rsum (W.st.cellsR m') rY')
     (hmv : W.Moves G m rY G' m' rY')
     (hRoff : ∀ xs r l, W.R xs r → (C.S.In l ∨ C.Ep.In l) → r.heap l = none)
-    (hsh : W.Shares G' m') : W.Base Sz K G' rX' m' := by
+    (hsh : W.Shares G' m') (hmt : M.ph (G t) = .out ∨ M.ph (G t) = .holds) :
+    W.Base Sz K G' rX' m' := by
   obtain ⟨⟨-, hW⟩, -⟩ := hu.sub
   have hsub' := semSub_step hs hu.sub hLw hRoff he he' hmv
   have hM' : M.Inv G' (rsum sB rX') m' := hS' ▸ hs.2.2.1
@@ -376,7 +424,13 @@ theorem wstep {t : ThreadId} {G' : ThreadId → γ} {rS rS' sB rX' rY rY' : Res}
       rw [hmph' u]
       rw [hlph' u, hspl u] at hq
       exact hu.nap u hq
-    live := fun l hl => hM'.rest_live ((Res.owned_sep rfl rfl).mpr (.inr hl)) }
+    live := fun l hl => hM'.rest_live ((Res.owned_sep rfl rfl).mpr (.inr hl))
+    rdm := fun u hr => by
+      rw [hmph' u]
+      by_cases e : u = t
+      · rw [e]; rcases hmt with h | h <;> rw [h] <;> exact ⟨nofun, nofun⟩
+      · rw [hoth u e] at hr; exact hu.rdm u hr
+    mal := fun u ha => by rw [hlph' u]; exact hu.mal u (by rwa [hmph' u] at ha) }
 
 /-! ## The relabels around the other lock's code -/
 
@@ -392,7 +446,10 @@ theorem relabel {t : ThreadId} {g' : γ} (hu : W.Base Sz K G rX m)
       (L.ph g' = .out ∨ L.ph g' = .away) ∧ S.place.ph (G t) = (.out, .out)))
     (hnap : (L.ph g' ≠ .out ∧ L.ph g' ≠ .away ∧ L.ph g' ≠ .gone) ∨
         S.place.ph (G t) ≠ (.out, .out) →
-      M.ph g' = .away ∨ M.ph g' = .holdsAway) :
+      M.ph g' = .away ∨ M.ph g' = .holdsAway)
+    (hrdm : (W.ph (G t)).isRd = true ∨ (W.ph (G t)).isRp = true →
+      M.ph g' ≠ .spin ∧ M.ph g' ≠ .wait)
+    (hmal : M.ph g' = .away → L.ph g' ≠ .away ∧ L.ph g' ≠ .holdsAway) :
     W.Base Sz K (upd G t g') rX m := by
   obtain ⟨⟨hC, hW⟩, hS⟩ := hu.sub
   have wph : W.ph g' = W.ph (G t) := congrArg Prod.fst hwp
@@ -470,16 +527,27 @@ theorem relabel {t : ThreadId} {g' : γ} (hu : W.Base Sz K G rX m)
       by_cases e : u = t
       · rw [e, upd_self] at hq ⊢; rw [spl] at hq; exact hnap hq
       · rw [upd_ne _ _ e] at hq ⊢; exact hu.nap u hq
-    live := hu.live }
+    live := hu.live
+    rdm := fun u hr => by
+      rw [hwph u] at hr
+      by_cases e : u = t
+      · rw [e, upd_self]; exact hrdm (by rwa [e] at hr)
+      · rw [upd_ne _ _ e]; exact hu.rdm u hr
+    mal := fun u ha => by
+      by_cases e : u = t
+      · rw [e, upd_self] at ha ⊢; exact hmal ha
+      · rw [upd_ne _ _ e] at ha ⊢; exact hu.mal u ha }
 
 /-- **A relabel of one thread's place at the outer mutex keeps the base** (`relabel` at
-`M.set g q h`): the thread has not ended, a writer keeps its hold (`hwm`), and the new place
-keeps `nap` (`hnap`). -/
+`M.set g q h`): the thread has not ended, a writer keeps its hold (`hwm`), the new place
+keeps `nap` (`hnap`) and is not on the lock path (`hq`), and a thread that goes `away` is not
+`away` from the semaphore's mutex (`hal`). -/
 theorem relabelM (hpm : ∀ g q h, W.place.ph (M.set g q h) = W.place.ph g) {t : ThreadId} {g : γ}
     {q : LPh} {h : Res} (hu : W.Base Sz K (upd G t g) rX m) (hgone : M.ph g ≠ .gone)
     (hwm : (W.ph g).isW = true → q.held = true)
     (hnap : (L.ph g ≠ .out ∧ L.ph g ≠ .away ∧ L.ph g ≠ .gone) ∨ S.place.ph g ≠ (.out, .out) →
-      q = .away ∨ q = .holdsAway) :
+      q = .away ∨ q = .holdsAway)
+    (hq : q ≠ .spin ∧ q ≠ .wait) (hal : q = .away → L.ph g ≠ .away ∧ L.ph g ≠ .holdsAway) :
     W.Base Sz K (upd G t (M.set g q h)) rX m := by
   have h' := hu.relabel (t := t) (g' := M.set g q h)
     (by rw [upd_self]; exact hpm _ _ _) (by rw [upd_self]; exact W.x_m _ _ _)
@@ -487,6 +555,8 @@ theorem relabelM (hpm : ∀ g q h, W.place.ph (M.set g q h) = W.place.ph g) {t :
     (fun hw => by rw [upd_self] at hw; rw [M.ph_set]; exact hwm hw)
     (.inl (by rw [upd_self]; exact W.pair.ph_ab _ _ _))
     (fun hq => by rw [upd_self, W.pair.ph_ab] at hq; rw [M.ph_set]; exact hnap hq)
+    (fun _ => by rw [M.ph_set]; exact hq)
+    (fun ha => by rw [M.ph_set] at ha; rw [W.pair.ph_ab]; exact hal ha)
   rwa [upd_upd] at h'
 
 /-- **The writer naps at the outer mutex** before the semaphore's wait (`Fits.ofProduct`'s
@@ -494,7 +564,8 @@ theorem relabelM (hpm : ∀ g q h, W.place.ph (M.set g q h) = W.place.ph g) {t :
 theorem mnap (hpm : ∀ g q h, W.place.ph (M.set g q h) = W.place.ph g) {t : ThreadId} {g : γ}
     (hm : M.ph g = .holds) (hu : W.Base Sz K (upd G t g) rX m) :
     W.Base Sz K (upd G t (M.set g .holdsAway (M.held g))) rX m :=
-  hu.relabelM hpm (by rw [hm]; exact nofun) (fun _ => rfl) fun _ => .inr rfl
+  hu.relabelM hpm (by rw [hm]; exact nofun) (fun _ => rfl) (fun _ => .inr rfl) ⟨nofun, nofun⟩
+    nofun
 
 /-- **The writer wakes at the outer mutex** after the semaphore's wait (`Fits.ofProduct`'s
 `munnap`): at `wr` out of the semaphore's mutex's code it is out of the semaphore's (`sout`). -/
@@ -504,20 +575,20 @@ theorem munnap (hpm : ∀ g q h, W.place.ph (M.set g q h) = W.place.ph g) {t : T
     W.Base Sz K (upd G t (M.set g .holds (M.held g))) rX m := by
   have hso := hu.sout (u := t) (by rw [upd_self]; exact hl) (by rw [upd_self, hw]; exact nofun)
   rw [upd_self] at hso
-  exact hu.relabelM hpm (by rw [hm]; exact nofun) (fun _ => rfl) fun hq => by
+  exact hu.relabelM hpm (by rw [hm]; exact nofun) (fun _ => rfl) (fun hq => by
     rcases hq with ⟨hq, -⟩ | hq
     · exact absurd hl hq
-    · exact absurd hso hq
+    · exact absurd hso hq) ⟨nofun, nofun⟩ nofun
 
 /-- **The last reader goes `away` from the outer mutex** around its post at the semaphore
 (`Fits.ofProduct`'s `maway`). -/
 theorem maway (hpm : ∀ g q h, W.place.ph (M.set g q h) = W.place.ph g) {t : ThreadId} {g : γ}
-    (hm : M.ph g = .out) (hu : W.Base Sz K (upd G t g) rX m) :
+    (hm : M.ph g = .out) (hl : L.ph g = .out) (hu : W.Base Sz K (upd G t g) rX m) :
     W.Base Sz K (upd G t (M.set g .away rnil)) rX m := by
   have hnw := hu.winv.not_isW (u := t) (by rw [upd_self]; exact .inl hm)
   rw [upd_self] at hnw
   exact hu.relabelM hpm (by rw [hm]; exact nofun) (fun hw => by rw [hnw] at hw; cases hw)
-    fun _ => .inl rfl
+    (fun _ => .inl rfl) ⟨nofun, nofun⟩ fun _ => by rw [hl]; exact ⟨nofun, nofun⟩
 
 /-- **The last reader comes back from `away`** at the outer mutex (`Fits.ofProduct`'s
 `munaway`): out of the semaphore's mutex's code it is out of the semaphore's (`sout`; it is no
@@ -530,10 +601,10 @@ theorem munaway (hpm : ∀ g q h, W.place.ph (M.set g q h) = W.place.ph g) {t : 
     (fun e => by rw [e] at hnw; cases hnw)
   rw [upd_self] at hnw hso
   exact hu.relabelM hpm (by rw [hm]; exact nofun) (fun hw => by rw [hnw] at hw; cases hw)
-    fun hq => by
+    (fun hq => by
       rcases hq with ⟨hq, -⟩ | hq
       · exact absurd hl hq
-      · exact absurd hso hq
+      · exact absurd hso hq) ⟨nofun, nofun⟩ nofun
 
 /-- **A relabel between `out` and `away` at the semaphore's mutex** around the outer mutex's
 code (`Fits.ofProduct`'s `laway`, `lunaway`): the thread is out of the outer mutex's code or
@@ -560,6 +631,13 @@ theorem lmove (hpl : ∀ g q h, S.place.ph (L.set g q h) = S.place.ph g) {t : Th
         · exact absurd e h1
         · exact absurd e h2
       · exact absurd hso hn)
+    (fun hr => by
+      rw [W.pair.ph_ba]
+      have := hu.rdm t hr
+      rwa [upd_self] at this)
+    (fun ha => by
+      rw [W.pair.ph_ba] at ha
+      rcases hm with e | e <;> rw [e] at ha <;> cases ha)
   rwa [upd_upd] at h
 
 /-- **The tick obligation of the outer mutex's view** (`fitsM`'s `tick`). -/
@@ -638,7 +716,10 @@ theorem ofStepRest {t : ThreadId} {G' : ThreadId → γ} {rX' : Res} {m' : Mem}
     (hshr : W.Shares G' m') (hwt : S.ph (G' t) = .wt → W.ph (G' t) = .ww)
     (hnap : (L.ph (G' t) ≠ .out ∧ L.ph (G' t) ≠ .away ∧ L.ph (G' t) ≠ .gone) ∨
         S.place.ph (G' t) ≠ (.out, .out) →
-      M.ph (G t) = .away ∨ M.ph (G t) = .holdsAway) : W.Base Sz K G' rX' m' := by
+      M.ph (G t) = .away ∨ M.ph (G t) = .holdsAway)
+    (hwph : W.ph (G' t) = W.ph (G t))
+    (hmal : M.ph (G t) = .away → L.ph (G' t) ≠ .away ∧ L.ph (G' t) ≠ .holdsAway) :
+    W.Base Sz K G' rX' m' := by
   obtain ⟨⟨-, hW⟩, -⟩ := hu.sub
   exact {
     winv := hu.winv.stepRest hsh hRoff hinv
@@ -658,7 +739,15 @@ theorem ofStepRest {t : ThreadId} {G' : ThreadId → γ} {rX' : Res} {m' : Mem}
       by_cases hw : C.S.In l ∨ C.Ep.In l
       · obtain ⟨V, hV, h⟩ := FCond.word_of hw
         exact (hok V hV).cellIn h
-      · exact hlv l hw (hsh.owned hw hl) hl }
+      · exact hlv l hw (hsh.owned hw hl) hl
+    rdm := fun u hr => by
+      by_cases e : u = t
+      · rw [e] at hr ⊢; rw [hmph]; exact hu.rdm t (by rwa [hwph] at hr)
+      · rw [hoth u e] at hr ⊢; exact hu.rdm u hr
+    mal := fun u ha => by
+      by_cases e : u = t
+      · rw [e] at ha ⊢; exact hmal (by rwa [hmph] at ha)
+      · rw [hoth u e] at ha ⊢; exact hu.mal u ha }
 
 /-- **A step in the frame of the semaphore's mutex's view** (its word and its rest, the outer
 mutex's side `sB` next to the common rest, read at the partial shares of `t`'s part and held
@@ -826,7 +915,7 @@ theorem sstep {t : ThreadId} {G' : ThreadId → γ} {rS rS' sB rL rH rX' : Res} 
         (hu.shares.congr hwph
           (fun v hv => by rwa [LockWord.joinedB_congr hms.threads] at hv)
           fun v l => by rw [hpart v])
-        (fun hq' => ?_) (fun hq' => ?_)
+        (fun hq' => ?_) (fun hq' => ?_) (by rw [upd_self]; exact hgw) (fun hma => ?_)
       · -- the word's bytes: the rest has their cells before and after the step
         by_cases hlW : Wd.In l
         · have hXne : rX.heap l ≠ none := by
@@ -855,6 +944,18 @@ theorem sstep {t : ThreadId} {G' : ThreadId → γ} {rS rS' sB rL rH rX' : Res} 
           have hc0 := hSI'.c_out hCI' (u := t) (by rw [upd_self]; exact hs0)
           rw [upd_self] at hc0
           exact Prod.ext hc0 hs0
+      · -- away from the semaphore's mutex only as a waiter: the writer at `ww`, which holds `M`
+        rw [upd_self, hlq]
+        rcases hq with ⟨rfl, -⟩ | ⟨-, hq2, -⟩
+        · exact hu.mal t hma
+        · rcases hq2 with rfl | ⟨rfl, hpw⟩
+          · exact ⟨nofun, nofun⟩
+          · have hcp : C.ph (L.set (C.set (G t) p) .away h) = p :=
+              (congrArg Prod.fst (ph_l _ _ _)).trans (C.ph_set _ _)
+            have hwt := hSI'.wt t (by rw [upd_self, hcp]; exact hpw)
+            rw [upd_self, hsph] at hwt
+            have hh := hu.winv.wm t (by rw [hu.wt t hwt]; rfl)
+            rw [hma] at hh; cases hh
     · -- a step on `t`'s own part
       rw [← W.pair.setPart] at hG'
       subst hG'
@@ -887,7 +988,8 @@ theorem sstep {t : ThreadId} {G' : ThreadId → γ} {rS rS' sB rL rH rX' : Res} 
             rw [hkL'.side_share (lR_share W l), hkL.side_share (lR_share W l), hsh.gh])
           (fun u q H l c hq hl => SCell.pos_add' _ (hu.winv.rest_share hq hl)) hfs.threads
           (hL.w.live t hlg).1 (fun u e => upd_ne _ _ e) (by rw [upd_self]; exact hgw))
-        (fun hq' => ?_) (fun hq' => ?_)
+        (fun hq' => ?_) (fun hq' => ?_) (by rw [upd_self]; exact hgw)
+        (fun hma => by rw [upd_self, hgl]; exact hu.mal t hma)
       · rw [upd_self] at hq' ⊢
         rw [hgw]; exact hu.wt t ((congrArg Prod.snd hgs).symm.trans hq')
       · rw [upd_self, hgl, hgs] at hq'
@@ -905,7 +1007,8 @@ theorem sstep {t : ThreadId} {G' : ThreadId → γ} {rS rS' sB rL rH rX' : Res} 
         (fun rZ hIZ _ _ => hIZ.congr hwph (hall M.ph hgm) (hall W.x (W.x_c _ _)))
         (fun V hV => (hW V hV).1) (fun _ _ _ => rfl) (fun l _ ho _ => hu.live l ho)
         (hu.shares.congr hwph (fun _ h => h) fun v l => by rw [hpart v])
-        (fun _ => ?_) (fun _ => ?_)
+        (fun _ => ?_) (fun _ => ?_) (by rw [upd_self]; exact hgw)
+        (fun hma => by rw [upd_self, of_cset lph]; exact hu.mal t hma)
       · rw [upd_self, hgw]; exact hu.wt t hst
       · exact hu.nap t (.inr fun e => by
           have h2 : S.ph (G t) = .out := congrArg Prod.snd e
@@ -931,7 +1034,8 @@ theorem sstep {t : ThreadId} {G' : ThreadId → γ} {rS rS' sB rL rH rX' : Res} 
         (hu.shares.congr hwph
           (fun v hv => by rwa [LockWord.joinedB_congr hfs.threads] at hv)
           fun v l => by rw [hpart v])
-        (fun hq' => ?_) (fun _ => ?_)
+        (fun hq' => ?_) (fun _ => ?_) (by rw [upd_self]; exact hgw)
+        (fun _ => by rw [upd_self, of_sset lph, L.ph_set]; exact ⟨nofun, nofun⟩)
       · rw [upd_self] at hq' ⊢
         rw [hgw]
         have h's : s = .wt := (S.ph_set _ _).symm.trans hq'
@@ -954,7 +1058,8 @@ theorem handover {t : ThreadId} {g' : γ} (hu : W.Base Sz K G rX m)
     (hI : W.Inv (upd G t g') rX m) (hS : S.Inv (upd G t g') m) (hC : C.Inv L (upd G t g') m)
     (hnr : ∀ u, (W.ph (upd G t g' u)).isRd = false) (hlh : L.ph (G t) = .holds)
     (hl : L.ph g' = L.ph (G t)) (hc : C.ph g' = C.ph (G t)) (hs : S.ph g' ≠ .wt)
-    (hm : M.ph g' = M.ph (G t)) : W.Base Sz K (upd G t g') rX m := by
+    (hm : M.ph g' = M.ph (G t)) (hnp : (W.ph g').isRp = false) :
+    W.Base Sz K (upd G t g') rX m := by
   have hup : ∀ {α : Type} (f : γ → α), f g' = f (G t) → ∀ u, f (upd G t g' u) = f (G u) :=
     fun f hf u => by
       by_cases e : u = t
@@ -977,7 +1082,19 @@ theorem handover {t : ThreadId} {g' : γ} (hu : W.Base Sz K G rX m)
       · rw [e, upd_self, hm]
         exact hu.nap t (.inl ⟨by rw [hlh]; nofun, by rw [hlh]; nofun, by rw [hlh]; nofun⟩)
       · rw [upd_ne _ _ e] at hq ⊢; exact hu.nap u hq
-    live := hu.live }
+    live := hu.live
+    rdm := fun u hr => by
+      by_cases e : u = t
+      · have h1 := hnr t
+        rw [e, upd_self] at hr; rw [upd_self] at h1
+        rcases hr with hr | hr
+        · rw [h1] at hr; cases hr
+        · rw [hnp] at hr; cases hr
+      · rw [upd_ne _ _ e] at hr ⊢; exact hu.rdm u hr
+    mal := fun u ha => by
+      by_cases e : u = t
+      · rw [e, upd_self, hl, hlh]; exact ⟨nofun, nofun⟩
+      · rw [upd_ne _ _ e] at ha ⊢; exact hu.mal u ha }
 
 section
 variable (mph_s : ∀ g q, M.ph (S.place.set g q) = M.ph g)
@@ -994,7 +1111,7 @@ theorem handoverS {t : ThreadId} {g g₀ : γ} {h₁ h₂ : Res} {sh sc}
     (hS : S.Inv (upd G t (S.set (L.set g₀ .holds h₂) (.pst sh sc))) m)
     (hC : C.Inv L (upd G t (S.set (L.set g₀ .holds h₂) (.pst sh sc))) m)
     (hnr : ∀ u, (W.ph (upd G t (S.set (L.set g₀ .holds h₂) (.pst sh sc)) u)).isRd = false)
-    (hm : M.ph g₀ = M.ph g) (hc : C.ph g₀ = C.ph g) :
+    (hm : M.ph g₀ = M.ph g) (hc : C.ph g₀ = C.ph g) (hnp : (W.ph g₀).isRp = false) :
     W.Base Sz K (upd G t (S.set (L.set g₀ .holds h₂) (.pst sh sc))) rX m := by
   have lph_hold : ∀ g h s, L.ph (S.set (L.set g .holds h) s) = .holds := fun g h s => by
     rw [of_sset lph, L.ph_set]
@@ -1006,6 +1123,7 @@ theorem handoverS {t : ThreadId} {g g₀ : γ} {h₁ h₂ : Res} {sh sc}
     (fun u => by rw [upd_upd]; exact hnr u) (by rw [upd_self, lph_hold])
     (by rw [upd_self, lph_hold, lph_hold]) (by rw [upd_self, cph_hold, cph_hold, hc])
     (by rw [S.ph_set]; nofun) (by rw [upd_self, mph_hold W mph_s, mph_hold W mph_s, hm])
+    (by rw [wph_hold]; exact hnp)
   rwa [upd_upd] at h
 
 variable (mph_w : ∀ g a, M.ph (W.set g a) = M.ph g)
@@ -1039,6 +1157,10 @@ theorem utake {t : ThreadId} {g : γ} {h₁ h₂ r : Res} {sh sc} (hw : W.ph g =
     (hu.winv.take hpost hw₁ hwr (by rw [mph_hold W mph_s, mph_hold W mph_s, hm])) hS hC
     (fun u => ?_) hm
     ((congrArg (fun p => p.2.1) hpp).trans (congrArg Prod.fst (W.sp_ph g .wr)))
+    (by
+      have e : W.ph (L.setPart (W.set g .wr) (rsum (L.part g) r)) = .wr :=
+        (congrArg Prod.fst hpp).trans (W.ph_set _ _)
+      rw [e]; rfl)
   by_cases e : u = t
   · rw [e, upd_self, hwr]; rfl
   · have := hpost.2.1 u
@@ -1063,6 +1185,95 @@ theorem upost {t : ThreadId} {g : γ} {h₁ h₂ r₀ : Res} {rc sh sc} (hw : W.
   obtain ⟨hI, hpost⟩ := hu.winv.post hw₁ hout (by rw [mph_hold W mph_s, mph_hold W mph_s, hm])
   exact hu.handoverS mph_s lph ph_l hI hS hC hpost.2.1 hm
     ((congrArg Prod.fst (W.sp_ph _ .out)).trans (congrArg (fun p => p.2.1) (place_lpart hpl g r₀)))
+    (by rw [W.ph_set]; rfl)
+
+end
+
+/-! ## Liveness
+
+A writer asleep in the semaphore's wait holds the outer mutex at `holdsAway`. With the count `0`
+and no signal on its way, it waits for a reader (the resource is not posted, so one is at `rd` or
+`rp`), and that reader is not asleep: it is not on the outer mutex's lock path (`rdm`), `away`
+from the outer mutex it sleeps at most at the semaphore's mutex (`mal`), whose waiter is live, and
+a holder at `holdsAway` sleeps at the semaphore's mutex or at the epoch, where only the writer
+sleeps (`wt`). -/
+
+section
+variable {Tgt : Type} {P : Proto Tgt γ} {okS : γ → Prop}
+  (inv : ∀ G m, P.inv G m ↔ ∃ rX, M.Inv G rX m ∧ FLock.Pair.U L (W.Base Sz K) G rX m)
+  (hs : S.Fits P (FLock.Pair.U M (W.Base Sz K)) okS)
+  (kfin : ∀ g, P.fin g → W.ph g = .out) (kjoins : ∀ g, P.joins g → W.ph g = .out)
+  (hnest : ∀ p, M.nest p → p = L.ptr ∨ p = C.Ep.ptr)
+include inv hs kfin kjoins hnest
+
+/-- **The writer asleep at the semaphore with the count `0` is not in a deadlock**
+(`Fits.ofProduct`'s `wlive`; section doc). -/
+theorem wlive {t : ThreadId} {m : Mem} (hw : W.ph (G t) = .ww) (hi : P.inv G m)
+    (hc0 : S.cnt G = 0) : P.Live t G m := by
+  intro _ hall
+  obtain ⟨rX, hM, sB, rL, rH, rX₀, rfl, hsB, hk, hu⟩ := (inv G m).mp hi
+  obtain ⟨rXL, hL, hUL⟩ := (hs.inv G m).mp hi
+  have hnp : ¬ RwPosted W.ph G := fun h => by rw [W.cnt_posted G h] at hc0; cases hc0
+  obtain ⟨u, hur⟩ : ∃ u, (W.ph (G u)).isRd = true ∨ (W.ph (G u)).isRp = true :=
+    Classical.byContradiction fun hne => hnp ⟨⟨t, hw⟩,
+      fun u => Bool.eq_false_iff.mpr fun h => hne ⟨u, .inl h⟩,
+      fun u => Bool.eq_false_iff.mpr fun h => hne ⟨u, .inr h⟩⟩
+  have hne : W.ph (G u) ≠ .out := fun e => by rw [e] at hur; rcases hur with h | h <;> cases h
+  rcases hall u (hu.winv.ex u hne) with hf | hq | hj
+  · exact hne (kfin _ hf)
+  · by_cases hlw : L.ph (G u) = .wait
+    · exact FLock.Fits.live hs.toFits hL hUL hlw hq hall
+    have hm := hu.rdm u hur
+    by_cases hma : M.ph (G u) = .away
+    · have hl := hu.mal u hma
+      have h0 := hL.w.notQ (t := u) hlw hl.1 hl.2
+      rw [h0] at hq; cases hq
+    by_cases hmh : M.ph (G u) = .holdsAway
+    · obtain ⟨k, hkm, -, p, hpn, hpk⟩ := hM.w.nestQ hmh hq
+      rcases hnest p hpn with rfl | rfl
+      · obtain rfl : k = L.key m := Option.some.inj (hpk.symm.trans hL.w.blk.keyAt)
+        rcases hL.w.fq _ hkm with ⟨-, h⟩ | ⟨h, -⟩ | ⟨h, -⟩
+        · exact hlw h
+        · exact absurd rfl h
+        · exact absurd rfl h
+      · obtain rfl : k = C.Ep.key m :=
+          Option.some.inj (hpk.symm.trans (hu.sub.1.2 C.Ep (.inr rfl)).1.keyAt)
+        obtain ⟨i, jr, e, hreg, -⟩ := hu.sub.1.1.q _ hkm rfl
+        have hww := hu.wt u (hu.sub.2.wt u (by rw [hreg]; rfl))
+        rw [hww] at hur; rcases hur with h | h <;> cases h
+    · have h0 := hM.w.notQ (t := u) hm.2 hma hmh
+      rw [h0] at hq; cases hq
+  · exact hne (kjoins _ hj)
+
+/-- **A holder of the outer mutex asleep at another futex is not in a deadlock** (`fitsM`'s
+`holdLive`): it sleeps at the semaphore's mutex, whose waiter is live, or at the epoch as the
+registered writer: then a signal is on its way (`FLock.Fits.liveC`), the count is not `0`
+(`FSem.Fits.live`), or a reader runs (`wlive`). -/
+theorem holdLiveM : ∀ G rX m v, M.Inv G rX m → FLock.Pair.U L (W.Base Sz K) G rX m →
+    M.ph (G v) = .holdsAway → P.Live v G m := by
+  intro G rX m v hM hU hv hq hall
+  have hi : P.inv G m := (inv G m).mpr ⟨rX, hM, hU⟩
+  obtain ⟨sB, rL, rH, rX₀, rfl, hsB, hk, hu⟩ := hU
+  obtain ⟨rXL, hL, hUL⟩ := (hs.inv G m).mp hi
+  obtain ⟨k, hkm, -, p, hpn, hpk⟩ := hM.w.nestQ hv hq
+  rcases hnest p hpn with rfl | rfl
+  · obtain rfl : k = L.key m := Option.some.inj (hpk.symm.trans hL.w.blk.keyAt)
+    have hlw : L.ph (G v) = .wait := by
+      rcases hL.w.fq _ hkm with ⟨-, h⟩ | ⟨h, -⟩ | ⟨h, -⟩
+      · exact h
+      · exact absurd rfl h
+      · exact absurd rfl h
+    exact FLock.Fits.live hs.toFits hL hUL hlw hq hall
+  · obtain rfl : k = C.Ep.key m :=
+      Option.some.inj (hpk.symm.trans (hu.sub.1.2 C.Ep (.inr rfl)).1.keyAt)
+    obtain ⟨i, jr, e, hreg, -⟩ := hu.sub.1.1.q _ hkm rfl
+    by_cases hp : 0 < FCond.sOf (C.lastS m) ∨ ∃ x, (C.ph (G x)).sig
+    · exact hs.toC.toFits.liveC hi hp hq hall
+    by_cases hz : S.cnt G = 0
+    · exact wlive inv hs kfin kjoins hnest
+        (hu.wt v (hu.sub.2.wt v (by rw [hreg]; rfl))) hi hz hq hall
+    · exact FSem.Fits.live hs.toFits hi (by rw [hreg]; rfl)
+        (Nat.eq_zero_of_not_pos fun h => hp (.inl h)) hz hq hall
 
 end
 
