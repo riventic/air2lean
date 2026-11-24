@@ -1,0 +1,18 @@
+{
+  "air_sha256": {
+    "air/queue.Ring.count.json": "42e606b0f4ef231321a740cbfe924ab77bb4ce02d0929555dcfbe33b4a1f8fbc",
+    "air/queue.Ring.init.json": "fd7583703b02797b32838df890fbb4a529f5788015bf8ee1a43213c877c0b5a2",
+    "air/queue.Ring.pop.json": "960dc18a0799ca193994c0763787563652daa24c846e5cabf29c65b98dd42a7c",
+    "air/queue.Ring.push.json": "25495759f8e8b4525f52b22c2e1e148cd58537b132abca6cd56dd77af738c27b",
+    "air/queue.pushAll.json": "7bf909cf5a1009533a502b3d8aacf55fb74a553c9b1f5cd15b424e9dab9eeb7f",
+    "air/queue.rotate.json": "f3e28fb45bd7802625f5593432e793ad716820880489bbfbe949d920c9fb1646"
+  },
+  "compilers": {
+    "0.17.1": "84a8a3bdf2a5766e405d422289fdcea5eab58b4acca120b145ecbcac86b75e8f"
+  },
+  "manifest_sha256": "72b3638ef595cb684fc3e6a09453f9b24969ab9c992db9905f40135a119f6020",
+  "schema": 1,
+  "sources_sha256": {
+    "queue.zig": "9485a05abf3a2d9ba7f1dee0d2a3dc33ad80dea9607681991c78457af08c782d"
+  }
+}
