@@ -71,6 +71,13 @@ of bytes. A `u12` atomic fails closed (`reject.zig`'s `atomicU12`). Pointer atom
 symbolic bytes. The std allocator, thread and OS models read no integer from memory except the
 futex word, so they are admitted on big-endian profiles.
 
+This fixture is a model-against-native comparison of byte order and contains no theorem.
+s390x-linux and mips64-linux have no memory-model qualification (premise ORD-06,
+`memory_model.unqualified` in `assurance/premises.json`): `scripts/premises.py` fails a
+concurrency theorem about these translations, and `scripts/claims.py` rejects such a goal. The
+observations below are schedule-independent results under qemu user-mode emulation; they are not
+evidence about the hardware's memory ordering.
+
 Each function observes byte order: an atomic store read back through its bytes, plain bytes
 read atomically, an RMW carry across a byte, a 64-bit `cmpxchg`, a signed `Max`, two threads
 adding to one word, a heap word from `Allocator.create`, and a futex wait (0.15.2) whose

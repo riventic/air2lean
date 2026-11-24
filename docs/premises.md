@@ -130,7 +130,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Hand-written std models (transitional) | [STD-01](#std-01) [STD-02](#std-02) [STD-03](#std-03) [STD-05](#std-05) [STD-06](#std-06) [STD-08](#std-08) [STD-09](#std-09) [STD-10](#std-10) |
 | OS page mapping | [OSM-01](#osm-01) |
 | OS thread primitives | [OSF-01](#osf-01) [OSF-02](#osf-02) [OST-01](#ost-01) [OST-02](#ost-02) [OST-03](#ost-03) [OSY-01](#osy-01) [OSK-01](#osk-01) [OSK-02](#osk-02) [OSG-01](#osg-01) [OSL-01](#osl-01) [OSM-02](#osm-02) |
-| Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) [TRU-05](#tru-05) |
+| Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) [TRU-05](#tru-05) [TRU-06](#tru-06) |
 
 ## Target and build profiles
 
@@ -183,7 +183,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 ### PRF-05 — Recorded `abi64-be-v1` big-endian profile
 
 - Kind: environment.
-- Statement: As PRF-02, for a big-endian target (s390x-linux): the theorem concerns the
+- Statement: As PRF-02, for a big-endian target (s390x-linux, mips64-linux): the theorem concerns the
   analyzed AIR of the recorded profile under the big-endian encodings of `Zig.BigEndian`
   (`ZigLean/Endian.lean`): integers, floats, slice lengths, packed backing integers,
   bit-pointer hosts and whole-byte vector lanes most significant byte first. Pointer and error
@@ -570,14 +570,25 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   is `.illegal`, so a theorem is about race-free executions (DRF-SC); the standard C11 mappings
   to x86-TSO and ARMv8 are proved sound for RC11, and ORD-01 admits every RC11 outcome; RC11's
   no-load-buffering axiom is ORD-02. LLVM's optimizer is assumed to respect the C++11 model.
-  Targets in the record's `unqualified` list (wasm32, s390x) reject atomics and threads, so no
-  theorem about them carries this premise.
+  The qualified targets are the record's `targets`: x86_64-linux, aarch64-macos and
+  aarch64-linux. The premise is stated for no other target. The record's `unqualified` list
+  names the known ones and what each lacks: wasm32 (the translator rejects atomics, threads and
+  futexes), and s390x-linux and mips64-linux (the translator accepts them on the big-endian
+  profile, PRF-05, but there is no hardware model, mapping argument or hardware evidence). A
+  theorem over a generated module that records no target (PRF-01, PRF-03) carries the premise
+  for the qualified targets only (`unrecorded`).
 - Derived from: implied by THR-01 and ORD-01, so every concurrency theorem carries it.
   `scripts/premises.py` (`check` and `compiled`) fails when a theorem or a report below whose
   premises contain THR-01 or ORD-01 omits it; `scripts/claims.py` lists it in each concurrency
-  claim's `premises`.
+  claim's `premises`. Target binding (`target_qualified`): `scripts/premises.py` fails a theorem
+  that carries it over a generated module whose profile header records a target outside
+  `targets`, and `scripts/claims.py` rejects such a goal. The translator's acceptance of a
+  target is not part of the binding. The source index binds the premises a theorem's own
+  closure gives; a premise it lists only as a source fallback (the upper bound over a runtime
+  module's imports) is bound by `compiled`.
 - Sources: [research/C12.md](research/C12.md), [std-models.md](std-models.md#thread-model),
-  [architecture-audit/concurrency.md](architecture-audit/concurrency.md).
+  [architecture-audit/concurrency.md](architecture-audit/concurrency.md),
+  [architecture-audit/memory-model-target-binding.md](architecture-audit/memory-model-target-binding.md).
 
 ## Timers and clocks
 
@@ -1325,8 +1336,15 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   post-validation wake path, a wake of up to `n` waiters at an address wakes an oracle-chosen subset of
   `min n k` of the `k` threads queued there, in one step, and accesses no memory. On Linux `n`
   is `val`, at least 1 for `val ≤ 0`; on macOS it is 1, or all with `WAKE_ALL`. Linux's success
-  result is the number woken. macOS returns `0`, `-ENOENT` if nobody was woken, or, as an oracle option,
-  `-EINTR` with nobody woken. It gives no happens-before edge.
+  result is the number woken. macOS returns `0` after a wake of one or more; after a wake of
+  nobody it returns `-ENOENT` or `0`, an oracle choice (xnu's `ulock_wake` returns `0` while the
+  key's `ull` lives, until its last waiter's cleanup, which the model does not track); as one more
+  oracle option it returns `-EINTR` with nobody woken (xnu's wake path never does; a conservative
+  extra outcome). It gives no happens-before edge. The translator binds
+  `os.linux.futex_3arg` (0.15.2 on), `os.linux.futex_wake` (0.14.1, the same system call) and
+  libc's `__ulock_wake` (macOS) to it in every allocator model (`Air2Lean/StdModels.lean`).
+  `std.Thread.Futex.wake` (0.14.1, 0.15.2) itself still binds to its hand row (STD-05) until
+  that row is deleted (audit S6 finding 4, slice D2).
 - Model gaps (OSF-01 and OSF-02): address validation follows Linux v6.16 `get_futex_key` and
   xnu-12377.121.6 `sys_ulock.c`. Where the native result needs mapping or address-limit
   knowledge outside the model, it is a conservative `.illegal` refusal
@@ -1585,6 +1603,29 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
 - Derived from: use of an attestation (`--attestation`); not derived from any theorem.
 - Sources: [artifact-manifest.md](artifact-manifest.md#authentication), `scripts/attest.py`.
 
+<a id="tru-06"></a>
+### TRU-06 — Filesystem publication atomicity
+
+- Kind: trusted.
+- Statement: A published artifact (a translated `Gen.lean`, a check report, a proof receipt,
+  an assumptions audit, a project report) reaches its path only by one `rename(2)`
+  (overwrite) or `link(2)` (no-clobber) of a fully written, fsynced temporary file in the
+  destination directory, followed by an fsync of the directory (`scripts/safe-output.py
+  publish`, `scripts/proof-receipt.py`, `scripts/assumptions.py`, `scripts/project.py`). The
+  host filesystem is trusted to make that `rename` and `link` atomic (a reader sees the
+  previous file or the complete new one, never a prefix; `link` fails when the name exists,
+  also when a concurrent writer created it) and to keep fsynced contents and names across a
+  crash. A filesystem without these guarantees (some network and FUSE filesystems; a
+  directory fsync the filesystem rejects is skipped) can show a partial or lost artifact, and
+  nothing detects it. A SIGKILL of the writer can leave a hidden `.partial` or staging file
+  beside the output, never at the published path. Containment of escaped stage processes is
+  not part of this premise: a missed escapee cannot publish, because only this step does
+  (I08; sampling-only on macOS, [safe-output.md](safe-output.md#limits)).
+- Derived from: use of a published artifact (the reports below that list it); not derived
+  from any theorem.
+- Sources: [safe-output.md](safe-output.md), `scripts/safe-output.py`,
+  `tests/roadmap/safe-output/test_safe_output.py`.
+
 ## Reports
 
 Each report below, and the premises a reader must accept to rely on it, is checked by the tool.
@@ -1593,9 +1634,10 @@ Each report below, and the premises a reader must accept to rely on it, is check
 |---|---|
 | `scripts/assumptions.sh` JSON ([assumptions-audit.md](assumptions-audit.md)) | TRU-01, TRU-04, EXT-02 |
 | `scripts/premises.py compiled` JSON (this page) | TRU-01, TRU-04 |
-| Proof receipts ([proof-receipts.md](proof-receipts.md)) | TRU-01, TRU-04 |
+| Proof receipts ([proof-receipts.md](proof-receipts.md)) | TRU-01, TRU-04, TRU-06 |
 | Authenticated manifests and receipts (`scripts/attest.py`, [artifact-manifest.md](artifact-manifest.md#authentication)) | TRU-05 |
-| Check receipts `.lake/check-reports/` ([profiles.md](profiles.md#golden-comparisons-and-check-receipts)) | PRF-01, PRF-02, TRU-02 |
+| Check receipts `.lake/check-reports/` ([profiles.md](profiles.md#golden-comparisons-and-check-receipts)) | PRF-01, PRF-02, TRU-02, TRU-06 |
+| Published translations and reports (`scripts/safe-output.py publish`, [safe-output.md](safe-output.md)) | TRU-06 |
 | Differential test results (`scripts/diff.sh`, [generated-code.md](generated-code.md#differential-test)) | TRU-02, TRU-03, THR-01, ORD-06, ALC-02, MTH-02 |
 | ABI probe reports ([profiles.md](profiles.md#bounded-linux-native-abi-observations)) | PRF-02, TRU-03 |
 | Allocation policy record ([allocation-policy-report.json](allocation-policy-report.json)) | ALC-01, ALC-02, TRU-02, TRU-03 |

@@ -1,0 +1,17 @@
+# version source function, then the text the translator's diagnostic must contain (check.sh).
+0.17.1 reject_sentinel sentToInt a Zig 0.17 `@bitCast` of a sentinel-terminated array (type
+0.17.1 reject_sentinel intToSentAt docs/upstream/bitcast-sentinel-array.md
+0.17.1 reject_sentinel nestedToInt a Zig 0.17 `@bitCast` of a sentinel-terminated array (type
+0.17.1 reject_sentinel sentToArray a Zig 0.17 `@bitCast` of a sentinel-terminated array (type
+0.15.2 reject_items tuplesToInt a Zig ≤0.16 representation `@bitCast` involving a tuple (type
+0.15.2 reject_items intToTuples a Zig ≤0.16 representation `@bitCast` involving a tuple (type
+0.15.2 reject_items errorsToInt an opaque bitcast involving optional, aggregate or error-union error storage
+0.15.2 reject_items intToErrors an opaque bitcast involving optional, aggregate or error-union error storage
+0.15.2 reject_items errorUnionsToInt an opaque bitcast involving optional, aggregate or error-union error storage
+0.15.2 reject_items optionalsToInt a Zig ≤0.16 representation `@bitCast` involving an optional (type
+0.14.1 reject_items tuplesToInt a Zig ≤0.16 representation `@bitCast` involving a tuple (type
+0.14.1 reject_items intToTuples a Zig ≤0.16 representation `@bitCast` involving a tuple (type
+0.14.1 reject_items errorsToInt an opaque bitcast involving optional, aggregate or error-union error storage
+0.14.1 reject_items intToErrors an opaque bitcast involving optional, aggregate or error-union error storage
+0.14.1 reject_items errorUnionsToInt an opaque bitcast involving optional, aggregate or error-union error storage
+0.14.1 reject_items optionalsToInt a Zig ≤0.16 representation `@bitCast` involving an optional (type

@@ -66,6 +66,10 @@ and enforced by `project.py` and `proof-receipt.py`.
 
 ## Limits
 
+- Publication rests on the filesystem: `rename`/`link` atomicity and fsync durability are
+  premise [TRU-06](premises.md#tru-06), which every published artifact carries. A
+  filesystem without them (some network and FUSE filesystems) can show a partial or lost
+  artifact, and nothing detects it.
 - SIGKILL of the script itself cannot run cleanup. A hidden `.air2lean-output.*`
   staging directory or `.partial` temporary file may remain beside the output. The
   published path still holds the previous complete file.

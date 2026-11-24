@@ -230,8 +230,17 @@ FIXTURES = [
         ("packed_casts", "PackedCasts", ("0.14.1", "0.15.2", "0.16.0", "0.17.1")),
         ("logical017", "Logical017", ("0.17.1",)),
         ("vector_fields", "VectorFields", ("0.14.1", "0.15.2")),
-        ("auto_items", "AutoItems", ("0.14.1", "0.15.2")))
+        ("auto_items", "AutoItems", ("0.14.1", "0.15.2")),
+        ("sentinel_arrays", "SentinelArrays", ("0.14.1", "0.15.2", "0.16.0")),
+        ("void_casts", "VoidCasts", ("0.14.1", "0.15.2", "0.16.0", "0.17.1")),
+        ("void017", "Void017", ("0.17.1",)))
     for v in versions
+] + [
+    # packed-casts/check.sh: the hand-written `bitcast` of zero-bit types (no compiler emits it).
+    (f"tests/roadmap/packed-casts/PackedCasts/V{v.replace('.', '_')}/VoidCast.lean",
+     f"tests/roadmap/packed-casts/air-handwritten/{v}/void_cast",
+     ["--namespace", f"PackedCasts.V{v.replace('.', '_')}.VoidCast", "--prefix", "void_cast."], "exact")
+    for v in ("0.16.0", "0.17.1")
 ] + [
     # nan-bits/check.sh (docs/architecture-audit/nan-bits.md): one translation per version.
     (f"tests/roadmap/nan-bits/NanBits/V{v.replace('.', '_')}/Gen.lean", f"tests/roadmap/nan-bits/air/{v}/nan_bits",

@@ -1756,6 +1756,60 @@ fn writeFailAt(writer: anytype, rng: std.Random, i: usize, max: usize) !void {
     if (i % 3 == 0) try writer.writeAll("null") else try writer.print("{d}", .{rng.uintAtMost(usize, max)});
 }
 
+/// The lines per lists function, after its `N` lines, whose allocator argument is a policy
+/// object with a failure oracle and a live-byte budget (M03, docs/allocation-policy.md).
+const policy_lines = 40;
+
+/// The generator of one function's policy lines: its own stream, so the `N` lines of every
+/// function stay the same.
+fn policyPrng(comptime name: []const u8) std.Random.DefaultPrng {
+    return std.Random.DefaultPrng.init(seed ^ std.hash.Fnv1a_64.hash("policy " ++ name));
+}
+
+fn writePolicyField(writer: anytype, first: *bool, name: []const u8, value: usize) !void {
+    if (!first.*) try writer.writeAll(",");
+    first.* = false;
+    try writer.print("\"{s}\":{d}", .{ name, value });
+}
+
+/// A policy object (`TestAllocator.fromJson`) for a function that makes up to `attempts`
+/// requests of up to `bytes` bytes: up to three oracle rules (an attempt, the attempts from one
+/// on, or a residue class of attempts; and a lower or an upper bound of the request), a budget
+/// on half of the lines, and on some a failure list and a request cap.
+fn writePolicy(writer: anytype, rng: std.Random, attempts: usize, bytes: usize) !void {
+    try writer.writeAll("{\"oracle\":[");
+    for (0..rng.uintAtMost(usize, 3)) |k| {
+        if (k > 0) try writer.writeAll(",");
+        try writer.writeAll("{");
+        var first = true;
+        switch (rng.uintLessThan(u8, 4)) {
+            0 => {},
+            1 => {
+                const a = rng.uintAtMost(usize, attempts);
+                try writePolicyField(writer, &first, "attempt_min", a);
+                try writePolicyField(writer, &first, "attempt_max", a);
+            },
+            2 => try writePolicyField(writer, &first, "attempt_min", rng.uintAtMost(usize, attempts)),
+            else => {
+                const m = 2 + rng.uintLessThan(usize, 3);
+                try writePolicyField(writer, &first, "attempt_mod", m);
+                try writePolicyField(writer, &first, "attempt_rem", rng.uintLessThan(usize, m));
+            },
+        }
+        switch (rng.uintLessThan(u8, 3)) {
+            0 => {},
+            1 => try writePolicyField(writer, &first, "bytes_min", rng.uintAtMost(usize, bytes)),
+            else => try writePolicyField(writer, &first, "bytes_max", rng.uintAtMost(usize, bytes)),
+        }
+        try writer.writeAll("}");
+    }
+    try writer.writeAll("]");
+    if (rng.boolean()) try writer.print(",\"budget\":{d}", .{rng.uintAtMost(usize, 2 * bytes)});
+    if (rng.uintLessThan(u8, 4) == 0) try writer.print(",\"failures\":[{d}]", .{rng.uintAtMost(usize, attempts)});
+    if (rng.uintLessThan(u8, 4) == 0) try writer.print(",\"max_bytes\":{d}", .{rng.uintAtMost(usize, bytes)});
+    try writer.writeAll("}");
+}
+
 fn genLists(rng: std.Random) !void {
     // sumRange(n): small `n`, and sizes that cannot be allocated (more than 1 MiB, or an
     // overflow of `4 * n`). A JSON integer is at most `maxInt(i64)`.
@@ -1769,6 +1823,18 @@ fn genLists(rng: std.Random) !void {
             try writeFailAt(writer, rng, i, 1);
             const n = if (i % 10 == 9) big[rng.uintLessThan(usize, big.len)] else rng.uintAtMost(usize, 40);
             try writer.print(",{d}]}}\n", .{n});
+        }
+        // The policy object: a failure list with a raised cap, and a cap at and below the
+        // request of 16 bytes.
+        try writer.writeAll("{\"bufs\":[],\"args\":[{\"fail_at\":null,\"failures\":[0,2],\"max_bytes\":2097152},4]}\n" ++
+            "{\"bufs\":[],\"args\":[{\"failures\":[],\"max_bytes\":16},4]}\n" ++
+            "{\"bufs\":[],\"args\":[{\"failures\":[],\"max_bytes\":15},4]}\n");
+        var policy_prng = policyPrng("sumRange");
+        const policy_rng = policy_prng.random();
+        for (0..policy_lines) |_| {
+            try writer.writeAll("{\"bufs\":[],\"args\":[");
+            try writePolicy(writer, policy_rng, 1, 160);
+            try writer.print(",{d}]}}\n", .{policy_rng.uintAtMost(usize, 40)});
         }
     }
     // dupe(xs: []const u8), evens(xs: []const u32), listSum(xs: []const u32): the allocation that
@@ -1786,8 +1852,11 @@ fn genLists(rng: std.Random) !void {
             try writeSlice(writer, 0, a, rng.uintAtMost(usize, n - a));
             try writer.writeAll("]}\n");
         }
+        try writeBytesPolicyLines(writer, "dupe", 0);
     }
-    inline for (.{ .{ "evens", 40, 3 }, .{ "listSum", 10, 11 } }) |g| {
+    // The policy lines of evens and listSum: several requests live at once (the list's old and
+    // new buffer, every node), so the budget and the attempt rules decide later requests too.
+    inline for (.{ .{ "evens", 40, 3, 8, 256 }, .{ "listSum", 10, 11, 10, 160 } }) |g| {
         var file = try openLists(g[0]);
         defer file.close();
         const writer = file.writer();
@@ -1795,6 +1864,16 @@ fn genLists(rng: std.Random) !void {
             const n = rng.uintAtMost(usize, g[1]);
             try writeBuf(writer, rng, 4 * n, 0);
             try writeFailAt(writer, rng, i, g[2]);
+            try writer.writeAll(",");
+            try writeSlice(writer, 0, 0, n);
+            try writer.writeAll("]}\n");
+        }
+        var policy_prng = policyPrng(g[0]);
+        const policy_rng = policy_prng.random();
+        for (0..policy_lines) |_| {
+            const n = policy_rng.uintAtMost(usize, g[1]);
+            try writeBuf(writer, policy_rng, 4 * n, 0);
+            try writePolicy(writer, policy_rng, g[3], g[4]);
             try writer.writeAll(",");
             try writeSlice(writer, 0, 0, n);
             try writer.writeAll("]}\n");
@@ -2742,6 +2821,23 @@ fn genDupeZ(rng: std.Random) !void {
         const n = rng.uintAtMost(usize, 24);
         try writeBuf(writer, rng, n, 6);
         try writeFailAt(writer, rng, i, 1);
+        try writer.writeAll(",");
+        const a = rng.uintAtMost(usize, n);
+        try writeSlice(writer, 0, a, rng.uintAtMost(usize, n - a));
+        try writer.writeAll("]}\n");
+    }
+    try writeBytesPolicyLines(writer, "dupeZLen", 6);
+}
+
+/// The policy lines of dupe and dupeZLen (one request of up to 25 bytes): a byte slice as in
+/// their other lines.
+fn writeBytesPolicyLines(writer: anytype, comptime name: []const u8, zeros: u8) !void {
+    var policy_prng = policyPrng(name);
+    const rng = policy_prng.random();
+    for (0..policy_lines) |_| {
+        const n = rng.uintAtMost(usize, 24);
+        try writeBuf(writer, rng, n, zeros);
+        try writePolicy(writer, rng, 1, 25);
         try writer.writeAll(",");
         const a = rng.uintAtMost(usize, n);
         try writeSlice(writer, 0, a, rng.uintAtMost(usize, n - a));
