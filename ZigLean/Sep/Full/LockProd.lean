@@ -241,6 +241,18 @@ theorem share_zero_of_cell {own : ThreadId → Res} {rO : Res} {m : Mem} {t : Th
   let ⟨_, _, _, ha⟩ := share_others ho ho rfl ht (fun _ _ => rfl) l
   (ha hl).1
 
+/-- The rest holds no share of a byte it holds as a cell. -/
+theorem rest_zero_of_cell {own : ThreadId → Res} {rO : Res} {m : Mem} {t : ThreadId}
+    (ho : FOwned own rO m) (ht : t < m.threads.size) {l : Loc} (hl : rO.heap l ≠ none) :
+    rO.gh.share l = SCell.zero := by
+  obtain ⟨rR, -, -, hh⟩ := ho.part ht
+  have hn := hh.not_pos_of_heap (l := l) (fun e => by
+    simp only [FHeap.union_apply, Option.or_eq_none_iff] at e
+    exact hl e.2.2)
+  rw [SCell.not_pos_iff] at hn
+  have e0 : ((own t).gh.share l).add ((rR.gh.share l).add (rO.gh.share l)) = SCell.zero := hn.eq
+  exact (SCell.add_eq_zero (SCell.add_eq_zero e0).2).2
+
 /-- The parts own their resources: a part of an exact composition is in a part. -/
 theorem owns_right (ho : FOwned (fun u => rsum (a u) (b u)) rO m) {u : ThreadId}
     (hu : u < m.threads.size) : m.OwnsRes u (b u) :=
@@ -519,6 +531,21 @@ theorem Inv.share_zero_of_cell {t : ThreadId} {l : Loc} (hi : L.Inv G rX m)
     (ht : t < m.threads.size) (hl : rX.heap l ≠ none) : (L.own G m t).gh.share l = SCell.zero := by
   obtain ⟨rL, ho, -⟩ := hi.rest
   exact ho.share_zero_of_cell ht fun e => hl (rsum_heap_none.mp (rsum_heap_none.mp e).2).2
+
+/-- The protocol's rest holds no share of a byte it holds as a cell
+(`FOwned.rest_zero_of_cell`). -/
+theorem Inv.rest_zero_of_cell {t : ThreadId} {l : Loc} (hi : L.Inv G rX m)
+    (ht : t < m.threads.size) (hl : rX.heap l ≠ none) : rX.gh.share l = SCell.zero := by
+  obtain ⟨rL, ho, -⟩ := hi.rest
+  have h : ((L.wordR m).gh.share l).add ((rL.gh.share l).add (rX.gh.share l)) = SCell.zero :=
+    ho.rest_zero_of_cell ht fun e => hl (rsum_heap_none.mp (rsum_heap_none.mp e).2).2
+  exact (SCell.add_eq_zero (SCell.add_eq_zero h).2).2
+
+/-- A thread that does not exist owns no share (`FOwned.outside`). -/
+theorem Inv.own_outside {u : ThreadId} {l : Loc} (hi : L.Inv G rX m)
+    (hu : m.threads.size ≤ u) : (L.own G m u).gh.share l = SCell.zero := by
+  obtain ⟨rL, ho, -⟩ := hi.rest
+  rw [(ho.outside u hu).2.2]; rfl
 
 /-- **A part of the protocol's rest owns no byte of the lock's word**, not even a share: the word
 is in the lock's own rest (`LockWord.off_owned_of_rest`). -/
