@@ -2901,7 +2901,7 @@ jobs:
   # aarch64-macos (scripts/ci-matrix.py). Each evidence step binds AIR2LEAN_ZIG_VERSION.
   # WASM is not a declared target (T02/T05).
   macos:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 90
     env:
       PYTHONDONTWRITEBYTECODE: "1"
