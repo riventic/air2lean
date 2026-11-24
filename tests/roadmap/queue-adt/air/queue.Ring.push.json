@@ -42,7 +42,7 @@
  "src": {
   "file": "queue.zig",
   "module": "queue",
-  "decl_line": 26
+  "decl_line": 29
  },
  "params": [
   0,

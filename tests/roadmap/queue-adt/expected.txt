@@ -14,3 +14,12 @@ pushAll 1
 four: head 3 len 4 cells 11 12 10 10
 pop 10 11 12 10 null
 no cells: push 0 pop null count 0
+shift empty: count 0 pop null
+shift push 1 1 1 full 0
+shift full: len 3 cells 1 2 3
+shift pop 1 count 2
+shift popped: len 2 cells 2 3 3
+shift push 1
+shift rotated: len 3 cells 3 5 2
+shift pop 3 5 2 null
+shift rotated empty: len 0 cells 2 2 2

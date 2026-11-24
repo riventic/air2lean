@@ -1,11 +1,16 @@
 {
   "air_sha256": {
-    "air/queue.Ring.count.json": "42e606b0f4ef231321a740cbfe924ab77bb4ce02d0929555dcfbe33b4a1f8fbc",
-    "air/queue.Ring.init.json": "fd7583703b02797b32838df890fbb4a529f5788015bf8ee1a43213c877c0b5a2",
-    "air/queue.Ring.pop.json": "960dc18a0799ca193994c0763787563652daa24c846e5cabf29c65b98dd42a7c",
-    "air/queue.Ring.push.json": "25495759f8e8b4525f52b22c2e1e148cd58537b132abca6cd56dd77af738c27b",
-    "air/queue.pushAll.json": "7bf909cf5a1009533a502b3d8aacf55fb74a553c9b1f5cd15b424e9dab9eeb7f",
-    "air/queue.rotate.json": "f3e28fb45bd7802625f5593432e793ad716820880489bbfbe949d920c9fb1646"
+    "air/queue.Ring.count.json": "8c6f03107ffa19c1b4b62446ebd18a858b4e2d99d3a7a4ccce02b9ad5c240027",
+    "air/queue.Ring.init.json": "905da0a1a5e3235eab96b444290e9eb57e0dc8e8e815aec1deed70789021a380",
+    "air/queue.Ring.pop.json": "568b34419b89d195945645385aaa6f268d628eff60f6cf4dc0355aba5c7871e6",
+    "air/queue.Ring.push.json": "6b5bf0c2e2ae11dbad9396cf584ca367f87be3bce24e1097031247453558a5d3",
+    "air/queue.Shift.count.json": "55fe5380706230dcd3f7f1859c4735915bc9ed13914c6dd7cc12441ebf34bdf9",
+    "air/queue.Shift.init.json": "c22999829b8099d47cb10ad37f75ff017b0fe51235cd7b91f19686cbf4df877f",
+    "air/queue.Shift.pop.json": "8afc19d901b90572a5314c823bde45fa44f409463a1e7aeb7049f331f342da72",
+    "air/queue.Shift.push.json": "493da60685d3b1de6d9d403243d0e17c27d1a36efea5a7eba9a84f95cd4feafc",
+    "air/queue.pushAll.json": "21b0de353f941b1e2f72299485d3fa83915c3d12450bf197851b7bc22790cba3",
+    "air/queue.rotate.json": "fe815f02e4865099c84ffc933135aa91912ef82afaab80a369d86ab74670cc40",
+    "air/queue.rotateShift.json": "ea852bcf32ce95f0714a53af7e83791418a964c477310bc3cb8b0114662605c5"
   },
   "compilers": {
     "0.17.1": "84a8a3bdf2a5766e405d422289fdcea5eab58b4acca120b145ecbcac86b75e8f"
@@ -13,7 +18,7 @@
   "manifest_sha256": "72b3638ef595cb684fc3e6a09453f9b24969ab9c992db9905f40135a119f6020",
   "schema": 1,
   "sources_sha256": {
-    "native.zig": "277d93627879bbaeadd5d722333c4e010bc6c42be069d660cbda6653d2de6a3d",
-    "queue.zig": "9485a05abf3a2d9ba7f1dee0d2a3dc33ad80dea9607681991c78457af08c782d"
+    "native.zig": "b0d42346377739c373435ebd6549e4b197855bfacf0bf84bee39d13fa9180b62",
+    "queue.zig": "a3295d9c7930124e2316899d61ad7473e6d947cd6b51bd2243299fab3af07bb2"
   }
 }

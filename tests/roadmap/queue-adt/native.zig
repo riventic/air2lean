@@ -50,4 +50,25 @@ pub fn main() void {
     // a ring without cells is full and empty
     var none = queue.Ring.init(buf[0..0]);
     std.debug.print("no cells: push {d} pop {?d} count {d}\n", .{ ok(none.push(1)), none.pop(), none.count() });
+
+    // the second implementation: the same calls give the same results
+    var cells = [_]u16{ 0, 0, 0 };
+    var s = queue.Shift.init(&cells);
+    std.debug.print("shift empty: count {d} pop {?d}\n", .{ s.count(), s.pop() });
+    std.debug.print("shift push {d} {d} {d} full {d}\n", .{ ok(s.push(1)), ok(s.push(2)), ok(s.push(3)), ok(s.push(4)) });
+    showShift("shift full", &s);
+    std.debug.print("shift pop {?d} count {d}\n", .{ s.pop(), s.count() });
+    showShift("shift popped", &s);
+    std.debug.print("shift push {d}\n", .{ok(s.push(5))});
+    queue.rotateShift(&s);
+    showShift("shift rotated", &s);
+    std.debug.print("shift pop {?d} {?d} {?d} {?d}\n", .{ s.pop(), s.pop(), s.pop(), s.pop() });
+    queue.rotateShift(&s);
+    showShift("shift rotated empty", &s);
+}
+
+fn showShift(tag: []const u8, q: *queue.Shift) void {
+    std.debug.print("{s}: len {d} cells", .{ tag, q.len });
+    for (q.items) |c| std.debug.print(" {d}", .{c});
+    std.debug.print("\n", .{});
 }

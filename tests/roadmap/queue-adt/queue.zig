@@ -1,7 +1,10 @@
-//! P04/P06: a fixed-capacity FIFO queue of `u32` items, a ring buffer over a caller's buffer.
-//! `push`, `pop` and `count` are the queue's interface (the contract `Zig.Full.QueueImpl`,
-//! ZigLean/Sep/Full/Queue.lean); `rotate` and `pushAll` are clients that use only that interface.
-//! Every index and every add is checked (ReleaseSafe): the proofs show that no check fails.
+//! P04/P06: two fixed-capacity FIFO queues over a caller's buffer: `Ring`, a ring buffer of `u32`
+//! items whose operations run no loop, and `Shift`, a linear array of `u16` items whose `pop`
+//! moves the rest down, one loop-body run per item. `push`, `pop` and `count` are the queue's
+//! interface (the contract `Zig.Full.QueueImpl`, ZigLean/Sep/Full/Queue.lean, with each
+//! operation's declared step count); `rotate`, `pushAll` and `rotateShift` are clients that use
+//! only that interface. Every index and every add is checked (ReleaseSafe): the proofs show that
+//! no check fails.
 
 pub const Ring = struct {
     /// The buffer; its length is the capacity.
@@ -57,7 +60,53 @@ pub fn pushAll(q: *Ring, vs: []const u32) usize {
     return n;
 }
 
+/// The second implementation: the items are the first `len` cells, front first.
+pub const Shift = struct {
+    /// The buffer; its length is the capacity.
+    items: []u16,
+    /// The number of items.
+    len: usize,
+
+    /// An empty queue over `buf`.
+    pub fn init(buf: []u16) Shift {
+        return .{ .items = buf, .len = 0 };
+    }
+
+    /// The number of items.
+    pub fn count(q: *const Shift) usize {
+        return q.len;
+    }
+
+    /// Puts `v` at the back, or fails when the queue is full.
+    pub fn push(q: *Shift, v: u16) error{Full}!void {
+        if (q.len == q.items.len) return error.Full;
+        q.items[q.len] = v;
+        q.len += 1;
+    }
+
+    /// Takes the front item, or null when the queue is empty. Every other item moves one cell
+    /// down: the loop body runs once per item (once per move and for the final test).
+    pub fn pop(q: *Shift) ?u16 {
+        if (q.len == 0) return null;
+        const v = q.items[0];
+        var i: usize = 1;
+        while (i < q.len) : (i += 1) q.items[i - 1] = q.items[i];
+        q.len -= 1;
+        return v;
+    }
+};
+
+/// Client 1 on the second implementation: the same program as `rotate`.
+pub fn rotateShift(q: *Shift) void {
+    if (q.pop()) |v| q.push(v) catch unreachable;
+}
+
 comptime {
+    _ = &Shift.init;
+    _ = &Shift.count;
+    _ = &Shift.push;
+    _ = &Shift.pop;
+    _ = &rotateShift;
     _ = &Ring.init;
     _ = &Ring.count;
     _ = &Ring.push;
