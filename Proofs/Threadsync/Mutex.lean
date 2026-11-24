@@ -79,7 +79,7 @@ theorem loop4_body (rp : Res) (hp : rp.Plain) (t : ThreadId) (s : workLocals)
     ThreadMutex.unlock_wp (fits (Lo := lo) (workOf := workOf)) rfl rfl rfl _ _ _ _ ⟨⟩,
     (fits (Lo := lo) (workOf := workOf)).wp_hold (g' := gHold rp k),
     (fits (Lo := lo) (workOf := workOf)).wp_hold (g' := gHold rp (k + 1)),
-    U_hold (Lo := lo), shape_next, sum_le4, sum_next,
+    U_hold (Lo := lo), holds_next, sum_le4, sum_next,
     set_out, set_hold, ph_out, ph_hold, work.again4]
 
 /-- `work`: two runs of its loop. -/

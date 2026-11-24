@@ -158,9 +158,26 @@ theorem apE : WE.ApartL L.toLockWord := .inr (.inl (by simp [WE, L, FLock.prod])
 theorem box_notL {l : Zig.Loc} (h : BoxW l) : ¬ L.In l := fun ⟨_, h2, h3⟩ => by
   obtain ⟨-, h5, -⟩ := h; simp [L, FLock.prod] at h2 h3; omega
 
-/-- The access `e` of the mutex's word is not to `io`. -/
-theorem io_notL {e : FootprintEntry} (h : e.off = L.o) : ¬ IoR e := fun ⟨_, _, h2⟩ => by
-  simp [L, FLock.prod] at h; omega
+/-- The rest's bytes: the two words' cells, and `io`'s. -/
+theorem Rest.only {rX : Res} {m : Mem} (h : Rest rX m) {l : Zig.Loc} (hl : rX.heap l ≠ none) :
+    BoxW l ∨ (l.1 = 0 ∧ l.2 < 16) := by
+  obtain ⟨rIO, hIO, -, rfl⟩ := h
+  by_cases hb : BoxW l
+  · exact .inl hb
+  · refine .inr (hIO.only ?_)
+    simpa [FHeap.union_apply, cellsAt_none hb] using hl
+
+/-- The rest has no byte of the mutex's word. -/
+theorem Rest.notL {rX : Res} {m : Mem} (h : Rest rX m) {l : Zig.Loc} (hl : rX.heap l ≠ none) :
+    ¬ L.In l := by
+  rcases h.only hl with hb | ⟨-, h16⟩
+  · exact box_notL hb
+  · rintro ⟨-, h2, -⟩; simp [L, FLock.prod] at h2; omega
+
+/-- `io`'s bytes are none of the two words'. -/
+theorem io_box {r : Res} {l : Zig.Loc} (hr : Cl.Io r) (hb : BoxW l) : r.heap l = none :=
+  Classical.byContradiction fun h => by
+    have := ((show IoRest r from hr).only h).2; have := hb.2.1; omega
 
 /-- A step of the lock's code keeps the `SemCounter`: it writes at most the mutex's bytes. -/
 theorem BlkOk.lstep {t : ThreadId} {m m' : Mem} (hb : BlkOk m) (hs : L.Step t m m') :
@@ -214,14 +231,9 @@ theorem frame_rest {rX : Res} {m : Mem} {l : Zig.Loc} (h : rX.heap.erase l ≠ n
 /-- **`UM` over a step of the lock's code** (it reads the client's places only). -/
 theorem UM.lstep {G G' : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} (hu : UM G rX m)
     (hs : L.Step t m m') (hX : xs G' = xs G) : UM G' rX m' := by
-  refine ⟨by rw [hX]; unfold Shape at *; rw [hs.threads]; exact hu.shape, fun e he hr => ?_,
+  refine ⟨by rw [hX]; exact hu.cl.lstep hs fun _ hl => hu.rest.notL hl,
     hu.rest.congr fun l hl => hs.heap (box_notL hl), hu.blk.lstep hs,
     (hu.ws.lockStep hs apS).1, (hu.we.lockStep hs apE).1, fun w hw => ?_⟩
-  · rcases hs.fp e he with h' | ⟨-, ho', -⟩
-    · rcases hu.io e h' hr with ⟨hk, h''⟩ | h''
-      · exact .inl ⟨hk, hs.someLe h''⟩
-      · exact .inr (hs.allLe h'')
-    · exact absurd hr (io_notL ho')
   · rw [hs.key, hu.we.key_of_addrs hs.addrs]
     by_cases hl : w.2 = L.key m
     · exact .inl hl
@@ -233,7 +245,8 @@ theorem UM.atStop {G : ThreadId → Gh} {rX : Res} {m : Mem} (t : ThreadId) (hu 
   have wordOk : ∀ W : Word 32 4, W.Ok m → W.Ok { m with current := t } :=
     fun _ hw => (hw.fields_native (m' := { m with current := t })
       rfl rfl rfl rfl (fun _ => VClock.le_refl _)).1
-  ⟨hu.shape, hu.io, hu.rest, hu.blk, wordOk _ hu.ws, wordOk _ hu.we, hu.q⟩
+  ⟨hu.cl.same rfl (fun _ => VClock.le_refl _) rfl, hu.rest, hu.blk, wordOk _ hu.ws,
+    wordOk _ hu.we, hu.q⟩
 
 /-- **`UM` over a native framed step** (`FStepIn` with `io`, the mutex's word and the condition's
 words in its frame), with the words' validity after it given. -/
@@ -242,22 +255,19 @@ theorem UM_frame_native {G G' : ThreadId → Gh} {rX rX' : Res} {m m' : Mem} {hF
     (hio : ∀ x, x < 16 → hF (0, x) ≠ none)
     (hrest : Rest rX' m') (hbk : BlkOk m') (hwS : WS.Ok m') (hwE : WE.Ok m')
     (hX : xs G' = xs G) : UM G' rX' m' := by
-  refine ⟨by rw [hX]; unfold Shape at *; rw [hs.threads]; exact hu.shape, fun e he hr => ?_,
+  -- the program's facts at the old rest (the step reads none of `io`'s bytes), then at the new
+  have hcl := hu.cl.fstep (Lk := BoxW) (rX' := rX) (fun _ _ => io_box) hs
+    (fun l hl hb => ⟨by
+      obtain ⟨b, x⟩ := l
+      rcases hu.rest.only hl with h | ⟨h0, hx⟩
+      · exact absurd h hb
+      · simp only at h0; subst h0; exact hio x hx, rfl⟩) fun _ _ _ h => h
+  exact ⟨by rw [hX]; exact holds_of hcl.thr hcl.sh hrest,
     hrest, hbk, hwS, hwE, fun w hw => by
       obtain ⟨_, hb₀, -⟩ := hu.blk
       rw [hs.waiters] at hw
       rw [L.key_of_addrs hs.addrs hb₀, hu.we.key_of_addrs hs.addrs]
       exact hu.q w hw⟩
-  rcases hs.fp e he with ⟨e₀, he₀, hn⟩ | ⟨-, hnt, -⟩
-  · obtain ⟨-, hb, hk, ho, hl, hc⟩ := hn
-    rcases hu.io e₀ he₀ ⟨hb.symm.trans hr.1, by have := hr.2.1; omega,
-      by have := hr.2.2; omega⟩ with ⟨hk', h''⟩ | h''
-    · exact .inl ⟨hk.trans hk', Conc.someLe_mono hs.threads (fun u _ => hs.clock u)
-        (LockWord.someLe_le hc h'')⟩
-    · exact .inr (Conc.allLe_mono hs.threads (fun u _ => hs.clock u)
-        fun u hu => VClock.le_trans hc (h'' u hu))
-  · refine absurd ⟨e.off, Nat.le_refl _, by have := hr.2.1; omega, ?_⟩ hnt.empty
-    rw [hr.1]; exact hio _ hr.2.2
 
 /-- **A step of `t` on its own part or on the mutex's resource keeps `UM`** (an `FStepIn` that keeps
 the mutex's word and the rest: `FLock.Inv.wp_liftM`, `FSem.Move.hold`), with the condition's

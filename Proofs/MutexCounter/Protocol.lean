@@ -26,7 +26,7 @@ walks `main` and `work` of its generated code with the steps here.
   increments of both threads (`R`).
 - **The protocol's rest** (`IoRest`): the bytes of `io` (0.16.0 and 0.17.1: read-shared, `IoR`)
   and the `Counter`'s full extent, which pins the block for every thread's step (`blk_of`).
-- **The rest of the invariant** (`U`): the program's own facts (`E`, an `FClient`: the threads,
+- **The rest of the invariant** (`U`): the program's own facts (`Cl`, an `FClient`: the threads,
   `Shape`, and the read shares of `io`), which every kind of step keeps by the library's lemmas
   (`FClient.Holds`), and the protocol's rest.
   Actual caller parts, including each thread's plain fragments, remain owned by `FLock.Inv`.
@@ -121,12 +121,12 @@ theorem rest_io {rX : Res} (hr : IoRest Lo rX) {x : Nat} (hx : x < Lo.io) :
 
 /-- **The program's own facts** (`FClient`): its threads (`Threads`), and the `io` prefix of the
 `Counter` (`IoR`), read-shared, whose bytes the protocol's rest holds. -/
-def E : FClient Ph := .pre Threads 0 Lo.io (IoRest Lo) fun _ hr _ hx => rest_io hr hx
+def Cl : FClient Ph := .pre Threads 0 Lo.io (IoRest Lo) fun _ hr _ hx => rest_io hr hx
 
 /-- The rest of the invariant (module doc). -/
 structure U (G : ThreadId → Gh) (rX : Res) (m : Mem) : Prop where
   /-- The program's own facts: the threads and the read shares of `io`. -/
-  cl : (E Lo).Holds (fun u => (G u).2) rX m
+  cl : (Cl Lo).Holds (fun u => (G u).2) rX m
   rest : IoRest Lo rX
 
 variable {Tgt : Type}
@@ -146,6 +146,10 @@ def QM : Except ErrName (BitVec 32) → (ThreadId → Gh) → Mem → Nat → Pr
 variable {Lo} {workOf : Tgt → Option Ptr}
 
 /-! ## The program's facts in `U` -/
+
+/-- The threads, from the program's facts. -/
+theorem shape_of {X : ThreadId → Ph} {rX : Res} {m : Mem} (h : (Cl Lo).Holds X rX m) :
+    Shape X m := h.thr
 
 theorem U.shape {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U Lo G rX m) :
     Shape (fun u => (G u).2) m := hu.cl.thr
@@ -380,12 +384,13 @@ theorem U_step {G : ThreadId → Gh} {rX : Res} {m m' : Mem} {t : ThreadId} {g :
     (fun l hl _ => ⟨by simpa [FHeap.erase] using hl, rfl⟩) fun _ _ _ hh => hh
 
 /-! The protocol's facts for the holder's increment (`FLock.Fits.wp_hold` in the walk of `work`):
-the counter's bound and next value (forward facts of the shape), the shape and `U` at the next
-place. -/
+the counter's bound and next value (forward facts of the program's facts, which the walk has as
+`U`'s field `cl`), the program's facts and `U` at the next place. -/
 
 /-- The counter is at most 4 (each thread adds at most 2). -/
-theorem sum_le4 {X : ThreadId → Ph} {m : Mem} (h : Shape X m) : sum X ≤ 4 := by
-  obtain ⟨-, ⟨-, h0, h1⟩ | ⟨-, -, h0, h1, -⟩⟩ := h
+theorem sum_le4 {X : ThreadId → Ph} {rX : Res} {m : Mem} (h : (Cl Lo).Holds X rX m) :
+    sum X ≤ 4 := by
+  obtain ⟨-, ⟨-, h0, h1⟩ | ⟨-, -, h0, h1, -⟩⟩ := shape_of h
   · unfold sum; rw [h0, h1 1 (Nat.le_refl _)]; decide
   have c0 : (X 0).count ≤ 2 := by
     rcases h0 with h0 | ⟨k, hk, h0⟩
@@ -398,25 +403,29 @@ theorem sum_le4 {X : ThreadId → Ph} {m : Mem} (h : Shape X m) : sum X ≤ 4 :=
   unfold sum; omega
 
 /-- One more increment of thread `t` at `work k`: the sum is one more. -/
-theorem sum_next {X : ThreadId → Ph} {m : Mem} {t k : Nat} (h : Shape (upd X t (.work k)) m) :
+theorem sum_next {X : ThreadId → Ph} {rX : Res} {m : Mem} {t k : Nat}
+    (h : (Cl Lo).Holds (upd X t (.work k)) rX m) :
     sum (upd X t (.work (k + 1))) = sum (upd X t (.work k)) + 1 := by
-  have := sum_succ (shape_work h (upd_self _ _ _)).1 (upd_self X t (.work k))
+  have := sum_succ (shape_work (shape_of h) (upd_self _ _ _)).1 (upd_self X t (.work k))
   rwa [upd_upd] at this
 
-/-- The shape after an increment of thread `t` at `work k`, `k < 2`. -/
-theorem shape_next {X : ThreadId → Ph} {m : Mem} {t k : Nat} (h : Shape (upd X t (.work k)) m)
-    (hk : k < 2) : Shape (upd X t (.work (k + 1))) m := by
-  have := shape_upd h (upd_self _ _ _) (k' := k + 1) (by omega) _ (.inl rfl)
-  rwa [upd_upd] at this
+/-- The program's facts after an increment of thread `t` at `work k`, `k < 2`. -/
+theorem holds_next {X : ThreadId → Ph} {rX : Res} {m : Mem} {t k : Nat}
+    (h : (Cl Lo).Holds (upd X t (.work k)) rX m) (hk : k < 2) :
+    (Cl Lo).Holds (upd X t (.work (k + 1))) rX m := by
+  have := shape_upd (shape_of h) (upd_self _ _ _) (k' := k + 1) (by omega) _ (.inl rfl)
+  rw [upd_upd] at this
+  exact h.relabel this
 
-/-- The holder's step keeps `U` (the obligation of `FLock.Fits.wp_hold`): the shape at
+/-- The holder's step keeps `U` (the obligation of `FLock.Fits.wp_hold`): the program's facts at
 its new place `work k₁`. -/
 theorem U_hold {G : ThreadId → Gh} {t : ThreadId} {k₀ k₁ : Nat} {rp rL r rX : Res} {hO : Heap}
     {m m' : Mem}
-    (hsh : Shape (upd (fun u => (G u).2) t (.work k₁)) m) (hu : U Lo (upd G t (gHold rp k₀ rL)) rX m)
+    (hcl : (Cl Lo).Holds (upd (fun u => (G u).2) t (.work k₁)) rX m)
+    (hu : U Lo (upd G t (gHold rp k₀ rL)) rX m)
     (hs : FStepIn (rsum ((L Lo).wordR m) rX).owned m m' ((rsum ((L Lo).wordR m) rX).shared.inter hO)) :
     U Lo (upd (upd G t (gHold rp k₀ rL)) t (gHold rp k₁ r)) rX m' :=
-  U_step hu hs.restX (by rw [upd_snd, upd_upd]; exact hsh)
+  U_step hu hs.restX (by rw [upd_snd, upd_upd]; exact shape_of hcl)
 
 /-! ## `main`'s start -/
 

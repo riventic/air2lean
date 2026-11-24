@@ -1,6 +1,8 @@
 import ZigLean.Sep.Full.Sem
 import ZigLean.Sep.Full.ThreadFacts
 import ZigLean.Conc.Share
+import ZigLean.Sep.Full.RwLockThreads
+import ZigLean.Sep.Full.RwLockEnds
 
 /-!
 # The protocol of `semaphoreCounter`
@@ -20,7 +22,8 @@ only the contract, with the semaphore component `FSem` (`ZigLean/Sep/Full/Sem.le
   1 while no thread has the permit, else 0 (`pv`), and the free permit owns `n`, with the
   increments of both threads (`Pool`). The thread that took the permit gets `n` with it
   (`SemImpl.wait_wp`'s `T`) and keeps it in its part until its post (`semWork`'s walk).
-- **The rest `U`**: the threads (`Shape`), the read shares of `io`, the cells of the condition's
+- **The rest `U`**: the program's own facts (`Cl`, an `FClient`: the threads, `Shape`, and the read
+  shares of `io`; kept over every kind of step by `FClient.Holds`' lemmas), the cells of the condition's
   words, the invariants of the condition and the semaphore, at most one holder of the permit
   (`one`), whose recorded value is the increments of both threads (`tot`); only a thread without
   the permit and with increments left waits (`wtx`, the waiting role `wx`); and the window
@@ -180,30 +183,79 @@ def Rest (rX : Res) (m : Mem) : Prop :=
 def BlkOk (m : Mem) : Prop :=
   ∃ blk, m.blocks[0]? = some blk ∧ blk.live = true ∧ blk.bytes.size = 48 ∧ blk.kind = .stack
 
-/-- The threads: `main` alone before its spawn; then `main` and the kid, which `main` spawned and
-did not join yet. -/
-def Shape (Y : ThreadId → Ph) (m : Mem) : Prop :=
-  m.threads[0]? = some { spawner := 0, joined := true } ∧
-  ((m.threads.size = 1 ∧ Y 0 = .pre ∧ ∀ u, 1 ≤ u → Y u = .none) ∨
-   (m.threads.size = 2 ∧ m.threads[1]? = some { spawner := 0, joined := false } ∧
+/-- The threads, over the thread table: `main` alone before its spawn; then `main` and the kid,
+which `main` spawned and did not join yet. -/
+def Threads (Y : ThreadId → Ph) (ts : Array ThreadRec) : Prop :=
+  ts[0]? = some { spawner := 0, joined := true } ∧
+  ((ts.size = 1 ∧ Y 0 = .pre ∧ ∀ u, 1 ≤ u → Y u = .none) ∨
+   (ts.size = 2 ∧ ts[1]? = some { spawner := 0, joined := false } ∧
     (Y 0 = .joins ∨ ∃ k ≤ 2, ∃ b s, Y 0 = .work k b s) ∧
     (Y 1 = .fin ∨ ∃ k ≤ 2, ∃ b s, Y 1 = .work k b s) ∧
     ∀ u, 2 ≤ u → Y u = .none))
 
+/-- The threads of a memory (`Threads`). -/
+def Shape (Y : ThreadId → Ph) (m : Mem) : Prop := Threads Y m.threads
+
+/-- `io`'s part of the rest has `io`'s bytes … -/
+theorem IoRest.has {r : Res} (h : IoRest r) {x : Nat} (hx : x < 16) : r.heap (0, x) ≠ none := by
+  obtain ⟨A, bs, -, hbs, -, r₁, r₂, -, rfl, h1, -⟩ := h
+  have := (up_bytesAt_some h1 rfl (0, x)).mpr ⟨rfl, by simp [cPtr], by simp [cPtr, hbs]; omega⟩
+  simp only [FHeap.union_apply, ne_eq, Option.or_eq_none_iff, not_and]
+  intro h; exact absurd h this
+
+/-- … and no other byte. -/
+theorem IoRest.only {r : Res} (h : IoRest r) {l : Zig.Loc} (hl : r.heap l ≠ none) :
+    l.1 = 0 ∧ l.2 < 16 := by
+  obtain ⟨A, bs, -, hbs, -, r₁, r₂, -, rfl, h1, h2⟩ := h
+  have e := bauth_eq h2
+  subst e
+  simp only [FHeap.union_apply, ne_eq, Option.or_eq_none_iff, not_and] at hl
+  obtain ⟨hb, -, hlt⟩ := (up_bytesAt_some h1 rfl l).mp fun e => hl e rfl
+  refine ⟨hb, ?_⟩
+  simp only [cPtr, hbs] at hlt
+  simpa using hlt
+
+/-- **The program's own facts** (`FClient`): its threads (`Threads`), and the `io` prefix of the
+`SemCounter` (`IoR`), read-shared, whose bytes the protocol's rest holds. -/
+def Cl : FClient Ph := .pre Threads 0 16 IoRest fun _ hr _ hx => hr.has hx
+
+/-- The rest holds `io`'s part. -/
+theorem Rest.io {rX : Res} {m : Mem} (h : Rest rX m) :
+    ∃ r, IoRest r ∧ ∀ l fc, r.heap l = some fc → rX.heap l = some fc := by
+  obtain ⟨rIO, hIO, hoff, rfl⟩ := h
+  refine ⟨rIO, hIO, fun l fc hl => ?_⟩
+  have hb : ¬ BoxW l := fun hb => by rw [hoff l hb] at hl; cases hl
+  simp [FHeap.union_apply, cellsAt_none hb, hl]
+
+/-- The program's facts, from the threads, the read shares of `io` and the rest. -/
+theorem holds_of {Y : ThreadId → Ph} {rX : Res} {m : Mem} (shape : Shape Y m)
+    (io : ReadShared IoR m) (rest : Rest rX m) : Cl.Holds Y rX m :=
+  ⟨shape, io, rest.io⟩
+
+/-- The threads, from the program's facts. -/
+theorem shape_of {Y : ThreadId → Ph} {rX : Res} {m : Mem} (h : Cl.Holds Y rX m) : Shape Y m :=
+  h.thr
+
 /-- The client parts of the ghost values. -/
 abbrev xs (G : ThreadId → Gh) : ThreadId → Ph := fun u => (G u).2.ph
 
-/-- The memory's part of the rest of the invariant: the threads, `io`, the rest's cells, the
-block, the condition's words and the futex queue. -/
+/-- The memory's part of the rest of the invariant: the program's own facts (`Cl`: the threads and
+the read shares of `io`), the rest's cells, the block, the condition's words and the futex
+queue. -/
 structure UM (G : ThreadId → Gh) (rX : Res) (m : Mem) : Prop where
-  shape : Shape (xs G) m
-  io : ReadShared IoR m
+  cl : Cl.Holds (xs G) rX m
   rest : Rest rX m
   blk : BlkOk m
   ws : WS.Ok m
   we : WE.Ok m
   /-- A thread waits only at the mutex or at the epoch. -/
   q : ∀ w ∈ m.waiters, w.2 = L.key m ∨ w.2 = WE.key m
+
+theorem UM.shape {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : UM G rX m) : Shape (xs G) m :=
+  hu.cl.thr
+
+theorem UM.io {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : UM G rX m) : ReadShared IoR m :=
+  hu.cl.sh
 
 /-- The client's part of the rest of the invariant: the permit and the window (module doc). -/
 structure Lg (G : ThreadId → Gh) (m : Mem) : Prop where
