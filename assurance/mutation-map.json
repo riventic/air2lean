@@ -1128,6 +1128,18 @@
           "anchor": "def test_concurrency_theorem_without_adequacy_premise_fails"
         },
         {
+          "path": "tests/roadmap/premises/test_premises.py",
+          "anchor": "def test_target_qualified_premise_needs_a_qualified_target"
+        },
+        {
+          "path": "tests/roadmap/premises/test_premises.py",
+          "anchor": "def test_compiled_concurrency_needs_a_qualified_target"
+        },
+        {
+          "path": "tests/roadmap/claims/test_claims.py",
+          "anchor": "def test_concurrency_claim_needs_a_qualified_target"
+        },
+        {
           "path": "Proofs/Atomics/Proofs.lean",
           "anchor": "theorem mp_sees_data"
         },
@@ -1147,6 +1159,16 @@
       "mutants": [
         {
           "name": "claims-memory-model-premise-dropped",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "claims-target-binding-dropped",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "premises-target-binding-dropped",
           "path": "tests/roadmap/mutation-map/mutants.py",
           "category": "other"
         },

@@ -352,6 +352,14 @@ value (`atomicRmwFnAt`). Generated code calls the `…COf .big` ops; each `…CO
 existing one by `rfl`. Pointer atomics keep their symbolic bytes. The std allocator, thread and OS
 models read no integer from memory except the futex word, so they are admitted too.
 
+The translation is admitted; a concurrency theorem about it is not. s390x-linux and mips64-linux
+have no memory-model qualification (premise [ORD-06](premises.md#ord-06), `memory_model.unqualified`
+in `assurance/premises.json`), so `scripts/premises.py` fails a theorem and `scripts/claims.py`
+rejects a goal that carries ORD-06 over a big-endian translation
+([architecture-audit/memory-model-target-binding.md](architecture-audit/memory-model-target-binding.md)).
+The evidence below is about the byte order of the atomic model, not the hardware's memory
+ordering.
+
 Evidence: `tests/roadmap/big-endian` exports one source with the patched Zig 0.16.0 for
 s390x-linux, mips64-linux and x86_64-linux (the AIR differs only in the profile), keeps the
 translations, proves byte-level facts of the s390x and x86_64 ones, and compares the model of each
