@@ -1369,14 +1369,15 @@ theorem wp_wakeEp (hC : L.Fits (C.prim L) P U ok) {io : Io} {c : BitVec 32} {q n
 
 /-- **The signaller's OS futex wake at the epoch** (`Os.futexWake`, OSF-02; std's translated
 `Thread.Futex.wake`) of up to `w ≥ 1` waiters (or all), at `wk 1 q h` (`signal`'s one wake):
-after a wake it is out; after a spurious `EINTR` (macOS; nobody woken) it is still at `wk`
-(std wakes again). -/
+after a wake of `j` waiters, within the request (`j ≤ c` for `w = some c`), it is out; after a
+spurious `EINTR` (macOS; nobody woken) it is still at `wk` (std wakes again). -/
 theorem wp_osWakeEp (hC : L.Fits (C.prim L) P U ok) {w : Option Nat}
     (hw : ∀ k, w = some k → 1 ≤ k) {spurious : Bool} {q : Nat} {sh : Array Word.Entry}
     (hg : C.ph g = .wk 1 q sh) (hi : P.inv (upd G t g) m)
     {Q : Option Nat → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ r G₁ m', m'.current = t →
-      ((∃ j, r = some j) ∧ C.S.Prefix sh m' ∧ P.inv (upd G₁ t (C.set g .out)) m' ∨
+      ((∃ j, r = some j ∧ ∀ c, w = some c → j ≤ c) ∧ C.S.Prefix sh m' ∧
+        P.inv (upd G₁ t (C.set g .out)) m' ∨
        spurious = true ∧ r = none ∧ P.inv (upd G₁ t g) m') → Q r G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Os.futexWake C.Ep.ptr false w spurious : ConcM Tgt (Option Nat)) Q G m n :=
@@ -1385,7 +1386,7 @@ theorem wp_osWakeEp (hC : L.Fits (C.prim L) P U ok) {w : Option Nat}
     ⟨fun cs m' hr hL => by
       obtain ⟨c, hc, hr'⟩ := Os.futexWake_pos (m := { m₁ with current := t }) hw hr
       obtain ⟨h1, h2, h3⟩ := hC.afterWakeEp hg₁ hg hc hU hwL hr' hL
-      exact h k hk _ G₁ m' h1 (.inl ⟨⟨_, rfl⟩, h2, h3⟩),
+      exact h k hk _ G₁ m' h1 (.inl ⟨⟨_, rfl, fun _ hc => Os.wakeSize_le_some hc _⟩, h2, h3⟩),
      fun hs hic => h k hk none G₁ _ rfl (.inr ⟨hs, rfl, hic⟩)⟩
 
 /-- **`signal`'s history post at its return after a post**: the post's (`wp_post`, `all =
