@@ -73,13 +73,22 @@ inductive OsFn where
   /-- libc `__ulock_wait(op: UL, addr, val: u64, timeout_us: u32) c_int` (OSF-01, macOS before 11,
   `Zig.Os.Darwin.__ulock_wait`). -/
   | ulockWait
+  /-- `os.linux.futex_3arg(uaddr: *const anyopaque, futex_op: FUTEX_OP, val: u32) usize`
+  (OSF-02, `Zig.Os.Linux.futex_3arg`; 0.15.2 on). -/
+  | futex3
+  /-- `os.linux.futex_wake(uaddr: *const i32, futex_op: u32, val: i32) usize` (OSF-02, 0.14.1):
+  the same `futex` system call as `futex_3arg`, so the same model. -/
+  | futexWakeRaw
+  /-- libc `__ulock_wake(op: UL, addr: ?*const anyopaque, val: u64) c_int` (OSF-02, macOS,
+  `Zig.Os.Darwin.__ulock_wake`). -/
+  | ulockWake
   deriving BEq, Repr
 
 /-- The OS primitive lets another thread run: a call of it is a sync op (`Func.syncLocally`), so
 its caller is a concurrent function. -/
 def OsFn.sync : OsFn → Bool
   | .schedYield | .cSchedYield | .clockGettime | .cClockGettime | .futex4 | .futexWaitRaw
-  | .ulockWait2 | .ulockWait => true
+  | .ulockWait2 | .ulockWait | .futex3 | .futexWakeRaw | .ulockWake => true
   | .mmap | .munmap | .mremap | .cErrno => false
 
 /-- The OS primitive's model takes the OS environment (`Zig.Os.Env`): a generated definition
@@ -169,7 +178,8 @@ private def posixZig : Array StdReview := review "posix.zig" [
   (.v0_16_0, "5b1462b18db6757d984e118e09c532ac8b98cf1cc1ed48f18fcdbb362b75b5e0")]
 /-- `os.linux.sched_yield` (`syscall0(.sched_yield)`), `os.linux.clock_gettime` (the vDSO
 pointer, else `syscall2(.clock_gettime)`), `os.linux.futex_4arg` (0.15.2 on) and
-`os.linux.futex_wait` (0.14.1) (`syscall4(.futex)`): unchanged signatures in every version. -/
+`os.linux.futex_wait` (0.14.1) (`syscall4(.futex)`), `os.linux.futex_3arg` (0.15.2 on) and
+`os.linux.futex_wake` (0.14.1) (`syscall3(.futex)`): unchanged signatures in every version. -/
 private def linuxZig : Array StdReview := review "os/linux.zig" [
   (.v0_14_1, "36e1b68b9c747a426c110fa8ce588253ca8a895a5241ab1452e8340901ee7d81"),
   (.v0_15_2, "49e632c05b4b5e3333ed318b8ae9ad26997fd507bcea111d88cabc628ba748d3"),
@@ -183,8 +193,8 @@ private def cZig : Array StdReview := review "c.zig" [
   (.v0_16_0, "f7062a55808aac78c515abd8bee5d36a596ee2de4116f61a51125107f84be158"),
   (.v0_17_1, "b1046cea3ed2f6310ba251b74da05faa323222779942ec7d11285979d48d71db")]
 /-- macOS libc's `extern "c" fn __ulock_wait2(op: UL, addr: ?*const anyopaque, val: u64,
-timeout_ns: u64, val2: u64) c_int` and `__ulock_wait(…, timeout_us: u32) c_int` (unchanged in
-every version). -/
+timeout_ns: u64, val2: u64) c_int`, `__ulock_wait(…, timeout_us: u32) c_int` and
+`__ulock_wake(op: UL, addr: ?*const anyopaque, val: u64) c_int` (unchanged in every version). -/
 private def darwinZig : Array StdReview := review "c/darwin.zig" [
   (.v0_14_1, "ab9b468c43a73ab1ea9ae46911adf3c8cf2b049761cf4e5476ae50748e3885ac"),
   (.v0_15_2, "4565e4abbe32fa6cdbdcee67d52376dacee82aa7c489d0048e509663500358c9"),
@@ -298,6 +308,12 @@ def stdModels : Array StdModel := #[
   osModel "os.linux.futex_wait" "OSF-01" .futexWaitRaw #["Linux.futex_4arg"] (only [.v0_14_1] linuxZig) none,
   osModel "extern:__ulock_wait2" "OSF-01" .ulockWait2 #["Darwin.__ulock_wait2"] darwinZig none,
   osModel "extern:__ulock_wait" "OSF-01" .ulockWait #["Darwin.__ulock_wait"] darwinZig none,
+  -- The futex wake with the kernel's wake count: the rows std's `Thread.Futex.wake`
+  -- (`LinuxImpl.wake`, `DarwinImpl.wake`; 0.14.1, 0.15.2) is translated down to once its hand
+  -- row above is deleted (audit S6, finding 4; engine-ledger row `s6-futex-hand-rows`).
+  osModel "os.linux.futex_3arg" "OSF-02" .futex3 #["Linux.futex_3arg"] (only [.v0_15_2, .v0_16_0, .v0_17_1] linuxZig) none,
+  osModel "os.linux.futex_wake" "OSF-02" .futexWakeRaw #["Linux.futex_3arg"] (only [.v0_14_1] linuxZig) none,
+  osModel "extern:__ulock_wake" "OSF-02" .ulockWake #["Darwin.__ulock_wake"] darwinZig none,
   { symbol := "Io.futexWaitTimeout",
     kind := .rejected "Io.futexWaitTimeout is outside the model: it has no clock" },
   { symbol := "Thread.spinLoopHint",

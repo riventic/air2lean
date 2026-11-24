@@ -471,11 +471,12 @@ def packedScalarCast (types : Array Ty) (src dst : TyId) : Bool :=
 
 /-! ## Zig ≤0.16 representation casts (`docs/aggregate-casts.md`) -/
 
-/-- An aggregate whose ≤0.16 `@bitCast` is a representation cast: an array without a sentinel,
-an `extern` struct, an `extern` union. -/
+/-- An aggregate whose ≤0.16 `@bitCast` is a representation cast: an array (with its sentinel,
+which is the last item of the value and of the memory image), an `extern` struct, an `extern`
+union. -/
 def reprAggregate (types : Array Ty) (id : TyId) : Bool :=
   match types[id]? with
-  | some (.array _ _ false) | some (.struct _ "extern" _) | some (.union _ "extern" none _) => true
+  | some (.array ..) | some (.struct _ "extern" _) | some (.union _ "extern" none _) => true
   | _ => false
 
 /-- A single (non-slice) pointer type that cannot hold address zero, and its optional. -/
@@ -491,47 +492,79 @@ def optSinglePtrTy (types : Array Ty) (layouts : Array Layout) (id : TyId) : Boo
 
 /-- Zig 0.16.0's `Type.bitSize` of a type with a guaranteed in-memory layout (`src/Type.zig`):
 an `extern` struct or union is its ABI size in bits; an array has `(len-1)·8·@sizeOf(E) +
-@bitSizeOf(E)` bits (its trailing padding is dropped, padding between items counts). `none`
-for a type without a guaranteed layout (`auto` struct, tuple, tagged union, slice, error
-storage, sentinel array), which `@bitCast` rejects or the model leaves out, and for a pointer or
-optional pointer at any depth: the model's pointer bytes carry provenance and are not integer
-bits, so a pointer-bearing representation cast is rejected (fail closed). A vector of integer,
-float or `bool` lanes has `len·@bitSizeOf(lane)` bits: the LLVM backend's memory image packs the
-lanes without padding (`Zig.Vec.packedEnc`, L09). A packed struct or union is its backing
-integer.
+@bitSizeOf(E)` bits (its trailing padding is dropped, padding between items counts), `len`
+counting a sentinel (`lenIncludingSentinel`: the sentinel is an item of the memory image, and
+of the model's value). `void` has no bits. A vector of integer, float or `bool` lanes has
+`len·@bitSizeOf(lane)` bits: the LLVM backend's memory image packs the lanes without padding
+(`Zig.Vec.packedEnc`, L09). A packed struct or union is its backing integer.
+
+Otherwise the error names the part that keeps the cast outside the subset: a type without a
+guaranteed layout (`auto` struct, tagged union, slice), which `@bitCast` rejects; a tuple (the
+memory model has no tuple layout); error storage (its bytes are symbolic, not the compilation's
+error codes); an optional; a pointer or optional pointer at any depth (the model's pointer bytes
+carry provenance and are not integer bits, so a pointer-bearing representation cast fails
+closed).
 
 `autoItems` (Zig 0.14.1 and 0.15.2, `ZigVersion.bitCastAutoItems`): Sema checks only the outer
 types, so an *array item* may be an `auto` struct or a tagged union; its bits are its ABI size
 (`Type.bitSize` of a non-packed container) and its memory image is the exporter's layout, the
-tag included (`compile-errors/README.md` in `tests/roadmap/packed-casts`). A tuple item stays
-outside: the memory model has no tuple layout. -/
+tag included (`compile-errors/README.md` in `tests/roadmap/packed-casts`). A tuple, error or
+optional item compiles there too and stays outside. -/
 partial def reprBitSize (types : Array Ty) (layouts : Array Layout) (id : TyId)
-    (autoItems : Bool := false) : Option Nat := do
-  let abiBits : Option Nat := (layouts[id]?.bind (·.size)).map (8 * ·)
+    (autoItems : Bool := false) : Except String Nat := do
+  let sizeOf (t : TyId) : Except String Nat :=
+    match layouts[t]?.bind (·.size) with
+    | some s => pure s
+    | none => throw s!"a type without a layout in the AIR file (type {t})"
   let recur (t : TyId) := reprBitSize types layouts t autoItems
-  match ← types[id]? with
+  let some ty := types[id]? | throw s!"an unknown type (type {id})"
+  match ty with
   | .int _ bits | .float bits => pure bits
   | .bool => pure 1
+  | .void => pure 0
   | .enum _ tag _ _ => recur tag
-  | .struct _ "packed" _ | .union _ "packed" none _ => packedBits types id
+  | .struct _ "packed" _ | .union _ "packed" none _ =>
+    match packedBits types id with
+    | some bits => pure bits
+    | none => throw s!"a packed struct or union without a modelled backing integer (type {id})"
   | .struct _ "extern" fields | .union _ "extern" none fields =>
     for (_, t) in fields do let _ ← recur t
-    abiBits
-  | .array len child false =>
+    (8 * ·) <$> sizeOf id
+  | .array len child sentinel =>
     let eb ← match types[child]? with
       | some (.struct _ "auto" fields) | some (.union _ _ (some _) fields) =>
-        if !autoItems then none else do
+        if !autoItems then
+          throw s!"an array of `auto` structs or tagged unions (type {id}; items without a \
+            guaranteed in-memory layout; Sema rejects its `@bitCast` from Zig 0.16.0)"
+        else do
           for (_, t) in fields do let _ ← recur t
-          (layouts[child]?.bind (·.size)).map (8 * ·)
+          (8 * ·) <$> sizeOf child
       | _ => recur child
-    let es ← layouts[child]?.bind (·.size)
-    pure (if len == 0 then 0 else (len - 1) * 8 * es + eb)
+    let es ← sizeOf child
+    let count := len + if sentinel then 1 else 0
+    pure (if count == 0 then 0 else (count - 1) * 8 * es + eb)
   | .vector len child =>
-    match ← types[child]? with
-    | .int _ bits | .float bits => pure (len * bits)
-    | .bool => pure len
-    | _ => none
-  | _ => none
+    match types[child]? with
+    | some (.int _ bits) | some (.float bits) => pure (len * bits)
+    | some .bool => pure len
+    | _ => throw s!"a vector of a lane type other than an integer, a float or `bool` (type {id})"
+  | .tuple _ =>
+    throw s!"a tuple (type {id}; the memory model has no tuple layout; Zig 0.14.1 and 0.15.2 \
+      accept an array of tuples, Sema rejects it from Zig 0.16.0)"
+  | .errorSet _ | .errorUnion .. =>
+    throw s!"error storage (type {id}; the model's error bytes are symbolic, not the \
+      compilation's error codes; Zig 0.14.1 and 0.15.2 accept an array of errors, Sema rejects \
+      it from Zig 0.16.0)"
+  | .ptr .. => throw s!"a pointer or slice (type {id}; the model's pointer bytes carry \
+      provenance, not integer bits)"
+  | .optional child =>
+    if types[child]? matches some (.ptr ..) then
+      throw s!"a pointer in an optional (type {id}; the model's pointer bytes carry \
+        provenance, not integer bits)"
+    else throw s!"an optional (type {id}; no guaranteed in-memory layout; Zig 0.14.1 and \
+      0.15.2 accept an array of optionals, Sema rejects it from Zig 0.16.0)"
+  | _ => throw s!"a type without a guaranteed in-memory layout (type {id}: an `auto` struct, \
+      tagged union or another type Sema rejects in a `@bitCast`)"
 
 def isVectorTy (types : Array Ty) (id : TyId) : Bool :=
   match types[id]? with | some (.vector ..) => true | _ => false
@@ -657,6 +690,11 @@ def CheckCtx.bitCast (cx : CheckCtx) : Option ZigVersion.BitCast := cx.dialect.m
 /-- `Dialect.arch`, for the asm allowlist (`Air2Lean/AsmAllowlist.lean`); empty in a bare
 context. -/
 def CheckCtx.targetArch (cx : CheckCtx) : String := (cx.dialect.map (·.arch)).getD ""
+
+/-- The type of the `void` constant, which carries no type id (`Val.constTy?`): the `void`
+type of the table. -/
+def voidConstTy? (types : Array Ty) (v : Val) : Option TyId :=
+  if v matches .void then types.findIdx? (· == .void) else none
 
 def CheckCtx.valTy? (cx : CheckCtx) (v : Val) : Option TyId :=
   match v with
@@ -1354,7 +1392,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     -- pointer; `Canon.lean`'s `dropDeadAllocPlaceholders` drops it unless something reads it.
     if (a matches .int _ 0) && singlePtrTy cx.types cx.layouts ty then
       cx.fail line "a read of the address-0 placeholder that the compiler leaves for a comptime-resolved local is outside the subset"
-    let sourceTy := cx.valTy? a
+    let sourceTy := cx.valTy? a <|> voidConstTy? cx.types a
     let isError (t : Option Ty) := match t with | some (.errorSet _) => true | _ => false
     if isError (sourceTy.bind (cx.types[·]?)) != isError (cx.types[ty]?) then
       -- `@intFromError`/`@errorFromInt` (L10): the code of the error integer `u<bits>` in the
@@ -1554,13 +1592,21 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
           unless byteStridedLane cx.types c do
             cx.fail line "a Zig ≤0.16 `@bitCast` between an array and a vector of another item \
               type whose source items do not fill whole bytes is outside the subset"
+        -- A sentinel array and a vector: up to 0.15.2 the LLVM `bitCast` copies `arrayLen`
+        -- items (without the sentinel), which is neither the lane-wise nor the memory cast.
+        let sentinelArray (t : TyId) : Bool := cx.types[t]? matches some (.array _ _ true)
+        if (sentinelArray aty && isVectorTy cx.types ty) ||
+            (sentinelArray ty && isVectorTy cx.types aty) then
+          cx.fail line "a Zig ≤0.16 `@bitCast` between a sentinel-terminated array and a vector \
+            is outside the subset (the compilers disagree on whether the sentinel is an item); \
+            cast through an array without a sentinel"
         let autoItems := cx.dialect.any (·.version.bitCastAutoItems)
-        let (some abits, some bbits) := (reprBitSize cx.types cx.layouts aty autoItems,
-            reprBitSize cx.types cx.layouts ty autoItems)
-          | cx.fail line "a Zig ≤0.16 representation `@bitCast` involving a pointer, an optional \
-              pointer or a type without a guaranteed in-memory layout (an `auto` struct, tuple, \
-              tagged union, slice, sentinel array or error storage, at any depth) is outside \
-              the subset"
+        let bitSize (t : TyId) : Except String Nat :=
+          (reprBitSize cx.types cx.layouts t autoItems).mapError fun part =>
+            s!"{fnName}: near line {line}: a Zig ≤0.16 representation `@bitCast` involving \
+              {part} is outside the subset"
+        let abits ← bitSize aty
+        let bbits ← bitSize ty
         unless abits == bbits do
           cx.fail line s!"a Zig ≤0.16 representation `@bitCast` between types of {abits} and \
             {bbits} bits (`@bitSizeOf`) is outside the subset"
@@ -1573,6 +1619,10 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         | some (.int ..) => "int"
         | _ => "other"
       if aty == ty then return line
+      -- `void` has a bit representation from Zig 0.17 only (the logical path above).
+      if cx.types[aty]? == some .void || cx.types[ty]? == some .void then
+        cx.fail line "a `@bitCast` to or from `void` is outside the subset (Sema rejects it \
+          before Zig 0.17, where `void` has no bit representation)"
       -- A packed struct or union and another packable scalar of the same bit size (a packed
       -- struct or union, a float, `bool`): the bits, through `Zig.Packed` (`packedScalarCast`).
       if packedScalarCast cx.types aty ty then return line
@@ -3667,6 +3717,16 @@ def checkOsCall (f : Func) (callee : String) (fn : OsFn) (args : Array Val) (ret
         c == isConst && child ch && !l.isVolatile && !l.allowzero && l.hostSize == 0
       | _, _ => false
     | none => false
+  -- The Linux futex rows' address/op/value: 0.15.2 on `*const anyopaque`, `FUTEX_OP`, `u32`;
+  -- 0.14.1 `*const i32`, `u32`, `i32`.
+  let futexArgs (packedOp : Bool) : Bool :=
+    if packedOp then plainPtr (argId 0) true anyopaque && packed32 1 && int32 false 2
+    else plainPtr (argId 0) true (fun t => f.types[t]? == some (.int true 32)) && int32 false 1 &&
+      int32 true 2
+  -- libc's ulock rows' `UL`, `?*const anyopaque`, `u64`.
+  let ulockArgs : Bool := packed32 0 && (match argTy 1 with
+    | some (.optional p) => plainPtr (some p) true anyopaque
+    | _ => false) && argTy 2 == some (.int false 64)
   match fn with
   | .mmap =>
     require (args.size == 6) "argument count"
@@ -3704,10 +3764,7 @@ def checkOsCall (f : Func) (callee : String) (fn : OsFn) (args : Array Val) (ret
   | .futex4 | .futexWaitRaw =>
     require (f.targetOs == "linux") "Linux-only os.linux"
     require (args.size == 4) "argument count"
-    -- 0.15.2 on: `*const anyopaque`, `FUTEX_OP`, `u32`; 0.14.1: `*const i32`, `u32`, `i32`.
-    require (if fn == .futex4 then plainPtr (argId 0) true anyopaque && packed32 1 && int32 false 2
-      else plainPtr (argId 0) true (fun t => f.types[t]? == some (.int true 32)) && int32 false 1 &&
-        int32 true 2) "address/op/value"
+    require (futexArgs (fn == .futex4)) "address/op/value"
     require (match argTy 3 with
       | some (.optional p) => plainPtr (some p) true timespec
       | _ => false) "?*const timespec timeout"
@@ -3715,11 +3772,20 @@ def checkOsCall (f : Func) (callee : String) (fn : OsFn) (args : Array Val) (ret
   | .ulockWait2 | .ulockWait =>
     require (f.targetOs == "macos") "macOS libc"
     require (args.size == (if fn == .ulockWait2 then 5 else 4)) "argument count"
-    require (packed32 0 && (match argTy 1 with
-      | some (.optional p) => plainPtr (some p) true anyopaque
-      | _ => false) && argTy 2 == some (.int false 64)) "UL/?*const anyopaque/u64"
+    require ulockArgs "UL/?*const anyopaque/u64"
     require (if fn == .ulockWait2 then argTy 3 == some (.int false 64) && argTy 4 == some (.int false 64)
       else int32 false 3) "timeout"
+    require cIntRet "c_int result"
+  -- OSF-02: the futex wake.
+  | .futex3 | .futexWakeRaw =>
+    require (f.targetOs == "linux") "Linux-only os.linux"
+    require (args.size == 3) "argument count"
+    require (futexArgs (fn == .futex3)) "address/op/value"
+    require usizeRet "usize result"
+  | .ulockWake =>
+    require (f.targetOs == "macos") "macOS libc"
+    require (args.size == 3) "argument count"
+    require ulockArgs "UL/?*const anyopaque/u64"
     require cIntRet "c_int result"
 
 /-- Recognized model names still require the runtime signature the emitter applies.

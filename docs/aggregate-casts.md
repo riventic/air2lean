@@ -9,7 +9,7 @@ them.
 
 ## Representation casts
 
-A `bitcast` whose two types differ and that has an array (no sentinel), `extern` struct or
+A `bitcast` whose two types differ and that has an array, `extern` struct or
 `extern` union on either side translates to `Zig.reprCast T x` (`ZigLean/Mem/Repr.lean`). A
 packed struct or union and another packed struct or union, a float or a `bool` of the same bit
 size cast through their bits (`packedScalarCast`, `Zig.Packed.bitCast`) in every version:
@@ -35,14 +35,29 @@ proves vector → integer is `Vec.packBits`, integer → vector splits the lanes
 (0.16.0 copies a padded item such as `u24` lane by lane), so it is translated lane-wise
 (`vectorLaneCast?`). An array and a vector of other item types are a representation cast only
 when the source's items fill whole bytes (otherwise 0.16.0 copies item by item into lanes of
-another type). A packed union is its bytes (its backing integer). It rejects casts that involve these parts at
-any depth: an `auto` struct, a tuple or a tagged union (no guaranteed layout, which Sema also
+another type). A packed union is its bytes (its backing integer).
+
+A sentinel-terminated array `[n:s]T` is `n + 1` items, in the type's bit size
+(`lenIncludingSentinel`), in memory and in the model's value (`Vector T (n+1)`), so its cast is
+the same reinterpretation: the sentinel is the last item of the source's image, and the last item
+of a result is the source's bits. The cast does not check them against the type's sentinel, as
+the compilers do not (0.16.0 reads the item back from memory; 0.14.1 and 0.15.2 read it from
+memory at a runtime index, and Sema folds a comptime index `len` to the sentinel, which the AIR
+then has as a constant). A sentinel array and a vector are rejected: up to 0.15.2 the LLVM
+`bitCast` copies the items without the sentinel. `void` has no bits (an array of `void` and `u0`;
+Sema folds these casts). `tests/roadmap/packed-casts`: `sentinel_arrays.zig`, `void_casts.zig`.
+
+The checker rejects casts that involve these parts at any depth, each with its own diagnostic
+(`reprBitSize`): an `auto` struct or a tagged union (no guaranteed layout, which Sema also
 rejects at the outer type in every version, `tests/roadmap/packed-casts/compile-errors`), a slice,
-a sentinel array, error storage, or a pointer or optional pointer. One exception follows Sema:
+a tuple, error storage, an optional, or a pointer or optional pointer. One exception follows Sema:
 Zig 0.14.1 and 0.15.2 check only the outer types, so an *array item* may be an `auto` struct or a
 tagged union (`ZigVersion.bitCastAutoItems`); its memory image is the exporter's layout, padding
-undefined and the tag included (`tests/roadmap/packed-casts/auto_items.zig`). An array of tuples
-stays rejected: the memory model has no tuple layout. Pointer-bearing repr casts are rejected (fail
+undefined and the tag included (`tests/roadmap/packed-casts/auto_items.zig`). The other items
+those two versions accept stay rejected by name (`reject_items.zig`): a tuple (the memory model
+has no tuple layout), an error set or error union (the model's error bytes are symbolic and are
+not the compilation's error codes; the check for symbolic error storage in an opaque cast rejects
+them first), and an optional (no guaranteed layout). Pointer-bearing repr casts are rejected (fail
 closed): the model's pointer bytes carry provenance and are not integer bits, so it could not
 give Zig's address there. It also rejects casts whose bit sizes differ. Enums, pointers and
 optionals on the outer side are rejected as before.
@@ -115,6 +130,7 @@ The native probe covers only the listed values on one host. Packed unions, float
 arrays and vectors in casts, and arrays of `auto` structs and tagged unions (0.14.1, 0.15.2), are
 exported for every version in `tests/roadmap/packed-casts`, with kernel-checked results and native
 x86_64-linux outputs; casts of `auto` structs, tuples and tagged unions are compile errors there.
-Sentinel arrays and error storage in casts have no export. Vector casts are
+Sentinel arrays and arrays of `void` are exported there too (0.14.1-0.16.0), and arrays of
+tuples, errors and optionals (0.14.1, 0.15.2) with their rejections. Vector casts are
 exported for 0.14.1-0.17.1 in `tests/roadmap/lang-long-tail` (`vector_casts.zig`, with
 `std.mem.eql`'s `mem.eqlBytes`), with native probes of every version.
