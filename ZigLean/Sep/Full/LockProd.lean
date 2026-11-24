@@ -143,6 +143,16 @@ theorem sepN_share_eq {f g : Nat → FAssn} {l : Loc} :
     rw [hfg n (Nat.lt_succ_self n) r₁ r₁' h1 h1',
       sepN_share_eq (fun j hj => hfg j (Nat.lt_succ_of_lt hj)) h2 h2']
 
+/-- A `sepN` whose conjuncts hold no share of a byte holds none. -/
+theorem sepN_share_zero {f : Nat → FAssn} {l : Loc} :
+    ∀ {n : Nat} {r : Res}, (∀ j, j < n → ∀ a, f j a → a.gh.share l = SCell.zero) →
+      sepN n f r → r.gh.share l = SCell.zero
+  | 0, _, _, h => by rw [h.2.2]; rfl
+  | n + 1, _, hf, ⟨r₁, r₂, _, rfl, h1, h2⟩ => by
+    show (r₁.gh.share l).add (r₂.gh.share l) = SCell.zero
+    rw [hf n (Nat.lt_succ_self n) r₁ h1,
+      sepN_share_zero (fun j hj => hf j (Nat.lt_succ_of_lt hj)) h2, SCell.zero_add]
+
 /-- Two shares that add up to none are none. -/
 theorem SCell.add_eq_zero {a b : SCell} (h : a.add b = SCell.zero) :
     a = SCell.zero ∧ b = SCell.zero := by
@@ -511,13 +521,18 @@ theorem Inv.share_zero_of_cell {t : ThreadId} {l : Loc} (hi : L.Inv G rX m)
   exact ho.share_zero_of_cell ht fun e => hl (rsum_heap_none.mp (rsum_heap_none.mp e).2).2
 
 /-- **A thread's share of a byte the rest shares stays over a change of its ghost value alone**
-(`Inv.share_sum` with the same rest: a tick, a step on its own part). -/
-theorem Inv.share_keep {G' : ThreadId → γ} {m' : Mem} {t : ThreadId} {l : Loc} {c : FCell}
-    (hi : L.Inv G rX m) (hi' : L.Inv G' rX m') (hth : m'.threads = m.threads)
+(`Inv.share_sum` with rests that hold the same share of the byte: a tick, a step on its own
+part; the rests differ when the invariants come from the other lock's view of a two-lock product,
+`Pair.swap`, by the other lock's side, which holds no share: `Keeps.side_share`). -/
+theorem Inv.share_keep {G' : ThreadId → γ} {rX' : Res} {m' : Mem} {t : ThreadId} {l : Loc}
+    {c : FCell} (hi : L.Inv G rX m) (hi' : L.Inv G' rX' m') (hth : m'.threads = m.threads)
     (ht : t < m.threads.size) (hoth : ∀ u, u ≠ t → G' u = G u)
-    (hR : ∀ G r, L.R G r → r.gh.share l = SCell.zero) (hc : 0 < (rX.gh.share l c).val) :
+    (hR : ∀ G r, L.R G r → r.gh.share l = SCell.zero)
+    (hX : rX'.gh.share l = rX.gh.share l) (hc : 0 < (rX.gh.share l c).val) :
     (L.own G' m' t).gh.share l = (L.own G m t).gh.share l := by
-  have h := hi.share_sum hi' hth ht hoth hR (SCell.pos_add' _ hc) (SCell.pos_add' _ hc)
+  have h := hi.share_sum hi' hth ht hoth hR (SCell.pos_add' _ hc)
+    (SCell.pos_add' _ (by rw [hX]; exact hc))
+  rw [hX] at h
   refine SCell.ext fun x => ?_
   have e := congrArg (fun s : SCell => (s x).val) h
   simp only [SCell.add_val] at e
@@ -676,6 +691,26 @@ theorem Keeps.side_owned {B : FLock γ} {rH : Res} (hR : ∀ G, B.R G = emp)
     · cases e : (B.ph (G j)).held
       · rw [hf.idle j e]; exact hemp _ ⟨rfl, rfl, rfl⟩
       · exact hemp _ (by have h' := hf.res j e; rwa [hR] at h')
+
+/-- **The side of a lock whose resource holds no share of a byte holds none of it** (the word's
+cells, the free resource and the holders' resources). -/
+theorem Keeps.side_share {B : FLock γ} {rH : Res} {l : Zig.Loc}
+    (hR : ∀ G r, B.R G r → r.gh.share l = SCell.zero) (hk : B.Keeps G m rL rH rX) :
+    (side B m rL rH).gh.share l = SCell.zero := by
+  have hf := hk.facts
+  have hL : rL.gh.share l = SCell.zero := by
+    by_cases hF : B.Free G
+    · exact hR _ _ (hf.free hF).1
+    · rw [hf.busy hF]; rfl
+  have hH : rH.gh.share l = SCell.zero := sepN_share_zero (fun j _ a ha => by
+    obtain rfl : a = B.heldOf G m j := ha
+    unfold FLock.heldOf; split
+    · rfl
+    · cases e : (B.ph (G j)).held
+      · rw [hf.idle j e]; rfl
+      · exact hR _ _ (hf.res j e)) hk.held
+  show (SCell.zero).add ((rL.gh.share l).add (rH.gh.share l)) = SCell.zero
+  rw [hL, hH, SCell.zero_add, SCell.zero_add]
 
 /-- **What a thread holds of a lock that protects nothing has no bytes** (`R = emp`). -/
 theorem Facts.held_heap (hR : ∀ G, L.R G = emp) (hf : L.Facts G m rL) (u : ThreadId) :

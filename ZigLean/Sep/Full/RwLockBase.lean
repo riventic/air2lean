@@ -19,7 +19,8 @@ own beside the lock's: what every client's base keeps, for every reader/writer l
   (`FLock.Inv.cells_pinned`).
 
 The obligations of the builders, one theorem each: a stop (`Base.atStop`), a tick of a thread's
-part at either lock (`Base.tick`).
+part in the outer mutex's view and in the semaphore's (`Base.tickM`, `Base.tickL`, from
+`Base.tick`).
 -/
 
 namespace Zig
@@ -68,14 +69,17 @@ theorem atStop (hu : W.Base Sz K G rX m) (t : ThreadId) :
     shares := hu.shares
     pin := hu.pin }
 
-/-- **A tick of `t`'s part keeps the base** (`FLock.Pair.TickKeeps` at either lock: the two locks
-have one part, `FLock.Pair.setPart`): the tick changes no byte, so the rwlock's invariant stays
-(`Inv.stepIn`; the rest's bytes are live, `FLock.Inv.rest_live`), the condition's and the
-semaphore's stay (`FCond.Inv.other`, `FSem.Inv.outStep`), and the readers' shares are kept by
-counting (`Shares.keep`), given the outer mutex's invariant before and after the tick at a rest
-with the common rest (`s` is the other lock's side). The part is no place (`hpl`). -/
-theorem tick {t : ThreadId} {r s : Res} (hu : W.Base Sz K G rX m) (hM : M.Inv G (rsum s rX) m)
-    (hM' : M.Inv (upd G t (M.setPart (G t) r)) (rsum s rX) m.ticked) (hg : M.ph (G t) ≠ .gone)
+/-- **A tick of `t`'s part keeps the base** (the two locks have one part,
+`FLock.Pair.setPart`): the tick changes no byte, so the rwlock's invariant stays (`Inv.stepIn`;
+the rest's bytes are live, `FLock.Inv.rest_live`), the condition's and the semaphore's stay
+(`FCond.Inv.other`, `FSem.Inv.outStep`), and the readers' shares are kept by counting
+(`Shares.keep`), given the outer mutex's invariant before and after the tick at rests with the
+common rest beside the semaphore's mutex's side (`s`, `s'`: the same shares). The part is no
+place (`hpl`). -/
+theorem tick {t : ThreadId} {r s s' : Res} (hu : W.Base Sz K G rX m)
+    (hM : M.Inv G (rsum s rX) m)
+    (hM' : M.Inv (upd G t (M.setPart (G t) r)) (rsum s' rX) m.ticked)
+    (hs : ∀ l, s'.gh.share l = s.gh.share l) (ht : t < m.threads.size)
     (hpl : ∀ g r, W.place.ph (M.setPart g r) = W.place.ph g) :
     W.Base Sz K (upd G t (M.setPart (G t) r)) rX m.ticked := by
   obtain ⟨⟨hC, hW⟩, hS⟩ := hu.sub
@@ -126,9 +130,39 @@ theorem tick {t : ThreadId} {r s : Res} (hu : W.Base Sz K G rX m) (hM : M.Inv G 
         fun u h => by rwa [hlph u] at h)
       (.inl hE'))
     shares := hu.shares.keep hM hM'
+      (fun l => by
+        show (s'.gh.share l).add (rX.gh.share l) = (s.gh.share l).add (rX.gh.share l)
+        rw [hs l])
       (fun u q H l c hq hl => SCell.pos_add' _ (hu.winv.rest_share hq hl)) rfl
-      (hM.w.live t hg).1 (fun u e => upd_ne _ _ e) (by rw [upd_self, wph])
+      ht (fun u e => upd_ne _ _ e) (by rw [upd_self, wph])
     pin := hu.pin }
+
+/-- **The tick obligation of the outer mutex's view** (`fitsM`'s `tick`). -/
+theorem tickM (hpl : ∀ g r, W.place.ph (M.setPart g r) = W.place.ph g) :
+    FLock.Pair.TickKeeps M L (W.Base Sz K) :=
+  fun t _ _ _ _ _ _ _ hg _ _ hM hM' hu =>
+    hu.tick hM hM' (fun _ => rfl) (hM.w.live t hg).1 hpl
+
+/-- **The tick obligation of the semaphore's view** (`fitsS`'s `tick`): the outer mutex's
+invariant before and after the tick is the product's (`FLock.Pair.swap`; the outer mutex stays
+kept over the tick, `FLock.Pair.Keeps.partStep`), at the common rest beside the semaphore's mutex's
+side, which holds no share (`FLock.Keeps.side_share`, `lR_share`). -/
+theorem tickL (hpl : ∀ g r, W.place.ph (M.setPart g r) = W.place.ph g) :
+    FLock.Pair.TickKeeps L M (W.Base Sz K) := by
+  intro t G sB rL rH rX m r hg hsB hk hL hL' hu
+  have hRM : ∀ G, (M.R G).Unshared := fun G => by rw [W.mR]; exact FAssn.Unshared.emp
+  have hpart : L.setPart (G t) r = M.setPart (G t) r := (W.pair.setPart _ _).symm
+  rw [hpart] at hL' ⊢
+  obtain ⟨rLL, rHL, hMi, hkL⟩ := W.pair.symm.swap (FLock.Pair.inv_side hL hsB) hk
+    (FLock.NoGatherHeld.of_R hRM hk.facts)
+  obtain ⟨hsB', hk'⟩ := FLock.Pair.Keeps.partStep (hO := Heap.empty) W.pair.symm hk hsB
+    (FStepIn.ticked m _).reads hL' (M.ph_setPart _ _) (M.held_setPart _ _)
+    (fun r' h => (M.R_setPart G t r r').mpr h) hk.xdisj hk.xoff
+  obtain ⟨rLL', rHL', hMi', hkL'⟩ := W.pair.symm.swap (FLock.Pair.inv_side hL' hsB') hk'
+    (FLock.NoGatherHeld.of_R hRM hk'.facts)
+  exact hu.tick hMi hMi'
+    (fun l => by rw [hkL'.side_share (lR_share W l), hkL.side_share (lR_share W l)])
+    (hL.w.live t hg).1 hpl
 
 end Base
 
