@@ -1,4 +1,4 @@
-import Proofs.Lists.Linked
+import Proofs.Lists.AllocInv
 import ZigLean.Sep.Full.Wrappers
 import ZigLean.Sep.Full.Dispatch
 import ZigLean.Sep.Full.Auto
@@ -32,8 +32,13 @@ owner of the nodes.
 
 The grant and the node are two views of the same bytes (`node_of_granted`; back:
 `EUpd.granted_of_node`, which reads the fields' labels off the memory,
-`ZigLean/Sep/Full/Fields.lean`). The generated code is walked by `fsym`; `freeAll`'s loop is
-`CTriple.loop` with the list as its invariant. These are `CTriple`s (partial correctness, no
+`ZigLean/Sep/Full/Fields.lean`). The nodes and `destroy`'s contract (`destroy_fields`) are in
+`Proofs/Lists/AllocNode.lean`. The generated code is walked by `fsym`; `freeAll`'s loop by its
+generated invariant (`Proofs/Lists/AllocInv.lean`, `@[fsym_inv]`), which `air2lean-invgen` reads
+off that contract: the nodes left are a list of granted nodes, the nodes passed a list of what
+`destroy` leaves of each. Only the loop with its exact step count (`freeAll_exact`) still has a
+hand-written invariant (`freeInvExact`, engine ledger #list-walk-step: one registered invariant
+per loop body). These are `CTriple`s (partial correctness, no
 panic): the contract `CAllocSpec` is one, so a client of an arbitrary allocator gets no more.
 -/
 
@@ -79,22 +84,6 @@ theorem valPad_pad (v : BitVec 32) :
       (Enc.encode v ++ Array.replicate 4 Byte.undef).size = Array.replicate 4 .undef := by
   rw [← LawfulEnc.size_encode v, Region.extract_append_right]
 
-/-- The rest of a node's grant for the fee `φ` besides its fields: the padding bytes, the
-allocator's token, and the grant's extent share and claim (`FAllocInv.granted` of 16 bytes at
-alignment `2 ^ 3`). -/
-def nodeRest (I : FAllocInv) (φ : Frac) (p : Ptr) : FAssn :=
-  FAssn.ex fun A => FAssn.ex fun S => FAssn.ex fun K => FAssn.ex fun q => FAssn.ex fun pad : Array Byte =>
-    ⟪pad.size = 4⟫ ⋆ (up (regionIn (p.add 12) A S K 4 pad) ⋆ (I.tok p 16 3 A S K q φ ⋆
-      (pshare p q (p.off.toNat + 16) I.tag ⋆ pclaim p p.off.toNat (p.off.toNat + 16) I.tag)))
-
-/-- A node that `I`'s allocator granted for the fee `φ`. -/
-abbrev node (I : FAllocInv) (φ : Frac) (p : Ptr) (v : BitVec 32) (q : Option Ptr) : FAssn :=
-  Linked.node (nodeRest I φ) p v q
-
-/-- The list at `hd` of nodes that `I`'s allocator granted for the fee `φ` holds `xs`. -/
-abbrev list (I : FAllocInv) (φ : Frac) (hd : Option Ptr) (xs : List (BitVec 32)) : FAssn :=
-  Linked.list (nodeRest I φ) hd xs
-
 /-- `n` fees `φ` of `I`'s allocator. -/
 abbrev fees (I : FAllocInv) (φ : Frac) (n : Nat) : FAssn := sepN n fun _ => I.fee φ
 
@@ -128,63 +117,11 @@ theorem node_of_granted {r : Res} (h : I.granted p 3 φ (nodeBytes v q) r) : nod
     (sep_mono_right (fun _ h => Full.sep_assoc h) (Full.sep_assoc h2))
   exact ⟨A, S, K, q', Array.replicate 4 .undef, sep_lift.mpr ⟨rfl, h⟩⟩
 
-/-- A node is a grant of 16 bytes again: its fields join the padding's region (an update in the
-memory, `EUpd.pts_region_join`). -/
-theorem EUpd.granted_of_node :
-    EUpd (node I φ p v q) (FAssn.ex fun bs : Array Byte => ⟪bs.size = 16⟫ ⋆ I.granted p 3 φ bs) := by
-  -- the grant's labels, token, share and claim out front
-  refine EUpd.trans (P' := (FAssn.ex fun A => FAssn.ex fun S => FAssn.ex fun K => FAssn.ex fun q' =>
-      FAssn.ex fun pad : Array Byte => ⟪pad.size = 4⟫ ⋆
-        ((up (pts (p.add 8) 4 v) ⋆ up (regionIn ((p.add 8).add (Enc.size (BitVec 32))) A S K 4 pad)) ⋆
-          (up (pts p 8 q) ⋆ (I.tok p 16 3 A S K q' φ ⋆
-            (pshare p q' (p.off.toNat + 16) I.tag ⋆ pclaim p p.off.toNat (p.off.toNat + 16) I.tag))))))
-    (EUpd.of_imp fun r h => ?_) ?_
-  · obtain ⟨r₁, r₂, hd, rfl, h1, h2⟩ := h
-    obtain ⟨r₃, r₄, hd', rfl, h3, ⟨A, S, K, q', pad, h4⟩⟩ := h2
-    obtain ⟨hpad, h4⟩ := sep_lift.mp h4
-    refine ⟨A, S, K, q', pad, sep_lift.mpr ⟨hpad, ?_⟩⟩
-    have e : (p.add 8).add (Enc.size (BitVec 32)) = p.add 12 := by rw [Ptr.add_add]; rfl
-    rw [e]
-    have hx : (up (pts p 8 q) ⋆ (up (pts (p.add 8) 4 v) ⋆
-        (up (regionIn (p.add 12) A S K 4 pad) ⋆ (I.tok p 16 3 A S K q' φ ⋆
-          (pshare p q' (p.off.toNat + 16) I.tag ⋆ pclaim p p.off.toNat (p.off.toNat + 16) I.tag))))) _ :=
-      ⟨r₁, _, hd, rfl, h1, ⟨r₃, r₄, hd', rfl, h3, h4⟩⟩
-    exact ac_cast hx (by ac_rfl)
-  refine EUpd.exAll fun A => EUpd.exAll fun S => EUpd.exAll fun K => EUpd.exAll fun q' =>
-    EUpd.exAll fun pad => EUpd.lift fun hpad => ?_
-  -- `val` joins the padding, then `next` joins both
-  refine EUpd.trans (EUpd.frame (EUpd.pts_region_join (by decide) (by omega))) ?_
-  refine EUpd.ex fun cs => EUpd.trans (EUpd.of_imp fun _ h => sep_assoc h)
-    (EUpd.lift fun ⟨hcs, _, _⟩ => ?_)
-  refine EUpd.trans (P' := (up (pts p 8 q) ⋆ up (regionIn (p.add (Enc.size (Option Ptr))) A S K 4 cs)) ⋆
-      (I.tok p 16 3 A S K q' φ ⋆ (pshare p q' (p.off.toNat + 16) I.tag ⋆
-        pclaim p p.off.toNat (p.off.toNat + 16) I.tag)))
-    (EUpd.of_imp fun _ h => ac_cast h (by ac_rfl)) ?_
-  have hcs4 : 0 < cs.size := by rw [hcs, hpad]; decide
-  refine EUpd.trans (EUpd.frame (EUpd.pts_region_join (T := Option Ptr) (by decide) hcs4)) ?_
-  refine EUpd.ex fun ds => EUpd.trans (EUpd.of_imp fun _ h => Full.sep_assoc h)
-    (EUpd.lift fun ⟨hds, _, _⟩ => EUpd.of_imp fun r h => ?_)
-  have h16 : ds.size = 16 := by rw [hds, hcs, hpad]; rfl
-  refine ⟨ds, sep_lift.mpr ⟨h16, A, S, K, q', ?_⟩⟩
-  rw [h16]
-  exact h
-
 end Views
 
 /-! ## The allocator -/
 
-/-- The alignment argument of the generated entries, from its log2. -/
-def al (k : Nat) : mem_Alignment := ⟨BitVec.ofNat 6 k⟩
-
 variable [Ext]
-
-/-- The environment's allocator entries: `Ext.call0` (`alloc`), `Ext.call1` (`remap`) and
-`Ext.call2` (`free`); `e`'s `resize`, which the program never calls. -/
-def env (e : AllocEnv Tgt) : AllocEnv Tgt :=
-  { e with
-    alloc := fun f a => Ext.call0 f a.1 a.2.1 (al a.2.2.1) a.2.2.2
-    remap := fun f a => Ext.call1 f a.1 a.2.1 (al a.2.2.1) a.2.2.2.1 a.2.2.2.2
-    free := fun f a => Ext.call2 f a.1 a.2.1 (al a.2.2.1) a.2.2.2 }
 
 variable (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt) (φ : Frac)
 
@@ -231,75 +168,7 @@ theorem push_spec (next : Option Ptr) (v : BitVec 32) (hfit : I.fits (16 : BitVe
         sep_mono_left (fun _ h => node_of_granted h) h) h) hr
     | error _ => exact hr
 
-omit [Ext] in
-theorem fromByteUnits_8 : mem_Alignment_fromByteUnits 8 = pure mem_Alignment.«8» := by
-  have h : (8 : BitVec 64).ctz = 3 := Zig.ctz_twoPow (k := 3) (by decide)
-  unfold mem_Alignment_fromByteUnits math_isPowerOfTwo__anon_38853e1fe316 debug_assert
-  simp only [Zig.ctz, h]
-  rfl
-
-set_option maxRecDepth 20000 in
-/-- `destroy` of a grant: its fee back, and what the allocator tells about the freed pointer
-(`FAllocInv.freed`). -/
-theorem destroy_grant (p : Ptr) (bs : Array Byte) (hbs : bs.size = 16)
-    (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
-    CTriple (I.own ⋆ (I.granted p 3 φ bs ⋆ vtR vtp fns.toList))
-      (mem_Allocator_destroy__anon_a9add1f02861 ⟨ctx, vtp⟩ p)
-      (fun _ => I.own ⋆ (I.fee φ ⋆ (vtR vtp fns.toList ⋆ I.freed p))) := by
-  -- fsym does not evaluate the pure helper on its literal (fsym-engine ledger)
-  unfold mem_Allocator_destroy__anon_a9add1f02861
-  simp only [fromByteUnits_8]
-  fsym [CAllocSpec.free h]
-
-set_option maxRecDepth 20000 in
-/-- `destroy` of a node gives its grant back to the allocator. -/
-theorem destroy_spec (p : Ptr) (v : BitVec 32) (q : Option Ptr)
-    (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
-    CTriple (I.own ⋆ (node I φ p v q ⋆ vtR vtp fns.toList))
-      (mem_Allocator_destroy__anon_a9add1f02861 ⟨ctx, vtp⟩ p)
-      (fun _ => I.own ⋆ (I.fee φ ⋆ (vtR vtp fns.toList ⋆ I.freed p))) := by
-  refine CTriple.eupd (EUpd.frameL (EUpd.frame EUpd.granted_of_node))
-    (CTriple.pre (P := FAssn.ex fun bs : Array Byte => ⟪bs.size = 16⟫ ⋆
-      (I.own ⋆ (I.granted p 3 φ bs ⋆ vtR vtp fns.toList)))
-      (CTriple.ex fun bs => CTriple.lift fun hbs => destroy_grant ctx vtp fns I e φ p bs hbs h)
-      fun _ h => ?_)
-  obtain ⟨r₁, r₂, hd, rfl, h1, h2⟩ := h
-  obtain ⟨bs, h2⟩ := sep_ex.mp h2
-  obtain ⟨hbs, h2⟩ := sep_lift.mp (Full.sep_assoc h2)
-  exact ⟨bs, sep_lift.mpr ⟨hbs, r₁, r₂, hd, rfl, h1, h2⟩⟩
-
-set_option maxRecDepth 20000 in
-/-- `destroy_spec` with the node's fields in view (the form the loop body of `freeAll` has). -/
-theorem destroy_fields (p : Ptr) (v : BitVec 32) (q : Option Ptr)
-    (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
-    CTriple (I.own ⋆ ((up (pts p 8 q) ⋆ (up (pts (p.add 8) 4 v) ⋆ nodeRest I φ p)) ⋆ vtR vtp fns.toList))
-      (mem_Allocator_destroy__anon_a9add1f02861 ⟨ctx, vtp⟩ p)
-      (fun _ => I.own ⋆ (I.fee φ ⋆ (vtR vtp fns.toList ⋆ I.freed p))) :=
-  destroy_spec ctx vtp fns I e φ p v q h
-
 /-! ## `freeAll` -/
-
--- the rest of a node's grant is handed on whole (to `destroy_fields`)
-attribute [local fsym_atom] nodeRest
-
-/-- The body at the end of the list: it takes its step in the plain mode and exits. -/
-theorem freeAll_step_nil (R : FAssn) :
-    CTriple (R ⋆ plain) ((freeAll.loop5 ⟨ctx, vtp⟩).run ⟨none⟩)
-      (fun r => ⟪r = (.br4, ⟨none⟩)⟫ ⋆ (R ⋆ plain)) := by
-  unfold freeAll.loop5
-  fsym
-
-set_option maxRecDepth 20000 in
-/-- The body at a node: it takes its step in the plain mode, reads `next` and gives the node back
-to the allocator, which tells what it knows of the freed node (`FAllocInv.freed`). -/
-theorem freeAll_step_cons (p : Ptr) (q : Option Ptr) (z : BitVec 32) (R : FAssn)
-    (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
-    CTriple (I.own ⋆ (node I φ p z q ⋆ (vtR vtp fns.toList ⋆ (R ⋆ plain))))
-      ((freeAll.loop5 ⟨ctx, vtp⟩).run ⟨some p⟩)
-      (fun r => ⟪r = (.rep5, ⟨q⟩)⟫ ⋆
-        (I.own ⋆ (I.fee φ ⋆ ((vtR vtp fns.toList ⋆ I.freed p) ⋆ (R ⋆ plain))))) := by
-  unfold freeAll.loop5 node Linked.node
-  fsym [destroy_fields ctx vtp fns I e φ (h := h)]
 
 omit [Ext] in
 /-- What the allocator told of `k` freed nodes (`FAllocInv.freed` of each), the first at `hd`,
@@ -323,102 +192,41 @@ theorem freedSeg_snoc {p : Ptr} (q : Option Ptr) :
     obtain ⟨hp, h⟩ := sep_lift.mp (sep_assoc h)
     exact ⟨p', q', sep_lift.mpr ⟨hp, sep_mono_right (fun _ h => freedSeg_snoc q k h) (sep_assoc h)⟩⟩
 
-/-- The invariant of `freeAll`'s loop over a list of `n` nodes from `hd`: `p` is a list of
-granted nodes, and the fees of the nodes freed so far are back, with what the allocator told of
-them. -/
-def freeInv (hd : Option Ptr) (n : Nat) (s : freeAllLocals) : FAssn :=
-  I.own ⋆ ((FAssn.ex fun zs => ⟪zs.length ≤ n⟫ ⋆ (list I φ s.p zs ⋆
-    (fees I φ (n - zs.length) ⋆ freedSeg I hd s.p (n - zs.length)))) ⋆ vtR vtp fns.toList)
+omit [Ext] in
+/-- The nodes that `freeAll`'s loop has passed (`freeAll.loop5.done`, what `destroy`'s contract
+leaves of each: the generated invariant's list of them, `Proofs/Lists/AllocInv.lean`) are the
+fee of every node and what the allocator told of the nodes. -/
+theorem fees_freed_of_done {tl : Option Ptr} :
+    ∀ {hd : Option Ptr} (xs : List (BitVec 32)) {r : Res},
+      listSeg (freeAll.loop5.done I φ) hd tl xs r →
+        (fees I φ xs.length ⋆ freedSeg I hd tl xs.length) r
+  | hd, [], _, h => sep_comm ((Full.sep_emp (P := freedSeg I hd tl 0)).mpr h)
+  | _, _ :: xs, _, h => by
+    obtain ⟨p, q, h⟩ := h
+    obtain ⟨hp, h⟩ := sep_lift.mp h
+    have h := sep_mono_right (fun _ h => fees_freed_of_done xs h) h
+    rw [List.length_cons, fees_succ]
+    have h : ((I.fee φ ⋆ fees I φ xs.length) ⋆ (I.freed p ⋆ freedSeg I q tl xs.length)) _ :=
+      ac_cast h (by ac_rfl)
+    exact sep_mono_right (fun _ h => ⟨p, q, sep_lift.mpr ⟨hp, h⟩⟩) h
 
-/-- After `freeAll`'s loop over a list of `n` nodes from `hd`: no node is left, the `n` fees are
-back, with what the allocator told of the `n` nodes. -/
+/-- After `freeAll`'s loop over a list of `n` nodes from `hd` (the form of the loop with its exact
+step count, below): no node is left, the `n` fees are back, with what the allocator told of the
+`n` nodes. -/
 def freePost (hd : Option Ptr) (n : Nat) (r : freeAllExit × freeAllLocals) : FAssn :=
   ⟪r.1 = .br4⟫ ⋆ (I.own ⋆ ((fees I φ n ⋆ vtR vtp fns.toList) ⋆ freedSeg I hd none n))
 
-theorem freeAll_step (h : CAllocSpec (CVTable.env (env e) fns) ctx I) (hd : Option Ptr) (n : Nat)
-    (s : freeAllLocals) :
-    CTriple (freeInv vtp fns I φ hd n s ⋆ plain) ((freeAll.loop5 ⟨ctx, vtp⟩).run s)
-      (fun r => (if freeAll.again5 r.1 then freeInv vtp fns I φ hd n r.2
-        else freePost vtp fns I φ hd n r) ⋆ plain) := by
-  obtain ⟨cu⟩ := s
-  refine CTriple.pre (P := FAssn.ex fun zs => ⟪zs.length ≤ n⟫ ⋆
-      (I.own ⋆ (list I φ cu zs ⋆ (vtR vtp fns.toList ⋆
-        ((fees I φ (n - zs.length) ⋆ freedSeg I hd cu (n - zs.length)) ⋆ plain)))))
-    (CTriple.ex fun zs => CTriple.lift fun hz => ?_) fun _ h => ?_
-  · cases zs with
-    | nil =>
-      refine CTriple.pre (P := ⟪cu = none⟫ ⋆
-          ((I.own ⋆ (vtR vtp fns.toList ⋆ (fees I φ n ⋆ freedSeg I hd cu n))) ⋆ plain))
-        (CTriple.lift fun hcu => ?_) fun _ h => ?_
-      · subst hcu
-        refine (freeAll_step_nil ctx vtp _).post fun r _ h => ?_
-        obtain ⟨hr, h'⟩ := Full.sep_lift.mp h
-        subst hr
-        show (freePost vtp fns I φ hd n (.br4, ⟨none⟩) ⋆ plain) _
-        exact sep_mono_left (fun _ h => Full.sep_lift.mpr ⟨rfl, ac_cast h (by ac_rfl)⟩) h'
-      · have e : list I φ cu [] = ⟪cu = none⟫ := rfl
-        rw [e, List.length_nil, Nat.sub_zero] at h
-        exact ac_cast h (by ac_rfl)
-    | cons z zs =>
-      refine CTriple.pre (P := FAssn.ex fun p => FAssn.ex fun q => ⟪cu = some p⟫ ⋆
-          (I.own ⋆ (node I φ p z q ⋆
-            (vtR vtp fns.toList ⋆ ((list I φ q zs ⋆ (fees I φ (n - (z :: zs).length) ⋆
-              freedSeg I hd (some p) (n - (z :: zs).length))) ⋆ plain)))))
-        (CTriple.ex fun p => CTriple.ex fun q => CTriple.lift fun hp => ?_) fun _ h => ?_
-      · subst hp
-        refine (freeAll_step_cons ctx vtp fns I e φ p q z _ h).post fun r _ h => ?_
-        obtain ⟨hr, h'⟩ := Full.sep_lift.mp h
-        subst hr
-        simp only [freeAll.again5, ↓reduceIte, freeInv]
-        simp only [List.length_cons] at hz h'
-        -- the node's fee joins the fees freed so far, what the allocator told of it the segment
-        have e : n - zs.length = (n - (zs.length + 1)) + 1 := by omega
-        have h'' := ac_cast h' (Q := (I.own ⋆ ((list I φ q zs ⋆
-            ((I.fee φ ⋆ fees I φ (n - (zs.length + 1))) ⋆
-              (freedSeg I hd (some p) (n - (zs.length + 1)) ⋆ I.freed p))) ⋆
-            vtR vtp fns.toList)) ⋆ plain) (by ac_rfl)
-        refine sep_mono_left (fun _ h'' =>
-          sep_mono_right (fun _ h => sep_mono_left (fun _ h => ⟨zs, ?_⟩) h) h'') h''
-        refine sep_lift.mpr ⟨by omega, ?_⟩
-        rw [e, fees_succ]
-        exact sep_mono_right (fun _ h => sep_mono_right (fun _ h => freedSeg_snoc I q _ h) h) h
-      · obtain ⟨r₁, r₂, hd', rfl, h1, h2⟩ := h
-        obtain ⟨p, q, hp, h2⟩ := listSeg_cons h2
-        refine ⟨p, q, Full.sep_lift.mpr ⟨hp, ⟨r₁, r₂, hd', rfl, h1, ?_⟩⟩⟩
-        subst hp
-        exact ac_cast h2 (by simp only [list, node, Linked.list, lseg]; ac_rfl)
-  · obtain ⟨rA, rP, hdA, rfl, hA, hP⟩ := h
-    obtain ⟨r₁, r₂, hd', rfl, h1, h2⟩ := hA
-    obtain ⟨zs, h2⟩ := sep_ex.mp h2
-    obtain ⟨hz, h2⟩ := sep_lift.mp (Full.sep_assoc h2)
-    have h3 : ((I.own ⋆ ((list I φ cu zs ⋆ (fees I φ (n - zs.length) ⋆
-        freedSeg I hd cu (n - zs.length))) ⋆ vtR vtp fns.toList)) ⋆ plain) _ :=
-      ⟨_, rP, hdA, rfl, ⟨r₁, r₂, hd', rfl, h1, h2⟩, hP⟩
-    exact ⟨zs, sep_lift.mpr ⟨hz, ac_cast h3 (by ac_rfl)⟩⟩
-
-/-- The generated loop of `freeAll`, as a rule for `fsym`: from the list at `p`, it exits with
-every node given back, every node's fee back, and what the allocator told of the nodes. -/
-theorem freeAll_loop {mb : Lean.Order.MonoBind (CM Tgt freeAllLocals)}
-    (h : CAllocSpec (CVTable.env (env e) fns) ctx I) (hd : Option Ptr) (xs : List (BitVec 32))
-    (s : freeAllLocals) (hp : s.p = hd) :
-    CTriple (I.own ⋆ (list I φ hd xs ⋆ vtR vtp fns.toList) ⋆ plain)
-      ((@Zig.loop (CM Tgt freeAllLocals) _ _ mb _ (freeAll.loop5 ⟨ctx, vtp⟩) freeAll.again5).run s)
-      (fun r => FAssn.ex fun t : freeAllLocals => ⟪r = (.br4, t)⟫ ⋆
-        ((I.own ⋆ ((fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆ freedSeg I hd none xs.length)) ⋆
-          plain)) :=
-  (CTriple.loop (fun s => freeInv vtp fns I φ hd xs.length s ⋆ plain)
-      (fun r => freePost vtp fns I φ hd xs.length r ⋆ plain)
-      (fun s => (freeAll_step ctx vtp fns I e φ h hd xs.length s).post fun r _ h' => by
-        by_cases ha : freeAll.again5 r.1 <;> simp only [ha, ↓reduceIte] at h' ⊢ <;> exact h')
-      s).pre
-    (fun _ h' => sep_mono_left (fun _ h' => sep_mono_right (fun _ h' => sep_mono_left (fun _ h' =>
-      ⟨xs, sep_lift.mpr ⟨Nat.le_refl _, by
-        rw [Nat.sub_self, hp]
-        exact sep_mono_right (fun _ h => sep_comm (Full.sep_lift.mpr ⟨rfl, h⟩))
-          ((Full.sep_emp (P := list I φ hd xs)).mpr h')⟩⟩) h') h') (Full.sep_assoc' h'))
-    |>.post fun ⟨e', t⟩ _ h' => by
-      obtain ⟨he, h'⟩ := sep_lift.mp (Full.sep_assoc h')
-      exact ⟨t, sep_lift.mpr ⟨by simp only at he; rw [he], h'⟩⟩
+/-- **`freeAll` hands every node of the list to `destroy`**: what is left of the list is what
+`destroy`'s contract (`destroy_fields`) leaves of each node, in the list's order. The loop is
+walked by `fsym` from its generated invariant (`Proofs/Lists/AllocInv.lean`, `air2lean-invgen`'s
+list walk with a call, read off that contract); a node passed joins the nodes passed by
+`listSeg_snoc_upd`. -/
+theorem freeAll_done (hd : Option Ptr) (xs : List (BitVec 32))
+    (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
+    CTriple (I.own ⋆ (list I φ hd xs ⋆ vtR vtp fns.toList) ⋆ plain) (freeAll ⟨ctx, vtp⟩ hd)
+      (fun _ => listSeg (freeAll.loop5.done I φ) hd none xs ⋆ I.own ⋆ vtR vtp fns.toList ⋆ plain) := by
+  unfold freeAll
+  fsym [destroy_fields ctx vtp fns I e φ (h := h), listSeg_snoc_upd]
 
 /-- **`freeAll`, with what the allocator told of the nodes** (`FAllocInv.freed` of each, from
 `hd`): every node given back, the fee of every node back. A client of the contract alone forgets
@@ -427,9 +235,9 @@ theorem freeAll_freed (hd : Option Ptr) (xs : List (BitVec 32))
     (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
     CTriple (I.own ⋆ (list I φ hd xs ⋆ vtR vtp fns.toList) ⋆ plain) (freeAll ⟨ctx, vtp⟩ hd)
       (fun _ => (I.own ⋆ ((fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆
-        freedSeg I hd none xs.length)) ⋆ plain) := by
-  unfold freeAll
-  fsym [freeAll_loop ctx vtp fns I e φ h]
+        freedSeg I hd none xs.length)) ⋆ plain) :=
+  (freeAll_done ctx vtp fns I e φ hd xs h).post fun _ _ h' =>
+    ac_cast (sep_mono_left (fun _ h => fees_freed_of_done I φ xs h) h') (by ac_rfl)
 
 omit [Ext] in
 /-- What the allocator told is knowledge only (`FAllocInv.freed_pers`): a contract client forgets

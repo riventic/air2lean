@@ -51,9 +51,26 @@ Families (layer 2 of the design: numeric facts and measures over the variables o
   obligation) and the other locals at their entry values. The exit post holds the whole list
   (reversed for a reversal) and the accumulators over `xs`.
 
+  **With a call** (`readContract`): a visit may hand the cursor's node to one call
+  (`a.destroy(n)`, a callback), after its own accesses to the node, if the generator was given a
+  contract of the called function (`--contract RULE`, a theorem `∀ ys, T P (f as) fun _ => Q` of a
+  specification module, `--spec`). The contract's precondition is read as the node (the atoms that
+  name the node's pointer or the values of its fields: `name.node`, which must own the `next`
+  field the body reads) and a frame (the other atoms), which the postcondition returns; what
+  the postcondition holds besides is what the call leaves of a node (`name.done`). The invariant
+  is the visit's with the nodes passed as a list at that layout (`listSeg name.done s0.cur s.cur
+  ys`), the nodes left at the node's (`listSeg name.node s.cur none zs`), and the frame; its
+  parameters are the loop's and the contract's variables that these name, and the contract's
+  other variables (its hypotheses) are binders of the step's check only, which walks the call by
+  the contract. A freeing walk is the instance whose contract leaves no field of the node.
+
+A loop body is a program of `MM σ ε` (its step is checked as an `FTotalTriple`) or of `CM Tgt σ ε`
+(a `CTriple`); its instance parameters are explicit parameters of the definitions (`inst0`).
+
 Outside the families (each one recorded with its reason): a cell at an offset of a parameter
 (`Zig.ptrProject`), an increment that depends on the counter, a bound of another width
-(`@intCast`), a `>= 0` or `<= maxInt` test (it holds until the step wraps), a nested loop, a call.
+(`@intCast`), a `>= 0` or `<= maxInt` test (it holds until the step wraps), a nested loop, a call
+without a contract.
 
 The body is read by a symbolic run over its monadic term (`bind`, `pure`, `get`, `modify`, `ite`,
 the lifted `Zig.load`/`Zig.store`/`Zig.add`/`Zig.sub`/`Zig.intCast`, the unsigned comparisons

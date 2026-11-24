@@ -334,12 +334,14 @@ def invgen_record(path, *, header_only=False):
     return json.loads(first[len(INVGEN_PREFIX):]), hashlib.sha256(body).hexdigest()
 
 
-def invgen_errors(targets=None):
-    """The `invgen` command: each target of scripts/invgen.py (`targets`: its TARGETS) has a
-    record that matches it and the checkout, and no other tracked file has one."""
+def invgen_errors(targets=None, contracts=None):
+    """The `invgen` command: each target of scripts/invgen.py (`targets`: its TARGETS, `contracts`:
+    its CONTRACTS) has a record that matches it and the checkout, and no other tracked file has
+    one."""
     invgen = sibling("invgen.py")
     valid_revision = sibling("semantic-fingerprints.py")["valid_translator"]
     targets = invgen["TARGETS"] if targets is None else targets
+    contracts_of = invgen["CONTRACTS"] if contracts is None else contracts
     toolchain = (ROOT / "lean-toolchain").read_text().strip()
 
     @functools.cache
@@ -355,7 +357,7 @@ def invgen_errors(targets=None):
                 errors.append(f"{path}: an air2lean-invgen record that is not a target of scripts/invgen.py")
     for path, root, module, namespace in targets:
         # (a target generated with contracts also reads the module that states them)
-        spec, contracts = invgen["CONTRACTS"].get(path, (None, []))
+        spec, contracts = contracts_of.get(path, (None, []))
         sources = [invgen["source"](root, m) for m in [module] + ([spec] if spec else [])]
         try:
             record, body = invgen_record(path)

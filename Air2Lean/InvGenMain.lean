@@ -4,12 +4,15 @@ import Air2Lean.Revision
 /-!
 The invariant generator as an executable (`lake build air2lean-invgen`):
 
-    air2lean-invgen MODULE NAMESPACE --source FILE [-o FILE]
+    air2lean-invgen MODULE NAMESPACE --source FILE [--spec MODULE FILE]... [--contract NAME]... [-o FILE]
 
 It imports the translated `MODULE`, whose source is `--source FILE` (a path relative to the
 repository root), and the library `ZigLean.Sep.Full.AutoAll`, whose `fsym` prunes the candidate
 invariants (both on the lookup path of `LEAN_PATH`: run it under `lake env` after
-`lake build ZigLean.Sep.Full.AutoAll`). It reads the module's loops, and writes the generated
+`lake build ZigLean.Sep.Full.AutoAll`). `--spec MODULE FILE` imports a hand-written specification
+module too (its source `FILE` is recorded as an input), and `--contract NAME` names a theorem of
+it: the contract of a function that a loop calls. With contracts, the output holds the loops that
+call by one of them (the others are in the module's file generated without contracts). It reads the module's loops, and writes the generated
 invariants and measures (`Air2Lean.InvGen.generate`) to `-o FILE` (default: stdout). The first line records the generator's revision (`translator_revision%`: this
 file and the `Air2Lean` modules it imports) and the source's SHA-256, which
 `scripts/gen-integrity.py invgen` checks against the checkout: the caller builds `MODULE`'s olean
