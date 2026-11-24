@@ -1332,6 +1332,81 @@ theorem Inv.stepIn {G G' : ThreadId → γ} {rX : Res} {m m' : Mem} {hF hR : Hea
   rw [he] at e
   exact (rsum_heap_none.mp (rsum_heap_none.mp e).2).1
 
+/-- **The free resource owns no byte that no resource with `R` has a cell at** (`FreeRes`: `rnil`,
+a resource with `R`, which has no share, `R_plain`, or a share of a heap with `R`). -/
+theorem FreeRes.owned_none {G : ThreadId → γ} {m : Mem} {rF : Res} (hf : W.FreeRes G m rF)
+    {l : Zig.Loc} (hR : ∀ xs r, W.R xs r → r.heap l = none) : rF.owned l = none := by
+  by_cases hb : W.Busy G
+  · rw [hf.1 hb]; exact Res.owned_plain rfl rfl
+  by_cases h0 : W.nrd G m = 0
+  · exact Res.owned_plain (W.R_plain _ _ (hf.2.1 hb h0)).2 (hR _ _ (hf.2.1 hb h0))
+  obtain ⟨H, f, hRH, hf0, -, rfl, -⟩ := hf.2.2 hb h0
+  exact Classical.byContradiction fun h => (shareRes_owned hf0).mp h (hR _ _ hRH)
+
+/-- **A change of the futex queue, the woken threads and the current thread keeps the invariant**
+(a stop, a futex wait's sleep or return, a futex wake): it reads none of them. -/
+theorem Inv.queue {G : ThreadId → γ} {rX : Res} {m : Mem} (hI : W.Inv G rX m) (c : ThreadId)
+    (ws : Array (ThreadId × FutexKey)) (wk : Array ThreadId) :
+    W.Inv G rX { m with current := c, waiters := ws, woken := wk } := by
+  have hok := hI.ok.fields_native (m' := { m with current := c, waiters := ws, woken := wk })
+    rfl rfl rfl rfl fun _ => VClock.le_refl _
+  exact hI.keep hok.1 hok.2 rfl rfl (fun _ => rfl) (fun _ => rfl) hI.wm fun _ _ _ _ ho => ho
+
+/-- **The invariant over a native step at another shared word** (the bytes `A`, apart from the
+state word: an atomic op at a word of the semaphore's condition; `FLock.Pair.Keeps.wordStep`
+takes the same two facts): the step changes only the bytes `A` (`RestStep`) and is an `FStepIn`
+in every frame without them, no resource with `R` has a cell at them (`hRA`), so the free
+resource owns none (`FreeRes.owned_none`), and the rest's bytes are live (`hbl`). The places
+and the client parts stay, no thread ends and the writer's hold of the outer mutex stays. -/
+theorem Inv.wordStep {A : Zig.Loc → Prop} [DecidablePred A] {G G' : ThreadId → γ} {rX : Res}
+    {m m' : Mem} (hI : W.Inv G rX m) (hr : RestStep A m m')
+    (hs : ∀ hF : Heap, (∀ l, A l → hF l = none) → FStepIn hF m m')
+    (hA : ∀ l, A l → ¬ W.st.In l) (hRA : ∀ xs r l, W.R xs r → A l → r.heap l = none)
+    (hbl : ∀ l, rX.owned l ≠ none → m.heap l ≠ none)
+    (hph : ∀ u, W.ph (G' u) = W.ph (G u)) (hx : ∀ u, W.x (G' u) = W.x (G u))
+    (hM : ∀ u, M.ph (G' u) ≠ .gone → M.ph (G u) ≠ .gone)
+    (hwm : ∀ u, (W.ph (G u)).isW = true → (M.ph (G' u)).held = true) : W.Inv G' rX m' := by
+  have hst : ∀ l, W.st.In l → m'.heap l = m.heap l := fun l hl => hr.heap l fun h => hA l h hl
+  have hs' : FStepIn (W.st.cellsR m).owned m m' :=
+    hs _ fun l hl => cellsAt_owned_none fun h => hA l hl h
+  have hwF : ∀ l, W.st.In l → (W.st.cellsR m).owned l ≠ none := fun l hl =>
+    Res.owned_of_heap (cellsAt_some hl (hI.ok.cellIn hl))
+  have hnorm : ∀ l, W.st.In l → (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm :=
+    fun l hl => by rw [hst l hl]
+  have hhist := Word.hist_fstep hI.ok hs' hwF hnorm
+  refine hI.keep ((hI.ok.fstep hs' hwF hnorm).anti hM) hhist (cellsAt_congr hst) hr.threads
+    hph hx hwm fun rF rO he hfr how => ?_
+  have hF₁ : ∀ l, rF.owned l ≠ none → rX.owned l ≠ none := fun l h => by
+    rw [he]; exact (Res.owned_sep rfl rfl).mpr (.inr ((Res.owned_sep rfl rfl).mpr (.inl h)))
+  have hoff : ∀ l, A l → rF.owned l = none := fun l hl =>
+    hfr.owned_none fun xs r h => hRA xs r l h hl
+  obtain ⟨hxc, -⟩ := hfr.bytes hI.ex
+  refine how.stepIn (hF := fun l => if A l then none else m.heap l)
+    (hs _ fun l hl => by simp only [hl, ↓reduceIte]) (fun l h => ?_)
+    (fun l h => hbl l (hF₁ l h)) hhist hph hM (fun _ _ => rfl)
+    (fun ⟨u, hu⟩ l => Classical.byContradiction fun h => by
+      have := (hxc l h).2 u; rw [hu] at this; cases this)
+    fun _ _ hr' => absurd rfl hr'
+  have hnA : ¬ A l := fun ha => h (hoff l ha)
+  simp only [hnA, ↓reduceIte]
+  exact hbl l (hF₁ l h)
+
+/-- **The invariant at a rest without the cells of bytes `A`** (`Inv.frame`'s converse at
+cells: bytes apart from the state word, where no resource with `R` has a cell): the cells are in
+the rest of the rest (`cellsAt_out`). -/
+theorem Inv.dropCells {A : Zig.Loc → Prop} [DecidablePred A] {G : ThreadId → γ} {rY : Res}
+    {m m₀ : Mem} (hI : W.Inv G (rsum (cellsAt A m₀) rY) m) (hY : ∀ l, A l → rY.heap l = none)
+    (hA : ∀ l, A l → ¬ W.st.In l) (hRA : ∀ xs r l, W.R xs r → A l → r.heap l = none) :
+    W.Inv G rY m := by
+  obtain ⟨rF, rO, he, hoff, hd, hfr, how⟩ := hI.rest
+  obtain ⟨rO₀, hO, -, hYe⟩ := cellsAt_out (he.trans rsum_assoc.symm) hY fun l hl =>
+    rsum_heap_none.mpr ⟨cellsAt_none fun h => hA l hl h,
+      hfr.heap_none fun xs r h => hRA xs r l h hl⟩
+  subst hO
+  refine { hI with rest := ⟨rF, rO₀, hYe.trans rsum_assoc,
+    fun l hl => ⟨(hoff l hl).1, (rsum_heap_none.mp (hoff l hl).2).2⟩,
+    (FHeap.disjoint_union_right.mp hd).2, hfr, how⟩ }
+
 /-- **The invariant after a release RMW of `t` at the state word that moves `t` to `b`** (the
 shared part of the op lemmas): the op's word facts (`wp_wordRmw`, `Word.atomicRmw_fpNew`), the
 new value as the encoding of the new places, the room, the writer and last-reader facts, and the
