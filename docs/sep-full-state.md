@@ -349,7 +349,7 @@ stronger `FAllocSpec`; the arena's `alloc` and `reset` follow, see the table. It
     from its ledger (`act_gauthP`, parent `CI.tag`) and its child's `act`. An allocator that holds
     a child's grants reads their bounds with it (`FAllocInv.act_within`, `Holds.pshareW`), with
     no hypothesis on the child.
-  * General pieces in the library: `Within X P` with the `within` tactic (find a part of a
+  * General pieces in the library: `Within X P`, closed by `fsym_entail` (find a part of a
     separating conjunction; `Holds.bshareW`, `Owns.within` in the arena), `EUpd.ex`/`exAll`/
     `lift`/`withFact`, `EUpd.pweaken` (a grant share's bound), `pshare_iff`, `EUpd.relabel` (a
     region's cells with another size label and a kind of the same normal form: labels carry no

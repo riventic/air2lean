@@ -2503,7 +2503,12 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let (env, l) := bindLet fc env inst.id s!"pure ({f} {fc.tyBits inst.ty} {rv a})"
     (env, some l)
   | .splat a =>
-    let (env, l) := bindLet fc env inst.id s!"pure (Zig.Vec.splat {rv a})"; (env, some l)
+    -- Zig 0.17: `@splat` to an array (the checker admits no sentinel) is the array of `len`
+    -- copies of the operand; to a vector, the lane-wise splat.
+    let term := match fc.tyOfId inst.ty with
+      | .array len _ _ => s!"(Vector.replicate {len} {rv a} : {fc.emitTyOf inst.ty})"
+      | _ => s!"Zig.Vec.splat {rv a}"
+    let (env, l) := bindLet fc env inst.id s!"pure ({term})"; (env, some l)
   | .select pred a b =>
     let (env, l) := bindLet fc env inst.id s!"pure (Zig.Vec.select {rv pred} {rv a} {rv b})"
     (env, some l)

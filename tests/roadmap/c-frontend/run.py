@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
 """C front-end coverage harness: C -> zig translate-c -> Zig -> AIR -> air2lean -> Lean.
 
-  run.py heavy --out DIR [--files NAME ...] [--record FILE] [--no-build]
+  run.py heavy --out DIR [--files NAME ...] [--record FILE] [--no-build] [--defer-lean]
       Run every stage for the corpus (or the named files) and write the coverage record.
-      Needs AIR2LEAN_ZIG_NATIVE (stock Zig 0.16.0), AIR2LEAN_ZIG_AIR (patched 0.16.0) and
+      Needs AIR2LEAN_ZIG_NATIVE (stock Zig 0.17.1), AIR2LEAN_ZIG_AIR (patched 0.17.1) and
       optionally AIR2LEAN_ZIG_NATIVE_0152 (stock 0.15.2, translate-c comparison only).
       Runs compilers and Lean sequentially; wrap the whole call in one scripts/build-guard.py.
+      --defer-lean writes each Check.lean but leaves its elaboration to `run.py lean`.
+  run.py lean --out DIR [--record FILE]
+      Elaborate the deferred Check.lean files under DIR (Lean only) and rewrite the record.
   run.py check [--record FILE]
       Offline record check (CI): the record covers exactly the committed corpus with matching
       source hashes, its summary is recomputed from the per-file stages, and docs/c-frontend.md
       contains the generated tables verbatim. No compiler, translator or Lean run.
-  run.py tables [--record FILE]
-      Print the generated markdown tables (stage results and histograms).
+  run.py tables [--record FILE] [--write]
+      Print the generated markdown tables (stage results and histograms); --write replaces
+      them in docs/c-frontend.md.
 
 Every corpus file defines `unsigned entry(unsigned a, unsigned b)`; it must be deterministic
 and reset any state it uses (the C driver calls each input twice and compares). Expected
@@ -48,10 +52,26 @@ from zig_gen import INPUTS, lean_checks  # noqa: E402  (Q01 inputs and #guard em
 SCHEMA = 1
 TC_TARGET = "x86_64-linux-musl"
 AIR_TARGET = ["-target", "x86_64-linux", "-mcpu=baseline"]
-# std code that translate-c output calls is translated from its AIR like user code. Wider
-# prefixes (`mem.zeroes`, `debug.assert`) also select std's own unrelated instances and fail
-# them, so other std callees stay CALLEE_MISSING (docs/c-frontend.md, gap G6).
+# std code that translate-c output calls is translated from its AIR like user code. The first
+# export asks for these prefixes; `stage_air_export` adds the other std callees by name.
 STD_FILTER = ["zig.c_translation."]
+# The translator runs in the allocator model the project is moving to (docs/allocator-model.md):
+# translated C has no `std.mem.Allocator`, and only this mode admits the recovery of a typed
+# pointer from `void *` (`?*anyopaque`), which it checks to be free of error storage.
+ALLOCATOR_MODEL = ["--allocator-model", "translated"]
+# Named gates (docs/c-frontend.md §Gates). A translate-c gate: its warning on a C function that
+# it demoted to `extern fn`, so the program reaches the translator without that function.
+TC_GATES = {
+    "TC-GOTO": "TODO goto",
+    "TC-BITFIELD": "has bitfield",
+    "TC-VARIADIC-DEF": "unable to translate variadic function",
+    "TC-COMPLEX-SWITCH": "TODO complex switch",
+}
+SETJMP_SYMBOLS = {"setjmp", "_setjmp", "sigsetjmp", "__sigsetjmp", "longjmp", "_longjmp", "siglongjmp"}
+VARIADIC_EXTERN = re.compile(r"extern function '(\w+)' is variadic")
+EXPORT_ROUNDS = 8 # export/closure rounds, as `project.py export`'s default `max_iterations`
+# `Air2Lean/Air/Op.lean` `panicErrorFor?`: the safety-check handlers, modelled by the translator.
+PANIC_PREFIX = "debug.FullPanic((function 'defaultPanic'))."
 STAGES = ["c_native", "translate_c", "zig_native", "air_export", "air2lean", "lean"]
 TIMEOUT = {"c": 300, "tc": 600, "zig": 900, "air": 900, "diag": 600, "emit": 900, "lean": 3600}
 WARNING = re.compile(r"// (?P<loc>[^\n]*?:\d+:\d+): warning: (?P<msg>.*)$", re.M)
@@ -109,6 +129,12 @@ def sha256(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def module_name(stem):
+    """The Zig root module of a translated corpus file. Not the bare stem: a root module named
+    like a std file (`enums`, `linked_list`) shares its name prefix with std's own functions."""
+    return "c_" + stem
+
+
 def corpus_files(corpus=CORPUS):
     return sorted(p.stem for p in Path(corpus).glob("*.c"))
 
@@ -126,12 +152,17 @@ def run(cmd, timeout, cwd=None, env=None):
         return -1, str(e)
 
 
+SCRUBBED = []
+
+
 def scrub(text):
     """Host-independent logs: the repository and home directories become placeholders."""
     for var in ("AIR2LEAN_ZIG_AIR", "AIR2LEAN_ZIG_NATIVE", "AIR2LEAN_ZIG_NATIVE_0152"):
         if os.environ.get(var):  # <prefix>/bin/zig or <prefix>/zig
             prefix = Path(os.environ[var]).parent
             text = text.replace(str(prefix.parent if prefix.name == "bin" else prefix), "$" + var)
+    for path, name in SCRUBBED:  # the run's work directory (`cmd_heavy`)
+        text = text.replace(path, name)
     return text.replace(str(ROOT), "$REPO").replace(str(Path.home()), "$HOME")
 
 
@@ -195,7 +226,7 @@ def c_symbols(zig, src, work):
 
 def stage_translate_c(zig, src, work, out_name, defined):
     zig_file = work / out_name
-    # stdout must be a regular file: Zig 0.16 copies its result to stdout with fcopyfile,
+    # stdout must be a regular file: Zig (0.16, 0.17) copies its result to stdout with fcopyfile,
     # which spins forever when stdout is a pipe on macOS 27.
     try:
         with open(zig_file, "w") as stdout:
@@ -237,40 +268,67 @@ def stage_zig_native(zig, zig_file, expected, work):
     return {"status": status, "log": tail(out)}
 
 
-def stage_air_export(zig_air, zig_file, stem, work):
+def function_refs(doc):
+    """Every function a function's AIR names: direct callees and function values, in the body
+    and in the initial values of its globals (`{"func": <fully qualified name>}`)."""
+    refs, stack = set(), [doc.get("body", []), doc.get("globals", [])]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            if isinstance(node.get("func"), str):
+                refs.add(node["func"])
+            stack.extend(node.values())
+        elif isinstance(node, list):
+            stack.extend(node)
+    return refs
+
+
+def stage_air_export(zig_air, zig_file, module, work):
+    """Export the C module's functions and the closure of what they reference (G6): the
+    exporter's filter is a list of name prefixes, so each round adds the exact names of the
+    referenced functions without AIR and exports again (the fixed point of
+    docs/project-workflow.md §Dependency closure); afterwards every exported function that
+    the C module does not reach (another instance sharing a prefix) is removed. Panic
+    handlers are the translator's own boundary and are never exported."""
     air = work / "air"
-    shutil.rmtree(air, ignore_errors=True)
-    air.mkdir()
-    env = dict(os.environ, ZIG_AIR_JSON_DIR=str(air), ZIG_AIR_JSON_FILTER=",".join([stem + "."] + STD_FILTER))
-    code, out = run([zig_air, "build-obj", "-fno-emit-bin", "-OReleaseSafe", "-fno-error-tracing",
-                     *AIR_TARGET, str(zig_file)], TIMEOUT["air"], cwd=work, env=env)
-    (work / "air_export.log").write_text(out)
-    files = sorted(air.glob("*.json"))
-    incomplete = re.search(r"air2lean: (cannot open|name too long for a file|no JSON for|incomplete JSON for)", out)
-    if code != 0 or incomplete or not files:
-        return {"status": "failed", "files": len(files), "log": tail(out)}, None
-    callees, names = set(), set()
-    for f in files:
-        doc = json.loads(f.read_text())
-        names.add(doc.get("name", f.stem))
-        stack = [doc.get("body", [])]
-        while stack:
-            node = stack.pop()
-            if isinstance(node, dict):
-                callee = node.get("callee")
-                if isinstance(callee, dict) and isinstance(callee.get("func"), str):
-                    callees.add(callee["func"])
-                stack.extend(node.values())
-            elif isinstance(node, list):
-                stack.extend(node)
-    external = sorted(c for c in callees - names)
-    std = sorted(n for n in names if not n.startswith(stem + "."))
-    return {"status": "ok", "functions": len(files), "std_functions": std,
-            "unexported_callees": external}, air
+    prefixes, log = [module + "."] + STD_FILTER, ""
+    for _ in range(EXPORT_ROUNDS):
+        shutil.rmtree(air, ignore_errors=True)
+        air.mkdir()
+        env = dict(os.environ, ZIG_AIR_JSON_DIR=str(air), ZIG_AIR_JSON_FILTER=",".join(prefixes))
+        code, out = run([zig_air, "build-obj", "-fno-emit-bin", "-OReleaseSafe", "-fno-error-tracing",
+                         *AIR_TARGET, str(zig_file)], TIMEOUT["air"], cwd=work, env=env)
+        log += out
+        (work / "air_export.log").write_text(log)
+        files = sorted(air.glob("*.json"))
+        incomplete = re.search(r"air2lean: (cannot open|name too long for a file|no JSON for|incomplete JSON for)", out)
+        if code != 0 or incomplete or not files:
+            return {"status": "failed", "files": len(files), "log": tail(out)}, None
+        docs = {f: json.loads(f.read_text()) for f in files}
+        refs = {doc.get("name", f.stem): function_refs(doc) for f, doc in docs.items()}
+        reached = {n for n in refs if n.startswith(module + ".")}
+        pending = sorted(reached)
+        while pending:
+            for callee in refs.get(pending.pop(), ()):
+                if callee not in reached:
+                    reached.add(callee)
+                    pending.append(callee)
+        missing = sorted(n for n in reached - set(refs) if not n.startswith(PANIC_PREFIX))
+        if all(any(n.startswith(p) for p in prefixes) for n in missing):
+            break  # nothing more to ask for: what is still missing has no AIR under its name
+        prefixes += [n for n in missing if not any(n.startswith(p) for p in prefixes)]
+    for f, doc in docs.items():
+        if doc.get("name", f.stem) not in reached:
+            f.unlink()
+    exported = sorted(n for n in refs if n in reached)
+    return {"status": "ok", "functions": len(exported), "filter": prefixes,
+            "std_functions": [n for n in exported if not n.startswith(module + ".")],
+            "unexported_callees": sorted(reached - set(refs))}, air
 
 
 def stage_air2lean(binary, air):
-    code, out = run([binary, "--diagnostics-json", str(air), "--diagnostic-limit", "256"], TIMEOUT["diag"])
+    code, out = run([binary, "--diagnostics-json", str(air), "--diagnostic-limit", "256", *ALLOCATOR_MODEL],
+                    TIMEOUT["diag"])
     try:
         doc = json.loads(out)
     except ValueError:
@@ -288,10 +346,14 @@ def stage_air2lean(binary, air):
             "diagnostics": items[:40], "diagnostic_count": len(items)}
 
 
-def stage_lean(binary, air, stem, expected, work):
+def stage_lean(binary, air, stem, expected, work, defer=False):
+    """Emit Gen.lean plus the #guard checks (Check.lean) and elaborate it. With `defer`, stop
+    after writing Check.lean (status `deferred`): `run.py lean` elaborates it later, possibly
+    on another host."""
     namespace = "CFront" + "".join(part.capitalize() for part in stem.split("_"))
     gen = work / "Gen.lean"
-    code, out = run([binary, str(air), "-o", str(gen), "--namespace", namespace, "--prefix", stem + "."],
+    code, out = run([binary, *ALLOCATOR_MODEL, str(air), "-o", str(gen), "--namespace", namespace,
+                     "--prefix", module_name(stem) + "."],
                     TIMEOUT["emit"])
     if code != 0 or not gen.exists():
         return {"status": "emit_failed", "log": tail(out)}
@@ -302,16 +364,22 @@ def stage_lean(binary, air, stem, expected, work):
         return {"status": "no_entry", "log": str(e)}
     check = work / "Check.lean"
     check.write_text(text + guards)
+    if defer:
+        return {"status": "deferred", "gen_lines": text.count("\n"), "check_sha256": sha256(check)}
+    return elaborate(check, text.count("\n"))
+
+
+def elaborate(check, gen_lines):
     env = dict(os.environ, LEAN_NUM_THREADS="1")
     code, out = run(["lake", "env", "lean", str(check)], TIMEOUT["lean"], cwd=ROOT, env=env)
-    (work / "lean.log").write_text(out)
+    (check.parent / "lean.log").write_text(out)
     if code == 0:
-        return {"status": "ok", "gen_lines": text.count("\n")}
+        return {"status": "ok", "gen_lines": gen_lines}
     status = "guard_failed" if "did not evaluate to `true`" in out else "elab_failed"
     return {"status": status, "log": tail(out)}
 
 
-def run_file(stem, tools, out_dir, corpus=CORPUS):
+def run_file(stem, tools, out_dir, corpus=CORPUS, defer_lean=False):
     src = Path(corpus) / f"{stem}.c"
     work = out_dir / stem
     shutil.rmtree(work, ignore_errors=True)
@@ -323,7 +391,8 @@ def run_file(stem, tools, out_dir, corpus=CORPUS):
     defined, undefined = c_symbols(tools["native"], src, work)
     entry["c_defined_functions"] = defined
     entry["libc_symbols"] = undefined
-    stages["translate_c"], zig_file = stage_translate_c(tools["native"], src, work, f"{stem}.zig", defined)
+    stages["translate_c"], zig_file = stage_translate_c(tools["native"], src, work,
+                                                        module_name(stem) + ".zig", defined)
     if tools.get("native_0152"):
         entry["translate_c_0.15.2"] = stage_translate_c(tools["native_0152"], src, work,
                                                         f"{stem}_0152.zig", defined)[0]
@@ -331,18 +400,47 @@ def run_file(stem, tools, out_dir, corpus=CORPUS):
         return entry
     if expected is not None:
         stages["zig_native"] = stage_zig_native(tools["native"], zig_file, expected, work)
-    stages["air_export"], air = stage_air_export(tools["air"], zig_file, stem, work)
+    stages["air_export"], air = stage_air_export(tools["air"], zig_file, module_name(stem), work)
     if air is None:
         return entry
     stages["air2lean"] = stage_air2lean(tools["air2lean"], air)
     if (stages["air2lean"]["status"] == "checked" and expected is not None
             and stages.get("zig_native", {}).get("status") == "ok"):
-        stages["lean"] = stage_lean(tools["air2lean"], air, stem, expected, work)
+        stages["lean"] = stage_lean(tools["air2lean"], air, stem, expected, work, defer_lean)
     return entry
 
 
+def gates(entry):
+    """The named gates that reject the file (docs/c-frontend.md §Gates), each with the evidence
+    in the stage records it is derived from."""
+    s = entry["stages"]
+    tc, found = s.get("translate_c", {}), []
+    if tc.get("status") == "demoted":
+        for gate, fragment in TC_GATES.items():
+            hits = [w for w in tc.get("warnings", []) if fragment in w]
+            if hits:
+                found.append({"id": gate, "evidence": hits[0]})
+    symbols = sorted(SETJMP_SYMBOLS & set(tc.get("extern_calls", [])))
+    if symbols:
+        found.append({"id": "LIBC-SETJMP", "evidence": ", ".join(symbols)})
+    variadic = {m.group(1) for d in s.get("air2lean", {}).get("diagnostics", [])
+                for m in VARIADIC_EXTERN.finditer(d["message"])} - set(tc.get("demoted_functions", []))
+    if variadic:
+        found.append({"id": "EXT-VARIADIC", "evidence": ", ".join(sorted(variadic))})
+    native = s.get("zig_native", {}).get("status")
+    if native in ("mismatch", "runtime_error"):
+        found.append({"id": "NATIVE-DIVERGENCE", "evidence": native})
+    return found
+
+
 def outcome(entry):
-    """First failing stage (or 'lean_ok') — the file's single headline outcome."""
+    """`gated` for a file a named gate rejects, else the first failing stage (or 'lean_ok') —
+    the file's single headline outcome."""
+    result = stage_outcome(entry)
+    return "gated" if result != "lean_ok" and entry.get("gates") else result
+
+
+def stage_outcome(entry):
     s = entry["stages"]
     if s.get("c_native", {}).get("status") != "ok":
         return "c_native"
@@ -365,6 +463,10 @@ def summarize(files):
     headline = dict(sorted(collections.Counter(outcome(f) for f in files.values()).items()))
     by_code, by_construct = collections.Counter(), collections.defaultdict(collections.Counter)
     libc, zig_externs = collections.Counter(), collections.Counter()
+    by_gate = collections.defaultdict(list)
+    for stem, f in sorted(files.items()):
+        for gate in f.get("gates", []):
+            by_gate[gate["id"]].append(stem)
     for f in files.values():
         codes = f["stages"].get("air2lean", {}).get("codes", {})
         for code in codes:
@@ -377,6 +479,7 @@ def summarize(files):
         for sym in f["stages"].get("translate_c", {}).get("extern_calls", []):
             zig_externs[sym] += 1
     return {"files": len(files), "stage_status": stage_counts, "headline": headline,
+            "gates": dict(sorted(by_gate.items())),
             "rejection_codes_by_file": dict(sorted(by_code.items())),
             "outcome_by_construct": {k: dict(sorted(v.items())) for k, v in sorted(by_construct.items())},
             "libc_symbols": dict(sorted(libc.items())),
@@ -388,8 +491,9 @@ def summarize(files):
 def tables(record):
     files, summary = record["files"], record["summary"]
     lines = ["<!-- c-frontend tables: generated by tests/roadmap/c-frontend/run.py tables; do not edit -->",
-             "", "| file | C native | translate-c 0.16 | translate-c 0.15.2 | Zig native | AIR export | air2lean | Lean | codes |",
-             "|---|---|---|---|---|---|---|---|---|"]
+             "", f"| file | C native | translate-c {record['tools']['zig_native']} | translate-c 0.15.2 | "
+             "Zig native | AIR export | air2lean | Lean | codes | gates |",
+             "|---|---|---|---|---|---|---|---|---|---|"]
     for stem, f in sorted(files.items()):
         s = f["stages"]
         cell = lambda st: s.get(st, {}).get("status", "–")  # noqa: E731
@@ -398,11 +502,14 @@ def tables(record):
             tc += " (" + ", ".join(s["translate_c"]["demoted_functions"]) + ")"
         old = f.get("translate_c_0.15.2", {}).get("status", "–")
         codes = ", ".join(f"{k}×{v}" for k, v in s.get("air2lean", {}).get("codes", {}).items()) or "–"
+        named = ", ".join(g["id"] for g in f.get("gates", [])) or "–"
         lines.append(f"| {stem} | {cell('c_native')} | {tc} | {old} | {cell('zig_native')} | "
-                     f"{cell('air_export')} | {cell('air2lean')} | {cell('lean')} | {codes} |")
-    lines += ["", "Headline outcome (first failing stage; `lean_ok` = translated and #guard-checked):", "",
-              "| outcome | files |", "|---|---|"]
+                     f"{cell('air_export')} | {cell('air2lean')} | {cell('lean')} | {codes} | {named} |")
+    lines += ["", "Headline outcome (`lean_ok` = translated and #guard-checked; `gated` = rejected by a "
+              "named gate; else the first failing stage):", "", "| outcome | files |", "|---|---|"]
     lines += [f"| {k} | {v} |" for k, v in summary["headline"].items()]
+    lines += ["", "Gates (files each named gate rejects):", "", "| gate | files |", "|---|---|"]
+    lines += [f"| {k} | {', '.join(v)} |" for k, v in summary["gates"].items()]
     lines += ["", "Rejection histogram (files whose diagnostics contain the code):", "",
               "| code | files |", "|---|---|"]
     lines += [f"| {k} | {v} |" for k, v in summary["rejection_codes_by_file"].items()]
@@ -419,7 +526,7 @@ def cmd_heavy(args):
     tools = {"native": os.environ.get("AIR2LEAN_ZIG_NATIVE"), "air": os.environ.get("AIR2LEAN_ZIG_AIR"),
              "native_0152": os.environ.get("AIR2LEAN_ZIG_NATIVE_0152")}
     if not tools["native"] or not tools["air"]:
-        print("set AIR2LEAN_ZIG_NATIVE (stock 0.16.0) and AIR2LEAN_ZIG_AIR (patched 0.16.0)", file=sys.stderr)
+        print("set AIR2LEAN_ZIG_NATIVE (stock 0.17.1) and AIR2LEAN_ZIG_AIR (patched 0.17.1)", file=sys.stderr)
         return 2
     if not args.no_build:
         code, out = run(["lake", "build", "ZigLean", "air2lean"], 10800, cwd=ROOT)
@@ -429,27 +536,51 @@ def cmd_heavy(args):
     tools["air2lean"] = str(ROOT / ".lake" / "build" / "bin" / "air2lean")
     out_dir = Path(args.out).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
+    SCRUBBED.append((str(out_dir), "$WORK"))
     record_path = Path(args.record)
     old = json.loads(record_path.read_text()) if record_path.exists() and args.files else None
     files = dict(old["files"]) if old else {}
     names = corpus_files(args.corpus)
     for stem in args.files or names:
         try:
-            files[stem] = run_file(stem, tools, out_dir, args.corpus)
+            files[stem] = run_file(stem, tools, out_dir, args.corpus, args.defer_lean)
         except Exception as error:  # a harness bug must not lose the other files' results
             files[stem] = {"source_sha256": sha256(Path(args.corpus) / f"{stem}.c"),
                            "constructs": CONSTRUCTS.get(stem, ["unclassified"]),
                            "stages": {}, "harness_error": repr(error)[:500]}
+        files[stem]["gates"] = gates(files[stem])
         print(f"{stem}: {outcome(files[stem])}", flush=True)
     files = {k: files[k] for k in sorted(files) if k in names}
     version = lambda z: run([z, "version"], 60)[1].strip() if z else None  # noqa: E731
     record = {"schema": SCHEMA, "kind": "air2lean-c-frontend-coverage",
               "inputs": INPUTS, "translate_c_target": TC_TARGET, "air_target": " ".join(AIR_TARGET),
-              "std_filter": STD_FILTER,
+              "std_filter": STD_FILTER, "allocator_model": ALLOCATOR_MODEL[1],
               "tools": {"zig_native": version(tools["native"]), "zig_air": version(tools["air"]),
                         "zig_native_0152": version(tools["native_0152"])},
               "files": files}
     record["summary"] = summarize(files)
+    record_path.write_text(json.dumps(record, indent=1, sort_keys=False) + "\n")
+    print(json.dumps(record["summary"]["headline"]))
+    return 0
+
+
+def cmd_lean(args):
+    """Finish a `heavy --defer-lean` run: elaborate every deferred Check.lean under --out (the
+    file the deferred stage hashed) and rewrite the record. Needs only Lean and the built
+    ZigLean library, so it can run on a build host that has no patched compiler."""
+    record_path, out_dir = Path(args.record), Path(args.out).resolve()
+    record = json.loads(record_path.read_text())
+    for stem, f in sorted(record["files"].items()):
+        lean = f["stages"].get("lean", {})
+        if lean.get("status") != "deferred":
+            continue
+        check = out_dir / stem / "Check.lean"
+        if not check.exists() or sha256(check) != lean.get("check_sha256"):
+            f["stages"]["lean"] = {"status": "elab_failed", "log": "deferred Check.lean missing or changed"}
+        else:
+            f["stages"]["lean"] = elaborate(check, lean["gen_lines"])
+        print(f"{stem}: {outcome(f)}", flush=True)
+    record["summary"] = summarize(record["files"])
     record_path.write_text(json.dumps(record, indent=1, sort_keys=False) + "\n")
     print(json.dumps(record["summary"]["headline"]))
     return 0
@@ -492,6 +623,8 @@ def cmd_check(args):
             errors.append(f"{stem}: corpus source changed since the record; rerun run.py heavy --files {stem}")
         if stem not in CONSTRUCTS or f["constructs"] != CONSTRUCTS[stem]:
             errors.append(f"{stem}: construct classification differs from run.py CONSTRUCTS")
+        if f.get("gates") != gates(f):
+            errors.append(f"{stem}: recorded gates differ from the gates its stage records give")
         unknown = set(f["stages"]) - set(STAGES)
         if unknown:
             errors.append(f"{stem}: unknown stages {sorted(unknown)}")
@@ -513,7 +646,17 @@ def cmd_check(args):
 
 
 def cmd_tables(args):
-    sys.stdout.write(tables(json.loads(Path(args.record).read_text())))
+    text = tables(json.loads(Path(args.record).read_text()))
+    if not args.write:
+        sys.stdout.write(text)
+        return 0
+    first, last = text.splitlines()[0], text.splitlines()[-1]
+    doc = DOC.read_text()
+    start, end = doc.find(first), doc.find(last)
+    if start < 0 or end < start:
+        print(f"{DOC.relative_to(ROOT)} has no generated tables block to replace", file=sys.stderr)
+        return 1
+    DOC.write_text(doc[:start] + text + doc[end + len(last) + 1:])
     return 0
 
 
@@ -526,12 +669,17 @@ def main(argv=None):
     heavy.add_argument("--record", default=str(RECORD))
     heavy.add_argument("--no-build", action="store_true")
     heavy.add_argument("--corpus", default=str(CORPUS), help="directory of .c files (default: corpus/)")
-    for name in ("check", "tables"):
+    heavy.add_argument("--defer-lean", action="store_true",
+                       help="write Check.lean but leave its elaboration to `run.py lean`")
+    for name in ("check", "tables", "lean"):
         p = sub.add_parser(name)
         p.add_argument("--record", default=str(RECORD))
     sub.choices["check"].add_argument("--generated", default=str(GENERATED))
+    sub.choices["lean"].add_argument("--out", required=True, help="the heavy run's work directory")
+    sub.choices["tables"].add_argument("--write", action="store_true",
+                                       help="replace the generated tables in docs/c-frontend.md")
     args = parser.parse_args(argv)
-    return {"heavy": cmd_heavy, "check": cmd_check, "tables": cmd_tables}[args.cmd](args)
+    return {"heavy": cmd_heavy, "check": cmd_check, "tables": cmd_tables, "lean": cmd_lean}[args.cmd](args)
 
 
 if __name__ == "__main__":

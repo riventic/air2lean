@@ -254,8 +254,8 @@ theorem chain_owns {CI : Child} {free : Bool} {b : BlockId} {nd : NodeV}
     rcases List.mem_cons.mp h with rfl | hm
     · exact Owns.within (X := up (regionIn (nd.N.add 16) nd.A nd.S nd.K 8 (Enc.encode nx)))
         (Owns.region (a := 8) (by simpa [Ptr.add] using hb) (by rw [encode_nxt_size]; omega))
-        (by within) r hr
-    · exact Owns.within (X := Chain CI free ns nx) (chain_owns hb hm) (by within) r hr
+        (by fsym_entail) r hr
+    · exact Owns.within (X := Chain CI free ns nx) (chain_owns hb hm) (by fsym_entail) r hr
 
 /-! The arena's fee for a grant is `epFee γ e φ` (`FAllocInv.fee`, `docs/sep-full-state.md` §The fee
 of a grant), a nonzero part of the epoch token of its ledger, and the arena keeps the receipt and
@@ -540,7 +540,7 @@ def inv (CI : Child) (γ e : Nat) (ctx : Ptr) : FAllocInv where
   act r h := by
     obtain ⟨w, h⟩ := h
     obtain ⟨-, h⟩ := sep_lift.mp h
-    exact act_gauthP (by within) h (CI.act_within (by within) h)
+    exact act_gauthP (by fsym_entail) h (CI.act_within (by fsym_entail) h)
   fee_add _ _ ha hb := epFee_add γ e ha hb
 
 @[simp] theorem inv_tag (CI : Child) (γ e : Nat) (ctx : Ptr) : (inv CI γ e ctx).tag = some (γ, e) := rfl
@@ -1098,8 +1098,8 @@ theorem resize_grow_upd {r : Bool} {v : FV} {wv : BitVec 64} (hv : v.Facts ctx s
       ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n v.A' S v.K' v.q v.q' v.φ tl r) := by
   subst hw hr
   -- the grant carries the first node's labels (the client gives no bytes that would show them)
-  refine EUpd.withFact (fun m r rF hh hp _ => grant_labels hv hb (by unfold FV.R0; within)
-    (by unfold FV.R0 FV.F; within) hh hp) fun ⟨hA, hK⟩ => ?_
+  refine EUpd.withFact (fun m r rF hh hp _ => grant_labels hv hb (by unfold FV.R0; fsym_entail)
+    (by unfold FV.R0 FV.F; fsym_entail) hh hp) fun ⟨hA, hK⟩ => ?_
   obtain ⟨hw, -, -, hbN, hbp, -, -, -, hp0, hMi⟩ := hv
   have h0 := hnf.off0
   have hpN : s.ptr.block = v.N.block := by rw [hbp, hbN, hb]

@@ -448,13 +448,6 @@
       "module": "ZigLean.VersionGate",
       "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-14 (command gate seed)"
-    },
-    {
-      "tactic": "within",
-      "kind": "syntax",
-      "module": "ZigLean.Sep.Full.Extent",
-      "status": "legacy-to-retire",
-      "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
     }
   ],
   "registries": [
@@ -558,66 +551,5 @@
     }
   ],
   "legacy_users": [],
-  "tactic_uses": [
-    {
-      "path": "Air2Lean/Check.lean",
-      "tactic": "within",
-      "count": 12,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "Proofs/ProvenanceGap/Gen.lean",
-      "tactic": "within",
-      "count": 1,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "Proofs/ProvenanceGap/Proofs.lean",
-      "tactic": "within",
-      "count": 2,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "ZigLean/Conc/TimedBudget.lean",
-      "tactic": "within",
-      "count": 7,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "ZigLean/Sep/Full/Auto.lean",
-      "tactic": "within",
-      "count": 3,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "ZigLean/Sep/Full/Extent.lean",
-      "tactic": "within",
-      "count": 3,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "tests/roadmap/alloc-arena/AllocArena/Core.lean",
-      "tactic": "within",
-      "count": 6,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "tests/roadmap/alloc-arena/AllocArena/Reset.lean",
-      "tactic": "within",
-      "count": 2,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "tests/roadmap/alloc-fba/AllocFba/Full.lean",
-      "tactic": "within",
-      "count": 1,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    },
-    {
-      "path": "tests/roadmap/deadline-cases/Runtime.lean",
-      "tactic": "within",
-      "count": 1,
-      "approved": "coordinator 2026-11-04 (tactic-use gate seed)"
-    }
-  ]
+  "tactic_uses": []
 }

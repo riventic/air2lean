@@ -844,7 +844,10 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
         env:
           PYTHONDONTWRITEBYTECODE: "1"
-        run: python3 tests/roadmap/upgrade-qualification/test_qualify.py
+        run: |
+          set -euo pipefail
+          python3 tests/roadmap/upgrade-qualification/test_qualify.py
+          python3 -B scripts/qualify-upgrade.py check qualification/0.17.1.json
 
       # Fixture exports (docs/coverage.md#fixture-exports): the manifest/lock tool on synthetic
       # fixtures, then every committed lock; runs no compiler.
@@ -2901,7 +2904,7 @@ jobs:
   # aarch64-macos (scripts/ci-matrix.py). Each evidence step binds AIR2LEAN_ZIG_VERSION.
   # WASM is not a declared target (T02/T05).
   macos:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 90
     env:
       PYTHONDONTWRITEBYTECODE: "1"

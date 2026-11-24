@@ -72,7 +72,7 @@ Full jobs (0.16.0 and 0.15.2) publish, check and claim-check their own summary a
 differential gate and append the table to the job summary. They upload
 `tests/diff/out/report.json` as the artifact `diff-summary-<zig>-<os>-<arch>`, even when the
 gate fails, in which case the summary is incomplete and `publish` rejects it. The `macos` job
-(`macos-14`, aarch64) runs the differential test for 0.16.0 and 0.15.2 and uploads each
+(`macos-15`, aarch64) runs the differential test for 0.16.0 and 0.15.2 and uploads each
 version's summary the same way, as `diff-summary-<zig>-macOS-ARM64`. Each is a separate
 version/target row (its selection omits `asm`, which runs only on x86_64). The restricted
 0.14.1 job runs no diff harness and uploads no summary. To publish the cross-version table for
