@@ -6,8 +6,8 @@ Zig. Start with the [README](README.md); [PLAN](PLAN.md) lists the implemented m
 [coverage](docs/coverage.md) the supported domains. Standing rules for every change are in
 [CLAUDE.md](CLAUDE.md).
 
-The register has <!-- register:counts -->**90 requirements: 46 complete, 33 partial, 2 open and 9 research**<!-- /register:counts -->;
-<!-- register:incomplete -->44<!-- /register:incomplete --> are incomplete, even where a useful
+The register has <!-- register:counts -->**90 requirements: 47 complete, 32 partial, 2 open and 9 research**<!-- /register:counts -->;
+<!-- register:incomplete -->43<!-- /register:incomplete --> are incomplete, even where a useful
 bounded feature has shipped. A bounded slice does not change a requirement's classification
 until its full acceptance is established.
 

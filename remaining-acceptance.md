@@ -1,6 +1,6 @@
 # Remaining acceptance — portable companion
 
-All <!-- register:total -->90<!-- /register:total --> IDs, order, classifications and remaining acceptance statements are retained. Counts are <!-- register:counts-plain -->46 complete, 33 partial, 2 open and 9 research<!-- /register:counts-plain -->. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
+All <!-- register:total -->90<!-- /register:total --> IDs, order, classifications and remaining acceptance statements are retained. Counts are <!-- register:counts-plain -->47 complete, 32 partial, 2 open and 9 research<!-- /register:counts-plain -->. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
 
 The sections below are generated from `assurance/register/<ID>.md` (`scripts/register.py generate`); edit those files, not the sections.
 
