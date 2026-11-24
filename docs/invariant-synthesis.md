@@ -34,8 +34,8 @@ Measured on `origin/main` at `d77a7b768`. "Lemmas" counts `theorem`/`lemma` decl
 | Arena `tests/roadmap/alloc-arena/AllocArena/Core.lean` | 2769 | 95 | 68 | 11 tactic + 1 command | invariant `own`/`OV`, ghost updates `free_last_upd` …, hand `CTriple` walks inside macros |
 | Arena `AllocArena/Reset.lean` | 668 | 23 | 8 | 0 | chain split/join, coverage and release lemmas |
 | Arena `ArenaSpec.lean`, `ArenaSpecFixed.lean`, `ArenaSpecMacos.lean` | 328 / 214 / 211 | 13 / 12 / 12 | 7 each | 0 | loop invariants `Inv9`, `Inv19`, `Lists9` by hand; `count_loop` by hand induction |
-| Lists `Proofs/Lists/Linked.lean` | 269 | 15 | 7 | 0 | `revInv`, `sumInv` and their `*_step`/`*_loop` lemmas by hand (measured at S0; since S2d the loop invariants are generated, `Proofs/Lists/OpenInv.lean`, and only `sum_exact`'s `sumInv` stays) |
-| Lists `Proofs/Lists/Alloc.lean` | 377 | 22 | 11 | 0 | `freeInv`, `freePost`, `freeAll_loop` by hand (measured at S0; since 2026-11-24 the loop invariant is generated from `destroy`'s contract, `Proofs/Lists/AllocInv.lean`, and only `freeAll_exact`'s `freeInvExact` stays) |
+| Lists `Proofs/Lists/Linked.lean` | 269 | 15 | 7 | 0 | `revInv`, `sumInv` and their `*_step`/`*_loop` lemmas by hand (measured at S0; since S2d the loop invariants are generated, `Proofs/Lists/OpenInv.lean`, and since 2026-11-24 `sum_exact`'s too: the credit-mode invariant) |
+| Lists `Proofs/Lists/Alloc.lean` | 377 | 22 | 11 | 0 | `freeInv`, `freePost`, `freeAll_loop` by hand (measured at S0; since 2026-11-24 the loop invariant is generated from `destroy`'s contract, `Proofs/Lists/AllocInv.lean`, and `freeAll_exact`'s too: the credit-mode invariant) |
 
 Of the 95 arena lemmas, 11 are declared by the `arena_spec_statements` command. The 12 macros are
 the `legacy-to-retire` entries of `assurance/proof-framework.json` for `AllocArena.Core`.
@@ -512,7 +512,9 @@ P09-E4 is implemented (`docs/proof-automation.md`, §Loops): `@[fsym_inv]` regis
 `B.meas` and the exit post `B.post` of a loop body `B`, and `air2lean-invgen` emits all three
 with the attribute. The exit post was registered because the invariant alone forgets the exit's
 label and test, which a translated caller matches on. Since P09-E2, `fsym` infers the strongest
-post at a loop's exits when no `B.post` is registered.
+post at a loop's exits when no `B.post` is registered. Since 2026-11-24 the registry is keyed by
+the body and the walk's mode: a body also registers `B.credits.inv` and `B.credits.post` for a
+walk that pays its steps with credits ("Implemented: the credit mode" below).
 
 ### Implemented: counted loops (S2, first slice)
 
@@ -773,11 +775,62 @@ meets `CAllocSpec`). `Proofs/Lists/Alloc.lean`'s `freeAll_done` is a bare
 `freeAll_spec` are unchanged statements (the nodes passed are the fees and `freedSeg`,
 `fees_freed_of_done`).
 
-Still by hand: the loops with their exact step counts (`sum_exact`, `freeAll_exact`: `sumInv`,
-`freeInvExact`, `FTotalTriple.loop_exact`/`CTriple.loop_exact`). Their invariants are the generated
-ones with `credits (n + 1) ⋆ spent (N - n)` in place of `plain`, but `@[fsym_inv]` holds one
-invariant per loop body, and the plain-mode one is registered (engine ledger #list-walk-step,
-open question for the maintainer).
+### Implemented: the credit mode (a second invariant per loop body)
+
+A statement with an exact step count (`sum_exact`, `freeAll_exact`) walks its loop while paying
+each body run with a credit. Its invariant is the plain-mode one without `plain`, at the exact
+count of the body runs left. `@[fsym_inv]` held one invariant per loop body, the plain-mode one,
+so these loops stayed hand-written (`sumInv`, `freeInvExact`, hand-applied `loop_exact`).
+
+**Maintainer decision (2026-11-24): a loop body registers a second invariant, selected by mode.**
+Rejected: one mode-generic invariant with a higher-order parameter `K : Nat → FAssn` for the
+mode's resources (the planner cannot assign a higher-order unknown at the loop's entry), and
+keeping the hand-written loops. This is an extension of the `@[fsym_inv]` registry only: no new
+attribute, tactic or judgment, and the updates registry (P09-E5) is not needed.
+
+* **The registry's key** is the loop body and the mode (`LoopMode`: `plain`, `credits`), read off
+  the registered name: `B.inv`, `B.meas`, `B.post` are the plain mode's, `B.credits.inv` and
+  `B.credits.post` the credit mode's (`ZigLean/Sep/Full/AutoAttr.lean`).
+* **Selection** (`docs/proof-automation.md`, §Loops): the walk is in the credit mode at a loop
+  when its state holds `credits n` and neither `plain` nor `unmetered`. `fsym` then applies the
+  counted loop rule (`FTotalTriple.loop_exact`, `CTriple.loop_exact`) with the credit parts; the
+  rule adds `credits (n + 1)` and returns `spent (n + 1)`, so the invariant names neither.
+* **One mode registered.** Plain walks are unchanged. A credit walk at a body with only a
+  plain-mode invariant is an error that names the missing definition. `fsym` never falls back to
+  the plain-mode invariant, which would change what the walk means.
+* **The generator derives the credit parts from the plain ones**, for every family alike
+  (`Cand.credit`, `creditOf` in `Air2Lean/InvGen.lean`). After the Houdini fixpoint and the
+  check of the exit post:
+  1. the credit candidate is the plain one's kept facts and resources without `plain`, with the
+     count `n` as last parameter. The count is the family's measure read exactly: a list walk's
+     ghost measure is the count already (`zs.length = n`, the nodes left), and a counted loop's
+     measure `B.meas` (the iterations left) becomes the fact `n = meas`;
+  2. the generator walks the counted rule's step with it (`Cand.creditCheck`): from the invariant
+     at `n` and one credit, a body run returns one receipt and repeats at exactly `n - 1` or
+     exits at `n = 0` with the exit post;
+  3. a walk with no residual gives `B.credits.inv` and `B.credits.post` (registered), and the
+     record's loop entry gets `"credits": {"count": …}`. Any residual or error gives no credit
+     parts and `"credits": {"none": why}` (a body that takes no step has nothing to count). The
+     plain parts are emitted either way.
+
+  The measure is exact for both families because each body run moves it by exactly one and the
+  exit is at zero: a counted loop's counter moves by 1 towards its exit value, and a list walk
+  passes one node. A family whose measure is only an upper bound would fail step 2 and get no
+  credit parts.
+
+The counted fixture proves two of its functions with their exact step counts too (`down_exact`,
+`upNe_exact` in `tests/roadmap/loop-tactics/counted/Proof.lean`: `n + 1` credits in, `n + 1`
+receipts out, by `fsym` alone), and three seeded mutants of the credit-mode definitions fail
+inside them: a wrong count (`n = 2 * meas`), a dropped count, and a credit-mode invariant that
+keeps `plain`. Because a loop's two invariants repeat their facts, a mutant of `mutants.json`
+may name the definition it changes (`def`); `old` then occurs exactly once in that definition.
+
+Clients (instances, not special cases): `Proofs/Lists/OpenInv.lean` (`sum.loop6`,
+`reverse.loop6`), `Proofs/Lists/AllocInv.lean` (`freeAll.loop5`, a `CM` body with a call),
+`tests/roadmap/loop-tactics/counted` and `nested` (the counted family). `sum_exact`,
+`sum_loop_exact` and `freeAll_exact` are unchanged statements proved by `fsym` over them;
+`sumInv`, `sumPost`, `sum_step`, `freeInvExact`, `freePost`, `freeAll_step_nil_exact`,
+`freeAll_step_cons_exact`, `freeAll_step_exact` and `freeAll_loop_exact` are deleted.
 
 What the slices do not have yet (next slices, sizes S < M < L):
 
@@ -785,7 +838,7 @@ What the slices do not have yet (next slices, sizes S < M < L):
 |---|---|---|
 | S2b | the semantic fingerprints (`docs/stable-generation.md`) of the functions whose loops a record covers, from each target's source-map sidecar (`--source-map-json`, `scripts/semantic-fingerprints.py index`), so a stale record names the loops whose functions changed. (The input hashes and `gen-integrity.py invgen` are implemented, above.) | S |
 | S2c′ | the rest of the counted family: cells at offsets of a parameter (an owned `arr p vs` with item updates, `counted.pairAt`; the engine side, #atom-args-normal-form, is closed), cell updates that depend on the counter (the library sum `tsum`, `counted.tri`, then the outer loop of `nested` with a summary of its generated inner loop, replacing the hand `outerI`, `outerPost`, `outer_step` and `outer_loop`; the engine side, #arith-atom-congruence, is closed) | M |
-| S2d | the list-walk family on the library list family (layer 1, measure the ghost list's length): `revInv`, `sumInv` (`Proofs/Lists/Linked.lean`), `freeInv` (`Proofs/Lists/Alloc.lean`), `loop-tactics/Queue.lean` unchanged on top. Not covered yet (checked 2026-11-06 by running `air2lean-invgen Proofs.Lists.Gen Lists`): `reverse.loop6` and `sum.loop6` give "an unsupported term: i8.isSome", and `freeAll.loop5` gives "an unsupported term: i7.isSome". The loop test is on an optional node pointer (`?*Node`), not on a counter. The engine side is done (ledger #list-walk-step, `docs/proof-automation.md`): `fsym` splits the ghost list at the cursor's test, folds the node back constructor by constructor at a repetition (a node at a segment's end by the caller's update `lseg_snoc_upd`), and applies an `@[fsym_inv]` invariant with a ghost measure (`B.inv … s n`, the nodes left, which the locals do not determine; `loop_ghost_ex`). `Proofs/Lists/Linked.lean`'s `reverse` and `sum` are bare `fsym` walks; their step and loop lemmas are deleted. **Generator done (PR #725)**: `air2lean-invgen` reads `Option.isSome`/`some`/`Zig.optPayload` on an optional-pointer cursor and the loads and stores of a node's fields (`Zig.ptrProject` offsets), recognizes a list walk (a visit, or a reversal that points each node back to a prefix local; accumulators that add the item or a constant), and emits the invariant, with a ghost measure, over the library list family `listSeg` (`ZigLean/Sep/Full/ListSeg.lean`, the S3 list family) at the node layout read off the body (`F.loopN.node`: `next`, the item field if read, the rest as a parameter); the facts are Houdini candidates, the step's walk with the exit post decides. `Proofs/Lists/OpenInv.lean` (target of `scripts/invgen.py`) replaces the hand invariants of `Linked.lean`, whose `node`/`lseg`/`list` are the family's instance; `reverse` is proved for every node with a `next` field. **`freeAll.loop5` done** (2026-11-24, "a list walk with a call" above): the generator reads `CM` bodies and the contract of the call (`--spec`/`--contract`), and states the nodes passed over `listSegRev` at what the contract leaves of a node, so no fold over an unknown `Nat` is needed; `Proofs/Lists/AllocInv.lean` replaces `freeInv` and the hand step and loop lemmas of `Proofs/Lists/Alloc.lean`. Open: the loops with exact step counts (`sum_exact`, `freeAll_exact`), which need a second registered invariant per body | L |
+| S2d | the list-walk family on the library list family (layer 1, measure the ghost list's length): `revInv`, `sumInv` (`Proofs/Lists/Linked.lean`), `freeInv` (`Proofs/Lists/Alloc.lean`), `loop-tactics/Queue.lean` unchanged on top. Not covered yet (checked 2026-11-06 by running `air2lean-invgen Proofs.Lists.Gen Lists`): `reverse.loop6` and `sum.loop6` give "an unsupported term: i8.isSome", and `freeAll.loop5` gives "an unsupported term: i7.isSome". The loop test is on an optional node pointer (`?*Node`), not on a counter. The engine side is done (ledger #list-walk-step, `docs/proof-automation.md`): `fsym` splits the ghost list at the cursor's test, folds the node back constructor by constructor at a repetition (a node at a segment's end by the caller's update `lseg_snoc_upd`), and applies an `@[fsym_inv]` invariant with a ghost measure (`B.inv … s n`, the nodes left, which the locals do not determine; `loop_ghost_ex`). `Proofs/Lists/Linked.lean`'s `reverse` and `sum` are bare `fsym` walks; their step and loop lemmas are deleted. **Generator done (PR #725)**: `air2lean-invgen` reads `Option.isSome`/`some`/`Zig.optPayload` on an optional-pointer cursor and the loads and stores of a node's fields (`Zig.ptrProject` offsets), recognizes a list walk (a visit, or a reversal that points each node back to a prefix local; accumulators that add the item or a constant), and emits the invariant, with a ghost measure, over the library list family `listSeg` (`ZigLean/Sep/Full/ListSeg.lean`, the S3 list family) at the node layout read off the body (`F.loopN.node`: `next`, the item field if read, the rest as a parameter); the facts are Houdini candidates, the step's walk with the exit post decides. `Proofs/Lists/OpenInv.lean` (target of `scripts/invgen.py`) replaces the hand invariants of `Linked.lean`, whose `node`/`lseg`/`list` are the family's instance; `reverse` is proved for every node with a `next` field. **`freeAll.loop5` done** (2026-11-24, "a list walk with a call" above): the generator reads `CM` bodies and the contract of the call (`--spec`/`--contract`), and states the nodes passed over `listSegRev` at what the contract leaves of a node, so no fold over an unknown `Nat` is needed; `Proofs/Lists/AllocInv.lean` replaces `freeInv` and the hand step and loop lemmas of `Proofs/Lists/Alloc.lean`. **Exact step counts done** (2026-11-24, "the credit mode" above): `sum_exact` and `freeAll_exact` walk their loops from generated credit-mode invariants, the second registration of the body | L |
 | S2e | loops over array contents (`Proofs/Slices/Sep.lean`'s `revInv`: quantified item facts from a permutation template) | L |
 
 S3 to S6 follow the staging table above.
