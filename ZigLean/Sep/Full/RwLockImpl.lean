@@ -1796,6 +1796,23 @@ theorem lR_eq {G G' : ThreadId → γ} (hpost : RwPosted W.ph G' ↔ RwPosted W.
   · have hP' : ¬ RwPosted W.ph G' := fun h => hP (hpost.mp h)
     rw [W.cnt_idle G hP, W.cnt_idle G' hP', W.pool_idle G hP, W.pool_idle G' hP']
 
+/-- **The semaphore's mutex's resource at client parts that keep the resource**: the places stay,
+so the count stays (`cnt_congr`), and the pool is the resource exactly while it is posted
+(`pool_posted`, `pool_idle`; `lR_eq` asks for the same client parts). -/
+theorem lR_keep {G G' : ThreadId → γ} (hph : ∀ u, W.ph (G' u) = W.ph (G u))
+    (hR : ∀ r, W.R (W.xs G) r → W.R (W.xs G') r) (r : Res) (h : L.R G r) : L.R G' r := by
+  have hp : RwPosted W.ph G' ↔ RwPosted W.ph G := by simp only [RwPosted, hph]
+  rw [S.R_cnt G] at h
+  rw [S.R_cnt G', cnt_congr hph]
+  refine sep_mono_right (fun r' h' => ?_) h
+  by_cases hq : RwPosted W.ph G
+  · rw [W.pool_posted _ hq] at h'
+    rw [W.pool_posted _ (hp.mpr hq)]
+    exact hR _ h'
+  · rw [W.pool_idle _ hq] at h'
+    rw [W.pool_idle _ fun h => hq (hp.mp h)]
+    exact h'
+
 /-- With no reader counted, no thread is at `rd` (`Inv.ex`: a thread in the code exists). -/
 theorem Inv.noRd {G : ThreadId → γ} {rX : Res} {m : Mem} (hI : W.Inv G rX m)
     (h0 : W.nrd G m = 0) : ∀ u, (W.ph (G u)).isRd = false := noRd_of hI.ex h0
