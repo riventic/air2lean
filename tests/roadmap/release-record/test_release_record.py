@@ -607,7 +607,7 @@ class LocalCiTests(Repo):
 
 
 MACOS_JOB = """  macos:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - name: Checkout
         uses: actions/checkout@0000000000000000000000000000000000000000 # v0
