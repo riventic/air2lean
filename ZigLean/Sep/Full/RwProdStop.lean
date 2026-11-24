@@ -28,7 +28,10 @@ program: the two-lock pair's end (`FLock.Pair.stop`) and the base's end (`FRw.Ba
 The rest `rZ` (the pin of the block, the read-shared bytes, what the rest held before the start)
 stays the rest: the base orders the accesses to the read-shared region only (`ReadShared`), not
 every access to a byte of `rZ`. The program takes a piece `rT` of it with `FOwned.takeOwned`
-once it has `m.OwnsRes t rT`.
+once it has `m.OwnsRes t rT`; the read-shared bytes with `FClient.Holds.takeIo`, when every
+access to one of them is one of the region's (`FClient.Holds.ownsIo`). The pin stays in the
+rest's ghost state: the base keeps it as a fact of the whole rest (`Res.Pins`), not as a summand
+a thread could take.
 -/
 
 namespace Zig
@@ -103,16 +106,82 @@ theorem cellsAt_split {W : Zig.Loc → Prop} [DecidablePred W] {m : Mem} {r : Re
     ∃ rZ : Res, r = rsum (cellsAt W m) rZ ∧ (∀ l, W l → rZ.heap l = none) ∧
       (∀ l, ¬ W l → rZ.heap l = r.heap l) ∧ rZ.know = r.know ∧ rZ.gh = r.gh := by
   obtain ⟨rh, rk, rg⟩ := r
-  refine ⟨⟨fun l => if W l then none else rh l, rk, rg⟩, ?_, fun l hl => if_pos hl,
-    fun l hl => if_neg hl, rfl, rfl⟩
+  refine ⟨⟨fun l => if W l then none else rh l, rk, rg⟩, ?_, fun l hl => ite_eq_left hl,
+    fun l hl => ite_eq_right hl, rfl, rfl⟩
   have hh : rh = (cellsAt W m).heap ∪ (fun l => if W l then none else rh l) := funext fun l => by
     rw [FHeap.union_apply]
     by_cases hl : W l
-    · rw [if_pos hl, Option.or_none]; exact h l hl
-    · rw [if_neg hl, cellsAt_none hl, Option.none_or]
+    · rw [ite_eq_left hl, Option.or_none]; exact h l hl
+    · rw [ite_eq_right hl, cellsAt_none hl, Option.none_or]
   show (⟨rh, rk, rg⟩ : Res) = ⟨(cellsAt W m).heap ∪ (fun l => if W l then none else rh l),
     Know.none.union rk, Ghost.unit.add rg⟩
   rw [Know.none_union, Ghost.unit_add, ← hh]
+
+/-- **A resource that holds the cells `h` is those cells and a rest** apart from them, with the
+resource's knowledge and ghost state. -/
+theorem Res.split_sub {r : Res} {h : FHeap} (hs : ∀ l fc, h l = some fc → r.heap l = some fc) :
+    ∃ rZ : Res, r = rsum ⟨h, Know.none, Ghost.unit⟩ rZ ∧ FHeap.Disjoint h rZ.heap ∧
+      rZ.know = r.know ∧ rZ.gh = r.gh := by
+  classical
+  obtain ⟨rh, rk, rg⟩ := r
+  refine ⟨⟨fun l => if h l = none then rh l else none, rk, rg⟩, ?_, fun l => ?_, rfl, rfl⟩
+  · have hh : rh = h ∪ (fun l => if h l = none then rh l else none) := funext fun l => by
+      show rh l = (h l).or (if h l = none then rh l else none)
+      cases e : h l with
+      | none => simp
+      | some fc => simpa using hs l fc e
+    show (⟨rh, rk, rg⟩ : Res) = ⟨h ∪ (fun l => if h l = none then rh l else none),
+      Know.none.union rk, Ghost.unit.add rg⟩
+    rw [Know.none_union, Ghost.unit_add, ← hh]
+  · by_cases e : h l = none
+    · exact .inl e
+    · exact .inr (ite_eq_right e)
+
+namespace FClient.Holds
+
+variable {X : Type} {E : FClient X} {xs : ThreadId → X} {rX : Res} {m : Mem} {t : ThreadId}
+
+/-- **The last thread owns the read-shared bytes**: thread `t` has a clock above every thread's
+(and above every access to a block that does not exist yet, `hfut`), and every access to a byte
+of the region's bytes is one of the region's (`hcov`; for `FClient.pre` an access that touches a
+byte of the prefix starts in it). A read of the region happened before a thread, any other
+access before every thread (`ReadShared`). -/
+theorem ownsIo (h : E.Holds xs rX m) (ht : t < m.threads.size)
+    (hall : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m.clocks[t]!) = true)
+    (hcov : ∀ r e, E.Io r → e.Touches r.heap.erase → E.Rg e)
+    (hfut : ∀ e ∈ m.footprint, m.blocks.size ≤ e.block →
+      VClock.le e.clock (m.clocks[t]!) = true) :
+    ∃ r, E.Io r ∧ (∀ l fc, r.heap l = some fc → rX.heap l = some fc) ∧
+      m.Owns t r.heap.erase := by
+  obtain ⟨r, hr, hsub⟩ := h.io
+  refine ⟨r, hr, hsub, fun e he htc => ?_⟩
+  rcases htc with htc | hb
+  · rcases h.sh e he (hcov r e hr htc) with ⟨-, u, hu, hle⟩ | h'
+    · exact VClock.le_trans hle (hall u hu)
+    · exact h' t ht
+  · exact hfut e he hb
+
+/-- **The last thread takes the read-shared bytes out of the rest** (`ownsIo`,
+`FOwned.takeOwned`): its part `a` (with `P`) gains `rI`, the cells of a resource with `E.Io`,
+without knowledge or ghost state. The rest `rZ'` keeps the ghost state (a pin of a block stays in
+it, `Res.Pins.of_gh`). -/
+theorem takeIo {own : ThreadId → Res} {a : Res} {P : FAssn} (h : E.Holds xs rX m)
+    (ho : FOwned own rX m) (ht : t < m.threads.size) (hat : own t = a) (hP : P a)
+    (hall : ∀ u < m.threads.size, VClock.le (m.clocks[u]!) (m.clocks[t]!) = true)
+    (hcov : ∀ r e, E.Io r → e.Touches r.heap.erase → E.Rg e) :
+    ∃ rI rZ' : Res, (∃ r, E.Io r ∧ rI.heap = r.heap) ∧ rI.know = Know.none ∧
+      rI.gh = Ghost.unit ∧ (P ⋆ fun r => r = rI) (rsum a rI) ∧
+      FOwned (upd own t (rsum a rI)) rZ' m ∧ rZ'.gh = rX.gh := by
+  obtain ⟨r, hr, hsub, hown⟩ := h.ownsIo ht hall hcov fun e he hb =>
+    (ho.owns t ht).1 e he (.inr hb)
+  obtain ⟨rZ', e, hd, -, hg⟩ := Res.split_sub hsub
+  rw [e] at ho
+  have eo : (⟨r.heap, Know.none, Ghost.unit⟩ : Res).owned = r.heap.erase := Res.owned_eq_erase
+  obtain ⟨hs, ho'⟩ := ho.takeOwned (Q := fun x => x = ⟨r.heap, Know.none, Ghost.unit⟩) ht hat hd
+    (.of_owns (by rw [eo]; exact hown)) (fun l => .inr ((Res.excl_eq_erase).2 l)) hP rfl
+  exact ⟨⟨r.heap, Know.none, Ghost.unit⟩, rZ', ⟨r, hr, rfl⟩, rfl, rfl, hs, ho', hg⟩
+
+end FClient.Holds
 
 namespace FRw
 
@@ -281,7 +350,8 @@ theorem stop {G : ThreadId → Gh Xc} {rXA : Res} {m : Mem} {t : ThreadId}
     (hRoff : ∀ xs r l, R xs r → ((C b o (Xc := Xc)).S.In l ∨ (C b o (Xc := Xc)).Ep.In l) →
       r.heap l = none)
     (hIo : ∀ r l, E.Io r → (W b o R R_plain R_fixed).Lk l → r.heap l = none) :
-    ∃ r rZ, ((fun r => r = (M b o).own G m t) ⋆ ((fun r => r = (M b o).wordR m) ⋆
+    ∃ r rZ, ((fun r => r = (M b o).own G m t) ⋆
+        ((fun r => r = (M b o (Xc := Xc)).wordR m) ⋆
         (up (pts ((p b o).add 8) 8 (0 : BitVec 64)) ⋆ ((fun r => r = (L b o R).wordR m) ⋆
         ((fun r => r = (W b o R R_plain R_fixed).st.cellsR m) ⋆ (R (fun u => (G u).2.x) ⋆
         ((fun r => r = (C b o (Xc := Xc)).S.cellsR m) ⋆
@@ -298,8 +368,8 @@ theorem stop {G : ThreadId → Gh Xc} {rXA : Res} {m : Mem} {t : ThreadId}
     fun r h => by
       have h' : (up (pts ((p b o).add 8) 8 (pv fun u => sx (G u).2)) ⋆
           Pool R fun u => sx (G u).2) r := h
-      rw [show pv (fun u => sx (G u).2) = 0 by unfold pv; exact if_neg hnp,
-        show Pool R (fun u => sx (G u).2) = emp by unfold Pool; exact if_neg hnp] at h'
+      rw [show pv (fun u => sx (G u).2) = 0 by unfold pv; exact ite_eq_right hnp,
+        show Pool R (fun u => sx (G u).2) = emp by unfold Pool; exact ite_eq_right hnp] at h'
       exact sep_emp.mp h'
   have hplain : ∀ {r : Res}, r.gh = Ghost.unit → ∀ l, r.shared l = none :=
     fun h l => (Res.excl_eq_erase (by rw [h]; rfl)).2 l
@@ -311,7 +381,8 @@ theorem stop {G : ThreadId → Gh Xc} {rXA : Res} {m : Mem} {t : ThreadId}
     (fun rL hR l => .inr (hemp rL hR l))
     (fun rB hR l => .inr (hplain (hcnt rB hR).2.2 l))
     (fun rA _ hA _ l => .inl (hemp rA hA l))
-  have hs0' : ((fun r => r = (M b o).own G m t) ⋆ ((fun r => r = (M b o).wordR m) ⋆
+  have hs0' : ((fun r => r = (M b o).own G m t) ⋆
+      ((fun r => r = (M b o (Xc := Xc)).wordR m) ⋆
       (up (pts ((p b o).add 8) 8 (0 : BitVec 64)) ⋆ fun r => r = (L b o R).wordR m))) r0 :=
     sep_mono_right (fun _ h => sep_mono_right (fun _ h2 => sep_mono_left
       (fun r hr => hcnt r hr) h2) (sep_emp.mp (sep_comm h))) hs0
