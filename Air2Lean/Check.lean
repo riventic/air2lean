@@ -691,6 +691,11 @@ def CheckCtx.bitCast (cx : CheckCtx) : Option ZigVersion.BitCast := cx.dialect.m
 context. -/
 def CheckCtx.targetArch (cx : CheckCtx) : String := (cx.dialect.map (·.arch)).getD ""
 
+/-- The type of the `void` constant, which carries no type id (`Val.constTy?`): the `void`
+type of the table. -/
+def voidConstTy? (types : Array Ty) (v : Val) : Option TyId :=
+  if v matches .void then types.findIdx? (· == .void) else none
+
 def CheckCtx.valTy? (cx : CheckCtx) (v : Val) : Option TyId :=
   match v with
   | .inst p => (cx.instTys.find? (·.1 == p)).map (·.2)
@@ -1387,9 +1392,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     -- pointer; `Canon.lean`'s `dropDeadAllocPlaceholders` drops it unless something reads it.
     if (a matches .int _ 0) && singlePtrTy cx.types cx.layouts ty then
       cx.fail line "a read of the address-0 placeholder that the compiler leaves for a comptime-resolved local is outside the subset"
-    -- The `void` constant carries no type id; its type is the `void` type.
-    let sourceTy := cx.valTy? a <|>
-      (if a matches .void then cx.types.findIdx? (· == .void) else none)
+    let sourceTy := cx.valTy? a <|> voidConstTy? cx.types a
     let isError (t : Option Ty) := match t with | some (.errorSet _) => true | _ => false
     if isError (sourceTy.bind (cx.types[·]?)) != isError (cx.types[ty]?) then
       -- `@intFromError`/`@errorFromInt` (L10): the code of the error integer `u<bits>` in the
