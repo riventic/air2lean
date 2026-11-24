@@ -76,6 +76,13 @@ diff <(grep '^page_grow' "$here/expected.txt") "$work/lines/AllocTranslated.Eval
 bash "$here/mutant.sh"
 PYTHONDONTWRITEBYTECODE=1 python3 "$here/test_cli.py" "$translator"
 if [ -n "${AIR2LEAN_NATIVE_ZIG:-}" ]; then
+  source scripts/rosetta.sh
+  if air2lean_under_rosetta; then
+    # Rosetta maps memory itself and aborts on the 2^47-byte growth ("could not find free space"),
+    # where a kernel returns ENOMEM: its result would not be the native one.
+    echo 'alloc-translated: the native run needs a Linux kernel, not Rosetta (docs/alloc-page.md)' >&2
+    exit 1
+  fi
   "$AIR2LEAN_NATIVE_ZIG" build-exe -OReleaseSafe "$here/native.zig" --cache-dir "$work/cache" \
     --global-cache-dir "$work/cache" -femit-bin="$work/native"
   "$work/native" 2> "$work/native.txt"
