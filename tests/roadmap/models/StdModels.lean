@@ -17,7 +17,7 @@ private def allocFns : Array AllocFn :=
   #[.create, .destroy, .alloc, .alignedAlloc, .allocSentinel, .free, .dupe, .remap, .realloc]
 private def threadFns : Array ThreadFn :=
   #[.spawn, .join, .detach, .futexWait, .futexWaitU, .futexWake,
-    .threadFutexWait, .threadFutexWake, .osLock, .osUnlock, .osTryLock,
+    .threadFutexWait, .osLock, .osUnlock, .osTryLock,
     .groupAsync, .groupConcurrent, .groupAwait, .groupCancel,
     .futureAsync, .futureAwait, .futureCancel, .checkCancel]
 
@@ -122,7 +122,6 @@ def main : IO Unit := do
     #["os.linux.futex_3arg", "os.linux.futex_wake", "extern:__ulock_wake"].all fun s =>
       (stdModel? s).bind (·.premise) == some "OSF-02")
     "futex wake rows per version"
-  expectError (checkProgram #[caller f "client" "os.linux.futex_3arg"]) "has an incompatible"
   require ((rejectedThreadFn? "Io.futexWaitTimeout").isSome) "rejection projection"
   require (threadFn? "Thread.detach" == some .detach) "detach projection"
   -- C05: cancelable APIs outside the cancelation model are rejected with their reason; the
@@ -170,6 +169,7 @@ def main : IO Unit := do
   -- An OS row with an environment (`OsFn.env`) checks its signature like any OS row, and every
   -- function that reaches it, and only those, takes the OS environment (`envFunctions`).
   expectError (checkProgram #[caller f "client" "os.linux.clock_gettime"]) "has an incompatible"
+  expectError (checkProgram #[caller f "client" "os.linux.futex_3arg"]) "has an incompatible"
   let clockUser := caller f "clockUser" "os.linux.clock_gettime"
   let clockCaller := caller f "clockCaller" "clockUser"
   let other := caller f "other" "os.linux.sched_yield"

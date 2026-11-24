@@ -1368,12 +1368,12 @@ theorem wp_wakeEp (hC : L.Fits (C.prim L) P U ok) {io : Io} {c : BitVec 32} {q n
       h k hk G₁ m' h1 h2 h3
 
 /-- **The signaller's OS futex wake at the epoch** (`Os.futexWake`, OSF-02; std's translated
-`Thread.Futex.wake`) of up to `w ≥ 1` waiters (or all), at `wk 1 q h` (`signal`'s one wake):
-after a wake of `j` waiters, within the request (`j ≤ c` for `w = some c`), it is out; after a
-spurious `EINTR` (macOS; nobody woken) it is still at `wk` (std wakes again). -/
+`Thread.Futex.wake`) of up to `w ≥ 1` waiters (or all), at `wk nw q h` with `nw ≤ 1` (`signal`'s
+one wake): after a wake of `j` waiters, within the request (`j ≤ c` for `w = some c`), it is out;
+after a spurious `EINTR` (macOS; nobody woken) it is still at `wk` (std wakes again). -/
 theorem wp_osWakeEp (hC : L.Fits (C.prim L) P U ok) {w : Option Nat}
-    (hw : ∀ k, w = some k → 1 ≤ k) {spurious : Bool} {q : Nat} {sh : Array Word.Entry}
-    (hg : C.ph g = .wk 1 q sh) (hi : P.inv (upd G t g) m)
+    (hw : ∀ k, w = some k → 1 ≤ k) {spurious : Bool} {q nw : Nat} {sh : Array Word.Entry}
+    (hnw : nw ≤ 1) (hg : C.ph g = .wk nw q sh) (hi : P.inv (upd G t g) m)
     {Q : Option Nat → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ r G₁ m', m'.current = t →
       ((∃ j, r = some j ∧ ∀ c, w = some c → j ≤ c) ∧ C.S.Prefix sh m' ∧
@@ -1385,7 +1385,7 @@ theorem wp_osWakeEp (hC : L.Fits (C.prim L) P U ok) {w : Option Nat}
     fun k hk G₁ rX m₁ hg₁ hU hwL =>
     ⟨fun cs m' hr hL => by
       obtain ⟨c, hc, hr'⟩ := Os.futexWake_pos (m := { m₁ with current := t }) hw hr
-      obtain ⟨h1, h2, h3⟩ := hC.afterWakeEp hg₁ hg hc hU hwL hr' hL
+      obtain ⟨h1, h2, h3⟩ := hC.afterWakeEp hg₁ hg (Nat.le_trans hnw hc) hU hwL hr' hL
       exact h k hk _ G₁ m' h1 (.inl ⟨⟨_, rfl, fun _ hc => Os.wakeSize_le_some hc _⟩, h2, h3⟩),
      fun hs hic => h k hk none G₁ _ rfl (.inr ⟨hs, rfl, hic⟩)⟩
 

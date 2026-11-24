@@ -1,4 +1,5 @@
 import Proofs.Threadsync.Deadline
+import Proofs.Threadsync.Futex
 import ZigLean.Sep.Full.Event
 import ZigLean.Sep.Full.LockSteps
 import ZigLean.Sep.Full.AutoWP
@@ -53,9 +54,15 @@ theorem futexSet_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
     fun k₂ hk₂ G₂ m₂ o hc₂ hs₂ hcase => ?_)
   rcases hcase with ⟨rfl, hi₂⟩ | ⟨ho, hi₂⟩
   · simp only [show ((1 : BitVec 32) == 1) = true from rfl, ↓reduceIte, StateT.run_bind,
-      threadFutexWakeC_eq, bind_assoc]
-    refine WP.bind (FEvent.wp_wake hE (by decide) (E.ph_set _ _) (by rw [hE.lph]; exact hgo)
-      hi₂ fun k₃ hk₃ G₃ m₃ hc₃ hs₃ hi₃ => ?_)
+      bind_assoc]
+    -- the translated `Thread.Futex.wake`, down to the OS wake (`Futex.wake_wp`)
+    refine WP.bind (WP.callC (Futex.wake_wp hcost (by decide)
+      (hE.wordWordAt (hE.wRest rfl) hi₂) fun v _ =>
+      FEvent.wp_osWake hE (fun k hk => by cases hk; exact Os.Linux.wakeLimit_pos v)
+        (E.ph_set _ _) (by rw [hE.lph]; exact hgo) hi₂ fun k₃ hk₃ r G₃ m₃ hc₃ hr => ?_))
+    rcases hr with ⟨⟨j, rfl, hj⟩, hs₃, hi₃⟩ | ⟨hsp, -⟩
+    case inr => cases hsp
+    refine ⟨j, rfl, Nat.le_trans (hj _ rfl) (Os.Linux.wakeLimit_le v), ?_⟩
     rw [E.set_set] at hi₃
     repeat (first
       | exact ⟨by omega, hc₃, hs₃, hi₃⟩
