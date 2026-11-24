@@ -96,6 +96,15 @@ theorem wp_ioAt {G : ThreadId → Gh} {t : ThreadId} {g : Gh} (hg : g.1.phA ≠ 
     (proto wOf).WP t (ConcM.liftMem (load Io 8 cPtr) : ConcM Tgt Io) Q G m d :=
   wp_io hi hc (by rw [upd_self]; exact hg) h
 
+/-- **A tick** of a thread outside the locks with a plain part (`FLock.Fits.wp_tick_plain` at the
+outer mutex's view). -/
+theorem wp_tickO {G G₀ : ThreadId → Gh} {t : ThreadId} {rp : Res} (hpl : rp.Plain) {y : Ph}
+    {m : Mem} {d : Nat} {Q : Unit → (ThreadId → Gh) → Mem → Nat → Prop}
+    (hi : (proto wOf).inv (upd G t (gO rp y)) m) (hc : m.current = t)
+    (h : ∀ m', m'.current = t → (proto wOf).inv (upd G t (gO rp y)) m' → Q () G₀ m' d) :
+    (proto wOf).WP t (ConcM.liftMem Zig.tick : ConcM Tgt Unit) Q G₀ m d :=
+  (fits (wOf := wOf)).m.wp_tick_plain hi hc (gO_live rp y) hpl h
+
 /-! ## A step on the thread's own part -/
 
 /-- **A step of the writer on its own part** while it holds the write lock (`FCond.wp_liftPart`

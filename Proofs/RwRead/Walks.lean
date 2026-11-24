@@ -53,7 +53,7 @@ theorem loop4_body (rp : Res) (hp : rp.Plain) (t : ThreadId) (s : writerLocals)
       else wrPost rp t r G' m' d') G m d := by
   obtain ⟨hc, k, hi, hk, hle⟩ := h
   unfold writer.loop4
-  fsym [(fits (wOf := wOf)).m.wp_tick_plain,
+  fsym [wp_tickO (wOf := wOf) hp,
     WP.liftMem_pure (projI (wOf := wOf) _ _) rfl,
     wp_ioAt (wOf := wOf) (gO_live _ _), wp_ioAt (wOf := wOf) (gW_live _ _ _),
     wp_lock (wOf := wOf) ioRwLock rfl rfl _ hp,
