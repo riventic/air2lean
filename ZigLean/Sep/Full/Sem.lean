@@ -1202,6 +1202,33 @@ theorem p_off (S : FSem γ X L C) : S.p.off = (L.o : Int) - 8 := by
   simp only [LockWord.ptr, Ptr.add] at this
   omega
 
+/-- **A thread out of the semaphore's code is out of the condition's**: a waiter of the condition
+is at `wt` (`Inv.wt`) and a signaller at `pst` (`FCond.Inv.sx`, `sx_iff`). -/
+theorem Inv.c_out {G : ThreadId → γ} {m : Mem} {u : ThreadId} (hI : S.Inv G m)
+    (hC : C.Inv L G m) (hs : S.ph (G u) = .out) : C.ph (G u) = .out := by
+  cases hwt : (C.ph (G u)).waits
+  · cases hsg : (C.ph (G u)).sig
+    · revert hwt hsg
+      generalize C.ph (G u) = c
+      cases c <;> simp [CPh.waits, CPh.sig]
+    · have := (S.sx_iff _).mp (hC.sx u hsg)
+      rw [hs] at this; cases this
+  · have := hI.wt u hwt
+    rw [hs] at this; cases this
+
+/-- **The condition's epoch and the semaphore's mutex have other futex keys in every memory** (the
+layout: one block, the mutex at `p + 8`, the epoch at `p + 16`; `Mem.wordKey_ne_off`): the `hkne`
+of `FCond.Inv.lstep`. -/
+theorem ep_key_ne (S : FSem γ X L C) (m : Mem) : C.Ep.key m ≠ L.key m := by
+  have b1 : some C.S.b = S.p.block := congrArg Ptr.block S.ptr_c
+  have hb : C.Ep.b = L.b := Option.some.inj (by rw [C.ep_b, b1, S.p_block])
+  have h1 : (C.S.o : Int) = S.p.off + 12 := congrArg Ptr.off S.ptr_c
+  have h2 := S.p_off
+  have h5 := C.ep_o
+  show m.wordKey C.Ep.b C.Ep.o ≠ m.wordKey L.b L.o
+  rw [hb]
+  exact Mem.wordKey_ne_off (by omega) (by omega) (by omega) _ _
+
 /-- **The semaphore's field pointers** (`&sem.mutex`, `&sem.cond`): the mutex's block is live and
 holds them (`LockWord.BlkOk`). -/
 theorem projI {K : FPrim γ} (hF : L.Fits K P U ok) {G : ThreadId → γ} {m : Mem}

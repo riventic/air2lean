@@ -1118,6 +1118,22 @@ theorem Owns.lockStep {K : LockWord} {G G' : ThreadId → γ} {m m' : Mem} {r : 
       · exact hm h'
       · rw [hs.bsize, hb] at h; exact absurd hbl (Nat.not_lt.mpr h)
 
+/-- **The semaphore's count reads only the rwlock's places** (`cnt_posted`, `cnt_idle`). -/
+theorem cnt_congr {G G' : ThreadId → γ} (hph : ∀ u, W.ph (G' u) = W.ph (G u)) :
+    S.cnt G' = S.cnt G := by
+  have hp : RwPosted W.ph G' ↔ RwPosted W.ph G := by simp only [RwPosted, hph]
+  by_cases h : RwPosted W.ph G
+  · rw [W.cnt_posted _ h, W.cnt_posted _ (hp.mpr h)]
+  · rw [W.cnt_idle _ h, W.cnt_idle _ fun h' => h (hp.mp h')]
+
+/-- No holder of the writing bit is out of the outer mutex's code or `away` from it (`Inv.wm`). -/
+theorem Inv.not_isW {G : ThreadId → γ} {rX : Res} {m : Mem} {u : ThreadId} (hI : W.Inv G rX m)
+    (hm : M.ph (G u) = .out ∨ M.ph (G u) = .away) : (W.ph (G u)).isW = false := by
+  cases e : (W.ph (G u)).isW
+  · rfl
+  · have := hI.wm u e
+    rcases hm with e' | e' <;> rw [e'] at this <;> cases this
+
 /-- **The invariant over a step that keeps the state word** (the shared part of `Inv.lockStep` and
 `Inv.stepIn`): the word stays `Ok` (at the threads that have not ended after the step), its
 history and cells stay, the threads, the places and the client parts stay, the writer's hold of
@@ -1208,6 +1224,17 @@ theorem FreeRes.heap_none {G : ThreadId → γ} {m : Mem} {rF : Res} (hf : W.Fre
   · rw [hf.1 hb]; rfl
   by_cases h0 : W.nrd G m = 0
   · exact hR _ _ (hf.2.1 hb h0)
+  obtain ⟨H, f, -, -, -, rfl, -⟩ := hf.2.2 hb h0
+  rfl
+
+/-- **The free resource claims no block's extent** (`FreeRes`: `rnil`, a resource with `R`, which
+has no ghost state, `R_plain`, or a share). -/
+theorem FreeRes.extent {G : ThreadId → γ} {m : Mem} {rF : Res} (hf : W.FreeRes G m rF)
+    (b : BlockId) : rF.gh.extent b = ECell.unit := by
+  by_cases hb : W.Busy G
+  · rw [hf.1 hb]; rfl
+  by_cases h0 : W.nrd G m = 0
+  · rw [(W.R_plain _ _ (hf.2.1 hb h0)).2]; rfl
   obtain ⟨H, f, -, -, -, rfl, -⟩ := hf.2.2 hb h0
   rfl
 
