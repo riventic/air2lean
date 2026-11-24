@@ -30,17 +30,33 @@ or mismatched set.
 
 Eleven more golden examples were added with the same shape (`asm`, `atomics`, `errors`,
 `floatconv`, `floats`, `iogroup`, `options`, `pointers`, `recursion`, `sync`, `threads`),
-for 18 workloads in all. `lists` is not a workload: its committed golden AIR lacks the std
-callees that `examples/lists/filter` adds, so it cannot be translated from the committed
-files alone. `sync` has `reference_gen: null`: `Proofs/Sync/Gen.lean` carries a hand-added
-function (`rwLockSnapshotPair`) that the golden AIR does not produce, so its output is
-pinned only by the recorded SHA-256.
+for 18 workloads on 0.15.2 and 0.16.0. `sync` has `reference_gen: null`: `Proofs/Sync/Gen.lean`
+carries a hand-added function (`rwLockSnapshotPair`) that the golden AIR does not produce, so its
+output is pinned only by the recorded SHA-256.
+
+**Zig 0.17.1, the default version.** The committed 0.17.1 goldens are overlays (only the files
+that differ from the shared folder after normalization), so most do not form a uniform 0.17.1
+set. The 18 `<ex>-0.17.1` workloads therefore translate the `perf-budgets` fixture's exports
+(`tests/roadmap/perf-budgets/exports.json`, `scripts/fixture-exports.py`): every example that
+supports 0.17.1 (`threadsync` is 0.15.2 only) plus `lists`, exported with the patched 0.17.1
+compiler for `x86_64-linux` and the baseline CPU, with the filters `scripts/check.sh` uses
+(`examples/<ex>/filter`, `filter-0.17.1`; a test keeps them equal) and the example's
+`translate.args`. The lock pins the exporter, the examples' sources and every file, so a stale
+export fails `fixture-exports.py check` (preflight). Each translation equals the committed one
+that `scripts/check.sh` compares on Linux (`tests/golden/0.17.1/<ex>/Gen.lean`, else
+`Proofs/<Ex>/Gen.lean`), which is the workload's `reference_gen`. With the std callees in the
+export, `lists` is a workload too, and `lists-0.17.1` carries the `Proofs.Lists` proof modules.
+The other 0.17.1 workloads carry none: the proof phases build the committed `Proofs/<Ex>`
+modules, the same for every Zig version, and the example's older-version workload measures
+them already (a test requires that each example's proofs are measured by exactly one workload).
+The proofs of the four 0.17.1 translations that differ from `Proofs/<Ex>/Gen.lean` (`floatops`,
+`layout`, `lists`, `sync`) are built only in a check tree, which `record` does not measure.
 
 The golden AIR is legacy schema 11 (no target profile), so the translation step does
 not depend on the host. `layout` is the exception: its goldens are per-version schema-12
 exports (the translator rejects integers with padding bits in memory under a profile that
 names no backend; docs/architecture-audit/enc-exactness.md), translated with their own
-profile. The proof phases build the committed `Proofs/<Ex>` modules
+profile, and so are the 0.17.1 exports. The proof phases build the committed `Proofs/<Ex>` modules
 (the reference-host 0.16.0 translation where it differs from the golden AIR). Those
 modules are proof workloads, not outputs of the measured translation.
 

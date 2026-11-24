@@ -15,6 +15,18 @@ keys, damage strings and nest deeply. Textual mutations truncate, cut, insert JS
 punctuation or invalid UTF-8, add a BOM, duplicate keys, inflate exponents and append
 garbage. Some cases add a second corpus file.
 
+`--zig-version V` selects one version's seed set instead of the mixed corpus: the three in-file
+seeds as V's schema-12 export (with the profile of one of V's committed exports, `module`
+fields, a typed callee and the full pointer type), plus V's committed compiler AIR only: the
+goldens and the outputs of every fixture export manifest (`tests/roadmap/*/exports.json`,
+`scripts/fixture-exports.py`) of version V. For 0.17.1 that adds the fixture exports of the
+0.17 tags the goldens lack (`div_ceil`, `error_from_int`, `int_from_error`, `union_from_enum`,
+`array_to_vector`). Retagging then draws from V's tags, and also from the tags that only the other
+supported versions' committed AIR uses (for 0.17.1: 0.16's `bitcast`, `intcast`,
+`struct_field_val`, `bool_and` and others, which a 0.17 file must not contain), and one more
+mutation relabels a `zig_version` (top-level or the profile's) as another supported version.
+Without the flag the corpus, and so every seed's case, is unchanged.
+
 Each case must end predictably:
 
 | Mode | Accepted outcomes |
@@ -32,8 +44,11 @@ failure kind and be strictly smaller, so the result is 1-minimal for these steps
 `--save DIR` writes each shrunk case as `seed-<N>/NN.json` plus `case.json`.
 
 Committed reproducers live in `tests/roadmap/fuzz/regressions/`. Each `case.json` records
-the seed, the original failure kind, the fix and `expected_exit` (written as null by `--save`; set it when committing the fix); `air_fuzz.py replay
-BINARY` requires every case to pass the oracle with that exit status. Seeds 0–9999 found
+the seed, the original failure kind, the fix and `expected_exit` (written as null by `--save`; set it when committing the fix),
+and the seed set's `zig_version` when it has one (the directory is then `seed-<version>-<N>`); `air_fuzz.py replay
+BINARY` requires every case to pass the oracle with that exit status, and every in-file seed
+(legacy and each supported version's) to be accepted, so that mutations start from accepted
+input. Seeds 0–9999 found
 three failure classes, each now rejected by the checker before emission:
 
 | Shrunk reproducers | Original failure | Fix |
@@ -95,7 +110,7 @@ every index is reduced modulo the static length, so no bounds trap is reachable.
 
 ```sh
 tests/roadmap/fuzz/check.sh --light [SEEDS]          # unit tests + generator invariants; no tools
-tests/roadmap/fuzz/check.sh --air .lake/build/bin/air2lean [SEEDS] [SAVE_DIR]
+tests/roadmap/fuzz/check.sh --air .lake/build/bin/air2lean [SEEDS] [SAVE_DIR] [ZIG_VERSION]
 python3 scripts/build-guard.py --cwd "$PWD" --report /tmp/q01.json --log /tmp/q01.log \
   --timeout 3600 --rss-mib 12000 -- \
   env AIR2LEAN_ZIG_NATIVE=zig AIR2LEAN_ZIG_AIR=zig-air-0.16.0/bin/zig \
@@ -113,7 +128,8 @@ over the AST with that stage as the oracle (`check.sh --reproduces`), and the mi
 is written to `OUT_DIR/shrunk-<seed>/`. The heavy mode runs compilers and Lean sequentially; wrap it in one
 build guard.
 
-CI runs `--light` (both profiles) on every job, `--air` with 1000 seeds against the built translator and `--heavy`
+CI runs `--light` (both profiles) on every job, `--air` with 1000 seeds of the mixed corpus and 1000 of
+the default version's seed set (`scripts/compat.py default`) against the built translator, and `--heavy`
 over seeds 0-2 of each profile in the full 0.16.0 job. Larger ranges are a manual job (the same command with the
 patched and stock 0.16.0 compilers). Caps: `--heavy` refuses `COUNT` above
 `AIR2LEAN_FUZZ_HEAVY_MAX` (default 50); shrinking spends at most `AIR2LEAN_FUZZ_SHRINK_BUDGET`
