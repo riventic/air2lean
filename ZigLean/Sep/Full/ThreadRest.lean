@@ -480,6 +480,39 @@ theorem rest_cell (ho : FOwned own rO m) {l : Loc} {fc : FCell} (hl : rO.heap l 
   simp only [FHeap.union_apply, hT, hl, Option.none_or, Option.some_or, Option.map_some] at this
   exact this
 
+/-- **A resource of the rest read as the memory's cells**: `rW` has exactly the bytes `W`, with no
+knowledge and no ghost state, apart from the rest of the rest (a sync object's words at the
+start, after their owner gives them to the rest). -/
+theorem restCells {W : Loc → Prop} [DecidablePred W] {rW Y : Res}
+    (ho : FOwned own (rsum rW Y) m) (hW : ∀ l, rW.heap l ≠ none ↔ W l)
+    (hWk : rW.know = Know.none) (hWg : rW.gh = Ghost.unit)
+    (hd : FHeap.Disjoint rW.heap Y.heap) : FOwned own (rsum (cellsAt W m) Y) m := by
+  have hoff : ∀ l, ¬ W l → rW.heap l = none := fun l hl => by
+    cases e : rW.heap l with
+    | none => rfl
+    | some _ => exact absurd ((hW l).mp (by rw [e]; simp)) hl
+  refine ho.congrRestU (fun l => ?_) (fun l fc' hl => ?_) ?_ ?_
+  · by_cases hl : W l
+    · have hWl := (hW l).mpr hl
+      have hYl := (hd l).resolve_left hWl
+      obtain ⟨fc, hfc⟩ := Option.ne_none_iff_exists'.mp hWl
+      have := ho.rest_cell (l := l) (fc := fc) (by simp [rsum, FHeap.union_apply, hfc])
+      simp only [rsum, FHeap.union_apply, cellsAt_of hl, hYl, hfc, Option.or_none]
+      cases e : m.heap l with
+      | none => rw [e] at this; cases this
+      | some c => rw [e] at this; simpa [Cell.norm] using this
+    · simp [rsum, FHeap.union_apply, cellsAt_none hl, hoff l hl]
+  · by_cases hl' : W l
+    · have hYl := (hd l).resolve_left ((hW l).mpr hl')
+      simp only [rsum, FHeap.union_apply, cellsAt_of hl', hYl, Option.or_none,
+        Option.map_eq_some_iff] at hl
+      obtain ⟨c, -, rfl⟩ := hl
+      exact .inl rfl
+    · simp only [rsum, FHeap.union_apply, cellsAt_none hl', Option.none_or] at hl
+      exact .inr ⟨fc', by simp [rsum, FHeap.union_apply, hoff l hl', hl], rfl⟩
+  · simp [rsum, cellsAt, hWk, Know.none_union]
+  · simp [rsum, cellsAt, hWg]
+
 end FOwned
 
 end Full
