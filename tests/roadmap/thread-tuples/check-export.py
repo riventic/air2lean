@@ -34,7 +34,7 @@ def check_export(directory, adapter=False):
         raise ValueError("AIR export has mixed profiles")
     version = profiles[0]["zig_version"]
     if adapter:
-        if version != "0.16.0":
+        if version not in ("0.17.1", "0.16.0"):
             raise ValueError("adapter AIR has a wrong version")
         expected = {"thread_adapter_contract." + name for name in
                     ("mutableCapture", "strongCapture", "weakCapture", "sliceWorker")}

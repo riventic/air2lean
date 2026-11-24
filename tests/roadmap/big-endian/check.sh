@@ -1,97 +1,128 @@
 #!/usr/bin/env bash
-# T03 byte-order fixtures. One source (`big_endian.zig`) exported for s390x-linux (big endian)
-# and x86_64-linux (little endian); the two AIR exports differ only in their profile.
+# T03 byte-order fixtures. One source (`big_endian.zig`) exported by each Zig version of
+# exports.json (0.17.1, 0.16.0) for s390x-linux and mips64-linux (big endian) and x86_64-linux
+# (little endian); the exports of one version differ only in their profile.
 #
-#   check.sh [--check]       re-translate the retained AIR, compare with the retained Gen.lean
-#                            files byte for byte, build them, check the proofs, compare the
-#                            model's lines with the retained native observations, and check the
-#                            big-endian rejections (test_cli.py)
-#   check.sh --native        also build native.zig with a stock Zig 0.16.0 (AIR2LEAN_ZIG_NATIVE)
-#                            for s390x-linux-musl and x86_64-linux-musl, run both, and compare
-#                            their output with the model and the retained observations
+#   check.sh [--check]        per version: re-translate the retained AIR, compare with the
+#                             retained BigEndian/<V>/<T>/Gen.lean files byte for byte, check that
+#                             every Diff module is the written one (0.17.1 x86_64-linux) renamed,
+#                             build the library BigEndian (tests/roadmap/lakefile.toml: the
+#                             translations, their Diff modules and BigEndian.Proofs), compare the
+#                             model's lines with the retained native observations
+#                             (observed/<version>-<arch>-linux-musl-ReleaseSafe.txt), and check
+#                             the big-endian rejections of every version (test_cli.py)
+#   check.sh --native VERSION build native.zig with a stock Zig VERSION (AIR2LEAN_ZIG_NATIVE) for
+#                             s390x-linux-musl, mips64-linux-muslabi64 and x86_64-linux-musl, run
+#                             each, and compare its output with the retained observation (which
+#                             the default run compares with the model)
 #
 # The AIR is declared in exports.json and pinned by exports.lock.json (the default run checks the
 # lock; scripts/fixture-exports.py verify|export big-endian re-exports it).
-# Runners for --native: AIR2LEAN_S390X_RUN / AIR2LEAN_X86_64_RUN name a command prefix that runs
-# a static Linux binary (`qemu-s390x-static`, or empty for the host); `docker` (the default for
-# a target that is not the host) runs it in `alpine:3` with `--platform linux/<arch>`.
-# Needs `lake build ZigLean Air2Lean air2lean ZigLean.EndianLemmas`. All tool invocations must
-# run in the repository's serialized build queue.
+# Runners for --native: AIR2LEAN_S390X_RUN / AIR2LEAN_MIPS64_RUN / AIR2LEAN_X86_64_RUN name a
+# command prefix that runs a static Linux binary (`qemu-s390x-static`, or empty for the host);
+# `docker` (the default for a target that is not the host) runs it in `alpine:3` with
+# `--platform linux/<arch>`.
+# Needs `lake build ZigLean Air2Lean air2lean ZigLean.EndianLemmas`; Lake builds the library
+# (scripts/fixtures.py): run it under scripts/build-guard.py.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
 case_dir=tests/roadmap/big-endian
+versions=(0.17.1 0.16.0)
 pairs=(S390x:s390x-linux:s390x Mips64:mips64-linux:mips64 X64:x86_64-linux:x86_64)
-mode=${1:---check}
-case "$mode" in
-  --check|--native) [ "$#" -le 1 ] || { echo 'usage: check.sh [--check|--native]' >&2; exit 2; } ;;
-  *) echo 'usage: check.sh [--check|--native]' >&2; exit 2 ;;
+case "${1:---check}" in
+  --native)
+    [ "$#" -eq 2 ] || { echo 'usage: check.sh --native VERSION' >&2; exit 2; }
+    version=$2
+    [ -f "$case_dir/observed/$version-x86_64-linux-musl-ReleaseSafe.txt" ] ||
+      { echo "no retained observation for Zig $version" >&2; exit 2; }
+    : "${AIR2LEAN_ZIG_NATIVE:?set a stock host Zig of that version}"
+    [ "$("$AIR2LEAN_ZIG_NATIVE" version)" = "$version" ] ||
+      { echo "AIR2LEAN_ZIG_NATIVE is not Zig $version" >&2; exit 1; }
+    work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-big-endian.XXXXXX")
+    trap 'rm -rf "$work"' EXIT
+    host_arch=$(uname -m)
+    [ "$host_arch" = arm64 ] && host_arch=aarch64
+    for pair in "${pairs[@]}"; do
+      arch=$(cut -d: -f3 <<<"$pair")
+      bin="$work/native-$arch"
+      abi=musl
+      [ "$arch" = mips64 ] && abi=muslabi64
+      "$AIR2LEAN_ZIG_NATIVE" build-exe -OReleaseSafe -target "$arch-linux-$abi" \
+        -femit-bin="$bin" "$case_dir/native.zig"
+      # mips64 runs through the Docker VM's qemu-mips64 binfmt handler (concurrency.sh).
+      [ "$arch" = mips64 ] && python3 "$case_dir/elf-abiversion.py" "$bin"
+      var=AIR2LEAN_$(tr a-z A-Z <<<"$arch")_RUN
+      if [ -n "${!var+set}" ]; then runner=${!var}
+      elif [ "$host_arch" = "$arch" ] && [ "$(uname -s)" = Linux ]; then runner=
+      else runner=docker; fi
+      if [ "$runner" = docker ]; then
+        docker run --rm --platform "linux/$([ "$arch" = s390x ] && echo s390x || echo amd64)" \
+          -v "$work:/w:ro" alpine:3 sh -c "/w/native-$arch 2>&1" > "$work/native-$arch.txt"
+      else
+        # shellcheck disable=SC2086
+        $runner "$bin" 2> "$work/native-$arch.txt"
+      fi
+      diff -u "$case_dir/observed/$version-$arch-linux-musl-ReleaseSafe.txt" "$work/native-$arch.txt"
+      echo "native $arch-linux-$abi ($version) matches the retained observation ($(wc -l < "$work/native-$arch.txt" | tr -d " ") lines)"
+    done
+    exit ;;
+  --check) [ "$#" -le 1 ] || { echo 'usage: check.sh [--check|--native VERSION]' >&2; exit 2; } ;;
+  *) echo 'usage: check.sh [--check|--native VERSION]' >&2; exit 2 ;;
 esac
 python3 -B scripts/fixture-exports.py check big-endian
-python3 -B scripts/lean-deps.py --build tests/roadmap/big-endian
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first (lake build air2lean)' >&2; exit 1; }
-lean_cmd=(lake env lean)
-if [ -n "${AIR2LEAN_LEAN:-}" ]; then lean_cmd=("$AIR2LEAN_LEAN"); fi
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-big-endian.XXXXXX")
 trap 'rm -rf "$work"' EXIT
-export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
-for pair in "${pairs[@]}"; do
-  ns=$(cut -d: -f1 <<<"$pair")
-  t=$(cut -d: -f2 <<<"$pair")
-  mkdir -p "$work/BigEndian/$ns"
-  "$translator" "$case_dir/air/0.16.0/$t" -o "$work/BigEndian/$ns/Gen.lean" \
-    --namespace "BigEndian.$ns" --prefix big_endian.
-  cmp "$work/BigEndian/$ns/Gen.lean" "$case_dir/BigEndian/$ns/Gen.lean"
-  "${lean_cmd[@]}" -R "$work" -o "$work/BigEndian/$ns/Gen.olean" "$work/BigEndian/$ns/Gen.lean"
-done
-# The two big-endian translations differ only in the profile header and the namespace.
-body_diff=$(diff "$case_dir/BigEndian/S390x/Gen.lean" "$case_dir/BigEndian/Mips64/Gen.lean" \
-  | grep '^[<>]' | grep -v -e 'air2lean-profile' -e 'BigEndian\.\(S390x\|Mips64\)$' || true)
-[ -z "$body_diff" ] || { echo "the s390x and mips64 translations differ: $body_diff" >&2; exit 1; }
-# The big- and little-endian translations differ only in the profile header, the namespace, the
-# opened big-endian instances and the byte order of the two bit-pointer accesses.
-diff "$case_dir/BigEndian/S390x/Gen.lean" "$case_dir/BigEndian/X64/Gen.lean" \
-  | grep '^[<>]' | sed -E 's/^([<>]) .*air2lean-profile.*/\1 PROFILE/' > "$work/gen.diff" || true
-cmp "$work/gen.diff" "$case_dir/expected-gen.diff"
-"${lean_cmd[@]}" -R "$case_dir" "$case_dir/BigEndian/Proofs.lean"
-for pair in "${pairs[@]}"; do
-  arch=$(cut -d: -f3 <<<"$pair")
-  "${lean_cmd[@]}" --run "$case_dir/Diff.lean" "$arch" > "$work/model-$arch.txt"
-  diff -u "$case_dir/observed/$arch-linux-musl-ReleaseSafe.txt" "$work/model-$arch.txt"
-done
-# The fixtures observe byte order: the two profiles disagree on most lines.
-differ=$(paste -d'\n' "$work/model-s390x.txt" "$work/model-x86_64.txt" | paste - - \
-  | awk -F'\t' '$1 != $2' | wc -l)
-[ "$differ" -ge 60 ] || { echo "only $differ lines depend on the byte order" >&2; exit 1; }
-python3 "$case_dir/test_cli.py" "$translator"
-if [ "$mode" = --native ]; then
-  : "${AIR2LEAN_ZIG_NATIVE:?set a stock host Zig 0.16.0}"
-  host_arch=$(uname -m)
-  [ "$host_arch" = arm64 ] && host_arch=aarch64
+# A retained translation with its version as a namespace component: `BigEndian.<V>.` dropped.
+unversioned() { sed -E 's/BigEndian\.V[0-9_]+\./BigEndian./' "$1"; }
+mains=()
+for v in "${versions[@]}"; do
+  V="V${v//./_}"
+  gen="$case_dir/BigEndian/$V"
   for pair in "${pairs[@]}"; do
-    arch=$(cut -d: -f3 <<<"$pair")
-    bin="$work/native-$arch"
-    abi=musl
-    [ "$arch" = mips64 ] && abi=muslabi64
-    "$AIR2LEAN_ZIG_NATIVE" build-exe -OReleaseSafe -target "$arch-linux-$abi" \
-      -femit-bin="$bin" "$case_dir/native.zig"
-    # mips64 runs through the Docker VM's qemu-mips64 binfmt handler (concurrency.sh).
-    [ "$arch" = mips64 ] && python3 "$case_dir/elf-abiversion.py" "$bin"
-    var=AIR2LEAN_$(tr a-z A-Z <<<"$arch")_RUN
-    if [ -n "${!var+set}" ]; then runner=${!var}
-    elif [ "$host_arch" = "$arch" ] && [ "$(uname -s)" = Linux ]; then runner=
-    else runner=docker; fi
-    if [ "$runner" = docker ]; then
-      docker run --rm --platform "linux/$([ "$arch" = s390x ] && echo s390x || echo amd64)" \
-        -v "$work:/w:ro" alpine:3 sh -c "/w/native-$arch 2>&1" > "$work/native-$arch.txt"
-    else
-      # shellcheck disable=SC2086
-      $runner "$bin" 2> "$work/native-$arch.txt"
-    fi
-    diff -u "$work/model-$arch.txt" "$work/native-$arch.txt"
-    cmp "$work/native-$arch.txt" "$case_dir/observed/$arch-linux-musl-ReleaseSafe.txt"
-    echo "native $arch-linux-musl matches the model ($(wc -l < "$work/native-$arch.txt" | tr -d " ") lines)"
+    ns=$(cut -d: -f1 <<<"$pair")
+    t=$(cut -d: -f2 <<<"$pair")
+    # The retained translation is the fresh one, byte for byte (Lake builds the retained file).
+    "$translator" "$case_dir/air/$v/$t" -o "$work/$V-$ns.lean" \
+      --namespace "BigEndian.$V.$ns" --prefix big_endian.
+    cmp "$work/$V-$ns.lean" "$gen/$ns/Gen.lean"
+    # One model for every version and target: the written one, the version and target renamed.
+    [ "$V/$ns" = V0_17_1/X64 ] || python3 -B scripts/fixtures.py instance \
+      "$case_dir/BigEndian/V0_17_1/X64/Diff.lean" --subst "V0_17_1=$V" --subst "X64=$ns"
+    mains+=("BigEndian.$V.$ns.Diff:BigEndian.$V.$ns.Diff.main")
   done
-fi
+  # The two big-endian translations differ only in the profile header and the namespace.
+  body_diff=$(diff "$gen/S390x/Gen.lean" "$gen/Mips64/Gen.lean" | grep '^[<>]' \
+    | grep -v -e 'air2lean-profile' -e "BigEndian\.$V\.\(S390x\|Mips64\)$" || true)
+  [ -z "$body_diff" ] || { echo "$v: the s390x and mips64 translations differ: $body_diff" >&2; exit 1; }
+  # The big- and little-endian translations differ only in the profile header, the namespace, the
+  # opened big-endian instances and the byte order of the two bit-pointer accesses.
+  diff <(unversioned "$gen/S390x/Gen.lean") <(unversioned "$gen/X64/Gen.lean") \
+    | grep '^[<>]' | sed -E 's/^([<>]) .*air2lean-profile.*/\1 PROFILE/' > "$work/gen-$v.diff" || true
+  cmp "$work/gen-$v.diff" "$case_dir/expected-gen.diff"
+done
+python3 -B scripts/fixtures.py build BigEndian
+python3 -B scripts/fixtures.py run "$work/out" "${mains[@]}"
+for v in "${versions[@]}"; do
+  V="V${v//./_}"
+  for pair in "${pairs[@]}"; do
+    ns=$(cut -d: -f1 <<<"$pair")
+    arch=$(cut -d: -f3 <<<"$pair")
+    lines="$work/out/BigEndian.$V.$ns.Diff.main.txt"
+    diff -u "$case_dir/observed/$v-$arch-linux-musl-ReleaseSafe.txt" "$lines"
+    echo "$v $arch: the model's $(wc -l < "$lines" | tr -d ' ') lines match the native observation"
+  done
+  # The fixtures observe byte order: the two profiles disagree on most lines. Up to 0.16 every
+  # `@bitCast` to or from bytes does too; from 0.17 on it is logical, and only the memory views
+  # do (docs/bitcast-semantics.md).
+  floor=50
+  [ "$v" = 0.16.0 ] && floor=60
+  differ=$(paste -d'\n' "$case_dir/observed/$v-s390x-linux-musl-ReleaseSafe.txt" \
+    "$case_dir/observed/$v-x86_64-linux-musl-ReleaseSafe.txt" | paste - - | awk -F'\t' '$1 != $2' | wc -l)
+  [ "$differ" -ge "$floor" ] || { echo "$v: only $differ lines depend on the byte order" >&2; exit 1; }
+  cmp "$case_dir/observed/$v-s390x-linux-musl-ReleaseSafe.txt" "$case_dir/observed/$v-mips64-linux-musl-ReleaseSafe.txt"
+done
+python3 "$case_dir/test_cli.py" "$translator"
 echo 'big-endian translation, proof, observation and rejection gates passed'
