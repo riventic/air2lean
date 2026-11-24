@@ -534,8 +534,8 @@ partial def reprBitSize (types : Array Ty) (layouts : Array Layout) (id : TyId)
     let eb ← match types[child]? with
       | some (.struct _ "auto" fields) | some (.union _ _ (some _) fields) =>
         if !autoItems then
-          throw s!"an array of `auto` structs or tagged unions (type {id}; no guaranteed \
-            in-memory layout: Sema rejects its `@bitCast` from Zig 0.16.0)"
+          throw s!"an array of `auto` structs or tagged unions (type {id}; items without a \
+            guaranteed in-memory layout; Sema rejects its `@bitCast` from Zig 0.16.0)"
         else do
           for (_, t) in fields do let _ ← recur t
           (8 * ·) <$> sizeOf child
