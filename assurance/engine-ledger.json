@@ -294,9 +294,9 @@
   {
    "id": "16",
    "title": "Keep path conditions",
-   "status": "open",
+   "status": "closed",
    "requester": "one-logic-vc",
-   "progress": "open, behaviour unchanged (checked 2026-11-24): `FTotalTriple emp (if b then (if n = 0 then throw .panic else pure ()) else pure ()) (fun _ => emp)` leaves, after `fsym`, `case inl.inl ⊢ FLogic.total.T emp (throw Error.panic) fun x => emp` with an empty context: `b` and `n` are substituted and their equations dropped, so the residual names its branch only by the case tag. The origin of a residual goal is in the report instead (`set_option fsym.report true`, docs/vcs.md: `reachability`, `panic_not_refuted`, with the command). A presentation wish of the retired one-logic-vc lane with no proof waiting on it; an engine change (keep the substituted equations as hypotheses). Candidate to close as not planned: coordinator's decision.",
+   "progress": "Closed as not planned (maintainer decision 2026-11-24, D7): presentation only, no proof waits on it. Behaviour unchanged (checked 2026-11-24): `FTotalTriple emp (if b then (if n = 0 then throw .panic else pure ()) else pure ()) (fun _ => emp)` leaves, after `fsym`, `case inl.inl ⊢ FLogic.total.T emp (throw Error.panic) fun x => emp` with an empty context: `b` and `n` are substituted and their equations dropped, so the residual names its branch only by the case tag. The origin of a residual goal is in the report instead (`set_option fsym.report true`, docs/vcs.md: `reachability`, `panic_not_refuted`, with the command). A presentation wish of the retired one-logic-vc lane with no proof waiting on it; an engine change (keep the substituted equations as hypotheses). Candidate to close as not planned: coordinator's decision.",
    "request": "(nice) Keep path conditions: an `if b` on a `Bool` variable is split and `destruct` substitutes `b`, so a VC under it (reachable panic `⊢ False`) shows no `b = true`",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -304,9 +304,9 @@
   {
    "id": "17",
    "title": "An undecided side condition φ is split by byCases",
-   "status": "open",
+   "status": "closed",
    "requester": "one-logic-vc",
-   "progress": "open, behaviour unchanged (checked 2026-11-24): a checked `add` of a loaded word and an argument with no bound leaves `case h` with `hc : ¬e.toNat + n.toNat < 2 ^ 64 ⊢ e.toNat + n.toNat < 2 ^ 64` (`walk`'s split on the undecided side condition, `g.byCases φ` in ZigLean/Sep/Full/Auto.lean, then the negative branch's rule premise). The obligation is the right one, with a redundant hypothesis; the positive branch is walked once, so there is one walk. A presentation wish of the retired one-logic-vc lane with no proof waiting on it; an engine change (clear `hc` from the residual, or a mode without the split). Candidate to close as not planned: coordinator's decision.",
+   "progress": "Closed as not planned (maintainer decision 2026-11-24, D7): presentation only, no proof waits on it. Behaviour unchanged (checked 2026-11-24): a checked `add` of a loaded word and an argument with no bound leaves `case h` with `hc : ¬e.toNat + n.toNat < 2 ^ 64 ⊢ e.toNat + n.toNat < 2 ^ 64` (`walk`'s split on the undecided side condition, `g.byCases φ` in ZigLean/Sep/Full/Auto.lean, then the negative branch's rule premise). The obligation is the right one, with a redundant hypothesis; the positive branch is walked once, so there is one walk. A presentation wish of the retired one-logic-vc lane with no proof waiting on it; an engine change (clear `hc` from the residual, or a mode without the split). Candidate to close as not planned: coordinator's decision.",
    "request": "(nice) An undecided side condition `φ` is split by `byCases`; the negative case leaves `hc : ¬φ ⊢ φ` (equivalent to `⊢ φ`). A mode that leaves `φ` unsplit gives one obligation and one walk",
    "workaround_sites": [],
    "deletion_plan": ""
