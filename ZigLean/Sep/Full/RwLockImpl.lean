@@ -909,6 +909,19 @@ theorem writing_threads {G : ThreadId → γ} {m m' : Mem} (h : m'.threads = m.t
 theorem fsum_threads {G : ThreadId → γ} {m m' : Mem} (h : m'.threads = m.threads) :
     W.fsum G m' = W.fsum G m := by unfold fsum; rw [h]
 
+/-- At most as many readers as threads (`RwLockImpl.lockShared_wp`'s room, for a program with a
+fixed set of threads). -/
+theorem nrd_le (G : ThreadId → γ) (m : Mem) : W.nrd G m ≤ m.threads.size :=
+  Nat.le_trans (tsum_le fun u _ => by
+    show (if _ then 1 else 0) ≤ 1
+    split <;> omega) (Nat.le_of_eq (tsum_one _))
+
+/-- At most as many pending writers as threads (`RwLockImpl.lock_wp`'s room). -/
+theorem nwi_le (G : ThreadId → γ) (m : Mem) : W.nwi G m ≤ m.threads.size :=
+  Nat.le_trans (tsum_le fun u _ => by
+    show (if _ then 1 else 0) ≤ 1
+    split <;> omega) (Nat.le_of_eq (tsum_one _))
+
 /-- A move of `t` to a place that agrees on `p` with its old one keeps `p` at every thread. -/
 theorem ph_mv_iff {G : ThreadId → γ} {t u : ThreadId} {b : RwPh} (p : RwPh → Prop)
     (hb : p b ↔ p (W.ph (G t))) : p (W.ph (upd G t (W.set (G t) b) u)) ↔ p (W.ph (G u)) := by

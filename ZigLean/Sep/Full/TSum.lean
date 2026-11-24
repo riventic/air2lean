@@ -42,6 +42,12 @@ def tsum (N : Nat) (g : Nat → Nat) : Nat := ((List.range N).map g).sum
 theorem tsum_succ (N : Nat) (g : Nat → Nat) : tsum (N + 1) g = tsum N g + g N := by
   simp [tsum, List.range_succ, List.sum_append]
 
+/-- A sum of ones over the threads is their number. -/
+theorem tsum_one (N : Nat) : tsum N (fun _ => 1) = N := by
+  induction N with
+  | zero => rfl
+  | succ n ih => rw [tsum_succ, ih]
+
 open Lean Meta Simp in
 /-- `tsum (n + 1) g` is `tsum n g + g n` (`tsum_succ`) where the bound is written `n + 1`; a
 numeral bound `N` (which `tsum_succ` as a simp lemma also matches) stays: it would unfold to `N`

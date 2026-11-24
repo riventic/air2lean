@@ -27,17 +27,6 @@ rules. The program supplies only its threads' fact (`Thr`) and that `n`'s value 
 
 namespace Zig
 
-namespace Full
-
-/-- A resource with the plain mode keeps it next to anything (`Res.plain_of_sep`, on the left).
-(Should move to `ZigLean/Sep/Full/Ghost.lean`, next to `Res.plain_of_sep`.) -/
-theorem Res.Plain.rsum_left {a : Res} (h : a.Plain) (b : Res) : (rsum a b).Plain := by
-  obtain ⟨h1, h2⟩ := h
-  exact ⟨by simp only [Ghost.add_ac, ACell.add_frag]; omega,
-    by simp only [Ghost.add_ac, ACell.add_frag]; omega⟩
-
-end Full
-
 namespace RwRead
 
 open Conc Conc.Proto Full Full.FAssn
