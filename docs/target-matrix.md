@@ -20,7 +20,7 @@ python3 -m unittest discover -s tests/roadmap/target-matrix -v
 ```
 
 A step counts only when its job's runner is the path's host (`ubuntu-24.04` is
-x86_64-linux, `ubuntu-24.04-arm` is aarch64-linux, `macos-14` is aarch64-macos), its `if`
+x86_64-linux, `ubuntu-24.04-arm` is aarch64-linux, `macos-15` is aarch64-macos), its `if`
 holds for the selected row (the checker evaluates the `matrix.*`/`runner.os` expressions
 CI uses and fails closed on any other context), it is bound to the path's Zig version (the matrix row's `zig`, or the
 step's `AIR2LEAN_ZIG_VERSION` in a job without a matrix), and it compiles no other OS's
@@ -101,11 +101,11 @@ whether or not they are also declared translation paths. The checker requires ea
 | Zig | Profile | Probe job (host) | Proof job |
 | --- | --- | --- | --- |
 | 0.16.0 | aarch64-linux-gnu ReleaseSafe | `aarch64-linux` (`ubuntu-24.04-arm`) | `test` (full 0.16.0 row) |
-| 0.16.0 | aarch64-macos-none ReleaseSafe | `macos` (`macos-14`) | `test` (full 0.16.0 row) |
+| 0.16.0 | aarch64-macos-none ReleaseSafe | `macos` (`macos-15`) | `test` (full 0.16.0 row) |
 | 0.15.2 | aarch64-linux-gnu ReleaseSafe | `aarch64-linux` (`ubuntu-24.04-arm`) | `test` (full 0.16.0 row) |
-| 0.15.2 | aarch64-macos-none ReleaseSafe | `macos` (`macos-14`) | `test` (full 0.16.0 row) |
+| 0.15.2 | aarch64-macos-none ReleaseSafe | `macos` (`macos-15`) | `test` (full 0.16.0 row) |
 | 0.14.1 | aarch64-linux-gnu ReleaseSafe | `aarch64-linux` (`ubuntu-24.04-arm`) | `test` (full 0.16.0 row) |
-| 0.14.1 | aarch64-macos-none ReleaseSafe | `macos` (`macos-14`) | `test` (full 0.16.0 row) |
+| 0.14.1 | aarch64-macos-none ReleaseSafe | `macos` (`macos-15`) | `test` (full 0.16.0 row) |
 
 The `aarch64-linux` job installs the checksum-pinned stock Zig releases and runs the probe
 and compare before its translation steps. Like `macos`, it is a native-runner job that `scripts/local-ci.sh` does not
