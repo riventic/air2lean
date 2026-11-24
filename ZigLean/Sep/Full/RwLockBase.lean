@@ -92,9 +92,8 @@ theorem tick {t : ThreadId} {r s s' : Res} (hu : W.Base Sz K G rX m)
     rw [W.pair.setPart, L.ph_setPart]
   have hup : ∀ {α : Type} (f : γ → α), (∀ g, f (M.setPart g r) = f g) →
       ∀ u, f (upd G t (M.setPart (G t) r) u) = f (G u) := fun f h u => by
-    by_cases e : u = t
-    · subst e; rw [upd_self, h]
-    · rw [upd_ne _ _ e]
+    have := congrFun (upd_map f G t (h (G t))) u
+    rwa [upd_same] at this
   have hwph := hup W.ph wph
   have hmph := hup M.ph fun g => M.ph_setPart g r
   have hlph := hup L.ph lph
@@ -139,9 +138,9 @@ theorem tick {t : ThreadId} {r s s' : Res} (hu : W.Base Sz K G rX m)
 
 /-- **The tick obligation of the outer mutex's view** (`fitsM`'s `tick`). -/
 theorem tickM (hpl : ∀ g r, W.place.ph (M.setPart g r) = W.place.ph g) :
-    FLock.Pair.TickKeeps M L (W.Base Sz K) :=
-  fun t _ _ _ _ _ _ _ hg _ _ hM hM' hu =>
-    hu.tick hM hM' (fun _ => rfl) (hM.w.live t hg).1 hpl
+    FLock.Pair.TickKeeps M L (W.Base Sz K) := by
+  intro t G sB rL rH rX m r hg hsB hk hM hM' hu
+  exact hu.tick hM hM' (fun _ => rfl) (hM.w.live t hg).1 hpl
 
 /-- **The tick obligation of the semaphore's view** (`fitsS`'s `tick`): the outer mutex's
 invariant before and after the tick is the product's (`FLock.Pair.swap`; the outer mutex stays

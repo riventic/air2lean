@@ -3,7 +3,10 @@ import ZigLean.Sep.Full.Word
 /-!
 # The bytes of a lock's rest in the memory
 
-A byte that a lock's rest owns, as a cell or as a share of one, is live (`FLock.Inv.rest_live`).
+Stated for the protocol's rest (`FOwned`) and, through it (`FLock.Inv.restIn`), for a lock's rest.
+
+A byte that the rest owns, as a cell or as a share of one, is live (`FOwned.rest_live`,
+`FLock.Inv.rest_live`).
 
 **A block pinned by its extent in the rest.** A lock's invariant keeps the bytes of its rest only up to `Cell.norm` (`FLock.Inv.restCell`): a
 cell's size and kind are its block's, which the rest's cells do not fix. A rest that also holds an
@@ -68,48 +71,82 @@ theorem of_bauth {r : Res} {R : FAssn} {q : Frac} (h : (bauth b S K q ⋆ R) r) 
 
 end Res.Pins
 
+/-! ## The protocol's rest (`FOwned`) -/
+
+namespace FOwned
+
+variable {own own' : ThreadId → Res} {rO rO' : Res} {m m' : Mem}
+
+/-- **A byte that the rest owns is live** (a cell, or a share of one: `FOwned.rest_cell`,
+`SMatch.share_live`). -/
+theorem rest_live (ho : FOwned own rO m) {l : Zig.Loc} (h : rO.owned l ≠ none) :
+    m.heap l ≠ none := by
+  rcases Res.owned_ne.mp h with h | h
+  · obtain ⟨fc, hfc⟩ := Option.ne_none_iff_exists'.mp h
+    intro e
+    have := ho.rest_cell hfc
+    rw [e] at this; cases this
+  · obtain ⟨rT, -, hh⟩ := ho.holds
+    refine hh.heap.share_live (l := l) ?_
+    show ((rT.gh.add rO.gh).share l).cell ≠ none
+    simp only [Ghost.add_share, ne_eq, SCell.cell_eq_none_iff]
+    exact fun hn => hn (SCell.pos_add_iff.mpr (.inr h))
+
+/-- **A block that the rest pins is live with the claim's size and kind** (`Res.Pins`; the rest
+holds, `Holds.extTrue`). -/
+theorem pinned (ho : FOwned own rO m) {b : BlockId} {S : Nat} {K : BlockKind}
+    (hp : rO.Pins b S K) :
+    ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧ blk.bytes.size = S ∧ blk.kind = K ∧
+      K.mappedLo < S := by
+  obtain ⟨rT, -, hh⟩ := ho.holds
+  exact (hh.swap.extTrue b).1 S K hp
+
+/-- **A byte of a pinned block that the rest after a step holds with its cell before it has the
+same cell** (module doc): the rest after the step has it up to `Cell.norm` (`FOwned.rest_cell`),
+and the block has one size and kind in both memories (`FOwned.pinned`). -/
+theorem cell_pinned (ho : FOwned own rO m) (ho' : FOwned own' rO' m') {b : BlockId} {S : Nat}
+    {K : BlockKind} (hp : rO.Pins b S K) (hp' : rO'.Pins b S K) {x : Nat} {c : Cell}
+    (hc : m.heap (b, x) = some c) (hr : rO'.heap (b, x) = some ⟨c, none⟩) :
+    m'.heap (b, x) = m.heap (b, x) := by
+  obtain ⟨blk, hb, -, hs, hk, -⟩ := ho.pinned hp
+  obtain ⟨blk', hb', -, hs', hk', -⟩ := ho'.pinned hp'
+  refine Mem.heap_eq_of_norm ⟨blk, hb, hs, hk⟩ ⟨blk', hb', hs', hk'⟩ ?_
+  rw [ho'.rest_cell hr, hc]; rfl
+
+end FOwned
+
+/-! ## A lock's rest (`FLock.Inv`): the protocol's rest holds it (`Inv.restIn`) -/
+
 namespace FLock
 
 variable {γ : Type} {L : FLock γ} {n nb : Nat} {W : Word n nb}
 
-/-- **A byte that the rest owns is live** (a cell, or a share of one: `Inv.restCell`,
-`SMatch.share_live`). -/
+/-- **A byte that the lock's rest owns is live** (`FOwned.rest_live`). -/
 theorem Inv.rest_live {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) {l : Zig.Loc}
     (h : rX.owned l ≠ none) : m.heap l ≠ none := by
-  rcases Res.owned_ne.mp h with h | h
-  · obtain ⟨fc, hfc⟩ := Option.ne_none_iff_exists'.mp h
-    intro e
-    have := hi.restCell hfc
-    rw [e] at this; cases this
-  · obtain ⟨rL, ho, -⟩ := hi.restIn
-    obtain ⟨rT, -, hh⟩ := ho.holds
-    refine hh.heap.share_live (l := l) ?_
-    show (((rT.gh.add ((L.wordR m).gh.add (rL.gh.add rX.gh))).share l).cell) ≠ none
-    simp only [Ghost.add_share, ne_eq, SCell.cell_eq_none_iff]
-    refine fun hn => hn (SCell.pos_add_iff.mpr (.inr (SCell.pos_add_iff.mpr (.inr
-      (SCell.pos_add_iff.mpr (.inr h))))))
+  obtain ⟨rL, ho, -⟩ := hi.restIn
+  exact ho.rest_live
+    ((Res.owned_sep rfl rfl).mpr (.inr ((Res.owned_sep rfl rfl).mpr (.inr h))))
 
-/-- **A block that the rest pins is live with the claim's size and kind** (`Res.Pins`; the
-lock's complete rest holds, `Holds.extTrue`). -/
+/-- **A block that the lock's rest pins is live with the claim's size and kind**
+(`FOwned.pinned`). -/
 theorem Inv.pinned {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) {b : BlockId}
     {S : Nat} {K : BlockKind} (hp : rX.Pins b S K) :
     ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧ blk.bytes.size = S ∧ blk.kind = K ∧
       K.mappedLo < S := by
   obtain ⟨rL, ho, -⟩ := hi.restIn
-  obtain ⟨rT, -, hh⟩ := ho.holds
-  exact (hh.swap.extTrue b).1 S K (Res.Pins.right (Res.Pins.right hp))
+  exact ho.pinned (Res.Pins.right (Res.Pins.right hp))
 
-/-- **A byte of a pinned block that the rest after a step holds with its cell before it has the
-same cell** (module doc): the invariant after the step has it up to `Cell.norm`
-(`Inv.restCell`), and the block has one size and kind in both memories (`Inv.pinned`). -/
+/-- **A byte of a pinned block that the lock's rest after a step holds with its cell before it
+has the same cell** (`FOwned.cell_pinned`). -/
 theorem Inv.cell_pinned {G G' : ThreadId → γ} {rX rX' : Res} {m m' : Mem} (hi : L.Inv G rX m)
     (hi' : L.Inv G' rX' m') {b : BlockId} {S : Nat} {K : BlockKind} (hp : rX.Pins b S K)
     (hp' : rX'.Pins b S K) {x : Nat} {c : Cell} (hc : m.heap (b, x) = some c)
     (hr : rX'.heap (b, x) = some ⟨c, none⟩) : m'.heap (b, x) = m.heap (b, x) := by
-  obtain ⟨blk, hb, -, hs, hk, -⟩ := hi.pinned hp
-  obtain ⟨blk', hb', -, hs', hk', -⟩ := hi'.pinned hp'
-  refine Mem.heap_eq_of_norm ⟨blk, hb, hs, hk⟩ ⟨blk', hb', hs', hk'⟩ ?_
-  rw [hi'.restCell hr, hc]; rfl
+  obtain ⟨rL, ho, -⟩ := hi.restIn
+  obtain ⟨rL', ho', hin'⟩ := hi'.restIn
+  exact ho.cell_pinned ho' (Res.Pins.right (Res.Pins.right hp))
+    (Res.Pins.right (Res.Pins.right hp')) hc (hin' _ _ hr)
 
 /-- **A step that keeps the rest keeps the cells of a word in a block that the rest pins**
 (`Inv.cell_pinned` at the word's cells in the rest; the word's bytes are live before the step). -/

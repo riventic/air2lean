@@ -218,9 +218,9 @@ the thread is a reader (`hrd`). `FRw.Inv` does not say where the readers' shares
 tick nor a `Step` fixes the stepping thread's new part, so a client's base states it by counting
 (`Shares`): while a reader is in, each thread owns exactly its place's fraction of each cell of the
 readers' heap (none out of `rd`). The rest holds a positive share of the cell then
-(`Inv.rest_share`), so the clause is kept over a change of one thread's ghost value beside the same
-rest (`Shares.keep`, by `FLock.Inv.share_keep`) and over a relabel that keeps what each thread
-owns of it (`Shares.congr`). -/
+(`Inv.rest_share`), so the clause is kept over a change of one thread's ghost value beside rests
+with the same shares (`Shares.keep`, by `FLock.Inv.share_keep`) and over a relabel that keeps what
+each thread owns of it (`Shares.congr`). -/
 
 /-- The outer mutex's resource holds no share (it is `emp`). -/
 theorem mR_share (W : FRw γ X Y M L C S) (l : Zig.Loc) :
@@ -298,8 +298,8 @@ theorem Shares.congr {G G' : ThreadId → γ} {m m' : Mem} (h : W.Shares G m)
   fun u q H hu l c hl v => by
     rw [hown, hph v]; exact h u q H (by rw [← hph u]; exact hu) l c hl v
 
-/-- **The shares over a change of one thread's ghost value beside the same rest** (a tick, a step
-on its own part): the outer mutex's invariant holds before and after it at rests `rXM` and `rXM'`
+/-- **The shares over a change of one thread's ghost value beside rests with the same shares**
+(a tick, a step on its own part): the outer mutex's invariant holds before and after it at rests `rXM` and `rXM'`
 with the same shares (one rest in the outer mutex's view; in the semaphore's the common rest
 beside the semaphore's mutex's side, which holds no share: `FLock.Keeps.side_share`), which hold
 a positive share of each cell of the readers' heap (`Inv.rest_share` at the common rest), and
