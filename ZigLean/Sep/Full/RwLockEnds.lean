@@ -26,7 +26,6 @@ the latter two (`Base.sout_of_m`).
 - `FRw.Inv.keepR`: the rwlock's invariant over a step that keeps the state word and the number of
   threads, at client parts that keep the resource (`FRw.Inv.keep` asks for the same thread table
   and client parts).
-- `FRw.lR_keep`: the semaphore's mutex's resource at client parts that keep the resource.
 - `FRw.Shares.join`: the joiner's part takes the ended thread's, which holds no reader's share.
 - `FRw.Base.thread`: the base over a change of one thread's ghost value outside both mutexes'
   code, in a memory with a new current thread, clocks and thread table.
@@ -167,23 +166,6 @@ theorem Inv.keepR {G G' : ThreadId → γ} {rX : Res} {m m' : Mem} (hI : W.Inv G
           exact ⟨H, f, hR _ hRr, hf, by rw [hfs]; exact hs, hr,
             fun u q H' hu => hq u q H' (by rwa [← hph u])⟩⟩,
       how rF rO he ⟨hf1, hf2, hf3⟩ ho⟩ }
-
-/-- **The semaphore's mutex's resource at client parts that keep the resource**: the places stay,
-so the count stays (`cnt_congr`), and the pool is the resource exactly while it is posted
-(`pool_posted`, `pool_idle`; `lR_eq` asks for the same client parts). -/
-theorem lR_keep {G G' : ThreadId → γ} (hph : ∀ u, W.ph (G' u) = W.ph (G u))
-    (hR : ∀ r, W.R (W.xs G) r → W.R (W.xs G') r) (r : Res) (h : L.R G r) : L.R G' r := by
-  have hp : RwPosted W.ph G' ↔ RwPosted W.ph G := by simp only [RwPosted, hph]
-  rw [S.R_cnt G] at h
-  rw [S.R_cnt G', cnt_congr hph]
-  refine sep_mono_right (fun r' h' => ?_) h
-  by_cases hq : RwPosted W.ph G
-  · rw [W.pool_posted _ hq] at h'
-    rw [W.pool_posted _ (hp.mpr hq)]
-    exact hR _ h'
-  · rw [W.pool_idle _ hq] at h'
-    rw [W.pool_idle _ fun h => hq (hp.mp h)]
-    exact h'
 
 /-- **The readers' shares over a join of `u` by `t`**: the ended thread `u` is out of the rwlock's
 code and holds nothing of the outer mutex, so its part holds no share of the readers' heap, and

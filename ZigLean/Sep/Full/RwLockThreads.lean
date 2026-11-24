@@ -34,7 +34,7 @@ families: `Conc.fork_mem_clocks` (`ZigLean/Conc/Base/Lock.lean`), `Word.Ok.forkL
 (`ZigLean/Sep/Full/Word.lean`, next to `Ok.fork_native`), `FLock.HB.fork`
 (`ZigLean/Sep/Full/Lock.lean`, next to `HB.mono`), `FSem.Inv.grow` (`ZigLean/Sep/Full/Sem.lean`,
 next to `Inv.mono`), `FClient.Holds.fork` (`ZigLean/Sep/Full/Client.lean`), and `FRw.counts_grow`,
-`FRw.Inv.grow`, `FRw.lR_keep` (`ZigLean/Sep/Full/RwLockImpl.lean`, next to `Inv.keep`, `lR_eq`).
+`FRw.Inv.grow` (`ZigLean/Sep/Full/RwLockImpl.lean`, next to `Inv.keep`).
 -/
 
 namespace Zig
@@ -260,24 +260,6 @@ theorem Inv.grow {G G' : ThreadId → γ} {rX : Res} {m m' : Mem} (hI : W.Inv G 
           exact ⟨H, f, hR _ hRr, hf, by rw [hfs]; exact hs, hr,
             fun u q H' hu => hq u q H' (by rwa [← hph u])⟩⟩,
       how rF ho⟩ }
-
-/-- **The semaphore's mutex's resource at new client parts** (as `lR_eq`, with the client parts
-changing): the rwlock's places stay, so the count stays and the pool is the protected resource or
-nothing as before, and the protected resource holds at the new client parts (`hR`). -/
-theorem lR_keep {G G' : ThreadId → γ} (hph : ∀ u, W.ph (G' u) = W.ph (G u))
-    (hR : ∀ r, W.R (W.xs G) r → W.R (W.xs G') r) : ∀ r, L.R G r → L.R G' r := by
-  intro r hr
-  have hp : RwPosted W.ph G' ↔ RwPosted W.ph G := by simp only [RwPosted, hph]
-  rw [S.R_cnt G] at hr
-  rw [S.R_cnt G', cnt_congr (W := W) hph]
-  by_cases hP : RwPosted W.ph G
-  · rw [W.pool_posted G hP] at hr
-    rw [W.pool_posted G' (hp.mpr hP)]
-    obtain ⟨r₁, r₂, hd, rfl, h1, h2⟩ := hr
-    exact ⟨r₁, r₂, hd, rfl, h1, hR r₂ h2⟩
-  · rw [W.pool_idle G hP] at hr
-    rw [W.pool_idle G' fun h => hP (hp.mp h)]
-    exact hr
 
 namespace Base
 
