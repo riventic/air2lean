@@ -96,7 +96,7 @@ first. AIR op → generated code:
 | AIR op | Generated code |
 |---|---|
 | `add`/`sub`/`mul`, checked/wrapping/saturating | `Zig.Vec.map2M`/`Zig.Vec.map2`, lane-wise, the same scalar function as the non-vector case |
-| `splat` | `Zig.Vec.splat` |
+| `splat` | `Zig.Vec.splat`; Zig 0.17.1's `splat` to an array `[n]T` (a runtime `@splat`) is `Vector.replicate n a`, and to a sentinel-terminated array it is rejected (the export does not carry the sentinel value) |
 | `select` (a vector of `bool` predicate) | `Zig.Vec.select` |
 | `shuffle` | a `Zig.Vec` literal picked from the comptime-known mask, `#v[a.lanes[i]!, …]` — not a runtime shuffle function, since AIR gives the mask at translation time |
 | every other lane-wise op: `div_*`, `rem`, `mod`, `div_float`, `min`/`max`, `add_with_overflow` family, `bit_and`/`bit_or`/`xor`, `not`, `abs`, shifts, `cmp_vector`, `bool_and`/`bool_or`, `intcast`, `trunc`, float rounding, `sqrt`, libm ops, `mul_add`, float/int conversions | the scalar op's expression on lane variables in `Zig.Vec.mapM`/`map2M`/`map3M` (`Emit.lean`'s `emitLaneWise`): each lane has the scalar semantics, and the first lane that throws gives the error. `@addWithOverflow` gives a vector of pairs, and `Zig.Vec.unzip` makes the tuple |
