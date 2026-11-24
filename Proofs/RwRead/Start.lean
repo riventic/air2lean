@@ -1,5 +1,6 @@
 import Proofs.RwRead.Protocol
 import ZigLean.Sep.Full.RwProdBytes
+import ZigLean.Sep.Full.Local
 
 /-!
 # The start of `rwLockRead`'s and `rwLockSnapshotPair`'s protocol
@@ -17,6 +18,8 @@ stack block of 64 bytes) and stores `io` (bytes `0 .. 16`), the fresh `Io.RwLock
 
 The statement has the shape of `Proofs/SemCounter/Start.lean`'s `inv_start`, so a walk of `main`
 applies it at the spawn from `FOwned.start0_facts` (`fsym [FTriple.allocStack', inv_start, …]`).
+The walk of `main`'s stores into its own stack block needs the rules of
+`ZigLean/Sep/Full/Local.lean` (`FTotalTriple.storeBytesAt`), which this file imports for them.
 -/
 
 namespace Zig
