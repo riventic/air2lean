@@ -1,9 +1,11 @@
 import ZigLean.Sep.Full.Word
 
 /-!
-# A block pinned by its extent in a lock's rest
+# The bytes of a lock's rest in the memory
 
-A lock's invariant keeps the bytes of its rest only up to `Cell.norm` (`FLock.Inv.restCell`): a
+A byte that a lock's rest owns, as a cell or as a share of one, is live (`FLock.Inv.rest_live`).
+
+**A block pinned by its extent in the rest.** A lock's invariant keeps the bytes of its rest only up to `Cell.norm` (`FLock.Inv.restCell`): a
 cell's size and kind are its block's, which the rest's cells do not fix. A rest that also holds an
 authority claim of the block's extent (`bauth`, `bext`) fixes them: the block is live with the
 claim's size and kind in every memory where the invariant holds (`FLock.Inv.pinned`), so a byte
@@ -69,6 +71,23 @@ end Res.Pins
 namespace FLock
 
 variable {γ : Type} {L : FLock γ} {n nb : Nat} {W : Word n nb}
+
+/-- **A byte that the rest owns is live** (a cell, or a share of one: `Inv.restCell`,
+`SMatch.share_live`). -/
+theorem Inv.rest_live {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G rX m) {l : Zig.Loc}
+    (h : rX.owned l ≠ none) : m.heap l ≠ none := by
+  rcases Res.owned_ne.mp h with h | h
+  · obtain ⟨fc, hfc⟩ := Option.ne_none_iff_exists'.mp h
+    intro e
+    have := hi.restCell hfc
+    rw [e] at this; cases this
+  · obtain ⟨rL, ho, -⟩ := hi.restIn
+    obtain ⟨rT, -, hh⟩ := ho.holds
+    refine hh.heap.share_live (l := l) ?_
+    show (((rT.gh.add ((L.wordR m).gh.add (rL.gh.add rX.gh))).share l).cell) ≠ none
+    simp only [Ghost.add_share, ne_eq, SCell.cell_eq_none_iff, not_not]
+    exact SCell.pos_add_iff.mpr (.inr (SCell.pos_add_iff.mpr (.inr
+      (SCell.pos_add_iff.mpr (.inr h)))))
 
 /-- **A block that the rest pins is live with the claim's size and kind** (`Res.Pins`; the
 lock's complete rest holds, `Holds.extTrue`). -/
