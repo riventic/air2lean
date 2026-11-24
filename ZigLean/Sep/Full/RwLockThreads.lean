@@ -215,7 +215,7 @@ theorem counts_grow {G : ThreadId → γ} {m m' : Mem}
   · simp [nrd, hsz, tsum_succ, hN, RwPh.isRd]
   · simp [nwi, hsz, tsum_succ, hN, RwPh.isWi]
   · simp [writing, hsz, List.range_succ, hN, RwPh.isW]
-  · simp [fsum, hsz, ftot, hN, RwPh.frac, Frac.zero]
+  · simp [fsum, hsz, ftot, hN, RwPh.frac, Frac.zero, Rat.add_zero]
 
 /-- **The invariant over a step that adds a thread and keeps the state word** (a spawn; as
 `Inv.keep`, with the thread table growing by one and the client parts changing): the word stays
