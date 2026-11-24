@@ -384,9 +384,10 @@ def check_asm(binary, tmp, air):
     """Inline asm: the reviewed allowlist, ASM_VOLATILE_EFFECT, and device asm events."""
     checks = 0
     out = tmp / "Gen.lean"
-    # The synthetic legacy profile lists no CPU features; `rdrand` needs `rdrnd` (ASM-09, checked in
-    # tests/roadmap/asm-effects), so the translations below assume the running CPU has it.
-    assume = ("--assume-asm-cpu-features",)
+    # The synthetic legacy profile lists no CPU features; `rdrand` needs `rdrnd` and `lzcnt`
+    # needs `lzcnt` (ASM-09, checked in tests/roadmap/asm-effects), so the translations below
+    # assume the running CPU has them.
+    assume = ("--assume-asm-cpu-features", "lzcnt,rdrnd")
     for version in VERSIONS:
         for name, (document, default, device) in asm_fixtures(version).items():
             write(air, {name: document})
@@ -426,6 +427,37 @@ def check_asm(binary, tmp, air):
         assert len(found) == 1, (flags, result.stdout)
         checks += 1
     assert "spin hint" in found[0]["message"], found
+    # A device contract states what an instruction does, not that the CPU has it (ASM-09): a
+    # declared `rdrand` on a profile without `rdrnd` (#UD on such a CPU) is rejected unless the
+    # feature is admitted, in both modes; an instruction outside the CPU-feature table
+    # (`rdtscp`: no Zig/LLVM feature names it) is rejected whatever is admitted.
+    cpu = tmp / "cpu.json"
+    cpu.write_text(json.dumps({"schema": 1, "device": "cpu", "registers": [], "asm": [
+        {"template": "rdrand %[ret]", "constraints": ["=r"], "clobbers": ["cc"]},
+        {"template": "rdtscp", "constraints": ["={rax}"], "clobbers": ["cc", "rdx", "rcx"]}]}))
+    contract = ("--device-contract", cpu)
+    write(air, {"rdrand": asm_fixtures()["rdrand"][0]})
+    for mode in ((binary, "--diagnostics-json", air), (binary, air, "-o", out, "--namespace", "Asm")):
+        check_only = "--diagnostics-json" in mode
+        out.write_text("KEEP\n")
+        result = invoke(*mode, *contract)
+        text = result.stdout if check_only else result.stderr
+        assert result.returncode == 1 and "instruction 'rdrand' needs the CPU feature(s) [rdrnd]" in text, text
+        assert "ASM-09" in text and out.read_text() == "KEEP\n", text
+        # Another feature does not admit it.
+        result = invoke(*mode, *contract, "--assume-asm-cpu-features", "lzcnt,popcnt")
+        assert result.returncode == 1 and "[rdrnd]" in (result.stdout if check_only else result.stderr)
+        result = invoke(*mode, *contract, "--assume-asm-cpu-features", "rdrnd")
+        assert result.returncode == 0, (result.stdout, result.stderr)
+        assert check_only or "Zig.vasm air2lean_device" in out.read_text()
+        checks += 3
+    write(air, {"rdtscp": function("rdtscp", [], 8, [
+        asm(0, 8, "rdtscp", clobbers=("cc", "rdx", "rcx"), outputs=("={rax}",)), returning(1, ref(0))])})
+    out.write_text("KEEP\n")
+    result = invoke(binary, air, "-o", out, "--namespace", "Asm", *contract, *assume)
+    assert result.returncode == 1 and out.read_text() == "KEEP\n", result.stderr
+    assert "instruction 'rdtscp' is not in the CPU-feature table of target 'x86_64'" in result.stderr, result.stderr
+    checks += 1
     # Device asm entries: a `memory` clobber is outside the contract (DEV-01), templates are unique.
     contract = json.loads(TSC_CONTRACT.read_text())
     entry = contract["asm"][0]
