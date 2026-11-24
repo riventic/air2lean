@@ -69,7 +69,12 @@
           "anchor": "def test_load_buffering_is_a_rejected_shape"
         }
       ],
-      "mutants": []
+      "mutants": [
+        {"name": "abi-probe-layout-unchecked", "path": "tests/roadmap/mutation-map/mutants.py", "category": "layout"},
+        {"name": "abi-probe-pointer-width-unchecked", "path": "tests/roadmap/mutation-map/mutants.py", "category": "layout"},
+        {"name": "abi-probe-features-unordered", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "abi-probe-pair-version-unchecked", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"}
+      ]
     },
     "T05": {
       "categories": [],
@@ -2246,9 +2251,18 @@
         {
           "path": "tests/roadmap/safe-output/test_safe_output.py",
           "anchor": "def test_interrupt_mid_write_keeps_prior_and_no_partial"
+        },
+        {
+          "path": "tests/roadmap/safe-output/test_safe_output.py",
+          "anchor": "def test_no_clobber_is_atomic_against_a_concurrent_writer"
         }
       ],
-      "mutants": []
+      "mutants": [
+        {"name": "safe-output-partial-file-left", "path": "tests/roadmap/mutation-map/mutants.py", "category": "failure-cleanup"},
+        {"name": "safe-output-mode-not-preserved", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "safe-output-symlink-destination-followed", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "safe-output-noclobber-race-overwrites", "path": "tests/roadmap/mutation-map/mutants.py", "category": "failure-cleanup"}
+      ]
     },
     "I09": {
       "categories": [
@@ -2298,7 +2312,22 @@
           "anchor": "def test_uncited_trust_premise"
         }
       ],
-      "mutants": []
+      "mutants": [
+        {"name": "air-validate-duplicate-id-accepted", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "air-validate-branch-target-unchecked", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "air-validate-missing-terminator-accepted", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "air-validate-noreturn-in-middle-accepted", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "air-validate-tag-universe-unchecked", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "air-validate-unsupported-marker-on-decoded-tag", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "air-validate-decoded-operands-on-unsupported-tag", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "trust-kernel-base-uncited", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "trust-test-not-run-by-ci-accepted", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "trust-unverified-stage-lists-checks", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "trust-required-stage-unchecked", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "trust-undefined-premise-accepted", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "trust-uncited-premise-accepted", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "trust-checked-stage-without-checks", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"}
+      ]
     },
     "V04": {
       "categories": [
@@ -2580,9 +2609,22 @@
         {
           "path": "tests/roadmap/schedule-caps/test_exploration.py",
           "anchor": "def test_one_capped_case_disqualifies_otherwise_matching_scope"
+        },
+        {
+          "path": "tests/roadmap/schedule-caps/test_exploration.py",
+          "anchor": "def test_truncated_enumeration_disqualifies_matching_scope"
+        },
+        {
+          "path": "tests/roadmap/schedule-caps/test_exploration.py",
+          "anchor": "def test_capped_status_must_consume_its_run_cap"
         }
       ],
-      "mutants": []
+      "mutants": [
+        {"name": "schedule-capped-match-counted", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "schedule-truncated-enumeration-not-blocking", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "schedule-no-result-branch-not-blocking", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "schedule-cap-unconsumed-accepted", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"}
+      ]
     },
     "Q04": {
       "categories": [],
@@ -2643,14 +2685,50 @@
         {
           "path": "tests/roadmap/perf-budgets/test_perf_budgets.py",
           "anchor": "def test_time_regression"
+        },
+        {
+          "path": "tests/roadmap/perf-budgets/test_perf_budgets.py",
+          "anchor": "def test_output_change_is_a_preservation_failure"
+        },
+        {
+          "path": "tests/roadmap/perf-budgets/test_perf_budgets.py",
+          "anchor": "def test_a_missing_or_foreign_calibration_fails_closed"
         }
       ],
-      "mutants": []
+      "mutants": [
+        {"name": "perf-output-change-ignored", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "perf-memory-limit-ignored", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "perf-missing-workload-ignored", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "perf-unserialized-measurement-accepted", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "perf-portable-limits-not-selected", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "perf-foreign-calibration-accepted", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"}
+      ]
     },
     "Q07": {
       "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/upgrade-qualification/test_qualify.py",
+          "anchor": "def test_removed_obligation_and_stale_plan_fail"
+        },
+        {
+          "path": "tests/roadmap/upgrade-qualification/test_qualify.py",
+          "anchor": "def test_tampered_log_fails_check"
+        },
+        {
+          "path": "tests/roadmap/upgrade-qualification/test_qualify.py",
+          "anchor": "def test_hand_edited_result_without_evidence_fails"
+        }
+      ],
+      "mutants": [
+        {"name": "qualify-plan-digest-unchecked", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "qualify-stale-plan-accepted", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "qualify-failed-result-accepted", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "qualify-log-tamper-unchecked", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "qualify-unaccepted-review-passes", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "qualify-unknown-result-accepted", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "qualify-evidence-free-result-accepted", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"}
+      ]
     },
     "Q08": {
       "categories": [
