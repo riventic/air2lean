@@ -8,10 +8,16 @@
 # memory-safety tutorial's refuted clients over the page allocator (ListsPage.lean). Every Lean
 # file is a module of the fixture's library AllocTranslated (tests/roadmap/lakefile.toml), built
 # by Lake with what it imports (scripts/fixtures.py; run it under scripts/build-guard.py). Needs
-# a built translator; runs no compiler. With
+# a built translator; runs no compiler. The page programs' AIR is exports.json's export, pinned
+# by exports.lock.json (scripts/fixture-exports.py); the fixed buffer's is pinned by
+# provenance.json.
+# M02: the model's lines of the growths by `remap` and `realloc` (in place, moved, failed, the
+# read of a moved block's old address; Eval.lean `growLinux`, `growMacos`) are compared with the
+# `page_grow` lines of expected-linux.txt and expected.txt on every host. With
 # AIR2LEAN_NATIVE_ZIG (a stock Zig 0.16.0), also builds and runs native.zig and compares it with
 # expected.txt (16 KiB pages, recorded on aarch64-macos) or expected-linux.txt (4 KiB pages,
-# recorded on x86_64-linux): the output depends on the page size only, not on the OS.
+# recorded on x86_64-linux): the output depends on the page size only, not on the OS. So the
+# model and the native run of one target are compared with the same file.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
@@ -27,9 +33,10 @@ record = json.loads((here / 'provenance.json').read_text())
 for name, digest in record['source_sha256'].items():
     assert hashlib.sha256((here / name).read_bytes()).hexdigest() == digest, name
 files = {str(p.relative_to(here / 'air')): hashlib.sha256(p.read_bytes()).hexdigest()
-         for p in sorted((here / 'air').rglob('*.json'))}
+         for p in sorted((here / 'air').glob('*/fba-*/*.json'))}
 assert files == record['air_sha256'], 'AIR fixtures differ from provenance.json'
 EOF
+python3 -B scripts/fixture-exports.py check alloc-translated
 for prog in page fba; do
   for os in linux macos; do
     Prog="$(printf '%s' "${prog:0:1}" | tr '[:lower:]' '[:upper:]')${prog:1}"
@@ -61,6 +68,11 @@ for name in KernelBytes.start_admissible KernelBytes.push_succeeds ListsPage.con
 done
 python3 -B scripts/fixtures.py audit PageObstruction PageTok PageSpec PageSpecMacos PageAlloc PageThread PageCreation \
   ListsPage KernelBytes "${theorems[@]}"
+# M02: the model's growth lines against the files the native runs are compared with.
+python3 -B scripts/fixtures.py run "$work/lines" AllocTranslated.Eval:AllocTranslated.Eval.growLinux \
+  AllocTranslated.Eval:AllocTranslated.Eval.growMacos
+diff <(grep '^page_grow' "$here/expected-linux.txt") "$work/lines/AllocTranslated.Eval.growLinux.txt"
+diff <(grep '^page_grow' "$here/expected.txt") "$work/lines/AllocTranslated.Eval.growMacos.txt"
 bash "$here/mutant.sh"
 PYTHONDONTWRITEBYTECODE=1 python3 "$here/test_cli.py" "$translator"
 if [ -n "${AIR2LEAN_NATIVE_ZIG:-}" ]; then
