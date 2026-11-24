@@ -586,6 +586,352 @@ theorem tickL (hpl : ∀ g r, W.place.ph (M.setPart g r) = W.place.ph g) :
     (fun l => by rw [hkL'.side_share (lR_share W l), hkL.side_share (lR_share W l)])
     (hL.w.live t hg).1 hpl
 
+/-! ## A step of the semaphore's code -/
+
+/-- **The base at the rest after a step of the semaphore's code** (`FCond.StepRest`; what the
+cases of `sstep` share). The step changes only `t`'s ghost value and keeps its place at the outer
+mutex; the case gives the condition's and the semaphore's invariants and the window after it, the
+rwlock's invariant after it at every rest within the rest before it (`hinv`, for
+`Inv.stepRest`), the words valid after it (`hok`), the memory at a byte of the words whose cell
+the rest keeps (`hE`, for `FCond.StepRest.words`), the rest's other bytes live (`hlv`), the
+shares, and `t`'s new places for `wt` and `nap`. -/
+theorem ofStepRest {t : ThreadId} {G' : ThreadId → γ} {rX' : Res} {m' : Mem}
+    (hu : W.Base Sz K G rX m) (hsh : C.StepRest m m' rX rX')
+    (hRoff : ∀ xs r l, W.R xs r → (C.S.In l ∨ C.Ep.In l) → r.heap l = none)
+    (hCI' : C.Inv L G' m') (hSI' : S.Inv G' m') (hwin : C.Win1 L G' m')
+    (hoth : ∀ u, u ≠ t → G' u = G u) (hmph : M.ph (G' t) = M.ph (G t))
+    (hinv : ∀ rZ, W.Inv G rZ m → (∀ l, rZ.owned l ≠ none → rX.owned l ≠ none) →
+      (∀ l, rZ.heap l ≠ none → rX.heap l ≠ none) → W.Inv G' rZ m')
+    (hok : ∀ V : Word 32 4, (V = C.S ∨ V = C.Ep) → V.Ok m' fun _ => True)
+    (hE : ∀ l, (C.S.In l ∨ C.Ep.In l) → rX'.heap l = rX.heap l → m'.heap l = m.heap l)
+    (hlv : ∀ l, ¬ (C.S.In l ∨ C.Ep.In l) → rX.owned l ≠ none → rX'.owned l ≠ none →
+      m'.heap l ≠ none)
+    (hshr : W.Shares G' m') (hwt : S.ph (G' t) = .wt → W.ph (G' t) = .ww)
+    (hnap : (L.ph (G' t) ≠ .out ∧ L.ph (G' t) ≠ .away ∧ L.ph (G' t) ≠ .gone) ∨
+        S.place.ph (G' t) ≠ (.out, .out) →
+      M.ph (G t) = .away ∨ M.ph (G t) = .holdsAway) : W.Base Sz K G' rX' m' := by
+  obtain ⟨⟨-, hW⟩, -⟩ := hu.sub
+  exact {
+    winv := hu.winv.stepRest hsh hRoff hinv
+    sub := ⟨⟨hCI', fun V hV => ⟨hok V hV, hsh.words (fun V hV => (hW V hV).2) hE hV⟩⟩, hSI'⟩
+    win := hwin
+    shares := hshr
+    pin := by
+      have h := hu.pin
+      unfold Res.Pins at h ⊢
+      rwa [hsh.gh]
+    wt := fun u hq => by
+      by_cases e : u = t
+      · rw [e] at hq ⊢; exact hwt hq
+      · rw [hoth u e] at hq ⊢; exact hu.wt u hq
+    nap := fun u hq => by
+      by_cases e : u = t
+      · rw [e] at hq ⊢; rw [hmph]; exact hnap hq
+      · rw [hoth u e] at hq ⊢; exact hu.nap u hq
+    live := fun l hl => by
+      by_cases hw : C.S.In l ∨ C.Ep.In l
+      · rcases hw with h | h
+        · exact (hok _ (.inl rfl)).cellIn h
+        · exact (hok _ (.inr rfl)).cellIn h
+      · exact hlv l hw (hsh.owned hw hl) hl }
+
+/-- **A step in the frame of the semaphore's mutex's view** (its word and its rest, the outer
+mutex's side `sB` next to the common rest, read at the partial shares of `t`'s part and held
+resource: a step on `t`'s own part, the holder's step `FSem.Move.hold`), with the mutex's
+invariant before and after it and the words' cells kept up to `Cell.norm` (`hnorm`). The rwlock's
+invariant stays at every rest within the common rest (`Inv.stepIn`: the state word's cells stay
+exactly, by the pin; the step reads a byte of the readers' heap only as a reader, `Shares.hrd`);
+the words stay valid; and a byte of the words whose cell the rest keeps is the memory's
+(`FLock.Inv.cell_pinned`). -/
+theorem natStep {t : ThreadId} {G' G'' : ThreadId → γ} {sB rL rH rX' : Res} {m' : Mem}
+    (hu : W.Base Sz K G rX m) (hsh : C.StepRest m m' rX rX')
+    (hsB : Res.Sim sB (FLock.side M m rL rH)) (hk : M.Keeps G m rL rH rX)
+    (hL : L.Inv G (rsum sB rX) m) (hL' : L.Inv G'' (rsum sB rX') m') (hcur : m.current = t)
+    (hlg : L.ph (G t) ≠ .gone)
+    (hfs : FStepIn (rsum (L.wordR m) (rsum sB rX)).owned m m'
+      ((rsum (L.wordR m) (rsum sB rX)).shared.inter (rsum (L.part (G t)) (L.held (G t))).shared))
+    (hnorm : ∀ V : Word 32 4, (V = C.S ∨ V = C.Ep) → ∀ l, V.In l →
+      (m'.heap l).map Cell.norm = (m.heap l).map Cell.norm)
+    (hph : ∀ u, W.ph (G' u) = W.ph (G u)) (hx : ∀ u, W.x (G' u) = W.x (G u))
+    (hmph : ∀ u, M.ph (G' u) = M.ph (G u)) :
+    (∀ rZ, W.Inv G rZ m → (∀ l, rZ.owned l ≠ none → rX.owned l ≠ none) →
+      (∀ l, rZ.heap l ≠ none → rX.heap l ≠ none) → W.Inv G' rZ m') ∧
+    (∀ V : Word 32 4, (V = C.S ∨ V = C.Ep) → V.Ok m' fun _ => True) ∧
+    ∀ l, (C.S.In l ∨ C.Ep.In l) → rX'.heap l = rX.heap l → m'.heap l = m.heap l := by
+  obtain ⟨⟨-, hW⟩, -⟩ := hu.sub
+  have hpin' : rX'.Pins W.st.b Sz K := by
+    have h := hu.pin
+    unfold Res.Pins at h ⊢
+    rwa [hsh.gh]
+  have hsBn : ∀ l, rX.heap l ≠ none → sB.heap l = none := fun l h =>
+    (hsB.disj hk.side_disj l).resolve_right h
+  -- a byte of the lock's block that the rest holds with its cell before and after the step
+  have hpinE : ∀ l c, l.1 = W.st.b → m.heap l = some c → rX.heap l = some ⟨c, none⟩ →
+      rX'.heap l = rX.heap l → m'.heap l = m.heap l := by
+    rintro ⟨b, x⟩ c hb hc hr hr'
+    obtain rfl : b = W.st.b := hb
+    refine hL.cell_pinned hL' (Res.Pins.right hu.pin) (Res.Pins.right hpin') hc ?_
+    have e1 := hsBn (W.st.b, x) (by rw [hr]; nofun)
+    show (sB.heap (W.st.b, x)).or (rX'.heap (W.st.b, x)) = some ⟨c, none⟩
+    rw [e1, hr', hr]; rfl
+  have hcellX : ∀ V : Word 32 4, (V = C.S ∨ V = C.Ep) → ∀ l, V.In l → ∀ c, m.heap l = some c →
+      rX.heap l = some ⟨c, none⟩ := fun V hV l hl c hc => by
+    obtain ⟨-, rY, e, -⟩ := hW V hV
+    rw [e]
+    show ((cellsAt V.In m).heap l).or (rY.heap l) = _
+    rw [cellsAt_of hl, hc]; rfl
+  have hE : ∀ l, (C.S.In l ∨ C.Ep.In l) → rX'.heap l = rX.heap l → m'.heap l = m.heap l :=
+    fun l hl hr => by
+      obtain ⟨V, hV, hlV⟩ : ∃ V : Word 32 4, (V = C.S ∨ V = C.Ep) ∧ V.In l := by
+        rcases hl with h | h
+        · exact ⟨_, .inl rfl, h⟩
+        · exact ⟨_, .inr rfl, h⟩
+      obtain ⟨c, hc⟩ := Option.ne_none_iff_exists'.mp ((hW V hV).1.cellIn hlV)
+      exact hpinE l c (hlV.1.trans (c_blk W V hV)) hc (hcellX V hV l hlV c hc) hr
+  have hstc : ∀ l, W.st.In l → m'.heap l = m.heap l := fun l hl => by
+    obtain ⟨c, hc⟩ := Option.ne_none_iff_exists'.mp (hu.winv.ok.cellIn hl)
+    refine hpinE l c hl.1 hc ?_ (hsh.heap fun h => ?_)
+    · obtain ⟨rF, rO, e, -⟩ := hu.winv.rest
+      rw [e]
+      show ((cellsAt W.st.In m).heap l).or _ = _
+      rw [cellsAt_of hl, hc]; rfl
+    · rcases h with h | h
+      · exact st_c_apart W _ (.inl rfl) l h hl
+      · exact st_c_apart W _ (.inr rfl) l h hl
+  have hXh : ∀ l, rX.heap l ≠ none → (rsum (L.wordR m) (rsum sB rX)).heap l ≠ none :=
+    fun l h e => h (rsum_heap_none.mp (rsum_heap_none.mp e).2).2
+  have hRn : ∀ l, rX.heap l ≠ none → ((rsum (L.wordR m) (rsum sB rX)).shared.inter
+      (rsum (L.part (G t)) (L.held (G t))).shared) l = none := fun l h =>
+    Heap.inter_none (Res.excl_shared_disj (Res.excl_of_heap (hXh l h)))
+  have hXo : ∀ l, rX.owned l ≠ none → (rsum (L.wordR m) (rsum sB rX)).owned l ≠ none :=
+    fun l h => (Res.owned_sep rfl rfl).mpr (.inr ((Res.owned_sep rfl rfl).mpr (.inr h)))
+  refine ⟨fun rZ hIZ ho hh => hIZ.stepIn hfs (fun l h => hXo l (ho l h))
+      (fun l h => hu.live l (ho l h)) hstc (fun l h => hRn l (hh l h))
+      (hu.shares.hrd (rh := L.held (G m.current)) (by rw [hcur]; exact (hL.w.live t hlg).2)
+        (fun l => hL.held_share (lR_share W l) m.current)
+        fun l h => by rw [hcur, W.pair.part]; exact (Heap.inter_ne.mp h).2)
+      hph hx (fun u h => by rwa [hmph u] at h) (fun u h => by rw [hmph u]; exact hu.winv.wm u h),
+    fun V hV => ?_, hE⟩
+  -- the word stays valid: the step in the frame of its cells
+  have hVx : ∀ l, (V.cellsR m).owned l ≠ none → rX.heap l ≠ none := fun l h => by
+    have hl : V.In l := Classical.byContradiction fun hn => h (cellsAt_owned_none hn)
+    obtain ⟨c, hc⟩ := Option.ne_none_iff_exists'.mp ((hW V hV).1.cellIn hl)
+    rw [hcellX V hV l hl c hc]; nofun
+  exact (hW V hV).1.fstep
+    (hfs.weakenR (fun l h => hXo l (Res.owned_of_heap (hVx l h)))
+      fun l h hr => absurd (hRn l (hVx l h)) hr)
+    (fun l hl => Res.owned_of_heap (cellsAt_some hl ((hW V hV).1.cellIn hl))) (hnorm V hV)
+
+/-- **A step of the semaphore's code keeps the base** (`fitsS`'s `kstep`; `FSem.prim`'s `Step`
+in the semaphore's mutex's view, whose rest is the outer mutex's side `sB` next to the common
+rest, which after the step is `FCond.StepRest`'s):
+- a step of the condition's code at one of its words (`FCond.MStep`): the rwlock's invariant by
+  `Inv.mstep`, the words by `FCond.MStep.word_rmw`, and the memory at the word's bytes by the
+  rest's two equations when the rest keeps their cells;
+- a step on `t`'s own part and the holder's step (`natStep`); the own part's new shares by
+  counting in the outer mutex's view (`Shares.keep`, as `tickL`);
+- the waiter's entry into the condition's wait, a relabel: only the writer at `ww` waits at the
+  semaphore (`wt`, `Inv.one`), so no thread is registered (`FSem.Win1.semStep`'s `hent`).
+
+The client gives that no resource with `R` has a cell at the condition's words (`hRoff`) and the
+laws of the semaphore's places next to both mutexes. -/
+theorem sstep {t : ThreadId} {G' : ThreadId → γ} {rS rS' sB rL rH rX' : Res} {m' : Mem}
+    (hu : W.Base Sz K G rX m) (hs : S.prim.Step t G rS m G' rS' m') (he : rS = rsum sB rX)
+    (he' : rS' = rsum sB rX') (hsh : C.StepRest m m' rX rX')
+    (hsB : Res.Sim sB (FLock.side M m rL rH)) (hk : M.Keeps G m rL rH rX)
+    (hk' : M.Keeps G' m' rL rH rX')
+    (hRoff : ∀ xs r l, W.R xs r → (C.S.In l ∨ C.Ep.In l) → r.heap l = none)
+    (mph_s : ∀ g q, M.ph (S.place.set g q) = M.ph g)
+    (lph : ∀ g q, L.ph (S.place.set g q) = L.ph g)
+    (lpart : ∀ g q, L.part (S.place.set g q) = L.part g)
+    (ph_l : ∀ g q h, S.place.ph (L.set g q h) = S.place.ph g)
+    (hpl : ∀ g r, W.place.ph (M.setPart g r) = W.place.ph g) :
+    W.Base Sz K G' rX' m' := by
+  subst he
+  obtain ⟨⟨-, hW⟩, hS⟩ := hu.sub
+  have hsubL : S.prim.Sub G (rsum sB rX) m :=
+    ⟨FPrim.ofWords_sub_rsum hu.sub.1 (hsB.disj hk.side_disj), hS⟩
+  have sph_l : ∀ g q h, S.ph (L.set g q h) = S.ph g := fun g q h => congrArg Prod.snd (ph_l g q h)
+  have ph_part : ∀ g r, S.place.ph (L.setPart g r) = S.place.ph g := fun g r => by
+    rw [← W.pair.setPart]; exact congrArg Prod.snd (hpl g r)
+  -- a coordinate that the semaphore's places leave, over the condition's and the semaphore's
+  have hc : ∀ {α : Type} (f : γ → α), (∀ g q, f (S.place.set g q) = f g) →
+      ∀ g p, f (C.set g p) = f g := fun f hf g p => by rw [← S.place_c]; exact hf g _
+  have hss : ∀ {α : Type} (f : γ → α), (∀ g q, f (S.place.set g q) = f g) →
+      ∀ g s, f (S.set g s) = f g := fun f hf g s => by rw [← S.place_s]; exact hf g _
+  have sph_c : ∀ g p, S.ph (C.set g p) = S.ph g := fun g p => by
+    rw [← S.place_c]; exact congrArg Prod.snd (S.place.ph_set g (p, S.ph g))
+  have mpart : ∀ g g' : γ, L.part g' = L.part g → M.part g' = M.part g := fun g g' h => by
+    rw [W.pair.part, W.pair.part]; exact h
+  have hall : ∀ {α : Type} (f : γ → α) {g' : γ}, f g' = f (G t) →
+      ∀ u, f (upd G t g' u) = f (G u) := fun f _ hf u => by
+    by_cases e : u = t
+    · rw [e, upd_self, hf]
+    · rw [upd_ne _ _ e]
+  -- the window: no thread is registered when the writer at `ww` enters the wait
+  have hwin : C.Win1 L G' m' := FSem.Win1.semStep hu.win hsubL ph_l ph_part lph
+    (fun Wd hWd => (c_apart W Wd hWd).1)
+    (fun _ hst hwx hct u => by
+      cases e : (C.ph (G u)).isReg with
+      | false => rfl
+      | true =>
+        have hwu : W.ph (G u) = .ww := hu.wt u (hS.wt u (CPh.isReg_waits e))
+        have hwt : W.ph (G t) = .ww := (W.wx_iff _).mp hwx
+        have hut : u = t := hu.winv.one u t (by rw [hwu]; rfl) (by rw [hwt]; rfl)
+        rw [hut, hct] at e; cases e)
+    hs
+  have hRM : ∀ G, (M.R G).Unshared := fun G => by rw [W.mR]; exact FAssn.Unshared.emp
+  have hsBn : ∀ l, rX.heap l ≠ none → sB.heap l = none := fun l h =>
+    (hsB.disj hk.side_disj l).resolve_right h
+  rcases hs with ⟨hSI', hcs | ⟨hCI', hmv⟩⟩
+  · subst he'
+    obtain ⟨Wd, rY, hWs, heq, heq', hY, hCI', hcase⟩ := hcs
+    rcases hcase with ⟨p, q, h, ⟨-, hq, hms, -, -⟩, -, rfl⟩ |
+      ⟨r, hown, hL, hcur, hfs, hcW, -, -, hL', hG'⟩
+    · -- a step of the condition's code at the word `Wd`
+      have hgw : W.ph (L.set (C.set (G t) p) q h) = W.ph (G t) :=
+        (W.ph_l _ _ _).trans (hc W.ph W.ph_sp _ _)
+      have hgm : M.ph (L.set (C.set (G t) p) q h) = M.ph (G t) :=
+        (W.pair.ph_ba _ _ _).trans (hc M.ph mph_s _ _)
+      have hgp : M.part (L.set (C.set (G t) p) q h) = M.part (G t) :=
+        mpart _ _ ((L.part_set _ _ _).trans (hc L.part lpart _ _))
+      have hgx : W.x (L.set (C.set (G t) p) q h) = W.x (G t) := (W.x_l _ _ _).trans (W.x_c _ _)
+      have hsph : S.ph (L.set (C.set (G t) p) q h) = S.ph (G t) :=
+        (sph_l _ _ _).trans (sph_c _ _)
+      have hlq : L.ph (L.set (C.set (G t) p) q h) = q := L.ph_set _ _ _
+      have hwph := hall W.ph hgw
+      have hmph := hall M.ph hgm
+      have hpart := hall M.part hgp
+      have hin : ∀ l, Wd.In l → C.S.In l ∨ C.Ep.In l := fun l hl => by
+        rcases hWs with rfl | rfl <;> first | exact .inl hl | exact .inr hl
+      refine hu.ofStepRest hsh hRoff hCI' hSI' hwin (fun u e => upd_ne _ _ e)
+        (by rw [upd_self]; exact hgm)
+        (fun rZ hIZ ho _ =>
+          (hIZ.mstep hms hWs hRoff fun l h => hu.live l (ho l h)).congr hwph hmph (hall W.x hgx))
+        (fun V hV => (hms.word_rmw (hW V hV).1 (FCond.words_apart hV hWs)
+          (FCond.words_apart hV (.inr rfl))).1)
+        (fun l _ hr => ?_) (fun l hl ho _ => ?_)
+        (hu.shares.congr hwph
+          (fun v hv => by rwa [LockWord.joinedB_congr hms.threads] at hv)
+          fun v l => by rw [hpart v])
+        (fun hq' => ?_) (fun hq' => ?_)
+      · -- the word's bytes: the rest has their cells before and after the step
+        by_cases hlW : Wd.In l
+        · have hXne : rX.heap l ≠ none := by
+            obtain ⟨hok, rA, e, -⟩ := hW Wd hWs
+            rw [e]; exact fun en => cellsAt_some hlW (hok.cellIn hlW) (rsum_heap_none.mp en).1
+          have e1 : (sB.heap l).or (rX.heap l) = ((cellsAt Wd.In m).heap l).or (rY.heap l) :=
+            congrFun (congrArg Res.heap heq) l
+          have e2 : (sB.heap l).or (rX'.heap l) = ((cellsAt Wd.In m').heap l).or (rY.heap l) :=
+            congrFun (congrArg Res.heap heq') l
+          rw [hsBn l hXne, hY l hlW, Option.none_or, Option.or_none] at e1 e2
+          exact cellsAt_inj hlW (e2.symm.trans (hr.trans e1))
+        · exact hms.cells hlW
+      · rw [hms.cells fun h => hl (hin l h)]; exact hu.live l ho
+      · rw [upd_self] at hq' ⊢
+        rw [hgw]; exact hu.wt t (hsph.symm.trans hq')
+      · rw [upd_self] at hq'
+        rcases hq' with ⟨h1, h2, h3⟩ | hsp
+        · rw [hlq] at h1 h2 h3
+          rcases hq with ⟨rfl, -⟩ | ⟨-, hq2, -⟩
+          · exact hu.nap t (.inl ⟨h1, h2, h3⟩)
+          · rcases hq2 with rfl | ⟨rfl, -⟩
+            · exact absurd rfl h1
+            · exact absurd rfl h2
+        · refine hu.nap t (.inr fun e => hsp ?_)
+          have hs0 : S.ph (L.set (C.set (G t) p) q h) = .out := hsph.trans (congrArg Prod.snd e)
+          have hc0 := hSI'.c_out hCI' (u := t) (by rw [upd_self]; exact hs0)
+          rw [upd_self] at hc0
+          exact Prod.ext hc0 hs0
+    · -- a step on `t`'s own part
+      rw [← W.pair.setPart] at hG'
+      subst hG'
+      have hlg : L.ph (G t) ≠ .gone := by rcases hown with e | e <;> rw [e] <;> nofun
+      have hgw : W.ph (M.setPart (G t) r) = W.ph (G t) := congrArg Prod.fst (hpl _ _)
+      have hgs : S.place.ph (M.setPart (G t) r) = S.place.ph (G t) := congrArg Prod.snd (hpl _ _)
+      have hgl : L.ph (M.setPart (G t) r) = L.ph (G t) := by rw [W.pair.setPart, L.ph_setPart]
+      have hsubW : (C.prim L).Sub G (rsum (Wd.cellsR m) rY) m := by rw [← heq]; exact hsubL.1
+      have hLW : L.Inv G (rsum (Wd.cellsR m) rY) m := by rw [← heq]; exact hL
+      have hLW' : L.Inv (upd G t (M.setPart (G t) r)) (rsum (Wd.cellsR m') rY) m' := by
+        rw [← heq']; exact hL'
+      obtain ⟨hinv, hok, hE⟩ := hu.natStep hsh hsB hk hL hL' hcur hlg hfs
+        (FCond.cells_own hsubW hLW hLW' hcW) (hall W.ph hgw) (hall W.x (W.x_part _ _))
+        (hall M.ph (M.ph_setPart _ _))
+      -- the outer mutex's invariant before and after the step, for the new part's shares
+      obtain ⟨hsB', -⟩ := FLock.Pair.Keeps.partStep W.pair.symm hk hsB hfs hL'
+        (M.ph_setPart _ _) (M.held_setPart _ _) (fun r' h' => (M.R_setPart G t r r').mpr h')
+        hk'.xdisj hk'.xoff
+      obtain ⟨rLL, rHL, hMi, hkL⟩ := W.pair.symm.swap (FLock.Pair.inv_side hL hsB) hk
+        (FLock.NoGatherHeld.of_R hRM hk.facts)
+      obtain ⟨rLL', rHL', hMi', hkL'⟩ := W.pair.symm.swap (FLock.Pair.inv_side hL' hsB') hk'
+        (FLock.NoGatherHeld.of_R hRM hk'.facts)
+      refine hu.ofStepRest hsh hRoff hCI' hSI' hwin (fun u e => upd_ne _ _ e)
+        (by rw [upd_self]; exact M.ph_setPart _ _) hinv hok hE
+        (fun l _ _ ho' => hL'.rest_live ((Res.owned_sep rfl rfl).mpr (.inr ho')))
+        (hu.shares.keep hMi hMi'
+          (fun l => by
+            show ((FLock.side L m' rLL' rHL').gh.share l).add (rX'.gh.share l) =
+              ((FLock.side L m rLL rHL).gh.share l).add (rX.gh.share l)
+            rw [hkL'.side_share (lR_share W l), hkL.side_share (lR_share W l), hsh.gh])
+          (fun u q H l c hq hl => SCell.pos_add' _ (hu.winv.rest_share hq hl)) hfs.threads
+          (hL.w.live t hlg).1 (fun u e => upd_ne _ _ e) (by rw [upd_self]; exact hgw))
+        (fun hq' => ?_) (fun hq' => ?_)
+      · rw [upd_self] at hq' ⊢
+        rw [hgw]; exact hu.wt t ((congrArg Prod.snd hgs).symm.trans hq')
+      · rw [upd_self, hgl, hgs] at hq'
+        exact hu.nap t hq'
+  · cases hmv with
+    | enter _ _ hst _ _ =>
+      -- the waiter's entry into the condition's wait: a relabel
+      have hgw : W.ph (C.set (G t) .en) = W.ph (G t) := hc W.ph W.ph_sp _ _
+      have hgm : M.ph (C.set (G t) .en) = M.ph (G t) := hc M.ph mph_s _ _
+      have hgp : M.part (C.set (G t) .en) = M.part (G t) := mpart _ _ (hc L.part lpart _ _)
+      have hwph := hall W.ph hgw
+      have hpart := hall M.part hgp
+      refine hu.ofStepRest hsh hRoff hCI' hSI' hwin (fun u e => upd_ne _ _ e)
+        (by rw [upd_self]; exact hgm)
+        (fun rZ hIZ _ _ => hIZ.congr hwph (hall M.ph hgm) (hall W.x (W.x_c _ _)))
+        (fun V hV => (hW V hV).1) (fun _ _ _ => rfl) (fun l _ ho _ => hu.live l ho)
+        (hu.shares.congr hwph (fun _ h => h) fun v l => by rw [hpart v])
+        (fun _ => ?_) (fun _ => ?_)
+      · rw [upd_self, hgw]; exact hu.wt t hst
+      · exact hu.nap t (.inr fun e => by
+          have h2 : S.ph (G t) = .out := congrArg Prod.snd e
+          rw [hst] at h2; cases h2)
+    | hold s h hlh _ hL hcur hfs hL'' hcells hgo =>
+      -- the holder's step on the mutex's resource
+      obtain ⟨G'', hL''⟩ := hL''
+      rw [he'] at hL''
+      have hlg : L.ph (G t) ≠ .gone := by rw [hlh]; nofun
+      have hgw : W.ph (S.set (L.set (G t) .holds h) s) = W.ph (G t) :=
+        (hss W.ph W.ph_sp _ _).trans (W.ph_l _ _ _)
+      have hgm : M.ph (S.set (L.set (G t) .holds h) s) = M.ph (G t) :=
+        (hss M.ph mph_s _ _).trans (W.pair.ph_ba _ _ _)
+      have hgp : M.part (S.set (L.set (G t) .holds h) s) = M.part (G t) :=
+        mpart _ _ ((hss L.part lpart _ _).trans (L.part_set _ _ _))
+      have hgx : W.x (S.set (L.set (G t) .holds h) s) = W.x (G t) :=
+        (W.x_s _ _).trans (W.x_l _ _ _)
+      have hwph := hall W.ph hgw
+      have hpart := hall M.part hgp
+      obtain ⟨hinv, hok, hE⟩ := hu.natStep hsh hsB hk hL hL'' hcur hlg hfs hcells hwph
+        (hall W.x hgx) (hall M.ph hgm)
+      refine hu.ofStepRest hsh hRoff hCI' hSI' hwin (fun u e => upd_ne _ _ e)
+        (by rw [upd_self]; exact hgm) hinv hok hE
+        (fun l _ _ ho' => hL''.rest_live ((Res.owned_sep rfl rfl).mpr (.inr ho')))
+        (hu.shares.congr hwph
+          (fun v hv => by rwa [LockWord.joinedB_congr hfs.threads] at hv)
+          fun v l => by rw [hpart v])
+        (fun hq' => ?_) (fun _ => ?_)
+      · rw [upd_self] at hq' ⊢
+        rw [hgw]
+        have h's : s = .wt := (S.ph_set _ _).symm.trans hq'
+        rcases hgo with e | ⟨-, -, hwx'⟩ | ⟨e, -⟩ | ⟨e, -⟩
+        · exact hu.wt t (e.symm.trans h's)
+        · exact (W.wx_iff _).mp hwx'
+        · rw [h's] at e; cases e
+        · rw [h's] at e; cases e
+      · exact hu.nap t (.inl ⟨by rw [hlh]; nofun, by rw [hlh]; nofun, by rw [hlh]; nofun⟩)
+
 end Base
 
 end FRw

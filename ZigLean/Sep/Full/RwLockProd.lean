@@ -281,19 +281,18 @@ theorem Shares.rd {G : ThreadId → γ} {m : Mem} (h : W.Shares G m) {u t : Thre
   exact absurd hc' (by decide)
 
 /-- **`Inv.stepIn`'s `hrd` from the shares** (`Shares.rd`): the step reads only shared bytes of
-the running thread's part and held resource (`hsub`: its read frame `hR`, as `FLock.PartTick`'s
-and `FSem.Move.hold`'s steps take it), the thread is not joined, and what it holds of the outer
-mutex has no share (`hheld`: from the outer mutex's invariant, `FLock.Inv.held_share`). -/
-theorem Shares.hrd {G : ThreadId → γ} {m : Mem} (h : W.Shares G m) {hR : Heap}
-    (hj : joinedB m m.current = false)
-    (hheld : ∀ l, (M.held (G m.current)).gh.share l = SCell.zero)
-    (hsub : ∀ l, hR l ≠ none →
-      (rsum (M.part (G m.current)) (M.held (G m.current))).shared l ≠ none) :
+the running thread's part and the resource `rh` it holds of the stepping lock (`hsub`: its read
+frame `hR`, as `FLock.PartTick`'s and `FSem.Move.hold`'s steps take it), the thread is not
+joined, and what it holds of the lock has no share (`hheld`: from the lock's invariant,
+`FLock.Inv.held_share`). -/
+theorem Shares.hrd {G : ThreadId → γ} {m : Mem} (h : W.Shares G m) {hR : Heap} {rh : Res}
+    (hj : joinedB m m.current = false) (hheld : ∀ l, rh.gh.share l = SCell.zero)
+    (hsub : ∀ l, hR l ≠ none → (rsum (M.part (G m.current)) rh).shared l ≠ none) :
     ∀ u q H l, W.ph (G u) = .rd q H → H l ≠ none → hR l ≠ none →
       (W.ph (G m.current)).isRd = true := fun u q H l hu hl hr => by
   obtain ⟨-, -, c', hc'⟩ := Res.shared_ne.mp (hsub l hr)
-  have e : (rsum (M.part (G m.current)) (M.held (G m.current))).gh.share l =
-      ((M.part (G m.current)).gh.share l).add ((M.held (G m.current)).gh.share l) := rfl
+  have e : (rsum (M.part (G m.current)) rh).gh.share l =
+      ((M.part (G m.current)).gh.share l).add (rh.gh.share l) := rfl
   rw [e, hheld l, SCell.add_zero] at hc'
   exact h.rd hu hl hj hc'
 
@@ -438,6 +437,67 @@ theorem st_c_apart (W : FRw γ X Y M L C S) : ∀ Wd : Word 32 4, (Wd = C.S ∨ 
   have h4 := C.ep_o
   rintro Wd (rfl | rfl) l hl <;> exact W.st.notIn_apart (.inr (.inl (by omega))) hl
 
+/-- The condition's words are in the state word's block (the layout: one block at `p`). -/
+theorem c_blk (W : FRw γ X Y M L C S) : ∀ Wd : Word 32 4, (Wd = C.S ∨ Wd = C.Ep) →
+    Wd.b = W.st.b := by
+  have b1 : some C.S.b = S.p.block := congrArg Ptr.block S.ptr_c
+  have b2 : S.p.block = W.p.block := by rw [W.ptr_s]; rfl
+  have b3 : some W.st.b = W.p.block := congrArg Ptr.block W.ptr_st
+  have hb : C.S.b = W.st.b := Option.some.inj (by rw [b1, b2, ← b3])
+  rintro Wd (rfl | rfl)
+  · exact hb
+  · rw [C.ep_b]; exact hb
+
+/-- **The invariant over a step of the condition's code at one of its words** (`FCond.MStep`: an
+op at the word, the futex wait's sleep at the epoch, a futex wait's return, a futex wake): an op
+is a native step at a word apart from the state word (`Inv.wordStep`, `st_c_apart`), where no
+resource with `R` has a cell (`hRoff`), and the rest reads only the memory's heap, clocks and
+footprint (`Inv.queue`). The rest's bytes are live (`hbl`). -/
+theorem Inv.mstep {Wd : Word 32 4} {t : ThreadId} {G : ThreadId → γ} {rX : Res} {m m' : Mem}
+    (hI : W.Inv G rX m) (hs : C.MStep Wd t m m') (hWd : Wd = C.S ∨ Wd = C.Ep)
+    (hRoff : ∀ xs r l, W.R xs r → (C.S.In l ∨ C.Ep.In l) → r.heap l = none)
+    (hbl : ∀ l, rX.owned l ≠ none → m.heap l ≠ none) : W.Inv G rX m' := by
+  have hI₀ : W.Inv G rX { m with current := t } := hI.queue t m.waiters m.woken
+  -- an op at a word `V` of the condition's, from `{ m with current := t }`
+  have hrun : ∀ (V : Word 32 4) (M : Mem), (V = C.S ∨ V = C.Ep) →
+      RestStep V.In { m with current := t } M →
+      (∀ hF : Heap, (∀ l, V.In l → hF l = none) → FStepIn hF { m with current := t } M) →
+      W.Inv G rX M := fun V _ hV hr hf =>
+    hI₀.wordStep hr hf (st_c_apart W V hV)
+      (fun xs r l h hl => hRoff xs r l h (by
+        rcases hV with rfl | rfl <;> first | exact .inl hl | exact .inr hl))
+      hbl (fun _ => rfl) (fun _ => rfl) (fun _ h => h) hI.wm
+  cases hs with
+  | same => exact hI
+  | op hw hc hop _ _ =>
+    exact hrun _ _ hWd (Word.actualRun_rest hw hc hop) fun _ h0 =>
+      Word.actualRun_fstep hw hc (fun _ h1 h2 => h0 _ ⟨rfl, h1, h2⟩) hop
+  | @sleep M hw hc hM _ _ =>
+    subst hM
+    exact (hrun _ _ (.inr rfl) (Word.record_rest hw hc) fun _ h0 =>
+      Word.record_fstep hw hc fun _ h1 h2 => h0 _ ⟨rfl, h1, h2⟩).queue _ _ _
+  | woken => exact hI.queue _ _ _
+  | resume => exact hI.queue _ _ _
+  | wake c cs h => obtain rfl := Proto.modify_ok h; exact hI.queue _ _ _
+
+/-- **The invariant at the rest after a step of the semaphore's code** (`FCond.StepRest`), given
+the invariant after the step at every rest within the rest before it (`hst`): at the same rest,
+or at the rest beside the word's cells (`Inv.dropCells`), which then takes the new cells
+(`Inv.frame`). -/
+theorem Inv.stepRest {G G' : ThreadId → γ} {rX₀ rX₀' : Res} {m m' : Mem} (hI : W.Inv G rX₀ m)
+    (hsh : C.StepRest m m' rX₀ rX₀')
+    (hRoff : ∀ xs r l, W.R xs r → (C.S.In l ∨ C.Ep.In l) → r.heap l = none)
+    (hst : ∀ rZ, W.Inv G rZ m → (∀ l, rZ.owned l ≠ none → rX₀.owned l ≠ none) →
+      (∀ l, rZ.heap l ≠ none → rX₀.heap l ≠ none) → W.Inv G' rZ m') : W.Inv G' rX₀' m' := by
+  rcases hsh with rfl | ⟨Wd, rY, hWd, rfl, rfl, hY⟩
+  · exact hst _ hI (fun _ h => h) fun _ h => h
+  · have hI₁ := hst rY
+      (hI.dropCells hY (st_c_apart W Wd hWd) fun xs r l h hl => hRoff xs r l h (by
+        rcases hWd with rfl | rfl <;> first | exact .inl hl | exact .inr hl))
+      (fun l h => (Res.owned_sep rfl rfl).mpr (.inr h))
+      fun l h e => h (rsum_heap_none.mp e).2
+    exact hI₁.frame (disj_cellsAt hY).symm
+
 /-- **The frame of a step of the rwlock's own code**: every byte but the state word's, which the
 step keeps (`Step`'s `RestStep` and `FStepIn`). -/
 theorem Step.frame {t : ThreadId} {G G' : ThreadId → γ} {rX rX' : Res} {m m' : Mem}
@@ -544,10 +604,7 @@ theorem fitsS (W : FRw γ X Y M L C S) {okS : γ → Prop}
       M.ph (G t) = .away ∨ (M.ph (G t) = .holdsAway ∧ M.nest C.Ep.ptr))
     (kstep : ∀ t G G' rX rX' m m' sB rL rH rX₀ rX₀', S.prim.Step t G rX m G' rX' m' →
       rX = rsum sB rX₀ → rX' = rsum sB rX₀' →
-      (rX₀' = rX₀ ∨ ∃ (Wd : Word 32 4) (rY₀ : Res), (Wd = C.S ∨ Wd = C.Ep) ∧
-        rX₀ = rsum (Wd.cellsR m) rY₀ ∧ rX₀' = rsum (Wd.cellsR m') rY₀ ∧
-        ∀ l, Wd.In l → rY₀.heap l = none) →
-      Res.Sim sB (FLock.side M m rL rH) →
+      C.StepRest m m' rX₀ rX₀' → Res.Sim sB (FLock.side M m rL rH) →
       M.Keeps G m rL rH rX₀ → M.Keeps G' m' rL rH rX₀' → U₀ G rX₀ m → U₀ G' rX₀' m')
     (holdLive : ∀ G rX m v, L.Inv G rX m → FLock.Pair.U M U₀ G rX m → L.ph (G v) = .holdsAway →
       P.Live v G m)

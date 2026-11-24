@@ -51,6 +51,61 @@ theorem cellsAt_congr {W : Zig.Loc → Prop} [DecidablePred W] {m m' : Mem}
   · rename_i hl; rw [h l hl]
   · rfl
 
+/-- Two memories with one cell of the bytes `W` at a byte have one byte there. -/
+theorem cellsAt_inj {W : Zig.Loc → Prop} [DecidablePred W] {m m' : Mem} {l : Zig.Loc} (hl : W l)
+    (h : (cellsAt W m').heap l = (cellsAt W m).heap l) : m'.heap l = m.heap l := by
+  rw [cellsAt_of hl, cellsAt_of hl] at h
+  cases e1 : m'.heap l with
+  | none =>
+    cases e2 : m.heap l with
+    | none => rfl
+    | some c => rw [e1, e2] at h; cases h
+  | some c' =>
+    cases e2 : m.heap l with
+    | none => rw [e1, e2] at h; cases h
+    | some c => rw [e1, e2] at h; exact congrArg (Option.map FCell.cell) h
+
+/-- **The cells at bytes `W` of a rest are in the summand that may have them**: a rest with the
+cells beside `rY`, which is also `rsum rB rO` with `rB` without the bytes, has the cells in `rO`,
+and `rY` is `rB` next to the rest of `rO`. -/
+theorem cellsAt_out {W : Zig.Loc → Prop} [DecidablePred W] {m : Mem} {rY rB rO : Res}
+    (h : rsum (cellsAt W m) rY = rsum rB rO) (hY : ∀ l, W l → rY.heap l = none)
+    (hB : ∀ l, W l → rB.heap l = none) :
+    ∃ rO₀, rO = rsum (cellsAt W m) rO₀ ∧ (∀ l, W l → rO₀.heap l = none) ∧ rY = rsum rB rO₀ := by
+  have hh : ∀ l, ((cellsAt W m).heap l).or (rY.heap l) = (rB.heap l).or (rO.heap l) := fun l =>
+    congrFun (congrArg Res.heap h) l
+  have hk : Know.none.union rY.know = rB.know.union rO.know := congrArg Res.know h
+  have hg : Ghost.unit.add rY.gh = rB.gh.add rO.gh := congrArg Res.gh h
+  rw [Know.none_union] at hk
+  rw [Ghost.unit_add] at hg
+  refine ⟨⟨fun l => if W l then none else rO.heap l, rO.know, rO.gh⟩, ?_,
+    fun l hl => by simp only [hl, ↓reduceIte], ?_⟩
+  · obtain ⟨oh, ok, og⟩ := rO
+    show Res.mk oh ok og = Res.mk ((cellsAt W m).heap ∪ _) (Know.none.union ok) (Ghost.unit.add og)
+    rw [Know.none_union, Ghost.unit_add]
+    congr 1
+    funext l
+    rw [FHeap.union_apply]
+    by_cases hl : W l
+    · have e := hh l
+      rw [hY l hl, hB l hl, Option.or_none, Option.none_or] at e
+      simp only [hl, ↓reduceIte, Option.or_none]
+      exact e.symm
+    · simp only [hl, ↓reduceIte, cellsAt_none hl, Option.none_or]
+  · obtain ⟨yh, yk, yg⟩ := rY
+    simp only at hk hg hh hY
+    subst hk hg
+    show Res.mk yh _ _ = Res.mk (rB.heap ∪ _) _ _
+    congr 1
+    funext l
+    rw [FHeap.union_apply]
+    by_cases hl : W l
+    · simp only [hl, ↓reduceIte, hY l hl, hB l hl, Option.or_none]
+    · have e := hh l
+      rw [cellsAt_none hl, Option.none_or] at e
+      simp only [hl, ↓reduceIte]
+      exact e
+
 /-- **The cells at bytes `W` stay in a rest whose other part changes**: a rest `rsum rA rO` with
 the cells beside a resource without them, where `rA` has none of the bytes, has them in `rO`; so
 after a step that keeps the bytes the rest `rsum rA' rO`, with `rA'` again without them, has the
