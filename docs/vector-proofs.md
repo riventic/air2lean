@@ -143,12 +143,27 @@ aarch64-macos (layout evidence only; ReleaseFast stays unqualified, [build-modes
 Under emulated x86_64-linux (Docker `linux/amd64`, stock Zig 0.16.0 `x86_64-linux` release),
 `lanes.zig`'s test passed and the probe printed the same lines; CI runs both natively.
 
+Zig 0.17.1. Stock 0.17.1 (ReleaseSafe, Debug, ReleaseFast) passed `lanes.zig`'s test and printed
+the same probe lines on x86_64-linux (Docker `linux/amd64`), and on aarch64-macos and
+aarch64-linux (a `linux/arm64` container; layout evidence only, ReleaseFast stays unqualified,
+[build-modes.md](build-modes.md)) except the two `f80x2` lines, the declared layout
+divergence of [aarch64-abi.md](aarch64-abi.md) §Zig 0.17.1 (an `f80` and a vector of it in memory
+are rejected there by the layout comparison of `checkMemTy`:
+`lang-long-tail/float_lanes_aarch64.reject`). 0.17.1 writes `&v[i]` as a `ptr_cast` of the vector
+pointer to the lane pointer type, for every lane type; `Canon.laneElemPtrs` gives it 0.16.0's form,
+`ptr_elem_ptr` with the lane index, so one rule (`CheckCtx.lanePtr`, `Zig.loadLane`/`Zig.storeLane`)
+serves every version. The predicate `wholeByteLane` splits the two models: a lane of a whole
+power-of-two number of bytes (`u8`, `u32`, `f64`) is the element pointer that 0.16.0 made, and
+every other lane is the bit-pointer. A 0.17.1 value of a lane pointer *type* with a whole-byte lane
+(a parameter, a result, a stored `&v[i]`) is the vector's address, which the element pointer is
+not: the type is rejected (`lang-long-tail/lane_values.zig`).
+
 Scope. The lane layout is LLVM's (LangRef: a vector of non-byte lanes is laid out as its
 bit-cast integer, lane 0 in the low bits on little-endian targets); the translator admits it
 only where the probe runs natively (`Target.lanePtrProbe`): an LLVM-backend profile on x86_64-linux,
 aarch64-macos or aarch64-linux (the `load`/`pad` rows of its T04 files, [aarch64-abi.md](aarch64-abi.md)).
-Other LLVM targets, the self-hosted x86_64 and C backends, legacy schema-11 files, float lanes (`f80`), 0.14.1/0.15.2 runtime lanes
-and Zig 0.17.1 lane pointers (no native lane-pointer evidence yet) stay rejected. An `undefined` store through a lane pointer is rejected (a packed field takes `Zig.storeUndefBits`; a lane has no such store).
+Other LLVM targets, the self-hosted x86_64 and C backends, legacy schema-11 files, runtime lane
+pointers that are read (0.14.1/0.15.2) and Zig 0.17.1 values of a whole-byte lane pointer type stay rejected. An `undefined` store through a lane pointer is rejected (a packed field takes `Zig.storeUndefBits`; a lane has no such store).
 
 Lane reads. `v.*[i]` through a pointer to a bit-packed vector is a lane pointer and a `load` in
 0.16.0 (`Zig.loadLane`), and a whole-vector `load` then `array_elem_val` in 0.15.2; canonicalization

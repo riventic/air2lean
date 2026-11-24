@@ -115,6 +115,66 @@
       ]
     },
     {
+      "out": "air/float_lanes_aarch64/{version}",
+      "source": "float_lanes.zig",
+      "filter": "float_lanes.",
+      "versions": [
+        "0.17.1"
+      ],
+      "args": [
+        "-OReleaseSafe",
+        "-fno-error-tracing",
+        "-target",
+        "aarch64-linux-gnu",
+        "-mcpu=baseline"
+      ],
+      "cwd": "repo",
+      "closure": [
+        "float_lanes.*"
+      ]
+    },
+    {
+      "out": "air/lane_values/{version}",
+      "source": "lane_values.zig",
+      "filter": "lane_values.",
+      "versions": [
+        "0.17.1"
+      ],
+      "args": [
+        "-OReleaseSafe",
+        "-fno-error-tracing",
+        "-target",
+        "x86_64-linux",
+        "-mcpu=baseline"
+      ],
+      "cwd": "repo",
+      "closure": [
+        "lane_values.*"
+      ]
+    },
+    {
+      "out": "air/lane_shapes/{version}",
+      "source": "lane_shapes.zig",
+      "filter": "lane_shapes.",
+      "versions": [
+        "0.17.1",
+        "0.16.0",
+        "0.15.2",
+        "0.14.1"
+      ],
+      "args": [
+        "-OReleaseSafe",
+        "-fno-error-tracing",
+        "-target",
+        "x86_64-linux",
+        "-mcpu=baseline"
+      ],
+      "cwd": "repo",
+      "closure": [
+        "lane_shapes.*"
+      ]
+    },
+    {
       "out": "air/runtime_lanes/{version}",
       "source": "runtime_lanes.zig",
       "filter": "runtime_lanes.",
