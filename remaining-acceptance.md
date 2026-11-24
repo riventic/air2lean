@@ -799,5 +799,9 @@ Classification: open.
 
 verify C programs through stock `zig translate-c` and the existing Zig route; state the trust added by translate-c and the libc headers. Acceptance: every corpus file is translated and `#guard`-checked or rejected by a named, documented gate; every libc symbol the corpus calls is translated from pinned real code or a trusted-base model with a stated contract; known compiler bugs are gated or avoided by a qualified Zig version; the heavy coverage run is reproducible and CI checks its record (docs/c-frontend.md).
 
-Baseline ([PR129](https://github.com/riventic/air2lean/pull/129)): corpus, harness, generator and committed records; 17/40 corpus files and 30/30 generated programs are `lean_ok`.
+Baseline ([PR129](https://github.com/riventic/air2lean/pull/129), Zig 0.16.0): corpus, harness, generator and committed records; 17/40 corpus files and 30/30 generated programs are `lean_ok`.
+
+Zig 0.17.1: 26/40 corpus files and 30/30 generated programs are `lean_ok`; 10 files are rejected by a named gate (docs/c-frontend.md §Gates). The harness closes the AIR export over std callees, runs the translator with `--allocator-model translated`, and can defer Lean elaboration to a build host; the translator models Zig 0.17.1's array `splat`.
+
+Remaining: `casts` (a 0.17.1 `int_from_ptr`/`ptr_cast` of an optional pointer, L07); `libc_string` and `malloc_vec` (no libc symbol has a binding: Zig 0.17.1 defines these symbols in Zig, `lib/c/*.zig` and `compiler_rt`, as weak `@export`s, so binding them needs the exporter's `@export` records and an EXT-03 decision on weak definitions); `ptr_arith` (a signed item offset for `[*c]` pointers in the memory model, L05); the gated files stay rejected until translate-c translates `goto` (L03), bitfields, variadic definitions and nested case labels, and until its `u1` comparator arithmetic is fixed upstream.
 <!-- register:acceptance:end -->

@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # C front-end coverage (docs/c-frontend.md).
-#   --light            record check: committed record.json matches the corpus, its summary and
-#                      the generated tables in docs/c-frontend.md; generator invariants. No tools.
+#   --light            record check: committed record.json matches the corpus, its summary, its
+#                      gates and the generated tables in docs/c-frontend.md; harness unit tests;
+#                      generator invariants. No tools.
 #   --heavy OUT_DIR [FILE...]
 #                      every stage for the corpus (or the named corpus stems): zig cc, translate-c,
 #                      native zig test, AIR export, air2lean diagnostics, Lean #guard; rewrites
-#                      record.json. Needs AIR2LEAN_ZIG_NATIVE (stock 0.16.0) and AIR2LEAN_ZIG_AIR
-#                      (patched 0.16.0); AIR2LEAN_ZIG_NATIVE_0152 adds the 0.15.2 translate-c column.
+#                      record.json. Needs AIR2LEAN_ZIG_NATIVE (stock 0.17.1) and AIR2LEAN_ZIG_AIR
+#                      (patched 0.17.1); AIR2LEAN_ZIG_NATIVE_0152 adds the 0.15.2 translate-c column.
 #                      Runs compilers and Lean sequentially; wrap it in one scripts/build-guard.py.
 #   --generated OUT_DIR START COUNT
 #                      cgen.py programs through the same stages into OUT_DIR/record.json
@@ -20,6 +21,7 @@ export PYTHONDONTWRITEBYTECODE=1
 case "${1:-}" in
   --light)
     python3 "$here/run.py" check
+    python3 "$here/test_run.py"
     python3 "$here/cgen.py" light --seeds 300
     ;;
   --heavy)
