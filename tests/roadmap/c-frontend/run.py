@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
 """C front-end coverage harness: C -> zig translate-c -> Zig -> AIR -> air2lean -> Lean.
 
-  run.py heavy --out DIR [--files NAME ...] [--record FILE] [--no-build]
+  run.py heavy --out DIR [--files NAME ...] [--record FILE] [--no-build] [--defer-lean]
       Run every stage for the corpus (or the named files) and write the coverage record.
-      Needs AIR2LEAN_ZIG_NATIVE (stock Zig 0.16.0), AIR2LEAN_ZIG_AIR (patched 0.16.0) and
+      Needs AIR2LEAN_ZIG_NATIVE (stock Zig 0.17.1), AIR2LEAN_ZIG_AIR (patched 0.17.1) and
       optionally AIR2LEAN_ZIG_NATIVE_0152 (stock 0.15.2, translate-c comparison only).
       Runs compilers and Lean sequentially; wrap the whole call in one scripts/build-guard.py.
+      --defer-lean writes each Check.lean but leaves its elaboration to `run.py lean`.
+  run.py lean --out DIR [--record FILE]
+      Elaborate the deferred Check.lean files under DIR (Lean only) and rewrite the record.
   run.py check [--record FILE]
       Offline record check (CI): the record covers exactly the committed corpus with matching
       source hashes, its summary is recomputed from the per-file stages, and docs/c-frontend.md
       contains the generated tables verbatim. No compiler, translator or Lean run.
-  run.py tables [--record FILE]
-      Print the generated markdown tables (stage results and histograms).
+  run.py tables [--record FILE] [--write]
+      Print the generated markdown tables (stage results and histograms); --write replaces
+      them in docs/c-frontend.md.
 
 Every corpus file defines `unsigned entry(unsigned a, unsigned b)`; it must be deterministic
 and reset any state it uses (the C driver calls each input twice and compares). Expected
@@ -148,12 +152,17 @@ def run(cmd, timeout, cwd=None, env=None):
         return -1, str(e)
 
 
+SCRUBBED = []
+
+
 def scrub(text):
     """Host-independent logs: the repository and home directories become placeholders."""
     for var in ("AIR2LEAN_ZIG_AIR", "AIR2LEAN_ZIG_NATIVE", "AIR2LEAN_ZIG_NATIVE_0152"):
         if os.environ.get(var):  # <prefix>/bin/zig or <prefix>/zig
             prefix = Path(os.environ[var]).parent
             text = text.replace(str(prefix.parent if prefix.name == "bin" else prefix), "$" + var)
+    for path, name in SCRUBBED:  # the run's work directory (`cmd_heavy`)
+        text = text.replace(path, name)
     return text.replace(str(ROOT), "$REPO").replace(str(Path.home()), "$HOME")
 
 
@@ -217,7 +226,7 @@ def c_symbols(zig, src, work):
 
 def stage_translate_c(zig, src, work, out_name, defined):
     zig_file = work / out_name
-    # stdout must be a regular file: Zig 0.16 copies its result to stdout with fcopyfile,
+    # stdout must be a regular file: Zig (0.16, 0.17) copies its result to stdout with fcopyfile,
     # which spins forever when stdout is a pipe on macOS 27.
     try:
         with open(zig_file, "w") as stdout:
@@ -517,7 +526,7 @@ def cmd_heavy(args):
     tools = {"native": os.environ.get("AIR2LEAN_ZIG_NATIVE"), "air": os.environ.get("AIR2LEAN_ZIG_AIR"),
              "native_0152": os.environ.get("AIR2LEAN_ZIG_NATIVE_0152")}
     if not tools["native"] or not tools["air"]:
-        print("set AIR2LEAN_ZIG_NATIVE (stock 0.16.0) and AIR2LEAN_ZIG_AIR (patched 0.16.0)", file=sys.stderr)
+        print("set AIR2LEAN_ZIG_NATIVE (stock 0.17.1) and AIR2LEAN_ZIG_AIR (patched 0.17.1)", file=sys.stderr)
         return 2
     if not args.no_build:
         code, out = run(["lake", "build", "ZigLean", "air2lean"], 10800, cwd=ROOT)
@@ -527,6 +536,7 @@ def cmd_heavy(args):
     tools["air2lean"] = str(ROOT / ".lake" / "build" / "bin" / "air2lean")
     out_dir = Path(args.out).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
+    SCRUBBED.append((str(out_dir), "$WORK"))
     record_path = Path(args.record)
     old = json.loads(record_path.read_text()) if record_path.exists() and args.files else None
     files = dict(old["files"]) if old else {}
@@ -636,7 +646,17 @@ def cmd_check(args):
 
 
 def cmd_tables(args):
-    sys.stdout.write(tables(json.loads(Path(args.record).read_text())))
+    text = tables(json.loads(Path(args.record).read_text()))
+    if not args.write:
+        sys.stdout.write(text)
+        return 0
+    first, last = text.splitlines()[0], text.splitlines()[-1]
+    doc = DOC.read_text()
+    start, end = doc.find(first), doc.find(last)
+    if start < 0 or end < start:
+        print(f"{DOC.relative_to(ROOT)} has no generated tables block to replace", file=sys.stderr)
+        return 1
+    DOC.write_text(doc[:start] + text + doc[end + len(last) + 1:])
     return 0
 
 
@@ -656,6 +676,8 @@ def main(argv=None):
         p.add_argument("--record", default=str(RECORD))
     sub.choices["check"].add_argument("--generated", default=str(GENERATED))
     sub.choices["lean"].add_argument("--out", required=True, help="the heavy run's work directory")
+    sub.choices["tables"].add_argument("--write", action="store_true",
+                                       help="replace the generated tables in docs/c-frontend.md")
     args = parser.parse_args(argv)
     return {"heavy": cmd_heavy, "check": cmd_check, "tables": cmd_tables, "lean": cmd_lean}[args.cmd](args)
 
