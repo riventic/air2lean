@@ -17,6 +17,9 @@ product (`ZigLean/Sep/Full/LockProd.lean`), once for every pair of locks and eve
   kept (`hcl`, the shape of the other `Pair` builders' premise: `U_relabel`, `U_stable`).
 - `FLock.Pair.fork`: `A`'s invariant and the product's rest together, the invariant of a protocol
   with two locks after the spawn (`FLock.Inv.fork` for `A`).
+- `FLock.Pair.U_setPart`, `FLock.Pair.eupdPart`: the product over a change of a thread's part at
+  the same memory (`FLock.Inv.eupdPart`), which a spawning thread uses to copy its plain mode for
+  the new thread before the spawn.
 
 The memory-level fact of the spawn is the one `FLock.Inv.fork` takes: the run of
 `Thread.forkWith gt` at `{ m with current := t }`.
@@ -159,6 +162,50 @@ theorem fork {U : (ThreadId → γ) → Res → Mem → Prop} {rXA : Res} {t c :
     A.Inv (upd (upd G c g₀) t g₁) rXA m' ∧ Pair.U B U (upd (upd G c g₀) t g₁) rXA m' :=
   ⟨hi.fork houtA hf hsplit hd hA₁ hA₁h hA₀ hA₀h hRA,
     U_fork hU houtB hf hB₁ hB₁h hB₀ hB₀h hRB hcl⟩
+
+/-- **A change of `t`'s part at the same memory keeps the product's rest for `A`** (module doc):
+`U_partStep` at the step that changes nothing (`FStepIn.refl`). `B` reads no part (the two locks
+have one part, `FLock.Pair.setPart`), and `t`'s new part is apart from what it holds of `B` by
+`A`'s invariant at the new part (`hi'`). The client's own `U` is kept (`hcl`, the shape of
+`TickKeeps` at the same memory: it gets `B`'s side, `B` kept, and `A`'s invariant at the stored
+rest before and after the change). -/
+theorem U_setPart (hp : A.Pair B) {U : (ThreadId → γ) → Res → Mem → Prop} {rXA : Res}
+    {t : ThreadId} {g : γ} {r : Res} (hi : A.Inv (upd G t g) rXA m)
+    (hi' : A.Inv (upd G t (A.setPart g r)) rXA m) (hU : Pair.U B U (upd G t g) rXA m)
+    (hcl : ∀ sB rL rH rX, rXA = rsum sB rX → Res.Sim sB (side B m rL rH) →
+      B.Keeps (upd G t g) m rL rH rX → A.Inv (upd G t g) (rsum sB rX) m →
+      A.Inv (upd G t (A.setPart g r)) (rsum sB rX) m → U (upd G t g) rX m →
+      U (upd G t (A.setPart g r)) rX m) :
+    Pair.U B U (upd G t (A.setPart g r)) rXA m := by
+  have hpart : A.setPart g r = B.setPart g r := hp.setPart _ _
+  have h := U_partStep (hO := Heap.empty) (t := t) (g := A.setPart g r) (m' := m) hp hU
+    (FStepIn.refl m _) (by rw [upd_upd]; exact hi')
+    (by rw [upd_self, hpart, B.ph_setPart]) (by rw [upd_self, hpart, B.held_setPart])
+    (fun r' h => by
+      have h' := (B.R_setPart (upd G t g) t r r').mpr h
+      rwa [upd_self, ← hpart] at h')
+    (fun sB rL rH rX e hs hk hu => by
+      subst e
+      rw [upd_upd]
+      exact hcl sB rL rH rX rfl hs hk hi hi' hu)
+  rwa [upd_upd] at h
+
+/-- **A same-memory update of `t`'s part keeps the invariant of a protocol with two locks**
+(module doc; `FLock.Inv.eupdPart` for `A`, `U_setPart` for the product's rest): the update that
+keeps, duplicates or drops plain fragments before a spawn. The client's own `U` is kept at each
+part the update may give (`hcl`). -/
+theorem eupdPart {Tgt : Type} (hp : A.Pair B) (P : Proto Tgt γ)
+    {U : (ThreadId → γ) → Res → Mem → Prop} {rXA : Res} {t : ThreadId} {g : γ} {Qa : FAssn}
+    (hi : A.Inv (upd G t g) rXA m) (hU : Pair.U B U (upd G t g) rXA m) (hc : m.current = t)
+    (hg : A.ph g ≠ .gone) (hu : EUpd (fun r => r = A.part g) Qa)
+    (hcl : ∀ r, Qa r → ∀ sB rL rH rX, rXA = rsum sB rX → Res.Sim sB (side B m rL rH) →
+      B.Keeps (upd G t g) m rL rH rX → A.Inv (upd G t g) (rsum sB rX) m →
+      A.Inv (upd G t (A.setPart g r)) (rsum sB rX) m → U (upd G t g) rX m →
+      U (upd G t (A.setPart g r)) rX m) :
+    ∃ r, Qa r ∧ A.Inv (upd G t (A.setPart g r)) rXA m ∧
+      Pair.U B U (upd G t (A.setPart g r)) rXA m := by
+  obtain ⟨r, hq, hi'⟩ := hi.eupdPart P hc hg hu
+  exact ⟨r, hq, hi', U_setPart hp hi hi' hU (hcl r hq)⟩
 
 end Pair
 

@@ -25,6 +25,12 @@ at the new client parts (`hR`) and its threads' fact at the new thread table (`h
 - `FRw.Base.forkProto`: the same for a protocol whose invariant is that one (`RwProd`'s `inv`,
   `ZigLean/Sep/Full/RwLockGhost.lean`), with the child's id and the current thread, in the form a
   program's spawn step uses.
+- `FRw.Base.setPart`: the base over a change of a thread's part at the same memory (`Base.tick`
+  without the tick; the readers' shares by counting, `Shares.keep`), and `FRw.Base.out_setPart`.
+- `FRw.Base.spawnProto`, `FRw.Base.spawn`: the spawn as a program's `main` uses it. `main`'s part
+  holds the duplicable plain mode; it copies the mode before the spawn
+  (`FLock.Pair.eupdPart` with `EUpd.plain_split`), keeps its part and gives the copy to the child
+  (`forkProto`). `spawn` is the rule a program passes to `fsym` for `Thread.fork`.
 
 The memory-level fact of the spawn is the one `FLock.Inv.fork` takes: the run of
 `Thread.forkWith gt` at `{ m with current := t }`.
@@ -512,6 +518,171 @@ theorem forkProto {Tgt : Type} {P : Proto Tgt γ} {t c : ThreadId} {g₁ g₀ : 
   simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
   obtain ⟨-, rfl⟩ := hf
   rfl
+
+/-! ## The spawn of a program: the plain mode copied for the child -/
+
+/-- **A thread out of every code stays so at another part**: the part is no place (`hpl`) and
+neither mutex reads it (`FLock.ph_setPart`, `held_setPart`; one part, `FLock.Pair.setPart`). -/
+theorem out_setPart (hpl : ∀ g r, W.place.ph (M.setPart g r) = W.place.ph g) {g : γ}
+    (h : W.Out g) (r : Res) : W.Out (M.setPart g r) := by
+  obtain ⟨hw, hm, hmh, hl, hlh, hc, hs⟩ := h
+  have wph : W.ph (M.setPart g r) = W.ph g := congrArg Prod.fst (hpl g r)
+  have cph : C.ph (M.setPart g r) = C.ph g := congrArg (fun q => q.2.1) (hpl g r)
+  have sph : S.ph (M.setPart g r) = S.ph g := congrArg (fun q => q.2.2) (hpl g r)
+  exact ⟨wph.trans hw, by rw [M.ph_setPart]; exact hm, by rw [M.held_setPart]; exact hmh,
+    by rw [W.pair.setPart, L.ph_setPart]; exact hl,
+    by rw [W.pair.setPart, L.held_setPart]; exact hlh, cph.trans hc, sph.trans hs⟩
+
+/-- **A change of `t`'s part at the same memory keeps the base** (`Base.tick` without the tick):
+the places and the client parts stay (the part is no place, `hpl`), and the readers' shares are
+kept by counting (`Shares.keep`), given the outer mutex's invariant before and after the change at
+rests with the common rest beside the semaphore's mutex's side (`s`, `s'`: the same shares). So a
+reader's part keeps its share of the readers' heap, and a thread that is no reader gets none. -/
+theorem setPart {t : ThreadId} {r s s' : Res} (hu : W.Base E Sz K G rX m)
+    (hM : M.Inv G (rsum s rX) m)
+    (hM' : M.Inv (upd G t (M.setPart (G t) r)) (rsum s' rX) m)
+    (hs : ∀ l, s'.gh.share l = s.gh.share l) (ht : t < m.threads.size)
+    (hpl : ∀ g r, W.place.ph (M.setPart g r) = W.place.ph g) :
+    W.Base E Sz K (upd G t (M.setPart (G t) r)) rX m := by
+  obtain ⟨⟨hC, hW⟩, hS⟩ := hu.sub
+  have wph : ∀ g, W.ph (M.setPart g r) = W.ph g := fun g => congrArg Prod.fst (hpl g r)
+  have cph : ∀ g, C.ph (M.setPart g r) = C.ph g := fun g =>
+    congrArg (fun q => q.2.1) (hpl g r)
+  have sph : ∀ g, S.ph (M.setPart g r) = S.ph g := fun g =>
+    congrArg (fun q => q.2.2) (hpl g r)
+  have lph : ∀ g, L.ph (M.setPart g r) = L.ph g := fun g => by
+    rw [W.pair.setPart, L.ph_setPart]
+  have hup : ∀ {α : Type} (f : γ → α), (∀ g, f (M.setPart g r) = f g) →
+      ∀ u, f (upd G t (M.setPart (G t) r) u) = f (G u) := fun f h u => by
+    have := congrFun (upd_map f G t (h (G t))) u
+    rwa [upd_same] at this
+  have hwph := hup W.ph wph
+  have hmph := hup M.ph fun g => M.ph_setPart g r
+  have hlph := hup L.ph lph
+  have hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m.clocks[u]!) = true :=
+    fun _ => VClock.le_refl _
+  have hpv : S.cnt (upd G t (M.setPart (G t) r)) = S.cnt G := cnt_congr hwph
+  have hmgone : ∀ u, M.ph (upd G t (M.setPart (G t) r) u) ≠ .gone → M.ph (G u) ≠ .gone :=
+    fun u h => by rwa [hmph u] at h
+  exact {
+    cl := cl_of (hup W.x fun g => W.x_part g r) hu.cl
+    winv := hu.winv.keep (hu.winv.ok.anti hmgone) rfl rfl rfl hwph
+      (hup W.x fun g => W.x_part g r) (fun u h => by rw [hmph u]; exact hu.winv.wm u h)
+      fun _ _ _ _ ho e he hT => by
+        rcases ho e he hT with h | h | ⟨hw, hsq, u, hu', hcu⟩
+        · exact .inl (LockWord.LiveLe.weaken hmgone h)
+        · exact .inr (.inl h)
+        · exact .inr (.inr ⟨hw, hsq, u, by rw [hwph u]; exact hu', hcu⟩)
+    sub := ⟨⟨hC.other (t := t) (g' := M.setPart (G t) r) (cph _) (fun _ => lph _)
+        (fun _ h => by rw [lph]; exact h)
+        (by rw [S.sx_iff, S.sx_iff, sph]; exact id) rfl rfl rfl rfl rfl
+        (fun w hw _ => .inl hw) (fun _ _ _ h => h) (Nat.le_refl _) hcl, hW⟩,
+      hS.outStep (t := t) (g' := M.setPart (G t) r) (sph _) (cph _) (lph _) hpv hcl
+        (fun _ h => h) rfl (fun w hw hn => absurd hw hn) rfl rfl⟩
+    win := hu.win.keep (hup C.ph cph) rfl rfl (hu.win.ehb.step
+      (fun _ hc => hc.mono (fun u h => .inl (by rw [hlph u]; exact h)) hcl (fun _ h => h) rfl
+        fun u h => by rwa [hlph u] at h)
+      (.inl rfl))
+    shares := hu.shares.keep hM hM'
+      (fun l => by
+        show (s'.gh.share l).add (rX.gh.share l) = (s.gh.share l).add (rX.gh.share l)
+        rw [hs l])
+      (fun u q H l c hq hl => SCell.pos_add' _ (hu.winv.rest_share hq hl)) rfl
+      ht (fun u e => upd_ne _ _ e) (by rw [upd_self, wph])
+    pin := hu.pin
+    wt := fun u hq => by rw [hwph u]; exact hu.wt u (by rwa [hup S.ph sph u] at hq)
+    nap := fun u hq => by
+      rw [hmph u]
+      rw [hlph u, hup S.place.ph (fun g => congrArg Prod.snd (hpl g r)) u] at hq
+      exact hu.nap u hq
+    live := hu.live
+    rdm := fun u hr => by rw [hmph u]; exact hu.rdm u (by rwa [hwph u] at hr)
+    mal := fun u ha => by rw [hlph u]; exact hu.mal u (by rwa [hmph u] at ha) }
+
+/-- **The spawn step of a program with the reader/writer lock, with the plain mode copied for the
+child** (module doc), for a protocol whose invariant is the outer mutex's and the two-lock product
+at the base. The spawning thread `t` is out of every code (`FRw.Out`) and its part holds the plain
+mode (`hp`, e.g. `main`'s start part); it copies the mode (`EUpd.plain_split`,
+`FLock.Pair.eupdPart`, `Base.setPart`) and gives the copy `rP` to the child (`forkProto`). The
+client chooses the parent's new ghost value `g₁`, with the parent's old part, and the child's
+`g₀`, whose part becomes `rP`; both are out of every code. The part is no place (`hpl`). The
+program gives its resource at the new client parts (`hR`) and its threads' fact at the new thread
+table (`hT`), which read no part (`FRw.x_part`). -/
+theorem spawnProto {Tgt : Type} {P : Proto Tgt γ} {t c : ThreadId} {g₁ g₀ : γ} {gt : Bool}
+    (inv : ∀ G m, P.inv G m ↔ ∃ rX, M.Inv G rX m ∧ FLock.Pair.U L (W.Base E Sz K) G rX m)
+    (hpl : ∀ g r, W.place.ph (M.setPart g r) = W.place.ph g)
+    (hp : (M.part (G t)).Plain) (hi : P.inv G m) (hout : W.Out (G t))
+    (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m')))
+    (h₁ : W.Out g₁) (hp₁ : M.part g₁ = M.part (G t)) (h₀ : W.Out g₀)
+    (hR : ∀ r, W.R (W.xs G) r → W.R (W.xs (upd (upd G c g₀) t g₁)) r)
+    (hT : E.T (W.xs (upd (upd G c g₀) t g₁)) m'.threads) :
+    c = m.threads.size ∧ m'.current = t ∧ ∃ rP, plain rP ∧
+      P.inv (upd (upd G c (M.setPart g₀ rP)) t g₁) m' := by
+  obtain ⟨rX, hM, hU⟩ := (inv G m).mp hi
+  have hgn : M.ph (G t) ≠ .gone := by rw [hout.2.1]; exact nofun
+  have ht : t < m.threads.size := (hM.w.live t (by show M.ph (G t) ≠ .gone; exact hgn)).1
+  have hM₀ : M.Inv (upd G t (G t)) rX { m with current := t } := by
+    rw [upd_same]; exact hM.cur t
+  have hU₀ : FLock.Pair.U L (W.Base E Sz K) (upd G t (G t)) rX { m with current := t } := by
+    rw [upd_same]; exact FLock.Pair.U_atStop t hU fun _ h => h.atStop t
+  -- the plain mode copied: `t`'s part is its old part and a plain `rP`
+  obtain ⟨r, ⟨r₁, rP, -, rfl, hr₁, hpP⟩, hM', hU'⟩ := FLock.Pair.eupdPart W.pair P hM₀ hU₀ rfl hgn
+    (EUpd.plain_split (P := fun r => r = M.part (G t)) fun r hr => by rw [hr]; exact hp)
+    (fun r _ sB rL rH rX' _ _ _ hMa hMb hu => by
+      have h := hu.setPart (t := t) (r := r) hMa (by rw [upd_self, upd_upd]; exact hMb)
+        (fun _ => rfl) ht hpl
+      rwa [upd_self, upd_upd] at h)
+  subst hr₁
+  obtain ⟨G₁, hG₁⟩ : ∃ G', G' = upd G t (M.setPart (G t) (rsum (M.part (G t)) rP)) := ⟨_, rfl⟩
+  rw [← hG₁] at hM' hU'
+  have hG₁t : G₁ t = M.setPart (G t) (rsum (M.part (G t)) rP) := by rw [hG₁, upd_self]
+  have hupd : ∀ a, upd (upd G₁ c a) t g₁ = upd (upd G c a) t g₁ := fun a => funext fun u => by
+    by_cases h1 : u = t
+    · rw [h1, upd_self, upd_self]
+    · rw [upd_ne _ _ h1, upd_ne _ _ h1]
+      by_cases h2 : u = c
+      · rw [h2, upd_self, upd_self]
+      · rw [upd_ne _ _ h2, upd_ne _ _ h2, hG₁, upd_ne _ _ h1]
+  have hxs : W.xs (upd (upd G c (M.setPart g₀ rP)) t g₁) = W.xs (upd (upd G c g₀) t g₁) :=
+    funext fun u => by
+      show W.x (upd (upd G c (M.setPart g₀ rP)) t g₁ u) = W.x (upd (upd G c g₀) t g₁ u)
+      by_cases h1 : u = t
+      · rw [h1, upd_self, upd_self]
+      · rw [upd_ne _ _ h1, upd_ne _ _ h1]
+        by_cases h2 : u = c
+        · rw [h2, upd_self, upd_self, W.x_part]
+        · rw [upd_ne _ _ h2, upd_ne _ _ h2]
+  have hxs₁ : W.xs G₁ = W.xs G := funext fun u => by
+    show W.x (G₁ u) = W.x (G u)
+    by_cases h1 : u = t
+    · rw [h1, hG₁t, W.x_part]
+    · rw [hG₁, upd_ne _ _ h1]
+  have hfin := forkProto (P := P) (G := G₁) (m := { m with current := t }) (g₁ := g₁)
+    (g₀ := M.setPart g₀ rP) inv ((inv _ _).mpr ⟨rX, hM', hU'⟩) hf
+    (by rw [hG₁t]; exact out_setPart hpl hout _) h₁ (out_setPart hpl h₀ rP)
+    (by rw [hG₁t, M.part_setPart, M.part_setPart, hp₁])
+    (by rw [M.part_setPart, (plain_ghost hpP).1]; exact FHeap.disjoint_empty _)
+    (fun r hr => by
+      rw [hupd, hxs]
+      rw [hxs₁] at hr
+      exact hR r hr)
+    (by rw [hupd, hxs]; exact hT)
+  rw [hupd] at hfin
+  exact ⟨hfin.1, hfin.2.1, rP, hpP, hfin.2.2⟩
+
+/-- **`spawnProto` at `Thread.fork`** (a child that is not gated), in the form a program's `main`
+passes to `fsym` as its spawn rule (as `inv_spawn` of `Proofs/SemCounter/Start.lean`). -/
+theorem spawn {Tgt : Type} {P : Proto Tgt γ} {t c : ThreadId} {g₁ g₀ : γ}
+    (inv : ∀ G m, P.inv G m ↔ ∃ rX, M.Inv G rX m ∧ FLock.Pair.U L (W.Base E Sz K) G rX m)
+    (hpl : ∀ g r, W.place.ph (M.setPart g r) = W.place.ph g)
+    (hp : (M.part (G t)).Plain) (hi : P.inv G m) (hout : W.Out (G t))
+    (hf : (Thread.fork.run { m with current := t }).run = some (.ok (c, m')))
+    (h₁ : W.Out g₁) (hp₁ : M.part g₁ = M.part (G t)) (h₀ : W.Out g₀)
+    (hR : ∀ r, W.R (W.xs G) r → W.R (W.xs (upd (upd G c g₀) t g₁)) r)
+    (hT : E.T (W.xs (upd (upd G c g₀) t g₁)) m'.threads) :
+    c = m.threads.size ∧ m'.current = t ∧ ∃ rP, plain rP ∧
+      P.inv (upd (upd G c (M.setPart g₀ rP)) t g₁) m' :=
+  spawnProto (gt := false) inv hpl hp hi hout hf h₁ hp₁ h₀ hR hT
 
 end Base
 
