@@ -596,6 +596,11 @@ theorem of_sset {α : Type} {f : γ → α} (hf : ∀ g q, f (S.place.set g q) =
     f (S.set g s) = f g := by
   rw [← S.place_s]; exact hf g _
 
+/-- A coordinate that the semaphore's places leave, over the condition's place. -/
+theorem of_cset {α : Type} {f : γ → α} (hf : ∀ g q, f (S.place.set g q) = f g) (g : γ) (p : CPh) :
+    f (C.set g p) = f g := by
+  rw [← S.place_c]; exact hf g _
+
 /-- The rwlock's place of a holder of the semaphore's mutex at a place of the semaphore. -/
 theorem wph_hold (g : γ) (h : Res) (s : SPh) : W.ph (S.set (L.set g .holds h) s) = W.ph g := by
   rw [of_sset W.ph_sp, W.ph_l]
@@ -765,11 +770,8 @@ theorem sstep {t : ThreadId} {G' : ThreadId → γ} {rS rS' sB rL rH rX' : Res} 
   have hsubL : S.prim.Sub G (rsum sB rX) m :=
     ⟨FPrim.ofWords_sub_rsum hu.sub.1 (hsB.disj hk.side_disj), hS⟩
   have sph_l : ∀ g q h, S.ph (L.set g q h) = S.ph g := fun g q h => congrArg Prod.snd (ph_l g q h)
-  have ph_part : ∀ g r, S.place.ph (L.setPart g r) = S.place.ph g := fun g r => by
-    rw [← W.pair.setPart]; exact congrArg Prod.snd (hpl g r)
-  -- a coordinate that the semaphore's places leave, over the condition's and the semaphore's
-  have hc : ∀ {α : Type} (f : γ → α), (∀ g q, f (S.place.set g q) = f g) →
-      ∀ g p, f (C.set g p) = f g := fun f hf g p => by rw [← S.place_c]; exact hf g _
+  have ph_part : ∀ g r, S.place.ph (L.setPart g r) = S.place.ph g := fun g r =>
+    congrArg Prod.snd (place_lpart hpl g r)
   have sph_c : ∀ g p, S.ph (C.set g p) = S.ph g := fun g p => by
     rw [← S.place_c]; exact congrArg Prod.snd (S.place.ph_set g (p, S.ph g))
   have mpart : ∀ g g' : γ, L.part g' = L.part g → M.part g' = M.part g := fun g g' h => by
@@ -801,11 +803,11 @@ theorem sstep {t : ThreadId} {G' : ThreadId → γ} {rS rS' sB rL rH rX' : Res} 
       ⟨r, hown, hL, hcur, hfs, hcW, -, -, hL', hG'⟩
     · -- a step of the condition's code at the word `Wd`
       have hgw : W.ph (L.set (C.set (G t) p) q h) = W.ph (G t) :=
-        (W.ph_l _ _ _).trans (hc W.ph W.ph_sp _ _)
+        (W.ph_l _ _ _).trans (of_cset W.ph_sp _ _)
       have hgm : M.ph (L.set (C.set (G t) p) q h) = M.ph (G t) :=
-        (W.pair.ph_ba _ _ _).trans (hc M.ph mph_s _ _)
+        (W.pair.ph_ba _ _ _).trans (of_cset mph_s _ _)
       have hgp : M.part (L.set (C.set (G t) p) q h) = M.part (G t) :=
-        mpart _ _ ((L.part_set _ _ _).trans (hc L.part lpart _ _))
+        mpart _ _ ((L.part_set _ _ _).trans (of_cset lpart _ _))
       have hgx : W.x (L.set (C.set (G t) p) q h) = W.x (G t) := (W.x_l _ _ _).trans (W.x_c _ _)
       have hsph : S.ph (L.set (C.set (G t) p) q h) = S.ph (G t) :=
         (sph_l _ _ _).trans (sph_c _ _)
@@ -893,9 +895,9 @@ theorem sstep {t : ThreadId} {G' : ThreadId → γ} {rS rS' sB rL rH rX' : Res} 
   · cases hmv with
     | enter _ _ hst _ _ =>
       -- the waiter's entry into the condition's wait: a relabel
-      have hgw : W.ph (C.set (G t) .en) = W.ph (G t) := hc W.ph W.ph_sp _ _
-      have hgm : M.ph (C.set (G t) .en) = M.ph (G t) := hc M.ph mph_s _ _
-      have hgp : M.part (C.set (G t) .en) = M.part (G t) := mpart _ _ (hc L.part lpart _ _)
+      have hgw : W.ph (C.set (G t) .en) = W.ph (G t) := of_cset W.ph_sp _ _
+      have hgm : M.ph (C.set (G t) .en) = M.ph (G t) := of_cset mph_s _ _
+      have hgp : M.part (C.set (G t) .en) = M.part (G t) := mpart _ _ (of_cset lpart _ _)
       have hwph := hall W.ph hgw
       have hpart := hall M.part hgp
       refine hu.ofStepRest hsh hRoff hCI' hSI' hwin (fun u e => upd_ne _ _ e)
@@ -1027,7 +1029,7 @@ theorem utake {t : ThreadId} {g : γ} {h₁ h₂ r : Res} {sh sc} (hw : W.ph g =
   have hpost : RwPosted W.ph (upd G t (S.set (L.set g .holds h₁) (.pst sh sc))) :=
     Classical.byContradiction fun hn => hcnt (by
       rw [cnt_congr (G := upd G t (S.set (L.set g .holds h₁) (.pst sh sc))) (G' := upd G t g)
-        (congrFun (upd_map W.ph G t (by rw [hw₁, hw]))), W.cnt_idle _ hn])
+        (congrFun (upd_map W.ph G t (wph_hold _ _ _).symm)), W.cnt_idle _ hn])
   have hwr : W.ph (S.set (L.set (L.setPart (W.set g .wr) (rsum (L.part g) r)) .holds h₂)
       (.pst sh sc)) = .wr := by
     rw [wph_hold]; exact (congrArg Prod.fst hpp).trans (W.ph_set _ _)
