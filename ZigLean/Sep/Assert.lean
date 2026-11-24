@@ -5,7 +5,7 @@ import ZigLean.Sep.Heap
 
 An assertion is a predicate on a heap. `P ∗ Q` holds of a heap that splits into two disjoint
 parts, one for `P` and one for `Q`. `bytesAt p A S K bs` owns exactly the bytes `bs` at `p`, in a
-block with address `A`, size `S` and kind `K`. The typed forms (`pts`, `arr`, `ZigLean/Sep/Triple.lean`)
+block with address `A`, size `S` and kind `K`. The typed forms (`pts`, `arr`, `ZigLean/Sep/Base/Pts.lean`)
 build on it.
 
 The two lemmas at the end are the base of every rule: an access to a part of owned bytes succeeds

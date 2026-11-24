@@ -27,9 +27,8 @@ A rest that has the word's cells of an older memory, the same up to `Cell.norm`,
 the word's cells of the new memory (`FLock.Inv.congrX`).
 
 The native producers feed WordRules and both Event/Cond step families directly. The old
-`Word.Op` contract and its full-state roots (`Op.rest`, `Op.word`, `FLock.Inv.wordOp`, …) live in
-`ZigLean/Conc/Word.lean`, retirement debt in the `seen-floor-sync-retirement` engine-ledger row.
-Native paths do not construct those packets or call their preservation wrappers.
+`Word.Op` contract and its full-state roots (`Op.rest`, `Op.word`, `FLock.Inv.wordOp`, …) are
+deleted with the legacy `ZigLean/Conc/Word.lean` (`docs/legacy-retirement.md`, stage D-d).
 -/
 
 namespace Zig

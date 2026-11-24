@@ -26,8 +26,8 @@ so a proof keeps facts about its values and clocks in the rest of its invariant.
   `Word.Floor`); an RMW writes `rmwEnt`. In strict mode no op throws (`Ok.load_noErr`,
   `Ok.rmw_noErr`, `Ok.cas_noErr`), and a futex wait at the word runs (`Ok.futexWait_run`).
 
-This is the permanent vocabulary of a shared word; the native steps over it are in
-`ZigLean/Sep/Full/Word.lean`, the legacy part in `ZigLean/Conc/Word.lean`.
+This is the permanent vocabulary of a shared word; the steps over it are in
+`ZigLean/Sep/Full/Word.lean`.
 -/
 
 namespace Zig

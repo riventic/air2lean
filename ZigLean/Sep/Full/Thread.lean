@@ -8,7 +8,7 @@ import ZigLean.Conc.Clock
 `FTTriple P c Q` is `FTriple` for a `MemM` step of one thread inside a concurrent run
 (`docs/sep-threads.md`): the same resources (`Res`), the same `Holds` and the same assertions, with
 ownership by the thread's clock in place of `Mem.Seq`, and the step's race freedom in the post.
-It replaces the legacy `TTriple` (`ZigLean/Conc/Own.lean`).
+It replaced the legacy `TTriple` (deleted, `docs/legacy-retirement.md`).
 
 - **Ownership, option R** (`Mem.OwnsRes`, `docs/sep-full-state.md` §Read shares): the thread owns
   the resource's exclusive bytes (cells and whole shares, `Res.excl`: every recorded access before

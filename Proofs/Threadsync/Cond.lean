@@ -20,7 +20,7 @@ open Zig Zig.Conc Zig.Full Zig.Full.FAssn Zig.Conc.Proto
 
 namespace Threadsync
 
--- Unification must not unfold `WP` into the program (as in `Proofs/Sync/RwLock.lean`).
+-- Unification must not unfold `WP` into the program (`docs/proofs.md`, "A lock that owns a resource").
 attribute [local irreducible] Proto.WP
 
 section

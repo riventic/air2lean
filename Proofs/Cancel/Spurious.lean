@@ -25,8 +25,8 @@ returns what it read after joining `setter`. The postcondition is "the result is
 
 These are kernel computations of single schedules (`decide +kernel`); the negative needs only one.
 The all-schedules statements for the std clients that recheck under spurious returns are the
-rebuilt proofs of `Proofs/Sync/Semaphore.lean`, `Proofs/Sync/Handoff.lean`,
-`Proofs/Sync/RwLock.lean`, `Proofs/Sync/Mutex.lean`, `Proofs/Threadsync/*` and
+proofs of `Proofs/Sync/IoSemaphore.lean`, `Proofs/Sync/Handoff.lean`,
+`Proofs/Sync/IoRwLock.lean`, `Proofs/Sync/Mutex.lean`, `Proofs/Threadsync/*` and
 `Proofs/Iogroup/Counter.lean`, whose futex rules (`WP.futexWaitC`) now quantify over the spurious
 return. `tests/roadmap/cancellation/Runtime.lean` samples many schedules of both clients.
 -/

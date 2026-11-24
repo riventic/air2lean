@@ -5,9 +5,8 @@ import ZigLean.Sep.Heap
 # Ownership by clocks
 
 Which bytes a thread may access without a race, read from the recorded accesses (the footprint)
-and the threads' vector clocks. Both thread logics use it: the full-state thread triples
-(`FTTriple`, `ZigLean/Sep/Full/Thread.lean`) and the legacy ones (`TTriple`,
-`ZigLean/Conc/Own.lean`).
+and the threads' vector clocks. The full-state thread triples use it (`FTTriple`,
+`ZigLean/Sep/Full/Thread.lean`).
 
 - **Ownership** (`Mem.OwnsC`, `Mem.Owns`). The clock `c` owns the heap `h` if every recorded
   access to a byte of `h` happened before `c`. Thread `t` owns `h` if its clock does. Then a
