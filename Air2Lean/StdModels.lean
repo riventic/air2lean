@@ -173,9 +173,11 @@ private def mutexZig : Array StdReview := review "Thread/Mutex.zig" [
   (.v0_14_1, "6916d64495922ac3b61386b659248c7fc0002edabc489f4a4fb64f973c754bcc"),
   (.v0_15_2, "6916d64495922ac3b61386b659248c7fc0002edabc489f4a4fb64f973c754bcc")]
 /-- `posix.mmap`, `posix.munmap`, `posix.mremap` (`--allocator-model translated`, OS-01): reviewed
-for 0.16.0 only. -/
+for 0.16.0 and 0.17.1 (same signatures, error sets and errno mapping; `docs/std-models.md`
+§Zig 0.17.1 audit). -/
 private def posixZig : Array StdReview := review "posix.zig" [
-  (.v0_16_0, "5b1462b18db6757d984e118e09c532ac8b98cf1cc1ed48f18fcdbb362b75b5e0")]
+  (.v0_16_0, "5b1462b18db6757d984e118e09c532ac8b98cf1cc1ed48f18fcdbb362b75b5e0"),
+  (.v0_17_1, "b7fc61c37fb148f4d729d962644c36dfdef00d139d99790e340e66b342a8ba08")]
 /-- `os.linux.sched_yield` (`syscall0(.sched_yield)`), `os.linux.clock_gettime` (the vDSO
 pointer, else `syscall2(.clock_gettime)`), `os.linux.futex_4arg` (0.15.2 on) and
 `os.linux.futex_wait` (0.14.1) (`syscall4(.futex)`), `os.linux.futex_3arg` (0.15.2 on) and
