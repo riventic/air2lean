@@ -1,4 +1,5 @@
 import Proofs.RwRead.Ops
+import ZigLean.Sep.Full.AutoWP
 
 /-!
 # The end of `rwLockRead` and `rwLockSnapshotPair`
@@ -21,6 +22,26 @@ import Proofs.RwRead.Ops
 -/
 
 namespace Zig
+
+namespace Conc.Proto
+
+open Full
+
+/-- **A checked unsigned `*` that does not overflow** (as `WP.liftMem_add`): its value as a fact.
+(Should move to `ZigLean/Sep/Full/AutoWP.lean`, next to `WP.liftMem_add` and `WP.liftMem_sub`,
+with their `@[fsym]` registration.) -/
+theorem WP.liftMem_mul {Tgt γ : Type} {P : Proto Tgt γ} {t : ThreadId} {G : ThreadId → γ}
+    {m : Mem} {n : Nat} {w : Nat} {a b : BitVec w} {safe : Bool}
+    {Q : BitVec w → (ThreadId → γ) → Mem → Nat → Prop}
+    (hlt : a.toNat * b.toNat < 2 ^ w)
+    (h : ∀ r : BitVec w, r.toNat = a.toNat * b.toNat → Q r G m n) :
+    P.WP t (ConcM.liftMem (StateT.lift (Zig.mul false a b safe) : MemM (BitVec w)) :
+      ConcM Tgt (BitVec w)) Q G m n :=
+  WP.liftMem_pure (by rw [Auto.mul_ok hlt]; rfl) rfl
+    (h _ (by rw [BitVec.toNat_mul, Nat.mod_eq_of_lt hlt]))
+
+end Conc.Proto
+
 namespace RwRead
 
 open Conc Conc.Proto Full Full.FAssn
@@ -104,6 +125,17 @@ theorem QRead.intro {k : Nat} {G : ThreadId → Gh} {m : Mem} {d : Nat} (hk : k 
 theorem QPair.intro {k : Nat} {G : ThreadId → Gh} {m : Mem} {d : Nat} (hk : k ≤ 2)
     (hj : joinedAll 0 m) : QPair (.ok (BitVec.ofNat 32 (11 * k))) G m d :=
   ⟨⟨k, hk, rfl⟩, hj⟩
+
+/-- `rwLockRead`'s post from the value of its result (`10 * first + last` as the walk's checked
+`*` and `+` give it). -/
+theorem QRead.of_toNat {r : BitVec 32} {k : Nat} {G : ThreadId → Gh} {m : Mem} {d : Nat}
+    (hr : r.toNat = 10 * k + 2) (hk : k ≤ 2) (hj : joinedAll 0 m) : QRead (.ok r) G m d :=
+  ⟨⟨k, hk, by rw [← hr]; simp⟩, hj⟩
+
+/-- `rwLockSnapshotPair`'s post from the value of its result. -/
+theorem QPair.of_toNat {r : BitVec 32} {k : Nat} {G : ThreadId → Gh} {m : Mem} {d : Nat}
+    (hr : r.toNat = 11 * k) (hk : k ≤ 2) (hj : joinedAll 0 m) : QPair (.ok r) G m d :=
+  ⟨⟨k, hk, by rw [← hr]; simp⟩, hj⟩
 
 /-- `rwLockRead` gives 2, 12 or 22. -/
 theorem QRead.result {v : Except ErrName (BitVec 32)} {G : ThreadId → Gh} {m : Mem} {d : Nat}

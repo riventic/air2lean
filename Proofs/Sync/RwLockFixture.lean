@@ -49,7 +49,7 @@ theorem dispatch_spec
       ((thr_of hi).wr (u := u) (k := 0) (by show (G u).2.x = _; rw [hgu]; rfl)).1
     subst hu1
     have hcur : proto.inv G { m with current := 1 } := by
-      obtain ⟨-, -, -, h⟩ := (fits (wOf := wOf)).m.cur 1 hi (by rw [hgu]; exact gO_live _ _)
+      obtain ⟨-, -, -, h⟩ := (fits (wOf := wOf)).m.cur 1 hi (by rw [hgu]; exact gO_live rp (.wr 0))
       exact h
     show proto.WP 1 ((fun _ => ()) <$> writer cPtr) _ G _ d
     refine WP.map (WP.mono ?_ (writer_spec rp (Res.plain_of hplain) 1 G _ d
@@ -63,6 +63,32 @@ theorem dispatch_spec
   | producer p => exact absurd hg.1 (by simp [wOf])
   | work p => exact absurd hg.1 (by simp [wOf])
   | semWork p => exact absurd hg.1 (by simp [wOf])
+
+/-! ## `main`'s reads -/
+
+/-- `main`'s read of `n` while the writer runs (`readShared_spec` at `run`): 0, 1 or 2. -/
+theorem readShared_run (rp : Res) (hp : rp.Plain) (G : ThreadId → Gh) (m : Mem) (d : Nat)
+    (hi : proto.inv (upd G 0 (gO rp .run)) m) (hc : m.current = 0) :
+    proto.WP 0 (readShared cPtr) (fun v G' m' _ => m'.current = 0 ∧ v.toNat ≤ 2 ∧
+      proto.inv (upd G' 0 (gO rp .run)) m') G m d := by
+  refine WP.mono ?_ (readShared_spec rp hp 0 .run G m d hi hc)
+  rintro v G' m' _ ⟨hc', ⟨Y, ts, hT, -, rfl⟩, hi'⟩
+  refine ⟨hc', ?_, hi'⟩
+  show (BitVec.ofNat 32 (cnt Y)).toNat ≤ 2
+  rw [BitVec.toNat_ofNat]
+  exact Nat.le_trans (Nat.mod_le _ _) hT.cnt_le
+
+/-- `main`'s read of `n` after its join (`readShared_spec` at `done`): 2. -/
+theorem readShared_done (rp : Res) (hp : rp.Plain) (G : ThreadId → Gh) (m : Mem) (d : Nat)
+    (hi : proto.inv (upd G 0 (gO rp .done)) m) (hc : m.current = 0) :
+    proto.WP 0 (readShared cPtr) (fun v G' m' _ => m'.current = 0 ∧ v.toNat = 2 ∧
+      proto.inv (upd G' 0 (gO rp .done)) m') G m d := by
+  refine WP.mono ?_ (readShared_spec rp hp 0 .done G m d hi hc)
+  rintro v G' m' _ ⟨hc', ⟨Y, ts, hT, h0, rfl⟩, hi'⟩
+  refine ⟨hc', ?_, hi'⟩
+  show (BitVec.ofNat 32 (cnt Y)).toNat = 2
+  rw [hT.done h0]
+  rfl
 
 /-! ## The results of `rwLockRead` -/
 
