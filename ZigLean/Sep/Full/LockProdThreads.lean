@@ -62,7 +62,7 @@ theorem Keeps.fork {rL rH rX : Res} {t c : ThreadId} {g₁ g₀ : γ} {gt : Bool
     by_cases h1 : u = t
     · simp [h1, h₁, hout, Ne.symm hct]
     · by_cases h2 : u = m.threads.size
-      · simp [h1, h2, h₀, hct]
+      · simp [h2, h₀, hct]
       · simp [h1, h2]
   have hphu : ∀ u, (B.ph (upd (upd G m.threads.size g₀) t g₁ u)).held = true ↔
       (B.ph (G u)).held = true := by
@@ -89,7 +89,9 @@ theorem Keeps.fork {rL rH rX : Res} {t c : ThreadId} {g₁ g₀ : γ} {gt : Bool
     unfold heldOf; rw [joinedB_out (Nat.le_refl _), hfa.held_out (Nat.le_refl _)]; rfl
   have hPar : B.heldOf G m t = rnil := by
     unfold heldOf; rw [hjt, hheldt]; rfl
-  refine ⟨by rw [side, side, FLock.wordR_congr (L := B) (m := m) rfl],
+  have hside : ∀ m₁ : Mem, m₁.blocks = m.blocks → side B m₁ rL rH = side B m rL rH :=
+    fun m₁ h => congrArg (fun r => rsum r (rsum rL rH)) (FLock.wordR_congr (L := B) h)
+  refine ⟨hside _ rfl,
     ⟨by rw [hpl]; exact hw, hfa.loff, fun hF' => ?_,
       fun h => hfa.busy (fun h' => h (hfree.mpr h')), fun u => ?_, fun u hu => ?_, fun u hu => ?_⟩,
     ?_, fun u hu => ?_, hk.hoff, hk.xdisj, hk.xoff⟩
