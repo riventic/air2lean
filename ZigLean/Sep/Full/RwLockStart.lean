@@ -45,7 +45,8 @@ theorem Ok.init {m : Mem} {v : BitVec n}
     obtain ⟨hb, ho⟩ := loc_at hl
     have := hat l (e ▸ Array.getElem_mem hi) hb
     omega
-  refine ⟨⟨hblk, fun l hl hb h1 h2 => ?_, fun i l h => absurd h (hno i l), hfp, ⟨v, hv⟩,
+  refine ⟨⟨hblk, fun l hl hb h1 h2 => ?_, fun i l h => absurd h (hno i l),
+    fun e he hh => .inr (hfp e he hh), ⟨v, hv⟩,
     fun i l h => absurd h (hno i l)⟩, ?_, ?_, ?_⟩
   · have := hat l hl hb
     omega
