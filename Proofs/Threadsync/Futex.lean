@@ -237,14 +237,15 @@ theorem wake_wp (hcost : P.cost = none) {t : ThreadId} {p : Ptr} {c : BitVec 32}
     P.WP t (Thread_Futex_wake p c) Q G m n := by
   have hc' : (c == (0 : BitVec 32)) = false := beq_false_of_ne hc
   unfold Thread_Futex_wake Thread_Futex_DarwinImpl_wake
-  fsym [WP.loop _ _
+  fsym [WP.loop (P := P) (t := t) (Thread_Futex_DarwinImpl_wake.loop25 p)
+      Thread_Futex_DarwinImpl_wake.again25
       (fun (s : Thread_Futex_DarwinImpl_wakeLocals) G' m' d' =>
         (Zig.Packed.toBits s.local2 =
           (if Zig.gt false c (1 : BitVec 32) then
             Os.Darwin.UL_COMPARE_AND_WAIT_NO_ERRNO ||| Os.Darwin.UL_WAKE_ALL
           else Os.Darwin.UL_COMPARE_AND_WAIT_NO_ERRNO)) ∧ d' ≤ n ∧ I G' m')
       (fun _ => 0)
-      (fun r G' m' d' => r.1 = .ret ∧ d' < n ∧ D G' m')
+      (fun r G' m' d' => r.1 = Thread_Futex_DarwinImpl_wakeExit.ret ∧ d' < n ∧ D G' m')
       (wake_body (P := P) (t := t) (p := p) (all := Zig.gt false c (1 : BitVec 32))
         hword htick hpick hwake n),
     ul_bits, hc', h]
