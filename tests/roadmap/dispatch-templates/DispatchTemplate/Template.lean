@@ -76,9 +76,6 @@ def badInv (N : Nat) : Phase → machLocals → FAssn
 
 def post (N : Nat) (r : machExit × machLocals) : FAssn := ⟪r.1 = .ret N⟫
 
--- The ranks of the states are arithmetic facts for `fsym`.
-attribute [local fsym_arith] rank flatRank
-
 /-- The step premise of `FTotalTriple.loop_dispatch` for `mach` (data: the units left; ranks below 3). -/
 abbrev Step (J : Phase → machLocals → FAssn) (R : Phase → Nat) (N : Nat) (s : machLocals) : Prop :=
   FTotalTriple (J s.dispatchValue3 s) (mach.loop3.run s)

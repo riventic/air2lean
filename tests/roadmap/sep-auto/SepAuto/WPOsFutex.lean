@@ -82,11 +82,9 @@ theorem event_wait (E : FEvent γ) (hE : L.Fits (E.prim L) P U ok) (hcost : P.co
       P.Live t G₁ m₁) :
     P.WP t (Linux.futex_4arg E.W.ptr 0x80 1 none)
       (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ P.inv (upd G' t g) m') G m d := by
-  -- workaround (ledger #current-thread-subst): `fsym` substitutes `hc` away after elaborating the
-  -- rule term, so the rule takes the current thread itself
-  subst hc
+  -- the rule's term takes `hc`, which the walk substitutes away (ledger #current-thread-subst)
   have hw := hE.wordWordAt (hE.wRest rfl) hi
-  fsym [FEvent.wp_osWait hE rfl hg hgo rfl hi hlive]
+  fsym [FEvent.wp_osWait hE rfl hg hgo hc hi hlive]
 
 /-- macOS: an event's setter at `sw` wakes every waiter (`__ulock_wake(… | WAKE_ALL, 0)`,
 `FEvent.wp_osWake`, over `wp_wordOsWake`), after the oracle's stop for the code's `live`

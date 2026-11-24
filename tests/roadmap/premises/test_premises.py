@@ -476,6 +476,20 @@ class FixtureTests(unittest.TestCase):
         self.assertIn("PRF-02", entries["plain_spec"]["premises"])
         self.assertNotIn("MTH-05", entries["pure_fact"]["premises"])
 
+    def test_admitted_cpu_features_are_named(self):
+        """`--assume-asm-cpu-features lzcnt,popcnt` (ASM-09 in the repository's mapping): the
+        admission's premise is listed, and its reason names the admitted features."""
+        self.fixture.files["Proofs/Asm/Gen.lean"] = PROFILE.replace(
+            '"float_semantics":"ieee"',
+            '"admission":"no-libc","asm_cpu_features":["lzcnt","popcnt"],"float_semantics":"ieee"') + \
+            textwrap.dedent(self.fixture.files["Proofs/Asm/Gen.lean"])
+        entries = self.written()
+        self.assertIn("MTH-05", entries["plain_spec"]["premises"])
+        self.assertTrue(any("(CPU features lzcnt,popcnt)" in reason
+                            for reason in entries["plain_spec"]["via"]["MTH-05"]), entries["plain_spec"]["via"])
+        mapping = json.loads((ROOT / "assurance/premises.json").read_text())["admissions"]
+        self.assertEqual(mapping["asm-cpu-features"], ["ASM-09"])
+
     def test_example_translate_args_admission(self):
         """A committed (headerless) example translation takes the opt-ins of its translate.args."""
         self.fixture.files["examples/asm/translate.args"] = "--float-semantics compiler-rt --assume-no-libc\n"

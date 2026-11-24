@@ -28,9 +28,6 @@ namespace Threadsync.MutexCounter
 
 /- The rules (`WP.bind`, `lock_wp`, …) need `WP` only as a name: unfolding it runs the program. -/
 attribute [local irreducible] Proto.WP
--- The mutex's code is a stop for the walk of `work` (its rules are the contract's): unification
--- must not unfold `lock` into `unlock`.
-attribute [local irreducible] Thread_Mutex_lock Thread_Mutex_unlock
 
 /-- The `Counter`'s layout (module doc). -/
 def lo : Layout where
@@ -54,7 +51,7 @@ abbrev P : Proto Tgt Gh := proto lo workOf
 
 /-- `work`'s loop invariant: thread `t` did `local1` increments and is out of the lock's code. -/
 def workInv (rp : Res) (t : ThreadId) (s : workLocals) (G : ThreadId → Gh) (m : Mem) (_ : Nat) : Prop :=
-  m.current = t ∧ ∃ k, P.inv (upd G t (gOut rp k)) m ∧ s.local1.toNat = k ∧ k ≤ 2
+  m.current = t ∧ ∃ k, s.local1.toNat = k ∧ k ≤ 2 ∧ P.inv (upd G t (gOut rp k)) m
 
 /-- `work`'s loop ends after 2 increments. -/
 def workPost (rp : Res) (t : ThreadId) (r : workExit × workLocals) (G : ThreadId → Gh) (m : Mem) (_ : Nat) :
@@ -70,7 +67,7 @@ theorem loop4_body (rp : Res) (hp : rp.Plain) (t : ThreadId) (s : workLocals)
       if work.again4 r.1 then workInv rp t r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : workLocals) => 0) s)
       else workPost rp t r G' m' d') G m d := by
-  obtain ⟨hc, k, hi, hk, hle⟩ := h
+  obtain ⟨hc, k, hk, hle, hi⟩ := h
   unfold work.loop4
   fsym [(fits (Lo := lo) (workOf := workOf)).wp_tick_plain,
     WP.liftMem_pure (projI (Lo := lo) (workOf := workOf) _ _) rfl,
