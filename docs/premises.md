@@ -130,7 +130,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Hand-written std models (transitional) | [STD-01](#std-01) [STD-02](#std-02) [STD-03](#std-03) [STD-05](#std-05) [STD-06](#std-06) [STD-08](#std-08) [STD-09](#std-09) [STD-10](#std-10) |
 | OS page mapping | [OSM-01](#osm-01) |
 | OS thread primitives | [OSF-01](#osf-01) [OSF-02](#osf-02) [OST-01](#ost-01) [OST-02](#ost-02) [OST-03](#ost-03) [OSY-01](#osy-01) [OSK-01](#osk-01) [OSK-02](#osk-02) [OSG-01](#osg-01) [OSL-01](#osl-01) [OSM-02](#osm-02) |
-| Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) [TRU-05](#tru-05) |
+| Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) [TRU-05](#tru-05) [TRU-06](#tru-06) |
 
 ## Target and build profiles
 
@@ -1592,6 +1592,29 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
 - Derived from: use of an attestation (`--attestation`); not derived from any theorem.
 - Sources: [artifact-manifest.md](artifact-manifest.md#authentication), `scripts/attest.py`.
 
+<a id="tru-06"></a>
+### TRU-06 — Filesystem publication atomicity
+
+- Kind: trusted.
+- Statement: A published artifact (a translated `Gen.lean`, a check report, a proof receipt,
+  an assumptions audit, a project report) reaches its path only by one `rename(2)`
+  (overwrite) or `link(2)` (no-clobber) of a fully written, fsynced temporary file in the
+  destination directory, followed by an fsync of the directory (`scripts/safe-output.py
+  publish`, `scripts/proof-receipt.py`, `scripts/assumptions.py`, `scripts/project.py`). The
+  host filesystem is trusted to make that `rename` and `link` atomic (a reader sees the
+  previous file or the complete new one, never a prefix; `link` fails when the name exists,
+  also when a concurrent writer created it) and to keep fsynced contents and names across a
+  crash. A filesystem without these guarantees (some network and FUSE filesystems; a
+  directory fsync the filesystem rejects is skipped) can show a partial or lost artifact, and
+  nothing detects it. A SIGKILL of the writer can leave a hidden `.partial` or staging file
+  beside the output, never at the published path. Containment of escaped stage processes is
+  not part of this premise: a missed escapee cannot publish, because only this step does
+  (I08; sampling-only on macOS, [safe-output.md](safe-output.md#limits)).
+- Derived from: use of a published artifact (the reports below that list it); not derived
+  from any theorem.
+- Sources: [safe-output.md](safe-output.md), `scripts/safe-output.py`,
+  `tests/roadmap/safe-output/test_safe_output.py`.
+
 ## Reports
 
 Each report below, and the premises a reader must accept to rely on it, is checked by the tool.
@@ -1600,9 +1623,10 @@ Each report below, and the premises a reader must accept to rely on it, is check
 |---|---|
 | `scripts/assumptions.sh` JSON ([assumptions-audit.md](assumptions-audit.md)) | TRU-01, TRU-04, EXT-02 |
 | `scripts/premises.py compiled` JSON (this page) | TRU-01, TRU-04 |
-| Proof receipts ([proof-receipts.md](proof-receipts.md)) | TRU-01, TRU-04 |
+| Proof receipts ([proof-receipts.md](proof-receipts.md)) | TRU-01, TRU-04, TRU-06 |
 | Authenticated manifests and receipts (`scripts/attest.py`, [artifact-manifest.md](artifact-manifest.md#authentication)) | TRU-05 |
-| Check receipts `.lake/check-reports/` ([profiles.md](profiles.md#golden-comparisons-and-check-receipts)) | PRF-01, PRF-02, TRU-02 |
+| Check receipts `.lake/check-reports/` ([profiles.md](profiles.md#golden-comparisons-and-check-receipts)) | PRF-01, PRF-02, TRU-02, TRU-06 |
+| Published translations and reports (`scripts/safe-output.py publish`, [safe-output.md](safe-output.md)) | TRU-06 |
 | Differential test results (`scripts/diff.sh`, [generated-code.md](generated-code.md#differential-test)) | TRU-02, TRU-03, THR-01, ORD-06, ALC-02, MTH-02 |
 | ABI probe reports ([profiles.md](profiles.md#bounded-linux-native-abi-observations)) | PRF-02, TRU-03 |
 | Allocation policy record ([allocation-policy-report.json](allocation-policy-report.json)) | ALC-01, ALC-02, TRU-02, TRU-03 |
