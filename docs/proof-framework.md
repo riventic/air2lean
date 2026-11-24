@@ -41,8 +41,11 @@ proof framework").
   `@[fsym]` and `fsym_norm`, so a new attribute or simp set is a reviewed decision like a new tactic.
   Applying one (`@[fsym]`, `attribute [fsym] …`, `simp [fsym_norm]`, `simproc [fsym_norm] …`) is
   not a declaration and is not recorded;
-* `legacy_users`: every Lean file that imports a module of the legacy logic or names a legacy
-  triple;
+* `legacy_users`: every Lean file that imports a module of the legacy concurrent chain
+  (`ZigLean/Conc/{Own,Csl,TlsLemmas,Witness,Lock,LockBase,LockRules}`) or names a legacy triple
+  (`Triple`, `TotalTriple`, `TTriple`, …). The legacy logic is deleted and the list is empty; the
+  check stays so that none of it comes back. The modules of the legacy sequential logic are not
+  matched by name: `ZigLean/Sep` is the directory of the one logic;
 * `tactic_uses`: per file and per tactic, the number of uses of every tactic with kind `syntax` and
   status `legacy-to-retire`, found as a word match in
   the code outside comments and strings. Declaring such a tactic is gated by `tactics`; this list

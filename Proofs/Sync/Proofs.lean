@@ -1,4 +1,5 @@
 import Proofs.Sync.Gen
+import Proofs.Sync.RwLockFixture
 import Proofs.Sync.SnapshotCache
 import Proofs.Sync.Mailbox
 import Proofs.Sync.NestedMutex

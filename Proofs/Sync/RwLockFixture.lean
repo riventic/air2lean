@@ -25,10 +25,10 @@ The protocol, its start, its thread steps and `main`'s end are once for every im
 
 open Zig Zig.Conc Zig.Conc.Proto Zig.Full Zig.Full.FAssn Zig.RwRead Sync
 
-namespace Sync.RwRead
-
 -- Unification must not unfold `WP` into the program (as in `Proofs/Sync/Mutex.lean`).
 attribute [local irreducible] Proto.WP
+
+namespace Sync.RwRead
 
 /-! ## The writer -/
 
@@ -81,12 +81,18 @@ theorem readShared_done (rp : Res) (hp : rp.Plain) (G : ThreadId → Gh) (m : Me
   rw [hT.done h0]
   rfl
 
+end Sync.RwRead
+
 /-! ## The results of `rwLockRead` -/
+
+namespace Sync.RwLockRead
+
+open Sync.RwRead (wOf dispatch_spec readShared_run readShared_done)
 
 /-- `main` of `rwLockRead`, walked by `fsym`: the `Shared` on its stack starts the protocol
 (`inv_start`), the spawn, a read while the writer runs, the join, the read after it, the free. -/
 theorem rwLockRead_main (σ : Placement) (io : Io) (d : Nat) :
-    proto.WP 0 (rwLockRead io) QRead G0 { mem0 σ with current := 0 } d := by
+    RwRead.proto.WP 0 (rwLockRead io) QRead G0 { mem0 σ with current := 0 } d := by
   cases io
   have := FOwned.start0_facts (σ := σ) (m := mem0 σ) rfl
   unfold rwLockRead
@@ -100,7 +106,7 @@ theorem rwLockRead_spec (env : Env) (henv : env.spawn = .available) {σ : Placem
     {v : Except ErrName (BitVec 32)} {m : Mem} (io : Io)
     (h : (Sched.run env dispatch fuel o (rwLockRead io) (mem0 σ)).run = some (.ok (v, m))) :
     v = .ok 2 ∨ v = .ok 12 ∨ v = .ok 22 := by
-  obtain ⟨_, _, hq⟩ := proto.run_sound env (Proto.of_available henv) dispatch G0
+  obtain ⟨_, _, hq⟩ := RwRead.proto.run_sound env (Proto.of_available henv) dispatch G0
     dispatch_spec (fun _ _ _ _ _ hq => hq.2) rfl (rwLockRead_main σ io) h
   exact QRead.result hq
 
@@ -110,7 +116,7 @@ theorem rwLockRead_safe (env : Env) (henv : env.spawn = .available) {σ : Placem
     {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
     e ≠ .stackOverflow →
       (Sched.run env dispatch fuel o (rwLockRead io) (mem0 σ)).run ≠ some (.error e) :=
-  proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec
+  RwRead.proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec
     (fun _ _ _ _ hq => hq.2) rfl (rwLockRead_main σ io)
 
 /-- One schedule completes: under the oracle that always picks option 0, the `Io.RwLock` reader
@@ -123,12 +129,18 @@ theorem rwLockRead_completes :
   iterate 10 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
   decide +kernel
 
+end Sync.RwLockRead
+
 /-! ## The results of `rwLockSnapshotPair` -/
+
+namespace Sync.RwLockSnapshotPair
+
+open Sync.RwRead (wOf dispatch_spec)
 
 /-- `main` of `rwLockSnapshotPair`, walked by `fsym`: as `rwLockRead_main`, with both loads of
 `n` under one read lock. -/
 theorem snapshotPair_main (σ : Placement) (io : Io) (d : Nat) :
-    proto.WP 0 (rwLockSnapshotPair io) QPair G0 { mem0 σ with current := 0 } d := by
+    RwRead.proto.WP 0 (rwLockSnapshotPair io) QPair G0 { mem0 σ with current := 0 } d := by
   cases io
   have := FOwned.start0_facts (σ := σ) (m := mem0 σ) rfl
   unfold rwLockSnapshotPair
@@ -147,7 +159,7 @@ theorem snapshotPair_spec (env : Env) (henv : env.spawn = .available) {σ : Plac
     (h : (Sched.run env dispatch fuel o (rwLockSnapshotPair io) (mem0 σ)).run =
       some (.ok (v, m))) :
     v = .ok 0 ∨ v = .ok 11 ∨ v = .ok 22 := by
-  obtain ⟨_, _, hq⟩ := proto.run_sound env (Proto.of_available henv) dispatch G0
+  obtain ⟨_, _, hq⟩ := RwRead.proto.run_sound env (Proto.of_available henv) dispatch G0
     dispatch_spec (fun _ _ _ _ _ hq => hq.2) rfl (snapshotPair_main σ io) h
   exact QPair.result hq
 
@@ -157,7 +169,7 @@ theorem snapshotPair_safe (env : Env) (henv : env.spawn = .available) {σ : Plac
     {e : Error} (io : Io) :
     e ≠ .stackOverflow →
       (Sched.run env dispatch fuel o (rwLockSnapshotPair io) (mem0 σ)).run ≠ some (.error e) :=
-  proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec
+  RwRead.proto.run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec
     (fun _ _ _ _ hq => hq.2) rfl (snapshotPair_main σ io)
 
 /-- One schedule completes: under the oracle that always picks option 0, the snapshot-pair reader
@@ -170,4 +182,4 @@ theorem snapshotPair_completes :
   iterate 10 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
   decide +kernel
 
-end Sync.RwRead
+end Sync.RwLockSnapshotPair
