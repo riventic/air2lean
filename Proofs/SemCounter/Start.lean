@@ -293,10 +293,10 @@ theorem inv_start {m : Mem} {r : Res} {A : Nat} {bs : Array Byte}
       refine (ho.owns 0 ht).1 e he (.inl ⟨e.off, Nat.le_refl _, by have := hr.2.1; omega, ?_⟩)
       rw [upd_self]
       exact Res.excl_of_heap (heap_ne_r (heap_ne_r hx))
-    refine ⟨⟨⟨by rw [hth]; rfl, .inl ⟨h1, hp0, fun u hu => ?_⟩⟩, hio,
+    refine ⟨UM.of ⟨by rw [hth]; rfl, .inl ⟨h1, hp0, fun u hu => ?_⟩⟩ hio
         ⟨rIO, ⟨A, bs.extract 0 16, hA, by simp [hs], by rw [hIo]; exact LawfulEnc.decode_encode _,
           ?_⟩, hIOoff,
-          rfl⟩, ⟨blk, hblk, hl, hSz, hK⟩, hwsOk, hweOk, fun w hw => by simp [hq] at hw⟩,
+          rfl⟩ ⟨blk, hblk, hl, hSz, hK⟩ hwsOk hweOk (fun w hw => by simp [hq] at hw),
       FCond.Inv.start hwsz hwsv hwez hwev hc hq,
       FSem.Inv.start (S := S) hwsz hwsv hc hsp,
       ⟨.inr (by rw [hp1]; rfl), fun u k s h => absurd h (hnw u k true s),
@@ -338,7 +338,7 @@ theorem U_rec {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {n : Nat
     (.inr (.inl (by show 0 + n ≤ 28; omega)))
   obtain ⟨hwE, hhE⟩ := hu.um.we.record_apart_native (b := 0) (o := 0) (len := n) (k := .read)
     (.inr (.inl (by show 0 + n ≤ 32; omega)))
-  exact ⟨⟨hu.um.shape, hu.um.io.read (hc ▸ ht) hcs 0 0 n, hu.um.rest.congr fun _ _ => rfl,
+  exact ⟨⟨hu.um.cl.read (hc ▸ ht) hcs 0 0 n, hu.um.rest.congr fun _ _ => rfl,
       hu.um.blk, hwS, hwE, hu.um.q⟩,
     hu.cinv.stay hhS hhE rfl rfl rfl (fun _ hw _ => hw) (fun _ _ h => h) (Nat.le_refl _) hclk,
     hu.sinv.mono (fun _ => rfl) (fun _ => rfl) rfl hu.sinv.pst (fun _ h => .inl h) hclk
@@ -424,7 +424,7 @@ theorem U_part {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {r : Re
   have hxs : xs (upd G t (L.setPart (G t) r)) = xs G := funext fun u => congrArg X.ph (hX u)
   have hcnt : S.cnt (upd G t (L.setPart (G t) r)) = S.cnt G := by
     show pv (xs _) = pv (xs _); rw [hxs]
-  refine ⟨⟨by rw [hxs]; exact hu.um.shape, hu.um.io, hu.um.rest, hu.um.blk, hu.um.ws, hu.um.we,
+  refine ⟨⟨by rw [hxs]; exact hu.um.cl, hu.um.rest, hu.um.blk, hu.um.ws, hu.um.we,
       hu.um.q⟩,
     hu.cinv.other rfl (fun _ => rfl) (fun _ h => h) id rfl rfl rfl rfl rfl (fun w hw _ => .inl hw)
       (fun _ _ _ h => h) (Nat.le_refl _) (fun _ => VClock.le_refl _),
@@ -611,12 +611,13 @@ theorem inv_spawnParts {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM rP 
   have hI' := cinv_out (cinv_out hI (t := 1) (g := gW rP 0 false 0) hG1c rfl)
     (t := 0) (g := gW rM 0 false 0) (by rw [upd1_0]; exact hG0c) rfl
   have hsat := FCond.Sated.congr (C := C) hhS
-  refine ⟨hs1, rfl, rX, by rw [hs1] at hL'; exact hL', ⟨⟨⟨?_, .inr ⟨by simp [hs1], ?_,
+  refine ⟨hs1, rfl, rX, by rw [hs1] at hL'; exact hL', ⟨⟨hu.um.cl.fork (t := 0) (gt := false)
+      (by rw [hs1]; decide) hcs hf ⟨?_, .inr ⟨by simp [hs1], ?_,
       .inr ⟨0, by decide, false, 0, by show (upd (upd G 1 _) 0 _ 0).2.ph = _; rw [hX0]⟩,
       .inr ⟨0, by decide, false, 0, by show (upd (upd G 1 _) 0 _ 1).2.ph = _; rw [hX1]⟩,
       fun u hu' => by
         show (upd (upd G 1 _) 0 _ u).2.ph = _
-        rw [hXu u hu']; exact hnone u (by unfold ThreadId at *; omega)⟩⟩, ?_,
+        rw [hXu u hu']; exact hnone u (by unfold ThreadId at *; omega)⟩⟩,
       hu.um.rest.congr fun _ _ => rfl, hu.um.blk, hwS, hwE, fun w hw => hu.um.q w hw⟩,
     hI', sinv_grow hu.sinv hsph hcph hcnt (fun u h => ?_) hHB hclk (by simp) (fun w hw => .inl hw)
       rfl hhS, ⟨.inl (by rw [hX0]; rfl), fun u k s h => ?_, fun u h => ?_,
@@ -631,8 +632,6 @@ theorem inv_spawnParts {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM rP 
       fun v q n h hv => by rw [hcph v] at hv; exact hsat.mpr (hu.lg.incS v q n h hv)⟩⟩⟩
   · simp only [Array.getElem?_push]; rw [ite_eq_right (by omega)]; exact h00
   · simp only [Array.getElem?_push, hs1, ↓reduceIte]
-  · exact hu.um.io.fork (t := 0) (by rw [hs1]; decide) (by simp)
-      (fun u hu' => hcl u (by rw [hcs]; exact hu')) (by rw [← hcs]; exact hcn) fun _ he _ => he
   · -- `pst`: no thread is in the semaphore's code
     by_cases hu' : u < 2
     · rcases h01 u hu' with rfl | rfl
@@ -768,7 +767,7 @@ theorem inv_end {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g : Gh} {rp : Re
       · exact .inl (by show (upd G 1 _ 1).2.ph = _; rw [upd_self] <;> rfl)
     · have e : u ≠ t := by have := ht2.1; unfold ThreadId at *; omega
       show (upd G t g u).2.ph = _; rw [hne u e]; exact hyu u hu
-  refine ⟨rX, hl, ⟨hsh, hU.um.io, hU.um.rest, hU.um.blk, hU.um.ws, hU.um.we, hU.um.q⟩,
+  refine ⟨rX, hl, ⟨hU.um.cl.relabel hsh, hU.um.rest, hU.um.blk, hU.um.ws, hU.um.we, hU.um.q⟩,
     by have := cinv_out (t := t) (g := g) hU.cinv (by rw [upd_self]; rfl) hgc
        rwa [upd_upd] at this,
     hU.sinv.mono hsph hcph hcnt

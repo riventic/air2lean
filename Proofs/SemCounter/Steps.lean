@@ -252,8 +252,8 @@ theorem U_enter {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} (hu : 
     · subst e; exact absurd hct2 h
     · rw [upd_ne _ _ e]
   have hum : UM (upd G t (C.set (G t) .en)) rX m :=
-    ⟨by rw [xs_upd (g := C.set (G t) .en) rfl]; exact hu.um.shape, hu.um.io, hu.um.rest, hu.um.blk, hu.um.ws, hu.um.we,
-      hu.um.q⟩
+    ⟨by rw [xs_upd (g := C.set (G t) .en) rfl]; exact hu.um.cl, hu.um.rest, hu.um.blk, hu.um.ws,
+      hu.um.we, hu.um.q⟩
   refine ⟨hum, hci, hsi, ⟨by rw [hph 0, hph 1]; exact hu.lg.one, fun u k s h => ?_,
     fun u h => by rw [hsp u] at h; rw [hph u]; exact hu.lg.wtx u h,
     fun k hk => hb_same hP (hu.lg.ehb k hk),
@@ -479,16 +479,17 @@ theorem cstep (G : ThreadId → Gh) (rY : Res) (m m' : Mem) (t : ThreadId) (p : 
     exact ⟨by omega, hh'⟩
   -- the memory's part
   have hum : UM G' (rsum (W.cellsR m') rY) m' := by
-    refine ⟨?_, fun e he hr => ?_, Rest.step (two_box hW2) hu.um.rest rfl hY
-        fun l _ hw => hs.cells hw,
+    have hrest : Rest (rsum (W.cellsR m') rY) m' :=
+      Rest.step (two_box hW2) hu.um.rest rfl hY fun l _ hw => hs.cells hw
+    -- the step's accesses are at the condition's words: the program's facts stay
+    have hcl := hu.um.cl.keep (Lk := BoxW) (rX' := rsum (W.cellsR m) rY) (fun _ _ => io_box) hth
+      hclk
+      (fun e he => ((hs.fp he).imp_right fun h => h.elim (two_fp hW2) (two_fp (.inr rfl))).imp
+        (fun h' => ⟨e, h', .refl e⟩) fun ⟨_, ho⟩ x h1 _ h3 =>
+          (hu.um.rest.only h3).resolve_right fun h => by have h16 : x < 16 := h.2; omega)
+      fun _ _ _ h => h
+    refine ⟨holds_of (hu.um.shape.congr hth (funext fun u => (hph u).1)) hcl.sh hrest, hrest,
       hu.um.blk.of_block fun _ _ hb => hs.block hb, hwS, hwE, fun w hw => ?_⟩
-    · exact hu.um.shape.congr hth (funext fun u => (hph u).1)
-    · rcases (hs.fp he).imp_right fun h => h.elim (two_fp hW2) (two_fp (.inr rfl)) with
-        h' | ⟨-, ho⟩
-      · rcases hu.um.io e h' hr with ⟨hk, h''⟩ | h''
-        · exact .inl ⟨hk, Conc.someLe_mono hth (fun u _ => hclk u) h''⟩
-        · exact .inr (Conc.allLe_mono hth (fun u _ => hclk u) h'')
-      · have := hr.2.2; omega
     · rw [hs.key hu.um.we, hWI.blk.key_of_addrs hs.addrs]
       rcases hs.waiters hw with h' | rfl
       · exact hu.um.q w h'

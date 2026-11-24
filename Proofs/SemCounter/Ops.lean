@@ -147,9 +147,10 @@ theorem U_take {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {rp r h
     by_cases e : u = t
     · subst e; rw [hG₁, hG₂, upd_self, upd_self]; rfl
     · rw [hne u e]
-  refine ⟨⟨hu.um.shape.work (k' := k) (by show (G₁ t).2.ph = _; rw [h₁t]) (by omega)
-      (by show (G₂ t).2.ph = _; rw [h₂t]) fun u e => by show (G₂ u).2.ph = _; rw [hne u e],
-    hu.um.io, hu.um.rest, hu.um.blk, hu.um.ws, hu.um.we, hu.um.q⟩, hci, hsi,
+  refine ⟨⟨hu.um.cl.relabel (hu.um.shape.work (k' := k) (by show (G₁ t).2.ph = _; rw [h₁t])
+      (by omega) (by show (G₂ t).2.ph = _; rw [h₂t])
+      fun u e => by show (G₂ u).2.ph = _; rw [hne u e]),
+    hu.um.rest, hu.um.blk, hu.um.ws, hu.um.we, hu.um.q⟩, hci, hsi,
     hu.lg.relabel hc rfl rfl ?_ ?_ ?_ (fun j hj => hb_same hP (hu.lg.ehb j hj))⟩
   · -- one: the other thread has no permit
     by_cases h0 : t = 0
@@ -302,9 +303,10 @@ theorem U_give {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {rp rT 
     by_cases e : u = t
     · subst e; rw [hG₁, hG₂, upd_self, upd_self]; rfl
     · rw [hne u e]
-  refine ⟨⟨hu.um.shape.work (k' := k + 1) (by show (G₁ t).2.ph = _; rw [h₁t]) (by omega)
-      (by show (G₂ t).2.ph = _; rw [h₂t]) fun u e => by show (G₂ u).2.ph = _; rw [hne u e],
-    hu.um.io, hu.um.rest, hu.um.blk, hu.um.ws, hu.um.we, hu.um.q⟩, hci, hsi,
+  refine ⟨⟨hu.um.cl.relabel (hu.um.shape.work (k' := k + 1) (by show (G₁ t).2.ph = _; rw [h₁t])
+      (by omega) (by show (G₂ t).2.ph = _; rw [h₂t])
+      fun u e => by show (G₂ u).2.ph = _; rw [hne u e]),
+    hu.um.rest, hu.um.blk, hu.um.ws, hu.um.we, hu.um.q⟩, hci, hsi,
     hu.lg.relabel hc rfl rfl ?_ ?_ ?_ (fun j hj => hb_same hP (hu.lg.ehb j hj))⟩
   · -- one: the giver has no permit
     have hf : (G₂ t).2.ph.holds = false := by rw [h₂t]; rfl

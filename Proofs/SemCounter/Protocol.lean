@@ -257,6 +257,12 @@ theorem UM.shape {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : UM G rX m) : S
 theorem UM.io {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : UM G rX m) : ReadShared IoR m :=
   hu.cl.sh
 
+/-- `UM` from the threads, the read shares of `io` and the memory's facts. -/
+theorem UM.of {G : ThreadId → Gh} {rX : Res} {m : Mem} (shape : Shape (xs G) m)
+    (io : ReadShared IoR m) (rest : Rest rX m) (blk : BlkOk m) (ws : WS.Ok m) (we : WE.Ok m)
+    (q : ∀ w ∈ m.waiters, w.2 = L.key m ∨ w.2 = WE.key m) : UM G rX m :=
+  ⟨holds_of shape io rest, rest, blk, ws, we, q⟩
+
 /-- The client's part of the rest of the invariant: the permit and the window (module doc). -/
 structure Lg (G : ThreadId → Gh) (m : Mem) : Prop where
   /-- At most one thread has the permit. -/
