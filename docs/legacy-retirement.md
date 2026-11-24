@@ -55,8 +55,8 @@ one step (`legacy_users` 13 → 0, judgments 85 → 67):
   (Conc/Lock), `LocsKeep`, `BlkStep`, `Keep`, `KeepK`, `Op` (Conc/Word), `Sem`, `Fits`, `Step`
   (Sync/Semaphore), `Sem.Spec`, `Frame` (Sync/RwLock), `ProtectedFacts` (Sync/RwLockContract).
 - **The RwLock clients.** `rwLockRead_spec`/`_safe`/`_completes` and
-  `snapshotPair_spec`/`_safe`/`_completes` are re-proved over `RwLockImpl` in the fixture that
-  this deletion lands on top of, statements unchanged.
+  `snapshotPair_spec`/`_safe`/`_completes` are re-proved over `RwLockImpl` in
+  `Proofs/Sync/RwLockFixture.lean`, statements unchanged.
   The step lemmas of the legacy proofs (`RwLockContract.held_pair_wp`, `acquire_shared`,
   `RwLockSnapshotPair.result_of_same_snapshot`, `MutexOps.lock_spec`/`unlock_spec`) are gone
   from `assurance/theorem-list.json`: the rules of `RwLockImpl` and `MutexImpl` replace them.

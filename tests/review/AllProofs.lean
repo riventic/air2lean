@@ -29,6 +29,7 @@ import Proofs.Slices.Sep
 import Proofs.Sync.Handoff
 import Proofs.Sync.Mutex
 import Proofs.Sync.Proofs
+import Proofs.Sync.RwLockFixture
 import Proofs.Sync.SemCounter
 import Proofs.Threads.Counter
 import Proofs.Threads.Disjoint

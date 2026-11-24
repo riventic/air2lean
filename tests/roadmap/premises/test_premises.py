@@ -1240,7 +1240,7 @@ class RepositoryTests(unittest.TestCase):
         direct_premises = {pid for pid, reasons in lock["via"].items()
                            if any("source runtime fallback" not in reason for reason in reasons)}
         self.assertNotIn("THR-06", direct_premises)
-        self.assertIn("PRF-02", self.premises_of("Proofs/Sync/RwLock.lean", "Sync.RwLockRead.rwLockRead_spec"))
+        self.assertIn("PRF-02", self.premises_of("Proofs/Sync/RwLockFixture.lean", "Sync.RwLockRead.rwLockRead_spec"))
         self.assertIn("ALC-04", self.premises_of("tests/roadmap/byte-sentinel/Check.lean", "example@L19"))
         self.assertIn("EXT-01", self.premises_of("tests/roadmap/models/Model.lean", "RegistryExample.evidence"))
         self.assertIn("TMR-02", {p for (f, _), e in self.entries.items()

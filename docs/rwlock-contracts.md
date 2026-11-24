@@ -1,20 +1,22 @@
 # Restricted RwLock contract client and reusable sync contracts
 
-The public `Proofs/Sync/RwLock.lean` already proves `rwLockRead_spec` (successful results
-2, 12 or 22) and `rwLockRead_safe` (no scheduler error for every fuel and oracle).
-These are partial correctness and strict safety statements, not fairness or termination.
-The roadmap's former missing-proof assessment is stale. C14 remains partial: the reusable
-Mutex/Semaphore contracts with two independent clients, a Condition contract restricted to
-the `Io.Semaphore` layout (no client yet) and a restricted RwLock contract are below
-([Reusable synchronization contracts](#reusable-synchronization-contracts)); a general
-RwLock contract and Event/WaitGroup contracts are not complete.
+`Proofs/Sync/RwLockFixture.lean` proves the two RwLock clients over the full-state contract
+`RwLockImpl` ([Reusable synchronization contracts](#reusable-synchronization-contracts)):
+`rwLockRead_spec` (successful results 2, 12 or 22) and `rwLockRead_safe` (no scheduler error for
+every fuel and oracle), and `snapshotPair_spec` (0, 11 or 22) and `snapshotPair_safe` for
+`rwLockSnapshotPair`. These are partial correctness and strict safety statements, not fairness or
+termination. They are the statements of the legacy proofs (`Proofs/Sync/RwLock.lean`,
+`RwLockContract.lean`, `RwLockSnapshotPair.lean`, over the legacy thread protocol), which are
+deleted (`docs/legacy-retirement.md`, the chain's deletion). The paragraphs below up to
+"Reusable synchronization contracts" are the record of the snapshot client's first landing
+(PR104); where they name the adapter `RwLockContract.lean`, `ProtectedFacts`, `NPts` or `U.parts`,
+they describe that deleted proof, not the fixture. C14 remains partial (its register entry
+has the scope): what `RwLockImpl` covers of arbitrary readers and resources, and the Event/WaitGroup
+contracts.
 
-`RwLockContract.lean` is a locally kernel-checked adapter to the existing shared-lock proofs.
-It retains reader 0, writer 1, the fixed Zig 0.16 `std.Io` layout, count at most 2, concrete
-`Sync.Tgt`, and the full semaphore/protocol premises. `ProtectedFacts` parameterizes facts
-entailed by the owned counter assertion. It does not generalize the protected heap or prove
-multiple readers/writers. Release aliases the original proof; no primitive proof is copied.
-Generic Mutex and Semaphore contracts already have independent clients.
+The legacy adapter `RwLockContract.lean` retained reader 0, writer 1, the fixed Zig 0.16 `std.Io`
+layout, count at most 2, concrete `Sync.Tgt`, and the full semaphore/protocol premises; it did not
+generalize the protected heap or prove multiple readers/writers.
 
 `rwLockSnapshotPair` is a restricted source client. It reuses the existing writer,
 holds one shared acquisition across two loads, releases, joins, and returns their decimal

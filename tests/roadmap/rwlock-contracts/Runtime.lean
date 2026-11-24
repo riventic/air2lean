@@ -5,7 +5,7 @@ import Proofs.Sync.Proofs
 
 `Zig.loop` is a `partial_fixpoint`: its logical body is opaque to definitional kernel
 reduction. The all-fuel/all-oracle WP/result/strict-safety proofs are separately checked
-in `RwLockSnapshotPair`; these finite assertions execute its compiled production model.
+in `Proofs/Sync/RwLockFixture.lean`; these finite assertions execute its compiled production model.
 They do not use `native_decide`, add axioms, or redirect the generated client/dispatcher.
 The no-join fixture is explicitly a model mutation using the real writer and lock calls.
 -/
