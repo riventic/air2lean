@@ -36,9 +36,9 @@ the writer's take and the last reader's give at the semaphore (`Base.utake`, `Ba
 `Base.handover`), and liveness (`Base.wlive`, `Base.holdLiveM`; at the semaphore's mutex, which
 has no nest, `FLock.holdLive_none`).
 
-`Base.wstep` takes two facts of the step as premises that `FRw.Step` does not state yet (ledger
-#two-lock-product, ninth and tenth obstruction): the readers' shares after it (`hsh`) and the
-stepping thread's place at the outer mutex (`hmt`).
+`Base.wstep` takes the readers' shares after the step as a premise (`hsh`), to be derived from
+`FRw.Step`'s clause that a thread comes to `rd` only from `out` (ledger #two-lock-product, ninth
+obstruction, decided 2026-11-24); the stepping thread's place at the outer mutex is `Step`'s.
 -/
 
 namespace Zig
