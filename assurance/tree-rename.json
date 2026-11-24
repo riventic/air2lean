@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "description": "The rename map of the directory restructuring (ROADMAP.md, 'Directory structure'). One group is one mechanical PR, landing in this order after the legacy layer is deleted; a later group names the paths as the earlier groups leave them. scripts/tree-rename.py --dry-run prints every change a group makes, --apply performs one, --check verifies that no reference to an old path or module remains. PROPOSAL until the maintainer approves it (handoff claude-dir-plan, open questions); the groups are written for the tree of origin/claude/legacy-chain (the legacy layer deleted): run the dry run with --tree origin/claude/legacy-chain until that merges.",
+  "lean_roots": ["ZigLean", "Air2Lean", "Proofs", "tools"],
+  "drop_prefix": ["ZigLean/"],
+  "never_rewrite": [
+    "assurance/tree-rename.json",
+    "scripts/tree-rename.py",
+    "tests/roadmap/tree-rename/",
+    "tests/fixtures/tree-rename/",
+    "*.zig",
+    "*.c",
+    "*.h",
+    "assurance/releases/",
+    "assurance/reproductions/",
+    "assurance/build-mode-runs/",
+    "qualification/",
+    "tests/roadmap/release-record/fixtures/",
+    "tests/fixtures/release-record/fixtures/"
+  ],
+  "never_rewrite_why": "Zig and C sources are hash-bound inputs of the goldens (a comment edit changes their source hash); assurance/releases, reproductions, build-mode-runs and qualification are records of a past state (digests keyed by the paths of that commit); release-record/fixtures holds frozen copies of CI files. A comment in a source that names a moved doc stays stale.",
+  "groups": [
+    {
+      "id": "G1",
+      "title": "ZigLean/Sep/Full becomes ZigLean/Sep (the one logic); Heap and Assert join the base vocabulary in Sep/Base",
+      "rules": [
+        {"kind": "dir", "from": "ZigLean/Sep/Full", "to": "ZigLean/Sep"},
+        {"kind": "file", "from": "ZigLean/Sep/Heap.lean", "to": "ZigLean/Sep/Base/Heap.lean"},
+        {"kind": "file", "from": "ZigLean/Sep/Assert.lean", "to": "ZigLean/Sep/Base/Assert.lean"}
+      ]
+    },
+    {
+      "id": "G2",
+      "title": "ZigLean/Sep families become directories (Lock/, RwLock/, Cond/, Thread/, Word/, Atomic/, Witness/, Auto/, Io/, Stack/); the family's root module stays beside its directory",
+      "rules": [
+        {"kind": "family", "dir": "ZigLean/Sep", "name": "Auto"},
+        {"kind": "family", "dir": "ZigLean/Sep", "name": "Lock"},
+        {"kind": "family", "dir": "ZigLean/Sep", "name": "RwLock"},
+        {"kind": "family", "dir": "ZigLean/Sep", "name": "RwProd", "into": "RwLock", "as": "Prod"},
+        {"kind": "family", "dir": "ZigLean/Sep", "name": "Cond"},
+        {"kind": "family", "dir": "ZigLean/Sep", "name": "Thread"},
+        {"kind": "family", "dir": "ZigLean/Sep", "name": "Word"},
+        {"kind": "family", "dir": "ZigLean/Sep", "name": "Atomic"},
+        {"kind": "family", "dir": "ZigLean/Sep", "name": "Witness"},
+        {"kind": "family", "dir": "ZigLean/Sep", "name": "Io"},
+        {"kind": "family", "dir": "ZigLean/Sep", "name": "Stack"}
+      ]
+    },
+    {
+      "id": "G3",
+      "title": "tests/roadmap becomes tests/fixtures (the Lake package is already named fixtures); one directory move, the modules inside do not change",
+      "rules": [
+        {"kind": "dir", "from": "tests/roadmap", "to": "tests/fixtures"}
+      ]
+    },
+    {
+      "id": "G4",
+      "title": "docs/*.md are grouped by area (logic, model, translator, assurance, build); getting-started.md and the three existing subdirectories stay",
+      "rules": [
+        {"kind": "files", "from_dir": "docs", "to_dir": "docs/logic", "names": [
+          "claim-strength.md", "engine-ledger.md", "interfaces.md", "invariant-synthesis.md",
+          "legacy-retirement.md", "loop-dispatch.md", "proof-automation.md", "proof-framework.md",
+          "proof-receipts.md", "proof-tools.md", "proofs.md", "rwlock-contracts.md",
+          "sep-full-state.md", "sep-threads.md", "thread-specs.md", "vcs.md", "vector-proofs.md",
+          "weak-cas.md", "weak-ordering.md"]},
+        {"kind": "files", "from_dir": "docs", "to_dir": "docs/model", "names": [
+          "aarch64-abi.md", "address-placement.md", "address-reuse.md", "aggregate-casts.md",
+          "air-json.md", "air-semantics.md", "alloc-arena.md", "alloc-page.md", "alloc-spec.md",
+          "allocation-policy.md", "allocator-identity.md", "allocator-model.md",
+          "bitcast-semantics.md", "bitops.md", "byte-permutation.md", "deadline-atomic-compare.md",
+          "deadline-cases.md", "deadline-futex-design.md", "deadline-handoff.md",
+          "deadline-runtime.md", "deadline-translator-scope.md", "env-boundaries.md",
+          "external-models.md", "float-semantics.md", "floats.md", "futures.md",
+          "illegal-behavior.md", "kernel-eval-bytes.md", "null-pointers.md", "os-mmap.md",
+          "os-threads.md", "pointer-atomics.md", "progress-hints.md", "schedule-caps.md",
+          "spawn-failure.md", "std-models.md", "thread-io-translation.md", "volatile-effects.md",
+          "zig-0.17-delta.md"]},
+        {"kind": "files", "from_dir": "docs", "to_dir": "docs/translator", "names": [
+          "c-frontend.md", "diagnostics.md", "export-names.md", "generated-code.md",
+          "input-validation.md", "modular-output.md", "outcome-accounting.md",
+          "outcome-taxonomy.md", "profiles.md", "project-diagnostics.md", "project-workflow.md",
+          "safe-output.md", "stable-generation.md"]},
+        {"kind": "files", "from_dir": "docs", "to_dir": "docs/assurance", "names": [
+          "artifact-manifest.md", "assumptions-audit.md", "build-budgets.md", "counterexamples.md",
+          "coverage.md", "distribution.md", "fuzzing.md", "host-accounting.md", "mutation-map.md",
+          "perf-budgets.md", "premises.md", "release-record.md", "support-matrix.md",
+          "target-matrix.md", "trust-report.md"]},
+        {"kind": "files", "from_dir": "docs", "to_dir": "docs/build", "names": [
+          "build-cache.md", "build-modes.md", "ci.md", "rosetta.md", "zig-0.17-ci.md"]}
+      ]
+    }
+  ]
+}
