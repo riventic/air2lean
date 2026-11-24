@@ -152,12 +152,12 @@ def growLines {Tgt : Type} (dispatch : Tgt → Zig.ConcM Tgt Unit) (m : Zig.Mem)
 /-- The model's `page_grow` lines for x86_64-linux (`expected-linux.txt`). -/
 def growLinux : IO Unit :=
   (growLines PageLinux.dispatch (PageLinux.mem0 .fresh) PageLinux.page_grow PageLinux.page_grow_blocked
-    PageLinux.page_grow_stale).forM' IO.println
+    PageLinux.page_grow_stale).forM IO.println *> pure ()
 
 /-- The model's `page_grow` lines for aarch64-macos (`expected.txt`). -/
 def growMacos : IO Unit :=
   (growLines PageMacos.dispatch (PageMacos.mem0 .fresh) PageMacos.page_grow PageMacos.page_grow_blocked
-    PageMacos.page_grow_stale).forM' IO.println
+    PageMacos.page_grow_stale).forM IO.println *> pure ()
 
 section GrowLinux
 open AllocTranslated.PageLinux
