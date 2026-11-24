@@ -532,8 +532,8 @@ theorem Inv.share_zero_of_cell {t : ThreadId} {l : Loc} (hi : L.Inv G rX m)
   obtain ⟨rL, ho, -⟩ := hi.rest
   exact ho.share_zero_of_cell ht fun e => hl (rsum_heap_none.mp (rsum_heap_none.mp e).2).2
 
-/-- The protocol's rest holds no share of a byte it holds as a cell (`FOwned.rest_zero_of_cell`),
-and a thread that does not exist owns nothing. -/
+/-- The protocol's rest holds no share of a byte it holds as a cell
+(`FOwned.rest_zero_of_cell`). -/
 theorem Inv.rest_zero_of_cell {t : ThreadId} {l : Loc} (hi : L.Inv G rX m)
     (ht : t < m.threads.size) (hl : rX.heap l ≠ none) : rX.gh.share l = SCell.zero := by
   obtain ⟨rL, ho, -⟩ := hi.rest
@@ -541,6 +541,7 @@ theorem Inv.rest_zero_of_cell {t : ThreadId} {l : Loc} (hi : L.Inv G rX m)
     ho.rest_zero_of_cell ht fun e => hl (rsum_heap_none.mp (rsum_heap_none.mp e).2).2
   exact (SCell.add_eq_zero (SCell.add_eq_zero h).2).2
 
+/-- A thread that does not exist owns no share (`FOwned.outside`). -/
 theorem Inv.own_outside {u : ThreadId} {l : Loc} (hi : L.Inv G rX m)
     (hu : m.threads.size ≤ u) : (L.own G m u).gh.share l = SCell.zero := by
   obtain ⟨rL, ho, -⟩ := hi.rest
