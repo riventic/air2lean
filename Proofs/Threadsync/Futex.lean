@@ -103,6 +103,8 @@ theorem wake_wp (hcost : P.cost = none) {t : ThreadId} {G : ThreadId → γ} {m 
   subst hMe
   unfold Thread_Futex_wake Thread_Futex_LinuxImpl_wake
   fsym [h', hcast1, hcast2, herrno, hc']
+  -- the woken count `(some j).getD 0` is `j`
+  assumption
 
 end_when
 
