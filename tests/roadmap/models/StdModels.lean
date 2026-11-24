@@ -113,6 +113,15 @@ def main : IO Unit := do
   require ((stdModel? "os.linux.futex_wait").map (·.zigVersions) == some #[.v0_14_1] &&
     (stdModel? "os.linux.futex_4arg").map (·.zigVersions) == some #[.v0_15_2, .v0_16_0, .v0_17_1])
     "futex wait rows per version"
+  -- The wake rows (OSF-02), active in every allocator model: `futex_wake` (0.14.1) and
+  -- `futex_3arg` (0.15.2 on) are the same system call, one row each.
+  require (osFn? "os.linux.futex_3arg" == some .futex3 && osFn? "extern:__ulock_wake" == some .ulockWake &&
+    osFn? "os.linux.futex_wake" (mode := .translated) == some .futexWakeRaw) "OSF-02 projection"
+  require ((stdModel? "os.linux.futex_wake").map (·.zigVersions) == some #[.v0_14_1] &&
+    (stdModel? "os.linux.futex_3arg").map (·.zigVersions) == some #[.v0_15_2, .v0_16_0, .v0_17_1] &&
+    #["os.linux.futex_3arg", "os.linux.futex_wake", "extern:__ulock_wake"].all fun s =>
+      (stdModel? s).bind (·.premise) == some "OSF-02")
+    "futex wake rows per version"
   require ((rejectedThreadFn? "Io.futexWaitTimeout").isSome) "rejection projection"
   require (threadFn? "Thread.detach" == some .detach) "detach projection"
   -- C05: cancelable APIs outside the cancelation model are rejected with their reason; the
@@ -158,6 +167,7 @@ def main : IO Unit := do
   -- An OS row with an environment (`OsFn.env`) checks its signature like any OS row, and every
   -- function that reaches it, and only those, takes the OS environment (`envFunctions`).
   expectError (checkProgram #[caller f "client" "os.linux.clock_gettime"]) "has an incompatible"
+  expectError (checkProgram #[caller f "client" "os.linux.futex_3arg"]) "has an incompatible"
   let clockUser := caller f "clockUser" "os.linux.clock_gettime"
   let clockCaller := caller f "clockCaller" "clockUser"
   let other := caller f "other" "os.linux.sched_yield"

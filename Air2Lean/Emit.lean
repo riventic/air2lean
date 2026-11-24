@@ -1270,7 +1270,7 @@ result checks the tag (`Zig.enumOf`): `invalidEnumValue` for 0.17's `bit_cast_sa
 `.illegal` for the unchecked `bit_cast`. -/
 def FCtx.logicalBitCastExpr? (fc : FCtx) (safe : Bool) (a : Val) (dst : TyId) (av : String) :
     Option String := do
-  let src ← fc.valTyId? a
+  let src ← fc.valTyId? a <|> voidConstTy? fc.types a
   unless logicalBitCastApplies fc.dialect.bitCast fc.types src dst do none
   let (s, d) ← (logicalBitCastShapes fc.types src dst).toOption
   -- An enum and exactly its tag type (`@intFromEnum`, `@enumFromInt`-style): the ≤0.16 text
@@ -1800,6 +1800,9 @@ def FCtx.osCall (fc : FCtx) (env : Array (InstId × String)) (fn : OsFn) (args :
   | .ulockWait2 =>
     s!"Zig.callC (Zig.Os.Darwin.__ulock_wait2 {bits 0} {arg 1} {arg 2} {arg 3} {arg 4})"
   | .ulockWait => s!"Zig.callC (Zig.Os.Darwin.__ulock_wait {bits 0} {arg 1} {arg 2} {arg 3})"
+  | .futex3 => s!"Zig.callC (Zig.Os.Linux.futex_3arg {arg 0} {bits 1} {arg 2})"
+  | .futexWakeRaw => s!"Zig.callC (Zig.Os.Linux.futex_3arg {arg 0} {arg 1} {arg 2})"
+  | .ulockWake => s!"Zig.callC (Zig.Os.Darwin.__ulock_wake {bits 0} {arg 1} {arg 2})"
 
 /-- A call to the allocator model (`ZigLean/Mem/Alloc.lean`), a `Zig.MemM` term. `ret`: the
 call's result type. `args[0]` is the allocator. -/
@@ -2503,7 +2506,12 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let (env, l) := bindLet fc env inst.id s!"pure ({f} {fc.tyBits inst.ty} {rv a})"
     (env, some l)
   | .splat a =>
-    let (env, l) := bindLet fc env inst.id s!"pure (Zig.Vec.splat {rv a})"; (env, some l)
+    -- Zig 0.17: `@splat` to an array (the checker admits no sentinel) is the array of `len`
+    -- copies of the operand; to a vector, the lane-wise splat.
+    let term := match fc.tyOfId inst.ty with
+      | .array len _ _ => s!"(Vector.replicate {len} {rv a} : {fc.emitTyOf inst.ty})"
+      | _ => s!"Zig.Vec.splat {rv a}"
+    let (env, l) := bindLet fc env inst.id s!"pure ({term})"; (env, some l)
   | .select pred a b =>
     let (env, l) := bindLet fc env inst.id s!"pure (Zig.Vec.select {rv pred} {rv a} {rv b})"
     (env, some l)

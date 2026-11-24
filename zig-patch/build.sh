@@ -18,7 +18,7 @@
 #   AIR2LEAN_ZIG_MAXRSS   Bytes passed as `zig build --maxrss` (the memory the build runner may
 #                         assume). Zig's build.zig declares an upper bound for compiling the
 #                         compiler (0.15.2: 7.8 GB, 0.16.0: 8 GB) and refuses to start that step
-#                         on a machine with less memory, such as the 7 GiB macos-14 CI runner.
+#                         on a machine with less memory, such as the 7 GiB macos-15 CI runner.
 #                         The bound is a ceiling, not a measurement. Default: unset.
 set -euo pipefail
 

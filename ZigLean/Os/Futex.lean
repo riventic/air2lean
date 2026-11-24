@@ -36,7 +36,8 @@ A sleeper that a `tgkill`/`pthread_kill` (`ZigLean/Os/Thread.lean`, OSG-01) woke
 pointer's key (audit finding #6: no FIFO order), which go on; the call returns their number. No
 memory access: the key (`FutexKey`, the domain and the `usize` address, `Mem.keyAt`) is resolved
 in the waking step, at the memory of the pick, as the kernel forms it inside the call. macOS
-`__ulock_wake` also has the option `EINTR` with nobody woken (std retries).
+`__ulock_wake` also has the option `EINTR` with nobody woken (std retries), and after a wake of
+nobody returns `-ENOENT` or `0` (`Darwin.wakeCode`).
 
 The return conventions are the ABI's: a Linux wrapper returns the raw `usize` (`-errno` on
 failure, decoded by the translated `linux.errno`); `__ulock_*` with `NO_ERRNO` return `-errno` as
@@ -408,20 +409,31 @@ def __ulock_wait (op : BitVec 32) (addr : Option Ptr) (val : BitVec 64) (timeout
     ConcM Tgt (BitVec 32) :=
   ulockWait op addr val (timeout_us ≠ 0)
 
+/-- The return code of a wake that ended with `r` (xnu-12377.121.6 `ulock_wake`, `sys_ulock.c`):
+`0` after it woke a waiter. After a wake of nobody, `-ENOENT` if the key has no `ull`, else `0`:
+the `ull` lives until its last waiter's cleanup, so a wake after every waiter was woken but before
+they ran finds it, and its wake-one or `WAKE_ALL` of an empty wait queue returns `0`. The model
+tracks no `ull`: the oracle's choice `live` decides (`0`: no `ull`). `none`, the model's spurious
+option, is `-EINTR` with nobody woken (std retries); xnu's wake path never returns it, a
+conservative extra outcome. -/
+def wakeCode (live : Nat) : Option Nat → BitVec 32
+  | none => negErrno32 E.INTR
+  | some 0 => if live = 0 then negErrno32 E.NOENT else 0
+  | some (_ + 1) => 0
+
 /-- `__ulock_wake(op: UL, addr: ?*const anyopaque, val: u64) c_int`: wakes one waiter (oracle) or,
-with `WAKE_ALL`, every waiter at `addr`: `0` if it woke one, `-ENOENT` if nobody waited, or
-`-EINTR` with nobody woken (std retries), or `-EINVAL` for a null address (module doc). `val`
-must be `0`. -/
+with `WAKE_ALL`, every waiter at `addr`, and returns `wakeCode`; `-EINVAL` for a null address
+(module doc). `val` must be `0`. The oracle picks `wakeCode`'s `live` before the wake (one more
+stop, at the caller's state). -/
 def __ulock_wake (op : BitVec 32) (addr : Option Ptr) (val : BitVec 64) : ConcM Tgt (BitVec 32) := do
   if (op ≠ UL_COMPARE_AND_WAIT_NO_ERRNO ∧ op ≠ UL_COMPARE_AND_WAIT_NO_ERRNO ||| UL_WAKE_ALL) ∨
       val ≠ 0 then
     throw .unspecified
   let some p ← ConcM.liftMem (ulockAddr addr false) | return negErrno32 E.INVAL
-  match ← futexWake p false (if op = UL_COMPARE_AND_WAIT_NO_ERRNO then some 1 else none)
-      (spurious := true) with
-  | none => return negErrno32 E.INTR
-  | some 0 => return negErrno32 E.NOENT
-  | some _ => return 0
+  let live ← pick fun _ => 2
+  let r ← futexWake p false (if op = UL_COMPARE_AND_WAIT_NO_ERRNO then some 1 else none)
+    (spurious := true)
+  return wakeCode live r
 
 end Darwin
 
