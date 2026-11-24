@@ -212,7 +212,12 @@ for v in "${versions[@]}"; do
     done
   done
 done
-echo "$rejected rejected casts fail with their diagnostics"
+# `void` itself has no bit representation before Zig 0.17 (hand-written: Sema rejects the source).
+if out=$("$translator" "$dir/air-handwritten/0.16.0/reject_void" -o "$work/reject.lean" --namespace Reject --prefix void_cast. 2>&1); then
+  echo 'a Zig 0.16.0 `bitcast` of `void` translated' >&2; exit 1
+fi
+grep -qF 'a `@bitCast` to or from `void` is outside the subset' <<<"$out" || { echo "$out" >&2; exit 1; }
+echo "$((rejected + 1)) rejected casts fail with their diagnostics"
 # Lane pointers into a vector field of a packed struct are rejected (0.14.1, 0.15.2).
 for v in 0.14.1 0.15.2; do
   if out=$("$translator" "$dir/air/$v/reject_lanes" -o "$work/reject.lean" --namespace Reject 2>&1); then

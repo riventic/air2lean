@@ -84,9 +84,8 @@ source's sentinel is in the bits and the result's sentinel is the type's; the LL
 leaves the sentinel out of the source's bits (zero) and leaves the result's sentinel undefined;
 the self-hosted x86_64 backend reinterprets memory. No single model equals the native result. -/
 def sentinelBitCastFailure (id : TyId) : String :=
-  s!"of a sentinel-terminated array (type {id}): Zig 0.17's comptime evaluation and its \
-    backends disagree on the sentinel's bits (docs/upstream/bitcast-sentinel-array.md); cast an \
-    array without a sentinel"
+  s!"of a sentinel-terminated array (type {id}), on whose sentinel bits Zig 0.17's comptime \
+    evaluation and its backends disagree (docs/upstream/bitcast-sentinel-array.md),"
 
 /-- The shape of `id` in a 0.17 `@bitCast`, or the diagnostic's description of why not. -/
 def bitShape? (types : Array Ty) (id : TyId) : Except String BitShape :=

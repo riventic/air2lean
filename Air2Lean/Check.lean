@@ -549,19 +549,19 @@ partial def reprBitSize (types : Array Ty) (layouts : Array Layout) (id : TyId)
     | some .bool => pure len
     | _ => throw s!"a vector of a lane type other than an integer, a float or `bool` (type {id})"
   | .tuple _ =>
-    throw s!"a tuple (type {id}): the memory model has no tuple layout (Zig 0.14.1 and 0.15.2 \
-      accept an array of tuples; Sema rejects it from Zig 0.16.0)"
+    throw s!"a tuple (type {id}; the memory model has no tuple layout; Zig 0.14.1 and 0.15.2 \
+      accept an array of tuples, Sema rejects it from Zig 0.16.0)"
   | .errorSet _ | .errorUnion .. =>
-    throw s!"error storage (type {id}): the model's error bytes are symbolic, not the \
-      compilation's error codes (Zig 0.14.1 and 0.15.2 accept an array of errors; Sema rejects \
+    throw s!"error storage (type {id}; the model's error bytes are symbolic, not the \
+      compilation's error codes; Zig 0.14.1 and 0.15.2 accept an array of errors, Sema rejects \
       it from Zig 0.16.0)"
-  | .ptr .. => throw s!"a pointer or slice (type {id}): the model's pointer bytes carry \
-      provenance, not integer bits"
+  | .ptr .. => throw s!"a pointer or slice (type {id}; the model's pointer bytes carry \
+      provenance, not integer bits)"
   | .optional child =>
     if types[child]? matches some (.ptr ..) then
-      throw s!"a pointer in an optional (type {id}): the model's pointer bytes carry \
-        provenance, not integer bits"
-    else throw s!"an optional (type {id}; no guaranteed in-memory layout: Zig 0.14.1 and \
+      throw s!"a pointer in an optional (type {id}; the model's pointer bytes carry \
+        provenance, not integer bits)"
+    else throw s!"an optional (type {id}; no guaranteed in-memory layout; Zig 0.14.1 and \
       0.15.2 accept an array of optionals, Sema rejects it from Zig 0.16.0)"
   | _ => throw s!"a type without a guaranteed in-memory layout (type {id}: an `auto` struct, \
       tagged union or another type Sema rejects in a `@bitCast`)"
@@ -1378,7 +1378,9 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     -- pointer; `Canon.lean`'s `dropDeadAllocPlaceholders` drops it unless something reads it.
     if (a matches .int _ 0) && singlePtrTy cx.types cx.layouts ty then
       cx.fail line "a read of the address-0 placeholder that the compiler leaves for a comptime-resolved local is outside the subset"
-    let sourceTy := cx.valTy? a
+    -- The `void` constant carries no type id; its type is the `void` type.
+    let sourceTy := cx.valTy? a <|>
+      (if a matches .void then cx.types.findIdx? (· == .void) else none)
     let isError (t : Option Ty) := match t with | some (.errorSet _) => true | _ => false
     if isError (sourceTy.bind (cx.types[·]?)) != isError (cx.types[ty]?) then
       -- `@intFromError`/`@errorFromInt` (L10): the code of the error integer `u<bits>` in the
@@ -1605,6 +1607,10 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         | some (.int ..) => "int"
         | _ => "other"
       if aty == ty then return line
+      -- `void` has a bit representation from Zig 0.17 only (the logical path above).
+      if cx.types[aty]? == some .void || cx.types[ty]? == some .void then
+        cx.fail line "a `@bitCast` to or from `void` is outside the subset (Sema rejects it \
+          before Zig 0.17, where `void` has no bit representation)"
       -- A packed struct or union and another packable scalar of the same bit size (a packed
       -- struct or union, a float, `bool`): the bits, through `Zig.Packed` (`packedScalarCast`).
       if packedScalarCast cx.types aty ty then return line
