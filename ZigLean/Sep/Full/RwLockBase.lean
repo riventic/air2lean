@@ -94,11 +94,8 @@ theorem stableM {t : ThreadId} {p : LPh} {h rL rH : Res} {m' : Mem} (hu : W.Base
   have hS' := ((hW C.S (.inl rfl)).1.lockStep hs (c_apart W _ (.inl rfl)).2).2
   have hE' := ((hW C.Ep (.inr rfl)).1.lockStep hs (c_apart W _ (.inr rfl)).2).2
   have hnw : (W.ph (G t)).isW = false := by
-    rcases hcalm.1 with e | e | e
-    · rw [show W.ph (G t) = .out from e]; rfl
-    · rw [show W.ph (G t) = .wi from e]; rfl
-    · cases e' : W.ph (G t) <;> rw [show (W.ph (G t)).isRd = true from e, e'] at * <;>
-        first | rfl | cases e
+    have hc : W.ph (G t) = .out ∨ W.ph (G t) = .wi ∨ (W.ph (G t)).isRd = true := hcalm.1
+    cases e' : W.ph (G t) <;> rw [e'] at hc <;> first | rfl | simp [RwPh.isRd] at hc
   have hposted : RwPosted W.ph (upd G t (M.set (G t) p h)) ↔ RwPosted W.ph G := by
     simp only [RwPosted, hwph]
   have hpv : S.cnt (upd G t (M.set (G t) p h)) = S.cnt G := by
