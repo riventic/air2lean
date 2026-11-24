@@ -620,6 +620,26 @@ class InvgenRecordTests(unittest.TestCase):
         error, = self.errors()
         self.assertIn("Fx/Fx/Inv.lean: no valid air2lean-invgen record", error)
 
+    def test_target_with_contracts_records_its_specification(self):
+        """A target generated with contracts (scripts/invgen.py CONTRACTS): the record names the
+        specification module and the rules, and the module's source is an input."""
+        (self.root / "Fx/Fx/Spec.lean").write_text("-- contracts\n")
+        contracts = {"Fx/Fx/Inv.lean": ("Fx.Spec", ["Fx.rule"])}
+        inputs = [[p, self.digest(p)] for p in ("Fx/Fx/Gen.lean", "Fx/Fx/Spec.lean")]
+        self.write_record(inputs=inputs, specs=["Fx.Spec"], contracts=["Fx.rule"])
+        self.assertEqual(gi.invgen_errors(self.TARGETS, contracts), [])
+        # a record without them is not this target's, nor is one of other rules
+        self.assertIn("not the record of Fx.Gen", gi.invgen_errors(self.TARGETS, {})[0])
+        self.write_record(inputs=inputs, specs=["Fx.Spec"], contracts=["Fx.other"])
+        self.assertIn("not the record of the contracts", gi.invgen_errors(self.TARGETS, contracts)[0])
+        self.write_record()
+        self.assertIn("not the record of Fx.Gen", gi.invgen_errors(self.TARGETS, contracts)[0])
+        # a changed specification makes the file stale
+        self.write_record(inputs=inputs, specs=["Fx.Spec"], contracts=["Fx.rule"])
+        (self.root / "Fx/Fx/Spec.lean").write_text("-- changed contracts\n")
+        error, = gi.invgen_errors(self.TARGETS, contracts)
+        self.assertIn("is stale (input Fx/Fx/Spec.lean changed)", error)
+
     def test_record_outside_the_targets_fails(self):
         self.write_record(path="Fx/Fx/Other.lean")
         self.tracked = self.tracked + ["Fx/Fx/Other.lean", "Fx/Fx/Deleted.lean"]

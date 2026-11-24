@@ -1329,10 +1329,19 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       if let some (.float _) := elemTy then
         throw s!"{fnName}: near line {line}: wrapping/saturating float arithmetic is outside the subset"
     pure line
-  | .splat _ =>
-    -- From Zig 0.17.0 a runtime `@splat` to an array is also `splat`; the model splats vectors only.
-    unless (cx.types[ty]? matches some (.vector ..)) do
-      cx.fail line "splat to a non-vector (Zig 0.17.1 array splat) is outside the subset"
+  | .splat a =>
+    -- From Zig 0.17.0 a runtime `@splat` to an array is also `splat`: every item is the operand,
+    -- whose type is the array's item type. The type table records only that a sentinel exists,
+    -- not its value, so a splat to a sentinel-terminated array is rejected.
+    match cx.types[ty]? with
+    | some (.vector ..) => pure ()
+    | some (.array _ child false) =>
+      unless cx.valTy? a == some child do
+        cx.fail line "an array splat whose operand is not of the array's item type is outside the subset"
+    | some (.array _ _ true) =>
+      cx.fail line "splat to a sentinel-terminated array (Zig 0.17.1) is outside the subset: \
+        the AIR export does not carry the sentinel value"
+    | _ => cx.fail line "splat to a type other than a vector or an array is outside the subset"
     pure line
   | .permuteBits op a =>
     let some aty := cx.valTy? a | cx.fail line "bit permutation operand has no known type"

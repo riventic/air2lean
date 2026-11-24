@@ -222,7 +222,7 @@ jobs:
   # The macOS root package with `Proofs` built: the macOS rows' proof build is then incremental.
   macos-lake:
     if: github.event_name != 'schedule'
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 90
     steps:
       - name: Checkout
@@ -281,7 +281,7 @@ jobs:
   macos-zig:
     if: github.event_name != 'schedule'
     needs: macos-lake
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 90
     strategy:
       fail-fast: false
