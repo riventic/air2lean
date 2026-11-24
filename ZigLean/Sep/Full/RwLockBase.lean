@@ -73,13 +73,11 @@ theorem atStop (hu : W.Base Sz K G rX m) (t : ThreadId) :
 calm place of the rwlock, out of the semaphore's code. The rwlock's invariant stays
 (`Inv.otherStep`: `t` holds no writing bit at a calm place), the semaphore's primitive's rest
 stays (`FSem.Sub.otherLock`), the window stays (the condition's writes stay, and every epoch write
-still happened before the semaphore's mutex's holder), and each thread owns what it owned of the
-readers' heap (`FLock.Inv.own_share_set`: the outer mutex protects nothing). The outer mutex's
-place is none of the rwlock's or the semaphore's (`hpm`). -/
+still happened before the semaphore's mutex's holder), and the parts stay (`FLock.part_set`). The
+outer mutex's place is none of the rwlock's or the semaphore's (`hpm`). -/
 theorem stableM {t : ThreadId} {p : LPh} {h rL rH : Res} {m' : Mem} (hu : W.Base Sz K G rX m)
     (hM : M.Inv G (rsum (FLock.side L m rL rH) rX) m) (hk : L.Keeps G m rL rH rX)
-    (hs : M.Step t m m') (htr : M.Transfer G (rsum (FLock.side L m rL rH) rX) m m' t p h)
-    (hn : (M.ph (G t)).next p = true) (hcalm : W.prim.calm (W.place.ph (G t)))
+    (hs : M.Step t m m') (hn : (M.ph (G t)).next p = true) (hcalm : W.prim.calm (W.place.ph (G t)))
     (hpm : ∀ g q h, W.place.ph (M.set g q h) = W.place.ph g) :
     W.Base Sz K (upd G t (M.set (G t) p h)) rX m' := by
   obtain ⟨⟨hC, hW⟩, hS⟩ := hu.sub
@@ -120,15 +118,17 @@ theorem stableM {t : ThreadId} {p : LPh} {h rL rH : Res} {m' : Mem} (hu : W.Base
         (fun _ hb => LockWord.Before.otherStep hs hapL hb) hs.threads
         fun u hg => by rwa [hlph u] at hg)
       (.inl hE'))
-    shares := hu.shares.congr hwph fun v l => hM.own_share_set htr (mR_share W l) hs.threads v
+    shares := hu.shares.congr hwph
+      (fun v hv => by rwa [LockWord.joinedB_congr hs.threads] at hv)
+      fun v l => by rw [hup M.part fun g => M.part_set g p h]
     pin := hu.pin }
 
 /-- **A step of the semaphore's mutex's code keeps the base** (`fitsS`'s `stable`): `t` runs it
 out of the condition's busy code and out of the semaphore's `pst` (the client's `okS`: `hb`,
 `hst`). The rwlock's invariant stays (`Inv.otherStep`), the condition's and the semaphore's by
 their own lock steps (`FCond.Inv.lstep`, `FSem.Inv.lstep`; the condition's words are apart from
-the mutex's, `c_apart`, `FSem.ep_key_ne`), the window by `FLock.WordHB.lstep`, and each thread
-owns what it owned at the outer mutex. The mutex's place is none of the semaphore's (`hpl`). -/
+the mutex's, `c_apart`, `FSem.ep_key_ne`), the window by `FLock.WordHB.lstep`, and the parts
+stay. The mutex's place is none of the semaphore's (`hpl`). -/
 theorem stableS {t : ThreadId} {p : LPh} {h s : Res} {m' : Mem} (hu : W.Base Sz K G rX m)
     (hL : L.Inv G (rsum s rX) m) (hs : L.Step t m m') (hn : (L.ph (G t)).next p = true)
     (hrel : L.ph (G t) = .holds → p ≠ .holds → L.Before m' (m.clocks[t]!))
@@ -164,12 +164,10 @@ theorem stableS {t : ThreadId} {p : LPh} {h s : Res} {m' : Mem} (hu : W.Base Sz 
     win := hu.win.keep (hup C.ph fun g => cph g p h) (hwS.lockStep hs (hap _ (.inl rfl)).1).2
       (hwE.lockStep hs (hap _ (.inr rfl)).1).2
       (hu.win.ehb.lstep hwE (hap _ (.inr rfl)).1 hg hz hs hrel)
-    shares := hu.shares.congr hwph fun v l => by
-      unfold FLock.own
-      rw [LockWord.joinedB_congr hs.threads]
-      by_cases e : v = t
-      · rw [e, upd_self, W.pair.part, L.part_set, ← W.pair.part, W.pair.held_ba]
-      · rw [upd_ne _ _ e]
+    shares := hu.shares.congr hwph
+      (fun v hv => by rwa [LockWord.joinedB_congr hs.threads] at hv)
+      fun v l => by
+        rw [hup M.part fun g => by rw [W.pair.part, L.part_set, ← W.pair.part]]
     pin := hu.pin }
 
 /-- **A tick of `t`'s part keeps the base** (the two locks have one part,

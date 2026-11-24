@@ -538,57 +538,24 @@ theorem Inv.share_keep {G' : ThreadId → γ} {rX' : Res} {m' : Mem} {t : Thread
   simp only [SCell.add_val] at e
   grind
 
-/-- **What a thread that has not ended owns of a byte is its part's share**, for a lock whose
-resource holds no share of the byte: the resource it holds has none. -/
+/-- **What a thread holds of the lock has no share of a byte the lock's resource holds none of**:
+nothing, or the lock's resource. -/
+theorem Inv.held_share {l : Loc} (hi : L.Inv G rX m)
+    (hR : ∀ G r, L.R G r → r.gh.share l = SCell.zero) (u : ThreadId) :
+    (L.held (G u)).gh.share l = SCell.zero := by
+  cases e : (L.ph (G u)).held
+  · rw [hi.idle u e]; rfl
+  · exact hR G _ (hi.res u e)
+
+/-- **What a thread that is not joined owns of a byte is its part's share**, for a lock whose
+resource holds no share of the byte (`Inv.held_share`). -/
 theorem Inv.own_share {u : ThreadId} {l : Loc} (hi : L.Inv G rX m)
-    (hR : ∀ G r, L.R G r → r.gh.share l = SCell.zero) (hu : L.ph (G u) ≠ .gone) :
+    (hR : ∀ G r, L.R G r → r.gh.share l = SCell.zero) (hj : joinedB m u = false) :
     (L.own G m u).gh.share l = (L.part (G u)).gh.share l := by
-  obtain ⟨-, hj⟩ := hi.w.live u hu
-  have hh : (L.held (G u)).gh.share l = SCell.zero := by
-    cases e : (L.ph (G u)).held
-    · have e' := hi.idle u e
-      show (L.held (G u)).gh.share l = (rnil : Res).gh.share l
-      rw [e']
-    · exact hR G _ (hi.res u e)
   unfold FLock.own
   rw [ite_eq_right (show ¬ (joinedB m u = true) by rw [hj]; exact Bool.false_ne_true)]
   show ((L.part (G u)).gh.share l).add ((L.held (G u)).gh.share l) = _
-  rw [hh, SCell.add_zero]
-
-/-- **The resource a step of the lock's code moves holds no share of a byte the lock's resource
-holds none of** (`Transfer`: nothing, the holder's resource or the free lock's). -/
-theorem Transfer.share {m' : Mem} {t : ThreadId} {p : LPh} {h : Res} {l : Loc}
-    (hi : L.Inv G rX m) (htr : L.Transfer G rX m m' t p h)
-    (hR : ∀ G r, L.R G r → r.gh.share l = SCell.zero) : h.gh.share l = SCell.zero := by
-  cases ep : p.held
-  · rw [htr.1 ep]; rfl
-  · cases e : (L.ph (G t)).held
-    · obtain ⟨hF, hfr⟩ := htr.2.2.1 e ep
-      exact hR G _ (hfr.2.2.2.1 hF).1
-    · rw [htr.2.1 e ep]; exact hR G _ (hi.res t e)
-
-/-- **What each thread owns of a byte stays over a step of the lock's code**, when the lock's
-resource holds no share of it (`Fits.stable`: the part stays and the held resource holds none,
-`Transfer.share`). -/
-theorem Inv.own_share_set {m' : Mem} {t : ThreadId} {p : LPh} {h : Res} {l : Loc}
-    (hi : L.Inv G rX m) (htr : L.Transfer G rX m m' t p h)
-    (hR : ∀ G r, L.R G r → r.gh.share l = SCell.zero) (hth : m'.threads = m.threads)
-    (v : ThreadId) :
-    (L.own (upd G t (L.set (G t) p h)) m' v).gh.share l = (L.own G m v).gh.share l := by
-  by_cases e : v = t
-  case neg => rw [own_congr hth (fun u e => upd_ne _ _ e) v e]
-  subst e
-  have hh : (L.held (G v)).gh.share l = SCell.zero := by
-    cases e : (L.ph (G v)).held
-    · rw [hi.idle v e]; rfl
-    · exact hR G _ (hi.res v e)
-  unfold FLock.own
-  rw [LockWord.joinedB_congr hth, upd_self, L.part_set, L.held_set]
-  split
-  · rfl
-  · show ((L.part (G v)).gh.share l).add (h.gh.share l) =
-      ((L.part (G v)).gh.share l).add ((L.held (G v)).gh.share l)
-    rw [Transfer.share hi htr hR, hh]
+  rw [hi.held_share hR u, SCell.add_zero]
 
 /-- **The facts at a new ghost value and memory**: the same places and held resources, the
 resource kept (`hR`), the word invariant and the free resource's ownership at the new memory, and
