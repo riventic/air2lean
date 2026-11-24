@@ -1202,6 +1202,20 @@ theorem p_off (S : FSem γ X L C) : S.p.off = (L.o : Int) - 8 := by
   simp only [LockWord.ptr, Ptr.add] at this
   omega
 
+/-- **A thread out of the semaphore's code is out of the condition's**: a waiter of the condition
+is at `wt` (`Inv.wt`) and a signaller at `pst` (`FCond.Inv.sx`, `sx_iff`). -/
+theorem Inv.c_out {G : ThreadId → γ} {m : Mem} {u : ThreadId} (hI : S.Inv G m)
+    (hC : C.Inv L G m) (hs : S.ph (G u) = .out) : C.ph (G u) = .out := by
+  cases hwt : (C.ph (G u)).waits
+  · cases hsg : (C.ph (G u)).sig
+    · revert hwt hsg
+      generalize C.ph (G u) = c
+      cases c <;> simp [CPh.waits, CPh.sig]
+    · have := (S.sx_iff _).mp (hC.sx u hsg)
+      rw [hs] at this; cases this
+  · have := hI.wt u hwt
+    rw [hs] at this; cases this
+
 /-- **The condition's epoch and the semaphore's mutex have other futex keys in every memory** (the
 layout: one block, the mutex at `p + 8`, the epoch at `p + 16`; `Mem.wordKey_ne_off`): the `hkne`
 of `FCond.Inv.lstep`. -/
