@@ -68,7 +68,10 @@ compile error.
 0.16's memory reinterpretation and 0.17's logical order coincide on little-endian exactly when
 every array element fills its ABI size. They always coincide for vectors. Padded or non-byte
 array elements, `bool` arrays, nested arrays, array↔vector regrouping, and every big-endian
-target differ. (The model rejects big-endian targets anyway: `Profile.lean`.)
+target differ. The 0.17 model is the logical order on every profile: on the qualified
+big-endian profiles `tests/roadmap/big-endian` checks that a 0.17.1 `@bitCast` between `u32`,
+`f32` or a packed struct and `[n]u8` gives the little-endian target's bytes, natively on s390x
+and mips64 and in the model.
 
 ## What the translator does for a 0.17 input
 

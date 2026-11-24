@@ -2,7 +2,7 @@
 import ZigLean
 
 
-namespace BigEndian.X64
+namespace BigEndian.V0_16_0.X64
 
 structure U where
   bytes : Vector Zig.Byte 4
@@ -437,4 +437,4 @@ def unionHalf (p0 : BitVec 32) : Zig.MemM (BitVec 16) := do
 
 attribute [zig_run] unionHalf
 
-end BigEndian.X64
+end BigEndian.V0_16_0.X64

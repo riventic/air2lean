@@ -2,7 +2,7 @@
 import ZigLean
 
 
-namespace BigEndian.S390x
+namespace BigEndian.V0_16_0.S390x
 
 open scoped Zig.BigEndian
 
@@ -439,4 +439,4 @@ def unionHalf (p0 : BitVec 32) : Zig.MemM (BitVec 16) := do
 
 attribute [zig_run] unionHalf
 
-end BigEndian.S390x
+end BigEndian.V0_16_0.S390x

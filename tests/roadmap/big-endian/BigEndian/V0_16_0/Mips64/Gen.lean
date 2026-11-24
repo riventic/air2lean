@@ -2,7 +2,7 @@
 import ZigLean
 
 
-namespace BigEndian.Mips64
+namespace BigEndian.V0_16_0.Mips64
 
 open scoped Zig.BigEndian
 
@@ -439,4 +439,4 @@ def unionHalf (p0 : BitVec 32) : Zig.MemM (BitVec 16) := do
 
 attribute [zig_run] unionHalf
 
-end BigEndian.Mips64
+end BigEndian.V0_16_0.Mips64
