@@ -18,7 +18,7 @@ other lock's view, and for the product.
   and a join keeps the blocks, so `B`'s side stays.
 - `FLock.Pair.U_ghost`, `U_join`: the product's rest, when the client's own `U` is kept.
 - `FLock.Pair.inv_ghost`, `inv_join`: `A`'s invariant with the product's rest, over each.
-- `joinedB_join`: the joined threads after a join.
+- `joinedB_join`, `join_mem`: the joined threads and the memory after a join.
 -/
 
 namespace Zig
@@ -37,6 +37,22 @@ theorem joinedB_join {m m' : Mem} {t u : ThreadId} (hu0 : u ≠ 0)
   by_cases hw : w = u
   · subst hw; simp [hu0, hul]
   · simp [hw, Ne.symm hw]
+
+/-- **The memory after a join by `t`**: the current thread is `t`, the clocks grew, and there are
+as many threads; the blocks, the atomic locations, the record of accesses and the futex queue
+stay. -/
+theorem join_mem {m m' : Mem} {t u : ThreadId}
+    (hj : ((Thread.join u).run { m with current := t }).run = some (.ok ((), m'))) :
+    ∃ cs ts, m' = { m with current := t, clocks := cs, threads := ts } ∧
+      ts.size = m.threads.size ∧ ∀ w : Nat, VClock.le (m.clocks[w]!) (cs[w]!) = true := by
+  obtain ⟨rec, -, -, rfl⟩ := Proto.join_eq hj
+  refine ⟨_, _, rfl, by simp, fun w => ?_⟩
+  show VClock.le (m.clocks[w]!) ((m.clocks.set! t _)[w]!) = true
+  rw [getElem!_set!_ite]
+  split
+  · rename_i h; rw [h.1]
+    exact VClock.le_trans (VClock.le_bump _ _) (VClock.le_merge_left _ _)
+  · exact VClock.le_refl _
 
 namespace FLock
 
