@@ -183,7 +183,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 ### PRF-05 — Recorded `abi64-be-v1` big-endian profile
 
 - Kind: environment.
-- Statement: As PRF-02, for a big-endian target (s390x-linux): the theorem concerns the
+- Statement: As PRF-02, for a big-endian target (s390x-linux, mips64-linux): the theorem concerns the
   analyzed AIR of the recorded profile under the big-endian encodings of `Zig.BigEndian`
   (`ZigLean/Endian.lean`): integers, floats, slice lengths, packed backing integers,
   bit-pointer hosts and whole-byte vector lanes most significant byte first. Pointer and error
@@ -570,14 +570,25 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   is `.illegal`, so a theorem is about race-free executions (DRF-SC); the standard C11 mappings
   to x86-TSO and ARMv8 are proved sound for RC11, and ORD-01 admits every RC11 outcome; RC11's
   no-load-buffering axiom is ORD-02. LLVM's optimizer is assumed to respect the C++11 model.
-  Targets in the record's `unqualified` list (wasm32, s390x) reject atomics and threads, so no
-  theorem about them carries this premise.
+  The qualified targets are the record's `targets`: x86_64-linux, aarch64-macos and
+  aarch64-linux. The premise is stated for no other target. The record's `unqualified` list
+  names the known ones and what each lacks: wasm32 (the translator rejects atomics, threads and
+  futexes), and s390x-linux and mips64-linux (the translator accepts them on the big-endian
+  profile, PRF-05, but there is no hardware model, mapping argument or hardware evidence). A
+  theorem over a generated module that records no target (PRF-01, PRF-03) carries the premise
+  for the qualified targets only (`unrecorded`).
 - Derived from: implied by THR-01 and ORD-01, so every concurrency theorem carries it.
   `scripts/premises.py` (`check` and `compiled`) fails when a theorem or a report below whose
   premises contain THR-01 or ORD-01 omits it; `scripts/claims.py` lists it in each concurrency
-  claim's `premises`.
+  claim's `premises`. Target binding (`target_qualified`): `scripts/premises.py` fails a theorem
+  that carries it over a generated module whose profile header records a target outside
+  `targets`, and `scripts/claims.py` rejects such a goal. The translator's acceptance of a
+  target is not part of the binding. The source index binds the premises a theorem's own
+  closure gives; a premise it lists only as a source fallback (the upper bound over a runtime
+  module's imports) is bound by `compiled`.
 - Sources: [research/C12.md](research/C12.md), [std-models.md](std-models.md#thread-model),
-  [architecture-audit/concurrency.md](architecture-audit/concurrency.md).
+  [architecture-audit/concurrency.md](architecture-audit/concurrency.md),
+  [architecture-audit/memory-model-target-binding.md](architecture-audit/memory-model-target-binding.md).
 
 ## Timers and clocks
 
