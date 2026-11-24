@@ -240,7 +240,7 @@ def check_cpu_features(binary, docs):
     # template with `%%` is rejected whatever the CPU has, as `%%` separates statements on Apple
     # targets (`nop %%%% crc32b …` would hide `crc32b` behind `nop`).
     document = json.loads(json.dumps(docs["asm_env.random.json"]))
-    document["profile"].update(target_triple="aarch64-linux.5.10...7.2-musl", cpu="generic")
+    document["profile"].update(target_triple="aarch64-linux.5.10...6.16-gnu.2.31", abi="gnu", cpu="generic")
     block = asm_inst(document)
     constraints = [o["constraint"] for o in block["outputs"]] + [i["constraint"] for i in block["inputs"]]
     with tempfile.TemporaryDirectory(prefix="air2lean-asm-a64-") as d:
