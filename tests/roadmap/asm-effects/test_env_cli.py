@@ -118,7 +118,31 @@ def main(binary):
     assert "Zig.vasm air2lean_device" in text and "Zig.Asm.envWord" not in text, text
     checks += 1
     checks += check_cpu_features(binary, docs)
+    checks += check_isa_coverage(binary, retained)
     print(f"{checks} asm environment/region CLI checks passed")
+
+
+def check_isa_coverage(binary, retained):
+    """A02 decision 1: an allowlist entry is a defined function over the instruction model
+    (`isa`, premise ASM-07) exactly when the model covers its block; only an uncovered entry
+    stays uninterpreted (`opaque`, premises ASM-01/02) (`--print-asm-isa-table`)."""
+    table = json.loads(subprocess.run([str(binary), "--print-asm-isa-table"], text=True, capture_output=True,
+                                      check=True, timeout=60).stdout)
+    assert table["model"] == "ZigLean/Isa/X86.lean" and table["allowlist"], table
+    for entry in table["allowlist"]:
+        assert entry["covered"] == (entry["semantics"] == "isa"), entry
+        assert ("reason" in entry) != entry["covered"], entry
+    by_semantics = {}
+    for entry in table["allowlist"]:
+        by_semantics.setdefault(entry["semantics"], []).append(entry["template"])
+    assert by_semantics["opaque"] == ["rep stosb", "rep movsb"], by_semantics
+    assert len(by_semantics["isa"]) == 12, by_semantics
+    # The retained translation: the two region blocks are the only uninterpreted functions; the
+    # memory-value input (`movq %[x], %[ret]`) is a definition with its footprint theorem.
+    opaques = [line for line in retained.splitlines() if line.startswith("opaque ")]
+    assert len(opaques) == 2 and all(line.startswith("opaque airAsmFx_") for line in opaques), opaques
+    assert retained.count(".check = none := by decide") == 1 and "def airIsa_" in retained, retained
+    return 3
 
 
 def header(text):
@@ -186,7 +210,7 @@ def check_cpu_features(binary, docs):
             result, text = run(binary, {"asm_env.loadm.json": document})
             if accepted:
                 assert result.returncode == 0 and "admission" not in header(text), result.stderr
-                assert "opaque airAsm_" in text, text
+                assert "def airIsa_" in text and "opaque" not in text, text
             else:
                 assert result.returncode == 1 and text == "sentinel\n", result.stderr
                 assert "instruction 'lzcnt' needs the CPU feature(s) [lzcnt]" in result.stderr, result.stderr

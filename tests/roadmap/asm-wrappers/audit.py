@@ -11,8 +11,10 @@ Static checks (always):
 
 With `--assurance REPORT` (scripts/assumptions.py output), also:
   * no audited declaration is an `AsmHarness` name or comes from a `tests` module;
-  * every `Asm.airAsm_*` stays a plain opaque with no implementation redirection or extern;
-  * every theorem of `Proofs.Asm.Proofs` is in the report and depends only on such opaques.
+  * every `Asm.airIsa_*` is a plain definition (no implementation redirection, no extern) and
+    no uninterpreted `Asm.airAsm_*` remains;
+  * every theorem of `Proofs.Asm.Proofs` is in the report and depends on no project opaque,
+    redirection or extern.
 """
 from __future__ import annotations
 
@@ -74,13 +76,17 @@ def report_issues(report: dict) -> list[str]:
     for node in nodes.values():
         if node["name"].startswith("AsmHarness") or node.get("module", "").split(".", 1)[0] == "tests":
             issues.append(f"harness declaration in audited graph: {node['name']}")
-    asm_opaques = {name for name in nodes if re.fullmatch(r"Asm\.airAsm_\d+", name)}
-    if not asm_opaques:
-        issues.append("no Asm.airAsm_* opaque in the audited graph")
-    for name in sorted(asm_opaques):
+    # A02: every asm statement of examples/asm is a defined function over the instruction model.
+    asm_defs = {name for name in nodes if re.fullmatch(r"Asm\.airIsa_\d+", name)}
+    if not asm_defs:
+        issues.append("no Asm.airIsa_* definition in the audited graph")
+    for name in sorted(asm_defs):
         node = nodes[name]
-        if node["kind"] != "opaque" or node.get("implemented_by") or node.get("extern"):
-            issues.append(f"{name} is no longer an uninterpreted opaque")
+        if node["kind"] != "definition" or node.get("implemented_by") or node.get("extern"):
+            issues.append(f"{name} is not a plain definition")
+    for name in sorted(nodes):
+        if re.fullmatch(r"Asm\.airAsm(?:Fx)?_\d+", name):
+            issues.append(f"{name}: an uninterpreted asm function is back in Proofs.Asm")
     asm_theorems = [t for t in report.get("theorems", [])
                     if nodes.get(t["name"], {}).get("module") == "Proofs.Asm.Proofs"]
     if not asm_theorems:
@@ -90,11 +96,10 @@ def report_issues(report: dict) -> list[str]:
             nodes.get(name, {}).get("module", "").split(".", 1)[0] in ("Proofs", "ZigLean", "tests"))
 
     for theorem in asm_theorems:
-        extra = [d for d in theorem.get("opaque_dependencies", []) if d not in asm_opaques and project(d)]
-        extra += [d for key in ("compiler_redirections", "extern_dependencies")
-                  for d in theorem.get(key, []) if project(d)]
+        extra = [d for key in ("opaque_dependencies", "compiler_redirections", "extern_dependencies")
+                 for d in theorem.get(key, []) if project(d)]
         if extra:
-            issues.append(f"{theorem['name']} depends on more than the asm opaques: {sorted(extra)}")
+            issues.append(f"{theorem['name']} depends on an opaque, redirection or extern: {sorted(extra)}")
     return issues
 
 

@@ -75,4 +75,41 @@ example : bswap32.out [0x12345678] 0 = 0x78563412 := by decide
 example : (cnt .popcnt).out [0b1011] 0 = 3 := by decide
 example : (cnt .lzcnt).out [0x80000000] 0 = 32 := by decide
 
+/-! ### The footprint check rejects a wrong declaration
+
+Each block below differs from an accepted one in one declared fact; `Block.check` names the
+instruction and the location. -/
+
+-- `divl` without the `xorl`: it reads `edx`, which no input and no instruction defines.
+example : ({ divl with instrs := [.div .w32 (.vreg 3)] } : Block).check
+    = some (.undefinedRead 0 rdx) := by decide
+-- `edx` is neither an output nor a clobber.
+example : ({ divl with outputs := [(rax, .w32)], early := [] } : Block).check
+    = some (.undeclaredWrite 0 rdx) := by decide
+-- The `edx` output is not early-clobber: the compiler may put the divisor in `edx`, and the
+-- `xorl` would overwrite it before `divl` reads it.
+example : ({ divl with early := [] } : Block).check = some (.staleRead 1 (.vreg 3)) := by decide
+-- `bswap` of a 16-bit register has an undefined result.
+example : ({ instrs := [.un .bswap .w16 (.vreg 0)], inputs := [(.vreg 0, .w16)],
+             outputs := [(.vreg 0, .w16)] } : Block).check = some (.noEncoding 0) := by decide
+-- `incl` on a memory operand of a 64-bit type.
+example : ({ instrs := [.un .inc .w32 (.mem 0)], inputs := [(.mem 0, .w64)],
+             outputs := [(.mem 0, .w64)] } : Block).check = some (.memWidth 0 (.mem 0)) := by decide
+-- `addq` on 32-bit operands reads the undefined upper halves of their registers.
+example : ({ instrs := [.bin .add .w64 (.loc (.vreg 1)) (.vreg 0)],
+             inputs := [(.vreg 1, .w32), (.vreg 0, .w32)],
+             outputs := [(.vreg 0, .w32)] } : Block).check
+    = some (.undefinedRead 0 (.vreg 1)) := by decide
+-- An output that no instruction writes; a 16-bit write does not define a 64-bit output, a
+-- 32-bit write does (it zero-extends).
+example : ({ instrs := [], inputs := [(.vreg 1, .w64)], outputs := [(.vreg 0, .w64)] } : Block).check
+    = some (.outputUndefined 0) := by decide
+example : ({ instrs := [.bin .mov .w16 (.loc (.vreg 1)) (.vreg 0)], inputs := [(.vreg 1, .w16)],
+             outputs := [(.vreg 0, .w64)] } : Block).check = some (.outputUndefined 0) := by decide
+example : ({ instrs := [.bin .mov .w32 (.loc (.vreg 1)) (.vreg 0)], inputs := [(.vreg 1, .w32)],
+             outputs := [(.vreg 0, .w64)] } : Block).check = none := by decide
+-- A clobbered register carries an operand.
+example : ({ instrs := [], inputs := [(rax, .w32)], outputs := [], clobbers := [0] } : Block).check
+    = some .declaration := by decide
+
 end Zig.Isa.X86.Vectors

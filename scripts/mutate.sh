@@ -233,7 +233,7 @@ diff_baseline_for threads k l v
 diff_baseline_for layout m n o p t u
 diff_baseline_for iogroup ae
 if [ -n "$diff_baselines" ]; then
-  # Batch the examples so their shared libm/asm archives and Lean executable build once.
+  # Batch the examples so their shared libm archive and Lean executable build once.
   echo "== unmutated differential baseline:$diff_baselines ==" >&2
   AIR2LEAN_EXAMPLES="$diff_baselines" bash scripts/diff.sh || {
     echo "error: unmutated differential baseline failed:$diff_baselines" >&2
