@@ -62,9 +62,20 @@ theorem Thr.spawn {Y Y' : ThreadId → Ph} {ts : Array ThreadRec} (h : Thr Y ts)
   obtain ⟨ht0, ⟨hs, -, hn⟩ | ⟨-, -, ⟨-, h0c, -⟩ | ⟨-, h0c, -⟩⟩⟩ := h
   · refine ⟨?_, .inr ⟨by simp [Array.size_push, hs], fun u hu => ?_,
       .inl ⟨?_, .inl h0', .inr ⟨0, by decide, h1'⟩⟩⟩⟩
-    · simp [Array.getElem?_push, hs, ht0]
+    · first
+        | (rw [Array.getElem?_push, hs, if_neg (by decide)]; exact ht0)
+        | (obtain ⟨h0lt, e0⟩ := Array.getElem?_eq_some_iff.mp ht0
+           exact Array.getElem?_eq_some_iff.mpr ⟨by rw [Array.size_push]; omega,
+             by rw [Array.getElem_push_lt h0lt]; exact e0⟩)
     · rw [hY u hu]; exact hn u (Nat.le_trans (by decide : 1 ≤ 2) hu)
-    · simp [Array.getElem?_push, hs]
+    · first
+        | rw [Array.getElem?_push, hs, if_pos rfl]
+        | (have e : (ts.push { spawner := 0, joined := false })[ts.size]? =
+               some { spawner := 0, joined := false } := Array.getElem?_push_size
+           rw [hs] at e; exact e)
+        | (have e : (ts.push { spawner := 0, joined := false })[ts.size]? =
+               some { spawner := 0, joined := false } := Array.getElem?_push_size _ _
+           rw [hs] at e; exact e)
   · rcases h0c with e | e <;> rw [e] at h0 <;> cases h0
   · rw [h0c] at h0; cases h0
 
@@ -105,9 +116,9 @@ theorem Thr.joined {Y Y' : ThreadId → Ph} {ts : Array ThreadRec} (h : Thr Y ts
   · rw [h0c] at h0; cases h0
   · refine ⟨?_, .inr ⟨by rw [Array.size_set!]; exact hs, fun u hu => ?_,
       .inr ⟨?_, h0', ?_⟩⟩⟩
-    · simp [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds, ht0]
+    · simp [Array.set!_eq_setIfInBounds, ht0]
     · rw [hY u (Nat.ne_of_gt (Nat.lt_of_lt_of_le (by decide : 0 < 2) hu))]; exact hn u hu
-    · simp [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds, hs]
+    · simp [Array.set!_eq_setIfInBounds, hs]
     · rw [hY 1 (by decide)]; exact h1
   · rw [h0c] at h0; cases h0
 
