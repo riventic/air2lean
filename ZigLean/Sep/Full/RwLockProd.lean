@@ -78,7 +78,7 @@ theorem U_step {U₀ : (ThreadId → γ) → Res → Mem → Prop} {t : ThreadId
       rX₀ = rsum (W.st.cellsR m) rY → rX₀' = rsum (W.st.cellsR m') rY' →
       W.Moves G m rY G' m' rY' → U₀ G' rX₀' m') :
     FLock.Pair.U L U₀ G' rX' m' := by
-  obtain ⟨hM, -, hM', hWI', -, ⟨hr, hfs⟩, hoth, hx, -, -, hlph, hlheld, -, -, hpost, rF, rF',
+  obtain ⟨hM, -, hM', hWI', -, ⟨hr, hfs⟩, hoth, hx, -, -, hlph, hlheld, -, -, -, -, hpost, rF, rF',
     rO, he, he', hsp, hsp'⟩ := hs
   obtain ⟨sB, rL, rH, rX₀, rfl, hsB, hk, hu⟩ := hU
   have hf := hk.facts
@@ -514,7 +514,7 @@ theorem semSub_step {P : ThreadId → LPh} {t : ThreadId} {G G' : ThreadId → �
     (he : rX₀ = rsum (W.st.cellsR m) rY) (he' : rX₀' = rsum (W.st.cellsR m') rY')
     (hmv : W.Moves G m rY G' m' rY') : S.prim.Sub G' rX₀' m' := by
   obtain ⟨hF, hfs, hFm⟩ := hs.frame
-  obtain ⟨-, -, -, -, -, -, hoth, -, -, -, hlph, -, hspe, hsp, hpost, -⟩ := hs
+  obtain ⟨-, -, -, -, -, -, hoth, -, -, -, hlph, -, hspe, hsp, -, -, hpost, -⟩ := hs
   obtain ⟨-, rF, rF', rO, rfl, rfl, ⟨-, -, hFR⟩, ⟨-, -, hFR'⟩⟩ := hmv
   subst he he'
   have hG : G' = upd G t (G' t) := funext fun u => by

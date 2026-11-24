@@ -371,13 +371,12 @@ theorem wstep {t : ThreadId} {G' : ThreadId → γ} {rS rS' sB rX' rY rY' : Res}
     (he : rX = rsum (W.st.cellsR m) rY) (he' : rX' = rsum (W.st.cellsR m') rY')
     (hmv : W.Moves G m rY G' m' rY')
     (hRoff : ∀ xs r l, W.R xs r → (C.S.In l ∨ C.Ep.In l) → r.heap l = none)
-    (hsh : W.Shares G' m') (hmt : M.ph (G t) = .out ∨ M.ph (G t) = .holds) :
-    W.Base Sz K G' rX' m' := by
+    (hsh : W.Shares G' m') : W.Base Sz K G' rX' m' := by
   obtain ⟨⟨-, hW⟩, -⟩ := hu.sub
   have hsub' := semSub_step hs hu.sub hLw hRoff he he' hmv
   have hM' : M.Inv G' (rsum sB rX') m' := hS' ▸ hs.2.2.1
   obtain ⟨hF, hfs, hFm⟩ := hs.frame
-  obtain ⟨-, -, -, -, -, -, hoth, -, hmph, -, hlph, -, hspe, hsp, -, -⟩ := hs
+  obtain ⟨-, -, -, -, -, -, hoth, -, hmph, -, hlph, -, hspe, hsp, hmt, -, -, -⟩ := hs
   obtain ⟨-, rF, rF', rO, rfl, rfl, ⟨-, -, hFR⟩, ⟨-, -, hFR'⟩⟩ := hmv
   subst he he'
   have hap := st_c_apart W
