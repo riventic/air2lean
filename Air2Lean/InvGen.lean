@@ -69,7 +69,7 @@ Families (layer 2 of the design: numeric facts and measures over the variables o
 A loop body is a program of `MM σ ε` (its step is checked as an `FTotalTriple`) or of `CM Tgt σ ε`
 (a `CTriple`); its instance parameters are explicit parameters of the definitions (`inst0`).
 
-**The credit mode** (`Cand.credit`, `creditOf`). A loop body registers a second invariant for a
+**The credit mode** (`Cand.creditOutput`, `creditOf`). A loop body registers a second invariant for a
 walk that pays its steps with credits (`@[fsym_inv]`'s `B.credits.inv … s n` and
 `B.credits.post`; `fsym` takes them when the state at the loop holds credits and no plain mode,
 with the counted loop rule `loop_exact`). It is derived from the plain-mode one, for every family:
@@ -972,10 +972,12 @@ parameter `n` is the **exact count**, the body runs left before the last one, as
 the family's measure: a list walk's ghost measure is that count already (`zs.length = n`, the
 nodes left), and a counted loop's measure `name.meas` (the iterations left) becomes the fact
 `n = meas`. Neither credits nor receipts are named: the counted loop rule (`loop_exact`) adds
-`credits (n + 1)` and returns `spent (n + 1)`, one per body run, the last being the exit's. -/
-def Cand.credit (c : Cand) : Cand :=
+`credits (n + 1)` and returns `spent (n + 1)`, one per body run, the last being the exit's.
+Its definitions as source text, given `c`'s kept facts `keep` (with the count's fact of a counted
+loop, kept). -/
+def Cand.creditOutput (c : Cand) (keep : Array Bool) : String :=
   let metered (owned : Array Owned) := owned.filter fun o => !(o matches .plain)
-  { c with
+  let cc := { c with
     name := s!"{c.name}.credits"
     owned := metered c.owned
     postOwned? := c.postOwned?.map metered
@@ -985,27 +987,24 @@ def Cand.credit (c : Cand) : Cand :=
     doc := s!"/-- The credit-mode invariant of `{c.name}` (a walk that counts its steps, \
       `loop_exact`): `{c.name}.inv` without the plain mode, at the exact count `n` of the body \
       runs left before the last one.\n`s0` holds the locals at loop entry. -/\n" }
+  cc.output (if c.ghost then keep else keep.push true)
 
-/-- The kept facts of `c.credit`, given `c`'s: with the count's fact of a counted loop. -/
-def Cand.creditKeep (c : Cand) (keep : Array Bool) : Array Bool :=
-  if c.ghost then keep else keep.push true
-
-/-- The check of the credit-mode definitions (`Cand.credit`, as they are written out): the step
-of the counted loop rule (`FTotalTriple.loop_exact`, `CTriple.loop_exact`), walked by `fsym` with
-its report on. From the invariant at the count `n` and one credit, a body run returns the
-receipt and either repeats with the invariant at exactly `n - 1` or exits at `n = 0` with the
+/-- The check of the credit-mode definitions `out` (`Cand.creditOutput`, as they are written out):
+the step of the counted loop rule (`FTotalTriple.loop_exact`, `CTriple.loop_exact`), walked by
+`fsym` with its report on. From the invariant at the count `n` and one credit, a body run returns
+the receipt and either repeats with the invariant at exactly `n - 1` or exits at `n = 0` with the
 exit post (`floopExact`). -/
-def Cand.creditCheck (ns : Name) (c : Cand) (keep : Array Bool) : String :=
-  let cc := c.credit
+def Cand.creditCheck (ns : Name) (c : Cand) (out : String) : String :=
+  let cn := s!"{c.name}.credits"
   let q (n : String) := s!"_root_.{ns}.{n}"
-  let inv (s : String) := s!"{q cc.name}.inv {c.args}s0 {c.vargs}{s}"
-  s!"{c.pre}{cc.output (c.creditKeep keep)}\n\
+  let inv (s : String) := s!"{q cn}.inv {c.args}s0 {c.vargs}{s}"
+  s!"{c.pre}{out}\n\
     set_option fsym.report true in\n\
-    theorem {cc.name}.houdini {c.tbinders}(s0 : {c.loc}) {c.entry}(s : {c.loc}) (n : Nat) :\n    \
+    theorem {cn}.houdini {c.tbinders}(s0 : {c.loc}) {c.entry}(s : {c.loc}) (n : Nat) :\n    \
       {c.triple} ({inv "s n"} ⋆ credits 1) (({c.run}).run s)\n      \
-      (fun r => floopExact {q c.again} ({inv ""}) ({q cc.name}.post {c.args}s0 {c.vargs}) n r ⋆ \
+      (fun r => floopExact {q c.again} ({inv ""}) ({q cn}.post {c.args}s0 {c.vargs}) n r ⋆ \
       spent 1) := by\n  \
-      unfold {q c.name} {q cc.name}.inv {q cc.name}.post\n  fsym{c.fsymArgs}\n"
+      unfold {q c.name} {q cn}.inv {q cn}.post\n  fsym{c.fsymArgs}\n"
 
 /-- The check of the kept facts: each one a definition `name.candᵢ` (so that a residual goal
 names it), the invariant over them, the measure, and the step triple of one iteration, walked by
@@ -1065,11 +1064,13 @@ the step: a residual that no candidate explains (the measure, an overflow), an e
 the unsolved goals of those residuals (a check that does not elaborate: a candidate whose text is
 ill-typed is an error here, never a pruned fact), or not exactly one report. The walk is not
 trusted: the generated definitions are checked by the proofs that use them. `final`
-(`Cand.check`'s): any residual is an error. `credits`: the walk of the credit-mode definitions'
-step instead (`Cand.creditCheck`), where any residual is an error too. -/
-def walk (ns : Name) (c : Cand) (keep : Array Bool) (final := false) (credits := false) :
-    MetaM (Array (Nat × String)) := do
-  let check := if credits then c.creditCheck ns keep else c.check ns keep final
+(`Cand.check`'s): any residual is an error. `credits?`: the credit-mode definitions, whose step
+is walked instead (`Cand.creditCheck`), where any residual is an error too. -/
+def walk (ns : Name) (c : Cand) (keep : Array Bool) (final := false)
+    (credits? : Option String := none) : MetaM (Array (Nat × String)) := do
+  let check := match credits? with
+    | some out => c.creditCheck ns out
+    | none => c.check ns keep final
   let text := s!"namespace {ns}\n{opens}\n\
     set_option linter.unusedVariables false\n\n{check}\nend {ns}\n"
   let opts := ({} : Options).setBool `Elab.async false
@@ -1089,7 +1090,7 @@ def walk (ns : Name) (c : Cand) (keep : Array Bool) (final := false) (credits :=
     throwError "the step check failed: {e}"
   let field (j : Json) (k : String) := (j.getObjValAs? String k).toOption.getD ""
   -- (the output has no candidates: a residual there is fatal, and this says why)
-  if credits then
+  if credits?.isSome then
     if let some res := residuals[0]? then
       throwError "the step does not keep the count (each body run one step, the measure lowered \
         by exactly one, zero at the exit): `{field (res.getObjValD "goal") "text"}` \
@@ -1415,9 +1416,9 @@ def candLoop (ns body again : Name) (contracts : Array (Name × Name) := #[]) : 
         doc := s!"/-- The invariant of `{name}`, a counted loop: `{x}` goes {if c.down then "down" else "up"} \
           by 1 while `{x} {c.rel.text} {boundName}`.\n`s0` holds the locals at loop entry.{String.join doc.toList} -/\n" }
 
-/-- The credit-mode definitions of the loop of `c` with the kept facts `keep` (`Cand.credit`: the
-text after the plain-mode definitions, and the record's entry `{"count": …}`), if the walk of the
-counted rule's step proves them (`walk … (credits := true)`); else no definition and the entry
+/-- The credit-mode definitions of the loop of `c` with the kept facts `keep` (`Cand.creditOutput`:
+the text after the plain-mode definitions, and the record's entry `{"count": …}`), if the walk of
+the counted rule's step proves them (`walk … (credits? := …)`); else no definition and the entry
 `{"none": why}`. A proof that counts the loop's steps then does not build: `fsym` does not take
 the plain-mode invariant for it (fail closed). -/
 def creditOf (ns : Name) (c : Cand) (keep : Array Bool) : MetaM (String × Json) := do
@@ -1425,9 +1426,10 @@ def creditOf (ns : Name) (c : Cand) (keep : Array Bool) : MetaM (String × Json)
     return ("", Json.mkObj [("none", "the body takes no step (`Zig.tick`): there is nothing to count")])
   withCurrHeartbeats <| tryCatchRuntimeEx
     (do
-      discard <| walk ns c keep (credits := true)
+      let out := c.creditOutput keep
+      discard <| walk ns c keep (credits? := some out)
       let count := if c.ghost then "zs.length" else c.meas
-      return (s!"\n{c.credit.output (c.creditKeep keep)}", Json.mkObj [("count", count)]))
+      return (s!"\n{out}", Json.mkObj [("count", count)]))
     fun ex => return ("", Json.mkObj [("none", ← ex.toMessageData.toString)])
 
 /-- The invariant `body.inv`, measure `body.meas` and exit post `body.post` of the loop `body`

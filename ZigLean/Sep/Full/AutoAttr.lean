@@ -215,18 +215,13 @@ one invariant per mode, and `fsym` takes the one of the walk's mode.
 inductive LoopMode where
   | plain
   | credits
-  deriving BEq, Inhabited, Repr
-
-/-- The name component of a mode's registrations (`B.credits.inv`); none in the plain mode. -/
-def LoopMode.part : LoopMode → Option String
-  | .plain => none
-  | .credits => some "credits"
+  deriving BEq, Hashable, Inhabited, Repr
 
 /-- The name of the part `part` (`inv`, `meas`, `post`) of the loop body `body` in a mode. -/
 def LoopMode.name (mode : LoopMode) (body : Name) (part : String) : Name :=
-  match mode.part with
-  | some m => (body.str m).str part
-  | none => body.str part
+  match mode with
+  | .plain => body.str part
+  | .credits => (body.str "credits").str part
 
 /-- A registered name read as `(B, mode, part)`: `B.credits.part` is the credit mode's part of `B`
 unless `B.credits` is itself a declaration (a loop body of that name: its plain-mode part). -/
@@ -321,9 +316,11 @@ def checkLoopInv (decl : Name) : MetaM Unit := do
 
 /-- The loops' invariants (`@[fsym_inv]`): at a loop with no rule, `fsym` applies its backend's
 loop rule with them (`walkCore`). -/
-initialize fsymInvExt : SimpleScopedEnvExtension Name NameSet ←
+initialize fsymInvExt :
+    SimpleScopedEnvExtension ((Name × LoopMode × String) × Name)
+      (PersistentHashMap (Name × LoopMode × String) Name) ←
   registerSimpleScopedEnvExtension {
-    addEntry := fun s n => s.insert n
+    addEntry := fun s (key, decl) => s.insert key decl
     initial := {}
   }
 
@@ -333,15 +330,19 @@ initialize registerBuiltinAttribute {
     the full-state symbolic executor `fsym`"
   add := fun decl _ kind => do
     (checkLoopInv decl).run' {} {}
-    fsymInvExt.add decl kind
+    -- (keyed as `checkLoopInv` read the name, once: a later declaration does not re-read it)
+    let some key := loopInvKey? (← getEnv) decl
+      | throwError "@[fsym_inv] {decl}: not a name `B.inv`, `B.meas` or `B.post`"
+    fsymInvExt.add (key, decl) kind
 }
 
 /-- The registered invariant, measure and exit post of the loop body `body` in the mode `mode`
-(`@[fsym_inv]`: the registry is keyed by the body and the mode, `LoopMode.name`). -/
+(`@[fsym_inv]`: the registry is keyed by the body, the mode and the part, as `loopInvKey?` read
+the name at its registration). -/
 def loopInvOf (env : Environment) (body : Name) (mode : LoopMode := .plain) :
     Option Name × Option Name × Option Name :=
   let s := fsymInvExt.getState env
-  let get (part : String) := let n := mode.name body part; if s.contains n then some n else none
+  let get (part : String) := s.find? (body, mode, part)
   (get "inv", get "meas", get "post")
 
 /-- `c` is an `@[fsym_atom]` or the head of a range law (planned by its law, never unfolded). -/

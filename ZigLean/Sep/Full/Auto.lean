@@ -7172,10 +7172,12 @@ def registeredLoop? (x P : Expr) : MetaM (Option RegLoop) := do
   let l := (x.getArg! 3).consumeMData
   unless l.isAppOfArity ``Zig.loop 7 do return none
   let some B := (l.getArg! 5).consumeMData.getAppFn.constName? | return none
+  let (plainRegs, creditRegs) := (loopInvOf (← getEnv) B, loopInvOf (← getEnv) B .credits)
+  if plainRegs.1.isNone && creditRegs.1.isNone then return none
   let mode := loopModeOf P
-  let (some inv, meas?, post?) := loopInvOf (← getEnv) B mode | do
+  let (some inv, meas?, post?) := if mode == .credits then creditRegs else plainRegs | do
     if mode == .credits then
-      if let (some plainInv, _, _) := loopInvOf (← getEnv) B then
+      if let some plainInv := plainRegs.1 then
         throwError "fsym: the state at the loop of `{B}` holds credits and no plain mode (a walk \
           that counts its steps), and `{B}` registers only its plain-mode invariant `{plainInv}` \
           (`@[fsym_inv]`). Register its credit-mode invariant `{LoopMode.credits.name B "inv"}` \
@@ -7279,8 +7281,8 @@ def loopInvRule? (g : MVarId) (L : Bk) (lem : Name) (R : RegLoop) (x f : Expr) :
     let (iInv, iPost, iStep, iS) ← if counted then do
         let bn := lemTy.getForallBinderNames.toArray
         let at_ (y : Name) : TacticM Nat := do
-          let some i := bn.findIdx? (· == y) | fail m!"`{lem}` has no parameter {y}"
-          unless i < n do fail m!"`{lem}` has no parameter {y}"
+          -- (`bn` and `lms` are both `lemTy`'s binders: an index of one is one of the other)
+          let some i := bn.idxOf? y | fail m!"`{lem}` has no parameter {y}"
           return i
         pure (← at_ `inv, ← at_ `post, ← at_ `step, ← at_ `s)
       else pure (n - 4 - measured.toNat, n - 3, n - 2, n - 1)

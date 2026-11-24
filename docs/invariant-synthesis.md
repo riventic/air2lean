@@ -799,7 +799,7 @@ attribute, tactic or judgment, and the updates registry (P09-E5) is not needed.
   plain-mode invariant is an error that names the missing definition. `fsym` never falls back to
   the plain-mode invariant, which would change what the walk means.
 * **The generator derives the credit parts from the plain ones**, for every family alike
-  (`Cand.credit`, `creditOf` in `Air2Lean/InvGen.lean`). After the Houdini fixpoint and the
+  (`Cand.creditOutput`, `creditOf` in `Air2Lean/InvGen.lean`). After the Houdini fixpoint and the
   check of the exit post:
   1. the credit candidate is the plain one's kept facts and resources without `plain`, with the
      count `n` as last parameter. The count is the family's measure read exactly: a list walk's
