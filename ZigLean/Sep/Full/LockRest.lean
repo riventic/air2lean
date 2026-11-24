@@ -8,8 +8,8 @@ Stated for the protocol's rest (`FOwned`) and, through it (`FLock.Inv.restIn`), 
 A byte that the rest owns, as a cell or as a share of one, is live (`FOwned.rest_live`,
 `FLock.Inv.rest_live`).
 
-**A block pinned by its extent in the rest.** A lock's invariant keeps the bytes of its rest only up to `Cell.norm` (`FLock.Inv.restCell`): a
-cell's size and kind are its block's, which the rest's cells do not fix. A rest that also holds an
+**A block pinned by its extent in the rest.** A lock's invariant keeps the bytes of its rest only
+up to `Cell.norm` (`FLock.Inv.restCell`): a cell's size and kind are its block's, which the rest's cells do not fix. A rest that also holds an
 authority claim of the block's extent (`bauth`, `bext`) fixes them: the block is live with the
 claim's size and kind in every memory where the invariant holds (`FLock.Inv.pinned`), so a byte
 that the rest holds with its cell of one memory has that cell in the other
