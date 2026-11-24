@@ -82,10 +82,42 @@ class CommittedBudgets(unittest.TestCase):
         self.assertEqual(perf.validate_budgets(data), [])
         ids = [workload["id"] for workload in data["workloads"]]
         self.assertGreaterEqual(len(ids), 5)
+        # The proof phases build the committed Proofs/<Ex> modules, which are the same for every
+        # Zig version: a workload of another version of an example whose proofs a workload
+        # already measures lists none.
+        proved = {workload["namespace"] for workload in data["workloads"] if workload["proof_modules"]}
         for workload in data["workloads"]:
             if workload["reference_gen"] is not None:
                 self.assertTrue((ROOT / workload["reference_gen"]).is_file(), workload["id"])
-            self.assertTrue(workload["proof_modules"], workload["id"])
+            self.assertIn(workload["namespace"], proved, workload["id"])
+        modules = [module for workload in data["workloads"] for module in workload["proof_modules"]]
+        self.assertEqual(len(modules), len(set(modules)), "a proof module is measured by two workloads")
+        # The default Zig version's translations are measured (Zig 0.17 first).
+        default = json.loads((ROOT / "compatibility.json").read_text())["zig"]["default"]
+        self.assertIn(default, {workload["air_zig_version"] for workload in data["workloads"]})
+
+    def test_fixture_exports_follow_the_examples(self):
+        # The 0.17.1 workloads translate the perf-budgets fixture's exports (exports.json,
+        # scripts/fixture-exports.py); each export's filter is the one scripts/check.sh uses.
+        manifest = json.loads((ROOT / "tests/roadmap/perf-budgets/exports.json").read_text())
+        for entry in manifest["exports"]:
+            example = Path(entry["source"]).stem
+            prefixes = [example + "."]
+            for name in ("filter", *("filter-" + version for version in entry["versions"])):
+                path = ROOT / "examples" / example / name
+                if path.is_file():
+                    prefixes += [line.strip() for line in path.read_text().splitlines() if line.strip()]
+            self.assertEqual(entry["filter"], ",".join(prefixes), example)
+        outs = {"tests/roadmap/perf-budgets/" + entry["out"].format(version=version)
+                for entry in manifest["exports"] for version in entry["versions"]}
+        data = perf.load_json(perf.BUDGETS)
+        for workload in data["workloads"]:
+            if any(directory.startswith("tests/roadmap/perf-budgets/") for directory in workload["air"]):
+                self.assertTrue(set(workload["air"]) <= outs, workload["id"])
+                example = workload["prefix"].rstrip(".")
+                args = ROOT / "examples" / example / "translate.args"
+                self.assertEqual(workload["translate_args"], args.read_text().split() if args.is_file() else [],
+                                 workload["id"])
         if data["status"] == "pending":
             self.assertTrue(any(workload["budget"] is None for workload in data["workloads"]))
         for workload in data["workloads"]:
