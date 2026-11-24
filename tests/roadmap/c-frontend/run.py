@@ -110,6 +110,7 @@ CONSTRUCTS = {
     "initializers": ["designated/compound initializers"],
     "inline_static": ["static inline"],
     "int_promotion": ["integer promotions"],
+    "libc_ctype": ["libc ctype", "libc stdlib"],
     "libc_stdio": ["libc stdio", "variadic call"],
     "libc_stdlib": ["libc stdlib", "function pointers"],
     "libc_string": ["libc string"],

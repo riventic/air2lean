@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Unit tests of the C front-end harness's record logic (run.py): named gates, the headline
 outcome and the function references the export closure follows. No compiler or Lean."""
+import json
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
