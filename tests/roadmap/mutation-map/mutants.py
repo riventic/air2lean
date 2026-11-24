@@ -45,6 +45,14 @@ CLAIMS = 'tests/roadmap/claims/test_claims.py'
 COVERAGE = 'tests/roadmap/coverage-report/test_coverage.py'
 OUTCOMES = 'tests/roadmap/outcome-accounting/test_report.py'
 OUTCOME_CONTRACTS = 'tests/roadmap/outcome-taxonomy/test_theorem_contracts.py'
+PERF = 'tests/roadmap/perf-budgets/test_perf_budgets.py'
+SAFE = 'tests/roadmap/safe-output/test_safe_output.py'
+QUALIFY = 'tests/roadmap/upgrade-qualification/test_qualify.py'
+SCHEDULES = 'tests/roadmap/schedule-caps/test_exploration.py'
+AIR_VALIDATE = 'tests/roadmap/export-validation/test_validate_air.py'
+TRUST = 'tests/roadmap/export-validation/test_trust_report.py'
+ABI = 'tests/roadmap/abi-probes/test_probe.py'
+FUZZ = 'tests/roadmap/fuzz/test_fuzz.py'
 
 # name -> (script, anchor, replacement, test file, module global holding the script, killing tests)
 MUTANTS = {
@@ -76,6 +84,17 @@ MUTANTS = {
         'scripts/claims.py', "    return [model['premise']] if set(model['concurrency']) & set(reached) else []\n",
         "    return []\n", 'tests/roadmap/claims/test_claims.py', 'claims',
         ('ClassifyTests.test_concurrency_claim_lists_memory_model_premise',)),
+    # C12: a claim that rests on a target-qualified premise (ORD-06) needs a qualified target.
+    'claims-target-binding-dropped': (
+        'scripts/claims.py', "    if unqualified:\n", "    if False:\n",
+        'tests/roadmap/claims/test_claims.py', 'claims',
+        ('ClassifyTests.test_concurrency_claim_needs_a_qualified_target',)),
+    # C12: a theorem that carries a target-qualified premise over a translation for a target
+    # without a qualification entry fails the premise index.
+    'premises-target-binding-dropped': (
+        'scripts/premises.py', '            elif target not in record["targets"]:\n', '            elif False:\n',
+        PREMISES, 'premises', ('FixtureTests.test_target_qualified_premise_needs_a_qualified_target',
+                               'CompiledTests.test_compiled_concurrency_needs_a_qualified_target')),
     # T01: legacy (pre-12) AIR selects the named legacy profile, not schema-12 validation.
     'profile-legacy-schema-misrouted': (
         'scripts/normalize-generated.py', '    if schema < 12:\n', '    if schema < 11:\n',
@@ -373,6 +392,191 @@ MUTANTS = {
         "        elif goal['strength'] in FUNCTIONAL and goal.get('scope') != 'universal':",
         '        elif False:',
         COVERAGE, 'project', ('CoverageTests.test_fixed_arguments_scope_the_domain',)),
+    # Q06: emitted Lean that differs from the baseline is a preservation failure, never a speedup.
+    'perf-output-change-ignored': (
+        'scripts/perf-budgets.py', '        if expected.get("sha256") != actual.get("sha256"):\n', '        if False:\n',
+        PERF, 'perf', ('Gate.test_output_change_is_a_preservation_failure',)),
+    # Q06: a peak-RSS regression fails the gate.
+    'perf-memory-limit-ignored': (
+        'scripts/perf-budgets.py', '                elif rss > limits[rss_key]:\n', '                elif False:\n',
+        PERF, 'perf', ('Gate.test_memory_regression',)),
+    # Q06: a budgeted workload absent from the measurement is a failure, not a pass.
+    'perf-missing-workload-ignored': (
+        'scripts/perf-budgets.py', '            add("missing-workload", ident, "budgeted workload is absent from the measurement")\n',
+        '            pass\n', PERF, 'perf', ('Gate.test_missing_workload',)),
+    # Q06: a measurement taken with parallel Lean threads is unserialized and not comparable.
+    'perf-unserialized-measurement-accepted': (
+        'scripts/perf-budgets.py',
+        '    if measurement.get("lean_num_threads") != "1":\n        add("unserialized-measurement", None,\n',
+        '    if False:\n        add("unserialized-measurement", None,\n',
+        PERF, 'perf', ('Gate.test_platform_and_serialization',)),
+    # Q06: the portable gate uses the generous portable limits, not the reference ones.
+    'perf-portable-limits-not-selected': (
+        'scripts/perf-budgets.py', '    prefix = "portable_" if portable else ""\n', '    prefix = ""\n',
+        PERF, 'perf', ('PortableGate.test_ignores_platform_and_absorbs_runner_noise',)),
+    # Q06: a measurement run against another calibration file must not normalize times.
+    'perf-foreign-calibration-accepted': (
+        'scripts/perf-budgets.py', '        elif calibration.get("sha256") != expected["sha256"]:\n',
+        '        elif False:\n', PERF, 'perf', ('NormalizedGate.test_a_missing_or_foreign_calibration_fails_closed',)),
+    # I08: the temporary file of an interrupted publish is removed.
+    'safe-output-partial-file-left': (
+        'scripts/safe-output.py', '            temporary.unlink(missing_ok=True)\n', '            pass\n',
+        SAFE, 'safe', ('Publish.test_interrupt_mid_write_keeps_prior_and_no_partial',)),
+    # I08: publishing keeps the mode of the artifact it replaces.
+    'safe-output-mode-not-preserved': (
+        'scripts/safe-output.py', '                os.fchmod(handle.fileno(), mode)\n', '                pass\n',
+        SAFE, 'safe', ('Publish.test_overwrite_replaces_atomically_and_keeps_mode',)),
+    # I08: a symlink destination is refused (no write through the link).
+    'safe-output-symlink-destination-followed': (
+        'scripts/safe-output.py', '    if path.is_symlink() or (path.exists() and not path.is_file()):\n',
+        '    if (path.exists() and not path.is_file()):\n',
+        SAFE, 'safe', ('Publish.test_rejects_symlink_and_directory_destinations_and_missing_policy',)),
+    # I08: --no-clobber is atomic: an output created after the early check is not replaced.
+    'safe-output-noclobber-race-overwrites': (
+        'scripts/safe-output.py', '                    os.link(temporary, destination)  # Atomic no-clobber, including concurrent writers.\n',
+        '                    os.replace(temporary, destination)\n',
+        SAFE, 'safe', ('Publish.test_no_clobber_is_atomic_against_a_concurrent_writer',)),
+    # Q07: edited obligations or inputs after `plan` must fail the record check.
+    'qualify-plan-digest-unchecked': (
+        'scripts/qualify-upgrade.py', "    if record.get('plan_sha256') != plan_digest(record):\n", '    if False:\n',
+        QUALIFY, 'q', ('RecordTests.test_removed_obligation_and_stale_plan_fail',)),
+    # Q07: a plan that no longer matches the before/after inventories is stale.
+    'qualify-stale-plan-accepted': (
+        'scripts/qualify-upgrade.py', "        if fresh['plan_sha256'] != record['plan_sha256']:\n", '        if False:\n',
+        QUALIFY, 'q', ('RecordTests.test_removed_obligation_and_stale_plan_fail',)),
+    # Q07: a failed obligation result is never a passing qualification.
+    'qualify-failed-result-accepted': (
+        'scripts/qualify-upgrade.py', "        if result.get('status') != 'pass':\n", '        if False:\n',
+        QUALIFY, 'q', ('RecordTests.test_run_records_and_check_passes',)),
+    # Q07: the recorded log must match its digest.
+    'qualify-log-tamper-unchecked': (
+        'scripts/qualify-upgrade.py', "            if not log.is_file() or sha256_bytes(log.read_bytes()) != result.get('log_sha256'):\n",
+        '            if False:\n', QUALIFY, 'q', ('RecordTests.test_tampered_log_fails_check',)),
+    # Q07: a model review needs an accepted decision from a named reviewer.
+    'qualify-unaccepted-review-passes': (
+        'scripts/qualify-upgrade.py', "            if result.get('decision') != 'accepted' or not result.get('reviewer'):\n",
+        '            if False:\n', QUALIFY, 'q', ('RecordTests.test_model_review_needs_accepted_decision_and_evidence',)),
+    # Q07: a result for an obligation the plan does not contain is rejected.
+    'qualify-unknown-result-accepted': (
+        'scripts/qualify-upgrade.py', "    for oid in sorted(set(record['results']) - ids):\n", '    for oid in []:\n',
+        QUALIFY, 'q', ('RecordTests.test_unknown_result_fails',)),
+    # Q07: a recorded external result without evidence is rejected by `check`, not only by `record`.
+    'qualify-evidence-free-result-accepted': (
+        'scripts/qualify-upgrade.py', "        elif not result.get('evidence'):\n", '        elif False:\n',
+        QUALIFY, 'q', ('RecordTests.test_hand_edited_result_without_evidence_fails',)),
+    # Q03: a capped search that matched is never counted as demonstrated correspondence.
+    'schedule-capped-match-counted': (
+        'scripts/diff-report.py', '    return Status.SEARCH_CAP if status in MATCHES and capped_search(search) else status\n',
+        '    return status\n', SCHEDULES, 'REPORT',
+        ('Exploration.test_capped_value_match_lands_in_cap_bucket',
+         'Exploration.test_one_capped_case_disqualifies_otherwise_matching_scope')),
+    # Q03: a truncated enumeration blocks correspondence for its scope.
+    'schedule-truncated-enumeration-not-blocking': (
+        'scripts/diff-report.py', "            if scope['enumeration']['truncated']:blockers.append('enumeration_truncated')\n",
+        '            pass\n', SCHEDULES, 'REPORT', ('Exploration.test_truncated_enumeration_disqualifies_matching_scope',)),
+    # Q03: a schedule that reached a no-result branch blocks correspondence.
+    'schedule-no-result-branch-not-blocking': (
+        'scripts/diff-report.py', "            if scope['observed']['bounded'] or scope['enumeration']['saw_no_result']:blockers.append('bounded_no_result')\n",
+        '            pass\n', SCHEDULES, 'REPORT',
+        ('Exploration.test_bounded_no_result_blocks_correspondence_but_is_not_cap',
+         'Exploration.test_enumerated_no_result_branch_blocks_correspondence')),
+    # Q03: a "capped" search must have consumed its run cap.
+    'schedule-cap-unconsumed-accepted': (
+        'scripts/diff-report.py', "        if search['status'] == 'capped' and search['runs'] != search['cap']:\n",
+        '        if False:\n', SCHEDULES, 'REPORT', ('Exploration.test_capped_status_must_consume_its_run_cap',)),
+    # V03: an instruction id may be defined once.
+    'air-validate-duplicate-id-accepted': (
+        'scripts/validate-air.py', '            elif ident in seen:\n', '            elif False:\n',
+        AIR_VALIDATE, 'v', ('ValidateAir.test_duplicate_instruction_id',)),
+    # V03: br/repeat must target an enclosing block/loop of the right kind.
+    'air-validate-branch-target-unchecked': (
+        'scripts/validate-air.py', '                if not any(t == target and k in TARGET_KINDS[tag] for t, k in scopes):\n',
+        '                if False:\n', AIR_VALIDATE, 'v',
+        ('ValidateAir.test_br_to_non_enclosing_block', 'ValidateAir.test_repeat_must_target_loop')),
+    # V03: a body must end in a noreturn terminator.
+    'air-validate-missing-terminator-accepted': (
+        'scripts/validate-air.py', '            if last and not noreturn:\n', '            if False:\n',
+        AIR_VALIDATE, 'v', ('ValidateAir.test_missing_terminator',)),
+    # V03: a noreturn instruction cannot sit in the middle of a body.
+    'air-validate-noreturn-in-middle-accepted': (
+        'scripts/validate-air.py', "            if noreturn and not last and not tag.startswith('call'):\n",
+        '            if False:\n', AIR_VALIDATE, 'v', ('ValidateAir.test_noreturn_in_the_middle',)),
+    # V03: a tag outside the Zig version's AIR universe is rejected.
+    'air-validate-tag-universe-unchecked': (
+        'scripts/validate-air.py', '        if not isinstance(tag, str) or tag not in self.universe:\n',
+        '        if not isinstance(tag, str):\n', AIR_VALIDATE, 'v', ('ValidateAir.test_tag_outside_version_universe',)),
+    # V03: an "unsupported" marker on a tag the exporter decodes is rejected.
+    'air-validate-unsupported-marker-on-decoded-tag': (
+        'scripts/validate-air.py', "        if marked and 'unsupported-marker' not in status:\n", '        if False:\n',
+        AIR_VALIDATE, 'v', ('ValidateAir.test_unsupported_marker_matches_inventory',)),
+    # V03: decoded operands on a tag the exporter marks unsupported are rejected.
+    'air-validate-decoded-operands-on-unsupported-tag': (
+        'scripts/validate-air.py', "        if not marked and 'unsupported-marker' in status:\n", '        if False:\n',
+        AIR_VALIDATE, 'v', ('ValidateAir.test_unsupported_marker_matches_inventory',)),
+    # V03: a kernel-checked stage must cite the trusted base.
+    'trust-kernel-base-uncited': (
+        'scripts/trust-report.py', "        if cls == 'kernel-checked' and 'TRU-01' not in ids:\n", '        if False:\n',
+        TRUST, 't', ('TrustReport.test_kernel_checked_needs_trusted_base',)),
+    # V03: a check whose test CI does not run is not a check.
+    'trust-test-not-run-by-ci-accepted': (
+        'scripts/trust-report.py', "            if test_ok and not runs_in_ci(check['test'], ci, commands, root):\n",
+        '            if False:\n', TRUST, 't', ('TrustReport.test_check_must_run_in_ci',)),
+    # V03: an unverified assumption cannot claim checks.
+    'trust-unverified-stage-lists-checks': (
+        'scripts/trust-report.py', "        if cls == 'unverified-assumption' and checks:\n", '        if False:\n',
+        TRUST, 't', ('TrustReport.test_unverified_stage_cannot_list_checks',)),
+    # V03: a required pipeline stage must be present.
+    'trust-required-stage-unchecked': (
+        'scripts/trust-report.py', '        if sid not in seen:\n', '        if False:\n',
+        TRUST, 't', ('TrustReport.test_missing_required_stage',)),
+    # V03: a cited premise must be defined.
+    'trust-undefined-premise-accepted': (
+        'scripts/trust-report.py', '            if pid not in premises:\n', '            if False:\n',
+        TRUST, 't', ('TrustReport.test_undefined_premise',)),
+    # V03: every compiler/tool trust premise must be cited by a stage.
+    'trust-uncited-premise-accepted': (
+        'scripts/trust-report.py', '        if pid not in cited:\n', '        if False:\n',
+        TRUST, 't', ('TrustReport.test_uncited_trust_premise',)),
+    # V03: a checked stage must name a checker and test.
+    'trust-checked-stage-without-checks': (
+        'scripts/trust-report.py', "        if cls in ('kernel-checked', 'independently-checked-metadata') and not checks:\n",
+        '        if False:\n', TRUST, 't', ('TrustReport.test_checked_classes_need_checks',)),
+    # Q01: the generator's type checker rejects code after an exit (the oracle must stay UB-free).
+    'fuzz-typecheck-unreachable-code-accepted': (
+        'tests/roadmap/fuzz/zig_gen.py', '            if _exits(s) and k != len(stmts) - 1:\n', '            if False:\n',
+        FUZZ, 'zig_gen', ('ZigGenerator.test_typecheck_rejects_invalid_programs',)),
+    # Q01: literals outside their type's range are rejected.
+    'fuzz-typecheck-literal-range-unchecked': (
+        'tests/roadmap/fuzz/zig_gen.py', '        if isinstance(v, bool) or not isinstance(v, int) or wrap(ty, v) != v:\n',
+        '        if isinstance(v, bool) or not isinstance(v, int):\n',
+        FUZZ, 'zig_gen', ('ZigGenerator.test_typecheck_rejects_invalid_programs',)),
+    # Q01: Zig forbids shadowing; a rendered program that shadows would not compile.
+    'fuzz-typecheck-shadowing-accepted': (
+        'tests/roadmap/fuzz/zig_gen.py', '        if not isinstance(name, str) or name in names:\n',
+        '        if not isinstance(name, str):\n',
+        FUZZ, 'zig_gen', ('ZigGenerator.test_typecheck_rejects_invalid_programs',)),
+    # Q01: the oracle evaluator loads a compound assignment's target before its operand.
+    'fuzz-eval-compound-assignment-order': (
+        'tests/roadmap/fuzz/zig_gen.py',
+        '                old = cell[0]\n                value = self.expr(s[3], env)\n',
+        '                value = self.expr(s[3], env)\n                old = cell[0]\n',
+        FUZZ, 'zig_gen', ('ZigGenerator.test_evaluator_semantics',)),
+    # T04: the native probe profile is exactly 64-bit.
+    'abi-probe-pointer-width-unchecked': (
+        'scripts/abi-probe.py', " or profile['pointer_bits'] != 64\n", '\n',
+        ABI, 'abi', ('ContractTests.test_profiles_fail_closed',)),
+    # T04: feature names are sorted and unique.
+    'abi-probe-features-unordered': (
+        'scripts/abi-probe.py', " or profile['features'] != sorted(set(profile['features']))):\n", '):\n',
+        ABI, 'abi', ('ContractTests.test_profiles_fail_closed',)),
+    # T04: observed layouts (size, alignment) must equal the bounded contract.
+    'abi-probe-layout-unchecked': (
+        'scripts/abi-probe.py', "'layout': layouts(profile['error_set_bits']), ", "'layout': data['layout'], ",
+        ABI, 'abi', ('ContractTests.test_observations_require_complete_exact_values',)),
+    # T04: the two Linux observations of a pair come from one Zig version.
+    'abi-probe-pair-version-unchecked': (
+        'scripts/abi-probe.py', "    if left['profile']['zig_version'] != right['profile']['zig_version']:\n",
+        '    if False:\n', ABI, 'abi', ('ContractTests.test_pair_requires_one_zig_version',)),
 }
 
 

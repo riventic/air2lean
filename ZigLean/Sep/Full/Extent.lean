@@ -753,7 +753,7 @@ theorem Holds.bshare {t : STag} {m : Mem} {r rF : Res} {R : FAssn} (hh : Holds m
 /-! ### Parts of a separating conjunction -/
 
 /-- `X` is one of the separated parts of `P`: every resource of `P` splits into one of `X` and a
-rest. The `within` tactic finds `X` in the separating conjunctions of `P`. -/
+rest. `fsym_entail` closes such a goal: it finds `X` in the separating conjunctions of `P`. -/
 def Within (X P : FAssn) : Prop := ∀ r, P r → ∃ R : FAssn, (X ⋆ R) r
 
 theorem Within.refl (X : FAssn) : Within X X := fun _ h => ⟨emp, sep_emp.mpr h⟩
@@ -771,17 +771,6 @@ theorem Within.trans {X Y P : FAssn} (h₁ : Within X Y) (h₂ : Within Y P) : W
   obtain ⟨r₁, r₂, hd, rfl, h1, h2⟩ := h
   obtain ⟨R', h'⟩ := h₁ r₁ h1
   exact ⟨R' ⋆ R, sep_assoc ⟨r₁, r₂, hd, rfl, h', h2⟩⟩
-
-/-- `within`: prove `Within X P` by finding `X` among the separated parts of `P`. Definitions
-are unfolded to find the separating conjunctions; a part matches `X` up to reducible unfolding
-(state `X` with the same definitions as `P`'s parts). -/
-syntax "within" : tactic
-macro_rules
-  | `(tactic| within) =>
-    `(tactic| first
-      | with_reducible exact Within.refl _
-      | (apply Within.sepL; within)
-      | (apply Within.sepR; within))
 
 /-- **A held share gives a live block**, for a share among the parts of the resource
 (`Holds.bshare`). -/

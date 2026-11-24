@@ -148,7 +148,7 @@ def finv (ctx : Ptr) (B : FBuf) (γ e : Nat) : FAllocInv where
   act r h := by
     obtain ⟨_, _, _, _, _, _, _, _, h⟩ := h
     obtain ⟨-, h⟩ := sep_lift.mp h
-    exact act_gauthP (by within) h Act.root
+    exact act_gauthP (by fsym_entail) h Act.root
   fee_add _ _ ha hb := epFee_add γ e ha hb
 
 @[simp] theorem finv_tag (ctx : Ptr) (B : FBuf) (γ e : Nat) : (finv ctx B γ e).tag = some (γ, e) := rfl

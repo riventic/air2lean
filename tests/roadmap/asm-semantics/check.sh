@@ -13,6 +13,9 @@ zig=${1:-$(python3 "$repo_root/scripts/cas.py" host-zig 0.17.1)}
 out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
 
+# The translator's CPU-feature table agrees with the compiler's own tables (ASM-09).
+bash "$dir/check-feature-table.sh"
+
 "$zig" build-exe "$dir/probe_x86_64.zig" -target x86_64-linux-musl -mcpu=x86_64_v2 -OReleaseSafe \
   -femit-bin="$out/probe_x86_64"
 docker run --rm --platform linux/amd64 -v "$out":/w:ro alpine:3 /w/probe_x86_64 2>&1 \

@@ -27,7 +27,10 @@ private def types : Array Ty := #[
   .ptr "c" false 0,                                                    -- 14: [*c]u32
   .union "U" "extern" none #[("a", 1), ("b", 0)],                      -- 15: extern union
   .array 4 1 true,                                                     -- 16: [4:0]u8
-  .array 1 12 false, .struct "P" "extern" #[("p", 13)]]                -- 17..18: [1]*u32, extern {?*u32}
+  .array 1 12 false, .struct "P" "extern" #[("p", 13)],                -- 17..18: [1]*u32, extern {?*u32}
+  .int false 40, .array 1 6 false,                                     -- 19..20: u40, [1]tuple
+  .void, .array 4 21 false, .int false 0,                              -- 21..23: void, [4]void, u0
+  .vector 5 1]                                                         -- 24: @Vector(5, u8)
 
 private def layouts : Array Layout := #[
   {size := some 4, align := some 4}, {size := some 1, align := some 1},
@@ -41,7 +44,11 @@ private def layouts : Array Layout := #[
   {size := some 8, align := some 8},
   ptrLayout, {size := some 8, align := some 8}, ptrLayout,
   {size := some 4, align := some 4}, {size := some 5, align := some 1, sentinel := true},
-  {size := some 8, align := some 8}, {size := some 8, align := some 8, offsets := #[0]}]
+  {size := some 8, align := some 8}, {size := some 8, align := some 8, offsets := #[0]},
+  {size := some 8, align := some 8}, {size := some 8, align := some 4},
+  {size := some 0, align := some 1}, {size := some 0, align := some 1},
+  {size := some 0, align := some 1},
+  {size := some 8, align := some 8}]
 
 private def cx (version : String) (src : TyId) : CheckCtx :=
   { fnName := "probe.f", types, layouts, instTys := #[(0, src)], places := #[],
@@ -84,7 +91,33 @@ def main : IO Unit := do
     for (s, d) in [(17, 5), (5, 17), (18, 5), (5, 18), (17, 18)] do
       require (rejects v s d "involving a pointer") s!"{v}: pointer-bearing cast {s} → {d} is accepted"
   require (rejects "0.16.0" 10 5 "between types of 56 and 64 bits") "[2]u24 → u64 is accepted"
-  require (rejects "0.16.0" 16 0 "an aggregate other than a packed") "[4:0]u8 → u32 is accepted"
+  -- A sentinel-terminated array is one more item (`lenIncludingSentinel`): `[4:0]u8` has 40 bits
+  -- up to 0.16. Zig 0.17 is rejected by name (docs/upstream/bitcast-sentinel-array.md), and so
+  -- is a vector on the other side (up to 0.15.2 the LLVM lowering copies the items only).
+  require (rejects "0.16.0" 16 0 "between types of 40 and 32 bits") "[4:0]u8 → u32 is accepted"
+  for v in ["0.14.1", "0.15.2", "0.16.0"] do
+    require (accepts v 16 19) s!"{v}: [4:0]u8 → u40 is rejected: {result v 16 19}"
+    require (accepts v 19 16) s!"{v}: u40 → [4:0]u8 is rejected: {result v 19 16}"
+    require (rejects v 16 24 "a sentinel-terminated array and a vector")
+      s!"{v}: [4:0]u8 → @Vector(5, u8) is accepted"
+  for (s, d) in [(16, 19), (19, 16)] do
+    require (rejects "0.17.1" s d "of a sentinel-terminated array (type 16)")
+      s!"0.17.1: sentinel cast {s} → {d}: {result "0.17.1" s d}"
+    require (!accepts "" s d) s!"\"\": sentinel cast {s} → {d} is accepted"
+  -- An array of tuples compiles on 0.14.1 and 0.15.2 only; the memory model has no tuple layout.
+  for v in ["0.14.1", "0.15.2", "0.16.0"] do
+    require (rejects v 20 5 "involving a tuple (type 6") s!"{v}: [1]tuple → u64: {result v 20 5}"
+    require (rejects v 5 20 "involving a tuple (type 6") s!"{v}: u64 → [1]tuple: {result v 5 20}"
+  -- Zero-bit types: `[4]void` ↔ `u0` in every version, `void` itself from 0.17.
+  for v in ["0.14.1", "0.15.2", "0.16.0", "0.17.1"] do
+    require (accepts v 22 23) s!"{v}: [4]void → u0 is rejected: {result v 22 23}"
+    require (accepts v 23 22) s!"{v}: u0 → [4]void is rejected: {result v 23 22}"
+  require (accepts "0.17.1" 21 23 && accepts "0.17.1" 23 21 && accepts "0.17.1" 21 22)
+    "0.17.1: a `void` cast is rejected"
+  for v in ["0.14.1", "0.15.2", "0.16.0"] do
+    require (rejects v 21 23 "to or from `void`") s!"{v}: void → u0: {result v 21 23}"
+    require (rejects v 23 21 "to or from `void`") s!"{v}: u0 → void: {result v 23 21}"
+  require (rejects "0.17.1" 22 0 "between types of 0 and 32 logical bits") "0.17.1: [4]void → u32 is accepted"
   require (rejects "0.16.0" 13 0 "optional pointer") "?*u32 → u32 is accepted"
   -- `?*T` ↔ `[*c]T` is L05's explicit null mapping (`docs/null-pointers.md`), for every version.
   for v in ["0.16.0", "0.17.1"] do

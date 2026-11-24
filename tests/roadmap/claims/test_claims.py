@@ -386,6 +386,39 @@ class ClassifyTests(unittest.TestCase):
             self.assertEqual(goal['status'], 'rejected')
             self.assertIn('runtime_modules', goal['reason'])
 
+    def test_concurrency_claim_needs_a_qualified_target(self):
+        """C12 target binding: a claim that rests on ORD-06 is rejected when its root's translation
+        records a target without a memory-model qualification entry (s390x-linux, mips64-linux:
+        the translator accepts their atomics and threads); a sequential claim is not bound."""
+        report = copy.deepcopy(FIXTURE)
+        for theorem in report['theorems']:
+            if theorem['name'] == 'ClaimFixture.ret_run':
+                theorem['runtime_modules'] = theorem['runtime_modules'] + ['ZigLean.Conc.Word']
+        goal = {'theorem': 'ClaimFixture.ret_run', 'strength': 'total_correctness', 'domain': 'all'}
+
+        def status(source, targets):
+            found = claims.check_goal(goal, theorems_of(source), definition='ClaimFixture.ret', targets=targets)
+            return found['status'], found['reason']
+
+        for qualified in ('x86_64-linux', 'aarch64-macos', 'aarch64-linux', None):
+            self.assertEqual(status(report, {qualified}), ('accepted', None))
+        for target in ('s390x-linux', 'mips64-linux', 'wasm32-wasi', 'riscv64-linux'):
+            found, reason = status(report, {target})
+            self.assertEqual(found, 'rejected')
+            self.assertIn(f'the claim carries ORD-06 for target {target}, which has no qualification entry in '
+                          'memory_model.targets', reason)
+            self.assertEqual(status(FIXTURE, {target}), ('accepted', None))
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / 'Conc').mkdir()
+            (root / 'Conc/Gen.lean').write_text(
+                '-- air2lean-profile: {"profile":{"name":"abi64-be-v1","target_triple":"s390x-linux.5.10...7.2-musl"}}\n')
+            (root / 'Conc/Plain.lean').write_text('namespace Conc\n')
+            self.assertEqual(claims.root_targets('Conc.Gen', root), {'s390x-linux'})
+            self.assertEqual(claims.root_targets('Conc.Plain', root), {None})
+            self.assertEqual(claims.root_targets('Conc.Gone', root), {None})
+            self.assertEqual(claims.root_targets(None, root), set())
+
     def test_old_or_failed_reports_are_rejected(self):
         for field in ('conclusion', 'statement'):
             old = copy.deepcopy(FIXTURE)

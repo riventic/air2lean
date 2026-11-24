@@ -35,7 +35,7 @@ Measured on `origin/main` at `d77a7b768`. "Lemmas" counts `theorem`/`lemma` decl
 | Arena `AllocArena/Reset.lean` | 668 | 23 | 8 | 0 | chain split/join, coverage and release lemmas |
 | Arena `ArenaSpec.lean`, `ArenaSpecFixed.lean`, `ArenaSpecMacos.lean` | 328 / 214 / 211 | 13 / 12 / 12 | 7 each | 0 | loop invariants `Inv9`, `Inv19`, `Lists9` by hand; `count_loop` by hand induction |
 | Lists `Proofs/Lists/Linked.lean` | 269 | 15 | 7 | 0 | `revInv`, `sumInv` and their `*_step`/`*_loop` lemmas by hand (measured at S0; since S2d the loop invariants are generated, `Proofs/Lists/OpenInv.lean`, and only `sum_exact`'s `sumInv` stays) |
-| Lists `Proofs/Lists/Alloc.lean` | 377 | 22 | 11 | 0 | `freeInv`, `freePost`, `freeAll_loop` by hand |
+| Lists `Proofs/Lists/Alloc.lean` | 377 | 22 | 11 | 0 | `freeInv`, `freePost`, `freeAll_loop` by hand (measured at S0; since 2026-11-24 the loop invariant is generated from `destroy`'s contract, `Proofs/Lists/AllocInv.lean`, and only `freeAll_exact`'s `freeInvExact` stays) |
 
 Of the 95 arena lemmas, 11 are declared by the `arena_spec_statements` command. The 12 macros are
 the `legacy-to-retire` entries of `assurance/proof-framework.json` for `AllocArena.Core`.
@@ -699,13 +699,93 @@ Each fails inside `down_total`, whose walk applies `down`'s registered invariant
 whose proof needs a fact that is not a candidate gets an invariant that is too weak, and its
 proof fails.
 
+### Implemented: a list walk with a call, by the call's contract (S2d, layer 3 for one call)
+
+A walk may hand each node to a call: `while (p) |n| { p = n.next; a.destroy(n); }`
+(`freeAll.loop5` of `Proofs/Lists/Open.lean`, a `CM` body). Its invariant needs what the call
+takes and leaves, which only the call's contract says. So the generator takes contracts:
+
+    air2lean-invgen MODULE NAMESPACE --source FILE --spec SPEC SPECFILE --contract RULE -o FILE
+
+`SPEC` is a hand-written specification module (it is imported, and its source is an input of the
+record), and `RULE` a theorem of it about the function that the loop calls,
+`∀ ys, T P (f as) (fun _ => Q)`. This is the first piece of the design's **spec header**: the
+contract is specification, the invariant between the contracts is generated. `scripts/invgen.py`
+lists such a target's module and rules in `CONTRACTS`; `scripts/gen-integrity.py invgen` checks
+them and the specification's hash in the record. A file generated with contracts holds the loops
+that call by one of them; the module's other loops stay in its file without contracts.
+
+The generator reads the body as before (now also a body of `CM Tgt σ ε`, checked as a `CTriple`
+step; an instance parameter `[Ext]` of the body is an explicit parameter `inst0` of the
+definitions, as `@[fsym_inv]` wants them). At a call `callC (f as)`, `callM` or `callMC` of a
+function with a given contract it reads the contract (`readContract`, in order, the first that
+fits):
+
+* The call fixes the rule's variables: one is the node's pointer (the cursor's payload), the
+  others are terms over the loop's parameters (`ctx := p0.ptr`, `vtp := p0.vtable` for the rule's
+  `⟨ctx, vtp⟩` at the loop's `p0`), found by unifying the rule's command with the call.
+* The precondition's atoms (through reducible definitions, so a node may be written by its
+  layout's name) that name the node's pointer or the value of one of its fields
+  (`up (pts (p.add k) a y)`) are **the node** (`F.loopN.node`); the others are **the frame**.
+* The postcondition must return the frame atom for atom. What it holds besides is **what the
+  call leaves of a node** (`F.loopN.done`): the fee and `I.freed p` for `destroy`, the node
+  itself for a call that only reads it.
+
+The invariant of the walk `w` with the contract is then, with `xs` the list's items:
+
+    ∃ ys zs, ⟪xs = ys.reverse ++ zs ∧ zs.length = n ∧ …⟫ ⋆
+      listSegRev (F.loopN.done …) s0.cur s.cur ys ⋆ listSeg (F.loopN.node …) s.cur none zs ⋆
+      frame ⋆ plain
+
+and the exit post `listSegRev (F.loopN.done …) s0.cur none xs.reverse ⋆ frame ⋆ plain`. Its
+parameters are the loop's, then the contract's variables that the node, the frame or a node
+passed names (`fns`, `I`, `φ`), which the plan at the loop's entry determines; a variable that only
+a node passed names is rejected (nothing at the entry determines it). The contract's other
+variables (its hypotheses, here `h : CAllocSpec …` and the `e` it names) are binders of the step's
+check only, and the check walks the call by the contract (`fsym [fun p v q => @RULE … p v q h]`).
+A client's walk passes the contract itself, as for any call.
+
+**Why `listSegRev`.** The nodes passed are the segment at the `done` layout *told from its end*
+(`ZigLean/Sep/Full/ListSeg.lean`: `listSegRev N hd tl (v :: vs) = ∃ p, N p v tl ⋆ listSegRev N hd
+(some p) vs`, and `listSeg_of_listSegRev`: it is `listSeg N hd tl vs.reverse`). A visit without a
+call joins a node to `listSeg` at its end by the update `listSeg_snoc_upd`, whose arguments (the
+item `v`, the next pointer `q`) `fsym` reads from the node's atoms. What `destroy` leaves of a
+node names neither, and the update is then rejected (`tryUpd`: an argument that its precondition
+does not determine; kernel-checked in experiments on `freeAll`, 2026-11-24: with the nodes passed
+as `listSeg done s0.p s.p ys` the walk reaches the repetition and stops there, also with the item
+given). Told from its end, the node joins by the *constructor*, as the prefix of a reversal does:
+the planner's constructor fold takes the next pointer from the goal's own index and the item from
+the list's equation. So this needs neither a fold over an unknown `Nat` (the count of fees, the
+obstruction recorded for the hand-written attempt of 2026-11-07) nor the updates registry
+(P09-E5).
+
+Outside this slice, each recorded with its reason (fail closed): two calls in one iteration, a
+call before the body's last access to the node or with a store to the node, a call on another
+node or that takes a value of the body, a contract that does not return its frame, that owns
+more than one value of the node besides `next`, whose postcondition reads the result or that
+returns a value.
+
+Client: `Proofs/Lists/AllocInv.lean` (target of `scripts/invgen.py`; specification
+`Proofs/Lists/AllocNode.lean`, contract `Lists.Alloc.destroy_fields`, for every allocator that
+meets `CAllocSpec`). `Proofs/Lists/Alloc.lean`'s `freeAll_done` is a bare
+`fsym [destroy_fields …]` over the generated invariant; `freeInv`, `freeAll_step_nil`,
+`freeAll_step_cons`, `freeAll_step` and `freeAll_loop` are deleted, and `freeAll_freed` and
+`freeAll_spec` are unchanged statements (the nodes passed are the fees and `freedSeg`,
+`fees_freed_of_done`).
+
+Still by hand: the loops with their exact step counts (`sum_exact`, `freeAll_exact`: `sumInv`,
+`freeInvExact`, `FTotalTriple.loop_exact`/`CTriple.loop_exact`). Their invariants are the generated
+ones with `credits (n + 1) ⋆ spent (N - n)` in place of `plain`, but `@[fsym_inv]` holds one
+invariant per loop body, and the plain-mode one is registered (engine ledger #list-walk-step,
+open question for the maintainer).
+
 What the slices do not have yet (next slices, sizes S < M < L):
 
 | Next | Content | Size |
 |---|---|---|
 | S2b | the semantic fingerprints (`docs/stable-generation.md`) of the functions whose loops a record covers, from each target's source-map sidecar (`--source-map-json`, `scripts/semantic-fingerprints.py index`), so a stale record names the loops whose functions changed. (The input hashes and `gen-integrity.py invgen` are implemented, above.) | S |
 | S2c′ | the rest of the counted family: cells at offsets of a parameter (an owned `arr p vs` with item updates, `counted.pairAt`; the engine side, #atom-args-normal-form, is closed), cell updates that depend on the counter (the library sum `tsum`, `counted.tri`, then the outer loop of `nested` with a summary of its generated inner loop, replacing the hand `outerI`, `outerPost`, `outer_step` and `outer_loop`; the engine side, #arith-atom-congruence, is closed) | M |
-| S2d | the list-walk family on the library list family (layer 1, measure the ghost list's length): `revInv`, `sumInv` (`Proofs/Lists/Linked.lean`), `freeInv` (`Proofs/Lists/Alloc.lean`), `loop-tactics/Queue.lean` unchanged on top. Not covered yet (checked 2026-11-06 by running `air2lean-invgen Proofs.Lists.Gen Lists`): `reverse.loop6` and `sum.loop6` give "an unsupported term: i8.isSome", and `freeAll.loop5` gives "an unsupported term: i7.isSome". The loop test is on an optional node pointer (`?*Node`), not on a counter. The engine side is done (ledger #list-walk-step, `docs/proof-automation.md`): `fsym` splits the ghost list at the cursor's test, folds the node back constructor by constructor at a repetition (a node at a segment's end by the caller's update `lseg_snoc_upd`), and applies an `@[fsym_inv]` invariant with a ghost measure (`B.inv … s n`, the nodes left, which the locals do not determine; `loop_ghost_ex`). `Proofs/Lists/Linked.lean`'s `reverse` and `sum` are bare `fsym` walks; their step and loop lemmas are deleted. **Generator done (PR #725)**: `air2lean-invgen` reads `Option.isSome`/`some`/`Zig.optPayload` on an optional-pointer cursor and the loads and stores of a node's fields (`Zig.ptrProject` offsets), recognizes a list walk (a visit, or a reversal that points each node back to a prefix local; accumulators that add the item or a constant), and emits the invariant, with a ghost measure, over the library list family `listSeg` (`ZigLean/Sep/Full/ListSeg.lean`, the S3 list family) at the node layout read off the body (`F.loopN.node`: `next`, the item field if read, the rest as a parameter); the facts are Houdini candidates, the step's walk with the exit post decides. `Proofs/Lists/OpenInv.lean` (target of `scripts/invgen.py`) replaces the hand invariants of `Linked.lean`, whose `node`/`lseg`/`list` are the family's instance; `reverse` is proved for every node with a `next` field. Open: `freeAll.loop5` (`Proofs/Lists/Alloc.lean`) is a `CM` body that calls `destroy` (the generator reads `MM` bodies only, and the call's contract is a caller's rule, layer 3), and its invariant has no plan at the loop's entry: the planner does not fold `fees I φ ?k` (`sepN`) and `freedSeg I hd tl ?k` over an unknown `Nat` (ledger #list-walk-step) | L |
+| S2d | the list-walk family on the library list family (layer 1, measure the ghost list's length): `revInv`, `sumInv` (`Proofs/Lists/Linked.lean`), `freeInv` (`Proofs/Lists/Alloc.lean`), `loop-tactics/Queue.lean` unchanged on top. Not covered yet (checked 2026-11-06 by running `air2lean-invgen Proofs.Lists.Gen Lists`): `reverse.loop6` and `sum.loop6` give "an unsupported term: i8.isSome", and `freeAll.loop5` gives "an unsupported term: i7.isSome". The loop test is on an optional node pointer (`?*Node`), not on a counter. The engine side is done (ledger #list-walk-step, `docs/proof-automation.md`): `fsym` splits the ghost list at the cursor's test, folds the node back constructor by constructor at a repetition (a node at a segment's end by the caller's update `lseg_snoc_upd`), and applies an `@[fsym_inv]` invariant with a ghost measure (`B.inv … s n`, the nodes left, which the locals do not determine; `loop_ghost_ex`). `Proofs/Lists/Linked.lean`'s `reverse` and `sum` are bare `fsym` walks; their step and loop lemmas are deleted. **Generator done (PR #725)**: `air2lean-invgen` reads `Option.isSome`/`some`/`Zig.optPayload` on an optional-pointer cursor and the loads and stores of a node's fields (`Zig.ptrProject` offsets), recognizes a list walk (a visit, or a reversal that points each node back to a prefix local; accumulators that add the item or a constant), and emits the invariant, with a ghost measure, over the library list family `listSeg` (`ZigLean/Sep/Full/ListSeg.lean`, the S3 list family) at the node layout read off the body (`F.loopN.node`: `next`, the item field if read, the rest as a parameter); the facts are Houdini candidates, the step's walk with the exit post decides. `Proofs/Lists/OpenInv.lean` (target of `scripts/invgen.py`) replaces the hand invariants of `Linked.lean`, whose `node`/`lseg`/`list` are the family's instance; `reverse` is proved for every node with a `next` field. **`freeAll.loop5` done** (2026-11-24, "a list walk with a call" above): the generator reads `CM` bodies and the contract of the call (`--spec`/`--contract`), and states the nodes passed over `listSegRev` at what the contract leaves of a node, so no fold over an unknown `Nat` is needed; `Proofs/Lists/AllocInv.lean` replaces `freeInv` and the hand step and loop lemmas of `Proofs/Lists/Alloc.lean`. Open: the loops with exact step counts (`sum_exact`, `freeAll_exact`), which need a second registered invariant per body | L |
 | S2e | loops over array contents (`Proofs/Slices/Sep.lean`'s `revInv`: quantified item facts from a permutation template) | L |
 
 S3 to S6 follow the staging table above.
@@ -730,7 +810,7 @@ New rows. Numbers are assigned when the fsym lane records them in its ledger.
 * **P09-E5** `@[fsym_upd]` ghost-update registry, keyed by heads, tried at returns. It generalizes
   the caller updates of 9f.
 
-Existing open rows on the path: #9 (arena macros), #21 (disjunctions in `fsym_arith`:
+Existing open rows on the path: #21 (disjunctions in `fsym_arith`:
 Houdini candidates with case splits), #55 and #60 (cost in large states: generation runs many
 walks over the arena's state), #58, #59, #61 (arena planning), #62 (struct ownership in a thread),
 #64–#67 (the FBA updates' workarounds, which E5 and the bump-ledger family replace).

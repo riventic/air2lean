@@ -123,7 +123,10 @@ module doc.
 **Wake** (`Os.futexWake`). One `pick` among the subsets of `min n k` of the `k` threads queued at
 the address (`wakeSets`), with no FIFO order (audit finding #6). The woken threads go on at their
 next turn. A wake accesses no memory and gives no edge: std re-reads the word with an acquire.
-macOS `__ulock_wake` has the extra option `-EINTR` with nobody woken, and std retries.
+macOS `__ulock_wake` has the extra option `-EINTR` with nobody woken, and std retries. Its code
+after a wake of nobody is `-ENOENT` or `0`, picked by the oracle at a stop before the wake
+(`Darwin.wakeCode`): xnu returns `0` while the key's `ull` lives (a wake after its waiters were
+woken but before they ran), which the model does not track.
 
 Address validation comes before any interrupt, scheduling choice, word read or queue effect
 (module doc of `ZigLean/Os/Futex.lean`, audit S6). The Linux wrappers follow `get_futex_key`
