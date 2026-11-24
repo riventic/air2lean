@@ -287,6 +287,7 @@ class ZigGenerator(unittest.TestCase):
         ret = ["return", LIT("u32", 1)]
         bad = [
             [ret, ["let", "x1", "u32", LIT("u32", 0)]],                     # unreachable code
+            [["if", LIT("bool", True), [ret, ["let", "x1", "u32", LIT("u32", 0)]], []]],  # unreachable code in a nested block
             [["break"]],                                                     # break outside a loop
             [["set", "x1", "=", LIT("u32", 0)]],                             # unbound
             [["let", "p0", "u32", LIT("u32", 0)]],                           # shadows a parameter

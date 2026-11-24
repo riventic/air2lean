@@ -1151,10 +1151,9 @@ deletion plan of each. No new hand model of std code is added (CLAUDE.md, Truste
 
 - Kind: trusted.
 - Statement: `Io.futexWait`, `Io.futexWaitUncancelable`, `Io.futexWake` (0.16.0, 0.17.1) and
-  `Thread.Futex.wait` (0.14.1, 0.15.2) are the futex ops of THR-05 instead
+  `Thread.Futex.wait`, `Thread.Futex.wake` (0.14.1, 0.15.2) are the futex ops of THR-05 instead
   of the `Io` implementation behind the vtable (`Io.Threaded`) or `lib/std/Thread/Futex.zig`
-  over the OS futex (OSF-01, OSF-02). `Thread.Futex.wake` is no longer one of them: it is
-  translated down to the OS wake rows (OSF-02; audit S6 finding 4, decision 2026-11-24).
+  over the OS futex (OSF-01, OSF-02).
 - Derived from: implied by THR-05.
 - Sources: [std-models.md](std-models.md#retiring-the-hand-models), `Air2Lean/StdModels.lean`,
   `ZigLean/Conc/Call.lean`.
@@ -1319,8 +1318,9 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   result is the number woken. macOS returns `0`, `-ENOENT` if nobody was woken, or, as an oracle option,
   `-EINTR` with nobody woken. It gives no happens-before edge. The translator binds
   `os.linux.futex_3arg` (0.15.2 on), `os.linux.futex_wake` (0.14.1, the same system call) and
-  libc's `__ulock_wake` (macOS) to it in every allocator model (`Air2Lean/StdModels.lean`), so
-  `std.Thread.Futex.wake` (0.14.1, 0.15.2) is translated from its std code.
+  libc's `__ulock_wake` (macOS) to it in every allocator model (`Air2Lean/StdModels.lean`).
+  `std.Thread.Futex.wake` (0.14.1, 0.15.2) itself still binds to its hand row (STD-05) until
+  that row is deleted (audit S6 finding 4, slice D2).
 - Model gaps (OSF-01 and OSF-02): address validation follows Linux v6.16 `get_futex_key` and
   xnu-12377.121.6 `sys_ulock.c`. Where the native result needs mapping or address-limit
   knowledge outside the model, it is a conservative `.illegal` refusal
@@ -1567,7 +1567,15 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   removed from the verifier's allowed signers; there is no revocation list, timestamp or
   transparency log, only the optional `valid-after`/`valid-before` of `allowed_signers`
   (`--verify-time`). The signature primitive and its verification are OpenSSH's
-  (`ssh-keygen -Y sign|verify`), trusted as installed.
+  (`ssh-keygen -Y sign|verify`), trusted as installed. The limits of the provenance chain
+  (I07) are part of this premise, not open work: CI holds no release key, because a key in CI
+  would let a compromised workflow sign any manifest, so the whole-tree fixtures CI regenerates
+  are unsigned and signing a release is an operator step with the operator's key; the `native`
+  link records a stock-Zig build's identity (target, mode, cpu, compiler and binary digests),
+  not a correspondence between the binary and the model (TRU-03); and `provenance-evidence.py
+  replay` establishes only that a committed receipt concerns the bytes now in the tree.
+  Someone who relies on a manifest, a receipt or a native binary beyond that accepts this
+  premise.
 - Derived from: use of an attestation (`--attestation`); not derived from any theorem.
 - Sources: [artifact-manifest.md](artifact-manifest.md#authentication), `scripts/attest.py`.
 

@@ -88,6 +88,10 @@ fi
 check 'generated loop invariant records' python3 -B scripts/gen-integrity.py invgen
 check 'release compatibility metadata' python3 scripts/compat.py check
 check 'build-mode qualification records' python3 -B scripts/build-modes.py check
+# Q07: the committed upgrade record of the default Zig version (docs/coverage.md#upgrade-qualification);
+# its obligations, logs and plan digest. The --before/--after staleness check needs the whole-tree
+# coverage inventories of the time the record was made, so the committed record is checked on its own.
+check 'upgrade qualification record' python3 -B scripts/qualify-upgrade.py check qualification/0.17.1.json
 check 'performance budgets' python3 scripts/perf-budgets.py validate
 check 'proof heartbeat budgets' python3 -B scripts/perf-budgets.py heartbeats check
 check 'requirement register documents' python3 scripts/register.py check

@@ -509,10 +509,34 @@ row `s6-futex-hand-rows` lists what is still transitional and when it is deleted
 | Slice | State |
 |---|---|
 | D1: the OS wake rows are bound (`os.linux.futex_3arg`, `os.linux.futex_wake` for 0.14.1, libc's `__ulock_wake`; OSF-02) | done |
-| D2: `Thread.Futex.wake` (0.14.1, 0.15.2) is translated down to them; its hand row is deleted | open |
+| D2: `Thread.Futex.wake` (0.14.1, 0.15.2) is translated down to them; its hand row is deleted | open, waits for a decision (below) |
 | D3: `Thread.Futex.wait` (0.14.1, 0.15.2) is translated down to the OS wait rows; its hand row is deleted | open |
 | F: `os_unfair_lock_*` are OS rows (OSL-01); the STD-06 rows are deleted | open |
 | E: the `Io` futex is a contract that `Io.Threaded`'s translated code proves; the last STD-05 rows are deleted | open |
+
+**Obstruction of D2 (2026-11-24, for the maintainer).** The hand wake has no loop. The translated
+macOS `Thread.Futex.DarwinImpl.wake` repeats `__ulock_wake` on `EINTR`, so it is a loop and each
+repeat ticks. `ResetEvent.set` reaches it, and two statements do not admit that tick:
+
+1. `EventImpl.set_wp` states no caller part, because `set` ticked in no implementation
+   (`ZigLean/Sep/Full/LockRules.lean`, §Caller parts). With the translated wake it ticks on
+   macOS, so the contract needs the caller part of an operation that may tick (`set_pre`,
+   `set_post`, `set_unmetered_pre`, as `wait` and `CondImpl.signal` have): a statement change
+   of the contract and of its clients (`Proofs/Handoff/Ops.lean`,
+   `Proofs/Threadsync/WaitGroup/Task.lean`).
+2. WaitGroup's last `finish` sets the event at the lock place `gone` (decision 2026-11-03,
+   engine-ledger row `l11-waitgroup-rwlock-impl`). The tick rule (`FLock.Fits.wp_tick_exact`)
+   needs a non-gone place: a lock-gone thread has no part that pays a tick, and the scheduler
+   gives it only existence, not "not joined". Failure scenario: `Proofs/Threadsync/WaitGroup`
+   on the macOS translation, at the first tick of `DarwinImpl.wake`'s loop in the finisher.
+
+A hand row for macOS only is not possible (a row has no target, and the example's `filter` is
+shared) and would keep the under-waking wake (`hand_leaves_one`). On Linux the translated wake
+has no loop: the branch `claude/s6-futex` deletes the row and proves the Linux translations.
+Options: (a) the `set` caller part in `EventImpl`, plus a tick rule for a lock-gone thread that
+still owns its part, with existence from the scheduler's resumption; (b) the `set` caller part,
+plus WaitGroup's finisher keeps a non-gone place until `set` returns (the waiter's whole-`Tally`
+read then needs another exclusion argument than "the only non-gone thread"). Recommended: (a).
 
 The text below is the finding as reported.
 
