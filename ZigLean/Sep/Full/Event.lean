@@ -2185,6 +2185,14 @@ theorem wp_liftPartCurM (hE : L.Fits (E.prim L) P U ok) {α : Type} {x : MemM α
   exact WP.bind (wp_liftPartCur hE hgo hi hc htt hp (fun a m' r' hr hq hc' hh hi' =>
     WP.pure' (h a m' r' hr hq hc' hh hi')) hret)
 
+/-- A thread's own part at another place of the event's code is its part (the place is no part:
+`Fits.lpart`), for an operation's post that returns the caller's exact part
+(`EventImpl.set_wp_resource`). -/
+theorem setPart_set_self (hE : L.Fits (E.prim L) P U ok) (g : γ) (p : EPh) :
+    L.setPart (E.set g p) (L.part g) = E.set g p := by
+  have hpart : L.part g = L.part (E.set g p) := (hE.lpart g p).symm
+  rw [hpart, L.setPart_self]
+
 end FEvent
 
 /-- **An event implementation** in generated code: its `wait` and `set`, with the rules that a
@@ -2202,21 +2210,26 @@ and counts no turns.
    (`FEvent.Synced`: it read an `is_set` write with acquire), so what happened before the set
    happened before the waiter's next step: a set that writes orders memory, not only control.
 - `set_wp`: a thread out of the event's code, with a ghost value that may set (`FEvent.sx`), that
-   sets it returns with the event set, done (`sd`), and its exact caller part, whatever that part
-   holds. Its steps are the event's (`FEvent.prim`, `FEvent.Next`): at most one write, a release
+   sets it returns with the event set, done (`sd`), and its exact caller part
+   (`set_pre`/`set_post`). Its steps are the event's (`FEvent.prim`, `FEvent.Next`): at most one write, a release
    `is_set` from `out`, so a client that tracks a clock below the setter's sees it in that write
    (the write's `clock`, below its release clock: `Inv.rel`) and, with `Inv.synced_first`, below
    the waiter's after its `wait`. A set that finds the event set already (0.15.2's peek,
    `Fits.doneSet`) writes nothing: a client with several setters shows which write is the first.
    To set or wait again, the client moves the thread from `sd` back to `out` by its own ghost
    step (`Inv.toOut`), which puts it in the word's live set again (`FEvent.Live`). The setter is out of the lock's code, or it left the lock for
-   good (`gone`: a task after its last access to the lock's resource, a detached thread). `set`
-   ticks in no implementation (`Io.Event` and `Thread.ResetEvent`: a store and a futex wake), so
-   the contract demands no caller resource, as `MutexImpl.unlock_wp`.
+   good (`gone`: a task after its last access to the lock's resource, a detached thread). Its
+   caller part needs a positive unmetered fragment: an implementation's wake may tick (std's
+   translated macOS `Thread.Futex.DarwinImpl.wake` under `Thread.ResetEvent.set` is a loop that
+   repeats `__ulock_wake` on `EINTR`; maintainer decision 2026-11-24, audit S6 finding 4, option
+   (a)). Every implementation admits such a part and returns it exactly (`set_unmetered_pre`,
+   `set_unmetered_post`), as `CondImpl.signal`. A setter that is `gone` for the lock still owns
+   its part until it is joined, and pays there (`FLock.Fits.wp_tick_exactUnjoined`).
 
-`wait_wp_resource` states caller parts the same way as the mutex and condition (`LockRules`,
-"Caller parts of composite operations"). Its post is about the actual caller part, not an
-assertion implicitly closed under adding or removing resources. -/
+`wait_wp_resource` and `set_wp_resource` state caller parts the same way as the mutex and
+condition (`LockRules`, "Caller parts of composite operations"); `EventImpl.wait_wp` (a Plain
+caller) and `EventImpl.set_wp` (a positive unmetered fragment) are derived. The posts are about
+the actual caller part, not an assertion implicitly closed under adding or removing resources. -/
 structure EventImpl (Tgt : Type) where
   wait : Ptr → Io → ConcM Tgt Unit
   set : Ptr → Io → ConcM Tgt Unit
@@ -2224,6 +2237,14 @@ structure EventImpl (Tgt : Type) where
   wait_post : ThreadId → Res → FAssn
   wait_plain_pre : ∀ (t : ThreadId) (r : Res), r.Plain → wait_pre t r
   wait_plain_post : ∀ (t : ThreadId) (r r' : Res), r.Plain → wait_post t r r' → r' = r
+  set_pre : ThreadId → FAssn
+  set_post : ThreadId → Res → FAssn
+  /-- A caller part with a positive unmetered fragment admits `set` (the minimal resource of an
+  emitted wake loop that ticks). -/
+  set_unmetered_pre : ∀ (t : ThreadId) (r : Res), 0 < r.gh.ac.frag .unmetered → set_pre t r
+  /-- `set` returns such a caller part exactly. -/
+  set_unmetered_post : ∀ (t : ThreadId) (r r' : Res), 0 < r.gh.ac.frag .unmetered →
+    set_post t r r' → r' = r
   wait_wp_resource : ∀ {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}
     {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}, L.Fits (E.prim L) P U ok →
     P.cost = none → ∀ {p : Ptr}, p = E.W.ptr → ∀ (t : ThreadId) (g : γ), E.ph g = .out →
@@ -2237,15 +2258,33 @@ structure EventImpl (Tgt : Type) where
     P.WP t (wait p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
       E.Synced t m' ∧ ∃ r', wait_post t (L.part g) r' ∧ P.inv (upd G' t (L.setPart g r')) m')
       G m d
-  set_wp : ∀ {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}
+  set_wp_resource : ∀ {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}
     {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}, L.Fits (E.prim L) P U ok →
     P.cost = none → ∀ {p : Ptr}, p = E.W.ptr → ∀ (t : ThreadId) (g : γ), E.ph g = .out →
     (L.ph g = .out ∨ L.ph g = .gone) → E.sx g → ∀ (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat),
-    P.inv (upd G t g) m →
+    set_pre t (L.part g) → P.inv (upd G t g) m →
     P.WP t (set p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
-      P.inv (upd G' t (E.set g .sd)) m') G m d
+      ∃ r', set_post t (L.part g) r' ∧ P.inv (upd G' t (L.setPart (E.set g .sd) r')) m') G m d
 
 namespace EventImpl
+
+/-- The exact-part set rule for a caller part with a positive unmetered fragment: the
+implementation returns that part exactly (`set_unmetered_post`). -/
+theorem set_wp (I : EventImpl Tgt) {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}
+    {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
+    (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = E.W.ptr)
+    (t : ThreadId) (g : γ) (hg : E.ph g = .out) (hgo : L.ph g = .out ∨ L.ph g = .gone)
+    (hsx : E.sx g) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered) (hi : P.inv (upd G t g) m) :
+    P.WP t (I.set p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
+      P.inv (upd G' t (E.set g .sd)) m') G m d := by
+  refine WP.mono ?_ (I.set_wp_resource hE hcost hp t g hg hgo hsx io G m d
+    (I.set_unmetered_pre t (L.part g) hu) hi)
+  rintro _ G' m' d' ⟨hd, hc, hset, r', hr, hi'⟩
+  have he := I.set_unmetered_post t (L.part g) r' hu hr
+  subst r'
+  rw [FEvent.setPart_set_self hE] at hi'
+  exact ⟨hd, hc, hset, hi'⟩
 
 /-- The exact-part wait rule for a concrete Plain caller, derived from the implementation's
 actual endpoint entailments. Its intermediate deadline/stack resources remain genuine. -/

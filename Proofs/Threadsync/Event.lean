@@ -95,6 +95,20 @@ theorem resetEvent_set_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none
     (futexSet_wp hE hcost t g hgx hgo hsx G m d hi)))
   exact WP.pure' (WP.pure' h)
 
+/-- The set's resource contract: the caller's positive unmetered fragment pays each tick of the
+wake (std's macOS `Thread.Futex.wake` repeats on `EINTR`; the Linux wake ticks nowhere), and the
+set returns the caller's exact part. -/
+theorem resetEvent_set_wp_resource (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
+    {p : Ptr} (hp : p = E.W.ptr) (t : ThreadId) (g : γ) (hgx : E.ph g = .out)
+    (hgo : L.ph g = .out ∨ L.ph g = .gone) (hsx : E.sx g) (io : Io) (G : ThreadId → γ) (m : Mem)
+    (d : Nat) (_ : payUnmetered t (L.part g)) (hi : P.inv (upd G t g) m) :
+    P.WP t (Thread_ResetEvent_set p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      E.IsSet m' ∧ ∃ r', keepPart t (L.part g) r' ∧
+        P.inv (upd G' t (L.setPart (E.set g .sd) r')) m') G m d := by
+  refine WP.mono ?_ (resetEvent_set_wp hE hcost hp t g hgx hgo hsx io G m d hi)
+  rintro _ G' m' d' ⟨hd, hc, hs, hi'⟩
+  exact ⟨hd, hc, hs, L.part g, rfl, by rw [FEvent.setPart_set_self hE]; exact hi'⟩
+
 /-- A waiter's ghost value: `g` at the event's place `p`, with the part `r` (its deadline
 block). -/
 abbrev gD (L : FLock γ) (E : FEvent γ) (g : γ) (p : EPh) (r : Res) : γ := L.setPart (E.set g p) r
@@ -267,6 +281,10 @@ def resetEvent [Zig.Os.HasEnv] : EventImpl Tgt where
   wait_plain_pre _ _ := .inl
   wait_plain_post _ _ _ _ hr := hr
   wait_wp_resource := ResetEvent.resetEvent_wait_wp_resource
-  set_wp := ResetEvent.resetEvent_set_wp
+  set_pre := payUnmetered
+  set_post := keepPart
+  set_unmetered_pre _ _ hu := hu
+  set_unmetered_post _ _ _ _ hr := hr
+  set_wp_resource := ResetEvent.resetEvent_set_wp_resource
 
 end Threadsync

@@ -657,11 +657,12 @@ theorem wp_unlockT (hLc : L.c = mi.c) {p : Ptr} (hp : p = L.ptr) (io : Io) {t : 
   mi.unlock_wp fitsL rfl hp hLc t (gH rp rL { ph := .un }) rfl ⟨rfl, nofun⟩ io G m d hi hc
 
 theorem wp_setT {p : Ptr} (hp : p = EV.ptr) (io : Io) {t : ThreadId} {G : ThreadId → Gh} {m : Mem}
-    {d : Nat} {rp : Res} {fc : VClock} (hi : proto.inv (upd G t (gS rp fc)) m) :
+    {d : Nat} {rp : Res} {fc : VClock} (hpP : rp.Plain)
+    (hi : proto.inv (upd G t (gS rp fc)) m) :
     proto.WP t (ei.set p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       proto.inv (upd G' t (gE rp fc)) m') G m d :=
   WP.mono (fun _ _ _ _ ⟨hd, hc, hs, hi'⟩ => ⟨hd, hc, inv_end hi' hs⟩)
-    (ei.set_wp fitsE rfl hp t (gS rp fc) rfl (.inr rfl) ⟨rfl, rfl⟩ io G m d hi)
+    (ei.set_wp fitsE rfl hp t (gS rp fc) rfl (.inr rfl) ⟨rfl, rfl⟩ io G m d hpP.unmetered hi)
 
 end Sync
 
@@ -685,14 +686,14 @@ theorem wp_finRmw {σ : Type} {s : σ} {t : ThreadId} {G : ThreadId → Gh} {m :
 variable [Zig.Os.HasEnv]
 
 theorem finish_spec {t : ThreadId} (G : ThreadId → Gh) (m : Mem) (d : Nat) {rp : Res}
-    (hrp : ∀ l, rp.shared l = none)
+    (hpP : rp.Plain) (hrp : ∀ l, rp.shared l = none)
     (hi : proto.inv (upd G t (gO rp { ph := .un })) m) (hc : m.current = t) :
     proto.WP t (Thread_WaitGroup_finish bPtr) (fun _ G' m' _ => m'.current = t ∧
       ∃ g, proto.fin g ∧ proto.inv (upd G' t g) m') G m d := by
   unfold Thread_WaitGroup_finish
   -- the task's part at its end is `rp`, without read shares (`proto.fin`)
   fsym [WP.liftMem_pure (projI _ _) rfl, fitsL.wp_tick_plain, wp_finRmw,
-    debug_assert, wp_setT resetEvent rfl ⟨⟩]
+    debug_assert, wp_setT resetEvent rfl ⟨⟩ hpP]
   all_goals exact hrp _
 
 /-! ## A task -/
@@ -710,7 +711,7 @@ theorem task_spec {u : ThreadId} (G : ThreadId → Gh) (m : Mem) (d : Nat) {rp :
   fsym [WP.liftMem_pure (projI _ _) rfl, fitsL.wp_tick_plain, wp_lockT threadMutex rfl rfl ⟨⟩ hp,
     wp_unlockT threadMutex rfl rfl ⟨⟩, fitsL.wp_hold (g' := fun r => gH rp r { ph := .hl }),
     fitsL.wp_hold (g' := fun r => gH rp r { ph := .un }), U_hold, cnt1_le, cnt2_le, cnt_un_l,
-    cnt_un_r, cnt_hl, Nat.zero_add, Nat.add_zero, finish_spec]
+    cnt_un_r, cnt_hl, Nat.zero_add, Nat.add_zero, finish_spec (hpP := hp)]
 
 omit [Zig.Os.HasEnv] in
 /-- **A task's end** (`QKid`), for any ghost value at the protocol's end. -/

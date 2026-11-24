@@ -67,6 +67,19 @@ theorem ioEvent_set_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
     FEvent.wp_wake (g := E.set g .sw) hE,
     hE.lph, E.ph_set, E.set_set, ioEvent_of0, ioEvent_of1, ioEvent_of2]
 
+/-- The set's resource contract: `Io.Event.set` ticks nowhere (a store and a futex wake), so it
+admits every caller part and returns it exactly. -/
+theorem ioEvent_set_wp_resource (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
+    {p : Ptr} (hp : p = E.W.ptr) (t : ThreadId) (g : γ) (hgx : E.ph g = .out)
+    (hgo : L.ph g = .out ∨ L.ph g = .gone) (hsx : E.sx g) (io : Io) (G : ThreadId → γ) (m : Mem)
+    (d : Nat) (_ : anyPart t (L.part g)) (hi : P.inv (upd G t g) m) :
+    P.WP t (Io_Event_set p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
+      ∃ r', keepPart t (L.part g) r' ∧ P.inv (upd G' t (L.setPart (E.set g .sd) r')) m')
+      G m d := by
+  refine WP.mono ?_ (ioEvent_set_wp hE hcost hp t g hgx hgo hsx io G m d hi)
+  rintro _ G' m' d' ⟨hd, hc, hs, hi'⟩
+  exact ⟨hd, hc, hs, L.part g, rfl, by rw [FEvent.setPart_set_self hE]; exact hi'⟩
+
 /-- `waitUncancelable`'s loop invariant: `t` is a waiter at `w1`. -/
 def waitInv (P : Proto Tgt γ) (E : FEvent γ) (t : ThreadId) (g : γ) (D : Nat)
     (_ : Io_Event_waitUncancelableLocals) (G : ThreadId → γ) (m : Mem) (d : Nat) : Prop :=
@@ -163,6 +176,10 @@ def ioEvent : EventImpl Tgt where
   wait_plain_pre _ _ := payUnmetered_plain
   wait_plain_post _ _ _ _ hr := hr
   wait_wp_resource := ioEvent_wait_wp_resource
-  set_wp := ioEvent_set_wp
+  set_pre := anyPart
+  set_post := keepPart
+  set_unmetered_pre _ _ _ := trivial
+  set_unmetered_post _ _ _ _ hr := hr
+  set_wp_resource := ioEvent_set_wp_resource
 
 end Sync
