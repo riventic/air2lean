@@ -27,8 +27,8 @@ def stage(tmp, source, edits=None, drop=()):
     return out
 
 
-def translate(exe, air, registry=None, tmp=None):
-    argv = [exe, str(air), "-o", str(Path(tmp) / "Out.lean"), "--namespace", "T"]
+def translate(exe, air, registry=None, tmp=None, flags=()):
+    argv = [exe, str(air), "-o", str(Path(tmp) / "Out.lean"), "--namespace", "T", *flags]
     if registry is not None:
         path = Path(tempfile.mkstemp(dir=tmp, suffix=".json")[1])
         path.write_text(json.dumps(registry))
@@ -36,17 +36,91 @@ def translate(exe, air, registry=None, tmp=None):
     return subprocess.run(argv, capture_output=True, text=True, timeout=60)
 
 
-def rejects(exe, air, needle, registry=None, tmp=None):
-    result = translate(exe, air, registry, tmp)
+def rejects(exe, air, needle, registry=None, tmp=None, flags=()):
+    result = translate(exe, air, registry, tmp, flags)
     assert result.returncode == 1, (needle, result.returncode, result.stderr)
     assert needle in result.stderr, (needle, result.stderr)
 
 
-def diagnostics(exe, air):
-    result = subprocess.run([exe, "--diagnostics-json", str(air)], capture_output=True, text=True,
-                            timeout=60)
+def diagnostics(exe, air, flags=()):
+    result = subprocess.run([exe, "--diagnostics-json", str(air), *flags], capture_output=True,
+                            text=True, timeout=60)
     assert result.returncode == 1, result.stdout
     return json.loads(result.stdout)["diagnostics"]
+
+
+WEAK = ("--assume-weak-exports",)
+
+
+def export_table(air, records, version="0.16.0"):
+    """Write the compilation's export table (docs/air-json.md §Export table) beside `air`'s
+    files. A record is (symbol, linkage, function name or None)."""
+    exports = [{"name": name, "linkage": linkage, "visibility": "hidden",
+                "function": fn and {"module": "root", "name": fn, "cc": "x86_64_sysv"}}
+               for name, linkage, fn in records]
+    (air / "export-table.air2lean").write_text(json.dumps(
+        {"schema": 12, "zig_version": version, "exports": exports}))
+    return air
+
+
+def by_table(tmp, records, drop=(), keep_export=(), version="0.16.0"):
+    """The AIR set with `memset` and `strlen` defined through the export table only (as
+    `@export` defines a symbol): the functions' own `export` is removed."""
+    def strip(d):
+        del d["export"]
+    edits = {stem: strip for stem in ("libc_ref.memset", "libc_ref.strlen") if stem not in keep_export}
+    return export_table(stage(tmp, AIR, edits, drop), records, version)
+
+
+def export_table_cases(exe, tmp):
+    """`@export` definitions (the export table) and the weak-definition premise EXT-07."""
+    strong = [("memset", "strong", "libc_ref.memset"), ("strlen", "strong", "libc_ref.strlen")]
+    weak = [("memset", "weak", "libc_ref.memset"), ("strlen", "weak", "libc_ref.strlen")]
+    # Without the records the symbols have no definition.
+    rejects(exe, by_table(tmp, []), "extern function 'memset' has no definition", tmp=tmp)
+    # A strong `@export` binds like an `export fn`; so does a record that repeats one.
+    assert translate(exe, by_table(tmp, strong), tmp=tmp).returncode == 0
+    assert translate(exe, by_table(tmp, strong, keep_export=("libc_ref.memset", "libc_ref.strlen")),
+                     tmp=tmp).returncode == 0
+    # A weak definition binds only under EXT-07, which the header then records.
+    weak_air = by_table(tmp, weak)
+    rejects(exe, weak_air, "extern function 'memset' has only the weak definition 'libc_ref.memset'", tmp=tmp)
+    codes = [(d["code"], d["function"]) for d in diagnostics(exe, weak_air)]
+    assert ("CALLEE_EXTERN_UNBOUND", "extern_calls.fillSum") in codes, codes
+    result = translate(exe, weak_air, tmp=tmp, flags=WEAK)
+    assert result.returncode == 0, result.stderr
+    assert '"admission":"weak-exports"' in (Path(tmp) / "Out.lean").read_text().replace(" ", "")
+    result = subprocess.run([exe, "--diagnostics-json", str(weak_air), *WEAK], capture_output=True,
+                            text=True, timeout=60)
+    assert result.returncode == 0 and json.loads(result.stdout)["status"] == "checked", result.stdout
+    # The premise does not bind what is not one function with AIR: two definitions (a weak one
+    # beside the `export fn`, or two weak ones), a symbol that is not a function, a function
+    # without AIR in the set.
+    both = by_table(tmp, [("memset", "weak", "libc_ref.strlen")] + strong[1:], keep_export=("libc_ref.memset",))
+    rejects(exe, both, "has several definitions ('libc_ref.memset', 'libc_ref.strlen') (CALLEE_AMBIGUOUS)",
+            tmp=tmp, flags=WEAK)
+    rejects(exe, by_table(tmp, weak + [("memset", "weak", "libc_ref.strlen")]),
+            "has several definitions", tmp=tmp, flags=WEAK)
+    rejects(exe, by_table(tmp, [("memset", "strong", None)] + weak[1:]),
+            "is defined by the compilation, but not as a function", tmp=tmp, flags=WEAK)
+    rejects(exe, by_table(tmp, weak, drop={"libc_ref.memset"}),
+            "is defined by 'libc_ref.memset', which has no AIR in the set", tmp=tmp, flags=WEAK)
+    # The calling convention and the signature are checked as for an `export fn`.
+    other_cc = by_table(tmp, weak)
+    table = json.loads((other_cc / "export-table.air2lean").read_text())
+    table["exports"][0]["function"]["cc"] = "x86_64_win"
+    (other_cc / "export-table.air2lean").write_text(json.dumps(table))
+    rejects(exe, other_cc, "is declared with calling convention", tmp=tmp, flags=WEAK)
+    # A variadic extern stays outside the subset.
+    variadic = stage(tmp, AIR, {"extern_calls.fillSum": lambda d: first_extern(d).update(varargs=True),
+                                "libc_ref.memset": lambda d: d.pop("export")})
+    rejects(exe, export_table(variadic, weak), "extern function 'memset' is variadic", tmp=tmp, flags=WEAK)
+    # The table is the compilation's: another Zig version's, or a linkage the translator does
+    # not know, is rejected.
+    rejects(exe, by_table(tmp, weak, version="0.17.1"), "export-table.air2lean is of Zig 0.17.1",
+            tmp=tmp, flags=WEAK)
+    rejects(exe, by_table(tmp, [("memset", "link_once", "libc_ref.memset")] + weak[1:]),
+            "has the unknown linkage 'link_once'", tmp=tmp, flags=WEAK)
 
 
 def memset_call(data):
@@ -87,7 +161,7 @@ def main(exe):
 
         # A symbol defined twice in the AIR set is ambiguous.
         twice = stage(tmp, AIR, {"libc_ref.strlen": lambda d: d["export"].update(name="memset")})
-        rejects(exe, twice, "is defined by several functions (libc_ref.memset, libc_ref.strlen)", tmp=tmp)
+        rejects(exe, twice, "has several definitions ('libc_ref.memset', 'libc_ref.strlen')", tmp=tmp)
         # ... but only for a call that needs the symbol.
         no_call = stage(tmp, AIR, {"libc_ref.strlen": lambda d: d["export"].update(name="memset")},
                         drop={"extern_calls.fillSum", "extern_calls.greetLen"})
@@ -148,6 +222,8 @@ def main(exe):
                     "effects", "dependencies"):
             entry[key] = REGISTRY["models"][0][key]
         rejects(exe, AIR, "is both defined by 'libc_ref.strlen' and bound to registry model", template, tmp)
+
+        export_table_cases(exe, tmp)
     print("extern-calls test_cli: ok")
 
 

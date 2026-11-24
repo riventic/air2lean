@@ -600,4 +600,22 @@ def withErrorTable (f : Func) : Option Raw.ErrorTableFile → Except String Func
         errors, the AIR file of Zig {f.dialect.version} with {f.dialect.errorSetBits}-bit errors"
     pure { f with errorTable := some t.names }
 
+/-- The exporter's export records beside the AIR files (`export-table.air2lean`), if any. Read
+by the translator and by `--diagnostics-json` alike. -/
+def readExportTable (dir : System.FilePath) : IO (Option Raw.ExportTableFile) := do
+  let path := dir / Raw.exportTableFileName
+  unless ← path.pathExists do return none
+  match Raw.parseExportTable (← StrictJson.readFile path) with
+  | .ok t => pure (some t)
+  | .error e => throw (IO.userError s!"{path}: {e}")
+
+/-- The table's records for the program `funcs`, which must be of its Zig version. -/
+def exportRecordsFor (funcs : Array Func) : Option Raw.ExportTableFile → Except String (Array ExportRecord)
+  | none => pure #[]
+  | some t => do
+    if let some f := funcs.find? (toString ·.dialect.version != t.zigVersion) then
+      throw s!"{f.name}: {Raw.exportTableFileName} is of Zig {t.zigVersion}, the AIR file of Zig \
+        {f.dialect.version}"
+    pure t.records
+
 end Air2Lean

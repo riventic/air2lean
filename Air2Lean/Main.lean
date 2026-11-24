@@ -45,8 +45,8 @@ def runtime : Revision.Translator := runtime_revision%
 
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
-    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1|abi64-be-v1] [--allow-unqualified-build-mode] [--assume-no-libc] [--assume-asm-cpu-features] [--model-registry <json>] [--model-registry-template] [--proof-api] [--assume-no-lb] [--timing-json <json>] [--source-map-json <json>] [--split-modules <Module>] [--device-contract <json>] [--air-certificate <lean> --air-certificate-import <Module>] [--canon-certificate] [--allocator-model std|translated]\n" ++
-    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--allow-unqualified-build-mode] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--assume-no-lb] [--device-contract <json>] [--allocator-model std|translated]\n" ++
+    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1|abi64-be-v1] [--allow-unqualified-build-mode] [--assume-no-libc] [--assume-asm-cpu-features] [--assume-weak-exports] [--model-registry <json>] [--model-registry-template] [--proof-api] [--assume-no-lb] [--timing-json <json>] [--source-map-json <json>] [--split-modules <Module>] [--device-contract <json>] [--air-certificate <lean> --air-certificate-import <Module>] [--canon-certificate] [--allocator-model std|translated]\n" ++
+    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--allow-unqualified-build-mode] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--assume-no-lb] [--assume-weak-exports] [--device-contract <json>] [--allocator-model std|translated]\n" ++
     "       air2lean --print-op-table"
 
 def help : String :=
@@ -66,6 +66,8 @@ def help : String :=
   "                               libm routines where c_longdouble is f128 (recorded in the header).\n" ++
   "  --assume-asm-cpu-features    Admit allowlisted asm whose CPU feature (lzcnt, popcnt, rdrnd) the profile\n" ++
   "                               lacks: the running CPU has it (premise ASM-09; recorded in the header).\n" ++
+  "  --assume-weak-exports        Bind an extern call to the program's weak definition of the symbol: the\n" ++
+  "                               image links no other definition (premise EXT-07; recorded in the header).\n" ++
   "  --model-registry <json>      Bind external calls to user models; see docs/external-models.md.\n" ++
   "  --model-registry-template    Write a registry template to -o instead of Lean.\n" ++
   "  --proof-api                  Emit stable model/unfold/loop-step lemmas; see docs/generated-code.md.\n" ++
@@ -116,6 +118,9 @@ structure Args where
   /-- `--assume-asm-cpu-features`: skip `checkAsmCpuFeatures` (premise ASM-09); recorded in the
   generated header. -/
   assumeAsmCpu : Bool := false
+  /-- `--assume-weak-exports`: `resolveExterns` binds an extern call to a weak definition
+  (premise EXT-07); recorded in the generated header. -/
+  assumeWeakExports : Bool := false
   /-- `--timing-json`: per-phase timing report path (`docs/perf-budgets.md`). -/
   timingJson : Option String := none
   /-- `--source-map-json`: per-function source map sidecar (`docs/stable-generation.md`). -/
@@ -189,6 +194,9 @@ private partial def parseArgsGo (args : List String)
   | "--assume-asm-cpu-features" :: rest =>
     (parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate).map
       (fun a => { a with assumeAsmCpu := true })
+  | "--assume-weak-exports" :: rest =>
+    (parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate).map
+      (fun a => { a with assumeWeakExports := true })
   | "--model-registry-template" :: rest => parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy true
   | "--timing-json" :: v :: rest => do
     let a ← parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate
@@ -390,6 +398,7 @@ private def run (args : List String) : IO UInt32 := do
         try StrictJson.readFile path catch e =>
           throw (IO.userError s!"reading AIR file {path}: {e}")
       let errorTable ← readErrorTable a.airDir
+      let exportTable ← readExportTable a.airDir
       let (models, interfaces) ← match a.modelRegistry with
         | none => pure (#[], #[])
         | some path =>
@@ -461,8 +470,10 @@ private def run (args : List String) : IO UInt32 := do
       let (checked, programNs) ← timed fun _ => (do
         match err with | some e => throw e | none => pure ()
         -- A template lists the extern calls that bind to no definition as model symbols.
-        if a.registryTemplate && !a.canonCertificate then return (← resolveExternsCollect funcs models).1
-        let resolved ← resolveExterns funcs models
+        let exports ← exportRecordsFor funcs exportTable
+        if a.registryTemplate && !a.canonCertificate then
+          return (← resolveExternsCollect funcs models exports a.assumeWeakExports).1
+        let resolved ← resolveExterns funcs models exports a.assumeWeakExports
         -- docs/interfaces.md: the open function types, before every whole-program analysis
         -- (a function that calls the environment is concurrent).
         let openTys ← ModelRegistry.openFnTypes interfaces resolved
@@ -507,7 +518,8 @@ private def run (args : List String) : IO UInt32 := do
             -- An admission opt-in is part of the claim scope: the header records it.
             let optIns := (if a.allowUnqualified then ["unqualified-build-mode"] else []) ++
               (if a.assumeNoLibc then ["no-libc"] else []) ++
-              (if a.assumeAsmCpu then ["asm-cpu-features"] else [])
+              (if a.assumeAsmCpu then ["asm-cpu-features"] else []) ++
+              (if a.assumeWeakExports then ["weak-exports"] else [])
             let admission := if optIns.isEmpty then [] else
               [("admission", Lean.Json.str (",".intercalate optIns))]
             let admission := admission ++ if a.allocatorModel == .translated then
