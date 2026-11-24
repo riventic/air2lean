@@ -126,7 +126,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Opaque math and floats | [MTH-01](#mth-01) [MTH-02](#mth-02) [MTH-03](#mth-03) [MTH-04](#mth-04) [MTH-05](#mth-05) |
 | Inline assembly | [ASM-01](#asm-01) [ASM-02](#asm-02) [ASM-03](#asm-03) [ASM-04](#asm-04) [ASM-05](#asm-05) [ASM-06](#asm-06) [ASM-09](#asm-09) |
 | Core runtime semantics | [SEM-01](#sem-01) [SEM-02](#sem-02) [SEM-03](#sem-03) [SEM-04](#sem-04) [SEM-06](#sem-06) [SEM-07](#sem-07) |
-| External models | [EXT-01](#ext-01) [EXT-02](#ext-02) [EXT-03](#ext-03) [EXT-04](#ext-04) [EXT-05](#ext-05) [EXT-06](#ext-06) |
+| External models | [EXT-01](#ext-01) [EXT-02](#ext-02) [EXT-03](#ext-03) [EXT-04](#ext-04) [EXT-05](#ext-05) [EXT-06](#ext-06) [EXT-07](#ext-07) |
 | Hand-written std models (transitional) | [STD-01](#std-01) [STD-02](#std-02) [STD-03](#std-03) [STD-05](#std-05) [STD-06](#std-06) [STD-08](#std-08) [STD-09](#std-09) [STD-10](#std-10) |
 | OS page mapping | [OSM-01](#osm-01) |
 | OS thread primitives | [OSF-01](#osf-01) [OSF-02](#osf-02) [OST-01](#ost-01) [OST-02](#ost-02) [OST-03](#ost-03) [OSY-01](#osy-01) [OSK-01](#osk-01) [OSK-02](#osk-02) [OSG-01](#osg-01) [OSL-01](#osl-01) [OSM-02](#osm-02) |
@@ -1040,9 +1040,14 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   linker symbol and declared library only. Bound to a registry model, the model's contract is
   assumed to describe the real symbol that the target's linker resolves (an OS or libc
   primitive, for example `mmap` or `abs`); each such binding names this or a more specific
-  premise. Bound to an `export fn` of the translated program, the program is assumed to be
-  linked as one image in which that definition is the symbol's strong definition. Variadic
-  and `noreturn` externs, `@export` aliases and weak definitions are outside the subset.
+  premise. Bound to a function of the translated program that defines the symbol with strong
+  linkage (an `export fn`, or an `@export` record of the compilation's export table), the
+  program is assumed to be linked as one image in which that definition is the symbol's
+  strong definition. A weak definition binds only under [EXT-07](#ext-07). Variadic and
+  `noreturn` externs, and a symbol with several definitions in the program, are outside the
+  subset. The call is then a direct call of the definition, so the declared parameter and
+  result types must be the definition's: a declaration that only agrees with it at the C ABI
+  (`[*c]const u8` for a `[*:0]const c_char` parameter) is rejected.
 - Derived from: a `--model-registry` entry with an `extern` object; an `externs` entry bound by
   `Air2Lean/Check.lean` `resolveExterns`.
 - Sources: [air-json.md](air-json.md#extern-calls), [external-models.md](external-models.md#extern-functions).
@@ -1097,6 +1102,25 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   [architecture-audit/memory-model.md](architecture-audit/memory-model.md) (MM-20),
   [architecture-audit/structure-2026-10-13.md](architecture-audit/structure-2026-10-13.md) (#7),
   `tests/roadmap/global-init`.
+
+<a id="ext-07"></a>
+### EXT-07 — A weak definition is the symbol's definition in the image
+
+- Kind: environment.
+- Statement: An extern call bound to a function of the translated program that defines the
+  symbol with weak linkage (`@export(&f, .{ .name = …, .linkage = .weak })`: every symbol of
+  Zig's `lib/c.zig` and `compiler_rt`) runs that function: the linked image contains no other
+  definition of the symbol. A static linker replaces a weak definition by a strong one from any
+  other object or archive member it links, and a dynamic linker may interpose one; the model
+  would then run code that the image does not. The translated program itself holds exactly one
+  definition (two, weak or strong, are rejected as `CALLEE_AMBIGUOUS`), so the premise is about
+  what is linked from outside it: other objects, C sources, archives and shared libraries. The
+  translator binds a weak definition only with `--assume-weak-exports`, and the header records
+  the admission `weak-exports`.
+- Derived from: a reached generated module whose header records the admission `weak-exports`
+  (`assurance/premises.json` `admissions`).
+- Sources: [air-json.md](air-json.md#export-table), [c-frontend.md](c-frontend.md#libc-boundary),
+  `Air2Lean/Check.lean` (`resolveExternsCollect`), `tests/roadmap/extern-calls`.
 
 ## Hand-written std models (transitional)
 

@@ -125,7 +125,7 @@ def fresh_linux_profile(doc, expected_version):
 
 
 # In the translator's recording order (`Air2Lean/Main.lean` `optIns`); the header lists a subset.
-ADMISSION_ORDER = ["unqualified-build-mode", "no-libc", "asm-cpu-features"]
+ADMISSION_ORDER = ["unqualified-build-mode", "no-libc", "asm-cpu-features", "weak-exports"]
 
 
 def valid_admission(value):
@@ -145,7 +145,8 @@ def split_generated(data, required=False):
     metadata = parse_json(first[len(PREFIX):].decode("utf-8"))
     # `admission` is present only when the translator was given an admission opt-in, in this
     # order: `--allow-unqualified-build-mode` (docs/build-modes.md), `--assume-no-libc`
-    # (docs/floats.md §Targets), `--assume-asm-cpu-features` (premise ASM-09).
+    # (docs/floats.md §Targets), `--assume-asm-cpu-features` (premise ASM-09),
+    # `--assume-weak-exports` (premise EXT-07).
     # `allocator_model` is present only under `--allocator-model translated`
     # (docs/allocator-model.md): its trust base is the OS boundary (OSM-01).
     if (not isinstance(metadata, dict) or

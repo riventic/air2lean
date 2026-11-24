@@ -87,7 +87,20 @@ class Closure(unittest.TestCase):
                "body": [{"tag": "call", "callee": {"func": "mem.zeroes__func_0"}, "args": [{"func": "c_f.cb"}]},
                         {"tag": "call", "callee": {"extern": "strlen"}}],
                "globals": [{"name": "c_f.table", "init": {"elems": [{"func": "c_f.other"}]}}]}
-        self.assertEqual(run.function_refs(doc), {"mem.zeroes__func_0", "c_f.cb", "c_f.other"})
+        self.assertEqual(run.function_refs(doc, {}), {"mem.zeroes__func_0", "c_f.cb", "c_f.other"})
+        # An extern symbol references the function of the compilation that defines it.
+        self.assertEqual(run.function_refs(doc, {"strlen": {"compiler_rt.strlen"}, "abs": {"c.stdlib.abs"}}),
+                         {"mem.zeroes__func_0", "c_f.cb", "c_f.other", "compiler_rt.strlen"})
+
+    def test_symbol_definitions_are_the_export_table_functions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            air = Path(tmp)
+            self.assertEqual(run.symbol_definitions(air), {})
+            (air / run.EXPORT_TABLE).write_text(json.dumps({"schema": 12, "zig_version": "0.17.1", "exports": [
+                {"name": "abs", "linkage": "weak", "visibility": "hidden",
+                 "function": {"module": "zigc", "name": "c.stdlib.abs", "cc": "x86_64_sysv"}},
+                {"name": "environ", "linkage": "weak", "visibility": "default", "function": None}]}))
+            self.assertEqual(run.symbol_definitions(air), {"abs": {"c.stdlib.abs"}})
 
     def test_module_name_is_not_a_std_file_name(self):
         self.assertEqual(run.module_name("enums"), "c_enums")
