@@ -76,7 +76,7 @@ theorem Thr.allJoined {Y : ThreadId → Ph} {ts : Array ThreadRec} (h : Thr Y ts
   · exact ⟨ht0, hs, h1⟩
 
 /-- After `main`'s join every thread is joined. -/
-theorem joinedAll_done {G : ThreadId → Gh} {m : Mem} {g : Gh} (hg : g.2.x = .done)
+theorem inv_joinedAll {G : ThreadId → Gh} {m : Mem} {g : Gh} (hg : g.2.x = .done)
     (hi : (proto wOf).inv (upd G 0 g) m) : joinedAll 0 m := by
   obtain ⟨h0, hs2, h1⟩ := (thr_of hi).allJoined
     (by show (upd G 0 g 0).2.x = _; rw [upd_self]; exact hg)
@@ -98,7 +98,7 @@ theorem wp_free {G : ThreadId → Gh} {m : Mem} {n : Nat} {rp : Res}
     (proto wOf).WP 0 (ConcM.liftMem (free cPtr) : ConcM Tgt Unit) Q G m n := by
   obtain ⟨blk, hblk, hl, -, hk⟩ := FRw.Base.inv_blk (W := W) (E := E) hi
   have hblk' : m.blocks[0]? = some blk := hblk
-  have hj : joinedAll 0 m := joinedAll_done rfl hi
+  have hj : joinedAll 0 m := inv_joinedAll rfl hi
   obtain ⟨-, hs2, h1⟩ := (thr_of hi).allJoined
     (by show (upd G 0 (gO rp .done) 0).2.x = _; rw [upd_self]; rfl)
   have hcs : m.clocks.size = m.threads.size := by
