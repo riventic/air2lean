@@ -10,8 +10,8 @@ import ZigLean.Conc.Base.Threads
 `FOwned own rO m` (`docs/sep-threads.md` §The threads' parts): thread `u`'s part is the resource
 `own u`; the parts compose (`sepN`) and hold in `m` next to the protocol's rest `rO` (resources no
 thread holds: a free lock's resource, shared atomic words, ledgers the protocol keeps); each
-thread's clock owns its part's bytes. It replaced the legacy `Owned` (deleted,
-`docs/legacy-retirement.md`); a proof keeps it in its protocol invariant.
+thread's clock owns its part's bytes. It replaces the legacy `Owned` (`ZigLean/Conc/Csl.lean`)
+for the full-state logic; a proof keeps it in its protocol invariant, as before.
 
 - **Message coverage** (`Mem.MsgCov`, `ZigLean/Conc/Clock.lean`) is part of the memory
   invariant (`FOwned.conc`): every step of a thread keeps it (`FStepIn.cov`), and the scheduler's

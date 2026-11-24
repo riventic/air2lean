@@ -3,9 +3,10 @@ import ZigLean.Conc.Clock
 /-!
 # Lock phases and clock/thread facts
 
-Pure vocabulary of the full-state lock logic (`ZigLean/Sep/Full/LockWord.lean`): a thread's place
+Pure vocabulary shared by the retiring lock rules and the full-state logic: a thread's place
 in lock code (`LPh`), clocks that happened before every or some thread (`AllLe`, `SomeLe`),
-array lookup facts, and thread fork/join bookkeeping.
+array lookup facts, and thread fork/join bookkeeping. The legacy atomic-location transport
+relation remains in `ZigLean.Conc.LockBase` until its `FStepIn`/`RestStep` retirement.
 -/
 
 namespace Zig

@@ -48,7 +48,7 @@ open Zig Zig.Conc Zig.Conc.Proto Zig.Full Zig.Full.FAssn Iogroup
 
 namespace Iogroup.GroupCounter
 
--- Unification must not unfold `WP` into the program (`docs/proofs.md`, "A lock that owns a resource").
+-- Unification must not unfold `WP` into the program (as in `Proofs/Sync/RwLock.lean`).
 attribute [local irreducible] Proto.WP
 
 /-- Where a thread is, outside the lock's code. -/

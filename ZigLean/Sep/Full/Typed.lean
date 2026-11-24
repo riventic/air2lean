@@ -5,7 +5,7 @@ import ZigLean.Sep.Full.AutoThread
 /-!
 # Typed values in the full-state logic: bytes, fields, payloads (Plan A library lane A1)
 
-`pts q a v` (`ZigLean/Sep/Base/Pts.lean`) owns the bytes of a typed value `v : T` at `q`, for any
+`pts q a v` (`ZigLean/Sep/Triple.lean`) owns the bytes of a typed value `v : T` at `q`, for any
 encoding `Enc T`. A part of the value is read or written through a pointer `q.add o` with
 another type `U` (a struct field, the payload of an error union or of an optional, the active
 field of a union): such an access sees only the bytes `[o, o + Enc.size U)`. Here:

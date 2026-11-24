@@ -19,7 +19,7 @@ open Zig Zig.Conc Zig.Full Zig.Conc.Proto
 
 namespace Sync
 
--- Unification must not unfold `WP` into the program (`docs/proofs.md`, "A lock that owns a resource").
+-- Unification must not unfold `WP` into the program (as in `Proofs/Sync/RwLock.lean`).
 attribute [local irreducible] Proto.WP
 
 /-! ## The state's values

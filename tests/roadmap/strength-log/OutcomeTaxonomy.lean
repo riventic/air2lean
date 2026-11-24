@@ -9,8 +9,8 @@ precondition. The legacy failure statements did not elaborate once a partial tri
 `.stackOverflow` (STK-01); they carry `e ≠ .stackOverflow` here.
 
 Each statement is the legacy `TotalTripleIn Mem.FSeqPlain P c Q` (`ZigLean/Sep/Total.lean`) or
-`Triple P c Q` (`ZigLean/Sep/Triple.lean`, last present at revision a1fe81f8a) with its definition
-unfolded, word for word, so the log does not use the legacy layer.
+`Triple P c Q` (`ZigLean/Sep/Triple.lean`) with its definition unfolded, word for word, so the log
+does not use the legacy layer.
 -/
 
 open Zig Zig.Full Zig.Full.FAssn Zig.Assn OutcomeTaxonomy

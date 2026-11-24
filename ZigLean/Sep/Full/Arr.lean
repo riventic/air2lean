@@ -3,7 +3,7 @@ import ZigLean.Sep.Full.Region
 /-!
 # Arrays in the full-state logic (`docs/sep-full-state.md`, Plan A library lane A1)
 
-`arr p vs` (`ZigLean/Sep/Base/Pts.lean`) owns the items `vs` at `p`. Here:
+`arr p vs` (`ZigLean/Sep/Triple.lean`) owns the items `vs` at `p`. Here:
 
 * **Assertion lemmas**: `arr_split` divides an array at a boundary, `arr_focus` exposes one
   item as `pts`, `arr_append_of_heap` and `arr_reassemble` join parts backed by one memory

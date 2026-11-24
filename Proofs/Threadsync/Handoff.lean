@@ -31,7 +31,7 @@ namespace Threadsync.HO
 -- hold for every OS environment.
 variable [Zig.Os.HasEnv]
 
--- Unification must not unfold `WP` into the program (`docs/proofs.md`, "A lock that owns a resource").
+-- Unification must not unfold `WP` into the program (as in `Proofs/Sync/RwLock.lean`).
 attribute [local irreducible] Proto.WP
 
 /-- The `Box`'s layout (module doc); the mutex's contended value is the OS's (`mutexC`). -/
