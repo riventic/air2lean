@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 183 rows, 76 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 183 rows, 75 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -28,7 +28,6 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [case-family-enrollment](#row-case-family-enrollment) | Remove transitional golden case-family enrollment markers | Task23; coordinator decision 6258258831 | `examples/threadsync/all-cases`, `examples/sync/all-cases` | When the last golden family is enrolled, remove every all-cases marker and the marker/history ratchet, derive all case families unconditionally from the full golden enumeration, and retire when_defined with its remaining users. Preserve complete output/import coverage and exact retranslation checks. |
 | [3](#row-3) | ruleConcl? recognize generic FLogic.T L … rules (FAllocSpec generic in partial/total) | coordinator for D2/allocator | - | - |
 | [7](#row-7) | document/plan rule preconditions ⟪φ⟫ from context facts | one-logic-tactics | - | - |
-| [9](#row-9) | engine support replacing arena_* macros, within (planner rule), unroll_solo (CTriple-backend rule) | arena lane | - | - |
 | [13](#row-13) | optPayload | one-logic-tactics (Lists.sum) | - | - |
 | [16](#row-16) | Keep path conditions | one-logic-vc | - | - |
 | [17](#row-17) | An undecided side condition φ is split by byCases | one-logic-vc | - | - |
@@ -108,6 +107,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [5](#row-5) | intCast step rule (a.toNat < 2^n → r.toNat = a.toNat) | DONE by one-logic-tactics PR2 (`@[fsym] intCast_step` added to AutoRules.lean after `divTrunc_step`; heads-up for merges) |
 | [6](#row-6) | fsym_arith: toNat / width-change normal forms | READY #237 (arith lane, cd5d17f1): both pass; AutoArith.lean normal forms, intCast_step for every signedness |
 | [8](#row-8) | TLogic record so fsym drives FTTriple/FTTotalTriple (no FTotalTriple rules in TLogic goals) | open |
+| [9](#row-9) | engine support replacing arena_* macros, within (planner rule), unroll_solo (CTriple-backend rule) | arena_* macros gone (#388); `unroll_solo` deleted (L16); the `within` macro is deleted (branch claude/legacy-tactics): its six uses (AllocArena/Core, AllocArena/Reset, AllocFba/Full) are `fsym_entail` on the `Within X P` goal (9g), and its tactic and tactic-use entries left proof-framework.json |
 | [9a](#row-9a) | Provider backtracking on arithmetic failure | READY #239 |
 | [9b](#row-9b) | Pair facts of atoms | open |
 | [9c](#row-9c) | Bool facts to constructor equations | open |
@@ -370,13 +370,15 @@ Request: TLogic record so fsym drives FTTriple/FTTotalTriple (no FTotalTriple ru
 <a id="row-9"></a>
 ### #9 engine support replacing arena_* macros, within (planner rule), unroll_solo (CTriple-backend rule)
 
-Status: **open**. Requester: arena lane.
+Status: **closed**. Requester: arena lane.
 
-Note: umbrella of 9a-9h; closes with 9h
+Note: umbrella of 9a-9h; all closed
 
-Progress: arena_* macros gone (#388); `unroll_solo` deleted (L16). Open until 9h closes and the `within` macro, whose fsym_entail replacement 9g landed, has no uses left (proof-framework.json tactic_uses)
+Progress: arena_* macros gone (#388); `unroll_solo` deleted (L16); the `within` macro is deleted (branch claude/legacy-tactics): its six uses (AllocArena/Core, AllocArena/Reset, AllocFba/Full) are `fsym_entail` on the `Within X P` goal (9g), and its tactic and tactic-use entries left proof-framework.json
 
 Request: engine support replacing arena_* macros, `within` (planner rule), `unroll_solo` (CTriple-backend rule)
+
+Deletion plan: Done: the `within` syntax and its macro_rules (ZigLean/Sep/Full/Extent.lean) are deleted with their last use.
 
 <a id="row-9a"></a>
 ### #9a Provider backtracking on arithmetic failure
