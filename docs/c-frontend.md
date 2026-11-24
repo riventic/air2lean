@@ -11,8 +11,9 @@ libc boundary, and a phased plan. The harness is `tests/roadmap/c-frontend/` (`c
 ```
 f.c ──zig translate-c──▶ c_f.zig ──patched Zig 0.17.1 (AIR only)──▶ AIR JSON ──air2lean──▶ Gen.lean ──▶ proofs
         (stock 0.17.1,             (build-obj -fno-emit-bin -OReleaseSafe          (--allocator-model translated,
-         -target x86_64-linux-      -target x86_64-linux -mcpu=baseline,             --diagnostics-json, then
-         musl -lc)                  ZIG_AIR_JSON_FILTER = the closure of `c_f.`)      emission, Lean elaboration)
+         -target x86_64-linux-      -target x86_64-linux-musl -mcpu=baseline -lc,    --assume-weak-exports,
+         musl -lc)                  Zig's libc as the module `zigc`,                 --diagnostics-json, then
+                                    ZIG_AIR_JSON_FILTER = the closure of `c_f.`)      emission, Lean elaboration)
 ```
 
 * **translate-c** (Zig 0.17.1) is the Aro-based translator in `lib/compiler/translate-c/`,
@@ -38,18 +39,30 @@ f.c ──zig translate-c──▶ c_f.zig ──patched Zig 0.17.1 (AIR only)�
   (`?*anyopaque` → `[*c]T`), which it checks to be free of error storage.
 * Non-`static` C functions become `pub export fn`; `static` ones become `pub fn` with
   `callconv(.c)`. The harness exports every function reachable from `entry`.
+* The AIR is exported from the compilation that `zig build-exe -target x86_64-linux-musl -lc`
+  makes of the translated module. For a static musl target that compilation holds Zig's libc
+  (`lib/c.zig`) as its module `zigc` (`src/Compilation.zig`, `zigc_strat == .zcu`), built with
+  the program's own settings; the harness names the same module on the command line
+  (`--dep zigc -Mroot=c_f.zig -fno-stack-check -fno-stack-protector -fno-builtin
+  -Mzigc=<lib>/c.zig`), since the AIR-only compiler builds objects.
 * libc functions are `pub extern fn` declarations. They are the libc boundary below: the
   translator binds an extern call by its linker symbol only ([EXT-03](premises.md#ext-03),
-  [air-json.md](air-json.md#extern-calls)): to a trusted base model with a named premise, to a
-  translated definition in the AIR set, or it rejects the program with
-  `CALLEE_EXTERN_UNBOUND`, naming the symbol.
+  [air-json.md](air-json.md#extern-calls)): to a trusted base model with a named premise, to
+  the function of the AIR set that defines the symbol, or it rejects the program with
+  `CALLEE_EXTERN_UNBOUND`, naming the symbol. The definitions of Zig's libc are weak
+  `@export`s: the exporter's [export table](air-json.md#export-table) names them, the export
+  closure follows a called symbol to its defining function, and the translator binds it under
+  `--assume-weak-exports` ([EXT-07](premises.md#ext-07): the image links no other definition
+  of the symbol), which the generated header records.
 
 ### Trust statement
 
 > A theorem about `Gen.lean` produced from `f.c` is a theorem about the Zig program that
 > stock `zig translate-c -target x86_64-linux-musl -lc f.c` (Zig 0.17.1) emits, as that
-> Zig program is compiled by Zig 0.17.1 for x86_64-linux in ReleaseSafe and modelled by
-> air2lean under its existing claims ([claim-strength.md](claim-strength.md)). It is not a
+> Zig program is compiled by Zig 0.17.1 for x86_64-linux-musl with libc linked, in ReleaseSafe,
+> and modelled by air2lean under its existing claims ([claim-strength.md](claim-strength.md)).
+> A libc function that the program calls and Zig's libc defines in Zig is part of that
+> program, under premise EXT-07 (the image links no other definition of its symbol). It is not a
 > claim about `f.c` under ISO C or as compiled by gcc or clang. translate-c, the musl headers
 > it reads, the Zig front end up to AIR and the patched AIR exporter are in the trusted base.
 > Where translate-c's Zig is stricter than C (a ReleaseSafe panic on signed overflow, on a

@@ -4,6 +4,7 @@
 import copy
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -50,6 +51,37 @@ def diagnostics(exe, air, flags=()):
 
 
 WEAK = ("--assume-weak-exports",)
+# weak_exports.zig as the patched Zig 0.17.1 exports it: the function files and the
+# compilation's export table (the exporter's own record of the two `@export` symbols).
+WEAK_AIR = HERE / "air" / "0.17.1-weak"
+
+
+def exporter_table_cases(exe, tmp):
+    """The export table that the exporter writes (not a hand-made one)."""
+    table = json.loads((WEAK_AIR / "export-table.air2lean").read_text())
+    records = {r["name"]: (r["linkage"], r["function"] and r["function"]["name"]) for r in table["exports"]}
+    assert records == {"weak_clamp_add": ("weak", "weak_exports.clampAdd"),
+                       "strong_twice": ("strong", "weak_exports.twice"),
+                       "viaWeak": ("strong", "weak_exports.viaWeak"),
+                       "viaStrong": ("strong", "weak_exports.viaStrong")}, records
+
+    def staged(drop=()):
+        out = stage(tmp, WEAK_AIR, drop=drop)
+        shutil.copyfile(WEAK_AIR / "export-table.air2lean", out / "export-table.air2lean")
+        return out
+    # The weak definition binds under EXT-07 only; the strong `@export` needs no premise.
+    rejects(exe, staged(), "extern function 'weak_clamp_add' has only the weak definition "
+            "'weak_exports.clampAdd'", tmp=tmp)
+    assert translate(exe, staged(drop={"weak_exports.viaWeak"}), tmp=tmp).returncode == 0
+    result = translate(exe, staged(), tmp=tmp, flags=WEAK)
+    assert result.returncode == 0, result.stderr
+    text = (Path(tmp) / "Out.lean").read_text()
+    assert '"admission":"weak-exports"' in text.splitlines()[0].replace(" ", ""), text.splitlines()[0]
+    # Without the table neither symbol has a definition; without the definition's AIR it
+    # cannot bind.
+    rejects(exe, stage(tmp, WEAK_AIR), "has no definition in the program", tmp=tmp, flags=WEAK)
+    rejects(exe, staged(drop={"weak_exports.clampAdd"}),
+            "is defined by 'weak_exports.clampAdd', which has no AIR in the set", tmp=tmp, flags=WEAK)
 
 
 def export_table(air, records, version="0.16.0"):
@@ -224,6 +256,7 @@ def main(exe):
         rejects(exe, AIR, "is both defined by 'libc_ref.strlen' and bound to registry model", template, tmp)
 
         export_table_cases(exe, tmp)
+        exporter_table_cases(exe, tmp)
     print("extern-calls test_cli: ok")
 
 

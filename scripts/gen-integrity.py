@@ -737,8 +737,9 @@ class Translator:
             else:
                 # A fixture's AIR is a directory, or the one file its check translates.
                 source = case.dirs[0]
-                # With the compilation's error numbering (`error-table.air2lean`, L10).
-                for src in (sorted([*source.glob("*.json"), *source.glob("error-table.air2lean")])
+                # With the compilation's tables: its error numbering (`error-table.air2lean`,
+                # L10) and its export records (`export-table.air2lean`).
+                for src in (sorted([*source.glob("*.json"), *source.glob("*-table.air2lean")])
                             if source.is_dir() else [source]):
                     shutil.copyfile(src, air / src.name)
             out = self.work / f"Gen{index}.lean"
