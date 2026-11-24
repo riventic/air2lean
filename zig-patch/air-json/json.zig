@@ -468,7 +468,7 @@ const Compat = struct {
                 .is_volatile = u.is_volatile,
             };
         }
-        const ty_pl = air.instructions.items(.data)[@backingInt(inst)].ty_pl;
+        const ty_pl = air.instructions.items(.data)[@intFromEnum(inst)].ty_pl;
         const asm_extra = air.extraData(Air.Asm, ty_pl.payload);
         const outputs_len = asm_extra.data.flags.outputs_len;
         const inputs_len = asm_extra.data.inputs_len;
@@ -562,7 +562,7 @@ fn outputFileName(fqn: []const u8, buffer: *[output_name_capacity]u8) []const u8
     }
     // Leading dots are hidden by shell globs; leading hyphens are CLI-unsafe.
     if (fqn.len > 0 and (fqn[0] == '.' or fqn[0] == '-')) direct = false;
-    const stem = fqn[0..(std.mem.indexOfScalar(u8, fqn, '.') orelse fqn.len)];
+    const stem = fqn[0 .. (std.mem.indexOfScalar(u8, fqn, '.') orelse fqn.len)];
     if (std.ascii.eqlIgnoreCase(stem, "con") or std.ascii.eqlIgnoreCase(stem, "prn") or
         std.ascii.eqlIgnoreCase(stem, "aux") or std.ascii.eqlIgnoreCase(stem, "nul")) direct = false;
     if (stem.len == 4 and stem[3] >= '1' and stem[3] <= '9' and
@@ -867,7 +867,7 @@ pub fn dumpToDir(air: *const Air, pt: Zcu.PerThread, func_index: InternPool.Inde
     };
     var name_buf: [output_name_capacity]u8 = undefined;
     const file_name = outputFileName(storage, &name_buf);
-    Identity.claim(zcu, .output, "", file_name, @backingInt(func.owner_nav));
+    Identity.claim(zcu, .output, "", file_name, @intFromEnum(func.owner_nav));
     const file = openOwnedOutput(pt, dir, file_name, fqn, module) catch |err| {
         std.log.warn("air2lean: no JSON for {s} at {s}: {s}", .{ fqn, file_name, @errorName(err) });
         return;
@@ -1137,7 +1137,7 @@ const W = struct {
     }
 
     fn data(w: *W, inst: Air.Inst.Index) Air.Inst.Data {
-        return w.air.instructions.items(.data)[@backingInt(inst)];
+        return w.air.instructions.items(.data)[@intFromEnum(inst)];
     }
 
     fn writeBody(w: *W, body: []const Air.Inst.Index) Error!void {
@@ -1160,10 +1160,10 @@ const W = struct {
     fn writeInst(w: *W, inst: Air.Inst.Index) Error!void {
         const zcu = w.pt.zcu;
         const ip = &zcu.intern_pool;
-        const tag = w.air.instructions.items(.tag)[@backingInt(inst)];
+        const tag = w.air.instructions.items(.tag)[@intFromEnum(inst)];
         try w.j.beginObject();
         try w.field("id");
-        try w.j.write(@backingInt(inst));
+        try w.j.write(@intFromEnum(inst));
         try w.field("tag");
         try w.j.write(@tagName(tag));
         // Once set, the flag stays: skip the type queries for the rest of the compilation.
@@ -1402,7 +1402,7 @@ const W = struct {
             },
             .dbg_var_ptr, .dbg_var_val, .dbg_arg_inline => {
                 const pl_op = w.data(inst).pl_op;
-                const name: Air.NullTerminatedString = @fromBackingInt(@intCast(pl_op.payload));
+                const name: Air.NullTerminatedString = @enumFromInt(pl_op.payload);
                 try w.writeArgs(&.{pl_op.operand});
                 try w.field("name");
                 try w.j.write(name.toSlice(w.air.*));
@@ -1426,12 +1426,12 @@ const W = struct {
             .br, .switch_dispatch => {
                 const br = w.data(inst).br;
                 try w.field("target");
-                try w.j.write(@backingInt(br.block_inst));
+                try w.j.write(@intFromEnum(br.block_inst));
                 try w.writeArgs(&.{br.operand});
             },
             .repeat => {
                 try w.field("target");
-                try w.j.write(@backingInt(w.data(inst).repeat.loop_inst));
+                try w.j.write(@intFromEnum(w.data(inst).repeat.loop_inst));
             },
             .cond_br => {
                 const pl_op = w.data(inst).pl_op;
@@ -1724,7 +1724,7 @@ const W = struct {
         try w.j.beginObject();
         if (ref.toIndex()) |idx| {
             try w.field("inst");
-            try w.j.write(@backingInt(idx));
+            try w.j.write(@intFromEnum(idx));
         } else {
             const ip_index = ref.toInterned().?;
             const val = Value.fromInterned(ip_index);
@@ -1977,7 +1977,8 @@ const W = struct {
                 const agg = parent_ty.childType(zcu);
                 const delta: u64 = switch (base) {
                     .field => |f| switch (agg.zigTypeTag(zcu)) {
-                        .pointer => if (agg.ptrSize(zcu) == .slice and f.index < 2) f.index * 8 else return .{ .unsupported = "field" },
+                        .pointer => if (agg.ptrSize(zcu) == .slice and f.index < 2) f.index * 8 else
+                            return .{ .unsupported = "field" },
                         .@"struct" => blk: {
                             if (agg.containerLayout(zcu) == .@"packed" or !Compat.hasLayout(zcu, agg))
                                 return .{ .unsupported = "field" };
@@ -2089,7 +2090,7 @@ const W = struct {
                 const info = Compat.navInfo(zcu, nav);
                 const name = ip.getNav(nav).fqn.toSlice(ip);
                 const module = Identity.navModule(zcu, nav);
-                Identity.claim(zcu, .global, module, name, @backingInt(nav));
+                Identity.claim(zcu, .global, module, name, @intFromEnum(nav));
                 try w.field("name");
                 try w.j.write(name);
                 try w.field("module");
@@ -2136,7 +2137,7 @@ const W = struct {
         const zcu = w.pt.zcu;
         const name = Compat.containerTypeName(ty, &zcu.intern_pool);
         const module = Identity.typeModule(zcu, ty);
-        Identity.claim(zcu, .type, module, name, @backingInt(ty.toIntern()));
+        Identity.claim(zcu, .type, module, name, @intFromEnum(ty.toIntern()));
         try w.field("name");
         try w.j.write(name);
         try w.field("module");
@@ -2217,7 +2218,7 @@ const W = struct {
                     if (Compat.isRuntimeLane(info.flags.vector_index))
                         try w.j.write("runtime")
                     else
-                        try w.j.write(@backingInt(info.flags.vector_index));
+                        try w.j.write(@intFromEnum(info.flags.vector_index));
                 } else if (info.packed_offset.host_size != 0) {
                     try w.field("vector_index");
                     try w.j.write(null);
