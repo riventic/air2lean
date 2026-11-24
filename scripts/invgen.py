@@ -32,7 +32,16 @@ TARGETS = [
     ('tests/roadmap/loop-tactics/counted/Counted/Inv.lean', 'tests/roadmap/loop-tactics/counted',
      'Counted.Gen', 'Counted'),
     ('Proofs/Lists/OpenInv.lean', '.', 'Proofs.Lists.Open', 'Lists.Open'),
+    ('Proofs/Lists/AllocInv.lean', '.', 'Proofs.Lists.Open', 'Lists.Open'),
 ]
+
+# A target generated with contracts (`air2lean-invgen --spec … --contract …`): the hand-written
+# specification module that states them (a module of the repository's own Lake package, built by
+# `lake build`) and the rules. The file then holds the loops that call by one of them; the
+# module's other loops are in its target without contracts.
+CONTRACTS = {
+    'Proofs/Lists/AllocInv.lean': ('Proofs.Lists.AllocNode', ['Lists.Alloc.destroy_fields']),
+}
 
 
 def source(root, module):
@@ -41,8 +50,9 @@ def source(root, module):
     return (Path(root) / f"{module.replace('.', '/')}.lean").as_posix()
 
 
-def generate(root, module, namespace, work):
-    """`air2lean-invgen`'s output for `module` (a module of the fixture at `root`), as bytes."""
+def generate(root, module, namespace, work, spec=None, contracts=()):
+    """`air2lean-invgen`'s output for `module` (a module of the fixture at `root`), as bytes; with
+    the contracts `contracts` of the specification module `spec`, if given."""
     # (here, not at the top: scripts/gen-integrity.py reads TARGETS and `source` without Lean)
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from theorem_universe import compile_unit, with_lean_path
@@ -55,8 +65,16 @@ def generate(root, module, namespace, work):
     if error:
         sys.exit(log.read_text()[-4000:] + error)
     out = work / 'Inv.lean'
-    subprocess.run(['lake', 'exe', 'air2lean-invgen', module, namespace, '--source', src, '-o', str(out)],
-                   cwd=ROOT, env=with_lean_path(lean_path), check=True)
+    options = []
+    if spec:
+        if root != '.':
+            sys.exit(f'{spec}: a specification module must be in the repository\'s Lake package (root ".")')
+        subprocess.run(['lake', 'build', '-q', spec], cwd=ROOT, check=True)
+        options += ['--spec', spec, source(root, spec)]
+        for contract in contracts:
+            options += ['--contract', contract]
+    subprocess.run(['lake', 'exe', 'air2lean-invgen', module, namespace, '--source', src, *options,
+                    '-o', str(out)], cwd=ROOT, env=with_lean_path(lean_path), check=True)
     return out.read_bytes()
 
 
@@ -74,7 +92,7 @@ def main(argv=None):
     subprocess.run(['lake', 'build', '-q', LIBRARY], cwd=ROOT, check=True)
     for path, root, module, namespace in [known[p] for p in args.paths] or TARGETS:
         with tempfile.TemporaryDirectory(prefix='air2lean-invgen.') as work:
-            fresh = generate(root, module, namespace, Path(work))
+            fresh = generate(root, module, namespace, Path(work), *CONTRACTS.get(path, ()))
         committed = ROOT / path
         if committed.is_file() and committed.read_bytes() == fresh:
             continue
