@@ -207,11 +207,11 @@ variable {γ Y : Type} {L B : FLock γ} {C : FCond γ} {S : FSem γ Y L C}
 `Step`, the `kstep` of `L.Fits S.prim` at `Pair.U B U₀`): `B` stays kept, the rest stores its side
 at the new memory, and the client keeps its own `U₀` at the protocol's rest after the step
 (`hcl`, which gets the rest after the step as the step fixes it, `FCond.StepRest`; the client
-cannot cancel `B`'s side to read it off the two equations). The client gives where its `U₀` keeps the condition (`hsub`), `B`'s coordinates over the
-semaphore's places (`bph`, `bheld`, `lpart`, `bR`) and the condition's over `L`'s (`cph_l`), that
-`B`'s side owns no byte of the condition's words (`hWo`), the keys apart (`hkey`), and that a
-waiter of the condition is `away` from `B` or holds it at `holdsAway` with the epoch in `B`'s nest
-(`hsleep`). -/
+cannot cancel `B`'s side to read it off the two equations). The client gives where its `U₀`
+keeps the condition (`hsub`), `B`'s coordinates over the semaphore's places (`bph`, `bheld`,
+`lpart`, `bR`) and the condition's over `L`'s (`cph_l`), that `B`'s side owns no byte of the
+condition's words (`hWo`), the keys apart (`hkey`), and that a waiter of the condition is `away`
+from `B` or holds it at `holdsAway` with the epoch in `B`'s nest (`hsleep`). -/
 theorem U_semStep (hp : L.Pair B) {U₀ : (ThreadId → γ) → Res → Mem → Prop} {t : ThreadId}
     {G G' : ThreadId → γ} {rX rX' : Res} {m m' : Mem} (hs : S.prim.Step t G rX m G' rX' m')
     (hU : Pair.U B U₀ G rX m)

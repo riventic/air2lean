@@ -1382,8 +1382,8 @@ theorem Inv.wordStep {A : Zig.Loc → Prop} [DecidablePred A] {G G' : ThreadId �
     hfr.owned_none fun xs r h => hRA xs r l h hl
   obtain ⟨hxc, -⟩ := hfr.bytes hI.ex
   refine how.stepIn (hF := fun l => if A l then none else m.heap l)
-    (hs _ fun l hl => by simp only [hl, ↓reduceIte]) (fun l h => ?_) (fun l h => hbl l (hF₁ l h)) hhist hph hM
-    (fun _ _ => rfl)
+    (hs _ fun l hl => by simp only [hl, ↓reduceIte]) (fun l h => ?_)
+    (fun l h => hbl l (hF₁ l h)) hhist hph hM (fun _ _ => rfl)
     (fun ⟨u, hu⟩ l => Classical.byContradiction fun h => by
       have := (hxc l h).2 u; rw [hu] at this; cases this)
     fun _ _ hr' => absurd rfl hr'
