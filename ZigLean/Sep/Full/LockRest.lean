@@ -85,9 +85,9 @@ theorem Inv.rest_live {G : ThreadId → γ} {rX : Res} {m : Mem} (hi : L.Inv G r
     obtain ⟨rT, -, hh⟩ := ho.holds
     refine hh.heap.share_live (l := l) ?_
     show (((rT.gh.add ((L.wordR m).gh.add (rL.gh.add rX.gh))).share l).cell) ≠ none
-    simp only [Ghost.add_share, ne_eq, SCell.cell_eq_none_iff, not_not]
-    exact SCell.pos_add_iff.mpr (.inr (SCell.pos_add_iff.mpr (.inr
-      (SCell.pos_add_iff.mpr (.inr h)))))
+    simp only [Ghost.add_share, ne_eq, SCell.cell_eq_none_iff]
+    refine fun hn => hn (SCell.pos_add_iff.mpr (.inr (SCell.pos_add_iff.mpr (.inr
+      (SCell.pos_add_iff.mpr (.inr h))))))
 
 /-- **A block that the rest pins is live with the claim's size and kind** (`Res.Pins`; the
 lock's complete rest holds, `Holds.extTrue`). -/
