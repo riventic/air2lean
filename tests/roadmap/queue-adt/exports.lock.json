@@ -13,6 +13,7 @@
   "manifest_sha256": "72b3638ef595cb684fc3e6a09453f9b24969ab9c992db9905f40135a119f6020",
   "schema": 1,
   "sources_sha256": {
+    "native.zig": "277d93627879bbaeadd5d722333c4e010bc6c42be069d660cbda6653d2de6a3d",
     "queue.zig": "9485a05abf3a2d9ba7f1dee0d2a3dc33ad80dea9607681991c78457af08c782d"
   }
 }
