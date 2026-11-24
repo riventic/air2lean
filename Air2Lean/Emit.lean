@@ -1270,7 +1270,7 @@ result checks the tag (`Zig.enumOf`): `invalidEnumValue` for 0.17's `bit_cast_sa
 `.illegal` for the unchecked `bit_cast`. -/
 def FCtx.logicalBitCastExpr? (fc : FCtx) (safe : Bool) (a : Val) (dst : TyId) (av : String) :
     Option String := do
-  let src ← fc.valTyId? a
+  let src ← fc.valTyId? a <|> voidConstTy? fc.types a
   unless logicalBitCastApplies fc.dialect.bitCast fc.types src dst do none
   let (s, d) ← (logicalBitCastShapes fc.types src dst).toOption
   -- An enum and exactly its tag type (`@intFromEnum`, `@enumFromInt`-style): the ≤0.16 text
