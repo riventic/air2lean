@@ -555,6 +555,41 @@ theorem Inv.own_share {u : ThreadId} {l : Loc} (hi : L.Inv G rX m)
   show ((L.part (G u)).gh.share l).add ((L.held (G u)).gh.share l) = _
   rw [hh, SCell.add_zero]
 
+/-- **The resource a step of the lock's code moves holds no share of a byte the lock's resource
+holds none of** (`Transfer`: nothing, the holder's resource or the free lock's). -/
+theorem Transfer.share {m' : Mem} {t : ThreadId} {p : LPh} {h : Res} {l : Loc}
+    (hi : L.Inv G rX m) (htr : L.Transfer G rX m m' t p h)
+    (hR : ∀ G r, L.R G r → r.gh.share l = SCell.zero) : h.gh.share l = SCell.zero := by
+  cases ep : p.held
+  · rw [htr.1 ep]; rfl
+  · cases e : (L.ph (G t)).held
+    · obtain ⟨hF, hfr⟩ := htr.2.2.1 e ep
+      exact hR G _ (hfr.2.2.2.1 hF).1
+    · rw [htr.2.1 e ep]; exact hR G _ (hi.res t e)
+
+/-- **What each thread owns of a byte stays over a step of the lock's code**, when the lock's
+resource holds no share of it (`Fits.stable`: the part stays and the held resource holds none,
+`Transfer.share`). -/
+theorem Inv.own_share_set {m' : Mem} {t : ThreadId} {p : LPh} {h : Res} {l : Loc}
+    (hi : L.Inv G rX m) (htr : L.Transfer G rX m m' t p h)
+    (hR : ∀ G r, L.R G r → r.gh.share l = SCell.zero) (hth : m'.threads = m.threads)
+    (v : ThreadId) :
+    (L.own (upd G t (L.set (G t) p h)) m' v).gh.share l = (L.own G m v).gh.share l := by
+  by_cases e : v = t
+  case neg => rw [own_congr hth (fun u e => upd_ne _ _ e) v e]
+  subst e
+  have hh : (L.held (G v)).gh.share l = SCell.zero := by
+    cases e : (L.ph (G v)).held
+    · rw [hi.idle v e]; rfl
+    · exact hR G _ (hi.res v e)
+  unfold FLock.own
+  rw [LockWord.joinedB_congr hth, upd_self, L.part_set, L.held_set]
+  split
+  · rfl
+  · show ((L.part (G v)).gh.share l).add (h.gh.share l) =
+      ((L.part (G v)).gh.share l).add ((L.held (G v)).gh.share l)
+    rw [Transfer.share hi htr hR, hh]
+
 /-- **The facts at a new ghost value and memory**: the same places and held resources, the
 resource kept (`hR`), the word invariant and the free resource's ownership at the new memory, and
 each part apart from its held resource. -/

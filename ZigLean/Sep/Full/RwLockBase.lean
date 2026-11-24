@@ -69,6 +69,63 @@ theorem atStop (hu : W.Base Sz K G rX m) (t : ThreadId) :
     shares := hu.shares
     pin := hu.pin }
 
+/-- **A step of the outer mutex's code keeps the base** (`fitsM`'s `stable`): `t` runs it at a
+calm place of the rwlock, out of the semaphore's code. The rwlock's invariant stays
+(`Inv.otherStep`: `t` holds no writing bit at a calm place), the semaphore's primitive's rest
+stays (`FSem.Sub.otherLock`), the window stays (the condition's writes stay, and every epoch write
+still happened before the semaphore's mutex's holder), and each thread owns what it owned of the
+readers' heap (`FLock.Inv.own_share_set`: the outer mutex protects nothing). The outer mutex's
+place is none of the rwlock's or the semaphore's (`hpm`). -/
+theorem stableM {t : ThreadId} {p : LPh} {h rL rH : Res} {m' : Mem} (hu : W.Base Sz K G rX m)
+    (hM : M.Inv G (rsum (FLock.side L m rL rH) rX) m) (hk : L.Keeps G m rL rH rX)
+    (hs : M.Step t m m') (htr : M.Transfer G (rsum (FLock.side L m rL rH) rX) m m' t p h)
+    (hn : (M.ph (G t)).next p = true) (hcalm : W.prim.calm (W.place.ph (G t)))
+    (hpm : ∀ g q h, W.place.ph (M.set g q h) = W.place.ph g) :
+    W.Base Sz K (upd G t (M.set (G t) p h)) rX m' := by
+  obtain ⟨⟨hC, hW⟩, hS⟩ := hu.sub
+  have hup : ∀ {α : Type} (f : γ → α), (∀ g, f (M.set g p h) = f g) →
+      ∀ u, f (upd G t (M.set (G t) p h) u) = f (G u) := fun f hf u => by
+    have := congrFun (upd_map f G t (hf (G t))) u
+    rwa [upd_same] at this
+  have hwph := hup W.ph fun g => congrArg Prod.fst (hpm g p h)
+  have hcph := hup C.ph fun g => congrArg (fun q => q.2.1) (hpm g p h)
+  have hlph := hup L.ph fun g => W.pair.ph_ab g p h
+  have hapL : L.ApartL M.toLockWord := W.pair.apart.symm
+  have hS' := ((hW C.S (.inl rfl)).1.lockStep hs (c_apart W _ (.inl rfl)).2).2
+  have hE' := ((hW C.Ep (.inr rfl)).1.lockStep hs (c_apart W _ (.inr rfl)).2).2
+  have hnw : (W.ph (G t)).isW = false := by
+    rcases hcalm.1 with e | e | e
+    · rw [show W.ph (G t) = .out from e]; rfl
+    · rw [show W.ph (G t) = .wi from e]; rfl
+    · cases e' : W.ph (G t) <;> rw [show (W.ph (G t)).isRd = true from e, e'] at * <;>
+        first | rfl | cases e
+  have hposted : RwPosted W.ph (upd G t (M.set (G t) p h)) ↔ RwPosted W.ph G := by
+    simp only [RwPosted, hwph]
+  have hpv : S.cnt (upd G t (M.set (G t) p h)) = S.cnt G := by
+    by_cases hp : RwPosted W.ph G
+    · rw [W.cnt_posted _ hp, W.cnt_posted _ (hposted.mpr hp)]
+    · rw [W.cnt_idle _ hp, W.cnt_idle _ fun h => hp (hposted.mp h)]
+  exact {
+    winv := Inv.otherStep hM hu.winv hs (st_apart W).2 hwph (hup W.x fun g => W.x_m g p h)
+      (fun u hg => by
+        by_cases e : u = t
+        · rw [e]; exact LPh.ne_gone_of_next hn
+        · rwa [upd_ne _ _ e] at hg)
+      (fun u hw => by
+        by_cases e : u = t
+        · rw [e, hnw] at hw; cases hw
+        · rw [upd_ne _ _ e]; exact hu.winv.wm u hw)
+    sub := FSem.Sub.otherLock hu.sub (fun Wd hWd => (c_apart W Wd hWd).2) hapL hk.facts.w.blk
+      (ep_key_ne W m) hcalm.2 ((congrArg Prod.snd (hpm (G t) p h)).trans hcalm.2)
+      (W.pair.ph_ab _ _ _) hpv hs
+    win := hu.win.keep hcph hS' hE' (hu.win.ehb.step
+      (fun _ hc => hc.mono (fun u hh => .inl (by rw [hlph u]; exact hh)) hs.clocks
+        (fun _ hb => LockWord.Before.otherStep hs hapL hb) hs.threads
+        fun u hg => by rwa [hlph u] at hg)
+      (.inl hE'))
+    shares := hu.shares.congr hwph fun v l => hM.own_share_set htr (mR_share W l) hs.threads v
+    pin := hu.pin }
+
 /-- **A tick of `t`'s part keeps the base** (the two locks have one part,
 `FLock.Pair.setPart`): the tick changes no byte, so the rwlock's invariant stays (`Inv.stepIn`;
 the rest's bytes are live, `FLock.Inv.rest_live`), the condition's and the semaphore's stay
