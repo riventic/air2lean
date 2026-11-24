@@ -70,7 +70,10 @@ bash tests/roadmap/asm-effects/check.sh
 `air-env/<version>` are the patched-compiler exports of `asm_env.zig` (environment reads, memory
 inputs, memory regions; docs/generated-code.md), declared in `exports.json` and pinned by
 `exports.lock.json` (`scripts/fixture-exports.py`). The CPU is `x86_64+rdrnd` because the
-allowlisted `rdrand` needs it (ASM-09; `--assume-asm-cpu-features` is not passed). 0.14.1 is not
+allowlisted `rdrand` needs it (ASM-09; `--assume-asm-cpu-features rdrnd` is not passed).
+`test_env_cli.py` also holds the CPU-feature tests (docs/volatile-effects.md §CPU features):
+rejection without the feature, acceptance with the profile's feature or the admission, and the
+table's coverage of the allowlist. 0.14.1 is not
 exported: its exporter has no inline asm (docs/air-json.md), and the 0.15+ clobber syntax does not
 parse there.
 

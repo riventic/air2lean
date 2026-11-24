@@ -696,6 +696,9 @@ def profile_premises(config: dict, lean: LeanFile) -> tuple[list[str], str]:
     premises = [config["profiles"][name], *config["float_semantics"][semantics],
                 *admission_premises(config, lean, admissions)]
     why = f"profile {name}, float {semantics}" + (f", admission {','.join(admissions)}" if admissions else "")
+    # ASM-09 is about named CPU features (`--assume-asm-cpu-features <f,...>`).
+    if "asm_cpu_features" in record:
+        why += f" (CPU features {','.join(record['asm_cpu_features'])})"
     return premises, why
 
 

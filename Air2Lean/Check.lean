@@ -3968,26 +3968,49 @@ def checkLoadBuffering (funcs : Array Func) : Except String Unit := do
         another location (load buffering) is outside the model, which has no promises; pass \
         --assume-no-lb to assume the compiled code shows no load buffering (premise ORD-02)"
 
-/-- Reject an allowlisted asm block whose CPU feature (`AsmAllowEntry.features`) the profile does
-not list: the encoding then runs as another instruction (`lzcnt` as `bsr`) or faults (#UD), so
-the entry's semantics does not hold on a CPU that matches the profile. A block that the device
-contract declares is that contract's. `--assume-asm-cpu-features` skips this check (premise
-ASM-09). -/
+/-- Reject an asm block with an instruction whose CPU feature (`Air2Lean/AsmFeatures.lean`) the
+profile does not list: the encoding then runs as another instruction (`lzcnt` as `bsr`) or
+faults (#UD), so no model of the instruction holds on a CPU that matches the profile. Every asm
+op is checked, whether the allowlist or a device contract accepts it: a contract states what an
+instruction does, not that the CPU has it. An instruction that is not in the table is rejected
+(fail closed). `admitted` are the features of `--assume-asm-cpu-features` (premise ASM-09): the
+running CPU has them although the profile does not list them. -/
 def checkAsmCpuFeatures (funcs : Array Func) (profile : BuildProfile)
-    (device : Option DeviceContract := none) : Except String Unit := do
+    (admitted : List String := []) : Except String Unit := do
   for f in funcs do
     for i in f.allInsts do
-      let .asm source _ clobbers outputs inputs := i.op | continue
-      let some entry := i.op.asmAllowEntry? f.dialect.arch | continue
-      if (device.bind (·.asm? source (asmConstraints outputs inputs) clobbers.toList)).isSome then continue
-      let missing := entry.features.filter (!profile.features.contains ·)
-      unless missing.isEmpty do
-        throw s!"{f.name}: inst {i.id}: asm {source.quote} needs the CPU feature(s) \
-          {missing} (Air2Lean/AsmAllowlist.lean), which the profile's CPU '{profile.cpu}' does \
-          not list (features {profile.features.toList}): on a CPU without them the encoding \
-          runs as another instruction or faults (#UD). Export for a CPU with the feature \
-          (-mcpu), or pass --assume-asm-cpu-features to assume that the running CPU has it \
-          (premise ASM-09)"
+      let .asm source .. := i.op | continue
+      let arch := asmTargetArch f.dialect.arch
+      let instrs ← (asmTemplateInstrs arch source).mapError fun e =>
+        s!"{f.name}: inst {i.id}: asm {source.quote}: {e}, so the CPU features it needs are \
+          unknown; only instructions of that table are translated (premise ASM-09)"
+      for (mnemonic, features) in instrs do
+        let missing := features.filter fun feature =>
+          !profile.features.contains feature && !admitted.contains feature
+        unless missing.isEmpty do
+          let names := ",".intercalate missing
+          throw s!"{f.name}: inst {i.id}: asm {source.quote}: instruction '{mnemonic}' needs \
+            the CPU feature(s) [{names}] (Air2Lean/AsmFeatures.lean), which the profile's CPU \
+            '{profile.cpu}' on target '{arch}' does not list (features \
+            {profile.features.toList}): on a CPU without them the encoding runs as another \
+            instruction or faults (#UD). Export for a CPU with the feature (-mcpu), or pass \
+            --assume-asm-cpu-features {names} to assume that the running CPU has it (premise \
+            ASM-09)"
+
+/-- The value of `--assume-asm-cpu-features`: a comma-separated, non-empty list of feature names
+of the table (`asmKnownFeatures`), sorted and without duplicates as the header records it. A
+name outside the table is rejected: it would admit nothing, and a misspelt one would hide that. -/
+def parseAsmCpuFeatures (value : String) : Except String (List String) := do
+  let names := value.splitOn ","
+  if value.isEmpty || value.startsWith "-" || names.any (·.isEmpty) then
+    throw s!"--assume-asm-cpu-features needs a comma-separated list of CPU features (one of \
+      {asmKnownFeatures}), got '{value}'"
+  for name in names do
+    unless asmKnownFeatures.contains name do
+      throw s!"--assume-asm-cpu-features: '{name}' is not a CPU feature of the asm feature \
+        table (Air2Lean/AsmFeatures.lean: {asmKnownFeatures})"
+  let sorted := names.toArray.qsort fun a b => decide (a < b)
+  pure sorted.toList.eraseDups
 
 /-- Explicit environment policy for translated thread assignment. The default retains
 existing proofs under an availability assumption; fallible includes API failure. -/
