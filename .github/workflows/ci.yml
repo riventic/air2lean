@@ -844,7 +844,10 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' }}
         env:
           PYTHONDONTWRITEBYTECODE: "1"
-        run: python3 tests/roadmap/upgrade-qualification/test_qualify.py
+        run: |
+          set -euo pipefail
+          python3 tests/roadmap/upgrade-qualification/test_qualify.py
+          python3 -B scripts/qualify-upgrade.py check qualification/0.17.1.json
 
       # Fixture exports (docs/coverage.md#fixture-exports): the manifest/lock tool on synthetic
       # fixtures, then every committed lock; runs no compiler.
