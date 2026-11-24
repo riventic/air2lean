@@ -37,7 +37,16 @@ pub fn roundTrip(x: u32) u32 {
     return @bitCast(a);
 }
 
+/// An array initialized at run time. Zig 0.14.1 does not store its sentinel (the AIR has the
+/// three item stores only), so the top byte is undefined there: stack garbage natively,
+/// `.unspecified` in the model. 0.15.2 and 0.16.0 store it.
+pub fn sentInit(a: u8) u32 {
+    const x: [3:7]u8 = .{ a, 2, 3 };
+    return @bitCast(x);
+}
+
 comptime {
+    _ = &sentInit;
     _ = &sentToInt;
     _ = &wideToInt;
     _ = &nestedToInt;

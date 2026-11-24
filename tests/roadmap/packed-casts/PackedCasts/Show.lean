@@ -17,6 +17,10 @@ instance (priority := low) {α : Type} {n : Nat} [Zig.Packed α n] : Show α whe
     | some (.ok b) => hexN b.toNat
     | _ => "unspecified"
 
+/-- `void` has no bits to print. -/
+instance : Show Unit where
+  format _ := "void"
+
 instance {α : Type} {n : Nat} [Show α] : Show (Vector α n) where
   format v := "[" ++ " ".intercalate (v.toList.map Show.format) ++ "]"
 

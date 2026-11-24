@@ -4,9 +4,20 @@
 #   logical017.zig     0.17.1                        (PackedCasts/<version>/Logical017.lean, ModelLogical.lean)
 #   vector_fields.zig  0.14.1 0.15.2                 (PackedCasts/<version>/VectorFields.lean, ModelVector.lean)
 #   auto_items.zig     0.14.1 0.15.2                 (PackedCasts/<version>/AutoItems.lean, ModelAuto.lean)
+#   sentinel_arrays.zig 0.14.1 0.15.2 0.16.0         (PackedCasts/<version>/SentinelArrays.lean, ModelSentinel.lean)
+#   void_casts.zig     0.14.1 0.15.2 0.16.0 0.17.1   (PackedCasts/<version>/VoidCasts.lean, ModelVoid.lean)
+#   void017.zig        0.17.1                        (PackedCasts/<version>/Void017.lean, ModelVoid017.lean)
+#   air-handwritten/<version>/void_cast  0.16.0 0.17.1  (PackedCasts/<version>/VoidCast.lean,
+#                                                    ModelVoidCast.lean: the `bitcast` of a zero-bit
+#                                                    type, which Sema folds and no compiler emits)
 #   reject_lanes.zig   0.14.1 0.15.2                 (rejected: docs/upstream/packed-vector-lane-ptr.md)
+#   reject_sentinel.zig 0.17.1                       (rejected: docs/upstream/bitcast-sentinel-array.md)
+#   reject_items.zig   0.14.1 0.15.2                 (rejected: arrays of tuples, errors, optionals)
 # (<version> as a name: V0_17_1). Each model is written for the newest version of its source; the
 # other versions' models are that one with the version renamed (scripts/fixtures.py instance).
+# reject/expected.txt lists every rejected function with its diagnostic; expected/wrong.txt lists
+# results of wrong models, which the comparison with the model and with the native output must
+# reject.
 #
 #   check.sh [--check]            translate every retained export, compare with the retained
 #                                 translation, check the model instances, build the library
@@ -37,6 +48,9 @@ sources=(
   "logical017:Logical017:ModelLogical:0.17.1"
   "vector_fields:VectorFields:ModelVector:0.15.2 0.14.1"
   "auto_items:AutoItems:ModelAuto:0.15.2 0.14.1"
+  "sentinel_arrays:SentinelArrays:ModelSentinel:0.16.0 0.15.2 0.14.1"
+  "void_casts:VoidCasts:ModelVoid:0.17.1 0.16.0 0.15.2 0.14.1"
+  "void017:Void017:ModelVoid017:0.17.1"
 )
 has_version() { [[ " $1 " == *" $2 "* ]]; }
 
@@ -54,6 +68,26 @@ for m, n in zip(model, native):
 if not ok:
     sys.exit(f"{sys.argv[1]} does not match {sys.argv[2]}")
 PY
+}
+
+# Negative control (`wrong_models_rejected MODEL NATIVE`, MODEL a scratch file): every wrong
+# result of expected/wrong.txt (`name: value`, `#` comments) that has a line in MODEL, put in
+# place of that line, must make `compare` fail against NATIVE.
+wrong_models_rejected() {
+  local wrong name count=0
+  while IFS= read -r wrong; do
+    wrong=${wrong%%#*}
+    wrong=${wrong%"${wrong##*[![:space:]]}"}
+    name=${wrong%%: *}
+    [ -n "$wrong" ] && grep -q "^$name: " "$1" || continue
+    awk -v n="$name: " -v w="$wrong" 'index($0, n) == 1 { print w; next } { print }' "$1" > "$1.wrong"
+    if compare "$1.wrong" "$2" 2>/dev/null; then
+      echo "the wrong model '$wrong' matches $2" >&2; return 1
+    fi
+    count=$((count + 1))
+  done < "$dir/expected/wrong.txt"
+  [ "$count" -gt 0 ] || { echo "no wrong model of expected/wrong.txt applies to $2" >&2; return 1; }
+  echo "$count wrong models rejected by the comparison with $(basename "$2")"
 }
 
 case "${1:---check}" in
@@ -74,6 +108,8 @@ case "${1:---check}" in
       fi
       compare "$dir/expected/$2.txt" "$work/native-$mode.txt"
       echo "native x86_64-linux-musl $mode ($2) matches the model ($(wc -l < "$work/native-$mode.txt" | tr -d ' ') lines)"
+      cp "$dir/expected/$2.txt" "$work/model.txt"
+      wrong_models_rejected "$work/model.txt" "$work/native-$mode.txt"
     done
     exit ;;
   --compile-errors)
@@ -114,6 +150,15 @@ for entry in "${sources[@]}"; do
     mains+=("PackedCasts.$t.$model:PackedCasts.$t.$model.main")
   done
 done
+# The hand-written `bitcast` of zero-bit types: one translation and one written model per version.
+for v in 0.16.0 0.17.1; do
+  t="V${v//./_}"
+  "$translator" "$dir/air-handwritten/$v/void_cast" -o "$work/$t-VoidCast.lean" \
+    --namespace "PackedCasts.$t.VoidCast" --prefix void_cast.
+  cmp "$work/$t-VoidCast.lean" "$dir/PackedCasts/$t/VoidCast.lean"
+  models+=("PackedCasts.$t.ModelVoidCast")
+  theorems+=(--declaration "PackedCasts.$t.ModelVoidCast.voidsToInt_ok")
+done
 for t in V0_14_1 V0_15_2 V0_16_0 V0_17_1; do
   theorems+=(--declaration "PackedCasts.$t.Model.setUnion_ok" --declaration "PackedCasts.$t.Model.floatField_nan")
 done
@@ -121,6 +166,9 @@ for t in V0_14_1 V0_15_2; do
   theorems+=(--declaration "PackedCasts.$t.ModelVector.laneSum_ok" --declaration "PackedCasts.$t.ModelAuto.unionsToInt_padding")
 done
 theorems+=(--declaration PackedCasts.V0_17_1.ModelLogical.intToModes_unnamed)
+for t in V0_14_1 V0_15_2 V0_16_0; do
+  theorems+=(--declaration "PackedCasts.$t.ModelSentinel.sentToInt_ok" --declaration "PackedCasts.$t.ModelSentinel.intToSentAt_last")
+done
 python3 -B scripts/fixtures.py build PackedCasts
 # Compiled and audited (axioms, sorry, kernel replay), not only run: they are indexed (F2).
 python3 -B scripts/fixtures.py audit "${models[@]}" "${theorems[@]}"
@@ -135,7 +183,36 @@ for v in "${versions[@]}"; do
   # The models' lines are the retained native observations of this version.
   compare "$work/$v.txt" "$dir/expected/$v.txt"
   echo "$v: translations, kernel proofs and $(wc -l < "$work/$v.txt" | tr -d ' ') model lines match"
+  # A wrong model's result is not the observation.
+  wrong_models_rejected "$work/$v.txt" "$dir/expected/$v.txt"
 done
+# Every function of the rejected sources, translated alone, fails with its diagnostic
+# (reject/expected.txt: version, source, function, then the text the diagnostic must contain).
+rejected=0
+while read -r v src fn text; do
+  case $v in ''|'#'*) continue ;; esac
+  mkdir "$work/reject-air"
+  cp "$dir/air/$v/$src/$src.$fn.json" "$work/reject-air/"
+  if out=$("$translator" "$work/reject-air" -o "$work/reject.lean" --namespace Reject --prefix "$src." 2>&1); then
+    echo "$src.$fn ($v) translated, expected a rejection" >&2; exit 1
+  fi
+  grep -qF -- "$text" <<<"$out" || { echo "$src.$fn ($v): expected '$text' in: $out" >&2; exit 1; }
+  [ ! -e "$work/reject.lean" ] || { echo "$src.$fn ($v): a rejected cast wrote a translation" >&2; exit 1; }
+  rm -r "$work/reject-air"
+  rejected=$((rejected + 1))
+done < "$dir/reject/expected.txt"
+# Every exported function of those sources has a line there.
+for v in "${versions[@]}"; do
+  for src in reject_sentinel reject_items; do
+    [ -d "$dir/air/$v/$src" ] || continue
+    for f in "$dir/air/$v/$src"/*.json; do
+      fn=$(basename "$f" .json)
+      grep -q "^$v $src ${fn#"$src".} " "$dir/reject/expected.txt" ||
+        { echo "reject/expected.txt has no line for $v $fn" >&2; exit 1; }
+    done
+  done
+done
+echo "$rejected rejected casts fail with their diagnostics"
 # Lane pointers into a vector field of a packed struct are rejected (0.14.1, 0.15.2).
 for v in 0.14.1 0.15.2; do
   if out=$("$translator" "$dir/air/$v/reject_lanes" -o "$work/reject.lean" --namespace Reject 2>&1); then
