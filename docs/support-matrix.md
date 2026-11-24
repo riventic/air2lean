@@ -85,7 +85,7 @@ Counts from `coverage/<version>.json` (`scripts/coverage.py`). This is a source 
 
 ## Requirement register
 
-From [ROADMAP.md](../ROADMAP.md): 90 requirements, 45 complete, 34 partial, 2 open, 9 research. Only `complete` rows are finished; every other ID is current open work (acceptance in [remaining-acceptance.md](../remaining-acceptance.md)). A bounded merged slice does not complete a requirement.
+From [ROADMAP.md](../ROADMAP.md): 90 requirements, 47 complete, 32 partial, 2 open, 9 research. Only `complete` rows are finished; every other ID is current open work (acceptance in [remaining-acceptance.md](../remaining-acceptance.md)). A bounded merged slice does not complete a requirement.
 
 | Area | Complete | Partial | Open | Research |
 |---|---|---|---|---|
@@ -97,9 +97,9 @@ From [ROADMAP.md](../ROADMAP.md): 90 requirements, 45 complete, 34 partial, 2 op
 | A: Inline assembly | A01, A03 | — | — | A02 |
 | E: External boundaries | E01, E02, E04 | E03 | — | — |
 | P: Proof support | P01, P02 | P03, P04, P05, P06, P07, P08 | P09 | — |
-| I: Integration and tooling | I01, I02, I03, I04, I05, I09 | I06, I07, I08 | — | — |
+| I: Integration and tooling | I01, I02, I03, I04, I05, I07, I09 | I06, I08 | — | — |
 | V: Validation and trust | V04, V05, V06 | V03 | — | V01, V02 |
-| Q: Quality and testing | Q04, Q05, Q08 | Q01, Q02, Q03, Q06, Q07 | — | — |
+| Q: Quality and testing | Q04, Q05, Q07, Q08 | Q01, Q02, Q03, Q06 | — | — |
 | D: Documentation | D01, D02, D03, D04 | — | — | — |
 | X: Other source languages | — | — | X01 | — |
 <!-- support-matrix:end matrix -->

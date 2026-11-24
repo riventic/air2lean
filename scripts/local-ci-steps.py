@@ -491,7 +491,7 @@ setup = {
     'Install elan': None,
     'Build patched zig': None,
 }
-RUNNERS = {'ubuntu-24.04': 'linux/amd64', 'ubuntu-24.04-arm': 'linux/arm64', 'macos-14': 'host'}
+RUNNERS = {'ubuntu-24.04': 'linux/amd64', 'ubuntu-24.04-arm': 'linux/arm64', 'macos-15': 'host'}
 HOST_SOURCE_GAP = ('macOS host checks are unrestricted: descendants can read the caller\'s Git objects, '
                    'for example git -C ../../../.. show HEAD:README.md; no files are withheld')
 ALLOWED_ACTIONS = {'actions/checkout', 'actions/cache', 'actions/cache/restore',

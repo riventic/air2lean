@@ -164,7 +164,7 @@ class Workflow(unittest.TestCase):
         self.previous=Path.cwd();os.chdir(self.root);self.addCleanup(os.chdir,self.previous)
         isolate_git_environment(self)
         subprocess.run(['git','init','-q','--object-format=sha1'],check=True,capture_output=True)
-        self.runner_name='macos-14' if sys.platform=='darwin' else {'x86_64':'ubuntu-24.04','aarch64':'ubuntu-24.04-arm'}[os.uname().machine]
+        self.runner_name='macos-15' if sys.platform=='darwin' else {'x86_64':'ubuntu-24.04','aarch64':'ubuntu-24.04-arm'}[os.uname().machine]
 
     def commit(self):
         subprocess.run(['git','add','-f','--','.'],check=True,capture_output=True)
@@ -369,7 +369,7 @@ class Workflow(unittest.TestCase):
         self.assertTrue(all(step['undeclared_reads'] for step in report['steps']))
 
     def test_host_restricted_request_is_rejected_before_commands(self):
-        workflow=self.workflow([{'name':'must not run','run':'touch unsafe'}],**{'runs-on':'macos-14'})
+        workflow=self.workflow([{'name':'must not run','run':'touch unsafe'}],**{'runs-on':'macos-15'})
         run=runner.WorkflowRun(workflow,self.artifacts,self.snapshot,restricted=True)
         actual=os.uname()
         host=os.uname_result(('Darwin',actual.nodename,actual.release,actual.version,'arm64'))
@@ -424,7 +424,7 @@ class Workflow(unittest.TestCase):
     def test_host_discovery_withholds_nothing_and_records_the_source_gap(self):
         (self.root/'README.md').write_text('unrestricted source\n')
         workflow=self.workflow([{'name':'native diagnostic','run':'test "$(cat README.md)" = "unrestricted source"'}],
-                               **{'runs-on':'macos-14'})
+                               **{'runs-on':'macos-15'})
         (self.root/'.github/ci-inputs.json').write_text(json.dumps(
             {'schema':'air2lean-ci-inputs/2','parts':{'sample':{'inputs':['scripts/**']}}}))
         self.commit()
@@ -1347,7 +1347,7 @@ jobs:
         self.write('README.md',b'caller source remains reachable\n')
         self.write('.github/workflows/ci.yml',b'''jobs:
   macos:
-    runs-on: macos-14
+    runs-on: macos-15
     strategy:
       matrix:
         include:
