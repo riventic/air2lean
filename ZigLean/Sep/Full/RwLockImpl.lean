@@ -1139,26 +1139,48 @@ theorem Inv.not_isW {G : ThreadId → γ} {rX : Res} {m : Mem} {u : ThreadId} (h
   · have := hI.wm u e
     rcases hm with e' | e' <;> rw [e'] at this <;> cases this
 
-/-- **The invariant over a step that keeps the state word** (the shared part of `Inv.lockStep` and
-`Inv.stepIn`): the word stays `Ok` (at the threads that have not ended after the step), its
-history and cells stay, the threads, the places and the client parts stay, the writer's hold of
+/-- **The counts read no thread out of the rwlock's code**: over a thread table with one more
+thread, when each thread in the code is in the old one (`Inv.ex`). -/
+theorem counts_grow {G : ThreadId → γ} {m m' : Mem}
+    (hex : ∀ u, W.ph (G u) ≠ .out → u < m.threads.size)
+    (hsz : m'.threads.size = m.threads.size + 1) :
+    W.nrd G m' = W.nrd G m ∧ W.nwi G m' = W.nwi G m ∧ W.writing G m' = W.writing G m ∧
+      W.fsum G m' = W.fsum G m := by
+  have hN : W.ph (G m.threads.size) = .out :=
+    Classical.byContradiction fun h => Nat.lt_irrefl _ (hex _ h)
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · simp [nrd, hsz, tsum_succ, hN, RwPh.isRd]
+  · simp [nwi, hsz, tsum_succ, hN, RwPh.isWi]
+  · simp [writing, hsz, List.range_succ, hN, RwPh.isW]
+  · simp [fsum, hsz, ftot, hN, RwPh.frac, Frac.zero, Rat.add_zero]
+
+/-- **The invariant over a step that keeps the state word and the counts** (the one proof of
+`Inv.keepR`, `Inv.keep` and `Inv.grow`): no thread is lost (`hsz`) and the counts over the new
+thread table are the old ones (`hcnt`: the same number of threads, or one more, `counts_grow`);
+the word stays `Ok` at the threads that have not ended after the step, its history and cells
+stay, the places stay, the resource holds at the new client parts (`hR`), the writer's hold of
 the outer mutex stays, and the free resource stays owned through the word. -/
-theorem Inv.keep {G G' : ThreadId → γ} {rX : Res} {m m' : Mem} (hI : W.Inv G rX m)
+theorem Inv.keepCounts {G G' : ThreadId → γ} {rX : Res} {m m' : Mem} (hI : W.Inv G rX m)
+    (hsz : m.threads.size ≤ m'.threads.size)
+    (hcnt : W.nrd G m' = W.nrd G m ∧ W.nwi G m' = W.nwi G m ∧ W.writing G m' = W.writing G m ∧
+      W.fsum G m' = W.fsum G m)
     (hok : W.st.Ok m' fun u => M.ph (G' u) ≠ .gone) (hhist : W.st.hist m' = W.st.hist m)
-    (hcells : W.st.cellsR m' = W.st.cellsR m) (hth : m'.threads = m.threads)
-    (hph : ∀ u, W.ph (G' u) = W.ph (G u)) (hx : ∀ u, W.x (G' u) = W.x (G u))
+    (hcells : W.st.cellsR m' = W.st.cellsR m)
+    (hph : ∀ u, W.ph (G' u) = W.ph (G u)) (hR : ∀ r, W.R (W.xs G) r → W.R (W.xs G') r)
     (hwm : ∀ u, (W.ph (G u)).isW = true → (M.ph (G' u)).held = true)
     (how : ∀ rF rO, rX = rsum (W.st.cellsR m) (rsum rF rO) → W.FreeRes G m rF → W.Owns G m rF →
       W.Owns G' m' rF) : W.Inv G' rX m' := by
-  have hnrd : W.nrd G' m' = W.nrd G m := by rw [nrd_threads hth]; simp only [nrd, hph]
-  have hnwi : W.nwi G' m' = W.nwi G m := by rw [nwi_threads hth]; simp only [nwi, hph]
-  have hwr : W.writing G' m' = W.writing G m := by
-    rw [writing_threads hth]; simp only [writing, hph]
-  have hxs : W.xs G' = W.xs G := funext hx
+  obtain ⟨hn1, hn2, hn3, hn4⟩ := hcnt
+  have hnrd : W.nrd G' m' = W.nrd G m := by rw [← hn1]; simp only [nrd, hph]
+  have hnwi : W.nwi G' m' = W.nwi G m := by rw [← hn2]; simp only [nwi, hph]
+  have hwr : W.writing G' m' = W.writing G m := by rw [← hn3]; simp only [writing, hph]
+  have hfs : W.fsum G' m' = W.fsum G m := by rw [← hn4]; simp only [fsum, hph]
+  have hbusy : W.Busy G' ↔ W.Busy G := by simp only [Busy, RwPosted, hph]
   obtain ⟨rF, rO, he, hoffF, hd, hfr, ho⟩ := hI.rest
+  obtain ⟨hf1, hf2, hf3⟩ := hfr
   exact {
     ok := hok
-    ex := fun u h => by rw [hth]; exact hI.ex u (by rwa [← hph u])
+    ex := fun u h => Nat.lt_of_lt_of_le (hI.ex u (by rwa [← hph u])) hsz
     room := by rw [hnrd, hnwi]; exact hI.room
     word := by rw [hnrd, hnwi, hwr, hhist]; exact hI.word
     msgs := by rw [hhist]; exact hI.msgs
@@ -1169,9 +1191,65 @@ theorem Inv.keep {G G' : ThreadId → γ} {rX : Res} {m m' : Mem} (hI : W.Inv G 
       obtain ⟨h1, ⟨w, hw⟩, h3⟩ := hI.rp u (by rwa [← hph u])
       exact ⟨by rw [hnrd]; exact h1, ⟨w, by rw [hph w]; exact hw⟩,
         fun v hv => h3 v (by rwa [← hph v])⟩
-    rpR := fun u r hu => by rw [hxs]; exact hI.rpR u r (by rwa [← hph u])
-    rest := ⟨rF, rO, by rw [hcells]; exact he, hoffF, hd, (hfr.congr hph hx).threads hth,
-      how rF rO he hfr ho⟩ }
+    rpR := fun u r hu => hR r (hI.rpR u r (by rwa [← hph u]))
+    rest := ⟨rF, rO, by rw [hcells]; exact he, hoffF, hd,
+      ⟨fun hb => hf1 (hbusy.mp hb),
+        fun hb h0 => hR _ (hf2 (fun h => hb (hbusy.mpr h)) (by rwa [← hnrd])),
+        fun hb h0 => by
+          obtain ⟨H, f, hRr, hf, hs, hr, hq⟩ :=
+            hf3 (fun h => hb (hbusy.mpr h)) (by rwa [← hnrd])
+          exact ⟨H, f, hR _ hRr, hf, by rw [hfs]; exact hs, hr,
+            fun u q H' hu => hq u q H' (by rwa [← hph u])⟩⟩,
+      how rF rO he ⟨hf1, hf2, hf3⟩ ho⟩ }
+
+/-- **The invariant over a step that keeps the state word and the number of threads, at client
+parts that keep the resource** (`Inv.keep` with the thread table and the client parts free: a join
+marks a thread joined, and a thread's end or join changes its client part): the word stays `Ok`,
+its history and cells stay, the places stay, the resource stays at the new client parts (`hR`),
+the writer's hold of the outer mutex stays, and the free resource stays owned through the word
+(`Inv.keepCounts`). -/
+theorem Inv.keepR {G G' : ThreadId → γ} {rX : Res} {m m' : Mem} (hI : W.Inv G rX m)
+    (hok : W.st.Ok m' fun u => M.ph (G' u) ≠ .gone) (hhist : W.st.hist m' = W.st.hist m)
+    (hcells : W.st.cellsR m' = W.st.cellsR m) (hth : m'.threads.size = m.threads.size)
+    (hph : ∀ u, W.ph (G' u) = W.ph (G u)) (hR : ∀ r, W.R (W.xs G) r → W.R (W.xs G') r)
+    (hwm : ∀ u, (W.ph (G u)).isW = true → (M.ph (G' u)).held = true)
+    (how : ∀ rF rO, rX = rsum (W.st.cellsR m) (rsum rF rO) → W.FreeRes G m rF → W.Owns G m rF →
+      W.Owns G' m' rF) : W.Inv G' rX m' :=
+  hI.keepCounts (Nat.le_of_eq hth.symm)
+    ⟨by simp only [nrd, hth], by simp only [nwi, hth], by simp only [writing, hth],
+      by simp only [fsum, hth]⟩
+    hok hhist hcells hph hR hwm how
+
+/-- **The invariant over a step that keeps the state word** (the shared part of `Inv.lockStep` and
+`Inv.stepIn`): the word stays `Ok` (at the threads that have not ended after the step), its
+history and cells stay, the threads, the places and the client parts stay, the writer's hold of
+the outer mutex stays, and the free resource stays owned through the word (`Inv.keepR` at the same
+thread table and client parts). -/
+theorem Inv.keep {G G' : ThreadId → γ} {rX : Res} {m m' : Mem} (hI : W.Inv G rX m)
+    (hok : W.st.Ok m' fun u => M.ph (G' u) ≠ .gone) (hhist : W.st.hist m' = W.st.hist m)
+    (hcells : W.st.cellsR m' = W.st.cellsR m) (hth : m'.threads = m.threads)
+    (hph : ∀ u, W.ph (G' u) = W.ph (G u)) (hx : ∀ u, W.x (G' u) = W.x (G u))
+    (hwm : ∀ u, (W.ph (G u)).isW = true → (M.ph (G' u)).held = true)
+    (how : ∀ rF rO, rX = rsum (W.st.cellsR m) (rsum rF rO) → W.FreeRes G m rF → W.Owns G m rF →
+      W.Owns G' m' rF) : W.Inv G' rX m' :=
+  have hxs : W.xs G' = W.xs G := funext hx
+  hI.keepR hok hhist hcells (congrArg Array.size hth) hph (fun r h => by rw [hxs]; exact h) hwm how
+
+/-- **The invariant over a step that adds a thread and keeps the state word** (a spawn; as
+`Inv.keepR`, with the thread table growing by one; `Inv.keepCounts` with `counts_grow`): the word
+stays `Ok` at the threads that have not ended after the step, its history and cells stay, the
+places stay, the resource holds at the new client parts (`hR`), the writer's hold of the outer
+mutex stays, and the free resource stays owned through the word. -/
+theorem Inv.grow {G G' : ThreadId → γ} {rX : Res} {m m' : Mem} (hI : W.Inv G rX m)
+    (hsz : m'.threads.size = m.threads.size + 1)
+    (hok : W.st.Ok m' fun u => M.ph (G' u) ≠ .gone) (hhist : W.st.hist m' = W.st.hist m)
+    (hcells : W.st.cellsR m' = W.st.cellsR m)
+    (hph : ∀ u, W.ph (G' u) = W.ph (G u))
+    (hR : ∀ r, W.R (W.xs G) r → W.R (W.xs G') r)
+    (hwm : ∀ u, (W.ph (G u)).isW = true → (M.ph (G' u)).held = true)
+    (how : ∀ rF, W.Owns G m rF → W.Owns G' m' rF) : W.Inv G' rX m' :=
+  hI.keepCounts (by rw [hsz]; exact Nat.le_succ _) (counts_grow hI.ex hsz) hok hhist hcells hph
+    hR hwm fun rF _ _ _ ho => how rF ho
 
 /-- **The invariant over a step of another lock's code** (`LockWord.Step` of a word `K` apart from
 the state word: the outer mutex's or the semaphore's mutex's, in a client's rest over that lock's

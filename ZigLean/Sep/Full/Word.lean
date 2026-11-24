@@ -1086,33 +1086,42 @@ theorem Ok.record_sole_native {m : Mem} {t : ThreadId} {b o len : Nat} {k : Acce
     · exact .inl he
     · right; cases k <;> simp_all [plainHit, AccessKind.isWrite]
 
-/-- A fork preserves every word's validity and history. The new thread's clock inherits its
-parent's bound, so the premise `hA` asks: if the new thread is in the live set, so is its parent
-(trivial for the default live set); no thread-preservation summary is required. -/
-theorem Ok.fork_native {m m' : Mem} {t c : ThreadId} {gt : Bool}
+/-- **A spawn keeps a word's validity at a live set that takes the new thread in**
+(`Ok.fork_native` with a new live set `A'`): each old thread of `A'` was in `A`, and with the new
+thread in `A'` its parent was in `A` (the new thread's clock is above its parent's). -/
+theorem Ok.forkLive {A' : ThreadId → Prop} {m m' : Mem} {t c : ThreadId} {gt : Bool}
     (hw : W.Ok m A) (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size)
     (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m')))
-    (hA : A m.threads.size → A t := by exact fun _ => trivial) :
-    W.Ok m' A ∧ W.hist m' = W.hist m := by
+    (hA : ∀ u, u < m.threads.size → A' u → A u) (hAt : A' m.threads.size → A t) :
+    W.Ok m' A' ∧ W.hist m' = W.hist m := by
+  obtain ⟨hclk, hnew⟩ := fork_mem_clocks ht hcs hf
   rw [Proto.forkWith_run] at hf
   simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
-  obtain ⟨rfl, rfl⟩ := hf
-  obtain ⟨hcl, hcn, _⟩ := Conc.fork_clocks (cs := m.clocks) (t := t)
-    (by rw [hcs]; exact ht)
+  obtain ⟨-, rfl⟩ := hf
   refine ⟨⟨hw.blk, hw.only, hw.loc, ?_, hw.val, hw.plain⟩, hist_congr rfl rfl⟩
   intro e he hh
   rcases hw.wfp e he hh with ⟨ha, u, hu, hle⟩ | hall
   · exact .inl ⟨ha, u, by simpa only [Array.size_push] using Nat.lt_succ_of_lt hu,
-      VClock.le_trans hle (hcl u (by rw [hcs]; exact hu))⟩
+      VClock.le_trans hle (hclk u)⟩
   · refine .inr ?_
     intro u hu hu₁
     simp only [Array.size_push] at hu
     by_cases hu' : u < m.threads.size
-    · exact VClock.le_trans (hall u hu' hu₁) (hcl u (by rw [hcs]; exact hu'))
+    · exact VClock.le_trans (hall u hu' (hA u hu' hu₁)) (hclk u)
     · have heq : u = m.threads.size := by omega
       subst u
-      rw [← hcs]
-      exact VClock.le_trans (hall t ht (hA hu₁)) hcn
+      exact VClock.le_trans (hall t ht (hAt hu₁)) hnew
+
+/-- A fork preserves every word's validity and history. The new thread's clock inherits its
+parent's bound, so the premise `hA` asks: if the new thread is in the live set, so is its parent
+(trivial for the default live set); no thread-preservation summary is required
+(`Ok.forkLive` at the same live set). -/
+theorem Ok.fork_native {m m' : Mem} {t c : ThreadId} {gt : Bool}
+    (hw : W.Ok m A) (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size)
+    (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m')))
+    (hA : A m.threads.size → A t := by exact fun _ => trivial) :
+    W.Ok m' A ∧ W.hist m' = W.hist m :=
+  hw.forkLive ht hcs hf (fun _ _ h => h) hA
 
 /-- A lock step preserves the validity and exact history of any apart word. The
 proof uses its native array effect and frame facts, without a preservation packet. -/

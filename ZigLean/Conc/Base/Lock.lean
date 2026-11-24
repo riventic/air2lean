@@ -260,6 +260,22 @@ theorem fork_clocks {cs : Array VClock} {t : ThreadId} (ht : t < cs.size) :
     exact VClock.le_bump _ _
   · rw [Proto.getElem!_push, if_pos (by simp; omega), Proto.getElem!_set!_ite, if_neg (by omega)]
 
+/-- **The clocks over a spawn** by `t`: no thread's clock moves back, and the new thread's clock
+is above `t`'s (`fork_clocks`, at every thread id). -/
+theorem fork_mem_clocks {m m' : Mem} {t c : ThreadId} {gt : Bool} (ht : t < m.threads.size)
+    (hcs : m.clocks.size = m.threads.size)
+    (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m'))) :
+    (∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true) ∧
+      VClock.le (m.clocks[t]!) (m'.clocks[m.threads.size]!) = true := by
+  rw [Proto.forkWith_run] at hf
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
+  obtain ⟨-, rfl⟩ := hf
+  obtain ⟨hcl, hcn, -⟩ := fork_clocks (cs := m.clocks) (t := t) (by rw [hcs]; exact ht)
+  refine ⟨fun u => ?_, by rw [← hcs]; exact hcn⟩
+  by_cases hu : u < m.clocks.size
+  · exact hcl u hu
+  · rw [getElem!_neg m.clocks u hu]; exact VClock.le_default _
+
 theorem join_threads {m m' : Mem} {t u : ThreadId} {rec : ThreadRec}
     (hr : m.threads[u]? = some rec)
     (hj : ((Thread.join u).run { m with current := t }).run = some (.ok ((), m'))) :

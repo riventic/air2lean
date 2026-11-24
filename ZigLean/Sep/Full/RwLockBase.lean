@@ -33,7 +33,8 @@ reader/writer lock `W`: the lock's part, and the program's own facts `E`.
 
 The obligations of the builders, one theorem each: a stop (`Base.atStop`), a step of either
 lock's code (`Base.stableM`, `Base.stableS`), a tick of a thread's part in the outer mutex's view
-and in the semaphore's (`Base.tickM`, `Base.tickL`, from `Base.tick`), a step of the rwlock's own
+and in the semaphore's (`Base.tickM`, `Base.tickL`, from `Base.tick`; `Base.tick` and the change
+of a part at the same memory, `Base.setPart`, are `Base.setPartAt`), a step of the rwlock's own
 code (`Base.wstep`), a step of the semaphore's code (`Base.sstep`: `fitsS`'s `kstep`, from the
 assembler `Base.ofStepRest` over the rest the step leaves, `FCond.StepRest`, and `Base.natStep` for
 a step in the semaphore's mutex's frame), the relabels around the other lock's code
@@ -315,19 +316,20 @@ theorem stableS {t : ThreadId} {p : LPh} {h s : Res} {m' : Mem} (hu : W.Base E S
         cases L.ph (G t) <;> cases p <;> simp [LPh.next]
       · rw [upd_ne _ _ e]; exact hu.mal u ha }
 
-/-- **A tick of `t`'s part keeps the base** (the two locks have one part,
-`FLock.Pair.setPart`): the tick changes no byte, so the rwlock's invariant stays (`Inv.stepIn`;
-the rest's bytes are live, `FLock.Inv.rest_live`), the condition's and the semaphore's stay
-(`FCond.Inv.other`, `FSem.Inv.outStep`), and the readers' shares are kept by counting
-(`Shares.keep`), given the outer mutex's invariant before and after the tick at rests with the
-common rest beside the semaphore's mutex's side (`s`, `s'`: the same shares). The part is no
-place (`hpl`). -/
-theorem tick {t : ThreadId} {r s s' : Res} (hu : W.Base E Sz K G rX m)
+/-- **A change of `t`'s part keeps the base, at every tick count** (the one proof of `Base.tick`
+and `Base.setPart`; the two locks have one part, `FLock.Pair.setPart`): the memory is `m` but for
+its tick count `k`, so no byte, clock, thread or record of accesses changes. The rwlock's
+invariant stays (`Inv.keep`), the condition's and the semaphore's stay (`FCond.Inv.other`,
+`FSem.Inv.outStep`), and the readers' shares are kept by counting (`Shares.keep`), given the outer
+mutex's invariant before and after the change at rests with the common rest beside the
+semaphore's mutex's side (`s`, `s'`: the same shares). So a reader's part keeps its share of the
+readers' heap, and a thread that is no reader gets none. The part is no place (`hpl`). -/
+theorem setPartAt {t : ThreadId} {r s s' : Res} (k : Nat) (hu : W.Base E Sz K G rX m)
     (hM : M.Inv G (rsum s rX) m)
-    (hM' : M.Inv (upd G t (M.setPart (G t) r)) (rsum s' rX) m.ticked)
+    (hM' : M.Inv (upd G t (M.setPart (G t) r)) (rsum s' rX) { m with ticks := k })
     (hs : ∀ l, s'.gh.share l = s.gh.share l) (ht : t < m.threads.size)
     (hpl : ∀ g r, W.place.ph (M.setPart g r) = W.place.ph g) :
-    W.Base E Sz K (upd G t (M.setPart (G t) r)) rX m.ticked := by
+    W.Base E Sz K (upd G t (M.setPart (G t) r)) rX { m with ticks := k } := by
   obtain ⟨⟨hC, hW⟩, hS⟩ := hu.sub
   have wph : ∀ g, W.ph (M.setPart g r) = W.ph g := fun g => congrArg Prod.fst (hpl g r)
   have cph : ∀ g, C.ph (M.setPart g r) = C.ph g := fun g =>
@@ -343,20 +345,27 @@ theorem tick {t : ThreadId} {r s s' : Res} (hu : W.Base E Sz K G rX m)
   have hwph := hup W.ph wph
   have hmph := hup M.ph fun g => M.ph_setPart g r
   have hlph := hup L.ph lph
-  have hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m.ticked.clocks[u]!) = true :=
+  have hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m.clocks[u]!) = true :=
     fun _ => VClock.le_refl _
   have hfld : ∀ {Wd : Word 32 4} {A : ThreadId → Prop}, Wd.Ok m A →
-      Wd.Ok m.ticked A ∧ Wd.hist m.ticked = Wd.hist m :=
+      Wd.Ok { m with ticks := k } A ∧ Wd.hist { m with ticks := k } = Wd.hist m :=
     fun h => h.fields_native rfl rfl rfl rfl hcl
   have hS' := (hfld (hW C.S (.inl rfl)).1).2
   have hE' := (hfld (hW C.Ep (.inr rfl)).1).2
+  have hst := hu.winv.ok.fields_native (m' := { m with ticks := k }) rfl rfl rfl rfl hcl
   have hpv : S.cnt (upd G t (M.setPart (G t) r)) = S.cnt G := cnt_congr hwph
+  have hmgone : ∀ u, M.ph (upd G t (M.setPart (G t) r) u) ≠ .gone → M.ph (G u) ≠ .gone :=
+    fun u h => by rwa [hmph u] at h
   exact {
     cl := cl_of (hup W.x fun g => W.x_part g r) (hu.cl.same rfl hcl rfl)
-    winv := hu.winv.stepIn (FStepIn.ticked m rX.owned) (fun _ h => h)
-      (fun l h => hM.rest_live ((Res.owned_sep rfl rfl).mpr (.inr h))) (fun _ _ => rfl)
-      (fun _ _ => rfl) (fun _ _ _ _ _ _ h => absurd rfl h) hwph (hup W.x fun g => W.x_part g r)
-      (fun u h => by rwa [hmph u] at h) (fun u h => by rw [hmph u]; exact hu.winv.wm u h)
+    winv := hu.winv.keep (hst.1.anti hmgone) hst.2 rfl rfl hwph
+      (hup W.x fun g => W.x_part g r) (fun u h => by rw [hmph u]; exact hu.winv.wm u h)
+      fun _ _ _ _ ho e he hT => by
+        rcases ho e he hT with h | h | ⟨hw, hsq, u, hu', hcu⟩
+        · have h' : LockWord.LiveLe (M.pl G) { m with ticks := k } e.clock := h
+          exact .inl (LockWord.LiveLe.weaken hmgone h')
+        · exact .inr (.inl (by rw [hst.2]; exact h))
+        · exact .inr (.inr ⟨hw, hsq, u, by rw [hwph u]; exact hu', hcu⟩)
     sub := ⟨⟨hC.other (t := t) (g' := M.setPart (G t) r) (cph _) (fun _ => lph _)
         (fun _ h => by rw [lph]; exact h)
         (by rw [S.sx_iff, S.sx_iff, sph]; exact id) hS' hE' rfl rfl rfl
@@ -385,6 +394,44 @@ theorem tick {t : ThreadId} {r s s' : Res} (hu : W.Base E Sz K G rX m)
     live := hu.live
     rdm := fun u hr => by rw [hmph u]; exact hu.rdm u (by rwa [hwph u] at hr)
     mal := fun u ha => by rw [hlph u]; exact hu.mal u (by rwa [hmph u] at ha) }
+
+/-- **A tick of `t`'s part keeps the base** (`Base.setPartAt` at the next tick count): the tick
+changes no byte, so the rwlock's, the condition's and the semaphore's invariants stay, and the
+readers' shares are kept by counting, given the outer mutex's invariant before and after the tick
+at rests with the common rest beside the semaphore's mutex's side (`s`, `s'`: the same shares).
+The part is no place (`hpl`). -/
+theorem tick {t : ThreadId} {r s s' : Res} (hu : W.Base E Sz K G rX m)
+    (hM : M.Inv G (rsum s rX) m)
+    (hM' : M.Inv (upd G t (M.setPart (G t) r)) (rsum s' rX) m.ticked)
+    (hs : ∀ l, s'.gh.share l = s.gh.share l) (ht : t < m.threads.size)
+    (hpl : ∀ g r, W.place.ph (M.setPart g r) = W.place.ph g) :
+    W.Base E Sz K (upd G t (M.setPart (G t) r)) rX m.ticked :=
+  hu.setPartAt (m.ticks + 1) hM hM' hs ht hpl
+
+/-- **A change of `t`'s part at the same memory keeps the base** (`Base.setPartAt` at the same
+tick count; `Base.tick` without the tick): the places and the client parts stay (the part is no
+place, `hpl`), and the readers' shares are kept by counting, given the outer mutex's invariant
+before and after the change at rests with the common rest beside the semaphore's mutex's side
+(`s`, `s'`: the same shares). -/
+theorem setPart {t : ThreadId} {r s s' : Res} (hu : W.Base E Sz K G rX m)
+    (hM : M.Inv G (rsum s rX) m)
+    (hM' : M.Inv (upd G t (M.setPart (G t) r)) (rsum s' rX) m)
+    (hs : ∀ l, s'.gh.share l = s.gh.share l) (ht : t < m.threads.size)
+    (hpl : ∀ g r, W.place.ph (M.setPart g r) = W.place.ph g) :
+    W.Base E Sz K (upd G t (M.setPart (G t) r)) rX m :=
+  hu.setPartAt m.ticks hM hM' hs ht hpl
+
+/-- **A thread out of every code stays so at another part**: the part is no place (`hpl`) and
+neither mutex reads it (`FLock.ph_setPart`, `held_setPart`; one part, `FLock.Pair.setPart`). -/
+theorem out_setPart (hpl : ∀ g r, W.place.ph (M.setPart g r) = W.place.ph g) {g : γ}
+    (h : W.Out g) (r : Res) : W.Out (M.setPart g r) := by
+  obtain ⟨hw, hm, hmh, hl, hlh, hc, hs⟩ := h
+  have wph : W.ph (M.setPart g r) = W.ph g := congrArg Prod.fst (hpl g r)
+  have cph : C.ph (M.setPart g r) = C.ph g := congrArg (fun q => q.2.1) (hpl g r)
+  have sph : S.ph (M.setPart g r) = S.ph g := congrArg (fun q => q.2.2) (hpl g r)
+  exact ⟨wph.trans hw, by rw [M.ph_setPart]; exact hm, by rw [M.held_setPart]; exact hmh,
+    by rw [W.pair.setPart, L.ph_setPart]; exact hl,
+    by rw [W.pair.setPart, L.held_setPart]; exact hlh, cph.trans hc, sph.trans hs⟩
 
 /-- **A waiter of the condition is `away` from the outer mutex or holds it at `holdsAway`**
 (`fitsS`'s `hsleep`; `nap`), with the epoch in the outer mutex's nest (`hnE`, the lock's). -/

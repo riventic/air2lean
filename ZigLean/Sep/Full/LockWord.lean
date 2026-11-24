@@ -57,6 +57,34 @@ structure LockWord where
   (`FLock.Fits.holdLive`). -/
   nest : Ptr → Prop := fun _ => False
 
+/-- **The joined threads after a join of `u`**: `u`, and those before it. -/
+theorem joinedB_join {m m' : Mem} {t u : ThreadId} (hu0 : u ≠ 0)
+    (hj : ((Thread.join u).run { m with current := t }).run = some (.ok ((), m')))
+    (w : ThreadId) : joinedB m' w = if w = u then true else joinedB m w := by
+  obtain ⟨rec, hr, -, rfl⟩ := Proto.join_eq hj
+  have hul : u < m.threads.size := (Array.getElem?_eq_some_iff.mp hr).1
+  unfold joinedB
+  simp only [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
+  by_cases hw : w = u
+  · subst hw; simp [hu0, hul]
+  · simp [hw, Ne.symm hw]
+
+/-- **The memory after a join by `t`**: the current thread is `t`, the clocks grew, and there are
+as many threads; the blocks, the atomic locations, the record of accesses and the futex queue
+stay. -/
+theorem join_mem {m m' : Mem} {t u : ThreadId}
+    (hj : ((Thread.join u).run { m with current := t }).run = some (.ok ((), m'))) :
+    ∃ cs ts, m' = { m with current := t, clocks := cs, threads := ts } ∧
+      ts.size = m.threads.size ∧ ∀ w : Nat, VClock.le (m.clocks[w]!) (cs[w]!) = true := by
+  obtain ⟨rec, -, -, rfl⟩ := Proto.join_eq hj
+  refine ⟨_, _, rfl, by simp, fun w => ?_⟩
+  show VClock.le (m.clocks[w]!) ((m.clocks.set! t _)[w]!) = true
+  rw [getElem!_set!_ite]
+  split
+  · rename_i h; rw [h.1]
+    exact VClock.le_trans (VClock.le_bump _ _) (VClock.le_merge_left _ _)
+  · exact VClock.le_refl _
+
 namespace LockWord
 
 variable (L : LockWord)
