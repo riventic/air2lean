@@ -986,10 +986,35 @@ def allocationPolicyNat (j : Json) : IO Nat := do
   if n < 0 ∨ 2 ^ 63 ≤ n then throw (IO.userError "invalid allocator policy integer")
   return n.toNat
 
+/-- The fields of a policy object, each a natural or (with `nullable`) `null`; any other field
+is rejected, since the native side would not read it. -/
+def allocationPolicyFields (j : Json) (allowed nullable : List String) (skip : List String := []) :
+    IO (String → Option Nat) := do
+  let mut found : List (String × Nat) := []
+  for (k, v) in (← orFail j.getObj? "allocator policy").toArray do
+    if skip.contains k then continue
+    unless allowed.contains k do throw (IO.userError s!"invalid allocator policy field {k}")
+    if v.isNull && nullable.contains k then continue
+    found := (k, ← allocationPolicyNat v) :: found
+  return fun k => found.lookup k
+
+/-- One rule of a failure oracle over (attempt index, request bytes), as
+`TestAllocator.OracleRule` (`tests/diff/common.zig`): it matches when every bound holds. -/
+def allocationOracleRule (j : Json) : IO (Nat → Nat → Bool) := do
+  let f ← allocationPolicyFields j
+    ["attempt_min", "attempt_max", "attempt_mod", "attempt_rem", "bytes_min", "bytes_max"] []
+  let modulus := (f "attempt_mod").getD 1
+  if modulus = 0 then throw (IO.userError "invalid allocator policy: attempt_mod 0")
+  let within (lo hi : String) (x : Nat) : Bool :=
+    decide ((f lo).getD 0 ≤ x) && (match f hi with | none => true | some h => decide (x ≤ h))
+  return fun i n => within "attempt_min" "attempt_max" i &&
+    i % modulus == (f "attempt_rem").getD 0 && within "bytes_min" "bytes_max" n
+
 /-- A function that takes an allocator: legacy null/index or an explicit object with
-`fail_at`, `failures` and `max_bytes`. This is the test-model policy, not native malloc. The
-harness keeps its 1 MiB request cap (`AllocPolicy.harness`, `TestAllocator.max_alloc_bytes`)
-explicitly; the model default has no fixed cap. -/
+`fail_at`, `failures`, `max_bytes`, `oracle` (a list of rules: `AllocPolicy.fails` holds when
+one matches) and `budget` (`AllocPolicy.budget`). This is the test-model policy, not native
+malloc. The harness keeps its 1 MiB request cap (`AllocPolicy.harness`,
+`TestAllocator.max_alloc_bytes`) explicitly; the model default has no fixed cap. -/
 def withFailAt {α : Type} (fa : Json) (r : Zig.MemM α) : IO (Zig.MemM α) := do
   let (f, policy) ← match fa with
     | .null => pure (none, Zig.AllocPolicy.harness)
@@ -997,19 +1022,18 @@ def withFailAt {α : Type} (fa : Json) (r : Zig.MemM α) : IO (Zig.MemM α) := d
       let n ← allocationPolicyNat fa
       pure (some n, Zig.AllocPolicy.harness)
     | .obj _ => do
-      let f ← match fa.getObjVal? "fail_at" with
-        | .ok .null => pure none
-        | .ok j => some <$> allocationPolicyNat j
-        | .error _ => pure none
-      let cap ← match fa.getObjVal? "max_bytes" with
-        | .ok j => allocationPolicyNat j
-        | .error _ => pure Zig.maxAllocBytes
+      let nat ← allocationPolicyFields fa ["fail_at", "max_bytes", "budget"] ["fail_at", "budget"]
+        (skip := ["failures", "oracle"])
       let failures ← match fa.getObjVal? "failures" with
         | .ok j => do
           let items ← getArr j
           (items.toList.mapM allocationPolicyNat)
         | .error _ => pure []
-      pure (f, ({ maxBytes := cap, failures } : Zig.AllocPolicy))
+      let rules ← match fa.getObjVal? "oracle" with
+        | .ok j => do (← getArr j).toList.mapM allocationOracleRule
+        | .error _ => pure []
+      pure (nat "fail_at", ({ maxBytes := (nat "max_bytes").getD Zig.maxAllocBytes, failures,
+        fails := fun i n => rules.any fun rule => rule i n, budget := nat "budget" } : Zig.AllocPolicy))
     | _ => throw (IO.userError "invalid allocator policy")
   return (do modify fun m => { m with failAt := f, allocPolicy := policy }; r)
 

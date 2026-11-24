@@ -63,42 +63,131 @@ var render_bufs: []const Buf = &.{};
 
 /// The allocator of a function that takes a `std.mem.Allocator`, with the rules of the model
 /// (`ZigLean/Mem/Alloc.lean`, docs/std-models.md): allocation number `fail_at` (from 0) fails, and
-/// so does an allocation of more than `max_alloc_bytes` bytes; `resize` and `remap` always fail;
-/// a free of memory that is not a live allocation of the same length panics with the kind
+/// so does an allocation of more than `max_alloc_bytes` bytes, one that the failure oracle
+/// `oracle` selects by (attempt, bytes), and one that would take the live allocations above
+/// `budget` bytes (`Mem.allocPolicy`, docs/allocation-policy.md); `resize` and `remap` always
+/// fail; a free of memory that is not a live allocation of the same length panics with the kind
 /// `doubleFree`.
 pub const TestAllocator = struct {
     fail_at: ?usize = null,
     failures: []const usize = &.{},
     request_cap: usize = max_alloc_bytes,
+    /// `AllocPolicy.fails`: attempt `i` of `n` bytes fails when a rule matches `(i, n)`.
+    oracle: []const OracleRule = &.{},
+    /// `AllocPolicy.budget`: the bytes of the live allocations, with the request, stay within it.
+    budget: ?usize = null,
     count: usize = 0,
     live: std.ArrayListUnmanaged([]u8) = .empty,
 
     pub const max_alloc_bytes = 1 << 20;
 
-    /// Decode an explicit reference-model policy. The caller owns `failures` when nonempty.
-    /// Legacy null/integer inputs preserve the original differential corpus.
+    /// One rule of a failure oracle over (attempt index, request bytes): it matches when every
+    /// bound holds. The default rule matches every request. A rule with
+    /// `attempt_min = attempt_max = i` and `bytes_min = bytes_max = n` is one entry of a decision
+    /// table, so the rules express every oracle on the finitely many requests of a run.
+    pub const OracleRule = struct {
+        attempt_min: usize = 0,
+        attempt_max: usize = std.math.maxInt(usize),
+        /// The attempt index is `attempt_rem` modulo `attempt_mod` (at least 1).
+        attempt_mod: usize = 1,
+        attempt_rem: usize = 0,
+        bytes_min: usize = 0,
+        bytes_max: usize = std.math.maxInt(usize),
+
+        pub fn matches(r: OracleRule, attempt: usize, bytes: usize) bool {
+            return r.attempt_min <= attempt and attempt <= r.attempt_max and
+                attempt % r.attempt_mod == r.attempt_rem and
+                r.bytes_min <= bytes and bytes <= r.bytes_max;
+        }
+    };
+
+    /// Decode an explicit reference-model policy. The caller owns `failures` and `oracle` when
+    /// nonempty (`deinitPolicy`). Legacy null/integer inputs preserve the original differential
+    /// corpus. A field that is not part of the policy is rejected: the model side would read it.
     pub fn fromJson(gpa: std.mem.Allocator, value: std.json.Value) !TestAllocator {
         if (value == .null) return .{};
         if (value == .integer) return .{ .fail_at = try policyNat(value) };
         if (value != .object) return error.InvalidAllocatorPolicy;
+        try onlyKeys(value.object, &.{ "fail_at", "max_bytes", "failures", "oracle", "budget" });
         var result: TestAllocator = .{};
+        errdefer result.deinitPolicy(gpa);
         if (value.object.get("fail_at")) |v| {
             if (v != .null) result.fail_at = try policyNat(v);
         }
         if (value.object.get("max_bytes")) |v| result.request_cap = try policyNat(v);
+        if (value.object.get("budget")) |v| {
+            if (v != .null) result.budget = try policyNat(v);
+        }
         if (value.object.get("failures")) |v| {
             if (v != .array) return error.InvalidAllocatorPolicy;
             const failures = try gpa.alloc(usize, v.array.items.len);
-            errdefer gpa.free(failures);
-            for (v.array.items, 0..) |item, i| failures[i] = try policyNat(item);
             result.failures = failures;
+            for (v.array.items, 0..) |item, i| failures[i] = try policyNat(item);
+        }
+        if (value.object.get("oracle")) |v| {
+            if (v != .array) return error.InvalidAllocatorPolicy;
+            const rules = try gpa.alloc(OracleRule, v.array.items.len);
+            result.oracle = rules;
+            for (v.array.items, 0..) |item, i| rules[i] = try policyRule(item);
         }
         return result;
+    }
+
+    /// Free what `fromJson` allocated.
+    pub fn deinitPolicy(self: *TestAllocator, gpa: std.mem.Allocator) void {
+        if (self.failures.len != 0) gpa.free(self.failures);
+        if (self.oracle.len != 0) gpa.free(self.oracle);
+        self.failures = &.{};
+        self.oracle = &.{};
+    }
+
+    fn onlyKeys(object: std.json.ObjectMap, comptime allowed: []const []const u8) !void {
+        next: for (object.keys()) |key| {
+            inline for (allowed) |name| {
+                if (std.mem.eql(u8, key, name)) continue :next;
+            }
+            return error.InvalidAllocatorPolicy;
+        }
+    }
+
+    fn policyRule(value: std.json.Value) !OracleRule {
+        if (value != .object) return error.InvalidAllocatorPolicy;
+        const names = comptime blk: {
+            const fields = std.meta.fieldNames(OracleRule);
+            break :blk fields[0..fields.len].*;
+        };
+        try onlyKeys(value.object, &names);
+        var rule: OracleRule = .{};
+        inline for (names) |name| {
+            if (value.object.get(name)) |v| @field(rule, name) = try policyNat(v);
+        }
+        if (rule.attempt_mod == 0) return error.InvalidAllocatorPolicy;
+        return rule;
     }
 
     fn policyNat(value: std.json.Value) !usize {
         if (value != .integer or value.integer < 0) return error.InvalidAllocatorPolicy;
         return std.math.cast(usize, value.integer) orelse error.InvalidAllocatorPolicy;
+    }
+
+    /// The bytes of the live allocations (`Mem.liveHeapBytes`).
+    pub fn liveBytes(self: *const TestAllocator) usize {
+        var total: usize = 0;
+        for (self.live.items) |m| total += m.len;
+        return total;
+    }
+
+    fn oracleDenies(self: *const TestAllocator, attempt: usize, len: usize) bool {
+        for (self.oracle) |rule| {
+            if (rule.matches(attempt, len)) return true;
+        }
+        return false;
+    }
+
+    /// `Mem.oracleDenies`'s budget half: the live bytes with the request exceed the budget.
+    fn overBudget(self: *const TestAllocator, len: usize) bool {
+        const budget = self.budget orelse return false;
+        return self.liveBytes() +| len > budget;
     }
 
     pub fn allocator(self: *TestAllocator) std.mem.Allocator {
@@ -115,6 +204,7 @@ pub const TestAllocator = struct {
         const k = self.count;
         self.count += 1;
         if (self.fail_at == k or len > self.request_cap or std.mem.indexOfScalar(usize, self.failures, k) != null) return null;
+        if (self.oracleDenies(k, len) or self.overBudget(len)) return null;
         const p = out_gpa.rawAlloc(len, alignment, ret_addr) orelse reportHarnessFailure("harnessOutOfMemory");
         self.live.append(out_gpa, p[0..len]) catch reportHarnessFailure("harnessOutOfMemory");
         return p;
