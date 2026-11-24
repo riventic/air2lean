@@ -3,12 +3,15 @@
 
 Drives a previously built translator; never builds it or invokes a compiler.
 
-  air_fuzz.py run BINARY [--seeds N] [--start S] [--save DIR] [--report FILE]
-  air_fuzz.py replay BINARY            # committed regressions/ must pass the oracle
-  air_fuzz.py show SEED [--out DIR]    # write the generated input for one seed
+  air_fuzz.py run BINARY [--seeds N] [--start S] [--save DIR] [--report FILE] [--zig-version V]
+  air_fuzz.py replay BINARY            # committed regressions/ must pass the oracle, in-file seeds be accepted
+  air_fuzz.py show SEED [--out DIR] [--zig-version V]   # write the generated input for one seed
 
 A case is reproducible from (seed, corpus): the corpus is the sorted list of committed
-`tests/golden/**/*.json` files under CORPUS_MAX_BYTES plus the in-file seeds below.
+`tests/golden/**/*.json` files under CORPUS_MAX_BYTES plus the in-file seeds below. With
+`--zig-version V` it is V's schema-12 in-file seeds plus V's committed compiler AIR only (the
+goldens and the fixture export manifests' outputs), and the mutations add the tags and version
+labels of the other supported versions.
 Each case is run in emission mode and with `--diagnostics-json`. The oracle accepts only:
 exit 0 with a profile header and no emitter placeholder, or exit 1 with a non-empty
 diagnostic and an untouched output path; diagnostics mode must print schema JSON whose
@@ -61,38 +64,81 @@ def _int(bits=32, signed=False):
     return dict(k="int", signed=signed, bits=bits, abi_size=(bits + 7) // 8, abi_align=(bits + 7) // 8)
 
 
-def _builtin_seeds():
+def _builtin_seeds(version=None, profile=None):
+    """The in-file seeds. Without VERSION: legacy schema-11 documents (Zig 0.16.0) of the mixed
+    corpus. With VERSION: the same functions as that version's schema-12 export, with PROFILE
+    (one of the version's committed exports) and the schema-12 type and global fields."""
     void, noret = dict(k="void", abi_size=0, abi_align=1), dict(k="noreturn")
-    ident = dict(schema=11, zig_version="0.16.0", target_endian="little", name="seed.ident",
-                 types=[void, _int(), noret], params=[1], ret=1, globals=[], body=[
-                     dict(id=0, tag="arg", ty=1, args=[], param=0),
-                     dict(id=1, tag="ret", ty=2, args=[dict(inst=0)])])
+    pointer = dict(k="ptr", size="one", const=False, child=1, abi_size=8, abi_align=8, ptr_align=4)
+    if version is None:
+        head = dict(schema=11, zig_version="0.16.0", target_endian="little")
+        fn_type, callee, module = [], {}, {}
+    else:
+        head = dict(schema=12, zig_version=version, target_endian=profile.get("endian", "little"),
+                    profile=profile, module="root", noalias=[])
+        pointer.update(volatile=False, allowzero=False, address_space="generic", sentinel=False, host_size=0)
+        fn_type, callee, module = [dict(k="other", name="fn (u32) u32")], dict(ty=3, module="root"), {"module": "root"}
+    ident = dict(head, name="seed.ident", types=[void, _int(), noret, *fn_type], params=[1], ret=1, globals=[],
+                 body=[dict(id=0, tag="arg", ty=1, args=[], param=0),
+                       dict(id=1, tag="ret", ty=2, args=[dict(inst=0)])])
     caller = dict(ident, name="seed.caller", body=[
         dict(id=0, tag="arg", ty=1, args=[], param=0),
-        dict(id=1, tag="call", ty=1, args=[dict(inst=0)], callee=dict(func="seed.ident", noreturn=False)),
+        dict(id=1, tag="call", ty=1, args=[dict(inst=0)],
+             callee=dict(callee, func="seed.ident", noreturn=False)),
         dict(id=2, tag="ret", ty=2, args=[dict(inst=1)])])
-    pointer = dict(k="ptr", size="one", const=False, child=1, abi_size=8, abi_align=8, ptr_align=4)
-    glob = dict(schema=11, zig_version="0.16.0", target_endian="little", name="seed.global",
-                types=[void, _int(), noret, pointer], params=[], ret=1, body=[
-                    dict(id=0, tag="load", ty=1, args=[dict(ty=3, ptr={"global": 0, "off": 0})]),
-                    dict(id=1, tag="ret", ty=2, args=[dict(inst=0)])],
-                globals=[dict(name="seed.state", ty=1, const=False, threadlocal=False, extern=False,
-                              init=dict(ty=1, val="7"))])
+    glob = dict(head, name="seed.global", types=[void, _int(), noret, pointer], params=[], ret=1, body=[
+        dict(id=0, tag="load", ty=1, args=[dict(ty=3, ptr={"global": 0, "off": 0})]),
+        dict(id=1, tag="ret", ty=2, args=[dict(inst=0)])],
+        globals=[dict(name="seed.state", **module, ty=1, const=False, threadlocal=False, extern=False,
+                      init=dict(ty=1, val="7"))])
     return [("builtin:ident", [ident]), ("builtin:call", [caller, ident]), ("builtin:global", [glob])]
 
 
-def load_corpus():
-    corpus = _builtin_seeds()
-    for path in sorted((ROOT / "tests/golden").rglob("*.json")):
+def supported_versions():
+    return [v["version"] for v in json.loads((ROOT / "compatibility.json").read_text())["zig"]["versions"]]
+
+
+def _committed_air(version):
+    """Committed compiler AIR of VERSION: the goldens and every fixture export manifest's output
+    (scripts/fixture-exports.py), in path order."""
+    paths = sorted((ROOT / "tests/golden").rglob("*.json"))
+    for manifest in sorted((ROOT / "tests/roadmap").glob("*/exports.json")):
+        for entry in json.loads(manifest.read_text())["exports"]:
+            if version in entry["versions"]:
+                paths += sorted((manifest.parent / entry["out"].format(version=version)).rglob("*.json"))
+    return paths
+
+
+def _committed_docs(version=None):
+    """(path, [document]) of each committed file of at most CORPUS_MAX_BYTES: without VERSION
+    every golden file, with VERSION that version's committed compiler AIR (`_committed_air`)."""
+    paths = sorted((ROOT / "tests/golden").rglob("*.json")) if version is None else _committed_air(version)
+    found = []
+    for path in paths:
         if path.stat().st_size <= CORPUS_MAX_BYTES:
             try:
-                corpus.append((str(path.relative_to(ROOT)), [json.loads(path.read_text())]))
+                doc = json.loads(path.read_text())
             except (ValueError, UnicodeDecodeError):
                 continue
-    return corpus
+            if version is None or (isinstance(doc, dict) and doc.get("zig_version") == version):
+                found.append((str(path.relative_to(ROOT)), [doc]))
+    return found
 
 
-def _vocabulary(corpus):
+def load_corpus(version=None):
+    """Without VERSION: the legacy seeds plus every committed golden file, of every version.
+    With VERSION: that version's seeds plus its committed compiler AIR only; a version without
+    committed schema-12 AIR fails closed."""
+    found = _committed_docs(version)
+    if version is None:
+        return _builtin_seeds() + found
+    profiles = [docs[0]["profile"] for _, docs in found if isinstance(docs[0].get("profile"), dict)]
+    if not profiles:
+        raise SystemExit(f"no committed schema-12 AIR of Zig {version} to fuzz")
+    return _builtin_seeds(version, profiles[0]) + found
+
+
+def _collect(corpus):
     tags, kinds, keys = set(), set(), set()
     for _, docs in corpus:
         for doc in docs:
@@ -108,7 +154,21 @@ def _vocabulary(corpus):
                     stack.extend(node.values())
                 elif isinstance(node, list):
                     stack.extend(node)
-    return sorted(tags), sorted(kinds), sorted(keys)
+    return tags, kinds, keys
+
+
+def _vocabulary(corpus, version=None):
+    """(tags, kinds, keys, foreign_tags, other_versions). The first three are what CORPUS uses.
+    With VERSION, `foreign_tags` are the tags of the other supported versions' committed AIR that
+    VERSION's lacks (a renamed or removed tag, such as 0.16's `bitcast` in a 0.17 file, must be
+    rejected) and `other_versions` the other version labels; without VERSION both are empty."""
+    tags, kinds, keys = _collect(corpus)
+    foreign, others = set(), []
+    if version is not None:
+        others = [v for v in supported_versions() if v != version]
+        for other in others:
+            foreign |= _collect(_committed_docs(other))[0]
+    return sorted(tags), sorted(kinds), sorted(keys), sorted(foreign - tags), others
 
 
 # --- generator ---------------------------------------------------------------------------
@@ -130,10 +190,17 @@ def _replace(doc, path, new):
 
 
 def _structural(rng, doc, corpus, vocab):
-    tags, kinds, keys = vocab
+    tags, kinds, keys, foreign, others = vocab
     tree = list(nodes(doc))
     path, node = rng.choice(tree)
-    op = rng.randrange(10)
+    # One version's corpus adds op 10, a version label of another supported version.
+    op = rng.randrange(11 if others else 10)
+    if op == 10:
+        labels = [(p, v) for p, v in tree if p and p[-1] == "zig_version"]
+        if labels:
+            path, value = rng.choice(labels)
+            new = rng.choice(others)
+            return _replace(doc, path, new), f"zig_version {list(path)} {value}->{new}"
     if op == 0 and path:  # delete a key / element
         parent = doc
         for key in path[:-1]:
@@ -154,7 +221,11 @@ def _structural(rng, doc, corpus, vocab):
         if tagged:
             path, value = rng.choice(tagged)
             field = "tag" if "tag" in value else "k"
-            new = rng.choice(tags if field == "tag" else kinds) if rng.random() < 0.8 else "fuzz_unknown"
+            draw = rng.random()
+            if field == "tag" and foreign and 0.7 <= draw < 0.85:
+                new = rng.choice(foreign)
+            else:
+                new = rng.choice(tags if field == "tag" else kinds) if draw < 0.8 else "fuzz_unknown"
             value[field] = new
             return doc, f"{field} {list(path)} -> {new}"
     if op == 4:
@@ -389,24 +460,30 @@ def shrink_case(binary, files, kind):
 
 # --- commands ----------------------------------------------------------------------------
 
-def save_regression(directory, seed, kind, files, description):
-    case = directory / f"seed-{seed}"
+def case_name(seed, version=None):
+    """A regression's directory name: the seed, after its corpus version when it has one."""
+    return f"seed-{version}-{seed}" if version else f"seed-{seed}"
+
+
+def save_regression(directory, seed, kind, files, description, version=None):
+    case = directory / case_name(seed, version)
     if case.exists():
         shutil.rmtree(case)
     case.mkdir(parents=True)
     for k, data in enumerate(files):
         (case / f"{k:02d}.json").write_bytes(data)
-    (case / "case.json").write_text(json.dumps(
-        # expected_exit stays null until a fix decides the outcome; test_fuzz.py rejects null.
-        {"seed": seed, "original_failure": kind, "expected_exit": None, "generator": description},
-        indent=1) + "\n")
+    meta = {"seed": seed, "original_failure": kind, "expected_exit": None, "generator": description}
+    if version:
+        meta["zig_version"] = version
+    # expected_exit stays null until a fix decides the outcome; test_fuzz.py rejects null.
+    (case / "case.json").write_text(json.dumps(meta, indent=1) + "\n")
     return case
 
 
 def cmd_run(args):
     binary = Path(args.binary).resolve(strict=True)
-    corpus = load_corpus()
-    vocab = _vocabulary(corpus)
+    corpus = load_corpus(args.zig_version)
+    vocab = _vocabulary(corpus, args.zig_version)
     failures, outcomes = [], {}
     for seed in range(args.start, args.start + args.seeds):
         files, description = generate(seed, corpus, vocab)
@@ -420,13 +497,14 @@ def cmd_run(args):
         entry = {"seed": seed, "failure": kind, "generator": description,
                  "shrunk_bytes": sum(len(f) for f in shrunk)}
         if args.save:
-            entry["fixture"] = str(save_regression(Path(args.save), seed, kind, shrunk, description))
+            entry["fixture"] = str(save_regression(Path(args.save), seed, kind, shrunk, description,
+                                                   args.zig_version))
         failures.append(entry)
-    report = {"seeds": args.seeds, "start": args.start, "corpus": len(corpus),
-              "outcomes": dict(sorted(outcomes.items())), "failures": failures}
+    report = {"seeds": args.seeds, "start": args.start, "zig_version": args.zig_version or "all",
+              "corpus": len(corpus), "outcomes": dict(sorted(outcomes.items())), "failures": failures}
     if args.report:
         Path(args.report).write_text(json.dumps(report, indent=1) + "\n")
-    print(json.dumps({k: report[k] for k in ("seeds", "start", "corpus", "outcomes")}))
+    print(json.dumps({k: report[k] for k in ("seeds", "start", "zig_version", "corpus", "outcomes")}))
     print(f"{len(failures)} failing seeds")
     return 1 if failures else 0
 
@@ -444,12 +522,24 @@ def cmd_replay(args):
             bad += 1
             print(f"{case.name}: {kind or 'exit'} {observed}")
     print(f"{len(cases) - bad}/{len(cases)} committed fuzz regressions pass the oracle")
-    return 1 if bad else 0
+    # Every in-file seed is a well-formed program the translator accepts, so that mutations start
+    # from accepted input: the legacy seeds and those of each supported version.
+    count = len(_builtin_seeds())
+    seeds = [(version, name, docs) for version in (None, *supported_versions())
+             for name, docs in load_corpus(version)[:count]]
+    rejected = 0
+    for version, name, docs in seeds:
+        kind, observed = evaluate(binary, [_dump(doc) for doc in docs])
+        if kind is not None or observed.get("emit") != 0:
+            rejected += 1
+            print(f"{name} ({version or 'legacy'}): {kind or 'rejected'} {observed}")
+    print(f"{len(seeds) - rejected}/{len(seeds)} in-file seeds are accepted")
+    return 1 if bad or rejected else 0
 
 
 def cmd_show(args):
-    corpus = load_corpus()
-    files, description = generate(args.seed, corpus, _vocabulary(corpus))
+    corpus = load_corpus(args.zig_version)
+    files, description = generate(args.seed, corpus, _vocabulary(corpus, args.zig_version))
     print(json.dumps(description, indent=1))
     if args.out:
         out = Path(args.out)
@@ -474,6 +564,9 @@ def main(argv=None):
     show = sub.add_parser("show")
     show.add_argument("seed", type=int)
     show.add_argument("--out")
+    for command in (run, show):
+        command.add_argument("--zig-version", choices=supported_versions(),
+                             help="mutate only this version's seeds and committed AIR (default: the mixed corpus)")
     args = parser.parse_args(argv)
     return {"run": cmd_run, "replay": cmd_replay, "show": cmd_show}[args.command](args)
 

@@ -1495,6 +1495,11 @@ jobs:
           export TMPDIR="$fuzz_dir/tmp"
           tests/roadmap/fuzz/check.sh --air "$PWD/.lake/build/bin/air2lean" 1000 "$fuzz_dir/failures" 2>&1 \
             | tee "$fuzz_dir/fuzz.log"
+          # The default version's own seed set: its schema-12 seeds and committed AIR, with the other
+          # versions' tags and labels as mutations (translator only, so in this job too).
+          default_zig=$(python3 scripts/compat.py default)
+          tests/roadmap/fuzz/check.sh --air "$PWD/.lake/build/bin/air2lean" 1000 "$fuzz_dir/failures-$default_zig" \
+            "$default_zig" 2>&1 | tee "$fuzz_dir/fuzz-$default_zig.log"
 
       # Q01 heavy differential, capped at 3 seeds per profile (core and wide): generated Zig is run natively (stock Zig),
       # exported with the patched compiler, translated, and the Lean values must equal native.
