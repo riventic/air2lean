@@ -108,6 +108,149 @@ theorem wake_wp (hcost : P.cost = none) {t : ThreadId} {G : ThreadId → γ} {m 
 
 end_when
 
+when_defined Thread_Futex_DarwinImpl_wake
+
+/-- `UL{ .op = .COMPARE_AND_WAIT, .NO_ERRNO = true, .WAKE_ALL = all }` as the `u32` the kernel
+reads (`COMPARE_AND_WAIT | NO_ERRNO`, with `WAKE_ALL`). -/
+theorem ul_bits (all : Bool) :
+    Zig.Packed.toBits ({ op := c_darwin_UL_Op.COMPARE_AND_WAIT, WAKE_ALL := all,
+      WAKE_THREAD := false, _10 := 0, WAIT_WORKQ_DATA_CONTENTION := false,
+      WAIT_CANCEL_POINT := false, WAIT_ADAPTIVE_SPIN := false, _19 := 0, NO_ERRNO := true,
+      «_» := 0 } : c_darwin_UL) =
+      (if all then Os.Darwin.UL_COMPARE_AND_WAIT_NO_ERRNO ||| Os.Darwin.UL_WAKE_ALL
+        else Os.Darwin.UL_COMPARE_AND_WAIT_NO_ERRNO) := by
+  cases all <;> decide
+
+/-- The request of a macOS wake of `c ≠ 0` waiters: one waiter, or all (`WAKE_ALL`) for more
+than one. -/
+theorem wakeMax_ul (all : Bool) :
+    Os.Darwin.wakeMax (if all then Os.Darwin.UL_COMPARE_AND_WAIT_NO_ERRNO ||| Os.Darwin.UL_WAKE_ALL
+      else Os.Darwin.UL_COMPARE_AND_WAIT_NO_ERRNO) = if all then none else some 1 := by
+  cases all <;> decide
+
+/-- **`__ulock_wake`** of std's macOS wake, by a caller that supplies the steps of its primitive
+at an invariant `I` of the wake's place: the oracle stop before the wake (`hpick`) and the OS
+wake (`hwake`: done, `D`, after a wake of some `j` waiters; still at `I` after a spurious
+`EINTR`). Its code is `0` or `-ENOENT` (`0xfffffffe`) when done, `-EINTR` (`0xfffffffc`) at
+`I`. -/
+theorem ulock_wake_wp {t : ThreadId} {p : Ptr} {all : Bool} {op : BitVec 32}
+    {I D : (ThreadId → γ) → Mem → Prop}
+    (hop : op = (if all then Os.Darwin.UL_COMPARE_AND_WAIT_NO_ERRNO ||| Os.Darwin.UL_WAKE_ALL
+      else Os.Darwin.UL_COMPARE_AND_WAIT_NO_ERRNO))
+    (hword : ∀ G m, I G m → m.wordAt p = true)
+    (hpick : ∀ {G : ThreadId → γ} {m : Mem} {d : Nat}
+      {Q : Nat → (ThreadId → γ) → Mem → Nat → Prop}, I G m →
+      (∀ k, d = k + 1 → ∀ a G₁ m', I G₁ m' → Q a G₁ m' k) →
+      P.WP t (Os.pick (fun _ => 2) : ConcM Tgt Nat) Q G m d)
+    (hwake : ∀ {G : ThreadId → γ} {m : Mem} {d : Nat}
+      {Q : Option Nat → (ThreadId → γ) → Mem → Nat → Prop}, I G m →
+      (∀ k, d = k + 1 → ∀ r G₁ m', ((∃ j, r = some j) ∧ D G₁ m' ∨ r = none ∧ I G₁ m') →
+        Q r G₁ m' k) →
+      P.WP t (Os.futexWake p false (if all then none else some 1) true :
+        ConcM Tgt (Option Nat)) Q G m d)
+    {G : ThreadId → γ} {m : Mem} {d : Nat} {Q : BitVec 32 → (ThreadId → γ) → Mem → Nat → Prop}
+    (hI : I G m)
+    (h : ∀ k, k < d → ∀ s G₁ m',
+      ((s = 0 ∨ s = (0xfffffffe : BitVec 32)) ∧ D G₁ m' ∨
+       s = (0xfffffffc : BitVec 32) ∧ I G₁ m') → Q s G₁ m' k) :
+    P.WP t (Os.Darwin.__ulock_wake op (some p) 0 : ConcM Tgt (BitVec 32)) Q G m d := by
+  subst hop
+  refine WP.ulock_wake (by cases all <;> simp) (hword G m hI)
+    (hpick hI fun k hk live G₁ m₁ hI₁ => ?_)
+  rw [wakeMax_ul]
+  refine hwake hI₁ fun k' hk' r G₂ m₂ hr => h k' (by omega) _ G₂ m₂ ?_
+  rcases hr with ⟨⟨j, rfl⟩, hD⟩ | ⟨rfl, hI₂⟩
+  · refine .inl ⟨?_, hD⟩
+    rcases j with _ | j
+    · by_cases hl : live = 0
+      · subst hl
+        refine .inr ?_
+        show Os.Darwin.negErrno32 Os.Darwin.E.NOENT = _
+        decide
+      · exact .inl (by simp [Os.Darwin.wakeCode, hl])
+    · exact .inl rfl
+  · refine .inr ⟨?_, hI₂⟩
+    show Os.Darwin.negErrno32 Os.Darwin.E.INTR = _
+    decide
+
+/-- The loop of `DarwinImpl.wake`: the tick (`htick`, paid by the caller at `I`), then
+`__ulock_wake` (`ulock_wake_wp`); it repeats after `EINTR`. -/
+theorem wake_body {t : ThreadId} {p : Ptr} {all : Bool} {I D : (ThreadId → γ) → Mem → Prop}
+    (hword : ∀ G m, I G m → m.wordAt p = true)
+    (htick : ∀ {G : ThreadId → γ} {m : Mem} {d : Nat}
+      {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop}, I G m →
+      (∀ m', I G m' → Q () G m' d) → P.WP t (ConcM.liftMem Zig.tick : ConcM Tgt Unit) Q G m d)
+    (hpick : ∀ {G : ThreadId → γ} {m : Mem} {d : Nat}
+      {Q : Nat → (ThreadId → γ) → Mem → Nat → Prop}, I G m →
+      (∀ k, d = k + 1 → ∀ a G₁ m', I G₁ m' → Q a G₁ m' k) →
+      P.WP t (Os.pick (fun _ => 2) : ConcM Tgt Nat) Q G m d)
+    (hwake : ∀ {G : ThreadId → γ} {m : Mem} {d : Nat}
+      {Q : Option Nat → (ThreadId → γ) → Mem → Nat → Prop}, I G m →
+      (∀ k, d = k + 1 → ∀ r G₁ m', ((∃ j, r = some j) ∧ D G₁ m' ∨ r = none ∧ I G₁ m') →
+        Q r G₁ m' k) →
+      P.WP t (Os.futexWake p false (if all then none else some 1) true :
+        ConcM Tgt (Option Nat)) Q G m d)
+    (N : Nat) (s : Thread_Futex_DarwinImpl_wakeLocals) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hs : (Zig.Packed.toBits s.local2 =
+        (if all then Os.Darwin.UL_COMPARE_AND_WAIT_NO_ERRNO ||| Os.Darwin.UL_WAKE_ALL
+          else Os.Darwin.UL_COMPARE_AND_WAIT_NO_ERRNO)) ∧ d ≤ N ∧ I G m) :
+    P.WP t ((Thread_Futex_DarwinImpl_wake.loop25 p).run s) (fun r G' m' d' =>
+      if Thread_Futex_DarwinImpl_wake.again25 r.1 then
+        ((Zig.Packed.toBits r.2.local2 =
+          (if all then Os.Darwin.UL_COMPARE_AND_WAIT_NO_ERRNO ||| Os.Darwin.UL_WAKE_ALL
+            else Os.Darwin.UL_COMPARE_AND_WAIT_NO_ERRNO)) ∧ d' ≤ N ∧ I G' m') ∧
+        (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 <
+          (fun (_ : Thread_Futex_DarwinImpl_wakeLocals) => 0) s)
+      else r.1 = .ret ∧ d' < N ∧ D G' m') G m d := by
+  obtain ⟨hbits, hd, hI⟩ := hs
+  unfold Thread_Futex_DarwinImpl_wake.loop25
+  rw [StateT.run_bind]
+  refine WP.bind ?_
+  show P.WP t (ConcM.liftMem Zig.tick >>= fun a => pure (a, s)) _ _ _ _
+  refine WP.bind (htick hI fun m₁ hI₁ => WP.pure' ?_)
+  fsym [ulock_wake_wp (P := P) (t := t) (p := p) (all := all) hbits hword hpick hwake,
+    Thread_Futex_DarwinImpl_wake.again25]
+
+/-- **`Thread.Futex.wake(p, c)`** (macOS, `c ≠ 0`) at a live word `p`, by a caller that supplies
+the steps of its primitive at an invariant `I` of the wake's place: the loop's tick (`htick`,
+paid from the caller's part), the oracle stop before each wake (`hpick`) and the OS wake of one
+waiter, or of all for `c > 1` (`hwake`: done, `D`, after a wake of some `j` waiters; still at
+`I` after a spurious `EINTR`, when std wakes again). -/
+theorem wake_wp (hcost : P.cost = none) {t : ThreadId} {p : Ptr} {c : BitVec 32} (hc : c ≠ 0)
+    {I D : (ThreadId → γ) → Mem → Prop}
+    (hword : ∀ G m, I G m → m.wordAt p = true)
+    (htick : ∀ {G : ThreadId → γ} {m : Mem} {d : Nat}
+      {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop}, I G m →
+      (∀ m', I G m' → Q () G m' d) → P.WP t (ConcM.liftMem Zig.tick : ConcM Tgt Unit) Q G m d)
+    (hpick : ∀ {G : ThreadId → γ} {m : Mem} {d : Nat}
+      {Q : Nat → (ThreadId → γ) → Mem → Nat → Prop}, I G m →
+      (∀ k, d = k + 1 → ∀ a G₁ m', I G₁ m' → Q a G₁ m' k) →
+      P.WP t (Os.pick (fun _ => 2) : ConcM Tgt Nat) Q G m d)
+    (hwake : ∀ {G : ThreadId → γ} {m : Mem} {d : Nat}
+      {Q : Option Nat → (ThreadId → γ) → Mem → Nat → Prop}, I G m →
+      (∀ k, d = k + 1 → ∀ r G₁ m', ((∃ j, r = some j) ∧ D G₁ m' ∨ r = none ∧ I G₁ m') →
+        Q r G₁ m' k) →
+      P.WP t (Os.futexWake p false (if Zig.gt false c (1 : BitVec 32) then none else some 1) true :
+        ConcM Tgt (Option Nat)) Q G m d)
+    {G : ThreadId → γ} {m : Mem} {n : Nat} {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop}
+    (hI : I G m) (h : ∀ G' m' d', d' < n → D G' m' → Q () G' m' d') :
+    P.WP t (Thread_Futex_wake p c) Q G m n := by
+  have hc' : (c == (0 : BitVec 32)) = false := beq_false_of_ne hc
+  unfold Thread_Futex_wake Thread_Futex_DarwinImpl_wake
+  fsym [WP.loop _ _
+      (fun (s : Thread_Futex_DarwinImpl_wakeLocals) G' m' d' =>
+        (Zig.Packed.toBits s.local2 =
+          (if Zig.gt false c (1 : BitVec 32) then
+            Os.Darwin.UL_COMPARE_AND_WAIT_NO_ERRNO ||| Os.Darwin.UL_WAKE_ALL
+          else Os.Darwin.UL_COMPARE_AND_WAIT_NO_ERRNO)) ∧ d' ≤ n ∧ I G' m')
+      (fun _ => 0)
+      (fun r G' m' d' => r.1 = .ret ∧ d' < n ∧ D G' m')
+      (wake_body (P := P) (t := t) (p := p) (all := Zig.gt false c (1 : BitVec 32))
+        hword htick hpick hwake n),
+    ul_bits, hc', h]
+
+end_when
+
 end Futex
 
 end Threadsync
