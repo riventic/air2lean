@@ -1,4 +1,5 @@
 import ZigLean.Mem.Basic
+import ZigLean.Isa.X86
 
 /-!
 # Inline asm effect contract (A01, ASM-03)
@@ -107,6 +108,29 @@ about the counter's order or the randomness of the source. -/
 /-- One environment-read output of width `w`: the next oracle word, cut to `w` bits. -/
 def envWord (w : Nat) : MemM (BitVec w) := do
   pure ((← arbitraryWord).setWidth w)
+
+/-! ## Defined blocks (A02, premise ASM-07)
+
+A block whose instructions are in the ISA model is a defined function `airIsa_<hash>` over
+`Zig.Isa.X86` (`Air2Lean/AsmIsa.lean`). If one of its instructions can fault, the wrapper guards
+the call with the block's own fault function: the instruction's condition, not an allowlist
+entry's. -/
+
+/-- The result `v` of a defined block whose fault on the same inputs is `fault`: `#DE` is
+`Zig.Error.trap`; a result the architecture leaves open (`bsr` of zero) is
+`Zig.Error.unspecified`. -/
+def isaFault {α : Type} (fault : Option Zig.Isa.X86.Fault) (v : α) : Result α :=
+  match fault with
+  | none => pure v
+  | some .trap => throw .trap
+  | some .unspecified => throw .unspecified
+
+@[simp] theorem isaFault_none {α : Type} (v : α) : isaFault none v = pure v := rfl
+
+@[simp] theorem isaFault_trap {α : Type} (v : α) : isaFault (some .trap) v = throw .trap := rfl
+
+@[simp] theorem isaFault_unspecified {α : Type} (v : α) :
+    isaFault (some .unspecified) v = throw .unspecified := rfl
 
 theorem envWord_run (w : Nat) (m : Mem) :
     (envWord w).run m = pure ((m.arbitrary.getD m.arbitraryNext 0).setWidth w,

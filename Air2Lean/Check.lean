@@ -12,6 +12,7 @@ import ZigLean.Mem.ErrWidth
 import ZigLean.Vec
 import Air2Lean.Device
 import Air2Lean.AsmAllowlist
+import Air2Lean.AsmIsa
 
 /-!
 # Subset checker
@@ -1929,6 +1930,29 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       if rg.access == .write && (operandTy rg.base).any constPtr then
         throw s!"{fnName}: near line {line}: an asm memory region writes through a const \
           pointer (A01)"
+    -- A02 (premise ASM-07): the block of an `isa` allowlist entry is a defined function over the
+    -- instruction model. At this op's operand widths the template must decode, and what the
+    -- instructions read and write must match the declared operands and clobbers
+    -- (`Air2Lean/AsmIsa.lean`); the entry's reviewed fault must agree with the instructions.
+    if let some entry := op.asmAllowEntry? cx.targetArch then
+      if entry.semantics == .isa then
+        let bitsOf (t : Option TyId) : Nat := match t.bind (cx.types[·]?) with
+          | some (.int _ b) => b
+          | _ => 0
+        let outBits := outputs.map fun o => bitsOf <| match o.ref with
+          | none => some ty
+          | some r => (cx.valTy? r).bind (ptrChild cx.types)
+        let inBits := inputs.map fun i => bitsOf (i.ref.bind cx.valTy?)
+        match asmIsaBlock cx.targetArch source outputs inputs outBits inBits clobbers
+            entry.regions with
+        | .error e =>
+          throw s!"{fnName}: near line {line}: asm {source.quote} (operand widths \
+            {(outBits ++ inBits).toList}) is {e.message} (A02, premise ASM-07)"
+        | .ok block =>
+          if block.instrs.any (·.mayFault) != (entry.fault != .never) then
+            throw s!"{fnName}: near line {line}: asm {source.quote}: the allowlist entry's fault \
+              condition disagrees with the instruction model on whether the block can fault \
+              (Air2Lean/AsmAllowlist.lean, A02)"
     pure line
   -- The operator must exist for the lane type (Sema: bitwise ops on `bool` and integer lanes,
   -- arithmetic on integer and float lanes); the result is one lane.
