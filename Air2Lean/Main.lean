@@ -657,7 +657,7 @@ def asmFeatureTableJson : Lean.Json :=
     ("targets", Lean.Json.mkObj (asmFeatureTable.map fun (arch, rows) =>
       (arch, .arr (rows.toArray.map fun row => Lean.Json.mkObj [
         ("mnemonics", Lean.toJson row.mnemonics), ("sized", Lean.toJson row.sized),
-        ("prefix", Lean.toJson row.isPrefix), ("features", Lean.toJson row.features)])))),
+        ("prefix_of", Lean.toJson row.prefixOf), ("features", Lean.toJson row.features)])))),
     ("allowlist", .arr (asmAllowlist.toArray.map fun e => Lean.Json.mkObj ([
       ("template", .str e.template), ("target", .str e.target),
       ("constraints", Lean.toJson e.constraints), ("clobbers", Lean.toJson e.clobbers)] ++

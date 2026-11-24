@@ -84,7 +84,7 @@ def main(table_path, source):
     encodings = x86_encodings(source / "src/codegen/x86_64/encodings.zon")
     checked = 0
     for row in table["targets"]["x86_64"]:
-        if row["prefix"]:
+        if row["prefix_of"]:
             continue  # prefixes are not rows of encodings.zon (`Instruction.Prefix`)
         for mnemonic in row["mnemonics"]:
             if mnemonic not in encodings:

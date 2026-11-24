@@ -268,8 +268,13 @@ against the profile it is translated for (`checkAsmCpuFeatures`, maintainer deci
 * A block with an instruction whose feature the profile lacks is rejected, with the
   instruction and the feature in the message. A block with an instruction that is not in the
   table (a vector or system instruction, `rdtscp`, a directive, a label) is rejected too: an
-  unknown instruction is never taken as needing no feature. A device contract does not exempt
-  a block: it states what the instruction does, not that the CPU has it.
+  unknown instruction is never taken as needing no feature. So is a template that could hide or
+  change an instruction: statements end at a newline, a carriage return or `;`; a mnemonic
+  followed by `:` or `=` is a label or an assignment (`nop : popcnt …`); a prefix stands only
+  before the instructions it is defined for (`rep bsf` would be `tzcnt` on a CPU with BMI1) and
+  never ends a template (it would prefix the compiler's next instruction); an aarch64 template
+  with `%%` is rejected (a statement separator on Apple targets). A device contract does not
+  exempt a block: it states what the instruction does, not that the CPU has it.
 * `--assume-asm-cpu-features lzcnt,popcnt` admits exactly the named features: the CPU that
   runs the program has them although the profile does not list them (premise
   [ASM-09](premises.md#asm-09)). The header records `"admission":"asm-cpu-features"` and

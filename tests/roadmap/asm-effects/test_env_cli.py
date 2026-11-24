@@ -230,10 +230,36 @@ def check_cpu_features(binary, docs):
         names = [m for row in rows for m in row["mnemonics"]]
         assert len(names) == len(set(names)), (arch, "a mnemonic has two rows")
         assert all(set(row["features"]) <= set(table["features"]) for row in rows), arch
+        # A prefix names only instructions of its own table.
+        assert all(set(row["prefix_of"]) <= set(names) for row in rows), arch
     checks += 2
     # An allowlisted template whose instruction has no table row cannot be built by a mutation
     # (the allowlist matches the exact template), so the unknown-instruction rejection is tested
     # with a device asm in tests/roadmap/volatile-effects/test_cli.py.
+    # aarch64: the `random` export retargeted, its block a device asm. `crc32b` needs `crc`; a
+    # template with `%%` is rejected whatever the CPU has, as `%%` separates statements on Apple
+    # targets (`nop %%%% crc32b …` would hide `crc32b` behind `nop`).
+    document = json.loads(json.dumps(docs["asm_env.random.json"]))
+    document["profile"].update(target_triple="aarch64-linux.5.10...7.2-musl", cpu="generic")
+    block = asm_inst(document)
+    constraints = [o["constraint"] for o in block["outputs"]] + [i["constraint"] for i in block["inputs"]]
+    with tempfile.TemporaryDirectory(prefix="air2lean-asm-a64-") as d:
+        contract = Path(d) / "cpu.json"
+        for source, features, marker in (
+                ("crc32b w0, w0, w0", [], "instruction 'crc32b' needs the CPU feature(s) [crc]"),
+                ("nop %%%% crc32b w0, w0, w0", [], "an aarch64 template with '%%'"),
+                ("nop %%%% crc32b w0, w0, w0", ["crc"], "an aarch64 template with '%%'"),
+                ("crc32b w0, w0, w0", ["crc"], None)):
+            block["source"] = source
+            document["profile"]["features"] = features
+            contract.write_text(json.dumps({"schema": 1, "device": "cpu", "registers": [], "asm": [
+                {"template": source, "constraints": constraints, "clobbers": block["clobbers"]}]}))
+            result, text = run(binary, {"asm_env.random.json": document}, ("--device-contract", str(contract)))
+            if marker is None:
+                assert result.returncode == 0 and "Zig.vasm air2lean_device" in text, result.stderr
+            else:
+                assert result.returncode == 1 and text == "sentinel\n" and marker in result.stderr, result.stderr
+            checks += 1
     return checks
 
 

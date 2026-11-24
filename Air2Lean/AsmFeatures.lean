@@ -15,7 +15,13 @@ only on a CPU with the feature.
 
 **Fail closed.** An instruction that is not in the table is rejected, never taken as needing no
 feature. So is every statement that is not an instruction of the table: a directive (`.byte`), a
-label, a comment, an upper-case mnemonic.
+label (`1:`, `nop : popcnt …`, whose `nop` is a label), a symbol assignment (`nop = 1`), a
+comment, an upper-case mnemonic. Statements end at a newline, a carriage return or `;` (LLVM's
+`AsmLexer` and `MCAsmInfo::SeparatorString`); an aarch64 template with `%%` is rejected, as
+`%%` separates statements on Apple targets (`AArch64MCAsmInfoDarwin`). A prefix (`rep`, `lock`)
+changes the instruction it stands before (`rep bsf` is `tzcnt` on a CPU with BMI1, `rep bsr` is
+`lzcnt`), so it is accepted only before the instructions it is defined for, and never at the end
+of a template, where it would prefix the compiler's next instruction.
 
 **Feature names** are Zig's `std.Target.<arch>.Feature` names (`lib/std/Target/x86.zig`,
 `aarch64.zig`), which are LLVM's `SubtargetFeature` names (`llvm/lib/Target/X86/X86.td`,
@@ -54,8 +60,9 @@ structure AsmFeatureRow where
   mnemonics : List String
   /-- AT&T (x86_64): the mnemonic may carry one operand-size suffix `b`, `w`, `l` or `q`. -/
   sized : Bool := false
-  /-- A prefix (`rep`, `lock`): the rest of its statement is the prefixed instruction. -/
-  isPrefix : Bool := false
+  /-- A prefix (`rep`, `lock`): the instructions (mnemonics without size suffix) it may stand
+  before. The rest of its statement, or else the next statement, is the prefixed instruction. -/
+  prefixOf : List String := []
   /-- The CPU features the instructions need beyond the target's base ISA. -/
   features : List String
   deriving Repr
@@ -76,7 +83,15 @@ def asmFeaturesX86_64 : List AsmFeatureRow := [
       "cmps", "lods", "movs", "scas", "stos"],
     sized := true, features := [] },
   { mnemonics := ["clc", "cld", "cmc", "cpuid", "nop", "stc", "std"], features := [] },
-  { mnemonics := ["rep", "repe", "repz", "repne", "repnz", "lock"], isPrefix := true, features := [] },
+  -- Prefixes, with the instructions they are defined for (Intel SDM vol. 2B, REP/REPE/REPNE and
+  -- LOCK). Before any other instruction the prefix byte selects another one (`F3 0F BC`, `rep
+  -- bsf`, is `tzcnt`) or faults.
+  { mnemonics := ["rep"], prefixOf := ["cmps", "lods", "movs", "scas", "stos", "nop"],
+    features := [] },                                                     -- `rep nop` is `pause`
+  { mnemonics := ["repe", "repz", "repne", "repnz"], prefixOf := ["cmps", "scas"], features := [] },
+  { mnemonics := ["lock"], prefixOf := ["adc", "add", "and", "btc", "btr", "bts", "cmpxchg",
+      "cmpxchg8b", "cmpxchg16b", "dec", "inc", "neg", "not", "or", "sbb", "sub", "xadd", "xchg",
+      "xor"], features := [] },
   { mnemonics := x86Conditions.map ("set" ++ ·), features := [] },
   -- x86-64 base (x86-64-v1): CMOV, CX8, SSE (`sfence`), SSE2 (`lfence`, `mfence`; `pause` is
   -- `rep nop` on an older CPU), TSC.
@@ -122,17 +137,18 @@ def asmTargetArch (arch : String) : String := if arch.isEmpty then "x86_64" else
 def asmKnownFeatures : List String :=
   (asmFeatureTable.flatMap fun (_, rows) => rows.flatMap (·.features)).eraseDups
 
-/-- The row of `mnemonic` on `arch`: the exact mnemonic, else (a `sized` row) the mnemonic
-without one AT&T size suffix. -/
-def asmFeatureRow? (arch mnemonic : String) : Option AsmFeatureRow := do
+/-- The row of `mnemonic` on `arch` and the mnemonic of the row it matched: the exact mnemonic,
+else (a `sized` row) the mnemonic without one AT&T size suffix. -/
+def asmFeatureRow? (arch mnemonic : String) : Option (String × AsmFeatureRow) := do
   let rows ← asmFeatureTable.lookup (asmTargetArch arch)
   match rows.find? (·.mnemonics.contains mnemonic) with
-  | some row => some row
+  | some row => some (mnemonic, row)
   | none =>
     match mnemonic.toList.reverse with
     | suffix :: stem =>
+      let stem := String.ofList stem.reverse
       if ['b', 'w', 'l', 'q'].contains suffix then
-        rows.find? fun row => row.sized && row.mnemonics.contains (String.ofList stem.reverse)
+        (stem, ·) <$> rows.find? fun row => row.sized && row.mnemonics.contains stem
       else none
     | [] => none
 
@@ -142,25 +158,45 @@ private def splitNonEmpty (p : Char → Bool) (s : String) : List String :=
     fun (pieces, piece) c => if p c then (piece :: pieces, []) else (pieces, c :: piece)
   ((last :: pieces).reverse.filter (!·.isEmpty)).map fun piece => String.ofList piece.reverse
 
-/-- The instructions of one statement, given as its words: the first word is the mnemonic, and
-after a prefix the next word is one too. -/
-private def asmStatementInstrs (arch : String) :
-    List String → Except String (List (String × List String))
-  | [] => pure []
-  | word :: rest => do
-    let some row := asmFeatureRow? arch word
+/-- The words of a template, statement by statement; `none` ends a statement. A statement ends
+at a newline, a carriage return or `;` (LLVM `AsmLexer`, `MCAsmInfo::SeparatorString`). -/
+private def asmWords (template : String) : List (Option String) :=
+  (splitNonEmpty (fun c => c == '\n' || c == '\r' || c == ';') template).flatMap fun statement =>
+    (splitNonEmpty Char.isWhitespace statement).map some ++ [none]
+
+/-- The instructions of a template's words. `pending` is the prefix before the next instruction
+(its mnemonic and `prefixOf`); `mnemonic` holds where the next word is a mnemonic: at the start
+of a statement and after a prefix. The other words are operands. -/
+private def asmWordInstrs (arch : String) : Option (String × List String) → Bool →
+    List (Option String) → Except String (List (String × List String))
+  | some (p, _), _, [] =>
+    throw s!"prefix '{p}' ends the template: it would prefix the instruction after the asm"
+  | none, _, [] => pure []
+  | pending, _, none :: words => asmWordInstrs arch pending true words
+  | pending, false, some _ :: words => asmWordInstrs arch pending false words
+  | pending, true, some word :: words => do
+    let some (stem, row) := asmFeatureRow? arch word
       | throw s!"instruction '{word}' is not in the CPU-feature table of target \
           '{asmTargetArch arch}' (Air2Lean/AsmFeatures.lean)"
-    let prefixed ← if row.isPrefix then asmStatementInstrs arch rest else pure []
-    pure ((word, row.features) :: prefixed)
+    if let some (p, allowed) := pending then
+      unless allowed.contains stem do
+        throw s!"prefix '{p}' before '{word}': the prefix is defined only before {allowed} \
+          (before another instruction it selects a different one, `rep bsf` is `tzcnt`)"
+    if let some (some next) := words.head? then
+      if next.startsWith ":" || next.startsWith "=" then
+        throw s!"'{word} {next}' is a label or a symbol assignment, not an instruction"
+    let isPrefix := !row.prefixOf.isEmpty
+    let rest ← asmWordInstrs arch (if isPrefix then some (word, row.prefixOf) else none) isPrefix
+      words
+    pure ((word, row.features) :: rest)
 
-/-- The instructions of an asm template on `arch`, in order, each with the features it needs.
-Statements end at a newline or `;`. An empty template has no instruction. An error names the
-first word that is not an instruction of the table (fail closed). -/
+/-- The instructions of an asm template on `arch`, in order, each with the features it needs. An
+empty template has no instruction. An error names the first word that is not an instruction of
+the table, or the construct that hides one (fail closed; see the module comment). -/
 def asmTemplateInstrs (arch template : String) : Except String (List (String × List String)) := do
-  let statements := splitNonEmpty (fun c => c == '\n' || c == ';') template
-  let instrs ← statements.mapM fun statement =>
-    asmStatementInstrs arch (splitNonEmpty Char.isWhitespace statement)
-  pure instrs.flatten
+  if asmTargetArch arch == "aarch64" && (template.splitOn "%%").length > 1 then
+    throw "an aarch64 template with '%%': '%%' separates statements on Apple targets (LLVM \
+      AArch64MCAsmInfoDarwin), so its instructions are not known"
+  asmWordInstrs arch none true (asmWords template)
 
 end Air2Lean

@@ -458,6 +458,36 @@ def check_asm(binary, tmp, air):
     assert result.returncode == 1 and out.read_text() == "KEEP\n", result.stderr
     assert "instruction 'rdtscp' is not in the CPU-feature table of target 'x86_64'" in result.stderr, result.stderr
     checks += 1
+    # Templates that hide an instruction or change one (`Air2Lean/AsmFeatures.lean`): a prefix
+    # before an instruction it is not defined for (`rep bsf` is `tzcnt` on a CPU with BMI1), also
+    # as its own statement; a prefix that ends the template (it prefixes the compiler's next
+    # instruction); a carriage return between statements; a label whose name is a mnemonic.
+    for template, marker in (("rep bsf %%rcx, %%rax", "prefix 'rep' before 'bsf'"),
+                             ("rep; bsf %%rcx, %%rax", "prefix 'rep' before 'bsf'"),
+                             ("lock\n\tmovq %%rcx, %%rax", "prefix 'lock' before 'movq'"),
+                             ("rdtsc\n\trep", "prefix 'rep' ends the template"),
+                             ("nop\rpopcnt %%rcx, %%rax", "instruction 'popcnt' needs the CPU feature(s) [popcnt]"),
+                             ("nop : popcnt %%rcx, %%rax", "'nop :' is a label or a symbol assignment")):
+        hidden = tmp / "hidden.json"
+        hidden.write_text(json.dumps({"schema": 1, "device": "cpu", "registers": [], "asm": [
+            {"template": template, "constraints": ["={rax}"], "clobbers": ["cc", "rcx", "rdx"]}]}))
+        write(air, {"hidden": function("hidden", [], 8, [
+            asm(0, 8, template, clobbers=("cc", "rcx", "rdx"), outputs=("={rax}",)), returning(1, ref(0))])})
+        for mode in ((binary, "--diagnostics-json", air), (binary, air, "-o", out, "--namespace", "Asm")):
+            out.write_text("KEEP\n")
+            result = invoke(*mode, "--device-contract", hidden, *assume)
+            text = result.stdout if "--diagnostics-json" in mode else result.stderr
+            assert result.returncode == 1 and marker in text and out.read_text() == "KEEP\n", (template, text)
+            checks += 1
+    # A prefix before an instruction it is defined for is accepted (`rep nop` is `pause`).
+    for template in ("rep; nop", "rep nop"):
+        hidden.write_text(json.dumps({"schema": 1, "device": "cpu", "registers": [], "asm": [
+            {"template": template, "constraints": ["={rax}"], "clobbers": ["cc", "rcx", "rdx"]}]}))
+        write(air, {"hidden": function("hidden", [], 8, [
+            asm(0, 8, template, clobbers=("cc", "rcx", "rdx"), outputs=("={rax}",)), returning(1, ref(0))])})
+        result = invoke(binary, air, "-o", out, "--namespace", "Asm", "--device-contract", hidden)
+        assert result.returncode == 0 and "Zig.vasm air2lean_device" in out.read_text(), (template, result.stderr)
+        checks += 1
     # Device asm entries: a `memory` clobber is outside the contract (DEV-01), templates are unique.
     contract = json.loads(TSC_CONTRACT.read_text())
     entry = contract["asm"][0]
