@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 183 rows, 75 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 184 rows, 76 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -96,6 +96,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [second-pass-speculative-cost](#row-second-pass-speculative-cost) | the arithmetic's second pass runs on the failed side goals of rules that do not apply | coordinator (main red on alloc-translated since #699, PR #703) | `tests/roadmap/alloc-translated/PageThread.lean` | Delete `fthread_remap`'s `set_option maxHeartbeats 300000` when a failed rule premise no longer pays the second pass and `fthread_remap` elaborates within 180k heartbeats (a margin under the default 200k, which it reached before #699). |
 | [share-gather](#row-share-gather) | gathering partial read shares of different owners into a whole share fails closed | coordinator (F4 read shares, option R, PR #713) | `ZigLean/Sep/Full/ThreadOwned.lean`, `ZigLean/Sep/Full/ThreadSpawn.lean`, `ZigLean/Sep/Full/Lock.lean` | Replace the no-gather premises `hg`/`hgat`/`NoGather` of `FOwned.join`, `FCapture.join_regain`, `FLock.Inv.join`, `FLock.Inv.acq` and `FLock.Inv.take` by the `Mem.Owns` premise of the gathered bytes (`Mem.OwnsRes.addOwns` shape), and delete `FLock.NoGather`. |
 | [fsym-abstract-shape](#row-fsym-abstract-shape) | fsym walks over an abstract code shape (continuations as hypotheses) | B3 lane (Io.RwLock as RwLockImpl, PR #734) | `ZigLean/Sep/Full/IoMutex.lean`, `ZigLean/Sep/Full/IoRwLock.lean` | Replace the term walks of `IoMutexCode` (`body_wp`, `lock_wp`, `unlock_wp`) and `IoRwLockCode` (`wp_frame`, `lock_wp`, `unlock_wp`, `body_wp`, `lockShared_wp`, `unlockShared_wp`) by `fsym` walks with the same statements, and delete the hand steps; with them goes `bodyOf`'s `addR` parameter once the walk's steps are proof steps that do not reduce the checked add against an open term (`kernel-proj-ctor`). |
+| [device-read-rules](#row-device-read-rules) | full-state rules for volatile device accesses and the device trace | device-proofs lane (fix-forward of tests/roadmap/volatile-effects/check-device.sh, 2026-11-24) | `tests/roadmap/volatile-effects/DeviceEffects/Proofs.lean`, `tests/roadmap/volatile-effects/DeviceAsm/Proofs.lean` | Restate `putc_trace`, `putc_eventually`, `statusTwice_trace`, `clearStatus_trace`, `sendThenStatus_trace` and `elapsed_trace` as `FTotalTriple`s over the trace resource, walked by `fsym`; delete the run-equation lemmas (`status_read`, `data_write`, `data_ptr`, `loop_busy`, `loop_ready`, `poll_run`, `tsc_run`) and the local `after`/`ticked` memory updates. The semantic mutants (device-mutants.py) keep their expected failures against the new statements. |
 
 ## Closed rows
 
@@ -2204,3 +2205,18 @@ Request: Let `fsym` walk a code shape whose functions are given by unfolding equ
 Workaround sites: `ZigLean/Sep/Full/IoMutex.lean`, `ZigLean/Sep/Full/IoRwLock.lean`
 
 Deletion plan: Replace the term walks of `IoMutexCode` (`body_wp`, `lock_wp`, `unlock_wp`) and `IoRwLockCode` (`wp_frame`, `lock_wp`, `unlock_wp`, `body_wp`, `lockShared_wp`, `unlockShared_wp`) by `fsym` walks with the same statements, and delete the hand steps; with them goes `bodyOf`'s `addR` parameter once the walk's steps are proof steps that do not reduce the checked add against an open term (`kernel-proj-ctor`).
+
+<a id="row-device-read-rules"></a>
+### #device-read-rules full-state rules for volatile device accesses and the device trace
+
+Status: **open**. Requester: device-proofs lane (fix-forward of tests/roadmap/volatile-effects/check-device.sh, 2026-11-24).
+
+Note: Not a weakening: the run equations fix the whole final memory (trace, tick count, everything else unchanged), which is stronger than a triple with a frame; only the proof style is outside the framework.
+
+Progress: Open. The full-state logic has no rule for `Zig.vload`, `Zig.vstore`, `Zig.vasm`, `Zig.vasmEffect` or `Zig.ptrProjectDevice` and no assertion about `Mem.dev` (oracle, asm oracle, trace): `ZigLean/Sep/Full` does not mention them, so `fsym` cannot walk the generated UART driver or the rdtsc client. The L13 device proofs are therefore run equations over the whole memory (`(putc uart c).run m = pure ((), …)`) closed by `simp` with `zig_unfold`. Since the step ticks (f0f5ece09, 2026-11-03) the polling loop's body starts with `Zig.tick`; the run equations state the count in the final memory (`ticked m (vs.length + 1)`: one step per poll) instead of paying it with the framework's credits. The statements before that commit claimed an unchanged tick count and were false (red on main until 2026-11-24).
+
+Request: `@[fsym]` rules for the device operations and an assertion for the device state: a trace resource (the events so far, with the oracle's answer to the next read as the rule's premise, DEV-01) so that `vload`/`vasm` append one read/asm event with the oracle's answer, `vstore`/`vasmEffect` append one write/asm event, and `ptrProjectDevice` forms an offset inside the declared window; total (`FTotalTriple`), with the loop's steps paid by `credits`/`unmetered` as for every other loop.
+
+Workaround sites: `tests/roadmap/volatile-effects/DeviceEffects/Proofs.lean`, `tests/roadmap/volatile-effects/DeviceAsm/Proofs.lean`
+
+Deletion plan: Restate `putc_trace`, `putc_eventually`, `statusTwice_trace`, `clearStatus_trace`, `sendThenStatus_trace` and `elapsed_trace` as `FTotalTriple`s over the trace resource, walked by `fsym`; delete the run-equation lemmas (`status_read`, `data_write`, `data_ptr`, `loop_busy`, `loop_ready`, `poll_run`, `tsc_run`) and the local `after`/`ticked` memory updates. The semantic mutants (device-mutants.py) keep their expected failures against the new statements.
