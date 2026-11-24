@@ -260,10 +260,12 @@ def contractOf (rule : Name) : MetaM Name := do
 /-- The atoms of the assertion `e`: the operands of its separating conjunctions, with the
 reducible definitions on the way unfolded (a node written as its layout's name). -/
 partial def sepAtoms (e : Expr) : MetaM (Array Expr) := do
-  let e ← whnfR e
-  if e.isAppOfArity `Zig.Full.FAssn.sep 2 then
-    return (← sepAtoms (e.getArg! 0)) ++ (← sepAtoms (e.getArg! 1))
-  return #[e]
+  let w ← whnfR e
+  if w.isAppOfArity `Zig.Full.FAssn.sep 2 then
+    return (← sepAtoms (w.getArg! 0)) ++ (← sepAtoms (w.getArg! 1))
+  -- An atom keeps the form the contract states it in (`I.fee φ`, not the projection it reduces
+  -- to), unless it reduces to a cell.
+  return #[if w.isAppOfArity `Zig.Full.FAssn.up 1 then w else e]
 
 /-- A natural-number literal (raw or `OfNat.ofNat`). -/
 def natLit? (e : Expr) : Option Nat :=

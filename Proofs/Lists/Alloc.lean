@@ -216,6 +216,7 @@ step count, below): no node is left, the `n` fees are back, with what the alloca
 def freePost (hd : Option Ptr) (n : Nat) (r : freeAllExit × freeAllLocals) : FAssn :=
   ⟪r.1 = .br4⟫ ⋆ (I.own ⋆ ((fees I φ n ⋆ vtR vtp fns.toList) ⋆ freedSeg I hd none n))
 
+set_option maxRecDepth 20000 in
 /-- **`freeAll` hands every node of the list to `destroy`**: what is left of the list is what
 `destroy`'s contract (`destroy_fields`) leaves of each node (the segment of them told from its
 end, `listSegRev`). The loop is walked by `fsym` from its generated invariant
