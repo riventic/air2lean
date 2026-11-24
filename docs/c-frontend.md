@@ -397,21 +397,38 @@ Closed since the 0.16.0 baseline:
 
 Symbols the translated Zig calls (`extern_calls` in the record). The rule is EXT-03: a symbol
 is bound to a translated definition (an `export fn` of that name in the AIR set: the real
-implementation, for example musl at a pinned revision, compiled through this same route), or
-to a trusted base model registered with a premise (`--model-registry`,
-[external-models.md](external-models.md#extern-functions)), never to a C-specific runtime
-model; without either the program is rejected. No corpus symbol has a binding yet.
+implementation compiled through this same route), or to a trusted base model registered with
+a premise (`--model-registry`, [external-models.md](external-models.md#extern-functions)),
+never to a C-specific runtime model; without either the program is rejected. No corpus symbol
+has a binding yet.
 
-| symbol | corpus files | status | proposal | why |
+**The pinned real code is Zig.** For a musl target, the Zig 0.17.1 distribution defines every
+corpus symbol except `snprintf`, `setjmp` and `longjmp` in Zig, not in musl's C (its
+`lib/libc/musl/src/string/` no longer has `strlen.c`, `memcpy.c`, …): `lib/c/string.zig`,
+`lib/c/ctype.zig`, `lib/c/stdlib.zig`, `lib/c/malloc.zig` and `lib/compiler_rt/`. So these
+symbols need no translate-c: their definitions are ordinary Zig for the existing route, the
+allocator included (`lib/c/malloc.zig` sits on a Zig allocator, hence on the page mapping of
+OSM-01). Two things stand between that code and a binding, and both are decisions rather than
+harness work:
+
+* The definitions are exported with `@export(func, .{ .name = …, .linkage = .weak })`
+  (`lib/c.zig` `symbol`), and EXT-03 binds only an `export fn` (a strong definition): `@export`
+  aliases and weak definitions are outside it. Binding them needs the exporter to write the
+  `@export` records and a premise that the image links exactly this libc (no other definition
+  of the symbol).
+* They are a separate compilation (`lib/c.zig`, `compiler_rt`), so the AIR set of a program
+  has to include their export, selected by symbol.
+
+| symbol | corpus files | status | definition in Zig 0.17.1 (x86_64-linux-musl) | notes |
 |---|---|---|---|---|
-| `memcpy`, `memset`, `memcmp` | `libc_string` | rejected: `CALLEE_EXTERN_UNBOUND` | translated (musl `src/string/*.c`, generic C path) | small byte loops; musl's word-at-a-time paths (`__GNUC__`) read whole words, past the end of the object in the Zig meaning, so its byte loops are the ones to translate |
-| `strlen`, `strcmp`, `strchr` | `libc_string` | rejected: `CALLEE_EXTERN_UNBOUND` | translated (musl) | `strings_loops` already passes with equivalent hand-written loops |
-| `abs` | `libc_stdlib` | rejected: `CALLEE_EXTERN_UNBOUND` | translated (musl `src/stdlib/abs.c`) | one line; `abs(INT_MIN)` is a ReleaseSafe panic in the Zig meaning |
-| `isdigit`, `isalpha` | `libc_stdio` | rejected with the file (`EXT-VARIADIC`) | translated (musl `src/ctype/`) | unsigned range tests |
-| `qsort` | `libc_stdlib` | rejected: `CALLEE_EXTERN_UNBOUND` | translated (musl `src/stdlib/qsort.c`) | needs function pointers (E02, L11), G2 and G8 |
-| `malloc`, `calloc`, `realloc`, `free` | `libc_stdlib`, `malloc_vec` | rejected: `CALLEE_EXTERN_UNBOUND` | trusted base over the translated page allocator (M01–M03), as the posix.mmap base, each with a premise | allocation is a resource boundary; `calloc` = allocation + zero bytes; `realloc` per M02; a maintainer decision (new premises) |
-| `snprintf` | `libc_stdio` | gate `EXT-VARIADIC` | trusted base first (format contract over a byte buffer); translating musl `vfprintf` waits for variadic definitions (G7) | large, variadic, locale-dependent |
-| `setjmp`, `longjmp` | `setjmp_longjmp` | gate `LIBC-SETJMP` | not supported | no `returns_twice` in Zig; measured divergence |
+| `memcpy`, `memset`, `memcmp`, `strlen` | `libc_string` | rejected: `CALLEE_EXTERN_UNBOUND` | `lib/compiler_rt/` (`memcpy.zig`, …) | weak `@export` |
+| `strcmp`, `strchr` | `libc_string` | rejected: `CALLEE_EXTERN_UNBOUND` | `lib/c/string.zig` | weak `@export`; `strings_loops` already passes with equivalent hand-written C loops |
+| `abs` | `libc_stdlib` | rejected: `CALLEE_EXTERN_UNBOUND` | `lib/c/stdlib.zig` | |
+| `isdigit`, `isalpha` | `libc_stdio` | rejected with the file (`EXT-VARIADIC`) | `lib/c/ctype.zig` | |
+| `qsort` | `libc_stdlib` | rejected: `CALLEE_EXTERN_UNBOUND` | `lib/c/stdlib.zig` | needs function pointers (E02, L11), G2 and G8 in the caller |
+| `malloc`, `calloc`, `realloc`, `free` | `libc_stdlib`, `malloc_vec` | rejected: `CALLEE_EXTERN_UNBOUND` | `lib/c/malloc.zig` | translated like any allocator (M01–M03), down to `mmap` (OSM-01) |
+| `snprintf` | `libc_stdio` | gate `EXT-VARIADIC` | musl C (`src/stdio/snprintf.c`, `vfprintf.c`) | variadic, large, locale-dependent: a trusted base contract over a byte buffer first; translating it waits for variadic definitions (G7) |
+| `setjmp`, `longjmp` | `setjmp_longjmp` | gate `LIBC-SETJMP` | musl assembly (`src/setjmp/x86_64/`) | not supported: no `returns_twice` in Zig; measured divergence |
 
 The C objects (`nm -u` at `-O0`, `libc_symbols` in the record) also reference `memset` in 8
 files: clang lowers `= {0}` initialisers to it. translate-c uses `std.mem.zeroes` instead,
