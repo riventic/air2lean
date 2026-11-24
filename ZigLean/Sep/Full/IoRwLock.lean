@@ -264,7 +264,7 @@ theorem lock_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc : M.c
   rw [hlock, lockOf]
   refine wp_frame hfin ?_
   rw [StateT.run_bind]
-  refine WP.bind (FRw.wp_addW hW hwo (by rw [hmo]; decide) hsc hroom hi
+  refine WP.bind (FRw.wp_addW hW hwo (.inl hmo) hsc hroom hi
     fun k₁ hk₁ G₁ m₁ _ hc₁ hi₁ => ?_)
   rw [StateT.run_bind]
   refine WP.bind (WP.callMC_ptrProject (hW.projW hi₁ (by decide) (by decide)) ?_)
@@ -355,7 +355,7 @@ theorem unlock_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc : M
   refine wp_frame hfin ?_
   rw [StateT.run_bind]
   have hsc := FRw.splace_out hco hso
-  refine WP.bind (FRw.wp_giveW hW hwr (by rw [hmh]; decide) hpart hd hR hsc hi
+  refine WP.bind (FRw.wp_giveW hW hwr (.inr hmh) hpart hd hR hsc hi
     fun k₁ hk₁ G₁ m₁ _ hc₁ hi₁ => ?_)
   rw [StateT.run_bind]
   refine WP.bind (WP.callMC_ptrProject (hW.projW hi₁ (by decide) (by decide)) ?_)
@@ -397,7 +397,7 @@ def lsPost (P : Proto Tgt γ) (W : FRw γ X Y M L Cn S) (t : ThreadId) (g : γ) 
 weak CAS (`FRw.wp_casR`): its success ends the loop with the share, its failure stores the value
 read (`MsgOk`) and repeats (a stop: the depth gets smaller). -/
 theorem body_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (t : ThreadId) (g : γ)
-    (hout : W.ph g = .out) (hmg : M.ph g ≠ .gone) (hsc : S.place.ph g = (.out, .out))
+    (hout : W.ph g = .out) (hmo : M.ph g = .out) (hsc : S.place.ph g = (.out, .out))
     (hu : 0 < (M.part g).gh.ac.frag .unmetered)
     (hroom : ∀ G m, P.inv G m → W.ph (G t) = .out → W.nrd G m + 1 < RwState.countBound)
     (D : Nat) (s : C.σR) (G : ThreadId → γ) (m : Mem) (d : Nat) (h : C.lsInv P t g D s G m d) :
@@ -406,6 +406,7 @@ theorem body_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (t : Threa
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : C.σR) => 0) s)
       else C.lsPost P W t g D r G' m' d') G m d := by
   obtain ⟨hD, hc, ⟨rr, ww, aa, hrr, hww, hst⟩, hi⟩ := h
+  have hmg : M.ph g ≠ .gone := by rw [hmo]; decide
   obtain ⟨k15, kB, hbody, hk15f, hk15r, hkB9, hkBr, hkB7⟩ := C.body_eq
   -- the checked add, abstracted: its overflow test of the unknown `state` against `2^64` unfolds
   -- unary on the literal, so the walk keeps it a variable and uses only its value at `MsgOk`
@@ -430,7 +431,7 @@ theorem body_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (t : Threa
     refine WP.bind (WP.callRC_ok (v := RwState.encode (rr + 1) ww aa)
       (by rw [hst, haddR rr ww aa hrr hww]; rfl) ?_)
     rw [StateT.run_bind]
-    refine WP.bind (FRw.wp_casR hW hout hmg hsc hroom (beq_iff_eq.mp hgd)
+    refine WP.bind (FRw.wp_casR hW hout (.inl hmo) hsc hroom (beq_iff_eq.mp hgd)
       (by rw [hst]; exact (RwState.Family.add_reader 31 1 rr ww aa).symm) hi₀
       (fun k hk G₁ m₁ hc₁ q H hq _ hi₁ => ?_) (fun k hk G₁ m₁ b hc₁ hb hi₁ => ?_))
     · -- success: the reader is in
@@ -491,11 +492,11 @@ theorem lockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none) (hMc
   rw [hls, lockSharedOf]
   refine wp_frame hfin ?_
   rw [StateT.run_bind]
-  refine WP.bind (FRw.wp_loadW hW hmg hsc hi
+  refine WP.bind (FRw.wp_loadW hW (.inl hmo) hsc hi
     fun k₁ hk₁ G₁ m₁ b hc₁ hb hi₁ => ?_)
   simp only [StateT.run_bind, StateT.run_modify, pure_bind]
   refine WP.bind (WP.mono ?_ (WP.loop _ _ (C.lsInv P t g d) (fun _ => 0) (C.lsPost P W t g d)
-    (C.body_wp hW hcost t g hwo hmg hsc hu hroom d) _ G₁ m₁ k₁
+    (C.body_wp hW hcost t g hwo hmo hsc hu hroom d) _ G₁ m₁ k₁
     ⟨by omega, hc₁, by rw [C.get_set]; exact hb, hi₁⟩))
   rintro ⟨_, _⟩ G₂ m₂ k₂ ⟨hk₂, hc₂, ⟨rfl, q, H, hq, hi₂⟩ | ⟨rfl, hi₂⟩⟩
   · -- the fast path's return
@@ -567,7 +568,7 @@ theorem unlockShared_wp (hW : W.Fits P UM US okM okS) (hcost : P.cost = none)
   rw [hus, unlockSharedOf]
   refine wp_frame hfin ?_
   rw [StateT.run_bind]
-  refine WP.bind (FRw.wp_subR hW hrd (by rw [hmo]; decide) hpart (FRw.splace_out hco hso) hi
+  refine WP.bind (FRw.wp_subR hW hrd (.inl hmo) hpart (FRw.splace_out hco hso) hi
     fun k₁ hk₁ G₁ m₁ old hc₁ hcase => ?_)
   have hlg : (old &&& (9223372032559808512 : BitVec 64) == (4294967296 : BitVec 64)) =
       (RwState.readers old == 1) := RwState.Family.last_guard (c := 31) (by decide) 1 old

@@ -427,7 +427,10 @@ and `FLock.Pair.Keeps.wordStep` take, so a lock kept in the rest stays kept
 **As the code takes it** (module doc, coordinator decision 2026-11-09 on #738, counterexamples
 A/B/C there): `t` is out of the semaphore's code, the resource is posted after the step exactly
 when before it, and the rest beside the word's cells is the two invariants' splits (`Split`,
-unique: `Split.unique`) with one rest of the rest. -/
+unique: `Split.unique`) with one rest of the rest. `t` is out of the outer mutex's code or holds
+it (the fast paths and the slow ones; never on its lock path, where a reader would sleep behind
+the writer that waits for it), and it comes to `rd q H` only from `out` (maintainer decision
+2026-11-24, ninth and tenth obstruction of ledger #two-lock-product). -/
 def Step (t : ThreadId) (G : ThreadId → γ) (rX : Res) (m : Mem) (G' : ThreadId → γ) (rX' : Res)
     (m' : Mem) : Prop :=
   M.Inv G rX m ∧ W.Inv G rX m ∧ M.Inv G' rX' m' ∧ W.Inv G' rX' m' ∧ m.current = t ∧
@@ -436,6 +439,8 @@ def Step (t : ThreadId) (G : ThreadId → γ) (rX : Res) (m : Mem) (G' : ThreadI
   M.ph (G' t) = M.ph (G t) ∧ M.held (G' t) = M.held (G t) ∧
   L.ph (G' t) = L.ph (G t) ∧ L.held (G' t) = L.held (G t) ∧
   S.place.ph (G' t) = S.place.ph (G t) ∧ S.place.ph (G t) = (.out, .out) ∧
+  (M.ph (G t) = .out ∨ M.ph (G t) = .holds) ∧
+  (∀ q H, W.ph (G' t) = .rd q H → W.ph (G t) = .rd q H ∨ W.ph (G t) = .out) ∧
   (RwPosted W.ph G' ↔ RwPosted W.ph G) ∧
   ∃ rF rF' rO, rX = rsum (W.st.cellsR m) (rsum rF rO) ∧
     rX' = rsum (W.st.cellsR m') (rsum rF' rO) ∧ W.Split G m rF rO ∧ W.Split G' m' rF' rO
@@ -2411,7 +2416,8 @@ theorem Fits.atWord (hW : W.Fits P UM US okM okS) {t : ThreadId} {G₁ : ThreadI
     (hL : M.Inv (upd G₁ t g₁) (rsum (W.st.cellsR m') rY') m')
     (hg : W.x g₁ = W.x g ∧ M.ph g₁ = M.ph g ∧ M.held g₁ = M.held g ∧ L.ph g₁ = L.ph g ∧
       L.held g₁ = L.held g ∧ S.place.ph g₁ = S.place.ph g)
-    (hsc : S.place.ph g = (.out, .out))
+    (hsc : S.place.ph g = (.out, .out)) (hmo : M.ph g = .out ∨ M.ph g = .holds)
+    (hrd : ∀ q H, a = .rd q H → W.ph g = .rd q H ∨ W.ph g = .out)
     (hI : W.Inv G₁ (rsum (W.st.cellsR m₁) rY) m₁ →
       W.Inv (upd G₁ t (W.set g a)) (rsum (W.st.cellsR m') rY') m' ∧
         W.Moves G₁ m₁ rY (upd G₁ t (W.set g a)) m' rY') :
@@ -2432,7 +2438,9 @@ theorem Fits.atWord (hW : W.Fits P UM US okM okS) {t : ThreadId} {G₁ : ThreadI
   obtain ⟨hpost, rF, rF', rO, he, he', hs, hs'⟩ := hMv.congr hph hxu
   refine ⟨hiL, hI₁, hM, hI₂.congr hph (hu M.ph (by rw [hW.mph, hW.mph, hmp])) hxu, hc₁,
     ⟨hrest, fun hF h => hA hF fun x h1 h2 => h _ ⟨rfl, h1, h2⟩⟩,
-    fun u hu => upd_ne _ _ hu, fun u => ?_, ?_, ?_, ?_, ?_, ?_, by rw [hg₁]; exact hsc, hpost,
+    fun u hu => upd_ne _ _ hu, fun u => ?_, ?_, ?_, ?_, ?_, ?_, by rw [hg₁]; exact hsc,
+    by rw [hg₁]; exact hmo,
+    fun q H h => by rw [upd_self, W.ph_set] at h; rw [hg₁]; exact hrd q H h, hpost,
     rF, rF', rO, by rw [he], by rw [he'], hs, hs'⟩
   · by_cases e : u = t
     · subst e; rw [upd_self, W.x_set, hg₁, hx]
@@ -2462,21 +2470,28 @@ theorem Fits.atWord_keep (hW : W.Fits P UM US okM okS) {t : ThreadId} {G₁ : Th
     (hA : ∀ hF : Heap, (∀ x, W.st.o ≤ x → x < W.st.o + 8 → hF (W.st.b, x) = none) →
       FStepIn hF m₁ m')
     (hL : M.Inv G₁ (rsum (W.st.cellsR m') rY) m') (hsc : S.place.ph g = (.out, .out))
+    (hmo : M.ph g = .out ∨ M.ph g = .holds)
+    (hrd : ∀ q H, a = .rd q H → W.ph g = .rd q H ∨ W.ph g = .out)
     (hI : W.Inv G₁ (rsum (W.st.cellsR m₁) rY) m₁ →
       W.Inv (upd G₁ t (W.set g a)) (rsum (W.st.cellsR m') rY) m' ∧
         W.Moves G₁ m₁ rY (upd G₁ t (W.set g a)) m' rY) :
     P.inv (upd G₁ t (W.set g a)) m' :=
   hW.atWord hg₁ hc₁ hU hiL hrest hA (by rw [← hg₁, upd_same]; exact hL)
-    ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩ hsc hI
+    ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩ hsc hmo hrd hI
 
 /-! ## The rules of the ops at the state word
 
 Each rule is the generic word rule at the outer mutex (`FLock.wp_wordRmw`, `wp_wordLoad`, with
 `Fits.inRest`), whose continuation moves `t` with `Fits.atWord` and the op's lemma of the
 invariant (`Inv.giveW`, …). The code's literal operand is the rule's `v`, with its meaning a
-default premise (`by decide`). -/
+default premise (`by decide`). Each rule takes `t`'s place at the outer mutex, out of its code or
+holding it (`hmo`, or `hmh` where the op runs under it: `Step`). -/
 
 variable {σ : Type} {s : σ} {G : ThreadId → γ} {m : Mem} {n : Nat} {t : ThreadId} {g : γ}
+
+/-- Out of the outer mutex's code or holding it, a thread has not ended. -/
+theorem not_gone {g : γ} (h : M.ph g = .out ∨ M.ph g = .holds) : M.ph g ≠ .gone := by
+  rcases h with h | h <;> rw [h] <;> nofun
 
 /-- The facts of an RMW by `t` at the word that every op lemma takes: its rest step and its new
 accesses, before `t`'s new clock (`Word.atomicRmw_rest`, `Word.atomicRmw_fpNew`). -/
@@ -2506,7 +2521,7 @@ theorem casFacts {A : ThreadId → Prop} {m₁ m' : Mem} {c : Nat} {succ fail : 
 `r` with `R` leaves `t`'s part (`r₀` stays) for the rest (`FLock.Inv.giveRest`; `Inv.giveW`). Its
 ownership and place come from the outer mutex's invariant before the op (`FLock.Inv.partApart`). -/
 theorem wp_giveW (hW : W.Fits P UM US okM okS) {r₀ r : Res} {ord : AtomicOrder} {v : BitVec 64}
-    (hwr : W.ph g = .wr) (hmg : M.ph g ≠ .gone) (hpart : M.part g = rsum r₀ r)
+    (hwr : W.ph g = .wr) (hmo : M.ph g = .out ∨ M.ph g = .holds) (hpart : M.part g = rsum r₀ r)
     (hd : FHeap.Disjoint r₀.heap r.heap) (hR : ∀ G, W.R (W.xs (upd G t g)) r)
     (hsc : S.place.ph g = (.out, .out))
     (hi : P.inv (upd G t g) m) {Q : BitVec 64 × σ → (ThreadId → γ) → Mem → Nat → Prop}
@@ -2516,6 +2531,7 @@ theorem wp_giveW (hW : W.Fits P UM US okM okS) {r₀ r : Res} {ord : AtomicOrder
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwC .and false ord 8 W.st.ptr v : CM Tgt σ (BitVec 64)).run s) Q G m n := by
   subst hv
+  have hmg := not_gone hmo
   refine FLock.wp_wordRmw hW.m hW.inRest hW.m.apart hi (hlv := hmg)
     fun k hk G₁ rY m₁ m' old hg₁ hc₁ hU hiL hY hv _ hh _ hw' hw₀ hct hrun hA _ _ hL => ?_
   obtain ⟨c, hr⟩ := hrun
@@ -2538,7 +2554,8 @@ theorem wp_giveW (hW : W.Fits P UM US okM okS) {r₀ r : Res} {ord : AtomicOrder
   rw [← rsum_assoc, rsum_comm hrc, rsum_assoc, hg₁] at hL'
   have hop := hA (fun _ => none) (fun _ _ _ => rfl)
   refine h k hk G₁ m' old (hop.current.trans hc₁) (hW.atWord hg₁ hc₁ hU hiL hrest hA hL'
-    (hW.setPart_keeps g r₀) hsc fun hI => ?_)
+    (hW.setPart_keeps g r₀) hsc hmo
+        (fun _ _ h => nomatch h) fun hI => ?_)
   have hR₁ : W.R (W.xs G₁) r := by have := hR G₁; rwa [← hg₁, upd_same] at this
   have := hI.giveW hY (by rw [hg₁]; exact hwr) ht (hW.mph _) hR₁ (hown.sepR rfl rfl).1 hoffr
     (FHeap.disjoint_union_right.mp hdr).2 hrest hw' hv hh hrel hfp
@@ -2547,7 +2564,8 @@ theorem wp_giveW (hW : W.Fits P UM US okM okS) {r₀ r : Res} {ord : AtomicOrder
 /-- **The writer's `+2`** (`lock`'s first RMW, `out → wi`): its intent is counted. The room is
 `lock_wp`'s (`hroom`). -/
 theorem wp_addW (hW : W.Fits P UM US okM okS) {ord : AtomicOrder} {v : BitVec 64}
-    (hout : W.ph g = .out) (hmg : M.ph g ≠ .gone) (hsc : S.place.ph g = (.out, .out))
+    (hout : W.ph g = .out) (hmo : M.ph g = .out ∨ M.ph g = .holds)
+    (hsc : S.place.ph g = (.out, .out))
     (hroom : ∀ G m, P.inv G m → W.ph (G t) = .out → W.nwi G m + 1 < RwState.countBound)
     (hi : P.inv (upd G t g) m) {Q : BitVec 64 × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' old, m'.current = t →
@@ -2556,6 +2574,7 @@ theorem wp_addW (hW : W.Fits P UM US okM okS) {ord : AtomicOrder} {v : BitVec 64
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwC .add false ord 8 W.st.ptr v : CM Tgt σ (BitVec 64)).run s) Q G m n := by
   subst hv
+  have hmg := not_gone hmo
   refine FLock.wp_wordRmw hW.m hW.inRest hW.m.apart hi (hlv := hmg)
     fun k hk G₁ rY m₁ m' old hg₁ hc₁ hU hiL hY hv _ hh _ hw' hw₀ hct hrun hA _ _ hL => ?_
   obtain ⟨c, hr⟩ := hrun
@@ -2563,7 +2582,8 @@ theorem wp_addW (hW : W.Fits P UM US okM okS) {ord : AtomicOrder} {v : BitVec 64
   have hgt : M.ph (G₁ t) ≠ .gone := by rw [hg₁]; exact hmg
   have hop := hA (fun _ => none) (fun _ _ _ => rfl)
   refine h k hk G₁ m' old (hop.current.trans hc₁)
-    (hW.atWord_keep hg₁ hc₁ hU hiL hrest hA hL hsc fun hI => ?_)
+    (hW.atWord_keep hg₁ hc₁ hU hiL hrest hA hL hsc hmo
+        (fun _ _ h => nomatch h) fun hI => ?_)
   have := hI.addW hY (by rw [hg₁]; exact hout) (hiL.ht hgt).1 (hW.mph _)
     (hroom G₁ m₁ ((hW.m.inv _ _).mpr ⟨_, hiL, hU⟩) (by rw [hg₁]; exact hout)) hrest hw' hv hh hrel
     hfp
@@ -2587,7 +2607,8 @@ theorem wp_decW (hW : W.Fits P UM US okM okS) {ord : AtomicOrder} {v : BitVec 64
     (hacq : ord.isAcq = true := by rfl) (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwC .add false ord 8 W.st.ptr v : CM Tgt σ (BitVec 64)).run s) Q G m n := by
   subst hv
-  have hmg : M.ph g ≠ .gone := by rw [hmh]; decide
+  have hmo : M.ph g = .out ∨ M.ph g = .holds := .inr hmh
+  have hmg := not_gone hmo
   refine FLock.wp_wordRmw hW.m hW.inRest hW.m.apart hi (hlv := hmg)
     fun k hk G₁ rY m₁ m' old hg₁ hc₁ hU hiL hY hv _ hh hac hw' hw₀ hct hrun hA _ _ hL => ?_
   obtain ⟨c, hr⟩ := hrun
@@ -2623,20 +2644,24 @@ theorem wp_decW (hW : W.Fits P UM US okM okS) {ord : AtomicOrder} {v : BitVec 64
     rw [hg₁] at hdp
     refine .inr ⟨by rw [hro]; exact hn, rF, by rw [← hg₁, upd_same]; exact hR,
       (FHeap.disjoint_union_right.mp (FHeap.disjoint_union_right.mp hdp).2).1,
-      hW.atWord hg₁ hc₁ hU hiL hrest hA hL' (hW.setPart_keeps g _) hsc fun _ => ⟨hI', hMv⟩⟩
+      hW.atWord hg₁ hc₁ hU hiL hrest hA hL' (hW.setPart_keeps g _) hsc hmo
+        (fun _ _ h => nomatch h) fun _ => ⟨hI', hMv⟩⟩
   · refine .inl ⟨by rw [hro]; exact hn,
-      hW.atWord_keep hg₁ hc₁ hU hiL hrest hA hL hsc fun hI => ?_⟩
+      hW.atWord_keep hg₁ hc₁ hU hiL hrest hA hL hsc hmo
+        (fun _ _ h => nomatch h) fun hI => ?_⟩
     have := hI.enterW hY hwi₁ ht (hW.mph _) hMt hnoW hn hrest hw' hv hh hrel hfp
     rwa [hg₁] at this
 
 /-- **A read of the state word** at any place of `t` (`lockSharedUncancelable`'s load): `t` stays
 (`Inv.load`), and the value read encodes counts below the bound (`Inv.msgOk`). -/
-theorem wp_loadW (hW : W.Fits P UM US okM okS) {ord : AtomicOrder} (hmg : M.ph g ≠ .gone)
-    (hsc : S.place.ph g = (.out, .out)) (hi : P.inv (upd G t g) m) {Q : BitVec 64 × σ → (ThreadId → γ) → Mem → Nat → Prop}
+theorem wp_loadW (hW : W.Fits P UM US okM okS) {ord : AtomicOrder}
+    (hmo : M.ph g = .out ∨ M.ph g = .holds) (hsc : S.place.ph g = (.out, .out))
+    (hi : P.inv (upd G t g) m) {Q : BitVec 64 × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' b, m'.current = t → MsgOk b →
       P.inv (upd G₁ t g) m' → Q (b, s) G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicLoadC (n := 64) ord 8 W.st.ptr : CM Tgt σ (BitVec 64)).run s) Q G m n := by
+  have hmg := not_gone hmo
   refine FLock.wp_wordLoad hW.m hW.inRest hW.m.apart hi (hlv := hmg)
     fun k hk G₁ rY m₁ m' b j hg₁ hc₁ hU hiL hY hj hv _ _ hh hw' hw₀ hct hrun hA _ _ hL => ?_
   obtain ⟨c, hr⟩ := hrun
@@ -2644,7 +2669,8 @@ theorem wp_loadW (hW : W.Fits P UM US okM okS) {ord : AtomicOrder} (hmg : M.ph g
   have hrest := Word.atomicLoad_rest hw₀ hct' hr
   have hop := hA (fun _ => none) (fun _ _ _ => rfl)
   refine h k hk G₁ m' b (hop.current.trans hc₁) ((hW.m.sub _ _ _ hU).msgOk hj hv) ?_
-  have := hW.atWord_keep (a := W.ph g) hg₁ hc₁ hU hiL hrest hA hL hsc fun hI => by
+  have := hW.atWord_keep (a := W.ph g) hg₁ hc₁ hU hiL hrest hA hL hsc hmo
+        (fun _ _ h => .inl h) fun hI => by
     rw [W.set_self, ← hg₁, upd_same]; exact hI.load hY hrest hw' hh
   rwa [W.set_self] at this
 
@@ -2660,7 +2686,8 @@ theorem Fits.enterR (hW : W.Fits P UM US okM okS) {G₁ : ThreadId → γ} {rY :
     {ord : AtomicOrder} {old : BitVec 64} (hg₁ : G₁ t = g) (hc₁ : m₁.current = t)
     (hc' : m'.current = t) (hU : UM G₁ (rsum (W.st.cellsR m₁) rY) m₁)
     (hiL : M.Inv G₁ (rsum (W.st.cellsR m₁) rY) m₁) (hY : ∀ l, W.st.In l → rY.heap l = none)
-    (hout : W.ph g = .out) (hmg : M.ph g ≠ .gone) (hsc : S.place.ph g = (.out, .out))
+    (hout : W.ph g = .out) (hmo : M.ph g = .out ∨ M.ph g = .holds)
+    (hsc : S.place.ph g = (.out, .out))
     (hnoW : ∀ u, (W.ph (G₁ u)).isW = false)
     (hroom : ∀ G m, P.inv G m → W.ph (G t) = .out → W.nrd G m + 1 < RwState.countBound)
     (hrest : RestStep W.st.In m₁ m')
@@ -2676,6 +2703,7 @@ theorem Fits.enterR (hW : W.Fits P UM US okM okS) {G₁ : ThreadId → γ} {rY :
     (hL : M.Inv G₁ (rsum (W.st.cellsR m') rY) m') :
     ∃ q H, 0 < q.val ∧ W.R (W.xs G₁) ⟨H, Know.none, Ghost.unit⟩ ∧
       P.inv (upd G₁ t (W.set (M.setPart g (rsum (M.part g) (shareRes H q))) (.rd q H))) m' := by
+  have hmg := not_gone hmo
   have hgt : M.ph (G₁ t) ≠ .gone := by rw [hg₁]; exact hmg
   have ht := (hiL.ht hgt).1
   have hI₁ : W.Inv G₁ (rsum (W.st.cellsR m₁) rY) m₁ := hW.m.sub _ _ _ hU
@@ -2692,7 +2720,8 @@ theorem Fits.enterR (hW : W.Fits P UM US okM okS) {G₁ : ThreadId → γ} {rY :
   suffices hM : M.Inv (upd G₁ t (M.setPart g (rsum (M.part g) (shareRes H f.half))))
       (rsum (W.st.cellsR m') (rsum (shareRes H f.half) rO)) m' by
     refine ⟨f.half, H, Frac.half_pos hf, hR, hW.atWord hg₁ hc₁ hU hiL hrest hA hM
-      (hW.setPart_keeps g _) hsc fun _ => ?_⟩
+      (hW.setPart_keeps g _) hsc hmo
+        (fun _ _ _ => .inr hout) fun _ => ?_⟩
     have := hI' f.half f.half (Frac.half_pos hf) (Frac.half_pos hf) (Frac.half_add_half f)
     rwa [hg₁] at this
   by_cases h0 : W.nrd G₁ m₁ = 0
@@ -2750,7 +2779,8 @@ the share in its part (`Fits.enterR`: the old value is `exp`, so no thread holds
 `RwState.Family.read_guard`); on failure `t` stays and the value read is `MsgOk` (`Inv.load`). The
 room is `lockShared_wp`'s (`hroom`). -/
 theorem wp_casR (hW : W.Fits P UM US okM okS) {succ fail : AtomicOrder} {exp new : BitVec 64}
-    (hout : W.ph g = .out) (hmg : M.ph g ≠ .gone) (hsc : S.place.ph g = (.out, .out))
+    (hout : W.ph g = .out) (hmo : M.ph g = .out ∨ M.ph g = .holds)
+    (hsc : S.place.ph g = (.out, .out))
     (hroom : ∀ G m, P.inv G m → W.ph (G t) = .out → W.nrd G m + 1 < RwState.countBound)
     (hguard : exp &&& RwState.lowMask = 0) (hnew : new = exp + BitVec.ofNat 64 RwState.readerUnit)
     (hi : P.inv (upd G t g) m) {Q : Option (BitVec 64) × σ → (ThreadId → γ) → Mem → Nat → Prop}
@@ -2764,6 +2794,7 @@ theorem wp_casR (hW : W.Fits P UM US okM okS) {succ fail : AtomicOrder} {exp new
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((cmpxchgWeakC (n := 64) succ fail 8 W.st.ptr exp new : CM Tgt σ _).run s) Q G m n := by
   subst hnew
+  have hmg := not_gone hmo
   refine FLock.wp_wordWeakCas hW.m hW.inRest hW.m.apart hi (hlv := hmg)
     fun k hk G₁ rY m₁ m' hg₁ hc₁ hU hiL hY hw' hw₀ hct hrun hA _ hL => ?_
   obtain ⟨c, r, hr⟩ := hrun
@@ -2779,11 +2810,12 @@ theorem wp_casR (hW : W.Fits P UM US okM okS) {succ fail : AtomicOrder} {exp new
       cases hu : (W.ph (G₁ u)).isW
       · rfl
       · rw [writing_of (hI₁.ex u fun e => by rw [e] at hu; cases hu) hu] at hwr; cases hwr
-    obtain ⟨q, H, hq, hR, hP⟩ := hW.enterR hg₁ hc₁ hc' hU hiL hY hout hmg hsc hnoW hroom hrest hA
+    obtain ⟨q, H, hq, hR, hP⟩ := hW.enterR hg₁ hc₁ hc' hU hiL hY hout hmo hsc hnoW hroom hrest hA
       hw' hv hh hrel (hac hacq) hfp hL
     exact hs k hk G₁ m' hc' q H hq hR hP
   · refine hf k hk G₁ m' b hc' (hI₁.msgOk hj hv) ?_
-    have := hW.atWord_keep (a := W.ph g) hg₁ hc₁ hU hiL hrest hA hL hsc fun hI => by
+    have := hW.atWord_keep (a := W.ph g) hg₁ hc₁ hU hiL hrest hA hL hsc hmo
+        (fun _ _ h => .inl h) fun hI => by
       rw [W.set_self, ← hg₁, upd_same]; exact hI.load hY hrest hw' hh
     rwa [W.set_self] at this
 
@@ -2802,7 +2834,8 @@ theorem wp_addR (hW : W.Fits P UM US okM okS) {ord : AtomicOrder} {v : BitVec 64
     (hacq : ord.isAcq = true := by rfl) (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwC .add false ord 8 W.st.ptr v : CM Tgt σ (BitVec 64)).run s) Q G m n := by
   subst hv
-  have hmg : M.ph g ≠ .gone := by rw [hmh]; decide
+  have hmo : M.ph g = .out ∨ M.ph g = .holds := .inr hmh
+  have hmg := not_gone hmo
   refine FLock.wp_wordRmw hW.m hW.inRest hW.m.apart hi (hlv := hmg)
     fun k hk G₁ rY m₁ m' old hg₁ hc₁ hU hiL hY hv _ hh hac hw' hw₀ hct hrun hA _ _ hL => ?_
   obtain ⟨c, hr⟩ := hrun
@@ -2817,7 +2850,7 @@ theorem wp_addR (hW : W.Fits P UM US okM okS) {ord : AtomicOrder} {v : BitVec 64
     · rfl
     · have := hiL.w.one u t (hI₁.wm u hu) hMt
       subst this; rw [hout₁] at hu; cases hu
-  obtain ⟨q, H, hq, hR, hP⟩ := hW.enterR hg₁ hc₁ hc' hU hiL hY hout hmg hsc hnoW hroom hrest hA hw'
+  obtain ⟨q, H, hq, hR, hP⟩ := hW.enterR hg₁ hc₁ hc' hU hiL hY hout hmo hsc hnoW hroom hrest hA hw'
     hv hh hrel (hac hacq) hfp hL
   exact h k hk G₁ m' old hc' q H hq hR hP
 
@@ -2830,8 +2863,9 @@ which becomes the resource (`EUpd.shareRes_unwhole`). With no writer it gives th
 before a writer at `ww` it is at `rp` holding it, to post it to the writer. -/
 theorem wp_subR (hW : W.Fits P UM US okM okS) {r₀ : Res} {q : Frac} {H : FHeap}
     {ord : AtomicOrder} {v : BitVec 64}
-    (hrd : W.ph g = .rd q H) (hmg : M.ph g ≠ .gone) (hpart : M.part g = rsum r₀ (shareRes H q))
-    (hsc : S.place.ph g = (.out, .out)) (hi : P.inv (upd G t g) m) {Q : BitVec 64 × σ → (ThreadId → γ) → Mem → Nat → Prop}
+    (hrd : W.ph g = .rd q H) (hmo : M.ph g = .out ∨ M.ph g = .holds)
+    (hpart : M.part g = rsum r₀ (shareRes H q)) (hsc : S.place.ph g = (.out, .out))
+    (hi : P.inv (upd G t g) m) {Q : BitVec 64 × σ → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ G₁ m' old, m'.current = t →
       ((RwState.readers old = 1 → RwState.writing old = false) ∧
         P.inv (upd G₁ t (W.set (M.setPart g r₀) .out)) m') ∨
@@ -2843,6 +2877,7 @@ theorem wp_subR (hW : W.Fits P UM US okM okS) {r₀ : Res} {q : Frac} {H : FHeap
     (hacq : ord.isAcq = true := by rfl) (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t ((atomicRmwC .sub false ord 8 W.st.ptr v : CM Tgt σ (BitVec 64)).run s) Q G m n := by
   subst hv
+  have hmg := not_gone hmo
   refine FLock.wp_wordRmw hW.m hW.inRest hW.m.apart hi (hlv := hmg)
     fun k hk G₁ rY m₁ m' old hg₁ hc₁ hU hiL hY hv _ hh hac hw' hw₀ hct hrun hA _ _ hL => ?_
   obtain ⟨c, hr⟩ := hrun
@@ -2878,7 +2913,8 @@ theorem wp_subR (hW : W.Fits P UM US okM okS) {r₀ : Res} {q : Frac} {H : FHeap
     by_cases hwt : W.writing G₁ m₁ = true
     · -- before a writer: at `rp`, holding the resource
       refine .inr ⟨by rw [hro]; exact h1, by rw [hwo]; exact hwt, ⟨H, Know.none, Ghost.unit⟩, hR,
-        hd₀, hW.atWord hg₁ hc₁ hU hiL hrest hA hL₂ (hW.setPart_keeps g _) hsc fun _ => ?_⟩
+        hd₀, hW.atWord hg₁ hc₁ hU hiL hrest hA hL₂ (hW.setPart_keeps g _) hsc hmo
+        (fun _ _ h => nomatch h) fun _ => ?_⟩
       have := hC h1 hwt
       rwa [hg₁] at this
     · -- no writer: the resource goes back to the rest
@@ -2890,7 +2926,8 @@ theorem wp_subR (hW : W.Fits P UM US okM okS) {r₀ : Res} {q : Frac} {H : FHeap
       rw [upd_self, M.setPart_setPart, upd_upd,
         rsum_left_comm (a := ⟨H, Know.none, Ghost.unit⟩) (b := W.st.cellsR m') hHc] at hL₃
       refine .inl ⟨fun _ => by rw [hwo]; exact Bool.eq_false_iff.mpr hwt,
-        hW.atWord hg₁ hc₁ hU hiL hrest hA hL₃ (hW.setPart_keeps g r₀) hsc fun _ => ?_⟩
+        hW.atWord hg₁ hc₁ hU hiL hrest hA hL₃ (hW.setPart_keeps g r₀) hsc hmo
+        (fun _ _ h => nomatch h) fun _ => ?_⟩
       have := hB h1 (Bool.eq_false_iff.mpr hwt) hHO
       rwa [hg₁] at this
   · -- other readers remain: the share goes back to the rest
@@ -2898,7 +2935,8 @@ theorem wp_subR (hW : W.Fits P UM US okM okS) {r₀ : Res} {q : Frac} {H : FHeap
     rw [hg₁, rsum_left_comm (a := shareRes H q) (b := W.st.cellsR m') fun _ => .inl rfl,
       ← rsum_assoc (a := shareRes H q), shareRes_add, Frac.add_comm q f] at hL₁
     refine .inl ⟨fun h1' => absurd (by rw [← hro]; exact h1') h1,
-      hW.atWord hg₁ hc₁ hU hiL hrest hA hL₁ (hW.setPart_keeps g r₀) hsc fun _ => ?_⟩
+      hW.atWord hg₁ hc₁ hU hiL hrest hA hL₁ (hW.setPart_keeps g r₀) hsc hmo
+        (fun _ _ h => nomatch h) fun _ => ?_⟩
     have := hA' h1
     rwa [hg₁] at this
 
