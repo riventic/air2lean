@@ -60,16 +60,18 @@ theorem darwin_wait (hP : L.Fits K P U ok) (hcost : P.cost = none) (t : ThreadId
   fsym [wp_osWait hP he hg hok hi, wp_ulockResult hP]
 
 /-- macOS: `wake(p, n)` with `n > 1` sets `WAKE_ALL` (`__ulock_wake(… | WAKE_ALL, 0)`): by the
-thread at `wake`, it goes on at `out`, or after a spurious `EINTR` at `wake`. -/
+thread at `wake`, after the oracle's stop for the code's `live` (`wp_pick`), it goes on at `out`,
+or after a spurious `EINTR` at `wake`. -/
 theorem darwin_wakeAll (hP : L.Fits K P U ok) (hcost : P.cost = none) (t : ThreadId) (g : γ)
     (hg : L.ph g = .wake) (hok : ok g) (G : ThreadId → γ) (m : Mem) (d : Nat)
     (hi : P.inv (upd G t g) m) :
     P.WP t (Darwin.__ulock_wake 0x01000101 (some L.ptr) 0)
       (fun r G' m' d' => d' < d ∧ m'.current = t ∧
         (P.inv (upd G' t (L.set g .out rnil)) m' ∨
-         r = Darwin.wakeCode none ∧ P.inv (upd G' t g) m')) G m d := by
+         r = negErrno32 Darwin.E.INTR ∧ P.inv (upd G' t g) m')) G m d := by
   have hw := hP.wordAt hi
-  fsym [wp_osWake hP (w := none) (fun k hk => by cases hk) hg hok hi]
+  fsym [wp_pick hP hi, wp_osWake hP (w := none) (fun k hk => by cases hk) hg hok,
+    Darwin.wakeCode_none]
 
 /-- Linux: an event's waiter at `w1` waits for `waiting` (1) at the event's word, by the word
 protocol's OS wait (`FEvent.wp_osWait`, over `wp_wordOsWait`): it goes on at `w1`. -/
@@ -87,17 +89,19 @@ theorem event_wait (E : FEvent γ) (hE : L.Fits (E.prim L) P U ok) (hcost : P.co
   fsym [FEvent.wp_osWait hE rfl hg hgo rfl hi hlive]
 
 /-- macOS: an event's setter at `sw` wakes every waiter (`__ulock_wake(… | WAKE_ALL, 0)`,
-`FEvent.wp_osWake`, over `wp_wordOsWake`): the event is set and it is done (`sd`), or after a
-spurious `EINTR` it is still at `sw`. -/
+`FEvent.wp_osWake`, over `wp_wordOsWake`), after the oracle's stop for the code's `live`
+(`wp_pick`): the event is set and it is done (`sd`), or after a spurious `EINTR` it is still at
+`sw`. -/
 theorem event_wakeAll (E : FEvent γ) (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
     (t : ThreadId) (g : γ) (hg : E.ph g = .sw) (hgo : L.ph g = .out) (G : ThreadId → γ)
     (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (Darwin.__ulock_wake 0x01000101 (some E.W.ptr) 0)
       (fun r G' m' d' => d' < d ∧ m'.current = t ∧
         (E.IsSet m' ∧ P.inv (upd G' t (E.set g .sd)) m' ∨
-         r = Darwin.wakeCode none ∧ P.inv (upd G' t g) m')) G m d := by
+         r = negErrno32 Darwin.E.INTR ∧ P.inv (upd G' t g) m')) G m d := by
   have hw := hE.wordWordAt (hE.wRest rfl) hi
-  fsym [FEvent.wp_osWake hE (w := none) (fun k hk => by cases hk) hg (.inl hgo) hi]
+  fsym [wp_pick hE hi, FEvent.wp_osWake hE (w := none) (fun k hk => by cases hk) hg (.inl hgo),
+    Darwin.wakeCode_none]
 
 /-- A retained address run (`ha`, `hal`) must not make the walker commit to the unaligned case
 before checking the aligned rule's guard, the live word `hw`. The address and protocol are
