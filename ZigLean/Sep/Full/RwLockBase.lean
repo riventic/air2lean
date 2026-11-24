@@ -22,6 +22,8 @@ own beside the lock's: what every client's base keeps, for every reader/writer l
   code or in the semaphore's is `away` from the outer mutex or holds it at `holdsAway` (`fitsS`'s
   `hsleep`: `Base.hsleep`).
 - `live`: the rest's owned bytes are live (`Inv.stepIn`'s `hbl`).
+- `rdm`, `mal`: where a reader is at the two mutexes, for liveness: not on the outer mutex's lock
+  path, and `away` from the outer mutex not `away` from the semaphore's.
 
 The obligations of the builders, one theorem each: a stop (`Base.atStop`), a step of either
 lock's code (`Base.stableM`, `Base.stableS`), a tick of a thread's part in the outer mutex's view
@@ -31,7 +33,12 @@ assembler `Base.ofStepRest` over the rest the step leaves, `FCond.StepRest`, and
 a step in the semaphore's mutex's frame), the relabels around the other lock's code
 (`Base.mnap`, `Base.munnap`, `Base.maway`, `Base.munaway`, `Base.lmove`, from `Base.relabel`), and
 the writer's take and the last reader's give at the semaphore (`Base.utake`, `Base.upost`, from
-`Base.handover`).
+`Base.handover`), and liveness (`Base.wlive`, `Base.holdLiveM`; at the semaphore's mutex, which
+has no nest, `FLock.holdLive_none`).
+
+`Base.wstep` takes two facts of the step as premises that `FRw.Step` does not state yet (ledger
+#two-lock-product, ninth and tenth obstruction): the readers' shares after it (`hsh`) and the
+stepping thread's place at the outer mutex (`hmt`).
 -/
 
 namespace Zig
@@ -1179,6 +1186,94 @@ theorem upost {t : ThreadId} {g : γ} {h₁ h₂ r₀ : Res} {rc sh sc} (hw : W.
   exact hu.handoverS mph_s lph ph_l hI hS hC hpost.2.1 hm
     ((congrArg Prod.fst (W.sp_ph _ .out)).trans (congrArg (fun p => p.2.1) (place_lpart hpl g r₀)))
     (by rw [W.ph_set]; rfl)
+
+end
+
+/-! ## Liveness
+
+A writer asleep in the semaphore's wait holds the outer mutex at `holdsAway`. With the count `0`
+and no signal on its way, it waits for a reader (the resource is not posted, so one is at `rd` or
+`rp`), and that reader is not asleep: it is not on the outer mutex's lock path (`rdm`), `away`
+from the outer mutex it sleeps at most at the semaphore's mutex (`mal`), whose waiter is live, and
+a holder at `holdsAway` sleeps at the semaphore's mutex or at the epoch, where only the writer
+sleeps (`wt`). -/
+
+section
+variable {Tgt : Type} {P : Proto Tgt γ} {okS : γ → Prop}
+  (inv : ∀ G m, P.inv G m ↔ ∃ rX, M.Inv G rX m ∧ FLock.Pair.U L (W.Base Sz K) G rX m)
+  (hs : S.Fits P (FLock.Pair.U M (W.Base Sz K)) okS)
+  (kfin : ∀ g, P.fin g → W.ph g = .out) (kjoins : ∀ g, P.joins g → W.ph g = .out)
+  (hnest : ∀ p, M.nest p → p = L.ptr ∨ p = C.Ep.ptr)
+include inv hs kfin kjoins hnest
+
+/-- **The writer asleep at the semaphore with the count `0` is not in a deadlock**
+(`Fits.ofProduct`'s `wlive`; section doc). -/
+theorem wlive {t : ThreadId} {m : Mem} (hw : W.ph (G t) = .ww) (hi : P.inv G m)
+    (hc0 : S.cnt G = 0) : P.Live t G m := by
+  intro _ hall
+  obtain ⟨rX, hM, sB, rL, rH, rX₀, rfl, hsB, hk, hu⟩ := (inv G m).mp hi
+  obtain ⟨rXL, hL, hUL⟩ := (hs.inv G m).mp hi
+  have hnp : ¬ RwPosted W.ph G := fun h => by rw [W.cnt_posted G h] at hc0; cases hc0
+  obtain ⟨u, hur⟩ : ∃ u, (W.ph (G u)).isRd = true ∨ (W.ph (G u)).isRp = true :=
+    Classical.byContradiction fun hne => hnp ⟨⟨t, hw⟩,
+      fun u => Bool.eq_false_iff.mpr fun h => hne ⟨u, .inl h⟩,
+      fun u => Bool.eq_false_iff.mpr fun h => hne ⟨u, .inr h⟩⟩
+  have hne : W.ph (G u) ≠ .out := fun e => by rw [e] at hur; rcases hur with h | h <;> cases h
+  rcases hall u (hu.winv.ex u hne) with hf | hq | hj
+  · exact hne (kfin _ hf)
+  · by_cases hlw : L.ph (G u) = .wait
+    · exact FLock.Fits.live hs.toFits hL hUL hlw hq hall
+    have hm := hu.rdm u hur
+    by_cases hma : M.ph (G u) = .away
+    · have hl := hu.mal u hma
+      have h0 := hL.w.notQ (t := u) hlw hl.1 hl.2
+      rw [h0] at hq; cases hq
+    by_cases hmh : M.ph (G u) = .holdsAway
+    · obtain ⟨k, hkm, -, p, hpn, hpk⟩ := hM.w.nestQ hmh hq
+      rcases hnest p hpn with rfl | rfl
+      · obtain rfl : k = L.key m := Option.some.inj (hpk.symm.trans hL.w.blk.keyAt)
+        rcases hL.w.fq _ hkm with ⟨-, h⟩ | ⟨h, -⟩ | ⟨h, -⟩
+        · exact hlw h
+        · exact absurd rfl h
+        · exact absurd rfl h
+      · obtain rfl : k = C.Ep.key m :=
+          Option.some.inj (hpk.symm.trans (hu.sub.1.2 C.Ep (.inr rfl)).1.keyAt)
+        obtain ⟨i, jr, e, hreg, -⟩ := hu.sub.1.1.q _ hkm rfl
+        have hww := hu.wt u (hu.sub.2.wt u (by rw [hreg]; rfl))
+        rw [hww] at hur; rcases hur with h | h <;> cases h
+    · have h0 := hM.w.notQ (t := u) hm.2 hma hmh
+      rw [h0] at hq; cases hq
+  · exact hne (kjoins _ hj)
+
+/-- **A holder of the outer mutex asleep at another futex is not in a deadlock** (`fitsM`'s
+`holdLive`): it sleeps at the semaphore's mutex, whose waiter is live, or at the epoch as the
+registered writer: then a signal is on its way (`FLock.Fits.liveC`), the count is not `0`
+(`FSem.Fits.live`), or a reader runs (`wlive`). -/
+theorem holdLiveM : ∀ G rX m v, M.Inv G rX m → FLock.Pair.U L (W.Base Sz K) G rX m →
+    M.ph (G v) = .holdsAway → P.Live v G m := by
+  intro G rX m v hM hU hv hq hall
+  have hi : P.inv G m := (inv G m).mpr ⟨rX, hM, hU⟩
+  obtain ⟨sB, rL, rH, rX₀, rfl, hsB, hk, hu⟩ := hU
+  obtain ⟨rXL, hL, hUL⟩ := (hs.inv G m).mp hi
+  obtain ⟨k, hkm, -, p, hpn, hpk⟩ := hM.w.nestQ hv hq
+  rcases hnest p hpn with rfl | rfl
+  · obtain rfl : k = L.key m := Option.some.inj (hpk.symm.trans hL.w.blk.keyAt)
+    have hlw : L.ph (G v) = .wait := by
+      rcases hL.w.fq _ hkm with ⟨-, h⟩ | ⟨h, -⟩ | ⟨h, -⟩
+      · exact h
+      · exact absurd rfl h
+      · exact absurd rfl h
+    exact FLock.Fits.live hs.toFits hL hUL hlw hq hall
+  · obtain rfl : k = C.Ep.key m :=
+      Option.some.inj (hpk.symm.trans (hu.sub.1.2 C.Ep (.inr rfl)).1.keyAt)
+    obtain ⟨i, jr, e, hreg, -⟩ := hu.sub.1.1.q _ hkm rfl
+    by_cases hp : 0 < FCond.sOf (C.lastS m) ∨ ∃ x, (C.ph (G x)).sig
+    · exact hs.toC.toFits.liveC hi hp hq hall
+    by_cases hz : S.cnt G = 0
+    · exact wlive inv hs kfin kjoins hnest
+        (hu.wt v (hu.sub.2.wt v (by rw [hreg]; rfl))) hi hz hq hall
+    · exact FSem.Fits.live hs.toFits hi (by rw [hreg]; rfl)
+        (Nat.eq_zero_of_not_pos fun h => hp (.inl h)) hz hq hall
 
 end
 
