@@ -3,3 +3,5 @@ create ok 7
 resize ok 1 ok 0 ok 0 ok 1
 reset ok 200 ok 400 ok 0
 page_sum ok 0 10 10000 page_create ok 7 page_resize ok 1 0 1
+page_grow remap ok 13 13 13 4 31 realloc ok 13 13 13 4 31
+page_grow_stale remap fault realloc fault

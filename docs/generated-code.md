@@ -96,7 +96,7 @@ first. AIR op → generated code:
 | AIR op | Generated code |
 |---|---|
 | `add`/`sub`/`mul`, checked/wrapping/saturating | `Zig.Vec.map2M`/`Zig.Vec.map2`, lane-wise, the same scalar function as the non-vector case |
-| `splat` | `Zig.Vec.splat` |
+| `splat` | `Zig.Vec.splat`; Zig 0.17.1's `splat` to an array `[n]T` (a runtime `@splat`) is `Vector.replicate n a`, and to a sentinel-terminated array it is rejected (the export does not carry the sentinel value) |
 | `select` (a vector of `bool` predicate) | `Zig.Vec.select` |
 | `shuffle` | a `Zig.Vec` literal picked from the comptime-known mask, `#v[a.lanes[i]!, …]` — not a runtime shuffle function, since AIR gives the mask at translation time |
 | every other lane-wise op: `div_*`, `rem`, `mod`, `div_float`, `min`/`max`, `add_with_overflow` family, `bit_and`/`bit_or`/`xor`, `not`, `abs`, shifts, `cmp_vector`, `bool_and`/`bool_or`, `intcast`, `trunc`, float rounding, `sqrt`, libm ops, `mul_add`, float/int conversions | the scalar op's expression on lane variables in `Zig.Vec.mapM`/`map2M`/`map3M` (`Emit.lean`'s `emitLaneWise`): each lane has the scalar semantics, and the first lane that throws gives the error. `@addWithOverflow` gives a vector of pairs, and `Zig.Vec.unzip` makes the tuple |
@@ -698,7 +698,7 @@ A `?T`/`E!T` result nests: e.g. `?(E!T)` renders as `null`, `{"err":"Name"}`, or
 
 A function that uses memory reads `{"bufs": [[<byte>, …], …], "args": [...]}`: the harness makes one 16-byte aligned buffer per list, and `tests/diff/Diff.lean` one block per buffer, after the globals of `mem0` (block `g + i` = buffer `i`). A buffer block has the kind `.stack`: the allocator did not make it, so a free of it throws `.illegal`. A pointer argument is `{"buf": i, "off": o}`, or `null` for a `?*T`; a slice argument also has `"len": n`. A pointer or slice result into the buffers is written the same way; a result into a global or a heap block is `{"bytes": "<hex>"}`, the bytes of the value or of the items. The result line also has the buffers after the call: `{"ok": v, "bufs": ["<hex>", …]}`, two lowercase hex digits per byte. The Lean side writes an `undef` byte as `??`, and `scripts/diff.sh` matches it with any Zig byte (for example a padding byte of a stored struct). A `part m` byte is `?` and its low hex digit if `m ≥ 4`, else `??`.
 
-A function that takes a `std.mem.Allocator` gets `TestAllocator` ([std-models.md](std-models.md)). Its first argument in `args` is the allocation that fails: `null` or its number (`Zig.Mem.failAt`). The result line ends with the number of live allocations after the call, `,"live": n`, and `scripts/diff.sh` compares it. A free that `TestAllocator` does not accept is the kind `doubleFree` (the Lean side: `.illegal`).
+A function that takes a `std.mem.Allocator` gets `TestAllocator` ([std-models.md](std-models.md)). Its first argument in `args` is the allocation that fails: `null` or its number (`Zig.Mem.failAt`), or a policy object with a failure list, a request cap, a failure oracle and a live-byte budget (`Zig.Mem.allocPolicy`, [allocation-policy.md](allocation-policy.md#native-differential)). The result line ends with the number of live allocations after the call, `,"live": n`, and `scripts/diff.sh` compares it. A free that `TestAllocator` does not accept is the kind `doubleFree` (the Lean side: `.illegal`).
 
 ## Error unions
 

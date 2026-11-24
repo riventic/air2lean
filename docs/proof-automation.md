@@ -344,7 +344,10 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
 * **A rule's precondition that is not literally in the state** is planned: the planner closes
   `EUpd P (P₀ ⋆ ?R)` (`?R` is the frame: what is left), so a rule may ask for the full extent of a
   block (`bext`) and one region of its bytes while the state holds the authority, shares and
-  several regions. Among the rules whose command unifies, the first whose side goals are all
+  several regions. A pure fact `⟪φ⟫` of `P₀` is a side goal of the plan: closed by a hypothesis of
+  the context, by the arithmetic solver from the context's facts, or by the state's own fact, an
+  implication included (`⟪s.it = none → x0 = none⟫`; regression
+  `tests/roadmap/sep-auto/SepAuto/Walk.lean`, `rule_fact_*`). Among the rules whose command unifies, the first whose side goals are all
   proved is taken; a side condition that the facts decide neither way is split on (the cases of
   `mremap`: shrink or grow).
 * **A condition that matches on a variable** (an error union's tag) splits the variable; a

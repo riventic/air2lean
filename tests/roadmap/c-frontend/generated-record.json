@@ -24,10 +24,11 @@
  "std_filter": [
   "zig.c_translation."
  ],
+ "allocator_model": "translated",
  "tools": {
-  "zig_native": "0.16.0",
-  "zig_air": "0.16.0",
-  "zig_native_0152": "0.15.2"
+  "zig_native": "0.17.1",
+  "zig_air": "0.17.1",
+  "zig_native_0152": null
  },
  "files": {
   "gen_s0": {
@@ -47,7 +48,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 515,
+     "lines": 519,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -58,10 +59,15 @@
     "air_export": {
      "status": "ok",
      "functions": 3,
+     "filter": [
+      "c_gen_s0.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": [
       "debug.FullPanic((function 'defaultPanic')).divideByZero",
-      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+      "debug.FullPanic((function 'defaultPanic')).unwrapNull"
      ]
     },
     "air2lean": {
@@ -72,7 +78,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 424
+     "gen_lines": 442
     }
    },
    "c_defined_functions": [
@@ -81,13 +87,7 @@
     "h0"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 648,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s1": {
    "source_sha256": "7738850deaf05ae26c8b02bd5bc684f691295134e6e81b2d995541b57d9b2ff5",
@@ -106,7 +106,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 577,
+     "lines": 582,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -117,10 +117,15 @@
     "air_export": {
      "status": "ok",
      "functions": 3,
+     "filter": [
+      "c_gen_s1.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": [
       "debug.FullPanic((function 'defaultPanic')).divideByZero",
-      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+      "debug.FullPanic((function 'defaultPanic')).unwrapNull"
      ]
     },
     "air2lean": {
@@ -131,7 +136,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 1054
+     "gen_lines": 1094
     }
    },
    "c_defined_functions": [
@@ -140,13 +145,7 @@
     "h1"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 710,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s10": {
    "source_sha256": "0f9b28768d92d78831d0e52a8cff7a5cd0054f8c5cde28ddd05eb030f73fd32b",
@@ -165,7 +164,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 388,
+     "lines": 395,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -176,9 +175,14 @@
     "air_export": {
      "status": "ok",
      "functions": 2,
+     "filter": [
+      "c_gen_s10.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": [
-      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+      "debug.FullPanic((function 'defaultPanic')).unwrapNull"
      ]
     },
     "air2lean": {
@@ -189,7 +193,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 103
+     "gen_lines": 117
     }
    },
    "c_defined_functions": [
@@ -197,13 +201,7 @@
     "entry_body"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 521,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s11": {
    "source_sha256": "dd2210070daaa1de70887329278f8503d92eb1e8868f4f8c0e62ed1f8dc8cca5",
@@ -222,7 +220,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 505,
+     "lines": 511,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -233,6 +231,10 @@
     "air_export": {
      "status": "ok",
      "functions": 2,
+     "filter": [
+      "c_gen_s11.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": [
       "debug.FullPanic((function 'defaultPanic')).divideByZero"
@@ -246,7 +248,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 98
+     "gen_lines": 102
     }
    },
    "c_defined_functions": [
@@ -254,13 +256,7 @@
     "entry_body"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 638,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s12": {
    "source_sha256": "53792e0667d169e625c3f34f9b6e95cea757084633425bff0a662e02438379f8",
@@ -279,7 +275,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 570,
+     "lines": 574,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -290,10 +286,15 @@
     "air_export": {
      "status": "ok",
      "functions": 3,
+     "filter": [
+      "c_gen_s12.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": [
       "debug.FullPanic((function 'defaultPanic')).divideByZero",
-      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+      "debug.FullPanic((function 'defaultPanic')).unwrapNull"
      ]
     },
     "air2lean": {
@@ -304,7 +305,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 752
+     "gen_lines": 773
     }
    },
    "c_defined_functions": [
@@ -313,13 +314,7 @@
     "h0"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 703,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s13": {
    "source_sha256": "2c66040e53cccf9d65e983ce39ca859b6bfca306204c88c935695ecf4cb2b761",
@@ -338,7 +333,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 528,
+     "lines": 533,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -349,10 +344,15 @@
     "air_export": {
      "status": "ok",
      "functions": 3,
+     "filter": [
+      "c_gen_s13.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": [
       "debug.FullPanic((function 'defaultPanic')).divideByZero",
-      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+      "debug.FullPanic((function 'defaultPanic')).unwrapNull"
      ]
     },
     "air2lean": {
@@ -363,7 +363,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 576
+     "gen_lines": 614
     }
    },
    "c_defined_functions": [
@@ -372,13 +372,7 @@
     "h0"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 661,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s14": {
    "source_sha256": "4eedfbd7dcf4111e326e89baf3e88b3e4d4a9aee563c46ab1c217bdccbc2314c",
@@ -397,7 +391,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 601,
+     "lines": 604,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -408,10 +402,15 @@
     "air_export": {
      "status": "ok",
      "functions": 3,
+     "filter": [
+      "c_gen_s14.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": [
       "debug.FullPanic((function 'defaultPanic')).divideByZero",
-      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+      "debug.FullPanic((function 'defaultPanic')).unwrapNull"
      ]
     },
     "air2lean": {
@@ -422,7 +421,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 720
+     "gen_lines": 749
     }
    },
    "c_defined_functions": [
@@ -431,13 +430,7 @@
     "h1"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 734,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s15": {
    "source_sha256": "39b0449e380b8898d7ed518d4a46da401cc926ac7aec4cdffbe5299358f2f740",
@@ -456,7 +449,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 468,
+     "lines": 473,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -467,10 +460,15 @@
     "air_export": {
      "status": "ok",
      "functions": 1,
+     "filter": [
+      "c_gen_s15.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": [
       "debug.FullPanic((function 'defaultPanic')).divideByZero",
-      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+      "debug.FullPanic((function 'defaultPanic')).unwrapNull"
      ]
     },
     "air2lean": {
@@ -481,20 +479,14 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 380
+     "gen_lines": 402
     }
    },
    "c_defined_functions": [
     "entry"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 601,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s16": {
    "source_sha256": "ee8ef8630d92c3d4ea036c7094d47bc5ee9e029b5b434893722f5db13e6527a1",
@@ -513,7 +505,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 425,
+     "lines": 432,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -524,10 +516,15 @@
     "air_export": {
      "status": "ok",
      "functions": 3,
+     "filter": [
+      "c_gen_s16.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": [
       "debug.FullPanic((function 'defaultPanic')).divideByZero",
-      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+      "debug.FullPanic((function 'defaultPanic')).unwrapNull"
      ]
     },
     "air2lean": {
@@ -538,7 +535,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 271
+     "gen_lines": 308
     }
    },
    "c_defined_functions": [
@@ -547,13 +544,7 @@
     "h0"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 558,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s17": {
    "source_sha256": "f54655b8d9764d905ad10b3095bddc4a9d03fcabb1e7b4017226fa78eab326f6",
@@ -583,10 +574,15 @@
     "air_export": {
      "status": "ok",
      "functions": 3,
+     "filter": [
+      "c_gen_s17.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": [
       "debug.FullPanic((function 'defaultPanic')).divideByZero",
-      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+      "debug.FullPanic((function 'defaultPanic')).unwrapNull"
      ]
     },
     "air2lean": {
@@ -597,7 +593,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 833
+     "gen_lines": 923
     }
    },
    "c_defined_functions": [
@@ -606,13 +602,7 @@
     "h0"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 850,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s18": {
    "source_sha256": "4cb1b5096a9be5a214f6ca0430df9f8bd33a9685706b4f126685c66f5368d53d",
@@ -631,7 +621,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 389,
+     "lines": 396,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -642,6 +632,10 @@
     "air_export": {
      "status": "ok",
      "functions": 1,
+     "filter": [
+      "c_gen_s18.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": []
     },
@@ -653,20 +647,14 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 144
+     "gen_lines": 148
     }
    },
    "c_defined_functions": [
     "entry"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 522,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s19": {
    "source_sha256": "fa56df58da1e1ba7e195ff1fd31d5139ecece929e796a4dbef131cb16f94e04d",
@@ -685,7 +673,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 390,
+     "lines": 397,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -696,10 +684,15 @@
     "air_export": {
      "status": "ok",
      "functions": 2,
+     "filter": [
+      "c_gen_s19.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": [
       "debug.FullPanic((function 'defaultPanic')).divideByZero",
-      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+      "debug.FullPanic((function 'defaultPanic')).unwrapNull"
      ]
     },
     "air2lean": {
@@ -710,7 +703,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 163
+     "gen_lines": 177
     }
    },
    "c_defined_functions": [
@@ -718,13 +711,7 @@
     "entry_body"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 523,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s2": {
    "source_sha256": "4fbdec7823691967aa49a3a97e7953f802e1fe0d316b905bd6f9c97a63f9ea97",
@@ -743,7 +730,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 398,
+     "lines": 405,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -754,10 +741,15 @@
     "air_export": {
      "status": "ok",
      "functions": 1,
+     "filter": [
+      "c_gen_s2.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": [
       "debug.FullPanic((function 'defaultPanic')).divideByZero",
-      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+      "debug.FullPanic((function 'defaultPanic')).unwrapNull"
      ]
     },
     "air2lean": {
@@ -768,20 +760,14 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 249
+     "gen_lines": 263
     }
    },
    "c_defined_functions": [
     "entry"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 531,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s20": {
    "source_sha256": "70fbd634946ec36ebdee0d0da05b896f5c853976461f3ac1536b304fd0905914",
@@ -800,7 +786,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 513,
+     "lines": 520,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -811,10 +797,15 @@
     "air_export": {
      "status": "ok",
      "functions": 3,
+     "filter": [
+      "c_gen_s20.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": [
       "debug.FullPanic((function 'defaultPanic')).divideByZero",
-      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+      "debug.FullPanic((function 'defaultPanic')).unwrapNull"
      ]
     },
     "air2lean": {
@@ -825,7 +816,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 372
+     "gen_lines": 392
     }
    },
    "c_defined_functions": [
@@ -834,13 +825,7 @@
     "h0"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 646,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s21": {
    "source_sha256": "09c4c3b75019bc8ed32b25da8f75592c310aeee48fae942d1ef7ddc3c955156e",
@@ -859,7 +844,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 409,
+     "lines": 416,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -870,6 +855,10 @@
     "air_export": {
      "status": "ok",
      "functions": 1,
+     "filter": [
+      "c_gen_s21.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": [
       "debug.FullPanic((function 'defaultPanic')).outOfBounds"
@@ -883,20 +872,14 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 65
+     "gen_lines": 67
     }
    },
    "c_defined_functions": [
     "entry"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 542,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s22": {
    "source_sha256": "e8c978f4a808fbfaa25da2ccad4ff48d33cadd6bddcb47cb8bbec470f707dc00",
@@ -915,7 +898,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 403,
+     "lines": 409,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -926,6 +909,10 @@
     "air_export": {
      "status": "ok",
      "functions": 1,
+     "filter": [
+      "c_gen_s22.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": []
     },
@@ -937,20 +924,14 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 43
+     "gen_lines": 45
     }
    },
    "c_defined_functions": [
     "entry"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 536,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s23": {
    "source_sha256": "8827951259857f9b9891c007ed1ad1cc4b31341aae2c9e93624b50715131b5bf",
@@ -969,7 +950,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 386,
+     "lines": 393,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -980,6 +961,10 @@
     "air_export": {
      "status": "ok",
      "functions": 2,
+     "filter": [
+      "c_gen_s23.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": []
     },
@@ -991,7 +976,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 109
+     "gen_lines": 113
     }
    },
    "c_defined_functions": [
@@ -999,13 +984,7 @@
     "entry_body"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 519,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s24": {
    "source_sha256": "e981fe65e718dfefce4e07dc64295fd40b4d635f060c58b3402463b98eb40e41",
@@ -1024,7 +1003,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 508,
+     "lines": 513,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -1035,10 +1014,15 @@
     "air_export": {
      "status": "ok",
      "functions": 3,
+     "filter": [
+      "c_gen_s24.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": [
       "debug.FullPanic((function 'defaultPanic')).divideByZero",
-      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+      "debug.FullPanic((function 'defaultPanic')).unwrapNull"
      ]
     },
     "air2lean": {
@@ -1049,7 +1033,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 569
+     "gen_lines": 590
     }
    },
    "c_defined_functions": [
@@ -1058,13 +1042,7 @@
     "h0"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 641,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s25": {
    "source_sha256": "7f6df2a3f0dce59759e6ed36e1deed7af317bf6bc2cc42202c4f804fc1d63e9d",
@@ -1083,7 +1061,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 382,
+     "lines": 389,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -1094,6 +1072,10 @@
     "air_export": {
      "status": "ok",
      "functions": 2,
+     "filter": [
+      "c_gen_s25.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": []
     },
@@ -1105,7 +1087,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 72
+     "gen_lines": 76
     }
    },
    "c_defined_functions": [
@@ -1113,13 +1095,7 @@
     "entry_body"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 515,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s26": {
    "source_sha256": "01ce5d46f547e0d18b58294af16507c734fe82b141ddf2509365398edefeea3d",
@@ -1138,7 +1114,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 391,
+     "lines": 398,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -1149,9 +1125,14 @@
     "air_export": {
      "status": "ok",
      "functions": 2,
+     "filter": [
+      "c_gen_s26.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": [
-      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+      "debug.FullPanic((function 'defaultPanic')).unwrapNull"
      ]
     },
     "air2lean": {
@@ -1162,7 +1143,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 121
+     "gen_lines": 135
     }
    },
    "c_defined_functions": [
@@ -1170,13 +1151,7 @@
     "entry_body"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 524,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s27": {
    "source_sha256": "2461420b0f08fe5aaf4e1f6a399a5cc3c9424ac6089e47e521b2caf97ed6a74a",
@@ -1195,7 +1170,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 443,
+     "lines": 449,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -1206,6 +1181,10 @@
     "air_export": {
      "status": "ok",
      "functions": 3,
+     "filter": [
+      "c_gen_s27.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": [
       "debug.FullPanic((function 'defaultPanic')).divideByZero"
@@ -1219,7 +1198,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 189
+     "gen_lines": 195
     }
    },
    "c_defined_functions": [
@@ -1228,13 +1207,7 @@
     "h0"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 576,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s28": {
    "source_sha256": "a22db772264f054b6d4fbf8646813e458261ffaa4a57898a94498936dcd5a7a0",
@@ -1253,7 +1226,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 509,
+     "lines": 514,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -1264,9 +1237,14 @@
     "air_export": {
      "status": "ok",
      "functions": 3,
+     "filter": [
+      "c_gen_s28.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": [
-      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+      "debug.FullPanic((function 'defaultPanic')).unwrapNull"
      ]
     },
     "air2lean": {
@@ -1277,7 +1255,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 353
+     "gen_lines": 391
     }
    },
    "c_defined_functions": [
@@ -1286,13 +1264,7 @@
     "h1"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 642,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s29": {
    "source_sha256": "8b6e75ece887972e505068fe0ccea9d0873426891f27046d311f2b4b15d97f75",
@@ -1311,7 +1283,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 406,
+     "lines": 413,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -1322,6 +1294,10 @@
     "air_export": {
      "status": "ok",
      "functions": 2,
+     "filter": [
+      "c_gen_s29.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": []
     },
@@ -1333,7 +1309,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 190
+     "gen_lines": 196
     }
    },
    "c_defined_functions": [
@@ -1341,13 +1317,7 @@
     "entry_body"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 539,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s3": {
    "source_sha256": "01ec3a4ab60c1f2adceda429df8d67c8a6bcf31aa7a4d5ff9542e3e5f57692e0",
@@ -1366,7 +1336,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 590,
+     "lines": 594,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -1377,10 +1347,15 @@
     "air_export": {
      "status": "ok",
      "functions": 3,
+     "filter": [
+      "c_gen_s3.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": [
       "debug.FullPanic((function 'defaultPanic')).divideByZero",
-      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+      "debug.FullPanic((function 'defaultPanic')).unwrapNull"
      ]
     },
     "air2lean": {
@@ -1391,7 +1366,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 693
+     "gen_lines": 748
     }
    },
    "c_defined_functions": [
@@ -1400,13 +1375,7 @@
     "h1"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 723,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s4": {
    "source_sha256": "ccabafd60a28f6eb1c3b4cc3bbd1bfa2184184c7725ca836bd52aeb79d20886d",
@@ -1425,7 +1394,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 458,
+     "lines": 464,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -1436,10 +1405,15 @@
     "air_export": {
      "status": "ok",
      "functions": 2,
+     "filter": [
+      "c_gen_s4.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": [
       "debug.FullPanic((function 'defaultPanic')).divideByZero",
-      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+      "debug.FullPanic((function 'defaultPanic')).unwrapNull"
      ]
     },
     "air2lean": {
@@ -1450,7 +1424,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 288
+     "gen_lines": 313
     }
    },
    "c_defined_functions": [
@@ -1458,13 +1432,7 @@
     "h0"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 591,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s5": {
    "source_sha256": "c8778cfd0eb7fc5c368c6a3ddcbcbad2240042b76d08809f6ca16f3dee763783",
@@ -1483,7 +1451,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 494,
+     "lines": 499,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -1494,10 +1462,15 @@
     "air_export": {
      "status": "ok",
      "functions": 3,
+     "filter": [
+      "c_gen_s5.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": [
       "debug.FullPanic((function 'defaultPanic')).divideByZero",
-      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+      "debug.FullPanic((function 'defaultPanic')).unwrapNull"
      ]
     },
     "air2lean": {
@@ -1508,7 +1481,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 437
+     "gen_lines": 454
     }
    },
    "c_defined_functions": [
@@ -1517,13 +1490,7 @@
     "h0"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 627,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s6": {
    "source_sha256": "996d3f156419fd3be5fa6c24c27133377fc0887986018fcbcd0f795717af028c",
@@ -1542,7 +1509,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 404,
+     "lines": 411,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -1553,10 +1520,15 @@
     "air_export": {
      "status": "ok",
      "functions": 2,
+     "filter": [
+      "c_gen_s6.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": [
       "debug.FullPanic((function 'defaultPanic')).divideByZero",
-      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+      "debug.FullPanic((function 'defaultPanic')).unwrapNull"
      ]
     },
     "air2lean": {
@@ -1567,7 +1539,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 227
+     "gen_lines": 243
     }
    },
    "c_defined_functions": [
@@ -1575,13 +1547,7 @@
     "entry_body"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 537,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s7": {
    "source_sha256": "1a0046f4b1b704c244c18c5500298a5ac777aa0c8127b4b26588c62e09385867",
@@ -1600,7 +1566,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 386,
+     "lines": 393,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -1611,9 +1577,14 @@
     "air_export": {
      "status": "ok",
      "functions": 2,
+     "filter": [
+      "c_gen_s7.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": [
-      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+      "debug.FullPanic((function 'defaultPanic')).unwrapNull"
      ]
     },
     "air2lean": {
@@ -1624,7 +1595,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 95
+     "gen_lines": 109
     }
    },
    "c_defined_functions": [
@@ -1632,13 +1603,7 @@
     "entry_body"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 519,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s8": {
    "source_sha256": "a610a3ccc11ba310b569af946a21ad33d6a96fe4ec92cac22d9cf8c73038adaf",
@@ -1657,7 +1622,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 468,
+     "lines": 474,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -1668,10 +1633,15 @@
     "air_export": {
      "status": "ok",
      "functions": 2,
+     "filter": [
+      "c_gen_s8.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": [
       "debug.FullPanic((function 'defaultPanic')).divideByZero",
-      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+      "debug.FullPanic((function 'defaultPanic')).unwrapNull"
      ]
     },
     "air2lean": {
@@ -1682,7 +1652,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 428
+     "gen_lines": 464
     }
    },
    "c_defined_functions": [
@@ -1690,13 +1660,7 @@
     "h0"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 601,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   },
   "gen_s9": {
    "source_sha256": "7b3c3a3e8342a5855123356fd975e99913ff33f33b965602122099e36f97d069",
@@ -1715,7 +1679,7 @@
     },
     "translate_c": {
      "status": "ok",
-     "lines": 527,
+     "lines": 532,
      "warnings": [],
      "demoted_functions": [],
      "extern_calls": []
@@ -1726,10 +1690,15 @@
     "air_export": {
      "status": "ok",
      "functions": 4,
+     "filter": [
+      "c_gen_s9.",
+      "zig.c_translation."
+     ],
      "std_functions": [],
      "unexported_callees": [
       "debug.FullPanic((function 'defaultPanic')).divideByZero",
-      "debug.FullPanic((function 'defaultPanic')).outOfBounds"
+      "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+      "debug.FullPanic((function 'defaultPanic')).unwrapNull"
      ]
     },
     "air2lean": {
@@ -1740,7 +1709,7 @@
     },
     "lean": {
      "status": "ok",
-     "gen_lines": 535
+     "gen_lines": 584
     }
    },
    "c_defined_functions": [
@@ -1750,13 +1719,7 @@
     "h1"
    ],
    "libc_symbols": [],
-   "translate_c_0.15.2": {
-    "status": "ok",
-    "lines": 660,
-    "warnings": [],
-    "demoted_functions": [],
-    "extern_calls": []
-   }
+   "gates": []
   }
  },
  "summary": {
@@ -1784,6 +1747,7 @@
   "headline": {
    "lean_ok": 30
   },
+  "gates": {},
   "rejection_codes_by_file": {},
   "outcome_by_construct": {
    "generated": {

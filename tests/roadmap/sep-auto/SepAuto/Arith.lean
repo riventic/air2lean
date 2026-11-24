@@ -208,6 +208,48 @@ theorem implies_post (P : FAssn) (p : Ptr) (x : Option Ptr) :
     FTotalTriple P (pure (some p) : MemM (Option Ptr)) (fun r => ⟪r = none → x = none⟫ ⋆ P) := by
   fsym
 
+/-! ## Disjunctions, user functions of constructors, constructor equations (ledger #21)
+
+The measure goals of a dispatch loop (`FTotalTriple.loop_dispatch`, a lexicographic order written
+as a disjunction), the rank of a state (a user `Nat` function by `match`, evaluated on a
+constructor with no `fsym_arith` tag: `unfoldUserValue`), and an exit's value. -/
+
+/-- A disjunction whose second side holds. -/
+theorem or_goal (n : Nat) : n < n ∨ 1 < 2 := by
+  fsym_arith
+
+/-- A lexicographic step from an order hypothesis. -/
+theorem or_goal_imp (m n : Nat) : m ≤ n → m < n ∨ m = n ∧ 1 < 2 := by
+  fsym_arith
+
+/-- The states of a small machine and their ranks. -/
+inductive Ph where
+  | idle | count | done
+
+def rk : Ph → Nat
+  | .done => 0 | .count => 1 | .idle => 2
+
+/-- A user `Nat` function on constructors, untagged. -/
+theorem rank_of_ctor : rk .count < rk .idle := by
+  fsym_arith
+
+/-- An exit that carries a value. -/
+inductive Ex where
+  | ret (n : Nat)
+  | rep
+
+/-- Constructors are injective for the solver: the fields' equation, by arithmetic. -/
+theorem ctor_inj (acc N : Nat) (h : acc + 0 = N) : Ex.ret acc = Ex.ret N := by
+  fsym_arith
+
+open Zig.Full Zig.Full.FAssn in
+/-- … in a return's entailment (a machine's exit `machExit.ret acc` against `.ret N`), and the
+rank of the returned state. -/
+theorem ctor_inj_post (P : FAssn) (acc N : Nat) (h : acc = N) :
+    FTotalTriple P (pure (Ex.ret acc, Ph.count) : MemM (Ex × Ph))
+      (fun r => ⟪r.1 = .ret N ∧ rk r.2 < rk .idle⟫ ⋆ P) := by
+  fsym
+
 /-! ## A probe's budget (`withBudget`, ledger #probe-case-budget)
 
 A probe searches the case facts within a budget of heartbeats of its own. These checks spend the

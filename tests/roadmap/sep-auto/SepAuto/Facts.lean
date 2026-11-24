@@ -74,6 +74,34 @@ theorem first_word (s : Locals) (v : BitVec 64) :
   unfold firstWord
   fsym
 
+/-- `self.cur.?.next`, as generated: the payload, then a field of it. -/
+def secondOfCur (s : Locals) : MemM (BitVec 64) := do
+  let x ← StateT.lift (optPayload s.cur)
+  let q ← Zig.ptrProject x (·.add 8)
+  Zig.load (BitVec 64) 8 q
+
+/-- **The payload of a field that a fact of the precondition names** (ledger #13): the step gives
+`s.cur = some x`, the fact says `s.cur = some p`; `some x = some p` is injected, so the atoms at
+`p` provide for `x`. -/
+theorem payload_of_fact (s : Locals) (p : Ptr) (v w : BitVec 64) :
+    FTotalTriple (⟪s.cur = some p⟫ ⋆ up (pts p 8 v) ⋆ up (pts (p.add 8) 8 w)) (secondOfCur s)
+      (fun r => ⟪r = w⟫ ⋆ up (pts p 8 v) ⋆ up (pts (p.add 8) 8 w)) := by
+  unfold secondOfCur
+  fsym
+
+set_option linter.unusedVariables false in
+/-- Expected failure, ledger #13: the same fact as a hypothesis of the context is rewritten to
+`some x = some p` and left so (no injection of a rewritten hypothesis), so the atoms at `p` do
+not provide for `x`. The positive goal is kept here until the engine injects it. -/
+example (s : Locals) (p : Ptr) (v w : BitVec 64) (hs : s.cur = some p) : True := by
+  fail_if_success
+    have : FTotalTriple (up (pts p 8 v) ⋆ up (pts (p.add 8) 8 w)) (secondOfCur s)
+        (fun r => ⟪r = w⟫ ⋆ up (pts p 8 v) ⋆ up (pts (p.add 8) 8 w)) := by
+      unfold secondOfCur
+      fsym
+      done
+  trivial
+
 /-- The state of an allocator with grants: a first node, if any, and the grant map (which is
 empty without a first node). -/
 structure Grants where

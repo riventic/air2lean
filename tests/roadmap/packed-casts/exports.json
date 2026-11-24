@@ -39,6 +39,46 @@
       "versions": ["0.15.2", "0.14.1"],
       "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
       "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/sentinel_arrays",
+      "source": "sentinel_arrays.zig",
+      "filter": "sentinel_arrays.",
+      "versions": ["0.16.0", "0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/void_casts",
+      "source": "void_casts.zig",
+      "filter": "void_casts.",
+      "versions": ["0.17.1", "0.16.0", "0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/void017",
+      "source": "void017.zig",
+      "filter": "void017.",
+      "versions": ["0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/reject_sentinel",
+      "source": "reject_sentinel.zig",
+      "filter": "reject_sentinel.",
+      "versions": ["0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/reject_items",
+      "source": "reject_items.zig",
+      "filter": "reject_items.",
+      "versions": ["0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
     }
   ]
 }

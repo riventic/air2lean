@@ -352,7 +352,7 @@
    "ty": 0,
    "callee": {
     "ty": 10,
-    "func": "mem.alignForward__anon_1639",
+    "func": "mem.alignForward__anon_1649",
     "module": "std",
     "instance_key": "589277751031c8f4ead7a1e6141dd8310c62f404a013efbc8b46bca7e601064b",
     "noreturn": false
@@ -1100,7 +1100,7 @@
    "ty": 12,
    "callee": {
     "ty": 26,
-    "func": "mem.alignPointer__anon_20433",
+    "func": "mem.alignPointer__anon_20444",
     "module": "std",
     "instance_key": "787bfe5d1eabc6bba8f8ff369474edbf27e375a9e9c9d76bf2568311dc3f87b3",
     "noreturn": false
@@ -2322,7 +2322,7 @@
   },
   {
    "k": "other",
-   "name": "fn (?[*]align(16384) u8, usize, macho.vm_prot_t, c.MAP__struct_6783, i32, u64) error{AccessDenied,LockedMemoryLimitExceeded,MappingAlreadyExists,MemoryMappingNotSupported,OutOfMemory,PermissionDenied,ProcessFdQuotaExceeded,SystemFdQuotaExceeded,Unexpected}![]align(16384) u8"
+   "name": "fn (?[*]align(16384) u8, usize, macho.vm_prot_t, c.MAP__struct_6818, i32, u64) error{AccessDenied,LockedMemoryLimitExceeded,MappingAlreadyExists,MemoryMappingNotSupported,OutOfMemory,PermissionDenied,ProcessFdQuotaExceeded,SystemFdQuotaExceeded,Unexpected}![]align(16384) u8"
   },
   {
    "k": "struct",
@@ -2360,7 +2360,7 @@
   },
   {
    "k": "struct",
-   "name": "c.MAP__struct_6783",
+   "name": "c.MAP__struct_6818",
    "module": "std",
    "layout": "packed",
    "fields": [
@@ -2605,7 +2605,7 @@
   },
   {
    "k": "enum",
-   "name": "c.MAP__struct_6783__enum_6792",
+   "name": "c.MAP__struct_6818__enum_6827",
    "module": "std",
    "tag": 42,
    "exhaustive": true,

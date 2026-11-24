@@ -11,9 +11,10 @@ calls (indirect calls), `FixedBufferAllocator` and `PageAllocator`. Only `posix.
 | File | Content |
 |---|---|
 | `air/0.16.0/<prog>-<os>/` | Zig 0.16.0 AIR, x86_64-linux and aarch64-macos, `ReleaseSafe`: the call/function-value closure of the exported functions, cut at the panic handlers and at `posix.mmap`/`munmap`/`mremap` |
-| `provenance.json` | source, compiler and per-file hashes. The exporter is this repository's (`zig-patch`: vtable initializers, `VTable` fields, schema 12 module identity); exporters before P0 fail on these programs |
+| `exports.json`, `exports.lock.json` | how the page programs' AIR is exported, and its pin (`scripts/fixture-exports.py`) |
+| `provenance.json` | the fixed buffer's source, compiler and per-file hashes. The exporter is this repository's (`zig-patch`: vtable initializers, `VTable` fields, schema 12 module identity); exporters before P0 fail on these programs |
 | `AllocTranslated/{Page,Fba}{Linux,Macos}.lean` | the retained translations; `check.sh` requires the fresh ones to be byte-identical |
-| `AllocTranslated/Eval.lean` | `#guard`s: the `FixedBufferAllocator` clients evaluate to the native results on both targets, also with other `@returnAddress` values; the page clients (`page_sum`, `page_create`, `page_resize`) evaluate through the page-mapping model to the native results of their target's page size (on the schedule of the oracle `fun _ => 0`), a zero-length allocation returns without a mapping, and a failing mapping takes the `OutOfMemory` path; the page allocator under allocation policies (M03: failure lists, index and size oracles, a cap, a list policy and its oracle form), with several failures in one run |
+| `AllocTranslated/Eval.lean` | `#guard`s: the `FixedBufferAllocator` clients evaluate to the native results on both targets, also with other `@returnAddress` values; the page clients (`page_sum`, `page_create`, `page_resize`) evaluate through the page-mapping model to the native results of their target's page size (on the schedule of the oracle `fun _ => 0`), a zero-length allocation returns without a mapping, and a failing mapping takes the `OutOfMemory` path; the page allocator under allocation policies (M03: failure lists, index and size oracles, a cap, a list policy and its oracle form), with several failures in one run; the growths by `remap` and `realloc` (M02, below) |
 | `native.zig`, `expected.txt`, `expected-linux.txt` | the native run of the same functions with a stock Zig 0.16.0 on aarch64-macos (16 KiB pages) and on x86_64-linux (4 KiB pages: `page_resize(10, 5000)` is `false`, `resize` never calls `mremap` on a stack-grows-down target); `check.sh` picks the file by the host's page size |
 | `PageThread.lean` | `alloc` (its in-thread reading, `CTriple.toSoloThread`), `free`, `resize` and `remap` as thread triples (`FTTriple`), `fallocSpec`'s statements, and `cAllocSpec`: the page allocator as an environment of an open `std.mem.Allocator` (`CAllocSpec`) |
 | `ListsPage.lean` | the memory-safety tutorial's refuted clients: the page allocator as the environment of `Proofs/Lists/Open.lean`'s allocator parameter (`page_spec`), the precondition of the tutorial client's properties (`Proofs/Lists/Client.lean`: `NoIllegal`, `NoLeak`) held in the program's start memory (`start`), and kernel-evaluated runs from it in which a double free and a read after free throw `.illegal` and a missing free leaves a node no resource of the precondition owns (`controls`), also when the freed page's address is reused (`reuse_happens`); the right client is the library's `buildThenFree` of one item |
@@ -30,7 +31,43 @@ bash tests/roadmap/alloc-translated/check.sh
 AIR2LEAN_NATIVE_ZIG=/path/to/zig-0.16.0/zig bash tests/roadmap/alloc-translated/check.sh   # also the native run
 ```
 
-To re-export: `ZIG_AIR_JSON_DIR=<dir> zig build-obj -fno-emit-bin -OReleaseSafe
--fno-error-tracing -target <x86_64-linux|aarch64-macos> -mcpu=baseline <prog>.zig` with the
-P0 exporter, keep the closure from the `<prog>.*` functions, then refresh `provenance.json`
-and the translations.
+The page programs' AIR (`air/0.16.0/page-{linux,macos}`) is the export of `exports.json`,
+pinned by `exports.lock.json`: `python3 -B scripts/fixture-exports.py export alloc-translated`
+re-exports it, then translate again (the command is in `check.sh`). The fixed buffer's AIR is
+still pinned by `provenance.json`; to re-export it: `ZIG_AIR_JSON_DIR=<dir> zig build-obj
+-fno-emit-bin -OReleaseSafe -fno-error-tracing -target <x86_64-linux|aarch64-macos>
+-mcpu=baseline fba.zig` with the P0 exporter, keep the closure from the `fba.*` functions, then
+refresh `provenance.json` and the translations.
+
+## Growth by `remap` and `realloc` against the native run (M02)
+
+`page.zig`'s `page_grow`, `page_grow_blocked` and `page_grow_stale` grow a block through
+`Allocator.remap` (`how = 0`) or `Allocator.realloc` (`how = 1`) and return what they observe as
+one word: 1 the call returned a block, 2 it is at another address, 4 the kept bytes are the old
+ones, 8 the block's last byte is writable, 16 a neighbouring live block kept its bytes. A failed
+call gives 4 alone (the old block is live with its bytes; it is written and freed afterwards).
+`native.zig` prints the words of the native run, and `Eval.lean`'s `growLinux` and `growMacos`
+print the model's words in the same format. `check.sh` compares the model's lines with the
+`page_grow` lines of `expected-linux.txt` and `expected.txt` on every host, and the native run
+with the file of the host's page size: the model and the native run of a target are compared
+with the same file.
+
+| Call | x86_64-linux (`mremap`) | aarch64-macos (no `mremap`) |
+|---|---|---|
+| `page_grow(81920, 10, 49152)`: the pages behind the block are free | `remap` 13, `realloc` 13: grown in place | `remap` 4: fails, old block unchanged; `realloc` 15: new mapping, copy, old one freed |
+| `page_grow(10, 10, 20)`: within the page | 13, 13 | 13, 13 |
+| `page_grow(49152, 49152, 10)`: a shrink | 13, 13 (`mremap`) | 13, 13 (tail `munmap`) |
+| `page_grow(10, 10, 2^47)`: more than the address space | 4, 4: `mremap` (and `realloc`'s `mmap`) fail, old block unchanged | 4, 4 |
+| `page_grow_blocked(10)`: one byte into a live neighbour's pages | 31, 31: moved, neighbour unchanged | `remap` 20: fails; `realloc` 31 |
+| `page_grow_stale(10)`: the old address read after the move | fault, fault | `remap` 0 (no move); `realloc` fault |
+
+The native runs: stock Zig 0.16.0 `ReleaseSafe`, x86_64-linux natively (Linux 6.6, 4 KiB pages)
+and aarch64-macos (16 KiB pages). A native fault (`SIGSEGV`/`SIGBUS` of the child process that
+reads the stale address) is the model's `.illegal`. Where the kernel has a choice the model has
+an oracle, and `Eval.lean` also runs the choices the kernel did not take: a move with room in
+place (`mremapMoves`, 15), a denied `mremap` (4), and on x86_64-linux `realloc`'s copying path
+after a denied `mremap` (15). The comparison is of these calls only; the claim for every call is
+the proof (`PageSpec.remap_spec`, `resize_spec`; the `realloc` wrapper's contract is proved for
+every allocator that meets `FAllocSpec` in `alloc-fba` and `interfaces`, not for this program's
+instance of it). Under Rosetta the native run is refused: Rosetta aborts on the `2^47`-byte
+growth where a kernel returns `ENOMEM`.

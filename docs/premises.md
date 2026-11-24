@@ -130,7 +130,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Hand-written std models (transitional) | [STD-01](#std-01) [STD-02](#std-02) [STD-03](#std-03) [STD-05](#std-05) [STD-06](#std-06) [STD-08](#std-08) [STD-09](#std-09) [STD-10](#std-10) |
 | OS page mapping | [OSM-01](#osm-01) |
 | OS thread primitives | [OSF-01](#osf-01) [OSF-02](#osf-02) [OST-01](#ost-01) [OST-02](#ost-02) [OST-03](#ost-03) [OSY-01](#osy-01) [OSK-01](#osk-01) [OSK-02](#osk-02) [OSG-01](#osg-01) [OSL-01](#osl-01) [OSM-02](#osm-02) |
-| Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) [TRU-05](#tru-05) |
+| Compiler and tool trust | [TRU-01](#tru-01) [TRU-02](#tru-02) [TRU-03](#tru-03) [TRU-04](#tru-04) [TRU-05](#tru-05) [TRU-06](#tru-06) |
 
 ## Target and build profiles
 
@@ -183,7 +183,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 ### PRF-05 — Recorded `abi64-be-v1` big-endian profile
 
 - Kind: environment.
-- Statement: As PRF-02, for a big-endian target (s390x-linux): the theorem concerns the
+- Statement: As PRF-02, for a big-endian target (s390x-linux, mips64-linux): the theorem concerns the
   analyzed AIR of the recorded profile under the big-endian encodings of `Zig.BigEndian`
   (`ZigLean/Endian.lean`): integers, floats, slice lengths, packed backing integers,
   bit-pointer hosts and whole-byte vector lanes most significant byte first. Pointer and error
@@ -570,14 +570,25 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   is `.illegal`, so a theorem is about race-free executions (DRF-SC); the standard C11 mappings
   to x86-TSO and ARMv8 are proved sound for RC11, and ORD-01 admits every RC11 outcome; RC11's
   no-load-buffering axiom is ORD-02. LLVM's optimizer is assumed to respect the C++11 model.
-  Targets in the record's `unqualified` list (wasm32, s390x) reject atomics and threads, so no
-  theorem about them carries this premise.
+  The qualified targets are the record's `targets`: x86_64-linux, aarch64-macos and
+  aarch64-linux. The premise is stated for no other target. The record's `unqualified` list
+  names the known ones and what each lacks: wasm32 (the translator rejects atomics, threads and
+  futexes), and s390x-linux and mips64-linux (the translator accepts them on the big-endian
+  profile, PRF-05, but there is no hardware model, mapping argument or hardware evidence). A
+  theorem over a generated module that records no target (PRF-01, PRF-03) carries the premise
+  for the qualified targets only (`unrecorded`).
 - Derived from: implied by THR-01 and ORD-01, so every concurrency theorem carries it.
   `scripts/premises.py` (`check` and `compiled`) fails when a theorem or a report below whose
   premises contain THR-01 or ORD-01 omits it; `scripts/claims.py` lists it in each concurrency
-  claim's `premises`.
+  claim's `premises`. Target binding (`target_qualified`): `scripts/premises.py` fails a theorem
+  that carries it over a generated module whose profile header records a target outside
+  `targets`, and `scripts/claims.py` rejects such a goal. The translator's acceptance of a
+  target is not part of the binding. The source index binds the premises a theorem's own
+  closure gives; a premise it lists only as a source fallback (the upper bound over a runtime
+  module's imports) is bound by `compiled`.
 - Sources: [research/C12.md](research/C12.md), [std-models.md](std-models.md#thread-model),
-  [architecture-audit/concurrency.md](architecture-audit/concurrency.md).
+  [architecture-audit/concurrency.md](architecture-audit/concurrency.md),
+  [architecture-audit/memory-model-target-binding.md](architecture-audit/memory-model-target-binding.md).
 
 ## Timers and clocks
 
@@ -765,9 +776,10 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   `Zig.asmTrap`, which throws `Zig.Error.trap` exactly on that condition. A no-panic or
   guaranteed-return claim over an asm opaque holds on hardware only if the condition is the
   instruction's whole fault set on the target CPU. That the CPU has the instruction (`popcnt`
-  without POPCNT is #UD; `lzcnt` without LZCNT runs as `bsr`) is no longer part of ASM-04: each
-  entry declares its `features`, the translator rejects a block whose features the profile lacks
-  (`checkAsmCpuFeatures`), and ASM-09 admits them. `scripts/claims.py` lists ASM-04
+  without POPCNT is #UD; `lzcnt` without LZCNT runs as `bsr`) is not part of ASM-04 (maintainer
+  decision 2026-11-24, A02 D1): the feature table (`Air2Lean/AsmFeatures.lean`) names the CPU
+  features of every instruction, the translator rejects a block whose features the profile
+  lacks (`checkAsmCpuFeatures`), and ASM-09 admits named ones. `scripts/claims.py` lists ASM-04
   in the `premises` of every such goal.
 - Derived from: implied by ASM-01.
 - Sources: [volatile-effects.md](volatile-effects.md), `Air2Lean/AsmAllowlist.lean`,
@@ -810,16 +822,25 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 ### ASM-09 — The running CPU has the asm features that the profile lacks
 
 - Kind: environment.
-- Statement: An allowlisted asm entry names the CPU features it needs (`features`: `lzcnt`,
-  `popcnt`, `rdrnd`). The translator derives support from the profile's `features` and rejects
-  an asm block with a missing one (`checkAsmCpuFeatures`; `lzcnt` without LZCNT executes as
-  `bsr`, so `lzcnt(1)` would be 0, not 63). `--assume-asm-cpu-features` skips the check and states
-  that the CPU that runs the program has the features, although the profile's CPU does not list
-  them. The header records the admission `asm-cpu-features`.
+- Statement: One table (`Air2Lean/AsmFeatures.lean`) names, for every inline-asm instruction
+  of every target with asm (x86_64, aarch64), the CPU features it needs beyond the target's
+  base ISA (`lzcnt`, `popcnt`, `rdrnd`, `bmi`, `bmi2`, `crc32`, `cx16`, `sahf`, ...; aarch64
+  `crc`), under the names of `profile.features`. The profile's features are those of the CPU
+  the compiler targeted (the exporter writes `target.cpu.features`). The translator rejects
+  an asm block, allowlisted or declared by a device contract, that has an instruction with a
+  feature the profile does not list (`checkAsmCpuFeatures`; `lzcnt` without LZCNT executes as
+  `bsr`, so `lzcnt(1)` would be 0, not 63), and one with an instruction that is not in the
+  table. `--assume-asm-cpu-features <f,...>` admits the named features and no others: it
+  states that the CPU that runs the program has them, although the profile's CPU does not
+  list them. The header records the admission `asm-cpu-features` and the features
+  (`asm_cpu_features`). The table itself is trusted: the features of the x86-64 base (CMOV,
+  SSE2, TSC, ...; psABI level x86-64-v1) are not requirements, and
+  `tests/roadmap/asm-semantics/feature_table.py` compares the rest with the Zig compiler's
+  encoding tables.
 - Derived from: a reached generated module whose header records the admission `asm-cpu-features`
   (`assurance/premises.json` `admissions`).
-- Sources: [volatile-effects.md](volatile-effects.md), `Air2Lean/AsmAllowlist.lean`,
-  [research/A02.md](research/A02.md).
+- Sources: [volatile-effects.md](volatile-effects.md#cpu-features), `Air2Lean/AsmFeatures.lean`,
+  `Air2Lean/AsmAllowlist.lean`, [research/A02.md](research/A02.md).
 
 ## Core runtime semantics
 
@@ -1315,8 +1336,15 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   post-validation wake path, a wake of up to `n` waiters at an address wakes an oracle-chosen subset of
   `min n k` of the `k` threads queued there, in one step, and accesses no memory. On Linux `n`
   is `val`, at least 1 for `val ≤ 0`; on macOS it is 1, or all with `WAKE_ALL`. Linux's success
-  result is the number woken. macOS returns `0`, `-ENOENT` if nobody was woken, or, as an oracle option,
-  `-EINTR` with nobody woken. It gives no happens-before edge.
+  result is the number woken. macOS returns `0` after a wake of one or more; after a wake of
+  nobody it returns `-ENOENT` or `0`, an oracle choice (xnu's `ulock_wake` returns `0` while the
+  key's `ull` lives, until its last waiter's cleanup, which the model does not track); as one more
+  oracle option it returns `-EINTR` with nobody woken (xnu's wake path never does; a conservative
+  extra outcome). It gives no happens-before edge. The translator binds
+  `os.linux.futex_3arg` (0.15.2 on), `os.linux.futex_wake` (0.14.1, the same system call) and
+  libc's `__ulock_wake` (macOS) to it in every allocator model (`Air2Lean/StdModels.lean`).
+  `std.Thread.Futex.wake` (0.14.1, 0.15.2) itself still binds to its hand row (STD-05) until
+  that row is deleted (audit S6 finding 4, slice D2).
 - Model gaps (OSF-01 and OSF-02): address validation follows Linux v6.16 `get_futex_key` and
   xnu-12377.121.6 `sys_ulock.c`. Where the native result needs mapping or address-limit
   knowledge outside the model, it is a conservative `.illegal` refusal
@@ -1563,9 +1591,40 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   removed from the verifier's allowed signers; there is no revocation list, timestamp or
   transparency log, only the optional `valid-after`/`valid-before` of `allowed_signers`
   (`--verify-time`). The signature primitive and its verification are OpenSSH's
-  (`ssh-keygen -Y sign|verify`), trusted as installed.
+  (`ssh-keygen -Y sign|verify`), trusted as installed. The limits of the provenance chain
+  (I07) are part of this premise, not open work: CI holds no release key, because a key in CI
+  would let a compromised workflow sign any manifest, so the whole-tree fixtures CI regenerates
+  are unsigned and signing a release is an operator step with the operator's key; the `native`
+  link records a stock-Zig build's identity (target, mode, cpu, compiler and binary digests),
+  not a correspondence between the binary and the model (TRU-03); and `provenance-evidence.py
+  replay` establishes only that a committed receipt concerns the bytes now in the tree.
+  Someone who relies on a manifest, a receipt or a native binary beyond that accepts this
+  premise.
 - Derived from: use of an attestation (`--attestation`); not derived from any theorem.
 - Sources: [artifact-manifest.md](artifact-manifest.md#authentication), `scripts/attest.py`.
+
+<a id="tru-06"></a>
+### TRU-06 — Filesystem publication atomicity
+
+- Kind: trusted.
+- Statement: A published artifact (a translated `Gen.lean`, a check report, a proof receipt,
+  an assumptions audit, a project report) reaches its path only by one `rename(2)`
+  (overwrite) or `link(2)` (no-clobber) of a fully written, fsynced temporary file in the
+  destination directory, followed by an fsync of the directory (`scripts/safe-output.py
+  publish`, `scripts/proof-receipt.py`, `scripts/assumptions.py`, `scripts/project.py`). The
+  host filesystem is trusted to make that `rename` and `link` atomic (a reader sees the
+  previous file or the complete new one, never a prefix; `link` fails when the name exists,
+  also when a concurrent writer created it) and to keep fsynced contents and names across a
+  crash. A filesystem without these guarantees (some network and FUSE filesystems; a
+  directory fsync the filesystem rejects is skipped) can show a partial or lost artifact, and
+  nothing detects it. A SIGKILL of the writer can leave a hidden `.partial` or staging file
+  beside the output, never at the published path. Containment of escaped stage processes is
+  not part of this premise: a missed escapee cannot publish, because only this step does
+  (I08; sampling-only on macOS, [safe-output.md](safe-output.md#limits)).
+- Derived from: use of a published artifact (the reports below that list it); not derived
+  from any theorem.
+- Sources: [safe-output.md](safe-output.md), `scripts/safe-output.py`,
+  `tests/roadmap/safe-output/test_safe_output.py`.
 
 ## Reports
 
@@ -1575,9 +1634,10 @@ Each report below, and the premises a reader must accept to rely on it, is check
 |---|---|
 | `scripts/assumptions.sh` JSON ([assumptions-audit.md](assumptions-audit.md)) | TRU-01, TRU-04, EXT-02 |
 | `scripts/premises.py compiled` JSON (this page) | TRU-01, TRU-04 |
-| Proof receipts ([proof-receipts.md](proof-receipts.md)) | TRU-01, TRU-04 |
+| Proof receipts ([proof-receipts.md](proof-receipts.md)) | TRU-01, TRU-04, TRU-06 |
 | Authenticated manifests and receipts (`scripts/attest.py`, [artifact-manifest.md](artifact-manifest.md#authentication)) | TRU-05 |
-| Check receipts `.lake/check-reports/` ([profiles.md](profiles.md#golden-comparisons-and-check-receipts)) | PRF-01, PRF-02, TRU-02 |
+| Check receipts `.lake/check-reports/` ([profiles.md](profiles.md#golden-comparisons-and-check-receipts)) | PRF-01, PRF-02, TRU-02, TRU-06 |
+| Published translations and reports (`scripts/safe-output.py publish`, [safe-output.md](safe-output.md)) | TRU-06 |
 | Differential test results (`scripts/diff.sh`, [generated-code.md](generated-code.md#differential-test)) | TRU-02, TRU-03, THR-01, ORD-06, ALC-02, MTH-02 |
 | ABI probe reports ([profiles.md](profiles.md#bounded-linux-native-abi-observations)) | PRF-02, TRU-03 |
 | Allocation policy record ([allocation-policy-report.json](allocation-policy-report.json)) | ALC-01, ALC-02, TRU-02, TRU-03 |
