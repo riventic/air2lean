@@ -20,7 +20,7 @@ import time
 
 ROOT = Path(__file__).absolute().parents[1]
 # The full assumption audit is ~65 MB at 11k theorems and grows with the proof corpus.
-MAX_JSON = 256 * 1024 * 1024
+MAX_JSON = 512 * 1024 * 1024
 MAX_FILES = 30000
 MAX_DECLARATIONS = 65536
 MAX_FILE = 512 * 1024 * 1024
