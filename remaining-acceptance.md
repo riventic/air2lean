@@ -1,6 +1,6 @@
 # Remaining acceptance — portable companion
 
-All <!-- register:total -->90<!-- /register:total --> IDs, order, classifications and remaining acceptance statements are retained. Counts are <!-- register:counts-plain -->46 complete, 33 partial, 2 open and 9 research<!-- /register:counts-plain -->. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
+All <!-- register:total -->90<!-- /register:total --> IDs, order, classifications and remaining acceptance statements are retained. Counts are <!-- register:counts-plain -->47 complete, 32 partial, 2 open and 9 research<!-- /register:counts-plain -->. Merged bounded work does not automatically close broader acceptance. Published navigation: [roadmap](https://github.com/riventic/air2lean/blob/main/ROADMAP.md) and [this acceptance register](https://github.com/riventic/air2lean/blob/main/remaining-acceptance.md). These are the published navigation destinations. Evidence details remain in the separately reconciled handoff; this companion needs no temporary/private evidence paths.
 
 The sections below are generated from `assurance/register/<ID>.md` (`scripts/register.py generate`); edit those files, not the sections.
 
@@ -745,11 +745,11 @@ Bounded progress: [PR116](https://github.com/riventic/air2lean/pull/116) merged:
 
 ## Q07 — Compiler and model upgrade qualification
 
-Classification: partial.
+Classification: complete.
 
 compare AIR tag/type lists, layout and float probes, std model boundaries, changed translations and theorem dependencies for every upgrade. Acceptance: an upgrade cannot expand support or change a model silently; affected proofs and target tests are rerun and documented.
 
-Bounded progress ([PR119](https://github.com/riventic/air2lean/pull/119)): scripts/qualify-upgrade.py turns coverage.py's inventory diff into an obligation record (support-expansion reviews ranked by coverage.py's disposition vocabulary, std-model, universe and compiler-source reviews, float/layout probes, affected example translations and proof dependency audits), runs command obligations with per-obligation logs, and check fails on missing/failing results, unaccepted or evidence-free support/model reviews, edited logs or stale plans. Remaining: qualify an actual compiler/model upgrade through it and publish the record.
+Bounded progress ([PR119](https://github.com/riventic/air2lean/pull/119)): scripts/qualify-upgrade.py turns coverage.py's inventory diff into an obligation record (support-expansion reviews ranked by coverage.py's disposition vocabulary, std-model, universe and compiler-source reviews, float/layout probes, affected example translations and proof dependency audits), runs command obligations with per-obligation logs, and check fails on missing/failing results, unaccepted or evidence-free support/model reviews, edited logs or stale plans. The Zig 0.17.0 to 0.17.1 upgrade was qualified through it: [`qualification/0.17.1.json`](qualification/0.17.1.json) (59 obligations: 11 probes on x86_64-linux, aarch64-linux and aarch64-macos, 19 example translations, 26 proof dependency audits, the model-boundary, tags and compiler-sources reviews accepted with evidence, `threadsync` reviewed not-applicable because `examples/threadsync/zig-versions` omits 0.17.1) with per-obligation logs in `qualification/0.17.1.d/`, described in [docs/zig-0.17-ci.md](docs/zig-0.17-ci.md) and used by [docs/support-matrix.md](docs/support-matrix.md); `scripts/qualify-upgrade.py check qualification/0.17.1.json` exits 0 and now runs in `scripts/preflight.sh` and the CI `inputs` part, so the committed record cannot rot or lose a result unnoticed. The `--before/--after` staleness comparison needs the whole-tree coverage inventories of the time of the plan, which are regenerated per tree, so it is a step of making a record, not of checking a committed one.
 
 ## Q08 — Review and release evidence
 
@@ -799,5 +799,9 @@ Classification: open.
 
 verify C programs through stock `zig translate-c` and the existing Zig route; state the trust added by translate-c and the libc headers. Acceptance: every corpus file is translated and `#guard`-checked or rejected by a named, documented gate; every libc symbol the corpus calls is translated from pinned real code or a trusted-base model with a stated contract; known compiler bugs are gated or avoided by a qualified Zig version; the heavy coverage run is reproducible and CI checks its record (docs/c-frontend.md).
 
-Baseline ([PR129](https://github.com/riventic/air2lean/pull/129)): corpus, harness, generator and committed records; 17/40 corpus files and 30/30 generated programs are `lean_ok`.
+Baseline ([PR129](https://github.com/riventic/air2lean/pull/129), Zig 0.16.0): corpus, harness, generator and committed records; 17/40 corpus files and 30/30 generated programs are `lean_ok`.
+
+Zig 0.17.1: 26/40 corpus files and 30/30 generated programs are `lean_ok`; 10 files are rejected by a named gate (docs/c-frontend.md §Gates). The harness closes the AIR export over std callees, runs the translator with `--allocator-model translated`, and can defer Lean elaboration to a build host; the translator models Zig 0.17.1's array `splat`.
+
+Remaining: `casts` (a 0.17.1 `int_from_ptr`/`ptr_cast` of an optional pointer, L07); `libc_string` and `malloc_vec` (no libc symbol has a binding: Zig 0.17.1 defines these symbols in Zig, `lib/c/*.zig` and `compiler_rt`, as weak `@export`s, so binding them needs the exporter's `@export` records and an EXT-03 decision on weak definitions); `ptr_arith` (a signed item offset for `[*c]` pointers in the memory model, L05); the gated files stay rejected until translate-c translates `goto` (L03), bitfields, variadic definitions and nested case labels, and until its `u1` comparator arithmetic is fixed upstream.
 <!-- register:acceptance:end -->
