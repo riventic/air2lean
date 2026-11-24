@@ -1997,7 +1997,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
             entry.regions with
         | .error e =>
           throw s!"{fnName}: near line {line}: asm {source.quote} (operand widths \
-            {(outBits ++ inBits).toList}) is {e.message} (A02, premise ASM-07)"
+            {(outBits ++ inBits).toList}) is rejected: {e.message} (A02, premise ASM-07)"
         | .ok block =>
           if block.instrs.any (·.mayFault) != (entry.fault != .never) then
             throw s!"{fnName}: near line {line}: asm {source.quote}: the allowlist entry's fault \

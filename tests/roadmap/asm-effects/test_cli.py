@@ -107,7 +107,7 @@ def main():
     def wide_incl(i, d):  # `incl` on a 64-bit memory operand
         d["types"][4] = dict(d["types"][4], child=1)
     checks += reject(binary, only("incm", wide_incl),
-                     "instruction 0 ('incl %[x]') accesses the memory operand")
+                     "instruction 0 ('incl %[x]') accesses operand 0 (memory) at another size")
 
     def narrow_addq(i, d):  # `addq` on 32-bit register operands
         for inst in d["body"]:
