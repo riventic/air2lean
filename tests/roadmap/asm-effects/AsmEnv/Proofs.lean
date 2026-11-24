@@ -18,8 +18,6 @@ Every theorem is about that unchanged text.
   region: `n` bytes at `dst`, whatever the opaque computes; `copy`'s read of `src` changes no
   byte. `copy_overlap`: overlapping regions are `.unspecified` (the result of a forward copy
   depends on their distance). `fill_zero`: a zero count touches no memory at all, whatever `dst` holds.
-* `fill_spec`: with the instruction's behaviour as an ASM-02 hypothesis (`rep stosb` stores
-  `al` `rcx` times), the region holds `n` copies of the byte.
 -/
 
 open Zig Zig.Asm AsmEnv

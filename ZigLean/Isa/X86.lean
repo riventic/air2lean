@@ -469,3 +469,24 @@ attribute [zig_unfold] Block.out Block.fault runInstrs faultInstrs Instr.step In
     simp [h]
 
 end Zig.Isa.X86
+
+namespace Zig.Asm
+
+/-- The result `v` of a defined block (`airIsa_<hash>`) whose fault on the same inputs is
+`fault`: the generated wrapper guards the call with the block's own fault function, the
+instructions' condition. `#DE` is `Zig.Error.trap`; a result the architecture leaves open (`bsr`
+of zero) is `Zig.Error.unspecified`. -/
+def isaFault {α : Type} (fault : Option Zig.Isa.X86.Fault) (v : α) : Result α :=
+  match fault with
+  | none => pure v
+  | some .trap => throw .trap
+  | some .unspecified => throw .unspecified
+
+@[simp] theorem isaFault_none {α : Type} (v : α) : isaFault none v = pure v := rfl
+
+@[simp] theorem isaFault_trap {α : Type} (v : α) : isaFault (some .trap) v = throw .trap := rfl
+
+@[simp] theorem isaFault_unspecified {α : Type} (v : α) :
+    isaFault (some .unspecified) v = throw .unspecified := rfl
+
+end Zig.Asm

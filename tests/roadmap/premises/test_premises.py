@@ -1346,7 +1346,15 @@ class RepositoryTests(unittest.TestCase):
                 self.assertIn(path.relative_to(ROOT).as_posix(), files)
 
     def test_known_premises(self):
-        self.assertIn("ASM-02", self.premises_of("Proofs/Asm/Proofs.lean", "bswap32_involutive"))
+        # A02: the asm blocks of examples/asm are defined over the instruction model, so the
+        # theorem rests on ASM-07 and on no opaque or instruction hypothesis.
+        involutive = self.premises_of("Proofs/Asm/Proofs.lean", "bswap32_involutive")
+        self.assertIn("ASM-07", involutive)
+        self.assertFalse({"ASM-01", "ASM-02", "TRU-04"} & set(involutive), involutive)
+        # A memory-region block is outside the model: still an opaque.
+        fill = self.premises_of("tests/roadmap/asm-effects/AsmEnv/Proofs.lean", "fill_frame")
+        self.assertLessEqual({"ASM-01", "ASM-03", "ASM-06"}, set(fill))
+        self.assertNotIn("ASM-07", fill)
         self.assertIn("MTH-02", self.premises_of("Proofs/Floatops/Proofs.lean", "op64_spec"))
         self.assertEqual(self.premises_of("Proofs/Floatops/Proofs.lean", "sel_ne"), ["TRU-01"])
         counter = self.premises_of("Proofs/Threads/Counter.lean", "Threads.Counter.parallelCounter_spec")
