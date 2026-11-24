@@ -92,16 +92,11 @@ recorded in the file named.
 | 2026-11-24 | D3 (F03): a wrapper per `*_optimized` operation and the `Permitted` envelope (MTH-09/MTH-10) approved, low priority. | docs/research/F03.md |
 | 2026-11-24 | D4 (L08): pointer fields in packed structs on 0.14.1/0.15.2 are a permanent named rejection; they and the never-emitted nested-bit-pointer export leave L08's remaining list. | `assurance/register/L08.md` |
 | 2026-11-24 | D5: I07 closes with its limits stated in TRU-05 (no release key in CI, since a key there lets a compromised workflow sign any manifest; no revocation, timestamp or log; native link is identity only; replay scope). | docs/premises.md TRU-05, `assurance/register/I07.md` |
+| 2026-11-24 | Audit S6 finding 4: std's untimed futex calls leave the hand rows. Approved end state: `Thread.Futex` (0.14.1, 0.15.2) is translated down to the OS rows (STD-05 step D); `Io.futexWait*`/`futexWake` (0.16.0, 0.17.1) become a contract that `Io.Threaded`'s translated code proves (step E); `os_unfair_lock` is an OS row (OSL-01). Rejected: proving the hand rows a refinement of the OS rows. | soundness-2026-10-14 §S6 finding 4, docs/std-models.md §Retiring the hand models, engine-ledger row s6-futex-hand-rows |
 
 ### Open for the maintainer
 
-1. **Audit S6, finding 4** (reported 2026-11-05): std's untimed futex calls bind to hand rows
-   that bypass the OS rows, and the hand wake can wake more threads than Linux does. Proposed end
-   state: route `Thread.Futex` (0.14.1, 0.15.2) through the OS rows (STD-05 step D); make
-   `Io.futexWait*`/`futexWake` (0.16.0, 0.17.1) a contract that `Io.Threaded`'s translated code
-   proves (step E); model `os_unfair_lock` as an OS row. Rejected: proving the hand rows a
-   refinement of the OS rows ([soundness-2026-10-14 §S6, finding 4](docs/architecture-audit/soundness-2026-10-14.md)).
-2. **Closing #581 and #602**: #581 is obsolete on main, and #602's measurement failed.
+1. **Closing #581 and #602**: #581 is obsolete on main, and #602's measurement failed.
 
 ## Since 2026-10-21
 
@@ -111,7 +106,7 @@ recorded in the file named.
 |---|---|---|
 | Legacy retirement | #563, #566, #573, #576, #611, #633, #653, #654, #655, #657, #658, #659, #660, #662, #664, #665, #669, #671, #677, #697, #705 | `legacy_users` 41 → 13. Deleted: legacy AllocSpec/Wrap/Wrappers/Dispatch/Automation (L6 D-b), Conc/Transfer, Sep/{Total,Loop}, the VC layer and `vc_gen` (P02's VCs are `fsym` residuals), `Conc/Spec`, `ZigLean/VC`, Threadsync/Lock, the legacy Mutex/Sem/Cond contracts; tactics `blkat_alloc`, `tomega`, `if_decl`, `unroll_solo`, `conc_norm`, `tame`, `fsym.quiet`, the `#audit_unchecked_*` commands. Kernel run witnesses use the `zig_run` simp set ([#690](https://github.com/riventic/air2lean/pull/690)). |
 | Concurrency contracts | #572, #575, #579, #582, #599, #601, #603, #606, #607, #615, #630, #631, #636, #639, #640, #641, #642, #643, #644, #646, #648, #651, #666, #667, #675, #676, #683, #693, #696 | Full-state `SemImpl`, multi-waiter `CondImpl`, `FEvent` (a set orders memory), WaitGroup on `MutexImpl` + `EventImpl`; SemCounter and Mailbox (C14) over `SemImpl`; lock nesting and a two-lock product (`LockPair`, `FLock.Pair`, WIP). |
-| Futex soundness (audit S6) | #465, #548, #645, #649, #650, #656, #668, #670, #672, #681, #704 | Linux alignment `EINVAL`, `CHILD_CLEARTID` wakes at most one waiter, address validation after `get_futex_key` and xnu ulock, macOS ulock return values, a futex queue keyed by `FutexKey`, block addresses stable across thread steps. Fixed for the OS rows; finding 4 is open (above). |
+| Futex soundness (audit S6) | #465, #548, #645, #649, #650, #656, #668, #670, #672, #681, #704 | Linux alignment `EINVAL`, `CHILD_CLEARTID` wakes at most one waiter, address validation after `get_futex_key` and xnu ulock, macOS ulock return values, a futex queue keyed by `FutexKey`, block addresses stable across thread steps. Fixed for the OS rows; finding 4's end state is approved (decision 2026-11-24) and in progress. |
 | `fsym` engine | #549-#557, #560, #561, #578, #585, #590, #592, #604, #605, #610, #629, #652, #688, #691, #699, #700, #702, #703 | Typed views, recursive group contracts, literal-pointer stores, reads through stores and memsets, projection reductions as proof steps, registered loop invariants, shared omega certificates, arithmetic atom congruence, discharger failure caching. |
 | Allocators and cost | #562, #567, #568, #580, #626, #510 | FBA client over `FAllocSpec` (legacy client retired); emitted step ticks with canonical tick semantics and cost rules (L8); the M03 append loop over the allocator contract. |
 | Recursion and threads | #597, #613, #616, #617, #620, #621, #625 | Parity, gcd and bounded factorial over full-state recursive contracts; `addDown` with its stack budget; the Disjoint worker by `fsym`. |

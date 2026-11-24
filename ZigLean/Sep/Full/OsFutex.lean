@@ -192,6 +192,14 @@ theorem wakeAt_all_of_le {c n : Nat} {p : FutexKey} {m m' : Mem} {j : Nat}
   apply wakeAt_all
   simpa only [wakeAt, zig_unfold, ExceptT.run, hs] using h
 
+/-- An OS wake of up to `c` waiters wakes at most `c`: the count a row returns is within its
+request (Linux: `wakeLimit val ≤ 2^31 − 1`, so the result is never an errno). -/
+theorem wakeSize_le_some {n : Option Nat} {c : Nat} (h : n = some c) (k : Nat) :
+    wakeSize n k ≤ c := by
+  subst h
+  simp only [wakeSize, Option.map_some, Option.getD_some]
+  exact Nat.min_le_left _ _
+
 /-- An OS wake of up to `n ≥ 1` (or all) waiters takes the run of a scheduler wake of at least
 one (`WInv.wake`, `FEvent.Inv.wake`, …): with nobody queued, every count wakes nobody. -/
 theorem futexWake_pos {p : FutexKey} {n : Option Nat} (hn : ∀ k, n = some k → 1 ≤ k) {m m' : Mem}

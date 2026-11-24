@@ -1316,7 +1316,11 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   `min n k` of the `k` threads queued there, in one step, and accesses no memory. On Linux `n`
   is `val`, at least 1 for `val ≤ 0`; on macOS it is 1, or all with `WAKE_ALL`. Linux's success
   result is the number woken. macOS returns `0`, `-ENOENT` if nobody was woken, or, as an oracle option,
-  `-EINTR` with nobody woken. It gives no happens-before edge.
+  `-EINTR` with nobody woken. It gives no happens-before edge. The translator binds
+  `os.linux.futex_3arg` (0.15.2 on), `os.linux.futex_wake` (0.14.1, the same system call) and
+  libc's `__ulock_wake` (macOS) to it in every allocator model (`Air2Lean/StdModels.lean`).
+  `std.Thread.Futex.wake` (0.14.1, 0.15.2) itself still binds to its hand row (STD-05) until
+  that row is deleted (audit S6 finding 4, slice D2).
 - Model gaps (OSF-01 and OSF-02): address validation follows Linux v6.16 `get_futex_key` and
   xnu-12377.121.6 `sys_ulock.c`. Where the native result needs mapping or address-limit
   knowledge outside the model, it is a conservative `.illegal` refusal
