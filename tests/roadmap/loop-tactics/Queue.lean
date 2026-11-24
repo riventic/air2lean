@@ -34,6 +34,49 @@ theorem sum_total (hd : Option Ptr) (xs : List (BitVec 32)) (hlen : xs.length �
 
 end Lists.Queue
 
+/-! ## Designated mutants (P03, `assurance/mutation-map.json`)
+
+The walk that proves `Lists.Linked.sum_total` (`unfold sum; fsym [listSeg_snoc_upd]`), first as a
+control on the queue, then twice mutated; each mutant must be rejected:
+
+* `queue-overflow-premise-dropped`: without the overflow premise the walk does not prove the
+  triple: the generated loop's overflow check stays a residual instead of being assumed away;
+* `queue-sum-off-by-one`: a postcondition one more than the queue's sum is rejected.
+
+The CI step that elaborates this file records their kills (`scripts/mutation_kill_log.py`). -/
+
+namespace Lists.Queue.Mutants
+open Zig Zig.Full Zig.Full.FAssn Lists.Open
+
+set_option linter.unusedVariables false
+
+/-- Control: the generic walk with the overflow premise proves the queue's sum. -/
+example (hd : Option Ptr) (xs : List (BitVec 32)) (htot : (xs.map BitVec.toNat).sum < 2 ^ 64) :
+    FTotalTriple (list hd xs ⋆ plain) (sum hd)
+      (fun r => ⟪r = BitVec.ofNat 64 (xs.map BitVec.toNat).sum⟫ ⋆ (list hd xs ⋆ plain)) := by
+  unfold sum
+  fsym [listSeg_snoc_upd]
+
+/-- `queue-overflow-premise-dropped`: the same walk without the overflow premise fails. -/
+example (hd : Option Ptr) (xs : List (BitVec 32)) : True := by
+  fail_if_success
+    have : FTotalTriple (list hd xs ⋆ plain) (sum hd)
+        (fun r => ⟪r = BitVec.ofNat 64 (xs.map BitVec.toNat).sum⟫ ⋆ (list hd xs ⋆ plain)) := by
+      unfold sum
+      fsym [listSeg_snoc_upd]
+  trivial
+
+/-- `queue-sum-off-by-one`: the same walk does not prove a sum one too large. -/
+example (hd : Option Ptr) (xs : List (BitVec 32)) (htot : (xs.map BitVec.toNat).sum < 2 ^ 64) : True := by
+  fail_if_success
+    have : FTotalTriple (list hd xs ⋆ plain) (sum hd)
+        (fun r => ⟪r = BitVec.ofNat 64 ((xs.map BitVec.toNat).sum + 1)⟫ ⋆ (list hd xs ⋆ plain)) := by
+      unfold sum
+      fsym [listSeg_snoc_upd]
+  trivial
+
+end Lists.Queue.Mutants
+
 -- Only the standard axioms: no `sorryAx`, no `native_decide` (`Lean.ofReduceBool`).
 /-- info: 'Lists.Queue.sum_total' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in

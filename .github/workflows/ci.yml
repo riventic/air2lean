@@ -1430,6 +1430,9 @@ jobs:
           mkdir -p "$RUNNER_TEMP/loop-tactics"
           lake build ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Strength ZigLean.Simp Proofs.Lists.Linked Proofs.Recursion.Proofs air2lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/build.log"
           lake env lean tests/roadmap/loop-tactics/Queue.lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Queue.log"
+          # Its elaboration rejected the queue walk's designated mutants (Q02 kill evidence).
+          python3 -B scripts/mutation_kill_log.py --check tests/roadmap/loop-tactics/Queue.lean tests/roadmap/loop-tactics/Queue.lean \
+            queue-overflow-premise-dropped queue-sum-off-by-one
           lake env lean tests/roadmap/loop-tactics/Recursion.lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Recursion.log"
           # Retained AIR of a nested loop: retranslate, compare, kernel-check the proof.
           bash tests/roadmap/loop-tactics/nested/check.sh 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Nested.log"

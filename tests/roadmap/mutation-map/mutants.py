@@ -53,6 +53,8 @@ AIR_VALIDATE = 'tests/roadmap/export-validation/test_validate_air.py'
 TRUST = 'tests/roadmap/export-validation/test_trust_report.py'
 ABI = 'tests/roadmap/abi-probes/test_probe.py'
 FUZZ = 'tests/roadmap/fuzz/test_fuzz.py'
+FINGERPRINTS = 'tests/roadmap/stable-generation/test_fingerprints.py'
+FINGERPRINT_TEST = 'FingerprintTests.test_fold_invalidation_and_sidecar_checks'
 
 # name -> (script, anchor, replacement, test file, module global holding the script, killing tests)
 MUTANTS = {
@@ -550,6 +552,22 @@ MUTANTS = {
         '                old = cell[0]\n                value = self.expr(s[3], env)\n',
         '                value = self.expr(s[3], env)\n                old = cell[0]\n',
         FUZZ, 'zig_gen', ('ZigGenerator.test_evaluator_semantics',)),
+    # P07: a callee's change must invalidate its callers (the call-graph fold).
+    'fingerprint-callers-not-invalidated': (
+        'scripts/semantic-fingerprints.py', '            callees=[[c, result[c]["fingerprint"]] for c in outside]))\n',
+        '            callees=outside))\n', FINGERPRINTS, 'fp', (FINGERPRINT_TEST,)),
+    # P07: a semantic (body) change must invalidate the function's own fingerprint.
+    'fingerprint-body-ignored': (
+        'scripts/semantic-fingerprints.py', 'canonical=r["canonical"])) for s, r in records.items()}',
+        'canonical=r["air_name"])) for s, r in records.items()}', FINGERPRINTS, 'fp', (FINGERPRINT_TEST,)),
+    # P07: a translator (emitter) change invalidates every fingerprint.
+    'fingerprint-translator-revision-ignored': (
+        'scripts/semantic-fingerprints.py', '                          translator=doc["translator"]["revision"],\n',
+        '', FINGERPRINTS, 'fp', (FINGERPRINT_TEST,)),
+    # P07: a sidecar whose runtime revision does not match its module digests is rejected.
+    'sidecar-runtime-revision-unchecked': (
+        'scripts/semantic-fingerprints.py', '    if not valid_translator(doc["runtime"]):\n', '    if False:\n',
+        FINGERPRINTS, 'fp', (FINGERPRINT_TEST,)),
     # T04: the native probe profile is exactly 64-bit.
     'abi-probe-pointer-width-unchecked': (
         'scripts/abi-probe.py', " or profile['pointer_bits'] != 64\n", '\n',

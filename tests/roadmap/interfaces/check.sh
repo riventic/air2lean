@@ -103,5 +103,15 @@ assert ": error" not in text and len(groups) == n, text
 assert used <= {"propext", "Classical.choice", "Quot.sound"}, text
 PY
 done
+# M04: semantic mutants of the translated std allocator sentinel path (the retained 0.17.1
+# Interfaces/Sentinel.lean): the unchanged SentinelSpec proofs must reject each one.
+python3 -B tests/roadmap/callbacks/mutants.py generate sentinel "$work/mutants" | while IFS=: read -r name module proofs; do
+  mroot="$work/mutants/$name"
+  "${lean_cmd[@]}" -R "$mroot" -o "$mroot/${module%.lean}.olean" "$mroot/$module"
+  cp "$here/$proofs" "$mroot/$proofs"
+  status=0
+  LEAN_PATH="$mroot:$LEAN_PATH" "${lean_cmd[@]}" -R "$mroot" "$mroot/$proofs" > "$mroot/log" 2>&1 || status=$?
+  python3 -B tests/roadmap/callbacks/mutants.py classify "$name" "$status" "$mroot/log" "$mroot/$proofs"
+done
 PYTHONDONTWRITEBYTECODE=1 python3 "$here/test_cli.py" "$translator"
 echo "interfaces: ok"

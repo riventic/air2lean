@@ -64,6 +64,17 @@ done
 differ=$(paste -d'\n' "$work/model-s390x.txt" "$work/model-x86_64.txt" | paste - - \
   | awk -F'\t' '$1 != $2' | wc -l)
 [ "$differ" -ge 60 ] || { echo "only $differ lines depend on the byte order" >&2; exit 1; }
+# Byte-order mutants of the retained s390x translation (mutations.py): the model must then
+# disagree with the committed s390x observations.
+python3 -B "$case_dir/mutations.py" --self-test
+python3 -B "$case_dir/mutations.py" generate "$work/mutants" | while read -r name; do
+  mroot="$work/mutants/$name"
+  "${lean_cmd[@]}" -R "$mroot" -o "$mroot/BigEndian/S390x/Gen.olean" "$mroot/BigEndian/S390x/Gen.lean"
+  status=0
+  LEAN_PATH="$mroot:$LEAN_PATH" "${lean_cmd[@]}" --run "$case_dir/Diff.lean" s390x > "$mroot/model.txt" 2> "$mroot/log" || status=$?
+  python3 -B "$case_dir/mutations.py" classify "$name" "$status" "$mroot/model.txt" \
+    "$case_dir/observed/s390x-linux-musl-ReleaseSafe.txt"
+done
 python3 "$case_dir/test_cli.py" "$translator"
 if [ "$mode" = --native ]; then
   : "${AIR2LEAN_ZIG_NATIVE:?set a stock host Zig 0.16.0}"

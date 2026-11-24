@@ -183,6 +183,26 @@
       },
       "block_sha256": "2cedf87bae4be8a55f889b02bca57965adafee56a141ef9e52576db0219714cf"
     },
+    "tests/roadmap/resize-remap/mutations.py#copy-lost-prefix-and-defined-suffix": {
+      "unrecorded": "mutations.py only writes patches of the retiring hand model ZigLean/Mem/Alloc.lean; no CI check applies them and runs Check.lean",
+      "block_sha256": "c93cec4e6d0892a52c2894febf66de31e627b278f2a2da8d4f0005b2f4c36c89"
+    },
+    "tests/roadmap/resize-remap/mutations.py#failure-mutates-old": {
+      "unrecorded": "mutations.py only writes patches of the retiring hand model ZigLean/Mem/Alloc.lean; no CI check applies them and runs Check.lean",
+      "block_sha256": "c93cec4e6d0892a52c2894febf66de31e627b278f2a2da8d4f0005b2f4c36c89"
+    },
+    "tests/roadmap/resize-remap/mutations.py#in-place-frame-overlap": {
+      "unrecorded": "mutations.py only writes patches of the retiring hand model ZigLean/Mem/Alloc.lean; no CI check applies them and runs Check.lean",
+      "block_sha256": "c93cec4e6d0892a52c2894febf66de31e627b278f2a2da8d4f0005b2f4c36c89"
+    },
+    "tests/roadmap/resize-remap/mutations.py#in-place-wrong-length": {
+      "unrecorded": "mutations.py only writes patches of the retiring hand model ZigLean/Mem/Alloc.lean; no CI check applies them and runs Check.lean",
+      "block_sha256": "c93cec4e6d0892a52c2894febf66de31e627b278f2a2da8d4f0005b2f4c36c89"
+    },
+    "tests/roadmap/resize-remap/mutations.py#moved-old-stays-live": {
+      "unrecorded": "mutations.py only writes patches of the retiring hand model ZigLean/Mem/Alloc.lean; no CI check applies them and runs Check.lean",
+      "block_sha256": "c93cec4e6d0892a52c2894febf66de31e627b278f2a2da8d4f0005b2f4c36c89"
+    },
     "u": {
       "killed_by": {
         "kind": "diff",

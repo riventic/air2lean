@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Semantic mutants of the retained E02 translations (`Callbacks/Gen.lean`, `Callbacks/Async.lean`)
-and of A01's `asm-effects/AsmEnv/Gen.lean`.
+"""Semantic mutants of the retained E02 translations (`Callbacks/Gen.lean`, `Callbacks/Async.lean`),
+of A01's `asm-effects/AsmEnv/Gen.lean` and of M04's `interfaces/Interfaces/Sentinel.lean`.
 
-`generate ROOT OUT` writes, per mutant of the fixture ROOT (`callbacks` or `asm-env`), a mutated
+`generate ROOT OUT` writes, per mutant of the fixture ROOT (`callbacks`, `asm-env`, `sentinel`), a mutated
 copy of its module under `OUT/<name>/<Module path>` and prints `name:<Module path>:<Proofs path>`.
 Each mutant is well-typed Lean that changes one semantic point. `classify NAME STATUS LOG PROOFS`
 requires that Lean rejected the unchanged proofs, with every located error inside the targeted
@@ -45,10 +45,25 @@ MUTANTS = {
             [("def copy ", "    Zig.Asm.guard [(a9o0, (a9o2).toNat), (a9o1, (a9o2).toNat)]\n", "")],
             {"copy_eq"}, {"copy_frame", "copy_overlap"}),
     },
+    # M04: the translated `std.mem.Allocator.allocSentinel` path (real std code, 0.17.1) under
+    # `SentinelSpec`'s every-allocator contract proofs.
+    "sentinel": {
+        # `allocWithOptionsRetAddr` asks for `n` bytes instead of `n + 1`: no room for the sentinel.
+        "sentinel-alloc-omits-extra-byte": ("Interfaces/Sentinel.lean", "Interfaces/SentinelSpec.lean",
+            [("def mem_Allocator_allocWithOptionsRetAddr__", "    let i3 ← Zig.add false p1 (1 : BitVec 64)\n",
+              "    let i3 ← pure p1\n")],
+            {"make_spec"}, set()),
+        # The sentinel is stored at item 0 instead of after the `n` items.
+        "sentinel-stored-at-item-0": ("Interfaces/Sentinel.lean", "Interfaces/SentinelSpec.lean",
+            [("def mem_Allocator_allocWithOptionsRetAddr__", "Zig.ptrProject v15.ptr (·.elem 1 p1))",
+              "Zig.ptrProject v15.ptr (·.elem 1 0))")],
+            {"make_spec"}, set()),
+    },
 }
-ROOTS = {"callbacks": ROADMAP / "callbacks", "asm-env": ROADMAP / "asm-effects"}
+ROOTS = {"callbacks": ROADMAP / "callbacks", "asm-env": ROADMAP / "asm-effects", "sentinel": ROADMAP / "interfaces"}
 # The CI check that runs each fixture's mutants (the kill it reports: scripts/mutation_kill_log.py).
-CHECKS = {"callbacks": "tests/roadmap/callbacks/check.sh", "asm-env": "tests/roadmap/asm-effects/check.sh"}
+CHECKS = {"callbacks": "tests/roadmap/callbacks/check.sh", "asm-env": "tests/roadmap/asm-effects/check.sh",
+          "sentinel": "tests/roadmap/interfaces/check.sh"}
 sys.path.insert(0, str(ROADMAP.parents[1] / "scripts"))
 from mutation_kill_log import killed as log_kill  # noqa: E402
 
@@ -107,7 +122,7 @@ def self_test():
             for theorem in required | allowed:
                 assert re.search(rf"^theorem {theorem}\b", text, re.M), (name, theorem)
             count += 1
-    print(f"E02/A01 mutant self-test: {count}")
+    print(f"E02/A01/M04 mutant self-test: {count}")
 
 
 def main(argv):
