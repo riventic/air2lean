@@ -1240,6 +1240,16 @@
    "deletion_plan": ""
   },
   {
+   "id": "lock-start-anywhere",
+   "title": "a lock's start at any point of a program: the clock, waiter and atomics premises of `FLock.Inv.make` range over the whole machine",
+   "status": "open",
+   "requester": "critic run 43 (2026-11-24) on #770-#773; every lock start: `FLock.Inv.make`/`make_word` (Lock.lean), `FLock.Pair.start` (LockProd.lean), `RwProd.start` (RwProdStart.lean)",
+   "request": "A lock, a pair of locks and a reader/writer lock start at any point of a program: after earlier threads were joined, while other threads wait at other futexes, and next to other atomic locations in the same block.",
+   "progress": "OPEN, by reading (not kernel-checked). (1) `hall : AllLe m (m.clocks[t]!)` ranges over joined threads: after `main` spawns and joins a helper, `clocks[t]` is the merge and `clocks[u]` stays, so `hall` is false and no lock can start afterwards. Plan: `AllLeOn` over the threads that are not `gone`, as `Word.Ok.init` already takes. (2) `hq : m.waiters = #[]` is the whole machine's queue: a lock created while any thread waits at any futex cannot start. Plan: no waiter at the lock's keys. (3) `hat : ∀ l ∈ m.atomics, l.block ≠ b` is block-wide: `struct { hits: std.atomic.Value(u32), lock: RwLock }` with `hits.store(0)` before the start, or two locks in one block, fails it although no atomic location overlaps the lock. Plan: `LockWord.WInv.make` takes the no-overlap form `Word.Ok.init` has. (4) The doc comments of these lemmas say `t`'s clock is above every thread's; the premise says at or below. Also recorded there: the rwlock's layout and width are fixed (`Word 64 8`, offsets 8/16/20/24/32; fails closed on a 32-bit target), and the spawn and join lemmas take a protocol whose invariant is exactly one rwlock's pair (a program with a second primitive needs the product of invariants).",
+   "workaround_sites": [],
+   "deletion_plan": ""
+  },
+  {
    "id": "list-walk-step",
    "title": "a list walk's step from its invariant: split the ghost list by the cursor's test, unfold and fold the list",
    "status": "open",
