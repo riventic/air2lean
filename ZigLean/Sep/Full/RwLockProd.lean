@@ -238,7 +238,7 @@ theorem lR_share (W : FRw γ X Y M L C S) (l : Zig.Loc) :
     · rw [W.pool_posted G h] at h2; exact (W.R_plain _ _ h2).2
     · rw [W.pool_idle G h] at h2; exact h2.2.2
   show (r₁.gh.share l).add (r₂.gh.share l) = SCell.zero
-  rw [h1.2.2, e2]; rfl
+  rw [h1.2.2, e2, Ghost.unit_share, SCell.zero_add]
 
 /-- **Each thread owns exactly its reader's fraction of the readers' heap** (section doc), at the
 outer mutex (`M.own`: the part and the held resource of a thread that is not joined). -/
