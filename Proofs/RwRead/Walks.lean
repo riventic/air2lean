@@ -29,7 +29,7 @@ def wOf : Tgt → Option Ptr
   | _ => none
 
 /-- This program's protocol. -/
-abbrev proto : Proto Tgt Gh := Zig.RwRead.proto wOf
+noncomputable abbrev proto : Proto Tgt Gh := Zig.RwRead.proto wOf
 
 /-! ## `writer` -/
 
@@ -55,7 +55,7 @@ theorem loop4_body (rp : Res) (hp : rp.Plain) (t : ThreadId) (s : writerLocals)
   unfold writer.loop4
   fsym [(fits (wOf := wOf)).m.wp_tick_plain,
     WP.liftMem_pure (projI (wOf := wOf) _ _) rfl,
-    wp_io (wOf := wOf),
+    wp_ioAt (wOf := wOf) (gO_live _ _), wp_ioAt (wOf := wOf) (gW_live _ _ _),
     wp_lock (wOf := wOf) ioRwLock rfl rfl _ hp,
     wp_ownN (wOf := wOf), wp_own (wOf := wOf),
     wp_unlockN (wOf := wOf) ioRwLock rfl rfl _ _ hp,
@@ -82,7 +82,7 @@ theorem readShared_spec (rp : Res) (hp : rp.Plain) (t : ThreadId) (y : Ph) (G : 
       proto.inv (upd G' t (gO rp y)) m') G m d := by
   unfold readShared
   fsym [WP.liftMem_pure (projI (wOf := wOf) _ _) rfl,
-    wp_io (wOf := wOf),
+    wp_ioAt (wOf := wOf) (gO_live _ _), wp_ioAt (wOf := wOf) (gR_live _ _ _ _),
     wp_lockShared (wOf := wOf) ioRwLock rfl rfl _ hp,
     wp_loadShare (wOf := wOf),
     wp_unlockShared (wOf := wOf) ioRwLock rfl rfl _ hp]

@@ -77,6 +77,25 @@ theorem wp_io {G G' : ThreadId → Gh} {t : ThreadId} {m : Mem} {d : Nat}
         by simpa [cPtr] using hA, by decide⟩)
     (FClient.pre_covers (by rw [o0]; decide)) hi hc hg h
 
+/-- A thread outside the locks has not ended. -/
+theorem gO_live (r : Res) (x : Ph) : (gO r x).1.phA ≠ .gone := nofun
+
+/-- The writer with the write lock has not ended. -/
+theorem gW_live (r rM : Res) (x : Ph) : (gW r rM x).1.phA ≠ .gone := nofun
+
+/-- A reader with its share has not ended. -/
+theorem gR_live (r : Res) (q : Frac) (H : FHeap) (x : Ph) : (gR r q H x).1.phA ≠ .gone := nofun
+
+/-- **The read of `io`** by the thread with the ghost value `g`, which has not ended (`wp_io`
+with the thread's value named: the rule of the walks, at `gO_live`, `gW_live`, `gR_live`). -/
+theorem wp_ioAt {G : ThreadId → Gh} {t : ThreadId} {g : Gh} (hg : g.1.phA ≠ .gone) {m : Mem}
+    {d : Nat} {Q : Io → (ThreadId → Gh) → Mem → Nat → Prop}
+    (hi : (proto wOf).inv (upd G t g) m) (hc : m.current = t)
+    (h : ∀ m', m'.current = t → m'.threads = m.threads → (proto wOf).inv (upd G t g) m' →
+      Q ⟨⟩ G m' d) :
+    (proto wOf).WP t (ConcM.liftMem (load Io 8 cPtr) : ConcM Tgt Io) Q G m d :=
+  wp_io hi hc (by rw [upd_self]; exact hg) h
+
 /-! ## A step on the thread's own part -/
 
 /-- **A step of the writer on its own part** while it holds the write lock (`FCond.wp_liftPart`
