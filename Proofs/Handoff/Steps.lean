@@ -610,7 +610,8 @@ theorem cwait_ok {G : ThreadId → Gh} {m : Mem} {rM rL : Res}
     have hU2 := hU.ep1
     have hU3 := hU.places
     rw [upd0_1] at hU1 hU2 hU3
-    refine ⟨hU.cl.relabel (Shape.congr hU.shape rfl (fun u => ?_) (fun u hfr => ?_)), hU.rest,
+    refine ⟨hU.cl.relabel (show Shape (fun u => (upd G 0 ((C Lo).set (gH rM rL { ph := .run })
+        .en) u).2) m from Shape.congr hU.shape rfl (fun u => ?_) (fun u hfr => ?_)), hU.rest,
       hU.blk,
       hU.ws, hU.we, hU.wv, hI, ?_, ?_, ?_, hU.ep2, hU.epS, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, hU.q,
       fun u hu' => ?_⟩
