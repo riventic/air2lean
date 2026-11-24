@@ -193,4 +193,66 @@ theorem result_disjunction (v : BitVec 8) (b : Bool) :
       (fun r => ⟪Ret v r⟫) := by
   fsym
 
+/-! ## Pure facts of a rule's precondition
+
+A fact `⟪φ⟫` of a caller's rule is a side goal of the plan: a hypothesis of the context, the
+arithmetic solver on the context's facts, or a fact of the state. -/
+
+/-- **A rule's fact that is a hypothesis of the context** (ledger #7). -/
+theorem rule_fact_ctx (c : MemM Nat) (P : FAssn) (n : Nat) (hn : 0 < n)
+    (h : FTotalTriple (⟪0 < n⟫ ⋆ P) c (fun r => ⟪r = n⟫ ⋆ P)) :
+    FTotalTriple P (do let r ← c; pure r) (fun r => ⟪r = n⟫ ⋆ P) := by
+  fsym [h]
+
+/-- … that follows from the context by arithmetic. -/
+theorem rule_fact_arith (c : MemM Nat) (P : FAssn) (n : Nat) (hn : 3 < n)
+    (h : FTotalTriple (⟪0 < n⟫ ⋆ P) c (fun r => ⟪r = n⟫ ⋆ P)) :
+    FTotalTriple P (do let r ← c; pure r) (fun r => ⟪r = n⟫ ⋆ P) := by
+  fsym [h]
+
+set_option linter.unusedVariables false in
+/-- Rejected: the context does not give the rule's fact. -/
+example (c : MemM Nat) (P : FAssn) (n : Nat)
+    (h : FTotalTriple (⟪0 < n⟫ ⋆ P) c (fun r => ⟪r = n⟫ ⋆ P)) : True := by
+  fail_if_success
+    have : FTotalTriple P (do let r ← c; pure r) (fun r => ⟪r = n⟫ ⋆ P) := by
+      fsym [h]
+      done
+  trivial
+
+/-- **A rule's fact that is an implication** (ledger #59: a loop invariant's
+`⟪s.it = none → x0 = none⟫`), from a hypothesis of the context. -/
+theorem rule_fact_implication (c : MemM Nat) (P : FAssn) (it x0 : Option Ptr)
+    (hx : it = none → x0 = none)
+    (h : FTotalTriple (⟪it = none → x0 = none⟫ ⋆ P) c (fun r => ⟪r = 0⟫ ⋆ P)) :
+    FTotalTriple P (do let r ← c; pure r) (fun r => ⟪r = 0⟫ ⋆ P) := by
+  fsym [h]
+
+/-- The locals of a list walk. -/
+structure Cursor where
+  it : Option Ptr
+
+/-- … from the state's fact about a field of the locals, for a rule over every locals. -/
+theorem rule_fact_implication_state (c : Cursor → MemM Nat) (P : FAssn) (s : Cursor)
+    (x0 : Option Ptr)
+    (h : ∀ s : Cursor, FTotalTriple (⟪s.it = none → x0 = none⟫ ⋆ P) (c s) (fun r => ⟪r = 0⟫ ⋆ P)) :
+    FTotalTriple (⟪s.it = none → x0 = none⟫ ⋆ P) (do let r ← c s; pure r)
+      (fun r => ⟪r = 0⟫ ⋆ P) := by
+  fsym [h]
+
+/-! ## The names of a residual goal -/
+
+/-- **A command's result has the program's name in a residual goal** (ledger #18): the loaded
+word is `e`, as the continuation binds it, so the proof of the side goal that `fsym` leaves (the
+addition does not overflow) can name it. -/
+theorem result_name (p : Ptr) (v n : BitVec 64)
+    (h : ∀ x : BitVec 64, x.toNat + n.toNat < 2 ^ 64) :
+    FTotalTriple (up (pts p 8 v))
+      (do let e ← Zig.load (BitVec 64) 8 p
+          let e' ← StateT.lift (Zig.add false e n)
+          pure e')
+      (fun _ => up (pts p 8 v)) := by
+  fsym
+  exact h e
+
 end SepAuto.Walk

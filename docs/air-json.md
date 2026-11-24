@@ -148,7 +148,9 @@ by default. Any other profile needs `--allow-unqualified-build-mode`; the genera
 `-- air2lean-profile:` record then carries `"admission": "unqualified-build-mode"`, which the
 check reports and proof receipts copy with the rest of the header. `--assume-no-libc`
 ([floats.md](floats.md#targets)) is recorded the same way (`"no-libc"`; both opt-ins:
-`"unqualified-build-mode,no-libc"`).
+`"unqualified-build-mode,no-libc"`), and so is `--assume-asm-cpu-features <f,...>`
+([volatile-effects.md](volatile-effects.md#cpu-features)): `"asm-cpu-features"`, with the
+admitted features in a second field, `"asm_cpu_features": ["lzcnt", "popcnt"]`.
 
 ## Type
 

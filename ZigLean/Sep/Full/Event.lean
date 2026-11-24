@@ -2044,15 +2044,16 @@ theorem wp_osWait (hE : L.Fits (E.prim L) P U ok) {e : BitVec 32} (he : e = 1)
     (waitBack hE hg hgo (hE.heldOut hgo hi)) h
 
 /-- **The setter's OS futex wake** (`Os.futexWake`, OSF-02; std's translated `Thread.Futex.wake`)
-of up to `w ≥ 1` waiters (or all) at the word, at `sw`: after a wake it is done (`sd`; the event
-is set);
+of up to `w ≥ 1` waiters (or all) at the word, at `sw`: after a wake of `j` waiters, within the
+request (`j ≤ c` for `w = some c`), it is done (`sd`; the event is set);
 after a spurious `EINTR` (macOS; nobody woken) it is still at `sw` (std wakes again). -/
 theorem wp_osWake (hE : L.Fits (E.prim L) P U ok) {w : Option Nat}
     (hw : ∀ k, w = some k → 1 ≤ k) {spurious : Bool} (hg : E.ph g = .sw)
     (hgo : L.ph g = .out ∨ L.ph g = .gone)
     (hi : P.inv (upd G t g) m) {Q : Option Nat → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ r G₁ m', m'.current = t →
-      ((∃ j, r = some j) ∧ E.IsSet m' ∧ P.inv (upd G₁ t (E.set g .sd)) m' ∨
+      ((∃ j, r = some j ∧ ∀ c, w = some c → j ≤ c) ∧ E.IsSet m' ∧
+        P.inv (upd G₁ t (E.set g .sd)) m' ∨
        spurious = true ∧ r = none ∧ P.inv (upd G₁ t g) m') → Q r G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Os.futexWake E.W.ptr false w spurious : ConcM Tgt (Option Nat)) Q G m n :=
@@ -2060,7 +2061,7 @@ theorem wp_osWake (hE : L.Fits (E.prim L) P U ok) {w : Option Nat}
     ⟨fun cs m' hr hL => by
       obtain ⟨c, hc, hr'⟩ := Os.futexWake_pos (m := { m₁ with current := t }) hw hr
       obtain ⟨h1, h2, h3⟩ := hE.afterWake hg₁ hg hgo hc hU hwL hr' hL
-      exact h k hk _ G₁ m' h1 (.inl ⟨⟨_, rfl⟩, h2, h3⟩),
+      exact h k hk _ G₁ m' h1 (.inl ⟨⟨_, rfl, fun _ hc => Os.wakeSize_le_some hc _⟩, h2, h3⟩),
      fun hs hic => h k hk none G₁ _ rfl (.inr ⟨hs, rfl, hic⟩)⟩
 
 /-- The native event reconstruction shared by ordinary and cur-aware caller-part steps.

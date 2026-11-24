@@ -70,29 +70,64 @@ index and size oracles, list-to-oracle agreement, a budget that is freed and reu
 uncapped default against the explicit harness cap, and a translated `Lists.dupe` of
 1 MiB + 1 bytes. That request succeeds by default and fails under the harness cap. It also
 runs the `append` loop of the `std` heap model's translation (a test-local `appendEach`) with
-three failures before successful appends. These checks have no
-native counterpart because `TestAllocator` has neither an oracle nor a budget. `check.sh`
-runs this check after the ten native comparisons.
+three failures before successful appends. The embedding, the uncapped default and the 1 MiB
+fixture stay Lean-only (the native harness keeps its cap); the oracle and the budget have the
+native counterpart below. `check.sh` runs this check before the twenty native comparisons.
 
-The native differential `TestAllocator` uses the same explicit policy, over page allocation,
-and still reports actual harness allocation failure separately. Existing lists inputs retain
-the null/index protocol. The first allocator argument can also be:
+### Native differential
+
+The native differential `TestAllocator` (`tests/diff/common.zig`) uses the same explicit
+policy, over page allocation, and still reports actual harness allocation failure separately.
+Existing lists inputs retain the null/index protocol. The first allocator argument can also
+be a policy object:
 
 ```json
-{"fail_at": null, "failures": [0, 2], "max_bytes": 2097152}
+{"fail_at": null, "failures": [0, 2], "max_bytes": 2097152, "budget": 96,
+ "oracle": [{"attempt_min": 2, "attempt_max": 2}, {"attempt_mod": 3, "attempt_rem": 1, "bytes_min": 64}]}
 ```
 
-Missing fields default to the legacy policy; malformed/negative policy values are rejected.
+`oracle` is `AllocPolicy.fails` and `budget` is `AllocPolicy.budget`. An oracle is a list of
+rules, and attempt `i` of `n` bytes fails when one rule matches `(i, n)`. A rule matches when
+all its bounds hold: `attempt_min ≤ i ≤ attempt_max`, `i % attempt_mod = attempt_rem`, and
+`bytes_min ≤ n ≤ bytes_max`; a missing bound does not restrict, so `{}` matches every request.
+A rule with `attempt_min = attempt_max` and `bytes_min = bytes_max` is one entry of a decision
+table, so the rules express every oracle on the finitely many requests of a terminating run;
+the model's `fails` stays an arbitrary function. The budget fails a request when the bytes of
+the live allocations plus the request exceed it (`Mem.oracleDenies`; natively
+`TestAllocator.overBudget` over its live list). The model side builds the policy from the
+same object (`withFailAt`, `tests/diff/Diff.lean`).
+
+Missing fields default to the legacy policy; malformed/negative policy values, an
+`attempt_mod` of 0 and a field that is not part of the policy are rejected on both sides.
 The shared JSON transport uses nonnegative signed-64-bit integers on native 64-bit fixtures,
 while semantic indices/caps are Lean naturals. The complete input object is part of the
 correspondence evidence. The cap is a per-request semantic policy, not an assurance that
 the host can satisfy a request. Zero-length allocations bypass policy in both models.
 
-The standalone fixture compares ten exact cases: legacy success/failure, several failures,
-combined legacy/trace failure, duplicate indices, all failures, cap equality/overflow,
-raised-cap success above 1 MiB, harness-cap rejection (case `default-cap`, the legacy 1 MiB cap), and zero-size allocation. Each
-successful block is freed and each run checks attempt count and absence of live blocks.
-Small existing `sumRange` fixtures separately exercise the JSON object transport.
+**Translated clients under generated policies.** The lists differential (`scripts/diff.sh`,
+`AIR2LEAN_EXAMPLES=lists`) runs each allocating function (`sumRange`, `dupe`, `dupeZLen`,
+`evens`, `listSum`) natively and in the model under the same policy object. After each
+function's 300 legacy lines, `tests/diff/gen_inputs.zig` writes 40 lines with a generated
+policy: up to three oracle rules, a budget on half of the lines, and on some a failure list
+and a request cap (`writePolicy`). They come from a generator stream of their own, so the
+other inputs stay the same, and `scripts/fresh-inputs.sh` regenerates them with every seed.
+`evens` (an `ArrayListUnmanaged` that grows: the old and the new buffer are live together)
+and `listSum` (every node live) make the budget and the attempt rules decide later requests
+too. Each case compares the result, the buffers and the live-allocation count, as every lists
+case does; there are no exclusion pins for these lines. The functions return at their first
+`OutOfMemory`, so a run with several failures is compared by the standalone fixture.
+
+**Standalone fixture.** `tests/roadmap/allocation-policy` compares twenty exact cases of
+`rawAlloc` against `TestAllocator`. Ten cover the failure index, the list and the cap: legacy
+success/failure, several failures, combined legacy/trace failure, duplicate indices, all
+failures, cap equality/overflow, raised-cap success above 1 MiB, harness-cap rejection (case
+`default-cap`, the legacy 1 MiB cap), and zero-size allocation. Ten cover the oracle and the
+budget: every even attempt (three failures in one run), by size, by attempt and size, two
+rules, every request, an oracle with a list and a cap; a budget with every block held (its
+boundary and the held bytes are compared), a budget whose blocks are released, a budget of 0,
+and a budget with an oracle. `Check.lean` states each oracle as a Lean function and
+`fixture.zig` as rules, so the comparison also checks the rule semantics. Each run checks the
+attempt count and the absence of live blocks. `compare.py` requires all twenty cases by name.
 
 Qualification commands (the coordinator runs compiler commands sequentially under its
 sampled memory/time guard):
@@ -104,8 +139,19 @@ python3 tests/roadmap/allocation-policy/mutations.py
 AIR2LEAN_EXAMPLES=lists scripts/diff.sh
 ```
 
-The three semantic mutants ignore the failure trace, ignore the cap, or omit live-allocation
-removal. Each must compile, then fail an explicit fixture outcome/ownership assertion.
+For a Zig version other than the one whose translation `Proofs/Lists/Gen.lean` holds, the
+lists differential runs in a check tree (`scripts/check-tree.py create DEST --host-goldens
+VERSION`, then `scripts/diff.sh` there), as `scripts/check.sh` does.
+
+Run of 2026-11-24 on native x86_64-linux (ReleaseSafe, baseline CPU), Zig 0.17.1, 0.16.0 and
+0.15.2 each: the lists differential compared 1,704 cases, of them 200 under generated
+oracle/budget policies, with 1,703 exact matches, 0 mismatches and the one pinned
+`allocatorWord` exclusion; the fixture gave 20 exact policy comparisons; all seven mutants
+were detected. This is a local run, not a qualification record.
+
+The seven semantic mutants ignore the failure trace, ignore the cap, omit live-allocation
+removal, ignore the failure oracle, ignore the budget, count only the request against the
+budget, or drop a rule's upper bound on the request. Each must compile, then fail an explicit fixture outcome/ownership assertion.
 Compiler errors, unexpected panics, missing tools and killed processes do not count as
 mutation detection. Temporary copies preserve the original source. Existing mutation (h)
 continues to remove only legacy `failAt`, retaining the configured policy.

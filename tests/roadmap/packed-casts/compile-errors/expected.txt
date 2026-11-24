@@ -5,6 +5,11 @@
 0.14.1 array_of_auto_structs.zig compiles
 0.14.1 array_of_tagged_unions.zig compiles
 0.14.1 extern_struct.zig compiles
+0.14.1 array_of_tuples.zig compiles
+0.14.1 array_of_errors.zig compiles
+0.14.1 array_of_error_unions.zig compiles
+0.14.1 array_of_optionals.zig compiles
+0.14.1 void.zig error
 0.15.2 auto_struct.zig error
 0.15.2 auto_struct_dest.zig error
 0.15.2 tuple.zig error
@@ -12,6 +17,11 @@
 0.15.2 array_of_auto_structs.zig compiles
 0.15.2 array_of_tagged_unions.zig compiles
 0.15.2 extern_struct.zig compiles
+0.15.2 array_of_tuples.zig compiles
+0.15.2 array_of_errors.zig compiles
+0.15.2 array_of_error_unions.zig compiles
+0.15.2 array_of_optionals.zig compiles
+0.15.2 void.zig error
 0.16.0 auto_struct.zig error
 0.16.0 auto_struct_dest.zig error
 0.16.0 tuple.zig error
@@ -19,6 +29,11 @@
 0.16.0 array_of_auto_structs.zig error
 0.16.0 array_of_tagged_unions.zig error
 0.16.0 extern_struct.zig compiles
+0.16.0 array_of_tuples.zig error
+0.16.0 array_of_errors.zig error
+0.16.0 array_of_error_unions.zig error
+0.16.0 array_of_optionals.zig error
+0.16.0 void.zig error
 0.17.1 auto_struct.zig error
 0.17.1 auto_struct_dest.zig error
 0.17.1 tuple.zig error
@@ -26,3 +41,8 @@
 0.17.1 array_of_auto_structs.zig error
 0.17.1 array_of_tagged_unions.zig error
 0.17.1 extern_struct.zig error
+0.17.1 array_of_tuples.zig error
+0.17.1 array_of_errors.zig error
+0.17.1 array_of_error_unions.zig error
+0.17.1 array_of_optionals.zig error
+0.17.1 void.zig compiles
