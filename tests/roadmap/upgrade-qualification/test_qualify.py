@@ -328,6 +328,12 @@ class RecordTests(Base):
         out, _, _ = self.plan(inventory(), inventory(), 'other.json')
         self.assertTrue(any('stale' in p for p in q.check_record(out, *self.paths, root=self.root)))
 
+    def test_hand_edited_result_without_evidence_fails(self):
+        record = q.load_record(self.out)
+        record['results']['translation:basic'] = {'status': 'pass'}  # no run, no evidence
+        q.write_record(self.out, record)
+        self.assertIn('translation:basic: recorded result has no evidence', q.check_record(self.out))
+
     def test_unknown_result_fails(self):
         record = q.load_record(self.out)
         record['results']['ghost'] = {'status': 'pass'}
