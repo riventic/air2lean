@@ -68,8 +68,12 @@ one step (`legacy_users` 13 → 0, judgments 85 → 67):
   what is left of the final PR.
 - **Still `legacy-to-retire`** (section 5): `StepIn` (`Conc/Clock`; `FStepIn.of_stepIn` and
   `Full/ThreadStep` use it), `Grows` (`Conc/Lemmas`; Proofs/Atomics and idle-loops use it), the
-  `Conc/Total` and `TimedBudget` judgments, four test fixtures, and the tactics `within` and
-  `when_defined`.
+  `Conc/Total` and `TimedBudget` judgments, four test fixtures, and the tactic `when_defined`.
+- **The gate** (`scripts/proof-framework.py`). `LEGACY_MODULES` keeps the modules of the legacy
+  concurrent chain. It no longer matches the modules of the legacy sequential logic by name
+  (`ZigLean.Sep.{Triple,Loop,Block,Try,Cost,Witness,Mmap,AllocSpec,…}`): the directory step
+  moves `ZigLean/Sep/Full/*` to these names. A legacy triple stays gated by its name
+  (`LEGACY_NAMES`) and as a new judgment.
 
 ### Dependency map of the last users (2026-11-05, after #648, #643, L13, #640 and Threadsync/Lock)
 
