@@ -21,7 +21,7 @@ the Conc CSL chain) is migrated and deleted.
 | Gate (`assurance/proof-framework.json`) | earlier | 2026-10-21 | now |
 |---|---|---|---|
 | `legacy_users` | 97 at the arena landing (2026-10-14) | 41 | **13** |
-| tactic entries | 34 before #471 (2026-10-19) | 29 | **9** (`legacy-to-retire`: `within`, `when_defined`) |
+| tactic entries | 34 before #471 (2026-10-19) | 29 | **8** (`legacy-to-retire`: `when_defined`) |
 | judgments / registries | | | 82 / 14 |
 
 What is left of the goal, in order ([legacy-retirement](docs/legacy-retirement.md), "Dependency
@@ -36,13 +36,14 @@ map" and "Retirement order"):
    after its last importer.
 3. **Stage D-e.** Sep/{Block,Triple}, with the strength log kept compiled until that final PR.
 4. **Legacy tactics.** `unroll_sched` and `ZigLean/Conc/Unroll` are deleted (L17).
-   `within` and `when_defined` keep their recorded plans (`when_defined` retires with
-   engine-ledger row case-family-enrollment).
+   `within` is deleted: its uses are `fsym_entail` on the `Within X P` goal (engine-ledger row 9,
+   closed). `when_defined` keeps its recorded plan (it retires with engine-ledger row
+   case-family-enrollment).
 5. **Directory structure** on the one framework: `ZigLean/Sep` becomes the one logic, then a
    target tree for proofs, fixtures, docs and scripts (mechanical `git mv` PRs).
 
 The engine features these steps wait on are rows of the [engine ledger](docs/engine-ledger.md)
-(177 rows: 72 open, 105 closed).
+(182 rows: 74 open, 108 closed).
 
 **Open PRs** are the list on GitHub (`gh pr list`). On 2026-11-06: #637, #480 and #403 (Codex
 drafts); #443 (an infrastructure draft, superseded by the light merge gate); #602 (its measurement failed) and #581 (obsolete), to be closed.

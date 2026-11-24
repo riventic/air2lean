@@ -180,7 +180,7 @@ theorem headH_owns {CI : Child} {nd : NodeV} {ei : BitVec 64} {nx : Option Ptr} 
     Owns b ((nd.N.add 16).off.toNat + 0) nd.A nd.K (HeadH CI nd ei nx ⋆ R) :=
   Owns.within (X := up (regionIn (nd.N.add 16) nd.A nd.S nd.K 8 (Enc.encode nx)))
     (Owns.region (a := 8) (by simpa [Ptr.add] using hb) (by rw [encode_nxt_size]; omega))
-    (by unfold HeadH; within)
+    (by unfold HeadH; fsym_entail)
 
 /-- The facts of a chain's nodes: `NodeFacts` and a block. -/
 theorem chainH_facts {CI : Child} {free : Bool} :
@@ -521,7 +521,7 @@ theorem reset_release (CI : Child) (γ e : Nat) (ctx : Ptr) :
         (up (regionIn ctx w.Ac w.Sc w.Kc 8 CI.bytes) ⋆ aptsE (ctx.add 16) w.first ⋆
           aptsE (ctx.add 24) w.fl ⋆ CI.cown ⋆ vtR CI.vtp CI.fns.toList ⋆ JunkAt w.jh ⋆
           Pool CI.tag w.pn w.pf ⋆ FirstPart CI w ⋆ UsedRest CI w.rest w.nxt ⋆ FreeList CI w.fl)))
-      (by unfold Child.cown; within) h
+      (by unfold Child.cown; fsym_entail) h
     exact freeCl_pairwise (R := gauthP γ (e + 1) GMap.empty CI.tag ⋆
       ((LedgerRcpts γ (e + 1) GMap.empty ⋆ epTok γ (e + 1) Frac.one) ⋆
         (up (regionIn ctx w.Ac w.Sc w.Kc 8 CI.bytes) ⋆ aptsE (ctx.add 16) w.first ⋆
