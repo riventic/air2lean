@@ -6,7 +6,7 @@ import ZigLean.Sep.Full.Disjoint
 /-!
 # Full-state triples (prototype, `docs/sep-full-state.md`)
 
-`FTriple P c Q` is `Triple` (`ZigLean/Sep/Triple.lean`) over full-state resources
+`FTriple P c Q` is a partial-correctness triple over full-state resources
 (`ZigLean/Sep/Full/Res.lean`): a memory holds a resource `r` with the frame `rF` (`Holds`) if its
 live bytes are exactly the disjoint union of the two, **each byte meets its atomic tag
 constraint** (`FMatch`), and **the knowledge of both is true in it** (every `known b A` names an

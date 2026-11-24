@@ -27,7 +27,7 @@ open Zig Zig.Conc Zig.Conc.Proto Zig.Full Zig.Full.FAssn Zig.Handoff Sync
 
 namespace Sync.Handoff
 
--- Unification must not unfold `WP` into the program (as in `Proofs/Sync/RwLock.lean`).
+-- Unification must not unfold `WP` into the program (`docs/proofs.md`, "A lock that owns a resource").
 attribute [local irreducible] Proto.WP
 
 /-- The `Box`'s layout (module doc). -/
