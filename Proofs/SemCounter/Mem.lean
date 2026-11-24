@@ -329,8 +329,8 @@ theorem two_word {W W' : Word 32 4} (h : Two W) (h' : Two W') :
 
 /-- An access at one of the two words is in the `SemCounter` past the mutex. -/
 theorem two_fp {e : FootprintEntry} {W : Word 32 4} (hW : Two W)
-    (h : e.block = W.b ∧ e.off = W.o) : e.block = 0 ∧ 28 ≤ e.off :=
-  ⟨h.1.trans (two_b hW), h.2 ▸ two_o hW⟩
+    (h : e.block = W.b ∧ e.off = W.o ∧ e.len = 4) : e.block = 0 ∧ 28 ≤ e.off :=
+  ⟨h.1.trans (two_b hW), h.2.1 ▸ two_o hW⟩
 
 /-- The `SemCounter` after a step that keeps each block as live, as large and of the same kind
 (`FCond.MStep.block`). -/

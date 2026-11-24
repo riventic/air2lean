@@ -310,7 +310,8 @@ theorem cells (hs : C.MStep W t m m') {l : Zig.Loc} (hl : ¬ W.In l) : m'.heap l
   | _ => rfl
 
 theorem fp (hs : C.MStep W t m m') {e : FootprintEntry} (he : e ∈ m'.footprint) :
-    e ∈ m.footprint ∨ (e.block = W.b ∧ e.off = W.o) ∨ (e.block = C.Ep.b ∧ e.off = C.Ep.o) := by
+    e ∈ m.footprint ∨ (e.block = W.b ∧ e.off = W.o ∧ e.len = 4) ∨
+      (e.block = C.Ep.b ∧ e.off = C.Ep.o ∧ e.len = 4) := by
   cases hs with
   | @op M hw _ hop _ _ =>
     exact (Word.actualRun_fpAt hw hop he).imp_right .inl

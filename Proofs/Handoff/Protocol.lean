@@ -805,8 +805,8 @@ theorem three_word {W W' : Word 32 4} (h : Three Lo W) (h' : Three Lo W') :
 
 /-- An access at one of the three words is in the `Box` past the mutex. -/
 theorem three_fp {e : FootprintEntry} {W : Word 32 4} (hW : Three Lo W)
-    (h : e.block = W.b ∧ e.off = W.o) : e.block = 0 ∧ Lo.so ≤ e.off :=
-  ⟨h.1.trans (three_b hW), h.2 ▸ three_o hW⟩
+    (h : e.block = W.b ∧ e.off = W.o ∧ e.len = 4) : e.block = 0 ∧ Lo.so ≤ e.off :=
+  ⟨h.1.trans (three_b hW), h.2.1 ▸ three_o hW⟩
 
 /-- The `Box` after a step that keeps each block as live, as large and of the same kind
 (`FCond.MStep.block`, `FEvent.MStep.block`). -/
