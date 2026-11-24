@@ -1800,6 +1800,9 @@ def FCtx.osCall (fc : FCtx) (env : Array (InstId × String)) (fn : OsFn) (args :
   | .ulockWait2 =>
     s!"Zig.callC (Zig.Os.Darwin.__ulock_wait2 {bits 0} {arg 1} {arg 2} {arg 3} {arg 4})"
   | .ulockWait => s!"Zig.callC (Zig.Os.Darwin.__ulock_wait {bits 0} {arg 1} {arg 2} {arg 3})"
+  | .futex3 => s!"Zig.callC (Zig.Os.Linux.futex_3arg {arg 0} {bits 1} {arg 2})"
+  | .futexWakeRaw => s!"Zig.callC (Zig.Os.Linux.futex_3arg {arg 0} {arg 1} {arg 2})"
+  | .ulockWake => s!"Zig.callC (Zig.Os.Darwin.__ulock_wake {bits 0} {arg 1} {arg 2})"
 
 /-- A call to the allocator model (`ZigLean/Mem/Alloc.lean`), a `Zig.MemM` term. `ret`: the
 call's result type. `args[0]` is the allocator. -/
