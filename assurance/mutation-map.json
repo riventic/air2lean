@@ -1324,6 +1324,26 @@
           "category": "other"
         },
         {
+          "name": "ignore-failure-oracle",
+          "path": "tests/roadmap/allocation-policy/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "ignore-budget",
+          "path": "tests/roadmap/allocation-policy/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "budget-ignores-live-bytes",
+          "path": "tests/roadmap/allocation-policy/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "oracle-ignores-bytes-upper-bound",
+          "path": "tests/roadmap/allocation-policy/mutations.py",
+          "category": "other"
+        },
+        {
           "name": "h",
           "path": "scripts/mutate.sh",
           "category": "other"

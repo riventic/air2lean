@@ -203,7 +203,9 @@ retired with the legacy logic; their replacements quantify over every allocator 
 remaining qualification/review gates.
 
 The diff test runs each function with `TestAllocator` (`tests/diff/common.zig`), which has the same rules (a mirror of the model, not a std allocator; see [Caller-supplied allocator and Io](#caller-supplied-allocator-and-io) for the real-allocator check). Its first argument is the allocation that fails (legacy null/index), or
-`{"fail_at": null, "failures": [0, 2], "max_bytes": 2097152}`. Missing object fields
+`{"fail_at": null, "failures": [0, 2], "max_bytes": 2097152}`, with an optional failure
+oracle over (attempt, bytes) and a live-byte budget (`oracle`, `budget`;
+[allocation-policy.md](allocation-policy.md#native-differential)). Missing object fields
 use legacy defaults. Policy integers in the test transport are nonnegative signed-64-bit
 JSON integers; semantic policy indices/caps are Lean naturals. The exact input policy is
 part of the differential evidence; each result line has the number of live allocations after the call (`docs/generated-code.md` §Protocol).
@@ -327,8 +329,9 @@ a canceled task ends (no fairness).
 these calls get a trusted model: futex wait and wake, `clone`/`pthread_*`, clocks, sleep,
 `SIG.IO` interrupts and macOS `malloc`/`free`. They are in `ZigLean/Os/`
 ([os-threads.md](os-threads.md), premises OSF/OST/OSY/OSK/OSG/OSM-02). They use the same scheduler
-ops and memory. The translator binds `sched_yield` (OSY-01) and macOS `__error` (OSK-02) so far
-(`Thread.yield`, §Retiring the hand models); the others have no binding yet.
+ops and memory. The translator binds `sched_yield` (OSY-01), macOS `__error` (OSK-02), the clocks
+(OSK-01) and the futex wait and wake (OSF-01, OSF-02) so far (§Retiring the hand models); the
+others have no binding yet.
 
 ## Retiring the hand models
 
@@ -374,7 +377,15 @@ with the protocol rules at the OS wait and wake of a lock word (`FLock.wp_osWait
 a word protocol (`wp_wordOsWait`/`wp_wordOsWake`), `Event` and `Cond`. The rows stay until the
 clients of `Thread.Futex` are switched to the translated code. The native wake count differs
 from the hand model's `wake p n` (macOS wakes every waiter, Linux clamps at `2^31 − 1`):
-[audit §S5](architecture-audit/soundness-2026-10-14.md).
+[audit §S5](architecture-audit/soundness-2026-10-14.md). Maintainer decision 2026-11-24
+([audit §S6, finding 4](architecture-audit/soundness-2026-10-14.md#s6-hand-rows)): `Thread.Futex`
+goes through the OS rows, the `Io` futex becomes a contract that `Io.Threaded`'s translated code
+proves, and `os_unfair_lock` becomes an OS row (OSL-01). Done so far: the translator binds the
+OS wake rows `os.linux.futex_3arg` (0.15.2 on), `os.linux.futex_wake` (0.14.1) and libc's
+`__ulock_wake` (OSF-02), and the wake rules state the woken count within the request, which the
+translated `LinuxImpl.wake` needs (its result is not an errno). The hand rows stay until their
+clients walk the translated code (engine-ledger row `s6-futex-hand-rows`, with the open
+question of the macOS wake's loop tick in `ResetEvent.set`).
 
 Retired:
 
