@@ -321,6 +321,133 @@ theorem Shares.keep {G G' : ThreadId → γ} {rXM rXM' : Res} {m m' : Mem} {t : 
     exact hM.share_keep hM' hth ht hoth (mR_share W l) (hX l) (hpos u q H l c hu hl)
   · rw [hoth v e]
 
+/-- **The free resource with a reader in** (`FreeRes`'s third clause at the reader's heap): the
+share `1 - Σ q` of the readers' one heap, which has `R`. -/
+theorem FreeRes.ofRd {G : ThreadId → γ} {rX rF : Res} {m : Mem} {u : ThreadId} {q : Frac}
+    {H : FHeap} (hI : W.Inv G rX m) (hF : W.FreeRes G m rF) (hu : W.ph (G u) = .rd q H) :
+    ∃ f : Frac, 0 < f.val ∧ f.val + W.fsum G m = 1 ∧ rF = shareRes H f ∧
+      W.R (W.xs G) ⟨H, Know.none, Ghost.unit⟩ ∧ ∀ v q' H', W.ph (G v) = .rd q' H' → H' = H := by
+  have hn : W.nrd G m ≠ 0 := nrd_pos (hI.ex u (by rw [hu]; nofun)) (by rw [hu]; rfl)
+  obtain ⟨H', f, hR, hf, hsum, rfl, hall⟩ :=
+    hF.2.2 (not_busy_rd (fun v hv => hn (hI.wr v hv)) (fun v hv => hn (hI.rp v hv).1) hn) hn
+  obtain ⟨rfl, -⟩ := hall u q H hu
+  exact ⟨f, hf, hsum, rfl, hR, fun v q' H' hv => (hall v q' H' hv).1⟩
+
+/-- The rest's share of a byte of the readers' heap: the free resource's and the rest of the
+rest's (the word's cells hold no share). -/
+theorem rest_share_rd (W : FRw γ X Y M L C S) (m : Mem) (rO : Res) {H : FHeap} (f : Frac)
+    {l : Zig.Loc} {c : FCell} (hl : H l = some c) :
+    (rsum (W.st.cellsR m) (rsum (shareRes H f) rO)).gh.share l =
+      (SCell.of c f).add (rO.gh.share l) := by
+  have e : (rsum (W.st.cellsR m) (rsum (shareRes H f) rO)).gh.share l =
+      (SCell.zero).add (((Ghost.sharesOf H f).share l).add (rO.gh.share l)) := rfl
+  rw [e, SCell.zero_add, Ghost.sharesOf_share, hl, Option.elim_some]
+
+/-- **The shares over a step of the rwlock's own code** (`Step`): `t` is not on the outer mutex's
+lock path, so it exists, and it comes to `rd` only from `out` (`Step`'s two clauses of the place).
+With a reader of the same heap before the step, the other parts keep their shares and `t`'s part
+and the rest hold together what they held (`FLock.Inv.share_sum`), the rest the free share
+`1 - Σ q` before and after. With none, `t` is the first reader: the rest held the heap's bytes as
+cells (`R_fixed`: the free resource's domain is the reader's heap's), so no other part holds a
+share of them (`FLock.Inv.share_zero_of_cell`) and `t`'s part and the rest hold all of each
+(`FLock.Inv.share_of_cell`), the rest of the rest none (`FLock.Inv.rest_zero_of_cell`). -/
+theorem Shares.step {t : ThreadId} {G G' : ThreadId → γ} {rX rX' : Res} {m m' : Mem}
+    (h : W.Shares G m) (hs : W.Step t G rX m G' rX' m') : W.Shares G' m' := by
+  obtain ⟨hM, hI, hM', hI', -, ⟨-, hfs⟩, hoth, hx, -, -, -, -, -, -, hmt, hrd, hpost, rF, rF', rO,
+    rfl, rfl, hsp, hsp'⟩ := hs
+  have hth := (hfs (fun _ => none) fun _ _ => rfl).threads
+  have ht : t < m.threads.size := (hM.ht (not_gone hmt)).1
+  have hxs : W.xs G' = W.xs G := funext hx
+  intro u q H hu l c hl v hv
+  have hj : joinedB m v = false := by rw [← LockWord.joinedB_congr hth]; exact hv
+  obtain ⟨f', -, hsum', rfl, hR', hall'⟩ := FreeRes.ofRd hI' hsp'.2.2 hu
+  rw [fsum_threads hth] at hsum'
+  have hfr : W.fsum G' m + (W.ph (G t)).frac.val = W.fsum G m + (W.ph (G' t)).frac.val :=
+    ftot_upd (f := fun u => (W.ph (G' u)).frac) (g := fun u => (W.ph (G u)).frac)
+      (fun u e => by simp only [hoth u e]) ht
+  have hpos' := hI'.rest_share hu hl
+  by_cases hpre : ∃ u₀ q₀, W.ph (G u₀) = .rd q₀ H
+  · -- a reader of the heap before the step
+    obtain ⟨u₀, q₀, hu₀⟩ := hpre
+    have hsh := h u₀ q₀ H hu₀ l c hl
+    by_cases e : v = t
+    · rw [e] at hv hj ⊢
+      have key := hM.share_sum hM' hth ht hoth (mR_share W l)
+        (SCell.pos_add' _ (hI.rest_share hu₀ hl)) (SCell.pos_add' _ hpos')
+      obtain ⟨f, -, hsum, rfl, -, -⟩ := FreeRes.ofRd hI hsp.2.2 hu₀
+      rw [hM'.own_share (mR_share W l) hv, hM.own_share (mR_share W l) hj, hsh t hj,
+        rest_share_rd W m' rO f' hl, rest_share_rd W m rO f hl] at key
+      refine SCell.ext fun x => ?_
+      have e := congrArg (fun s : SCell => (s x).val) key
+      simp only [SCell.add_val] at e
+      by_cases hxc : x = c
+      · rw [hxc] at e ⊢
+        simp only [SCell.of_self] at e ⊢
+        grind
+      · simp only [SCell.of_ne _ hxc] at e ⊢
+        grind
+    · rw [hoth v e]; exact hsh v hj
+  · -- none: `t` is the first reader
+    obtain rfl : u = t := Classical.byContradiction fun e =>
+      hpre ⟨u, q, by rw [← hoth u e]; exact hu⟩
+    have hout : W.ph (G u) = .out := (hrd q H hu).resolve_left fun e => hpre ⟨u, q, e⟩
+    have hnr : ∀ w q₁ H₁, W.ph (G w) ≠ .rd q₁ H₁ := fun w q₁ H₁ e => by
+      have hw : w ≠ u := fun e' => by rw [e', hout] at e; cases e
+      exact hpre ⟨w, q₁, by rw [e, hall' w q₁ H₁ (by rw [hoth w hw]; exact e)]⟩
+    have hnr' : ∀ w, (W.ph (G w)).isRd = false := fun w => by
+      cases e : W.ph (G w) <;> first | rfl | exact absurd e (hnr w _ _)
+    have hn' : W.nrd G' m' ≠ 0 := nrd_pos (hI'.ex u (by rw [hu]; nofun)) (by rw [hu]; rfl)
+    have hnb : ¬ W.Busy G := by
+      rintro (⟨w, hw⟩ | ⟨w, hw⟩ | hp)
+      · have hwu : w ≠ u := fun e => by rw [e, hout] at hw; cases hw
+        exact hn' (hI'.wr w (by rw [hoth w hwu]; exact hw))
+      · have hwu : w ≠ u := fun e => by rw [e, hout] at hw; cases hw
+        exact hn' (hI'.rp w (by rw [hoth w hwu]; exact hw)).1
+      · have := (hpost.mpr hp).2.1 u
+        rw [hu] at this; cases this
+    have hR := hsp.2.2.2.1 hnb (nrd_noRd hnr')
+    obtain ⟨hk, hg⟩ := W.R_plain _ _ hR
+    have hFl : rF.heap l ≠ none := fun e => by
+      obtain ⟨Hf, kf, gf⟩ := rF
+      dsimp only at hk hg e
+      subst hk hg
+      have hd := W.R_fixed (W.xs G) Hf H hR (hxs ▸ hR') l
+      rw [e, hl] at hd; cases hd
+    have hXl : (rsum (W.st.cellsR m) (rsum rF rO)).heap l ≠ none := fun e =>
+      hFl (rsum_heap_none.mp (rsum_heap_none.mp e).2).1
+    rw [← hM'.own_share (mR_share W l) hv]
+    by_cases e : v = u
+    · rw [e] at hv ⊢
+      have key := hM.share_of_cell hM' hth ht hoth (mR_share W l) hXl (SCell.pos_add' _ hpos')
+      have hz : (SCell.zero).add ((rF.gh.share l).add (rO.gh.share l)) = SCell.zero :=
+        hM.rest_zero_of_cell ht hXl
+      rw [rest_share_rd W m' rO f' hl, (SCell.add_eq_zero (SCell.add_eq_zero hz).2).2,
+        SCell.add_zero] at key
+      have h0 : W.fsum G m = 0 := fsum_noRd hnr'
+      rw [hout, hu, h0] at hfr
+      rw [hu]
+      refine SCell.ext fun x => ?_
+      have e := congrArg (fun s : SCell => (s x).val) key
+      simp only [SCell.add_val] at e
+      have h1 : Frac.one.val = 1 := rfl
+      have h2 : (RwPh.out).frac.val = 0 := rfl
+      have h3 : (RwPh.rd q H).frac = q := rfl
+      rw [h2, h3] at hfr
+      rw [h3]
+      by_cases hxc : x = c
+      · rw [hxc] at e ⊢
+        simp only [SCell.of_self] at e ⊢
+        grind
+      · simp only [SCell.of_ne _ hxc] at e ⊢
+        grind
+    · have hf0 : (W.ph (G v)).frac = Frac.zero := by
+        cases e' : W.ph (G v) <;> first | rfl | exact absurd e' (hnr v _ _)
+      rw [hM'.own_share (mR_share W l) hv, hoth v e, hf0, SCell.of_zero,
+        ← hM.own_share (mR_share W l) hj]
+      by_cases hvs : v < m.threads.size
+      · exact hM.share_zero_of_cell hvs hXl
+      · exact hM.own_outside (Nat.le_of_not_lt hvs)
+
 /-! ## The outer mutex's view -/
 
 variable {Tgt : Type} {P : Proto Tgt γ} {U₀ : (ThreadId → γ) → Res → Mem → Prop} {okM : γ → Prop}

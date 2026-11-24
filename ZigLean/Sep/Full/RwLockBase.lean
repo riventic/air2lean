@@ -36,9 +36,9 @@ the writer's take and the last reader's give at the semaphore (`Base.utake`, `Ba
 `Base.handover`), and liveness (`Base.wlive`, `Base.holdLiveM`; at the semaphore's mutex, which
 has no nest, `FLock.holdLive_none`).
 
-`Base.wstep` takes the readers' shares after the step as a premise (`hsh`), to be derived from
-`FRw.Step`'s clause that a thread comes to `rd` only from `out` (ledger #two-lock-product, ninth
-obstruction, decided 2026-11-24); the stepping thread's place at the outer mutex is `Step`'s.
+`Base.wstep` gets the readers' shares after the step and the stepping thread's place at the outer
+mutex from `FRw.Step` (`Shares.step`; ledger #two-lock-product, ninth and tenth obstruction,
+decided 2026-11-24).
 -/
 
 namespace Zig
@@ -358,9 +358,8 @@ theorem hsleep (hnE : M.nest C.Ep.ptr) {t : ThreadId} (hu : W.Base Sz K G rX m)
     have hc : C.ph (G t) = .out := congrArg Prod.fst e
     rw [hc] at hw; cases hw)).imp id fun h => ⟨h, hnE⟩
 
-/-- **A step of the rwlock's own code keeps the base** (`fitsM`'s `kstep`), but for the readers'
-shares after it (`hsh`; ledger #two-lock-product, the ninth obstruction: `Step` does not fix the
-stepping thread's new place). The rwlock's invariant after the step is `fitsM`'s; the semaphore's
+/-- **A step of the rwlock's own code keeps the base** (`fitsM`'s `kstep`). The readers' shares
+stay by `Shares.step`. The rwlock's invariant after the step is `fitsM`'s; the semaphore's
 primitive's rest stays (`semSub_step`); the condition's writes stay in the step's frame
 (`Step.frame`), so the window stays; the free resource claims no extent (`FreeRes.extent`), so
 the pin stays in the rest of the rest; and the stepping thread is out of the semaphore's code,
@@ -370,8 +369,9 @@ theorem wstep {t : ThreadId} {G' : ThreadId → γ} {rS rS' sB rX' rY rY' : Res}
     (hS' : rS' = rsum sB rX') (hLw : L.WInv P m) (hI' : W.Inv G' rX' m')
     (he : rX = rsum (W.st.cellsR m) rY) (he' : rX' = rsum (W.st.cellsR m') rY')
     (hmv : W.Moves G m rY G' m' rY')
-    (hRoff : ∀ xs r l, W.R xs r → (C.S.In l ∨ C.Ep.In l) → r.heap l = none)
-    (hsh : W.Shares G' m') : W.Base Sz K G' rX' m' := by
+    (hRoff : ∀ xs r l, W.R xs r → (C.S.In l ∨ C.Ep.In l) → r.heap l = none) :
+    W.Base Sz K G' rX' m' := by
+  have hsh : W.Shares G' m' := hu.shares.step hs
   obtain ⟨⟨-, hW⟩, -⟩ := hu.sub
   have hsub' := semSub_step hs hu.sub hLw hRoff he he' hmv
   have hM' : M.Inv G' (rsum sB rX') m' := hS' ▸ hs.2.2.1
