@@ -27,12 +27,9 @@ import Proofs.Recursion.Proofs
 import Proofs.Slices.Proofs
 import Proofs.Slices.Sep
 import Proofs.Sync.Handoff
-import Proofs.Sync.Lock
 import Proofs.Sync.Mutex
 import Proofs.Sync.Proofs
-import Proofs.Sync.RwLock
 import Proofs.Sync.SemCounter
-import Proofs.Sync.Semaphore
 import Proofs.Threads.Counter
 import Proofs.Threads.Disjoint
 import Proofs.Threads.Proofs

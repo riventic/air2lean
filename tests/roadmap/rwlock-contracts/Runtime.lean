@@ -19,13 +19,23 @@ private def snapshotCompleted : Bool :=
       m.threads.all (fun r => r.joined) && m.blocks[0]?.any (fun b => !b.live)
   | _ => false
 
+/-- The `RwLock` value that the generated client stores at its start (unlocked, no reader, no
+permit), written out here as the generated code writes it. -/
+private def rw0 : Io_RwLock :=
+  { state := 0
+    mutex := { state := { raw := Io_Mutex_State.unlocked } }
+    semaphore :=
+      { mutex := { state := { raw := Io_Mutex_State.unlocked } }
+        cond := { state := { raw := Packed.ofBits (0 : BitVec 32) }, epoch := { raw := 0 } }
+        permits := 0 } }
+
 /-- A model mutation of the real client's initialize/spawn/hold/read/release sequence:
 only the writer join is omitted. Uses the actual exported writer and lock operations. -/
 private def snapshotWithoutJoin : ConcM Tgt (BitVec 32) :=
   ((do
     let p ← allocStack 64 8
     store 8 p ({} : Io)
-    store 8 (p.add 16) Sync.RwLockRead.rw0
+    store 8 (p.add 16) rw0
     store 4 (p.add 56) (0 : BitVec 32)
     let spawned ← spawnC (.writer p)
     match spawned with
