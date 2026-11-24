@@ -28,8 +28,10 @@ lock's code (`Base.stableM`, `Base.stableS`), a tick of a thread's part in the o
 and in the semaphore's (`Base.tickM`, `Base.tickL`, from `Base.tick`), a step of the rwlock's own
 code (`Base.wstep`), a step of the semaphore's code (`Base.sstep`: `fitsS`'s `kstep`, from the
 assembler `Base.ofStepRest` over the rest the step leaves, `FCond.StepRest`, and `Base.natStep` for
-a step in the semaphore's mutex's frame), and the relabels around the other lock's code
-(`Base.mnap`, `Base.munnap`, `Base.maway`, `Base.munaway`, `Base.lmove`, from `Base.relabel`).
+a step in the semaphore's mutex's frame), the relabels around the other lock's code
+(`Base.mnap`, `Base.munnap`, `Base.maway`, `Base.munaway`, `Base.lmove`, from `Base.relabel`), and
+the writer's take and the last reader's give at the semaphore (`Base.utake`, `Base.upost`, from
+`Base.handover`).
 -/
 
 namespace Zig
@@ -587,6 +589,27 @@ theorem tickL (hpl : ∀ g r, W.place.ph (M.setPart g r) = W.place.ph g) :
     (fun l => by rw [hkL'.side_share (lR_share W l), hkL.side_share (lR_share W l)])
     (hL.w.live t hg).1 hpl
 
+/-! ## The places of a holder of the semaphore's mutex -/
+
+/-- A coordinate that the semaphore's places leave, over the semaphore's own place. -/
+theorem of_sset {α : Type} {f : γ → α} (hf : ∀ g q, f (S.place.set g q) = f g) (g : γ) (s : SPh) :
+    f (S.set g s) = f g := by
+  rw [← S.place_s]; exact hf g _
+
+/-- The rwlock's place of a holder of the semaphore's mutex at a place of the semaphore. -/
+theorem wph_hold (g : γ) (h : Res) (s : SPh) : W.ph (S.set (L.set g .holds h) s) = W.ph g := by
+  rw [of_sset W.ph_sp, W.ph_l]
+
+/-- The outer mutex's place of a holder of the semaphore's mutex at a place of the semaphore. -/
+theorem mph_hold (W : FRw γ X Y M L C S) (mph_s : ∀ g q, M.ph (S.place.set g q) = M.ph g) (g : γ)
+    (h : Res) (s : SPh) : M.ph (S.set (L.set g .holds h) s) = M.ph g := by
+  rw [of_sset mph_s, W.pair.ph_ba]
+
+/-- The places of the rwlock, the condition and the semaphore over a thread's part. -/
+theorem place_lpart (hpl : ∀ g r, W.place.ph (M.setPart g r) = W.place.ph g) (g : γ) (r : Res) :
+    W.place.ph (L.setPart g r) = W.place.ph g := by
+  rw [← W.pair.setPart]; exact hpl g r
+
 /-! ## A step of the semaphore's code -/
 
 /-- **The base at the rest after a step of the semaphore's code** (`FCond.StepRest`; what the
@@ -747,8 +770,6 @@ theorem sstep {t : ThreadId} {G' : ThreadId → γ} {rS rS' sB rL rH rX' : Res} 
   -- a coordinate that the semaphore's places leave, over the condition's and the semaphore's
   have hc : ∀ {α : Type} (f : γ → α), (∀ g q, f (S.place.set g q) = f g) →
       ∀ g p, f (C.set g p) = f g := fun f hf g p => by rw [← S.place_c]; exact hf g _
-  have hss : ∀ {α : Type} (f : γ → α), (∀ g q, f (S.place.set g q) = f g) →
-      ∀ g s, f (S.set g s) = f g := fun f hf g s => by rw [← S.place_s]; exact hf g _
   have sph_c : ∀ g p, S.ph (C.set g p) = S.ph g := fun g p => by
     rw [← S.place_c]; exact congrArg Prod.snd (S.place.ph_set g (p, S.ph g))
   have mpart : ∀ g g' : γ, L.part g' = L.part g → M.part g' = M.part g := fun g g' h => by
@@ -892,12 +913,10 @@ theorem sstep {t : ThreadId} {G' : ThreadId → γ} {rS rS' sB rL rH rX' : Res} 
       obtain ⟨G'', hL''⟩ := hL''
       rw [he'] at hL''
       have hlg : L.ph (G t) ≠ .gone := by rw [hlh]; nofun
-      have hgw : W.ph (S.set (L.set (G t) .holds h) s) = W.ph (G t) :=
-        (hss W.ph W.ph_sp _ _).trans (W.ph_l _ _ _)
-      have hgm : M.ph (S.set (L.set (G t) .holds h) s) = M.ph (G t) :=
-        (hss M.ph mph_s _ _).trans (W.pair.ph_ba _ _ _)
+      have hgw : W.ph (S.set (L.set (G t) .holds h) s) = W.ph (G t) := wph_hold _ _ _
+      have hgm : M.ph (S.set (L.set (G t) .holds h) s) = M.ph (G t) := mph_hold W mph_s _ _ _
       have hgp : M.part (S.set (L.set (G t) .holds h) s) = M.part (G t) :=
-        mpart _ _ ((hss L.part lpart _ _).trans (L.part_set _ _ _))
+        mpart _ _ ((of_sset lpart _ _).trans (L.part_set _ _ _))
       have hgx : W.x (S.set (L.set (G t) .holds h) s) = W.x (G t) :=
         (W.x_s _ _).trans (W.x_l _ _ _)
       have hwph := hall W.ph hgw
@@ -958,32 +977,11 @@ theorem handover {t : ThreadId} {g' : γ} (hu : W.Base Sz K G rX m)
       · rw [upd_ne _ _ e] at hq ⊢; exact hu.nap u hq
     live := hu.live }
 
-/-- A coordinate that the semaphore's places leave, over the semaphore's own place. -/
-theorem of_sset {α : Type} {f : γ → α} (hf : ∀ g q, f (S.place.set g q) = f g) (g : γ) (s : SPh) :
-    f (S.set g s) = f g := by
-  rw [← S.place_s]; exact hf g _
-
-/-- The rwlock's place of a holder of the semaphore's mutex at a place of the semaphore. -/
-theorem wph_hold (g : γ) (h : Res) (s : SPh) : W.ph (S.set (L.set g .holds h) s) = W.ph g := by
-  rw [of_sset W.ph_sp, W.ph_l]
-
-/-- The places of the rwlock, the condition and the semaphore over a thread's part. -/
-theorem place_lpart (hpl : ∀ g r, W.place.ph (M.setPart g r) = W.place.ph g) (g : γ) (r : Res) :
-    W.place.ph (L.setPart g r) = W.place.ph g := by
-  rw [← W.pair.setPart]; exact hpl g r
-
 section
 variable (mph_s : ∀ g q, M.ph (S.place.set g q) = M.ph g)
   (lph : ∀ g q, L.ph (S.place.set g q) = L.ph g)
   (ph_l : ∀ g q h, S.place.ph (L.set g q h) = S.place.ph g)
-include mph_s
-
-/-- The outer mutex's place of a holder of the semaphore's mutex at a place of the semaphore. -/
-theorem mph_hold (W : FRw γ X Y M L C S) (g : γ) (h : Res) (s : SPh) :
-    M.ph (S.set (L.set g .holds h) s) = M.ph g := by
-  rw [of_sset mph_s, W.pair.ph_ba]
-
-include lph ph_l
+include mph_s lph ph_l
 
 /-- **A handover of a holder at the semaphore's `pst`** (`handover` at the places of `utake` and
 `upost`): `t` goes from `g` to `g₀` under its hold of the semaphore's mutex, where `g₀` keeps
@@ -1005,7 +1003,7 @@ theorem handoverS {t : ThreadId} {g g₀ : γ} {h₁ h₂ : Res} {sh sc}
     (by rw [upd_upd]; exact hI) (by rw [upd_upd]; exact hS) (by rw [upd_upd]; exact hC)
     (fun u => by rw [upd_upd]; exact hnr u) (by rw [upd_self, lph_hold])
     (by rw [upd_self, lph_hold, lph_hold]) (by rw [upd_self, cph_hold, cph_hold, hc])
-    (by rw [S.ph_set]; nofun) (by rw [upd_self, mph_hold mph_s W, mph_hold mph_s W, hm])
+    (by rw [S.ph_set]; nofun) (by rw [upd_self, mph_hold W mph_s, mph_hold W mph_s, hm])
   rwa [upd_upd] at h
 
 variable (mph_w : ∀ g a, M.ph (W.set g a) = M.ph g)
@@ -1036,7 +1034,7 @@ theorem utake {t : ThreadId} {g : γ} {h₁ h₂ r : Res} {sh sc} (hw : W.ph g =
   have hm : M.ph (L.setPart (W.set g .wr) (rsum (L.part g) r)) = M.ph g := by
     rw [← W.pair.setPart, M.ph_setPart, mph_w]
   refine hu.handoverS mph_s lph ph_l
-    (hu.winv.take hpost hw₁ hwr (by rw [mph_hold mph_s W, mph_hold mph_s W, hm])) hS hC
+    (hu.winv.take hpost hw₁ hwr (by rw [mph_hold W mph_s, mph_hold W mph_s, hm])) hS hC
     (fun u => ?_) hm
     ((congrArg (fun p => p.2.1) hpp).trans (congrArg Prod.fst (W.sp_ph g .wr)))
   by_cases e : u = t
@@ -1060,7 +1058,7 @@ theorem upost {t : ThreadId} {g : γ} {h₁ h₂ r₀ : Res} {rc sh sc} (hw : W.
     rw [wph_hold, W.ph_set]
   have hm : M.ph (W.set (L.setPart g r₀) .out) = M.ph g := by
     rw [mph_w, ← W.pair.setPart, M.ph_setPart]
-  obtain ⟨hI, hpost⟩ := hu.winv.post hw₁ hout (by rw [mph_hold mph_s W, mph_hold mph_s W, hm])
+  obtain ⟨hI, hpost⟩ := hu.winv.post hw₁ hout (by rw [mph_hold W mph_s, mph_hold W mph_s, hm])
   exact hu.handoverS mph_s lph ph_l hI hS hC hpost.2.1 hm
     ((congrArg Prod.fst (W.sp_ph _ .out)).trans (congrArg (fun p => p.2.1) (place_lpart hpl g r₀)))
 
