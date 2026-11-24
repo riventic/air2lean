@@ -208,7 +208,16 @@ theorem wake_body {t : ThreadId} {p : Ptr} {all : Bool} {I D : (ThreadId → γ)
   refine WP.bind ?_
   show P.WP t (ConcM.liftMem Zig.tick >>= fun a => pure (a, s)) _ _ _ _
   refine WP.bind (htick hI fun m₁ hI₁ => WP.pure' ?_)
+  -- the errno of a negative code: `0 - (-EINTR) = 4`, `0 - (-ENOENT) = 2`
+  have hsub : ∀ (x y : BitVec 32), Zig.sub true (0 : BitVec 32) x = pure y →
+      ∀ {Q' : BitVec 32 → (ThreadId → γ) → Mem → Nat → Prop} {G' : ThreadId → γ}
+        {m' : Mem} {n' : Nat}, Q' y G' m' n' →
+      P.WP t (ConcM.liftMem (StateT.lift (Zig.sub true (0 : BitVec 32) x)) :
+        ConcM Tgt (BitVec 32)) Q' G' m' n' :=
+    fun x y hx _ _ _ _ hq => WP.liftMem_pure (by rw [hx]; rfl) rfl hq
   fsym [ulock_wake_wp (P := P) (t := t) (p := p) (all := all) hbits hword hpick hwake,
+    hsub _ _ (show Zig.sub true (0 : BitVec 32) 4294967292#32 = pure 4#32 from rfl),
+    hsub _ _ (show Zig.sub true (0 : BitVec 32) 4294967294#32 = pure 2#32 from rfl),
     Thread_Futex_DarwinImpl_wake.again25]
 
 /-- **`Thread.Futex.wake(p, c)`** (macOS, `c ≠ 0`) at a live word `p`, by a caller that supplies
