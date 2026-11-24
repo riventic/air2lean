@@ -55,15 +55,13 @@ theorem cellsAt_congr {W : Zig.Loc → Prop} [DecidablePred W] {m m' : Mem}
 theorem cellsAt_inj {W : Zig.Loc → Prop} [DecidablePred W] {m m' : Mem} {l : Zig.Loc} (hl : W l)
     (h : (cellsAt W m').heap l = (cellsAt W m).heap l) : m'.heap l = m.heap l := by
   rw [cellsAt_of hl, cellsAt_of hl] at h
-  cases e1 : m'.heap l with
-  | none =>
-    cases e2 : m.heap l with
-    | none => rfl
-    | some c => rw [e1, e2] at h; cases h
-  | some c' =>
-    cases e2 : m.heap l with
-    | none => rw [e1, e2] at h; cases h
-    | some c => rw [e1, e2] at h; exact congrArg (Option.map FCell.cell) h
+  exact (Option.map_inj_right fun _ _ e => congrArg FCell.cell e).mp h
+
+/-- A sum with the cells at bytes `W` has the other summand's cell at a byte out of `W`. -/
+theorem rsum_cellsAt_heap {W : Zig.Loc → Prop} [DecidablePred W] {m : Mem} {r : Res}
+    {l : Zig.Loc} (hl : ¬ W l) : (rsum (cellsAt W m) r).heap l = r.heap l := by
+  show ((cellsAt W m).heap ∪ r.heap) l = r.heap l
+  rw [FHeap.union_apply, cellsAt_none hl, Option.none_or]
 
 /-- **The cells at bytes `W` of a rest are in the summand that may have them**: a rest with the
 cells beside `rY`, which is also `rsum rB rO` with `rB` without the bytes, has the cells in `rO`,

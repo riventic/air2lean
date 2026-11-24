@@ -532,6 +532,14 @@ theorem Inv.off_side {s r : Res} (hi : L.Inv G (rsum s r) m) : L.Off r.owned := 
   exact LockWord.off_owned_of_rest ho hi.w.blk hO fun l hl =>
     (Res.owned_sep rfl rfl).mpr (.inr ((Res.owned_sep rfl rfl).mpr (.inr hl)))
 
+/-- A byte a part of the protocol's rest owns is none of the lock's word's (`Inv.off_side`): a
+step of the lock's code keeps it (`LockWord.Step.heap`). -/
+theorem Inv.notIn_side {s r : Res} (hi : L.Inv G (rsum s r) m) (l : Loc) (hl : r.owned l ≠ none) :
+    ¬ L.In l := fun hin => by
+  have e : l = (L.b, l.2) := Prod.ext hin.1 rfl
+  rw [e] at hl
+  exact hl (hi.off_side l.2 hin.2.1 hin.2.2)
+
 /-- **A thread's share of a byte the rest shares stays over a change of its ghost value alone**
 (`Inv.share_sum` with rests that hold the same share of the byte: a tick, a step on its own
 part; the rests differ when the invariants come from the other lock's view of a two-lock product,

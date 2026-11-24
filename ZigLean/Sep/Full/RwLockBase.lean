@@ -95,10 +95,8 @@ theorem atStop (hu : W.Base Sz K G rX m) (t : ThreadId) :
   obtain ⟨⟨hC, hW⟩, hS⟩ := hu.sub
   have hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m.clocks[u]!) = true :=
     fun _ => VClock.le_refl _
-  have hok := hu.winv.ok.fields_native (m' := { m with current := t }) rfl rfl rfl rfl hcl
   exact {
-    winv := hu.winv.keep hok.1 hok.2 rfl rfl (fun _ => rfl) (fun _ => rfl) hu.winv.wm
-      fun _ _ _ _ ho => ho
+    winv := hu.winv.queue t m.waiters m.woken
     sub := ⟨⟨hC.stay (m' := { m with current := t }) rfl rfl rfl rfl rfl (fun _ hw _ => hw)
         (fun _ _ h => h) (Nat.le_refl _) hcl,
       fun Wd hWd => by
@@ -175,7 +173,7 @@ theorem stableM {t : ThreadId} {p : LPh} {h rL rH : Res} {m' : Mem} (hu : W.Base
         · exact absurd hcalm.2 hq
       · rw [upd_ne _ _ e]; exact hu.nap u hq
     live := fun l hl => by
-      rw [hs.heap (off_of_side hM l hl)]; exact hu.live l hl }
+      rw [hs.heap (hM.notIn_side l hl)]; exact hu.live l hl }
 
 /-- **A step of the semaphore's mutex's code keeps the base** (`fitsS`'s `stable`): `t` runs it
 out of the condition's busy code and out of the semaphore's `pst` (the client's `okS`: `hb`,
@@ -232,7 +230,7 @@ theorem stableS {t : ThreadId} {p : LPh} {h s : Res} {m' : Mem} (hu : W.Base Sz 
       · rw [e]; exact hma
       · rw [upd_ne _ _ e] at hq; exact hu.nap u hq
     live := fun l hl => by
-      rw [hs.heap (off_of_side hL l hl)]; exact hu.live l hl }
+      rw [hs.heap (hL.notIn_side l hl)]; exact hu.live l hl }
 
 /-- **A tick of `t`'s part keeps the base** (the two locks have one part,
 `FLock.Pair.setPart`): the tick changes no byte, so the rwlock's invariant stays (`Inv.stepIn`;
@@ -616,7 +614,7 @@ theorem ofStepRest {t : ThreadId} {G' : ThreadId → γ} {rX' : Res} {m' : Mem}
   obtain ⟨⟨-, hW⟩, -⟩ := hu.sub
   exact {
     winv := hu.winv.stepRest hsh hRoff hinv
-    sub := ⟨⟨hCI', fun V hV => ⟨hok V hV, hsh.words (fun V hV => (hW V hV).2) hE hV⟩⟩, hSI'⟩
+    sub := ⟨⟨hCI', fun V hV => ⟨hok V hV, hsh.words hV (hW V hV).2 hE⟩⟩, hSI'⟩
     win := hwin
     shares := hshr
     pin := hu.pin.of_gh hsh.gh
@@ -630,9 +628,8 @@ theorem ofStepRest {t : ThreadId} {G' : ThreadId → γ} {rX' : Res} {m' : Mem}
       · rw [hoth u e] at hq ⊢; exact hu.nap u hq
     live := fun l hl => by
       by_cases hw : C.S.In l ∨ C.Ep.In l
-      · rcases hw with h | h
-        · exact (hok _ (.inl rfl)).cellIn h
-        · exact (hok _ (.inr rfl)).cellIn h
+      · obtain ⟨V, hV, h⟩ := FCond.word_of hw
+        exact (hok V hV).cellIn h
       · exact hlv l hw (hsh.owned hw hl) hl }
 
 /-- **A step in the frame of the semaphore's mutex's view** (its word and its rest, the outer
@@ -679,10 +676,7 @@ theorem natStep {t : ThreadId} {G' G'' : ThreadId → γ} {sB rL rH rX' : Res} {
     rw [cellsAt_of hl, hc]; rfl
   have hE : ∀ l, (C.S.In l ∨ C.Ep.In l) → rX'.heap l = rX.heap l → m'.heap l = m.heap l :=
     fun l hl hr => by
-      obtain ⟨V, hV, hlV⟩ : ∃ V : Word 32 4, (V = C.S ∨ V = C.Ep) ∧ V.In l := by
-        rcases hl with h | h
-        · exact ⟨_, .inl rfl, h⟩
-        · exact ⟨_, .inr rfl, h⟩
+      obtain ⟨V, hV, hlV⟩ := FCond.word_of hl
       obtain ⟨c, hc⟩ := Option.ne_none_iff_exists'.mp ((hW V hV).1.cellIn hlV)
       exact hpinE l c (hlV.1.trans (c_blk W V hV)) hc (hcellX V hV l hlV c hc) hr
   have hstc : ∀ l, W.st.In l → m'.heap l = m.heap l := fun l hl => by
@@ -692,9 +686,8 @@ theorem natStep {t : ThreadId} {G' G'' : ThreadId → γ} {sB rL rH rX' : Res} {
       rw [e]
       show ((cellsAt W.st.In m).heap l).or _ = _
       rw [cellsAt_of hl, hc]; rfl
-    · rcases h with h | h
-      · exact st_c_apart W _ (.inl rfl) l h hl
-      · exact st_c_apart W _ (.inr rfl) l h hl
+    · obtain ⟨V, hV, h⟩ := FCond.word_of h
+      exact st_c_apart W V hV l h hl
   have hXh : ∀ l, rX.heap l ≠ none → (rsum (L.wordR m) (rsum sB rX)).heap l ≠ none :=
     fun l h e => h (rsum_heap_none.mp (rsum_heap_none.mp e).2).2
   have hRn : ∀ l, rX.heap l ≠ none → ((rsum (L.wordR m) (rsum sB rX)).shared.inter

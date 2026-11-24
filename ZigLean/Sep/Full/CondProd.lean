@@ -148,6 +148,11 @@ theorem in_words {V : Word 32 4} (hV : V = C.S ∨ V = C.Ep) {l : Zig.Loc} (hl :
     C.S.In l ∨ C.Ep.In l := by
   rcases hV with rfl | rfl <;> first | exact .inl hl | exact .inr hl
 
+/-- The word of a byte of the condition's two words. -/
+theorem word_of {l : Zig.Loc} (hl : C.S.In l ∨ C.Ep.In l) :
+    ∃ V : Word 32 4, (V = C.S ∨ V = C.Ep) ∧ V.In l :=
+  hl.elim (fun h => ⟨_, .inl rfl, h⟩) fun h => ⟨_, .inr rfl, h⟩
+
 /-- The rest keeps its ghost state (a word's cells have none). -/
 theorem StepRest.gh (h : C.StepRest m m' rX rX') : rX'.gh = rX.gh := by
   rcases h with rfl | ⟨Wd, rY, -, rfl, rfl, -⟩ <;> rfl
@@ -158,8 +163,7 @@ theorem StepRest.heap (h : C.StepRest m m' rX rX') {l : Zig.Loc}
   rcases h with rfl | ⟨Wd, rY, hWd, rfl, rfl, -⟩
   · rfl
   · have hn : ¬ Wd.In l := fun h => hl (in_words hWd h)
-    show ((cellsAt Wd.In m').heap ∪ rY.heap) l = ((cellsAt Wd.In m).heap ∪ rY.heap) l
-    rw [FHeap.union_apply, FHeap.union_apply, cellsAt_none hn, cellsAt_none hn]
+    exact (rsum_cellsAt_heap hn).trans (rsum_cellsAt_heap hn).symm
 
 /-- A byte the rest owns after the step, out of the condition's words, it owned before. -/
 theorem StepRest.owned (h : C.StepRest m m' rX rX') {l : Zig.Loc}
@@ -171,33 +175,24 @@ theorem StepRest.owned (h : C.StepRest m m' rX rX') {l : Zig.Loc}
     · exact absurd (cellsAt_owned_none hn) h
     · exact (Res.owned_sep rfl rfl).mpr (.inr h)
 
-/-- **The rest after the step has each word's new cells**, when it had each word's cells before
+/-- **The rest after the step has a word's new cells**, when it had the word's cells before
 (`hsub`: `FCond.prim`'s `Sub`) and the memory keeps a byte of the words whose cell the rest
-keeps (`hE`: the step's own word is the rest's, and the other word's bytes stay). -/
-theorem StepRest.words (h : C.StepRest m m' rX rX')
-    (hsub : ∀ V : Word 32 4, (V = C.S ∨ V = C.Ep) →
-      ∃ rY, rX = rsum (V.cellsR m) rY ∧ ∀ l, V.In l → rY.heap l = none)
-    (hE : ∀ l, (C.S.In l ∨ C.Ep.In l) → rX'.heap l = rX.heap l → m'.heap l = m.heap l)
-    {V : Word 32 4} (hV : V = C.S ∨ V = C.Ep) :
+keeps (`hE`: the step's own word is the rest's, and the other word's bytes stay;
+`cellsAt_swap`). -/
+theorem StepRest.words (h : C.StepRest m m' rX rX') {V : Word 32 4} (hV : V = C.S ∨ V = C.Ep)
+    (hsub : ∃ rY, rX = rsum (V.cellsR m) rY ∧ ∀ l, V.In l → rY.heap l = none)
+    (hE : ∀ l, (C.S.In l ∨ C.Ep.In l) → rX'.heap l = rX.heap l → m'.heap l = m.heap l) :
     ∃ rY, rX' = rsum (V.cellsR m') rY ∧ ∀ l, V.In l → rY.heap l = none := by
-  have hin : ∀ l, V.In l → C.S.In l ∨ C.Ep.In l := fun l hl => in_words hV hl
-  obtain ⟨rA, hA, hoff⟩ := hsub V hV
+  obtain ⟨rA, hA, hoff⟩ := hsub
   rcases h with rfl | ⟨Wd, rY, hWd, rfl, rfl, hY⟩
-  · have hc : V.cellsR m' = V.cellsR m := cellsAt_congr fun l hl => hE l (hin l hl) rfl
+  · have hc : V.cellsR m' = V.cellsR m := cellsAt_congr fun l hl => hE l (in_words hV hl) rfl
     exact ⟨rA, by rw [hc]; exact hA, hoff⟩
   · rcases words_apart hV hWd with rfl | hap
     · exact ⟨rY, rfl, hY⟩
     · have hnW : ∀ l, V.In l → ¬ Wd.In l := fun l hl => Word.notIn_apart hap hl
-      have hc : V.cellsR m' = V.cellsR m := cellsAt_congr fun l hl => hE l (hin l hl) (by
-        show ((cellsAt Wd.In m').heap ∪ rY.heap) l = ((cellsAt Wd.In m).heap ∪ rY.heap) l
-        rw [FHeap.union_apply, FHeap.union_apply, cellsAt_none (hnW l hl),
-          cellsAt_none (hnW l hl)])
-      obtain ⟨rO₀, hO, hO₀, -⟩ := cellsAt_out (W := V.In) hA.symm hoff fun l hl =>
-        cellsAt_none (hnW l hl)
-      subst hO
-      exact ⟨rsum (Wd.cellsR m') rO₀,
-        by rw [hc]; exact rsum_left_comm (disj_cellsAt fun l hl => cellsAt_none (hnW l hl)),
-        fun l hl => rsum_heap_none.mpr ⟨cellsAt_none (hnW l hl), hO₀ l hl⟩⟩
+      exact cellsAt_swap hA hoff (fun l hl => cellsAt_none (hnW l hl))
+        (fun l hl => cellsAt_none (hnW l hl)) fun l hl => hE l (in_words hV hl)
+          ((rsum_cellsAt_heap (hnW l hl)).trans (rsum_cellsAt_heap (hnW l hl)).symm)
 
 end FCond
 
