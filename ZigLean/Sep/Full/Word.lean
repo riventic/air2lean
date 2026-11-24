@@ -3100,19 +3100,19 @@ open Proto
 
 variable {n nb : Nat} {W : Word n nb} {A : ThreadId → Prop}
 
-/-- The actual recorded access has the exact word address, not just a subrange. -/
+/-- The actual recorded access is the word's exact bytes, not just a subrange. -/
 theorem record_fpAt {m : Mem} {k : AccessKind} {e : FootprintEntry}
     (he : e ∈ (m.recordAt W.b W.o nb k).footprint) :
-    e ∈ m.footprint ∨ (e.block = W.b ∧ e.off = W.o) := by
+    e ∈ m.footprint ∨ (e.block = W.b ∧ e.off = W.o ∧ e.len = nb) := by
   simp only [Mem.recordAt, Array.mem_push] at he
   rcases he with he | rfl
   · exact .inl he
-  · exact .inr ⟨rfl, rfl⟩
+  · exact .inr ⟨rfl, rfl, rfl⟩
 
 /-- Location preparation changes no footprint entry after the recorded access. -/
 theorem prepare_fpAt {m m' : Mem} {li : Nat} {k : AccessKind} {e : FootprintEntry}
     (h : ((locIdx W.b W.o nb).run (m.recordAt W.b W.o nb k)).run = some (.ok (li, m')))
-    (he : e ∈ m'.footprint) : e ∈ m.footprint ∨ (e.block = W.b ∧ e.off = W.o) := by
+    (he : e ∈ m'.footprint) : e ∈ m.footprint ∨ (e.block = W.b ∧ e.off = W.o ∧ e.len = nb) := by
   obtain ⟨a, s, next, rfl⟩ := locIdx_updates h
   exact record_fpAt he
 
@@ -3120,7 +3120,7 @@ theorem atomicLoad_fpAt {m m' : Mem} {c : Nat} {ord : AtomicOrder} {v : BitVec n
     (hw : W.Ok m A)
     (h : ((atomicLoadAt c ord nb W.ptr).run m).run = some (.ok (v, m')))
     {e : FootprintEntry} (he : e ∈ m'.footprint) :
-    e ∈ m.footprint ∨ (e.block = W.b ∧ e.off = W.o) := by
+    e ∈ m.footprint ∨ (e.block = W.b ∧ e.off = W.o ∧ e.len = nb) := by
   obtain ⟨b, blk, o, li, m₁, pos, hacc, _, hp, _, _, rfl⟩ := atomicLoadAt_ok h
   obtain ⟨blk₀, _, _, _, ha, _⟩ := hw.access
   rw [W.sz_eq, ha] at hacc
@@ -3133,7 +3133,7 @@ theorem atomicRmw_fpAt {m m' : Mem} {c : Nat} {op : RmwOp} {signed : Bool}
     {ord : AtomicOrder} {v old : BitVec n} (hw : W.Ok m A)
     (h : ((atomicRmwAt c op signed ord nb W.ptr v).run m).run = some (.ok (old, m')))
     {e : FootprintEntry} (he : e ∈ m'.footprint) :
-    e ∈ m.footprint ∨ (e.block = W.b ∧ e.off = W.o) := by
+    e ∈ m.footprint ∨ (e.block = W.b ∧ e.off = W.o ∧ e.len = nb) := by
   obtain ⟨b, blk, o, li, m₁, pos, hacc, _, hp, _, _, rfl⟩ := atomicRmwAt_ok h
   obtain ⟨blk₀, _, _, _, _, ha⟩ := hw.access
   rw [W.sz_eq, ha] at hacc
@@ -3172,7 +3172,7 @@ theorem cmpxchg_fpAt {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
     {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m A)
     (h : ((cmpxchgAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m')))
     {e : FootprintEntry} (he : e ∈ m'.footprint) :
-    e ∈ m.footprint ∨ (e.block = W.b ∧ e.off = W.o) := by
+    e ∈ m.footprint ∨ (e.block = W.b ∧ e.off = W.o ∧ e.len = nb) := by
   obtain ⟨b, blk, o, li, m₁, pos, old, hacc, _, hp, _, _, hcase⟩ := cmpxchgAt_ok h
   obtain ⟨blk₀, _, _, _, _, ha⟩ := hw.access
   rw [W.sz_eq, ha] at hacc
@@ -3191,7 +3191,7 @@ theorem cmpxchgWeak_fpAt {m m' : Mem} {c : Nat} {succ fail : AtomicOrder}
     {expected new : BitVec n} {r : Option (BitVec n)} (hw : W.Ok m A)
     (h : ((cmpxchgWeakAt c succ fail nb W.ptr expected new).run m).run = some (.ok (r, m')))
     {e : FootprintEntry} (he : e ∈ m'.footprint) :
-    e ∈ m.footprint ∨ (e.block = W.b ∧ e.off = W.o) := by
+    e ∈ m.footprint ∨ (e.block = W.b ∧ e.off = W.o ∧ e.len = nb) := by
   obtain ⟨b, blk, o, li, m₁, pos, spurious, old, hacc, _, hp, _, _, hcase⟩ :=
     cmpxchgWeakAt_ok h
   obtain ⟨blk₀, _, _, _, _, ha⟩ := hw.access
@@ -3322,7 +3322,7 @@ theorem actualRun_fpAt {m m' : Mem} (hw : W.Ok m A)
           some (.ok (r, m'))) ∨
       m' = m.recordAt W.b W.o nb .atomicRead)
     {e : FootprintEntry} (he : e ∈ m'.footprint) :
-    e ∈ m.footprint ∨ (e.block = W.b ∧ e.off = W.o) := by
+    e ∈ m.footprint ∨ (e.block = W.b ∧ e.off = W.o ∧ e.len = nb) := by
   rcases hop with ⟨c, ord, v, hr⟩ | ⟨c, op, signed, ord, v, old, hr⟩ |
     ⟨c, succ, fail, expected, new, r, hr⟩ |
     ⟨c, succ, fail, expected, new, r, hr⟩ | hr

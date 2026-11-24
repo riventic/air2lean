@@ -20,8 +20,10 @@ any resource `R` of the client parts.
   exactly while the resource is posted, `RwPosted`; only the writer at `ww` waits) and the
   reader/writer lock.
 - `RwProd.fits`: `FRw.Fits` for every protocol whose invariant is the two-lock product at
-  `FRw.Base` (`FRw.Base.fits`; the laws of the places hold by `rfl`). The client gives where an
-  ended or joining thread is and that `R` has no byte of the condition's words.
+  `FRw.Base` (`FRw.Base.fits`; the laws of the places hold by `rfl`), with the program's own
+  facts `E` (`FClient`: its threads, the bytes every thread reads). The client gives where an
+  ended or joining thread is, that `R` has no byte of the condition's words, and that its
+  read-shared bytes are none of the bytes the lock's code changes.
 -/
 
 namespace Zig
@@ -170,23 +172,24 @@ def okS (g : Gh Xc) : Prop := g.2.c.busy = false ∧ (g.2.sp = .out ∨ g.2.sp =
 
 variable {b o : Nat} {R : (ThreadId → Xc) → FAssn}
   {R_plain : ∀ xs r, R xs r → r.know = Know.none ∧ r.gh = Ghost.unit}
-  {R_fixed : ∀ xs, (R xs).FixedDom} {Sz : Nat} {K : BlockKind} {Tgt : Type}
+  {R_fixed : ∀ xs, (R xs).FixedDom} {E : FClient Xc} {Sz : Nat} {K : BlockKind} {Tgt : Type}
   {P : Proto Tgt (Gh Xc)}
 
 /-- **The reader/writer protocol over the product ghost value** (module doc): `FRw.Base.fits`
 with the laws of the places by `rfl`. -/
 theorem fits
     (inv : ∀ G m, P.inv G m ↔ ∃ rX, (M b o).Inv G rX m ∧
-      FLock.Pair.U (L b o R) ((W b o R R_plain R_fixed).Base Sz K) G rX m)
+      FLock.Pair.U (L b o R) ((W b o R R_plain R_fixed).Base E Sz K) G rX m)
     (fin : ∀ g, P.fin g → g.1.phA = .gone ∧ g.1.phB = .gone ∧ g.2.w = .out ∧ g.2.c = .out ∧
       g.2.sp = .out)
     (joins : ∀ g, P.joins g → g.1.phA = .out ∧ g.1.phB = .out ∧ g.2.w = .out ∧ g.2.c = .out ∧
       g.2.sp = .out)
     (hRoff : ∀ xs r l, R xs r → ((C b o (Xc := Xc)).S.In l ∨ (C b o (Xc := Xc)).Ep.In l) →
-      r.heap l = none) :
+      r.heap l = none)
+    (hIo : ∀ r l, E.Io r → (W b o R R_plain R_fixed).Lk l → r.heap l = none) :
     (W b o R R_plain R_fixed).Fits P
-      (FLock.Pair.U (L b o R) ((W b o R R_plain R_fixed).Base Sz K))
-      (FLock.Pair.U (M b o) ((W b o R R_plain R_fixed).Base Sz K)) (fun _ => True) okS := by
+      (FLock.Pair.U (L b o R) ((W b o R R_plain R_fixed).Base E Sz K))
+      (FLock.Pair.U (M b o) ((W b o R R_plain R_fixed).Base E Sz K)) (fun _ => True) okS := by
   have hpl : ∀ g : Gh Xc, g.2.c = .out → g.2.sp = .out →
       (S b o R).place.ph g = (.out, .out) := fun g hc hs => Prod.ext hc hs
   refine FRw.Base.fits inv (fun g h => (fin g h).1) (fun g h => (joins g h).1)
@@ -197,7 +200,7 @@ theorem fits
     (fun _ _ => Iff.rfl) (fun _ _ _ => Iff.rfl) (fun _ _ => Iff.rfl) (fun _ _ _ => Iff.rfl)
     (fun _ _ => Iff.rfl) (fun _ h => h.1) (fun _ h => h.2)
     (fun _ _ _ hp hq => ⟨fun _ => hq, fun _ => hp⟩)
-    (.inl rfl) (.inr rfl) (fun _ h => h) (fun _ h => h) hRoff
+    (.inl rfl) (.inr rfl) (fun _ h => h) (fun _ h => h) hRoff hIo
     (fun _ _ => rfl) (fun _ _ => rfl) (fun _ _ => rfl) (fun _ _ _ => rfl) (fun _ _ _ _ => rfl)
     (fun _ _ => rfl) (fun _ _ _ => rfl)
     (fun _ _ => rfl) (fun _ _ => rfl) (fun _ _ => rfl) (fun G t q r h => ?_)

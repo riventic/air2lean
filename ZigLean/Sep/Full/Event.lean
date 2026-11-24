@@ -409,7 +409,7 @@ theorem cells (hs : E.MStep t m m') {l : Zig.Loc} (hl : ¬ E.W.In l) : m'.heap l
   | _ => rfl
 
 theorem fp (hs : E.MStep t m m') {e : FootprintEntry} (he : e ∈ m'.footprint) :
-    e ∈ m.footprint ∨ (e.block = E.W.b ∧ e.off = E.W.o) := by
+    e ∈ m.footprint ∨ (e.block = E.W.b ∧ e.off = E.W.o ∧ e.len = 4) := by
   cases hs with
   | @op M hw _ _ hop _ =>
     exact Word.actualRun_fpAt hw hop he
