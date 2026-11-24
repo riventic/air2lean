@@ -36,29 +36,36 @@ def options : List String → Option (Array (String × String) × Array String �
   | _ => none
 
 unsafe def main (argv : List String) : IO UInt32 := do
-  let parsed := match argv with
-    | m :: n :: "--source" :: s :: rest => (options rest).map fun (ss, cs, o) => (m, n, s, ss, cs, o)
-    | _ => none
-  let some (module, ns, source, specs, contracts, out) := parsed
-    | IO.eprintln "usage: air2lean-invgen MODULE NAMESPACE --source FILE \
-        [--spec MODULE FILE]... [--contract NAME]... [-o FILE]"
-      return 2
+  let usage : IO UInt32 := do
+    IO.eprintln "usage: air2lean-invgen MODULE NAMESPACE --source FILE \
+      [--spec MODULE FILE]... [--contract NAME]... [-o FILE]"
+    return 2
+  let module :: ns :: "--source" :: source :: rest := argv | usage
+  let some parsed := options rest | usage
+  let specs : Array (String × String) := parsed.1
+  let contracts : Array String := parsed.2.1
+  let out : Option String := parsed.2.2
   try
-    let mut inputs := #[]
-    for file in #[source] ++ specs.map (·.2) do
-      inputs := inputs.push (Json.arr #[file, Air2Lean.Revision.sha256 (← IO.FS.readBinFile file)])
+    let mut inputs : Array Json := #[]
+    let files : Array String := #[source] ++ specs.map fun (spec : String × String) => spec.2
+    for file in files do
+      inputs := inputs.push
+        (Json.arr #[Json.str file, Json.str (Air2Lean.Revision.sha256 (← IO.FS.readBinFile file))])
     initSearchPath (← findSysroot)
     -- The `match` and structure tables are environment extensions. Loading them
     -- (`loadExts := true`) requires initializer execution, as in `lean` itself: the imported
     -- modules' initializers run here as they do when a proof imports the same module.
     enableInitializersExecution
     -- With the library and `fsym`, for the pruning walks (`Air2Lean.InvGen.houdini`).
-    let env ← importModules (#[{ module := module.toName }, { module := `ZigLean.Sep.Full.AutoAll }] ++
-      specs.map fun (m, _) => { module := m.toName }) {} (loadExts := true)
+    let specNames : Array Name := specs.map fun (spec : String × String) => spec.1.toName
+    let imports : Array Import :=
+      #[{ module := module.toName }, { module := `ZigLean.Sep.Full.AutoAll }] ++
+        specNames.map fun (m : Name) => ({ module := m } : Import)
+    let env ← importModules imports {} (loadExts := true)
     -- The default heartbeat limit: a run is bounded and deterministic, never timed.
     let ((text, skipped), _) ←
       (Air2Lean.InvGen.generate module.toName ns.toName generatorRecord (Json.arr inputs)
-        (specs.map (·.1.toName)) (contracts.map (·.toName))).run'.toIO
+        specNames (contracts.map fun (c : String) => c.toName)).run'.toIO
         { fileName := "<air2lean-invgen>", fileMap := default } { env }
     for (loop, why) in skipped do
       IO.eprintln s!"air2lean-invgen: {loop}: no invariant: {why}"
