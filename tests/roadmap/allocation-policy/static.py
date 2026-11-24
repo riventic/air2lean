@@ -35,17 +35,48 @@ class PolicyChecks(unittest.TestCase):
     def test_comparison_rejects_missing_or_duplicate_cases(self):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / 'lines.jsonl'
-            for lines in ([], [{'case': 'duplicate'}] * 10):
+            # No case, one case repeated, and the right number without the oracle/budget cases.
+            for lines in ([], [{'case': 'duplicate'}] * COMPARE.CASES,
+                          [{'case': str(i)} for i in range(COMPARE.CASES)]):
                 path.write_text('\n'.join(json.dumps(line) for line in lines))
                 with self.assertRaises(ValueError):
                     COMPARE.records(path)
 
-    def test_comparison_accepts_ten_distinct_cases(self):
-        lines = [{'case': str(i), 'outcomes': [0, 1], 'attempts': 2, 'live': 0} for i in range(10)]
+    def test_comparison_accepts_the_distinct_cases(self):
+        names = [*COMPARE.REQUIRED, *map(str, range(COMPARE.CASES - len(COMPARE.REQUIRED)))]
+        lines = [{'case': name, 'outcomes': [0, 1], 'attempts': 2, 'live': 0} for name in names]
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / 'lines.jsonl'
             path.write_text('\n'.join(json.dumps(line) for line in lines))
             self.assertEqual(COMPARE.records(path), lines)
+
+    def test_both_sides_run_every_oracle_and_budget_case(self):
+        for fixture in ('Check.lean', 'fixture.zig'):
+            source = (HERE / fixture).read_text()
+            for case in COMPARE.REQUIRED:
+                self.assertEqual(source.count(f'"{case}"'), 1, (fixture, case))
+
+    def test_oracle_and_budget_have_mutants(self):
+        for name in ('ignore-failure-oracle', 'ignore-budget', 'budget-ignores-live-bytes',
+                     'oracle-ignores-bytes-upper-bound'):
+            self.assertIn(name, MUTATIONS.MUTANTS)
+
+    def test_differential_inputs_carry_oracle_and_budget_policies(self):
+        """The lists differential (scripts/diff.sh) runs each function under generated policy
+        objects; the committed inputs hold them, with the fields the harness decodes."""
+        fields = {'fail_at', 'failures', 'max_bytes', 'oracle', 'budget'}
+        rule_fields = {'attempt_min', 'attempt_max', 'attempt_mod', 'attempt_rem', 'bytes_min', 'bytes_max'}
+        for name in ('sumRange', 'dupe', 'dupeZLen', 'evens', 'listSum'):
+            rows = [json.loads(line)['args'][0]
+                    for line in (ROOT / f'tests/diff/lists/inputs/{name}.jsonl').read_text().splitlines()]
+            policies = [row for row in rows if isinstance(row, dict)]
+            self.assertGreaterEqual(len(policies), 40, name)
+            self.assertTrue(any(p.get('oracle') for p in policies), name)
+            self.assertTrue(any('budget' in p for p in policies), name)
+            for policy in policies:
+                self.assertLessEqual(set(policy), fields, name)
+                for rule in policy.get('oracle', []):
+                    self.assertLessEqual(set(rule), rule_fields, name)
 
     def test_lean_fixture_uses_json_serializer(self):
         fixture = (HERE / 'Check.lean').read_text()

@@ -304,7 +304,7 @@
      "ty": 9,
      "callee": {
       "ty": 10,
-      "func": "mem.Allocator.allocWithSizeAndAlignment__anon_1362",
+      "func": "mem.Allocator.allocWithSizeAndAlignment__anon_1481",
       "module": "std",
       "instance_key": "0aadb2616c4397b4959dfd917c053409d8fde795af19b98f0482fa6122137459",
       "noreturn": false

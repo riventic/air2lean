@@ -134,6 +134,17 @@ def valid_admission(value):
         parts == [a for a in ADMISSION_ORDER if a in parts]
 
 
+def valid_asm_cpu_features(metadata):
+    """`asm_cpu_features` (the features that `--assume-asm-cpu-features` admits, premise ASM-09):
+    present exactly with the admission `asm-cpu-features`, a sorted list of distinct names."""
+    admitted = "asm-cpu-features" in str(metadata.get("admission", "")).split(",")
+    features = metadata.get("asm_cpu_features")
+    if features is None:
+        return not admitted
+    return admitted and isinstance(features, list) and bool(features) and \
+        all(isinstance(f, str) and f for f in features) and features == sorted(set(features))
+
+
 def split_generated(data, required=False):
     first, newline, body = data.partition(b"\n")
     if not first.startswith(PREFIX):
@@ -145,12 +156,15 @@ def split_generated(data, required=False):
     metadata = parse_json(first[len(PREFIX):].decode("utf-8"))
     # `admission` is present only when the translator was given an admission opt-in, in this
     # order: `--allow-unqualified-build-mode` (docs/build-modes.md), `--assume-no-libc`
-    # (docs/floats.md §Targets), `--assume-asm-cpu-features` (premise ASM-09).
+    # (docs/floats.md §Targets), `--assume-asm-cpu-features <f,...>` (premise ASM-09, with the
+    # admitted features in `asm_cpu_features`).
     # `allocator_model` is present only under `--allocator-model translated`
     # (docs/allocator-model.md): its trust base is the OS boundary (OSM-01).
     if (not isinstance(metadata, dict) or
-            set(metadata) - {"admission", "allocator_model"} != {"profile", "float_semantics", "correspondence"} or
+            set(metadata) - {"admission", "allocator_model", "asm_cpu_features"} !=
+            {"profile", "float_semantics", "correspondence"} or
             not valid_admission(metadata.get("admission", "no-libc")) or
+            not valid_asm_cpu_features(metadata) or
             metadata.get("allocator_model", "translated") != "translated" or
             not isinstance(metadata["float_semantics"], str) or
             metadata["float_semantics"] not in {"ieee", "compiler-rt"} or metadata["correspondence"] != "model"):

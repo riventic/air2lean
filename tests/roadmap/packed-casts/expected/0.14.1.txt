@@ -28,3 +28,14 @@ structsToInt: 0x4000300020001
 structB1: 0x4
 unionPayload1: 0xbeef
 unionsToInt: 0x1005600001234
+sentToInt: 0x7030211
+wideToInt: 0x1234000300020077
+nestedToInt: 0x506050405030211
+sentItem3: 0x9
+intToSentAt0: 0xdd
+intToSentAt3: 0xaa
+roundTrip: 0xaabbccdd
+sentInit: unspecified
+voidsToInt: 0x0
+intToVoids: 0x4
+emptyToInt: 0x0

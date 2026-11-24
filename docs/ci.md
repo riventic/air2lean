@@ -847,7 +847,7 @@ the Lean files that import a fixture's own generated modules are elaborated only
 and before this phase only CI ran those (#342 and the strength logs, 984ab3533 and
 dispatch-templates, #372 and alloc-fba/lists-fba were each found after the merge). The checks are
 derived from `.github/workflows/ci.yml`, not listed: every step that runs a `tests/**/check.sh`
-whose directory holds tracked `.lean` files, for every job row its `if:` may run for
+or `tests/**/check-NAME.sh` (`volatile-effects/check-device.sh`) whose directory holds tracked `.lean` files, for every job row its `if:` may run for
 (`ci-reuse.py`'s `may_run`), rendered for that row and run once per distinct rendering, the whole
 `run:` script with its `env:` (prerequisites, sibling gates and mode switches as in CI).
 `--list` prints the units, their checks and the toolchains they name. The CI layout comes from

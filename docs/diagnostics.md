@@ -13,6 +13,8 @@ this mode. It accepts `--profile`, `--diagnostic-limit` (1–4096, default 256),
 `--unit-diagnostic-limit` (1–4096, default 64), `--spawn-policy available|fallible`,
 `--assume-no-lb` (the load-buffering shape is reported as a model failure without it, as
 translation rejects it),
+`--assume-asm-cpu-features <f,...>` (inline asm whose CPU feature the profile lacks is reported
+as a model failure unless the feature is named, as translation rejects it; premise ASM-09),
 `--device-contract <json>` (L13, checks volatile integer accesses as device events), and
 `--allocator-model std|translated` ([allocator-model.md](allocator-model.md)); `-o`,
 `--namespace`, `--prefix`, and `--float-semantics` are incompatible. The ordinary

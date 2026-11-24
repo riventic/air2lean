@@ -3,7 +3,8 @@
 //!
 //! Every function takes a `std.mem.Allocator` and uses the memory protocol
 //! (`{"bufs":[…],"args":[…]}`). Its first argument in `args` is the allocation that fails:
-//! `null` or its number (common.TestAllocator). A result slice on the heap is
+//! `null` or its number, or a policy object with a failure oracle and a live-byte budget
+//! (common.TestAllocator, docs/allocation-policy.md). A result slice on the heap is
 //! `{"bytes":"<hex>"}`, and each line ends with the number of live allocations after the call.
 
 const std = @import("std");
@@ -27,7 +28,7 @@ fn run(gpa: std.mem.Allocator, comptime name: []const u8, comptime func: anytype
         fn call(policy_gpa: std.mem.Allocator, bufs: []common.Buf, items: []std.json.Value, writer: anytype) !void {
             const Args = std.meta.ArgsTuple(@TypeOf(func));
             test_alloc = try common.TestAllocator.fromJson(policy_gpa, items[0]);
-            defer if (test_alloc.failures.len != 0) policy_gpa.free(test_alloc.failures);
+            defer test_alloc.deinitPolicy(policy_gpa);
             common.test_alloc = &test_alloc;
             defer common.test_alloc = null;
             const a = test_alloc.allocator();

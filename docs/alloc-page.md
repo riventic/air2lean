@@ -74,7 +74,7 @@ passes any comptime alignment, so the `alloc` overflow is reachable through the 
 | | aarch64-macos (16 KiB pages) | x86_64-linux (4 KiB pages, Docker `linux/amd64`) | model |
 |---|---|---|---|
 | `page_resize(10,20)`, `(10,5000)`, `(8192,10)`, `(10,20000)` | 1 1 1 0 | 1 0 1 0 | same per target (`Eval.lean`; the Linux guards stop at `(8192,10)`) |
-| `remap` 10→5000, 8192→10, 10→20000 | 1 1 0 | 1 1 1 (`mremap` may move) | — (no translated client) |
+| `remap` 10→5000, 8192→10, 10→20000 | 1 1 0 | 1 1 1 (`mremap` may move) | — (one-off runs; the compared `remap`/`realloc` calls are below) |
 | aligned alloc of 64 KiB / 1 MiB alignment, `resize` | aligned, `false` | aligned, `false` | — |
 | `page_sum(0,10,10000)`, `page_create(7)` | 0 10 10000, 7 | same | same |
 
@@ -83,6 +83,29 @@ P2's claim holds natively: on x86_64-linux `resize` never calls `mremap` (stacks
 only; `check.sh` now picks `expected-linux.txt` on 4 KiB-page hosts (the output depends on the
 page size only), and CI runs the comparison. `native.zig` prints the first three `page_resize`
 cases; the `(10,20000)`, `remap` and aligned-alloc rows are from one-off native runs.
+
+### Growth by `remap` and `realloc` (M02)
+
+The proved paths and their native comparison. Every row is Zig 0.16.0; the model's lines
+(`Eval.lean` `growLinux`, `growMacos`) and the native run's lines are compared with the same
+file per target (`expected-linux.txt`, `expected.txt`;
+[the fixture's README](../tests/roadmap/alloc-translated/README.md) has the calls and words).
+The native x86_64-linux run is on a Linux 6.6 kernel, not under Rosetta: Rosetta aborts on the
+`2^47`-byte `mremap`.
+
+| Path | Proved | Compared with the native run |
+|---|---|---|
+| `resize` within the page, a shrink (tail `munmap`), a growth past the page that fails | `PageSpec.resize_spec`, `PageSpecMacos.resize_spec` | both targets (`page_resize`) |
+| `remap` grows in place (x86_64-linux: `mremap` with the pages behind free) | `PageSpec.remap_spec` (`FTotalTriple.mremapMove'`) | x86_64-linux: `page_grow`, in place, old bytes kept |
+| `remap` moves (x86_64-linux: `mremap` under `MAYMOVE`, no room in place) | `PageSpec.remap_spec` | x86_64-linux: `page_grow_blocked`, moved, old bytes kept, the neighbour unchanged; the old address faults (`page_grow_stale`) |
+| `remap` fails, the old block unchanged | `PageSpec.remap_spec`, `PageSpecMacos.remap_spec` | x86_64-linux: a `2^47`-byte growth; aarch64-macos: every growth past the page |
+| `remap` shrinks | `PageSpec.remap_spec` (`mremapShrinkR`), `PageSpecMacos.remap_spec` (`munmapTailR`) | both targets |
+| `realloc` (the `mem.Allocator` wrapper: `remap`, else a new block, copy, free) | the wrapper for every allocator that meets the contract: `realloc_spec`, `reallocAdvanced_spec` (`AllocFba/Wrappers.lean`, `Interfaces/SentinelSpec.lean`, [alloc-spec.md](alloc-spec.md)); the instance of the wrapper in `page.zig`'s translation has no theorem of its own | both targets; the copying path natively on aarch64-macos only (on x86_64-linux `mremap` moves instead; the model runs that path with a denied `mremap`) |
+
+Not compared natively: a kernel that moves a mapping although there is room in place and a
+`mremap` that fails for lack of memory (the model's oracles `mremapMoves` and the failure
+decision; no native run forces them), alignments above a page, and Zig 0.17.1 (there is no
+translated `PageAllocator` of that version yet).
 
 ## Status with the full-state logic (`codex/alloc-p4b-page`)
 

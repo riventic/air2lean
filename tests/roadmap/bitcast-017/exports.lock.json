@@ -12,7 +12,7 @@
     "air/0.17.1/bitcast017.vecToInt.json": "afe959e9881de2643d97b44595d554bca50f57ec8c3e19537ed1b38e2914a6f0"
   },
   "compilers": {
-    "0.17.1": "a4b56f33ac0b5fbafae85e023f692a3cdb85df8ce7028d7d3e725dfd3404ed52"
+    "0.17.1": "84a8a3bdf2a5766e405d422289fdcea5eab58b4acca120b145ecbcac86b75e8f"
   },
   "manifest_sha256": "841c6c054d92428f56aa6acfa9c748dd78d9db1fc2f81fc73b3e29bc62293653",
   "schema": 1,
