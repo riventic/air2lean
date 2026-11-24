@@ -121,3 +121,10 @@ globs = ["DispatchTemplate.+"]
 name = "Claims"
 srcDir = "claims"
 globs = ["Fixture", "AllocatorApplications", "AllocatorImported"]
+
+# The ring-buffer queue of queue-adt/check.sh (P04, P06): the retained 0.17.1 translation
+# (QueueAdt.Gen), the ring's proof of the queue contract and the clients proved from the contract.
+[[lean_lib]]
+name = "QueueAdt"
+srcDir = "queue-adt"
+globs = ["QueueAdt.+"]
