@@ -10,10 +10,13 @@ checks the translator's backend gate and lane-pointer rejection. The theorems ar
 `lanes.zig` uses lane pointers into `u9`, `u3`, `u24` and `bool` vectors (§Lane pointers).
 `air/<version>` holds the AIR that the patched compilers exported from it, `Lanes/Gen.lean` the
 0.16.0 translation, `Lanes/Proofs.lean` theorems on it, and `Lanes/Checks.lean`
-(`lanes_checks.py`) kernel-checked runs of the native test's inputs. `lanes.sh` retranslates both
-versions, compares the 0.16.0 translation with `Lanes/Gen.lean` and checks the proofs and runs;
-`--native` runs the test with a stock Zig and `--export DIR` exports fresh AIR with the patched
-0.16.0 and compares its translation. `lane_reads.zig` (`air-reads/<version>`) reads lanes through a
+(`lanes_checks.py`) kernel-checked runs of the native test's inputs. `lanes.sh` retranslates every
+version (0.17.1, 0.16.0, 0.15.2), compares the 0.16.0 translation with `Lanes/Gen.lean` and checks
+the proofs and runs on each version's translation; `--native` runs the test with a stock Zig and
+`--export DIR [VERSION]` exports fresh AIR with the patched compiler (default 0.16.0) and compares
+its translation with the committed export's. Zig 0.17.1 writes `&v[i]` as a `ptr_cast` to the lane
+pointer type; its lane accesses translate as 0.16.0's (`Canon.laneElemPtrs`).
+`lane_reads.zig` (`air-reads/<version>`) reads lanes through a
 vector pointer; `test_lane_reads.py BINARY` checks its translations against the native values and
 that byte-strided `ptr_elem_val` reads and runtime-index lane pointers into bit-packed vectors are
 rejected.
@@ -31,4 +34,8 @@ AIR2LEAN_ZIG_AIR=zig-air-0.16.0/bin/zig bash tests/roadmap/vector-layouts/lanes.
 
 `aarch64-macos-ReleaseSafe.txt` is the output of stock Zig 0.16.0 on aarch64-macos (Apple M1).
 Debug and ReleaseFast, and stock Zig 0.15.2, printed the same lines. CI compares its own x86_64-linux output. A
-probe line covers only the listed vectors on the host that printed it.
+probe line covers only the listed vectors on the host that printed it. Stock Zig 0.17.1 printed
+the same lines in the three modes on x86_64-linux (a `linux/amd64` container), and on
+aarch64-macos and aarch64-linux except `f80x2` (`--skip f80x2`: the declared divergence of
+`docs/aarch64-abi.md`, rejected by the translator); `lanes.zig`'s and `lane_reads.zig`'s tests pass
+with it on the three targets.
