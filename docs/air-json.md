@@ -317,7 +317,7 @@ function name has. Before the whole-program checks it binds each extern call
    call becomes a direct call of that definition, and its argument and result types are
    checked against the definition's parameters and return type like any direct call's: a
    declaration that agrees with the definition only at the C ABI (`[*c]const u8` for a
-   `[*:0]const c_char` parameter, `c_int` for a `u8`) is rejected. Binding a strong definition
+   `[*:0]const c_char` parameter, `?*anyopaque` for a `?[*]u8`) is rejected. Binding a strong definition
    is the static linker's rule for a program linked as one image (EXT-03). A **weak**
    definition (`.linkage = .weak`: every symbol of Zig's `lib/c.zig` and `compiler_rt`) binds
    only with `--assume-weak-exports`, which states that the image links no other definition
