@@ -113,10 +113,9 @@ when_defined Thread_Futex_DarwinImpl_wake
 /-- `UL{ .op = .COMPARE_AND_WAIT, .NO_ERRNO = true, .WAKE_ALL = all }` as the `u32` the kernel
 reads (`COMPARE_AND_WAIT | NO_ERRNO`, with `WAKE_ALL`). -/
 theorem ul_bits (all : Bool) :
-    Zig.Packed.toBits ({ op := c_darwin_UL_Op.COMPARE_AND_WAIT, WAKE_ALL := all,
-      WAKE_THREAD := false, _10 := 0, WAIT_WORKQ_DATA_CONTENTION := false,
-      WAIT_CANCEL_POINT := false, WAIT_ADAPTIVE_SPIN := false, _19 := 0, NO_ERRNO := true,
-      «_» := 0 } : c_darwin_UL) =
+    Zig.Packed.toBits
+      (⟨c_darwin_UL_Op.COMPARE_AND_WAIT, all, false, 0, false, false, false, 0, true, 0⟩ :
+        c_darwin_UL) =
       (if all then Os.Darwin.UL_COMPARE_AND_WAIT_NO_ERRNO ||| Os.Darwin.UL_WAKE_ALL
         else Os.Darwin.UL_COMPARE_AND_WAIT_NO_ERRNO) := by
   cases all <;> decide
@@ -165,12 +164,12 @@ theorem ulock_wake_wp {t : ThreadId} {p : Ptr} {all : Bool} {op : BitVec 32}
     · by_cases hl : live = 0
       · subst hl
         refine .inr ?_
-        show Os.Darwin.negErrno32 Os.Darwin.E.NOENT = _
+        show Os.negErrno32 Os.Darwin.E.NOENT = _
         decide
       · exact .inl (by simp [Os.Darwin.wakeCode, hl])
     · exact .inl rfl
   · refine .inr ⟨?_, hI₂⟩
-    show Os.Darwin.negErrno32 Os.Darwin.E.INTR = _
+    show Os.negErrno32 Os.Darwin.E.INTR = _
     decide
 
 /-- The loop of `DarwinImpl.wake`: the tick (`htick`, paid by the caller at `I`), then
@@ -215,9 +214,24 @@ theorem wake_body {t : ThreadId} {p : Ptr} {all : Bool} {I D : (ThreadId → γ)
       P.WP t (ConcM.liftMem (StateT.lift (Zig.sub true (0 : BitVec 32) x)) :
         ConcM Tgt (BitVec 32)) Q' G' m' n' :=
     fun x y hx _ _ _ _ hq => WP.liftMem_pure (by rw [hx]; rfl) rfl hq
+  have henum : ∀ (x : c_darwin_E)
+      {Q' : c_darwin_E → (ThreadId → γ) → Mem → Nat → Prop} {G' : ThreadId → γ}
+        {m' : Mem} {n' : Nat}, Q' x G' m' n' →
+      P.WP t (ConcM.liftMem (StateT.lift (Zig.enumOf (some x))) : ConcM Tgt c_darwin_E)
+        Q' G' m' n' :=
+    fun x _ _ _ _ hq => WP.liftMem_pure rfl rfl hq
+  have e4 : ((⟨BitVec.ofInt 16 (Zig.val true 4#32)⟩ : c_darwin_E) == c_darwin_E.INTR) = true := by
+    decide
+  have e2i : ((⟨BitVec.ofInt 16 (Zig.val true 2#32)⟩ : c_darwin_E) == c_darwin_E.INTR) = false := by
+    decide
+  have e2f : ((⟨BitVec.ofInt 16 (Zig.val true 2#32)⟩ : c_darwin_E) == c_darwin_E.FAULT) = false := by
+    decide
+  have e2n : ((⟨BitVec.ofInt 16 (Zig.val true 2#32)⟩ : c_darwin_E) == c_darwin_E.NOENT) = true := by
+    decide
   fsym [ulock_wake_wp (P := P) (t := t) (p := p) (all := all) hbits hword hpick hwake,
     hsub _ _ (show Zig.sub true (0 : BitVec 32) 4294967292#32 = pure 4#32 from rfl),
     hsub _ _ (show Zig.sub true (0 : BitVec 32) 4294967294#32 = pure 2#32 from rfl),
+    henum, e4, e2i, e2f, e2n,
     Thread_Futex_DarwinImpl_wake.again25]
 
 /-- **`Thread.Futex.wake(p, c)`** (macOS, `c ≠ 0`) at a live word `p`, by a caller that supplies
