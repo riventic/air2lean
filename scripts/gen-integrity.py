@@ -224,8 +224,17 @@ FIXTURES = [
         ("packed_casts", "PackedCasts", ("0.14.1", "0.15.2", "0.16.0", "0.17.1")),
         ("logical017", "Logical017", ("0.17.1",)),
         ("vector_fields", "VectorFields", ("0.14.1", "0.15.2")),
-        ("auto_items", "AutoItems", ("0.14.1", "0.15.2")))
+        ("auto_items", "AutoItems", ("0.14.1", "0.15.2")),
+        ("sentinel_arrays", "SentinelArrays", ("0.14.1", "0.15.2", "0.16.0")),
+        ("void_casts", "VoidCasts", ("0.14.1", "0.15.2", "0.16.0", "0.17.1")),
+        ("void017", "Void017", ("0.17.1",)))
     for v in versions
+] + [
+    # packed-casts/check.sh: the hand-written `bitcast` of zero-bit types (no compiler emits it).
+    (f"tests/roadmap/packed-casts/PackedCasts/V{v.replace('.', '_')}/VoidCast.lean",
+     f"tests/roadmap/packed-casts/air-handwritten/{v}/void_cast",
+     ["--namespace", f"PackedCasts.V{v.replace('.', '_')}.VoidCast", "--prefix", "void_cast."], "exact")
+    for v in ("0.16.0", "0.17.1")
 ] + [
     # nan-bits/check.sh (docs/architecture-audit/nan-bits.md): one translation per version.
     (f"tests/roadmap/nan-bits/NanBits/V{v.replace('.', '_')}/Gen.lean", f"tests/roadmap/nan-bits/air/{v}/nan_bits",
@@ -334,12 +343,14 @@ def invgen_record(path, *, header_only=False):
     return json.loads(first[len(INVGEN_PREFIX):]), hashlib.sha256(body).hexdigest()
 
 
-def invgen_errors(targets=None):
-    """The `invgen` command: each target of scripts/invgen.py (`targets`: its TARGETS) has a
-    record that matches it and the checkout, and no other tracked file has one."""
+def invgen_errors(targets=None, contracts=None):
+    """The `invgen` command: each target of scripts/invgen.py (`targets`: its TARGETS, `contracts`:
+    its CONTRACTS) has a record that matches it and the checkout, and no other tracked file has
+    one."""
     invgen = sibling("invgen.py")
     valid_revision = sibling("semantic-fingerprints.py")["valid_translator"]
     targets = invgen["TARGETS"] if targets is None else targets
+    contracts_of = invgen["CONTRACTS"] if contracts is None else contracts
     toolchain = (ROOT / "lean-toolchain").read_text().strip()
 
     @functools.cache
@@ -354,16 +365,20 @@ def invgen_errors(targets=None):
                 invgen_record(path, header_only=True)
                 errors.append(f"{path}: an air2lean-invgen record that is not a target of scripts/invgen.py")
     for path, root, module, namespace in targets:
-        source = invgen["source"](root, module)
+        # (a target generated with contracts also reads the module that states them)
+        spec, contracts = contracts_of.get(path, (None, []))
+        sources = [invgen["source"](root, m) for m in [module] + ([spec] if spec else [])]
         try:
             record, body = invgen_record(path)
-            generator, [[name, digest]] = record["generator"], record["inputs"]
+            generator, inputs = record["generator"], [(name, digest) for name, digest in record["inputs"]]
             if record["version"] != 2 or not valid_revision(generator):
                 raise ValueError("not a version 2 record with a consistent generator revision")
             if not {"Air2Lean.InvGen", "Air2Lean.InvGenMain"} <= {m for m, _ in generator["modules"]}:
                 raise ValueError("a revision that is not the generator's (no Air2Lean.InvGen, Air2Lean.InvGenMain)")
-            if (record["module"], record["namespace"], name) != (module, namespace, source):
-                raise ValueError(f"not the record of {module} (namespace {namespace}) read from {source}")
+            if (record["module"], record["namespace"], [name for name, _ in inputs]) != (module, namespace, sources):
+                raise ValueError(f"not the record of {module} (namespace {namespace}) read from {', '.join(sources)}")
+            if (record.get("specs", []), record.get("contracts", [])) != ([spec] if spec else [], contracts):
+                raise ValueError(f"not the record of the contracts {contracts} of {spec}")
         except (OSError, ValueError, KeyError, TypeError) as error:
             errors.append(f"{path}: no valid air2lean-invgen record ({error}); "
                           "regenerate it with scripts/invgen.py write")
@@ -376,8 +391,7 @@ def invgen_errors(targets=None):
             [f"Lean {generator['lean']} (lean-toolchain {toolchain})"]
         stale += [f"generator module {m}" for m, d in generator["modules"]
                   if sha256_file(premise_markers.module_path(ROOT, m)) != d]
-        if sha256_file(ROOT / source) != digest:
-            stale.append(f"input {source}")
+        stale += [f"input {name}" for name, digest in inputs if sha256_file(ROOT / name) != digest]
         if stale:
             errors.append(f"{path} is stale ({'; '.join(stale)} changed); regenerate it with scripts/invgen.py write")
     return errors
