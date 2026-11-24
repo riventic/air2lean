@@ -949,7 +949,7 @@
    "title": "Conc/Returns: no client yet",
    "status": "open",
    "requester": "csl/T-term",
-   "progress": "plan",
+   "progress": "plan. Triage 2026-11-24: unchanged, needs a maintainer decision (keep for T-term, or delete with `Proto.cost`). No module imports `ZigLean.Conc.Returns` and no proof uses `Proto.returnsWithin`; it is built only by name and cited by docs/sep-threads.md (Termination), docs/premises.md (THR-08, SEM-04: assurance/premises.json maps the module to them) and research C13. `Proto.cost` itself has users (every sync rule takes `P.cost = none`), so deleting the pair is a change to `Proto`, not a file removal.",
    "request": "`Conc/Returns` (`Proto.returnsWithin`, turn-cost adequacy, ROADMAP current goal text): target leaf result, no client yet. PLAN: first client = a turn-counting protocol proof (T-term, research C13); if T-term is dropped, delete with `Proto.cost`",
    "workaround_sites": [],
    "deletion_plan": "first client: a turn-counting protocol proof (T-term, research C13); if T-term is dropped, delete with Proto.cost.",
@@ -958,9 +958,9 @@
   {
    "id": "71",
    "title": "Conc/OsRules: premise evidence, standalone by design",
-   "status": "open",
+   "status": "closed",
    "requester": "os lane",
-   "progress": "plan; the full-state rules of the OS futex rows landed in `ZigLean/Sep/Full/OsFutex.lean` (STD-05 step A, PR #437), the target for OsRules' futex facts",
+   "progress": "plan; the full-state rules of the OS futex rows landed in `ZigLean/Sep/Full/OsFutex.lean` (STD-05 step A, PR #437), the target for OsRules' futex facts. CLOSED (triage 2026-11-24): the module is no longer standalone. `ZigLean/Sep/Full/OsFutex.lean` imports it and its rules `WP.osFutexWait`/`WP.osFutexWake` are proved from its facts (`wakeSize`, `wakeCount_pos`, `wakeSets_mem`, `wakeAt_frame`, `waitCount_eq`; `wakeSize` also in Full/WordRules), so it is a library module of the one framework with users (regression: tests/roadmap/sep-auto/SepAuto/WPOsFutex.lean); it holds no legacy judgment and is no workaround. What the plan still names, moving the file next to its user, is the mechanical directory step of the roadmap (ROADMAP.md, Current state, step 5), not an engine item.",
    "request": "`Conc/OsRules`: proof-only premise evidence for OSF-01/02, OST-01/02, OSG-01 (docs/premises.md \"Derived from\", docs/os-threads.md); standalone by design (not dead). PLAN: its facts move into the full-state futex rules (the `Io` futex slots as `CTriple` rules when those land, docs/thread-specs.md), then the module is absorbed",
    "workaround_sites": [],
    "deletion_plan": "move its futex facts into the full-state OS futex rules (ZigLean/Sep/Full/OsFutex.lean) and the `Io` futex-slot CTriple rules when those land (docs/thread-specs.md, STD-05), then absorb the module."
@@ -1346,7 +1346,7 @@
    "title": "Seven remaining hand ofSeq one-liners",
    "status": "open",
    "requester": "coordinator (critic run 9)",
-   "progress": "PR #352 (merged 2026-10-15) deleted the term-level copies in Block.lean and Local.lean; one remains: `FTTotalTriple.storeBytes_bytesAt` (ZigLean/Sep/Full/Ops.lean ~729, `ofSeq` plus `ThreadLocal.storeBytes`)",
+   "progress": "PR #352 (merged 2026-10-15) deleted the term-level copies in Block.lean and Local.lean; one remains: `FTTotalTriple.storeBytes_bytesAt` (ZigLean/Sep/Full/Ops.lean, section OwnedBytes: `ofSeq` plus `ThreadLocal.storeBytes`). Triage 2026-11-24: still there, and not deletable yet. Its users are the term-level thread store rules `FTTriple.storeBytesAt`/`storeAt`/`storeAt'` (ZigLean/Sep/Full/Local.lean), which the hand `WP.bind (WP.liftM_fowned …)`/`WP.callMC_fownedS …` walks call: Proofs/Threads/Disjoint.lean, Proofs/Iogroup/Counter.lean, Proofs/Detach/Worker.lean, Proofs/Cancel/Group.lean, Proofs/Threadsync/Deadline.lean, tests/roadmap/spawn-failure/SpawnFailure/Group.lean, and ZigLean/Sep/Full/ThreadTls.lean. `fsym` already applies the sequential rule in a thread goal itself (AutoThread), so the one-liner goes when those walks are `fsym` walks (rows fowned-bridges and errok-native); nothing to do in the engine for this row.",
    "request": "7 remaining hand ofSeq one-liners (Block.lean:378/383/391, Local.lean:164/169, Ops.lean:664/671) -> AutoThread providers, then delete.",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -1356,7 +1356,7 @@
    "title": "A spawned thread's stack budget, reserve and sp token",
    "status": "open",
    "requester": "stack-region lane (codex/stack-pr5)",
-   "progress": "main's budget, the token rules, cur t and its thread rules are done (Full/Stack, Full/Init run_init_stack, FOwned.noCur); open: the model side",
+   "progress": "main's budget, the token rules, cur t and its thread rules are done (Full/Stack, Full/Init run_init_stack, FOwned.noCur); open: the model side. Triage 2026-11-24: unchanged. `Mem.reserveAt?` (ZigLean/Mem/Basic.lean) is called for thread 0 only (`Mem.withStack`, Full/Init); no fork or clone path reserves a child's stack, so a spawned thread still has no `sp` token. A model change (memory model, premises STK-01/02), not an fsym rule: needs its own lane.",
    "request": "`Thread.forkWith`/`Os.Linux.clone` give a child no budget (MM-18 step 5): a spawned thread has no stack token, so its stack pushes are plain-mode only. Needed: the child's budget at fork (environment parameter first, `SpawnConfig.stack_size` later) with its reserve (`Mem.reserveAt?`; no fit: `SystemResources` where the spawn policy allows a failure, else `.stackOverflow`), the reserve released at thread end, the lifetime cells reserved up front; then a spawn rule that hands the child `sp c S_c k_c` (with `StackAuth` of the forked memory) and `FOwned.start` with a budgeted main (`sp 0 S 0` in main's part).",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -1366,7 +1366,7 @@
    "title": "The WP walk hands cur t to a thread's segment (WP.liftMem_fownedCurS)",
    "status": "open",
    "requester": "stack-region lane (codex/stack-pr5)",
-   "progress": "the rule exists (Full/ThreadOwned `WP.liftMem_fownedCurS`), not registered",
+   "progress": "the rule exists (Full/ThreadOwned `WP.liftMem_fownedCurS`), not registered. Triage 2026-11-24: unchanged and blocked on row stack-child-budget: no protocol client has a budgeted thread (only main gets a budget, and no protocol proof starts from a budgeted main), so there is no walk to register the rule for or to test it on. Registering it now would add an `@[fsym]` WP rule that every WP walk tries with no user.",
    "request": "fsym's WP backend applies `WP.liftMem_fowned` (@[fsym], AutoWP) with the segment's precondition the thread's part; a segment that pushes a stack block from a budget needs `cur t` (`FTTriple (Pa ⋆ cur t) x (fun a => Qa a ⋆ cur t)`). Register `WP.liftMem_fownedCurS` (or a `liftMem_fowned` form of it) once a protocol client has a budgeted thread (needs row stack-child-budget for any thread but main), and walk such a segment.",
    "workaround_sites": [],
    "deletion_plan": ""
@@ -1920,7 +1920,7 @@
    "title": "build-guard mirrors a lifeline ticket in `merge/` for guards of checkouts before PR #661",
    "status": "open",
    "requester": "P1c (elastic build-guard admission, PR #661)",
-   "progress": "open: transitional compatibility with guards of older checkouts (not an fsym engine gap; recorded here as the deletion plan CLAUDE.md asks for).",
+   "progress": "open: transitional compatibility with guards of older checkouts (not an fsym engine gap; recorded here as the deletion plan CLAUDE.md asks for). Triage 2026-11-24: DUE. The plan's date (2026-11-19) has passed; `Admission.mirror`/`mirror_lifeline` are still in scripts/build-guard.py. What is left is the plan's check at a main-health run (every running build-guard on arc and on the Mac comes from a checkout that contains #661's merge) and then the deletion in one infrastructure PR. Not done in the triage: the check must run on both hosts at one moment and the change touches the guard every running lane shares.",
    "request": "PR #661 moved an elastic workload's lifeline ticket from `<lock>.d/merge/` (where guards before #661 read every ticket as a drain ticket, so a lifeline there drained the shared host beside free memory) to `<lock>.d/lifeline-tickets/`. Guards before #661 do not see that directory, so one of them as a large or exclusive queue head could keep the queue from a lifeline until its --lock-wait. Until no such guard runs, a lifeline whose turn it is mirrors its ticket in `merge/` under a time-0 name (`Admission.mirror_lifeline`) while no `lifeline_aware` head publishes a reservation.",
    "workaround_sites": [
     "scripts/build-guard.py",

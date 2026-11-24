@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 182 rows, 75 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 182 rows, 74 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -48,7 +48,6 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [68](#row-68) | WP walk: a side goal whose unknown is fixed by a LATER conjunct is not re-solved | L9 | `Proofs/Sync/Mutex.lean`, `Proofs/Threadsync/Mutex.lean` | reorder `workInv` / `workPost` back (the conjunct that fixes k last) once the WP walk retries deferred side goals after their unknowns are assigned. |
 | [69](#row-69) | WP rules are tried on a command with a different head; the failed unification unfolds both generated functions | L9 | `Proofs/Threadsync/Mutex.lean` | drop `attribute [local irreducible] Thread_Mutex_lock Thread_Mutex_unlock` once WP rules are keyed by the command head (or unify generated functions at reducible transparency); then `threadMutex.lock_wp` can be passed directly. |
 | [70d](#row-70d) | Conc/Returns: no client yet | csl/T-term | - | first client: a turn-counting protocol proof (T-term, research C13); if T-term is dropped, delete with Proto.cost. |
-| [71](#row-71) | Conc/OsRules: premise evidence, standalone by design | os lane | - | move its futex facts into the full-state OS futex rules (ZigLean/Sep/Full/OsFutex.lean) and the `Io` futex-slot CTriple rules when those land (docs/thread-specs.md, STD-05), then absorb the module. |
 | [76](#row-76) | Read of a read-shared io prefix in a protocol: hand copies of wp_io | critic run 15 (coordinator) | `Proofs/Sync/RwLock.lean`, `Proofs/Sync/Semaphore.lean` | when each legacy-layer file migrates to the full-state logic (docs/legacy-retirement.md), replace its `wp_io` copy with `FLock.Fits.wp_readRest` and its holder copies with `FLock.Fits.wp_hold`. Keep the primitive load/record proof shared through Inv.loadRest. Close this row only when every listed legacy workaround site is gone. |
 | [return-bool-split](#row-return-bool-split) | A return whose Boolean value the postcondition matches on is not split | arena-gen (arena macros -> fsym) | `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | delete `rcases Nat.lt_trichotomy n.toNat s.len.toNat` in each arena `resize_ct` (with #64) once the walk splits a return's undecided Boolean that the postcondition matches on. |
 | [arena-resize-update-cost](#row-arena-resize-update-cost) | (perf) whole-state updates at every return: the arena's resize | arena-gen (arena macros -> fsym) | - | - |
@@ -164,6 +163,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [68d](#row-68d) | Full/ThreadCall (WP.call_fowned): used by fsym's WP backend | DONE PR2; PR #354 merged |
 | [69d](#row-69d) | Conc/Spec/MutexToy: witness of the legacy MutexSpec | DONE (L21): deleted with ZigLean/Conc/Spec and MutexSpec. Its relaxed-unlock counterexample against MutexImpl is row mutex-impl-relaxed-witness. |
 | [70](#row-70) | Holder field steps as one library rule (coordinator item (a)) not landed yet | DONE codex/fsym-wp-hold: the `WP` walk applies `FLock.Fits.wp_hold` itself (`fsym [hF.wp_hold (g' := gH x'), …]`, one term per place the walk reaches): a rule for every `MemM` step is tried after the others and applies only completely; the segment's precondition comes from `hpa`, the side goals from the first one about the segment's post on (`hR`, `hg'`, `hU`) are solved after the segment; `hR` by the post's atoms (`assnByHyp`: equal or provably equal values, AC), `hU` by the protocol's lemma applied backwards (`wpChain`), arithmetic facts of the protocol's shape forwards (`wpForward`); ghost values of products normalized (`upd_snd`, `upd_ne`, data fields of user values). All per-field instances are deleted; the walks of SnapshotCache (`update_spec`, `main`'s snapshot to the free), MutexCounter (both versions' `loop4_body`), Iogroup (`add_spec`) and Handoff (both versions' producer, `ready` loop and `main`'s tail from the spawn) are `fsym` calls. Regression sep-auto WPHold. |
+| [71](#row-71) | Conc/OsRules: premise evidence, standalone by design | plan; the full-state rules of the OS futex rows landed in `ZigLean/Sep/Full/OsFutex.lean` (STD-05 step A, PR #437), the target for OsRules' futex facts. CLOSED (triage 2026-11-24): the module is no longer standalone. `ZigLean/Sep/Full/OsFutex.lean` imports it and its rules `WP.osFutexWait`/`WP.osFutexWake` are proved from its facts (`wakeSize`, `wakeCount_pos`, `wakeSets_mem`, `wakeAt_frame`, `waitCount_eq`; `wakeSize` also in Full/WordRules), so it is a library module of the one framework with users (regression: tests/roadmap/sep-auto/SepAuto/WPOsFutex.lean); it holds no legacy judgment and is no workaround. What the plan still names, moving the file next to its user, is the mechanical directory step of the roadmap (ROADMAP.md, Current state, step 5), not an engine item. |
 | [72](#row-72) | PageAllocator as an environment of an open std.mem.Allocator | DONE: part 1 #369 (CTriple.toSoloThread: no Tgt map needed; alloc/free/resize thread triples); part 2 codex/l4-page-env (remap thread triple after #368, PageThread.cAllocSpec); the page-backed Lists.Open env chore/l4-controls (tests/roadmap/alloc-translated/ListsPage.lean: ext, env_runs, page_spec) |
 | [73](#row-73) | Run-level adequacy to .illegal | DONE: part 1 #364 (KFact.dead, free_dead, munmapWhole_dead, Holds.dead); part 2 codex/l4-page-env (FAllocInv.freed in free's post, coordinator decision B; the page allocator's freed = dead, PageThread.fthread_free). The Controls restatement (chore/l4-controls) needs no run-level theorem: with #77 fixed the kernel evaluates the runs (`.illegal` and the leak) from the start memory |
 | [74](#row-74) | PLAN (legacy-to-retire) | DONE chore/l4-controls: tutorials/memory-safety/Controls.lean is deleted; its refuted clients are restated over Proofs/Lists/Open.lean and the translated PageAllocator in tests/roadmap/alloc-translated/ListsPage.lean (`controls`: unconditional refutations of Main.lean's properties from the program's start memory, the runs evaluated by the kernel after #77), and it left `legacy_users` |
@@ -1137,7 +1137,7 @@ Status: **open**. Requester: csl/T-term.
 
 Note: dead-module row 70 of agent 17; L9 row 70 keeps 70; this one is 70d
 
-Progress: plan
+Progress: plan. Triage 2026-11-24: unchanged, needs a maintainer decision (keep for T-term, or delete with `Proto.cost`). No module imports `ZigLean.Conc.Returns` and no proof uses `Proto.returnsWithin`; it is built only by name and cited by docs/sep-threads.md (Termination), docs/premises.md (THR-08, SEM-04: assurance/premises.json maps the module to them) and research C13. `Proto.cost` itself has users (every sync rule takes `P.cost = none`), so deleting the pair is a change to `Proto`, not a file removal.
 
 Request: `Conc/Returns` (`Proto.returnsWithin`, turn-cost adequacy, ROADMAP current goal text): target leaf result, no client yet. PLAN: first client = a turn-counting protocol proof (T-term, research C13); if T-term is dropped, delete with `Proto.cost`
 
@@ -1146,9 +1146,9 @@ Deletion plan: first client: a turn-counting protocol proof (T-term, research C1
 <a id="row-71"></a>
 ### #71 Conc/OsRules: premise evidence, standalone by design
 
-Status: **open**. Requester: os lane.
+Status: **closed**. Requester: os lane.
 
-Progress: plan; the full-state rules of the OS futex rows landed in `ZigLean/Sep/Full/OsFutex.lean` (STD-05 step A, PR #437), the target for OsRules' futex facts
+Progress: plan; the full-state rules of the OS futex rows landed in `ZigLean/Sep/Full/OsFutex.lean` (STD-05 step A, PR #437), the target for OsRules' futex facts. CLOSED (triage 2026-11-24): the module is no longer standalone. `ZigLean/Sep/Full/OsFutex.lean` imports it and its rules `WP.osFutexWait`/`WP.osFutexWake` are proved from its facts (`wakeSize`, `wakeCount_pos`, `wakeSets_mem`, `wakeAt_frame`, `waitCount_eq`; `wakeSize` also in Full/WordRules), so it is a library module of the one framework with users (regression: tests/roadmap/sep-auto/SepAuto/WPOsFutex.lean); it holds no legacy judgment and is no workaround. What the plan still names, moving the file next to its user, is the mechanical directory step of the roadmap (ROADMAP.md, Current state, step 5), not an engine item.
 
 Request: `Conc/OsRules`: proof-only premise evidence for OSF-01/02, OST-01/02, OSG-01 (docs/premises.md "Derived from", docs/os-threads.md); standalone by design (not dead). PLAN: its facts move into the full-state futex rules (the `Io` futex slots as `CTriple` rules when those land, docs/thread-specs.md), then the module is absorbed
 
@@ -1515,7 +1515,7 @@ Request: fsym should step through the WP.liftMem_fowned*/callMC_fownedS bridges 
 
 Status: **open**. Requester: coordinator (critic run 9).
 
-Progress: PR #352 (merged 2026-10-15) deleted the term-level copies in Block.lean and Local.lean; one remains: `FTTotalTriple.storeBytes_bytesAt` (ZigLean/Sep/Full/Ops.lean ~729, `ofSeq` plus `ThreadLocal.storeBytes`)
+Progress: PR #352 (merged 2026-10-15) deleted the term-level copies in Block.lean and Local.lean; one remains: `FTTotalTriple.storeBytes_bytesAt` (ZigLean/Sep/Full/Ops.lean, section OwnedBytes: `ofSeq` plus `ThreadLocal.storeBytes`). Triage 2026-11-24: still there, and not deletable yet. Its users are the term-level thread store rules `FTTriple.storeBytesAt`/`storeAt`/`storeAt'` (ZigLean/Sep/Full/Local.lean), which the hand `WP.bind (WP.liftM_fowned …)`/`WP.callMC_fownedS …` walks call: Proofs/Threads/Disjoint.lean, Proofs/Iogroup/Counter.lean, Proofs/Detach/Worker.lean, Proofs/Cancel/Group.lean, Proofs/Threadsync/Deadline.lean, tests/roadmap/spawn-failure/SpawnFailure/Group.lean, and ZigLean/Sep/Full/ThreadTls.lean. `fsym` already applies the sequential rule in a thread goal itself (AutoThread), so the one-liner goes when those walks are `fsym` walks (rows fowned-bridges and errok-native); nothing to do in the engine for this row.
 
 Request: 7 remaining hand ofSeq one-liners (Block.lean:378/383/391, Local.lean:164/169, Ops.lean:664/671) -> AutoThread providers, then delete.
 
@@ -1524,7 +1524,7 @@ Request: 7 remaining hand ofSeq one-liners (Block.lean:378/383/391, Local.lean:1
 
 Status: **open**. Requester: stack-region lane (codex/stack-pr5).
 
-Progress: main's budget, the token rules, cur t and its thread rules are done (Full/Stack, Full/Init run_init_stack, FOwned.noCur); open: the model side
+Progress: main's budget, the token rules, cur t and its thread rules are done (Full/Stack, Full/Init run_init_stack, FOwned.noCur); open: the model side. Triage 2026-11-24: unchanged. `Mem.reserveAt?` (ZigLean/Mem/Basic.lean) is called for thread 0 only (`Mem.withStack`, Full/Init); no fork or clone path reserves a child's stack, so a spawned thread still has no `sp` token. A model change (memory model, premises STK-01/02), not an fsym rule: needs its own lane.
 
 Request: `Thread.forkWith`/`Os.Linux.clone` give a child no budget (MM-18 step 5): a spawned thread has no stack token, so its stack pushes are plain-mode only. Needed: the child's budget at fork (environment parameter first, `SpawnConfig.stack_size` later) with its reserve (`Mem.reserveAt?`; no fit: `SystemResources` where the spawn policy allows a failure, else `.stackOverflow`), the reserve released at thread end, the lifetime cells reserved up front; then a spawn rule that hands the child `sp c S_c k_c` (with `StackAuth` of the forked memory) and `FOwned.start` with a budgeted main (`sp 0 S 0` in main's part).
 
@@ -1533,7 +1533,7 @@ Request: `Thread.forkWith`/`Os.Linux.clone` give a child no budget (MM-18 step 5
 
 Status: **open**. Requester: stack-region lane (codex/stack-pr5).
 
-Progress: the rule exists (Full/ThreadOwned `WP.liftMem_fownedCurS`), not registered
+Progress: the rule exists (Full/ThreadOwned `WP.liftMem_fownedCurS`), not registered. Triage 2026-11-24: unchanged and blocked on row stack-child-budget: no protocol client has a budgeted thread (only main gets a budget, and no protocol proof starts from a budgeted main), so there is no walk to register the rule for or to test it on. Registering it now would add an `@[fsym]` WP rule that every WP walk tries with no user.
 
 Request: fsym's WP backend applies `WP.liftMem_fowned` (@[fsym], AutoWP) with the segment's precondition the thread's part; a segment that pushes a stack block from a budget needs `cur t` (`FTTriple (Pa ⋆ cur t) x (fun a => Qa a ⋆ cur t)`). Register `WP.liftMem_fownedCurS` (or a `liftMem_fowned` form of it) once a protocol client has a budgeted thread (needs row stack-child-budget for any thread but main), and walk such a segment.
 
@@ -2116,7 +2116,7 @@ Deletion plan: Closes when the witness is in tests and checked by its fixture's 
 
 Status: **open**. Requester: P1c (elastic build-guard admission, PR #661).
 
-Progress: open: transitional compatibility with guards of older checkouts (not an fsym engine gap; recorded here as the deletion plan CLAUDE.md asks for).
+Progress: open: transitional compatibility with guards of older checkouts (not an fsym engine gap; recorded here as the deletion plan CLAUDE.md asks for). Triage 2026-11-24: DUE. The plan's date (2026-11-19) has passed; `Admission.mirror`/`mirror_lifeline` are still in scripts/build-guard.py. What is left is the plan's check at a main-health run (every running build-guard on arc and on the Mac comes from a checkout that contains #661's merge) and then the deletion in one infrastructure PR. Not done in the triage: the check must run on both hosts at one moment and the change touches the guard every running lane shares.
 
 Request: PR #661 moved an elastic workload's lifeline ticket from `<lock>.d/merge/` (where guards before #661 read every ticket as a drain ticket, so a lifeline there drained the shared host beside free memory) to `<lock>.d/lifeline-tickets/`. Guards before #661 do not see that directory, so one of them as a large or exclusive queue head could keep the queue from a lifeline until its --lock-wait. Until no such guard runs, a lifeline whose turn it is mirrors its ticket in `merge/` under a time-0 name (`Admission.mirror_lifeline`) while no `lifeline_aware` head publishes a reservation.
 
