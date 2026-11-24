@@ -39,6 +39,9 @@ has no nest, `FLock.holdLive_none`).
 `Base.wstep` gets the readers' shares after the step and the stepping thread's place at the outer
 mutex from `FRw.Step` (`Shares.step`; ledger #two-lock-product, ninth and tenth obstruction,
 decided 2026-11-24).
+
+`Base.fits` puts them together: the reader/writer protocol `FRw.Fits` for every client whose
+invariant is the two-lock product at the base.
 -/
 
 namespace Zig
@@ -1273,6 +1276,99 @@ theorem holdLiveM : ∀ G rX m v, M.Inv G rX m → FLock.Pair.U L (W.Base Sz K) 
         (hu.wt v (hu.sub.2.wt v (by rw [hreg]; rfl))) hi hz hq hall
     · exact FSem.Fits.live hs.toFits hi (by rw [hreg]; rfl)
         (Nat.eq_zero_of_not_pos fun h => hp (.inl h)) hz hq hall
+
+end
+
+/-! ## The protocol from the base
+
+Every obligation of `fitsM`, `fitsS` and `Fits.ofProduct` at `U₀ := Base` is one theorem above.
+The client gives the protocol's invariant as the product at the base (`inv`), where an ended or
+joining thread is (`finM` … `kjoins`), the laws of its `ok` predicates and of the places next to
+each other (as `fitsM` and `fitsS` take them), the nests of the two mutexes (the outer mutex's
+is the semaphore's mutex and the epoch; the semaphore's mutex has none), and that the protected
+resource has no byte of the condition's words (`hRoff`). -/
+
+section
+variable {Tgt : Type} {P : Proto Tgt γ} {okM okS : γ → Prop}
+
+/-- **The reader/writer protocol at the base** (section doc; ledger #two-lock-product, item (5)):
+`Fits.ofProduct` over `fitsM` and `fitsS` at `U₀ := Base`. -/
+theorem fits
+    (inv : ∀ G m, P.inv G m ↔ ∃ rX, M.Inv G rX m ∧ FLock.Pair.U L (W.Base Sz K) G rX m)
+    (finM : ∀ g, P.fin g → M.ph g = .gone) (joinsM : ∀ g, P.joins g → M.ph g = .out)
+    (finL : ∀ g, P.fin g → L.ph g = .gone) (joinsL : ∀ g, P.joins g → L.ph g = .out)
+    (kfin : ∀ g, P.fin g → W.ph g = .out ∧ S.place.ph g = (.out, .out))
+    (kjoins : ∀ g, P.joins g → W.ph g = .out ∧ S.place.ph g = (.out, .out))
+    (okM_set : ∀ g a, okM (W.set g a) ↔ okM g) (okM_m : ∀ g p h, okM (M.set g p h) ↔ okM g)
+    (okM_part : ∀ g r, okM (M.setPart g r) ↔ okM g) (okM_l : ∀ g q h, okM (L.set g q h) ↔ okM g)
+    (okS_set : ∀ g a, okS (W.set g a) ↔ okS g) (okS_m : ∀ g q h, okS (M.set g q h) ↔ okS g)
+    (okS_part : ∀ g r, okS (M.setPart g r) ↔ okS g)
+    (okS_l : ∀ g p h, okS (L.set g p h) ↔ okS g) (okS_lpart : ∀ g r, okS (L.setPart g r) ↔ okS g)
+    (okS_b : ∀ g, okS g → (C.ph g).busy = false)
+    (okS_s : ∀ g, okS g → S.ph g = .out ∨ S.ph g = .wt)
+    (okS_calm : ∀ g p q, S.prim.calm p → S.prim.calm q →
+      (okS (S.place.set g p) ↔ okS (S.place.set g q)))
+    (hnM : M.nest L.ptr) (hnE : M.nest C.Ep.ptr)
+    (hnest : ∀ p, M.nest p → p = L.ptr ∨ p = C.Ep.ptr) (hnL : ∀ p, ¬ L.nest p)
+    (hRoff : ∀ xs r l, W.R xs r → (C.S.In l ∨ C.Ep.In l) → r.heap l = none)
+    (mph_w : ∀ g p, M.ph (W.place.set g p) = M.ph g)
+    (mpart_w : ∀ g p, M.part (W.place.set g p) = M.part g)
+    (mheld_w : ∀ g p, M.held (W.place.set g p) = M.held g)
+    (ph_m : ∀ g q h, W.place.ph (M.set g q h) = W.place.ph g)
+    (set_m : ∀ g p q h, W.place.set (M.set g q h) p = M.set (W.place.set g p) q h)
+    (ph_mpart : ∀ g r, W.place.ph (M.setPart g r) = W.place.ph g)
+    (set_mpart : ∀ g p r, W.place.set (M.setPart g r) p = M.setPart (W.place.set g p) r)
+    (lph : ∀ g q, L.ph (S.place.set g q) = L.ph g)
+    (lpart : ∀ g q, L.part (S.place.set g q) = L.part g)
+    (lheld : ∀ g q, L.held (S.place.set g q) = L.held g)
+    (lR : ∀ G t q r, L.R G r → L.R (upd G t (S.place.set (G t) q)) r)
+    (ph_l : ∀ g q h, S.place.ph (L.set g q h) = S.place.ph g)
+    (set_l : ∀ g p q h, S.place.set (L.set g q h) p = L.set (S.place.set g p) q h)
+    (ph_lpart : ∀ g r, S.place.ph (L.setPart g r) = S.place.ph g)
+    (set_lpart : ∀ g p r, S.place.set (L.setPart g r) p = L.setPart (S.place.set g p) r)
+    (mph_s : ∀ g q, M.ph (S.place.set g q) = M.ph g)
+    (mheld_s : ∀ g q, M.held (S.place.set g q) = M.held g) :
+    W.Fits P (FLock.Pair.U L (W.Base Sz K)) (FLock.Pair.U M (W.Base Sz K)) okM okS := by
+  have hs : S.Fits P (FLock.Pair.U M (W.Base Sz K))
+      (fun g => okS g ∧ (M.ph g = .away ∨ M.ph g = .holdsAway)) :=
+    fitsS W inv finL joinsL (fun g h => (kfin g h).2) (fun g h => (kjoins g h).2) okS_l okS_lpart
+      okS_s okS_calm hnM
+      (fun G rL rH rX m m' t p h hok hma hn hL _ hu hst hrel _ =>
+        hu.stableS hL hst hn hrel (okS_b _ hok) (okS_s _ hok) hma ph_l)
+      (fun G rX m t _ hu => hu.atStop t) (tickL ph_mpart) (fun _ _ _ hu => hu.sub)
+      lph lpart lheld lR ph_l set_l ph_lpart set_lpart mph_s mheld_s
+      (fun _ _ _ _ hu hw => hu.hsleep hnE hw)
+      (fun t G G' rX rX' m m' sB rL rH rX₀ rX₀' hst he he' hsh hsB hk hk' hu =>
+        hu.sstep hst he he' hsh hsB hk hk' hRoff mph_s lph lpart ph_l ph_mpart)
+      (fun _ _ _ _ hi _ hv => FLock.holdLive_none hnL hi hv)
+      (FCond.Win1.win fun _ _ _ hu => hu.win)
+  have kfin' : ∀ g, P.fin g → W.ph g = .out := fun g h => (kfin g h).1
+  have kjoins' : ∀ g, P.joins g → W.ph g = .out := fun g h => (kjoins g h).1
+  have hm : M.Fits W.prim P (FLock.Pair.U L (W.Base Sz K))
+      (fun g => okM g ∧ L.ph g = .away ∧ W.prim.calm (W.place.ph g)) :=
+    fitsM inv finM joinsM kfin kjoins okM_set okM_m okM_part
+      (fun G rL rH rX m m' t p h _ hla hcalm hn hen hM hk hu hst _ _ =>
+        hu.stableM hM hk hst hn hen hla hcalm ph_m)
+      (fun G rX m t _ hu => hu.atStop t) (tickM ph_mpart) (fun _ _ _ hu => hu.winv)
+      mph_w mpart_w mheld_w ph_m set_m ph_mpart set_mpart
+      (fun t G G' rX rX' m m' sB rL rH rX₀ rX₀' rY rY' hst _ he' _ hk _ hu hI' e e' hmv =>
+        hu.wstep hst he' hk.facts.w hI' e e' hmv hRoff)
+      (holdLiveM inv hs kfin' kjoins' hnest)
+  have mph_set : ∀ g a, M.ph (W.set g a) = M.ph g := fun g a =>
+    (congrArg M.ph (prim_set (W := W) g a)).symm.trans (mph_w g _)
+  exact Fits.ofProduct hm hs okM_set okS_set okS_m okS_part okM_l
+    (fun G rX m t g _ _ hg hu => mnap ph_m hg hu)
+    (fun G rX m t g hw hl hg hu => munnap ph_m hw hl hg hu)
+    (fun G rX m t g hl hg hu => lmove ph_l (.inl hl) (.inr rfl) hg hu)
+    (fun G rX m t g hl hg hu => lmove ph_l (.inr hl) (.inl rfl) hg hu)
+    (fun G rX m t g hg hl hu => maway ph_m hg hl hu)
+    (fun G rX m t g hg hl hu => munaway ph_m hg hl hu)
+    (fun G rL rH rX m t g h₁ h₂ r sh sc hw hcnt _ _ hu _ _ hS hC =>
+      utake mph_s lph ph_l mph_set ph_mpart hw hcnt hu hS hC)
+    (fun G rL rH rX m t g r₀ rc h₁ h₂ sh sc hw hu _ _ hS hC =>
+      upost mph_s lph ph_l mph_set ph_mpart hw hu hS hC)
+    (fun _ _ _ u hu h => hu.wt u h)
+    (fun t G₁ m₁ hw _ _ hi _ _ hc0 => wlive inv hs kfin' kjoins' hnest hw hi hc0)
 
 end
 
