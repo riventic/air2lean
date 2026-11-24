@@ -123,8 +123,8 @@ REGISTRY_CALL = re.compile(r"(?<![\w'])(?:[\w']+\.)*(register\w*Attr\w*|KeyedDec
 DEFINITION_BEFORE = re.compile(r"\b(?:def|abbrev|opaque|theorem|instance)\s+$")
 
 # The legacy separation logic, deleted in Plan A's last phase. The base vocabulary that stays
-# (`Sep/Heap`, `Sep/Assert`, `Sep/AllocSpec/{Region,Norm,Ops}`) is not listed. `Sep/Triple` also
-# holds the vocabulary (`pts`, `arr`): until that is split out, its importers count as users.
+# (`Sep/Heap`, `Sep/Assert`, `Sep/Base/*`, `Sep/AllocSpec/{Region,Norm,Ops}`) is not listed. Every
+# listed module is deleted (docs/legacy-retirement.md); the patterns stay so that none comes back.
 LEGACY_MODULES = re.compile(
     r"^ZigLean\.Sep(\.(Triple|Total|Bounded|Loop|LoopTemplate|DispatchTemplate|Step|Automation"
     r"|Array|Array\.\w+|Block|Try|TryAlias|Discard|Sentinel|SentinelRealloc|Remap|RawAlloc|Alloc"

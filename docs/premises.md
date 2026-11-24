@@ -89,10 +89,8 @@ theorems with gaps. They were closed by general rules, not per-theorem entries:
 - The runtime model is layered, and `implies` records the layers: THR-01 implies SEM-02 (the
   scheduler runs over the block memory), and SEM-02 and SEM-03 imply SEM-01 (memory ops and
   loops return `Zig.Result`).
-- `ZigLean.Conc.Base.Word`, `ZigLean.Conc.Word` and `ZigLean.Conc.WeakWord` map to THR-05: the
-  word vocabulary and its ops (`Conc.Base.Word`) use the futex wait and the atomic ops, and the
-  legacy `Word.Op` and `Word.Keep` part (`Conc.Word`) and `Conc.WeakWord` also use
-  `ZigLean.Conc.Lock` (`LocsKeep`).
+- `ZigLean.Conc.Base.Word` maps to THR-05: the word vocabulary and its ops use the futex wait
+  and the atomic ops.
 - Field notation on typed binders, unique `.ctor` names and instances are resolved as in
   step 1.
 - A proof that names a runtime definition can unfold it, so the closure rules also see the
@@ -410,7 +408,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   waiter leaves the waiters only through a wake, a cancelation request or an OS interrupt
   (OSG-01). A wake adds no
   happens-before edge. No runnable thread with an unfinished thread is `Zig.Error.deadlock`.
-- Derived from: `ZigLean.Conc.Lock`, `ZigLean.Conc.LockRules`, `ZigLean.Conc.Base.Word`, `ZigLean.Conc.Word`, `ZigLean.Conc.WeakWord`; tokens `futex`, `Futex` (not in the OS rows `Os.*`, OSF-01/OSF-02, and not where the occurrence is the key layer's word `FutexKey`, `futexAddr` or `futexKeyOf`, e.g. `futexKeyOf_run`; `futexWait_futexAddr_eq` still derives THR-05).
+- Derived from: `ZigLean.Conc.Base.Word`, the full-state lock and word modules (`ZigLean.Sep.Full.Lock*`, `Word*`, …); tokens `futex`, `Futex` (not in the OS rows `Os.*`, OSF-01/OSF-02, and not where the occurrence is the key layer's word `FutexKey`, `futexAddr` or `futexKeyOf`, e.g. `futexKeyOf_run`; `futexWait_futexAddr_eq` still derives THR-05).
 - Sources: [std-models.md](std-models.md#thread-model), `ZigLean/Conc/Call.lean`.
 
 <a id="thr-06"></a>
@@ -447,7 +445,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   kernel-proved. A client theorem holds for the protocol, global invariant, ghost state and
   ownership splits that it states or discharges. Strict-safety theorems additionally exclude
   every scheduler error, including races and deadlock.
-- Derived from: `ZigLean.Conc.Logic`, `ZigLean.Conc.Csl`, `ZigLean.Conc.Own`, `ZigLean.Conc.Lemmas`, `ZigLean.Conc.Lock*`, `ZigLean.Conc.Base.Word`, `ZigLean.Conc.Word`, `ZigLean.Conc.Share`.
+- Derived from: `ZigLean.Conc.Logic`, `ZigLean.Conc.Clock`, `ZigLean.Conc.Lemmas`, `ZigLean.Conc.Base.*`, `ZigLean.Conc.Share`.
 - Sources: [proofs.md](proofs.md), [rwlock-contracts.md](rwlock-contracts.md).
 
 
@@ -512,7 +510,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   integers, enums, bools, packed structs or single/many pointers (ORD-05). Under
   `--allocator-model translated` an `unordered` load may also read any message not older than
   one that happened before it, ignoring and not updating the thread's own read view.
-- Derived from: `ZigLean.Mem.Thread`, `ZigLean.Conc.Base.Word`, `ZigLean.Conc.Word`, `ZigLean.Conc.AtomicWord`; tokens `atomicLoad*`, `atomicStore*`, `atomicRmw*`, `cmpxchg*`, `AtomicOrder`, `RmwOp`.
+- Derived from: `ZigLean.Mem.Thread`, `ZigLean.Conc.Base.Word`, `ZigLean.Conc.AtomicWord`; tokens `atomicLoad*`, `atomicStore*`, `atomicRmw*`, `cmpxchg*`, `AtomicOrder`, `RmwOp`.
 - Sources: [std-models.md](std-models.md#thread-model), `ZigLean/Mem/Thread.lean`.
 
 <a id="ord-02"></a>
@@ -542,7 +540,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: environment.
 - Statement: `cmpxchg_weak` may fail on a matching value with a failure-order read and no
   write, repeatedly. Its rules are safety-only; no retry liveness follows.
-- Derived from: `ZigLean.Conc.WeakCas`, `ZigLean.Conc.Base.WeakCas`, `ZigLean.Conc.WeakWord`; tokens `cmpxchgWeak`, `WeakCas`.
+- Derived from: `ZigLean.Conc.WeakCas`, `ZigLean.Conc.Base.WeakCas`; tokens `cmpxchgWeak`, `WeakCas`.
 - Sources: [weak-cas.md](weak-cas.md).
 
 <a id="ord-05"></a>
@@ -977,7 +975,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   covers address-space exhaustion of a block without an allocator of a thread without a budget:
   an `alloc` (stack local, thread-local instance, runtime cell) without room below
   `Placement.addrLimit` throws `.stackOverflow` (O-H, SEM-07). Every partial-correctness
-  statement (`Triple`, `TTriple`, `FTriple`, `CTriple`, and the strict concurrent `run_safe`,
+  statement (`FTriple`, `FTTriple`, `CTriple`, and the strict concurrent `run_safe`,
   which excludes every other error) reads `.stackOverflow` as it reads a run that does not
   terminate; a total-correctness statement excludes it, so one that allocates shows room
   (under a budget the stack-depth token of

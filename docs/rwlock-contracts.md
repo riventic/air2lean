@@ -87,19 +87,20 @@ That larger extraction and generic Event/WaitGroup contracts are separate remain
 ## Reusable synchronization contracts
 
 A contract is a `Prop` structure over a sync object's *operations*, proved once against the
-translated Zig 0.16.0 std code. The mutex, semaphore and condition contracts are the full-state
-ones, for every implementation; `Proofs/Sync/Contracts.lean` keeps the restricted RwLock one:
+translated Zig 0.16.0 std code. All four are full-state contracts, for every implementation:
 
 | Contract | Proved once by | Lock invariant / ownership transfer | Scope |
 |---|---|---|---|
 | `MutexImpl` (`ZigLean/Sep/Full/Mutex.lean`) | `Sync.ioMutex` (`Proofs/Sync/IoMutex.lean`) | `lock` moves the lock's resource to the holder; `unlock` moves it back | every protocol with the lock (`FLock.Fits`), any resource, any thread count |
 | `SemImpl` (`ZigLean/Sep/Full/Sem.lean`) | `Sync.ioSem` (`Proofs/Sync/IoSemaphore.lean`) | `post` moves a heap from the caller into the free permits' resource; `wait` moves one out | every protocol with the semaphore (`FSem.Fits`) |
 | `CondImpl` (`ZigLean/Sep/Full/Cond.lean`) | `Sync.ioCond` (`Proofs/Sync/Cond.lean`) | `wait` gives the mutex's resource back and returns holding it again; the caller rechecks its predicate | any number of waiters |
-| `RwContract E …` | `Sync.Contracts.rwLock` (existing `RwLockRead` specs) | shared/exclusive acquire gives `NPts`, release returns it | only the restricted protocol above (reader 0, writer 1, `NPts`) |
+| `RwLockImpl` (`ZigLean/Sep/Full/RwLockImpl.lean`) | `Sync.ioRwLock` (`Proofs/Sync/IoRwLock.lean`) | the rules of `lockUncancelable`, `unlock`, `lockSharedUncancelable` and `unlockShared`, over the outer mutex (`MutexImpl`) and the semaphore (`SemImpl`) | every protocol with the lock (`FRw.Fits`) |
 
 The legacy-protocol `MutexContract`, `SemContract` and `CondContract` (PR125) had no client left
 after SnapshotCache and Mailbox moved to the full-state contracts; they were removed (L12,
-`docs/legacy-retirement.md`).
+`docs/legacy-retirement.md`). The legacy `RwContract` (`Proofs/Sync/Contracts.lean`: the restricted
+protocol with reader 0, writer 1 and the counter resource `NPts`) is deleted with the legacy
+RwLock proofs (stage D-d); `RwLockImpl` replaces it.
 
 A client that takes a contract as a hypothesis receives the operations as abstract
 functions, so its proof cannot unfold the std code. It still establishes the object's

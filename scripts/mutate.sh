@@ -125,8 +125,8 @@
 #     evidence, not a semantic detection.
 # (af) Lean-runtime mutation, threads: `Thread.join` (ZigLean/Mem/Thread.lean) does not merge the
 #     joined thread's clock, so the joiner does not happen after that thread's writes. Detected by
-#     the proof build: `join_eq` (ZigLean/Conc/Lemmas.lean) fails first; `Owned.join`
-#     (ZigLean/Conc/Csl.lean), which `disjoint_safe` (Proofs/Threads/Disjoint.lean) needs, uses the
+#     the proof build: `join_eq` (ZigLean/Conc/Lemmas.lean) fails first; `FOwned.join`
+#     (ZigLean/Sep/Full/ThreadOwned.lean), which `disjoint_safe` (Proofs/Threads/Disjoint.lean) needs, uses the
 #     merged clock too (`main`'s read of a flag would race with its kid's write).
 #
 # Usage: mutate.sh

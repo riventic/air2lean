@@ -240,7 +240,8 @@ built in `ZigLean/Conc/Spec/` and retired in L21. Their full-state replacements 
   * Lemma: on the same target, `futexWaitInner` is equivalent to OSF-01 plus the cancelation
     bracket (`Syscall.start`/`finish`).
 * **`MutexSpec m R`.** The CSL lock spec: `lock` gives `R` and the holder token, and `unlock`
-  takes them back, with acquire/release edges. `ZigLean/Conc/Lock.lean` already proves this
+  takes them back, with acquire/release edges. The lock rules (`ZigLean/Sep/Full/LockRules.lean`;
+  at the time of this spike the legacy `ZigLean/Conc/Lock.lean`, since deleted) already prove this
   for the *translated* `Io.Mutex` against the hand futex (THR-05). The work is to re-derive it
   on `FutexSpec`, which allows spurious returns. Std's loops re-check, so the proof shape stays
   and only the wait step gains a "spurious → loop" case. `Threaded.mutexLock`/`mutexUnlock` have

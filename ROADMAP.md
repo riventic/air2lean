@@ -20,21 +20,24 @@ the Conc CSL chain) is migrated and deleted.
 
 | Gate (`assurance/proof-framework.json`) | earlier | 2026-10-21 | now |
 |---|---|---|---|
-| `legacy_users` | 97 at the arena landing (2026-10-14) | 41 | **13** |
+| `legacy_users` | 97 at the arena landing (2026-10-14) | 41 | **0** |
 | tactic entries | 34 before #471 (2026-10-19) | 29 | **9** (`legacy-to-retire`: `within`, `when_defined`) |
-| judgments / registries | | | 82 / 14 |
+| judgments / registries | | | 67 / 14 |
 
-What is left of the goal, in order ([legacy-retirement](docs/legacy-retirement.md), "Dependency
-map" and "Retirement order"):
+The legacy layer is deleted (stage D-d and the modules of D-e, [legacy-retirement](docs/legacy-retirement.md)):
+the legacy RwLock, Semaphore and Sync/Lock proofs, `Contracts.RwContract`, the Conc library chain
+(Conc/{Word,WeakWord,LockRules,Lock,LockBase,Csl,Own,Witness}) and Sep/{Block,Triple}. What is left of
+the goal, in order:
 
-1. **RwLock cluster.** An `RwLockImpl` contract with `Io.RwLock` as its instance, over `SemImpl`
-   ([#575](https://github.com/riventic/air2lean/pull/575)) and `MutexImpl`; then RwLockContract
-   and RwLockSnapshotPair as its clients, and `Contracts.RwContract`. Codex draft
-   [#637](https://github.com/riventic/air2lean/pull/637). This frees Semaphore, Sync/Lock and
-   Conc/Witness.
-2. **Conc library chain.** The legacy part of Conc/Word, then LockRules → Lock → Csl → Own, each
-   after its last importer.
-3. **Stage D-e.** Sep/{Block,Triple}, with the strength log kept compiled until that final PR.
+1. **RwLock clients.** `rwLockRead` and `rwLockSnapshotPair` as clients of `RwLockImpl`
+   (`Sync.ioRwLock` is its `Io.RwLock` instance, over `SemImpl` and `MutexImpl`), statements
+   unchanged.
+2. **The last `legacy-to-retire` entries.** 12 judgments (`StepIn`, `Grows`, the `Conc/Total` and
+   `TimedBudget` judgments, test fixtures) and the tactics below
+   ([legacy-retirement](docs/legacy-retirement.md), section 5).
+3. **Stage D-e, final step.** The strength log (`tests/roadmap/strength-log/`, `Full/Strength`) is
+   kept compiled until that final PR; it writes each legacy statement out and imports no legacy
+   module.
 4. **Legacy tactics.** `unroll_sched` and `ZigLean/Conc/Unroll` are deleted (L17).
    `within` and `when_defined` keep their recorded plans (`when_defined` retires with
    engine-ledger row case-family-enrollment).

@@ -1944,18 +1944,12 @@
       ],
       "reference_gen": null,
       "proof_modules": [
-        "Proofs.Sync.Contracts",
         "Proofs.Sync.Gen",
         "Proofs.Sync.Handoff",
-        "Proofs.Sync.Lock",
         "Proofs.Sync.Mailbox",
         "Proofs.Sync.Mutex",
         "Proofs.Sync.Proofs",
-        "Proofs.Sync.RwLock",
-        "Proofs.Sync.RwLockContract",
-        "Proofs.Sync.RwLockSnapshotPair",
         "Proofs.Sync.SemCounter",
-        "Proofs.Sync.Semaphore",
         "Proofs.Sync.SnapshotCache"
       ],
       "budget": {
@@ -2040,11 +2034,6 @@
           }
         },
         "modules": {
-          "Proofs.Sync.Contracts": {
-            "baseline_seconds": 5.8248,
-            "baseline_ratio": 0.787,
-            "max_ratio": 1.787
-          },
           "Proofs.Sync.Gen": {
             "baseline_seconds": 4.2253,
             "baseline_ratio": 0.571,
@@ -2070,25 +2059,10 @@
             "baseline_ratio": 1.156,
             "max_ratio": 2.313
           },
-          "Proofs.Sync.RwLock": {
-            "baseline_seconds": 28.4093,
-            "baseline_ratio": 3.839,
-            "max_ratio": 7.678
-          },
-          "Proofs.Sync.RwLockSnapshotPair": {
-            "baseline_seconds": 10.1718,
-            "baseline_ratio": 1.375,
-            "max_ratio": 2.749
-          },
           "Proofs.Sync.SemCounter": {
             "baseline_seconds": 26.4403,
             "baseline_ratio": 3.573,
             "max_ratio": 7.146
-          },
-          "Proofs.Sync.Semaphore": {
-            "baseline_seconds": 31.5607,
-            "baseline_ratio": 4.265,
-            "max_ratio": 8.53
           },
           "Proofs.Sync.SnapshotCache": {
             "baseline_seconds": 16.3468,
