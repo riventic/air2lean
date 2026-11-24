@@ -31,12 +31,12 @@ theorem Mem.heap_eq_of_norm {m m' : Mem} {b : BlockId} {S : Nat} {K : BlockKind}
     | none => rw [e, e'] at hn; cases hn
     | some c' =>
       rw [e, e'] at hn
-      obtain ⟨k, hk0, -, -, rfl⟩ := Mem.heap_some e
-      obtain ⟨k', hk0', -, -, rfl⟩ := Mem.heap_some e'
-      rw [hb] at hk0; cases hk0
-      rw [hb'] at hk0'; cases hk0'
-      simp only [Option.map_some, Option.some.injEq, Cell.norm, Cell.mk.injEq] at hn
-      simp only [Option.some.injEq, Cell.mk.injEq]
+      obtain ⟨k, hk0, _, _, hc⟩ := Mem.heap_some e
+      obtain ⟨k', hk0', _, _, hc'⟩ := Mem.heap_some e'
+      obtain rfl : blk = k := Option.some.inj (hb.symm.trans hk0)
+      obtain rfl : blk' = k' := Option.some.inj (hb'.symm.trans hk0')
+      rw [hc, hc'] at hn ⊢
+      simp only [Option.map_some, Option.some.injEq, Cell.norm, Cell.mk.injEq] at hn ⊢
       exact ⟨hn.1, hn.2.1, by rw [hs', hs], by rw [hk', hk]⟩
 
 namespace Full
