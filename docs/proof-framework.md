@@ -44,13 +44,14 @@ proof framework").
 * `legacy_users`: every Lean file that imports a module of the legacy logic or names a legacy
   triple;
 * `tactic_uses`: per file and per tactic, the number of uses of every tactic with kind `syntax` and
-  status `legacy-to-retire` (`within`, …), found as a word match in
+  status `legacy-to-retire`, found as a word match in
   the code outside comments and strings. Declaring such a tactic is gated by `tactics`; this list
-  gates building new proofs on it, so a new file cannot import `ZigLean.Sep.Full.Extent` and call
-  `within` without a reviewed addition. A new file or a rising count fails, also against the
+  gates building new proofs on it, so a new file cannot import the tactic's module and call
+  it without a reviewed addition. A new file or a rising count fails, also against the
   base (unless the entry records `"approved"`); a falling count is stale (`--write` lowers it).
-  A local name equal to a retiring tactic (`let within := …`) also counts, a conservative
-  over-approximation.
+  A local name equal to a retiring tactic also counts, a conservative over-approximation. The
+  list is empty: the last such tactic, `within` of `ZigLean.Sep.Full.Extent`, is deleted (its
+  uses are `fsym_entail` on the `Within X P` goal).
 
 Status is `target` (the framework above) or `legacy-to-retire`. The check fails on anything new
 and on entries that no longer exist (delete them: the file is exact). Against the base branch the
@@ -85,6 +86,7 @@ postcondition, which neither an implication nor the model's own result alone sta
 | `sep_step`, `sep_steps`, `sep_unfold`, `sep_intro`, `sep_ret`, `sep_close`, `sep_split` | `Sep/Step` (deleted, L6) | `fsym` |
 | `sep_normalize`, `sep_frame` | `Sep/Automation` (deleted, L6 D-b) | `fsym` (frame inference is the planner) |
 | `sep_from`, `tame_prim`, `tame` | `Sep/AllocSpec/Wrappers` (deleted, L6 D-b), `Full/Tame` (`tame` deleted, L16) | native `@[fsym]` rules (no lifting) |
+| `within` | `Full/Extent` (deleted, engine-ledger row 9) | `fsym_entail` on the goal `Within X P` |
 | `conc_norm` | `Full/Conc` (`conc_norm` deleted, L16) | `fsym_norm` (`gen_norm` of `Sep/AllocSpec/Norm` is deleted: its lemmas are in `fsym_norm`) |
 | `unroll_solo` | `Full/Unroll` (module deleted, L16) | the partial fixpoints' defining equations (`unfold`), then `decide +kernel` |
 | `loop_template(?)`, `dispatch_template(?)`, `rec_template(?)` | templates | `@[fsym]` loop, dispatch and call rules |
