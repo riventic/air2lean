@@ -61,7 +61,7 @@ theorem min_toNat (c : BitVec 32) :
   · have hn : (2147483647 : BitVec 32).toNat ≤ c.toNat := by simpa [BitVec.ule] using hle
     simp only [hle, ↓reduceIte]; rw [h2] at hn ⊢; omega
   · have hn : ¬ (2147483647 : BitVec 32).toNat ≤ c.toNat := by simpa [BitVec.ule] using hle
-    simp only [hle, ↓reduceIte]; rw [h2] at hn; omega
+    simp only [hle, Bool.false_eq_true, ↓reduceIte]; rw [h2] at hn; omega
 
 /-- **`Thread.Futex.wake(p, c)`** (Linux, `c ≠ 0`) at a live word `p`: the OS wake of up to
 `wakeLimit v` waiters at `p`'s private key, where `v = min(c, maxInt(i32))`; it returns after a
@@ -93,9 +93,9 @@ theorem wake_wp (hcost : P.cost = none) {t : ThreadId} {G : ThreadId → γ} {m 
         ConcM Tgt (BitVec 32)) Q' G' m' n' :=
     fun hq => WP.liftMem_pure
       (by rw [Zig.intCast_unsigned_widen _ 32 (by decide)]; rfl) rfl hq
-  have herrno : ∀ {j : Nat}, j ≤ 2 ^ 31 - 1 →
-      ∀ {Q' : os_linux_E__enum_1 → (ThreadId → γ) → Mem → Nat → Prop} {G' : ThreadId → γ}
-      {m' : Mem} {n' : Nat}, Q' os_linux_E__enum_1.SUCCESS G' m' n' →
+  have herrno : ∀ {j : Nat}
+      {Q' : os_linux_E__enum_1 → (ThreadId → γ) → Mem → Nat → Prop} {G' : ThreadId → γ}
+      {m' : Mem} {n' : Nat}, j ≤ 2 ^ 31 - 1 → Q' os_linux_E__enum_1.SUCCESS G' m' n' →
       P.WP t (ConcM.liftMem (StateT.lift (os_linux_errnoFromSyscall (BitVec.ofNat 64 j))) :
         ConcM Tgt os_linux_E__enum_1) Q' G' m' n' :=
     fun hj hq => WP.liftMem_pure (by rw [errno_count hj]; rfl) rfl hq
