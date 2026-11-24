@@ -43,4 +43,22 @@ abbrev freeAll.loop5.done (I : Zig.Full.FAllocInv) (φ : Zig.Full.Frac) (p : Zig
     (Zig.Full.vtR p0.vtable fns.toList) ⋆
     plain
 
+/-- The credit-mode invariant of `freeAll.loop5` (a walk that counts its steps, `loop_exact`): `freeAll.loop5.inv` without the plain mode, at the exact count `n` of the body runs left before the last one.
+`s0` holds the locals at loop entry. -/
+@[fsym_inv] def freeAll.loop5.credits.inv (inst0 : Lists.Open.Ext) (p0 : Lists.Open.mem_Allocator) (fns : Zig.VTableFns) (I : Zig.Full.FAllocInv) (φ : Zig.Full.Frac) (xs : List (BitVec 32)) (s0 : freeAllLocals) (s : freeAllLocals) (n : Nat) : FAssn :=
+  FAssn.ex fun ys : List (BitVec 32) => FAssn.ex fun zs : List (BitVec 32) =>
+    ⟪xs = ys.reverse ++ zs ∧
+      zs.length = n⟫ ⋆
+    listSegRev (Lists.Open.freeAll.loop5.done I φ) s0.p s.p ys ⋆
+    listSeg (Lists.Open.freeAll.loop5.node I φ) s.p none zs ⋆
+    I.own ⋆
+    (Zig.Full.vtR p0.vtable fns.toList)
+
+/-- The exit post of `freeAll.loop5.credits`: the loop exits with `r`, after all iterations. -/
+@[fsym_inv] def freeAll.loop5.credits.post (inst0 : Lists.Open.Ext) (p0 : Lists.Open.mem_Allocator) (fns : Zig.VTableFns) (I : Zig.Full.FAllocInv) (φ : Zig.Full.Frac) (xs : List (BitVec 32)) (s0 : freeAllLocals) (r : freeAllExit × freeAllLocals) : FAssn :=
+  ⟪r.1 = freeAllExit.br4⟫ ⋆
+    listSegRev (Lists.Open.freeAll.loop5.done I φ) s0.p none xs.reverse ⋆
+    I.own ⋆
+    (Zig.Full.vtR p0.vtable fns.toList)
+
 end Lists.Open

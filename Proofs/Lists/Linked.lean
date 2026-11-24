@@ -31,8 +31,9 @@ repetition folds the node it passed back into the invariant's lists. Each genera
 stated over its own node layout (`reverse.loop6.node`: `next` and an abstract rest, so `reverse`
 holds for every node with a `next` field; `sum.loop6.node`: `next`, the item and `X`), which `node`
 instantiates.
-`sum_exact` counts the steps by `FTotalTriple.loop_exact` over `sumInv`, whose step `fsym`
-walks. The program is `Proofs/Lists/Open.lean`, the translation in which the `Allocator`
+`sum_exact` counts the steps: its walk pays them with credits, so `fsym` takes the loop's
+generated credit-mode invariant (`sum.loop6.credits.inv`, at the exact count of the body runs
+left) and the counted loop rule `FTotalTriple.loop_exact`. The program is `Proofs/Lists/Open.lean`, the translation in which the `Allocator`
 parameter is an open interface; `push` and `freeAll`, which allocate and free nodes through it,
 are proved for every allocator in `Proofs/Lists/Alloc.lean`, with `X` the rest of each node's
 grant.
@@ -78,30 +79,11 @@ theorem reverse_spec (hd : Option Ptr) (xs : List (BitVec 32)) :
 
 /-! ## `sum` -/
 
-variable (X)
-
-/-- The invariant of `sum`: the visited prefix `ys` is a segment, the rest `zs` (`n` items) a list
-at the cursor, and the total so far is the sum of `ys`. -/
-def sumInv (hd : Option Ptr) (xs : List (BitVec 32)) (s : sumLocals) (n : Nat) : FAssn :=
-  FAssn.ex fun ys => FAssn.ex fun zs =>
-    ⟪xs = ys ++ zs ∧ zs.length = n ∧ s.s.toNat = (ys.map BitVec.toNat).sum⟫ ⋆
-      (lseg X hd s.p ys ⋆ list X s.p zs)
-
-def sumPost (hd : Option Ptr) (xs : List (BitVec 32)) (r : sumExit × sumLocals) : FAssn :=
-  ⟪r.1 = .br5 ∧ r.2.s.toNat = (xs.map BitVec.toNat).sum⟫ ⋆ list X hd xs
-
-variable {X}
-
-theorem sum_step (hd : Option Ptr) (xs : List (BitVec 32))
-    (htot : (xs.map BitVec.toNat).sum < 2 ^ 64) (s : sumLocals) (n : Nat) :
-    FTotalTriple (sumInv X hd xs s n ⋆ credits 1) (sum.loop6.run s)
-      (fun r => floopExact sum.again6 (sumInv X hd xs) (sumPost X hd xs) n r ⋆ spent 1) := by
-  unfold sum.loop6 sumInv
-  fsym [listSeg_snoc_upd]
-
 /-- **The generated loop of `sum` with its exact step count**: from the list's head and a zero
 total it exits with the sum after `xs.length + 1` body runs (one per node and the final null
-test), paid by as many credits and returning as many receipts. -/
+test), paid by as many credits and returning as many receipts. The loop is walked by `fsym` from
+its generated credit-mode invariant (`sum.loop6.credits.inv`, `Proofs/Lists/OpenInv.lean`), by
+the counted loop rule `FTotalTriple.loop_exact`. -/
 theorem sum_loop_exact {mb : Lean.Order.MonoBind (MM sumLocals)} (hd : Option Ptr)
     (xs : List (BitVec 32)) (htot : (xs.map BitVec.toNat).sum < 2 ^ 64) (s : sumLocals)
     (hs : s.s = 0) (hp : s.p = hd) :
@@ -109,13 +91,11 @@ theorem sum_loop_exact {mb : Lean.Order.MonoBind (MM sumLocals)} (hd : Option Pt
       ((@Zig.loop (MM sumLocals) _ _ mb _ sum.loop6 sum.again6).run s)
       (fun r => (FAssn.ex fun t : sumLocals =>
         ⟪r = (.br5, t) ∧ t.s.toNat = (xs.map BitVec.toNat).sum⟫ ⋆ list X hd xs) ⋆
-          spent (xs.length + 1)) :=
-  (FTotalTriple.loop_exact (sum_step (X := X) hd xs htot) s xs.length).conseq
-    (fun _ h => sep_mono_left (fun _ h => ⟨[], xs, sep_lift.mpr ⟨⟨rfl, rfl, by simp [hs]⟩,
-      sep_lift.mpr ⟨hp.symm, by rwa [hp]⟩⟩⟩) h)
-    fun ⟨e, t⟩ _ h => sep_mono_left (fun _ h => by
-      obtain ⟨⟨he, ht⟩, h⟩ := sep_lift.mp h
-      exact ⟨t, sep_lift.mpr ⟨⟨by simp only at he; rw [he], ht⟩, h⟩⟩) h
+          spent (xs.length + 1)) := by
+  obtain ⟨t, p⟩ := s
+  obtain rfl : t = 0 := hs
+  obtain rfl : p = hd := hp
+  fsym [listSeg_snoc_upd]
 
 /-- **`sum`** returns the sum of the list's items and leaves the list unchanged, if the sum fits
 in a `u64` (in the plain mode; the loop by its registered invariant). -/
@@ -134,7 +114,7 @@ theorem sum_exact (hd : Option Ptr) (xs : List (BitVec 32))
       (fun r => (⟪r = BitVec.ofNat 64 (xs.map BitVec.toNat).sum⟫ ⋆ list X hd xs) ⋆
         spent (xs.length + 1)) := by
   unfold sum
-  fsym [sum_loop_exact (htot := htot)]
+  fsym [listSeg_snoc_upd]
 
 /-! ## Admissible inputs -/
 

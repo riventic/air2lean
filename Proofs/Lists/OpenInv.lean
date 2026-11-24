@@ -57,4 +57,21 @@ abbrev sum.loop6.node (X : Zig.Ptr → FAssn) (p : Zig.Ptr) (v : BitVec 32) (q :
     listSeg (Lists.Open.sum.loop6.node X) s0.p none xs ⋆
     plain
 
+/-- The credit-mode invariant of `sum.loop6` (a walk that counts its steps, `loop_exact`): `sum.loop6.inv` without the plain mode, at the exact count `n` of the body runs left before the last one.
+`s0` holds the locals at loop entry. -/
+@[fsym_inv] def sum.loop6.credits.inv (X : Zig.Ptr → FAssn) (xs : List (BitVec 32)) (s0 : sumLocals) (s : sumLocals) (n : Nat) : FAssn :=
+  FAssn.ex fun ys : List (BitVec 32) => FAssn.ex fun zs : List (BitVec 32) =>
+    ⟪xs = ys ++ zs ∧
+      zs.length = n ∧
+      s.s.toNat = s0.s.toNat + (ys.map BitVec.toNat).sum ∧
+      s0.s.toNat + (xs.map BitVec.toNat).sum < 2 ^ 64⟫ ⋆
+    listSeg (Lists.Open.sum.loop6.node X) s0.p s.p ys ⋆
+    listSeg (Lists.Open.sum.loop6.node X) s.p none zs
+
+/-- The exit post of `sum.loop6.credits`: the loop exits with `r`, after all iterations. -/
+@[fsym_inv] def sum.loop6.credits.post (X : Zig.Ptr → FAssn) (xs : List (BitVec 32)) (s0 : sumLocals) (r : sumExit × sumLocals) : FAssn :=
+  ⟪r.1 = sumExit.br5 ∧
+      r.2.s.toNat = s0.s.toNat + (xs.map BitVec.toNat).sum⟫ ⋆
+    listSeg (Lists.Open.sum.loop6.node X) s0.p none xs
+
 end Lists.Open

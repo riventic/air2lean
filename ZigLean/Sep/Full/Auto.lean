@@ -7122,9 +7122,15 @@ where
 /-- The backend's loop rule (`Full/Loop`, `Full/ThreadLoop`, `Conc`): with a measure in a total
 logic (`!L.part`), else partial correctness. `none` in a logic that is not one of the backends'
 constants (a proof over a variable `FLogic`). `ghost`: an invariant with a ghost measure
-(`B.inv … s n`), by `loop_ghost_ex` in a total logic. -/
-def loopRuleOf (L : Bk) (ghost := false) : Option Name :=
-  if L.conc then some ``CTriple.loop
+(`B.inv … s n`), by `loop_ghost_ex` in a total logic. In the credit mode: the backend's counted
+loop rule (`ZigLean/Sep/Full/Cost.lean`, named here without importing it: a proof that counts
+steps imports it), which only the sequential total logic and `CTriple` have. -/
+def loopRuleOf (L : Bk) (ghost := false) (mode : LoopMode := .plain) : Option Name :=
+  if mode == .credits then
+    if L.conc then some `Zig.Full.CTriple.loop_exact
+    else if L.L.isConstOf ``FLogic.total then some `Zig.Full.FTotalTriple.loop_exact
+    else none
+  else if L.conc then some ``CTriple.loop
   else if L.L.isConstOf ``FLogic.total then
     some (if ghost then ``FTotalTriple.loop_ghost_ex else ``FTotalTriple.loop_measure)
   else if L.L.isConstOf ``FLogic.partial then some ``FTriple.loop
@@ -7143,19 +7149,43 @@ structure RegLoop where
   post? : Option Name
   /-- `B.inv … s n`: the locals followed by a ghost measure `n : Nat` (no `B.meas`). -/
   ghost : Bool
+  /-- The walk's mode at the loop, whose registrations these are (`loopModeOf`). -/
+  mode : LoopMode := .plain
 
-/-- The command `(Zig.loop (B xs) again).run s₀` with a registered invariant (`@[fsym_inv]`). -/
-def registeredLoop? (x : Expr) : MetaM (Option RegLoop) := do
+/-- **The mode of a walk at a loop**, read off the state `P` there: the credit mode if `P` holds
+credits (`credits n`) and no plain mode (`plain`, `unmetered`), else the plain mode. This is what
+decides a step (`Zig.tick`): with the plain mode it needs no credit (`tick_plain`), and without it
+only a credit pays it (`tick_credit`). -/
+def loopModeOf (P : Expr) : LoopMode :=
+  let as := atoms P
+  let has (c : Name) (n : Nat) := as.any (·.isAppOfArity c n)
+  if has ``Zig.Full.credits 1 && !has ``Zig.Full.plain 0 && !has ``Zig.Full.unmetered 0 then .credits
+  else .plain
+
+/-- The command `(Zig.loop (B xs) again).run s₀` with a registered invariant (`@[fsym_inv]`) of
+the mode of the state `P` (`loopModeOf`). A walk in the credit mode at a loop that registers only
+its plain-mode invariant is an error (fail closed: the plain-mode invariant holds the plain mode,
+which a counted walk does not have, and no other reading of it is taken). -/
+def registeredLoop? (x P : Expr) : MetaM (Option RegLoop) := do
   let x := x.consumeMData
   unless x.isAppOfArity ``StateT.run 5 do return none
   let l := (x.getArg! 3).consumeMData
   unless l.isAppOfArity ``Zig.loop 7 do return none
   let some B := (l.getArg! 5).consumeMData.getAppFn.constName? | return none
-  let (some inv, meas?, post?) := loopInvOf (← getEnv) B | return none
+  let mode := loopModeOf P
+  let (some inv, meas?, post?) := loopInvOf (← getEnv) B mode | do
+    if mode == .credits then
+      if let (some plainInv, _, _) := loopInvOf (← getEnv) B then
+        throwError "fsym: the state at the loop of `{B}` holds credits and no plain mode (a walk \
+          that counts its steps), and `{B}` registers only its plain-mode invariant `{plainInv}` \
+          (`@[fsym_inv]`). Register its credit-mode invariant `{LoopMode.credits.name B "inv"}` \
+          (with its exact count as last parameter) and exit post \
+          `{LoopMode.credits.name B "post"}`, or pass the loop's rule to `fsym`.{indentExpr x}"
+    return none
   -- (the registration's test, `checkLoopInv`)
   let σ ← inferType (x.getArg! 4)
   let ghost ← forallTelescope (← inferType (mkConst inv)) fun ys _ => isGhostInv ys (some σ)
-  return some { loop := l, body := B, inv, meas?, post?, ghost }
+  return some { loop := l, body := B, inv, meas?, post?, ghost, mode }
 
 /-- **A loop with a registered invariant** (`@[fsym_inv]`, P09-E4): the command
 `(Zig.loop (B xs) again).run s₀` of `x >>= f` by the backend's loop rule (`loopRuleOf`) with the
@@ -7175,10 +7205,18 @@ A registration that does not fit the loop (no measure in a total logic, a parame
 that `B.inv` does not have) is an error. -/
 def loopInvRule? (g : MVarId) (L : Bk) (lem : Name) (R : RegLoop) (x f : Expr) :
     TacticM (Except MessageData (MVarId × MVarId × List MVarId × Option MVarId)) := g.withContext do
-  let { loop := l, body := B, inv := invN, meas? := measN?, post? := postN?, ghost } := R
+  let { loop := l, body := B, inv := invN, meas? := measN?, post? := postN?, ghost, mode } := R
   let (body, s₀) := ((l.getArg! 5).consumeMData, x.consumeMData.getArg! 4)
   let fail {α} (why : MessageData) : TacticM α :=
     throwError "fsym: the loop invariant of `{B}` (`@[fsym_inv]`): {why}"
+  -- The credit mode: the counted loop rule `loop_exact` takes the invariant over the locals and
+  -- its exact count (`B.credits.inv … s n`: both the rule's, so no `∃ n` and no measure) and
+  -- the exit post, and adds the credits `credits (n + 1)` and the receipts itself.
+  let counted := mode == .credits
+  if counted then
+    unless ghost do fail m!"`{invN}` does not end in its exact count (`… s n`)"
+    unless (← getEnv).contains lem do
+      fail m!"the counted loop rule `{lem}` is not imported (`ZigLean.Sep.Full.Cost`)"
   let total := !L.part
   -- (a ghost measure is the invariant's last parameter: the rule has no `μ`)
   let measured := total && !ghost
@@ -7215,7 +7253,7 @@ def loopInvRule? (g : MVarId) (L : Bk) (lem : Name) (R : RegLoop) (x f : Expr) :
       catch _ => fail m!"`{c}`'s parameters do not have the types of `{invN}`'s of the same names"
     let I := mkAppN (mkConst invN) pre
     -- (a ghost measure in a partial logic: the invariant at some measure, `∃ n, B.inv … s n`)
-    let I ← if ghost && !total then
+    let I ← if ghost && !total && !counted then
         withLocalDeclD `s σ fun sv => do
           mkLambdaFVars #[sv] (mkApp2 (mkConst exN) (mkConst ``Nat) (mkApp I sv))
       else pure I
@@ -7224,15 +7262,29 @@ def loopInvRule? (g : MVarId) (L : Bk) (lem : Name) (R : RegLoop) (x f : Expr) :
     let post ← match postN? with
       | some p => atParams p
       | none => do
+        -- (the counted rule's step states the exit under its count, `floopExact`: its post is
+        -- registered, not inferred)
+        if counted then
+          fail m!"no exit post `{mode.name B "post"}` is registered for the credit mode"
         let E ← mkFreshExprMVar (← mkArrow (← mkAppM ``Prod #[l.getArg! 4, σ]) (mkConst ``Zig.Full.FAssn))
         (← caches).inferPosts.modify (·.push E.mvarId!)
         pure E
     -- the rule `lem I μ post ?step s₀`: the loop rules' last parameters are `I`, `μ` (total only,
-    -- not with a ghost measure: `loop_ghost_ex`), `post`, `step` and `s`
+    -- not with a ghost measure: `loop_ghost_ex`), `post`, `step` and `s`; the counted rules'
+    -- (`loop_exact`) are found by their names `inv`, `post`, `step` and `s`
     let lemC ← mkConstWithFreshMVarLevels lem
-    let (lms, _, concl) ← forallMetaTelescope (← inferType lemC)
+    let lemTy ← inferType lemC
+    let (lms, _, concl) ← forallMetaTelescope lemTy
     let n := lms.size
-    let mut data : Array (Expr × Nat) := #[(I, n - 4 - measured.toNat), (post, n - 3), (s₀, n - 1)]
+    let (iInv, iPost, iStep, iS) ← if counted then do
+        let bn := lemTy.getForallBinderNames.toArray
+        let at_ (y : Name) : TacticM Nat := do
+          let some i := bn.findIdx? (· == y) | fail m!"`{lem}` has no parameter {y}"
+          unless i < n do fail m!"`{lem}` has no parameter {y}"
+          return i
+        pure (← at_ `inv, ← at_ `post, ← at_ `step, ← at_ `s)
+      else pure (n - 4 - measured.toNat, n - 3, n - 2, n - 1)
+    let mut data : Array (Expr × Nat) := #[(I, iInv), (post, iPost), (s₀, iS)]
     if measured then
       let some measN := measN? | fail m!"no measure `{B}.meas` for total correctness"
       data := data.push (← atParams measN, n - 4)
@@ -7240,8 +7292,8 @@ def loopInvRule? (g : MVarId) (L : Bk) (lem : Name) (R : RegLoop) (x f : Expr) :
       unless ← isDefEq lms[i]! e do fail m!"`{lem}` does not take{indentExpr e}"
     let some (_, cmd) := ruleConcl? (← whnfR concl) | fail m!"`{lem}` is not a loop rule"
     unless ← isDefEq cmd x do fail m!"`{lem}`'s command does not unify with{indentExpr x}"
-    let step ← mkFreshExprSyntheticOpaqueMVar (← instantiateMVars (← inferType lms[n - 2]!))
-    lms[n - 2]!.mvarId!.assign step
+    let step ← mkFreshExprSyntheticOpaqueMVar (← instantiateMVars (← inferType lms[iStep]!))
+    lms[iStep]!.mvarId!.assign step
     let some (k, left) ← tryRule g (← instantiateMVars (mkAppN lemC lms)) x f (keepPre := true) | do
       rollback; return .error m!"`{invN}` has no plan in the state at the loop's entry"
     for h : i in [0:pre.size] do
@@ -7696,15 +7748,26 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
   -- precondition wanted; the body's step and the rest walked as branches. An invariant with no
   -- plan at the entry: after the views and the rebase of what its plan wanted, reported.
   -- (a proof over a variable logic has no loop rule: the loop stays a residual)
-  let loop? ← if partialRule then pure none else registeredLoop? x
-  if let (some R, some lem) := (loop?, loopRuleOf L (loop?.any (·.ghost))) then
+  -- The registrations are those of the walk's mode at the loop (`loopModeOf`: the credit mode
+  -- when the state holds credits and no plain mode). A credit-mode walk never takes a plain-mode
+  -- invariant, and a logic without a counted loop rule is an error there, not a residual.
+  let loop? ← if partialRule then pure none else registeredLoop? x P
+  let lem? := loop?.bind fun R => loopRuleOf L R.ghost R.mode
+  if let some R := loop? then
+    if R.mode == .credits && lem?.isNone then
+      throwError "fsym: the loop of `{R.body}` is walked in the credit mode (the state holds \
+        credits and no plain mode), and this logic has no counted loop rule (`loop_exact`: \
+        `FTotalTriple`, `CTriple`){indentExpr x}"
+  if let (some R, some lem) := (loop?, lem?) then
     if !wanted.isEmpty then
       if let some r ← viewed wanted then return r
     match ← reportLimit m!"the registered invariant of the loop{indentExpr x}"
         (loopInvRule? g L lem R x f) with
     | .ok (k, step, left, exit?) =>
-      -- (the step: `∀ s`, `∀ s n` with a ghost measure in a total logic)
-      let (_, step) ← step.introN (if R.ghost && !L.part then 2 else 1) [`s, `n]
+      -- (the step: `∀ s`, `∀ s n` with a ghost measure in a total logic or with the exact count
+      -- of the credit mode)
+      let (_, step) ← step.introN
+        (if R.mode == .credits || (R.ghost && !L.part) then 2 else 1) [`s, `n]
       -- An unknown exit post: the join of the step's exits, before the continuation's walk,
       -- only if the step's walk closed every path (each exit it reaches is noted). A step that
       -- stopped, or a join that does not fit, leaves it unknown and stops the continuation. A
