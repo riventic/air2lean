@@ -3717,6 +3717,16 @@ def checkOsCall (f : Func) (callee : String) (fn : OsFn) (args : Array Val) (ret
         c == isConst && child ch && !l.isVolatile && !l.allowzero && l.hostSize == 0
       | _, _ => false
     | none => false
+  -- The Linux futex rows' address/op/value: 0.15.2 on `*const anyopaque`, `FUTEX_OP`, `u32`;
+  -- 0.14.1 `*const i32`, `u32`, `i32`.
+  let futexArgs (packedOp : Bool) : Bool :=
+    if packedOp then plainPtr (argId 0) true anyopaque && packed32 1 && int32 false 2
+    else plainPtr (argId 0) true (fun t => f.types[t]? == some (.int true 32)) && int32 false 1 &&
+      int32 true 2
+  -- libc's ulock rows' `UL`, `?*const anyopaque`, `u64`.
+  let ulockArgs : Bool := packed32 0 && (match argTy 1 with
+    | some (.optional p) => plainPtr (some p) true anyopaque
+    | _ => false) && argTy 2 == some (.int false 64)
   match fn with
   | .mmap =>
     require (args.size == 6) "argument count"
@@ -3754,10 +3764,7 @@ def checkOsCall (f : Func) (callee : String) (fn : OsFn) (args : Array Val) (ret
   | .futex4 | .futexWaitRaw =>
     require (f.targetOs == "linux") "Linux-only os.linux"
     require (args.size == 4) "argument count"
-    -- 0.15.2 on: `*const anyopaque`, `FUTEX_OP`, `u32`; 0.14.1: `*const i32`, `u32`, `i32`.
-    require (if fn == .futex4 then plainPtr (argId 0) true anyopaque && packed32 1 && int32 false 2
-      else plainPtr (argId 0) true (fun t => f.types[t]? == some (.int true 32)) && int32 false 1 &&
-        int32 true 2) "address/op/value"
+    require (futexArgs (fn == .futex4)) "address/op/value"
     require (match argTy 3 with
       | some (.optional p) => plainPtr (some p) true timespec
       | _ => false) "?*const timespec timeout"
@@ -3765,11 +3772,20 @@ def checkOsCall (f : Func) (callee : String) (fn : OsFn) (args : Array Val) (ret
   | .ulockWait2 | .ulockWait =>
     require (f.targetOs == "macos") "macOS libc"
     require (args.size == (if fn == .ulockWait2 then 5 else 4)) "argument count"
-    require (packed32 0 && (match argTy 1 with
-      | some (.optional p) => plainPtr (some p) true anyopaque
-      | _ => false) && argTy 2 == some (.int false 64)) "UL/?*const anyopaque/u64"
+    require ulockArgs "UL/?*const anyopaque/u64"
     require (if fn == .ulockWait2 then argTy 3 == some (.int false 64) && argTy 4 == some (.int false 64)
       else int32 false 3) "timeout"
+    require cIntRet "c_int result"
+  -- OSF-02: the futex wake.
+  | .futex3 | .futexWakeRaw =>
+    require (f.targetOs == "linux") "Linux-only os.linux"
+    require (args.size == 3) "argument count"
+    require (futexArgs (fn == .futex3)) "address/op/value"
+    require usizeRet "usize result"
+  | .ulockWake =>
+    require (f.targetOs == "macos") "macOS libc"
+    require (args.size == 3) "argument count"
+    require ulockArgs "UL/?*const anyopaque/u64"
     require cIntRet "c_int result"
 
 /-- Recognized model names still require the runtime signature the emitter applies.

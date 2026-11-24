@@ -127,14 +127,15 @@ def ulockMismatch : List String :=
 #guard outcomes noKids (do let p ← word 0; Darwin.__ulock_wait2 0x01000001 (some p) 0 0 1) hex32 ==
   ["Zig.Error.unspecified"]
 -- macOS address validation (S6, `sys_ulock.c`): a null or unaligned WAIT and a null WAKE are
--- EINVAL; an unaligned WAKE finds no waiter at its key (ENOENT, or a spurious EINTR).
+-- EINVAL; an unaligned WAKE finds no waiter at its key (ENOENT, or 0 if the key's `ull` is still
+-- alive, or a spurious EINTR).
 #guard outcomes noKids (Darwin.__ulock_wait2 0x01000001 none 0 0 0) hex32 == ["-22"]
 #guard outcomes noKids (Darwin.__ulock_wait2 0x01000001 (some ⟨none, 0⟩) 0 0 0) hex32 == ["-22"]
 #guard outcomes noKids (do let p ← word 0; Darwin.__ulock_wait2 0x01000001 (some (p.add 1)) 0 0 0)
   hex32 == ["-22"]
 #guard outcomes noKids (Darwin.__ulock_wake 0x01000001 none 0) hex32 == ["-22"]
 #guard outcomes noKids (do let p ← word 0; Darwin.__ulock_wake 0x01000001 (some (p.add 1)) 0)
-  hex32 == ["-2", "-4"]
+  hex32 == ["-2", "-4", "0"]
 
 /-! ## Linux numeric alignment and validation order -/
 
@@ -257,9 +258,11 @@ def twoWaiters : Mem := { waiters := #[(1, k0), (2, k0), (3, ⟨false, 8192⟩)]
 -- Linux FUTEX_WAKE with nobody waiting wakes 0; `val = 0` still wakes one (kernel `nr_wake`).
 #guard outcomes noKids (do let p ← word 0; Linux.futex_3arg p 0x81 1) hex64 == ["0"]
 #guard Linux.wakeLimit 0 == 1 && Linux.wakeLimit 0xffffffff == 1 && Linux.wakeLimit 3 == 3
--- macOS: nobody waiting is -ENOENT; a spurious -EINTR is allowed.
+-- macOS: a wake of nobody is -ENOENT, or 0 while the key's `ull` lives (xnu `ulock_wake`: a
+-- wake after its waiters were woken but before they ran; the model tracks no `ull`, so the oracle
+-- picks); a spurious -EINTR is allowed.
 #guard outcomes noKids (do let p ← word 0; Darwin.__ulock_wake 0x01000001 (some p) 0) hex32 ==
-  ["-2", "-4"]
+  ["-2", "-4", "0"]
 
 -- The wake count (audit soundness-2026-10-14 §S5). Std's `wake(p, n)` on macOS sets `WAKE_ALL`
 -- for `n > 1`: with three threads asleep, `wake(p, 2)` wakes all three, under every choice of the
