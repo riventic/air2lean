@@ -48,6 +48,10 @@ decided 2026-11-24).
 
 `Base.fits` puts them together: the reader/writer protocol `FRw.Fits` for every client whose
 invariant is the two-lock product at the base.
+
+A read of the program's read-shared bytes is proved once: the base over the read's record
+(`Base.read`), the two-lock product at the base over it (`Base.readU`), and the read under the
+protocol (`Base.wp_readIo`, from `FLock.Fits.wp_readRest`).
 -/
 
 namespace Zig
@@ -1257,6 +1261,119 @@ theorem upost {t : ThreadId} {g : γ} {h₁ h₂ r₀ : Res} {rc sh sc} (hw : W.
 
 end
 
+/-! ## A read of the program's read-shared bytes
+
+A thread reads bytes of the program's read-shared region (`E.Io`; the `io` prefix of a shared
+object) at any place: the bytes are cells of the rest and none of the lock's (`hIo`), so the
+record is a step in every frame without them. -/
+
+/-- The block of the program's read-shared bytes exists: the rest has their cells, and its bytes
+are live (`live`). -/
+theorem io_blk {b : BlockId} {o n : Nat} (hu : W.Base E Sz K G rX m)
+    (hin : ∀ r, E.Io r → ∀ x, o ≤ x → x < o + n → r.heap (b, x) ≠ none) (hn : 0 < n) :
+    b < m.blocks.size := by
+  obtain ⟨r, hr, hsub⟩ := hu.cl.io
+  obtain ⟨fc, hfc⟩ := Option.ne_none_iff_exists'.mp (hin r hr o (Nat.le_refl _) (by omega))
+  have hl := hu.live (b, o) (Res.owned_of_heap (by rw [hsub _ _ hfc]; nofun))
+  exact Classical.byContradiction fun hge => hl (by
+    simp [Mem.heap, Array.getElem?_eq_none (Nat.le_of_not_lt hge)])
+
+/-- **The record of a read of the program's read-shared bytes keeps the base**: every resource
+with `E.Io` has the read's bytes (`hin`). The program's facts by `FClient.Holds.read`; the three
+words stay valid with their histories (`Word.Ok.fstep` in the frame of their cells), the rwlock's
+invariant by `Inv.keep` (the free resource has none of the bytes, `FreeRes.owned_none`), and the
+condition's and the semaphore's by `FCond.Inv.stay` and `FSem.Inv.mono`. -/
+theorem read {b : BlockId} {o n : Nat} (hu : W.Base E Sz K G rX m)
+    (hIo : ∀ r l, E.Io r → W.Lk l → r.heap l = none)
+    (hin : ∀ r, E.Io r → ∀ x, o ≤ x → x < o + n → r.heap (b, x) ≠ none)
+    (ht : m.current < m.threads.size) (hcs : m.clocks.size = m.threads.size)
+    (hn : 0 < n) : W.Base E Sz K G rX (m.recordAt b o n .read) := by
+  have hb := hu.io_blk hin hn
+  obtain ⟨⟨hC, hW⟩, hS⟩ := hu.sub
+  obtain ⟨r, hr, hsub⟩ := hu.cl.io
+  have hnl : ∀ x, o ≤ x → x < o + n → ¬ W.Lk (b, x) := fun x h1 h2 hk => by
+    obtain ⟨fc, hfc⟩ := Option.ne_none_iff_exists'.mp (hin r hr x h1 h2)
+    rw [hIo r _ hr hk] at hfc; cases hfc
+  have hclk := Conc.recordAt_le m b o n .read
+  -- the record is a step in every frame without the read's bytes
+  have hfs : ∀ hF : Heap, (∀ x, o ≤ x → x < o + n → hF (b, x) = none) →
+      FStepIn hF m (m.recordAt b o n .read) := fun hF h =>
+    FStepIn.recordAt_of (hcs ▸ ht) h hb (fun h => nomatch h)
+  -- a word of the lock stays valid, with its history
+  have hword : ∀ {k nb : Nat} (V : Word k nb) {A : ThreadId → Prop}, V.Ok m A →
+      (∀ l, V.In l → W.Lk l) →
+      V.Ok (m.recordAt b o n .read) A ∧ V.hist (m.recordAt b o n .read) = V.hist m :=
+    fun V _ hok hV => by
+      have hs := hfs (V.cellsR m).owned fun x h1 h2 =>
+        cellsAt_owned_none fun hl => hnl x h1 h2 (hV _ hl)
+      have hcov : ∀ l, V.In l → (V.cellsR m).owned l ≠ none := fun l hl =>
+        Res.owned_of_heap (cellsAt_some hl (hok.cellIn hl))
+      exact ⟨hok.fstep hs hcov fun _ _ => rfl, Word.hist_fstep hok hs hcov fun _ _ => rfl⟩
+  obtain ⟨hstO, hstH⟩ := hword W.st hu.winv.ok fun _ h => .inl h
+  obtain ⟨hSO, hSH⟩ := hword C.S (hW C.S (.inl rfl)).1 fun _ h => .inr (.inl h)
+  obtain ⟨hEO, hEH⟩ := hword C.Ep (hW C.Ep (.inr rfl)).1 fun _ h => .inr (.inr (.inl h))
+  exact {
+    cl := hu.cl.read ht hcs b o n
+    winv := hu.winv.keep hstO hstH rfl rfl (fun _ => rfl) (fun _ => rfl) hu.winv.wm
+      fun rF rO he hfr how => by
+        have hF₁ : ∀ l, rF.owned l ≠ none → rX.owned l ≠ none := fun l h => by
+          rw [he]
+          exact (Res.owned_sep rfl rfl).mpr (.inr ((Res.owned_sep rfl rfl).mpr (.inl h)))
+        obtain ⟨hxc, -⟩ := hfr.bytes hu.winv.ex
+        exact how.stepIn
+          (hfs rF.owned fun x h1 h2 => hfr.owned_none fun xs r' hR =>
+            Classical.byContradiction fun hn => hnl x h1 h2 (.inr (.inr (.inr ⟨xs, r', hR, hn⟩))))
+          (fun _ h => h) (fun l h => hu.live l (hF₁ l h)) hstH (fun _ => rfl) (fun _ h => h)
+          (fun _ _ => rfl)
+          (fun ⟨u, hu'⟩ l => Classical.byContradiction fun h => by
+            have := (hxc l h).2 u; rw [hu'] at this; cases this)
+          fun _ _ hr => absurd rfl hr
+    sub := ⟨⟨hC.stay hSH hEH rfl rfl rfl (fun _ hw _ => hw) (fun _ _ h => h) (Nat.le_refl _) hclk,
+      fun V hV => by
+        obtain ⟨hok, rY, e, hY⟩ := hW V hV
+        rcases hV with rfl | rfl
+        · exact ⟨hSO, rY, e, hY⟩
+        · exact ⟨hEO, rY, e, hY⟩⟩,
+      hS.mono (fun _ => rfl) (fun _ => rfl) rfl hS.pst (fun _ h => .inl h) hclk (fun _ h => h) rfl
+        (fun _ h => h) (fun _ h => .inl h) rfl hSH⟩
+    win := hu.win.keep (fun _ => rfl) hSH hEH (hu.win.ehb.step
+      (fun _ hc => hc.mono (fun _ h => .inl h) hclk (fun _ h => h) rfl fun _ h => h)
+      (.inl hEH))
+    shares := hu.shares.congr (fun _ => rfl) (fun _ h => h) fun _ _ => rfl
+    pin := hu.pin
+    wt := hu.wt
+    nap := hu.nap
+    live := hu.live
+    rdm := hu.rdm
+    mal := hu.mal }
+
+/-- **The record of a read of the program's read-shared bytes keeps the outer mutex's rest**
+(`FLock.Fits.wp_readRest`'s `hrec` at the outer mutex's view): the semaphore's mutex's side has
+none of the bytes (it is apart from the common rest, and has no share), so the record is a step
+in its frame (`FLock.Pair.Keeps.stepIn`). -/
+theorem readU {b : BlockId} {o n : Nat} {rXA : Res}
+    (hU : FLock.Pair.U L (W.Base E Sz K) G rXA m)
+    (hIo : ∀ r l, E.Io r → W.Lk l → r.heap l = none)
+    (hin : ∀ r, E.Io r → ∀ x, o ≤ x → x < o + n → r.heap (b, x) ≠ none)
+    (ht : m.current < m.threads.size) (hcs : m.clocks.size = m.threads.size)
+    (hn : 0 < n) :
+    FLock.Pair.U L (W.Base E Sz K) G rXA (m.recordAt b o n .read) := by
+  obtain ⟨sB, rL, rH, rX, rfl, hsB, hk, hu⟩ := hU
+  have hb := hu.io_blk hin hn
+  obtain ⟨r, hr, hsub⟩ := hu.cl.io
+  have hside : ∀ x, o ≤ x → x < o + n → (FLock.side L m rL rH).owned (b, x) = none :=
+    fun x h1 h2 => by
+      obtain ⟨fc, hfc⟩ := Option.ne_none_iff_exists'.mp (hin r hr x h1 h2)
+      have h0 := (hk.side_disj (b, x)).resolve_right (by rw [hsub _ _ hfc]; nofun)
+      show (((FLock.side L m rL rH).heap (b, x)).map (·.cell)).or
+        (((FLock.side L m rL rH).gh.share (b, x)).cell.map (·.cell)) = none
+      rw [h0, hk.side_share (lR_share W _), SCell.cell_zero]; rfl
+  obtain ⟨-, hk'⟩ := FLock.Pair.Keeps.stepIn hk (G' := G) (rX' := rX)
+    (FStepIn.recordAt_of (kind := .read) (hcs ▸ ht) hside hb (fun h => nomatch h)) (fun _ h => h)
+    (fun _ _ => rfl) (fun _ _ => rfl) (fun _ => ⟨rfl, rfl⟩) (fun _ h => h) hk.facts.pdisj
+    hk.xdisj hk.xoff
+  exact ⟨sB, rL, rH, rX, rfl, hsB, hk', hu.read hIo hin ht hcs hn⟩
+
 /-! ## Liveness
 
 A writer asleep in the semaphore's wait holds the outer mutex at `holdsAway`. With the count `0`
@@ -1437,6 +1554,45 @@ theorem fits
       upost mph_s lph ph_l mph_set ph_mpart hw hu hS hC)
     (fun _ _ _ u hu h => hu.wt u h)
     (fun t G₁ m₁ hw _ _ hi _ _ hc0 => wlive inv hs kfin' kjoins' hnest hw hi hc0)
+
+/-- **A read of the program's read-shared bytes, for every client at the base**
+(`FLock.Fits.wp_readRest` at the outer mutex's view, with its obligations from the base): a thread
+that has not ended loads the value `v` that the region's bytes at `p` decode to (`hbytes`, for
+every resource with `E.Io`), where `E.Rg` covers the read (`hcov`). The bytes are in the rest
+(`cl`), the region is read-shared (`cl`), and the record keeps the rest (`readU`). -/
+theorem wp_readIo {US : (ThreadId → γ) → Res → Mem → Prop}
+    (hF : W.Fits P (FLock.Pair.U L (W.Base E Sz K)) US okM okS)
+    (hIo : ∀ r l, E.Io r → W.Lk l → r.heap l = none)
+    {T : Type} [Enc T] {p : Ptr} {b : BlockId} {a : Nat} {v : T} (hpb : p.block = some b)
+    (hn : 0 < Enc.size T)
+    (hbytes : ∀ r₀, E.Io r₀ → ∃ r A S K' bs, up (bytesAt p A S K' bs) r ∧
+      (∀ l fc, r.heap l = some fc → r₀.heap l = some fc) ∧ bs.size = Enc.size T ∧
+      Enc.decode bs = pure v ∧ (A + p.off.toNat) % a = 0 ∧ K' ≠ .constGlobal)
+    (hcov : Conc.Covers E.Rg b p.off.toNat (Enc.size T))
+    {G G' : ThreadId → γ} {t : ThreadId} {m : Mem} {d : Nat}
+    {Q : T → (ThreadId → γ) → Mem → Nat → Prop}
+    (hi : P.inv G' m) (hc : m.current = t) (hg : M.ph (G' t) ≠ .gone)
+    (h : ∀ m', m'.current = t → m'.threads = m.threads → P.inv G' m' → Q v G m' d) :
+    P.WP t (ConcM.liftMem (load T a p) : ConcM Tgt T) Q G m d := by
+  have hin : ∀ r₀, E.Io r₀ → ∀ x, p.off.toNat ≤ x → x < p.off.toNat + Enc.size T →
+      r₀.heap (b, x) ≠ none := fun r₀ h₀ x h1 h2 => by
+    obtain ⟨r, A, S, K', bs, hr, hsub, hbs, -⟩ := hbytes r₀ h₀
+    obtain ⟨fc, hfc⟩ := Option.ne_none_iff_exists'.mp
+      ((up_bytesAt_some hr hpb (b, x)).mpr ⟨rfl, h1, by rw [hbs]; exact h2⟩)
+    rw [hsub _ _ hfc]; nofun
+  exact hF.m.wp_readRest hpb hn
+    (fun G rXA m hU => by
+      obtain ⟨sB, rL, rH, rX, rfl, hsB, hk, hu⟩ := hU
+      obtain ⟨r₀, hr₀, hsub₀⟩ := hu.cl.io
+      obtain ⟨r, A, S, K', bs, hr, hsub, h3, h4, h5, h6⟩ := hbytes r₀ hr₀
+      refine ⟨r, A, S, K', bs, hr, fun l fc hl => ?_, h3, h4, h5, h6⟩
+      have hx := hsub₀ l fc (hsub l fc hl)
+      show (sB.heap l).or (rX.heap l) = some fc
+      rw [(hsB.disj hk.side_disj l).resolve_right (by rw [hx]; nofun), hx]; rfl)
+    (fun G rXA m hU => by
+      obtain ⟨_, _, _, _, _, _, _, hu⟩ := hU
+      exact hu.cl.sh)
+    hcov (fun G rXA m hU ht _ hcs => readU hU hIo hin ht hcs hn) hi hc hg h
 
 end
 

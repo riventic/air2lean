@@ -20,7 +20,8 @@ primitive's base carries them (`FRw.Base`'s `cl`) and a program proves no step l
 - `Holds.fstep`, `Holds.lstep`: the two step relations of the logic, an `FStepIn` whose frame has
   the rest's bytes out of `Lk`, and a step of a lock's code at its word.
 - `Holds.read`: the record of a read keeps the facts (`FLock.Fits.wp_readRest`'s `hrec`).
-- `FClient.none`: no facts (`none_holds`, `none_io`).
+- `FClient.none`: no facts (`none_holds`, `none_io`). `FClient.pre`: the read-shared prefix of a
+  shared object, the first `n` bytes of a block (`pre_covers`).
 -/
 
 namespace Zig
@@ -54,6 +55,26 @@ def none (X : Type) : FClient X where
   Io r := ∀ l, r.heap l = Option.none
   up _ _ _ h := h
   touch _ _ _ h := h.elim
+
+/-- **The read-shared prefix of a shared object**: the accesses that start in the first `n` bytes
+of block `b` (a zero-length access touches none), whose bytes every resource with `Io` has
+(`hio`). -/
+def pre (T : (ThreadId → X) → Array ThreadRec → Prop) (b : BlockId) (n : Nat) (Io : Res → Prop)
+    (hio : ∀ r, Io r → ∀ x, x < n → r.heap (b, x) ≠ Option.none) : FClient X where
+  T := T
+  Rg e := e.block = b ∧ 0 < e.len ∧ e.off < n
+  Io := Io
+  up e e₀ hn h := by
+    obtain ⟨-, hb, -, ho, hl, -⟩ := hn
+    exact ⟨hb ▸ h.1, by have := h.2.1; omega, by have := h.2.2; omega⟩
+  touch r e hr h := ⟨e.off, Nat.le_refl _, by have := h.2.1; omega, by
+    rw [h.1]; exact hio r hr e.off h.2.2⟩
+
+/-- The prefix's accesses cover a read within it (`FLock.Fits.wp_readRest`'s `hcov`). -/
+theorem pre_covers {T : (ThreadId → X) → Array ThreadRec → Prop} {b : BlockId} {n : Nat}
+    {Io : Res → Prop} {hio : ∀ r, Io r → ∀ x, x < n → r.heap (b, x) ≠ Option.none} {o len : Nat}
+    (h : o + len ≤ n) : Conc.Covers (pre T b n Io hio).Rg b o len :=
+  fun _ hb hl _ h2 => ⟨hb, hl, by omega⟩
 
 /-- **The program's facts hold** (module doc): the threads, the region read-shared, and its bytes
 in the rest. -/
