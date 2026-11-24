@@ -309,8 +309,8 @@ theorem Shares.congr {G G' : ThreadId → γ} {m m' : Mem} (h : W.Shares G m)
 (a tick, a step on its own part): the outer mutex's invariant holds before and after it at rests
 `rXM` and `rXM'` with the same shares (one rest in the outer mutex's view; in the semaphore's the
 common rest beside the semaphore's mutex's side, which holds no share:
-`FLock.Keeps.side_share`), which hold a positive share of each cell of the readers' heap (`Inv.rest_share` at the common rest), and
-`t`'s place stays (`FLock.Inv.share_keep`). -/
+`FLock.Keeps.side_share`), which hold a positive share of each cell of the readers' heap
+(`Inv.rest_share` at the common rest), and `t`'s place stays (`FLock.Inv.share_keep`). -/
 theorem Shares.keep {G G' : ThreadId → γ} {rXM rXM' : Res} {m m' : Mem} {t : ThreadId}
     (h : W.Shares G m) (hM : M.Inv G rXM m) (hM' : M.Inv G' rXM' m')
     (hX : ∀ l, rXM'.gh.share l = rXM.gh.share l)
