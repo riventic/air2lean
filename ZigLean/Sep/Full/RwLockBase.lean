@@ -921,6 +921,151 @@ theorem sstep {t : ThreadId} {G' : ThreadId → γ} {rS rS' sB rL rH rX' : Res} 
         · rw [h's] at e; cases e
       · exact hu.nap t (.inl ⟨by rw [hlh]; nofun, by rw [hlh]; nofun, by rw [hlh]; nofun⟩)
 
+/-! ## The take and the give at the semaphore -/
+
+/-- **A handover at the semaphore keeps the base** (what `utake` and `upost` share): `t` holds
+the semaphore's mutex and changes its place at the rwlock and its part, in the same memory. Its
+places at both mutexes and in the condition's code stay, it is not at the semaphore's `wt` after
+it, and no thread is a reader after it (the resource is posted, before or after), so the shares'
+clause is empty. The three invariants after it are given (`Inv.take`/`Inv.post`, the
+semaphore's own). -/
+theorem handover {t : ThreadId} {g' : γ} (hu : W.Base Sz K G rX m)
+    (hI : W.Inv (upd G t g') rX m) (hS : S.Inv (upd G t g') m) (hC : C.Inv L (upd G t g') m)
+    (hnr : ∀ u, (W.ph (upd G t g' u)).isRd = false) (hlh : L.ph (G t) = .holds)
+    (hl : L.ph g' = L.ph (G t)) (hc : C.ph g' = C.ph (G t)) (hs : S.ph g' ≠ .wt)
+    (hm : M.ph g' = M.ph (G t)) : W.Base Sz K (upd G t g') rX m := by
+  have hup : ∀ {α : Type} (f : γ → α), f g' = f (G t) → ∀ u, f (upd G t g' u) = f (G u) :=
+    fun f hf u => by
+      by_cases e : u = t
+      · rw [e, upd_self, hf]
+      · rw [upd_ne _ _ e]
+  exact {
+    winv := hI
+    sub := ⟨⟨hC, hu.sub.1.2⟩, hS⟩
+    win := hu.win.keep (hup C.ph hc) rfl rfl (hu.win.ehb.relabel (hup L.ph hl))
+    shares := fun u q H hq => by
+      have h := hnr u
+      rw [hq] at h; cases h
+    pin := hu.pin
+    wt := fun u hq => by
+      by_cases e : u = t
+      · rw [e, upd_self] at hq; exact absurd hq hs
+      · rw [upd_ne _ _ e] at hq ⊢; exact hu.wt u hq
+    nap := fun u hq => by
+      by_cases e : u = t
+      · rw [e, upd_self, hm]
+        exact hu.nap t (.inl ⟨by rw [hlh]; nofun, by rw [hlh]; nofun, by rw [hlh]; nofun⟩)
+      · rw [upd_ne _ _ e] at hq ⊢; exact hu.nap u hq
+    live := hu.live }
+
+/-- A coordinate that the semaphore's places leave, over the semaphore's own place. -/
+theorem of_sset {α : Type} {f : γ → α} (hf : ∀ g q, f (S.place.set g q) = f g) (g : γ) (s : SPh) :
+    f (S.set g s) = f g := by
+  rw [← S.place_s]; exact hf g _
+
+/-- The rwlock's place of a holder of the semaphore's mutex at a place of the semaphore. -/
+theorem wph_hold (g : γ) (h : Res) (s : SPh) : W.ph (S.set (L.set g .holds h) s) = W.ph g := by
+  rw [of_sset W.ph_sp, W.ph_l]
+
+/-- The places of the rwlock, the condition and the semaphore over a thread's part. -/
+theorem place_lpart (hpl : ∀ g r, W.place.ph (M.setPart g r) = W.place.ph g) (g : γ) (r : Res) :
+    W.place.ph (L.setPart g r) = W.place.ph g := by
+  rw [← W.pair.setPart]; exact hpl g r
+
+section
+variable (mph_s : ∀ g q, M.ph (S.place.set g q) = M.ph g)
+  (lph : ∀ g q, L.ph (S.place.set g q) = L.ph g)
+  (ph_l : ∀ g q h, S.place.ph (L.set g q h) = S.place.ph g)
+include mph_s
+
+/-- The outer mutex's place of a holder of the semaphore's mutex at a place of the semaphore. -/
+theorem mph_hold (W : FRw γ X Y M L C S) (g : γ) (h : Res) (s : SPh) :
+    M.ph (S.set (L.set g .holds h) s) = M.ph g := by
+  rw [of_sset mph_s, W.pair.ph_ba]
+
+include lph ph_l
+
+/-- **A handover of a holder at the semaphore's `pst`** (`handover` at the places of `utake` and
+`upost`): `t` goes from `g` to `g₀` under its hold of the semaphore's mutex, where `g₀` keeps
+the places at the outer mutex and in the condition's code. -/
+theorem handoverS {t : ThreadId} {g g₀ : γ} {h₁ h₂ : Res} {sh sc}
+    (hu : W.Base Sz K (upd G t (S.set (L.set g .holds h₁) (.pst sh sc))) rX m)
+    (hI : W.Inv (upd G t (S.set (L.set g₀ .holds h₂) (.pst sh sc))) rX m)
+    (hS : S.Inv (upd G t (S.set (L.set g₀ .holds h₂) (.pst sh sc))) m)
+    (hC : C.Inv L (upd G t (S.set (L.set g₀ .holds h₂) (.pst sh sc))) m)
+    (hnr : ∀ u, (W.ph (upd G t (S.set (L.set g₀ .holds h₂) (.pst sh sc)) u)).isRd = false)
+    (hm : M.ph g₀ = M.ph g) (hc : C.ph g₀ = C.ph g) :
+    W.Base Sz K (upd G t (S.set (L.set g₀ .holds h₂) (.pst sh sc))) rX m := by
+  have lph_hold : ∀ g h s, L.ph (S.set (L.set g .holds h) s) = .holds := fun g h s => by
+    rw [of_sset lph, L.ph_set]
+  have cph_hold : ∀ g h s, C.ph (S.set (L.set g .holds h) s) = C.ph g := fun g h s => by
+    rw [← S.place_s]
+    exact (congrArg Prod.fst (S.place.ph_set _ _)).trans (congrArg Prod.fst (ph_l g .holds h))
+  have h := hu.handover (t := t) (g' := S.set (L.set g₀ .holds h₂) (.pst sh sc))
+    (by rw [upd_upd]; exact hI) (by rw [upd_upd]; exact hS) (by rw [upd_upd]; exact hC)
+    (fun u => by rw [upd_upd]; exact hnr u) (by rw [upd_self, lph_hold])
+    (by rw [upd_self, lph_hold, lph_hold]) (by rw [upd_self, cph_hold, cph_hold, hc])
+    (by rw [S.ph_set]; nofun) (by rw [upd_self, mph_hold mph_s W, mph_hold mph_s W, hm])
+  rwa [upd_upd] at h
+
+variable (mph_w : ∀ g a, M.ph (W.set g a) = M.ph g)
+  (hpl : ∀ g r, W.place.ph (M.setPart g r) = W.place.ph g)
+include mph_w hpl
+
+/-- **The writer's take at the semaphore keeps the base** (`Fits.ofProduct`'s `utake`): the
+count is not `0`, so the resource is posted and no thread is a reader (`cnt_idle`); the rwlock's
+invariant by `Inv.take`. The client gives the laws of the places next to each other. -/
+theorem utake {t : ThreadId} {g : γ} {h₁ h₂ r : Res} {sh sc} (hw : W.ph g = .ww)
+    (hcnt : S.cnt (upd G t g) ≠ 0)
+    (hu : W.Base Sz K (upd G t (S.set (L.set g .holds h₁) (.pst sh sc))) rX m)
+    (hS : S.Inv (upd G t (S.set (L.set (L.setPart (W.set g .wr) (rsum (L.part g) r)) .holds h₂)
+      (.pst sh sc))) m)
+    (hC : C.Inv L (upd G t (S.set (L.set (L.setPart (W.set g .wr) (rsum (L.part g) r)) .holds h₂)
+      (.pst sh sc))) m) :
+    W.Base Sz K (upd G t (S.set (L.set (L.setPart (W.set g .wr) (rsum (L.part g) r)) .holds h₂)
+      (.pst sh sc))) rX m := by
+  have hpp := place_lpart hpl (W.set g .wr) (rsum (L.part g) r)
+  have hw₁ : W.ph (S.set (L.set g .holds h₁) (.pst sh sc)) = .ww := by rw [wph_hold, hw]
+  have hpost : RwPosted W.ph (upd G t (S.set (L.set g .holds h₁) (.pst sh sc))) :=
+    Classical.byContradiction fun hn => hcnt (by
+      rw [cnt_congr (G := upd G t (S.set (L.set g .holds h₁) (.pst sh sc))) (G' := upd G t g)
+        (congrFun (upd_map W.ph G t (by rw [hw₁, hw]))), W.cnt_idle _ hn])
+  have hwr : W.ph (S.set (L.set (L.setPart (W.set g .wr) (rsum (L.part g) r)) .holds h₂)
+      (.pst sh sc)) = .wr := by
+    rw [wph_hold]; exact (congrArg Prod.fst hpp).trans (W.ph_set _ _)
+  have hm : M.ph (L.setPart (W.set g .wr) (rsum (L.part g) r)) = M.ph g := by
+    rw [← W.pair.setPart, M.ph_setPart, mph_w]
+  refine hu.handoverS mph_s lph ph_l
+    (hu.winv.take hpost hw₁ hwr (by rw [mph_hold mph_s W, mph_hold mph_s W, hm])) hS hC
+    (fun u => ?_) hm
+    ((congrArg (fun p => p.2.1) hpp).trans (congrArg Prod.fst (W.sp_ph g .wr)))
+  by_cases e : u = t
+  · rw [e, upd_self, hwr]; rfl
+  · have := hpost.2.1 u
+    rwa [upd_ne _ _ e] at this ⊢
+
+/-- **The last reader's give at the semaphore keeps the base** (`Fits.ofProduct`'s `upost`):
+the rwlock's invariant by `Inv.post`, after which the resource is posted, so no thread is a
+reader. -/
+theorem upost {t : ThreadId} {g : γ} {h₁ h₂ r₀ : Res} {rc sh sc} (hw : W.ph g = .rp rc)
+    (hu : W.Base Sz K (upd G t (S.set (L.set g .holds h₁) (.pst sh sc))) rX m)
+    (hS : S.Inv (upd G t (S.set (L.set (W.set (L.setPart g r₀) .out) .holds h₂) (.pst sh sc))) m)
+    (hC : C.Inv L (upd G t (S.set (L.set (W.set (L.setPart g r₀) .out) .holds h₂) (.pst sh sc)))
+      m) :
+    W.Base Sz K (upd G t (S.set (L.set (W.set (L.setPart g r₀) .out) .holds h₂) (.pst sh sc)))
+      rX m := by
+  have hw₁ : (W.ph (S.set (L.set g .holds h₁) (.pst sh sc))).isRp = true := by
+    rw [wph_hold, hw]; rfl
+  have hout : W.ph (S.set (L.set (W.set (L.setPart g r₀) .out) .holds h₂) (.pst sh sc)) = .out := by
+    rw [wph_hold, W.ph_set]
+  have hm : M.ph (W.set (L.setPart g r₀) .out) = M.ph g := by
+    rw [mph_w, ← W.pair.setPart, M.ph_setPart]
+  obtain ⟨hI, hpost⟩ := hu.winv.post hw₁ hout (by rw [mph_hold mph_s W, mph_hold mph_s W, hm])
+  exact hu.handoverS mph_s lph ph_l hI hS hC hpost.2.1 hm
+    ((congrArg Prod.fst (W.sp_ph _ .out)).trans (congrArg (fun p => p.2.1) (place_lpart hpl g r₀)))
+
+end
+
 end Base
 
 end FRw
