@@ -12,7 +12,7 @@
  "oldStructFieldVal": "tag 'struct_field_val' is not a Zig 0.17.1 AIR tag",
  "safeOn016": "unsupported profile.build_mode 'safe'",
  "spirv": "SPIR-V runtime arrays",
- "splatArray": "splat to a non-vector (Zig 0.17.1 array splat) is outside the subset",
+ "splatSentinelArray": "splat to a sentinel-terminated array (Zig 0.17.1) is outside the subset",
  "subByteLane": "a pointer to a vector lane (vector_index) is outside the subset",
  "toVec": "tag 'array_to_vector': Zig 0.17.1's array-to-vector coercion is outside the subset",
  "toVecSentinel": "tag 'array_to_vector': Zig 0.17.1's array-to-vector coercion",

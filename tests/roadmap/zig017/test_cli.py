@@ -53,6 +53,7 @@ example : both true false = pure false := by rfl
 example : both false true = pure true := by rfl
 example : field { a := 1#16, b := 7#32 } = pure 7#32 := by rfl
 example : twice 21#32 = pure 42#32 := by rfl
+example : fill 7#16 = pure #v[7#16, 7#16, 7#16] := by rfl
 end
 """
 
@@ -84,6 +85,8 @@ def positive(binary, elaborate):
                        "(p0.elem 4 (2 : BitVec 64))", "(p0.elem 4 (1 : BitVec 64))",
                        # ... aligned for its own offset: lane 2 of an `align(16)` vector is 8-aligned.
                        "Zig.store (α := BitVec 32) 8 i2 p1",
+                       # A runtime `@splat` to an array is the array of copies of its operand.
+                       "(Vector.replicate 3 p0 : Vector (BitVec 16) 3)",
                        # A `__func_<n>` generic instance gets the stable `__anon_<k>` name.
                        "def double__anon_1"):
             assert needle in text, f"missing {needle!r}"
