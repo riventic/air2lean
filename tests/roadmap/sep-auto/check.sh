@@ -29,6 +29,7 @@
 # and loops by their registered invariants (LoopInv: `@[fsym_inv]`, a wrong invariant rejected)
 # and list walks from theirs (ListWalk: a ghost measure, the ghost list split at the cursor's
 # test, the constructor fold at a repetition, a wrong invariant rejected).
+# LedgerOpen holds the smallest goal of each open engine-ledger row as an expected failure.
 # Its large user is
 # the FixedBufferAllocator
 # (tests/roadmap/alloc-fba/AllocFba/Full.lean). Every example is a module of the fixture's library

@@ -396,13 +396,17 @@
     "OSL-01": ["THR-01", "ORD-01"],
     "OSM-02": ["SEM-02", "ALC-02"]
   },
+  "target_qualified": [
+    "memory_model"
+  ],
   "memory_model": {
     "premise": "ORD-06",
     "concurrency": [
       "THR-01",
       "ORD-01"
     ],
-    "note": "C12 (docs/research/C12.md): every theorem or report whose premises contain a concurrency premise (closed under implies) lists the memory-model adequacy premise; scripts/premises.py check and compiled, and scripts/claims.py, fail or list it. targets: the qualification record per target that accepts atomics and threads; unqualified: targets whose translation rejects them.",
+    "note": "C12 (docs/research/C12.md): every theorem or report whose premises contain a concurrency premise (closed under implies) lists the memory-model adequacy premise; scripts/premises.py check and compiled, and scripts/claims.py, fail or list it. targets: the qualification record per qualified target. unqualified: known targets without one, each with what is missing. Target binding (target_qualified, docs/architecture-audit/memory-model-target-binding.md): a theorem or claim that carries the premise over a generated module whose profile header records a target outside targets fails scripts/premises.py check and compiled and is rejected by scripts/claims.py, whether or not the translator accepts atomics and threads on that target. unrecorded: what the premise means over a module that records no target.",
+    "unrecorded": "A generated module without a recorded target (no profile header or the legacy profile: PRF-01; a gate-time module: PRF-03) leaves the target unverified. A theorem over it carries ORD-06 for the qualified targets only: it claims nothing about the compiled code of any other target.",
     "targets": {
       "x86_64-linux": {
         "hardware": "x86-TSO",
@@ -434,7 +438,8 @@
     "unqualified": {
       "wasm32-freestanding": "The translator rejects atomics, threads and futexes on wasm32 (T02, docs/profiles.md); no theorem carries a concurrency premise for it.",
       "wasm32-wasi": "As wasm32-freestanding.",
-      "s390x-linux": "The translator rejects atomics on the big-endian profile (T03, PRF-05)."
+      "s390x-linux": "The translator accepts atomics, futexes, threads and the allocator model on the big-endian profile (T03, PRF-05, docs/profiles.md §Byte order), but the target has no memory-model qualification: no theorem or claim may carry ORD-06 for it (target binding). Missing: a hardware memory model of z/Architecture with an argument that LLVM's SystemZ lowering of atomics is a mapping proved sound for RC11 (the cited proofs cover x86-TSO, ARMv7, ARMv8, POWER and RISC-V, not z/Architecture), and litmus evidence from the hardware. tests/roadmap/big-endian/observed/concurrency-*-s390x-linux.txt are schedule-independent results run under qemu user-mode emulation: they check the byte order of the atomic model, not the hardware's memory ordering.",
+      "mips64-linux": "As s390x-linux: accepted by the translator (T03), no memory-model qualification, so no theorem or claim may carry ORD-06 for it. Missing: a hardware memory model of MIPS64 (the architecture has no published axiomatic model) with an argument that LLVM's Mips lowering of atomics (LL/SC, sync) is a mapping proved sound for RC11, and litmus evidence from the hardware. tests/roadmap/big-endian/observed/concurrency-*-mips64-linux.txt are qemu user-mode runs, as for s390x-linux."
     }
   }
 }

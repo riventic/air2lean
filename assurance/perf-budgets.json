@@ -946,7 +946,8 @@
       "translate_args": [
         "--profile",
         "legacy-abi64-le",
-        "--assume-asm-cpu-features"
+        "--assume-asm-cpu-features",
+        "lzcnt,popcnt"
       ],
       "reference_gen": "Proofs/Asm/Gen.lean",
       "proof_modules": [

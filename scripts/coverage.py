@@ -368,8 +368,6 @@ COMPILER_FIXTURE_ROOTS = {
     'tests/roadmap/volatile-effects/air-asm/{version}': 'tests/roadmap/volatile-effects/air-asm/provenance.json',
     'tests/roadmap/extern-calls/air/{version}': 'tests/roadmap/extern-calls/provenance.json',
     'tests/roadmap/noreturn-variants/air/{version}': 'tests/roadmap/noreturn-variants/provenance.json',
-    'tests/roadmap/alloc-translated/air/{version}/page-linux': 'tests/roadmap/alloc-translated/provenance.json',
-    'tests/roadmap/alloc-translated/air/{version}/page-macos': 'tests/roadmap/alloc-translated/provenance.json',
     'tests/roadmap/alloc-translated/air/{version}/fba-linux': 'tests/roadmap/alloc-translated/provenance.json',
     'tests/roadmap/alloc-translated/air/{version}/fba-macos': 'tests/roadmap/alloc-translated/provenance.json',
     'tests/roadmap/alloc-fba/air/{version}/client-linux': 'tests/roadmap/alloc-fba/provenance.json',
@@ -399,6 +397,8 @@ NON_COMPILER_AIR = {
     'tests/roadmap/undef-locals/air': 'hand-written AIR in the exporter schema (README)',
     'tests/roadmap/aggregate-casts/air-handwritten': 'earlier hand-written AIR in the exporter schema (README)',
     'tests/roadmap/packed-fields/air': 'hand-written AIR in the exporter schema (README)',
+    'tests/roadmap/packed-casts/air-handwritten':
+        'hand-written AIR of the zero-bit `bitcast`, which Sema folds and no compiler emits (README)',
     'tests/roadmap/try-pointers/aliases/air': 'hand-written AIR (provenance.json air_origin; the compiler export is aliases/air-fresh)',
     'tests/roadmap/error-width/air': 'hand-written AIR per error-code width (make-fixtures.py, README)',
     'tests/roadmap/asm-effects/air': 'hand-written AIR in the exporter schema (README)',

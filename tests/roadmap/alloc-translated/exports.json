@@ -1,0 +1,20 @@
+{
+  "exports": [
+    {
+      "out": "air/{version}/page-linux",
+      "source": "page.zig",
+      "filter": "page.,heap.PageAllocator,mem.,math.,debug.assert",
+      "versions": ["0.16.0"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "closure": ["page.*"]
+    },
+    {
+      "out": "air/{version}/page-macos",
+      "source": "page.zig",
+      "filter": "page.,heap.PageAllocator,mem.,math.,debug.assert",
+      "versions": ["0.16.0"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "aarch64-macos", "-mcpu=baseline"],
+      "closure": ["page.*"]
+    }
+  ]
+}

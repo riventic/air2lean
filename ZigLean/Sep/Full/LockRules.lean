@@ -32,6 +32,7 @@ places before and after are the code's transitions (`LPh.next`, the table); a ru
 | `wp_osWait` | OS futex wait for `c` (`Os.futexWait`, OSF-01) | `spin` | `spin` |
 | `wp_ulockResult` | macOS wait's return code (`Os.Darwin.ulockResult`, OSF-01) | any | the same |
 | `wp_osWake` | OS futex wake of `w ≥ 1` or all (`Os.futexWake`, OSF-02) | `wake` | `out`, or `wake` (spurious `EINTR`) |
+| `wp_pick` | oracle stop (`Os.pick`; a macOS wake's `live`, OSF-02) | any | the same |
 -/
 
 namespace Zig
@@ -820,15 +821,28 @@ theorem wp_ulockResult (hP : L.Fits K P U ok) {r : Os.WaitResult} {t : ThreadId}
     P.WP t (Os.Darwin.ulockResult r : ConcM Tgt (BitVec 32)) Q G m n :=
   WP.ulockResult_stay (fun _ _ hi₁ ht => let ⟨_, _, _, h'⟩ := hP.curT t hi₁ ht; h') hc hi h hcost
 
+/-- **An oracle stop** (`Os.pick`; the `live` choice of a macOS wake's code before the wake,
+`Os.Darwin.wakeCode`) by thread `t` with the ghost value `g`, at any place: it keeps `g` over the
+stop and goes on with any choice. -/
+theorem wp_pick (hP : L.Fits K P U ok) {c : Mem → Nat} {t : ThreadId} {G : ThreadId → γ}
+    {m : Mem} {n : Nat} {g : γ} (hi : P.inv (upd G t g) m)
+    {Q : Nat → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ a G₁ m', m'.current = t → P.inv (upd G₁ t g) m' → Q a G₁ m' k)
+    (hcost : P.cost = none := by first | rfl | assumption) :
+    P.WP t (Os.pick c : ConcM Tgt Nat) Q G m n :=
+  WP.pick_stay (fun _ _ hi₁ ht => let ⟨_, _, _, h'⟩ := hP.curT t hi₁ ht; h') hi h hcost
+
 /-- **`unlock`'s OS futex wake** (`Os.futexWake`, OSF-02) of up to `w ≥ 1` waiters (or all) at the
-lock's word, by thread `t` at `wake` (`g`): after a wake it goes on at `out`; after a spurious
-`EINTR` (macOS; nobody woken) it is still at `wake` (std wakes again). -/
+lock's word, by thread `t` at `wake` (`g`): after a wake of `j` waiters, within the request
+(`j ≤ c` for `w = some c`), it goes on at `out`; after a spurious `EINTR` (macOS; nobody woken) it
+is still at `wake` (std wakes again). -/
 theorem wp_osWake (hP : L.Fits K P U ok) {w : Option Nat} (hw : ∀ k, w = some k → 1 ≤ k)
     {spurious : Bool} {t : ThreadId} {G : ThreadId → γ} {m : Mem} {n : Nat} {g : γ}
     (hg : L.ph g = .wake) (hok : ok g) (hi : P.inv (upd G t g) m)
     {Q : Option Nat → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ r G₁ m', m'.current = t →
-      ((∃ j, r = some j) ∧ P.inv (upd G₁ t (L.set g .out rnil)) m' ∨
+      ((∃ j, r = some j ∧ ∀ c, w = some c → j ≤ c) ∧
+        P.inv (upd G₁ t (L.set g .out rnil)) m' ∨
        spurious = true ∧ r = none ∧ P.inv (upd G₁ t g) m') → Q r G₁ m' k)
     (hcost : P.cost = none := by first | rfl | assumption) :
     P.WP t (Os.futexWake L.ptr false w spurious : ConcM Tgt (Option Nat)) Q G m n := by
@@ -838,7 +852,8 @@ theorem wp_osWake (hP : L.Fits K P U ok) {w : Option Nat} (hw : ∀ k, w = some 
   · have hph : L.pl G₁ t = .wake := by show L.ph (G₁ t) = _; rw [hg₁, hg]
     obtain ⟨c, hc, hr'⟩ := Os.futexWake_pos (m := { m₁ with current := t }) hw hr
     obtain ⟨hst, hcu, hl⟩ := hiL.w.wake hph hc hr'
-    exact h k hk _ G₁ m' hcu (.inl ⟨⟨_, rfl⟩, hP.stepAt hg₁ hok (LPh.next_of_eq hg rfl)
+    exact h k hk _ G₁ m' hcu (.inl ⟨⟨_, rfl, fun _ hc => Os.wakeSize_le_some hc _⟩,
+      hP.stepAt hg₁ hok (LPh.next_of_eq hg rfl)
       (fun h => nomatch hg.symm.trans h) (by rw [hg]; decide) (by decide) hiL hU hst hl⟩)
   · obtain ⟨-, -, -, hic⟩ := hP.curT t hi₁ ht
     exact h k hk none G₁ _ rfl (.inr ⟨hs, rfl, by rw [← hg₁, upd_same]; exact hic⟩)

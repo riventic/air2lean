@@ -8,7 +8,8 @@ import ZigLean.Mem.Lemmas
 `device_effects.zig` with `--device-contract uart.json`. Every theorem quantifies over the
 device oracle (`Mem.dev.oracle`) and the memory: the device contract (premise DEV-01) is only
 that the device answers the reads that the theorem names. Nothing about ordinary memory changes:
-each final memory is the initial one with the device events appended to its trace.
+each final memory is the initial one with the device events appended to its trace and, for the
+polling loop, its step ticks counted (`Zig.tick`, one per loop-body run: exactly one per poll).
 -/
 
 namespace DeviceEffectsProofs
@@ -40,6 +41,14 @@ theorem after_append (m : Mem) (es fs : List DevEvent) :
     after (after m es) fs = after m (es ++ fs) := by simp [after]
 
 theorem withEvent_after (m : Mem) (e : DevEvent) : m.withEvent e = after m [e] := rfl
+
+/-- The memory `m` after `n` step ticks (`Zig.tick`), nothing else changed. -/
+def ticked (m : Mem) (n : Nat) : Mem := { m with ticks := m.ticks + n }
+
+/-- Steps and events of two consecutive runs add up. -/
+theorem after_ticked_merge (m : Mem) (a b : Nat) (es fs : List DevEvent) :
+    after (ticked (after (ticked m a) es) b) fs = after (ticked m (a + b)) (es ++ fs) := by
+  simp [after, ticked, Nat.add_assoc]
 
 theorem status_addr : devAddr? uart = some STATUS := by decide
 theorem data_addr : devAddr? (uart.add 4) = some DATA := by decide
@@ -74,24 +83,26 @@ def putcSpec (vs : List (BitVec 32)) (r : BitVec 32) (c : BitVec 8) : List DevEv
 
 theorem loop_busy (s : putcLocals) {m : Mem} {v : BitVec 32}
     (ho : m.dev.oracle m.dev.trace STATUS 32 = some v) (hv : v &&& 1#32 = 0#32) :
-    ((putc.loop3 uart).run s).run m = pure ((.rep3, s), after m [rd v]) := by
-  have h := status_read ho
+    ((putc.loop3 uart).run s).run m = pure ((.rep3, s), after (ticked m 1) [rd v]) := by
+  have ht : tick m = some (Except.ok ((), ticked m 1)) := rfl
+  have h := status_read (m := ticked m 1) (v := v) ho
   simp only [StateT.run] at h
-  simp [putc.loop3, zig_unfold, h, hv]
+  simp [putc.loop3, zig_unfold, ht, h, hv]
 
 theorem loop_ready (s : putcLocals) {m : Mem} {v : BitVec 32}
     (ho : m.dev.oracle m.dev.trace STATUS 32 = some v) (hv : v &&& 1#32 ≠ 0#32) :
-    ((putc.loop3 uart).run s).run m = pure ((.br2, s), after m [rd v]) := by
-  have h := status_read ho
+    ((putc.loop3 uart).run s).run m = pure ((.br2, s), after (ticked m 1) [rd v]) := by
+  have ht : tick m = some (Except.ok ((), ticked m 1)) := rfl
+  have h := status_read (m := ticked m 1) (v := v) ho
   simp only [StateT.run] at h
-  simp [putc.loop3, zig_unfold, h, hv]
+  simp [putc.loop3, zig_unfold, ht, h, hv]
 
 /-- The polling loop reads the status register once per iteration, in order, and exits on the
-first ready value. -/
+first ready value; it makes exactly one step per read. -/
 theorem poll_run (s : putcLocals) (vs : List (BitVec 32)) (r : BitVec 32) :
     ∀ m : Mem, Answers m.dev.oracle m.dev.trace vs r →
       ((loop (putc.loop3 uart) putc.again3).run s).run m =
-        pure ((.br2, s), after m ((vs ++ [r]).map rd)) := by
+        pure ((.br2, s), after (ticked m (vs.length + 1)) ((vs ++ [r]).map rd)) := by
   induction vs with
   | nil =>
     intro m ⟨ho, hr⟩
@@ -100,19 +111,21 @@ theorem poll_run (s : putcLocals) (vs : List (BitVec 32)) (r : BitVec 32) :
   | cons v vs ih =>
     intro m ⟨ho, hv, hrest⟩
     rw [loop_run_mm, loop_busy s ho hv]
-    have := ih (after m [rd v]) hrest
+    have := ih (after (ticked m 1) [rd v]) hrest
+    have e : 1 + (vs.length + 1) = (v :: vs).length + 1 := by rw [List.length_cons]; omega
+    rw [after_ticked_merge, e] at this
     simp only [StateT.run] at this
-    simp [putc.again3, zig_unfold, this, after_append]
+    simp [putc.again3, zig_unfold, this]
 
 /-- **`putc` meets its trace spec for every device oracle satisfying the polling contract**:
-the emitted trace is exactly the polls in order, then one data write of `c`; ordinary memory is
-unchanged. -/
+the emitted trace is exactly the polls in order, then one data write of `c`; the run makes
+exactly one step per poll (`vs.length + 1`), and ordinary memory is unchanged. -/
 theorem putc_trace (m : Mem) (c : BitVec 8) (vs : List (BitVec 32)) (r : BitVec 32)
     (hc : Answers m.dev.oracle m.dev.trace vs r) :
-    (putc uart c).run m = pure ((), after m (putcSpec vs r c)) := by
+    (putc uart c).run m = pure ((), after (ticked m (vs.length + 1)) (putcSpec vs r c)) := by
   have hp := poll_run default vs r m hc
-  have hw := data_write (after m ((vs ++ [r]).map rd)) (c.setWidth 32)
-  have hd := data_ptr (after m ((vs ++ [r]).map rd))
+  have hw := data_write (after (ticked m (vs.length + 1)) ((vs ++ [r]).map rd)) (c.setWidth 32)
+  have hd := data_ptr (after (ticked m (vs.length + 1)) ((vs ++ [r]).map rd))
   have hi : Zig.intCast false false 32 c = pure (c.setWidth 32) := intCast_unsigned_widen c 32 (by decide)
   simp only [StateT.run, List.map_append, List.map_cons, List.map_nil, widen_toNat] at hp hw hd
   simp [putc, zig_unfold, hp, hw, hd, hi, after_append, putcSpec, wr]
@@ -140,10 +153,11 @@ theorem answers_of_ready (o : DevOracle) :
       exact ⟨v :: vs, r, ho, hb, ha⟩
 
 /-- **`putc` returns for every device that eventually reports ready**, with the trace of its
-polls followed by exactly one data write of `c`, and nothing else changed. -/
+polls followed by exactly one data write of `c`, one step per poll, and nothing else changed. -/
 theorem putc_eventually (m : Mem) (c : BitVec 8) (k : Nat)
     (hr : EventuallyReady m.dev.oracle m.dev.trace k) :
-    ∃ vs r, (putc uart c).run m = pure ((), after m (putcSpec vs r c)) := by
+    ∃ vs r, (putc uart c).run m =
+      pure ((), after (ticked m (vs.length + 1)) (putcSpec vs r c)) := by
   obtain ⟨vs, r, ha⟩ := answers_of_ready _ k _ hr
   exact ⟨vs, r, putc_trace m c vs r ha⟩
 

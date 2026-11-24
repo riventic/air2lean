@@ -152,7 +152,7 @@ class Citations(unittest.TestCase):
 
     def test_slash_list_and_row_word(self):
         t = Tree(self.rows(), {'A.lean': 'ledger rows ' + '#1, #2 and #7\n'})
-        self.assertEqual(['A.lean:1: cites ledger row #7, which is not in ' + el.DATA], t.problems())
+        self.assertEqual(['A.lean:1: cites ' + 'ledger ' + 'row #7, which is not in ' + el.DATA], t.problems())
 
     def test_closed_row_as_workaround(self):
         t = Tree(self.rows(), {

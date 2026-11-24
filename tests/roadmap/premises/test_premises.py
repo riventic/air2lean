@@ -73,7 +73,9 @@ def fixture_config():
         "rules": [{"premise": "ASM-01", "scope": "closure", "pattern": "(?:^|\\.)airAsm_[0-9]+$"},
                   {"premise": "ASM-02", "scope": "statement", "pattern": "(?:^|\\.)airAsm_[0-9]+$"}],
         "implies": {"ASM-02": ["ASM-01"], "TRU-02": ["SEM-01"], "THR-01": ["ORD-06"]},
+        "target_qualified": ["memory_model"],
         "memory_model": {"premise": "ORD-06", "concurrency": ["THR-01"],
+                         "unrecorded": "fixture: the qualified targets only",
                          "targets": {"x86_64-linux": {"hardware": "x86-TSO", "argument": "fixture",
                                                       "evidence": ["ZigLean/Sched.lean"]}},
                          "unqualified": {"wasm32-freestanding": "fixture"}},
@@ -476,6 +478,20 @@ class FixtureTests(unittest.TestCase):
         self.assertIn("PRF-02", entries["plain_spec"]["premises"])
         self.assertNotIn("MTH-05", entries["pure_fact"]["premises"])
 
+    def test_admitted_cpu_features_are_named(self):
+        """`--assume-asm-cpu-features lzcnt,popcnt` (ASM-09 in the repository's mapping): the
+        admission's premise is listed, and its reason names the admitted features."""
+        self.fixture.files["Proofs/Asm/Gen.lean"] = PROFILE.replace(
+            '"float_semantics":"ieee"',
+            '"admission":"no-libc","asm_cpu_features":["lzcnt","popcnt"],"float_semantics":"ieee"') + \
+            textwrap.dedent(self.fixture.files["Proofs/Asm/Gen.lean"])
+        entries = self.written()
+        self.assertIn("MTH-05", entries["plain_spec"]["premises"])
+        self.assertTrue(any("(CPU features lzcnt,popcnt)" in reason
+                            for reason in entries["plain_spec"]["via"]["MTH-05"]), entries["plain_spec"]["via"])
+        mapping = json.loads((ROOT / "assurance/premises.json").read_text())["admissions"]
+        self.assertEqual(mapping["asm-cpu-features"], ["ASM-09"])
+
     def test_example_translate_args_admission(self):
         """A committed (headerless) example translation takes the opt-ins of its translate.args."""
         self.fixture.files["examples/asm/translate.args"] = "--float-semantics compiler-rt --assume-no-libc\n"
@@ -531,6 +547,100 @@ class FixtureTests(unittest.TestCase):
         self.fixture.config["memory_model"]["targets"]["x86_64-linux"]["evidence"] = ["tests/gone.zig"]
         errors, _ = self.fixture.check(write=True)
         self.assertIn("memory_model.targets.x86_64-linux: evidence tests/gone.zig does not exist", errors)
+
+    def concurrent_translation(self, triple):
+        """A generated module of a concurrent function, its header recording `triple` (None: no
+        target), and a theorem about it."""
+        header = PROFILE if triple is None else PROFILE.replace('"schema":12', f'"schema":12,"target_triple":"{triple}"')
+        self.fixture.files["Proofs/Spin/Gen.lean"] = header + textwrap.dedent("""\
+            import ZigLean.Sched
+            namespace Spin
+            def spin (n : Nat) : Nat := Zig.Sched.run n
+            end Spin
+            """)
+        self.fixture.files["Proofs/Spin/Proofs.lean"] = """\
+            import Proofs.Spin.Gen
+            theorem spin_id (n : Nat) : Spin.spin n = n := rfl
+            """
+
+    def test_target_qualified_premise_needs_a_qualified_target(self):
+        """C12 target binding: a concurrency theorem about a translation for a target without a
+        memory-model qualification entry fails, whatever the translator accepts."""
+        self.concurrent_translation("x86_64-linux.5.10...7.2-musl")
+        entries = self.written()
+        self.assertIn("ORD-06", entries["spin_id"]["premises"])
+        self.assertEqual(entries["spin_id"]["binding"]["targets"], {"x86_64-linux"})
+        for triple, target in (("s390x-linux.5.10...7.2-musl", "s390x-linux"),
+                               ("wasm32-freestanding-none", "wasm32-freestanding")):
+            self.concurrent_translation(triple)
+            errors, _ = self.fixture.check(write=True)
+            self.assertEqual([e.split(" (unqualified")[0] for e in errors],
+                             [f"Proofs/Spin/Proofs.lean: spin_id carries ORD-06 for target {target}, which has no "
+                              "qualification entry in memory_model.targets"])
+        self.assertIn("(unqualified: fixture)", errors[0])
+
+    def test_target_qualified_premise_over_an_unrecorded_target(self):
+        """A module that records no target is bound only through the record's `unrecorded`."""
+        self.concurrent_translation(None)
+        self.written()
+        del self.fixture.config["memory_model"]["unrecorded"]
+        errors, _ = self.fixture.check(write=True)
+        self.assertEqual(errors, ["Proofs/Spin/Proofs.lean: spin_id carries ORD-06 over a translation that "
+                                  "records no target, and memory_model admits none"])
+
+    def test_target_binding_covers_every_target_qualified_record(self):
+        """The binding is not about ORD-06: any record listed in `target_qualified` binds its
+        premise, and a sequential theorem is bound by none."""
+        self.fixture.files["Proofs/Asm/Gen.lean"] = PROFILE.replace(
+            '"schema":12', '"schema":12,"target_triple":"aarch64-macos.13.0...15.6-none"') + textwrap.dedent(
+            self.fixture.files["Proofs/Asm/Gen.lean"])
+        self.written()
+        self.fixture.config["target_qualified"].append("asm_model")
+        self.fixture.config["asm_model"] = {"premise": "ASM-01", "unqualified": {},
+                                            "targets": {"x86_64-linux": {"evidence": ["ZigLean/Basic.lean"]}}}
+        errors, _ = self.fixture.check(write=True)
+        self.assertEqual(errors, ["Proofs/Asm/Proofs.lean: wrap_spec carries ASM-01 for target aarch64-macos, "
+                                  "which has no qualification entry in asm_model.targets"])
+        self.fixture.config["asm_model"]["targets"]["x86_64-linux"]["evidence"] = ["tests/gone.zig"]
+        errors, _ = self.fixture.check(write=True)
+        self.assertIn("asm_model.targets.x86_64-linux: evidence tests/gone.zig does not exist", errors)
+
+    def test_source_fallback_premise_is_not_bound(self):
+        """A premise the source index lists only as the upper bound of a runtime module's imports
+        is listed, but it is no claim about the translation: `compiled` binds the kernel's."""
+        self.fixture.files["ZigLean/Basic.lean"] = "import ZigLean.Sched\n" + textwrap.dedent(
+            self.fixture.files["ZigLean/Basic.lean"])
+        self.fixture.files["ZigLean/Sched.lean"] = self.fixture.files["ZigLean/Sched.lean"].replace(
+            "import ZigLean.Basic\n", "")
+        self.fixture.files["Proofs/Asm/Gen.lean"] = PROFILE.replace(
+            '"schema":12', '"schema":12,"target_triple":"s390x-linux.5.10...7.2-musl"') + textwrap.dedent(
+            self.fixture.files["Proofs/Asm/Gen.lean"])
+        plain = self.written()["plain_spec"]
+        self.assertIn("ORD-06", plain["premises"])
+        self.assertNotIn("ORD-06", plain["binding"]["premises"])
+        self.assertEqual(plain["binding"]["targets"], {"s390x-linux"})
+
+    def test_target_qualified_configuration_is_required(self):
+        self.fixture.config["target_qualified"] = []
+        self.fixture.write()
+        with self.assertRaisesRegex(ValueError, "target_qualified must list"):
+            premises.load_config(self.fixture.root / "assurance/premises.json")
+        self.fixture.config["target_qualified"] = ["memory_model", "gone"]
+        self.fixture.write()
+        with self.assertRaisesRegex(ValueError, "target-qualified record gone"):
+            premises.load_config(self.fixture.root / "assurance/premises.json")
+
+    def test_profile_target(self):
+        header = PROFILE.replace('"schema":12', '"schema":12,"target_triple":"{}"').strip()
+        for triple, target in (("s390x-linux.5.10...7.2-musl", "s390x-linux"),
+                               ("mips64-linux.5.10...7.2-muslabi64", "mips64-linux"),
+                               ("aarch64-macos.13.0...15.6-none", "aarch64-macos"),
+                               ("wasm32-wasi.0.1...0.3-musl", "wasm32-wasi"),
+                               ("wasm32-freestanding-none", "wasm32-freestanding"),
+                               ("unverified", None)):
+            self.assertEqual(premises.profile_target(header.replace("{}", triple)), target)
+        self.assertIsNone(premises.profile_target(PROFILE.strip()))
+        self.assertIsNone(premises.profile_target(""))
 
     def test_undefined_premise_fails(self):
         self.fixture.config["rules"].append({"premise": "ZZZ-99", "scope": "closure", "pattern": "x"})
@@ -659,6 +769,21 @@ class CompiledTests(unittest.TestCase):
         result = premises.compiled(report, self.fixture.root, self.config, None)
         self.assertIn("run_spec makes a concurrency claim without the memory-model adequacy premise ORD-06",
                       result["errors"])
+
+    def test_compiled_concurrency_needs_a_qualified_target(self):
+        """C12 target binding over the kernel graph: the generated module's recorded target."""
+        report = self.report()
+        report["nodes"][1]["dependencies"].append("Zig.Inner")  # Asm.wrap reaches the scheduler
+        gen = self.fixture.root / "Proofs/Asm/Gen.lean"
+        body = gen.read_text()
+        for triple, problem in (("x86_64-linux.5.10...7.2-musl", None),
+                                ("mips64-linux.5.10...7.2-muslabi64",
+                                 "wrap_spec carries ORD-06 for target mips64-linux, which has no qualification "
+                                 "entry in memory_model.targets")):
+            gen.write_text(PROFILE.replace('"schema":12', f'"schema":12,"target_triple":"{triple}"') + body)
+            result = premises.compiled(report, self.fixture.root, self.config, None)
+            self.assertIn("ORD-06", result["theorems"][0]["premises"])
+            self.assertEqual(result["errors"], [problem] if problem else [])
 
     def test_compiled_unmapped_module_and_axiom(self):
         result = premises.compiled(self.report("Zig.now", ["Fixture.extra"]), self.fixture.root, self.config, None)

@@ -203,7 +203,9 @@ retired with the legacy logic; their replacements quantify over every allocator 
 remaining qualification/review gates.
 
 The diff test runs each function with `TestAllocator` (`tests/diff/common.zig`), which has the same rules (a mirror of the model, not a std allocator; see [Caller-supplied allocator and Io](#caller-supplied-allocator-and-io) for the real-allocator check). Its first argument is the allocation that fails (legacy null/index), or
-`{"fail_at": null, "failures": [0, 2], "max_bytes": 2097152}`. Missing object fields
+`{"fail_at": null, "failures": [0, 2], "max_bytes": 2097152}`, with an optional failure
+oracle over (attempt, bytes) and a live-byte budget (`oracle`, `budget`;
+[allocation-policy.md](allocation-policy.md#native-differential)). Missing object fields
 use legacy defaults. Policy integers in the test transport are nonnegative signed-64-bit
 JSON integers; semantic policy indices/caps are Lean naturals. The exact input policy is
 part of the differential evidence; each result line has the number of live allocations after the call (`docs/generated-code.md` §Protocol).
@@ -242,7 +244,7 @@ profiles and final composed CI remain unqualified.
 
 The orderings: `monotonic` is relaxed; `unordered` is outside the subset (it has no read-read coherence). `seq_cst` has the rule of `acq_rel`: the model has no global SC order, so it allows more results than RC11 (a proof never depends on a result that RC11 forbids), but a proof that needs the SC order (store buffering with `seq_cst`, Dekker) does not go through. `cmpxchg_weak` adds matching-value read-only failure choices; `cmpxchg_strong` retains success on a matching selected value. Failure uses the failure order, creates no message or RMW write, and may repeat forever. See `docs/weak-cas.md` for the qualified scope. **Mixed-size policy**: an atomic location is one `(block, offset, size)`; an atomic access that overlaps it with another offset or size retires it and starts a new location with the block's bytes when every access to the bytes they share happened before (memory reused for another object; LLVM's model is per byte, MM-21), and throws `.unspecified` before it reads or writes a message when one is concurrent (racing mixed-size atomics have no meaning in LLVM); plain accesses of any size are unaffected (`docs/weak-cas.md`).
 
-**Memory-model adequacy** (premise [ORD-06](premises.md#ord-06), carried by every theorem that reaches the scheduler or the atomics model): the compiled program's behaviours on the target are among the model's outcomes. The argument per target (DRF-SC for plain accesses, the RC11 mappings to x86-TSO and ARMv8 for atomics) and its evidence are the `memory_model` record of `assurance/premises.json` ([research/C12.md](research/C12.md)); `scripts/premises.py` and `scripts/claims.py` fail a concurrency claim that omits it.
+**Memory-model adequacy** (premise [ORD-06](premises.md#ord-06), carried by every theorem that reaches the scheduler or the atomics model): the compiled program's behaviours on the target are among the model's outcomes. The argument per target (DRF-SC for plain accesses, the RC11 mappings to x86-TSO and ARMv8 for atomics) and its evidence are the `memory_model` record of `assurance/premises.json` ([research/C12.md](research/C12.md)); `scripts/premises.py` and `scripts/claims.py` fail a concurrency claim that omits it, and one about a translation whose recorded target has no entry in that record (s390x-linux, mips64-linux, wasm32).
 
 **Trusted assumption** (premise [ORD-02](premises.md#ord-02), carried by every theorem with atomics): the compiled code has no load buffering, as RC11 requires (the model has no promises). LLVM does not promise this for relaxed atomics; no example depends on it. The translator rejects the load-buffering shape it can see: a read without acquire (a load, an RMW, a `cmpxchg`), then a store, RMW or `cmpxchg` without release to another address (field and element pointers compared by base and index) on a straight-line path (no acquire-release or sequentially consistent RMW, call or branch between; an acquire or a release alone does not order them, and a `seq_cst` load or store is only one of them; an inlined block is straight-line), unless `--assume-no-lb` assumes ORD-02 (`checkLoadBuffering`, `Air2Lean/Check.lean`; also `scripts/translate.sh --assume-no-lb`). The check is not complete (a call or a branch ends it), so ORD-02 stays a premise. An atomic op's pointee is an integer, an enum, a `bool` or a packed struct (`Io.Condition`'s state): such an op is the integer op on its bits (`Zig.Packed`; `Zig.atomicLoadAs`, `atomicStoreAs`, `atomicRmwAs`, `cmpxchgAs`), and a loaded tag value without a name of an exhaustive enum is `.illegal`. A single or many pointer pointee (`*T`, `[*]T`, `?*T`; C09, [pointer-atomics.md](pointer-atomics.md)) is a pointer op (`Zig.atomicLoadPtrAt`, `atomicStorePtrAt`, `atomicXchgPtrAt`, `cmpxchgPtrAt`, `cmpxchgWeakPtrAt`): its messages hold the pointer's bytes, which keep its block, and `cmpxchg` compares identities (block and offset); a different pointer at the same address is `.unspecified`, never a success. Only `.Xchg` is an RMW on a pointer. A `usize` from `@intFromPtr` stays an integer atomic. Float atomics, slice, C and allowzero pointer pointees are rejected, each with its reason. A `cmpxchg` (strong or weak) or an RMW `.Max`/`.Min` on an integer representation with padding bits (bit width other than `8 * @sizeOf`: `u24`, `u31`, `i40`, `enum(u24)`, a packed struct backed by `u40`) is rejected (`PADDED_ATOMIC`): Zig lowers it to an op on the whole ABI cell (`cmpxchg ptr, i64` for `u40`, on x86_64 and aarch64), so padding bits that a plain `iN` store left untouched, an RMW carry or a sign extension made nonzero make it fail (or keep the old value) natively where the model, whose padding is undefined, compares only the value bits. A signed `.Max`/`.Min` is wrong natively even when the padding is zero: LLVM gets the sign-extended operand but the cell's raw bytes, so a negative cell orders as a large unsigned value (a negative `i24`/`i40` cell and a positive operand: `.Max` keeps the negative cell, `.Min` takes the operand), where the model, correctly, compares signed value bits. Zig 0.17.1 passes a probe that fills its cells with plain stores only because those stores now write the whole ABI cell, sign-extended; a cell whose padding is zero (bytes written otherwise) or an RMW `.Add` carry into the padding still breaks `cmpxchg` and `.Max`/`.Min` there. Probe evidence and the upstream bug draft: [upstream/padded-rmw-minmax.md](upstream/padded-rmw-minmax.md). Loads, stores, `.Xchg` and the arithmetic/bitwise RMWs mask or only write the padding, and stay supported.
 
@@ -327,8 +329,9 @@ a canceled task ends (no fairness).
 these calls get a trusted model: futex wait and wake, `clone`/`pthread_*`, clocks, sleep,
 `SIG.IO` interrupts and macOS `malloc`/`free`. They are in `ZigLean/Os/`
 ([os-threads.md](os-threads.md), premises OSF/OST/OSY/OSK/OSG/OSM-02). They use the same scheduler
-ops and memory. The translator binds `sched_yield` (OSY-01) and macOS `__error` (OSK-02) so far
-(`Thread.yield`, §Retiring the hand models); the others have no binding yet.
+ops and memory. The translator binds `sched_yield` (OSY-01), macOS `__error` (OSK-02), the clocks
+(OSK-01) and the futex wait and wake (OSF-01, OSF-02) so far (§Retiring the hand models); the
+others have no binding yet.
 
 ## Retiring the hand models
 
@@ -374,7 +377,15 @@ with the protocol rules at the OS wait and wake of a lock word (`FLock.wp_osWait
 a word protocol (`wp_wordOsWait`/`wp_wordOsWake`), `Event` and `Cond`. The rows stay until the
 clients of `Thread.Futex` are switched to the translated code. The native wake count differs
 from the hand model's `wake p n` (macOS wakes every waiter, Linux clamps at `2^31 − 1`):
-[audit §S5](architecture-audit/soundness-2026-10-14.md).
+[audit §S5](architecture-audit/soundness-2026-10-14.md). Maintainer decision 2026-11-24
+([audit §S6, finding 4](architecture-audit/soundness-2026-10-14.md#s6-hand-rows)): `Thread.Futex`
+goes through the OS rows, the `Io` futex becomes a contract that `Io.Threaded`'s translated code
+proves, and `os_unfair_lock` becomes an OS row (OSL-01). Done so far: the translator binds the
+OS wake rows `os.linux.futex_3arg` (0.15.2 on), `os.linux.futex_wake` (0.14.1) and libc's
+`__ulock_wake` (OSF-02), and the wake rules state the woken count within the request, which the
+translated `LinuxImpl.wake` needs (its result is not an errno). The hand rows stay until their
+clients walk the translated code (engine-ledger row `s6-futex-hand-rows`, with the open
+question of the macOS wake's loop tick in `ResetEvent.set`).
 
 Retired:
 

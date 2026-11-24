@@ -46,7 +46,7 @@ theorem writeAlias_owned (p : Ptr) (u : Except ErrName (BitVec 8)) (y : BitVec 8
     FTotalTriple (up (pts p 2 u)) (TryPointers.writeAlias p y)
       (fun r => ⟪r = writeView y u⟫ ⋆ up (pts p 2 (writeView y u))) := by
   have hd := admitted_all hdom
-  unfold TryPointers.writeAlias; cases u <;> fsym <;> exact hd
+  unfold TryPointers.writeAlias; cases u <;> fsym
 
 /-! ## Cleanup paths -/
 
@@ -57,7 +57,7 @@ theorem cleanup_owned (p o e : Ptr) (u : Except ErrName (BitVec 8)) (c k : BitVe
         (up (pts p 2 u) ⋆ (up (pts o 4 (c + 1)) ⋆
           up (pts e 4 (match u with | .ok _ => k | .error _ => k + 1))))) := by
   have hd := admitted_all hdom
-  unfold TryPointers.cleanup; cases u <;> fsym <;> exact hd
+  unfold TryPointers.cleanup; cases u <;> fsym
 
 /-- Aliased cleanup targets: one counter is passed for both `ordinary` and `on_error`.
 Error increments it twice (errdefer, then defer), success once. -/
@@ -67,7 +67,7 @@ theorem cleanup_shared_owned (p c : Ptr) (u : Except ErrName (BitVec 8)) (k : Bi
       (fun r => ⟪r = u⟫ ⋆
         (up (pts p 2 u) ⋆ up (pts c 4 (match u with | .ok _ => k + 1 | .error _ => k + 1 + 1)))) := by
   have hd := admitted_all hdom
-  unfold TryPointers.cleanup; cases u <;> fsym <;> exact hd
+  unfold TryPointers.cleanup; cases u <;> fsym
 
 /-- The cold error body runs its `errdefer`; success returns the payload address untouched. -/
 theorem coldPayload_owned (p e : Ptr) (u : Except ErrName (BitVec 8)) (k : BitVec 32)
@@ -76,6 +76,6 @@ theorem coldPayload_owned (p e : Ptr) (u : Except ErrName (BitVec 8)) (k : BitVe
       (fun r => ⟪r = tryView (BitVec 8) p u⟫ ⋆
         (up (pts p 2 u) ⋆ up (pts e 4 (match u with | .ok _ => k | .error _ => k + 1)))) := by
   have hd := admitted_all hdom
-  unfold TryPointers.coldPayload; cases u <;> fsym <;> exact hd
+  unfold TryPointers.coldPayload; cases u <;> fsym
 
 end TryPointersAliasProofs

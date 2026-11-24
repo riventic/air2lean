@@ -1,0 +1,19 @@
+# Results of wrong models (check.sh, wrong_models_rejected): each line, put in place of the
+# model's line of that name, must fail the comparison with the native output and with the
+# retained observation. They are what other readings of the casts would give.
+#
+# A sentinel array up to Zig 0.16 with the sentinel left out of the bits (what Zig 0.17.1's
+# LLVM lowering does, docs/upstream/bitcast-sentinel-array.md):
+sentToInt: 0x30211
+wideToInt: 0x300020077
+nestedToInt: 0x6050400030211
+sentItem3: 0x0
+roundTrip: 0xbbccdd
+# ... or with the result's sentinel forced to the type's (Zig 0.17.1's comptime evaluation):
+intToSentAt3: 0x0
+# An array of `void` with bits:
+voidsToInt: 0x1
+intToVoids: 0x0
+# The ≤0.16 memory reading of a float array and of a packed union, bytes swapped:
+floatsToInt: 0x3f800000c0000000
+bytesToU: 0x3412
