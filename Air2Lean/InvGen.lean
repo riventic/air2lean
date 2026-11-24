@@ -58,11 +58,13 @@ Families (layer 2 of the design: numeric facts and measures over the variables o
   name the node's pointer or the values of its fields: `name.node`, which must own the `next`
   field the body reads) and a frame (the other atoms), which the postcondition returns; what
   the postcondition holds besides is what the call leaves of a node (`name.done`). The invariant
-  is the visit's with the nodes passed as a list at that layout (`listSeg name.done s0.cur s.cur
-  ys`), the nodes left at the node's (`listSeg name.node s.cur none zs`), and the frame; its
-  parameters are the loop's and the contract's variables that these name, and the contract's
-  other variables (its hypotheses) are binders of the step's check only, which walks the call by
-  the contract. A freeing walk is the instance whose contract leaves no field of the node.
+  has the nodes passed as the segment at that layout told from its end (`listSegRev name.done
+  s0.cur s.cur ys`, `xs = ys.reverse ++ zs`: a node joins it by the constructor, also when what
+  the call leaves names neither the node's item nor its next pointer), the nodes left at the
+  node's (`listSeg name.node s.cur none zs`), and the frame; its parameters are the loop's and
+  the contract's variables that these name, and the contract's other variables (its hypotheses)
+  are binders of the step's check only, which walks the call by the contract. A freeing walk is
+  the instance whose contract leaves no field of the node.
 
 A loop body is a program of `MM σ ε` (its step is checked as an `FTotalTriple`) or of `CM Tgt σ ε`
 (a `CTriple`); its instance parameters are explicit parameters of the definitions (`inst0`).
@@ -480,7 +482,7 @@ partial def exec (ctx : Ctx) (st : St) (e : Expr) : MetaM (Array Path) := do
     let callee := (args.back?.getD default).consumeMData
     unless args.size == (if n == `Zig.callM then 3 else 4) do throwError "a partial lift: {e}"
     -- a call with a contract (`--contract`): the first rule about the function that fits
-    let rules := match callee.getAppFn.constName? with
+    let rules : Array (Name × Name) := match callee.getAppFn.constName? with
       | some f => ctx.contracts.filter (·.1 == f)
       | none => #[]
     if !rules.isEmpty then
@@ -883,7 +885,7 @@ structure Cand where
   /-- The arguments of the check's `fsym` (` [update]`). -/
   fsymArgs : String := ""
   /-- The body at the loop's parameters (`@B xs`), as the check runs it. -/
-  body : String
+  run : String
   /-- The binders of the check's theorem: `binders` with the instance parameters as instances,
   and the variables of a contract that the definitions do not take (its hypotheses). -/
   tbinders : String
@@ -975,7 +977,7 @@ def Cand.check (ns : Name) (c : Cand) (keep : Array Bool) (final := false) : Str
     return s!"{text}\n\
       set_option fsym.report true in\n\
       theorem {c.name}.houdini {c.tbinders}(s0 : {c.loc}) {c.entry}(s : {c.loc}) (n : Nat) :\n    \
-        {c.triple} ({inv "s n"}) (({c.body}).run s)\n      \
+        {c.triple} ({inv "s n"}) (({c.run}).run s)\n      \
         (floopNext {q c.again} ({inv ""}) ({q c.name}.post {c.args}s0 {c.vargs}) n) := by\n  \
         unfold {q c.name} {q c.name}.inv {q c.name}.post\n  fsym{c.fsymArgs}\n"
   -- the definitions, the assertion at the exit and the extra definition to unfold
@@ -985,7 +987,7 @@ def Cand.check (ns : Name) (c : Cand) (keep : Array Bool) (final := false) : Str
   return s!"{text}\n\
     set_option fsym.report true in\n\
     theorem {c.name}.houdini {c.tbinders}(s0 : {c.loc}) {c.entry}(s : {c.loc}) :\n    \
-      {c.triple} ({inv "s"}) (({c.body}).run s)\n      \
+      {c.triple} ({inv "s"}) (({c.run}).run s)\n      \
       (fun r => if {q c.again} r.1 then ⟪{meas "r.2"} < {meas "s"}⟫ ⋆ {inv "r.2"}\n        \
         else {atExit}) := by\n  \
       unfold {q c.name} {q c.name}.inv {q c.name}.meas{unfoldPost}\n  fsym\n"
@@ -1075,7 +1077,7 @@ for a reversal (the prefix `ys` reversed at the prefix's local); each accumulato
 value plus the sum of the visited items (or `k` per node), with the no-overflow fact over all of
 `xs` (an entry obligation, as in the counted family); the other locals keep their entry values.
 These facts are Houdini's candidates; the walk of the step with the exit post decides. -/
-def listCand (ns : Name) (name again binders tbinders args body triple loc exit : String)
+def listCand (ns : Name) (name again binders tbinders args run triple loc exit : String)
     (params : Array (String × String)) (w : Walk) : MetaM Cand := do
   let ptr (k : Nat) := if k == 0 then "p" else s!"(p.add {k})"
   let (nextOff, nextAl) := w.next
@@ -1103,7 +1105,7 @@ def listCand (ns : Name) (name again binders tbinders args body triple loc exit 
       let (v, T) := match k.fields.find? (·.1 != nextOff) with
         | some (_, _, v, T) => (v, T)
         | none => ("v", "Unit")
-      let bound := ["s", "s0", "r", "n", "xs", "ys", "zs", "plain", "listSeg", "FAssn", "Zig"]
+      let bound := ["s", "s0", "r", "n", "xs", "ys", "zs", "plain", "listSeg", "listSegRev", "FAssn", "Zig"]
       let taken := params.map (·.1) ++ k.vars.map (·.1)
       for x in #[k.ptr, q, v] ++ k.vars.map (·.1) do
         if bound.contains x then throwError "a variable of the contract `{k.rule}` named {x}"
@@ -1139,9 +1141,16 @@ def listCand (ns : Name) (name again binders tbinders args body triple loc exit 
       pure (T, bindersOf used, " ".intercalate (used.toList.map (·.1)), bindersOf rest, app "node" na,
         app "done" da, frame, pre)
   let LT := if T.contains ' ' then s!"List ({T})" else s!"List {T}"
-  let (rel, prefixAt, postList) := match w.rev? with
-    | some r => ("ys.reverse ++ zs", s!"listSeg {N} s.{r} none ys", s!"listSeg {N} r.2.{r} none xs.reverse")
-    | none => ("ys ++ zs", s!"listSeg {M} s0.{cur} s.{cur} ys", s!"listSeg {M} s0.{cur} none xs")
+  -- The nodes passed. A visit's are a segment to the cursor, which a node joins at its end (the
+  -- update `listSeg_snoc_upd`: the node's atoms give the update the item and the next pointer).
+  -- What a call leaves of a node need not name either, so the nodes that a call has taken are
+  -- the segment told from its end (`listSegRev`, the last node passed first): a node joins it
+  -- by the constructor, as a reversal's prefix, and the list's equation gives its item.
+  let (rel, prefixAt, postList) := match w.rev?, w.call? with
+    | some r, _ => ("ys.reverse ++ zs", s!"listSeg {N} s.{r} none ys", s!"listSeg {N} r.2.{r} none xs.reverse")
+    | none, some _ => ("ys.reverse ++ zs", s!"listSegRev {M} s0.{cur} s.{cur} ys",
+        s!"listSegRev {M} s0.{cur} none xs.reverse")
+    | none, none => ("ys ++ zs", s!"listSeg {N} s0.{cur} s.{cur} ys", s!"listSeg {N} s0.{cur} none xs")
   -- an accumulator's increment over the items `l`
   let inc (a : Acc) (l : String) := match a with
     | .item => s!"({l}.map BitVec.toNat).sum"
@@ -1166,11 +1175,11 @@ def listCand (ns : Name) (name again binders tbinders args body triple loc exit 
   let rules := match w.call? with
     | some k => #[k.use]
     | none => #[]
-  let upds := (if w.rev?.isSome then #[] else #["Zig.Full.listSeg_snoc_upd"]) ++ rules
+  let upds := (if w.rev?.isSome || w.call?.isSome then #[] else #["Zig.Full.listSeg_snoc_upd"]) ++ rules
   return {
     name, again, binders := binders ++ layout ++ s!"(xs : {LT}) ",
     tbinders := tbinders ++ layout ++ hyps ++ s!"(xs : {LT}) ", args := args ++ layoutArgs ++ " xs ",
-    body, triple, rules := w.call?.toArray.map (·.rule),
+    run, triple, rules := w.call?.toArray.map (·.rule),
     loc, entry := "", vargs := "", measEntry := "", measArgs := "", facts,
     owned := #[.atom prefixAt, .atom s!"listSeg {N} s.{cur} none zs"] ++ rest,
     meas := "", exit, postFacts := post, postCells := #[], ghost := true,
@@ -1333,7 +1342,7 @@ def candLoop (ns body again : Name) (contracts : Array (Name × Name) := #[]) : 
       if c.plain then owned := owned.push .plain
       let name := relName ns body
       return {
-        name, again := relName ns again, binders, tbinders, args, body := run, triple, loc, entry,
+        name, again := relName ns again, binders, tbinders, args, run, triple, loc, entry,
         vargs, measEntry, measArgs,
         facts, owned, meas := left, exit, postFacts := post, postCells,
         doc := s!"/-- The invariant of `{name}`, a counted loop: `{x}` goes {if c.down then "down" else "up"} \

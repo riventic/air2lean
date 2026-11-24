@@ -196,19 +196,19 @@ omit [Ext] in
 /-- The nodes that `freeAll`'s loop has passed (`freeAll.loop5.done`, what `destroy`'s contract
 leaves of each: the generated invariant's list of them, `Proofs/Lists/AllocInv.lean`) are the
 fee of every node and what the allocator told of the nodes. -/
-theorem fees_freed_of_done {tl : Option Ptr} :
-    ∀ {hd : Option Ptr} (xs : List (BitVec 32)) {r : Res},
-      listSeg (freeAll.loop5.done I φ) hd tl xs r →
-        (fees I φ xs.length ⋆ freedSeg I hd tl xs.length) r
-  | hd, [], _, h => sep_comm ((Full.sep_emp (P := freedSeg I hd tl 0)).mpr h)
-  | _, _ :: xs, _, h => by
-    obtain ⟨p, q, h⟩ := h
-    obtain ⟨hp, h⟩ := sep_lift.mp h
-    have h := sep_mono_right (fun _ h => fees_freed_of_done xs h) h
+theorem fees_freed_of_done :
+    ∀ (vs : List (BitVec 32)) {hd tl : Option Ptr} {r : Res},
+      listSegRev (freeAll.loop5.done I φ) hd tl vs r →
+        (fees I φ vs.length ⋆ freedSeg I hd tl vs.length) r
+  | [], hd, tl, _, h => sep_comm ((Full.sep_emp (P := freedSeg I hd tl 0)).mpr h)
+  | _ :: vs, hd, tl, _, h => by
+    obtain ⟨p, h⟩ := h
+    have h : ((I.fee φ ⋆ I.freed p) ⋆ listSegRev (freeAll.loop5.done I φ) hd (some p) vs) _ := h
+    have h := sep_mono_right (fun _ h => fees_freed_of_done vs h) h
     rw [List.length_cons, fees_succ]
-    have h : ((I.fee φ ⋆ fees I φ xs.length) ⋆ (I.freed p ⋆ freedSeg I q tl xs.length)) _ :=
+    have h : ((I.fee φ ⋆ fees I φ vs.length) ⋆ (freedSeg I hd (some p) vs.length ⋆ I.freed p)) _ :=
       ac_cast h (by ac_rfl)
-    exact sep_mono_right (fun _ h => ⟨p, q, sep_lift.mpr ⟨hp, h⟩⟩) h
+    exact sep_mono_right (fun _ h => freedSeg_snoc I tl _ h) h
 
 /-- After `freeAll`'s loop over a list of `n` nodes from `hd` (the form of the loop with its exact
 step count, below): no node is left, the `n` fees are back, with what the allocator told of the
@@ -217,16 +217,17 @@ def freePost (hd : Option Ptr) (n : Nat) (r : freeAllExit × freeAllLocals) : FA
   ⟪r.1 = .br4⟫ ⋆ (I.own ⋆ ((fees I φ n ⋆ vtR vtp fns.toList) ⋆ freedSeg I hd none n))
 
 /-- **`freeAll` hands every node of the list to `destroy`**: what is left of the list is what
-`destroy`'s contract (`destroy_fields`) leaves of each node, in the list's order. The loop is
-walked by `fsym` from its generated invariant (`Proofs/Lists/AllocInv.lean`, `air2lean-invgen`'s
-list walk with a call, read off that contract); a node passed joins the nodes passed by
-`listSeg_snoc_upd`. -/
+`destroy`'s contract (`destroy_fields`) leaves of each node (the segment of them told from its
+end, `listSegRev`). The loop is walked by `fsym` from its generated invariant
+(`Proofs/Lists/AllocInv.lean`, `air2lean-invgen`'s list walk with a call, read off that
+contract): no step or loop lemma. -/
 theorem freeAll_done (hd : Option Ptr) (xs : List (BitVec 32))
     (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
     CTriple (I.own ⋆ (list I φ hd xs ⋆ vtR vtp fns.toList) ⋆ plain) (freeAll ⟨ctx, vtp⟩ hd)
-      (fun _ => listSeg (freeAll.loop5.done I φ) hd none xs ⋆ I.own ⋆ vtR vtp fns.toList ⋆ plain) := by
+      (fun _ => listSegRev (freeAll.loop5.done I φ) hd none xs.reverse ⋆ I.own ⋆
+        vtR vtp fns.toList ⋆ plain) := by
   unfold freeAll
-  fsym [destroy_fields ctx vtp fns I e φ (h := h), listSeg_snoc_upd]
+  fsym [destroy_fields ctx vtp fns I e φ (h := h)]
 
 /-- **`freeAll`, with what the allocator told of the nodes** (`FAllocInv.freed` of each, from
 `hd`): every node given back, the fee of every node back. A client of the contract alone forgets
@@ -236,8 +237,10 @@ theorem freeAll_freed (hd : Option Ptr) (xs : List (BitVec 32))
     CTriple (I.own ⋆ (list I φ hd xs ⋆ vtR vtp fns.toList) ⋆ plain) (freeAll ⟨ctx, vtp⟩ hd)
       (fun _ => (I.own ⋆ ((fees I φ xs.length ⋆ vtR vtp fns.toList) ⋆
         freedSeg I hd none xs.length)) ⋆ plain) :=
-  (freeAll_done ctx vtp fns I e φ hd xs h).post fun _ _ h' =>
-    ac_cast (sep_mono_left (fun _ h => fees_freed_of_done I φ xs h) h') (by ac_rfl)
+  (freeAll_done ctx vtp fns I e φ hd xs h).post fun _ _ h' => by
+    have h' := sep_mono_left (fun _ h => fees_freed_of_done I φ xs.reverse h) h'
+    rw [List.length_reverse] at h'
+    exact ac_cast h' (by ac_rfl)
 
 omit [Ext] in
 /-- What the allocator told is knowledge only (`FAllocInv.freed_pers`): a contract client forgets
