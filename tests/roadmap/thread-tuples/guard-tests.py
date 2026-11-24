@@ -109,7 +109,7 @@ manifest=json.loads(Path('tests/roadmap/thread-tuples/provenance.json').read_tex
 mode=os.environ.get('FAKE_AIR_MODE','good')
 version=os.environ.get('FAKE_AIR_VERSION','0.16.0')  # zig-pin: test double
 names=['thread_tuples.'+n for n in manifest['functions']] + manifest['stdlib_functions']
-if version!='0.16.0': names.remove('thread_tuples.groupMixed')
+if version in ('0.14.1','0.15.2'): names.remove('thread_tuples.groupMixed')
 if mode=='missing': names.pop()
 if mode=='duplicate': names.append(names[0])
 for i, name in enumerate(names):
@@ -161,6 +161,9 @@ for i, name in enumerate(names):
 
     def test_previous_version_no_group(self):
         self.check(True, version="0.15.2")
+
+    def test_default_version_has_group(self):
+        self.check(True, version="0.17.1")
 
     def test_missing_callee(self):
         self.check(False, mode="missing", expected="function inventory")

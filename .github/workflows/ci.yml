@@ -2659,17 +2659,18 @@ jobs:
           # The strength log of its memory contracts (tests/roadmap/strength-log).
           LEAN_PATH="$RUNNER_TEMP/vcs${LEAN_PATH:+:$LEAN_PATH}" lake env lean tests/roadmap/strength-log/Vcs.lean
 
-      # Labelled switch loops share the same AIR contract in 0.14/0.15/0.16; 0.17.1 is not
-      # yet a qualified dispatch profile (tests/roadmap/dispatch/check.sh rejects it).
+      # Labelled switch loops share the same AIR contract in 0.14/0.15/0.16/0.17.1
+      # (tests/roadmap/dispatch/check.sh rejects any other profile). The version-independent
+      # synthetic part runs once, on the default.
       - name: Loop-switch dispatch regressions
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate && matrix.zig == '0.14.1' || !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate && matrix.zig == '0.15.2' || !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate && matrix.zig == '0.16.0' }}
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate && matrix.zig == '0.14.1' || !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate && matrix.zig == '0.15.2' || !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate && matrix.zig == '0.16.0' || !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate && matrix.zig == '0.17.1' }}
         env:
           LEAN_NUM_THREADS: "1"
           AIR2LEAN_DISPATCH_ZIG_VERSION: ${{ matrix.zig }}
           AIR2LEAN_DISPATCH_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
           AIR2LEAN_DISPATCH_ZIG_STOCK: zig
         run: |
-          if [ "$AIR2LEAN_DISPATCH_ZIG_VERSION" = "0.16.0" ]; then
+          if [ "$AIR2LEAN_DISPATCH_ZIG_VERSION" = "0.17.1" ]; then
             tests/roadmap/dispatch/check.sh
           else
             tests/roadmap/dispatch/check.sh --native-only

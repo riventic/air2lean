@@ -42,7 +42,8 @@ def check_export(directory, adapter=False):
         manifest = HELPERS["parse_json"]((ROOT / "provenance.json").read_text())
         expected = {"thread_tuples." + n for n in manifest["functions"]}
         expected.update(manifest["stdlib_functions"])
-        if version != "0.16.0":
+        # `std.Io.Group` (and so `groupMixed`) exists from Zig 0.16 on.
+        if version in ("0.14.1", "0.15.2"):
             expected.remove("thread_tuples.groupMixed")
     names = [doc["name"] for doc in data]
     if set(names) != expected or len(names) != len(expected):
