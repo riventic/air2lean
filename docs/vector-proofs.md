@@ -145,7 +145,8 @@ Under emulated x86_64-linux (Docker `linux/amd64`, stock Zig 0.16.0 `x86_64-linu
 
 Zig 0.17.1. Stock 0.17.1 (ReleaseSafe, Debug, ReleaseFast) passed `lanes.zig`'s test and printed
 the same probe lines on x86_64-linux (Docker `linux/amd64`), and on aarch64-macos and
-aarch64-linux (a `linux/arm64` container) except the two `f80x2` lines, the declared layout
+aarch64-linux (a `linux/arm64` container; layout evidence only, ReleaseFast stays unqualified,
+[build-modes.md](build-modes.md)) except the two `f80x2` lines, the declared layout
 divergence of [aarch64-abi.md](aarch64-abi.md) §Zig 0.17.1 (an `f80` and a vector of it in memory
 are rejected there by the layout comparison of `checkMemTy`:
 `lang-long-tail/float_lanes_aarch64.reject`). 0.17.1 writes `&v[i]` as a `ptr_cast` of the vector

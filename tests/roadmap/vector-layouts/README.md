@@ -12,7 +12,8 @@ checks the translator's backend gate and lane-pointer rejection. The theorems ar
 0.16.0 translation, `Lanes/Proofs.lean` theorems on it, and `Lanes/Checks.lean`
 (`lanes_checks.py`) kernel-checked runs of the native test's inputs. `lanes.sh` retranslates every
 version (0.17.1, 0.16.0, 0.15.2), compares the 0.16.0 translation with `Lanes/Gen.lean` and checks
-the proofs and runs on each version's translation; `--native` runs the test with a stock Zig and
+the runs on each version's translation and the proofs on the 0.17.1 and 0.16.0 ones (0.15.2 types
+the lane pointers with the vector's alignment, another access statement); `--native` runs the test with a stock Zig and
 `--export DIR [VERSION]` exports fresh AIR with the patched compiler (default 0.16.0) and compares
 its translation with the committed export's. Zig 0.17.1 writes `&v[i]` as a `ptr_cast` to the lane
 pointer type; its lane accesses translate as 0.16.0's (`Canon.laneElemPtrs`).
