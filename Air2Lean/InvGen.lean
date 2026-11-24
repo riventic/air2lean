@@ -154,6 +154,36 @@ def Sym.nodeLoc? : Sym → Option (Sym × Nat)
 /-- `()`, the result of a step that returns nothing. -/
 def unitV : Sym := .val (.const ``Unit.unit [])
 
+/-- The contract of a call that a list walk makes on the cursor's node, read off a rule
+`∀ ys, T P (f as) (fun _ => Q)` of the contracts given to the generator (`--contract`): the
+call takes the node's fields, the rest of the node and a frame, and returns the frame and what is
+left of the node. All text is over the loop's parameters and the rule's variables. -/
+structure Contract where
+  /-- The rule. -/
+  rule : Name
+  /-- The call's argument that is the node's pointer, and the rule's variable for it. -/
+  node : Sym
+  ptr : String
+  /-- The node's fields that the rule's precondition owns as `up (pts (p.add off) al y)`: the
+  offset, the alignment, the variable `y` and its type. -/
+  fields : Array (Nat × Nat × String × String)
+  /-- The rule's variables that the call does not fix and that are not the node's, in order:
+  the name, the type and whether it is a hypothesis (a proof). -/
+  vars : Array (String × String × Bool)
+  /-- The atoms of the precondition that name the node (its fields first to last, the rest of the
+  node), those that do not (the frame), and the atoms of the postcondition besides the frame. -/
+  nodeAtoms : Array String
+  frame : Array String
+  after : Array String
+  /-- The loop's parameters and the rule's variables that each of the three names. -/
+  nodeUses : Array String
+  frameUses : Array String
+  afterUses : Array String
+  /-- The rule at the call's arguments as a function of the node's variables (the `fsym` rule of
+  the step's check). -/
+  use : String
+  deriving Inhabited
+
 /-- The state of one path through the body. -/
 structure St where
   /-- The current value of each local, in field order. -/
@@ -170,6 +200,8 @@ structure St where
   cond : Option (Sym × Bool) := none
   /-- The accesses through node pointers, in order (the list-walk family). -/
   nodeOps : Array NodeOp := #[]
+  /-- The calls with a contract, in order, each with the number of node accesses before it. -/
+  calls : Array (Contract × Nat) := #[]
 
 /-- A path through the body and its result. -/
 structure Path where
@@ -182,6 +214,37 @@ structure Ctx where
   fields : Array Name
   params : Array FVarId
   env : Std.HashMap FVarId Sym := {}
+  /-- The contracts given to the generator: the function a rule is about, and the rule. -/
+  contracts : Array (Name × Name) := #[]
+
+/-- `e` on one line. -/
+def ppLine (e : Expr) : MetaM String :=
+  return (← ppExpr e).pretty (width := 1000000)
+
+/-- The precondition, the command and the postcondition of a triple of the full-state logic. -/
+def tripleParts? (concl : Expr) : Option (Expr × Expr × Expr) :=
+  if concl.isAppOfArity `Zig.Full.CTriple 5 then
+    some (concl.getArg! 2, concl.getArg! 3, concl.getArg! 4)
+  else [`Zig.Full.FTotalTriple, `Zig.Full.FTriple, `Zig.Full.FTTotalTriple, `Zig.Full.FTTriple].findSome?
+    fun k => if concl.isAppOfArity k 4 then some (concl.getArg! 1, concl.getArg! 2, concl.getArg! 3)
+      else none
+
+/-- The function that the rule `rule` is about: the head of its triple's command. -/
+def contractOf (rule : Name) : MetaM Name := do
+  let some info := (← getEnv).find? rule | throwError "no contract `{rule}`"
+  unless info.levelParams.isEmpty do throwError "a contract `{rule}` with universe parameters"
+  forallTelescope info.type fun _ concl => do
+    let some (_, cmd, _) := tripleParts? concl | throwError "a contract `{rule}` that is not a triple"
+    let some f := cmd.getAppFn.constName? | throwError "a contract `{rule}` whose command is not a call"
+    return f
+
+/-- The atoms of the assertion `e`: the operands of its separating conjunctions, with the
+reducible definitions on the way unfolded (a node written as its layout's name). -/
+partial def sepAtoms (e : Expr) : MetaM (Array Expr) := do
+  let e ← whnfR e
+  if e.isAppOfArity `Zig.Full.FAssn.sep 2 then
+    return (← sepAtoms (e.getArg! 0)) ++ (← sepAtoms (e.getArg! 1))
+  return #[e]
 
 /-- A natural-number literal (raw or `OfNat.ofNat`). -/
 def natLit? (e : Expr) : Option Nat :=
@@ -270,6 +333,100 @@ def St.access (st : St) (i : Nat) (ty : Expr) (align : Nat) : MetaM (St × Nat) 
     return ({ st with cells := st.cells.push { param := i, ty, width, align, val := .cell i } },
       st.cells.size)
 
+/-- The contract `rule` at the call `call` (its function applied to the call's arguments), or why
+it does not fit. The call fixes some of the rule's variables: one is the node's pointer (an
+optional pointer's payload in the body), the others are terms over the loop's parameters, which
+the text has in their place. The node's variables are the pointer and the values of the fields
+that the precondition owns at offsets of it (`up (pts (p.add k) a y)`); the precondition's atoms
+that name one are the node, the others the frame, which the postcondition must return atom for
+atom. The call returns `()` and its postcondition does not read the result. -/
+def readContract (ctx : Ctx) (st : St) (rule : Name) (call : Expr) : MetaM Contract := do
+  let some info := (← getEnv).find? rule | throwError "no contract `{rule}`"
+  let (ms, _, concl) ← forallMetaTelescope info.type
+  let some (_, cmd, _) := tripleParts? concl | throwError "a contract `{rule}` that is not a triple"
+  unless ← isDefEq cmd call do throwError "the contract `{rule}` is not about the call {call}"
+  let vals ← ms.mapM (instantiateMVars ·)
+  forallTelescope info.type fun ys concl => do
+    let name (y : Expr) : MetaM String := do
+      let n := (← y.fvarId!.getDecl).userName
+      if n.hasMacroScopes then throwError "a variable of the contract `{rule}` without a name"
+      return n.toString
+    -- the variables that the call fixes: the node's pointer, or a term over the loop's parameters
+    let mut fixed : Array (Expr × Expr) := #[]
+    let mut node? : Option (Expr × Sym) := none
+    for h : i in [0:ys.size] do
+      let v := vals[i]!
+      if v.isMVar then continue
+      if v.hasExprMVar then throwError "a call that fixes a variable of the contract `{rule}` only in part"
+      let local? := match v with | .fvar id => ctx.env[id]? | _ => none
+      if let some sym := local? then
+        let some (_, 0) := sym.nodeLoc? | throwError "a call argument that is not the loop's or the node's pointer"
+        if node?.isSome then throwError "a call that takes two nodes"
+        node? := some (ys[i], sym)
+      else
+        let outside := (collectFVars {} v).fvarIds.any (!ctx.params.contains ·)
+        if outside then throwError "a call argument that is not over the loop's parameters"
+        fixed := fixed.push (ys[i], v)
+    let some (py, node) := node? | throwError "a call that does not take a node"
+    let inst (e : Expr) : Expr := e.replaceFVars (fixed.map (·.1)) (fixed.map (·.2))
+    let some (P, _, Q) := tripleParts? concl | throwError "a contract `{rule}` that is not a triple"
+    let Q ← match (inst Q).consumeMData with
+      | .lam _ _ b _ =>
+        if b.hasLooseBVars then throwError "a contract `{rule}` whose postcondition reads the result"
+        pure b
+      | _ => throwError "a contract `{rule}` whose postcondition is not a function"
+    let pre ← sepAtoms (inst P)
+    let kept := ys.filter fun y => !fixed.any (·.1 == y)
+    -- the node's fields and variables
+    let mut fields := #[]
+    let mut nodeVars := #[py]
+    for a in pre do
+      unless a.isAppOfArity `Zig.Full.FAssn.up 1 do continue
+      let x := a.appArg!.consumeMData
+      unless x.isAppOfArity `Zig.pts 5 do continue
+      let (T, q, al, v) := (x.getArg! 0, x.getArg! 2, x.getArg! 3, x.getArg! 4)
+      let off? : Option Nat :=
+        if q == py then some 0
+        else if q.isAppOfArity `Zig.Ptr.add 2 && q.getArg! 0 == py then natLit? (q.getArg! 1)
+        else none
+      let (some off, some al) := (off?, natLit? al) | continue
+      unless v.isFVar && kept.contains v && !nodeVars.contains v do continue
+      fields := fields.push (off, al, ← name v, ← ppLine T)
+      nodeVars := nodeVars.push v
+    let names (a : Expr) : Bool := nodeVars.any fun y => a.containsFVar y.fvarId!
+    let nodeAtoms := pre.filter names
+    let frame := pre.filter (!names ·)
+    let mut after ← sepAtoms Q
+    for f in frame do
+      let some i := after.idxOf? f
+        | throwError "the contract `{rule}` does not return its frame `{← ppLine f}`"
+      after := after.extract 0 i ++ after.extract (i + 1) after.size
+    -- the other variables
+    let mut vars := #[]
+    for y in kept do
+      if nodeVars.contains y then continue
+      let ty := inst (← inferType y)
+      vars := vars.push (← name y, ← ppLine ty, ← isProp ty)
+    let uses (atoms : Array Expr) : MetaM (Array String) := do
+      let mut out := #[]
+      for id in ctx.params ++ (kept.filter (!nodeVars.contains ·)).map (·.fvarId!) do
+        if atoms.any (·.containsFVar id) then out := out.push (← id.getDecl).userName.toString
+      return out
+    let mut binders := ""
+    let mut args := ""
+    for h : i in [0:ys.size] do
+      let y := ys[i]
+      match fixed.find? (·.1 == y) with
+      | some (_, v) => args := args ++ s!" ({← ppLine v})"
+      | none =>
+        args := args ++ s!" {← name y}"
+        if nodeVars.contains y then binders := binders ++ s!"({← name y} : {← ppLine (inst (← inferType y))}) "
+    return {
+      rule, node, ptr := ← name py, fields, vars,
+      nodeAtoms := ← nodeAtoms.mapM ppLine, frame := ← frame.mapM ppLine, after := ← after.mapM ppLine,
+      nodeUses := ← uses nodeAtoms, frameUses := ← uses frame, afterUses := ← uses after,
+      use := s!"(fun {binders}=> @{rule}{args})" }
+
 mutual
 
 /-- The paths of the monadic term `e` from `st`. -/
@@ -300,10 +457,25 @@ partial def exec (ctx : Ctx) (st : St) (e : Expr) : MetaM (Array Path) := do
         throwError "a modify that does not rebuild the locals: {body}"
       body.getAppArgs.mapM (evalPure ctx' st')
     return #[{ st := { st' with locals := new }, res := unitV }]
-  | some n@`Zig.callM | some n@`Zig.callMC =>
-    -- (`callM r : MM σ α` and `callMC r : CM Tgt σ α` lift the memory command `r`)
+  | some n@`Zig.callM | some n@`Zig.callMC | some n@`Zig.callC =>
+    -- (`callM r : MM σ α` and `callMC r : CM Tgt σ α` lift the memory command `r`, `callC r` the
+    -- concurrent function `r`)
     let callee := (args.back?.getD default).consumeMData
     unless args.size == (if n == `Zig.callM then 3 else 4) do throwError "a partial lift: {e}"
+    -- a call with a contract (`--contract`): the first rule about the function that fits
+    let rules := match callee.getAppFn.constName? with
+      | some f => ctx.contracts.filter (·.1 == f)
+      | none => #[]
+    if !rules.isEmpty then
+      unless (← inferType callee).getAppArgs.back?.any (·.isConstOf ``Unit) do
+        throwError "a call with a contract that returns a value"
+      let mut why := #[]
+      for (_, rule) in rules do
+        try
+          let k ← readContract ctx st rule callee
+          return #[{ st := { st with calls := st.calls.push (k, st.nodeOps.size) }, res := unitV }]
+        catch ex => why := why.push (← ex.toMessageData.toString)
+      throwError "a call that no given contract fits: {"; ".intercalate why.toList}"
     if callee.isAppOfArity `Zig.ptrProject 2 then
       let base ← evalPure ctx st (callee.getArg! 0)
       -- a field of a node (`(·.add k)` of an optional pointer's payload), not a cell at an
@@ -527,6 +699,9 @@ structure Walk where
   pinned : Array Name
   exits : Option (Array Name)
   plain : Bool
+  /-- The call that the body hands each node to, by its contract (a consuming walk): the nodes
+  passed are then what the contract leaves of them. -/
+  call? : Option Contract := none
 
 /-- An optional pointer (`?*T`). -/
 def isOptPtr (ty : Expr) : Bool :=
@@ -546,9 +721,9 @@ def listWalk (ctx : Ctx) (again : Expr → MetaM Bool) (fieldTy : Name → MetaM
   unless isOptPtr (← fieldTy cur) do throwError "a cursor `{cur}` that is not an optional pointer"
   for p in exits do
     unless p.st.cond == some (.isSome (.local cur), false) do throwError "an exit guarded by another test"
-    unless p.st.checked.isEmpty && p.st.cells.isEmpty && p.st.nodeOps.isEmpty &&
+    unless p.st.checked.isEmpty && p.st.cells.isEmpty && p.st.nodeOps.isEmpty && p.st.calls.isEmpty &&
         (p.st.locals.zip ctx.fields).all (fun (v, f) => v == .local f) do
-      throwError "an exit that adds, accesses memory or changes a local"
+      throwError "an exit that adds, accesses memory, calls or changes a local"
   unless c.st.cells.isEmpty do throwError "a list walk that accesses a cell of a parameter"
   let ops := c.st.nodeOps
   unless ops.all (·.node == .local cur) do throwError "an access to a node other than the cursor's"
@@ -603,8 +778,25 @@ def listWalk (ctx : Ctx) (again : Expr → MetaM Bool) (fieldTy : Name → MetaM
     unless changed.any (fun (v, f) => v == a && accs.any (·.1 == f)) do
       throwError "an add or subtraction outside the accumulators"
   let pinned := ctx.fields.filter fun f => f != cur && rev? != some f && !accs.any (·.1 == f)
+  -- a call with a contract takes the cursor's node, after the body's accesses to it: the
+  -- contract owns the `next` field and the item's (and at most that one value besides `next`)
+  let call? ← match c.st.calls with
+    | #[] => pure none
+    | #[(k, before)] =>
+      unless k.node == .payload (.local cur) do throwError "a call on a node other than the cursor's"
+      unless before == ops.size do throwError "an access to a node after the call that takes it"
+      unless stores.isEmpty do throwError "a store to a node that a call takes"
+      unless k.fields.any (fun (off, al, _, _) => off == nextOff && al == nextOp.align) do
+        throwError "the contract `{k.rule}` does not own the node's next field"
+      if let some (off, _, al) := item? then
+        unless k.fields.any (fun (off', al', _, _) => off' == off && al' == al) do
+          throwError "the contract `{k.rule}` does not own the node's item field"
+      if k.fields.size > 2 then
+        throwError "the contract `{k.rule}` owns {k.fields.size - 1} values of a node besides `next`, not at most one"
+      pure (some k)
+    | _ => throwError "a list walk with two calls"
   return { cursor := cur, next := (nextOff, nextOp.align), item?, rev?, accs, pinned,
-           exits := exitLabels exits, plain := paths.any (·.st.tick) }
+           exits := exitLabels exits, plain := paths.any (·.st.tick), call? }
 
 /-- `n` without the namespace `ns`. -/
 def relName (ns n : Name) : String :=
@@ -673,8 +865,15 @@ structure Cand where
   pre : String := ""
   /-- The arguments of the check's `fsym` (` [update]`). -/
   fsymArgs : String := ""
-  /-- The body's arguments, if not all of `args` (a list walk's invariant takes more). -/
-  bodyArgs? : Option String := none
+  /-- The body at the loop's parameters (`@B xs`), as the check runs it. -/
+  body : String
+  /-- The binders of the check's theorem: `binders` with the instance parameters as instances,
+  and the variables of a contract that the definitions do not take (its hypotheses). -/
+  tbinders : String
+  /-- The judgment of the step's check: `FTotalTriple` (a body of `MM`), `CTriple` (of `CM`). -/
+  triple : String := "FTotalTriple"
+  /-- The contracts that the candidate uses. -/
+  rules : Array Name := #[]
 
 /-- An assertion over the resources `owned`: the facts `top`, and each written cell `k` at a
 value `v` with the facts `cell k`. -/
@@ -758,8 +957,8 @@ def Cand.check (ns : Name) (c : Cand) (keep : Array Bool) (final := false) : Str
     let text := if final then c.output keep else c.pre ++ defs ++ c.defs keep use ++ "\n" ++ c.postDef
     return s!"{text}\n\
       set_option fsym.report true in\n\
-      theorem {c.name}.houdini {c.binders}(s0 : {c.loc}) {c.entry}(s : {c.loc}) (n : Nat) :\n    \
-        FTotalTriple ({inv "s n"}) (({q c.name} {c.bodyArgs?.getD c.args}).run s)\n      \
+      theorem {c.name}.houdini {c.tbinders}(s0 : {c.loc}) {c.entry}(s : {c.loc}) (n : Nat) :\n    \
+        {c.triple} ({inv "s n"}) (({c.body}).run s)\n      \
         (floopNext {q c.again} ({inv ""}) ({q c.name}.post {c.args}s0 {c.vargs}) n) := by\n  \
         unfold {q c.name} {q c.name}.inv {q c.name}.post\n  fsym{c.fsymArgs}\n"
   -- the definitions, the assertion at the exit and the extra definition to unfold
@@ -768,8 +967,8 @@ def Cand.check (ns : Name) (c : Cand) (keep : Array Bool) (final := false) : Str
     else (defs ++ c.defs keep use, inv "r.2", "")
   return s!"{text}\n\
     set_option fsym.report true in\n\
-    theorem {c.name}.houdini {c.binders}(s0 : {c.loc}) {c.entry}(s : {c.loc}) :\n    \
-      FTotalTriple ({inv "s"}) (({q c.name} {c.args}).run s)\n      \
+    theorem {c.name}.houdini {c.tbinders}(s0 : {c.loc}) {c.entry}(s : {c.loc}) :\n    \
+      {c.triple} ({inv "s"}) (({c.body}).run s)\n      \
       (fun r => if {q c.again} r.1 then ⟪{meas "r.2"} < {meas "s"}⟫ ⋆ {inv "r.2"}\n        \
         else {atExit}) := by\n  \
       unfold {q c.name} {q c.name}.inv {q c.name}.meas{unfoldPost}\n  fsym\n"
@@ -859,25 +1058,73 @@ for a reversal (the prefix `ys` reversed at the prefix's local); each accumulato
 value plus the sum of the visited items (or `k` per node), with the no-overflow fact over all of
 `xs` (an entry obligation, as in the counted family); the other locals keep their entry values.
 These facts are Houdini's candidates; the walk of the step with the exit post decides. -/
-def listCand (ns : Name) (name again binders args loc exit : String) (w : Walk) : MetaM Cand := do
+def listCand (ns : Name) (name again binders tbinders args body triple loc exit : String)
+    (params : Array (String × String)) (w : Walk) : MetaM Cand := do
   let ptr (k : Nat) := if k == 0 then "p" else s!"(p.add {k})"
   let (nextOff, nextAl) := w.next
-  -- the node layout, and the item type
-  let (T, layout, layoutArgs, rest) ← match w.item? with
-    | some (k, ty, al) => do
-      let t := toString (← ppExpr ty)
-      pure (t, "(X : Zig.Ptr → FAssn) ", "X", s!"up (pts {ptr k} {al} v) ⋆ X p")
-    | none => pure ("V", "(V : Type) (D : Zig.Ptr → V → FAssn) ", "V D", "D p v")
-  let LT := if T.contains ' ' then s!"List ({T})" else s!"List {T}"
-  -- (qualified: a parameter named like the body's first component would capture it)
-  let N := s!"({ns}.{name}.node {layoutArgs})"
-  let pre := s!"/-- The node layout of `{name}`: `next` at offset {nextOff}{if w.item?.isSome then ", the item" else ""}, \
-    the rest. -/\nabbrev {name}.node {layout}(p : Zig.Ptr) (v : {T}) (q : Option Zig.Ptr) : FAssn :=\n  \
-    up (pts {ptr nextOff} {nextAl} q) ⋆ {rest}\n\n"
   let cur := w.cursor
+  -- The node layout and the item type. Without a call they are read off the body's accesses;
+  -- with one, off its contract: the node is the contract's precondition without its frame, and a
+  -- node passed is the contract's postcondition without it (`name.done`). `layout`: the
+  -- parameters of the definitions for them, `hyps`: those of the check besides.
+  let (T, layout, layoutArgs, hyps, N, M, frame, pre) ← match w.call? with
+    | none => do
+      let (T, layout, layoutArgs, rest) ← match w.item? with
+        | some (k, ty, al) => do
+          let t := toString (← ppExpr ty)
+          pure (t, "(X : Zig.Ptr → FAssn) ", "X", s!"up (pts {ptr k} {al} v) ⋆ X p")
+        | none => pure ("V", "(V : Type) (D : Zig.Ptr → V → FAssn) ", "V D", "D p v")
+      -- (qualified: a parameter named like the body's first component would capture it)
+      let N := s!"({ns}.{name}.node {layoutArgs})"
+      let pre := s!"/-- The node layout of `{name}`: `next` at offset {nextOff}{if w.item?.isSome then ", the item" else ""}, \
+        the rest. -/\nabbrev {name}.node {layout}(p : Zig.Ptr) (v : {T}) (q : Option Zig.Ptr) : FAssn :=\n  \
+        up (pts {ptr nextOff} {nextAl} q) ⋆ {rest}\n\n"
+      pure (T, layout, layoutArgs, "", N, N, (#[] : Array String), pre)
+    | some k => do
+      -- the node's variables: the pointer, `next`'s value and the item (the other value field)
+      let some (_, _, q, qT) := k.fields.find? (·.1 == nextOff) | throwError "no next field"
+      let (v, T) := match k.fields.find? (·.1 != nextOff) with
+        | some (_, _, v, T) => (v, T)
+        | none => ("v", "Unit")
+      let bound := ["s", "s0", "r", "n", "xs", "ys", "zs", "plain", "listSeg", "FAssn", "Zig"]
+      let taken := params.map (·.1) ++ k.vars.map (·.1)
+      for x in #[k.ptr, q, v] ++ k.vars.map (·.1) do
+        if bound.contains x then throwError "a variable of the contract `{k.rule}` named {x}"
+      for x in #[k.ptr, q, v] do
+        if taken.contains x then throwError "the contract `{k.rule}` names a variable and the node's {x}"
+      if k.ptr == q || k.ptr == v || q == v then throwError "the contract `{k.rule}` names two of the node's variables {v}"
+      if let some (x, _, _) := k.vars.find? fun (x, _, _) => params.any (·.1 == x) then
+        throwError "the contract `{k.rule}` and the loop both name {x}"
+      -- a definition's parameters: the loop's parameters and the contract's variables it names
+      let all := params ++ k.vars.filterMap fun (x, ty, hyp) => if hyp then none else some (x, ty)
+      let pick (uses : Array String) : String × String :=
+        let ps := all.filter (uses.contains ·.1)
+        (String.join (ps.toList.map fun (x, ty) => s!"({x} : {ty}) "), " ".intercalate (ps.toList.map (·.1)))
+      let join (atoms : Array String) := if atoms.isEmpty then "FAssn.emp" else " ⋆ ".intercalate atoms.toList
+      let nodeB := s!"({k.ptr} : Zig.Ptr) ({v} : {T}) ({q} : {qT}) : FAssn"
+      let (nb, na) := pick k.nodeUses
+      let (db, da) := pick k.afterUses
+      let app (f a : String) := if a.isEmpty then s!"{ns}.{name}.{f}" else s!"({ns}.{name}.{f} {a})"
+      let pre := s!"/-- The node layout of `{name}`: a node as the contract `{k.rule}` of the call that takes \
+        it owns it. -/\nabbrev {name}.node {nb}{nodeB} :=\n  {join k.nodeAtoms}\n\n\
+        /-- A node that `{name}` has passed: what the contract `{k.rule}` leaves of it. -/\n\
+        abbrev {name}.done {db}{nodeB} :=\n  {join k.after}\n\n"
+      -- the invariant's parameters: every variable that the node, the frame or a node passed
+      -- names; one that only a node passed names is not determined at the loop's entry
+      let known := params.map (·.1) ++ k.nodeUses ++ k.frameUses
+      if let some x := k.afterUses.find? (!known.contains ·) then
+        throwError "the contract `{k.rule}` leaves `{x}` in a node, which its precondition does not name"
+      let used := k.vars.filter fun (x, _, hyp) => !hyp && known.contains x
+      let rest := k.vars.filter fun (x, _, hyp) => hyp || !known.contains x
+      let bindersOf (vs : Array (String × String × Bool)) :=
+        String.join (vs.toList.map fun (x, ty, _) => s!"({x} : {ty}) ")
+      let frame := k.frame.map fun a => if a.contains ' ' then s!"({a})" else a
+      pure (T, bindersOf used, " ".intercalate (used.toList.map (·.1)), bindersOf rest, app "node" na,
+        app "done" da, frame, pre)
+  let LT := if T.contains ' ' then s!"List ({T})" else s!"List {T}"
   let (rel, prefixAt, postList) := match w.rev? with
     | some r => ("ys.reverse ++ zs", s!"listSeg {N} s.{r} none ys", s!"listSeg {N} r.2.{r} none xs.reverse")
-    | none => ("ys ++ zs", s!"listSeg {N} s0.{cur} s.{cur} ys", s!"listSeg {N} s0.{cur} none xs")
+    | none => ("ys ++ zs", s!"listSeg {M} s0.{cur} s.{cur} ys", s!"listSeg {M} s0.{cur} none xs")
   -- an accumulator's increment over the items `l`
   let inc (a : Acc) (l : String) := match a with
     | .item => s!"({l}.map BitVec.toNat).sum"
@@ -893,53 +1140,86 @@ def listCand (ns : Name) (name again binders args loc exit : String) (w : Walk) 
     facts := facts ++ #[{ text := s!"s.{a}.toNat = s0.{a}.toNat + {inc acc "ys"}" },
       { text := s!"s0.{a}.toNat + {inc acc "xs"} < 2 ^ {width}" }]
     post := post.push s!"r.2.{a}.toNat = s0.{a}.toNat + {inc acc "xs"}"
-  let plain := if w.plain then #[Owned.plain] else #[]
-  let kind := if w.rev?.isSome then "reverses the list" else "visits the list"
+  -- (the frame of a call's contract stays with the loop, after the lists)
+  let rest := frame.map Owned.atom ++ if w.plain then #[Owned.plain] else #[]
+  let kind := match w.rev?, w.call? with
+    | some _, _ => "reverses the list"
+    | _, some k => s!"hands to the call of `{k.rule}` each node of the list"
+    | _, _ => "visits the list"
+  let rules := match w.call? with
+    | some k => #[k.use]
+    | none => #[]
+  let upds := (if w.rev?.isSome then #[] else #["Zig.Full.listSeg_snoc_upd"]) ++ rules
   return {
-    name, again, binders := binders ++ layout ++ s!"(xs : {LT}) ", args := args ++ layoutArgs ++ " xs ",
+    name, again, binders := binders ++ layout ++ s!"(xs : {LT}) ",
+    tbinders := tbinders ++ layout ++ hyps ++ s!"(xs : {LT}) ", args := args ++ layoutArgs ++ " xs ",
+    body, triple, rules := w.call?.toArray.map (·.rule),
     loc, entry := "", vargs := "", measEntry := "", measArgs := "", facts,
-    owned := #[.atom prefixAt, .atom s!"listSeg {N} s.{cur} none zs"] ++ plain,
+    owned := #[.atom prefixAt, .atom s!"listSeg {N} s.{cur} none zs"] ++ rest,
     meas := "", exit, postFacts := post, postCells := #[], ghost := true,
-    exs := #[("ys", LT), ("zs", LT)], postOwned? := some (#[.atom postList] ++ plain), pre,
-    fsymArgs := if w.rev?.isSome then "" else " [Zig.Full.listSeg_snoc_upd]", bodyArgs? := some args,
+    exs := #[("ys", LT), ("zs", LT)], postOwned? := some (#[.atom postList] ++ rest), pre,
+    fsymArgs := if upds.isEmpty then "" else s!" [{", ".intercalate upds.toList}]",
     doc := s!"/-- The invariant of `{name}`, a list walk that {kind} `xs` at `{cur}` \
       (`{name}.node`): `zs` are the `n` nodes left.\n`s0` holds the locals at loop entry. -/\n" }
 
+/-- A definition's value with its leading instance binders named (`inst0`, by position): the
+generated definitions take them as explicit parameters. -/
+partial def nameInsts (i : Nat) : Expr → Expr
+  | .lam n ty b bi =>
+    .lam (if bi.isInstImplicit then Name.mkSimple s!"inst{i}" else n) ty (nameInsts (i + 1) b) bi
+  | e => e
+
 /-- The candidate invariant, measure and exit post of the loop `body` (the definition run by
-`Zig.loop`) with exit test `again`; throws why there are none. -/
-def candLoop (ns body again : Name) : MetaM Cand := do
+`Zig.loop`) with exit test `again`, with the contracts `contracts` (the function, the rule) for
+its calls; throws why there are none. -/
+def candLoop (ns body again : Name) (contracts : Array (Name × Name) := #[]) : MetaM Cand := do
     let some (.defnInfo d) := (← getEnv).find? body | throwError "not a definition"
-    lambdaTelescope d.value fun xs code => do
+    lambdaTelescope (nameInsts 0 d.value) fun xs code => do
       let ty ← inferType code
-      unless ty.isAppOfArity `Zig.MM 2 do throwError "not a loop body of `Zig.MM`"
-      let some structName := (ty.getArg! 0).constName? | throwError "locals that are not a structure"
-      let exit ← match (ty.getArg! 1).constName? with
+      -- a body of `MM σ ε` (checked in `FTotalTriple`) or of `CM Tgt σ ε` (in `CTriple`)
+      let (σ, ε, triple) ←
+        if ty.isAppOfArity `Zig.MM 2 then pure (ty.getArg! 0, ty.getArg! 1, "FTotalTriple")
+        else if ty.isAppOfArity `Zig.CM 3 then pure (ty.getArg! 1, ty.getArg! 2, "CTriple")
+        else throwError "not a loop body of `Zig.MM` or `Zig.CM`"
+      let some structName := σ.constName? | throwError "locals that are not a structure"
+      let exit ← match ε.constName? with
         | some n => pure (relName ns n)
-        | none => toString <$> ppExpr (ty.getArg! 1)
+        | none => toString <$> ppExpr ε
       unless isStructure (← getEnv) structName do throwError "locals that are not a structure"
       for x in xs do
         let n := (← x.fvarId!.getDecl).userName
         if n.hasMacroScopes || reserved n then throwError "a parameter named {n}"
       let fields := getStructureFields (← getEnv) structName
-      let ctx : Ctx := { structName, fields, params := xs.map (·.fvarId!) }
+      let ctx : Ctx := { structName, fields, params := xs.map (·.fvarId!), contracts }
       let st : St := { locals := fields.map .local }
       let paths ← exec ctx st code
       let isAgain (e : Expr) : MetaM Bool := do
         return (← whnf (mkApp (.const again []) e)).isConstOf ``Bool.true
       -- The text.
+      -- (`binders`: of the definitions, all explicit, as `@[fsym_inv]` wants them; `tbinders`: of
+      -- the check's theorem, where an instance parameter is an instance)
       let mut binders := ""
+      let mut tbinders := ""
       let mut args := ""
+      let mut params := #[]
       for x in xs do
         let decl ← x.fvarId!.getDecl
-        binders := binders ++ s!"({decl.userName} : {← ppExpr decl.type}) "
+        let ty ← ppLine decl.type
+        binders := binders ++ s!"({decl.userName} : {ty}) "
+        tbinders := tbinders ++ (if decl.binderInfo.isInstImplicit then s!"[{decl.userName} : {ty}] "
+          else s!"({decl.userName} : {ty}) ")
         args := args ++ s!"{decl.userName} "
+        params := params.push (decl.userName.toString, ty)
+      -- (qualified from the root, as in `Cand.check`; all of the parameters given)
+      let run := s!"@_root_.{body} {args}"
       let loc := relName ns structName
       -- a loop that tests an optional pointer is a list walk, any other a counted loop
       if paths.any (·.st.cond.any (· matches (.isSome _, _))) then
         let fieldTy (f : Name) : MetaM Expr := withLocalDeclD `s (.const structName []) fun s =>
           inferType (mkApp (.const (structName ++ f) []) s)
         let w ← listWalk ctx isAgain fieldTy paths
-        return ← listCand ns (relName ns body) (relName ns again) binders args loc exit w
+        return ← listCand ns (relName ns body) (relName ns again) binders tbinders args run triple loc
+          exit params w
       let c ← counted ctx isAgain paths
       let pname (i : Nat) : MetaM String := return (← xs[i]!.fvarId!.getDecl).userName.toString
       let x := c.counter
@@ -1036,7 +1316,8 @@ def candLoop (ns body again : Name) : MetaM Cand := do
       if c.plain then owned := owned.push .plain
       let name := relName ns body
       return {
-        name, again := relName ns again, binders, args, loc, entry, vargs, measEntry, measArgs,
+        name, again := relName ns again, binders, tbinders, args, body := run, triple, loc, entry,
+        vargs, measEntry, measArgs,
         facts, owned, meas := left, exit, postFacts := post, postCells,
         doc := s!"/-- The invariant of `{name}`, a counted loop: `{x}` goes {if c.down then "down" else "up"} \
           by 1 while `{x} {c.rel.text} {boundName}`.\n`s0` holds the locals at loop entry.{String.join doc.toList} -/\n" }
@@ -1045,11 +1326,16 @@ def candLoop (ns body again : Name) : MetaM Cand := do
 with exit test `again` (`candLoop`, pruned by `houdini`, the output walked once more with its exit
 post) as source text with the pruning decisions, or why there are none. Each loop has its own
 heartbeat budget: the walks of the loops before it do not count. -/
-def genLoop (ns body again : Name) : MetaM (Except String (String × String × Array Json)) :=
+def genLoop (ns body again : Name) (contracts : Array (Name × Name) := #[]) :
+    MetaM (Except String (String × String × Array Json)) :=
   -- (a heartbeat or recursion limit, too, only costs this loop its invariant)
   withCurrHeartbeats <| tryCatchRuntimeEx
     (do
-      let c ← candLoop ns body again
+      let c ← candLoop ns body again contracts
+      -- a file generated with contracts holds the loops that call by them; the others are in
+      -- the module's file generated without contracts
+      if !contracts.isEmpty && c.rules.isEmpty then
+        throwError "no call by one of the given contracts (a loop of the file generated without them)"
       let (keep, pruned) ← houdini ns c
       -- the output itself, with its exit post: a walk with no residual (else no invariant)
       discard <| walk ns c keep (final := true)
@@ -1090,14 +1376,15 @@ changes the pruning (the library is not hashed; `scripts/invgen.py check` finds 
 entry in `loops` names its family and the facts Houdini pruned (`pruned`), or why it has no
 invariant (`none`). The current environment
 must import `ZigLean.Sep.Full.AutoAll`: the pruning walks run `fsym`. -/
-def generate (module ns : Name) (generator inputs : Json) :
+def generate (module ns : Name) (generator inputs : Json) (specs contracts : Array Name := #[]) :
     MetaM (String × Array (String × String)) := do
   let mut loops := #[]
   let mut defs := #[]
   let mut skipped := #[]
+  let rules ← contracts.mapM fun r => return (← contractOf r, r)
   for (b, a) in ← loopsOf module ns do
     let loop := relName ns b
-    match ← genLoop ns b a with
+    match ← genLoop ns b a rules with
     | .ok (family, t, pruned) =>
       loops := loops.push (Json.mkObj [("loop", loop), ("family", family), ("pruned", Json.arr pruned)])
       defs := defs.push t
@@ -1105,6 +1392,7 @@ def generate (module ns : Name) (generator inputs : Json) :
       loops := loops.push (Json.mkObj [("loop", loop), ("none", why)])
       skipped := skipped.push (loop, why)
   let body := s!"import {module}\n\
+    {String.join (specs.toList.map (s!"import {·}\n"))}\
     import ZigLean.Sep.Full.Ghost\n\
     import ZigLean.Sep.Full.AutoAttr\n\
     import ZigLean.Sep.Full.ListSeg\n\n\
@@ -1117,10 +1405,15 @@ def generate (module ns : Name) (generator inputs : Json) :
     {opens}\n\n\
     {"\n".intercalate defs.toList}\n\
     end {ns}\n"
-  let record := Json.mkObj [
+  -- (a file generated with contracts: the modules that state them, and the rules)
+  let extra : List (String × Json) := if contracts.isEmpty then [] else [
+    ("specs", Json.arr (specs.map (Json.str ·.toString))),
+    ("contracts", Json.arr (contracts.map (Json.str ·.toString)))]
+  let fields : List (String × Json) := [
     ("version", (2 : Nat)), ("generator", generator), ("inputs", inputs),
     ("module", module.toString), ("namespace", ns.toString), ("loops", Json.arr loops),
     ("output", Air2Lean.Revision.sha256 body.toUTF8)]
+  let record := Json.mkObj (fields ++ extra)
   return (s!"-- air2lean-invgen: {record.compress}\n" ++ body, skipped)
 
 end Air2Lean.InvGen

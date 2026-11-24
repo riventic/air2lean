@@ -22,28 +22,40 @@ open Lean Meta
 /-- The generator's revision record. -/
 def generatorRecord : Json := toJson translator_revision%
 
+/-- The options after `MODULE NAMESPACE --source FILE`: the specification modules with their
+sources (`--spec MODULE FILE`), the contracts (`--contract NAME`) and the output (`-o FILE`);
+`none`: not an option list. -/
+def options : List String → Option (Array (String × String) × Array String × Option String)
+  | [] => some (#[], #[], none)
+  | "--spec" :: m :: f :: rest => (options rest).map fun (ss, cs, o) => (#[(m, f)] ++ ss, cs, o)
+  | "--contract" :: c :: rest => (options rest).map fun (ss, cs, o) => (ss, #[c] ++ cs, o)
+  | ["-o", f] => some (#[], #[], some f)
+  | _ => none
+
 unsafe def main (argv : List String) : IO UInt32 := do
-  let (module, ns, source, out) := match argv with
-    | [m, n, "--source", s] => (m, n, s, none)
-    | [m, n, "--source", s, "-o", f] => (m, n, s, some f)
-    | _ => ("", "", "", none)
-  if module.isEmpty then
-    IO.eprintln "usage: air2lean-invgen MODULE NAMESPACE --source FILE [-o FILE]"
-    return 2
+  let parsed := match argv with
+    | m :: n :: "--source" :: s :: rest => (options rest).map fun (ss, cs, o) => (m, n, s, ss, cs, o)
+    | _ => none
+  let some (module, ns, source, specs, contracts, out) := parsed
+    | IO.eprintln "usage: air2lean-invgen MODULE NAMESPACE --source FILE \
+        [--spec MODULE FILE]... [--contract NAME]... [-o FILE]"
+      return 2
   try
-    let inputs := Json.arr #[Json.arr #[source,
-      Air2Lean.Revision.sha256 (← IO.FS.readBinFile source)]]
+    let mut inputs := #[]
+    for file in #[source] ++ specs.map (·.2) do
+      inputs := inputs.push (Json.arr #[file, Air2Lean.Revision.sha256 (← IO.FS.readBinFile file)])
     initSearchPath (← findSysroot)
     -- The `match` and structure tables are environment extensions. Loading them
     -- (`loadExts := true`) requires initializer execution, as in `lean` itself: the imported
     -- modules' initializers run here as they do when a proof imports the same module.
     enableInitializersExecution
     -- With the library and `fsym`, for the pruning walks (`Air2Lean.InvGen.houdini`).
-    let env ← importModules #[{ module := module.toName }, { module := `ZigLean.Sep.Full.AutoAll }] {}
-      (loadExts := true)
+    let env ← importModules (#[{ module := module.toName }, { module := `ZigLean.Sep.Full.AutoAll }] ++
+      specs.map fun (m, _) => { module := m.toName }) {} (loadExts := true)
     -- The default heartbeat limit: a run is bounded and deterministic, never timed.
     let ((text, skipped), _) ←
-      (Air2Lean.InvGen.generate module.toName ns.toName generatorRecord inputs).run'.toIO
+      (Air2Lean.InvGen.generate module.toName ns.toName generatorRecord (Json.arr inputs)
+        (specs.map (·.1.toName)) (contracts.map (·.toName))).run'.toIO
         { fileName := "<air2lean-invgen>", fileMap := default } { env }
     for (loop, why) in skipped do
       IO.eprintln s!"air2lean-invgen: {loop}: no invariant: {why}"

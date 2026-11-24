@@ -354,16 +354,20 @@ def invgen_errors(targets=None):
                 invgen_record(path, header_only=True)
                 errors.append(f"{path}: an air2lean-invgen record that is not a target of scripts/invgen.py")
     for path, root, module, namespace in targets:
-        source = invgen["source"](root, module)
+        # (a target generated with contracts also reads the module that states them)
+        spec, contracts = invgen["CONTRACTS"].get(path, (None, []))
+        sources = [invgen["source"](root, m) for m in [module] + ([spec] if spec else [])]
         try:
             record, body = invgen_record(path)
-            generator, [[name, digest]] = record["generator"], record["inputs"]
+            generator, inputs = record["generator"], [(name, digest) for name, digest in record["inputs"]]
             if record["version"] != 2 or not valid_revision(generator):
                 raise ValueError("not a version 2 record with a consistent generator revision")
             if not {"Air2Lean.InvGen", "Air2Lean.InvGenMain"} <= {m for m, _ in generator["modules"]}:
                 raise ValueError("a revision that is not the generator's (no Air2Lean.InvGen, Air2Lean.InvGenMain)")
-            if (record["module"], record["namespace"], name) != (module, namespace, source):
-                raise ValueError(f"not the record of {module} (namespace {namespace}) read from {source}")
+            if (record["module"], record["namespace"], [name for name, _ in inputs]) != (module, namespace, sources):
+                raise ValueError(f"not the record of {module} (namespace {namespace}) read from {', '.join(sources)}")
+            if (record.get("specs", []), record.get("contracts", [])) != ([spec] if spec else [], contracts):
+                raise ValueError(f"not the record of the contracts {contracts} of {spec}")
         except (OSError, ValueError, KeyError, TypeError) as error:
             errors.append(f"{path}: no valid air2lean-invgen record ({error}); "
                           "regenerate it with scripts/invgen.py write")
@@ -376,8 +380,7 @@ def invgen_errors(targets=None):
             [f"Lean {generator['lean']} (lean-toolchain {toolchain})"]
         stale += [f"generator module {m}" for m, d in generator["modules"]
                   if sha256_file(premise_markers.module_path(ROOT, m)) != d]
-        if sha256_file(ROOT / source) != digest:
-            stale.append(f"input {source}")
+        stale += [f"input {name}" for name, digest in inputs if sha256_file(ROOT / name) != digest]
         if stale:
             errors.append(f"{path} is stale ({'; '.join(stale)} changed); regenerate it with scripts/invgen.py write")
     return errors
