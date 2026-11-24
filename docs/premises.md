@@ -1563,7 +1563,15 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   removed from the verifier's allowed signers; there is no revocation list, timestamp or
   transparency log, only the optional `valid-after`/`valid-before` of `allowed_signers`
   (`--verify-time`). The signature primitive and its verification are OpenSSH's
-  (`ssh-keygen -Y sign|verify`), trusted as installed.
+  (`ssh-keygen -Y sign|verify`), trusted as installed. The limits of the provenance chain
+  (I07) are part of this premise, not open work: CI holds no release key, because a key in CI
+  would let a compromised workflow sign any manifest, so the whole-tree fixtures CI regenerates
+  are unsigned and signing a release is an operator step with the operator's key; the `native`
+  link records a stock-Zig build's identity (target, mode, cpu, compiler and binary digests),
+  not a correspondence between the binary and the model (TRU-03); and `provenance-evidence.py
+  replay` establishes only that a committed receipt concerns the bytes now in the tree.
+  Someone who relies on a manifest, a receipt or a native binary beyond that accepts this
+  premise.
 - Derived from: use of an attestation (`--attestation`); not derived from any theorem.
 - Sources: [artifact-manifest.md](artifact-manifest.md#authentication), `scripts/attest.py`.
 

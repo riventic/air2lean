@@ -135,7 +135,7 @@ class ForeignGoldens(Scratch):
         self.check_fails('compiles foreign golden Gen-darwin.lean on linux')
 
     def test_macos_runner_moved_to_linux_unbacks_the_darwin_paths(self):
-        self.edit_text(TM['WORKFLOW'], 'runs-on: macos-14', 'runs-on: ubuntu-24.04')
+        self.edit_text(TM['WORKFLOW'], 'runs-on: macos-15', 'runs-on: ubuntu-24.04')
         self.check_fails('0.16.0/aarch64-macos/aarch64-macos/abi64-le-v1: job',
                          '0.15.2/aarch64-macos/aarch64-macos/abi64-le-v1: job')
 
@@ -882,7 +882,7 @@ raise SystemExit('malformed interpolation was accepted')
         host = TM['runner_host']
         self.assertEqual(host('ubuntu-24.04'), 'x86_64-linux')
         self.assertEqual(host('ubuntu-24.04-arm'), 'aarch64-linux')
-        self.assertEqual(host('macos-14'), 'aarch64-macos')
+        self.assertEqual(host('macos-15'), 'aarch64-macos')
         self.assertEqual(host('macos-13'), 'x86_64-macos')
         self.assertEqual(host('macos-15-large'), 'x86_64-macos')
         self.assertIsNone(host('${{ matrix.os }}'))
