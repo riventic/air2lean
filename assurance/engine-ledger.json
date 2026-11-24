@@ -139,13 +139,13 @@
   {
    "id": "9",
    "title": "engine support replacing arena_* macros, within (planner rule), unroll_solo (CTriple-backend rule)",
-   "status": "open",
+   "status": "closed",
    "requester": "arena lane",
-   "progress": "arena_* macros gone (#388); `unroll_solo` deleted (L16). Open until 9h closes and the `within` macro, whose fsym_entail replacement 9g landed, has no uses left (proof-framework.json tactic_uses)",
+   "progress": "arena_* macros gone (#388); `unroll_solo` deleted (L16); the `within` macro is deleted (branch claude/legacy-tactics): its six uses (AllocArena/Core, AllocArena/Reset, AllocFba/Full) are `fsym_entail` on the `Within X P` goal (9g), and its tactic and tactic-use entries left proof-framework.json",
    "request": "engine support replacing arena_* macros, `within` (planner rule), `unroll_solo` (CTriple-backend rule)",
    "workaround_sites": [],
-   "deletion_plan": "",
-   "note": "umbrella of 9a-9h; closes with 9h"
+   "deletion_plan": "Done: the `within` syntax and its macro_rules (ZigLean/Sep/Full/Extent.lean) are deleted with their last use.",
+   "note": "umbrella of 9a-9h; all closed"
   },
   {
    "id": "9a",
@@ -1231,6 +1231,16 @@
    "requester": "P09",
    "progress": "pending maintainer approval",
    "request": "`@[fsym_upd]` ghost-update registry keyed by heads, tried at returns; generalizes caller updates (9f); replaces #64–#67 workarounds with the bump-ledger family",
+   "workaround_sites": [],
+   "deletion_plan": ""
+  },
+  {
+   "id": "lock-start-anywhere",
+   "title": "a lock's start at any point of a program: the clock, waiter and atomics premises of `FLock.Inv.make` range over the whole machine",
+   "status": "open",
+   "requester": "critic run 43 (2026-11-24) on #770-#773; every lock start: `FLock.Inv.make`/`make_word` (Lock.lean), `FLock.Pair.start` (LockProd.lean), `RwProd.start` (RwProdStart.lean)",
+   "request": "A lock, a pair of locks and a reader/writer lock start at any point of a program: after earlier threads were joined, while other threads wait at other futexes, and next to other atomic locations in the same block.",
+   "progress": "OPEN, by reading (not kernel-checked). (1) `hall : AllLe m (m.clocks[t]!)` ranges over joined threads: after `main` spawns and joins a helper, `clocks[t]` is the merge and `clocks[u]` stays, so `hall` is false and no lock can start afterwards. Plan: `AllLeOn` over the threads that are not `gone`, as `Word.Ok.init` already takes. (2) `hq : m.waiters = #[]` is the whole machine's queue: a lock created while any thread waits at any futex cannot start. Plan: no waiter at the lock's keys. (3) `hat : ∀ l ∈ m.atomics, l.block ≠ b` is block-wide: `struct { hits: std.atomic.Value(u32), lock: RwLock }` with `hits.store(0)` before the start, or two locks in one block, fails it although no atomic location overlaps the lock. Plan: `LockWord.WInv.make` takes the no-overlap form `Word.Ok.init` has. (4) The doc comments of these lemmas say `t`'s clock is above every thread's; the premise says at or below. Also recorded there: the rwlock's layout and width are fixed (`Word 64 8`, offsets 8/16/20/24/32; fails closed on a 32-bit target), and the spawn and join lemmas take a protocol whose invariant is exactly one rwlock's pair (a program with a second primitive needs the product of invariants).",
    "workaround_sites": [],
    "deletion_plan": ""
   },

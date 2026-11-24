@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 182 rows, 67 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 183 rows, 67 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -27,7 +27,6 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [lake-needs-race](#row-lake-needs-race) | Lake 4.34 creates the jobs of concurrent `needs` facet keys twice and can deadlock | lake-hang lane (arc hangs of the assurance extraction and kernel-replay builds, 2026-11-04) | `scripts/assumptions.py`, `tests/roadmap/fixtures-lake/test_needs_race.py` | When a toolchain update fixes the race, the control assertion of tests/roadmap/fixtures-lake/test_needs_race.py fails. Then delete assumptions.needs_first (its callers build only the generated modules again), delete the test, and close this row. |
 | [case-family-enrollment](#row-case-family-enrollment) | Remove transitional golden case-family enrollment markers | Task23; coordinator decision 6258258831 | `examples/threadsync/all-cases`, `examples/sync/all-cases` | When the last golden family is enrolled, remove every all-cases marker and the marker/history ratchet, derive all case families unconditionally from the full golden enumeration, and retire when_defined with its remaining users. Preserve complete output/import coverage and exact retranslation checks. |
 | [3](#row-3) | ruleConcl? recognize generic FLogic.T L … rules (FAllocSpec generic in partial/total) | coordinator for D2/allocator | - | - |
-| [9](#row-9) | engine support replacing arena_* macros, within (planner rule), unroll_solo (CTriple-backend rule) | arena lane | - | - |
 | [13](#row-13) | optPayload | one-logic-tactics (Lists.sum) | - | - |
 | [16](#row-16) | Keep path conditions | one-logic-vc | - | - |
 | [17](#row-17) | An undecided side condition φ is split by byCases | one-logic-vc | - | - |
@@ -50,6 +49,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [chain-case-unfold](#row-chain-case-unfold) | A recursive list predicate unfolded by the case the loop tests | arena-retain (loop78 of the retaining reset) | `tests/roadmap/alloc-arena/ArenaSpec.lean`, `tests/roadmap/alloc-arena/ArenaSpecMacos.lean`, `tests/roadmap/alloc-arena/ArenaSpecFixed.lean` | replace the per-case bullets of `loop78_step` (ArenaSpec.lean, ArenaSpecMacos.lean, ArenaSpecFixed.lean) with one uniform `fsym` walk, drop the local `fsym_atom` attribute and delete `chain_one`, `chain_cons2`, `chain_full_cons2` and `chain_head` (Reset.lean) if no other proof uses them, once fsym unfolds a recursive list predicate by the case the step tests. |
 | [P09-E4](#row-p09-e4) | @[fsym_inv] loop-invariant registry | P09 | `tests/roadmap/loop-tactics/nested/Proof.lean` | Nested's hand outer loop (`outerI`, `outerPost`, `outer_step`, `outer_loop`; `fsym` walks its step since #arith-atom-congruence, and its inner loop by the generated `@[fsym_inv]` definitions): delete when the generator also emits the counter-dependent outer invariant over `tsum` with a summary of the generated inner loop (S2c′) and `@[fsym_inv]` applies its loop rule. |
 | [P09-E5](#row-p09-e5) | @[fsym_upd] ghost-update registry keyed by heads, tried at returns | P09 | - | - |
+| [lock-start-anywhere](#row-lock-start-anywhere) | a lock's start at any point of a program: the clock, waiter and atomics premises of `FLock.Inv.make` range over the whole machine | critic run 43 (2026-11-24) on #770-#773; every lock start: `FLock.Inv.make`/`make_word` (Lock.lean), `FLock.Pair.start` (LockProd.lean), `RwProd.start` (RwProdStart.lean) | - | - |
 | [list-walk-step](#row-list-walk-step) | a list walk's step from its invariant: split the ghost list by the cursor's test, unfold and fold the list | invariant-synthesis (P09, S2d: Proofs/Lists/Linked.lean, Proofs/Lists/Alloc.lean freeAll, loop-tactics/Queue.lean) | `Proofs/Lists/Linked.lean`, `Proofs/Lists/Alloc.lean` | When `fsym` walks these steps from the invariant and the generator emits the list-walk family (S2d), delete `revInv`/`revPost`/`sumInv`/`sumPost`/`freeInv`/`freePost` and the `*_step`/`*_loop` lemmas. The files then hold statements proved by `fsym` over the generated `@[fsym_inv]` definitions, and loop-tactics/Queue.lean builds on top unchanged. |
 | [recursive-group-total](#row-recursive-group-total) | Generic total correctness of a recursive function group | L8b-1 tick coverage (Task 09); P03/stack | `Proofs/Pointers/Sep.lean` | Proofs/Pointers/Sep.lean (#617): the private `addDown_group`, which `addDown_total` applies, closes the postcondition by hand after fsym: `EUpd.of_imp`, two `sep_left_comm_eq` reorderings and `congrArg (BitVec.ofNat 64)` with `addDown_sum_step`, because fsym's frame planner cannot match `pts p 8 v` against `pts p 8 v'` when the values are equal only by arithmetic. Missing fsym capability: matching values that are equal by arithmetic (a kernel-checked value-congruence step in the frame planner, or an existential postcondition `∃ y, ⟪y.toNat = x.toNat + sumDown n.toNat⟫ ⋆ pts p 8 y` closed by `fsym_arith`). This capability is separate from this row's generic recursive-group rule (which is why no row of its own tracks it yet: open one when the engine work starts); delete that hand block from `addDown_group` and this site when it lands, and do not close this row while the site stays. |
 | [T1](#row-t1) | credits n is not split for tick_credit | stack-ac lane (codex/stack-ac-ticks) | - | - |
@@ -100,6 +100,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [6](#row-6) | fsym_arith: toNat / width-change normal forms | READY #237 (arith lane, cd5d17f1): both pass; AutoArith.lean normal forms, intCast_step for every signedness |
 | [7](#row-7) | document/plan rule preconditions ⟪φ⟫ from context facts | CLOSED (triage 2026-11-24): `fsym` plans a pure fact of a rule's precondition as a side goal of the plan: from a hypothesis of the context, by arithmetic from the context's facts, and it fails closed without it. Regressions: tests/roadmap/sep-auto/SepAuto/Walk.lean `rule_fact_ctx`, `rule_fact_arith` and the rejected control after them (also Updates.lean, the caller-contract examples with `hφ`). Documented in docs/proof-automation.md (the bullet on a rule's planned precondition). |
 | [8](#row-8) | TLogic record so fsym drives FTTriple/FTTotalTriple (no FTotalTriple rules in TLogic goals) | open |
+| [9](#row-9) | engine support replacing arena_* macros, within (planner rule), unroll_solo (CTriple-backend rule) | arena_* macros gone (#388); `unroll_solo` deleted (L16); the `within` macro is deleted (branch claude/legacy-tactics): its six uses (AllocArena/Core, AllocArena/Reset, AllocFba/Full) are `fsym_entail` on the `Within X P` goal (9g), and its tactic and tactic-use entries left proof-framework.json |
 | [9a](#row-9a) | Provider backtracking on arithmetic failure | READY #239 |
 | [9b](#row-9b) | Pair facts of atoms | open |
 | [9c](#row-9c) | Bool facts to constructor equations | open |
@@ -369,13 +370,15 @@ Request: TLogic record so fsym drives FTTriple/FTTotalTriple (no FTotalTriple ru
 <a id="row-9"></a>
 ### #9 engine support replacing arena_* macros, within (planner rule), unroll_solo (CTriple-backend rule)
 
-Status: **open**. Requester: arena lane.
+Status: **closed**. Requester: arena lane.
 
-Note: umbrella of 9a-9h; closes with 9h
+Note: umbrella of 9a-9h; all closed
 
-Progress: arena_* macros gone (#388); `unroll_solo` deleted (L16). Open until 9h closes and the `within` macro, whose fsym_entail replacement 9g landed, has no uses left (proof-framework.json tactic_uses)
+Progress: arena_* macros gone (#388); `unroll_solo` deleted (L16); the `within` macro is deleted (branch claude/legacy-tactics): its six uses (AllocArena/Core, AllocArena/Reset, AllocFba/Full) are `fsym_entail` on the `Within X P` goal (9g), and its tactic and tactic-use entries left proof-framework.json
 
 Request: engine support replacing arena_* macros, `within` (planner rule), `unroll_solo` (CTriple-backend rule)
+
+Deletion plan: Done: the `within` syntax and its macro_rules (ZigLean/Sep/Full/Extent.lean) are deleted with their last use.
 
 <a id="row-9a"></a>
 ### #9a Provider backtracking on arithmetic failure
@@ -1399,6 +1402,15 @@ Status: **open**. Requester: P09.
 Progress: pending maintainer approval
 
 Request: `@[fsym_upd]` ghost-update registry keyed by heads, tried at returns; generalizes caller updates (9f); replaces #64–#67 workarounds with the bump-ledger family
+
+<a id="row-lock-start-anywhere"></a>
+### #lock-start-anywhere a lock's start at any point of a program: the clock, waiter and atomics premises of `FLock.Inv.make` range over the whole machine
+
+Status: **open**. Requester: critic run 43 (2026-11-24) on #770-#773; every lock start: `FLock.Inv.make`/`make_word` (Lock.lean), `FLock.Pair.start` (LockProd.lean), `RwProd.start` (RwProdStart.lean).
+
+Progress: OPEN, by reading (not kernel-checked). (1) `hall : AllLe m (m.clocks[t]!)` ranges over joined threads: after `main` spawns and joins a helper, `clocks[t]` is the merge and `clocks[u]` stays, so `hall` is false and no lock can start afterwards. Plan: `AllLeOn` over the threads that are not `gone`, as `Word.Ok.init` already takes. (2) `hq : m.waiters = #[]` is the whole machine's queue: a lock created while any thread waits at any futex cannot start. Plan: no waiter at the lock's keys. (3) `hat : ∀ l ∈ m.atomics, l.block ≠ b` is block-wide: `struct { hits: std.atomic.Value(u32), lock: RwLock }` with `hits.store(0)` before the start, or two locks in one block, fails it although no atomic location overlaps the lock. Plan: `LockWord.WInv.make` takes the no-overlap form `Word.Ok.init` has. (4) The doc comments of these lemmas say `t`'s clock is above every thread's; the premise says at or below. Also recorded there: the rwlock's layout and width are fixed (`Word 64 8`, offsets 8/16/20/24/32; fails closed on a 32-bit target), and the spawn and join lemmas take a protocol whose invariant is exactly one rwlock's pair (a program with a second primitive needs the product of invariants).
+
+Request: A lock, a pair of locks and a reader/writer lock start at any point of a program: after earlier threads were joined, while other threads wait at other futexes, and next to other atomic locations in the same block.
 
 <a id="row-list-walk-step"></a>
 ### #list-walk-step a list walk's step from its invariant: split the ghost list by the cursor's test, unfold and fold the list
