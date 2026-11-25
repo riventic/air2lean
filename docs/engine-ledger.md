@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 187 rows, 63 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 188 rows, 64 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -84,6 +84,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [returns-within-adequacy](#row-returns-within-adequacy) | Proto.returnsWithin concludes ReturnsWithin directly | legacy-flip lane (maintainer decision 2026-11-25: ReturnsWithin, EventuallyReturns, EventuallyReturnsUnder are `target` outcome vocabulary of Sched.run, proved through Proto.WP + Proto.returnsWithin) | - | Not a workaround: the hand `countdown_total`/`countdown_within` proofs in ZigLean/Conc/Total.lean are replaced by the Proto route once the two lemmas exist. |
 | [timed-budget-concm](#row-timed-budget-concm) | TimedBudget *_sound theorems are over the opt-in TimedSched interpreter | legacy-flip lane (maintainer decision 2026-11-25; design file note on TimedBudget) | - | When the deadline wait is a `SyncOp` of `ConcM` the `TimedSched` interpreter and its `resume_sound` rule are deleted and the `*_sound` theorems are restated over `ConcM`. |
 | [device-read-rules](#row-device-read-rules) | full-state rules for volatile device accesses and the device trace | device-proofs lane (fix-forward of tests/roadmap/volatile-effects/check-device.sh, 2026-11-24) | `tests/roadmap/volatile-effects/DeviceEffects/Proofs.lean`, `tests/roadmap/volatile-effects/DeviceAsm/Proofs.lean` | Restate `putc_trace`, `putc_eventually`, `statusTwice_trace`, `clearStatus_trace`, `sendThenStatus_trace` and `elapsed_trace` as `FTotalTriple`s over the trace resource, walked by `fsym`; delete the run-equation lemmas (`status_read`, `data_write`, `data_ptr`, `loop_busy`, `loop_ready`, `poll_run`, `tsc_run`) and the local `after`/`ticked` memory updates. The semantic mutants (device-mutants.py) keep their expected failures against the new statements. |
+| [fba-0171-wrapper-stack](#row-fba-0171-wrapper-stack) | std.mem.Allocator wrapper contracts with stack room for Zig 0.17.1's result slots | fba-0171 lane (2026-11-25) | `tests/roadmap/alloc-fba/check.sh` | Once the wrapper contracts are restated (and ledger 21a is closed): the retained AllocFba/Gen.lean becomes the 0.17.1 translation, and check.sh builds and audits the whole library over the 0.16.0 translation in its check tree instead of only Full/Creation/CreationDomain/Eval over 0.17.1's. |
 
 ## Closed rows
 
@@ -2244,3 +2245,16 @@ Request: `@[fsym]` rules for the device operations and an assertion for the devi
 Workaround sites: `tests/roadmap/volatile-effects/DeviceEffects/Proofs.lean`, `tests/roadmap/volatile-effects/DeviceAsm/Proofs.lean`
 
 Deletion plan: Restate `putc_trace`, `putc_eventually`, `statusTwice_trace`, `clearStatus_trace`, `sendThenStatus_trace` and `elapsed_trace` as `FTotalTriple`s over the trace resource, walked by `fsym`; delete the run-equation lemmas (`status_read`, `data_write`, `data_ptr`, `loop_busy`, `loop_ready`, `poll_run`, `tsc_run`) and the local `after`/`ticked` memory updates. The semantic mutants (device-mutants.py) keep their expected failures against the new statements.
+
+<a id="row-fba-0171-wrapper-stack"></a>
+### #fba-0171-wrapper-stack std.mem.Allocator wrapper contracts with stack room for Zig 0.17.1's result slots
+
+Status: **open**. Requester: fba-0171 lane (2026-11-25).
+
+Progress: Open, a statement decision. Zig 0.17.1's `mem.Allocator.alloc`, `reallocAdvanced`, `allocSentinel` (24 bytes) and `create` (16 bytes) keep their error-union result in a stack slot (`Zig.allocStack`); 0.16.0's return it as a value. tests/roadmap/alloc-fba/AllocFba/Wrappers.lean states the wrapper contracts as `FTotalTriple`s with no stack resource, which do not hold for the 0.17.1 translation (the push may throw `.stackOverflow`: `FTriple.allocStack` is partial, the total rule `FTotalTriple.allocStack_sp` needs `cur t ⋆ sp t S D` with room), and `Client.client_spec`'s room `D + stackCharge 24 8 ≤ S` covers the client's frame but not a wrapper's slot behind it. Build of the library over the 0.17.1 translation (p0, 2026-11-25): only AllocFba.Wrappers fails (alloc_spec, create_spec, dupe_spec, allocSentinel_spec, reallocAdvanced_spec, realloc_spec; free_spec, freeSentinel_spec, destroy_spec fail at ledger 21a). Options: (a) one statement for every version with the stack room as an owned resource (`cur t ⋆ sp t S D ⋆ ⟪D + need ≤ S⟫` in the precondition, `sp t S D` back), true for 0.16.0 too but a stronger precondition than its current statement; (b) the stack need per translation (`when_defined`, as `Proofs/Lists/Append.lean`'s `hdrVal`), which keeps 0.16.0's statement but still needs the `sp` token in it; (c) partial-correctness wrapper contracts in the plain mode (as `Interfaces/SentinelSpec.lean`), a weakening: rejected.
+
+Request: Decide how the generated std.mem.Allocator wrapper contracts state stack room, so that one Wrappers.lean/Client.lean text holds over the 0.16.0 and 0.17.1 translations.
+
+Workaround sites: `tests/roadmap/alloc-fba/check.sh`
+
+Deletion plan: Once the wrapper contracts are restated (and ledger 21a is closed): the retained AllocFba/Gen.lean becomes the 0.17.1 translation, and check.sh builds and audits the whole library over the 0.16.0 translation in its check tree instead of only Full/Creation/CreationDomain/Eval over 0.17.1's.

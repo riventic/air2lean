@@ -1,0 +1,12 @@
+{
+  "exports": [
+    {
+      "out": "air/{version}/client-linux",
+      "source": "client.zig",
+      "filter": "client.,heap.FixedBufferAllocator,mem.,math.,debug.assert",
+      "versions": ["0.16.0", "0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "closure": ["client.*"]
+    }
+  ]
+}
