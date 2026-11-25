@@ -12,6 +12,11 @@
 #                                       `xs.length + ys.length ≤ C` to `xs.length ≤ C`
 #                                       (Clients.lean): a push may fail, the exact count
 #                                       `ys.length + 1` is not provable, QueueAdt.Clients fails.
+#   "shift-pop-no-move"                 the shifting array's pop leaves the cells where they are
+#                                       (Gen.lean): QueueAdt.Shift's pop_spec fails.
+#   "shift-pop-steps-short"             the shifting array's pop is stated for one credit fewer
+#                                       than its items (Shift.lean): its loop is not paid,
+#                                       QueueAdt.Shift fails.
 #
 # The mutants are built by Lake apart from the fixture (scripts/fixtures.py mutant); run from
 # anywhere, under scripts/build-guard.py.
@@ -68,4 +73,23 @@ cp "$here/QueueAdt/Gen.lean" "$work/room/QueueAdt/"
 python3 -B scripts/fixtures.py mutant "pushall-capacity-premise-dropped" --src "$work/room" \
   --fails QueueAdt.Clients
 echo "queue-adt mutant: pushall-capacity-premise-dropped rejected (pushAll's step count needs the capacity premise)"
+
+# 4. pop of the shifting array without its moves
+mkdir -p "$work/shift/QueueAdt"
+mutate "$here/QueueAdt/Gen.lean" Shift_pop.loop22 \
+  $'          Zig.store (α := BitVec 16) 2 i42 i53\n' '' "$work/shift/QueueAdt/Gen.lean"
+cp "$here/QueueAdt/Moved.lean" "$here/QueueAdt/Shift.lean" "$work/shift/QueueAdt/"
+python3 -B scripts/fixtures.py mutant "shift-pop-no-move" --src "$work/shift" --fails QueueAdt.Shift
+echo "queue-adt mutant: shift-pop-no-move rejected (the shifting array's pop_spec fails for a pop that moves no cell)"
+
+# 5. pop of the shifting array with one step fewer than its loop runs
+mkdir -p "$work/steps/QueueAdt"
+mutate "$here/QueueAdt/Shift.lean" "" 'credits xs.length)' 'credits (xs.length - 1))' \
+  "$work/Shift1.lean"
+mutate "$work/Shift1.lean" "" 'spent xs.length)' 'spent (xs.length - 1))' \
+  "$work/steps/QueueAdt/Shift.lean"
+cp "$here/QueueAdt/Gen.lean" "$here/QueueAdt/Moved.lean" "$work/steps/QueueAdt/"
+python3 -B scripts/fixtures.py mutant "shift-pop-steps-short" --src "$work/steps" \
+  --fails QueueAdt.Shift
+echo "queue-adt mutant: shift-pop-steps-short rejected (the shifting array's pop is not paid by one credit fewer than its items)"
 echo "queue-adt mutants: ok"
