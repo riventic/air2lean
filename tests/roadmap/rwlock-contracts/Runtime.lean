@@ -1,4 +1,6 @@
 import Proofs.Sync.Proofs
+import Proofs.Sync.RwLockFixture
+import Proofs.Sync.Mailbox
 
 /-!
 # Actual generated RwLock snapshot runtime regressions

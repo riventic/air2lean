@@ -1,4 +1,6 @@
 import Proofs.Sync.Proofs
+import Proofs.Sync.Mailbox
+import Proofs.Sync.SnapshotCache
 import ZigLean.Conc.RunResult
 
 /-!
@@ -28,7 +30,7 @@ theorem mailbox_completes :
     ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ stdDispatch 1000 (fun _ => 0) (stdMain ⟨⟩)
       (mem0 σ)) = some 34 := by
   refine ⟨.fresh, ?_⟩
-  delta stdDispatch stdMain dispatch producer mailMain ioSem
+  delta stdDispatch stdMain dispatch producer mailMain ioSem ioSemCode IoSemCode.impl
   iterate 8 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
   decide +kernel
 

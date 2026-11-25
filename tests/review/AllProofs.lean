@@ -27,10 +27,13 @@ import Proofs.Recursion.Proofs
 import Proofs.Slices.Proofs
 import Proofs.Slices.Sep
 import Proofs.Sync.Handoff
+import Proofs.Sync.Mailbox
 import Proofs.Sync.Mutex
+import Proofs.Sync.NestedMutex
 import Proofs.Sync.Proofs
 import Proofs.Sync.RwLockFixture
 import Proofs.Sync.SemCounter
+import Proofs.Sync.SnapshotCache
 import Proofs.Threads.Counter
 import Proofs.Threads.Disjoint
 import Proofs.Threads.Proofs

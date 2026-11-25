@@ -1,8 +1,4 @@
 import Proofs.Sync.Gen
-import Proofs.Sync.RwLockFixture
-import Proofs.Sync.SnapshotCache
-import Proofs.Sync.Mailbox
-import Proofs.Sync.NestedMutex
 
 /-!
 # Proofs about `examples/sync/sync.zig`
@@ -11,7 +7,8 @@ import Proofs.Sync.NestedMutex
 (`ZigLean/Mem/Thread.lean`, `ZigLean/Conc/Sched.lean`). The spec of `mutexCounter` over all
 schedules is in `Proofs/Sync/Mutex.lean`. This file has the steps without a loop, computed by the
 kernel (`decide +kernel`) under the sequentially consistent schedule, and the deadlock rule of
-the model.
+the model. It imports only the translation, so it builds against every translation of `sync`
+whose `Io.Mutex`, `dispatch` and futex calls have these names (0.16.0 and 0.17.1).
 -/
 
 open Zig Sync

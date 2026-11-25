@@ -2842,15 +2842,16 @@ jobs:
       # (which inlines `waitInner` into `waitUncancelable`) are per-case contract instances
       # (Proofs/Sync/MutexCases.lean, Proofs/Sync/CondCases.lean) built with `Proofs`. 0.17.1
       # translates `Io.Event` and `mutexCounter`'s `main` and `work` to the same code and names as
-      # 0.16.0: `Sync.ioEvent : EventImpl` and `Proofs/Sync/Mutex.lean`, which need no condition,
-      # hold for that translation too, built in a tree with it as the public module.
+      # 0.16.0: `Sync.ioEvent : EventImpl`, `Proofs/Sync/Mutex.lean` and the kernel runs of
+      # `Proofs/Sync/Proofs.lean`, which need no condition, hold for that translation too, built in
+      # a tree with it as the public module.
       - name: Build sync event and mutex proofs (0.17.1 translation)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate && matrix.zig == '0.17.1' }}
         run: |
           python3 scripts/check-tree.py create .lake/check-tree/0.17.1-sync \
             --replace Proofs/Sync/Gen.lean=tests/golden/0.17.1/sync/Gen.lean
           cd .lake/check-tree/0.17.1-sync
-          lake build Proofs.Sync.Event Proofs.Sync.Mutex
+          lake build Proofs.Sync.Event Proofs.Sync.Mutex Proofs.Sync.Proofs
 
       - name: Mutation check
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'mutation' && matrix.mutate }}

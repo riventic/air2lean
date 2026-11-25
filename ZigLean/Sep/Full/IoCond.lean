@@ -447,7 +447,8 @@ theorem entry_wp {σ E : Type} [Inhabited σ] {prev : σ → X.S} {setPrev : σ 
     (prev_set : ∀ s v, prev (setPrev s v) = v) {body : Ptr → Io → CM Tgt σ E}
     {again : E → Bool} {ret stop : E} {k : E → CM Tgt σ E} {fin : E → ConcM Tgt Unit}
     (hkstop : k stop = pure ret) (hkret : k ret = pure ret) (hfin : fin ret = pure ())
-    {all : Bool} (hC : L.Fits (C.prim L) P U ok) {p : Ptr} (hp : p = C.S.ptr) (t : ThreadId)
+    {all : Bool} (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none) {p : Ptr}
+    (hp : p = C.S.ptr) (t : ThreadId)
     (g : γ) (hgx : C.ph g = .out) (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g)
     (io : Io)
     (hbody : ∀ (h : Array Word.Entry) (c : VClock) (D : Nat) (s : σ) (G : ThreadId → γ)
@@ -455,7 +456,7 @@ theorem entry_wp {σ E : Type} [Inhabited σ] {prev : σ → X.S} {setPrev : σ 
       P.WP t ((body C.S.ptr io).run s) (fun r G' m' d' =>
         if again r.1 then X.sigInv prev P C t g h c D r.2 G' m' d' ∧
           (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : σ) => 0) s)
-        else X.sigPost ret stop all P C t g h c D r G' m' d') G m d)
+        else sigPost ret stop all P C t g h c D r G' m' d') G m d)
     (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (signalOf setPrev body again k fin p io) (fun _ G' m' d' => d' < d ∧
       m'.current = t ∧ P.inv (upd G' t g) m' ∧ C.SigPost (C.S.hist m) (m.clocks[t]!) all m')
@@ -476,7 +477,7 @@ theorem entry_wp {σ E : Type} [Inhabited σ] {prev : σ → X.S} {setPrev : σ 
   rw [C.set_set] at hi₁
   simp only [StateT.run_modify, pure_bind]
   refine WP.bind (WP.mono ?_ (WP.loop _ _ (X.sigInv prev P C t g h c d) (fun _ => 0)
-    (X.sigPost ret stop all P C t g h c d) (hbody h c d) _ G₁ m₁ k₁
+    (sigPost ret stop all P C t g h c d) (hbody h c d) _ G₁ m₁ k₁
     ⟨by omega, hc₁, b, prev_set _ _, hb, hsp, hi₁⟩))
   rintro ⟨x, s'⟩ G₂ m₂ d₂ ⟨hx, hd₂, hc₂, hi₂, hp₂⟩
   have hkx : k x = pure ret := by rcases hx with rfl | rfl <;> assumption
@@ -495,7 +496,7 @@ theorem sig_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     P.WP t ((X.sbody C.S.ptr io).run s) (fun r G' m' d' =>
       if X.sagain r.1 then X.sigInv X.sprev P C t g h c D r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : X.σs) => 0) s)
-      else X.sigPost X.sret X.sstop false P C t g h c D r G' m' d') G m d := by
+      else sigPost X.sret X.sstop false P C t g h c D r G' m' d') G m d := by
   obtain ⟨hd, hcur, b, hb, hok, hsp₀, hi₀⟩ := hs
   rw [X.sbody_eq, sbodyOf, StateT.run_bind]
   refine WP.bind ?_
@@ -535,7 +536,7 @@ theorem signal_wp_unmetered (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = no
       P.inv (upd G' t g) m' ∧ C.SigPost (C.S.hist m) (m.clocks[t]!) false m') G m d := by
   obtain ⟨k, fin, hsig, hkstop, hkret, hfin⟩ := X.signal_eq
   rw [hsig]
-  exact X.entry_wp X.sprev_set hkstop hkret hfin hC hp t g hgx hgo hsx io
+  exact X.entry_wp X.sprev_set hkstop hkret hfin hC hcost hp t g hgx hgo hsx io
     (fun h c D => X.sig_body hC hcost t g hgx hgo hu h c D io) G m d hi
 
 /-- The signal contract at its caller part: this implementation's proved profile returns the
@@ -561,7 +562,7 @@ theorem bc_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     P.WP t ((X.bbody C.S.ptr io).run s) (fun r G' m' d' =>
       if X.bagain r.1 then X.sigInv X.bprev P C t g h c D r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : X.σb) => 0) s)
-      else X.sigPost X.bret X.bstop true P C t g h c D r G' m' d') G m d := by
+      else sigPost X.bret X.bstop true P C t g h c D r G' m' d') G m d := by
   obtain ⟨hd, hcur, b, hb, hok, hsp₀, hi₀⟩ := hs
   rw [X.bbody_eq, bbodyOf, StateT.run_bind]
   refine WP.bind ?_
@@ -602,7 +603,7 @@ theorem broadcast_wp_unmetered (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost =
       P.inv (upd G' t g) m' ∧ C.SigPost (C.S.hist m) (m.clocks[t]!) true m') G m d := by
   obtain ⟨k, fin, hbc, hkstop, hkret, hfin⟩ := X.broadcast_eq
   rw [hbc]
-  exact X.entry_wp X.bprev_set hkstop hkret hfin hC hp t g hgx hgo hsx io
+  exact X.entry_wp X.bprev_set hkstop hkret hfin hC hcost hp t g hgx hgo hsx io
     (fun h c D => X.bc_body hC hcost t g hgx hgo hu h c D io) G m d hi
 
 /-- The broadcast contract at its caller part (`keepPart`, as `signal`). -/

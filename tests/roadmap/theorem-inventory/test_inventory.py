@@ -1005,6 +1005,71 @@ class FixtureTests(unittest.TestCase):
         self.fx.save(inv)
         self.assertError('Demo.f_spec: excludes 0.14.1/linux, which is not a translation')
 
+    def case_fixture(self, statement='f x = x'):
+        """`Demo.f_spec`'s 0.15.2 Linux translation checked by a case theorem: the same statement
+        in a module that opens a retained 0.15.2 translation (a case family's golden case)."""
+        profile = {'profile': {'zig_version': '0.15.2', 'target_triple': 'x86_64-linux-musl'}}
+        (self.fx.root / 'Proofs/Demo/Case.lean').write_text(
+            f'{ti.PROFILE_PREFIX}{json.dumps(profile)}\nnamespace Demo.Case\ndef f (x : Nat) : Nat := x\n'
+            'end Demo.Case\n')
+        (self.fx.root / 'Proofs/Demo/CaseProofs.lean').write_text(
+            'import Proofs.Demo.Case\nnamespace Demo.Case\n'
+            f'theorem f_spec (x : Nat) : {statement} := rfl\nend Demo.Case\n')
+        inv = self.fx.load()
+        inv['theorems'][0]['cases'] = [{'zig': '0.15.2', 'target': 'linux', 'theorem': 'Demo.Case.f_spec'}]
+        inv['theorems'].append({'name': 'Demo.Case.f_spec', 'module': 'Proofs.Demo.CaseProofs',
+                                'example': 'demo', 'gen': 'Proofs/Demo/Case.lean',
+                                'scope': 'sequential', 'domain': 'every x'})
+        self.fx.save(inv)
+        return inv
+
+    def test_case_theorem_checks_a_translation(self):
+        self.case_fixture()
+        # The case theorem's own (committed) build is the result: no swap run for 0.15.2.
+        self.assertEqual(ti.plan(self.fx.root, ti.load_list(self.fx.root)), {
+            'committed': {'zig': '0.16.0', 'target': 'linux', 'swaps': {},
+                          'modules': ['Proofs.Conc.Proofs', 'Proofs.Demo.CaseProofs', 'Proofs.Demo.Proofs']}})
+        self.assertError('Demo.f_spec: no current check result for 0.15.2/linux (case theorem Demo.Case.f_spec)')
+        self.fx.record('committed', '0.16.0', *self.fx.guard('committed', ['lake', 'build', 'Proofs'], 'Build completed\n'))
+        ti.check(self.fx.root, write=True)
+        self.assertEqual(self.fx.errors(), [])
+        self.assertIn('0.15.2/linux: pass via `Demo.Case.f_spec`, run `committed`',
+                      (self.fx.root / ti.DOC).read_text())
+        # An edit of the case's translation makes both results stale.
+        gen = self.fx.root / 'Proofs/Demo/Case.lean'
+        gen.write_text(gen.read_text() + '\n')
+        self.assertError('Demo.f_spec: no current check result for 0.15.2/linux (case theorem Demo.Case.f_spec)')
+
+    def test_case_theorem_needs_the_same_statement_translation_and_entry(self):
+        self.case_fixture(statement='f x = x + 0')
+        self.assertError("Demo.f_spec: 0.15.2/linux: case theorem Demo.Case.f_spec does not have this theorem's statement")
+        inv = self.case_fixture()
+        inv['theorems'][0]['cases'][0]['zig'] = '0.14.1'
+        self.fx.save(inv)
+        self.assertError('Demo.f_spec: covers 0.14.1/linux by a case theorem, which is not a translation')
+        inv['theorems'][0]['cases'] = [{'zig': '0.16.0', 'target': 'linux', 'theorem': 'Demo.Case.f_spec'}]
+        self.fx.save(inv)
+        self.assertError('Demo.f_spec: 0.16.0/linux: case theorem Demo.Case.f_spec is over 0.15.2/linux')
+        inv['theorems'][0]['cases'] = [{'zig': '0.15.2', 'target': 'linux', 'theorem': 'Demo.Case.f_spec'}]
+        inv['theorems'][0]['excluded'] = [{'zig': '0.15.2', 'target': 'linux', 'reason': 'x'}]
+        self.fx.save(inv)
+        self.assertError('Demo.f_spec: both excludes 0.15.2/linux and covers it by a case theorem')
+        del inv['theorems'][0]['excluded']
+        inv['theorems'][-1]['scope'] = 'single-step'
+        self.fx.save(inv)
+        self.assertError('case theorem Demo.Case.f_spec has another example or scope')
+        del inv['theorems'][-1]['gen']
+        self.fx.save(inv)
+        self.assertError('case theorem Demo.Case.f_spec is not a listed theorem over a retained translation')
+
+    def test_case_theorem_must_not_import_the_public_translation(self):
+        # Its statement text could then name the public declarations, not the case's.
+        self.case_fixture()
+        cases = self.fx.root / 'Proofs/Demo/CaseProofs.lean'
+        cases.write_text('import Proofs.Demo.Gen\n' + cases.read_text())
+        self.assertError('case theorem Demo.Case.f_spec: Proofs.Demo.CaseProofs imports the public '
+                         'translation Proofs.Demo.Gen')
+
     def test_narrow_theorem_labeled_all_schedules_in_docs(self):
         self.fx.record_all()
         doc = self.fx.root / 'docs/proofs.md'
