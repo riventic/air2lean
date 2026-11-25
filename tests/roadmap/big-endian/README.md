@@ -26,6 +26,9 @@ between a vector and an array is illegal behaviour (langref §Vectors,
 | `native.zig` | The native program: the same 115 cases |
 | `observed/<version>-<arch>-linux-musl-ReleaseSafe.txt` | Its output with stock Zig `<version>`: s390x under qemu (Docker `--platform linux/s390x`), mips64 (`mips64-linux-muslabi64`) under the Docker VM's qemu-mips64 binfmt handler, x86_64 under Docker `linux/amd64`. The s390x and mips64 outputs are identical |
 | `test_cli.py` | Profile acceptance, mixed/contradictory endian metadata and the fail-closed rejections, on each version's exports |
+| `names.zig`, `air/<version>/names/<target>/` | `@tagName` (an exhaustive enum and a non-exhaustive `enum(u16)`) and `@errorName`, and a name slice stored in memory read back byte by byte; its test is endian-aware |
+| `BigEndian/Names/<version>/<target>/Gen.lean` | Their retained translations |
+| `BigEndian/Names/<version>/Proofs.lean` | Kernel-evaluated facts on each target: the name's length and bytes, the sentinel at index `len`, out of bounds after it, no name for an unnamed tag, and the stored length's least significant byte (byte 7 at big endian, byte 0 at little endian). Written for 0.17.1; the 0.16.0 file is that one renamed (`scripts/fixtures.py instance ... --write` after an edit) |
 
 `ZigLean/Endian.lean` parameterizes the byte order; `ZigLean/EndianLemmas.lean` (proof-only)
 proves the integer, float, slice, optional-slice and vector round trips at both orders and the
@@ -49,7 +52,8 @@ observation. `--native V` builds `native.zig` with stock Zig `V` for the three t
 (Docker by default; set `AIR2LEAN_S390X_RUN=qemu-s390x-static`,
 `AIR2LEAN_MIPS64_RUN=qemu-mips64-static` or `AIR2LEAN_X86_64_RUN=` for a direct runner;
 `elf-abiversion.py` clears the mips64 executable's EI_ABIVERSION byte, which the binfmt
-handler's magic does not match), and requires its output to equal the retained observation. Of
+handler's magic does not match), and requires its output to equal the retained observation; it
+also runs `names.zig`'s test on the three targets. Of
 the 115 lines, 82 differ between the two byte orders on 0.16.0 and 56 on 0.17.1. These are
 bounded observations of one target, backend (`stage2_llvm`) and mode (`ReleaseSafe`); they do
 not establish binary correspondence.

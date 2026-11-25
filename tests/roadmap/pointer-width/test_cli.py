@@ -9,21 +9,21 @@ or runs a compiler.
 """
 import copy
 import json
+import re
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 
 HERE = Path(__file__).resolve().parent
-AIR = HERE / "air" / "0.16.0"
 TARGETS = ("wasm32-freestanding", "wasm32-wasi", "x86_64-linux")
 
 
-def load(target):
-    return {p.name: json.loads(p.read_text()) for p in sorted((AIR / target).glob("*.json"))}
+def load(target, version="0.16.0"):
+    return {p.name: json.loads(p.read_text()) for p in sorted((HERE / "air" / version / target).glob("*.json"))}
 
 
-def run(binary, documents, error=None):
+def run(binary, documents, error=None, prefix="pointer_width."):
     with tempfile.TemporaryDirectory(prefix="air2lean-pointer-width-") as directory:
         directory = Path(directory)
         air = directory / "air"
@@ -33,7 +33,7 @@ def run(binary, documents, error=None):
         out = directory / "out.lean"
         out.write_text("sentinel\n")
         result = subprocess.run([str(binary), str(air), "-o", str(out), "--namespace", "PW",
-                                 "--prefix", "pointer_width."], text=True, capture_output=True, check=False)
+                                 "--prefix", prefix], text=True, capture_output=True, check=False)
         if error is not None:
             assert result.returncode != 0, (error, result.stdout)
             assert error in result.stderr, (error, result.stderr)
@@ -96,11 +96,25 @@ def main():
         run(binary, bad, error="pointer width")
         checks += 1
 
+    # `@tagName` and `@errorName` (names.zig, every exported version): the name is a slice of the
+    # profile's width; a 32-bit translation names no 64-bit slice.
+    for version in sorted(p.name for p in (HERE / "air").iterdir() if (p / "names").is_dir()):
+        for target in TARGETS:
+            wasm = target.startswith("wasm32")
+            text = run(binary, load(f"names/{target}", version), prefix="names.")
+            slice_ty = "Zig.Slice32" if wasm else "Zig.Slice"
+            for term in (f"def Color.tagName (e : Color) : Zig.Result {slice_ty} :=",
+                         f"def Level.tagName (e : Level) : Zig.Result {slice_ty} :=",
+                         f"def errorNameOf (e : Zig.ErrName) : Zig.Result {slice_ty} :="):
+                assert term in text, (version, target, term)
+            if wasm:
+                assert not re.search(r"\bZig\.Slice\b", text), (version, target)
+            checks += 1
+
     # Real wasm32 exports of operations that stay 64-bit only (`reject.zig`).
     rejects = load("wasm32-reject")
     for name, error in [
         ("reject.atomicRead.json", "an atomic op is outside the 32-bit pointer model"),
-        ("reject.colorName.json", "`@tagName` is outside the 32-bit pointer model"),
         ("reject.copyOf.json", "is outside the 32-bit pointer model (only create, alloc"),
     ]:
         run(binary, one(rejects, name), error=error)

@@ -48,12 +48,6 @@ pub fn nibbleLanes(a: u4, b: u4) u4 {
     return p.*[1];
 }
 
-pub const E = enum { one, two };
-
-pub fn tagName(e: E) []const u8 {
-    return @tagName(e);
-}
-
 /// `u128` is 8-byte aligned on s390x, 16 in the model: a layout mismatch of the `u128` in
 /// memory. (A by-value `@bitCast` puts it in memory up to 0.16 only: 0.17's is logical.)
 pub fn u128Bytes(x: u128) [16]u8 {
@@ -70,6 +64,5 @@ comptime {
     _ = &f80Add;
     _ = &boolLanes;
     _ = &nibbleLanes;
-    _ = &tagName;
     _ = &u128Bytes;
 }

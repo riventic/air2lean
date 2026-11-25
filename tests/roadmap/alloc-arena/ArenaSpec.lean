@@ -1,7 +1,6 @@
-import AllocArena.ArenaLinux
-import AllocArena.Core
-import AllocArena.Reset
-import ZigLean.Sep.Full.AutoAll
+import ArenaSpec.Entries
+import ArenaSpec.Loop66C0
+import ArenaSpec.Loop66C1
 
 /-!
 # The translated `ArenaAllocator`'s `free`, `resize` and `remap` against `FAllocSpec`
@@ -95,125 +94,23 @@ are the arena at epoch `e + 1` (`own_kept`). The child takes every request up to
 **O-E** (`ArenaObstruction.oob_free_illegal`): the invariant keeps `end_index` within the first
 node's buffer (`OV.Facts`: `24 + ei ≤ sz`). A failed `alloc` leaves it past the buffer, so the reachable
 states this specification covers end at the first failed `alloc`.
+
+**Modules.** The proofs are split so that the heavy walks build in parallel: `free`, `resize` and
+`remap` in `ArenaSpec/Entries.lean`; the child's `tables`, `loop78` and `loop66`'s invariant in
+`ArenaSpec/Retain.lean`; `loop66`'s body per list in `ArenaSpec/Loop66C0.lean` and
+`ArenaSpec/Loop66C1.lean`. This module imports them and holds the rest.
 -/
 
 namespace AllocArena.ArenaSpec
 
 open Zig Zig.Region Zig.Full Zig.Full.FAssn AllocArena.Core AllocArena.ArenaLinux
 
-/-! ## `free`, `resize` and `remap` -/
-
-set_option maxHeartbeats 350000 in
-/-- `free`'s run, case by case (module doc). -/
-theorem free_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (ra : BitVec 64) (φ : Frac)
-    (bs : Array Byte) (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) :
-    CTriple (Tgt := Tgt) ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k φ bs)
-      (heap_ArenaAllocator_free ctx s ⟨BitVec.ofNat 6 k⟩ ra)
-      (fun _ => (inv CI γ e ctx).own ⋆ (inv CI γ e ctx).fee φ) := by
-  unfold heap_ArenaAllocator_free
-  fsym [free_other_upd, free_last_upd]
-
-/-- **`free` meets `FAllocSpec`'s `free` field** for the arena invariant at every epoch, every
-child `CI` (`Child`), and every depth of the one-thread reading (`Sched.soloRun`). -/
-theorem free_spec (CI : Child) (γ e : Nat) (ctx : Ptr) (fuel : Nat) (s : Slice) (k : Nat)
-    (ra : BitVec 64) (φ : Frac) (bs : Array Byte) (hlen : s.len.toNat = bs.size)
-    (hpos : 0 < bs.size) :
-    FLogic.partial.T ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k φ bs)
-      (Sched.soloRun fuel (heap_ArenaAllocator_free ctx s ⟨BitVec.ofNat 6 k⟩ ra))
-      (fun _ => (inv CI γ e ctx).own ⋆ (inv CI γ e ctx).fee φ) :=
-  (free_ct CI γ e ctx s k ra φ bs hlen hpos).toSolo fuel
-
-set_option maxHeartbeats 4250000 in
-/-- `resize`'s run, case by case, against the refined contract (`FAllocSpec.resize`): from the
-token, the client's part `q'` of the grant's share and the bytes a shrink releases. A slice that
-is not the first node's last one only shrinks (the released bytes become junk); the last one moves
-`end_index` (shrink, or growth into the tail when it fits: the client gets the new bytes, its part
-of the share is re-lent at the new end). A successful resize re-points the grant at the new
-length (`Upd.reassign`). The updates take the released bytes' length, labels and bytes from the
-statement. `n` against `len` is split by the walk where a return needs it: the released bytes'
-`if` before the updates, and the returned `n <= len` that the postcondition matches on. -/
-theorem resize_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (n ra : BitVec 64)
-    (A S : Nat) (K : BlockKind) (q q' φ : Frac) (tl : Array Byte) (hpos : 0 < s.len.toNat)
-    (hn : 0 < n.toNat) (hq : q'.val ≤ q.val) :
-    CTriple (Tgt := Tgt) ((inv CI γ e ctx).own ⋆ ((inv CI γ e ctx).held s.ptr s.len.toNat k A S K q q' φ ⋆
-        (inv CI γ e ctx).relBytes s.ptr A S K n.toNat s.len.toNat tl))
-      (heap_ArenaAllocator_resize ctx s ⟨BitVec.ofNat 6 k⟩ n ra)
-      ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n.toNat A S K q q' φ tl) := by
-  unfold heap_ArenaAllocator_resize
-  fsym [resize_other_upd (S := S) (k := k) (n := n.toNat) (tl := tl),
-    resize_shrink_upd (S := S) (k := k) (n := n.toNat) (tl := tl),
-    resize_grow_upd (S := S) (k := k) (n := n.toNat) (tl := tl),
-    resize_false_upd (S := S) (k := k) (n := n.toNat) (tl := tl)]
-
-/-- The whole-region `resize` (`FAllocInv.resize_granted_of`). -/
-theorem resize_granted_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (n ra : BitVec 64)
-    (φ : Frac) (bs : Array Byte) (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size)
-    (hn : 0 < n.toNat) :
-    CTriple (Tgt := Tgt) ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k φ bs)
-      (heap_ArenaAllocator_resize ctx s ⟨BitVec.ofNat 6 k⟩ n ra)
-      ((inv CI γ e ctx).resizePost s.ptr k φ bs n.toNat) :=
-  (inv CI γ e ctx).resize_granted_gen (T := CTriple) (fun h hp => CTriple.pre h hp)
-    (fun h => CTriple.frame h) (fun h => CTriple.ex h) (fun h hu => CTriple.eupd_post h hu)
-    (fun A S K q q' tl h1 _ => resize_ct CI γ e ctx s k n ra A S K q q' φ tl (by omega) hn h1) hlen
-
-/-- `remap` is `resize`, and returns `memory.ptr` when it succeeds. -/
-theorem remap_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (n ra : BitVec 64)
-    (φ : Frac) (bs : Array Byte) (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size)
-    (hn : 0 < n.toNat) :
-    CTriple (Tgt := Tgt) ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k φ bs)
-      (heap_ArenaAllocator_remap ctx s ⟨BitVec.ofNat 6 k⟩ n ra)
-      ((inv CI γ e ctx).remapPost s.ptr k φ bs n.toNat) := by
-  unfold heap_ArenaAllocator_remap
-  fsym [resize_granted_ct CI γ e ctx s k n ra φ bs hlen hpos hn]
-
-/-- **`resize` meets `FAllocSpec`'s refined `resize` field** for the arena invariant at every
-epoch, every child `CI`, and every depth of the one-thread reading. -/
-theorem resize_spec (CI : Child) (γ e : Nat) (ctx : Ptr) (fuel : Nat) (s : Slice) (k : Nat)
-    (n ra : BitVec 64) (A S : Nat) (K : BlockKind) (q q' φ : Frac) (tl : Array Byte)
-    (hpos : 0 < s.len.toNat) (hn : 0 < n.toNat) (hq : q'.val ≤ q.val) :
-    FLogic.partial.T ((inv CI γ e ctx).own ⋆ ((inv CI γ e ctx).held s.ptr s.len.toNat k A S K q q' φ ⋆
-        (inv CI γ e ctx).relBytes s.ptr A S K n.toNat s.len.toNat tl))
-      (Sched.soloRun fuel (heap_ArenaAllocator_resize ctx s ⟨BitVec.ofNat 6 k⟩ n ra))
-      ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n.toNat A S K q q' φ tl) :=
-  (resize_ct CI γ e ctx s k n ra A S K q q' φ tl hpos hn hq).toSolo fuel
-
-/-- **`remap` meets `FAllocSpec`'s `remap` field.** -/
-theorem remap_spec (CI : Child) (γ e : Nat) (ctx : Ptr) (fuel : Nat) (s : Slice) (k : Nat)
-    (n ra : BitVec 64) (φ : Frac) (bs : Array Byte) (hlen : s.len.toNat = bs.size)
-    (hpos : 0 < bs.size) (hn : 0 < n.toNat) :
-    FLogic.partial.T ((inv CI γ e ctx).own ⋆ (inv CI γ e ctx).granted s.ptr k φ bs)
-      (Sched.soloRun fuel (heap_ArenaAllocator_remap ctx s ⟨BitVec.ofNat 6 k⟩ n ra))
-      ((inv CI γ e ctx).remapPost s.ptr k φ bs n.toNat) :=
-  (remap_ct CI γ e ctx s k n ra φ bs hlen hpos hn).toSolo fuel
-
 /-! ## `deinit` and `reset`
 
 The child enters through `CAllocSpec` of the allocator that the arena's vtable selects among the
 module's allocators (`tables`, `CVTable.dispatch`). Each loop is `CTriple.loop` with its invariant;
-the bodies and the entries are walked by `fsym`. -/
-
-/-- The alignment argument of the generated entries, from its log2. -/
-def al (k : Nat) : mem_Alignment := ⟨BitVec.ofNat 6 k⟩
-
-/-- The module's allocators (`std.heap.page_allocator`, `ArenaAllocator`, `FixedBufferAllocator`):
-the entries that an indirect call through the child's vtable can reach. -/
-def tables : AllocTables Tgt where
-  alloc := [(⟨some 3, 0⟩, fun a => heap_PageAllocator_alloc a.1 a.2.1 (al a.2.2.1) a.2.2.2),
-    (⟨some 8, 0⟩, fun a => heap_ArenaAllocator_alloc a.1 a.2.1 (al a.2.2.1) a.2.2.2),
-    (⟨some 12, 0⟩, fun a => ConcM.liftMem (heap_FixedBufferAllocator_alloc a.1 a.2.1 (al a.2.2.1) a.2.2.2))]
-  resize := [(⟨some 4, 0⟩, fun a => ConcM.liftMem (heap_PageAllocator_resize a.1 a.2.1 (al a.2.2.1) a.2.2.2.1 a.2.2.2.2)),
-    (⟨some 9, 0⟩, fun a => heap_ArenaAllocator_resize a.1 a.2.1 (al a.2.2.1) a.2.2.2.1 a.2.2.2.2),
-    (⟨some 13, 0⟩, fun a => ConcM.liftMem (heap_FixedBufferAllocator_resize a.1 a.2.1 (al a.2.2.1) a.2.2.2.1 a.2.2.2.2))]
-  remap := [(⟨some 5, 0⟩, fun a => ConcM.liftMem (heap_PageAllocator_remap a.1 a.2.1 (al a.2.2.1) a.2.2.2.1 a.2.2.2.2)),
-    (⟨some 10, 0⟩, fun a => heap_ArenaAllocator_remap a.1 a.2.1 (al a.2.2.1) a.2.2.2.1 a.2.2.2.2),
-    (⟨some 14, 0⟩, fun a => ConcM.liftMem (heap_FixedBufferAllocator_remap a.1 a.2.1 (al a.2.2.1) a.2.2.2.1 a.2.2.2.2))]
-  free := [(⟨some 6, 0⟩, fun a => ConcM.liftMem (heap_PageAllocator_free a.1 a.2.1 (al a.2.2.1) a.2.2.2)),
-    (⟨some 11, 0⟩, fun a => heap_ArenaAllocator_free a.1 a.2.1 (al a.2.2.1) a.2.2.2),
-    (⟨some 15, 0⟩, fun a => ConcM.liftMem (heap_FixedBufferAllocator_free a.1 a.2.1 (al a.2.2.1) a.2.2.2))]
-
-/-- The child allocator read back from its bytes in the arena struct. -/
-theorem child_decode (CI : Child) : Enc.decode CI.bytes = pure (⟨CI.cctx, CI.vtp⟩ : mem_Allocator) := by
-  simp only [Enc.decode, Child.decodeAt0, Child.decodeAt8]; rfl
+the bodies and the entries are walked by `fsym`. The module's allocators (`tables`) and the child
+read back from the arena struct (`child_decode`) are in `ArenaSpec/Retain.lean`. -/
 
 /-- `countListCapacity`'s loop over a list from `it`, by induction on the list (the loop unfolded
 once, `Full.loop_run`), in the caller's thread (`reset` runs it). -/
@@ -335,131 +232,16 @@ end Deinit
 
 /-! ## `reset`'s retaining modes
 
-`retain_capacity` and `retain_with_limit` sum each list's buffer sizes (`count_free`), then
-`loop66` handles the two lists in turn: `loop78` gives every node of a list back to the child but
-the last one, which the arena keeps (`Last`, `AllocArena/Reset.lean`), resized to the list's share
-of the limit (`std.mem.alignBackward(24 + limit, 2)` bytes): given back if that is just the header,
-kept as it is if it has that size, else shrunk or grown in place by the child
-(`CAllocSpec.resize_upTo`, the walk splitting on its released bytes' `if`), else replaced by a new node of that size
-(`CAllocSpec.alloc_upTo`, the old one given back; the new node's header words are stored over the
-granted bytes: `region_storePacked_wpts`, `region_store_wpts`, `region_storeAll`), else kept as
-it is (the result `ok` false). Each kept node is a whole node with `end_index` `0` and no next node
-(`Kept`); the walk folds it from the node's parts, whatever path made it. The child takes every
-request up to `2 ^ 63` bytes (`FAllocInv.FitsUpTo`, the hypothesis `hfit`): a kept node holds at
-most a list's buffer sizes and a header (`count_free`). The kept nodes are the arena at the next
-epoch (`own_kept`). -/
+`loop78`, `loop66`'s invariant (`Inv66`, `Exit66`) and the walks of its body per list
+(`loop66_c0`, `loop66_c1`) are in `ArenaSpec/Retain.lean`, `ArenaSpec/Loop66C0.lean` and
+`ArenaSpec/Loop66C1.lean` (the module doc of `ArenaSpec/Retain.lean` describes the walk). -/
 
 section Retain
 
 variable (CI : Child) (h : CAllocSpec (CVTable.dispatch tables CI.fns) CI.cctx CI.toFAllocInv)
   (ctx : Ptr) (Ac Sc : Nat) (Kc : BlockKind)
 
-/-- `loop78`'s invariant: the head word `p`, and the list from `it`; `it` is empty only if the
-list was. -/
-def Inv78 (p : Ptr) (x0 : Option Ptr) (s : heap_ArenaAllocator_resetLocals) : FAssn :=
-  FAssn.ex fun ns : List NodeV => ⟪s.it = none → x0 = none⟫ ⋆
-    (aptsE p x0 ⋆ Chain CI true (ns.map NodeV.full) s.it ⋆ FreeCl CI ns ⋆ Cm CI ctx Ac Sc Kc ⋆ plain)
-
-/-- `loop78`'s exits: the list's last node, or an empty list. -/
-def Exit78 (p : Ptr) (x0 : Option Ptr) :
-    heap_ArenaAllocator_resetExit × heap_ArenaAllocator_resetLocals → FAssn
-  | (.br77 N, _) => aptsE p x0 ⋆ Last CI N ⋆ Cm CI ctx Ac Sc Kc ⋆ plain
-  | (.br68, _) => ⟪x0 = none⟫ ⋆ (aptsE p x0 ⋆ Cm CI ctx Ac Sc Kc ⋆ plain)
-  | _ => ⟪False⟫
-
-attribute [local fsym_atom] Chain FreeCl in
-include h in
-/-- One run of `loop78`'s body: the list's last node is kept (`br77`); any other node goes back to
-the child (`free` through the vtable; the refund joins the reservoir). The list's cases are split
-before `fsym`: its first node, and the rest as a chain (`fsym_atom`), which the invariant names
-again at the next node (ledger #chain-case-unfold). -/
-theorem loop78_step (p : Ptr) (x0 : Option Ptr) (s : heap_ArenaAllocator_resetLocals) :
-    CTriple (Tgt := Tgt) (Inv78 CI ctx Ac Sc Kc p x0 s) ((heap_ArenaAllocator_reset.loop78 ctx).run s)
-      (fun r => if heap_ArenaAllocator_reset.again78 r.1 then Inv78 CI ctx Ac Sc Kc p x0 r.2
-        else Exit78 CI ctx Ac Sc Kc p x0 r) := by
-  have hd := child_decode CI
-  refine CTriple.ex fun ns => ?_
-  rcases s with ⟨ok, l, it⟩
-  unfold heap_ArenaAllocator_reset.loop78
-  rcases ns with _ | ⟨nd, _ | ⟨nd2, ns⟩⟩ <;> cases it
-  · simp only [List.map_nil, Chain, FreeCl]
-    fsym
-  · simp only [List.map_nil, Chain]
-    fsym
-  · simp only [List.map_cons, List.map_nil, Chain]
-    fsym
-  · rw [List.map_cons, List.map_nil, chain_one, FreeCl.eq_2, FreeCl.eq_1]
-    fsym [CAllocSpec.free' h, Child.cown_refund]
-  · simp only [List.map_cons, Chain]
-    fsym
-  · rw [chain_full_cons2, FreeCl.eq_2]
-    fsym [CAllocSpec.free' h, Child.cown_refund]
-
-include h in
-/-- **`loop78`** gives every node of a list back to the child but the last (`CTriple.loop`,
-`Inv78`), from the list's head word `p` holding `x` and the list of whole nodes from `x`. A rule
-from the loop's start state, where the invariant's implication holds (ledger #59). -/
-theorem loop78_ct (p : Ptr) (x : Option Ptr) (ok : Bool) (l : BitVec 64) :
-    CTriple (Tgt := Tgt) (aptsE p x ⋆ FreeList CI x ⋆ Cm CI ctx Ac Sc Kc ⋆ plain)
-      ((Zig.loop (heap_ArenaAllocator_reset.loop78 ctx) heap_ArenaAllocator_reset.again78).run ⟨ok, l, x⟩)
-      (fun r => FAssn.ex fun e => FAssn.ex fun s' => ⟪r = (e, s')⟫ ⋆ Exit78 CI ctx Ac Sc Kc p x (e, s')) := by
-  refine CTriple.pre ((CTriple.loop (Inv78 CI ctx Ac Sc Kc p x) (Exit78 CI ctx Ac Sc Kc p x)
-    (loop78_step CI h ctx Ac Sc Kc p x) ⟨ok, l, x⟩).post fun r r' h =>
-      ⟨r.1, r.2, sep_lift.mpr ⟨rfl, h⟩⟩) fun r hr => ?_
-  obtain ⟨r₁, r₂, hd', he, h1, h2⟩ := hr
-  obtain ⟨ns, h2⟩ := sep_ex.mp h2
-  refine ⟨ns, sep_lift.mpr ⟨id, ?_⟩⟩
-  show (aptsE p x ⋆ Chain CI true (ns.map NodeV.full) x ⋆ FreeCl CI ns ⋆ Cm CI ctx Ac Sc Kc ⋆ plain) r
-  have h3 : (aptsE p x ⋆ ((Chain CI true (ns.map NodeV.full) x ⋆ FreeCl CI ns) ⋆
-    Cm CI ctx Ac Sc Kc ⋆ plain)) r := ⟨r₁, r₂, hd', he, h1, h2⟩
-  exact of_eq (by ac_rfl) h3
-
 attribute [local fsym_facts] MemFacts.region_end
-
-/-- `loop66`'s invariant: the lists before index `local55` are handled (`Lst`). -/
-def Inv66 (pu pf : Ptr) (xu xf : Option Ptr) (s : heap_ArenaAllocator_resetLocals) : FAssn :=
-  ⟪s.local55.toNat ≤ 2⟫ ⋆ (Lst CI (decide (0 < s.local55.toNat)) pu xu ⋆
-    Lst CI (decide (1 < s.local55.toNat)) pf xf ⋆ Cm CI ctx Ac Sc Kc ⋆ plain)
-
-/-- `loop66`'s exit: both lists handled. -/
-def Exit66 (pu pf : Ptr) (r : heap_ArenaAllocator_resetExit × heap_ArenaAllocator_resetLocals) : FAssn :=
-  FAssn.ex fun s' => ⟪r = (.br65, s')⟫ ⋆ (KeptAt CI pu ⋆ KeptAt CI pf ⋆ Cm CI ctx Ac Sc Kc ⋆ plain)
-
-include h in
-set_option maxHeartbeats 2650000 in
-/-- One run of `loop66`'s body for the first list (`limits[0]`, `v0`). The limit is split before
-the walk: a node of just a header (`v0 < 2`, the node goes back) or a kept node (ledger
-#undecided-eq-branch-cost). -/
-theorem loop66_c0 (hfit : CI.FitsUpTo (2 ^ 63) 3) (pu pf : Ptr) (xu xf : Option Ptr)
-    (v0 v1 : BitVec 64) (hv0 : v0.toNat + 24 ≤ 2 ^ 63) (ok : Bool) (it : Option Ptr) :
-    CTriple (Tgt := Tgt) (Inv66 CI ctx Ac Sc Kc pu pf xu xf ⟨ok, 0, it⟩)
-      ((heap_ArenaAllocator_reset.loop66 ctx #v[pu, pf] #v[v0, v1]).run ⟨ok, 0, it⟩)
-      (fun r => if heap_ArenaAllocator_reset.again66 r.1 then Inv66 CI ctx Ac Sc Kc pu pf xu xf r.2
-        else Exit66 CI ctx Ac Sc Kc pu pf r) := by
-  have hd := child_decode CI
-  unfold heap_ArenaAllocator_reset.loop66
-  by_cases hsm : v0.toNat < 2 <;>
-    fsym [loop78_ct CI h ctx Ac Sc Kc, CAllocSpec.free' h, CAllocSpec.alloc_upTo h hfit,
-      CAllocSpec.resize_upTo h hfit, Child.cown_refund,
-      FTotalTriple.region_storePacked_wpts, FTotalTriple.region_store_wpts,
-      FTotalTriple.region_storeAll]
-
-include h in
-set_option maxHeartbeats 3100000 in
-/-- One run of `loop66`'s body for the second list (`limits[1]`, `v1`), as `loop66_c0`. -/
-theorem loop66_c1 (hfit : CI.FitsUpTo (2 ^ 63) 3) (pu pf : Ptr) (xu xf : Option Ptr)
-    (v0 v1 : BitVec 64) (hv1 : v1.toNat + 24 ≤ 2 ^ 63) (ok : Bool) (it : Option Ptr) :
-    CTriple (Tgt := Tgt) (Inv66 CI ctx Ac Sc Kc pu pf xu xf ⟨ok, 1, it⟩)
-      ((heap_ArenaAllocator_reset.loop66 ctx #v[pu, pf] #v[v0, v1]).run ⟨ok, 1, it⟩)
-      (fun r => if heap_ArenaAllocator_reset.again66 r.1 then Inv66 CI ctx Ac Sc Kc pu pf xu xf r.2
-        else Exit66 CI ctx Ac Sc Kc pu pf r) := by
-  have hd := child_decode CI
-  unfold heap_ArenaAllocator_reset.loop66
-  by_cases hsm : v1.toNat < 2 <;>
-    fsym [loop78_ct CI h ctx Ac Sc Kc, CAllocSpec.free' h, CAllocSpec.alloc_upTo h hfit,
-      CAllocSpec.resize_upTo h hfit, Child.cown_refund,
-      FTotalTriple.region_storePacked_wpts, FTotalTriple.region_store_wpts,
-      FTotalTriple.region_storeAll]
 
 include h in
 /-- One run of `loop66`'s body, for every list index: the first list (`loop66_c0`), the second

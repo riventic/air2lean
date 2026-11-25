@@ -320,8 +320,11 @@ value bytes at both orders. Floats, enums, a slice's length, a packed struct's b
 a whole-byte vector lane are stored as such integers; a vector's lane 0 comes first. A bit-pointer
 reads and writes its host integer at the profile's order, with the exporter's bit offset counted
 from the least significant bit. Pointer and error-code bytes are symbolic and the same at both
-orders. Each `.little` definition is the existing model by `rfl`, so little-endian translations
-and proofs are unchanged; `ZigLean/EndianLemmas.lean` (proof-only) proves the round trips at both
+orders. A `@tagName`/`@errorName` result is a slice into a static name block whose bytes are the
+same at both orders; stored, its length is a `usize` at the profile's order. No 32-bit
+big-endian target is qualified: a profile declaring one (`pointer_bits` 32 on s390x, or a
+`mips`/`powerpc` triple) is rejected before translation (`big-endian/test_cli.py`). Each `.little`
+definition is the existing model by `rfl`, so little-endian translations and proofs are unchanged; `ZigLean/EndianLemmas.lean` (proof-only) proves the round trips at both
 orders.
 
 A big-endian profile is accepted for `s390x-linux-<abi>` and `mips64-linux-<abi>` (MIPS64 n64,
@@ -341,7 +344,7 @@ big-endian subset, the translator rejects (fails closed):
 | Vectors of `bool`, pointer or non-byte-multiple lanes | Bit-packed lane order is unqualified at big endian |
 | `f80` | Software format on s390x, unqualified |
 | `error_set_bits` other than 16 | No big-endian error-width evidence |
-| `@tagName`, `@errorName`, inline assembly | Unqualified |
+| Inline assembly | Unqualified |
 | Byte pointers into packed structs, `@fieldParentPtr` from them | The model's byte offset is the little-endian one (Zig 0.16 exports bit-pointers here) |
 
 Integer atomics and futex words are admitted at both orders. The atomic messages of
