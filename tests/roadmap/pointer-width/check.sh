@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # T02 pointer-width fixtures. `--export DIR` writes fresh AIR of pointer_width.zig and
-# reject.zig (Zig 0.16.0) for every profile with a patched compiler; names.zig is declared in
-# exports.json (0.17.1, 0.16.0) and pinned by exports.lock.json (scripts/fixture-exports.py
-# verify|export pointer-width). `--native` runs the sources' layout/boundary/name tests on the
-# host and under wasm32-wasi (Node WASI). The default re-translates the retained AIR, compares
+# reject.zig (Zig 0.16.0) for every profile with a patched compiler; names.zig (0.17.1, 0.16.0)
+# and the 0.17.1 exports of pointer_width.zig and reject.zig are declared in exports.json and
+# pinned by exports.lock.json (scripts/fixture-exports.py verify|export pointer-width).
+# `--native` runs the sources' layout/boundary/name tests on the host and under wasm32-wasi
+# (Node WASI). The default re-translates the retained AIR, compares
 # it with the retained Gen.lean files byte for byte and checks the proofs and rejections.
 # Needs `lake build ZigLean Air2Lean air2lean ZigLean.Mem.WidthLemmas`. All tool invocations
 # must run in the root's serialized build queue.
@@ -71,9 +72,24 @@ for pair in Wasm32:wasm32-freestanding Wasi:wasm32-wasi X64:x86_64-linux; do
   "${lean_cmd[@]}" -R "$work" -o "$work/PointerWidth/$ns/Gen.olean" "$work/PointerWidth/$ns/Gen.lean"
 done
 "${lean_cmd[@]}" -R "$case_dir" "$case_dir/PointerWidth/Proofs.lean"
+# pointer_width.zig exported by Zig 0.17.1 (exports.json): the same proofs, instantiated from the
+# 0.16.0 file (which the T05 wasm-correspondence claims name) one namespace deeper.
+python3 -B scripts/fixture-exports.py check pointer-width
+for pair in Wasm32:wasm32-freestanding Wasi:wasm32-wasi X64:x86_64-linux; do
+  ns=${pair%%:*}
+  t=${pair#*:}
+  gen="PointerWidth/V0_17_1/$ns/Gen.lean"
+  mkdir -p "$(dirname "$work/$gen")"
+  "$translator" "$case_dir/air/0.17.1/pointer_width/$t" -o "$work/$gen" \
+    --namespace "PointerWidth.V0_17_1.$ns" --prefix pointer_width.
+  cmp "$work/$gen" "$case_dir/$gen"
+  "${lean_cmd[@]}" -R "$work" -o "$work/${gen%.lean}.olean" "$work/$gen"
+done
+python3 -B scripts/fixtures.py instance "$case_dir/PointerWidth/Proofs.lean" \
+  --subst PointerWidth=PointerWidth.V0_17_1
+"${lean_cmd[@]}" -R "$case_dir" "$case_dir/PointerWidth/V0_17_1/Proofs.lean"
 # names.zig (`@tagName`, `@errorName`) per Zig version of exports.json and target. The proofs are
 # stated once (0.17.1) and instantiated for 0.16.0 (scripts/fixtures.py instance).
-python3 -B scripts/fixture-exports.py check pointer-width
 for v in 0.17.1 0.16.0; do
   V="V${v//./_}"
   for pair in Wasm32:wasm32-freestanding Wasi:wasm32-wasi X64:x86_64-linux; do
