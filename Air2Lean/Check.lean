@@ -3022,8 +3022,6 @@ def checkBigEndian (f : Func) (insts : Array Inst) : Except String Unit := do
     match i.op with
     | .atomicLoad p _ | .atomicStore p _ _ | .atomicRmw _ _ p _ | .cmpxchg _ p .. => atomicWidth p
     | .asm .. => fail "inline assembly"
-    | .tagName _ => fail "`@tagName`"
-    | .errorName _ => fail "`@errorName`"
     -- The little-endian byte offset of a byte-aligned packed field (`FCtx.fieldOffsetIn`).
     | .fieldPtr b _ =>
       if (tyOf b).any packedPtr && hostOf i.ty == 0 then fail "a byte pointer to a packed struct field"
