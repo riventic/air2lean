@@ -16,6 +16,9 @@
     "reproducers/aarch64-linux-float-probe.zig": "c09ea45a2da6365c9bfa6dd9eacc53ef78ed39f58f13dc03796129edf245a48a",
     "reproducers/bare-union-safety-tag.zig": "b72e57e4790cd2a4920b1936a38700edcbe35fee3484dc9aa4b2f116baeaf081",
     "reproducers/float-divexact-inexact.zig": "bc7f2ded9f392803254a1d55b3be17aa573e89a08cdd1baa8b564c464ece4ac4",
+    "reproducers/safety-layout-probe.zig": "d83c88557b61cb85aa2a21571969c5fb812682c5bc3ace25273017c2a2e48305",
+    "reproducers/safety-layout-reify-type.zig": "69fd66c973ef77466cf02a213e5d7455237c701862f601dd5038036ffedbdc79",
+    "reproducers/safety-layout-reify-union.zig": "0f29a058d51ff7ac3a7966acca524817664a58b5b65c4f0a7dd556707fcf0d93",
     "reproducers/stage2-x86_64-divergences.zig": "4578391af8be4cd9c7c77a1c3c82ac2e8823cbc0caec75440f0670ca5a0f8a20"
   }
 }
