@@ -203,8 +203,9 @@ def main(exe):
         rejects(exe, stage(tmp, AIR, {"extern_calls.fillSum": lambda d: first_extern(d)["params"].pop()}),
                 "does not match its 'externs' entry", tmp=tmp)
 
-        # The declaration must have the definition's signature (no conversion at the binding):
-        # here the declared result type (the call's, unused) differs from the definition's.
+        # The declaration must have the definition's signature up to the C-ABI conversion of
+        # pointers: here the declared result type (the call's, unused) differs from the
+        # definition's.
         def wider_result(d):
             d["types"].append({"k": "int", "signed": False, "bits": 64, "abi_size": 8, "abi_align": 8})
             memset_call(d)["ty"] = first_extern(d)["ret"] = len(d["types"]) - 1
@@ -217,6 +218,16 @@ def main(exe):
             first_extern(d)["params"][1] = len(d["types"]) - 1
         rejects(exe, stage(tmp, AIR, {"extern_calls.fillSum": wider_param}),
                 "differs from its definition 'libc_ref.memset' in its parameter 1 type", tmp=tmp)
+        # A pointer that differs as the C ABI allows is converted at the call (docs/c-frontend.md
+        # §libc boundary): `strlen` declared with translate-c's `[*c]const u8` for the
+        # definition's `[*:0]const u8` checks non-null and the sentinel.
+        def c_pointer(d):
+            d["types"][first_extern(d)["params"][0]].update(size="c", allowzero=True, sentinel=False)
+            d["types"][first_extern(d)["params"][0]].pop("sentinel_byte")
+        result = translate(exe, stage(tmp, AIR, {"extern_calls.greetLen": c_pointer}), tmp=tmp)
+        assert result.returncode == 0, result.stderr
+        assert ("libc_ref_strlen (← Zig.callM (Zig.abiPtr ({ nonNull := true, align := 1, sentinel := "
+                "some (0 : BitVec 8) } : Zig.AbiPtrReq)") in (Path(tmp) / "Out.lean").read_text()
 
         # A call without an externs entry, and a noreturn extern call.
         no_entry = stage(tmp, AIR, {"extern_calls.fillSum": lambda d: d.pop("externs")})

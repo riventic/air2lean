@@ -7,8 +7,8 @@
     "stage2-air/0.17.1/stage2-x86_64-divergences.setNib.json": "0ce22bcaee82df9f39d9fa1dd6b052f67f84af4d0c1d185d378cc57c4ae969ae"
   },
   "compilers": {
-    "0.16.0": "ac86370329eafe688257f5404d52c03c5f6f447fd99db8b9d35f7e92272ea3fa",
-    "0.17.1": "a7a36d6ec8882fa27172eafd4215b5535dcac0b47315f9e2f20ddb7291b93852"
+    "0.16.0": "c7f33f99339241f401922ab14c913587f82ac814841847869f6b82050c76a815",
+    "0.17.1": "1953662bf1225a88b6c93545ccccf804f3eec5601df436181a1ba5b9ef1ab7c8"
   },
   "manifest_sha256": "cdd28f1454aad8fde340909fbde18c6c12b02c87f11ae07336019ddd7f004315",
   "schema": 1,
@@ -16,6 +16,9 @@
     "reproducers/aarch64-linux-float-probe.zig": "c09ea45a2da6365c9bfa6dd9eacc53ef78ed39f58f13dc03796129edf245a48a",
     "reproducers/bare-union-safety-tag.zig": "b72e57e4790cd2a4920b1936a38700edcbe35fee3484dc9aa4b2f116baeaf081",
     "reproducers/float-divexact-inexact.zig": "bc7f2ded9f392803254a1d55b3be17aa573e89a08cdd1baa8b564c464ece4ac4",
+    "reproducers/safety-layout-probe.zig": "ed17e9fb2b0d0fc93211422a803dac748ab9e09128b805f7dbda544da1e72bc4",
+    "reproducers/safety-layout-reify-type.zig": "69fd66c973ef77466cf02a213e5d7455237c701862f601dd5038036ffedbdc79",
+    "reproducers/safety-layout-reify-union.zig": "0f29a058d51ff7ac3a7966acca524817664a58b5b65c4f0a7dd556707fcf0d93",
     "reproducers/stage2-x86_64-divergences.zig": "4578391af8be4cd9c7c77a1c3c82ac2e8823cbc0caec75440f0670ca5a0f8a20"
   }
 }

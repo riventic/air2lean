@@ -1,0 +1,4 @@
+cmp_case 0 -1 1
+last_case 10 -1 15 16
+rfind_case 15
+usable_case 0 100

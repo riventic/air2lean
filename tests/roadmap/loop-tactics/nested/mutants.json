@@ -5,7 +5,7 @@
   "old": "⟪v.toNat = v0.toNat + (s.j",
   "new": "⟪v.toNat = 1 + v0.toNat + (s.j",
   "in": [
-   "outer_step"
+   "pairs_total"
   ]
  },
  {
@@ -14,7 +14,25 @@
   "old": "s.j.toNat ≤ s.i.toNat ∧",
   "new": "True ∧",
   "in": [
-   "outer_step"
+   "pairs_total"
+  ]
+ },
+ {
+  "name": "outer-sum",
+  "def": "pairs.loop5.inv",
+  "old": "⟪v.toNat + (tsum p1.toNat (fun u => u) - tsum s.i.toNat (fun u => u)) =",
+  "new": "⟪v.toNat + (tsum p1.toNat (fun u => u + 1) - tsum s.i.toNat (fun u => u + 1)) =",
+  "in": [
+   "pairs_total"
+  ]
+ },
+ {
+  "name": "outer-bound",
+  "def": "pairs.loop5.inv",
+  "old": "s.i.toNat ≤ p1.toNat ∧",
+  "new": "True ∧",
+  "in": [
+   "pairs_total"
   ]
  },
  {
@@ -22,7 +40,7 @@
   "old": ": Nat :=\n  s.i.toNat - s.j.toNat\n",
   "new": ": Nat :=\n  s.i.toNat\n",
   "in": [
-   "outer_step"
+   "pairs_total"
   ]
  }
 ]

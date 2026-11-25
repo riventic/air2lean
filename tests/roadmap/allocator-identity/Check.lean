@@ -3,7 +3,8 @@ import ZigLean.Mem.Owned
 /-! Executable regressions of the allocator-identity model (`docs/allocator-identity.md`): the
 `std`-mode semantics of `ZigLean/Mem/Owned.lean`, evaluated. No proofs: M01's theorems are stated
 over the translated arena (`tests/roadmap/alloc-arena`: `Core.granted_in_node`,
-`ArenaSpec.reset_free_all_frame`). Run:
+`ArenaSpec.reset_free_all_frame`). The `FixedBufferAllocator` is translated from its Zig code and
+proved and evaluated there (`tests/roadmap/alloc-fba`, `tests/roadmap/alloc-translated`). Run:
 `lake env lean --run tests/roadmap/allocator-identity/Check.lean`. -/
 
 open Zig
@@ -87,19 +88,6 @@ private def crossFree (src dst : Option Nat) : MemM Unit := do
   let s ← slice! (← (ref src).alloc 1 1 (u8 4))
   (ref dst).free 1 s
 
-/-- A fixed buffer of 8 bytes: LIFO frees give bytes back, other frees do not. -/
-private def fixedBufferLifo : MemM (List Bool) := do
-  let r := AllocRef.owned (← FixedBuffer.init 4096 8)
-  let x ← r.alloc 1 1 (u8 4)
-  let y ← r.alloc 1 1 (u8 4)
-  let z ← r.alloc 1 1 (u8 1)
-  r.free 1 (← slice! y)
-  let w ← r.alloc 1 1 (u8 4)
-  r.free 1 (← slice! x)
-  let v ← r.alloc 1 1 (u8 1)
-  let ok : Except ErrName Slice → Bool := fun | .ok _ => true | .error _ => false
-  pure [ok x, ok y, ok z, ok w, ok v]
-
 /-- Arena reset: the arena's blocks die, a `std.mem.Allocator` block and another arena's
 block stay. `use` selects the block read after the reset. -/
 private def resetThenUse (use : Nat) : MemM Unit := do
@@ -151,9 +139,6 @@ def main : IO Unit := do
   expect "reset-other-arena-block" (outcome ((resetThenUse 1).run {})) "ok"
   expect "reset-std-block" (outcome ((resetThenUse 2).run {})) "ok"
   expect "alloc-after-deinit" (outcome (afterDeinit.run {})) "illegal"
-  match (fixedBufferLifo.run' {}).run with
-  | some (.ok oks) => expect "fixed-buffer-lifo" (toString oks) "[true, true, false, true, false]"
-  | _ => throw (IO.userError "fixed-buffer-lifo: no result")
   let reqs := [[#[1, 2], #[3]], [#[], #[250, 10]], [#[7]]]
   for (name, failures, want) in [("session", ([] : List Nat), "[ok 6, ok 260, ok 7]"),
       ("session-failures", [1, 3], "[error OutOfMemory, ok 260, error OutOfMemory]")] do

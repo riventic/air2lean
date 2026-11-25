@@ -1491,6 +1491,11 @@ jobs:
           export TMPDIR="$fuzz_dir/tmp"
           tests/roadmap/fuzz/check.sh --air "$PWD/.lake/build/bin/air2lean" 1000 "$fuzz_dir/failures" 2>&1 \
             | tee "$fuzz_dir/fuzz.log"
+          # The default version's own seed set: its schema-12 seeds and committed AIR, with the other
+          # versions' tags and labels as mutations (translator only, so in this job too).
+          default_zig=$(python3 scripts/compat.py default)
+          tests/roadmap/fuzz/check.sh --air "$PWD/.lake/build/bin/air2lean" 1000 "$fuzz_dir/failures-$default_zig" \
+            "$default_zig" 2>&1 | tee "$fuzz_dir/fuzz-$default_zig.log"
 
       # Q01 heavy differential, capped at 3 seeds per profile (core and wide): generated Zig is run natively (stock Zig),
       # exported with the patched compiler, translated, and the Lean values must equal native.
@@ -1538,6 +1543,8 @@ jobs:
           set -euo pipefail
           lake build ZigLean
           bash tests/roadmap/extern-calls/check.sh
+          # X01: translate-c declarations bound to Zig's libc through the C-ABI conversion.
+          bash tests/roadmap/extern-abi/check.sh
 
       # E02: function-pointer call sites bound to registry contracts (`&ext_visit` in a vtable
       # and as a callback, also from a spawned thread), proofs from the callback contract alone.
@@ -1978,7 +1985,7 @@ jobs:
           bash tests/roadmap/allocation-policy/check.sh 2>&1 | tee "$AIR2LEAN_ALLOCATION_REPORT_DIR/check.log"
           python3 tests/roadmap/allocation-policy/mutations.py 2>&1 | tee "$AIR2LEAN_ALLOCATION_REPORT_DIR/mutations.log"
 
-      # M01: allocator identity, arena/fixed-buffer policies of the std-mode model (executable
+      # M01: allocator identity and the arena policy of the std-mode model (executable
       # regressions; M01's theorems over the translated arena run in tests/roadmap/alloc-arena).
       - name: Allocator identity model regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}

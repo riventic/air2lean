@@ -7,6 +7,7 @@
     python3 -B scripts/lean-deps.py --elaborate [--jobs N] [--mem-mib M]
     python3 -B scripts/lean-deps.py --precompiled check|write
     python3 -B scripts/lean-deps.py --prune-orphans
+    python3 -B scripts/lean-deps.py --lean [LEAN-OPTION...] FILE.lean [ARG...]
 
 Prints the imports of the given `.lean` files (a directory: every `.lean` file below it) that are
 modules of this package's libraries (`lakefile.toml`; `import ZigLean.Sep.Full.Auto` with
@@ -19,7 +20,8 @@ full build (`all_targets`; scripts/full-build.sh builds them).
 the libraries' directories whose imports are Lean's own or modules of this package. `lake env lean
 FILE` elaborates each of them with no extra setup (the strength logs, the proof-client fixtures,
 the tutorials), so the build alone does not cover them. `--elaborate` does (scripts/full-build.sh
-runs it): it elaborates every one, in parallel, and fails when a file that should check does not,
+runs it): it elaborates every one, in parallel, with the native code a Lake build of it would load
+(`native_options`: precompiled `fsym`), and fails when a file that should check does not,
 when a file listed under `reject` in `assurance/lean-files.json` (a negative control: a false
 theorem Lean must refuse) checks after all, or when a tracked file imports a library module that
 does not exist (a renamed or split module). A result is remembered under the key of the file, its
@@ -34,6 +36,12 @@ A file with imports of a fixture's own modules is elaborated by the check of tha
 `--prune-orphans` deletes, in every tracked Lake package (`lakefile.toml`), the compiled outputs of
 modules that have no source there any more (`orphan_outputs`), and prints them;
 scripts/full-build.sh runs it first.
+
+`--lean ARGS` is `lake env $LEAN ARGS` (LEAN: a build guard's Lean, else `lean`) with the native
+code a Lake build of the first `.lean` argument would load (`native_options`), for a check script's
+`lean_cmd`: the library modules among the file's imports decide it, so a file that reaches `fsym`
+only through a module of the check's own work directory still runs it interpreted (the same terms,
+slower). With `--run` it adds nothing: the file's code is evaluated by the interpreter as before.
 
 A check that runs `lake env lean` on test files builds their imports first with `--build`: the
 modules are derived from the files, so the list cannot drift, and a stale `.olean` (a merge that
@@ -50,6 +58,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import tomllib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -282,12 +291,9 @@ def precompiled(write: bool) -> int:
     return 1 if wrong else 0
 
 
-def input_key(f: str, toolchain: bytes, memo: dict[str, bytes]) -> str:
-    """Hash of everything that decides whether `lake env lean f` checks: the file, the sources of
-    the library modules it imports (transitively), the lakefile and the toolchain."""
+def library_closure(f: str, memo: dict[str, bytes]) -> set[str]:
+    """The library modules the file f imports, transitively (their sources read into memo)."""
     roots = lib_roots()
-    h = hashlib.sha256(toolchain)
-    h.update((ROOT / f).read_bytes())
     seen, todo = set(), sorted(imports(ROOT / f))
     while todo:
         m = todo.pop()
@@ -297,9 +303,66 @@ def input_key(f: str, toolchain: bytes, memo: dict[str, bytes]) -> str:
         if m not in memo:
             memo[m] = module_file(m).read_bytes() if module_file(m).is_file() else b""
         todo += sorted(imports(module_file(m))) if module_file(m).is_file() else []
-    for m in sorted(seen):
+    return seen
+
+
+def input_key(f: str, toolchain: bytes, memo: dict[str, bytes]) -> str:
+    """Hash of everything that decides whether `lake env lean f` checks: the file, the sources of
+    the library modules it imports (transitively), the lakefile and the toolchain."""
+    h = hashlib.sha256(toolchain)
+    h.update((ROOT / f).read_bytes())
+    for m in sorted(library_closure(f, memo)):
         h.update(m.encode() + b"\0" + hashlib.sha256(memo[m]).digest())
     return h.hexdigest()
+
+
+_NATIVE: dict[tuple, list[str]] = {}
+_NATIVE_LOCK = threading.Lock()
+
+
+def native_code(lake_imports) -> list[str]:
+    """The `lean` options that load the native code Lake loads into a build of a module whose
+    import closure has the Lake modules `lake_imports`: `lake setup-file` computes the shared
+    libraries of their precompiled imports (fsym's engine, docs/build-cache.md#precompiled-fsym)
+    in Lake's load order. With them a file runs the same native tactic code as its Lake build and
+    spends the heartbeats that build spends; interpreted, `fsym` spends more, and a budget the Lake
+    build meets can time out. The elaborated terms are the same."""
+    key = tuple(sorted(set(lake_imports)))
+    with _NATIVE_LOCK:  # parallel callers: one Lake run (which may build the libraries) at a time
+        if key in _NATIVE:
+            return _NATIVE[key]
+        header = {'imports': [{'module': m, 'importAll': False, 'isExported': True, 'isMeta': False}
+                              for m in key], 'isModule': False}
+        # With a header, Lake reads no source: the file names no module of the workspace.
+        result = subprocess.run(['lake', 'setup-file', 'universe-unit.lean', json.dumps(header)],
+                                cwd=ROOT, text=True, capture_output=True)
+        try:
+            setup = json.loads(result.stdout) if not result.returncode else None
+        except ValueError:
+            setup = None
+        if (not isinstance(setup, dict) or not isinstance(setup.get('dynlibs'), list)
+                or not isinstance(setup.get('plugins'), list)
+                or any(not isinstance(p, dict) or p.get('initFn?') or p.get('initFn')
+                       for p in setup['plugins'])):
+            raise RuntimeError(f'lake setup-file gave no supported module setup for {list(key)}:\n'
+                               f'{result.stdout[-2000:]}{result.stderr[-2000:]}')
+        _NATIVE[key] = ([f'--load-dynlib={(ROOT / path).absolute()}' for path in setup['dynlibs']]
+                        + [f'--plugin={(ROOT / p["path"]).absolute()}' for p in setup['plugins']])
+        return _NATIVE[key]
+
+
+def precompiled_modules() -> set[str]:
+    """The modules of the precompiled libraries (`precompiled_libs`)."""
+    return set().union(*precompiled_libs().values())
+
+
+def native_options(f: str, memo: dict[str, bytes], precompiled_mods: set[str]) -> list[str]:
+    """`native_code` for the file f: Lake loads a precompiled library into every elaboration whose
+    import closure has one of its modules (`precompiled_mods`), so the precompiled modules of the
+    file's library closure decide it (one Lake query per set). Without them `fsym` runs in Lean's
+    interpreter: the same proof terms, several times slower and with more heartbeats."""
+    mods = sorted(library_closure(f, memo) & precompiled_mods)
+    return native_code(mods) if mods else []
 
 
 def elaborate(jobs: int | None, mem_mib: int) -> int:
@@ -324,8 +387,12 @@ def elaborate(jobs: int | None, mem_mib: int) -> int:
         # $LEAN: the Lean of a --lean-processes guard (build-guard.py `lean_processes_env`), which
         # `lake env` would put behind the toolchain's own bin on PATH.
         lean = os.environ.get("LEAN") or "lean"
+        # Lake's native code for each file, asked before the parallel runs (one Lake at a time).
+        precompiled_mods = precompiled_modules()
+        native = {f: native_options(f, memo, precompiled_mods) for f in todo}
         with open(os.devnull, "wb") as null:
-            statuses = par.run([par.Job(names[f], ["lake", "env", lean, f], cwd=str(ROOT)) for f in todo],
+            statuses = par.run([par.Job(names[f], ["lake", "env", lean, *native[f], f], cwd=str(ROOT))
+                                for f in todo],
                                par.workers(jobs, mem_mib, len(todo)), out=null, err=null, log_dir=logs,
                                stats=stats)
         store.mkdir(parents=True, exist_ok=True)
@@ -372,6 +439,18 @@ def main(argv: list[str]) -> int:
                 print(f"lean-deps: removing {path} (its module has no source)")
                 path.unlink(missing_ok=True)  # another prune of this tree may have removed it
         return 0
+    if argv[:1] == ["--lean"]:
+        files = [a for a in argv[1:] if a.endswith(".lean")]
+        if not files:
+            print("usage: lean-deps.py --lean [LEAN-OPTION...] FILE.lean [ARG...]", file=sys.stderr)
+            return 2
+        # `--run` evaluates the file's code: it stays in the interpreter, as in a plain `lake env lean`.
+        # The file is named relative to the caller's directory, not necessarily the repository's.
+        native = [] if "--run" in argv else \
+            native_options(str(pathlib.Path(files[0]).resolve()), {}, precompiled_modules())
+        lean = os.environ.get("LEAN") or "lean"
+        os.execvp("lake", ["lake", "env", lean, *native, *argv[1:]])
+        return 127  # not reached: execvp replaces this process or raises
     if argv[:1] == ["--elaborate"]:
         opts = dict(zip(argv[1::2], argv[2::2]))
         if set(opts) - {"--jobs", "--mem-mib"} or len(argv) % 2 == 0:
