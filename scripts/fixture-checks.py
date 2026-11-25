@@ -3,6 +3,7 @@
 
     scripts/fixture-checks.sh [--logs DIR] [--only TEXT]...   (guarded; full-build.sh)
     python3 -B scripts/fixture-checks.py [--jobs N] [--mem-mib M] [--only TEXT]... [--logs DIR] [--rerun]
+                                         [--build-lean-threads N]
     python3 -B scripts/fixture-checks.py --pending [--only TEXT]...
     python3 -B scripts/fixture-checks.py --list [--only TEXT]...
     python3 -B scripts/fixture-checks.py --prepare [--only TEXT]...
@@ -468,14 +469,20 @@ def log_tail(log: Path, lines=15):
     return ''.join('\n    ' + line for line in tail)
 
 
-def prepare_shared(log: Path):
+def prepare_shared(log: Path, build_threads=None):
     """Build what the units share before any of them starts, so no unit builds it under the
     others: every library of the proof-fixture package (a unit's own `fixtures.py build` is then
     an up-to-date check), and the compiled assurance extractor (assumptions.py `prepared_tool`).
-    Returns the failure, or None."""
+    In an elastic admission Lake runs up to `build_threads` Lean processes of the package at once
+    (--build-lean-threads; default the units' LEAN_NUM_THREADS): each is a sub-admission on one
+    Lean thread, so the slots they hold bound their memory, as in the full build's root phase.
+    With the units' one thread the package (the largest modules of the tree) was built one module
+    at a time. Returns the failure, or None."""
     try:
         grant = elastic_grant()
         env = lean_processes_env(grant) if grant else None
+        if env is not None and build_threads:
+            env['LEAN_NUM_THREADS'] = str(build_threads)
         with open(log, 'wb') as out:
             status = subprocess.run(FIXTURE_BUILD, cwd=ROOT, env=env, stdout=out, stderr=subprocess.STDOUT).returncode
     except (OSError, ValueError, subprocess.SubprocessError) as error:
@@ -684,6 +691,9 @@ def main(argv=None):
     parser.add_argument('--prepare', action='store_true', help='resolve the units\' toolchains only')
     parser.add_argument('--only', action='append', default=[], help='units whose name or checks contain TEXT')
     parser.add_argument('--jobs', type=int)
+    parser.add_argument('--build-lean-threads', type=int, metavar='N',
+                        help='in an elastic admission, the Lean processes Lake runs at once while it builds '
+                        'the proof-fixture package before the units (default: the units\' LEAN_NUM_THREADS)')
     # A unit's peak: three at once reached 10.4 GiB under the full build's 11000 MiB guard.
     parser.add_argument('--mem-mib', type=int, default=5000, help='peak memory of one unit (default 5000)')
     parser.add_argument('--logs', type=Path, help='keep every unit\'s log here')
@@ -763,7 +773,7 @@ def main(argv=None):
                 with assumptions.runtime_run(), open(os.devnull, 'wb') as null:
                     # They also share the proof-fixture package and the compiled extractor, built
                     # here, before the units, so no unit builds them under the units that read them.
-                    if error := prepare_shared(logs / 'shared-build.log'):
+                    if error := prepare_shared(logs / 'shared-build.log', a.build_lean_threads):
                         failed.append(error)
                     else:
                         before = shared_outputs()
