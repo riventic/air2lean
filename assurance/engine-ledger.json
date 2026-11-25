@@ -1415,7 +1415,7 @@
    "workaround_sites": [
     "ZigLean/Conc/Lemmas.lean"
    ],
-   "deletion_plan": "Retire LocsKeep through the existing FStepIn/RestStep machinery and restate its lock consumers on FStepIn without weakening their contracts. Reuse the generic Conc.Base.Threads facts in the remaining legacy Owned.fork/join proofs while that layer remains, then delete those rules with Conc.Csl. If the lock migration needs a contract change, stop and post the exact obstruction with a counterexample for the maintainer. Keep LocsKeep legacy-to-retire and every real consumer in the structural gate until actual retirement."
+   "deletion_plan": "Left after the legacy-chain deletion (LocsKeep, Conc.Csl and the legacy Owned rules are gone): retire `Grows` in ZigLean/Conc/Lemmas.lean by restating its users (Proofs/Atomics, idle-loops) on the full-state facts, statements unchanged, then close the row. Original plan: Retire LocsKeep through the existing FStepIn/RestStep machinery and restate its lock consumers on FStepIn without weakening their contracts. Reuse the generic Conc.Base.Threads facts in the remaining legacy Owned.fork/join proofs while that layer remains, then delete those rules with Conc.Csl. If the lock migration needs a contract change, stop and post the exact obstruction with a counterexample for the maintainer. Keep LocsKeep legacy-to-retire and every real consumer in the structural gate until actual retirement."
   },
   {
    "id": "thread-loop",

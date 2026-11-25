@@ -24,10 +24,7 @@ permit), written out here as the generated code writes it. -/
 private def rw0 : Io_RwLock :=
   { state := 0
     mutex := { state := { raw := Io_Mutex_State.unlocked } }
-    semaphore :=
-      { mutex := { state := { raw := Io_Mutex_State.unlocked } }
-        cond := { state := { raw := Packed.ofBits (0 : BitVec 32) }, epoch := { raw := 0 } }
-        permits := 0 } }
+    semaphore := Sync.Mailbox.semZ }
 
 /-- A model mutation of the real client's initialize/spawn/hold/read/release sequence:
 only the writer join is omitted. Uses the actual exported writer and lock operations. -/
