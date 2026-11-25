@@ -3197,7 +3197,9 @@ jobs:
       # float differences count as `host`, scripts/diff.sh). Never writes a tracked file: a
       # translation that differs from the committed module is built in a check tree. 0.15.2's
       # Thread.Mutex is os_unfair_lock here: check.sh selects
-      # tests/golden/0.15.2/threadsync/Gen-darwin.lean and the proofs build against it natively.
+      # tests/golden/0.15.2/threadsync/Gen-darwin.lean and runs the differential test on it.
+      # `threadsync` is a case family, so its proofs build against that translation in the
+      # "Build threadsync proofs (macOS translation)" step, not in the build tree.
       - name: macOS golden AIR, translate, differential test
         if: ${{ !env.AIR2LEAN_REUSED }}
         env:

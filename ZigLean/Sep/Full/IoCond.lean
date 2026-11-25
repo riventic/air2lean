@@ -161,30 +161,31 @@ structure IoCondCode (Tgt : Type) where
   wa : S → BitVec 16
   si : S → BitVec 16
   pack : BitVec 16 → BitVec 16 → S
+  /- The facts below are definitional for generated code: each defaults to `rfl`. -/
   ofBits?_ok : ∀ b : BitVec 32,
-    (Packed.ofBits? (α := S) b).run = some (Except.ok (Packed.ofBits b))
-  wa_ofBits : ∀ b : BitVec 32, wa (Packed.ofBits b) = b.extractLsb' 0 16
-  si_ofBits : ∀ b : BitVec 32, si (Packed.ofBits b) = b.extractLsb' 16 16
+    (Packed.ofBits? (α := S) b).run = some (Except.ok (Packed.ofBits b)) := by intros; rfl
+  wa_ofBits : ∀ b : BitVec 32, wa (Packed.ofBits b) = b.extractLsb' 0 16 := by intros; rfl
+  si_ofBits : ∀ b : BitVec 32, si (Packed.ofBits b) = b.extractLsb' 16 16 := by intros; rfl
   toBits_pack : ∀ w s : BitVec 16,
-    Packed.toBits (pack w s) = (w.setWidth 32 <<< 0) ||| (s.setWidth 32 <<< 16)
-  pack_eta : ∀ x : S, pack (wa x) (si x) = x
+    Packed.toBits (pack w s) = (w.setWidth 32 <<< 0) ||| (s.setWidth 32 <<< 16) := by intros; rfl
+  pack_eta : ∀ x : S, pack (wa x) (si x) = x := by intros; rfl
   /-- The program's `debug.assert`. -/
   dassert : Bool → Result Unit
-  dassert_true : (dassert true).run = some (.ok ())
+  dassert_true : (dassert true).run = some (.ok ()) := by rfl
   /-- `signal`'s locals (`prev_state`) and exits: the return, the loop's end, its repeat. -/
   σs : Type
   [inhs : Inhabited σs]
   Es : Type
   sprev : σs → S
   ssetPrev : σs → S → σs
-  sprev_set : ∀ s v, sprev (ssetPrev s v) = v
+  sprev_set : ∀ s v, sprev (ssetPrev s v) = v := by intros; rfl
   sret : Es
   sstop : Es
   srep : Es
   sagain : Es → Bool
-  sagain_rep : sagain srep = true
-  sagain_stop : sagain sstop = false
-  sagain_ret : sagain sret = false
+  sagain_rep : sagain srep = true := by rfl
+  sagain_stop : sagain sstop = false := by rfl
+  sagain_ret : sagain sret = false := by rfl
   /-- `signal`'s loop body. -/
   sbody : Ptr → Io → CM Tgt σs Es
   sbody_eq : ∀ p io, sbody p io = IoCondCode.sbodyOf wa si pack sprev ssetPrev srep sstop sret p io
@@ -202,20 +203,20 @@ structure IoCondCode (Tgt : Type) where
   setEp : σ → BitVec 32 → σ
   prev : σ → S
   setPrev : σ → S → σ
-  ep_setEp : ∀ s v, ep (setEp s v) = v
-  ep_setPrev : ∀ s v, ep (setPrev s v) = ep s
-  prev_setPrev : ∀ s v, prev (setPrev s v) = v
+  ep_setEp : ∀ s v, ep (setEp s v) = v := by intros; rfl
+  ep_setPrev : ∀ s v, ep (setPrev s v) = ep s := by intros; rfl
+  prev_setPrev : ∀ s v, prev (setPrev s v) = v := by intros; rfl
   done : E
   istop : E
   irep : E
   orep : E
   iagain : E → Bool
   oagain : E → Bool
-  iagain_rep : iagain irep = true
-  iagain_stop : iagain istop = false
-  iagain_done : iagain done = false
-  oagain_rep : oagain orep = true
-  oagain_done : oagain done = false
+  iagain_rep : iagain irep = true := by rfl
+  iagain_stop : iagain istop = false := by rfl
+  iagain_done : iagain done = false := by rfl
+  oagain_rep : oagain orep = true := by rfl
+  oagain_done : oagain done = false := by rfl
   /-- The inner loop's body. -/
   inner : Ptr → Io → Ptr → CM Tgt σ E
   inner_eq : ∀ p io q, inner p io q = IoCondCode.innerOf wa si pack prev setPrev M.lock irep istop
@@ -342,9 +343,6 @@ theorem s_room {b : BitVec 32} (h : FCond.RegOld b) :
   unfold FCond.RegOld at h
   simp only [lt, Bool.false_eq_true, ↓reduceIte, BitVec.ult, s_w]
   simp; omega
-
-theorem bits32 (e : BitVec 32) : (Packed.toBits e).setWidth 32 = e := by
-  simp [Packed.toBits]
 
 section
 variable {γ : Type} {L : FLock γ} {C : FCond γ} {P : Proto Tgt γ}
@@ -588,7 +586,7 @@ theorem outer_body (hC' : C.Fits L P U ok) (hcost : P.cost = none)
   refine WP.bind (WP.callMC_ptrProject (hC.projE hi) ?_)
   dsimp only
   rw [FCond.ptr_ep]
-  refine WP.bind (FCond.wp_waitEp hC' (bits32 (X.ep s)) gR_ph (gR_lph hC) hi hlive
+  refine WP.bind (FCond.wp_waitEp hC' (BitVec.setWidth_eq (X.ep s)) gR_ph (gR_lph hC) hi hlive
     fun k₁ hk₁ G₁ m₁ hc₁ hi₁ => ?_)
   rw [FCond.afterWait, gR_set] at hi₁
   dsimp only

@@ -25,25 +25,15 @@ def condCode : IoCondCode Tgt where
   wa := Io_Condition_State.waiters
   si := Io_Condition_State.signals
   pack := Io_Condition_State.mk
-  ofBits?_ok _ := rfl
-  wa_ofBits _ := rfl
-  si_ofBits _ := rfl
-  toBits_pack _ _ := rfl
-  pack_eta _ := rfl
   dassert := debug_assert
-  dassert_true := rfl
   σs := Io_Condition_signalLocals
   Es := Io_Condition_signalExit
   sprev := Io_Condition_signalLocals.prev_state
   ssetPrev s v := { s with prev_state := v }
-  sprev_set _ _ := rfl
   sret := .ret
   sstop := .br10
   srep := .rep11
   sagain := Io_Condition_signal.again11
-  sagain_rep := rfl
-  sagain_stop := rfl
-  sagain_ret := rfl
   sbody := Io_Condition_signal.loop11
   sbody_eq _ _ := by
     simp only [Io_Condition_signal.loop11, bind_assoc, pure_bind, Norm.ite_bind]; rfl
@@ -57,20 +47,12 @@ def condCode : IoCondCode Tgt where
   setEp s v := { s with epoch := v }
   prev := Io_Condition_waitUncancelableLocals.prev_state
   setPrev s v := { s with prev_state := v }
-  ep_setEp _ _ := rfl
-  ep_setPrev _ _ := rfl
-  prev_setPrev _ _ := rfl
   done := .ret
   istop := .br44
   irep := .rep45
   orep := .rep22
   iagain := Io_Condition_waitUncancelable.again45
   oagain := Io_Condition_waitUncancelable.again22
-  iagain_rep := rfl
-  iagain_stop := rfl
-  iagain_done := rfl
-  oagain_rep := rfl
-  oagain_done := rfl
   inner := Io_Condition_waitUncancelable.loop45
   inner_eq _ _ _ := by
     simp only [Io_Condition_waitUncancelable.loop45, bind_assoc, pure_bind, Norm.ite_bind]; rfl
@@ -104,25 +86,15 @@ def condCode : IoCondCode Tgt where
   wa := Io_Condition_State.waiters
   si := Io_Condition_State.signals
   pack := Io_Condition_State.mk
-  ofBits?_ok _ := rfl
-  wa_ofBits _ := rfl
-  si_ofBits _ := rfl
-  toBits_pack _ _ := rfl
-  pack_eta _ := rfl
   dassert := debug_assert
-  dassert_true := rfl
   σs := Io_Condition_signalLocals
   Es := Io_Condition_signalExit
   sprev := Io_Condition_signalLocals.prev_state
   ssetPrev s v := { s with prev_state := v }
-  sprev_set _ _ := rfl
   sret := .ret
   sstop := .br10
   srep := .rep11
   sagain := Io_Condition_signal.again11
-  sagain_rep := rfl
-  sagain_stop := rfl
-  sagain_ret := rfl
   sbody := Io_Condition_signal.loop11
   sbody_eq _ _ := by
     simp only [Io_Condition_signal.loop11, bind_assoc, pure_bind, Norm.ite_bind]; rfl
@@ -136,20 +108,12 @@ def condCode : IoCondCode Tgt where
   setEp s v := { s with epoch := v }
   prev := Io_Condition_waitInnerLocals.prev_state
   setPrev s v := { s with prev_state := v }
-  ep_setEp _ _ := rfl
-  ep_setPrev _ _ := rfl
-  prev_setPrev _ _ := rfl
   done := .ret (.ok ())
   istop := .br55
   irep := .rep56
   orep := .rep23
   iagain := Io_Condition_waitInner.again56
   oagain := Io_Condition_waitInner.again23
-  iagain_rep := rfl
-  iagain_stop := rfl
-  iagain_done := rfl
-  oagain_rep := rfl
-  oagain_done := rfl
   inner := Io_Condition_waitInner.loop56
   inner_eq _ _ _ := by
     simp only [Io_Condition_waitInner.loop56, bind_assoc, pure_bind, Norm.ite_bind]; rfl
@@ -186,25 +150,15 @@ def condCode : IoCondCode Tgt where
   wa := Io_Condition_State.waiters
   si := Io_Condition_State.signals
   pack := Io_Condition_State.mk
-  ofBits?_ok _ := rfl
-  wa_ofBits _ := rfl
-  si_ofBits _ := rfl
-  toBits_pack _ _ := rfl
-  pack_eta _ := rfl
   dassert := debug_assert
-  dassert_true := rfl
   σs := Io_Condition_signalLocals
   Es := Io_Condition_signalExit
   sprev := Io_Condition_signalLocals.prev_state
   ssetPrev s v := { s with prev_state := v }
-  sprev_set _ _ := rfl
   sret := .ret
   sstop := .br10
   srep := .rep11
   sagain := Io_Condition_signal.again11
-  sagain_rep := rfl
-  sagain_stop := rfl
-  sagain_ret := rfl
   sbody := Io_Condition_signal.loop11
   sbody_eq _ _ := by
     simp only [Io_Condition_signal.loop11, bind_assoc, pure_bind, Norm.ite_bind]; rfl
@@ -218,20 +172,12 @@ def condCode : IoCondCode Tgt where
   setEp s v := { s with epoch := v }
   prev := Io_Condition_waitInnerLocals.prev_state
   setPrev s v := { s with prev_state := v }
-  ep_setEp _ _ := rfl
-  ep_setPrev _ _ := rfl
-  prev_setPrev _ _ := rfl
   done := .ret (.ok ())
   istop := .br55
   irep := .rep56
   orep := .rep23
   iagain := Io_Condition_waitInner.again56
   oagain := Io_Condition_waitInner.again23
-  iagain_rep := rfl
-  iagain_stop := rfl
-  iagain_done := rfl
-  oagain_rep := rfl
-  oagain_done := rfl
   inner := Io_Condition_waitInner.loop56
   inner_eq _ _ _ := by
     simp only [Io_Condition_waitInner.loop56, bind_assoc, pure_bind, Norm.ite_bind]; rfl
