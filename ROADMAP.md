@@ -49,7 +49,7 @@ the goal, in order:
    target tree for proofs, fixtures, docs and scripts (mechanical `git mv` PRs).
 
 The engine features these steps wait on are rows of the [engine ledger](docs/engine-ledger.md)
-(193 rows: 67 open, 126 closed).
+(193 rows: 65 open, 128 closed).
 
 **Open PRs** are the list on GitHub (`gh pr list`). On 2026-11-06: #637, #480 and #403 (Codex
 drafts); #443 (an infrastructure draft, superseded by the light merge gate); #602 (its measurement failed) and #581 (obsolete), to be closed.

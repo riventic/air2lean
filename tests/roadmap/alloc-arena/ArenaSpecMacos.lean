@@ -49,7 +49,6 @@ theorem resize_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (n ra : BitVec
       (heap_ArenaAllocator_resize ctx s ⟨BitVec.ofNat 6 k⟩ n ra)
       ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n.toNat A S K q q' φ tl) := by
   unfold heap_ArenaAllocator_resize
-  rcases Nat.lt_trichotomy n.toNat s.len.toNat with hc | hc | hc <;>
   fsym [resize_other_upd (S := S) (k := k) (n := n.toNat) (tl := tl),
     resize_shrink_upd (S := S) (k := k) (n := n.toNat) (tl := tl),
     resize_grow_upd (S := S) (k := k) (n := n.toNat) (tl := tl),
@@ -312,7 +311,7 @@ theorem loop66_c0 (hfit : CI.FitsUpTo (2 ^ 63) 3) (pu pf : Ptr) (xu xf : Option 
   unfold heap_ArenaAllocator_reset.loop66
   by_cases hsm : v0.toNat < 2 <;>
     fsym [loop78_ct CI h ctx Ac Sc Kc, CAllocSpec.free' h, CAllocSpec.alloc_upTo h hfit,
-      CAllocSpec.resize_shrink h hfit, CAllocSpec.resize_grow h hfit, Child.cown_refund,
+      CAllocSpec.resize_upTo h hfit, Child.cown_refund,
       FTotalTriple.region_storePacked_wpts, FTotalTriple.region_store_wpts,
       FTotalTriple.region_storeAll]
 
@@ -329,7 +328,7 @@ theorem loop66_c1 (hfit : CI.FitsUpTo (2 ^ 63) 3) (pu pf : Ptr) (xu xf : Option 
   unfold heap_ArenaAllocator_reset.loop66
   by_cases hsm : v1.toNat < 2 <;>
     fsym [loop78_ct CI h ctx Ac Sc Kc, CAllocSpec.free' h, CAllocSpec.alloc_upTo h hfit,
-      CAllocSpec.resize_shrink h hfit, CAllocSpec.resize_grow h hfit, Child.cown_refund,
+      CAllocSpec.resize_upTo h hfit, Child.cown_refund,
       FTotalTriple.region_storePacked_wpts, FTotalTriple.region_store_wpts,
       FTotalTriple.region_storeAll]
 
