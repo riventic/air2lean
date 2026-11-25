@@ -1835,12 +1835,12 @@ partial def arithGoals (g : MVarId) (quick := false) (cases := true) : TacticM (
       let s ← saveState
       if let some e ← congrEq x y (cases := cases) then g.assign e; return []
       s.restore
-  -- `x ≤ x` (a carved region that starts where the state's does)
+  -- `x ≤ x` (a carved region that starts where the state's does; a share's fraction `q.val ≤ q.val`
+  -- of a rule stated for a part `q' ≤ q` of it): in any type with a reflexive order
   if t.isAppOfArity ``LE.le 4 then
-    let ty := t.getArg! 0
-    if ty.isConstOf ``Nat || ty.isConstOf ``Int then
-      if ← withReducible (isDefEq (t.getArg! 2) (t.getArg! 3)) then
-        g.assign (← mkAppM (if ty.isConstOf ``Nat then ``Nat.le_refl else ``Int.le_refl) #[t.getArg! 2])
+    if ← withReducible (isDefEq (t.getArg! 2) (t.getArg! 3)) then
+      if let some pf ← observing? (mkAppM ``Std.le_refl #[t.getArg! 2]) then
+        g.assign pf
         return []
   if ← arithCore g quick cases then return []
   unless quick do
