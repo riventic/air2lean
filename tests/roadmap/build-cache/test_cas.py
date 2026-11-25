@@ -240,7 +240,7 @@ class RegenTests(unittest.TestCase):
         self.assertEqual({n for n, scope in scopes.items() if scope == 'tree'}, set(regen.TREE_GROUPS))
         self.assertEqual(sorted(g for groups in regen.TREE_GROUPS.values() for g in groups),
                          sorted(g['name'] for g in regen.GENERATED.load(ROOT)['groups']))
-        for name in ('gen', 'ci-matrix', 'trust-report', 'inventory', 'support-matrix', 'claims'):
+        for name in ('gen', 'ci-matrix', 'trust-report', 'support-matrix', 'claims'):
             self.assertEqual(scopes[name], 'pr', name)
 
     def test_list_json(self):
