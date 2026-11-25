@@ -7,7 +7,7 @@ After its read of the `Tally` (`rdd`), `main` joins task 1 and then task 2. Both
 `fin` and lock-`gone` then (`proto.fin`, which `WP.joinC` gives).
 
 - **The first join** (`wp_join1`): `main` takes task 1's part (`FLock.Inv.join`). The threads'
-  shape records task 1 as joined exactly at `j1`, the shape's third case. The rest of `U` stays by
+  shape records task 1 as joined exactly at `j1`, after its end, the shape's third case. The rest of `U` stays by
   `U_main` (a join keeps the blocks, atomics, footprint and heap, keeps as many threads, and its
   clocks grow), and then `main`'s new part by `U_part`.
 - **The second join** (`wp_join2`): every thread record is `main`'s and joined. So every other
@@ -58,7 +58,8 @@ theorem wp_join1 {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} 
     obtain ⟨-, -, hn, -⟩ := hu.shape
     have hX : ∀ u, u ≠ 0 → upd G₁ 0 ((G₁ 0).1, { ph := .j1, wk := w }) u = G₁ u :=
       fun u h => upd_ne _ _ h
-    refine ⟨?_, by dsimp only; rw [upd_self]; rfl, fun u hu3 => ?_, .inr (.inr ⟨?_, ?_, ?_, ?_, ?_, ?_⟩)⟩
+    refine ⟨?_, by dsimp only; rw [upd_self]; rfl, fun u hu3 => ?_,
+      .inr (.inr ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩)⟩
     · rw [hth, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds, if_neg (by decide)]
       exact h00
     · dsimp only; rw [hX u (by unfold ThreadId at *; omega)]; exact hn u hu3
@@ -71,6 +72,8 @@ theorem wp_join1 {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} 
       rfl
     · rw [hth, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds, if_neg (by decide)]
       exact hr2
+    · -- task 1 is joined after its end (`proto.fin`)
+      intro _; dsimp only; rw [hX 1 h10]; exact hfin.2.1
   have hU := U_main (x₁ := { ph := .j1, wk := w }) hu (by rw [hm']) (by rw [hm']) (by rw [hm'])
     (fun l => by rw [hm']; rfl) (by rw [hth, Array.size_set!]) (by rw [hm'])
     (Nat.le_of_eq (by rw [hm'])) hclk (congrArg X.e hX0).symm rfl rfl

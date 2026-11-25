@@ -39,9 +39,11 @@ def gE (rp : Res) (fc : VClock) : Gh := (⟨.gone, rp, rnil⟩, { ph := .fin, fc
 theorem Ph.main_task {p : Ph} (h1 : p.isMain = true) (h2 : p.isTask = true) : False := by
   cases p <;> simp [Ph.isMain, Ph.isTask] at h1 h2
 
-/-- **The threads' shape after a task moves to another task's place.** -/
+/-- **The threads' shape after a task moves to another task's place** (a task at its end stays
+there). -/
 theorem Shape.task {Y : ThreadId → X} {m : Mem} {t : ThreadId} {x : X} (h : Shape Y m)
-    (ht : (Y t).ph.isTask = true) (hx : x.ph.isTask = true) : Shape (upd Y t x) m := by
+    (ht : (Y t).ph.isTask = true) (hx : x.ph.isTask = true)
+    (hf : (Y t).ph = .fin → x.ph = .fin) : Shape (upd Y t x) m := by
   obtain ⟨h0, hm, h3, hc⟩ := h
   have t3 : t < 3 := Nat.lt_of_not_le fun h => by rw [h3 t h] at ht; exact absurd ht (by decide)
   have h3' : ∀ u, 3 ≤ u → upd Y t x u = {} := fun u hu => by
@@ -52,10 +54,10 @@ theorem Shape.task {Y : ThreadId → X} {m : Mem} {t : ThreadId} {x : X} (h : Sh
     have e2 : upd Y 1 x 2 = Y 2 := upd_ne _ _ (by decide)
     refine ⟨h0, by rw [e0]; exact hm, h3', ?_⟩
     rw [e0, e2, upd_self]
-    rcases hc with ⟨-, -, c, -⟩ | ⟨a, b, c, -, f⟩ | ⟨a, b, -, d, f, g⟩
+    rcases hc with ⟨-, -, c, -⟩ | ⟨a, b, c, -, f⟩ | ⟨a, b, -, d, f, g, gj⟩
     · rw [c] at ht; exact absurd ht (by decide)
     · exact .inr (.inl ⟨a, b, c, hx, f⟩)
-    · exact .inr (.inr ⟨a, b, hx, d, f, g⟩)
+    · exact .inr (.inr ⟨a, b, hx, d, f, g, fun h => hf (gj h)⟩)
   · have e0 : upd Y 2 x 0 = Y 0 := upd_ne _ _ (by decide)
     have e1 : upd Y 2 x 1 = Y 1 := upd_ne _ _ (by decide)
     refine ⟨h0, by rw [e0]; exact hm, h3', ?_⟩
@@ -151,7 +153,10 @@ theorem U_task {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {g : Gh
   · by_cases e : u = t
     · subst e; rw [upd_self]; exact hph
     · rw [upd_ne _ _ e]
-  · rw [upd_snd]; exact Shape.task hu.shape (htk hp) (htk hp')
+  · rw [upd_snd]
+    exact Shape.task hu.shape (htk hp) (htk hp') fun h => by
+      have h' : (G t).2.ph = .fin := h
+      rw [h'] at hp; exact absurd hp (by decide)
   · exact hu.einv.relabel (fun u hu => upd_ne _ _ hu) (by rw [upd_self]; exact he.trans he'.symm)
       (fun h => absurd (by rw [upd_self]; exact he) h)
       (fun h => by
@@ -444,7 +449,9 @@ theorem inv_fin {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {t : ThreadId} {rp
     fun u h => ?_, fun u h => ?_, fun u v h1 h2 => ?_, fun e he hb0 hk hl ho => ?_, fun h => ?_, ?_⟩
   · -- shape
     rw [upd_snd]
-    exact (Shape.task hu.shape (by rw [hg]; rfl) (by cases b <;> rfl)).threads hs.threads
+    exact (Shape.task hu.shape (by rw [hg]; rfl) (by cases b <;> rfl) fun h => by
+      have h' : (G t).2.ph = .fin := h
+      rw [hg] at h'; exact absurd h' (by decide)).threads hs.threads
   · -- the group's live set: `t` leaves it
     by_cases e : u = t
     · subst e; unfold WLive at h; rw [hGt, hfd'] at h; cases h
@@ -623,7 +630,7 @@ theorem inv_end {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {rp : Res} {fc : 
     rw [upd_self] at this; exact Bool.false_ne_true this
   have hsh : Shape (fun u => (upd G t (gE rp fc) u).2) m := by
     have hs := hu.shape; rw [upd_snd] at hs ⊢
-    have := Shape.task hs (t := t) (x := (gE rp fc).2) (by rw [upd_self]; rfl) rfl
+    have := Shape.task hs (t := t) (x := (gE rp fc).2) (by rw [upd_self]; rfl) rfl fun _ => rfl
     rwa [upd_upd] at this
   have hE : E.Inv L (upd G t (gE rp fc)) m := by
     have := hu.einv.toOut (t := t) (g := gE rp fc) (by rw [upd_self]; exact .inr rfl) (.inl rfl)
@@ -635,6 +642,26 @@ theorem inv_end {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {rp : Res} {fc : 
     rwa [upd_upd] at this
   refine ⟨rX, L_relabel hL rfl rfl, U_end hu hset ht0 (fun u h => by rw [upd_ne _ _ h, upd_ne _ _ h])
     ?_ ?_ ?_ ?_ ?_ ?_ ?_ hsh hE⟩ <;> simp only [upd_self] <;> rfl
+
+/-- **A task before its end was not joined**: task 1 is joined only at `main`'s `j1`, after its
+end (`Shape`), task 2 not before `main`'s end. This discharges the gone setter's hypothesis of
+`EventImpl.set_wp` (THR-12). -/
+theorem unjoined {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U G rX m) {t : ThreadId}
+    (ht : (G t).2.ph.isTask = true) (hf : (G t).2.ph ≠ .fin) : joinedB m t = false := by
+  obtain ⟨-, -, h3, hc⟩ := hu.shape
+  have t3 : t < 3 := Nat.lt_of_not_le fun h => by
+    rw [show (G t).2 = {} from h3 t h] at ht; exact absurd ht (by decide)
+  rcases lt3 t3 with rfl | rfl | rfl
+  · simp [joinedB]
+  · rcases hc with ⟨-, -, c, -⟩ | ⟨-, -, c, -, -⟩ | ⟨-, -, -, -, c, -, cj⟩
+    · rw [show (G 1).2 = {} from c] at ht; exact absurd ht (by decide)
+    · simp [joinedB, c]
+    · have hn : ¬ (G 0).2.ph = Ph.j1 := fun h => hf (cj h)
+      simp [joinedB, c, hn]
+  · rcases hc with ⟨-, -, -, c⟩ | ⟨-, -, -, -, c⟩ | ⟨-, -, -, -, -, c, -⟩
+    · rw [show (G 2).2 = {} from c] at ht; exact absurd ht (by decide)
+    · rw [show (G 2).2 = {} from c] at ht; exact absurd ht (by decide)
+    · simp [joinedB, c]
 
 section Sync
 
@@ -662,7 +689,9 @@ theorem wp_setT {p : Ptr} (hp : p = EV.ptr) (io : Io) {t : ThreadId} {G : Thread
     proto.WP t (ei.set p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       proto.inv (upd G' t (gE rp fc)) m') G m d :=
   WP.mono (fun _ _ _ _ ⟨hd, hc, hs, hi'⟩ => ⟨hd, hc, inv_end hi' hs⟩)
-    (ei.set_wp fitsE rfl hp t (gS rp fc) rfl (.inr rfl) ⟨rfl, rfl⟩ io G m d hpP.unmetered hi)
+    (ei.set_wp fitsE rfl hp t (gS rp fc) rfl (.inr rfl) ⟨rfl, rfl⟩
+      (fun _ _ _ _ hG ⟨_, _, hu₁⟩ => unjoined hu₁ (by rw [hG]; rfl) (by rw [hG]; decide))
+      io G m d hpP.unmetered hi)
 
 end Sync
 

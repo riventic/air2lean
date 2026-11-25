@@ -2224,7 +2224,10 @@ and counts no turns.
    repeats `__ulock_wake` on `EINTR`; maintainer decision 2026-11-24, audit S6 finding 4, option
    (a)). Every implementation admits such a part and returns it exactly (`set_unmetered_pre`,
    `set_unmetered_post`), as `CondImpl.signal`. A setter that is `gone` for the lock still owns
-   its part until it is joined, and pays there (`FLock.Fits.wp_tick_exactUnjoined`).
+   its part until it is joined, and pays there (`FLock.Fits.wp_tick_exactUnjoined`): for such a
+   setter the client shows that it is not joined in any state where it is at a place of the
+   event's code (premise THR-12, docs/premises.md; maintainer decision 2026-11-25, option (ii')).
+   The scheduler cannot supply it: `Thread.detach` marks a running thread joined.
 
 `wait_wp_resource` and `set_wp_resource` state caller parts the same way as the mutex and
 condition (`LockRules`, "Caller parts of composite operations"); `EventImpl.wait_wp` (a Plain
@@ -2261,7 +2264,9 @@ structure EventImpl (Tgt : Type) where
   set_wp_resource : ∀ {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}
     {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}, L.Fits (E.prim L) P U ok →
     P.cost = none → ∀ {p : Ptr}, p = E.W.ptr → ∀ (t : ThreadId) (g : γ), E.ph g = .out →
-    (L.ph g = .out ∨ L.ph g = .gone) → E.sx g → ∀ (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat),
+    (L.ph g = .out ∨ L.ph g = .gone) → E.sx g →
+    (L.ph g = .gone → ∀ G₁ m₁ q, G₁ t = E.set g q → P.inv G₁ m₁ → joinedB m₁ t = false) →
+    ∀ (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat),
     set_pre t (L.part g) → P.inv (upd G t g) m →
     P.WP t (set p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
       ∃ r', set_post t (L.part g) r' ∧ P.inv (upd G' t (L.setPart (E.set g .sd) r')) m') G m d
@@ -2274,11 +2279,13 @@ theorem set_wp (I : EventImpl Tgt) {γ : Type} {L : FLock γ} {E : FEvent γ} {P
     {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
     (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = E.W.ptr)
     (t : ThreadId) (g : γ) (hg : E.ph g = .out) (hgo : L.ph g = .out ∨ L.ph g = .gone)
-    (hsx : E.sx g) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hsx : E.sx g)
+    (hjoin : L.ph g = .gone → ∀ G₁ m₁ q, G₁ t = E.set g q → P.inv G₁ m₁ → joinedB m₁ t = false)
+    (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
     (hu : 0 < (L.part g).gh.ac.frag .unmetered) (hi : P.inv (upd G t g) m) :
     P.WP t (I.set p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
       P.inv (upd G' t (E.set g .sd)) m') G m d := by
-  refine WP.mono ?_ (I.set_wp_resource hE hcost hp t g hg hgo hsx io G m d
+  refine WP.mono ?_ (I.set_wp_resource hE hcost hp t g hg hgo hsx hjoin io G m d
     (I.set_unmetered_pre t (L.part g) hu) hi)
   rintro _ G' m' d' ⟨hd, hc, hset, r', hr, hi'⟩
   have he := I.set_unmetered_post t (L.part g) r' hu hr

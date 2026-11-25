@@ -284,8 +284,8 @@ theorem wp_set {p : Ptr} (hp : p = Lo.WV.ptr) (io : Io) {G : ThreadId → Gh} {m
     (proto Lo prodOf).WP 1 (ei.set p io) (fun _ G' m' d' => d' < d ∧ m'.current = 1 ∧
       (proto Lo prodOf).inv (upd G' 1 (⟨.gone, rp, rnil⟩, { ph := .fin })) m') G m d :=
   WP.mono (fun _ _ _ _ ⟨hd, hc, hs, hi'⟩ => ⟨hd, hc, inv_end hi' hs⟩)
-    (ei.set_wp fitsE rfl hp 1 (gO rp { ph := .st }) rfl (.inl rfl) (.inl rfl) io G m d
-      hpl.unmetered hi)
+    (ei.set_wp fitsE rfl hp 1 (gO rp { ph := .st }) rfl (.inl rfl) (.inl rfl)
+      (fun h => by cases h) io G m d hpl.unmetered hi)
 
 /-- **`main`'s event wait** at `ev`: to its join. -/
 theorem wp_ewait {p : Ptr} (hp : p = Lo.WV.ptr) (io : Io) {G : ThreadId → Gh} {m : Mem} {d : Nat}

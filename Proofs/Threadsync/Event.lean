@@ -30,12 +30,92 @@ namespace ResetEvent
 variable {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}
   {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
 
+/-- A gone setter's hypothesis (THR-12, `EventImpl.set_wp_resource`): in every state where it is
+at a place of the event's code, it was not joined. -/
+abbrev GoneUnjoined (L : FLock γ) (E : FEvent γ) (P : Proto Tgt γ) (t : ThreadId) (g : γ) : Prop :=
+  L.ph g = .gone → ∀ G₁ m₁ q, G₁ t = E.set g q → P.inv G₁ m₁ → joinedB m₁ t = false
+
+when_defined Thread_Futex_LinuxImpl_wake
+
+/-- Linux: the setter's `wake(maxInt(u32))` at `sw` (`Futex.wake_wp`, no loop) is the OS wake of
+up to `wakeLimit` waiters; it is done (`sd`). -/
+theorem wakeSw_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none) {t : ThreadId}
+    {g : γ} (hgo : L.ph g = .out ∨ L.ph g = .gone)
+    (_hu : 0 < (L.part g).gh.ac.frag .unmetered) (_hjoin : GoneUnjoined L E P t g)
+    {G : ThreadId → γ} {m : Mem} {k : Nat} (_hc : m.current = t)
+    (hi : P.inv (upd G t (E.set g .sw)) m) :
+    P.WP t (Thread_Futex_wake E.W.ptr (4294967295 : BitVec 32)) (fun _ G' m' d' => d' < k ∧
+      m'.current = t ∧ E.IsSet m' ∧ P.inv (upd G' t (E.set g .sd)) m') G m k :=
+  Futex.wake_wp hcost (by decide) (hE.wordWordAt (hE.wRest rfl) hi) fun v _ =>
+    FEvent.wp_osWake hE (fun k hk => by cases hk; exact Os.Linux.wakeLimit_pos v)
+      (E.ph_set _ _) (by rw [hE.lph]; exact hgo) hi fun k₃ hk₃ r G₃ m₃ hc₃ hr => by
+    rcases hr with ⟨⟨j, rfl, hj⟩, hs₃, hi₃⟩ | ⟨hsp, -⟩
+    · rw [E.set_set] at hi₃
+      exact ⟨j, rfl, Nat.le_trans (hj _ rfl) (Os.Linux.wakeLimit_le v), by omega, hc₃, hs₃, hi₃⟩
+    · cases hsp
+
+end_when
+
+when_defined Thread_Futex_DarwinImpl_wake
+
+/-- The tick of std's macOS wake loop by the setter at `sw`, paid from its positive unmetered
+fragment: out of the lock's code by the lock's invariant, `gone` by its existence (`Inv.swex`)
+and THR-12 (`FLock.Fits.wp_tick_unmetered_exactUnjoined`). -/
+theorem tickSw (hE : L.Fits (E.prim L) P U ok) {t : ThreadId} {g : γ}
+    (hgo : L.ph g = .out ∨ L.ph g = .gone) (hu : 0 < (L.part g).gh.ac.frag .unmetered)
+    (hjoin : GoneUnjoined L E P t g) {G : ThreadId → γ} {m : Mem} {d : Nat}
+    {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop}
+    (hc : m.current = t) (hi : P.inv (upd G t (E.set g .sw)) m)
+    (h : ∀ m', m'.current = t → P.inv (upd G t (E.set g .sw)) m' → Q () G m' d) :
+    P.WP t (ConcM.liftMem Zig.tick : ConcM Tgt Unit) Q G m d := by
+  have hu' : 0 < (L.part (E.set g .sw)).gh.ac.frag .unmetered := by rw [hE.lpart]; exact hu
+  rcases hgo with hgo | hgo
+  · exact hE.wp_tick_unmetered_exact hi hc (by rw [hE.lph, hgo]; decide) hu'
+      fun hc' hi' => h _ hc' hi'
+  · obtain ⟨rX, -, hU⟩ := (hE.inv _ _).mp hi
+    exact hE.wp_tick_unmetered_exactUnjoined hi hc
+      ((hE.wInv _ _ _ hU).swex t (by rw [upd_self, E.ph_set]))
+      (hjoin hgo _ m .sw (by rw [upd_self]) hi) hu' fun hc' hi' => h _ hc' hi'
+
+/-- macOS: the setter's `wake(maxInt(u32))` at `sw` is std's loop of `__ulock_wake` with
+`WAKE_ALL`, repeated on a spurious `EINTR` (`Futex.wake_wp`); each tick is paid by `tickSw`; it
+is done (`sd`). -/
+theorem wakeSw_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none) {t : ThreadId}
+    {g : γ} (hgo : L.ph g = .out ∨ L.ph g = .gone)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered) (hjoin : GoneUnjoined L E P t g)
+    {G : ThreadId → γ} {m : Mem} {k : Nat} (hc : m.current = t)
+    (hi : P.inv (upd G t (E.set g .sw)) m) :
+    P.WP t (Thread_Futex_wake E.W.ptr (4294967295 : BitVec 32)) (fun _ G' m' d' => d' < k ∧
+      m'.current = t ∧ E.IsSet m' ∧ P.inv (upd G' t (E.set g .sd)) m') G m k :=
+  Futex.wake_wp hcost (by decide)
+    (I := fun G m => m.current = t ∧ P.inv (upd G t (E.set g .sw)) m)
+    (D := fun G m => m.current = t ∧ E.IsSet m ∧ P.inv (upd G t (E.set g .sd)) m)
+    (fun _ _ hI => hE.wordWordAt (hE.wRest rfl) hI.2)
+    (fun hI hq => tickSw hE hgo hu hjoin hI.1 hI.2 fun m' hc' hi' => hq m' ⟨hc', hi'⟩)
+    (fun hI hq => FLock.wp_pick hE hI.2
+      (fun k hk a G₁ m' hc hi' => hq k hk a G₁ m' ⟨hc, hi'⟩) hcost)
+    (fun hI hq => FEvent.wp_osWake hE (spurious := true)
+      (fun k hk => by
+        rw [show (if Zig.gt false (4294967295 : BitVec 32) (1 : BitVec 32) then
+          (none : Option Nat) else some 1) = none by decide] at hk
+        cases hk)
+      (E.ph_set _ _) (by rw [hE.lph]; exact hgo) hI.2 fun k hk r G₁ m' hc hr =>
+        hq k hk r G₁ m' (by
+          rcases hr with ⟨⟨j, rfl, -⟩, hs, hi'⟩ | ⟨-, rfl, hi'⟩
+          · rw [E.set_set] at hi'
+            exact .inl ⟨⟨j, rfl⟩, hc, hs, hi'⟩
+          · exact .inr ⟨rfl, hc, hi'⟩))
+    ⟨hc, hi⟩ fun _ _ _ hd hD => ⟨hd, hD⟩
+
+end_when
+
 /-- `FutexImpl.set` by a thread out of the event's code, out of the lock's code or gone from it: a
 peek (if it reads `is_set`, it is done: `Fits.doneSet`), a release `xchg(is_set)`, then a wake if
-it read `waiting`; it is done (`sd`). -/
+it read `waiting` (`wakeSw_wp` of the target); it is done (`sd`). -/
 theorem futexSet_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
     (t : ThreadId) (g : γ) (hgx : E.ph g = .out) (hgo : L.ph g = .out ∨ L.ph g = .gone)
-    (hsx : E.sx g) (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
+    (hsx : E.sx g) (hjoin : GoneUnjoined L E P t g) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered) (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_ResetEvent_FutexImpl_set E.W.ptr) (fun _ G' m' d' => d' < d ∧
       m'.current = t ∧ E.IsSet m' ∧ P.inv (upd G' t (E.set g .sd)) m') G m d := by
   unfold Thread_ResetEvent_FutexImpl_set
@@ -55,15 +135,10 @@ theorem futexSet_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
   rcases hcase with ⟨rfl, hi₂⟩ | ⟨ho, hi₂⟩
   · simp only [show ((1 : BitVec 32) == 1) = true from rfl, ↓reduceIte, StateT.run_bind,
       bind_assoc]
-    -- the translated `Thread.Futex.wake`, down to the OS wake (`Futex.wake_wp`)
-    refine WP.bind (WP.callC (Futex.wake_wp hcost (by decide)
-      (hE.wordWordAt (hE.wRest rfl) hi₂) fun v _ =>
-      FEvent.wp_osWake hE (fun k hk => by cases hk; exact Os.Linux.wakeLimit_pos v)
-        (E.ph_set _ _) (by rw [hE.lph]; exact hgo) hi₂ fun k₃ hk₃ r G₃ m₃ hc₃ hr => ?_))
-    rcases hr with ⟨⟨j, rfl, hj⟩, hs₃, hi₃⟩ | ⟨hsp, -⟩
-    case inr => cases hsp
-    refine ⟨j, rfl, Nat.le_trans (hj _ rfl) (Os.Linux.wakeLimit_le v), ?_⟩
-    rw [E.set_set] at hi₃
+    -- the translated `Thread.Futex.wake`, down to the OS wake (`wakeSw_wp`)
+    refine WP.bind (WP.callC (WP.mono (fun _ G₃ m₃ d₃ h₃ => ?_)
+      (wakeSw_wp hE hcost hgo hu hjoin hc₂ hi₂)))
+    obtain ⟨hd₃, hc₃, hs₃, hi₃⟩ := h₃
     repeat (first
       | exact ⟨by omega, hc₃, hs₃, hi₃⟩
       | refine WP.pure' ?_
@@ -81,8 +156,9 @@ theorem futexSet_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
 it. -/
 theorem resetEvent_set_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
     {p : Ptr} (hp : p = E.W.ptr) (t : ThreadId) (g : γ) (hgx : E.ph g = .out)
-    (hgo : L.ph g = .out ∨ L.ph g = .gone) (hsx : E.sx g) (_io : Io) (G : ThreadId → γ) (m : Mem)
-    (d : Nat) (hi : P.inv (upd G t g) m) :
+    (hgo : L.ph g = .out ∨ L.ph g = .gone) (hsx : E.sx g) (hjoin : GoneUnjoined L E P t g)
+    (_io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered) (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_ResetEvent_set p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       E.IsSet m' ∧ P.inv (upd G' t (E.set g .sd)) m') G m d := by
   subst hp
@@ -92,20 +168,22 @@ theorem resetEvent_set_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none
   refine WP.map ?_
   simp only [StateT.run_bind, StateT.run_pure, pure_bind]
   refine WP.bind (WP.callC (WP.mono (fun _ G' m' d' h => ?_)
-    (futexSet_wp hE hcost t g hgx hgo hsx G m d hi)))
+    (futexSet_wp hE hcost t g hgx hgo hsx hjoin G m d hu hi)))
   exact WP.pure' (WP.pure' h)
 
 /-- The set's resource contract: the caller's positive unmetered fragment pays each tick of the
 wake (std's macOS `Thread.Futex.wake` repeats on `EINTR`; the Linux wake ticks nowhere), and the
-set returns the caller's exact part. -/
+set returns the caller's exact part. A gone setter pays there only while it is not joined
+(THR-12). -/
 theorem resetEvent_set_wp_resource (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
     {p : Ptr} (hp : p = E.W.ptr) (t : ThreadId) (g : γ) (hgx : E.ph g = .out)
-    (hgo : L.ph g = .out ∨ L.ph g = .gone) (hsx : E.sx g) (io : Io) (G : ThreadId → γ) (m : Mem)
-    (d : Nat) (_ : payUnmetered t (L.part g)) (hi : P.inv (upd G t g) m) :
+    (hgo : L.ph g = .out ∨ L.ph g = .gone) (hsx : E.sx g) (hjoin : GoneUnjoined L E P t g)
+    (io : Io) (G : ThreadId → γ) (m : Mem)
+    (d : Nat) (hu : payUnmetered t (L.part g)) (hi : P.inv (upd G t g) m) :
     P.WP t (Thread_ResetEvent_set p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       E.IsSet m' ∧ ∃ r', keepPart t (L.part g) r' ∧
         P.inv (upd G' t (L.setPart (E.set g .sd) r')) m') G m d := by
-  refine WP.mono ?_ (resetEvent_set_wp hE hcost hp t g hgx hgo hsx io G m d hi)
+  refine WP.mono ?_ (resetEvent_set_wp hE hcost hp t g hgx hgo hsx hjoin io G m d hu hi)
   rintro _ G' m' d' ⟨hd, hc, hs, hi'⟩
   exact ⟨hd, hc, hs, L.part g, rfl, by rw [FEvent.setPart_set_self hE]; exact hi'⟩
 

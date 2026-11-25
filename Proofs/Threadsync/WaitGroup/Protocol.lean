@@ -211,7 +211,9 @@ def Rest (rX : Res) (m : Mem) : Prop :=
 def BlkOk (m : Mem) : Prop :=
   ∃ blk, m.blocks[0]? = some blk ∧ blk.live = true ∧ blk.bytes.size = 24 ∧ blk.kind = .stack
 
-/-- The threads: `main` alone before its spawns; then the tasks, which `main` spawned. -/
+/-- The threads: `main` alone before its spawns; then the tasks, which `main` spawned. Task 1 is
+joined only at `j1`, after its end (`fin`, learned at the join): a task that is not `fin` was not
+joined (the gone setter's hypothesis of `EventImpl.set_wp`, THR-12). -/
 def Shape (Y : ThreadId → X) (m : Mem) : Prop :=
   m.threads[0]? = some { spawner := 0, joined := true } ∧ (Y 0).ph.isMain ∧ (∀ u, 3 ≤ u → Y u = {}) ∧
   ((m.threads.size = 1 ∧ (Y 0).ph.rank ≤ 1 ∧ Y 1 = {} ∧ Y 2 = {}) ∨
@@ -219,7 +221,8 @@ def Shape (Y : ThreadId → X) (m : Mem) : Prop :=
      (Y 1).ph.isTask ∧ Y 2 = {}) ∨
    (m.threads.size = 3 ∧ 3 ≤ (Y 0).ph.rank ∧ (Y 1).ph.isTask ∧ (Y 2).ph.isTask ∧
      m.threads[1]? = some { spawner := 0, joined := decide ((Y 0).ph = .j1) } ∧
-     m.threads[2]? = some { spawner := 0, joined := false }))
+     m.threads[2]? = some { spawner := 0, joined := false } ∧
+     ((Y 0).ph = .j1 → (Y 1).ph = .fin)))
 
 /-- The newest write of a word. -/
 abbrev newest {n nb : Nat} (W : Word n nb) (m : Mem) : Word.Entry := (W.hist m)[(W.hist m).size - 1]!

@@ -68,10 +68,13 @@ theorem ioEvent_set_wp (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
     hE.lph, E.ph_set, E.set_set, ioEvent_of0, ioEvent_of1, ioEvent_of2]
 
 /-- The set's resource contract: `Io.Event.set` ticks nowhere (a store and a futex wake), so it
-admits every caller part and returns it exactly. -/
+admits every caller part and returns it exactly; it does not use the gone setter's hypothesis
+(THR-12). -/
 theorem ioEvent_set_wp_resource (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
     {p : Ptr} (hp : p = E.W.ptr) (t : ThreadId) (g : γ) (hgx : E.ph g = .out)
-    (hgo : L.ph g = .out ∨ L.ph g = .gone) (hsx : E.sx g) (io : Io) (G : ThreadId → γ) (m : Mem)
+    (hgo : L.ph g = .out ∨ L.ph g = .gone) (hsx : E.sx g)
+    (_ : L.ph g = .gone → ∀ G₁ m₁ q, G₁ t = E.set g q → P.inv G₁ m₁ → joinedB m₁ t = false)
+    (io : Io) (G : ThreadId → γ) (m : Mem)
     (d : Nat) (_ : anyPart t (L.part g)) (hi : P.inv (upd G t g) m) :
     P.WP t (Io_Event_set p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
       ∃ r', keepPart t (L.part g) r' ∧ P.inv (upd G' t (L.setPart (E.set g .sd) r')) m')
