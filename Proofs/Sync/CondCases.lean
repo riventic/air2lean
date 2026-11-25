@@ -121,7 +121,7 @@ def condCode : IoCondCode Tgt where
   outer_eq := ⟨_, fun _ _ _ => by
     simp only [Io_Condition_waitInner.loop23, IoCondCode.outerOf, bind_assoc, pure_bind,
       Norm.ite_bind, ↓reduceIte, isNonErr, isErr, Bool.not_false]; rfl,
-    by simp only [bind_assoc, pure_bind], by simp only [bind_assoc, pure_bind]⟩
+    by simp only [pure_bind], by simp only [pure_bind]⟩
   R := Except ErrName Unit
   rv := .ok ()
   core p io q := Io_Condition_waitInner p io q true
@@ -130,7 +130,7 @@ def condCode : IoCondCode Tgt where
   wait := Io_Condition_waitUncancelable
   wait_eq := .call (σ := Io_Condition_waitUncancelableLocals) _
     Io_Condition_waitUncancelableExit.ret _ (fun _ _ _ => by
-      simp only [Io_Condition_waitUncancelable, bind_assoc, pure_bind]; rfl)
+      simp only [Io_Condition_waitUncancelable, pure_bind]; rfl)
       (by simp only [isNonErr, isErr, Bool.not_false, ↓reduceIte, pure_bind]) (by rfl)
 
 /-- This profile's translated condition satisfies the general condition contract. -/
@@ -185,7 +185,7 @@ def condCode : IoCondCode Tgt where
   outer_eq := ⟨_, fun _ _ _ => by
     simp only [Io_Condition_waitInner.loop23, IoCondCode.outerOf, bind_assoc, pure_bind,
       Norm.ite_bind, ↓reduceIte, isNonErr, isErr, Bool.not_false]; rfl,
-    by simp only [bind_assoc, pure_bind], by simp only [bind_assoc, pure_bind]⟩
+    by simp only [pure_bind], by simp only [pure_bind]⟩
   R := Except ErrName Unit
   rv := .ok ()
   core p io q := Io_Condition_waitInner p io q true
@@ -194,7 +194,7 @@ def condCode : IoCondCode Tgt where
   wait := Io_Condition_waitUncancelable
   wait_eq := .call (σ := Io_Condition_waitUncancelableLocals) _
     Io_Condition_waitUncancelableExit.ret _ (fun _ _ _ => by
-      simp only [Io_Condition_waitUncancelable, bind_assoc, pure_bind]; rfl)
+      simp only [Io_Condition_waitUncancelable, pure_bind]; rfl)
       (by simp only [isNonErr, isErr, Bool.not_false, ↓reduceIte, pure_bind]) (by rfl)
 
 /-- This profile's translated condition satisfies the general condition contract. -/
