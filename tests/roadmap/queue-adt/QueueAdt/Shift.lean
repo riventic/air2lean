@@ -49,7 +49,7 @@ theorem pushed_upd {q buf : Ptr} {cap len len' : BitVec 64} {items : List (BitVe
       (QueueImpl.Pushed shift q cap.toNat xs v (.ok ())) :=
   EUpd.of_imp fun _ h => by
     subst hj hxs
-    have hp := take_set_succ (items := items) v (by omega)
+    have hp := take_set_succ (items := items) (n := len.toNat) v (by omega)
     have hl : (items.take len.toNat).length = len.toNat := by
       rw [List.length_take]; omega
     refine sep_lift.mpr ⟨by omega, ⟨buf, cap, len', items.set len.toNat v, sep_lift.mpr
@@ -152,6 +152,9 @@ theorem push_spec (q : Ptr) (C : Nat) (xs : List (BitVec 16)) (v : BitVec 16) :
     FTotalTriple (shift q C xs) (Shift_push q v) (QueueImpl.Pushed shift q C xs v) := by
   unfold Shift_push
   fsym [pushed_upd v]
+  -- the walk leaves the update's count premises over the header's words (`¬len = cap`,
+  -- `len' = len + 1#64`): bit-vector arithmetic
+  all_goals bv_omega
 
 /-- **`pop`** takes the cell 0 and moves the other items one cell down, in exactly `xs.length`
 steps (one loop-body run per item); an empty array gives `null` in none. -/
@@ -166,6 +169,9 @@ theorem pop_spec (q : Ptr) (C : Nat) (xs : List (BitVec 16)) :
   | cons x xs =>
     simp only [List.length_cons]
     fsym [pop_loop_exact, popped_upd]
+    -- the walk leaves the front cell's bound (`0 < items.length`) over the facts
+    -- `(x :: xs).length = len` and `len ≤ cap = items.length`
+    all_goals (simp only [List.length_cons] at *; bv_omega)
 
 /-- **`count`** returns the number of items. -/
 theorem count_spec (q : Ptr) (C : Nat) (xs : List (BitVec 16)) :
