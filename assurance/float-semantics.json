@@ -1135,6 +1135,15 @@
       ],
       "correspondence": "model"
     },
+    "SepAuto.Packed::SepAuto.Packed.floats_val": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
     "Model::T04.linuxGnu_layouts": {
       "semantics": "ieee",
       "targets": [
@@ -4645,6 +4654,12 @@
       "correspondence": "model"
     },
     "tests/roadmap/enc-exactness/EncExactness/Rows.lean": {
+      "labels": [
+        "abstract-spec"
+      ],
+      "correspondence": "model"
+    },
+    "tests/roadmap/sep-auto/SepAuto/Packed.lean": {
       "labels": [
         "abstract-spec"
       ],
