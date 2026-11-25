@@ -299,9 +299,7 @@ theorem RunFp.enterFrame {F : Array FootprintEntry} {m₀ : Mem} : RunFp F m₀ 
 /-- A change of the stack states only is a step outside every frame that revives no byte. -/
 theorem stacksStep {m : Mem} (hF : Heap) (ss : Array StackState) :
     FStepIn hF m { m with stacks := ss } ∧ m.NoRevive { m with stacks := ss } :=
-  ⟨.of_stepIn ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _,
-      Nat.le_refl _, fun _ he => .inl he, fun _ he => .inl he⟩ (.of_blocks rfl) (fun _ _ h => h)
-      (fun _ he hn => absurd he hn) (fun _ h => h), fun _ _ _ h => h⟩
+  ⟨.of_same fun _ h => h, fun _ _ _ h => h⟩
 
 /-- **Entering a frame is local**: it touches no byte and reads no record. -/
 @[fsym_provider] theorem ThreadLocal.enterFrame {P : FAssn} : ThreadLocal P Zig.enterFrame :=

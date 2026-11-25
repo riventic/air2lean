@@ -351,12 +351,6 @@
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
-      "name": "StepIn",
-      "module": "ZigLean.Conc.Clock",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
       "name": "TLogic",
       "module": "ZigLean.Sep.Full.AutoThread",
       "status": "target",
