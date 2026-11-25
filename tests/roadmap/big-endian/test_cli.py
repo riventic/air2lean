@@ -123,7 +123,6 @@ def check_version(binary, version):
         ("reject.f80Add.json", "`f80` is outside the qualified big-endian model"),
         ("reject.boolLanes.json", "a vector of `bool` or pointer lanes is outside"),
         ("reject.nibbleLanes.json", "a vector of non-byte-multiple lanes is outside"),
-        ("reject.tagName.json", "`@tagName` is outside the qualified big-endian model"),
         ("reject.u128Bytes.json", "the memory model gives type"),
         ("reject.vecByte.json", "a pointer cast between a vector and another pointee type is illegal behaviour"),
         ("reject.vecLane0FromBytes.json", "a pointer cast between a vector and another pointee type is illegal behaviour"),

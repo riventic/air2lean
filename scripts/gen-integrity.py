@@ -233,6 +233,13 @@ FIXTURES = [
     for v in ("0.15.2", "0.17.1")
     for target, ns in (("s390x-linux", "S390x"), ("mips64-linux", "Mips64"), ("x86_64-linux", "X64"))
 ] + [
+    # T03 check.sh: names.zig (`@tagName`, `@errorName`) per Zig version and target.
+    (f"tests/roadmap/big-endian/BigEndian/Names/V{v.replace('.', '_')}/{ns}/Gen.lean",
+     f"tests/roadmap/big-endian/air/{v}/names/{target}",
+     ["--namespace", f"BigEndian.Names.V{v.replace('.', '_')}.{ns}", "--prefix", "names."], "exact")
+    for v in ("0.16.0", "0.17.1")
+    for target, ns in (("s390x-linux", "S390x"), ("mips64-linux", "Mips64"), ("x86_64-linux", "X64"))
+] + [
     # L07/L08 packed-casts/check.sh: one translation per source and version.
     (f"tests/roadmap/packed-casts/PackedCasts/V{v.replace('.', '_')}/{ns}.lean",
      f"tests/roadmap/packed-casts/air/{v}/{src}",
