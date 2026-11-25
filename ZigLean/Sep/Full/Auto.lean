@@ -1806,6 +1806,14 @@ partial def arithGoals (g : MVarId) (quick := false) (cases := true) : TacticM (
     if ← closeWith g (← `(tactic| decide)) then return []
     -- (a closed fact whose instance the elaborator's reduction does not evaluate, the size of a
     -- structure's encoding `(Enc.encode v).size`: the kernel evaluates it)
+    -- (in the imports' environment where it suffices, `kernelEnvFor`: `decide +kernel` adds an
+    -- auxiliary lemma, which waits for every earlier theorem of the file; the proof is `decide`'s,
+    -- which the kernel evaluates again when it checks the theorem)
+    if let some pf ← observing? (mkDecideProof t) then
+      -- (`of_decide_eq_true inst rfl`: its instance)
+      let inst := pf.appFn!.appArg!
+      if let .ok v := Kernel.whnf (← kernelEnvFor inst) (← getLCtx) inst then
+        if v.isAppOf ``Decidable.isTrue then g.assign pf; return []
     if ← closeWith g (← `(tactic| decide +kernel)) then return []
   if let some (ty, x, y) := t.eq? then
     -- an unknown ghost list that the equation fixes (a loop's parameter at its entry,

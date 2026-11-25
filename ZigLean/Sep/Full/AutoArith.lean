@@ -305,7 +305,7 @@ as a literal: evaluated by the kernel, whose reduction unfolds what the elaborat
 irreducible definitions when the simplifier transports hypotheses. -/
 simproc [fsym_arith] reduceClosedSize (Array.size _) := fun e => do
   unless e.isAppOfArity ``Array.size 2 && !e.hasFVar && !e.hasMVar do return .continue
-  let .ok v := Kernel.whnf (← getEnv) (← getLCtx) e | return .continue
+  let .ok v := Kernel.whnf (← kernelEnvFor e) (← getLCtx) e | return .continue
   let some n := v.rawNatLit? <|> v.nat? | return .continue
   let rhs := mkNatLit n
   let pf ← mkExpectedTypeHint (← mkEqRefl e) (← mkEq e rhs)
