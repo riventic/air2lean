@@ -66,7 +66,12 @@ case unconditionally and retain their own ABI facts. No generated body or public
 `Sync.ioMutex` symbol changes. `Proofs/Sync/CondCases.lean` supplies the condition facet
 the same way: each profile's `Io.Condition` code is an `IoCondCode` instance
 (`ZigLean/Sep/Full/IoCond.lean`) with that profile's mutex, whose general proof establishes
-`CondImpl` once for 0.16.0's wait through `waitInner` and 0.17.1's inlined one. With it Sync's
+`CondImpl` once for 0.16.0's wait through `waitInner` and 0.17.1's inlined one.
+`Proofs/Sync/SemCases.lean` and `Proofs/Sync/RwLockCases.lean` supply the semaphore and
+reader/writer lock facets over them: `IoSemCode` (`ZigLean/Sep/Full/IoSem.lean`) proves
+`SemImpl` once over any `MutexImpl` and `CondImpl`, `IoRwLockCode` proves `RwLockImpl` once over
+any `MutexImpl` and `SemImpl`, and each profile instantiates both with its own mutex, condition
+and semaphore. With it Sync's
 version-gated proof is retired: the public `Proofs/Sync/Cond.lean` is the public
 translation's instance, and `scripts/check.sh` builds a case family's proofs against its
 committed public module (its other cases are their own modules with per-case instances). The

@@ -1990,9 +1990,11 @@
    "request": "Let `fsym` walk a code shape whose functions are given by unfolding equations (`lock_eq`, `body_eq`) and whose continuations are hypotheses with equations at their exits: rewrite the entry by the shape's equation, step through the normal form with the registered rules (the callee fields' contract rules, the protocol's op rules), and close a continuation step by its local equation, as it closes a generated `match` today.",
    "workaround_sites": [
     "ZigLean/Sep/Full/IoMutex.lean",
-    "ZigLean/Sep/Full/IoRwLock.lean"
+    "ZigLean/Sep/Full/IoRwLock.lean",
+    "ZigLean/Sep/Full/IoCond.lean",
+    "ZigLean/Sep/Full/IoSem.lean"
    ],
-   "deletion_plan": "Replace the term walks of `IoMutexCode` (`body_wp`, `lock_wp`, `unlock_wp`) and `IoRwLockCode` (`wp_frame`, `lock_wp`, `unlock_wp`, `body_wp`, `lockShared_wp`, `unlockShared_wp`) by `fsym` walks with the same statements, and delete the hand steps; with them goes `bodyOf`'s `addR` parameter once the walk's steps are proof steps that do not reduce the checked add against an open term (`kernel-proj-ctor`).",
+   "deletion_plan": "Replace the term walks of `IoMutexCode` (`body_wp`, `lock_wp`, `unlock_wp`), `IoRwLockCode` (`wp_frame`, `lock_wp`, `unlock_wp`, `body_wp`, `lockShared_wp`, `unlockShared_wp`), `IoCondCode` (`signal_wp_unmetered`, `core_wp`, `wait_wp_unmetered`) and the continuation junctions of `IoSemCode` (`wait_wp`, `post_wp`: the `WP.bind`/`WP.mono` steps at `k` and `fin`) by `fsym` walks with the same statements, and delete the hand steps; with them goes `bodyOf`'s `addR` parameter once the walk's steps are proof steps that do not reduce the checked add against an open term (`kernel-proj-ctor`).",
    "note": "Not a weakening: the shapes' statements are the contracts' (`MutexImpl`, `RwLockImpl`); only the proof style is transitional."
   },
   {
