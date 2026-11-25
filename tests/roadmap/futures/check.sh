@@ -58,4 +58,8 @@ export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}
 "${lean_cmd[@]}" -R $case_dir --run $case_dir/Futures/Runtime.lean
 "${lean_cmd[@]}" --run $case_dir/FallibleRuntime.lean
 "${lean_cmd[@]}" --run $case_dir/Pipeline.lean
+# Mutants of the retained translation (mutations.py): each builds and is rejected by the runtime
+# schedules or the proofs for the reason named there.
+python3 -B $case_dir/mutations.py --self-test
+python3 -B $case_dir/mutations.py run "$work"
 echo 'futures translation, proofs, runtime schedules and boundary gates passed'

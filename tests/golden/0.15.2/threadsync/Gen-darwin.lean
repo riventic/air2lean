@@ -1264,6 +1264,100 @@ def Thread_Condition_FutexImpl_wait [Zig.Os.HasEnv] (p0 : Zig.Ptr) (p1 : Zig.Ptr
 
 attribute [zig_run] Thread_Condition_FutexImpl_wait.loop107 Thread_Condition_FutexImpl_wait.loop45 Thread_Condition_FutexImpl_wait.loop42 Thread_Condition_FutexImpl_wait.loop29 Thread_Condition_FutexImpl_wait
 
+structure Thread_Futex_DarwinImpl_wakeLocals where
+  local2 : c_darwin_UL
+  deriving Inhabited
+
+inductive Thread_Futex_DarwinImpl_wakeExit where
+  | ret
+  | br31
+  | br26
+  | rep25
+
+def Thread_Futex_DarwinImpl_wake.again25 : Thread_Futex_DarwinImpl_wakeExit → Bool
+  | .rep25 => true
+  | _ => false
+
+def Thread_Futex_DarwinImpl_wake.loop25 (p0 : Zig.Ptr) : Zig.CM Tgt Thread_Futex_DarwinImpl_wakeLocals Thread_Futex_DarwinImpl_wakeExit := do
+  Zig.callMC Zig.tick
+  match ← ((do
+    let i27 ← pure (p0)
+    let i28 ← pure ((← get).local2)
+    let i29 ← pure (i27)
+    let i30 ← Zig.callC (Zig.Os.Darwin.__ulock_wake (Zig.Packed.toBits i28) i29 (0 : BitVec 64))
+    match ← ((do
+      let i32 ← pure (i30)
+      let i33 ← pure (Zig.ge true i32 (0 : BitVec 32))
+      if i33 then (do
+        pure .ret)
+      else (do
+        pure .br31)) : Zig.CM Tgt Thread_Futex_DarwinImpl_wakeLocals Thread_Futex_DarwinImpl_wakeExit) with
+    | .br31 => (do
+      let i37 ← Zig.sub true (0 : BitVec 32) i30
+      let i38 ← Zig.enumOf (c_darwin_E.ofInt? (Zig.val true i37))
+      if i38 == c_darwin_E.INTR then (do
+        pure .br26)
+      else (do
+        if i38 == c_darwin_E.FAULT then (do
+          throw .unreachable)
+        else (do
+          if i38 == c_darwin_E.NOENT then (do
+            pure .ret)
+          else (do
+            if i38 == c_darwin_E.ALREADY then (do
+              throw .unreachable)
+            else (do
+              throw .unreachable)))))
+    | e => pure e) : Zig.CM Tgt Thread_Futex_DarwinImpl_wakeLocals Thread_Futex_DarwinImpl_wakeExit) with
+  | .br26 => (do
+    pure .rep25)
+  | e => pure e
+
+def Thread_Futex_DarwinImpl_wake (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.ConcM Tgt (Unit) := do
+  let e ← ((do
+    modify (fun s => { s with local2 := { s.local2 with op := c_darwin_UL_Op.COMPARE_AND_WAIT } })
+    modify (fun s => { s with local2 := { s.local2 with NO_ERRNO := true } })
+    let i8 ← pure (Zig.gt false p1 (1 : BitVec 32))
+    modify (fun s => { s with local2 := { s.local2 with WAKE_ALL := i8 } })
+    modify (fun s => { s with local2 := { s.local2 with WAKE_THREAD := false } })
+    modify (fun s => { s with local2 := { s.local2 with _10 := (0 : BitVec 6) } })
+    modify (fun s => { s with local2 := { s.local2 with WAIT_WORKQ_DATA_CONTENTION := false } })
+    modify (fun s => { s with local2 := { s.local2 with WAIT_CANCEL_POINT := false } })
+    modify (fun s => { s with local2 := { s.local2 with WAIT_ADAPTIVE_SPIN := false } })
+    modify (fun s => { s with local2 := { s.local2 with _19 := (0 : BitVec 5) } })
+    modify (fun s => { s with local2 := { s.local2 with «_» := (0 : BitVec 7) } })
+    Zig.loop (Thread_Futex_DarwinImpl_wake.loop25 p0) Thread_Futex_DarwinImpl_wake.again25) : Zig.CM Tgt Thread_Futex_DarwinImpl_wakeLocals Thread_Futex_DarwinImpl_wakeExit).run' (default : Thread_Futex_DarwinImpl_wakeLocals)
+  match e with
+  | .ret => pure ()
+  | _ => throw .panic
+
+attribute [zig_run] Thread_Futex_DarwinImpl_wake.loop25 Thread_Futex_DarwinImpl_wake
+
+structure Thread_Futex_wakeLocals where
+  deriving Inhabited
+
+inductive Thread_Futex_wakeExit where
+  | ret
+  | br2
+
+def Thread_Futex_wake (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.ConcM Tgt (Unit) := do
+  let e ← ((do
+    match ← ((do
+      let i3 ← pure (p1 == (0 : BitVec 32))
+      if i3 then (do
+        pure .ret)
+      else (do
+        pure .br2)) : Zig.CM Tgt Thread_Futex_wakeLocals Thread_Futex_wakeExit) with
+    | .br2 => (do
+      let _i7 ← Zig.callC (Thread_Futex_DarwinImpl_wake p0 p1)
+      pure .ret)
+    | e => pure e) : Zig.CM Tgt Thread_Futex_wakeLocals Thread_Futex_wakeExit).run' (default : Thread_Futex_wakeLocals)
+  match e with
+  | .ret => pure ()
+  | _ => throw .panic
+
+attribute [zig_run] Thread_Futex_wake
+
 structure Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals where
   state : BitVec 32
   deriving Inhabited
@@ -1322,7 +1416,7 @@ def Thread_Condition_FutexImpl_wake__anon_b3c587c57789.loop9 (p0 : Zig.Ptr) : Zi
             | .br37 _v37 => (do
               let i41 ← Zig.callMC (Zig.ptrProject p0 (·.add 4))
               let i42 ← pure (i41)
-              let _i43 ← Zig.threadFutexWakeC i42 (1 : BitVec 32)
+              let _i43 ← Zig.callC (Thread_Futex_wake i42 (1 : BitVec 32))
               pure .ret)
             | e => pure e))
         | e => pure e) : Zig.CM Tgt Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals Thread_Condition_FutexImpl_wake__anon_b3c587c57789Exit) with
@@ -1462,7 +1556,7 @@ def Thread_ResetEvent_FutexImpl_set (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
           if i18 then (do
             let i20 ← pure p0
             let i21 ← pure (i20)
-            let _i22 ← Zig.threadFutexWakeC i21 (4294967295 : BitVec 32)
+            let _i22 ← Zig.callC (Thread_Futex_wake i21 (4294967295 : BitVec 32))
             pure .br12)
           else (do
             pure .br12))

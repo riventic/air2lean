@@ -12,8 +12,17 @@ from it; `write` replaces the stale ones. The translated modules must be current
 and a fixture check repeats the comparison for the file it proves against. Lean runs unguarded here: callers
 run it under scripts/build-guard.py. `scripts/gen-integrity.py invgen` checks the files' records
 (generator revision, source hashes) without running Lean.
+
+The generator gets the semantic fingerprints of the module's functions (`fingerprints`: a source
+map of a fresh translation of the module's committed AIR, so the translator must be built) and
+records, per loop, the function that runs it and its fingerprint; `check` names the functions
+whose fingerprints changed in each stale file.
 """
 import argparse
+import functools
+import json
+import os
+import runpy
 import subprocess
 import sys
 import tempfile
@@ -50,6 +59,66 @@ def source(root, module):
     return (Path(root) / f"{module.replace('.', '/')}.lean").as_posix()
 
 
+@functools.cache
+def integrity():
+    """The globals of scripts/gen-integrity.py (run once): its translation cases (`FIXTURES`,
+    `Case`, `Translator`), its record prefix and its cached sibling loader."""
+    return runpy.run_path(str(Path(__file__).with_name('gen-integrity.py')))
+
+
+def fingerprints(src, work):
+    """`[definition, fingerprint]` of each function of the translated module `src`: its semantic
+    fingerprint (docs/stable-generation.md) from a source map of a fresh translation of the
+    module's committed AIR (its case of scripts/gen-integrity.py), without the translator's and the
+    runtime's revisions. Those two change every fingerprint, at every translator or runtime change,
+    while only a change of what they emit or of the library's pruning changes an `Inv.lean`: the
+    input hash of the record and `check` cover them. So a fingerprint changes when the function's
+    translated AIR, a callee's, the target profile or the translation options change."""
+    checks = integrity()
+    cases = [case for case in checks['FIXTURES'] if case[0] == src]
+    if len(cases) != 1:
+        sys.exit(f'{src}: {len(cases)} translation cases in scripts/gen-integrity.py FIXTURES, not one')
+    path, air, args, mode = cases[0]
+    translator = os.environ.get('AIR2LEAN_TRANSLATOR', str(ROOT / '.lake/build/bin/air2lean'))
+    if not os.access(translator, os.X_OK):
+        sys.exit('build the translator first: lake build air2lean')
+    # (the case's translation as scripts/gen-integrity.py makes it, with the source map)
+    sidecar = work / 'Gen.source-map.json'
+    case = checks['Case'](path, [ROOT / air], [*args, '--source-map-json', str(sidecar)], mode, path)
+    try:
+        checks['Translator'](translator, work).output(0, case)
+    except ValueError as error:
+        sys.exit(f'{src}: {error}')
+    semantic = checks['sibling']('semantic-fingerprints.py')
+    doc = semantic['load_sidecar'](sidecar)
+    unversioned = dict(doc, translator=dict(doc['translator'], revision=''),
+                       runtime=dict(doc['runtime'], revision=''))
+    return sorted([e['definition'], e['fingerprint']] for e in semantic['fingerprints'](unversioned).values())
+
+
+def changed_functions(committed, fresh):
+    """The functions whose fingerprints differ between the records of two generated files (each
+    loop's `function` and `fingerprint`), with their loops; a function only one record has
+    counts as changed."""
+    def loops(text):
+        prefix = integrity()['INVGEN_PREFIX']
+        first = text.split(b'\n', 1)[0]
+        if not first.startswith(prefix):
+            raise ValueError('no record')
+        record = json.loads(first[len(prefix):])
+        return [(e['loop'], e['function'], e['fingerprint']) for e in record['loops']]
+    try:
+        old, new = loops(committed), loops(fresh)
+    except (ValueError, KeyError, TypeError):
+        return 'no comparable record'
+    def prints(entries):
+        return {f: fp for _, f, fp in entries}
+    before, after = prints(old), prints(new)
+    changed = sorted(f for f in before.keys() | after.keys() if before.get(f) != after.get(f))
+    return ', '.join(f"{f} ({', '.join(sorted({l for l, g, _ in old + new if g == f}))})"
+                     for f in changed) or 'none'
+
+
 def generate(root, module, namespace, work, spec=None, contracts=()):
     """`air2lean-invgen`'s output for `module` (a module of the fixture at `root`), as bytes; with
     the contracts `contracts` of the specification module `spec`, if given."""
@@ -58,6 +127,7 @@ def generate(root, module, namespace, work, spec=None, contracts=()):
     from theorem_universe import compile_unit, with_lean_path
     rel = module.replace('.', '/')
     src = source(root, module)
+    (work / 'fingerprints.json').write_text(json.dumps(fingerprints(src, work)))
     lean_path = [work / 'olean']
     log = work / 'compile.log'
     subprocess.run([sys.executable, '-B', 'scripts/lean-deps.py', '--build', src], cwd=ROOT, check=True)
@@ -74,7 +144,8 @@ def generate(root, module, namespace, work, spec=None, contracts=()):
         for contract in contracts:
             options += ['--contract', contract]
     subprocess.run(['lake', 'exe', 'air2lean-invgen', module, namespace, '--source', src, *options,
-                    '-o', str(out)], cwd=ROOT, env=with_lean_path(lean_path), check=True)
+                    '--fingerprints', str(work / 'fingerprints.json'), '-o', str(out)],
+                   cwd=ROOT, env=with_lean_path(lean_path), check=True)
     return out.read_bytes()
 
 
@@ -97,7 +168,8 @@ def main(argv=None):
         if committed.is_file() and committed.read_bytes() == fresh:
             continue
         if args.mode == 'check':
-            stale.append(path)
+            changed = changed_functions(committed.read_bytes(), fresh) if committed.is_file() else 'new file'
+            stale.append(f'{path} (functions changed: {changed})')
         else:
             committed.write_bytes(fresh)
             print('wrote ' + path)

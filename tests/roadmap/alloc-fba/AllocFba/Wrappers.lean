@@ -1,5 +1,5 @@
 import AllocFba.Full
-import ZigLean.Sep.Full.Wrappers
+import ZigLean.Sep.Full.AutoAll
 import ZigLean.Sep.Full.Dispatch
 
 /-!
@@ -17,7 +17,15 @@ the translated `FixedBufferAllocator` entries (`impl`), for every invariant, in 
 `FBA.fallocSpec`'s.
 
 No hand-written model of the wrappers is involved (`docs/alloc-spec.md`, §Retired claims).
--/
+
+**Stack room.** A wrapper may keep its result in a stack slot: from Zig 0.17.1 on, `alloc`,
+`reallocAdvanced` (so `realloc`) and `allocSentinel` push a 24-byte slot, `create` a 16-byte one,
+and `dupe` calls `alloc` (`alignedAlloc`, `free` and `destroy` push none in any version). Their
+contracts own the running thread's stack token and room for that slot
+(`cur t ⋆ sp t S D ⋆ ⟪D + need ≤ S⟫`) and give the token back at the same depth
+(`cur t ⋆ sp t S D`), so they are total over every translation: `need` is one constant per wrapper,
+`stackCharge 24 8` (`stackCharge 16 8` for `create`), an upper bound of the slot every supported Zig
+version pushes (none in 0.16.0, whose walk frames the token). The statement names no version. -/
 
 namespace AllocFba.Wrappers
 
@@ -27,7 +35,7 @@ theorem mulWithOverflow_one (x : BitVec 64) :
     Zig.mulWithOverflow false (1#64) x = (x, 0#1) := by
   simp [Zig.mulWithOverflow, BitVec.umulOverflow, x.isLt]
 
-variable (ctx vtp : Ptr) (I : FAllocInv) (φ : Frac)
+variable (ctx vtp : Ptr) (I : FAllocInv) (φ : Frac) {t S D : Nat}
 
 /-! ## Allocation
 
@@ -40,9 +48,11 @@ theorem alloc_spec (n : BitVec 64) (hfit : I.fits n.toNat 0)
     (hA : ∀ len ra, 0 < len.toNat → I.fits len.toNat 0 →
       FTotalTriple (I.own ⋆ I.fee φ) (heap_FixedBufferAllocator_alloc ctx len mem_Alignment.«1» ra)
         (I.allocPost len.toNat 0 φ)) :
-    FTotalTriple (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList))
+    FTotalTriple (I.own ⋆ (I.fee φ ⋆ (vtR vtp fns.toList ⋆
+        (cur t ⋆ (sp t S D ⋆ ⟪D + stackCharge 24 8 ≤ S⟫)))))
       (mem_Allocator_alloc__anon_a8254a5f2b74 ⟨ctx, vtp⟩ n)
-      (fun r => I.own ⋆ (I.sliceResult 0 φ n n.toNat r ⋆ vtR vtp fns.toList)) := by
+      (fun r => I.own ⋆ (I.sliceResult 0 φ n n.toNat r ⋆ (vtR vtp fns.toList ⋆
+        (cur t ⋆ sp t S D)))) := by
   fsym [hA, mulWithOverflow_one]
 
 /-- **`a.alignedAlloc(u8, .@"4", n)`**: as `alloc`, with the grant aligned to 4 (the wrapper's
@@ -61,24 +71,26 @@ theorem create_spec (hfit : I.fits (4 : BitVec 64).toNat 2)
     (hA : ∀ len ra, 0 < len.toNat → I.fits len.toNat 2 →
       FTotalTriple (I.own ⋆ I.fee φ) (heap_FixedBufferAllocator_alloc ctx len mem_Alignment.«4» ra)
         (I.allocPost len.toNat 2 φ)) :
-    FTotalTriple (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList))
+    FTotalTriple (I.own ⋆ (I.fee φ ⋆ (vtR vtp fns.toList ⋆
+        (cur t ⋆ (sp t S D ⋆ ⟪D + stackCharge 16 8 ≤ S⟫)))))
       (mem_Allocator_create__anon_8f6a81b88324 ⟨ctx, vtp⟩)
-      (fun r => I.own ⋆ (I.allocResult 2 4 φ r ⋆ vtR vtp fns.toList)) := by
+      (fun r => I.own ⋆ (I.allocResult 2 4 φ r ⋆ (vtR vtp fns.toList ⋆ (cur t ⋆ sp t S D)))) := by
   fsym [hA]
 
 /-- **`a.dupe(u8, s)`** of a nonempty source region (of any provenance): a fresh grant with a
 copy of its bytes, or `error.OutOfMemory` and nothing; the source stays. The `@memcpy` aliasing
 check passes because the grant and the source are owned separately (`MemFacts.regions_apart`);
 no premise about the placement is needed. -/
-theorem dupe_spec (s : Slice) {A S : Nat} {K : BlockKind} {a : Nat} (bs : Array Byte)
+theorem dupe_spec (s : Slice) {A Sz : Nat} {K : BlockKind} {a : Nat} (bs : Array Byte)
     (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) (hfit : I.fits s.len.toNat 0)
     (hA : ∀ len ra, 0 < len.toNat → I.fits len.toNat 0 →
       FTotalTriple (I.own ⋆ I.fee φ) (heap_FixedBufferAllocator_alloc ctx len mem_Alignment.«1» ra)
         (I.allocPost len.toNat 0 φ)) :
-    FTotalTriple (I.own ⋆ (I.fee φ ⋆ (up (regionIn s.ptr A S K a bs) ⋆ vtR vtp fns.toList)))
+    FTotalTriple (I.own ⋆ (I.fee φ ⋆ (up (regionIn s.ptr A Sz K a bs) ⋆ (vtR vtp fns.toList ⋆
+        (cur t ⋆ (sp t S D ⋆ ⟪D + stackCharge 24 8 ≤ S⟫))))))
       (mem_Allocator_dupe__anon_63991a21d32c ⟨ctx, vtp⟩ s)
       (fun r => I.own ⋆ (I.bytesResult 0 φ s.len bs r ⋆
-        (up (regionIn s.ptr A S K a bs) ⋆ vtR vtp fns.toList))) := by
+        (up (regionIn s.ptr A Sz K a bs) ⋆ (vtR vtp fns.toList ⋆ (cur t ⋆ sp t S D))))) := by
   fsym [hA, mulWithOverflow_one]
 
 /-- **`a.allocSentinel(u8, n, 7)`**: `n` undefined bytes and the sentinel `7` after them, granted
@@ -88,10 +100,11 @@ theorem allocSentinel_spec (n : BitVec 64) (hn : n.toNat + 1 < 2 ^ 64)
     (hA : ∀ len ra, 0 < len.toNat → I.fits len.toNat 0 →
       FTotalTriple (I.own ⋆ I.fee φ) (heap_FixedBufferAllocator_alloc ctx len mem_Alignment.«1» ra)
         (I.allocPost len.toNat 0 φ)) :
-    FTotalTriple (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList))
+    FTotalTriple (I.own ⋆ (I.fee φ ⋆ (vtR vtp fns.toList ⋆
+        (cur t ⋆ (sp t S D ⋆ ⟪D + stackCharge 24 8 ≤ S⟫)))))
       (mem_Allocator_allocSentinel__anon_79cb42d26607 ⟨ctx, vtp⟩ n)
       (fun r => I.own ⋆ (I.bytesResult 0 φ n (writeBytes (Array.replicate (n.toNat + 1) .undef)
-        n.toNat (Enc.encode (7 : BitVec 8))) r ⋆ vtR vtp fns.toList)) := by
+        n.toNat (Enc.encode (7 : BitVec 8))) r ⋆ (vtR vtp fns.toList ⋆ (cur t ⋆ sp t S D)))) := by
   fsym [hA, mulWithOverflow_one]
 
 /-! ## Release and reallocation -/
@@ -123,9 +136,11 @@ theorem reallocAdvanced_spec (s : Slice) (n ra : BitVec 64) (bs : Array Byte)
     (hF : ∀ (s : Slice) ra (bs : Array Byte), s.len.toNat = bs.size → 0 < bs.size →
       FTotalTriple (I.own ⋆ I.granted s.ptr 0 φ bs) (heap_FixedBufferAllocator_free ctx s ⟨0#6⟩ ra)
         (fun _ => I.own ⋆ I.fee φ)) :
-    FTotalTriple (I.own ⋆ (I.owned 0 φ s.ptr bs ⋆ (I.fee φ ⋆ vtR vtp fns.toList)))
+    FTotalTriple (I.own ⋆ (I.owned 0 φ s.ptr bs ⋆ (I.fee φ ⋆ (vtR vtp fns.toList ⋆
+        (cur t ⋆ (sp t S D ⋆ ⟪D + stackCharge 24 8 ≤ S⟫))))))
       (mem_Allocator_reallocAdvanced__anon_0df1ef68623e ⟨ctx, vtp⟩ s n ra)
-      (fun r => I.own ⋆ (I.reallocResult 0 φ s.ptr bs n n.toNat r ⋆ vtR vtp fns.toList)) := by
+      (fun r => I.own ⋆ (I.reallocResult 0 φ s.ptr bs n n.toNat r ⋆ (vtR vtp fns.toList ⋆
+        (cur t ⋆ sp t S D)))) := by
   -- The wrapper names alignment 1 both as the enum literal and as its log2 `⟨0#6⟩`.
   fsym [hA, fun len ra (h1 : 0 < len.toNat) (h2 : I.fits len.toNat 0) =>
       show FTotalTriple (I.own ⋆ I.fee φ) (heap_FixedBufferAllocator_alloc ctx len ⟨0#6⟩ ra)
@@ -149,9 +164,11 @@ theorem realloc_spec (s : Slice) (n : BitVec 64) (bs : Array Byte)
     (hF : ∀ (s : Slice) ra (bs : Array Byte), s.len.toNat = bs.size → 0 < bs.size →
       FTotalTriple (I.own ⋆ I.granted s.ptr 0 φ bs) (heap_FixedBufferAllocator_free ctx s ⟨0#6⟩ ra)
         (fun _ => I.own ⋆ I.fee φ)) :
-    FTotalTriple (I.own ⋆ (I.owned 0 φ s.ptr bs ⋆ (I.fee φ ⋆ vtR vtp fns.toList)))
+    FTotalTriple (I.own ⋆ (I.owned 0 φ s.ptr bs ⋆ (I.fee φ ⋆ (vtR vtp fns.toList ⋆
+        (cur t ⋆ (sp t S D ⋆ ⟪D + stackCharge 24 8 ≤ S⟫))))))
       (mem_Allocator_realloc__anon_af0c43114565 ⟨ctx, vtp⟩ s n)
-      (fun r => I.own ⋆ (I.reallocResult 0 φ s.ptr bs n n.toNat r ⋆ vtR vtp fns.toList)) := by
+      (fun r => I.own ⋆ (I.reallocResult 0 φ s.ptr bs n n.toNat r ⋆ (vtR vtp fns.toList ⋆
+        (cur t ⋆ sp t S D)))) := by
   fsym [hA, fun len ra (h1 : 0 < len.toNat) (h2 : I.fits len.toNat 0) =>
       show FTotalTriple (I.own ⋆ I.fee φ) (heap_FixedBufferAllocator_alloc ctx len ⟨0#6⟩ ra)
         (I.allocPost len.toNat 0 φ) from hA len ra h1 h2,
@@ -190,9 +207,11 @@ variable {ctx vtp : Ptr} {I : FAllocInv} (h : FAllocSpec FLogic.total impl ctx I
 include h
 
 theorem alloc_of (n : BitVec 64) (hfit : I.fits n.toNat 0) :
-    FTotalTriple (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList))
+    FTotalTriple (I.own ⋆ (I.fee φ ⋆ (vtR vtp fns.toList ⋆
+        (cur t ⋆ (sp t S D ⋆ ⟪D + stackCharge 24 8 ≤ S⟫)))))
       (mem_Allocator_alloc__anon_a8254a5f2b74 ⟨ctx, vtp⟩ n)
-      (fun r => I.own ⋆ (I.sliceResult 0 φ n n.toNat r ⋆ vtR vtp fns.toList)) :=
+      (fun r => I.own ⋆ (I.sliceResult 0 φ n n.toNat r ⋆ (vtR vtp fns.toList ⋆
+        (cur t ⋆ sp t S D)))) :=
   alloc_spec ctx vtp I φ n hfit fun len ra h1 h2 => h.alloc len 0 ra φ h1 (by decide) h2
 
 theorem alignedAlloc_of (n : BitVec 64) (hfit : I.fits n.toNat 2) :
@@ -202,32 +221,37 @@ theorem alignedAlloc_of (n : BitVec 64) (hfit : I.fits n.toNat 2) :
   alignedAlloc_spec ctx vtp I φ n hfit fun len ra h1 h2 => h.alloc len 2 ra φ h1 (by decide) h2
 
 theorem create_of (hfit : I.fits (4 : BitVec 64).toNat 2) :
-    FTotalTriple (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList))
+    FTotalTriple (I.own ⋆ (I.fee φ ⋆ (vtR vtp fns.toList ⋆
+        (cur t ⋆ (sp t S D ⋆ ⟪D + stackCharge 16 8 ≤ S⟫)))))
       (mem_Allocator_create__anon_8f6a81b88324 ⟨ctx, vtp⟩)
-      (fun r => I.own ⋆ (I.allocResult 2 4 φ r ⋆ vtR vtp fns.toList)) :=
+      (fun r => I.own ⋆ (I.allocResult 2 4 φ r ⋆ (vtR vtp fns.toList ⋆ (cur t ⋆ sp t S D)))) :=
   create_spec ctx vtp I φ hfit fun len ra h1 h2 => h.alloc len 2 ra φ h1 (by decide) h2
 
-theorem dupe_of (s : Slice) {A S : Nat} {K : BlockKind} {a : Nat} (bs : Array Byte)
+theorem dupe_of (s : Slice) {A Sz : Nat} {K : BlockKind} {a : Nat} (bs : Array Byte)
     (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) (hfit : I.fits s.len.toNat 0) :
-    FTotalTriple (I.own ⋆ (I.fee φ ⋆ (up (regionIn s.ptr A S K a bs) ⋆ vtR vtp fns.toList)))
+    FTotalTriple (I.own ⋆ (I.fee φ ⋆ (up (regionIn s.ptr A Sz K a bs) ⋆ (vtR vtp fns.toList ⋆
+        (cur t ⋆ (sp t S D ⋆ ⟪D + stackCharge 24 8 ≤ S⟫))))))
       (mem_Allocator_dupe__anon_63991a21d32c ⟨ctx, vtp⟩ s)
       (fun r => I.own ⋆ (I.bytesResult 0 φ s.len bs r ⋆
-        (up (regionIn s.ptr A S K a bs) ⋆ vtR vtp fns.toList))) :=
+        (up (regionIn s.ptr A Sz K a bs) ⋆ (vtR vtp fns.toList ⋆ (cur t ⋆ sp t S D))))) :=
   dupe_spec ctx vtp I φ s bs hlen hpos hfit fun len ra h1 h2 => h.alloc len 0 ra φ h1 (by decide) h2
 
 theorem allocSentinel_of (n : BitVec 64) (hn : n.toNat + 1 < 2 ^ 64)
     (hfit : I.fits (n.toNat + 1) 0) :
-    FTotalTriple (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList))
+    FTotalTriple (I.own ⋆ (I.fee φ ⋆ (vtR vtp fns.toList ⋆
+        (cur t ⋆ (sp t S D ⋆ ⟪D + stackCharge 24 8 ≤ S⟫)))))
       (mem_Allocator_allocSentinel__anon_79cb42d26607 ⟨ctx, vtp⟩ n)
       (fun r => I.own ⋆ (I.bytesResult 0 φ n (writeBytes (Array.replicate (n.toNat + 1) .undef)
-        n.toNat (Enc.encode (7 : BitVec 8))) r ⋆ vtR vtp fns.toList)) :=
+        n.toNat (Enc.encode (7 : BitVec 8))) r ⋆ (vtR vtp fns.toList ⋆ (cur t ⋆ sp t S D)))) :=
   allocSentinel_spec ctx vtp I φ n hn hfit fun len ra h1 h2 => h.alloc len 0 ra φ h1 (by decide) h2
 
 theorem realloc_of (s : Slice) (n : BitVec 64) (bs : Array Byte)
     (hlen : s.len.toNat = bs.size) (hfit : I.fits n.toNat 0) :
-    FTotalTriple (I.own ⋆ (I.owned 0 φ s.ptr bs ⋆ (I.fee φ ⋆ vtR vtp fns.toList)))
+    FTotalTriple (I.own ⋆ (I.owned 0 φ s.ptr bs ⋆ (I.fee φ ⋆ (vtR vtp fns.toList ⋆
+        (cur t ⋆ (sp t S D ⋆ ⟪D + stackCharge 24 8 ≤ S⟫))))))
       (mem_Allocator_realloc__anon_af0c43114565 ⟨ctx, vtp⟩ s n)
-      (fun r => I.own ⋆ (I.reallocResult 0 φ s.ptr bs n n.toNat r ⋆ vtR vtp fns.toList)) :=
+      (fun r => I.own ⋆ (I.reallocResult 0 φ s.ptr bs n n.toNat r ⋆ (vtR vtp fns.toList ⋆
+        (cur t ⋆ sp t S D)))) :=
   realloc_spec ctx vtp I φ s n bs hlen hfit (fun len ra h1 h2 => h.alloc len 0 ra φ h1 (by decide) h2)
     (fun s n ra bs h1 h2 h3 h4 => h.remap s 0 n ra φ bs (by decide) h1 h2 h3 h4)
     (fun s ra bs h1 h2 => h.free' s 0 ra φ bs (by decide) h1 h2)
@@ -257,10 +281,11 @@ end OfSpec
 `e` of its reset ledger `γ`: its fee is a part `φ` of the epoch token (`epFee`). -/
 example (ctx vtp : Ptr) (B : FBA.FBuf) (γ e : Nat) (φ : Frac) (n : BitVec 64)
     (hfit : (FBA.finv ctx B γ e).fits n.toNat 0) :
-    FTotalTriple ((FBA.finv ctx B γ e).own ⋆ (epFee γ e φ ⋆ vtR vtp fns.toList))
+    FTotalTriple ((FBA.finv ctx B γ e).own ⋆ (epFee γ e φ ⋆ (vtR vtp fns.toList ⋆
+        (cur t ⋆ (sp t S D ⋆ ⟪D + stackCharge 24 8 ≤ S⟫)))))
       (mem_Allocator_alloc__anon_a8254a5f2b74 ⟨ctx, vtp⟩ n)
       (fun r => (FBA.finv ctx B γ e).own ⋆ ((FBA.finv ctx B γ e).sliceResult 0 φ n n.toNat r ⋆
-        vtR vtp fns.toList)) :=
+        (vtR vtp fns.toList ⋆ (cur t ⋆ sp t S D)))) :=
   alloc_of (FBA.fallocSpec ctx B γ e) φ n hfit
 
 end AllocFba.Wrappers

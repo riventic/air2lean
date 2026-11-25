@@ -53,7 +53,39 @@ receiving an abstract post memory that hides the tick's already-proved run equal
 The existing total thread rule
 fixes the actual resource post, while `Inv.wp_liftPartLive` frames the entire held resource.
 The composite protocol's existing `kstep` obligation re-establishes arbitrary `U` at the exact
-ticked memory. Internal busy phases need no lock-code `ok` admission. -/
+ticked memory. Internal busy phases need no lock-code `ok` admission.
+
+The thread exists and was not joined (`ht`, `hj`): the rule holds at every lock place, also at
+`gone`, where a thread that left the lock still owns its part and runs a loop of another sync
+object's code (the translated macOS `Thread.Futex.DarwinImpl.wake` under `ResetEvent.set`;
+`FLock.PartTick`, decision 2026-11-24). `Fits.wp_tick_exact` is the instance at a place that is
+not `gone`. -/
+theorem Fits.wp_tick_exactUnjoined (hF : L.Fits K P U ok) {G G₀ : ThreadId → γ} {g : γ}
+    {r : Res} {t : ThreadId} {m : Mem} {d : Nat}
+    {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop}
+    (hi : P.inv (upd G t g) m) (hc : m.current = t) (ht : t < m.threads.size)
+    (hj : joinedB m t = false)
+    (htt : FTTotalTriple (fun rp => rp = L.part g) Zig.tick (fun _ rp => rp = r))
+    (h : m.ticked.current = t → P.inv (upd G t (L.setPart g r)) m.ticked →
+      Q () G₀ m.ticked d) :
+    P.WP t (ConcM.liftMem Zig.tick : ConcM Tgt Unit) Q G₀ m d := by
+  obtain ⟨rX, hL, hU⟩ := (hF.inv _ _).mp hi
+  refine hL.wp_liftPartUnjoined hc ht hj htt.1 rfl (fun a m' r' hr hq _ hc' hL' => ?_)
+    (.inr htt.2)
+  cases a
+  subst r'
+  have hm : m' = m.ticked := by
+    rw [tick_run' m] at hr
+    exact (Prod.mk.inj (Except.ok.inj (Option.some.inj hr))).2.symm
+  have hU' := hF.kstep t (upd G t g) rX m (upd G t (L.setPart g r)) rX m'
+    (.inr ⟨hc, .inr ⟨ht, hj⟩, hL, r,
+      by simpa only [upd_self] using htt,
+      by rw [upd_self, upd_upd], rfl, hm, hL'⟩) hU
+  subst m'
+  exact h hc' ((hF.inv _ _).mpr ⟨rX, hL', hU'⟩)
+
+/-- The caller-part tick with its exact memory post at a lock place that is not `gone`
+(`Fits.wp_tick_exactUnjoined`; the thread facts from the lock's invariant, `Inv.ht`). -/
 theorem Fits.wp_tick_exact (hF : L.Fits K P U ok) {G G₀ : ThreadId → γ} {g : γ} {r : Res}
     {t : ThreadId} {m : Mem} {d : Nat} {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop}
     (hi : P.inv (upd G t g) m) (hc : m.current = t) (hg : L.ph g ≠ .gone)
@@ -61,19 +93,24 @@ theorem Fits.wp_tick_exact (hF : L.Fits K P U ok) {G G₀ : ThreadId → γ} {g 
     (h : m.ticked.current = t → P.inv (upd G t (L.setPart g r)) m.ticked →
       Q () G₀ m.ticked d) :
     P.WP t (ConcM.liftMem Zig.tick : ConcM Tgt Unit) Q G₀ m d := by
-  obtain ⟨rX, hL, hU⟩ := (hF.inv _ _).mp hi
-  refine hL.wp_liftPartLive hc hg htt.1 rfl (fun a m' r' hr hq _ hc' hL' => ?_) (.inr htt.2)
-  cases a
-  subst r'
-  have hm : m' = m.ticked := by
-    rw [tick_run' m] at hr
-    exact (Prod.mk.inj (Except.ok.inj (Option.some.inj hr))).2.symm
-  have hU' := hF.kstep t (upd G t g) rX m (upd G t (L.setPart g r)) rX m'
-    (.inr ⟨hc, by rw [upd_self]; exact hg, hL, r,
-      by simpa only [upd_self] using htt,
-      by rw [upd_self, upd_upd], rfl, hm, hL'⟩) hU
-  subst m'
-  exact h hc' ((hF.inv _ _).mpr ⟨rX, hL', hU'⟩)
+  obtain ⟨rX, hL, -⟩ := (hF.inv _ _).mp hi
+  obtain ⟨ht, hj⟩ := hL.ht (t := t) (by rw [upd_self]; exact hg)
+  exact hF.wp_tick_exactUnjoined hi hc ht hj htt h
+
+/-- An unmetered tick of a thread that exists and was not joined, at every lock place (also
+`gone`), with the exact memory and the exact caller part (`Fits.wp_tick_exactUnjoined`). -/
+theorem Fits.wp_tick_unmetered_exactUnjoined (hF : L.Fits K P U ok) {G G₀ : ThreadId → γ}
+    {g : γ} {t : ThreadId} {m : Mem} {d : Nat}
+    {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop}
+    (hi : P.inv (upd G t g) m) (hc : m.current = t) (ht : t < m.threads.size)
+    (hj : joinedB m t = false) (hu : 0 < (L.part g).gh.ac.frag .unmetered)
+    (h : m.ticked.current = t → P.inv (upd G t g) m.ticked → Q () G₀ m.ticked d) :
+    P.WP t (ConcM.liftMem Zig.tick : ConcM Tgt Unit) Q G₀ m d := by
+  refine hF.wp_tick_exactUnjoined hi hc ht hj
+    (FTTotalTriple.tick_part_unmetered (L.part g) hu) ?_
+  intro hc' hi'
+  rw [L.setPart_self] at hi'
+  exact h hc' hi'
 
 /-- The existing caller-part tick API, derived from the exact-memory rule. Its callback
 header stays unchanged; callers needing unchanged memory observations use `wp_tick_exact`. -/
