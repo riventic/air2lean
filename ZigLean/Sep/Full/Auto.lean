@@ -5573,16 +5573,15 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
     let pf ← mkAppM ``imp_trans #[← mkAppM ``imp_trans #[body, ← mkAppM ``imp_eq #[eT]], pQ]
     let pf ← instantiateMVars pf
     if pf.hasExprMVar then
+      -- (the unknowns of the planned state and the target)
+      let used := (T'.collectMVars (Qf.collectMVars {})).result
       for m in ← getMVars pf do
         unless left.contains m do
           if ← isProp (← m.getType) then continue
           -- a witness that neither the planned state nor the target mentions, only the proof of
           -- an `if` the facts decided (a rule's released bytes `relBytes … tl` of a growth, where
           -- `tl` is in the refuted branch): any value serves, as the rule holds for every one
-          if ← m.isAssigned then continue
-          let mentions (e : Expr) : MetaM Bool := do
-            return ((← instantiateMVars e).collectMVars {}).result.contains m
-          unless (← mentions T') || (← mentions Qf) do
+          unless used.contains m do
             if let some d ← observing? (mkDefault (← m.getType)) then
               trace[fsym] "plan: witness ?{m.name} not used: {d}"
               m.assign d
@@ -7519,23 +7518,25 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
     let [gp, gn] ← joinPosts Q [sp.mvarId, sn.mvarId] | throwError "fsym: join"
     let lp ← walk (← destruct gp sp.fvarId) user extra (fuel - 1)
     return lp ++ (← walk (← destruct gn sn.fvarId) user extra (fuel - 1))
-  -- a condition to split on: closed, in the goal's context, and neither it nor its negation
-  -- proved by the facts (a quick probe)
-  let undecided (cond : Expr) : TacticM Bool := g.withContext do
+  -- a condition that can be split on: closed and in the goal's context
+  let splittable (cond : Expr) : TacticM Bool := g.withContext do
     let cond ← instantiateMVars cond
     if cond.hasExprMVar || cond.hasLooseBVars then return false
     let lctx ← getLCtx
-    if cond.hasAnyFVar (!lctx.contains ·) then return false
+    return !cond.hasAnyFVar (!lctx.contains ·)
+  -- … that neither it nor its negation is proved by the facts (a quick probe)
+  let undecided (cond : Expr) : TacticM Bool := g.withContext do
+    unless ← splittable cond do return false
     let hp ← mkFreshExprMVar cond
     if ← arith hp.mvarId! (quick := true) then return false
     let hn ← mkFreshExprMVar (mkNot cond)
     return !(← arith hn.mvarId! (quick := true))
-  -- the condition of an assertion-level `if` of the state that the facts do not decide: each case
-  -- has its own atoms and facts
-  let stateIf? : TacticM (Option Expr) := do
+  -- the condition of an assertion-level `if` of the state that the facts do not decide
+  -- (`decideIte`'s cached probe): each case has its own atoms and facts
+  let stateIf? : TacticM (Option Expr) := g.withContext do
     for a in atoms P do
       if a.isAppOfArity ``ite 5 then
-        if ← undecided (a.getArg! 1) then return some (a.getArg! 1)
+        if (← splittable (a.getArg! 1)) && (← decideIte a).isNone then return some (a.getArg! 1)
     return none
   -- a returned value `v` of a non-recursive inductive type with several constructors that is not
   -- a constructor and that the postcondition depends on: split by cases (a local), or
@@ -7549,10 +7550,9 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
     let .const tn _ := (← whnfD ty).getAppFn | return none
     let some ii ← caseInduct? tn | return none
     if ii.isRec || ii.numIndices != 0 then return none
-    let Qv := (mkApp Q v).headBeta
-    if ← hasExitPost Qv then return none
     unless ← withLocalDeclD `r ty fun r => return (mkApp Q r).headBeta.containsFVar r.fvarId! do
       return none
+    if ← hasExitPost (mkApp Q v).headBeta then return none
     trace[fsym] "return: split the value {v}"
     if v.isFVar then return some (← casesWalk g v user extra fuel)
     let some (xs, g') ← observing? (g.generalize #[{ expr := v, xName? := `r, hName? := `hr }])
@@ -7571,11 +7571,11 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
     -- the caller's updates are planned against the state's atoms as they are: an assertion-level
     -- `if` of the state that the facts do not decide is split on first, so that each case tries
     -- the updates with its own atoms (the entailment alone splits it inside, ledger #64)
-    let hasUpd ← user.anyM fun u => do isUpd (← refreshUser u)
-    if hasUpd then
-      if let some cond ← stateIf? then
-        trace[fsym] "return: split on the state's condition {cond}"
-        return ← splitWalk g cond
+    if (atoms P).any (·.isAppOfArity ``ite 5) then
+      if ← user.anyM fun u => do isUpd (← refreshUser u) then
+        if let some cond ← stateIf? then
+          trace[fsym] "return: split on the state's condition {cond}"
+          return ← splitWalk g cond
     let s ← saveState
     let entail : TacticM (List MVarId) := do
       let h ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, Qv])
@@ -7826,7 +7826,6 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
   let partialRule := partial?.isSome
   -- (a refuted rule only for a command that cannot be inlined either)
   let unfold? ← if partial?.isNone then unfoldCmd x else pure none
-  let lastResort := partial?.isNone && unfold?.isNone && refuted?.isSome
   if partial?.isNone && unfold?.isNone then partial? := refuted?
   let wanted ← (← caches).wanted.get
   -- more facts (of the atoms) for the rules' side goals
@@ -7900,7 +7899,7 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
   -- frame, so the goal is split on the condition and each case plans the decided precondition
   -- (ledger #61): when no rule applies, or only one whose side goal is refuted, before the
   -- command is inlined
-  if partial?.isNone || lastResort then
+  unless partialRule do
     for cond in splits do
       if ← undecided cond then
         trace[fsym] "split on a condition of a rule's precondition {cond}"
