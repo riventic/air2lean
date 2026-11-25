@@ -14,6 +14,7 @@
   "schema": 1,
   "sources_sha256": {
     "reproducers/aarch64-linux-float-probe.zig": "c09ea45a2da6365c9bfa6dd9eacc53ef78ed39f58f13dc03796129edf245a48a",
+    "reproducers/bare-union-safety-tag.zig": "b72e57e4790cd2a4920b1936a38700edcbe35fee3484dc9aa4b2f116baeaf081",
     "reproducers/float-divexact-inexact.zig": "bc7f2ded9f392803254a1d55b3be17aa573e89a08cdd1baa8b564c464ece4ac4",
     "reproducers/stage2-x86_64-divergences.zig": "4578391af8be4cd9c7c77a1c3c82ac2e8823cbc0caec75440f0670ca5a0f8a20"
   }

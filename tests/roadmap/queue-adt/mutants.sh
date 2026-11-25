@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# Negative checks of the queue fixture (Q02: assurance/mutation-map.json, P04 and P06). Each
+# seeded mutant changes one place of the translation or of a statement, and the proof that
+# covers it, rechecked against the mutant, must fail in its own module:
+#
+#   "ring-push-no-wrap"                 push writes cell `len` instead of `len - room` when the
+#                                       back is around the end of the buffer (Gen.lean): the
+#                                       ring is no queue, QueueAdt.Ring's push_spec fails.
+#   "ring-pop-no-wrap"                  pop moves `head` to `head + 1` after the last cell
+#                                       instead of 0 (Gen.lean): QueueAdt.Ring's pop_spec fails.
+#   "pushall-capacity-premise-dropped"  the capacity premise of pushAll's bound is weakened from
+#                                       `xs.length + ys.length ≤ C` to `xs.length ≤ C`
+#                                       (Clients.lean): a push may fail, the exact count
+#                                       `ys.length + 1` is not provable, QueueAdt.Clients fails.
+#   "shift-pop-no-move"                 the shifting array's pop leaves the cells where they are
+#                                       (Gen.lean): QueueAdt.Shift's pop_spec fails.
+#   "shift-pop-steps-short"             the shifting array's pop is stated for one credit fewer
+#                                       than its items (Shift.lean): its loop is not paid,
+#                                       QueueAdt.Shift fails.
+#
+# The mutants are built by Lake apart from the fixture (scripts/fixtures.py mutant); run from
+# anywhere, under scripts/build-guard.py.
+set -euo pipefail
+repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
+cd "$repo_root"
+here=tests/roadmap/queue-adt
+work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-queue-adt-mutants.XXXXXX")
+trap 'rm -rf "$work"' EXIT
+
+# mutate FILE FUNCTION OLD NEW DEST: FILE with the one occurrence of OLD after "def FUNCTION "
+# (the whole file if FUNCTION is empty: then every occurrence, at least one) replaced by NEW.
+mutate() {
+  python3 - "$@" <<'EOF'
+import sys
+src, function, old, new, dst = sys.argv[1:]
+text = open(src).read()
+if function:
+    start = text.index("def " + function + " ")
+    end = text.index("\ndef ", start + 1) if "\ndef " in text[start + 1:] else len(text)
+    assert text.count(old, start, end) == 1, (function, old, text.count(old, start, end))
+    at = text.index(old, start)
+    text = text[:at] + new + text[at + len(old):]
+else:
+    assert old in text, old
+    text = text.replace(old, new)
+open(dst, "w").write(text)
+EOF
+}
+
+# 1. push without the wrap-around of the write index
+mkdir -p "$work/push/QueueAdt"
+mutate "$here/QueueAdt/Gen.lean" Ring_push \
+  $'          let i32 ← Zig.sub false i31 i16\n          pure (.br17 i32)))' \
+  $'          pure (.br17 i31)))' "$work/push/QueueAdt/Gen.lean"
+cp "$here/QueueAdt/Window.lean" "$here/QueueAdt/Ring.lean" "$work/push/QueueAdt/"
+python3 -B scripts/fixtures.py mutant "ring-push-no-wrap" --src "$work/push" --fails QueueAdt.Ring
+echo "queue-adt mutant: ring-push-no-wrap rejected (the ring's push_spec fails for a push that does not wrap)"
+
+# 2. pop without the wrap-around of the front index
+mkdir -p "$work/pop/QueueAdt"
+mutate "$here/QueueAdt/Gen.lean" Ring_pop \
+  $'            pure (.br25 (0 : BitVec 64)))' \
+  $'            pure (.br25 i23))' "$work/pop/QueueAdt/Gen.lean"
+cp "$here/QueueAdt/Window.lean" "$here/QueueAdt/Ring.lean" "$work/pop/QueueAdt/"
+python3 -B scripts/fixtures.py mutant "ring-pop-no-wrap" --src "$work/pop" --fails QueueAdt.Ring
+echo "queue-adt mutant: ring-pop-no-wrap rejected (the ring's pop_spec fails for a pop that does not wrap)"
+
+# 3. the bound of pushAll without its capacity premise
+mkdir -p "$work/room/QueueAdt"
+mutate "$here/QueueAdt/Clients.lean" "" '(hroom : xs.length + ys.length ≤ C)' '(hroom : xs.length ≤ C)' \
+  "$work/room/QueueAdt/Clients.lean"
+cp "$here/QueueAdt/Gen.lean" "$work/room/QueueAdt/"
+python3 -B scripts/fixtures.py mutant "pushall-capacity-premise-dropped" --src "$work/room" \
+  --fails QueueAdt.Clients
+echo "queue-adt mutant: pushall-capacity-premise-dropped rejected (pushAll's step count needs the capacity premise)"
+
+# 4. pop of the shifting array without its moves
+mkdir -p "$work/shift/QueueAdt"
+mutate "$here/QueueAdt/Gen.lean" Shift_pop.loop22 \
+  $'          Zig.store (α := BitVec 16) 2 i42 i53\n' '' "$work/shift/QueueAdt/Gen.lean"
+cp "$here/QueueAdt/Moved.lean" "$here/QueueAdt/Shift.lean" "$work/shift/QueueAdt/"
+python3 -B scripts/fixtures.py mutant "shift-pop-no-move" --src "$work/shift" --fails QueueAdt.Shift
+echo "queue-adt mutant: shift-pop-no-move rejected (the shifting array's pop_spec fails for a pop that moves no cell)"
+
+# 5. pop of the shifting array with one step fewer than its loop runs
+mkdir -p "$work/steps/QueueAdt"
+mutate "$here/QueueAdt/Shift.lean" "" 'credits xs.length)' 'credits (xs.length - 1))' \
+  "$work/Shift1.lean"
+mutate "$work/Shift1.lean" "" 'spent xs.length)' 'spent (xs.length - 1))' \
+  "$work/steps/QueueAdt/Shift.lean"
+cp "$here/QueueAdt/Gen.lean" "$here/QueueAdt/Moved.lean" "$work/steps/QueueAdt/"
+python3 -B scripts/fixtures.py mutant "shift-pop-steps-short" --src "$work/steps" \
+  --fails QueueAdt.Shift
+echo "queue-adt mutant: shift-pop-steps-short rejected (the shifting array's pop is not paid by one credit fewer than its items)"
+python3 -B scripts/mutation_kill_log.py --check tests/roadmap/queue-adt/check.sh "$here/mutants.sh" \
+  ring-push-no-wrap ring-pop-no-wrap pushall-capacity-premise-dropped shift-pop-no-move \
+  shift-pop-steps-short
+echo "queue-adt mutants: ok"

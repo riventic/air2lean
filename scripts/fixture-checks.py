@@ -118,6 +118,10 @@ RUNNER = re.compile(r'AIR2LEAN_\w+_RUN')
 # build-guard charged its request (`admitted`); elsewhere the requests of the running units stay
 # within MEM_SHARE of the guard's limit (AIR2LEAN_MEM_MIB), which the guard enforces on their sum.
 HINT_RUNS, MEM_MARGIN, MEM_FLOOR_MIB, MEM_SHARE = 5, 1.5, 1024, 0.85
+# The measurement a hint holds: 2 counts the whole unit (par.py `group_usage`: its descendants in
+# sessions of their own too). Hints of version 1 measured a sub-admission's guard alone (~36 MB),
+# so they under-charge every unit: an entry of another version is unmeasured (`_hint`).
+HINT_VERSION = 2
 _ARCH = {'arm64': 'aarch64', 'amd64': 'x86_64'}
 HOST = '%s-%s' % (_ARCH.get(platform.machine().lower(), platform.machine().lower()),
                   {'Darwin': 'macos'}.get(platform.system(), platform.system().lower()))
@@ -376,7 +380,7 @@ def lean_threads():
 def _hint(entry):
     """A well-formed measurement, else None (the file is a cache: a bad entry is unmeasured)."""
     number = lambda x: isinstance(x, (int, float)) and not isinstance(x, bool) and x >= 0
-    if (isinstance(entry, dict) and number(entry.get('elapsed_s'))
+    if (isinstance(entry, dict) and entry.get('version') == HINT_VERSION and number(entry.get('elapsed_s'))
             and isinstance(entry.get('peak_rss_kib'), list) and all(map(number, entry['peak_rss_kib']))
             and isinstance(entry.get('lean_threads'), int) and entry['lean_threads'] > 0):
         return entry
@@ -400,7 +404,7 @@ def write_hints(units, stats):
         if s:
             old = hints.get(u['name'])
             peaks = old['peak_rss_kib'] if old and old['lean_threads'] == threads else []
-            hints[u['name']] = {'elapsed_s': s['elapsed_s'], 'lean_threads': threads,
+            hints[u['name']] = {'version': HINT_VERSION, 'elapsed_s': s['elapsed_s'], 'lean_threads': threads,
                                 'peak_rss_kib': ([s['peak_rss_kib']] + peaks)[:HINT_RUNS]}
     path, written = hints_path(), None
     try:

@@ -38,11 +38,30 @@
       ]
     },
     "T02": {
-      "categories": [
-        "layout"
+      "categories": ["layout"],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/pointer-width/test_cli.py",
+          "anchor": "error=\"the memory model gives type\""
+        },
+        {
+          "path": "tests/roadmap/pointer-width/test_cli.py",
+          "anchor": "an atomic op is outside the 32-bit pointer model"
+        },
+        {
+          "path": "tests/roadmap/pointer-width/test_cli.py",
+          "anchor": "run(binary, bad, error=\"pointer width\")"
+        }
       ],
-      "negative_tests": [],
-      "mutants": []
+      "mutants": [
+        {"name": "wasm32-view-uses-64-bit-pointer-layout", "path": "tests/roadmap/pointer-width/mutations.py", "category": "layout"},
+        {"name": "x64-view-uses-32-bit-pointer-layout", "path": "tests/roadmap/pointer-width/mutations.py", "category": "layout"},
+        {"name": "wasm32-usize-add-wraps", "path": "tests/roadmap/pointer-width/mutations.py", "category": "other"},
+        {"name": "x64-byte-count-overflow-flag-inverted", "path": "tests/roadmap/pointer-width/mutations.py", "category": "other"},
+        {"name": "wasm32-bounds-check-allows-length", "path": "tests/roadmap/pointer-width/mutations.py", "category": "other"},
+        {"name": "wasm32-alloc-item-size-one", "path": "tests/roadmap/pointer-width/mutations.py", "category": "other"}
+      ],
+      "note": "mutations.py mutates the retained wasm32/x86_64 translations; check.sh elaborates PointerWidth.Proofs against each and requires errors in the theorems of the changed fact."
     },
     "T03": {
       "categories": [
@@ -1056,9 +1075,39 @@
       ]
     },
     "C08": {
-      "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "categories": ["forwarding", "failure-cleanup"],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/futures/Futures/Runtime.lean",
+          "anchor": "an unconsumed future was not reported"
+        },
+        {
+          "path": "tests/roadmap/futures/Futures/Runtime.lean",
+          "anchor": "a future was consumed by another thread"
+        },
+        {
+          "path": "tests/roadmap/futures/Futures/Runtime.lean",
+          "anchor": "two concurrent awaits were not reported"
+        },
+        {
+          "path": "tests/roadmap/futures/Pipeline.lean",
+          "anchor": "is a cancelation point that the model does not deliver"
+        },
+        {
+          "path": "tests/roadmap/futures/Futures/Proofs.lean",
+          "anchor": "theorem leak_illegal"
+        }
+      ],
+      "mutants": [
+        {"name": "task-result-wrong", "path": "tests/roadmap/futures/mutations.py", "category": "other"},
+        {"name": "second-await-result-dropped", "path": "tests/roadmap/futures/mutations.py", "category": "other"},
+        {"name": "task-write-through-capture-lost", "path": "tests/roadmap/futures/mutations.py", "category": "forwarding"},
+        {"name": "task-error-not-propagated", "path": "tests/roadmap/futures/mutations.py", "category": "forwarding"},
+        {"name": "cancel-is-await", "path": "tests/roadmap/futures/mutations.py", "category": "other"},
+        {"name": "cancel-point-skipped", "path": "tests/roadmap/futures/mutations.py", "category": "other"},
+        {"name": "future-storage-leaked", "path": "tests/roadmap/futures/mutations.py", "category": "failure-cleanup"}
+      ],
+      "note": "mutations.py mutates the retained translation; check.sh runs Futures/Runtime.lean (every schedule) or Futures/Proofs.lean on each and requires the named failure."
     },
     "C09": {
       "categories": [
@@ -1827,9 +1876,34 @@
       ]
     },
     "E03": {
-      "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "categories": ["failure-cleanup", "invariant-transfer", "forwarding"],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/env-boundaries/WriteAll.lean",
+          "anchor": "theorem demo_closed"
+        },
+        {
+          "path": "tests/roadmap/env-boundaries/test_env_boundaries.py",
+          "anchor": "def test_new_operation_without_row_fails"
+        },
+        {
+          "path": "tests/roadmap/env-boundaries/test_env_boundaries.py",
+          "anchor": "def test_premise_mapping_is_required"
+        }
+      ],
+      "mutants": [
+        {"name": "close-keeps-handle-open", "path": "tests/roadmap/env-boundaries/mutations.py", "category": "failure-cleanup"},
+        {"name": "write-all-close-skipped", "path": "tests/roadmap/env-boundaries/mutations.py", "category": "failure-cleanup"},
+        {"name": "read-close-skipped", "path": "tests/roadmap/env-boundaries/mutations.py", "category": "failure-cleanup"},
+        {"name": "write-reports-zero-progress", "path": "tests/roadmap/env-boundaries/mutations.py", "category": "invariant-transfer"},
+        {"name": "write-reports-more-than-given", "path": "tests/roadmap/env-boundaries/mutations.py", "category": "invariant-transfer"},
+        {"name": "monotonic-clock-runs-backwards", "path": "tests/roadmap/env-boundaries/mutations.py", "category": "invariant-transfer"},
+        {"name": "error-outside-allowed-list", "path": "tests/roadmap/env-boundaries/mutations.py", "category": "invariant-transfer"},
+        {"name": "write-all-error-swallowed", "path": "tests/roadmap/env-boundaries/mutations.py", "category": "forwarding"},
+        {"name": "read-wouldblock-renamed", "path": "tests/roadmap/env-boundaries/mutations.py", "category": "forwarding"},
+        {"name": "write-all-advances-one-byte", "path": "tests/roadmap/env-boundaries/mutations.py", "category": "other"}
+      ],
+      "note": "mutations.py: contract-violating instances of the scripted client (WriteAll.lean) and changed translations of std I/O (StdIo.lean), each rejected in the theorems of the changed fact."
     },
     "E04": {
       "categories": [],
@@ -2016,8 +2090,38 @@
     },
     "P04": {
       "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/queue-adt/mutants.sh",
+          "anchor": "ring-push-no-wrap rejected (the ring's push_spec fails for a push that does not wrap)"
+        },
+        {
+          "path": "tests/roadmap/queue-adt/mutants.sh",
+          "anchor": "ring-pop-no-wrap rejected (the ring's pop_spec fails for a pop that does not wrap)"
+        },
+        {
+          "path": "tests/roadmap/queue-adt/mutants.sh",
+          "anchor": "shift-pop-no-move rejected (the shifting array's pop_spec fails for a pop that moves no cell)"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "ring-push-no-wrap",
+          "path": "tests/roadmap/queue-adt/mutants.sh",
+          "category": "other"
+        },
+        {
+          "name": "ring-pop-no-wrap",
+          "path": "tests/roadmap/queue-adt/mutants.sh",
+          "category": "other"
+        },
+        {
+          "name": "shift-pop-no-move",
+          "path": "tests/roadmap/queue-adt/mutants.sh",
+          "category": "other"
+        }
+      ],
+      "note": "The ring buffer's proof of the queue contract (Zig.Full.QueueImpl) fails for a push or a pop of the translation that does not wrap around the end of the buffer; the shifting array's fails for a pop that moves no cell."
     },
     "P05": {
       "categories": [],
@@ -2115,8 +2219,29 @@
     },
     "P06": {
       "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/queue-adt/QueueAdt/Clients.lean",
+          "anchor": "theorem pushAll_not_within"
+        },
+        {
+          "path": "tests/roadmap/sep-full/TicksCX.lean",
+          "anchor": "tick_without_credit"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "pushall-capacity-premise-dropped",
+          "path": "tests/roadmap/queue-adt/mutants.sh",
+          "category": "other"
+        },
+        {
+          "name": "shift-pop-steps-short",
+          "path": "tests/roadmap/queue-adt/mutants.sh",
+          "category": "other"
+        }
+      ],
+      "note": "pushAll's step count ys.length + 1 is tight (one credit fewer does not pay it) and is not provable when the capacity premise is weakened to xs.length <= C; the shifting array's pop is not paid by one credit fewer than its declared count xs.length."
     },
     "P07": {
       "categories": [],

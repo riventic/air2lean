@@ -17,7 +17,7 @@ private def allocFns : Array AllocFn :=
   #[.create, .destroy, .alloc, .alignedAlloc, .allocSentinel, .free, .dupe, .remap, .realloc]
 private def threadFns : Array ThreadFn :=
   #[.spawn, .join, .detach, .futexWait, .futexWaitU, .futexWake,
-    .threadFutexWait, .threadFutexWake, .osLock, .osUnlock, .osTryLock,
+    .threadFutexWait, .osLock, .osUnlock, .osTryLock,
     .groupAsync, .groupConcurrent, .groupAwait, .groupCancel,
     .futureAsync, .futureAwait, .futureCancel, .checkCancel]
 
@@ -162,8 +162,10 @@ def main : IO Unit := do
   for symbol in #["mem.Allocator.dupe", "mem.Allocator.allocSentinel", "Thread.spawn", "Io.futexWait",
       "Io.Group.await"] do
     require (qualifies symbol .v0_17_1) s!"{symbol}: audited for 0.17.1"
-  for symbol in #["Thread.Futex.wait", "Thread.Futex.wake"] do
-    require (!qualifies symbol .v0_17_1) s!"{symbol}: not qualified for 0.17.1"
+  require (!qualifies "Thread.Futex.wait" .v0_17_1) "Thread.Futex.wait: not qualified for 0.17.1"
+  -- `Thread.Futex.wake` has no model: it is translated from std down to the OS wake rows
+  -- (OSF-02; audit S6, finding 4).
+  require (stdModel? "Thread.Futex.wake").isNone "Thread.Futex.wake is translated"
   -- An OS row with an environment (`OsFn.env`) checks its signature like any OS row, and every
   -- function that reaches it, and only those, takes the OS environment (`envFunctions`).
   expectError (checkProgram #[caller f "client" "os.linux.clock_gettime"]) "has an incompatible"

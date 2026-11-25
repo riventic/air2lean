@@ -15,6 +15,22 @@
       "versions": ["0.16.0", "0.17.1"],
       "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "aarch64-macos", "-mcpu=baseline"],
       "closure": ["page.*"]
+    },
+    {
+      "out": "air/{version}/fba-linux",
+      "source": "fba.zig",
+      "filter": "fba.,heap.FixedBufferAllocator,mem.,math.,debug.assert",
+      "versions": ["0.16.0", "0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "closure": ["fba.*"]
+    },
+    {
+      "out": "air/{version}/fba-macos",
+      "source": "fba.zig",
+      "filter": "fba.,heap.FixedBufferAllocator,mem.,math.,debug.assert",
+      "versions": ["0.16.0", "0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "aarch64-macos", "-mcpu=baseline"],
+      "closure": ["fba.*"]
     }
   ]
 }
