@@ -188,7 +188,8 @@ class ClaimsEvidenceTests(unittest.TestCase):
         # The statements are synthetic test input, not a kernel replay. Keep the real
         # compiler-owned Unit/source plan and prepare it BEFORE the fake compiler runs.
         with mock.patch.dict(os.environ, cls.env):
-            with mock.patch.object(assumptions, 'prepared_tool', contextlib.nullcontext):
+            with mock.patch.object(assumptions, 'prepared_tool', contextlib.nullcontext), \
+                    mock.patch.object(universe, 'native_code', return_value=[]):
                 context = universe.prepare_compilation(selected, by_file, base / 'producer')
             with mock.patch.object(universe, 'compile_unit', side_effect=compile_fixture):
                 errors = universe.compile_all(universe.closure(selected, by_file), by_file,

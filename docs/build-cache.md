@@ -126,7 +126,9 @@ mutant cannot fail on a heartbeat budget that the native proof meets. Outside th
 `scripts/theorem_universe.py audit` (CI part `audit`) still compiles the theorem-indexed fixture
 files itself with `lake env lean -o`: it rejects a file whose elaboration printed `declaration
 uses 'sorry'` (a `sorry` in an `example` never reaches the `.olean`), which a Lake-built olean
-does not show. The remaining `lake env
+does not show. It loads the native code Lake would load for the file's import closure
+(`lake setup-file` with the closure's Lake imports, `--load-dynlib`), so a heartbeat budget the
+Lake build meets is met there too. The remaining `lake env
 lean` run in these checks is the audit driver of `assumptions.py`, which loads oleans and runs no
 tactic (`maxHeartbeats 0`).
 
@@ -186,7 +188,9 @@ and the compiler arguments, and restores the shared libraries under their names
 
 `lake env lean FILE` loads no native code; the checks that still elaborate with it (the ones not
 yet converted to the proof-fixture package, `perf-budgets.py heartbeats`,
-`theorem_universe.py audit`, `lean-deps.py --elaborate`) run `fsym` interpreted. Results agree,
+`lean-deps.py --elaborate`) run `fsym` interpreted. `theorem_universe.py` passes Lake's
+`--load-dynlib` options itself (above): interpreted, `fsym` exceeded the budgets of
+`PageSpec.resize_spec` and the `ArenaSpec*` proofs that their Lake builds meet. Results agree,
 but a heartbeat count does not. The native engine spends no more heartbeats than the interpreter
 in every declaration measured (2026-10-20: `ArenaSpec.resize_ct` 3 383 680 thousand interpreted,
 1 913 890 thousand native; `Proofs/Lists` up to 23 % fewer), so a budget measured interpreted

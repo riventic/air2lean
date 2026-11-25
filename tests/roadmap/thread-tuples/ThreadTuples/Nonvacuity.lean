@@ -115,7 +115,9 @@ theorem zero_pair_owned :
   rw [hr] at hx
   obtain ⟨r, hh', hq, hcm', how, hs⟩ := hx
   obtain ⟨hnc, hh'⟩ := hh'.dropCurF
-  exact ⟨m', r, hr, ho.step rfl ht hR hRO hh' hcm' how hs hnc,
+  -- the frame's `cur` token holds no share: the step is one in the frame without it
+  rw [Res.owned_addGh, Res.shared_addGh] at hs
+  exact ⟨m', r, hr, ho.step rfl ht hR hRO hh' hcm' how hs.interL hnc,
     hq, hs.current, hs.threads⟩
 
 /-- Native adequacy supplies full resources, their frame, and sequential memory
