@@ -644,6 +644,28 @@ def strip_identities(value, root=True):
             if k != "comptime_fn_module" and not (k == "module" and named)}
 
 
+# The architecture of a golden host named by its OS alone: `linux` is the x86_64-linux
+# reference host (aarch64-linux is `linux-aarch64`, check.sh's `air-<os>-<arch>`), `darwin` the
+# aarch64 Mac.
+HOST_ARCH = {"linux": "x86_64", "darwin": "aarch64"}
+
+
+def host_target(host):
+    """(arch, os) of the target a golden host exports, or None for an unknown host."""
+    if not isinstance(host, str) or not GOLDEN_HOST.fullmatch(host):
+        return None
+    host_os, _, host_arch = host.partition("-")
+    host_arch = {"arm64": "aarch64", "amd64": "x86_64"}.get(host_arch, host_arch) or HOST_ARCH.get(host_os)
+    return (host_arch, {"darwin": "macos"}.get(host_os, host_os)) if host_arch else None
+
+
+def triple_target(triple):
+    """(arch, os) of a target triple (`aarch64-macos.27.0.1...27.0.1-none`), or None for a
+    profile that records no target (the legacy `unverified`)."""
+    parts = triple.split("-") if isinstance(triple, str) else []
+    return (parts[0], parts[1].split(".")[0]) if len(parts) == 3 else None
+
+
 def compose(dirs, destination, version, *, require_profile=False, host=None):
     """Apply golden overlays as scripts/check.sh does: a later directory replaces every file
     whose normalized function name it provides. Profile metadata is dropped (schema 12 is the
@@ -669,21 +691,21 @@ def compose(dirs, destination, version, *, require_profile=False, host=None):
                             docs[0]["profile"].get("zig_version") != version or
                             any(doc.get("zig_version") != version for doc in docs)):
         raise ValueError("namespaced golden case requires one complete schema-12 profile of its actual Zig version; legacy downgrade refused")
-    if require_profile:
-        if not isinstance(host, str) or not GOLDEN_HOST.fullmatch(host):
-            raise ValueError("namespaced golden case requires its explicit valid golden host identity")
-        profile = generated_helpers()["profile_for_air"](docs[0])
-        arch, target_os, _ = profile["target_triple"].split("-")
-        host_os, _, host_arch = host.partition("-")
-        host_os = {"darwin": "macos"}.get(host_os, host_os)
-        host_arch = {"arm64": "aarch64", "amd64": "x86_64"}.get(host_arch, host_arch)
-        if host_os != target_os.split(".")[0] or (host_arch and host_arch != arch):
-            raise ValueError(f"namespaced golden case {version} {host}: actual profile "
-                             f"{profile['target_triple']} does not match golden host")
+    if require_profile and (not isinstance(host, str) or not GOLDEN_HOST.fullmatch(host)):
+        raise ValueError("namespaced golden case requires its explicit valid golden host identity")
     own_os = (last.startswith("air-") and last != "air-linux"
               and set(chosen) == {IDENTITY.sub(r"__\1_N", json.loads(p.read_text(encoding="utf-8"))["name"])
                                   for p in dirs[-1].glob("*.json")})
-    if uniform and (own_os or docs[0]["profile"].get("zig_version") == version):
+    keep = require_profile or (uniform and (own_os or docs[0]["profile"].get("zig_version") == version))
+    if keep:
+        # A kept profile is the target the translation claims: it must be the golden host's
+        # (docs/architecture-audit/golden-host.md).
+        target = triple_target(generated_helpers()["profile_for_air"](docs[0])["target_triple"])
+        expected = host_target(host)
+        if target is None or expected != target:
+            raise ValueError(f"golden case {version} {host}: actual profile "
+                             f"{docs[0]['profile'].get('target_triple')} does not match golden host "
+                             f"{host} ({'-'.join(expected or ('?', '?'))}); export it on that host")
         for entries in chosen.values():
             for name, doc in entries:
                 (destination / name).write_text(json.dumps(doc), encoding="utf-8")
@@ -715,15 +737,32 @@ def comparable(data, mode):
     return rest if first.startswith(PROFILE_PREFIX) else data
 
 
-def header_error(committed, fresh):
+def owns_record(case, path):
+    """Whether `case` is the one whose target the profile record of `path` names: a golden
+    `Gen-<host>.lean` is its host's, any other golden module the `linux` reference host's (a host
+    whose translation has the same body shares it, check.sh's fallback); a fixture's is its own."""
+    if case.mode != "golden":
+        return True
+    name = Path(path).name
+    return case.host == (name[4:-5] if name.startswith("Gen-") else "linux")
+
+
+def header_error(committed, fresh, own=True):
     """A committed profile record must be valid (not ignorable metadata) and name the float
-    semantics the translation used: consumers attach it to the generated module."""
+    semantics the translation used, and for its owning case (`owns_record`) the target:
+    consumers attach it to the generated module."""
     if not committed.startswith(PROFILE_PREFIX):
         return None
     mine = split_generated()(committed, required=True)[0]
     theirs = split_generated()(fresh)[0] if fresh.startswith(PROFILE_PREFIX) else None
     if theirs and mine["float_semantics"] != theirs["float_semantics"]:
         return f"profile record says float_semantics {mine['float_semantics']!r}, translation used {theirs['float_semantics']!r}"
+    # `scripts/premises.py profile_target` binds target-qualified premises to the record's target.
+    # A legacy translation records no target and keeps the committed record (its body is checked).
+    targets = [triple_target(record["profile"].get("target_triple")) for record in (mine, theirs) if record]
+    if own and len(targets) == 2 and None not in targets and targets[0] != targets[1]:
+        return (f"profile record says target {mine['profile'].get('target_triple')}, "
+                f"translation used {theirs['profile'].get('target_triple')}")
     return None
 
 
@@ -794,7 +833,7 @@ class Translator:
         """None if `path` equals the fresh output of `case`, else the difference."""
         fresh = self.output(index, case)
         committed = (ROOT / path).read_bytes()
-        if case.mode != "exact" and (error := header_error(committed, fresh)):
+        if case.mode != "exact" and (error := header_error(committed, fresh, owns_record(case, path))):
             return error
         mine, theirs = comparable(committed, case.mode), comparable(fresh, case.mode)
         return None if mine == theirs else first_difference(mine, theirs)
@@ -861,17 +900,16 @@ def run_write(translator, cases, only):
                 continue
             committed = (ROOT / path).read_bytes() if (ROOT / path).is_file() else b""
             fresh = {}
-            for index, case in members:
-                out = translator.output(index, case)
-                if case.mode == "exact":
-                    fresh[case.label] = out
-                else:
-                    # The committed profile record, unless its float semantics are stale.
-                    first, sep, _ = committed.partition(b"\n")
-                    if header_error(committed, out):
-                        first, sep, _ = out.partition(b"\n")
-                    header = first + sep if first.startswith(PROFILE_PREFIX) else b""
-                    fresh[case.label] = header + comparable(out, case.mode)
+            outs = [(case, translator.output(index, case)) for index, case in members]
+            # The committed profile record, unless it is stale for a case (`header_error`): then
+            # that case's fresh one (the owning case's first), for every case of the module.
+            record = next((out for case, out in sorted(outs, key=lambda item: not owns_record(item[0], path))
+                           if case.mode != "exact" and header_error(committed, out, owns_record(case, path))),
+                          committed)
+            first, sep, _ = record.partition(b"\n")
+            header = first + sep if first.startswith(PROFILE_PREFIX) else b""
+            for case, out in outs:
+                fresh[case.label] = out if case.mode == "exact" else header + comparable(out, case.mode)
         except ValueError as error:
             errors.append(f"{path}: {error}")
             continue
