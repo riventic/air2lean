@@ -109,10 +109,12 @@ def main():
     checks += reject(binary, only("incm", wide_incl),
                      "instruction 0 ('incl %[x]') accesses operand 0 (memory) at another size")
 
-    def narrow_addq(i, d):  # `addq` on 32-bit register operands
+    def narrow_addq(i, d):  # `addq` on 32-bit register operands: the whole function at u32
+        narrow = {1: 0, 5: 4}  # u64 -> u32, *u64 -> *u32
         for inst in d["body"]:
-            if inst["id"] in (i["outputs"][0]["ref"]["inst"], i["inputs"][0]["ref"]["inst"]):
-                inst["ty"] = {1: 0, 5: 4}.get(inst["ty"], inst["ty"])
+            inst["ty"] = narrow.get(inst["ty"], inst["ty"])
+        d["params"] = [narrow.get(t, t) for t in d["params"]]
+        d["ret"] = narrow.get(d["ret"], d["ret"])
     checks += reject(binary, only("addr", narrow_addq), "(A02, premise ASM-07)")
 
     def narrow_movq(i, d):  # `movq` to a 32-bit memory operand
