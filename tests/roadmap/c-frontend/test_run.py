@@ -71,6 +71,12 @@ class Gates(unittest.TestCase):
                   zig_native={"status": "compile_error"})
         self.assertEqual(self.ids(e), [])
 
+    def test_an_undefined_symbol_is_a_compile_error_with_either_linker(self):
+        for log in ("error: undefined symbol: _entry",  # macOS ld64
+                    "error: ld.lld: undefined symbol: entry"):  # ELF targets
+            self.assertTrue(run.COMPILE_ERROR.search(log), log)
+        self.assertIsNone(run.COMPILE_ERROR.search("thread 1 panic: integer overflow"))
+
     def test_lean_ok_is_never_gated(self):
         checked = {"status": "checked"}
         e = entry(c_native=OK, translate_c=OK, zig_native=OK, air_export=OK, air2lean=checked, lean=OK)

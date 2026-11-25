@@ -88,7 +88,9 @@ STAGES = ["c_native", "translate_c", "zig_native", "air_export", "air2lean", "le
 TIMEOUT = {"c": 300, "tc": 600, "zig": 900, "air": 900, "diag": 600, "emit": 900, "lean": 3600}
 WARNING = re.compile(r"// (?P<loc>[^\n]*?:\d+:\d+): warning: (?P<msg>.*)$", re.M)
 MISMATCH = re.compile(r"expected \d+, found \d+")
-COMPILE_ERROR = re.compile(r"(\.zig:\d+:\d+: error:|error: undefined symbol)")
+# A link failure is a compile error too: macOS ld64 reports `error: undefined symbol`, ELF
+# targets' ld.lld `error: ld.lld: undefined symbol`.
+COMPILE_ERROR = re.compile(r"(\.zig:\d+:\d+: error:|error: (?:ld\.lld: )?undefined symbol)")
 EXTERN_FN = re.compile(r"^pub extern fn (\w+)\(", re.M)
 BODY = re.compile(r"^(?:pub )?(?:export )?fn \w+\([^\n]*\{$.*?^\}$", re.M | re.S)  # translated bodies
 
