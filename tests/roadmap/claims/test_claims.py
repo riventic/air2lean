@@ -751,7 +751,8 @@ class ManifestTests(unittest.TestCase):
         # The statement fixture is synthetic CLI input, not a kernel replay receipt. Use the
         # ordinary writer BEFORE the fake compiler, keeping its real Unit/source/path checks.
         # No extractor is needed to construct these already-recorded statement shapes.
-        with mock.patch.object(assumptions, 'prepared_tool', contextlib.nullcontext):
+        with mock.patch.object(assumptions, 'prepared_tool', contextlib.nullcontext), \
+                mock.patch.object(universe, 'native_code', return_value=[]):
             context = universe.prepare_compilation(selected, by_file, output)
 
         def compile_fixture(source, root, olean, lean_path, log, **kwargs):
