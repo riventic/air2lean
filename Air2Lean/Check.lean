@@ -2006,7 +2006,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
           throw s!"{fnName}: near line {line}: asm {source.quote} (operand widths \
             {(outBits ++ inBits).toList}) is rejected: {e.message} (A02, premise ASM-07)"
         | .ok block =>
-          if block.instrs.any (·.mayFault) != (entry.fault != .never) then
+          if block.mayFault != (entry.fault != .never) then
             throw s!"{fnName}: near line {line}: asm {source.quote}: the allowlist entry's fault \
               condition disagrees with the instruction model on whether the block can fault \
               (Air2Lean/AsmAllowlist.lean, A02)"

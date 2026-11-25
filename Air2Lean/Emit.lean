@@ -2378,7 +2378,7 @@ def emitAsmDef (d : AsmDef) : String :=
       | [] => "()"
       | [o] => o
       | os => "(" ++ ", ".intercalate os ++ ")"
-    let faults := block.instrs.any (·.mayFault)
+    let faults := block.mayFault
     let faultDef := if faults then
         [s!"def {d.name}_fault{binders} : Option Zig.Isa.X86.Fault :=\n  {d.name}_block.fault {vals}"]
       else []
@@ -2393,7 +2393,7 @@ def AsmDef.declNames (d : AsmDef) : Array String :=
   match d.isa with
   | none => #[d.name]
   | some block => #[d.name, s!"{d.name}_block", s!"{d.name}_wf"] ++
-      (if block.instrs.any (·.mayFault) then #[s!"{d.name}_fault"] else #[])
+      (if block.mayFault then #[s!"{d.name}_fault"] else #[])
 
 /-- AIR can compute a value that nothing reads (`catch 0` still unwraps the error code). The
 effect stays; the `_` prefix stops Lean's unused-variable warning. -/
@@ -3353,7 +3353,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let isa? := asmIsaOf fc.targetArch entry? source clobbers outputs inputs outputWidths inputWidths
     let name := if entry?.any (·.semantics == .isa) && isa?.isNone then asmIsaUndecoded else
       asmOpName clobbers outputs (asmKey source constraints inputWidths outputWidths) isa?.isSome
-    let isaFaults := isa?.any (·.instrs.any (·.mayFault))
+    let isaFaults := isa?.any (·.mayFault)
     let isPtr := asmPtrOperands fc.types fc.valTyId? outputs inputs
     let ptrAt (k : Nat) : Bool := isPtr[k]?.getD false
     let regions := (entry?.map (·.regions)).getD []

@@ -237,6 +237,9 @@ def out (b : Block) (vals : List (BitVec 64)) (k : Nat) : BitVec 64 :=
   | some (l, w) => ((runInstrs b.instrs (initState b.inputs vals)).get w l).setWidth 64
   | none => 0
 
+/-- Can an instruction of the block fault? Only then does it get a fault function and a guard. -/
+def mayFault (b : Block) : Bool := b.instrs.any Instr.mayFault
+
 /-- The block's fault on the input values `vals`, if any. -/
 def fault (b : Block) (vals : List (BitVec 64)) : Option Fault :=
   faultInstrs b.instrs (initState b.inputs vals)
