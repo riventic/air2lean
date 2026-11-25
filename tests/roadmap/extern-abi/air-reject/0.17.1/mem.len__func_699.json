@@ -1,0 +1,268 @@
+{
+ "schema": 12,
+ "zig_version": "0.17.1",
+ "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...7.2-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.17.1",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "mem.len__func_699",
+ "module": "std",
+ "src": {
+  "file": "mem.zig",
+  "module": "std",
+  "decl_line": 1164
+ },
+ "instance_key": "39742bb7d15dd9db28a5570767943e3f67c1a5ace84cd277c2d438f0175d9e4a",
+ "params": [
+  0
+ ],
+ "noalias": [],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2,
+   "column": 13
+  },
+  {
+   "id": 3,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 3,
+   "column": 36
+  },
+  {
+   "id": 5,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 5,
+   "column": 17
+  },
+  {
+   "id": 7,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 5,
+   "column": 47
+  },
+  {
+   "id": 8,
+   "tag": "dbg_inline_block",
+   "ty": 2,
+   "src": {
+    "file": "lang.zig",
+    "module": "std",
+    "decl_line": 695
+   },
+   "body": [
+    {
+     "id": 9,
+     "tag": "dbg_stmt",
+     "ty": 2,
+     "line": 2,
+     "column": 13
+    },
+    {
+     "id": 11,
+     "tag": "dbg_stmt",
+     "ty": 2,
+     "line": 2,
+     "column": 42
+    },
+    {
+     "id": 13,
+     "tag": "dbg_var_val",
+     "ty": 2,
+     "args": [
+      {
+       "ty": 3,
+       "ptr": {
+        "global": 0,
+        "off": 0
+       }
+      }
+     ],
+     "name": "sp"
+    },
+    {
+     "id": 14,
+     "tag": "dbg_stmt",
+     "ty": 2,
+     "line": 3,
+     "column": 13
+    },
+    {
+     "id": 15,
+     "tag": "br",
+     "ty": 4,
+     "target": 8,
+     "args": [
+      {
+       "ty": 2,
+       "val": "{}"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 17,
+   "tag": "dbg_var_val",
+   "ty": 2,
+   "args": [
+    {
+     "ty": 5,
+     "val": "0"
+    }
+   ],
+   "name": "sentinel"
+  },
+  {
+   "id": 18,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 7,
+   "column": 36
+  },
+  {
+   "id": 20,
+   "tag": "call",
+   "ty": 1,
+   "callee": {
+    "ty": 6,
+    "func": "mem.findSentinel__func_701",
+    "module": "std",
+    "instance_key": "d3431873667f8d835989933b95aaeb8fe00f65be0b78b58247b5e135fb9bf7fb",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 21,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 7,
+   "column": 17
+  },
+  {
+   "id": 22,
+   "tag": "ret_safe",
+   "ty": 4,
+   "args": [
+    {
+     "inst": 20
+    }
+   ]
+  }
+ ],
+ "globals": [
+  {
+   "ty": 5,
+   "const": true,
+   "init": {
+    "ty": 5,
+    "val": "0"
+   }
+  }
+ ],
+ "types": [
+  {
+   "k": "ptr",
+   "size": "many",
+   "const": true,
+   "child": 5,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": true,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 5,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "int",
+   "signed": true,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "other",
+   "name": "fn ([*:0]const i32) usize"
+  }
+ ]
+}

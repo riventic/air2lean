@@ -23,6 +23,8 @@ import tempfile
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
+sys.path.insert(0, str(ROOT / "scripts"))
+from mutation_kill_log import killed as log_kill  # noqa: E402
 GEN = HERE / "AsmEffects/Gen.lean"
 AIR = HERE / "air/0.16.0"
 A03 = ROOT / "tests/roadmap/asm-wrappers"
@@ -115,6 +117,8 @@ def main() -> int:
         try:
             a03.classify(status, output, expected)
             print(f"{case}: {'passed' if expected is None else 'killed'} (exit {status})")
+            if expected is not None:
+                log_kill("tests/roadmap/asm-effects/harness.py", case, "tests/roadmap/asm-effects/check.sh")
         except ValueError as error:
             failed = True
             print(f"{case}: {error} (exit {status})\n{output}", file=sys.stderr)

@@ -4,33 +4,58 @@ import ZigLean.PackedRepr
 # Packed layouts: a packed value's bits read back (engine ledger #packed-roundtrip)
 
 **`LawfulPacked α n`**: bits that are a value (`valid`) are the bits of the value they make
-(`toBits_ofBits`), and a value whose bits are all determined (`mask`) is the value of its bits,
-which are valid (`ofBits_toBits`). Integers, `bool` and floats are lawful by the instances here
-(a float's `ofBits_toBits` asks for determined bits: a NaN has none, so the law says nothing of
-it). An exhaustive enum is lawful by its tags (`EnumTags.lawful`); a non-exhaustive one, whose
-value is its bits, by definition.
+(`toBits_ofBits`, the bits direction `LawfulPackedBits`), and a value whose bits are all
+determined (`mask`) is the value of its bits, which are valid (`ofBits_toBits`, the value
+direction `LawfulPackedVal`); `LawfulPacked` is both. Integers, `bool`, `void` and floats are
+lawful by the instances here (a float's `ofBits_toBits` asks for determined bits: a NaN has none,
+so the law says nothing of it). An exhaustive enum is lawful by its tags (`EnumTags.lawful`); a
+non-exhaustive one, whose value is its bits, by definition. An array or vector has each direction
+its lanes have (one instance per direction, every lane type and width). A packed union has the
+bits direction only (`PackedU.bitsOf_intBytes`; ledger #packed-lawful-split).
 
 **`PackedLayout α n`** describes a packed struct as the translator generates it, once for all
 packed structs: its fields (`PField`: the type's representation, the bit offset and the value),
 in order from bit 0, tile the backing integer (`PTiles`); `toBits` ors each field's bits at its
 offset (`toBits_eq`), `ofBits` reads each field at its offset (`ofBits_read`), the bits are valid
 exactly when each field's are (`valid_iff`), every bit is determined only if each field's are
-(`mask_full`), and a value is its fields (`ext`). `PackedLayout.lawful` proves the round trip once
-for every layout whose fields are lawful. The per-type obligations (the layout's fields) are
-discharged by `fsym` from the generated instance (`lawfulPackedOf?`, `Auto.lean`). A type of
-another shape (a packed union, an array) gets no instance, and the rules that need one do not
-apply (fail closed).
+(`mask_full`), and a value is its fields (`ext`). `PackedLayout.lawfulBits`/`lawfulVal` prove
+each direction once for every layout whose fields all have it, `PackedLayout.lawful` both. The
+per-type obligations (the layout's fields) are discharged by `fsym` from the generated instance
+(`lawfulPackedOf?`, `Auto.lean`), which derives the whole law (`LawfulPacked`). A type without
+it gets no instance, and the rules that need one do not apply (fail closed).
 -/
 
 namespace Zig
 
-/-- **A packable type's bits read back**: valid bits are the bits of the value they make, and a
-value with every bit determined is the value of its bits, which are valid. -/
+/-- **The bits direction**: valid bits are the bits of the value they make. -/
+class LawfulPackedBits (α : Type) (n : Nat) [Packed α n] : Prop where
+  toBits_ofBits : ∀ b : BitVec n, Packed.valid (α := α) b = true →
+    Packed.toBits (Packed.ofBits b : α) = b
+
+/-- **The value direction**: a value with every bit determined is the value of its bits, which
+are valid. -/
+class LawfulPackedVal (α : Type) (n : Nat) [Packed α n] : Prop where
+  ofBits_toBits : ∀ v : α, Packed.mask v = BitVec.allOnes n →
+    Packed.valid (α := α) (Packed.toBits v) = true ∧ Packed.ofBits (Packed.toBits v) = v
+
+/-- **A packable type's bits read back**, both directions (`LawfulPackedBits` and
+`LawfulPackedVal`, by the instances below and `LawfulPacked.of`). -/
 class LawfulPacked (α : Type) (n : Nat) [Packed α n] : Prop where
   toBits_ofBits : ∀ b : BitVec n, Packed.valid (α := α) b = true →
     Packed.toBits (Packed.ofBits b : α) = b
   ofBits_toBits : ∀ v : α, Packed.mask v = BitVec.allOnes n →
     Packed.valid (α := α) (Packed.toBits v) = true ∧ Packed.ofBits (Packed.toBits v) = v
+
+instance LawfulPacked.bits {α : Type} {n : Nat} [Packed α n] [h : LawfulPacked α n] :
+    LawfulPackedBits α n := ⟨h.toBits_ofBits⟩
+
+instance LawfulPacked.val {α : Type} {n : Nat} [Packed α n] [h : LawfulPacked α n] :
+    LawfulPackedVal α n := ⟨h.ofBits_toBits⟩
+
+/-- Both directions are the law. -/
+theorem LawfulPacked.of {α : Type} {n : Nat} [Packed α n] [hb : LawfulPackedBits α n]
+    [hv : LawfulPackedVal α n] : LawfulPacked α n :=
+  ⟨hb.toBits_ofBits, hv.ofBits_toBits⟩
 
 instance {n : Nat} : LawfulPacked (BitVec n) n where
   toBits_ofBits _ _ := rfl
@@ -44,6 +69,10 @@ instance : LawfulPacked Bool 1 where
 
 instance lawfulPackedFloat {fmt : FloatFmt} : LawfulPacked (Float fmt) fmt.width where
   toBits_ofBits _ _ := rfl
+  ofBits_toBits _ _ := ⟨rfl, rfl⟩
+
+instance : LawfulPacked Unit 0 where
+  toBits_ofBits b _ := (BitVec.eq_nil b).symm
   ofBits_toBits _ _ := ⟨rfl, rfl⟩
 
 /-! ## Exhaustive enums -/
@@ -128,6 +157,12 @@ def Full (f : PField) : Prop := f.mask = BitVec.allOnes f.w
 /-- The field's type is lawful. -/
 def Lawful (f : PField) : Prop := @LawfulPacked f.U f.w f.inst
 
+/-- The field's type has the bits direction of the law. -/
+def LawfulBits (f : PField) : Prop := @LawfulPackedBits f.U f.w f.inst
+
+/-- The field's type has the value direction of the law. -/
+def LawfulVal (f : PField) : Prop := @LawfulPackedVal f.U f.w f.inst
+
 end PField
 
 /-- Every item of the list has `P`. -/
@@ -142,6 +177,10 @@ theorem PAll.mem {α : Type 1} {P : α → Prop} : ∀ {xs : List α}, PAll P xs
 theorem PAll.of_mem {α : Type 1} {P : α → Prop} : ∀ {xs : List α}, (∀ x ∈ xs, P x) → PAll P xs
   | [], _ => trivial
   | _ :: _, h => ⟨h _ (.head _), PAll.of_mem fun x hx => h x (.tail _ hx)⟩
+
+theorem PAll.imp {α : Type 1} {P Q : α → Prop} (h : ∀ x, P x → Q x) {xs : List α}
+    (hp : PAll P xs) : PAll Q xs :=
+  PAll.of_mem fun x hx => h x (hp.mem x hx)
 
 /-- Bit vectors or-ed in order: `x₀ ||| x₁ ||| …` (`|||` associates to the left). -/
 def orAll {n : Nat} : List (BitVec n) → BitVec n
@@ -267,8 +306,8 @@ theorem extract_toBits (L : PackedLayout α n) (v : α) :
   rw [L.toBits_eq]
   exact PTiles.extract PField.toBits (L.fields_tiles v) f hf
 
-/-- **Valid bits read back**, for a layout of lawful fields. -/
-theorem toBits_ofBits (L : PackedLayout α n) (hl : ∀ v, PAll PField.Lawful (L.fields v))
+/-- **Valid bits read back**, for a layout of fields with the bits direction. -/
+theorem toBits_ofBits (L : PackedLayout α n) (hl : ∀ v, PAll PField.LawfulBits (L.fields v))
     (b : BitVec n) (hb : Packed.valid (α := α) b = true) :
     Packed.toBits (Packed.ofBits b : α) = b := by
   apply BitVec.eq_of_getLsbD_eq
@@ -278,7 +317,7 @@ theorem toBits_ofBits (L : PackedLayout α n) (hl : ∀ v, PAll PField.Lawful (L
   have hv := ((L.valid_iff b).mp hb).mem f hf
   have hlf := (hl _).mem f hf
   have hfb : f.toBits = b.extractLsb' f.off f.w := by
-    unfold PField.toBits; rw [hr]; exact @LawfulPacked.toBits_ofBits f.U f.w f.inst hlf _ hv
+    unfold PField.toBits; rw [hr]; exact @LawfulPackedBits.toBits_ofBits f.U f.w f.inst hlf _ hv
   have e := congrArg (·.getLsbD (j - f.off)) (L.extract_toBits (Packed.ofBits b) f hf)
   simp only [hfb, BitVec.getLsbD_extractLsb', show j - f.off < f.w by omega, decide_true,
     Bool.true_and, show f.off + (j - f.off) = j by omega] at e
@@ -308,15 +347,15 @@ private theorem read_eq (b : BitVec n) :
       simp only at he; rw [he]; exact hv
 
 /-- **A value with every bit determined is the value of its bits**, which are valid, for a layout
-of lawful fields. -/
-theorem ofBits_toBits (L : PackedLayout α n) (hl : ∀ v, PAll PField.Lawful (L.fields v))
+of fields with the value direction. -/
+theorem ofBits_toBits (L : PackedLayout α n) (hl : ∀ v, PAll PField.LawfulVal (L.fields v))
     (v : α) (hm : Packed.mask v = BitVec.allOnes n) :
     Packed.valid (α := α) (Packed.toBits v) = true ∧ Packed.ofBits (Packed.toBits v) = v := by
   have hfull := L.mask_full v hm
   have hf : ∀ f ∈ L.fields v, (Packed.toBits v).extractLsb' f.off f.w = f.toBits ∧
       @Packed.valid f.U f.w f.inst f.toBits = true ∧ @Packed.ofBits f.U f.w f.inst f.toBits = f.val := by
     intro f hf
-    have := @LawfulPacked.ofBits_toBits f.U f.w f.inst ((hl v).mem f hf) f.val (hfull.mem f hf)
+    have := @LawfulPackedVal.ofBits_toBits f.U f.w f.inst ((hl v).mem f hf) f.val (hfull.mem f hf)
     exact ⟨L.extract_toBits v f hf, this⟩
   have hs : (L.fields (Packed.ofBits (Packed.toBits v))).map PField.slot = (L.fields v).map PField.slot := by
     rw [L.slots_eq, L.slots_eq]
@@ -344,12 +383,146 @@ theorem mask_full_of {fields : α → List PField}
     decide_eq_true_eq]
   omega
 
+/-- **A packed struct whose fields all have the bits direction has it.** -/
+theorem lawfulBits (L : PackedLayout α n) (hl : ∀ v, PAll PField.LawfulBits (L.fields v)) :
+    LawfulPackedBits α n :=
+  ⟨L.toBits_ofBits hl⟩
+
+/-- **A packed struct whose fields all have the value direction has it.** -/
+theorem lawfulVal (L : PackedLayout α n) (hl : ∀ v, PAll PField.LawfulVal (L.fields v)) :
+    LawfulPackedVal α n :=
+  ⟨L.ofBits_toBits hl⟩
+
 /-- **A packed struct of lawful fields is lawful.** -/
 theorem lawful (L : PackedLayout α n) (hl : ∀ v, PAll PField.Lawful (L.fields v)) :
     LawfulPacked α n :=
-  ⟨L.toBits_ofBits hl, L.ofBits_toBits hl⟩
+  ⟨L.toBits_ofBits fun v => (hl v).imp fun f h => @LawfulPacked.bits f.U f.w f.inst h,
+    L.ofBits_toBits fun v => (hl v).imp fun f h => @LawfulPacked.val f.U f.w f.inst h⟩
 
 end PackedLayout
+
+/-! ## Arrays and vectors
+
+An array or vector of lanes (`Vector α k`, `Vec α k`, `ZigLean/PackedRepr.lean`: the lanes' bits
+concatenated, lane 0 lowest) has each direction of the law its lanes have, for every lane width
+and lane type, by one instance per direction. -/
+
+section Lanes
+
+variable {α : Type} {w k : Nat} [Packed α w]
+
+/-- The lanes of a value's bits are its lanes' bits. -/
+private theorem lanesOf_toBits (v : Vector α k) :
+    lanesOf k (Packed.toBits v) = v.map Packed.toBits :=
+  BitCast.toLanes_ofLanes _
+
+/-- Every bit of an array is determined only if every bit of each lane is. -/
+private theorem lane_mask_full (v : Vector α k) (h : Packed.mask v = BitVec.allOnes (k * w))
+    (i : Nat) (hi : i < k) : Packed.mask v[i] = BitVec.allOnes w := by
+  apply BitVec.eq_of_getLsbD_eq
+  intro j hj
+  have e := BitCast.getLsbD_ofLanes (v.map Packed.mask) i j hi hj
+  have hlt : w * i + j < k * w := by
+    have : w * i + w ≤ k * w := by rw [Nat.mul_comm k w, ← Nat.mul_succ]; exact Nat.mul_le_mul_left _ hi
+    omega
+  change (Packed.mask v).getLsbD (w * i + j) = _ at e
+  rw [h, BitVec.getLsbD_allOnes, decide_eq_true hlt, Vector.getElem_map] at e
+  rw [← e, BitVec.getLsbD_allOnes, decide_eq_true hj]
+
+instance [LawfulPackedBits α w] : LawfulPackedBits (Vector α k) (k * w) where
+  toBits_ofBits b hb := by
+    change BitCast.ofLanes (((lanesOf k b).map Packed.ofBits).map Packed.toBits) = b
+    have hv : ∀ i (hi : i < k), Packed.valid (α := α) (lanesOf k b)[i] = true := by
+      change (lanesOf (w := w) k b).all (Packed.valid (α := α)) = true at hb
+      exact Vector.all_eq_true.mp hb
+    have e : ((lanesOf k b).map Packed.ofBits).map (Packed.toBits (α := α)) = lanesOf k b := by
+      apply Vector.ext
+      intro i hi
+      rw [Vector.getElem_map, Vector.getElem_map]
+      exact LawfulPackedBits.toBits_ofBits _ (hv i hi)
+    rw [e]
+    exact BitCast.ofLanes_toLanes b
+
+instance [LawfulPackedVal α w] : LawfulPackedVal (Vector α k) (k * w) where
+  ofBits_toBits v h := by
+    have hl : ∀ i (hi : i < k), Packed.valid (α := α) (Packed.toBits v[i]) = true ∧
+        Packed.ofBits (Packed.toBits v[i]) = v[i] :=
+      fun i hi => LawfulPackedVal.ofBits_toBits _ (lane_mask_full v h i hi)
+    constructor
+    · change (lanesOf (w := w) k (Packed.toBits v)).all (Packed.valid (α := α)) = true
+      rw [lanesOf_toBits]
+      exact Vector.all_eq_true.mpr fun i hi => by rw [Vector.getElem_map]; exact (hl i hi).1
+    · change (lanesOf k (Packed.toBits v)).map Packed.ofBits = v
+      rw [lanesOf_toBits]
+      apply Vector.ext
+      intro i hi
+      rw [Vector.getElem_map, Vector.getElem_map]
+      exact (hl i hi).2
+
+instance [LawfulPacked α w] : LawfulPacked (Vector α k) (k * w) := LawfulPacked.of
+
+instance [LawfulPackedBits α w] : LawfulPackedBits (Vec α k) (k * w) where
+  toBits_ofBits b hb := LawfulPackedBits.toBits_ofBits (α := Vector α k) b hb
+
+instance [LawfulPackedVal α w] : LawfulPackedVal (Vec α k) (k * w) where
+  ofBits_toBits v h := by
+    obtain ⟨h1, h2⟩ := LawfulPackedVal.ofBits_toBits (α := Vector α k) v.lanes h
+    refine ⟨h1, ?_⟩
+    cases v
+    exact congrArg Vec.mk h2
+
+instance [LawfulPacked α w] : LawfulPacked (Vec α k) (k * w) := LawfulPacked.of
+
+end Lanes
+
+/-! ## Packed unions
+
+A packed union (generated `structure U where bytes : Vector Byte size`, `ZigLean/PackedRepr.lean`)
+has the bits direction for every union: `ofBits` writes the bits as the integer's bytes and
+`toBits` reads them back (`PackedU.bitsOf_intBytes`). It has no value direction: a byte whose bits
+are all determined in a form other than `.int` (`.mask 0xFF x`, never made by `ofBits`) reads as
+`x` and is rebuilt as `.int x`. -/
+
+/-- Bit `j` of an integer's bytes is the integer's bit `j`. -/
+theorem hostBit_intBytes {n : Nat} (b : BitVec n) {j : Nat} (hj : j < n) :
+    hostBit (intBytes b) j = some (b.getLsbD j) := by
+  have hi : j / 8 < (n + 7) / 8 := by omega
+  have hsz : j / 8 < (intBytes b).size := by simp [intBytes]; omega
+  unfold hostBit
+  rw [Array.getElem?_eq_getElem hsz]
+  simp only [intBytes, Array.getElem_map, Array.getElem_range]
+  have hjm : j % 8 < 8 := Nat.mod_lt _ (by omega)
+  have hbit : (BitVec.ofNat 8 ((b.toNat >>> (8 * (j / 8))) % 256)).getLsbD (j % 8) = b.getLsbD j := by
+    rw [BitVec.getLsbD_ofNat, BitVec.getLsbD]
+    simp only [hjm, decide_true, Bool.true_and, Nat.shiftRight_eq_div_pow]
+    rw [show (256 : Nat) = 2 ^ 8 from rfl, Nat.testBit_mod_two_pow, Nat.testBit_div_two_pow]
+    simp only [hjm, decide_true, Bool.true_and]
+    congr 1
+    omega
+  split
+  · simp only [Byte.bit, Byte.defBits, BitVec.getLsbD_and]
+    have hm : (lowMask8 (n - 8 * (j / 8))).getLsbD (j % 8) = true := by
+      simp only [lowMask8, BitVec.getLsbD_ofNat, hjm, decide_true, Bool.true_and,
+        Nat.testBit_two_pow_sub_one, decide_eq_true_eq]
+      omega
+    simp only [hm, ↓reduceIte, Bool.and_true, hbit]
+  · simp only [Byte.bit, Byte.defBits, BitVec.getLsbD_allOnes, hjm, decide_true, ↓reduceIte, hbit]
+
+/-- **A packed union's bits read back**: the union of an integer's bytes (`ofBits`, at least as
+many bytes as the integer has) has the integer's bits (`toBits`). -/
+theorem PackedU.bitsOf_intBytes {n k : Nat} (b : BitVec n) (hk : (n + 7) / 8 ≤ k) :
+    PackedU.bitsOf n (Raw.ofArray k (intBytes b)).toArray = b := by
+  apply BitVec.eq_of_getLsbD_eq
+  intro j hj
+  have hjk : j / 8 < k := by omega
+  have hsz : j / 8 < (intBytes b).size := by simp [intBytes]; omega
+  have e : hostBit (Raw.ofArray k (intBytes b)).toArray j = hostBit (intBytes b) j := by
+    unfold hostBit
+    rw [Array.getElem?_eq_getElem (by simpa using hjk), Array.getElem?_eq_getElem hsz]
+    simp [Raw.ofArray, Array.getD, hsz]
+  simp only [PackedU.bitsOf, BitVec.getLsbD_cast, BitVec.getLsbD_ofBoolListLE, List.getD_eq_getElem?_getD,
+    List.getElem?_map, List.getElem?_range hj, Option.map_some, Option.getD_some, e,
+    hostBit_intBytes b hj]
 
 /-- **Valid bits read back** (`LawfulPacked`): the rewrite of the arithmetic normal form. -/
 theorem Packed.toBits_ofBits_of {α : Type} {n : Nat} [Packed α n] [LawfulPacked α n] {b : BitVec n}

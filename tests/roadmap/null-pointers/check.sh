@@ -72,6 +72,8 @@ mutation_status=0
 lake env lean "$work/mutant.lean" >"$work/mutation.log" 2>&1 || mutation_status=$?
 python3 tests/roadmap/null-pointers/classify_mutant.py "$mutation_status" \
   "$work/mutation.log" "$work/mutant.lean" "$work/generated/cNull.lean"
+python3 -B scripts/mutation_kill_log.py --check tests/roadmap/null-pointers/check.sh \
+  tests/roadmap/null-pointers/classify_mutant.py ptrIsNull-inverted
 for version in 0.17.1 0.16.0 0.15.2 0.14.1; do
   "$translator" "$here/air/$version" -o "$work/Gen-$version.lean" --namespace NullableNative --prefix 'nullpointers.'
   cat "$here/Runner.lean" >> "$work/Gen-$version.lean"

@@ -18,7 +18,10 @@ import time
 
 ROOT = Path(__file__).resolve().parents[3]
 FIXTURE = ROOT / "tests/roadmap/spawn-failure"
-HEADER = "Thread assignment policy: fallible"
+sys.path.insert(0, str(ROOT / "scripts"))
+from mutation_kill_log import killed as log_kill  # noqa: E402
+MUTANT_FILE, CHECK = "tests/roadmap/spawn-failure/qualify.py", "tests/roadmap/spawn-failure/check.sh"
+HEADER ="Thread assignment policy: fallible"
 HELPERS = runpy.run_path(str(ROOT / "scripts/normalize-generated.py"))
 def fresh_profile(records, version, names):
     if sorted(r["name"] for r in records) != sorted(names) or not records:
@@ -496,6 +499,7 @@ def qualify(mode, destination):
                     raise RuntimeError("mutation target missing")
                 mutant.write_text(source.replace(before, after) + template)
                 gate.run(label, lean + ["-R", str(destination), "--run", str(mutant)], expected=1, marker="SOURCE_REJECTED:")
+                log_kill(MUTANT_FILE, label, CHECK)
             if version == "0.16.0":
                 # `Group.async`'s outcome is the run environment's (the policy argument selects
                 # nothing), so the mutant drops the caller execution: the eager outcome must then
@@ -510,6 +514,7 @@ def qualify(mode, destination):
                 mutant = destination / "no-fallback.lean"
                 mutant.write_text("".join(lines) + template)
                 gate.run("no-fallback", lean + ["-R", str(destination), "--run", str(mutant)], expected=1, marker="SOURCE_REJECTED:")
+                log_kill(MUTANT_FILE, "no-fallback", CHECK)
             gate.run("native-allowed-outcomes", [str(native), "test", "-OReleaseSafe", "--cache-dir",
                      str(destination / "native-cache"), "--dep", "spawn_failure_source",
                      "-Mroot=" + str(FIXTURE / "native.zig"), "-Mspawn_failure_source=" + str(FIXTURE / "spawn_failure.zig")])

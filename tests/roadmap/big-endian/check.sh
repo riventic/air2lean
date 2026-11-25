@@ -130,5 +130,12 @@ for v in "${versions[@]}"; do
   [ "$differ" -ge "$floor" ] || { echo "$v: only $differ lines depend on the byte order" >&2; exit 1; }
   cmp "$case_dir/observed/$v-s390x-linux-musl-ReleaseSafe.txt" "$case_dir/observed/$v-mips64-linux-musl-ReleaseSafe.txt"
 done
+# Byte-order mutants of the retained 0.17.1 s390x translation (mutations.py): the translation
+# builds, the byte-order theorems of BigEndian.Proofs fail on it.
+python3 -B "$case_dir/mutations.py" --self-test
+python3 -B "$case_dir/mutations.py" generate "$work/mutants" | while read -r name; do
+  python3 -B scripts/fixtures.py mutant "big-endian-$name" --src "$work/mutants/$name" --fails BigEndian.Proofs
+  python3 -B "$case_dir/mutations.py" kill "$name"
+done
 python3 "$case_dir/test_cli.py" "$translator"
 echo 'big-endian translation, proof, observation and rejection gates passed'

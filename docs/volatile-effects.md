@@ -238,6 +238,14 @@ two counter reads are equal. The checker now accepts inline asm only in these tw
    one of the oracle's answer sequences. When the device contract declares the same template,
    the device event takes precedence (the device rules then apply: `volatile`, one result).
 
+In both forms every operand reference of the template (`%[name]`, `%[name:modifier]`) must name
+exactly one operand of the block, as the Zig compiler resolves it (`codegen/llvm/FuncGen.zig`
+`airAssembly`): a name that no operand has, `_`, two operands with one name and an unclosed
+`%[` are rejected (`checkAsmOperandNames`, `Air2Lean/AsmContract.lean`). The compiler only finds
+these at code generation, after the AIR is exported, and both forms match the template text,
+not the names: without the check, `rdrand %[ret]` with an output named `foo`, a program that
+does not compile, matched its entry.
+
 Every other asm is `ASM_VOLATILE_EFFECT` (phase `check`, category `unsupported_semantics`, with
 guidance). This covers `cpuid`, port I/O, fences, output-less asm, every `memory` clobber other
 than A01's empty barrier and its memory-region entries, an allowlisted template with other

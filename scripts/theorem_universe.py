@@ -32,7 +32,6 @@ import re
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -241,40 +240,12 @@ def with_lean_path(paths) -> dict:
     return {**os.environ, "LEAN_PATH": os.pathsep.join(str(p) for p in paths)}
 
 
-_NATIVE: dict[tuple, list[str]] = {}
-_NATIVE_LOCK = threading.Lock()
-
-
 def native_code(lake_imports) -> list[str]:
-    """The `lean` options that load the native code Lake loads into a build of a module whose
-    import closure has the Lake modules `lake_imports`: `lake setup-file` computes the shared
-    libraries of their precompiled imports (fsym's engine, docs/build-cache.md#precompiled-fsym)
-    in Lake's load order. With them a universe module runs the same native tactic code as its
-    Lake build and spends the heartbeats that build spends; interpreted, `fsym` spends more, and
-    a budget the fixture build meets times out. The elaborated terms, so the oleans the audit
-    checks, are the same."""
-    key = tuple(sorted(set(lake_imports)))
-    with _NATIVE_LOCK:  # compile_all's workers: one Lake run (which may build the libraries) at a time
-        if key in _NATIVE:
-            return _NATIVE[key]
-        header = {'imports': [{'module': m, 'importAll': False, 'isExported': True, 'isMeta': False}
-                              for m in key], 'isModule': False}
-        # With a header, Lake reads no source: the file names no module of the workspace.
-        result = subprocess.run(['lake', 'setup-file', 'universe-unit.lean', json.dumps(header)],
-                                cwd=ROOT, text=True, capture_output=True)
-        try:
-            setup = json.loads(result.stdout) if not result.returncode else None
-        except ValueError:
-            setup = None
-        if (not isinstance(setup, dict) or not isinstance(setup.get('dynlibs'), list)
-                or not isinstance(setup.get('plugins'), list)
-                or any(not isinstance(p, dict) or p.get('initFn?') or p.get('initFn')
-                       for p in setup['plugins'])):
-            raise RuntimeError(f'lake setup-file gave no supported module setup for {list(key)}:\n'
-                               f'{result.stdout[-2000:]}{result.stderr[-2000:]}')
-        _NATIVE[key] = ([f'--load-dynlib={(ROOT / path).absolute()}' for path in setup['dynlibs']]
-                        + [f'--plugin={(ROOT / p["path"]).absolute()}' for p in setup['plugins']])
-        return _NATIVE[key]
+    """Lake's native code for a universe module whose import closure has the Lake modules
+    `lake_imports` (scripts/lean-deps.py `native_code`): with it the module runs the same native
+    `fsym` as its Lake build, so a heartbeat budget that build meets is met here too. The
+    elaborated terms, so the oleans the audit checks, are the same."""
+    return assumptions.lean_deps().native_code(lake_imports)
 
 
 def compile_unit(file: str, root: str, olean: Path, lean_path, log: Path, *,

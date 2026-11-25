@@ -14,3 +14,5 @@ fi
 # The strength log of the migrated statement (tests/roadmap/strength-log).
 lake env lean tests/roadmap/strength-log/AddressReuse.lean
 lake env lean --run tests/roadmap/address-reuse/Check.lean
+python3 -B scripts/mutation_kill_log.py --check tests/roadmap/address-reuse/check.sh tests/roadmap/address-reuse/Check.lean \
+  provenance-mode-ignored reuse-policy-ignored

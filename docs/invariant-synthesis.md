@@ -537,6 +537,18 @@ loop, the family or why the loop has none; then the `def`s, registered with `@[f
 body outside the given namespace, is an error. `scripts/invgen.py check|write` regenerates every
 committed `Inv.lean` (its `TARGETS` table); it is the `invgen` step of `scripts/regen.py`, right
 after `gen`, so a retranslation regenerates the invariants with it.
+Each loop's entry in the record names the function that runs the loop and that function's
+**semantic fingerprint** (S2b, `docs/stable-generation.md`): `scripts/invgen.py` translates the
+module's committed AIR again (its case of `scripts/gen-integrity.py`) with `--source-map-json`,
+computes the fingerprints of its functions (`scripts/semantic-fingerprints.py`) and passes them to
+the generator (`--fingerprints`). The fingerprint is the documented one without the translator's
+and the runtime's revisions: those change every fingerprint at every translator or runtime
+change, and would make every `Inv.lean` change with them, while the input hash already covers a
+change of what the translator emits and `scripts/invgen.py check` a change of the library's
+pruning. So a recorded fingerprint changes when the function's translated AIR, a callee's, the
+target profile or the translation options change, for example on a retranslation for another
+Zig version. When a file is stale, `scripts/invgen.py check` names the functions whose
+fingerprints changed and their loops.
 The record also holds the SHA-256 of the rest of the file. `scripts/gen-integrity.py invgen`
 (preflight, also without a translator) checks each target's record against the checkout without
 running Lean: a changed generator module, toolchain or input makes the file stale, a hand edit
@@ -579,11 +591,13 @@ unchanged. `nested/check.sh`:
 * checks the proof against it;
 * checks three seeded mutants of the generated file (a wrong cell relation, a dropped bound `x ≤ b`,
   a measure that does not decrease): each still elaborates, and the proof then fails with an
-  elaboration error inside `outer_step`, the theorem whose walk runs the inner loop.
+  elaboration error inside `pairs_total`, the theorem whose walk runs the inner loop (until S2c′,
+  the hand-written `outer_step`).
 
-The outer loop `pairs.loop5` runs a loop in its body. The generator records `"none": "a nested loop"`
-for it, and its invariant (`outerI`, over the library sum `tsum`) stays hand-written (deletion
-plan: engine ledger row P09-E4).
+The outer loop `pairs.loop5` runs a loop in its body. Since S2c′ (below) its invariant is generated
+too, from the inner loop's exit post; the hand `outerI` is deleted, and so are `outer_step` and
+`outer_loop`: `pairs_total` is a bare `fsym`, whose walk of each outer iteration applies the inner
+loop's definitions, so the mutants above now fail inside `pairs_total`.
 
 ### Implemented: the counted family widened (S2c)
 
@@ -620,23 +634,53 @@ function's theorem. (A dropped no-wrap fact of the
 `<=` counter is not among them: the walk runs in `upLe_total`'s context, whose premise
 `n + 1 < 2 ^ 32` restores it.)
 
-Two loops of `counted.zig` stay outside the family, and `Inv.lean` records why (fail closed):
+### Implemented: array items, counter-dependent sums, inner loops (S2c′)
 
-* `pairAt` writes `acc[1]` through `Zig.ptrProject p (·.elem 8 1)`: "a pointer projection (a cell
-  at an offset)". `fsym` forms such a pointer from an owned array (`FTotalTriple.arr_ptrProject`),
-  so the invariant needs the array atom `arr p vs` with item updates, not separate `pts` cells.
-  Under an invariant that owns `arr p [w₀, w₁]`, `fsym` walks the body (item `0` through `p`
-  itself by `FTotalTriple.arr_load_zero`/`arr_store_zero`), and the stored list
-  `([w₀, w₁].set 0 x).set (1#64).toNat y` matches the invariant's list `[?w₀, ?w₁]` (the planner
-  evaluates it to the pattern's constructors, `docs/proof-automation.md`; closed ledger row
-  #atom-args-normal-form). The generator does not emit it yet.
-* `tri` adds the counter to its cell (`acc.* += i`): "a cell that does not go up by a constant".
-  The library sum `tsum n g` (`ZigLean/Sep/Full/TSum.lean`, `g u` over `u < n`) makes the
-  invariant linear, `v + (tsum n g - tsum i g) = v₀ + (tsum n g - tsum i₀ g)` with `g = fun u => u`,
-  and `fsym` walks its step: the arithmetic relates `tsum x.toNat g` to `tsum (i.toNat + 1) g`
-  by the congruence of atoms (`docs/proof-automation.md`, closed ledger row
-  #arith-atom-congruence). The generator does not emit it yet; `nested`'s hand outer invariant
-  `outerI` has this form and `fsym` walks it without glue.
+Three more shapes of the counted family, each a general reading (no per-loop case):
+
+* **Items of an array parameter.** A body that indexes a parameter `p` with a literal index
+  (`Zig.ptrProject p (·.elem size k)`; `p` itself is item `0`) accesses an array (`arraysOf`
+  finds such parameters before the reading; every access through `p` is then an item). The
+  invariant owns it as one atom, `up (arr p (x₀ :: … :: xₘ :: tₚ))`: the items up to the last one
+  the body reaches, each written item `xₖ = wₖ` an existential with its facts (as a written cell:
+  `wₖ = vₖ + cₖ * d`), each item it only reads at its entry value `vₖ`, and the rest `tₚ` (a
+  parameter of any length, so the invariant fits every array at least that long). `fsym` walks
+  the items by `FTotalTriple.arr_load`/`arr_store` (item `0` by `arr_load_zero`/`arr_store_zero`)
+  and matches the stored list against the invariant's constructors (closed ledger row
+  #atom-args-normal-form). Client: `counted.pairAt` (`acc[0] += 1; acc[1] += 2`), `pairAt_total`.
+* **A cell that goes up by a value of the counter.** In a loop that counts up, an increment may be
+  a value `g u` of the counter's value `u` at the iteration's start (also of the parameters, the
+  locals the body does not write and the cells it only reads; the constant part joins `g`). With
+  the library sum `tsum n g` (`ZigLean/Sep/Full/TSum.lean`, `g u` over `u < n`) the invariant is
+  linear: `v + (tsum e g - tsum x g) = vₖ + (tsum e g - tsum x₀ g)` (`e` the counter's exit
+  value: the increments still to come plus the cell stay at the entry value plus all of them),
+  with the no-overflow fact `vₖ + (tsum e g - tsum x₀ g) < 2 ^ w`, and the exit post
+  `v = vₖ + (tsum e g - tsum x₀ g)`. `fsym` walks the step: the counter's step relates
+  `tsum x.toNat g` to `tsum (i.toNat + 1) g` by the congruence of atoms (closed ledger row
+  #arith-atom-congruence), and `tsum_sub_of_lt` under the loop test bounds the add. Client:
+  `counted.tri` (`acc.* += i`), `tri_total`. A loop that counts down with such an increment is
+  outside (recorded): its sum runs over the values above the counter, a form the arithmetic has
+  no regression for.
+* **An inner counted loop** (`execInner`). A body that runs `Zig.loop inner again` reads the inner
+  body as a counted loop over the same locals and continues after it with the inner loop's exit
+  post as values: the inner counter at its exit value, each cell it writes up by its constant
+  increment times the distance its counter goes. A cell that the inner loop moves by a distance
+  that depends on the outer counter is then a counter-dependent sum (above). The inner counter is
+  a **scratch local**: the body sets it before it reads it, so no path reads its value at an
+  iteration's start, and the invariant and the exit post do not state it. The generator
+  generates the inner loop first (`generate` orders the loops by the loops their bodies run) and
+  puts its generated definitions in front of every walk of the outer loop's step (`Cand.deps`),
+  which applies them at the inner loop as a client's walk does. Client: `nested.pairs.loop5`; its
+  hand invariant `outerI`, `outerPost`, `outer_step` and `outer_loop` are deleted and
+  `pairs_total` (unchanged statement) is a bare `fsym`. An inner loop with an increment that is not
+  a constant, with a loop of its own or with several exits is outside (recorded).
+
+An outer body that runs an inner loop which takes steps gets no credit-mode definitions (the record
+says why): one run of it takes more than the one step that the counted loop rule pays with one
+credit, so its exact count is not the outer measure.
+
+A file whose definitions name `arr` or `tsum` imports `ZigLean.Sep.Full.Arr` or
+`ZigLean.Sep.Full.TSum` (`Cand.imports`), and only then.
 
 ### Implemented: Houdini pruning (S2f)
 
@@ -836,8 +880,8 @@ What the slices do not have yet (next slices, sizes S < M < L):
 
 | Next | Content | Size |
 |---|---|---|
-| S2b | the semantic fingerprints (`docs/stable-generation.md`) of the functions whose loops a record covers, from each target's source-map sidecar (`--source-map-json`, `scripts/semantic-fingerprints.py index`), so a stale record names the loops whose functions changed. (The input hashes and `gen-integrity.py invgen` are implemented, above.) | S |
-| S2c′ | the rest of the counted family: cells at offsets of a parameter (an owned `arr p vs` with item updates, `counted.pairAt`; the engine side, #atom-args-normal-form, is closed), cell updates that depend on the counter (the library sum `tsum`, `counted.tri`, then the outer loop of `nested` with a summary of its generated inner loop, replacing the hand `outerI`, `outerPost`, `outer_step` and `outer_loop`; the engine side, #arith-atom-congruence, is closed) | M |
+| S2b | **Done** (2026-11-25): each loop's entry in the record names its function and that function's semantic fingerprint, and `scripts/invgen.py check` names the functions that changed (above) | S |
+| S2c′ | **Done** (2026-11-25): array items, counter-dependent sums and inner counted loops ("Implemented: array items, counter-dependent sums, inner loops"). Still outside: a counter-dependent increment in a loop that counts down, an inner loop whose increments are not constants, loops nested three deep | M |
 | S2d | the list-walk family on the library list family (layer 1, measure the ghost list's length): `revInv`, `sumInv` (`Proofs/Lists/Linked.lean`), `freeInv` (`Proofs/Lists/Alloc.lean`), `loop-tactics/Queue.lean` unchanged on top. Not covered yet (checked 2026-11-06 by running `air2lean-invgen Proofs.Lists.Gen Lists`): `reverse.loop6` and `sum.loop6` give "an unsupported term: i8.isSome", and `freeAll.loop5` gives "an unsupported term: i7.isSome". The loop test is on an optional node pointer (`?*Node`), not on a counter. The engine side is done (ledger #list-walk-step, `docs/proof-automation.md`): `fsym` splits the ghost list at the cursor's test, folds the node back constructor by constructor at a repetition (a node at a segment's end by the caller's update `lseg_snoc_upd`), and applies an `@[fsym_inv]` invariant with a ghost measure (`B.inv … s n`, the nodes left, which the locals do not determine; `loop_ghost_ex`). `Proofs/Lists/Linked.lean`'s `reverse` and `sum` are bare `fsym` walks; their step and loop lemmas are deleted. **Generator done (PR #725)**: `air2lean-invgen` reads `Option.isSome`/`some`/`Zig.optPayload` on an optional-pointer cursor and the loads and stores of a node's fields (`Zig.ptrProject` offsets), recognizes a list walk (a visit, or a reversal that points each node back to a prefix local; accumulators that add the item or a constant), and emits the invariant, with a ghost measure, over the library list family `listSeg` (`ZigLean/Sep/Full/ListSeg.lean`, the S3 list family) at the node layout read off the body (`F.loopN.node`: `next`, the item field if read, the rest as a parameter); the facts are Houdini candidates, the step's walk with the exit post decides. `Proofs/Lists/OpenInv.lean` (target of `scripts/invgen.py`) replaces the hand invariants of `Linked.lean`, whose `node`/`lseg`/`list` are the family's instance; `reverse` is proved for every node with a `next` field. **`freeAll.loop5` done** (2026-11-24, "a list walk with a call" above): the generator reads `CM` bodies and the contract of the call (`--spec`/`--contract`), and states the nodes passed over `listSegRev` at what the contract leaves of a node, so no fold over an unknown `Nat` is needed; `Proofs/Lists/AllocInv.lean` replaces `freeInv` and the hand step and loop lemmas of `Proofs/Lists/Alloc.lean`. **Exact step counts done** (2026-11-24, "the credit mode" above): `sum_exact` and `freeAll_exact` walk their loops from generated credit-mode invariants, the second registration of the body | L |
 | S2e | loops over array contents (`Proofs/Slices/Sep.lean`'s `revInv`: quantified item facts from a permutation template) | L |
 
@@ -863,8 +907,7 @@ New rows. Numbers are assigned when the fsym lane records them in its ledger.
 * **P09-E5** `@[fsym_upd]` ghost-update registry, keyed by heads, tried at returns. It generalizes
   the caller updates of 9f.
 
-Existing open rows on the path: #21 (disjunctions in `fsym_arith`:
-Houdini candidates with case splits), #55 and #60 (cost in large states: generation runs many
+Existing open rows on the path: #55 and #60 (cost in large states: generation runs many
 walks over the arena's state), #58, #59, #61 (arena planning), #62 (struct ownership in a thread),
 #64–#67 (the FBA updates' workarounds, which E5 and the bump-ledger family replace).
 

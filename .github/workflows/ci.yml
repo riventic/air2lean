@@ -1423,6 +1423,9 @@ jobs:
           mkdir -p "$RUNNER_TEMP/loop-tactics"
           lake build ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Strength ZigLean.Simp Proofs.Lists.Linked Proofs.Recursion.Proofs air2lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/build.log"
           lake env lean tests/roadmap/loop-tactics/Queue.lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Queue.log"
+          # Its elaboration rejected the queue walk's designated mutants (Q02 kill evidence).
+          python3 -B scripts/mutation_kill_log.py --check tests/roadmap/loop-tactics/Queue.lean tests/roadmap/loop-tactics/Queue.lean \
+            queue-overflow-premise-dropped queue-sum-off-by-one
           lake env lean tests/roadmap/loop-tactics/Recursion.lean 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Recursion.log"
           # Retained AIR of a nested loop: retranslate, compare, kernel-check the proof.
           bash tests/roadmap/loop-tactics/nested/check.sh 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Nested.log"
@@ -1540,6 +1543,8 @@ jobs:
           set -euo pipefail
           lake build ZigLean
           bash tests/roadmap/extern-calls/check.sh
+          # X01: translate-c declarations bound to Zig's libc through the C-ABI conversion.
+          bash tests/roadmap/extern-abi/check.sh
 
       # E02: function-pointer call sites bound to registry contracts (`&ext_visit` in a vtable
       # and as a callback, also from a spawned thread), proofs from the callback contract alone.
@@ -1752,6 +1757,16 @@ jobs:
           AIR2LEAN_ZIG_NATIVE="${{ github.workspace }}/host-zig/zig" tests/roadmap/bitcast-017/check.sh --native
           # @divCeil: committed compiler-exported AIR, translation and native differential.
           AIR2LEAN_ZIG_NATIVE="${{ github.workspace }}/host-zig/zig" tests/roadmap/zig017/divceil/check.sh
+
+      # P04/P06: the ring buffer and the shifting array of queue.zig (0.17.1) prove the queue
+      # contract (QueueImpl) with their step counts, its clients are proved from the contract
+      # only, pushAll with its exact step count under the capacity premise; seeded mutants fail;
+      # the native run with stock 0.17.1.
+      - name: Queues against the queue contract
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate && matrix.zig == '0.17.1' }}
+        env:
+          AIR2LEAN_NATIVE_ZIG: ${{ github.workspace }}/host-zig/zig
+        run: bash tests/roadmap/queue-adt/check.sh
 
       # Batch D: this row's Zig version natively on x86_64-linux (s390x and mips64 under
       # qemu-user): packed casts and their compile errors, NaN bits through memory and
@@ -1970,7 +1985,7 @@ jobs:
           bash tests/roadmap/allocation-policy/check.sh 2>&1 | tee "$AIR2LEAN_ALLOCATION_REPORT_DIR/check.log"
           python3 tests/roadmap/allocation-policy/mutations.py 2>&1 | tee "$AIR2LEAN_ALLOCATION_REPORT_DIR/mutations.log"
 
-      # M01: allocator identity, arena/fixed-buffer policies of the std-mode model (executable
+      # M01: allocator identity and the arena policy of the std-mode model (executable
       # regressions; M01's theorems over the translated arena run in tests/roadmap/alloc-arena).
       - name: Allocator identity model regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
@@ -2482,10 +2497,15 @@ jobs:
             lake env lean --run tests/roadmap/rwlock-contracts/Runtime.lean
             lake env lean --run tests/roadmap/sync-contracts/Runtime.lean
             lake env lean --run tests/roadmap/shared-reclamation/Runtime.lean
+            # Each run rejected its mutants (Q02 kill evidence; written only with AIR2LEAN_MUTATION_KILL_LOG).
+            python3 -B scripts/mutation_kill_log.py --check tests/roadmap/shared-reclamation/Runtime.lean \
+              tests/roadmap/shared-reclamation/Runtime.lean heap-free-before-readers-joined stack-free-before-readers-joined
             lake env lean --run tests/roadmap/pointer-atomics/Generate.lean "$RUNNER_TEMP/pointer-atomics"
             lake env lean "$RUNNER_TEMP/pointer-atomics/PtrAtomics.lean"
             # C09: semantic mutants of the pointer-publication client must be rejected.
             lake env lean --run tests/roadmap/pointer-atomics/Mutants.lean
+            python3 -B scripts/mutation_kill_log.py --check tests/roadmap/pointer-atomics/Mutants.lean \
+              tests/roadmap/pointer-atomics/Mutants.lean relaxed-pointer-publish free-before-join
             # C07: detached threads and handle ownership (kernel witnesses; detach admission
             # and emission, whose generated module must elaborate).
             lake env lean tests/roadmap/detached-threads/Runtime.lean
@@ -2495,6 +2515,8 @@ jobs:
           fi
           # C05: sampled spurious-wake and cancelation schedules (no translation involved).
           lake env lean --run tests/roadmap/cancellation/Runtime.lean
+          python3 -B scripts/mutation_kill_log.py --check tests/roadmap/cancellation/Runtime.lean \
+            tests/roadmap/cancellation/Runtime.lean cancel-is-await canceled-status-dropped
 
       # Qualify the complete Zig 0.16.0 Linux translation selected above. The explicit
       # assembly/libm policy is reviewed for this profile and the pinned Lean release.
@@ -2618,6 +2640,25 @@ jobs:
           AIR2LEAN_BITOPS_OUT_DIR: ${{ runner.temp }}/air2lean-bitops
         run: tests/roadmap/bitops/check.sh
 
+      # L08/L10: byte permutations and finite error storage, each against fresh AIR and native
+      # observations, with the designated semantic mutants of assurance/mutation-map.json (Q02:
+      # a mutant's kill is bound to the CI check that runs it).
+      - name: Byte permutation regression, differential gate and mutants
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-0.16.0/bin/zig
+          AIR2LEAN_ZIG: zig
+        run: bash tests/roadmap/byte-permutation/check.sh
+
+      - name: Finite error storage differential gate and dictionary mutants
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-0.16.0/bin/zig
+          AIR2LEAN_ZIG_NATIVE: zig
+          AIR2LEAN_ERROR_STORAGE_VERSION: "0.16.0"
+          AIR2LEAN_ERROR_STORAGE_OUT_DIR: ${{ runner.temp }}/air2lean-error-storage
+        run: bash tests/roadmap/error-storage/check.sh
+
       # L02 native qualification of the wide cases (tests/roadmap/bitops-native): AIR of
       # wide.zig is exported with this row's patched compiler, translated and evaluated in Lean,
       # and every row is compared with stock Zig executables in four optimization modes:
@@ -2668,6 +2709,9 @@ jobs:
           tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
           cd "$tree"
           lake env lean -R tests/roadmap/vcs -o "$RUNNER_TEMP/vcs/Extract.olean" tests/roadmap/vcs/Extract.lean 2>&1 | tee "$RUNNER_TEMP/vcs/Extract.log"
+          # Its elaboration pinned the residual of each mutant (Q02 kill evidence).
+          python3 -B scripts/mutation_kill_log.py --check tests/roadmap/vcs/Extract.lean tests/roadmap/vcs/Extract.lean \
+            overflow-bound-dropped cells-not-swapped provenance-premise-dropped
           # The strength log of its memory contracts (tests/roadmap/strength-log).
           LEAN_PATH="$RUNNER_TEMP/vcs${LEAN_PATH:+:$LEAN_PATH}" lake env lean tests/roadmap/strength-log/Vcs.lean
 

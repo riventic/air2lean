@@ -43,8 +43,9 @@ python3 scripts/mutation-map.py check --json   # problems, per-category mutants,
 row lacks evidence, a `scripts/mutate.sh` or `mutants.py` mutation is mapped to no ID, or one of
 the six categories has no mutant anywhere. It prints the mutants per category and one `gap` line
 per incomplete row that lacks negative tests, mutants or a declared category. Classification
-comes from ROADMAP.md, so promoting a row to `complete` fails until its evidence is mapped. The
-checker reads text only; it does not show that a mutant is killed.
+comes from ROADMAP.md, so promoting a row to `complete` fails until its evidence is mapped. Every
+designated mutant outside `mutants.py` must also have a recorded kill (below); a `complete` row
+may not rely on a mutant whose kill is `unrecorded`.
 
 ## Python-side mutants
 
@@ -79,18 +80,43 @@ PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/mutation-map/test_mutation_map.p
 ```
 
 All three run in CI ("Mutation map and Python-side mutants"). The other Lean/Zig mutants the
-map names (`tests/roadmap/*/check.sh`, `mutations.py`) stay in their own gates.
+map names (`tests/roadmap/*/check.sh`, `mutations.py`) stay in their own gates, which report
+their kills to the ledger below.
 
-## Kill evidence for `scripts/mutate.sh`
+## Lean-side fixture mutants
 
-`assurance/mutation-kills.json` records, for each `scripts/mutate.sh` mutation, the regression
-that killed it: `{"kind": "diff", "target": "<example>"}` (the differential test of that example
-reported a mismatch or an eligible count change) or `{"kind": "proof", "target": "<module>"}`
-(`lake build <module>` failed with a Lean error, possibly in a dependency such as
-`ZigLean.Conc.Lemmas`), plus `block_sha256`, the hash of the mutation's text in `mutate.sh`.
-`check` fails when a designated `mutate.sh` mutant has no recorded kill, the killing example or
-module does not exist, the hash differs (the mutation was edited after its kill was recorded),
-or the ledger names a mutation that is gone. A survivor can never be recorded.
+A fixture whose check elaborates retained Lean (`tests/roadmap/{pointer-width,futures,env-boundaries}/mutations.py`)
+builds one mutated copy of its translation (or of its scripted client instance) per mutant below the
+check's work directory and runs the fixture's own proofs or runtime schedules on it. `scripts/lean_mutant.py`
+holds the shared steps: `edit` (each anchor occurs exactly once), `build_gen` (an invalid mutant aborts the
+run) and `reject`, which accepts a kill only when Lean fails, every error lies in the checked file and each
+declaration the mutant must break contains an error; a runtime mutant is killed only by the named `require`
+message. A mutant that passes or fails for another reason aborts the check: a survivor is a finding.
+
+## Kill evidence
+
+`assurance/mutation-kills.json` records, for each `scripts/mutate.sh` mutation and each
+designated fixture mutant, the regression that killed it: `{"kind": "diff", "target":
+"<example>"}` (the differential test of that example reported a mismatch or an eligible count
+change), `{"kind": "proof", "target": "<module>"}` (`lake build <module>` failed with a Lean
+error, possibly in a dependency such as `ZigLean.Conc.Lemmas`), or `{"kind": "check", "target":
+"<path>"}` (a `tests/` or `scripts/` file that a `.github/workflows/*.yml` step names, so a
+hyphenated fixture such as `tests/roadmap/big-endian/check.sh` can be the killer), plus
+`block_sha256`. A `mutate.sh` mutation's key is its label and its hash covers the mutation's text
+in `mutate.sh`; a fixture mutant's key is `<path>#<name>` (the map entry's path and name) and its
+hash covers the whole file at `path`. `check` fails when a designated mutant has no recorded
+kill, the killing example, module or check does not exist (or the check is run by no workflow),
+the hash differs (the mutant's file was edited after its kill was recorded), or the ledger names
+a mutant that is no longer designated. A survivor can never be recorded. A mutant no CI check
+runs may carry `{"unrecorded": reason, block_sha256}` (for example the patch-only
+`tests/roadmap/resize-remap/mutations.py`): `check` lists it as a gap, and a `complete` row
+relying on it fails.
+
+Fixture runners report a kill only after their own classification: `scripts/mutation_kill_log.py`
+(`killed(path, names, check)` from Python, or `python3 -B scripts/mutation_kill_log.py --check
+CHECK MUTANT_FILE NAME...` after a check that must reject the mutants, for example a Lean file of
+`fail_if_success` mutants) appends `<path>#<name> killed check <check>` to
+`AIR2LEAN_MUTATION_KILL_LOG` and does nothing when it is unset.
 
 ```sh
 AIR2LEAN_MUTATION_KILL_LOG=kills.log scripts/mutate.sh        # also per shard (heavy)
@@ -98,7 +124,8 @@ python3 scripts/mutation-map.py kills record --log kills.log  # merge killed mut
 python3 scripts/mutation-map.py kills verify --log kills.log  # fail unless each was killed by the recorded regression
 ```
 
-`mutate.sh` appends one line per mutation it runs (`<label> killed|survived diff|proof <target>`).
+`mutate.sh` appends one line per mutation it runs (`<label> killed|survived diff|proof <target>`);
+running a fixture's CI check with the variable set appends its fixture kills the same way.
 `record` refuses a log with a survivor; the CI mutation shards run `verify` on their own log, so a
 mutant that survives or is killed by something else than the recorded regression fails the job.
 `mutate.sh` aborts as a setup failure, never reporting "killed" or "survived", when a mutation

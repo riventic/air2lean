@@ -8,7 +8,7 @@ cd "$repo_root"
 python3 -B scripts/lean-deps.py --build tests/roadmap/global-init
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first (lake build air2lean)' >&2; exit 1; }
-lean_cmd=(lake env lean)
+lean_cmd=(python3 -B scripts/lean-deps.py --lean)  # `lake env lean` with Lake's native fsym
 if [ -n "${AIR2LEAN_LEAN:-}" ]; then lean_cmd=("$AIR2LEAN_LEAN"); fi
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-global-init.XXXXXX")
 trap 'rm -rf "$work"' EXIT

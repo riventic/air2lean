@@ -19,11 +19,14 @@ cmp <(tail -n +2 "$work/Gen15.lean") <(tail -n +2 "$dir/ThreadLocals/Gen.lean")
 mkdir -p "$work/olean/ThreadLocals"
 export LEAN_PATH="$work/olean:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
 for mod in Gen Counters Leak; do
-  lake env lean -R "$dir" -o "$work/olean/ThreadLocals/$mod.olean" "$dir/ThreadLocals/$mod.lean"
+  # With Lake's native fsym where the module reaches it (scripts/lean-deps.py --lean).
+  python3 -B scripts/lean-deps.py --lean -R "$dir" -o "$work/olean/ThreadLocals/$mod.olean" "$dir/ThreadLocals/$mod.lean"
 done
 lake env lean "$dir/Check.lean"
 # The strength log of the migrated proof (tests/roadmap/strength-log).
 lake env lean tests/roadmap/strength-log/ThreadLocals.lean
 lake env lean --run "$dir/ThreadLocals/Runtime.lean"
+python3 -B scripts/mutation_kill_log.py --check tests/roadmap/thread-locals/check.sh \
+  tests/roadmap/thread-locals/ThreadLocals/Runtime.lean shared-instance immortal-instance
 PYTHONDONTWRITEBYTECODE=1 python3 "$dir/test_cli.py" "$translator"
 echo 'thread-local translation, proofs, schedules, mutants and CLI checks passed'

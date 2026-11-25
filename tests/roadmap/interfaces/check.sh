@@ -14,7 +14,7 @@ python3 -B scripts/lean-deps.py --build tests/roadmap/interfaces
 here=tests/roadmap/interfaces
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first (lake build air2lean)' >&2; exit 1; }
-lean_cmd=(lake env lean)
+lean_cmd=(python3 -B scripts/lean-deps.py --lean)  # `lake env lean` with Lake's native fsym
 if [ -n "${AIR2LEAN_LEAN:-}" ]; then lean_cmd=("$AIR2LEAN_LEAN"); fi
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-interfaces.XXXXXX")
 trap 'rm -rf "$work"' EXIT
@@ -102,6 +102,16 @@ used = {a.strip() for g, _ in groups for a in g.split(",") if a.strip()}
 assert ": error" not in text and len(groups) == n, text
 assert used <= {"propext", "Classical.choice", "Quot.sound"}, text
 PY
+done
+# M04: semantic mutants of the translated std allocator sentinel path (the retained 0.17.1
+# Interfaces/Sentinel.lean): the unchanged SentinelSpec proofs must reject each one.
+python3 -B tests/roadmap/callbacks/mutants.py generate sentinel "$work/mutants" | while IFS=: read -r name module proofs; do
+  mroot="$work/mutants/$name"
+  "${lean_cmd[@]}" -R "$mroot" -o "$mroot/${module%.lean}.olean" "$mroot/$module"
+  cp "$here/$proofs" "$mroot/$proofs"
+  status=0
+  LEAN_PATH="$mroot:$LEAN_PATH" "${lean_cmd[@]}" -R "$mroot" "$mroot/$proofs" > "$mroot/log" 2>&1 || status=$?
+  python3 -B tests/roadmap/callbacks/mutants.py classify "$name" "$status" "$mroot/log" "$mroot/$proofs"
 done
 PYTHONDONTWRITEBYTECODE=1 python3 "$here/test_cli.py" "$translator"
 echo "interfaces: ok"

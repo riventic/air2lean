@@ -119,9 +119,6 @@ def unread (xs : List (BitVec 8)) (s : countTokensLocals) : Nat := xs.length - s
 def post (sl : Slice) (xs : List (BitVec 8)) (r : countTokensExit × countTokensLocals) : FAssn :=
   ⟪r.1 = .br9 ∧ r.2.count.toNat = tokens .start xs % 2 ^ 32⟫ ⋆ (up (arr sl.ptr xs) ⋆ plain)
 
--- The ranks of the states are arithmetic facts for `fsym`.
-attribute [local fsym_arith] rank
-
 /-- One run of the body, in every state: the step premise of `FTotalTriple.loop_dispatch`. -/
 theorem step (sl : Slice) (xs : List (BitVec 8)) (hlen : sl.len.toNat = xs.length)
     (s : countTokensLocals) :
