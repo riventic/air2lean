@@ -22,11 +22,14 @@ as it walks a sequential program, with these rules:
   command that no provider shows local (an atomic op, a read of another thread's bytes) gets no
   thread rule from a sequential one: atomic ops have their own thread rules
   (`docs/sep-threads.md`).
-* **Locality providers** (`@[fsym_provider]`, kinds `ThreadLocal` and `OwnsPtr`): an owned access
-  (`load`, `store`, `loadBytes`, `storeBytes`, `@memset`, `@memmove`, `@memcpy`) is local when the
-  precondition owns its bytes (`OwnsPtr`, from an owned view: `bytesAt` and `pts` here, each other
-  view in its module: `regionIn` in `Region`, `region` and error-union payloads in `Typed`, `arr`
-  in `Arr`); `alloc`, results (`pure`, `throw`) and pure steps (`StateT.lift`) always are.
+* **Locality providers** (`@[fsym_provider]`, kinds `ThreadLocal`, `OwnsPtr` and `ReadsPtr`): an
+  owned access (`load`, `store`, `loadBytes`, `storeBytes`, `@memset`, `@memmove`, `@memcpy`) is
+  local when the precondition owns its bytes (`OwnsPtr`, from an owned view: `bytesAt` and `pts`
+  here, each other view in its module: `regionIn` in `Region`, `region` and error-union payloads
+  and codes in `Typed`, `arr` in `Arr`); a read is local when the precondition holds or reads its
+  bytes by a share (`ReadsPtr`: owned bytes, `ReadsPtr.of_owns`, or `spts` in `Share`; the
+  pointer-try reads in `Try`); `alloc`, results (`pure`, `throw`) and pure steps (`StateT.lift`)
+  always are.
 * **Native thread rules** (`@[fsym]` with an `FTTotalTriple` conclusion): steps that read only the
   blocks (`@intFromPtr`, pointer comparisons and formation, bounds checks) are thread rules by
   their proofs (`FTTotalTriple.of_read`); `Ops`' here, `Region`'s in `Region`, and the `const`
@@ -224,11 +227,7 @@ theorem liftR_bind {β : Type} {g : Result α} {f : α → MemM β} (hf : ∀ v,
 /-- **Pointer formation, then a local step**: the formation keeps the memory (`bind_keep`). -/
 theorem ptrProject_bind {β : Type} {p : Ptr} {f : Ptr → Ptr} {k : Ptr → MemM β}
     (hk : ∀ v, ThreadLocal P (k v)) : ThreadLocal P (Zig.ptrProject p f >>= k) :=
-  bind_keep (ptrProject p f) (fun m _ _ e => by
-    simp only [Zig.ptrProject, StateT.run] at e
-    split at e
-    · exact (Prod.mk.inj (Result.pure_inj e)).2.symm
-    · exact (Proto.MemM.throw_ok (m := m) e).elim) hk
+  bind_keep (ptrProject p f) (fun _ _ _ e => (ptrProject_ok e).2) hk
 
 /-- **`@memset`** of `n` items over owned bytes, with the size of the bytes it writes (`hsz`, a
 fact of `fsym_arith`). -/

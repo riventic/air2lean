@@ -419,7 +419,7 @@ theorem FTotalTriple.errIsErrAt_region {t : Option ErrName} (hal : Nat.min al 2 
   show FTotalTriple _ (do
     let x ← liftM (errOfBytes (← Zig.loadBytes (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1)
       2 (Nat.min al 2)))
-    Pure.pure x.isSome) _
+    pure x.isSome) _
   refine FTotalTriple.bind (FTotalTriple.errCode_bytes hal heo hfit) fun x =>
     FTotalTriple.lift fun hx => ?_
   subst hx
@@ -518,7 +518,7 @@ variable {d : ErrorDomain}
     show FTotalTriple _ (do
       let x ← liftM ((optionalErrorEnc d).decode
         (← Zig.loadBytes (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2 (Nat.min al 2)))
-      Pure.pure x.isSome) _
+      pure x.isSome) _
     refine FTotalTriple.bind (FTotalTriple.errCode_bytes hal heo (errCode_fit hs)) fun x =>
       FTotalTriple.lift fun hx => ?_
     subst hx
@@ -1265,11 +1265,6 @@ pointer. -/
 @[fsym_provider] theorem ReadsPtr.errCode_spts {x : Except ErrName α} :
     ReadsPtr (spts q a φ x) (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2 :=
   ReadsPtr.spts_add (errUnion_bounds _ _).1
-
-/-- The error code of an owned error union. -/
-@[fsym_provider] theorem OwnsPtr.errCode {x : Except ErrName α} :
-    OwnsPtr (up (Zig.pts q a x)) (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2 :=
-  OwnsPtr.pts_add (errUnion_bounds _ _).1
 
 /-- **A payload load of a shared error union** is local (`ThreadLocal.loadOwned`). -/
 @[fsym_provider] theorem ThreadLocal.errPayload_sload {x : Except ErrName α} {b : Nat} :
