@@ -104,15 +104,17 @@ def asmTemplateRefs (template : String) : Except String (List String) :=
 
 /-- The operand (AIR order: outputs, then inputs) that the reference `%[name]` names. -/
 def asmOperandIndex (names : Array String) (name : String) : Except String Nat :=
-  match if name == "_" then none else names.findIdx? (· == name) with
-  | some k => pure k
-  | none => throw s!"'%[{name}]' names no operand of the block (its operands are named \
-      {names.toList}; `_` names none)"
+  match names.findIdx? (· == name) with
+  | some k => if name != "_" then pure k else unknown
+  | none => unknown
+where
+  unknown : Except String Nat := throw s!"'%[{name}]' names no operand of the block (its operands are named \
+    {names.toList}; `_` names none)"
 
 /-- Every operand reference of the template names exactly one operand (`names`, AIR order). -/
 def checkAsmOperandNames (template : String) (names : Array String) : Except String Unit := do
   for (n, k) in names.zipIdx do
-    if n != "_" && (names.extract 0 k).contains n then
+    if n != "_" && names.findIdx? (· == n) != some k then
       throw s!"two operands of the block are named '{n}'"
   for name in ← asmTemplateRefs template do
     discard <| asmOperandIndex names name
