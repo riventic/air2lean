@@ -34,7 +34,7 @@
 # kind, a disagreement counts as "host"; any other difference is a mismatch (F3). A panic, error
 # or exclusion against a value is never a host difference. CI (x86_64-linux) is the reference.
 #
-# The native side (each example's harness, the libm archive and its self-check, the asm archive)
+# The native side (each example's harness, the libm archive and its self-check)
 # is built and the harnesses run in parallel, one job per example (scripts/par.py: AIR2LEAN_JOBS
 # workers, output in example order). With AIR2LEAN_CAS_DIR set, every stock-Zig build goes through
 # the shared cache (`scripts/cas.py native`, docs/build-cache.md): an unchanged harness is not
@@ -274,13 +274,6 @@ EOF
   stock_zig build-exe -OReleaseSafe -mcpu=baseline ${AIR2LEAN_DIFF_TARGET:+-target "$AIR2LEAN_DIFF_TARGET"} ${AIR2LEAN_ROSETTA_LINK_FLAGS:-} \
     -femit-bin="$native_dir/libm_selfcheck" tests/diff/libm/selfcheck.zig "$native_dir/air2lean_libm.a"
 
-  echo "== building asm archive ==" >&2
-# tests/diff/asm/asm.zig re-implements examples/asm/asm.zig's ops with ordinary Zig builtins
-# (@byteSwap/@popCount/@clz, `/` and `%`) instead of inline asm, so it builds on any host, unlike the example
-# itself (x86_64 only). No compiler_rt dependency (unlike libm): these are plain integer ops.
-  # shellcheck disable=SC2086  # $target_flags are flags
-  stock_zig build-lib -static -fPIC -OReleaseFast $target_flags --name air2lean_asm \
-    -femit-bin="$native_dir/air2lean_asm.a" -Mroot=tests/diff/asm/asm.zig
   printf '%s\n' "$native_stamp" > "$native_dir/air2lean-native.txt"
 fi
 [ -z "$build_only" ] || exit 0
@@ -292,9 +285,8 @@ echo "== running zig harnesses ==" >&2
 # shellcheck disable=SC2086  # $examples is a space-separated list
 python3 scripts/par.py --mem-mib 512 -- "$native_dir/{}" ::: $examples
 diff_phase=build_libm
-mkdir -p tests/diff/out/libm tests/diff/out/asm
+mkdir -p tests/diff/out/libm
 cp "$native_dir/air2lean_libm.a" tests/diff/out/libm/air2lean_libm.a
-cp "$native_dir/air2lean_asm.a" tests/diff/out/asm/air2lean_asm.a
 echo "== libm self-check ==" >&2
 "$native_dir/libm_selfcheck"
 

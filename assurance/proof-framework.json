@@ -8,12 +8,6 @@
       "approved": "coordinator 2026-10-13 (structural gate, csl)"
     },
     {
-      "name": "BlkStep",
-      "module": "ZigLean.Conc.Word",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate, sync)"
-    },
-    {
       "name": "CAllocSpec",
       "module": "ZigLean.Sep.Full.Dispatch",
       "status": "target",
@@ -199,18 +193,6 @@
     },
     {
       "name": "Fits",
-      "module": "Proofs.Sync.Semaphore",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
-      "name": "Fits",
-      "module": "ZigLean.Conc.Lock",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
-      "name": "Fits",
       "module": "ZigLean.Sep.Full.Cond",
       "status": "target",
       "approved": "coordinator 2026-11-04 (maintainer decision PR #575 comment 6625654179: C.Fits extends L.Fits (C.prim L) with the window field)"
@@ -234,12 +216,6 @@
       "approved": "coordinator 2026-11-04 (PR #575 comment 6638437976: FSem.Fits is L.Fits S.prim with ok_s and the window field; precedent FCond.Fits, PR #575 decision 6625654179)"
     },
     {
-      "name": "FitsOn",
-      "module": "ZigLean.Conc.Lock",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
       "name": "Float.AllowedSpec",
       "module": "ZigLean.Float.Allowed",
       "status": "target",
@@ -250,12 +226,6 @@
       "module": "ZigLean.Sep.Full.Dispatch",
       "status": "target",
       "approved": "coordinator 2026-10-13 (FnSpec, framework-approvals.md)"
-    },
-    {
-      "name": "Frame",
-      "module": "Proofs.Sync.RwLock",
-      "status": "target",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
       "name": "Grows",
@@ -273,30 +243,6 @@
       "name": "Inv",
       "module": "Proofs.Detach.Worker",
       "status": "target",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
-      "name": "Keep",
-      "module": "ZigLean.Conc.Word",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed); retires into FStepIn/RestStep (coordinator 2026-10-14, maintainer-allowed)"
-    },
-    {
-      "name": "KeepK",
-      "module": "ZigLean.Conc.Word",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate, sync)"
-    },
-    {
-      "name": "Lock",
-      "module": "ZigLean.Conc.Lock",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
-      "name": "LocsKeep",
-      "module": "ZigLean.Conc.LockBase",
-      "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
@@ -326,18 +272,6 @@
     {
       "name": "OkR",
       "module": "Air2Lean.SemView",
-      "status": "target",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
-      "name": "Op",
-      "module": "ZigLean.Conc.Word",
-      "status": "target",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
-      "name": "ProtectedFacts",
-      "module": "Proofs.Sync.RwLockContract",
       "status": "target",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
@@ -389,17 +323,6 @@
       "approved": "coordinator 2026-11-07 (maintainer 2026-11-03: *Impl gate released, SemImpl and RwLockImpl built like MutexImpl/CondImpl; hroom premises maintainer 2026-11-06; PR #723)"
     },
     {
-      "name": "Sem",
-      "module": "Proofs.Sync.Semaphore",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
-      "name": "Sem.Spec",
-      "module": "Proofs.Sync.RwLock",
-      "status": "legacy-to-retire"
-    },
-    {
       "name": "SemImpl",
       "module": "ZigLean.Sep.Full.Sem",
       "status": "target",
@@ -423,18 +346,6 @@
     },
     {
       "name": "Step",
-      "module": "Proofs.Sync.Semaphore",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
-      "name": "Step",
-      "module": "ZigLean.Conc.Lock",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
-      "name": "Step",
       "module": "ZigLean.Sep.Full.LockWord",
       "status": "target",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
@@ -446,32 +357,16 @@
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
-      "name": "TLive",
-      "module": "ZigLean.Conc.Witness",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
       "name": "TLogic",
       "module": "ZigLean.Sep.Full.AutoThread",
       "status": "target",
       "approved": "coordinator 2026-10-13 (structural gate, engine)"
     },
     {
-      "name": "TTriple",
-      "module": "ZigLean.Conc.Own",
-      "status": "legacy-to-retire"
-    },
-    {
       "name": "ThreadLocal",
       "module": "ZigLean.Sep.Full.ThreadStep",
       "status": "target",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
-      "name": "Triple",
-      "module": "ZigLean.Sep.Triple",
-      "status": "legacy-to-retire"
     },
     {
       "name": "UpToReads",
@@ -655,50 +550,6 @@
       "approved": "coordinator 2026-10-16 (registry gate seed)"
     }
   ],
-  "legacy_users": [
-    {
-      "path": "Proofs/Sync/Lock.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "Proofs/Sync/RwLock.lean"
-    },
-    {
-      "path": "Proofs/Sync/RwLockContract.lean"
-    },
-    {
-      "path": "Proofs/Sync/RwLockSnapshotPair.lean"
-    },
-    {
-      "path": "Proofs/Sync/Semaphore.lean"
-    },
-    {
-      "path": "ZigLean/Conc/Csl.lean"
-    },
-    {
-      "path": "ZigLean/Conc/Lock.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "ZigLean/Conc/LockRules.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "ZigLean/Conc/Own.lean"
-    },
-    {
-      "path": "ZigLean/Conc/Witness.lean"
-    },
-    {
-      "path": "ZigLean/Conc/Word.lean",
-      "approved": "coordinator 2026-10-14 (honest gate: Conc cluster)"
-    },
-    {
-      "path": "ZigLean/Sep/Block.lean"
-    },
-    {
-      "path": "ZigLean/Sep/Triple.lean"
-    }
-  ],
+  "legacy_users": [],
   "tactic_uses": []
 }

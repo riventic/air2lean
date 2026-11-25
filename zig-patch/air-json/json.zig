@@ -600,6 +600,7 @@ pub fn dumpErrorTable(pt: Zcu.PerThread) void {
         return;
     };
     defer Compat.closeDir(pt, &dir);
+    dumpExportTable(pt, dir);
     // Without a conversion, a table an earlier compilation left in the directory must not
     // describe these files.
     if (!error_ints_used.load(.monotonic)) {
@@ -607,7 +608,7 @@ pub fn dumpErrorTable(pt: Zcu.PerThread) void {
             std.log.warn("air2lean: cannot remove a stale error table: {s}", .{@errorName(err)});
         return;
     }
-    const file = openErrorTable(pt, dir) catch |err| {
+    const file = openTable(pt, dir, error_table_name) catch |err| {
         std.log.warn("air2lean: no error table: {s}", .{@errorName(err)});
         return;
     };
@@ -621,15 +622,170 @@ pub fn dumpErrorTable(pt: Zcu.PerThread) void {
     sink.flush() catch |err| std.log.warn("air2lean: incomplete error table: {s}", .{@errorName(err)});
 }
 
-/// The error table file, created or (a re-export into the same directory) truncated.
-fn openErrorTable(pt: Zcu.PerThread, dir: Compat.Dir) !Compat.File {
-    return Compat.createFile(pt, dir, error_table_name) catch |err| {
+/// A table file (`error-table.air2lean`, `export-table.air2lean`), created or (a re-export into
+/// the same directory) truncated.
+fn openTable(pt: Zcu.PerThread, dir: Compat.Dir, name: []const u8) !Compat.File {
+    return Compat.createFile(pt, dir, name) catch |err| {
         if (err != error.PathAlreadyExists) return err;
-        const file = try Compat.openExistingFile(pt, dir, error_table_name);
+        const file = try Compat.openExistingFile(pt, dir, name);
         errdefer Compat.closeFile(pt, file);
         try Compat.truncateFile(pt, file);
         return file;
     };
+}
+
+/// The file of the compilation's export records (`docs/air-json.md` §Export table). Not a
+/// `.json` name: it describes no function.
+const export_table_name = "export-table.air2lean";
+
+/// After analysis (called by `dumpErrorTable`): the linker symbols this compilation defines.
+/// A function's own file carries the symbol of an `export fn` (`exportedName`); a symbol that
+/// `@export` defines (an alias, a weak definition: all of `lib/c.zig` and `compiler_rt`) is
+/// known only when analysis has ended, so it is written here. The table is written when the
+/// compilation has such a symbol, and then lists every live export (the `export fn` ones too),
+/// so a reader that finds it knows every definition of a symbol in this compilation. Zig
+/// 0.17.1 only: an older compiler writes no table, and an extern call to an `@export` symbol
+/// stays unbound there.
+fn dumpExportTable(pt: Zcu.PerThread, dir: Compat.Dir) void {
+    if (Compat.v17) {
+        var arena = std.heap.ArenaAllocator.init(pt.zcu.gpa);
+        defer arena.deinit();
+        const records = collectExports(pt, arena.allocator()) catch |err| {
+            // An incomplete table would hide a definition: none is written, and a stale one
+            // must not stay.
+            std.log.warn("air2lean: no export table: {s}", .{@errorName(err)});
+            removeExportTable(pt, dir);
+            return;
+        };
+        var by_builtin = false;
+        for (records) |r| by_builtin = by_builtin or !r.keyword;
+        if (!by_builtin) return removeExportTable(pt, dir);
+        const file = openTable(pt, dir, export_table_name) catch |err| {
+            std.log.warn("air2lean: no export table: {s}", .{@errorName(err)});
+            return;
+        };
+        defer Compat.closeFile(pt, file);
+        var sink: Compat.Sink = undefined;
+        sink.init(pt, file);
+        writeExportTable(&sink.j, records) catch |err| {
+            std.log.warn("air2lean: incomplete export table: {s}", .{@errorName(err)});
+            return;
+        };
+        sink.flush() catch |err| std.log.warn("air2lean: incomplete export table: {s}", .{@errorName(err)});
+    }
+}
+
+fn removeExportTable(pt: Zcu.PerThread, dir: Compat.Dir) void {
+    Compat.deleteFile(pt, dir, export_table_name) catch |err| if (err != error.FileNotFound)
+        std.log.warn("air2lean: cannot remove a stale export table: {s}", .{@errorName(err)});
+}
+
+const ExportRecord = struct {
+    name: []const u8,
+    linkage: []const u8,
+    visibility: []const u8,
+    /// The exported function's identity (module, name) and calling convention; null for an
+    /// exported variable or constant, or an `@export` of an extern declaration.
+    function: ?struct { module: []const u8, name: []const u8, cc: []const u8 },
+    /// The record repeats the `export` of the function's own file (an `export fn` under its
+    /// own name).
+    keyword: bool,
+};
+
+/// Every export of the compilation that the linker sees: those of the analysis units that are
+/// still referenced, as `Zcu.PerThread.processExports` selects them.
+fn collectExports(pt: Zcu.PerThread, arena: Allocator) ![]const ExportRecord {
+    const zcu = pt.zcu;
+    const ip = &zcu.intern_pool;
+    // `resolveReferences` caches its result; the compiler computes it again after this hook
+    // (a test compilation still adds its test functions), so the cache is dropped again.
+    const cached = zcu.resolved_references != null;
+    const references = try zcu.resolveReferences();
+    defer if (!cached) {
+        zcu.resolved_references.?.deinit(zcu.gpa);
+        zcu.resolved_references = null;
+    };
+    var indices: std.ArrayListUnmanaged(Zcu.Export.Index) = .empty;
+    for (zcu.single_exports.keys(), zcu.single_exports.values()) |unit, index| {
+        if (references.contains(unit)) try indices.append(arena, index);
+    }
+    for (zcu.multi_exports.keys(), zcu.multi_exports.values()) |unit, info| {
+        if (!references.contains(unit)) continue;
+        for (0..info.len) |off| try indices.append(arena, @enumFromInt(info.index + off));
+    }
+    const records = try arena.alloc(ExportRecord, indices.items.len);
+    for (records, indices.items) |*record, index| {
+        const exp = index.ptr(zcu);
+        const symbol = exp.opts.name.toSlice(ip);
+        record.* = .{
+            .name = symbol,
+            .linkage = @tagName(exp.opts.linkage),
+            .visibility = @tagName(exp.opts.visibility),
+            .function = null,
+            .keyword = false,
+        };
+        const value = exp.exported.getValue(zcu).toIntern();
+        switch (ip.indexToKey(value)) {
+            .func => |func| {
+                const fqn = ip.getNav(func.owner_nav).fqn.toSlice(ip);
+                record.function = .{
+                    .module = Identity.navModule(zcu, func.owner_nav),
+                    .name = fqn,
+                    .cc = @tagName(ip.indexToKey(func.ty).func_type.cc),
+                };
+                record.keyword = exp.opts.linkage == .strong and
+                    exp.exported == .nav and exp.exported.nav == func.owner_nav and
+                    if (exportKeywordName(zcu, func.owner_nav)) |own| std.mem.eql(u8, own, symbol) else false;
+            },
+            else => {},
+        }
+    }
+    return records;
+}
+
+fn writeExportTable(j: *Compat.Json, records: []const ExportRecord) Error!void {
+    try j.beginObject();
+    try j.objectField("schema");
+    try j.write(12);
+    try j.objectField("zig_version");
+    try j.write(build_options.version);
+    try j.objectField("exports");
+    try j.beginArray();
+    for (records) |r| {
+        try j.beginObject();
+        try j.objectField("name");
+        try j.write(r.name);
+        try j.objectField("linkage");
+        try j.write(r.linkage);
+        try j.objectField("visibility");
+        try j.write(r.visibility);
+        try j.objectField("function");
+        if (r.function) |f| {
+            try j.beginObject();
+            try j.objectField("module");
+            try j.write(f.module);
+            try j.objectField("name");
+            try j.write(f.name);
+            try j.objectField("cc");
+            try j.write(f.cc);
+            try j.endObject();
+        } else try j.write(null);
+        try j.endObject();
+    }
+    try j.endArray();
+    try j.endObject();
+}
+
+/// The symbol of a function declared with the `export` keyword (`export fn f` defines the
+/// symbol `f`), else null.
+fn exportKeywordName(zcu: *Zcu, nav_index: InternPool.Nav.Index) ?[]const u8 {
+    const ip = &zcu.intern_pool;
+    const nav = ip.getNav(nav_index);
+    const analysis = nav.analysis orelse return null;
+    const inst = analysis.zir_index.resolve(ip) orelse return null;
+    const zir = zcu.navFileScope(nav_index).zir orelse return null;
+    if (zir.getDeclaration(inst).linkage != .@"export") return null;
+    return nav.name.toSlice(ip);
 }
 
 fn writeErrorTable(j: *Compat.Json, zcu: *Zcu) Error!void {
@@ -936,17 +1092,10 @@ const W = struct {
     }
 
     /// The symbol of a function declared with the `export` keyword (`export fn f` defines the
-    /// symbol `f`), else null. `@export` aliases are not reported: an extern call to one stays
-    /// unbound, which the translator rejects.
+    /// symbol `f`), else null. A symbol that `@export` defines is in the export table
+    /// (`dumpExportTable`), not here.
     fn exportedName(w: *W, nav_index: InternPool.Nav.Index) ?[]const u8 {
-        const zcu = w.pt.zcu;
-        const ip = &zcu.intern_pool;
-        const nav = ip.getNav(nav_index);
-        const analysis = nav.analysis orelse return null;
-        const inst = analysis.zir_index.resolve(ip) orelse return null;
-        const zir = zcu.navFileScope(nav_index).zir orelse return null;
-        if (zir.getDeclaration(inst).linkage != .@"export") return null;
-        return nav.name.toSlice(ip);
+        return exportKeywordName(w.pt.zcu, nav_index);
     }
 
     /// One `externs` entry: an extern function's linker identity and full function type.

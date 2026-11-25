@@ -20,8 +20,9 @@ lists what exists today, so that nothing parallel is added:
   name, kind (`attribute`, `simp-set`, `rule-set`) and module. Applying one (`@[fsym]`,
   `attribute [fsym] …`, `simp [fsym_norm]`, `simproc [fsym_norm] …`) is not a declaration. A
   registry is a second way to add automation, so a new one is reviewed like a new tactic;
-* `legacy_users`: every Lean file that uses the legacy separation logic (imports a module of
-  `LEGACY_MODULES` or names a legacy triple, `LEGACY_NAMES`), by path;
+* `legacy_users`: every Lean file that uses the deleted legacy logic (imports a module of its
+  concurrent chain, `LEGACY_MODULES`, or names a legacy triple, `LEGACY_NAMES`), by path; the
+  list is empty and stays so;
 * `tactic_uses`: per file and per tactic, how often a tactic of `tactics` with kind `syntax` and
   status `legacy-to-retire` (`unroll_sched`, `tomega`, …) occurs in the code (`scan_uses`: a word
   match outside comments and strings; a local variable of the same name counts, a conservative
@@ -122,15 +123,13 @@ REGISTRY_COMMAND = re.compile(
 REGISTRY_CALL = re.compile(r"(?<![\w'])(?:[\w']+\.)*(register\w*Attr\w*|KeyedDeclsAttribute\.init)(?![\w'])")
 DEFINITION_BEFORE = re.compile(r"\b(?:def|abbrev|opaque|theorem|instance)\s+$")
 
-# The legacy separation logic, deleted in Plan A's last phase. The base vocabulary that stays
-# (`Sep/Heap`, `Sep/Assert`, `Sep/AllocSpec/{Region,Norm,Ops}`) is not listed. `Sep/Triple` also
-# holds the vocabulary (`pts`, `arr`): until that is split out, its importers count as users.
-LEGACY_MODULES = re.compile(
-    r"^ZigLean\.Sep(\.(Triple|Total|Bounded|Loop|LoopTemplate|DispatchTemplate|Step|Automation"
-    r"|Array|Array\.\w+|Block|Try|TryAlias|Discard|Sentinel|SentinelRealloc|Remap|RawAlloc|Alloc"
-    r"|Owned|OsMalloc|ArenaClient|AddrReuse|Cost|Witness|Mmap|AllocSpec"
-    r"|AllocSpec\.(Wrap|Wrappers|Dispatch|Toy)|Full\.Pinned))?$"
-    r"|^ZigLean\.Conc\.(Own|Csl|TlsLemmas|Witness|Lock|LockBase|LockRules)$")
+# The legacy logic is deleted (docs/legacy-retirement.md); the patterns stay so that none of it
+# comes back. The modules of the legacy concurrent chain are listed by name. The modules of the
+# legacy sequential logic (`ZigLean/Sep` outside `Full/`) are not: `ZigLean/Sep` is the directory
+# of the one logic, and a module there may carry a name the legacy logic had (`Triple`, `Loop`,
+# `Block`, …). A legacy triple that came back would be named (`LEGACY_NAMES`) and would be a new
+# judgment.
+LEGACY_MODULES = re.compile(r"^ZigLean\.Conc\.(Own|Csl|TlsLemmas|Witness|Lock|LockBase|LockRules)$")
 LEGACY_NAMES = re.compile(r"\b(Triple|TotalTriple|TotalTripleIn|TTriple|TTripleIn|TotalTripleWithin)\b")
 IMPORT = re.compile(r"^import\s+(\S+)", re.M)
 IMPORT_LINE = re.compile(r"^[ \t]*(?:public\s+|meta\s+)*import\b[^\n]*", re.M)
@@ -399,9 +398,8 @@ def default_status(entry):
     if "name" in entry:
         if entry["name"].split(".")[-1] in TARGET_JUDGMENTS:
             return "target"
-        # Structural candidates: the legacy layer's, and parallel judgments by name, are to retire.
-        legacy = LEGACY_MODULES.match(entry["module"]) or entry["name"].endswith(SUFFIXES)
-        return "legacy-to-retire" if legacy else "target"
+        # Structural candidates: parallel judgments by name are to retire.
+        return "legacy-to-retire" if entry["name"].endswith(SUFFIXES) else "target"
     # A tactic or registry that is not `fsym`'s is a candidate for a parallel automation; the
     # review of its approval sets `target` when it belongs to the framework.
     return "target" if TARGET_AUTOMATION.match(entry.get("tactic") or entry["registry"]) else "legacy-to-retire"

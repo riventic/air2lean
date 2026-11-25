@@ -11,261 +11,37 @@ and of its components' (`FRw.Out`), it keeps `part g₁` of its part and the chi
 and both new ghost values are `FRw.Out`. The program supplies only what is its own: its resource
 at the new client parts (`hR`) and its threads' fact at the new thread table (`hT`).
 
-- `FClient.Holds.fork`: the program's facts (`ReadShared.fork`: the child's clock is above its
-  parent's, so it holds a share of every read too).
-- `FRw.Base.fork`: the base, for every reader/writer lock and every client. The rwlock's invariant
-  stays (`FRw.Inv.grow`: the counts read no thread out of the code, `counts_grow`; the state word
-  stays `Ok` at the threads that have not ended, `Word.Ok.forkLive`; the free resource stays owned
-  through the word), the condition's and the semaphore's invariants stay (`FCond.Inv.stay`,
-  `FCond.Inv.other`, `FSem.Inv.grow`), the window stays (`FLock.HB.fork`), the readers' shares stay
-  (the parent holds no share, so neither part of its part does), and the places' clauses hold at
-  the child, which is out of every code.
+- `FRw.Base.fork`: the base, for every reader/writer lock and every client. The program's facts
+  stay (`FClient.Holds.fork`), the rwlock's invariant stays (`FRw.Inv.grow`: the counts read no
+  thread out of the code, `counts_grow`; the state word stays `Ok` at the threads that have not
+  ended, `Word.Ok.forkLive`; the free resource stays owned through the word), the condition's and
+  the semaphore's invariants stay (`FCond.Inv.stay`, `FCond.Inv.other`, `FSem.Inv.grow`), the
+  window stays (`FLock.HB.fork`), the readers' shares stay (the parent holds no share, so neither
+  part of its part does), and the places' clauses hold at the child, which is out of every code.
 - `FRw.Base.forkInv`: the invariant `∃ rX, M.Inv G rX m ∧ FLock.Pair.U L (W.Base E Sz K) G rX m`
   after the spawn (`FLock.Pair.fork`, `ZigLean/Sep/Full/LockProdThreads.lean`).
 - `FRw.Base.forkProto`: the same for a protocol whose invariant is that one (`RwProd`'s `inv`,
   `ZigLean/Sep/Full/RwLockGhost.lean`), with the child's id and the current thread, in the form a
   program's spawn step uses.
-- `FRw.Base.setPart`: the base over a change of a thread's part at the same memory (`Base.tick`
-  without the tick; the readers' shares by counting, `Shares.keep`), and `FRw.Base.out_setPart`.
 - `FRw.Base.spawnProto`, `FRw.Base.spawn`: the spawn as a program's `main` uses it. `main`'s part
   holds the duplicable plain mode; it copies the mode before the spawn
-  (`FLock.Pair.eupdPart` with `EUpd.plain_split`), keeps its part and gives the copy to the child
-  (`forkProto`). `spawn` is the rule a program passes to `fsym` for `Thread.fork`.
+  (`FLock.Pair.eupdPart` with `EUpd.plain_split`; the base over the change of its part at the same
+  memory is `FRw.Base.setPart`, `ZigLean/Sep/Full/RwLockBase.lean`), keeps its part and gives the
+  copy to the child (`forkProto`). `spawn` is the rule a program passes to `fsym` for
+  `Thread.fork`.
 
 The memory-level fact of the spawn is the one `FLock.Inv.fork` takes: the run of
 `Thread.forkWith gt` at `{ m with current := t }`.
-
-The lemmas of other modules' namespaces stated here are general and belong next to their
-families: `Conc.fork_mem_clocks` (`ZigLean/Conc/Base/Lock.lean`), `Word.Ok.forkLive`
-(`ZigLean/Sep/Full/Word.lean`, next to `Ok.fork_native`), `FLock.HB.fork`
-(`ZigLean/Sep/Full/Lock.lean`, next to `HB.mono`), `FSem.Inv.grow` (`ZigLean/Sep/Full/Sem.lean`,
-next to `Inv.mono`), `FClient.Holds.fork` (`ZigLean/Sep/Full/Client.lean`), and `FRw.counts_grow`,
-`FRw.Inv.grow` (`ZigLean/Sep/Full/RwLockImpl.lean`, next to `Inv.keep`).
 -/
 
 namespace Zig
-
-namespace Conc
-
-open Proto
-
-/-- **The clocks over a spawn** by `t`: no thread's clock moves back, and the new thread's clock
-is above `t`'s (`fork_clocks`, at every thread id). -/
-theorem fork_mem_clocks {m m' : Mem} {t c : ThreadId} {gt : Bool} (ht : t < m.threads.size)
-    (hcs : m.clocks.size = m.threads.size)
-    (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m'))) :
-    (∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true) ∧
-      VClock.le (m.clocks[t]!) (m'.clocks[m.threads.size]!) = true := by
-  rw [Proto.forkWith_run] at hf
-  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
-  obtain ⟨-, rfl⟩ := hf
-  obtain ⟨hcl, hcn, -⟩ := fork_clocks (cs := m.clocks) (t := t) (by rw [hcs]; exact ht)
-  refine ⟨fun u => ?_, by rw [← hcs]; exact hcn⟩
-  by_cases hu : u < m.clocks.size
-  · exact hcl u hu
-  · rw [getElem!_neg m.clocks u hu]; exact VClock.le_default _
-
-namespace Word
-
-open Full
-
-variable {n nb : Nat} {W : Word n nb} {A A' : ThreadId → Prop}
-
-/-- **A spawn keeps a word's validity at a live set that takes the new thread in**
-(`Ok.fork_native` with a new live set `A'`): each old thread of `A'` was in `A`, and with the new
-thread in `A'` its parent was in `A` (the new thread's clock is above its parent's). -/
-theorem Ok.forkLive {m m' : Mem} {t c : ThreadId} {gt : Bool}
-    (hw : W.Ok m A) (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size)
-    (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m')))
-    (hA : ∀ u, u < m.threads.size → A' u → A u) (hAt : A' m.threads.size → A t) :
-    W.Ok m' A' ∧ W.hist m' = W.hist m := by
-  obtain ⟨hclk, hnew⟩ := fork_mem_clocks ht hcs hf
-  rw [Proto.forkWith_run] at hf
-  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
-  obtain ⟨-, rfl⟩ := hf
-  refine ⟨⟨hw.blk, hw.only, hw.loc, ?_, hw.val, hw.plain⟩, hist_congr rfl rfl⟩
-  intro e he hh
-  rcases hw.wfp e he hh with ⟨ha, u, hu, hle⟩ | hall
-  · exact .inl ⟨ha, u, by simpa only [Array.size_push] using Nat.lt_succ_of_lt hu,
-      VClock.le_trans hle (hclk u)⟩
-  · refine .inr ?_
-    intro u hu hu₁
-    simp only [Array.size_push] at hu
-    by_cases hu' : u < m.threads.size
-    · exact VClock.le_trans (hall u hu' (hA u hu' hu₁)) (hclk u)
-    · have heq : u = m.threads.size := by omega
-      subst u
-      exact VClock.le_trans (hall t ht (hAt hu₁)) hnew
-
-end Word
-
-end Conc
-
 namespace Full
 
 open FAssn Conc Proto
 
-namespace FLock
-
-variable {γ : Type} {L : FLock γ}
-
-/-- **`HB` over a step that adds a thread** (a spawn by `t`, which has not ended): the new
-thread's clock is above `t`'s, so a clock below every thread that has not ended is below the new
-thread's too. The holders stay, the clocks grow, the word's newest release stays, and no old
-thread comes back from its end. -/
-theorem HB.fork {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} {c : VClock} (h : L.HB G m c)
-    (hcl : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
-    (hnew : VClock.le (m.clocks[t]!) (m'.clocks[m.threads.size]!) = true)
-    (hsz : m'.threads.size = m.threads.size + 1) (hbef : ∀ c, L.Before m c → L.Before m' c)
-    (hhold : ∀ u, (L.ph (G u)).held = true → (L.ph (G' u)).held = true)
-    (ht : t < m.threads.size) (hgt : L.ph (G t) ≠ .gone)
-    (hgone : ∀ u, u < m.threads.size → L.ph (G' u) ≠ .gone → L.ph (G u) ≠ .gone) :
-    L.HB G' m' c := by
-  rcases h with ⟨u, hu, hle⟩ | hb | hlive
-  · exact .inl ⟨u, hhold u hu, VClock.le_trans hle (hcl u)⟩
-  · exact .inr (.inl (hbef c hb))
-  · refine .inr (.inr fun u hu hg => ?_)
-    by_cases hu' : u < m.threads.size
-    · exact VClock.le_trans (hlive u hu' (hgone u hu' hg)) (hcl u)
-    · obtain rfl : u = m.threads.size := by omega
-      exact VClock.le_trans (hlive t ht hgt) hnew
-
-end FLock
-
-namespace FSem
-
-variable {γ X : Type} {L : FLock γ} {C : FCond γ} {S : FSem γ X L C}
-
-/-- **The semaphore's invariant over a step that grows the threads** (a spawn; `Inv.mono` with
-the thread table growing and `HB` over the step given): every thread's places and the count stay,
-the holders at `pst` stay, the clocks grow, a new queue entry is at the mutex, and the state's
-writes stay. -/
-theorem Inv.grow {G G' : ThreadId → γ} {m m' : Mem} (hI : S.Inv G m)
-    (hsph : ∀ u, S.ph (G' u) = S.ph (G u)) (hcph : ∀ u, C.ph (G' u) = C.ph (G u))
-    (hpv : S.cnt G' = S.cnt G)
-    (hpst : ∀ u, (S.ph (G u)).isPst → L.ph (G' u) = .holds)
-    (hHB : ∀ c, L.HB G m c → L.HB G' m' c)
-    (hcl : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
-    (ht : m.threads.size ≤ m'.threads.size)
-    (hwq : ∀ w ∈ m'.waiters, w ∈ m.waiters ∨ w.2 = L.key m) (hkL : L.key m' = L.key m)
-    (hS : C.S.hist m' = C.S.hist m) : S.Inv G' m' := by
-  have hTk : ∀ v, S.Tk G' v ↔ S.Tk G v := fun v => by unfold FSem.Tk; rw [hsph, hcph]
-  have hlast : C.lastS m' = C.lastS m := by unfold FCond.lastS; rw [hS]
-  refine ⟨fun u hu => ?_, fun u hu => hpst u (by rw [← hsph u]; exact hu),
-    fun u hu => by rw [hpv]; exact hI.crit u (by rw [← hcph u]; exact hu),
-    fun u hu => by rw [hsph]; exact hI.wt u (by rw [← hcph u]; exact hu),
-    fun u v hu hv => hI.cp u v (by rw [← hcph u]; exact hu) (by rw [← hsph v]; exact hv),
-    fun w hw hk => ?_, fun p h0 hp => ?_, fun u h c hu => ?_, fun u h c hu p h0 hp => ?_,
-    fun u h c hu p h0 hp => ?_, fun hc hpw => ?_⟩
-  · exact Nat.lt_of_lt_of_le (hI.ex u (by rw [← hsph u]; exact hu)) ht
-  · rw [hkL]
-    rcases hwq w hw with hw | hw
-    · exact hI.tq w hw ((hTk _).mp hk)
-    · exact hw
-  · rw [hS] at hp ⊢
-    rcases hI.hw p h0 hp with h | h | ⟨u, hu, hle⟩
-    · exact .inl h
-    · exact .inr (.inl (hHB _ h))
-    · exact .inr (.inr ⟨u, (hTk u).mpr hu, VClock.le_trans hle (hcl u)⟩)
-  · obtain ⟨⟨r, hr⟩, hc⟩ := hI.sp u h c (by rw [← hsph u]; exact hu)
-    exact ⟨⟨r, by rw [hS]; exact hr⟩, VClock.le_trans hc (hcl u)⟩
-  · rcases hI.sb u h c (by rw [← hsph u]; exact hu) p h0 hp with h | h | ⟨v, hv⟩
-    · exact .inl h
-    · exact .inr (.inl h)
-    · exact .inr (.inr ⟨v, (hTk v).mpr hv⟩)
-  · rw [hS] at hp ⊢
-    rcases hI.sa u h c (by rw [← hsph u]; exact hu) p h0 hp with h | ⟨v, hv⟩
-    · exact .inl h
-    · exact .inr ⟨v, (hTk v).mpr hv⟩
-  · rw [hlast] at hpw ⊢
-    rcases hI.live (by rwa [← hpv]) hpw with h | ⟨u, hu⟩ | ⟨v, hv⟩
-    · exact .inl h
-    · exact .inr (.inl ⟨u, by rw [hsph]; exact hu⟩)
-    · exact .inr (.inr ⟨v, (hTk v).mpr hv⟩)
-
-end FSem
-
-namespace FClient
-
-variable {X : Type} {E : FClient X} {xs xs' : ThreadId → X} {rX : Res} {m m' : Mem}
-
-/-- **A spawn keeps the program's facts** (module doc): the new thread holds a share of every
-read of the region (`ReadShared.fork`), the rest keeps the region's bytes, and the program gives
-its threads' fact at the new client parts and thread table (`hT`). -/
-theorem Holds.fork {t c : ThreadId} {gt : Bool} (h : E.Holds xs rX m) (ht : t < m.threads.size)
-    (hcs : m.clocks.size = m.threads.size)
-    (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m')))
-    (hT : E.T xs' m'.threads) : E.Holds xs' rX m' := by
-  obtain ⟨hclk, hnew⟩ := fork_mem_clocks ht hcs hf
-  rw [Proto.forkWith_run] at hf
-  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
-  obtain ⟨-, rfl⟩ := hf
-  exact ⟨hT, h.sh.fork (t := t) ht (by simp) (fun u _ => hclk u) hnew fun _ he _ => he, h.io⟩
-
-end FClient
-
 namespace FRw
 
 variable {γ X Y : Type} {M L : FLock γ} {C : FCond γ} {S : FSem γ Y L C} {W : FRw γ X Y M L C S}
-
-/-- **The counts read no thread out of the rwlock's code**: over a thread table with one more
-thread, when each thread in the code is in the old one (`Inv.ex`). -/
-theorem counts_grow {G : ThreadId → γ} {m m' : Mem}
-    (hex : ∀ u, W.ph (G u) ≠ .out → u < m.threads.size)
-    (hsz : m'.threads.size = m.threads.size + 1) :
-    W.nrd G m' = W.nrd G m ∧ W.nwi G m' = W.nwi G m ∧ W.writing G m' = W.writing G m ∧
-      W.fsum G m' = W.fsum G m := by
-  have hN : W.ph (G m.threads.size) = .out :=
-    Classical.byContradiction fun h => Nat.lt_irrefl _ (hex _ h)
-  refine ⟨?_, ?_, ?_, ?_⟩
-  · simp [nrd, hsz, tsum_succ, hN, RwPh.isRd]
-  · simp [nwi, hsz, tsum_succ, hN, RwPh.isWi]
-  · simp [writing, hsz, List.range_succ, hN, RwPh.isW]
-  · simp [fsum, hsz, ftot, hN, RwPh.frac, Frac.zero, Rat.add_zero]
-
-/-- **The invariant over a step that adds a thread and keeps the state word** (a spawn; as
-`Inv.keep`, with the thread table growing by one and the client parts changing): the word stays
-`Ok` at the threads that have not ended after the step, its history and cells stay, the places
-stay, the resource holds at the new client parts (`hR`), the writer's hold of the outer mutex
-stays, and the free resource stays owned through the word. -/
-theorem Inv.grow {G G' : ThreadId → γ} {rX : Res} {m m' : Mem} (hI : W.Inv G rX m)
-    (hsz : m'.threads.size = m.threads.size + 1)
-    (hok : W.st.Ok m' fun u => M.ph (G' u) ≠ .gone) (hhist : W.st.hist m' = W.st.hist m)
-    (hcells : W.st.cellsR m' = W.st.cellsR m)
-    (hph : ∀ u, W.ph (G' u) = W.ph (G u))
-    (hR : ∀ r, W.R (W.xs G) r → W.R (W.xs G') r)
-    (hwm : ∀ u, (W.ph (G u)).isW = true → (M.ph (G' u)).held = true)
-    (how : ∀ rF, W.Owns G m rF → W.Owns G' m' rF) : W.Inv G' rX m' := by
-  obtain ⟨hn1, hn2, hn3, hn4⟩ := counts_grow (W := W) hI.ex hsz
-  have hnrd : W.nrd G' m' = W.nrd G m := by rw [← hn1]; simp only [nrd, hph]
-  have hnwi : W.nwi G' m' = W.nwi G m := by rw [← hn2]; simp only [nwi, hph]
-  have hwr : W.writing G' m' = W.writing G m := by rw [← hn3]; simp only [writing, hph]
-  have hfs : W.fsum G' m' = W.fsum G m := by rw [← hn4]; simp only [fsum, hph]
-  have hbusy : W.Busy G' ↔ W.Busy G := by simp only [Busy, RwPosted, hph]
-  obtain ⟨rF, rO, he, hoffF, hd, hfr, ho⟩ := hI.rest
-  exact {
-    ok := hok
-    ex := fun u h => by rw [hsz]; exact Nat.lt_succ_of_lt (hI.ex u (by rwa [← hph u]))
-    room := by rw [hnrd, hnwi]; exact hI.room
-    word := by rw [hnrd, hnwi, hwr, hhist]; exact hI.word
-    msgs := by rw [hhist]; exact hI.msgs
-    one := fun u v hu hv => hI.one u v (by rwa [← hph u]) (by rwa [← hph v])
-    wm := fun u hu => hwm u (by rwa [← hph u])
-    wr := fun u hu => by rw [hnrd]; exact hI.wr u (by rwa [← hph u])
-    rp := fun u hu => by
-      obtain ⟨h1, ⟨w, hw⟩, h3⟩ := hI.rp u (by rwa [← hph u])
-      exact ⟨by rw [hnrd]; exact h1, ⟨w, by rw [hph w]; exact hw⟩,
-        fun v hv => h3 v (by rwa [← hph v])⟩
-    rpR := fun u r hu => hR r (hI.rpR u r (by rwa [← hph u]))
-    rest := ⟨rF, rO, by rw [hcells]; exact he, hoffF, hd,
-      ⟨fun hb => hfr.1 (hbusy.mp hb),
-        fun hb h0 => hR rF (hfr.2.1 (fun h => hb (hbusy.mpr h)) (by rwa [← hnrd])),
-        fun hb h0 => by
-          obtain ⟨H, f, hRr, hf, hs, hr, hq⟩ :=
-            hfr.2.2 (fun h => hb (hbusy.mpr h)) (by rwa [← hnrd])
-          exact ⟨H, f, hR _ hRr, hf, by rw [hfs]; exact hs, hr,
-            fun u q H' hu => hq u q H' (by rwa [← hph u])⟩⟩,
-      how rF ho⟩ }
 
 namespace Base
 
@@ -502,84 +278,6 @@ theorem forkProto {Tgt : Type} {P : Proto Tgt γ} {t c : ThreadId} {g₁ g₀ : 
   rfl
 
 /-! ## The spawn of a program: the plain mode copied for the child -/
-
-/-- **A thread out of every code stays so at another part**: the part is no place (`hpl`) and
-neither mutex reads it (`FLock.ph_setPart`, `held_setPart`; one part, `FLock.Pair.setPart`). -/
-theorem out_setPart (hpl : ∀ g r, W.place.ph (M.setPart g r) = W.place.ph g) {g : γ}
-    (h : W.Out g) (r : Res) : W.Out (M.setPart g r) := by
-  obtain ⟨hw, hm, hmh, hl, hlh, hc, hs⟩ := h
-  have wph : W.ph (M.setPart g r) = W.ph g := congrArg Prod.fst (hpl g r)
-  have cph : C.ph (M.setPart g r) = C.ph g := congrArg (fun q => q.2.1) (hpl g r)
-  have sph : S.ph (M.setPart g r) = S.ph g := congrArg (fun q => q.2.2) (hpl g r)
-  exact ⟨wph.trans hw, by rw [M.ph_setPart]; exact hm, by rw [M.held_setPart]; exact hmh,
-    by rw [W.pair.setPart, L.ph_setPart]; exact hl,
-    by rw [W.pair.setPart, L.held_setPart]; exact hlh, cph.trans hc, sph.trans hs⟩
-
-/-- **A change of `t`'s part at the same memory keeps the base** (`Base.tick` without the tick):
-the places and the client parts stay (the part is no place, `hpl`), and the readers' shares are
-kept by counting (`Shares.keep`), given the outer mutex's invariant before and after the change at
-rests with the common rest beside the semaphore's mutex's side (`s`, `s'`: the same shares). So a
-reader's part keeps its share of the readers' heap, and a thread that is no reader gets none. -/
-theorem setPart {t : ThreadId} {r s s' : Res} (hu : W.Base E Sz K G rX m)
-    (hM : M.Inv G (rsum s rX) m)
-    (hM' : M.Inv (upd G t (M.setPart (G t) r)) (rsum s' rX) m)
-    (hs : ∀ l, s'.gh.share l = s.gh.share l) (ht : t < m.threads.size)
-    (hpl : ∀ g r, W.place.ph (M.setPart g r) = W.place.ph g) :
-    W.Base E Sz K (upd G t (M.setPart (G t) r)) rX m := by
-  obtain ⟨⟨hC, hW⟩, hS⟩ := hu.sub
-  have wph : ∀ g, W.ph (M.setPart g r) = W.ph g := fun g => congrArg Prod.fst (hpl g r)
-  have cph : ∀ g, C.ph (M.setPart g r) = C.ph g := fun g =>
-    congrArg (fun q => q.2.1) (hpl g r)
-  have sph : ∀ g, S.ph (M.setPart g r) = S.ph g := fun g =>
-    congrArg (fun q => q.2.2) (hpl g r)
-  have lph : ∀ g, L.ph (M.setPart g r) = L.ph g := fun g => by
-    rw [W.pair.setPart, L.ph_setPart]
-  have hup : ∀ {α : Type} (f : γ → α), (∀ g, f (M.setPart g r) = f g) →
-      ∀ u, f (upd G t (M.setPart (G t) r) u) = f (G u) := fun f h u => by
-    have := congrFun (upd_map f G t (h (G t))) u
-    rwa [upd_same] at this
-  have hwph := hup W.ph wph
-  have hmph := hup M.ph fun g => M.ph_setPart g r
-  have hlph := hup L.ph lph
-  have hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m.clocks[u]!) = true :=
-    fun _ => VClock.le_refl _
-  have hpv : S.cnt (upd G t (M.setPart (G t) r)) = S.cnt G := cnt_congr hwph
-  have hmgone : ∀ u, M.ph (upd G t (M.setPart (G t) r) u) ≠ .gone → M.ph (G u) ≠ .gone :=
-    fun u h => by rwa [hmph u] at h
-  exact {
-    cl := cl_of (hup W.x fun g => W.x_part g r) hu.cl
-    winv := hu.winv.keep (hu.winv.ok.anti hmgone) rfl rfl rfl hwph
-      (hup W.x fun g => W.x_part g r) (fun u h => by rw [hmph u]; exact hu.winv.wm u h)
-      fun _ _ _ _ ho e he hT => by
-        rcases ho e he hT with h | h | ⟨hw, hsq, u, hu', hcu⟩
-        · exact .inl (LockWord.LiveLe.weaken hmgone h)
-        · exact .inr (.inl h)
-        · exact .inr (.inr ⟨hw, hsq, u, by rw [hwph u]; exact hu', hcu⟩)
-    sub := ⟨⟨hC.other (t := t) (g' := M.setPart (G t) r) (cph _) (fun _ => lph _)
-        (fun _ h => by rw [lph]; exact h)
-        (by rw [S.sx_iff, S.sx_iff, sph]; exact id) rfl rfl rfl rfl rfl
-        (fun w hw _ => .inl hw) (fun _ _ _ h => h) (Nat.le_refl _) hcl, hW⟩,
-      hS.outStep (t := t) (g' := M.setPart (G t) r) (sph _) (cph _) (lph _) hpv hcl
-        (fun _ h => h) rfl (fun w hw hn => absurd hw hn) rfl rfl⟩
-    win := hu.win.keep (hup C.ph cph) rfl rfl (hu.win.ehb.step
-      (fun _ hc => hc.mono (fun u h => .inl (by rw [hlph u]; exact h)) hcl (fun _ h => h) rfl
-        fun u h => by rwa [hlph u] at h)
-      (.inl rfl))
-    shares := hu.shares.keep hM hM'
-      (fun l => by
-        show (s'.gh.share l).add (rX.gh.share l) = (s.gh.share l).add (rX.gh.share l)
-        rw [hs l])
-      (fun u q H l c hq hl => SCell.pos_add' _ (hu.winv.rest_share hq hl)) rfl
-      ht (fun u e => upd_ne _ _ e) (by rw [upd_self, wph])
-    pin := hu.pin
-    wt := fun u hq => by rw [hwph u]; exact hu.wt u (by rwa [hup S.ph sph u] at hq)
-    nap := fun u hq => by
-      rw [hmph u]
-      rw [hlph u, hup S.place.ph (fun g => congrArg Prod.snd (hpl g r)) u] at hq
-      exact hu.nap u hq
-    live := hu.live
-    rdm := fun u hr => by rw [hmph u]; exact hu.rdm u (by rwa [hwph u] at hr)
-    mal := fun u ha => by rw [hlph u]; exact hu.mal u (by rwa [hmph u] at ha) }
 
 /-- **The spawn step of a program with the reader/writer lock, with the plain mode copied for the
 child** (module doc), for a protocol whose invariant is the outer mutex's and the two-lock product

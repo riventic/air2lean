@@ -98,7 +98,10 @@ FIXTURES = [
      ["--namespace", "PackedFieldsX86", "--prefix", "packed_fields.", "--allow-unqualified-build-mode"], "exact"),
     ("tests/roadmap/spawn-failure/SpawnFailure/Gen.lean", "tests/roadmap/spawn-failure/air/0.16.0",
      ["--namespace", "SpawnFailure", "--prefix", "spawn_failure.", "--spawn-policy", "fallible"], "exact"),
-    # Its check.sh compares with normalize-generated.py compare (body only); schema-11 AIR.
+    # Its check.sh compares with normalize-generated.py compare (body only): the 0.17.1 and
+    # 0.16.0 exports translate to the same body.
+    ("tests/roadmap/thread-tuples/ThreadTuples/Gen.lean", "tests/roadmap/thread-tuples/air/0.17.1",
+     ["--namespace", "ThreadTuples", "--prefix", "thread_tuples."], "body"),
     ("tests/roadmap/thread-tuples/ThreadTuples/Gen.lean", "tests/roadmap/thread-tuples/air/0.16.0",
      ["--namespace", "ThreadTuples", "--prefix", "thread_tuples."], "body"),
     ("tests/roadmap/try-pointers/TryPointers/Gen.lean", "tests/roadmap/try-pointers/air/0.16.0",
@@ -193,11 +196,13 @@ FIXTURES = [
     ("tests/roadmap/alloc-fba/AllocFba/Gen.lean", "tests/roadmap/alloc-fba/air/0.16.0/client-linux",
      ["--namespace", "AllocFba.Gen", "--prefix", "client.", "--allocator-model", "translated"], "exact"),
 ] + [
+    # tests/roadmap/alloc-translated/check.sh: the page programs' Zig 0.17.1 translations (0.16.0's
+    # are checked in a check tree), the fixed buffer's 0.16.0 ones.
     (f"tests/roadmap/alloc-translated/AllocTranslated/{prog.title()}{target.title()}.lean",
-     f"tests/roadmap/alloc-translated/air/0.16.0/{prog}-{target}",
+     f"tests/roadmap/alloc-translated/air/{version}/{prog}-{target}",
      ["--namespace", f"AllocTranslated.{prog.title()}{target.title()}", "--prefix", f"{prog}.",
       "--allocator-model", "translated"], "exact")
-    for prog in ("page", "fba") for target in ("linux", "macos")
+    for prog, version in (("page", "0.17.1"), ("fba", "0.16.0")) for target in ("linux", "macos")
 ] + [
     # tests/roadmap/alloc-arena/check.sh: the stock arena (both targets) and the patched one.
     (f"tests/roadmap/alloc-arena/AllocArena/{module}.lean", f"tests/roadmap/alloc-arena/air/0.16.0/{d}",
@@ -205,8 +210,11 @@ FIXTURES = [
     for d, module in (("arena-linux", "ArenaLinux"), ("arena-macos", "ArenaMacos"),
                       ("arena-fixed-linux", "ArenaFixedLinux"))
 ] + [
-    (f"tests/roadmap/big-endian/BigEndian/{ns}/Gen.lean", f"tests/roadmap/big-endian/air/0.16.0/{target}",
-     ["--namespace", f"BigEndian.{ns}", "--prefix", "big_endian."], "exact")
+    # T03 check.sh: big_endian.zig per Zig version and target.
+    (f"tests/roadmap/big-endian/BigEndian/V{v.replace('.', '_')}/{ns}/Gen.lean",
+     f"tests/roadmap/big-endian/air/{v}/{target}",
+     ["--namespace", f"BigEndian.V{v.replace('.', '_')}.{ns}", "--prefix", "big_endian."], "exact")
+    for v in ("0.16.0", "0.17.1")
     for ns, target in (("S390x", "s390x-linux"), ("Mips64", "mips64-linux"), ("X64", "x86_64-linux"))
 ] + [
     # T03 concurrency.sh: concurrency.zig per Zig version and target.
@@ -282,7 +290,8 @@ FIXTURES = [
         ("error_ints", "ErrorInts", "ErrorInts", "error_ints.", "0.16.0", ("0.16.0", "0.17.1", "0.15.2", "0.14.1")),
         ("error_ints_w8", "ErrorInts", "ErrorIntsW8", "error_ints.", "0.16.0", ("0.16.0", "0.17.1", "0.15.2")),
         ("runtime_lanes", "RuntimeLanes", "RuntimeLanes", "runtime_lanes.", "0.15.2", ("0.15.2",)),
-        ("float_lanes", "FloatLanes", "FloatLanes", "float_lanes.", "0.16.0", ("0.16.0", "0.15.2", "0.14.1")))
+        ("float_lanes", "FloatLanes", "FloatLanes", "float_lanes.", "0.16.0", ("0.16.0", "0.15.2", "0.14.1")),
+        ("lane_shapes", "LaneShapes", "LaneShapes", "lane_shapes.", "0.16.0", ("0.16.0", "0.15.2", "0.14.1")))
     for v in versions
 ]
 
@@ -746,8 +755,9 @@ class Translator:
             else:
                 # A fixture's AIR is a directory, or the one file its check translates.
                 source = case.dirs[0]
-                # With the compilation's error numbering (`error-table.air2lean`, L10).
-                for src in (sorted([*source.glob("*.json"), *source.glob("error-table.air2lean")])
+                # With the compilation's tables: its error numbering (`error-table.air2lean`,
+                # L10) and its export records (`export-table.air2lean`).
+                for src in (sorted([*source.glob("*.json"), *source.glob("*-table.air2lean")])
                             if source.is_dir() else [source]):
                     shutil.copyfile(src, air / src.name)
             out = self.work / f"Gen{index}.lean"

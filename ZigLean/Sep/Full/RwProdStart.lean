@@ -87,8 +87,8 @@ theorem start {own : ThreadId → Res} {rO rWM rCnt rWL rYw rR rI : Res} {G : Th
     rw [(hG u).1] at h; cases h
   have hRB : (L b o R).R G rCnt := by
     show (up (pts ((p b o).add 8) 8 (pv fun u => sx (G u).2)) ⋆ Pool R fun u => sx (G u).2) rCnt
-    rw [show pv (fun u => sx (G u).2) = 0 by unfold pv; exact if_neg hnp,
-      show Pool R (fun u => sx (G u).2) = emp by unfold Pool; exact if_neg hnp]
+    rw [show pv (fun u => sx (G u).2) = 0 by unfold pv; exact ite_eq_right hnp,
+      show Pool R (fun u => sx (G u).2) = emp by unfold Pool; exact ite_eq_right hnp]
     exact sep_emp.mpr hCnt
   obtain ⟨hi, hk⟩ := FLock.Pair.start (A := M b o) (B := L b o R) (G := G) (rLA := rnil)
     (rY := rsum rR rI) ho hjt ht hown hsplit hdP (fun _ => .inl rfl) hdAB hdB hdBY hdY hYw hYwk

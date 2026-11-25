@@ -256,6 +256,18 @@ with other jobs, so differences below about 20% are noise):
   `have _ : x = pure a := h` steps exist in `Proofs/Lists` and `ZigLean/Sep`; they are not
   hotspots.
 
+- **Long lines and the `.ilean` writer.** Lake runs every elaboration with `-i` (the `.ilean`
+  reference index), and Lean converts each identifier's position by scanning its line from the
+  start: the cost is quadratic in the length of a line with many identifiers. The AIR
+  certificates printed each function's reified term (`Air2Lean/Reify.lean`) on one line, up to
+  324 000 characters (`Proofs/Iogroup/AirCert.lean`): 31 s to elaborate with `-o` alone, 420 s
+  with `-o -i`, and 555 s in the full build, the longest module of the tree and alone most of
+  the root package's critical path (x86_64-linux, 2026-11-24). `Reify.term` now starts a line
+  for each argument (the same term: only white space inside parentheses changed), and the same
+  file takes 34 s with `-o -i`. A profile with `lake env lean FILE` does not show this cost: it
+  writes no `.ilean`. Time a module as Lake runs it (`lake build -v` prints the command) before
+  concluding where its time goes, and keep generated terms off single long lines.
+
 No lookup-structure change in the translator is claimed: no translator phase other than
 `renumber` exceeds 16 ms. The remaining proof candidates are `handoff_completes` and the split
 `WaitGroup` above; both await a profile on the full-state logic.

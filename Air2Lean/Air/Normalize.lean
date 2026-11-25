@@ -512,12 +512,15 @@ def supportedVersions : List String := ZigVersion.all.map toString
 or `bool` of `w` bits) as the bit-pointer that `Zig.loadLane`/`Zig.storeLane` take: the
 vector's integer of `n * w` bits is its host (`⌈n * w / 8⌉` bytes, LLVM's store size), the lane
 is at bit `i * w`. `packedLanes` marks it. Any other lane pointer keeps its layout, which the
-checker rejects. -/
-def lanePtrLayout (types : Array Ty) (child : TyId) (l : Layout) : Layout :=
+checker rejects: also a pointer to a `wholeByteLane` (Zig 0.17.1 only), which is an element
+pointer where `&v[i]` makes it (`Canon.laneElemPtrs`) and has no model as a value of the lane
+pointer type (a parameter, a stored pointer). -/
+def lanePtrLayout (types : Array Ty) (layouts : Array Layout) (child : TyId) (l : Layout) :
+    Layout :=
   match l.vectorIndex, types[child]? with
   | some lane, some t =>
     let w := (laneBits? t).getD 0
-    if w == 0 || l.bitOffset != 0 || lane ≥ l.hostSize then l
+    if w == 0 || l.bitOffset != 0 || lane ≥ l.hostSize || wholeByteLane types layouts child then l
     else { l with hostSize := (l.hostSize * w + 7) / 8, bitOffset := lane * w, packedLanes := true }
   | _, _ => l
 
@@ -553,7 +556,7 @@ def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
     let l := { l with ptrBytes := dialect.ptrBytes }
     match raw.types[i]? with
     | some (.vector ..) => { l with packedLanes }
-    | some (.ptr "one" _ c) => if laneBitPtrs then lanePtrLayout raw.types c l else l
+    | some (.ptr "one" _ c) => if laneBitPtrs then lanePtrLayout raw.types raw.layouts c l else l
     | _ => l
   return { dialect, name := raw.name, params := raw.params, ret := raw.ret,
            body, types := raw.types, layouts,
@@ -599,5 +602,23 @@ def withErrorTable (f : Func) : Option Raw.ErrorTableFile → Except String Func
       throw s!"{f.name}: {Raw.errorTableFileName} is of Zig {t.zigVersion} with {t.errorSetBits}-bit \
         errors, the AIR file of Zig {f.dialect.version} with {f.dialect.errorSetBits}-bit errors"
     pure { f with errorTable := some t.names }
+
+/-- The exporter's export records beside the AIR files (`export-table.air2lean`), if any. Read
+by the translator and by `--diagnostics-json` alike. -/
+def readExportTable (dir : System.FilePath) : IO (Option Raw.ExportTableFile) := do
+  let path := dir / Raw.exportTableFileName
+  unless ← path.pathExists do return none
+  match Raw.parseExportTable (← StrictJson.readFile path) with
+  | .ok t => pure (some t)
+  | .error e => throw (IO.userError s!"{path}: {e}")
+
+/-- The table's records for the program `funcs`, which must be of its Zig version. -/
+def exportRecordsFor (funcs : Array Func) : Option Raw.ExportTableFile → Except String (Array ExportRecord)
+  | none => pure #[]
+  | some t => do
+    if let some f := funcs.find? (toString ·.dialect.version != t.zigVersion) then
+      throw s!"{f.name}: {Raw.exportTableFileName} is of Zig {t.zigVersion}, the AIR file of Zig \
+        {f.dialect.version}"
+    pure t.records
 
 end Air2Lean

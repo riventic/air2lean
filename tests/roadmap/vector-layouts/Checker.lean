@@ -24,7 +24,8 @@ private def types : Array Ty := #[
   .int false 0, .vector 4 10,                          -- 10..11: u0, @Vector(4, u0)
   .ptr "one" false 0, .bool, .vector 5 13,             -- 12: &v[2] of u9x4; 13..14: bool, @Vector(5, bool)
   .ptr "one" false 14, .ptr "one" false 13,            -- 15: *@Vector(5, bool); 16: &v[3] of bool5
-  .ptr "one" false 6, .ptr "one" false 0]              -- 17: &v[1] of f80x2; 18: runtime lane of u9x4
+  .ptr "one" false 6, .ptr "one" false 0,              -- 17: &v[1] of f80x2; 18: runtime lane of u9x4
+  .ptr "one" false 3]                                  -- 19: &v[1] of u32x4 as Zig 0.17.1 types it
 
 /-- The compiler's (LLVM backend) sizes and alignments, as the exporter writes them. -/
 private def exported : Array Layout := #[
@@ -44,17 +45,21 @@ private def exported : Array Layout := #[
   {size := some 8, align := some 8, ptrAlign := some 16, hostSize := 2, vectorIndex := some 1,
     vectorIndexExported := true},
   {size := some 8, align := some 8, ptrAlign := some 2, hostSize := 4, runtimeLane := true,
+    vectorIndexExported := true},
+  {size := some 8, align := some 8, ptrAlign := some 16, hostSize := 4, vectorIndex := some 1,
     vectorIndexExported := true}]
 
 private def raw (backend : String) (schema : Nat := 12)
-    (targetTriple : String := "x86_64-linux.5.10...6.19-musl") : Raw.RawFunc :=
-  { schema, version? := some .v0_16_0, name := "probe.f", params := #[], ret := 3, body := #[],
+    (targetTriple : String := "x86_64-linux.5.10...6.19-musl") (version : ZigVersion := .v0_16_0) :
+    Raw.RawFunc :=
+  { schema, version? := some version, name := "probe.f", params := #[], ret := 3, body := #[],
     types, layouts := exported, globals := #[],
-    profile := { name := "abi64-le-v1", schema, zigVersion := "0.16.0", backend, targetTriple } }
+    profile := { name := "abi64-le-v1", schema, zigVersion := toString version, backend, targetTriple } }
 
 private def layoutsOf (backend : String) (schema : Nat := 12)
-    (targetTriple : String := "x86_64-linux.5.10...6.19-musl") : IO (Array Layout) := do
-  match normalizeCanonical (raw backend schema targetTriple) with
+    (targetTriple : String := "x86_64-linux.5.10...6.19-musl") (version : ZigVersion := .v0_16_0) :
+    IO (Array Layout) := do
+  match normalizeCanonical (raw backend schema targetTriple version) with
   | .ok f => pure f.layouts
   | .error e => throw (IO.userError e)
 
@@ -70,7 +75,7 @@ private def tyOk (layouts : Array Layout) (id : TyId) : Bool :=
 def main : IO Unit := do
   let llvm ← layoutsOf "stage2_llvm"
   require ([1, 4, 7, 9, 11, 14].all fun i => llvm[i]!.packedLanes) "LLVM vector layouts are not marked bit-packed"
-  require ([0, 2, 3, 5, 6, 8, 10, 13, 15, 18].all fun i => !llvm[i]!.packedLanes)
+  require ([0, 2, 3, 5, 6, 8, 10, 13, 15, 18, 19].all fun i => !llvm[i]!.packedLanes)
     "a non-vector layout is marked"
   require (modelLayout types llvm 1 == .ok (8, 8)) "u9x4: bit-packed 36 bits, 8 bytes"
   require (modelLayout types llvm 9 == .ok (16, 16)) "u24x3: bit-packed 72 bits, 16 bytes"
@@ -114,6 +119,19 @@ def main : IO Unit := do
   require ([12, 16].all fun i => tyOk arm i && arm[i]!.laneBitPtr)
     "an aarch64-linux integer or bool lane pointer is rejected"
   IO.println "lane pointers: integer, float and bool lanes are bit-pointers on LLVM x86_64/aarch64"
+  -- Every supported Zig version has the native evidence (`ZigVersion.lanePtrEvidence`), 0.17.1
+  -- too: one layout for every version.
+  for version in ZigVersion.all do
+    let of ← layoutsOf "stage2_llvm" 12 "x86_64-linux.5.10...6.19-musl" version
+    require ([12, 16, 17].all fun i => tyOk of i && of[i]! == llvm[i]!)
+      s!"{version}: a bit-packed lane pointer is not the bit-pointer of 0.16.0"
+    -- A lane of whole power-of-two bytes (Zig 0.17.1 types `&v[1]` of a `u32` vector so): an
+    -- element pointer where it is made (`Canon.laneElemPtrs`), no model as a value of this type.
+    require (!tyOk of 19 && !of[19]!.laneBitPtr) s!"{version}: a whole-byte lane pointer type is accepted"
+    require (!wholeByteLane types of 0 && !wholeByteLane types of 8 && !wholeByteLane types of 6 &&
+        !wholeByteLane types of 13 && wholeByteLane types of 3)
+      s!"{version}: whole-byte lanes are u32, not u9, u24, f80 or bool"
+  IO.println "lane pointers: one model for every Zig version; whole-byte lane pointer types rejected"
   for (backend, schema, triple) in [("stage2_x86_64", 12, "x86_64-linux.5.10...6.19-musl"),
       ("stage2_c", 12, "x86_64-linux.5.10...6.19-musl"), ("unverified", 11, "unverified"),
       ("stage2_llvm", 12, "riscv64-linux.5.10...6.19-musl"),

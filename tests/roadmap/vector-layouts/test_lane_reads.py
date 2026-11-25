@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """L09 lane reads through a bit-packed vector pointer (`lane_reads.zig`).
 
-Positive: the committed 0.16.0 and 0.15.2 AIR translates to a lane-pointer read
+Positive: the committed 0.17.1, 0.16.0 and 0.15.2 AIR translates to a lane-pointer read
 (`Zig.loadLane`) or a whole-vector read (`Zig.load` of the vector, then its lane), never to a
 byte-strided item read; kernel-checked runs give the native values.
 Negative: hand-made `ptr_elem_val` reads through `*@Vector(8, u3)` / `*@Vector(5, bool)` (comptime
@@ -19,7 +19,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 AIR = HERE / "air-reads"
-VERSIONS = ("0.16.0", "0.15.2", "0.14.1")
+VERSIONS = ("0.17.1", "0.16.0", "0.15.2", "0.14.1")
 NOT_STRIDED = "a pointer to a lane of a vector whose lanes are not byte-strided"
 BOOL_LANE = "a pointer to a lane of a `bool` vector is outside the subset"
 LANE_MISMATCH = "a lane pointer whose type does not match its vector and comptime lane"
@@ -48,7 +48,8 @@ def translate(binary, air, out):
 
 def positives(binary, work):
     checks = 0
-    for version, read in (("0.16.0", "Zig.loadLane (BitVec 3) 3 1 15"),
+    for version, read in (("0.17.1", "Zig.loadLane (BitVec 3) 3 1 15"),
+                          ("0.16.0", "Zig.loadLane (BitVec 3) 3 1 15"),
                           ("0.15.2", "Zig.load (Zig.Vec (BitVec 3) 8) 4")):
         gen = work / f"Gen-{version}.lean"
         result = translate(binary, AIR / version, gen)
@@ -78,15 +79,20 @@ def reject(binary, work, document, marker):
 
 
 def negatives(binary, work):
-    u3 = json.loads((AIR / "0.16.0" / "lane_reads.u3Read.json").read_text())
-    boolean = json.loads((AIR / "0.16.0" / "lane_reads.boolRead.json").read_text())
     checks = 0
     for version in VERSIONS:
+        # The shapes are edits of a compiler export in the version's own tag vocabulary: 0.17.1's
+        # export (`int_cast`; `&v[i]` is a `ptr_cast`, so it has no `usize` type), else 0.16.0's.
+        source, intcast = ("0.17.1", "int_cast") if version == "0.17.1" else ("0.16.0", "intcast")
+        u3 = json.loads((AIR / source / "lane_reads.u3Read.json").read_text())
+        boolean = json.loads((AIR / source / "lane_reads.boolRead.json").read_text())
         for base, lane_ty, ret_conv, marker in ((u3, 5, True, NOT_STRIDED),
                                                 (boolean, None, False, BOOL_LANE)):
             doc = copy.deepcopy(base)
             doc["zig_version"] = doc["profile"]["zig_version"] = version
             types = doc["types"]
+            if not any(t.get("k") == "int" and t["bits"] == 64 for t in types):
+                types.append(dict(k="int", signed=False, bits=64, abi_size=8, abi_align=8))
             usize = next(k for k, t in enumerate(types) if t.get("k") == "int" and t["bits"] == 64)
             lane = next(k for k, t in enumerate(types) if "vector_index" in t)
             child = types[lane]["child"]
@@ -96,7 +102,7 @@ def negatives(binary, work):
             def body(read):
                 tail = [read]
                 if ret_conv:
-                    tail.append(dict(id=20, tag="intcast", ty=doc["ret"], args=[dict(inst=10)]))
+                    tail.append(dict(id=20, tag=intcast, ty=doc["ret"], args=[dict(inst=10)]))
                 result = dict(inst=20 if ret_conv else 10)
                 return [dict(id=0, tag="arg", ty=0, param=0), dict(id=1, tag="arg", ty=usize, param=1),
                         *tail, dict(id=30, tag=ret["tag"], ty=ret["ty"], args=[result])]
@@ -113,7 +119,7 @@ def negatives(binary, work):
                 return [dict(id=0, tag="arg", ty=0, param=0), dict(id=1, tag="arg", ty=usize, param=1),
                         dict(id=5, tag="ptr_elem_ptr", ty=ptr_ty, args=[dict(inst=0), dict(inst=1)]),
                         dict(id=10, tag="load", ty=child, args=[dict(inst=5)]),
-                        dict(id=20, tag="intcast", ty=doc["ret"], args=[dict(inst=10)]),
+                        dict(id=20, tag=intcast, ty=doc["ret"], args=[dict(inst=10)]),
                         dict(id=30, tag=ret["tag"], ty=ret["ty"], args=[dict(inst=20)])]
             doc["body"] = elem_ptr(lane)
             checks += reject(binary, work, doc, LANE_MISMATCH)

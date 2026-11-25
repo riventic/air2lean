@@ -42,6 +42,12 @@ def tsum (N : Nat) (g : Nat → Nat) : Nat := ((List.range N).map g).sum
 theorem tsum_succ (N : Nat) (g : Nat → Nat) : tsum (N + 1) g = tsum N g + g N := by
   simp [tsum, List.range_succ, List.sum_append]
 
+/-- A sum of ones over the threads is their number. -/
+theorem tsum_one (N : Nat) : tsum N (fun _ => 1) = N := by
+  induction N with
+  | zero => rfl
+  | succ n ih => rw [tsum_succ, ih]
+
 open Lean Meta Simp in
 /-- `tsum (n + 1) g` is `tsum n g + g n` (`tsum_succ`) where the bound is written `n + 1`; a
 numeral bound `N` (which `tsum_succ` as a simp lemma also matches) stays: it would unfold to `N`
@@ -108,6 +114,11 @@ theorem tsum_le {N : Nat} {g h : Nat → Nat} (e : ∀ u, u < N → g u ≤ h u)
   | succ N ih =>
     rw [tsum_succ, tsum_succ]
     exact Nat.add_le_add (ih fun u hu => e u (by omega)) (e N (by omega))
+
+/-- A count of the indices with a property is at most the number of indices. -/
+theorem tsum_ite_le (N : Nat) (p : Nat → Prop) [DecidablePred p] :
+    tsum N (fun u => if p u then 1 else 0) ≤ N :=
+  Nat.le_trans (tsum_le fun u _ => by split <;> omega) (Nat.le_of_eq (tsum_one N))
 
 theorem tsum_add (N : Nat) (g h : Nat → Nat) :
     tsum N (fun u => g u + h u) = tsum N g + tsum N h := by

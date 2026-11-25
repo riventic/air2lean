@@ -26,7 +26,8 @@ invgen_fixture() {
   lake env lean -R "$dir" -o "$work/olean/$ns/Gen.olean" "$dir/$ns/Gen.lean"
   # The generated invariants, reproduced byte for byte from the committed translation (the
   # generator's pruning walks import the library, scripts/invgen.py's LIBRARY).
-  lake build -q "$(python3 -B -c 'import runpy; print(runpy.run_path("scripts/invgen.py")["LIBRARY"])')"
+  # shellcheck disable=SC2046  # (module names: one word each)
+  lake build -q $(python3 -B -c 'import runpy; print(" ".join(runpy.run_path("scripts/invgen.py")["LIBRARY"]))')
   lake exe air2lean-invgen "$ns.Gen" "$ns" --source "$dir/$ns/Gen.lean" -o "$work/Inv.lean"
   cmp "$work/Inv.lean" "$dir/$ns/Inv.lean"
   lake env lean -R "$dir" -o "$work/olean/$ns/Inv.olean" "$dir/$ns/Inv.lean"

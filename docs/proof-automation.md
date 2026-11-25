@@ -69,8 +69,8 @@ calls with 20 to 30 facts.
   `X … lo m … ⋆ X … m hi … = X … lo hi …` (checked when the attribute is added; the planner's
   table is data, never code `fsym` evaluates: no `evalConst`), `@[fsym_drop]` a drop lemma
   `EUpd (X ⋆ R) R` for atoms left over (knowledge, claims), `@[fsym_view]` a view lemma
-  `EUpd X Y` of one atom (§Views), `@[fsym_inv]` a loop's invariant, measure and exit post
-  (§Loops).
+  `EUpd X Y` of one atom (§Views), `@[fsym_inv]` a loop's invariant, measure and exit post, per
+  mode of the walk (plain, credits; §Loops).
 * `ZigLean/Sep/Full/AutoClaims.lean`: byte-range claims (`docs/sep-full-state.md` §Byte-range
   claims): `bclaim_split` is their range law, and claims left over are dropped (`claim_drop`).
   Import it (not just `Auto`) to prove allocator specifications: grants carry claims.
@@ -828,7 +828,47 @@ body `B`, named by their part.
   it is added, that `B` is a defined program over locals (`StateT σ m ε`: `MM σ ε`, `CM Tgt σ ε`),
   that the definition has no universe parameters, explicit parameters with names of their own,
   the locals as its last one (`s : σ`, `r : ε × σ` for the post) and an `FAssn` value (a `Nat`
-  for the measure). A name is one definition, so there is one of each part per body.
+  for the measure). A name is one definition, so there is one of each part per body and mode.
+* **A second invariant, for the credit mode** (maintainer decision 2026-11-24). The registry is
+  keyed by the loop body and the **mode** of the walk. The parts above are the plain mode's. A
+  body may also register `B.credits.inv` and `B.credits.post`, for a walk that pays its steps
+  with credits:
+
+  ```lean
+  @[fsym_inv] def count.loop.credits.inv (p : Ptr) (n : BitVec 32) (v0 : BitVec 64) (s : Locals) (k : Nat) : FAssn :=
+    ⟪… ∧ k = n.toNat - s.i.toNat⟫ ⋆ …
+  @[fsym_inv] def count.loop.credits.post (p : Ptr) (n : BitVec 32) (v0 : BitVec 64) (r : Exit × Locals) : FAssn := …
+  ```
+
+  * **What selects the mode** is the state at the loop: it is the credit mode when the state
+    holds a `credits n` atom and neither `plain` nor `unmetered`, and the plain mode otherwise
+    (`loopModeOf`). This is what decides a step too: with the plain mode a `Zig.tick` needs no
+    credit, and without it only a credit pays it.
+  * The credit-mode invariant ends in its **exact count** `n : Nat` after the locals: the body
+    runs left before the last one. It names neither credits nor receipts. The rule is the
+    backend's counted loop rule (`FTotalTriple.loop_exact`, `CTriple.loop_exact`,
+    `ZigLean/Sep/Full/Cost.lean`, which the proof imports), whose precondition is
+    `B.credits.inv … s₀ n ⋆ credits (n + 1)` and whose postcondition is
+    `B.credits.post … r ⋆ spent (n + 1)`. Its step, `∀ s n, T (B.credits.inv … s n ⋆ credits 1)
+    ((B xs).run s) (fun r => floopExact again (B.credits.inv …) (B.credits.post …) n r ⋆ spent 1)`,
+    is walked like any step: one credit in, one receipt out, and the count lowered by exactly
+    one at a repetition or zero at the exit. A wrong count fails there, and one credit too few
+    has no plan at the entry.
+  * The registration rejects a `B.credits.meas` (the count is the measure) and a credit-mode
+    invariant that does not end in a count. The exit post is registered, not inferred.
+  * **One mode registered.** A plain walk at a body that registers only the plain parts is
+    unchanged. A credit walk at such a body is an **error** that names the missing
+    `B.credits.inv` (fail closed: `fsym` never takes the plain-mode invariant for a walk that
+    counts its steps, and never takes another reading of it). A credit walk in a logic without a
+    counted loop rule (`FTriple`, the thread logics) is an error as well. A plain walk at a body
+    that registers only the credit parts finds no registered invariant, as before.
+  * `air2lean-invgen` emits the credit parts from the plain ones for every family it has
+    (`docs/invariant-synthesis.md`, "The credit mode").
+
+  Regression: `tests/roadmap/sep-auto/SepAuto/LoopCredits.lean` (one body in both modes, the
+  concurrent rule, a wrong count, one credit too few, a credit walk with only a plain
+  invariant, the rejected registrations). Clients: `Proofs/Lists/Linked.lean` (`sum_exact`,
+  `sum_loop_exact`), `Proofs/Lists/Alloc.lean` (`freeAll_exact`).
 * **A ghost measure**: an invariant whose locals are followed by `n : Nat` (`B.inv … s n`, with
   no `B.meas`) is measured by `n`, which the invariant relates to its ghost state (a list walk's
   nodes left, `zs.length = n`, which the locals do not determine). The rule is `loop_ghost_ex`
@@ -1004,7 +1044,9 @@ set, `zig_run` (`ZigLean/SimpAttr.lean`), and names no generated declaration:
   the rule of owned bytes (`Full/Ops`: `load_bytesAt`, `storeBytes_bytesAt`, …) through
   `FTotalTriple.up_view`/`up_view'`, not a proof of its own.
 * A loop: its invariant, measure and exit post as `@[fsym_inv] def B.inv`/`B.meas`/`B.post` next
-  to the body `B` (§Loops), not a lemma about the loop passed as `fsym [h]`.
+  to the body `B` (§Loops), not a lemma about the loop passed as `fsym [h]`; for a statement with
+  an exact step count, its credit-mode invariant `B.credits.inv` and exit post `B.credits.post`
+  too, not a hand-applied `loop_exact`.
 * A new opaque assertion: `attribute [fsym_atom] myPred`; its pure facts (the block of the
   pointer it owns memory at, its alignment): `@[fsym_facts] theorem … : AtomFacts (myPred p …) φ`;
   facts that need the memory or two atoms: `@[fsym_facts] theorem … : MemFacts (X ⋆ Y) φ`.

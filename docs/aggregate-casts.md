@@ -2,10 +2,11 @@
 
 Up to Zig 0.16.0, `@bitCast` of an array, `extern` struct or `extern` union reinterprets the
 value's **in-memory representation**, padding included. Zig 0.17.0 changed `@bitCast` to the
-logical bit order and made `extern` struct and union casts compile errors. The rules below
-apply to AIR with `zig_version` 0.14.1, 0.15.2 or 0.16.0 only (`ZigVersion.bitCast` is `.memory`,
+logical bit order and made `extern` struct and union casts compile errors. The representation
+casts below apply to AIR with `zig_version` 0.14.1, 0.15.2 or 0.16.0 only (`ZigVersion.bitCast` is `.memory`,
 `reprCastApplies` in `Air2Lean/Check.lean`). Any other version, and a checker context without a version, rejects
-them.
+them. The optional-pointer rules are pointer casts, not `@bitCast`s, and apply to every Zig
+version (a context without a version rejects them too).
 
 ## Representation casts
 
@@ -98,6 +99,17 @@ ordinary optional single/many pointer only through the explicit null mapping of
 these rules). Casts between optional pointers and slices or other integers, and between a
 C/allowzero pointer and an optional slice, stay rejected.
 
+The three rules hold for every Zig version. Sema rejects a `@bitCast` to or from an optional
+pointer in 0.16.0 and in 0.17.1 ("cannot @bitCast from '?*u32'"), so such a `bitcast` in AIR is
+always `@ptrCast`, `@intFromPtr` or `@ptrFromInt`, which 0.17.0's redefinition of `@bitCast` does
+not touch. 0.17.1 writes the same instructions with their own tags (`ptr_cast`, `int_from_ptr`,
+`ptr_from_int`; `Air2Lean/Air/Canon.lean` renames them to `bitcast`): for
+`@intFromPtr(p)`, `@ptrFromInt(n)`, `@ptrCast(p)` and `@ptrCast(@alignCast(p))` on `?*T` the two
+versions' AIR differs in these tag names only. The 0.17.1 evidence is the translated
+`std.heap.PageAllocator` (`tests/roadmap/alloc-translated`: `map` takes `@intFromPtr` of the
+`?[*]u8` hint and `@ptrFromInt`s the derived hint), whose 0.17.1 translation equals 0.16.0's
+there and is compared with the native run.
+
 ## Evidence
 
 `tests/roadmap/aggregate-casts/` (`check.sh`):
@@ -124,7 +136,8 @@ C/allowzero pointer and an optional slice, stay rejected.
   `00` in this run but is unspecified. The three casts the model leaves `.unspecified` are only
   recorded.
 - `Checker.lean`: every accepted cast is accepted for 0.14.1, 0.15.2 and 0.16.0 and rejected
-  for 0.17.1 or no version. It also checks the layout, bit-size and optional-pointer rejections.
+  for no version; 0.17.1 rejects the representation casts and accepts the optional-pointer
+  casts. It also checks the layout, bit-size and optional-pointer rejections.
 
 The native probe covers only the listed values on one host. Packed unions, floats and float
 arrays and vectors in casts, and arrays of `auto` structs and tagged unions (0.14.1, 0.15.2), are
