@@ -1,4 +1,5 @@
-import Proofs.RwRead.Generic
+import ZigLean.Sep.Full.RwLockGhost
+import ZigLean.Sep.Full.Share
 import ZigLean.Sep.Full.ThreadFacts
 
 /-!
