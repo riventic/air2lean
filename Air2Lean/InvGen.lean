@@ -130,7 +130,7 @@ namespace Air2Lean.InvGen
 structure Loc where
   param : Nat
   item : Option Nat := none
-  deriving Inhabited, BEq
+  deriving Inhabited, BEq, Repr
 
 /-- A symbolic value of one iteration, over the values at its start. -/
 inductive Sym where
@@ -175,7 +175,7 @@ inductive Sym where
   /-- The value at offset `k` of the node that the optional pointer `c` points to, as the
   iteration read it (`Zig.load` through `c`'s payload). -/
   | nload (c : Sym) (k : Nat)
-  deriving Inhabited, BEq
+  deriving Inhabited, BEq, Repr
 
 /-- `s` as a base and a constant summand. -/
 partial def Sym.split : Sym → Sym × Int
@@ -682,7 +682,7 @@ def counted (ctx : Ctx) (again : Expr → MetaM Bool) (paths : Array Path) : Met
     let (base, k) := a.split
     unless (base == .local x && (k == 0 || k == step)) ||
         cells.any (fun (cell, _) => cell.stored && (cell.val.partialSums (.cell cell.loc)).contains a) do
-      throwError "an add or subtraction that the counter's and the cells' bounds do not cover"
+      throwError "an add or subtraction that the counter's and the cells' bounds do not cover: {repr a}"
   -- (an exit with a payload has no label: the post then states only that it exits)
   return { counter := x, rel, bound := b, down, cells, scratch, exits := exitLabels exits,
            plain := paths.any (·.st.tick) }
