@@ -78,7 +78,7 @@ moves to another module, unless the entry records the maintainer's `"status_appr
 | `AllocSpec` | `Sep/AllocSpec` | `FAllocSpec` |
 | `MutexSpec`, `CondSpec`, `FutexSpec`, `WaitGroupSpec`, `EventSpec` | `Conc/Spec/*` (deleted, L21) | `MutexImpl`, `CondImpl`, `EventImpl` over the model futex's rules ([thread-specs.md](thread-specs.md)) |
 | `Sem.Spec`, `CancelSpec` | proofs (deleted: `Sem.Spec` with Sync/Semaphore, D-d; `CancelSpec` written out as the futures protocol's result predicate) | the same contracts stated with `CTriple` (Plan A4) |
-| `TimedBudget.Spec`/`WithinSpec`, test `Spec`s | pure results (the asm-wrappers `Spec`, a data structure, is `Interp.Insn`) | propositions about a `Result` (no memory); they stay until a pure-result rule set replaces them |
+| `TimedBudget.Spec`/`WithinSpec` (2026-11-25) | renamed `TimedBudget.SolverPost`/`BudgetPost` (bodies unchanged); the asm-wrappers `Spec`, a data structure, is `Interp.Insn` | postconditions on a solver `Verdict`: they take no program and no precondition, so they are not judgments and are off the allow-list |
 
 `Float.AllowedSpec` is `target` (maintainer, 2026-10-18, #439): it is the pure-result fragment. It
 states that a float computation succeeds and that every result IEEE allows for it satisfies the

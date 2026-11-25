@@ -330,11 +330,6 @@
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
-      "name": "Spec",
-      "module": "ZigLean.Conc.TimedBudget",
-      "status": "legacy-to-retire"
-    },
-    {
       "name": "Step",
       "module": "ZigLean.Sep.Full.LockWord",
       "status": "target",
@@ -369,11 +364,6 @@
       "module": "ZigLean.Sep.Full.Extent",
       "status": "target",
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "name": "WithinSpec",
-      "module": "ZigLean.Conc.TimedBudget",
-      "status": "legacy-to-retire"
     }
   ],
   "tactics": [
