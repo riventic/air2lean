@@ -1408,14 +1408,12 @@
   {
    "id": "conc-base-owned",
    "title": "Direct full-state ownership facts and pure concurrency vocabulary",
-   "status": "open",
+   "status": "closed",
    "requester": "Codex Task 01 / L12",
    "progress": "FOwned.legacy and both applications of the legacy Owned rules are removed; full-state fork/join use generic memory, heap and access-clock facts. Conc.Base contains pure vocabulary. LocsKeep and its consumers remain legacy-to-retire in Conc.LockBase and the lock modules; BlkStep, Keep and Grows also remain legacy. The legacy Owned.fork/join proofs still duplicate facts now available from Conc.Base.Threads and should reuse them in the follow-on retirement work. Stage D-d (branch claude/legacy-chain): Conc/{LockBase,Lock,LockRules,Word,Csl,Own} are deleted with LocsKeep, BlkStep, Keep, KeepK and the legacy Owned rules; nothing was restated, no consumer was left. LEFT of this row: `Grows` (ZigLean/Conc/Lemmas.lean, used by Proofs/Atomics and idle-loops) stays `legacy-to-retire`.",
    "request": "Task 01 stopped because Full/ThreadOwned derived fork/join through the legacy Owned judgment from Conc.Csl. PR #390 records the coordinator's approval to replace that dependency with generic memory/heap/access-clock facts, derive the existing FOwned rules directly, and relocate pure vocabulary into Conc/Base. Owned remains in the retiring layer; WP.liftMem_setTls remains on the WP side. This is distinct from fowned-bridges, which concerns fsym stepping through WP.liftMem_fowned* and remaining ofSeq call sites.",
-   "workaround_sites": [
-    "ZigLean/Conc/Lemmas.lean"
-   ],
-   "deletion_plan": "Left after the legacy-chain deletion (LocsKeep, Conc.Csl and the legacy Owned rules are gone): retire `Grows` in ZigLean/Conc/Lemmas.lean by restating its users (Proofs/Atomics, idle-loops) on the full-state facts, statements unchanged, then close the row. Original plan: Retire LocsKeep through the existing FStepIn/RestStep machinery and restate its lock consumers on FStepIn without weakening their contracts. Reuse the generic Conc.Base.Threads facts in the remaining legacy Owned.fork/join proofs while that layer remains, then delete those rules with Conc.Csl. If the lock migration needs a contract change, stop and post the exact obstruction with a counterexample for the maintainer. Keep LocsKeep legacy-to-retire and every real consumer in the structural gate until actual retirement."
+   "workaround_sites": [],
+   "deletion_plan": "Closed 2026-11-25: the maintainer re-statused `Grows` `target` (memory-model vocabulary, the stability condition of Proto.WP invariants, a field of the target structure GrowsAt), so nothing is left to retire; the plan below was what the row waited for. Left after the legacy-chain deletion (LocsKeep, Conc.Csl and the legacy Owned rules are gone): retire `Grows` in ZigLean/Conc/Lemmas.lean by restating its users (Proofs/Atomics, idle-loops) on the full-state facts, statements unchanged, then close the row. Original plan: Retire LocsKeep through the existing FStepIn/RestStep machinery and restate its lock consumers on FStepIn without weakening their contracts. Reuse the generic Conc.Base.Threads facts in the remaining legacy Owned.fork/join proofs while that layer remains, then delete those rules with Conc.Csl. If the lock migration needs a contract change, stop and post the exact obstruction with a counterexample for the maintainer. Keep LocsKeep legacy-to-retire and every real consumer in the structural gate until actual retirement."
   },
   {
    "id": "thread-loop",
@@ -2000,6 +1998,28 @@
    ],
    "deletion_plan": "D2: delete the row `Thread.Futex.wake` and `ThreadFn.threadFutexWake` once `Proofs/Threadsync` (Linux, aarch64-linux and macOS translations) walks the translated `Thread.Futex.wake` over `futex_3arg`/`__ulock_wake` (needs the decision above for macOS). D3: delete the row `Thread.Futex.wait`, `ThreadFn.threadFutexWait`, `Zig.threadFutexWaitC`, `threadFutexWaitCOf` and `wp_waitD`'s use of it once `Proofs/Threadsync` and the big-endian 0.15.2 concurrency fixture walk the translated `Thread.Futex.wait` over `futex_4arg`/`__ulock_wait2` (the OS wait rows then need a byte order for the big-endian targets, or those targets reject the call). F: delete the rows `Thread.Mutex.DarwinImpl.*`, `Zig.osUnfair*C`, `Zig.threadFutexWakeC`, `wp_casD`/`wp_waitD`/`wp_xchgRel` and premise STD-06 once `os_unfair_lock_lock`/`unlock`/`trylock` are OS rows under OSL-01 and `Proofs/Threadsync/ThreadMutex.lean` (macOS half) is proved against them. E: delete the rows `Io.futexWait`/`Io.futexWaitUncancelable`/`Io.futexWake`, `Zig.futexWaitC`/`futexWaitCancelableC`/`futexWakeC`, the rules over them and premise STD-05 once the `Io` futex slots are a contract (docs/interfaces.md) that the translated `Io.Threaded` proves over OSF-01/02 and OSG-01 and every client is proved against it. Then close this row.",
    "note": "Kernel-checked counterexample of the hand wake: tests/roadmap/architecture-audit/soundness-1014/futex-wake/WakeCount.lean (`hand_wakes_more`, `hand_leaves_one`)."
+  },
+  {
+   "id": "returns-within-adequacy",
+   "title": "Proto.returnsWithin concludes ReturnsWithin directly",
+   "status": "open",
+   "requester": "legacy-flip lane (maintainer decision 2026-11-25: ReturnsWithin, EventuallyReturns, EventuallyReturnsUnder are `target` outcome vocabulary of Sched.run, proved through Proto.WP + Proto.returnsWithin)",
+   "progress": "Open. `Proto.returnsWithin` (ZigLean/Conc/Returns.lean) has no client and its conclusion is written out (`∀ o fuel, cr (G0 0) ≤ fuel → ∃ r, run = some r ∧ (ok ∧ QM ∨ r = .error .stackOverflow)`), so it does not conclude `ReturnsWithin`; the only producers of the Conc/Total predicates are the hand `countdown` proofs and the idle loop's direct scheduler proof.",
+   "request": "Two library lemmas, no new judgment or tactic: (a) `Proto.returnsWithin` with the sharper hypothesis `cr (G0 0) - 1 ≤ fuel` (the potential BInv starts at `cr (G0 0) - 1`, Returns.lean:572; check the depth side); (b) a scheduler lemma `m0.NoStack` -> no run ends in `.stackOverflow` (only per-triple forms exist: `FTotalTriple.of_noStack`, Full/Block.lean:657). With both, `Proto.returnsWithin` concludes `ReturnsWithin (cr (G0 0) - 1) env dispatch main m0 (fun v m => ∃ G d, QM v G m d)` directly. Then re-prove `countdown` through a Proto with `cost := some cr` and `strict := true`, or delete it as a toy. `EventuallyReturnsUnder` needs C13 phases 1-3 (SCH-01 WeakFair), not this row.",
+   "workaround_sites": [],
+   "deletion_plan": "Not a workaround: the hand `countdown_total`/`countdown_within` proofs in ZigLean/Conc/Total.lean are replaced by the Proto route once the two lemmas exist.",
+   "note": "One Opus lane, ZigLean/Conc/Returns.lean (size S-M). Design: handoffs/claude-legacy-design.md sections 2-4."
+  },
+  {
+   "id": "timed-budget-concm",
+   "title": "TimedBudget *_sound theorems are over the opt-in TimedSched interpreter",
+   "status": "open",
+   "requester": "legacy-flip lane (maintainer decision 2026-11-25; design file note on TimedBudget)",
+   "progress": "Open. The `*_sound` theorems of ZigLean/Conc/TimedBudget.lean (`pausedLoop_sound`, `loop_sound`, `within_sound`, `solveWithin_sound`, `pausedWithin_sound`) are statements over the opt-in `TimedSched` interpreter (`Program`, no translator adapter, `resume_sound` as its invariant rule), which none of FTriple, FTotalTriple or CTriple covers. Their postconditions `SolverPost`/`BudgetPost` are plain predicates on a solver `Verdict` and are not judgments.",
+   "request": "Move the deadline futex wait into `ConcM` as a `SyncOp` and prove it through `Proto.WP` under a clock-progress premise (C04/C13 scope); `SolverPost`/`BudgetPost` survive the move unchanged.",
+   "workaround_sites": [],
+   "deletion_plan": "When the deadline wait is a `SyncOp` of `ConcM` the `TimedSched` interpreter and its `resume_sound` rule are deleted and the `*_sound` theorems are restated over `ConcM`.",
+   "note": "Belongs to C04/C13; recorded so the interpreter is not mistaken for end-state."
   },
   {
    "id": "device-read-rules",
