@@ -22842,7 +22842,7 @@
       "ZigLean/Conc/Progress.lean": "3bfbc29ef146956112dbe8a58aa492d1fb3d96e983ac59bd94c86699935193ad",
       "ZigLean/Conc/PtrAtomic.lean": "be6545ab3f0e53c47dda1d9622d29f99610ce48f724dde71a5aa6d84f5fa5c04",
       "ZigLean/Conc/PtrAtomicLemmas.lean": "db047ea1c115a2d0a247de0951cc918957b5f19dd3812a22709d3c7cdbf914f0",
-      "ZigLean/Conc/Returns.lean": "a3c900caf20246aa7f8029364856650340069bbf1dd33fcc06939829f7b93aea",
+      "ZigLean/Conc/Returns.lean": "10169c77e0dc0a1450fb3913c5cb5fe452b5c41034b311164b45270255a5f56a",
       "ZigLean/Conc/RunResult.lean": "c2e8c1595b84f7279eec356181a9bf340f2861d40445d5ef67ccd6a24f572096",
       "ZigLean/Conc/Sched.lean": "e7402180196e8e5b3163723c89c2f9d10c4622a58f48191120110698f48c974d",
       "ZigLean/Conc/Share.lean": "89af71439ca0a4a0f6bee58f06f3bb2bcd882321ede314b9d82e1d88bb3c7a4a",
