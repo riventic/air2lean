@@ -55,6 +55,8 @@ ABI = 'tests/roadmap/abi-probes/test_probe.py'
 FUZZ = 'tests/roadmap/fuzz/test_fuzz.py'
 FINGERPRINTS = 'tests/roadmap/stable-generation/test_fingerprints.py'
 FINGERPRINT_TEST = 'FingerprintTests.test_fold_invalidation_and_sidecar_checks'
+WASM = 'tests/roadmap/wasm-correspondence/test_correspondence.py'
+C_FRONTEND = 'tests/roadmap/c-frontend/test_run.py'
 
 # name -> (script, anchor, replacement, test file, module global holding the script, killing tests)
 MUTANTS = {
@@ -595,6 +597,36 @@ MUTANTS = {
     'abi-probe-pair-version-unchecked': (
         'scripts/abi-probe.py', "    if left['profile']['zig_version'] != right['profile']['zig_version']:\n",
         '    if False:\n', ABI, 'abi', ('ContractTests.test_pair_requires_one_zig_version',)),
+    # T05: each side of a target-specific kernel meets its own profile's model (pointer width).
+    'wasm-profile-model-native-width': (
+        'scripts/wasm-correspondence.py', "        want = evaluate(entry['expect'], expect_env(args, bits[side], zig))\n",
+        "        want = evaluate(entry['expect'], expect_env(args, bits['native'], zig))\n",
+        WASM, 'wc', ('Relation.test_committed_records_hold', 'Relation.test_target_specific_model_is_per_profile')),
+    # T05: a NaN on one side only is not in the tolerated float relation.
+    'wasm-one-sided-nan-tolerated': (
+        'scripts/wasm-correspondence.py', '        if is_nan(native, fmt) and is_nan(wasm, fmt):\n',
+        '        if is_nan(native, fmt) or is_nan(wasm, fmt):\n', WASM, 'wc', ('Relation.test_float_tolerance',)),
+    # T05: the declared ulp bound limits a tolerated pair.
+    'wasm-ulp-bound-ignored': (
+        'scripts/wasm-correspondence.py', "        return None if distance <= entry['ulp'] else",
+        '        return None if True else', WASM, 'wc', ('Relation.test_float_tolerance',)),
+    # T05: a record of other kernel sources is stale, never compared.
+    'wasm-stale-sources-accepted': (
+        'scripts/wasm-correspondence.py', "    if data.get('sources_sha256') != sources(relation, root):\n",
+        '    if False:\n', WASM, 'wc', ('Relation.test_stale_record_fails',)),
+    # X01: a file with a function translate-c demoted to an extern is never a verified program.
+    'c-demoted-file-counted-translated': (
+        'tests/roadmap/c-frontend/run.py', '.get("status") in ("failed", "demoted", None):\n',
+        '.get("status") in ("failed", None):\n', C_FRONTEND, 'run', ('Gates.test_a_demoted_file_is_never_lean_ok',)),
+    # X01: a deferred Lean elaboration is not `lean_ok`.
+    'c-deferred-lean-ok': (
+        'tests/roadmap/c-frontend/run.py', '    if s.get("lean", {}).get("status") != "ok":\n',
+        '    if s.get("lean", {}).get("status") not in ("ok", "deferred"):\n', C_FRONTEND, 'run',
+        ('Gates.test_deferred_lean_is_not_ok',)),
+    # X01: a translated program whose results differ from C's is gated as a divergence.
+    'c-native-mismatch-ungated': (
+        'tests/roadmap/c-frontend/run.py', '    if native in ("mismatch", "runtime_error"):\n',
+        '    if native == "runtime_error":\n', C_FRONTEND, 'run', ('Gates.test_setjmp_variadic_and_divergence',)),
 }
 
 
