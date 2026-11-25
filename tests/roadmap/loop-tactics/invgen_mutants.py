@@ -5,7 +5,8 @@
 
 The generator is untrusted: only the kernel check of the proof accepts its output. Each seeded
 mutant in FIXTURE/mutants.json (`old` replaced by `new` in the committed NAMESPACE/Inv.lean, where
-`old` occurs exactly once) must still elaborate, and FIXTURE/Proof.lean must then fail with an
+`old` occurs exactly once; with `def`, exactly once in that definition, and the mutant changes
+only it: a loop's plain-mode and credit-mode invariants repeat their facts) must still elaborate, and FIXTURE/Proof.lean must then fail with an
 error inside one of the theorems listed in `in` (from its `theorem` line to the next declaration),
 so that an import error or a failure elsewhere does not count. WORK/olean holds the compiled
 NAMESPACE/Gen.olean and LEAN_PATH reaches the library. AIR2LEAN_MUTANT_JOBS mutants run at a
@@ -36,6 +37,17 @@ def spans(proof):
     return out
 
 
+def scope(text, name):
+    """The definition `name` in the generated file, as (start, end): from its `def` up to and
+    including the newline before the next blank line. None unless it is defined exactly once."""
+    head = f'def {name} '
+    start = text.find(head)
+    if start < 0 or text.find(head, start + 1) >= 0:
+        return None
+    end = text.find('\n\n', start)
+    return start, len(text) if end < 0 else end + 1
+
+
 def run(fixture, ns, work, mutant, theorems):
     """Why `mutant` was not rejected inside its theorems, or None."""
     name = mutant['name']
@@ -44,9 +56,16 @@ def run(fixture, ns, work, mutant, theorems):
     (mdir / 'src' / ns).mkdir(parents=True)
     shutil.copy(work / 'olean' / ns / 'Gen.olean', mdir / 'olean' / ns)
     text = (fixture / ns / 'Inv.lean').read_text()
-    if text.count(mutant['old']) != 1:
-        return f"{mutant['old']!r} does not occur exactly once in the generated file"
-    (mdir / 'src' / ns / 'Inv.lean').write_text(text.replace(mutant['old'], mutant['new']))
+    lo, hi, where = 0, len(text), 'the generated file'
+    if 'def' in mutant:
+        span = scope(text, mutant['def'])
+        if span is None:
+            return f"the generated file does not have exactly one definition {mutant['def']}"
+        lo, hi, where = *span, mutant['def']
+    if text.count(mutant['old'], lo, hi) != 1:
+        return f"{mutant['old']!r} does not occur exactly once in {where}"
+    (mdir / 'src' / ns / 'Inv.lean').write_text(
+        text[:lo] + text[lo:hi].replace(mutant['old'], mutant['new']) + text[hi:])
     env = dict(os.environ, LEAN_PATH=f"{mdir / 'olean'}:{os.environ.get('LEAN_PATH', '')}")
     subprocess.run(['lake', 'env', 'lean', '-R', str(mdir / 'src'), '-o', str(mdir / 'olean' / ns / 'Inv.olean'),
                     str(mdir / 'src' / ns / 'Inv.lean')], env=env, check=True)

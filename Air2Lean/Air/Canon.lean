@@ -142,11 +142,16 @@ partial def rewriteBody (g : RawInst → Option RawInst) (body : Array RawInst) 
 
 /-- Zig 0.17.1 writes `&v[i]` as a `ptr_cast` of the vector pointer to a lane pointer
 (`Layout.vectorIndex`). 0.16.0 wrote `ptr_elem_ptr` of the vector pointer and the lane index,
-typed as a plain element pointer, when the lane is a power-of-two number of whole bytes. This
-gives those lanes the 0.16.0 form (adding the element pointer and `usize` types if the table
-lacks them); other lane pointers stay, and `Check.lean` rejects them. A lane pointer carries the
-vector pointer's alignment (`*align(16:0:4:1) u32`); the element pointer gets the alignment of
-its own address, as in 0.16.0: `gcd(align, k * size)`, the power of two the lane offset keeps. -/
+typed as a plain element pointer, when the lane is a power-of-two number of whole bytes
+(`wholeByteLane`), and typed as the lane pointer for every other lane (`u9`, `u24`, `bool`,
+`f80`). This gives every `&v[i]` the 0.16.0 form: `ptr_elem_ptr` of the vector pointer and the
+lane index (adding the `usize` type if the table lacks it), with the plain element pointer type
+for a whole-byte lane (added if the table lacks it) and the lane pointer type kept for the others
+(`Check.lean`'s `CheckCtx.lanePtr` then compares the type's lane with the index). A `ptr_cast` to
+a lane pointer from anything else than a pointer to its vector stays a cast. A lane pointer
+carries the vector pointer's alignment (`*align(16:0:4:1) u32`); the element pointer gets the
+alignment of its own address, as in 0.16.0: `gcd(align, k * size)`, the power of two the lane
+offset keeps. -/
 def laneElemPtrs (f : RawFunc) : RawFunc := Id.run do
   let mut types := f.types
   let mut layouts := f.layouts
@@ -160,9 +165,12 @@ def laneElemPtrs (f : RawFunc) : RawFunc := Id.run do
     let some k := l.vectorIndex | continue
     let some (.ptr "one" _ vec) := (producers[p]?).bind (types[·]?) | continue
     let some (.vector n child) := types[vec]? | continue
-    let bits := match types[lane]? with | some (.int _ b) | some (.float b) => b | _ => 0
+    unless child == lane && k < n do continue
+    -- A bit-packed lane keeps its lane pointer type (`lanePtrLayout`).
+    unless wholeByteLane types layouts lane do
+      repl := repl.insert i.id (ty, k)
+      continue
     let bytes := ((layouts[lane]?).bind (·.size)).getD 0
-    unless child == lane && k < n && bytes ∈ [1, 2, 4, 8, 16] && bits == 8 * bytes do continue
     let plain : Layout :=
       { l with hostSize := 0, bitOffset := 0, vectorIndex := none, vectorIndexExported := false,
                ptrAlign := l.ptrAlign.map (Nat.gcd · (k * bytes)) }
