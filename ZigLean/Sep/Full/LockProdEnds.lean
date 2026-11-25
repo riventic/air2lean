@@ -13,7 +13,7 @@ other lock's view, and for the product.
 - `FLock.Keeps.ghost`, `Keeps.join`: what the product keeps of `B` (`FLock.Facts.ghost`,
   `Facts.join`, `ZigLean/Sep/Full/LockProd.lean`). No thread that ends or joins holds `B`, so the
   holders' resources and their owners' clocks stay (`Mem.OwnsRes.join_other`), and a join keeps
-  the blocks, so `B`'s side stays (`joinedB_join`, `ZigLean/Sep/Full/LockWord.lean`).
+  the blocks, so `B`'s side stays (`joinedB_join`, `ZigLean/Conc/Base/Lock.lean`).
 - `FLock.Pair.U_ghost`, `U_join`: the product's rest, when the client's own `U` is kept.
 - `FLock.Pair.inv_ghost`, `inv_join`: `A`'s invariant with the product's rest, over each.
 -/

@@ -115,6 +115,11 @@ theorem tsum_le {N : Nat} {g h : Nat → Nat} (e : ∀ u, u < N → g u ≤ h u)
     rw [tsum_succ, tsum_succ]
     exact Nat.add_le_add (ih fun u hu => e u (by omega)) (e N (by omega))
 
+/-- A count of the indices with a property is at most the number of indices. -/
+theorem tsum_ite_le (N : Nat) (p : Nat → Prop) [DecidablePred p] :
+    tsum N (fun u => if p u then 1 else 0) ≤ N :=
+  Nat.le_trans (tsum_le fun u _ => by split <;> omega) (Nat.le_of_eq (tsum_one N))
+
 theorem tsum_add (N : Nat) (g h : Nat → Nat) :
     tsum N (fun u => g u + h u) = tsum N g + tsum N h := by
   induction N with
