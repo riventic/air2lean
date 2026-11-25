@@ -23,8 +23,9 @@ supported version, so one translation (and the proofs over it) serves all versio
    safety checks combine their conditions with `bit_and`/`bit_or` on `bool` (or `bool` vector)
    operands, which the pass renames to `bool_and`/`bool_or` (both evaluate both operands, so
    the meaning is the same). A `ptr_cast` of a vector pointer to one of its lane pointers
-   becomes 0.16.0's `ptr_elem_ptr` (`laneElemPtrs`). It rejects a tag that the file's `zig_version` does not
-   have (`airTagReason?`), before the rename can make a misplaced tag look canonical.
+   becomes 0.16.0's `ptr_elem_ptr` (`laneElemPtrs`). It rejects a tag that the file's
+   `zig_version` does not have (`airTagReason?`), before the rename can make a misplaced tag
+   look canonical.
 
 1. `forwardReadOnlyCopies`. Sema lowers `&v` of a constant value `v` (a parameter, a union
    payload) to a read-only stack copy: `alloc`, one `store` of `v`, and `bitcast`s to a const

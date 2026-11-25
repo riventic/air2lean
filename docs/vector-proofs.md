@@ -160,7 +160,10 @@ pointer type too, which does not coerce to `*T` ("pointer host size '4' cannot c
 host size '0'"), and `@intFromPtr(&v[1])` is the vector's address there
 (`lang-long-tail/lane_values.zig`: `u8`, `i16`, `u32`, `u64`, `u128`, `f32` and `f64` lane
 pointers as a parameter, a result, a struct field, a `const` lane and a constant, and the address
-offset, 0.14.1–0.17.1, native probes of the four stock compilers equal to the model).
+offset, 0.14.1–0.17.1, native probes of the four stock compilers equal to the model). A store
+through a lane pointer of any lane is `Zig.storeLane`, which reads and writes the vector's whole
+host bytes, so two threads that write different lanes of one vector through lane pointers race in
+the model (`.illegal`): a conservative over-approximation where the backend stores only the lane.
 
 Scope. The lane layout is LLVM's (LangRef: a vector of non-byte lanes is laid out as its
 bit-cast integer, lane 0 in the low bits on little-endian targets); the translator admits it

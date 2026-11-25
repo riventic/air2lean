@@ -80,8 +80,8 @@ def positive(binary, elaborate):
                        "Zig.Vec.map2M (fun x0 x1 => Zig.divCeil true x0 x1)",
                        "Zig.enumOf (Color.ofInt?", "(p0 && p1)", "(i2 || p1)", "(p0 &&& p1)",
                        "Zig.load (BitVec 32) 4 i1", "Zig.Float.toBits? p0",
-                       # `&v[i]` of a whole-byte lane is a lane pointer, as of every lane: the
-                       # vector's address and alignment, lane `i` at bit `32 * i` of its 16 bytes.
+                       # Every `&v[i]` is a lane pointer (`u32` lanes here): the vector's
+                       # address and alignment, lane `i` at bit `32 * i` of its 16 bytes.
                        "Zig.storeLane (α := BitVec 32) 16 16 64 i2 p1",
                        "Zig.loadLane (BitVec 32) 16 4 32 i4",
                        # A runtime `@splat` to an array is the array of copies of its operand.
