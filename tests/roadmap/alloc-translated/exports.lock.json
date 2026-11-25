@@ -165,7 +165,7 @@
   "schema": 1,
   "sources_sha256": {
     "fba.zig": "463abb48ed6af2c363d43a3d96aa94817d4001e0729fb2010477285aa3537983",
-    "native.zig": "89690be6be2531e68fc36e4d202f6a5a44a5b5270a0c67f5f91f4bf8294dcc6c",
+    "native.zig": "7b933eb03acb0a4a4cfa25dc48cdedeeffbaced4270e397dca67fbaab103a8c6",
     "page.zig": "e41d289765a6fdb8b77552262845c5b81685a0f388df32c8fecd8809b0471a6e"
   }
 }
