@@ -321,6 +321,26 @@ class Passes(unittest.TestCase):
         self.assertIn("lake failed", (self.temp / "logs" / "shared-build.log").read_text())
         self.assertFalse(marker.exists(), "a unit ran without the fixture package")
 
+    def test_the_fixture_package_is_built_by_several_lean_processes_only_when_each_is_admitted(self):
+        # With the units' LEAN_NUM_THREADS (1 in the full build) Lake built the package one module
+        # at a time. In an elastic admission each Lean process is a sub-admission, so Lake may run
+        # --build-lean-threads of them; outside one nothing bounds them: the units' count stays.
+        seen = self.temp / "threads"
+        build = ["sh", "-c", 'printf %%s "$LEAN_NUM_THREADS" > "%s"' % seen]
+        grant = {"lock": "/l/build.lock", "elastic": {"id": "e"}}
+        with mock.patch.object(fc, "FIXTURE_BUILD", build), \
+                mock.patch.object(fc.assumptions, "prepared_tool", offline_prepared_tool), \
+                mock.patch.dict(os.environ, {"LEAN_NUM_THREADS": "1"}):
+            with mock.patch.object(fc, "elastic_grant", lambda: grant), \
+                    mock.patch.object(fc, "lean_processes_env", lambda grant: dict(os.environ, LEAN="guarded")):
+                self.assertIsNone(fc.prepare_shared(self.temp / "a.log", 6))
+                self.assertEqual(seen.read_text(), "6")
+                self.assertIsNone(fc.prepare_shared(self.temp / "b.log"))
+                self.assertEqual(seen.read_text(), "1")
+            with mock.patch.object(fc, "elastic_grant", lambda: None):
+                self.assertIsNone(fc.prepare_shared(self.temp / "c.log", 6))
+                self.assertEqual(seen.read_text(), "1")
+
     def test_the_units_share_the_runs_toolchain_digest_and_a_change_fails_the_run(self):
         (self.hidden / "input").write_text("ok\n")
         self.unit["run"] = '[ "$AIR2LEAN_TOOLCHAIN_RUNTIME_RUN" = offline-record ]\n'

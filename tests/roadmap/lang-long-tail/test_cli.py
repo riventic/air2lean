@@ -257,6 +257,31 @@ def float_lanes(binary):
     other = copy.deepcopy(docs)
     other["float_lanes.middle.json"]["profile"]["backend"] = "stage2_x86_64"
     reject(binary, other, FL + ["--allow-unqualified-build-mode"], "LLVM backend")
+    # Zig 0.17.1 writes `&v[k]` as a `ptr_cast` of the vector pointer to the lane pointer type
+    # (`Canon.laneElemPtrs`): the same lane accesses as 0.16.0's `ptr_elem_ptr`.
+    name = "float_lanes.middle.json"
+    docs17 = fixtures("float_lanes", "0.17.1")
+    middle = {name: docs17[name]}
+    lane_casts = [inst for inst in walk(middle[name]["body"]) if inst["tag"] == "ptr_cast"
+                  and "vector_index" in middle[name]["types"][inst["ty"]]]
+    assert lane_casts, "the 0.17.1 export has no lane-pointer `ptr_cast`"
+    text = accept(binary, middle, FL)
+    assert "Zig.storeLane (α := Zig.F80) 30 16 80" in text and "Zig.loadLane (Zig.F80) 30 16 80" in text
+    assert text.split("\n", 1)[1] == accept(binary, docs, FL).split("\n", 1)[1], "0.17.1 differs from 0.16.0"
+    # Another backend lays lanes out differently: no bit-pointer model.
+    other = copy.deepcopy(middle)
+    other[name]["profile"]["backend"] = "stage2_x86_64"
+    reject(binary, other, FL + ["--allow-unqualified-build-mode"], "LLVM backend")
+    # A lane pointer whose type's lane count is not its vector's (4 lanes for a 3-lane vector).
+    wrong = copy.deepcopy(middle)
+    for ty in {inst["ty"] for inst in lane_casts}:
+        wrong[name]["types"][ty]["host_size"] = 4
+    reject(binary, wrong, FL, "a lane pointer whose type does not match its vector and comptime lane")
+    # A lane beyond the vector's lanes is not a lane pointer of any vector.
+    beyond = copy.deepcopy(middle)
+    for ty in {inst["ty"] for inst in lane_casts}:
+        beyond[name]["types"][ty]["vector_index"] = 3
+    reject(binary, beyond, FL, "a pointer to a vector lane (vector_index)")
 
 
 def main():

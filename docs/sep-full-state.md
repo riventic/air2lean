@@ -604,8 +604,8 @@ arena's child, the `std.mem.Allocator` clients M01–M04) could not both hold it
   an atomic write's message: its `accessW`; each primitive's `KMono` proof checks it) except
   `Zig.free`, which ended any live block at offset 0. **Model correction**: `Zig.free` of a `const`
   global throws `.illegal` (native code cannot free static storage; no generated `free` reaches
-  one: it frees stack slots, and `rawFree`/`ownedFree` check the kind first). The legacy free
-  lemmas got the side condition (`free_run_core`, `free_run`, `Triple.free`, `TTriple.free`,
+  one: it frees stack slots, and `rawFree`/`ownedFree` check the kind first). The free
+  lemmas got the side condition (`free_run_core`, `free_run`,
   `free_whole`, `FTriple.free'`: `K ≠ .constGlobal`, by `decide` for a concrete kind;
   `free_noErr`: `blk.kind ≠ .constGlobal`). So a live `const` global keeps its bytes, address and
   life in every later memory.
@@ -1510,8 +1510,9 @@ through the existing rules, without a new environmental premise or judgment.
 See [sep-threads.md, “Seen floors and frame locality”](sep-threads.md) for the
 model argument, standards references and necessity/advancing-read controls.
 
-* **Ownership by threads** (`Mem.Owns`, `Owned` in `Conc/Csl.lean`) is about legacy heaps. It
-  carries over by putting `FHeap`s in the parts. A thread's part then owns its constraints too,
+* **Ownership by threads** (`Mem.Owns`; the legacy `Owned` of the deleted `Conc/Csl.lean`) was
+  about legacy heaps. It carried over by putting `FHeap`s in the parts (`FOwned`,
+  `Full/ThreadOwned.lean`). A thread's part then owns its constraints too,
   so an atomic op of thread `t` on its own word keeps another part's constraints (`holds_after`
   generalises: the new location covers only `t`'s bytes). With several threads a retire can
   throw `.unspecified` (a racing access to the old location); a concurrent rule needs the
