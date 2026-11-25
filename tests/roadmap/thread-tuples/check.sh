@@ -95,7 +95,10 @@ for version in $(python3 -c 'import json, sys; print(*json.load(open(sys.argv[1]
     "$gen/ThreadTuples/Gen.lean" "$gen/generated-report.json"
   export LEAN_PATH="$gen:$lean_path"
   "${lean_cmd[@]}" -R "$gen" -o "$gen/ThreadTuples/Gen.olean" "$gen/ThreadTuples/Gen.lean"
-  "${lean_cmd[@]}" -R "$repo_root/tests/roadmap/thread-tuples" tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean
+  "${lean_cmd[@]}" -R "$repo_root/tests/roadmap/thread-tuples" -o "$gen/ThreadTuples/Proofs.olean" \
+    tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean
+  # The non-vacuity witnesses of the proofs' specs (imported by tests/roadmap/strength-log/ThreadFixtures.lean).
+  "${lean_cmd[@]}" -R "$repo_root/tests/roadmap/thread-tuples" tests/roadmap/thread-tuples/ThreadTuples/Nonvacuity.lean
   "${lean_cmd[@]}" -R "$repo_root/tests/roadmap/thread-tuples" --run tests/roadmap/thread-tuples/ThreadTuples/Runtime.lean
   # groupMixed under failing assignment: every exit must finish the group before freeing its frame.
   "$translator" "$air" -o "$gen/ThreadTuplesFallible/Gen.lean" \
