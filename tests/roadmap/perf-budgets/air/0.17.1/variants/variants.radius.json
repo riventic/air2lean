@@ -1,0 +1,374 @@
+{
+ "schema": 12,
+ "zig_version": "0.17.1",
+ "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...7.2-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.17.1",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "variants.radius",
+ "module": "root",
+ "src": {
+  "file": "variants.zig",
+  "module": "variants",
+  "decl_line": 85
+ },
+ "params": [
+  0
+ ],
+ "noalias": [],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "alloc",
+   "ty": 2
+  },
+  {
+   "id": 2,
+   "tag": "store_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 1
+    },
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "tag": "ptr_cast",
+   "ty": 4,
+   "args": [
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 2,
+   "column": 13
+  },
+  {
+   "id": 5,
+   "tag": "load",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "tag": "get_union_tag",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 5
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "tag": "cmp_eq",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 6
+    },
+    {
+     "ty": 5,
+     "enum": "0"
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "tag": "block",
+   "ty": 3,
+   "body": [
+    {
+     "id": 13,
+     "tag": "cond_br",
+     "ty": 7,
+     "args": [
+      {
+       "inst": 7
+      }
+     ],
+     "then": [
+      {
+       "id": 14,
+       "tag": "br",
+       "ty": 7,
+       "target": 12,
+       "args": [
+        {
+         "ty": 3,
+         "val": "{}"
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 10,
+       "tag": "call",
+       "ty": 7,
+       "callee": {
+        "ty": 8,
+        "func": "debug.FullPanic((function 'defaultPanic')).inactiveUnionField__func_0",
+        "module": "std",
+        "instance_key": "7d91c977aa378ed37c7e44b372e4aec488b8de9569becab49b01a4ec4248aab9",
+        "noreturn": true
+       },
+       "args": [
+        {
+         "inst": 6
+        },
+        {
+         "ty": 5,
+         "enum": "0"
+        }
+       ]
+      },
+      {
+       "id": 11,
+       "tag": "unreach",
+       "ty": 7
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 15,
+   "tag": "struct_field_ptr_index_0",
+   "ty": 9,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 16,
+   "tag": "load",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 15
+    }
+   ]
+  },
+  {
+   "id": 17,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 18,
+   "tag": "ret_safe",
+   "ty": 7,
+   "args": [
+    {
+     "inst": 16
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "union",
+   "name": "variants.Shape",
+   "module": "root",
+   "layout": "auto",
+   "tag": 5,
+   "fields": [
+    {
+     "name": "circle",
+     "ty": 1
+    },
+    {
+     "name": "rect",
+     "ty": 10
+    },
+    {
+     "name": "square",
+     "ty": 1
+    },
+    {
+     "name": "empty",
+     "ty": 3
+    }
+   ],
+   "abi_size": 12,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 0,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 0,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "enum",
+   "name": "@typeInfo(variants.Shape).@\"union\".tag_type.?",
+   "module": "root",
+   "tag": 11,
+   "exhaustive": true,
+   "fields": [
+    {
+     "name": "circle",
+     "value": "0"
+    },
+    {
+     "name": "rect",
+     "value": "1"
+    },
+    {
+     "name": "square",
+     "value": "2"
+    },
+    {
+     "name": "empty",
+     "value": "3"
+    }
+   ],
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "other",
+   "name": "fn (@typeInfo(variants.Shape).@\"union\".tag_type.?, @typeInfo(variants.Shape).@\"union\".tag_type.?) noreturn"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 1,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "variants.Rect",
+   "module": "root",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "w",
+     "ty": 1,
+     "offset": 0
+    },
+    {
+     "name": "h",
+     "ty": 1,
+     "offset": 4
+    }
+   ],
+   "abi_size": 8,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 2,
+   "abi_size": 1,
+   "abi_align": 1
+  }
+ ]
+}
