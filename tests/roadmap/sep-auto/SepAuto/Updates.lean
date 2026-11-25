@@ -494,6 +494,13 @@ theorem return_bool_match (P : FAssn) (n len : Nat) :
       (fun r => (match r with | true => ⟪n ≤ len⟫ | false => ⟪len < n⟫) ⋆ P) := by
   fsym
 
+/-- A post that mentions the returned `Bool` without matching on it: no split, the goal
+`f a = g a` is left as it is (`Proofs/Recursion/Proofs.lean`, `parity_total`). -/
+theorem return_bool_mention (f g : Nat → Bool) (a : Nat) (h : f a = g a) :
+    FTotalTriple emp (pure (f a) : MemM Bool) (fun v => ⟪v = g a⟫) := by
+  fsym
+  all_goals exact h
+
 end Split
 
 end SepAuto.Updates

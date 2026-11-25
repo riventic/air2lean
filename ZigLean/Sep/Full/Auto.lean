@@ -7618,8 +7618,13 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
     s.restore
     -- a returned value of an enumeration (a `Bool` expression `n ≤ len`, not a constructor) that
     -- the postcondition matches on: split it, each case a return of a constructor (ledger
-    -- #return-bool-split), as a `match` of the program on a term
-    if let some r ← splitValue v then return r
+    -- #return-bool-split), as a `match` of the program on a term. Kept only if it closes the
+    -- return: a post that merely mentions the value (`⟪v = f a⟫`) leaves its cases weaker than
+    -- the unsplit goal (`true = …` with `hr : f a = true`), so that goal is left as it is
+    if let some r ← splitValue v then
+      if r.isEmpty then return r
+      trace[fsym] "return: the value's split leaves goals; not split"
+      s.restore
     -- more facts (of the atoms) may close it, or views of its atoms
     if let some r ← moreFacts then return r
     if part?.isNone then
