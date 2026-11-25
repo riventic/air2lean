@@ -1,5 +1,5 @@
 {
- "schema": 12,
+ "schema": 11,
  "zig_version": "0.15.2",
  "target_endian": "little",
  "unchecked_ib": [
