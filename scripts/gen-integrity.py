@@ -300,7 +300,10 @@ FIXTURES = [
         ("error_ints_w8", "ErrorInts", "ErrorIntsW8", "error_ints.", "0.16.0", ("0.16.0", "0.17.1", "0.15.2")),
         ("runtime_lanes", "RuntimeLanes", "RuntimeLanes", "runtime_lanes.", "0.15.2", ("0.15.2",)),
         ("float_lanes", "FloatLanes", "FloatLanes", "float_lanes.", "0.16.0", ("0.16.0", "0.15.2", "0.14.1")),
-        ("lane_shapes", "LaneShapes", "LaneShapes", "lane_shapes.", "0.16.0", ("0.16.0", "0.15.2", "0.14.1")))
+        ("lane_shapes", "LaneShapes", "LaneShapes", "lane_shapes.", "0.16.0",
+         ("0.16.0", "0.17.1", "0.15.2", "0.14.1")),
+        ("lane_values", "LaneValues", "LaneValues", "lane_values.", "0.16.0",
+         ("0.16.0", "0.17.1", "0.15.2", "0.14.1")))
     for v in versions
 ]
 
