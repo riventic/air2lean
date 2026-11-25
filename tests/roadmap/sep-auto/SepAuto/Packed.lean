@@ -10,8 +10,9 @@ generates (`LawfulPacked`, derived by `lawfulPackedOf?` from the generated insta
 `mask` names), and a struct without fields. A store of `fromInt(b)` (`Packed.ofBits b`) to a word
 leaves the word `b` (the arena's `reset` storing a node's size). Arrays and vectors have each
 direction of their lanes' law, for every lane type and width (the generic instances). A packed
-union has the bits direction only (`PackedU.bitsOf_intBytes`); a struct with a union field gets
-no law derived yet (fail closed; ledger #packed-lawful-split). The types are written as the
+union has the bits direction only (`PackedU.bitsOf_intBytes`), and so has a struct with a union
+field (its value direction fails closed; ledger #packed-lawful-split); a struct with a vector
+field and a vector of enum lanes get their laws derived too. The types are written as the
 translator writes them (`tests/golden/0.17.1/layout/Gen.lean`).
 -/
 
@@ -266,22 +267,50 @@ theorem reg_no_val : ∃ u : Reg, Packed.mask u = BitVec.allOnes 8 ∧
     (Packed.ofBits (Packed.toBits u) : Reg) ≠ u :=
   ⟨⟨#v[.mask 0xFF 0]⟩, by decide, by decide +kernel⟩
 
-set_option linter.unusedVariables false in
-/-- A struct with a packed union field: no round trip law derived (fail closed; the engine's
-derivation by direction, ledger #packed-lawful-split). -/
-example (x : BitVec 9) : True := by
-  fail_if_success have : Packed.toBits (Packed.ofBits x : Wrap) = x := by fsym_arith
-  trivial
+/-- A struct with a packed union field has the bits direction (its fields', derived by direction,
+ledger #packed-lawful-split)... -/
+theorem wrap_bits (x : BitVec 9) : Packed.toBits (Packed.ofBits x : Wrap) = x := by
+  fsym_arith
 
 set_option linter.unusedVariables false in
-example (v : Wrap) : True := by
+/-- ... and not the value direction (fail closed: the union has none, `reg_no_val`). -/
+example (v : Wrap) (h : Packed.mask v = BitVec.allOnes 9) : True := by
   fail_if_success have : (Packed.ofBits (Packed.toBits v) : Wrap) = v := by fsym_arith
   trivial
 
-/-- A type without a law (a packed union field) is left alone, and its failed derivation logs no
-error into the proof that meets it (at the top level, with error recovery on). -/
-theorem wrap_left (x : BitVec 9) (h : Packed.toBits (Packed.ofBits x : Wrap) = x) :
-    Packed.toBits (Packed.ofBits x : Wrap) = x := by
+/-- A type without a law of a direction (a packed union field, the value direction) is left
+alone, and its failed derivation logs no error into the proof that meets it (at the top level,
+with error recovery on). -/
+theorem wrap_left (v : Wrap) (h : (Packed.ofBits (Packed.toBits v) : Wrap) = v) :
+    (Packed.ofBits (Packed.toBits v) : Wrap) = v := by
+  fsym_arith
+
+/-! ## Array and vector fields, lanes of a derived law -/
+
+/-- A packed struct with a vector field (Zig 0.15.2 `VectorFields`, `VF`): the field's validity
+and determined bits from its lanes' (`Packed.valid_vec_of`, `Packed.mask_vec_of`). -/
+structure VF where
+  t : BitVec 4
+  v : Zig.Vec (BitVec 4) 3
+  deriving Repr, Inhabited, DecidableEq
+
+instance : Zig.Packed VF 16 where
+  toBits v := ((Zig.Packed.toBits v.t).setWidth 16 <<< 0) ||| ((Zig.Packed.toBits v.v).setWidth 16 <<< 4)
+  ofBits b := { t := Zig.Packed.get b 0, v := Zig.Packed.get b 4 }
+
+theorem vf_bits (x : BitVec 16) : Packed.toBits (Packed.ofBits x : VF) = x := by
+  fsym_arith
+
+theorem vf_val (v : VF) : (Packed.ofBits (Packed.toBits v) : VF) = v := by
+  fsym_arith
+
+/-- Lanes of an enum: the lane's law derived first (no instance), then the vector's. -/
+theorem vec_enum_bits (x : BitVec (2 * 2)) (h : Packed.valid (α := Vector Mode 2) x = true) :
+    Packed.toBits (Packed.ofBits x : Vector Mode 2) = x := by
+  fsym_arith
+
+theorem vec_enum_val (v : Vec Mode 2) (h : Packed.mask v = BitVec.allOnes (2 * 2)) :
+    (Packed.ofBits (Packed.toBits v) : Vec Mode 2) = v := by
   fsym_arith
 
 /-! ## Generic clients and the nesting budget -/

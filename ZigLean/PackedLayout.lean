@@ -473,6 +473,38 @@ instance [LawfulPackedVal α w] : LawfulPackedVal (Vec α k) (k * w) where
 
 instance [LawfulPacked α w] : LawfulPacked (Vec α k) (k * w) := LawfulPacked.of
 
+/-- All bits of an array are valid when all bits of a lane are (a packed struct's array field:
+its `PField.Valid`). -/
+theorem Packed.valid_lanes_of (h : ∀ b : BitVec w, Packed.valid (α := α) b = true)
+    (b : BitVec (k * w)) : Packed.valid (α := Vector α k) b = true := by
+  change (lanesOf (w := w) k b).all (Packed.valid (α := α)) = true
+  exact Vector.all_eq_true.mpr fun _ _ => h _
+
+/-- `Packed.valid_lanes_of` for a vector. -/
+theorem Packed.valid_vec_of (h : ∀ b : BitVec w, Packed.valid (α := α) b = true)
+    (b : BitVec (k * w)) : Packed.valid (α := Vec α k) b = true :=
+  Packed.valid_lanes_of h b
+
+/-- Every bit of an array is determined when every bit of each lane value is (a packed struct's
+array field: its `PField.Full`). -/
+theorem Packed.mask_lanes_of (h : ∀ x : α, Packed.mask x = BitVec.allOnes w) (v : Vector α k) :
+    Packed.mask v = BitVec.allOnes (k * w) := by
+  apply BitVec.eq_of_getLsbD_eq
+  intro t ht
+  have hw : 0 < w := Nat.pos_of_ne_zero fun h0 => by simp [h0] at ht
+  have hi : t / w < k := Nat.div_lt_of_lt_mul (by rw [Nat.mul_comm]; exact ht)
+  have hj : t % w < w := Nat.mod_lt _ hw
+  have e := BitCast.getLsbD_ofLanes (v.map Packed.mask) (t / w) (t % w) hi hj
+  rw [Nat.div_add_mod] at e
+  change (Packed.mask v).getLsbD t = _ at e
+  rw [e, Vector.getElem_map, h, BitVec.getLsbD_allOnes, BitVec.getLsbD_allOnes, decide_eq_true hj,
+    decide_eq_true ht]
+
+/-- `Packed.mask_lanes_of` for a vector. -/
+theorem Packed.mask_vec_of (h : ∀ x : α, Packed.mask x = BitVec.allOnes w) (v : Vec α k) :
+    Packed.mask v = BitVec.allOnes (k * w) :=
+  Packed.mask_lanes_of h v.lanes
+
 end Lanes
 
 /-! ## Packed unions
@@ -524,21 +556,21 @@ theorem PackedU.bitsOf_intBytes {n k : Nat} (b : BitVec n) (hk : (n + 7) / 8 ≤
     List.getElem?_map, List.getElem?_range hj, Option.map_some, Option.getD_some, e,
     hostBit_intBytes b hj]
 
-/-- **Valid bits read back** (`LawfulPacked`): the rewrite of the arithmetic normal form. -/
-theorem Packed.toBits_ofBits_of {α : Type} {n : Nat} [Packed α n] [LawfulPacked α n] {b : BitVec n}
-    (h : Packed.valid (α := α) b = true) : Packed.toBits (Packed.ofBits b : α) = b :=
-  LawfulPacked.toBits_ofBits b h
+/-- **Valid bits read back** (`LawfulPackedBits`): the rewrite of the arithmetic normal form. -/
+theorem Packed.toBits_ofBits_of {α : Type} {n : Nat} [Packed α n] [LawfulPackedBits α n]
+    {b : BitVec n} (h : Packed.valid (α := α) b = true) : Packed.toBits (Packed.ofBits b : α) = b :=
+  LawfulPackedBits.toBits_ofBits b h
 
-/-- **A value with every bit determined reads back** (`LawfulPacked`): the rewrite of the
+/-- **A value with every bit determined reads back** (`LawfulPackedVal`): the rewrite of the
 arithmetic normal form. -/
-theorem Packed.ofBits_toBits_of {α : Type} {n : Nat} [Packed α n] [LawfulPacked α n] {v : α}
+theorem Packed.ofBits_toBits_of {α : Type} {n : Nat} [Packed α n] [LawfulPackedVal α n] {v : α}
     (h : Packed.mask v = BitVec.allOnes n) : (Packed.ofBits (Packed.toBits v) : α) = v :=
-  (LawfulPacked.ofBits_toBits v h).2
+  (LawfulPackedVal.ofBits_toBits v h).2
 
-/-- **The bits of a value with every bit determined are valid** (`LawfulPacked`): the rewrite of
-the arithmetic normal form. -/
-theorem Packed.valid_toBits_of {α : Type} {n : Nat} [Packed α n] [LawfulPacked α n] {v : α}
+/-- **The bits of a value with every bit determined are valid** (`LawfulPackedVal`): the rewrite
+of the arithmetic normal form. -/
+theorem Packed.valid_toBits_of {α : Type} {n : Nat} [Packed α n] [LawfulPackedVal α n] {v : α}
     (h : Packed.mask v = BitVec.allOnes n) : Packed.valid (α := α) (Packed.toBits v) = true :=
-  (LawfulPacked.ofBits_toBits v h).1
+  (LawfulPackedVal.ofBits_toBits v h).1
 
 end Zig
