@@ -22,7 +22,7 @@ the Conc CSL chain) is migrated and deleted.
 |---|---|---|---|
 | `legacy_users` | 97 at the arena landing (2026-10-14) | 41 | **0** |
 | tactic entries | 34 before #471 (2026-10-19) | 29 | **8** (`legacy-to-retire`: `when_defined`) |
-| judgments / registries | | | 67 / 14 |
+| judgments / registries | | | 66 / 14 |
 
 The legacy layer is deleted (stage D-d and the modules of D-e, [legacy-retirement](docs/legacy-retirement.md)):
 the legacy RwLock, Semaphore and Sync/Lock proofs, `Contracts.RwContract`, the Conc library chain
@@ -32,7 +32,7 @@ the goal, in order:
 1. **RwLock clients: done.** `rwLockRead` and `rwLockSnapshotPair` are clients of `RwLockImpl`
    (`Sync.ioRwLock` is its `Io.RwLock` instance, over `SemImpl` and `MutexImpl`) in
    `Proofs/Sync/RwLockFixture.lean`, statements unchanged.
-2. **The last `legacy-to-retire` entries.** 12 judgments (`StepIn`, `Grows`, the `Conc/Total` and
+2. **The last `legacy-to-retire` entries.** 11 judgments (`Grows`, the `Conc/Total` and
    `TimedBudget` judgments, test fixtures) and the tactics below
    ([legacy-retirement](docs/legacy-retirement.md), section 5).
 3. **Stage D-e, final step.** The strength log (`tests/roadmap/strength-log/`, `Full/Strength`) is
