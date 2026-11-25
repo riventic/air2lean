@@ -1004,6 +1004,74 @@ simproc [fsym_norm] reduceLitAdd (Zig.add false _ _ _) := reduceLitArithCore ``Z
 simproc [fsym_norm] reduceLitSub (Zig.sub false _ _ _) := reduceLitArithCore ``Zig.sub ``sub_lit
 simproc [fsym_norm] reduceLitMul (Zig.mul false _ _ _) := reduceLitArithCore ``Zig.mul ``mul_lit
 
+theorem intCast_lit {n m : Nat} {s₁ s₂ safe : Bool} {a : BitVec n} (r : BitVec m)
+    (h : Zig.intLo s₂ m ≤ Zig.val s₁ a ∧ Zig.val s₁ a ≤ Zig.intHi s₂ m)
+    (hr : BitVec.ofInt m (Zig.val s₁ a) = r) :
+    Zig.intCast s₁ s₂ m a safe = pure r := by
+  simp only [Zig.intCast, if_pos h, hr]
+theorem intCast_lit_out {n m : Nat} {s₁ s₂ safe : Bool} {a : BitVec n}
+    (h : ¬(Zig.intLo s₂ m ≤ Zig.val s₁ a ∧ Zig.val s₁ a ≤ Zig.intHi s₂ m)) :
+    Zig.intCast s₁ s₂ m a safe = throw (.ifSafe safe .overflow) := by
+  simp only [Zig.intCast, if_neg h]
+
+open Lean Meta Simp in
+/-- The step `e = r` of a closed-word simproc: `r` computed, the equation decided by evaluation
+(`of_decide_eq_true rfl`). -/
+def litStep (e r : Expr) : MetaM Simp.Step := do
+  return .done { expr := r, proof? := some (← mkDecideProof (← mkEq e r)) }
+
+open Lean Meta Simp in
+/-- A bit count (`Zig.ctz`, `Zig.clz`, `Zig.popcount`), a truncation (`Zig.trunc`) or the value
+(`Zig.val`) of a word literal to a literal result width: its value, computed here and decided on
+the literal (`litStep`). Generated pure helpers compute constants this way
+(`mem_Alignment.fromByteUnits 8`: `ctz`, then `intCast`, then `val`; ledger #21a). -/
+def reduceLitWordCore (op : Name) : Simproc := fun e => do
+  let some ⟨_, a⟩ ← getBitVecValue? e.appArg! | return .continue
+  if op == ``Zig.val then
+    let some s := (e.getArg! 1).constName? | return .continue
+    unless s == ``Bool.true || s == ``Bool.false do return .continue
+    let v := Zig.val (s == ``Bool.true) a
+    return ← litStep e (toExpr v)
+  let some m ← getNatValue? (e.getArg! 1) | return .continue
+  let r : BitVec m :=
+    if op == ``Zig.ctz then Zig.ctz m a
+    else if op == ``Zig.clz then Zig.clz m a
+    else if op == ``Zig.popcount then Zig.popcount m a
+    else Zig.trunc m a
+  litStep e (toExpr r)
+
+simproc [fsym_norm, fsym_arith] reduceLitCtz (Zig.ctz _ _) := reduceLitWordCore ``Zig.ctz
+simproc [fsym_norm, fsym_arith] reduceLitClz (Zig.clz _ _) := reduceLitWordCore ``Zig.clz
+simproc [fsym_norm, fsym_arith] reduceLitPopcount (Zig.popcount _ _) := reduceLitWordCore ``Zig.popcount
+simproc [fsym_norm, fsym_arith] reduceLitTrunc (Zig.trunc _ _) := reduceLitWordCore ``Zig.trunc
+simproc [fsym_norm, fsym_arith] reduceLitVal (Zig.val _ _) := reduceLitWordCore ``Zig.val
+
+open Lean Meta Simp in
+/-- `@intCast` of a word literal to a literal width: `pure` of its value when it fits, else its
+`throw` (`intCast_lit`, `intCast_lit_out`; the range decided on the literal). -/
+simproc [fsym_norm] reduceLitIntCast (Zig.intCast _ _ _ _ _) := fun e => do
+  unless e.isAppOfArity ``Zig.intCast 6 do return .continue
+  let args := e.getAppArgs
+  let bool? (x : Expr) : Option Bool :=
+    if x.isConstOf ``Bool.true then some true else if x.isConstOf ``Bool.false then some false
+    else none
+  let (some s₁, some s₂) := (bool? args[1]!, bool? args[2]!) | return .continue
+  let some m ← getNatValue? args[3]! | return .continue
+  let some ⟨_, a⟩ ← getBitVecValue? args[4]! | return .continue
+  let v := Zig.val s₁ a
+  let vE ← mkAppOptM ``Zig.val #[args[0]!, args[1]!, args[4]!]
+  let range ← mkAppM ``And #[← mkAppM ``LE.le #[← mkAppM ``Zig.intLo #[args[2]!, args[3]!], vE],
+    ← mkAppM ``LE.le #[vE, ← mkAppM ``Zig.intHi #[args[2]!, args[3]!]]]
+  let pf ← if Zig.intLo s₂ m ≤ v ∧ v ≤ Zig.intHi s₂ m then do
+      let r := toExpr (BitVec.ofInt m v)
+      let hr ← mkDecideProof (← mkEq (← mkAppM ``BitVec.ofInt #[args[3]!, vE]) r)
+      mkAppOptM ``intCast_lit #[none, none, args[1]!, args[2]!, args[5]!, args[4]!, r,
+        ← mkDecideProof range, hr]
+    else
+      mkAppOptM ``intCast_lit_out #[none, none, args[1]!, args[2]!, args[5]!, args[4]!,
+        ← mkDecideProof (mkNot range)]
+  return .visit { expr := (← inferType pf).appArg!, proof? := some pf }
+
 open Lean Meta Simp in
 /-- A field accessor of generated code applied to a structure value (`mem_Alignment.toBits ⟨x⟩`
 is `x`): a user definition whose body is a projection of one of its parameters. -/
