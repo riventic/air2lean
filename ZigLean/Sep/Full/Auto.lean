@@ -977,7 +977,8 @@ where
               (fun c => { c with maxRecDepth := Nat.max c.maxRecDepth 20000 }) do
               Lean.Elab.Tactic.Omega.omega (neg ++ fs).toList g
         let pf ← instantiateMVars m
-        return mkAppN (← mkLambdaFVars hs pf) (idx.map (facts[·]!))
+        -- (the proofs substituted back: the term as `omega` on the facts would give it)
+        return pf.replaceFVars hs (idx.map (facts[·]!))
     let proveClosed : MetaM (Option Expr) := do
       let some pf ← withNewMCtxDepth do
           let pf ← proveAbs
