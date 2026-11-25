@@ -2,10 +2,11 @@ import Air2Lean
 import Air2Lean.Check
 open Air2Lean
 
-/-! L07 checker controls for `@bitCast` (`Air2Lean/Check.lean`): the representation cast and
-the optional-pointer rules hold for Zig 0.14.1, 0.15.2 and 0.16.0 only (`ZigVersion.BitCast.memory`);
-a context without a version rejects them; 0.17.1 redefined `@bitCast` (logical bit order,
-`docs/bitcast-semantics.md`), which admits only the equal-width integer-array casts here. Types without a guaranteed
+/-! L07 checker controls for `@bitCast` (`Air2Lean/Check.lean`): the representation cast
+holds for Zig 0.14.1, 0.15.2 and 0.16.0 only (`ZigVersion.BitCast.memory`); 0.17.1 redefined
+`@bitCast` (logical bit order, `docs/bitcast-semantics.md`), which admits only the equal-width
+integer-array casts here. The optional-pointer rules (`@ptrCast`, `@intFromPtr`, `@ptrFromInt`: no
+`@bitCast`s) hold for every version; a context without a version rejects all of them. Types without a guaranteed
 in-memory layout, pointers
 and optional pointers at any depth, and `@bitSizeOf` mismatches are rejected. The emitted text is pinned by `AggregateCasts/Gen.lean`.
 
@@ -71,15 +72,16 @@ def main : IO Unit := do
   for v in ["0.14.1", "0.15.2", "0.16.0"] do
     for (s, d) in casts do
       require (accepts v s d) s!"{v}: cast {s} → {d} is rejected: {result v s d}"
-  -- Only ≤0.16 has these rules: a context without a version rejects them all. 0.17.1 takes
-  -- the logical-bit-order path (`Air2Lean/BitCast.lean`, docs/bitcast-semantics.md): it admits
-  -- `[4]u8` ↔ `u32` (equal logical bits) and rejects the rest (extern aggregates, `[2]u24` ↔ `u56`
-  -- at 48 vs 56 logical bits, optional pointers).
+  -- A context without a version rejects them all. Only ≤0.16 has the representation casts:
+  -- 0.17.1 takes the logical-bit-order path (`Air2Lean/BitCast.lean`, docs/bitcast-semantics.md),
+  -- which admits `[4]u8` ↔ `u32` (equal logical bits) and rejects the rest (extern aggregates,
+  -- `[2]u24` ↔ `u56` at 48 vs 56 logical bits). The three optional-pointer casts (`@ptrCast`,
+  -- `@intFromPtr`, `@ptrFromInt`) are no `@bitCast`s and hold for every version.
   for (s, d) in casts do
     require (!accepts "" s d) s!"\"\": cast {s} → {d} is accepted"
-    let logical := (s, d) == (2, 0) || (s, d) == (0, 2)
-    require (accepts "0.17.1" s d == logical)
-      s!"\"0.17.1\": cast {s} → {d} is {if logical then "rejected" else "accepted"}: {result "0.17.1" s d}"
+    let admitted := [(2, 0), (0, 2), (13, 12), (13, 5), (5, 13)].contains (s, d)
+    require (accepts "0.17.1" s d == admitted)
+      s!"\"0.17.1\": cast {s} → {d} is {if admitted then "rejected" else "accepted"}: {result "0.17.1" s d}"
   -- The pointer wrap (`*T → ?*T`) is the existing coercion, for every version.
   require (accepts "0.17.1" 12 13) "the optional wrap is rejected"
   let layoutMsg := "without a guaranteed in-memory layout"

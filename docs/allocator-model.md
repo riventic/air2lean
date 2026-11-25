@@ -14,13 +14,15 @@
 
 The `translated` mode is the base of the allocator proofs that derive every allocator,
 user-written ones included, from the operating system's page mapping instead of from a
-hand-written model per allocator. It requires Zig 0.16.0 for the OS boundary.
+hand-written model per allocator. It requires Zig 0.16.0 or 0.17.1 for the OS boundary (the
+versions whose `posix.zig` is reviewed; any other version is rejected with "posix.mmap qualified
+Zig 0.16.0, 0.17.1; no reviewed std source for Zig …").
 
 ## The trusted OS boundary
 
 `posix.mmap`, `posix.munmap` and `posix.mremap` are built-in rows of `Air2Lean/StdModels.lean`
-that are active only in translated mode. A call is checked against the exact 0.16.0 signature
-(`Check.lean`'s `checkOsCall`) and emitted as a call of `ZigLean/Os/Mmap.lean`:
+that are active only in translated mode. A call is checked against the exact signature, the same in 0.16.0
+and 0.17.1 (`Check.lean`'s `checkOsCall`; [std-models.md](std-models.md#zig-0171-audit)) and emitted as a call of `ZigLean/Os/Mmap.lean`:
 
 ```lean
 Zig.Os.mmap   : Target → Option Ptr → BitVec 64 → BitVec 32 → BitVec 32 → BitVec 32 → BitVec 64 → MemM (Except ErrName Slice)
@@ -143,7 +145,7 @@ Steps, one PR each, in this order:
    gives the legacy-logic wrappers. Re-prove the std-mode allocation corpora (`Proofs/Lists`,
    `Proofs/Slices`, sentinel and realloc fixtures) in translated mode against it, and make
    `--allocator-model translated` the default for every Zig version whose `posix.zig` is
-   reviewed (0.16.0 now; 0.17.1 after its review of the three `posix` rows).
+   reviewed (0.16.0 and 0.17.1).
 4. **Remap and realloc behaviour from code** (L3). With step 3, `resize`/`remap`/`realloc`
    behaviour comes from the translated allocator (`PageAllocator`'s `mremap`, the fixed buffer's
    last-allocation growth), so delete `AllocPolicy.byteRemap`, `ByteRemapMode`, the byte remap
