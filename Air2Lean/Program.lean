@@ -19,17 +19,23 @@ namespace Graph
 def dedupKeys {κ : Type} [BEq κ] (a : Array κ) : Array κ :=
   a.foldl (fun acc x => if acc.contains x then acc else acc.push x) #[]
 
-/-- Prepare one finite adjacency table from the producer's nodes and references. References to
-external declarations are excluded from this graph; they cannot form a component with its nodes. -/
-private def successorsBy {α κ : Type} [BEq κ] (nodes : Array α) (key : α → κ)
-    (successors : α → Array κ) : κ → Array κ :=
+/-- One finite adjacency table from the producer's nodes and references. References to external
+declarations are excluded from this graph; they cannot form a component with its nodes. -/
+private def successorTable {α κ : Type} [BEq κ] (nodes : Array α) (key : α → κ)
+    (successors : α → Array κ) : Array (κ × Array κ) :=
   let keys := nodes.map key
-  let edges := nodes.map fun node =>
-    (key node, dedupKeys ((successors node).filter keys.contains))
-  fun k => ((edges.find? (·.1 == k)).map (·.2)).getD #[]
+  nodes.map fun node => (key node, dedupKeys ((successors node).filter keys.contains))
+
+/-- The successors of `k` in a table (`successorTable`). Each walk binds the table as a value
+first and passes `successorsIn table` to the walks, which are not specialized
+(`@[nospecialize]`): a specialized walk over a successor function that builds the table itself
+rebuilt it, calling `successors` on every node, at each lookup (threadsync: `emit` 0.02 s ->
+0.45 s, docs/perf-budgets.md). -/
+private def successorsIn {κ : Type} [BEq κ] (edges : Array (κ × Array κ)) (k : κ) : Array κ :=
+  ((edges.find? (·.1 == k)).map (·.2)).getD #[]
 
 /-- The single bounded DFS used by both source-function and emitted-declaration graphs. -/
-private def topoVisitCore {α κ : Type} [BEq κ] (nodes : Array α) (key : α → κ)
+@[nospecialize] private def topoVisitCore {α κ : Type} [BEq κ] (nodes : Array α) (key : α → κ)
     (next : κ → Array κ) (vo : Array κ × Array α) (name : κ) : Array κ × Array α :=
   let rec visit : Nat → (Array κ × Array α) → κ → Array κ × Array α
     | 0, state, _ => state
@@ -46,11 +52,11 @@ private def topoVisitCore {α κ : Type} [BEq κ] (nodes : Array α) (key : α �
   -- or absent key after at most `nodes.size` expansions.
   visit (nodes.size + 1) vo name
 
-private def topoOrderCore {α κ : Type} [BEq κ] (nodes : Array α) (key : α → κ)
+@[nospecialize] private def topoOrderCore {α κ : Type} [BEq κ] (nodes : Array α) (key : α → κ)
     (next : κ → Array κ) : Array α :=
   ((nodes.map key).foldl (topoVisitCore nodes key next) (#[], #[])).2
 
-private def reachableCore {κ : Type} [BEq κ] (keys : Array κ) (nextOf : κ → Array κ)
+@[nospecialize] private def reachableCore {κ : Type} [BEq κ] (keys : Array κ) (nextOf : κ → Array κ)
     (name : κ) : Array κ := Id.run do
   let mut seen := #[]
   let mut todo := [name]
@@ -65,12 +71,14 @@ private def reachableCore {κ : Type} [BEq κ] (keys : Array κ) (nextOf : κ �
 
 def topoOrderBy {α κ : Type} [BEq κ] (nodes : Array α) (key : α → κ)
     (successors : α → Array κ) : Array α :=
-  topoOrderCore nodes key (successorsBy nodes key successors)
+  let table := successorTable nodes key successors
+  topoOrderCore nodes key (successorsIn table)
 
 /-- The internal node keys reachable by one or more edges, in discovery order. -/
 def reachableBy {α κ : Type} [BEq κ] (nodes : Array α) (key : α → κ)
     (successors : α → Array κ) (name : κ) : Array κ :=
-  reachableCore (nodes.map key) (successorsBy nodes key successors) name
+  let table := successorTable nodes key successors
+  reachableCore (nodes.map key) (successorsIn table) name
 
 /-- Ordered strongly connected components, with the original DFS ordering. A component is
 emitted at its last member in DFS post-order; members retain that post-order. The Boolean is
@@ -79,7 +87,8 @@ is shared by reachability and ordering. -/
 def callGroupsBy {α κ : Type} [BEq κ] (nodes : Array α) (key : α → κ)
     (successors : α → Array κ) : Array (Array α × Bool) :=
   let keys := nodes.map key
-  let next := successorsBy nodes key successors
+  let table := successorTable nodes key successors
+  let next := successorsIn table
   let reach := keys.map fun n => (n, reachableCore keys next n)
   let reaches (a b : κ) : Bool :=
     ((reach.find? (·.1 == a)).map (·.2.contains b)).getD false
@@ -99,11 +108,11 @@ def callGroupsBy {α κ : Type} [BEq κ] (nodes : Array α) (key : α → κ)
   groups
 
 /-- The adjacency table depends only on the projected node fields. -/
-private theorem successorsBy_map {A B K : Type} [BEq K]
+private theorem successorTable_map {A B K : Type} [BEq K]
     (nodes : Array A) (project : A → B) (key : B → K) (next : B → Array K) :
-    successorsBy (nodes.map project) key next =
-      successorsBy nodes (fun x => key (project x)) (fun x => next (project x)) := by
-  simp only [successorsBy, Array.map_map, Function.comp_def]
+    successorTable (nodes.map project) key next =
+      successorTable nodes (fun x => key (project x)) (fun x => next (project x)) := by
+  simp only [successorTable, Array.map_map, Function.comp_def]
 
 /-- Naturality of the existing bounded walk, with its fuel left unchanged. -/
 private theorem topoVisitCore_visit_map {A B K : Type} [BEq K]
@@ -176,7 +185,7 @@ theorem callGroupsBy_map {A B K : Type} [BEq K]
     callGroupsBy (nodes.map project) key next =
       (callGroupsBy nodes (fun x => key (project x)) (fun x => next (project x))).map
         (fun (members, recursive) => (members.map project, recursive)) := by
-  simp only [callGroupsBy, successorsBy_map, Array.map_map, Function.comp_def,
+  simp only [callGroupsBy, successorTable_map, Array.map_map, Function.comp_def,
     topoOrderCore_map]
   rw [Array.foldl_map]
   let liftGroups :
@@ -184,7 +193,8 @@ theorem callGroupsBy_map {A B K : Type} [BEq K]
     fun state =>
       (state.1, state.2.map (fun (members, recursive) => (members.map project, recursive)))
   let keys := nodes.map (fun node => key (project node))
-  let nextOf := successorsBy nodes (fun node => key (project node)) (fun node => next (project node))
+  let nextOf := successorsIn
+    (successorTable nodes (fun node => key (project node)) (fun node => next (project node)))
   let reach := nodes.map fun node =>
     (key (project node), reachableCore keys nextOf (key (project node)))
   let reaches (a b : K) : Bool :=

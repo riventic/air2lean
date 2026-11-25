@@ -31,7 +31,7 @@ theorem loop66_c0 (hfit : CI.FitsUpTo (2 ^ 63) 3) (pu pf : Ptr) (xu xf : Option 
   unfold heap_ArenaAllocator_reset.loop66
   by_cases hsm : v0.toNat < 2 <;>
     fsym [loop78_ct CI h ctx Ac Sc Kc, CAllocSpec.free' h, CAllocSpec.alloc_upTo h hfit,
-      CAllocSpec.resize_shrink h hfit, CAllocSpec.resize_grow h hfit, Child.cown_refund,
+      CAllocSpec.resize_upTo h hfit, Child.cown_refund,
       FTotalTriple.region_storePacked_wpts, FTotalTriple.region_store_wpts,
       FTotalTriple.region_storeAll]
 

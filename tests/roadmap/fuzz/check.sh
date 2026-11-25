@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Q01 generated-program and parser fuzzing (docs/fuzzing.md).
 #   --light [SEEDS]                 generator/shrinker unit tests + typed generator invariants; no tools
-#   --air BINARY [SEEDS] [SAVE_DIR]  committed regressions + seeded malformed AIR JSON against a built translator
+#   --air BINARY [SEEDS] [SAVE_DIR] [ZIG_VERSION]  committed regressions + seeded malformed AIR JSON against a
+#                                    built translator (ZIG_VERSION: that version's seeds and AIR only)
 #   --heavy OUT_DIR [START] [COUNT] [PROFILE]  generated Zig (PROFILE core|wide, default core): native test,
 #                                    AIR export + translation, Lean evaluation
 #   --reproduces CASE_DIR STAGE      exit 1 iff STAGE (native|translate|lean) is the first failing stage
@@ -55,11 +56,13 @@ case "${1:-}" in
     python3 "$here/zig_gen.py" light --seeds "${2:-300}" --profile wide
     ;;
   --air)
-    [ "$#" -ge 2 ] || { echo 'usage: check.sh --air BINARY [SEEDS] [SAVE_DIR]' >&2; exit 2; }
+    [ "$#" -ge 2 ] || { echo 'usage: check.sh --air BINARY [SEEDS] [SAVE_DIR] [ZIG_VERSION]' >&2; exit 2; }
     python3 "$here/air_fuzz.py" replay "$2"
-    save=()
-    if [ -n "${4:-}" ]; then save=(--save "$4" --report "$4/report.json"); mkdir -p "$4"; fi
-    python3 "$here/air_fuzz.py" run "$2" --seeds "${3:-200}" ${save[@]+"${save[@]}"}
+    extra=()
+    if [ -n "${4:-}" ]; then extra=(--save "$4" --report "$4/report.json"); mkdir -p "$4"; fi
+    # ZIG_VERSION: that version's seeds and committed AIR only (default: the mixed corpus).
+    if [ -n "${5:-}" ]; then extra+=(--zig-version "$5"); fi
+    python3 "$here/air_fuzz.py" run "$2" --seeds "${3:-200}" ${extra[@]+"${extra[@]}"}
     ;;
   --reproduces)
     [ "$#" -ge 3 ] || { echo 'usage: check.sh --reproduces CASE_DIR STAGE [SIG]' >&2; exit 2; }
@@ -100,7 +103,7 @@ case "${1:-}" in
     exit "$failed"
     ;;
   *)
-    echo 'usage: check.sh --light [SEEDS]|--air BINARY [SEEDS] [SAVE_DIR]|--heavy OUT_DIR [START] [COUNT] [PROFILE]|--reproduces CASE_DIR STAGE' >&2
+    echo 'usage: check.sh --light [SEEDS]|--air BINARY [SEEDS] [SAVE_DIR] [ZIG_VERSION]|--heavy OUT_DIR [START] [COUNT] [PROFILE]|--reproduces CASE_DIR STAGE' >&2
     exit 2
     ;;
 esac

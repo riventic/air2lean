@@ -48,7 +48,6 @@ theorem resize_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (n ra : BitVec
       (heap_ArenaAllocator_resize ctx s ⟨BitVec.ofNat 6 k⟩ n ra)
       ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n.toNat A S K q q' φ tl) := by
   unfold heap_ArenaAllocator_resize
-  rcases Nat.lt_trichotomy n.toNat s.len.toNat with hc | hc | hc <;>
   fsym [resize_other_upd (S := S) (k := k) (n := n.toNat) (tl := tl),
     resize_shrink_upd (S := S) (k := k) (n := n.toNat) (tl := tl),
     resize_grow_upd (S := S) (k := k) (n := n.toNat) (tl := tl),

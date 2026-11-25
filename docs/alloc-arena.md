@@ -340,8 +340,8 @@ free list) is not attempted.
   module's file states the theorems and proves each entry by `fsym` with these updates
   (`fsym [u]`, as for the `FixedBufferAllocator`), which walks that module's generated code. The
   patched `free` and `resize` add a bounds check, which `fsym` decides from the invariant
-  (`end_index` within the buffer). `resize` is split on `n` against `len` first (the workaround
-  for engine ledger rows #64 and #return-bool-split).
+  (`end_index` within the buffer). The walk of `resize` splits on `n` against `len` itself where a
+  return needs it (the released bytes' `if`, the returned `n <= len`).
 * The patched arena (`upstream/arena-fix.patch`) is translated from its AIR
   (`air/0.16.0/arena-fixed-linux`, `AllocArena/ArenaFixedLinux.lean`) and equals its native run
   (`expected-fixed.txt`), `check.sh` builds that native run. `arena_fit` is the regression of an
@@ -430,7 +430,7 @@ Not proved yet, in order:
   a list before its turn is `FreeList`, after it `KeptAt`): `loop78` gives every node but the
   last back to the child (`loop78_ct`), and the last is kept: given back if the list's share of
   the limit is just a header, kept as it is if it has that size, shrunk or grown in place by the
-  child's `resize` (`CAllocSpec.resize_shrink`, `resize_grow`), or replaced by a new node from
+  child's `resize` (`CAllocSpec.resize_upTo`, the walk splitting on its released bytes' `if`), or replaced by a new node from
   the child's `alloc` (`CAllocSpec.alloc_upTo`; the old one given back, the new header's words
   stored over the granted bytes as `wpts`: `region_storePacked_wpts`, `region_store_wpts`), or
   kept as it is when the child has no room (the result `false`). The new `size` word of a node

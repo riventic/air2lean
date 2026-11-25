@@ -280,7 +280,8 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
   `match` on `t` reduces: `substCtor`; a test `o.isSome`/`o.isNone` of an optional adds its
   constructor equation, `o = none` or `o = some a`: `opt_*`). An assertion-level `if c then X else Y`
   (`relBytes`, `newBytes`) takes the branch the facts decide; an undecided one stays an atom and
-  is split at the next return.
+  is split at the next return (the whole goal, before the caller's updates are tried, if there
+  are some, so that each case plans them with its own atoms; ledger #64).
 * **Programs** are normalized with `fsym_norm` (the `MM`/`StateT` layer of generated code,
   binds, trivial results, field accessors of structure values), **at the head only**
   (`lazyMethods`): at `x >>= f` only `x` is simplified and the node rewritten (`bind_assoc`,
@@ -349,7 +350,12 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
   implication included (`⟪s.it = none → x0 = none⟫`; regression
   `tests/roadmap/sep-auto/SepAuto/Walk.lean`, `rule_fact_*`). Among the rules whose command unifies, the first whose side goals are all
   proved is taken; a side condition that the facts decide neither way is split on (the cases of
-  `mremap`: shrink or grow).
+  `mremap`: shrink or grow). So is the condition of an assertion-level `if` in a rule's
+  precondition (the refined `resize`'s released bytes `relBytes … n len …`): one frame cannot
+  serve both cases of the planner's own split, so the planner notes the condition (`noteSplit`)
+  and, when no rule applies, the walk splits the goal on it, before the command is inlined; each
+  case plans the decided precondition (ledger #61; regression `SepAuto/Updates.lean`,
+  `Split.rule_if`).
 * **A condition that matches on a variable** (an error union's tag) splits the variable; a
   `match` on a constructor in the precondition reduces. A `match`/`Option.elim` on a term (a
   field of the locals) generalizes the term with its equation and splits it.
@@ -422,7 +428,12 @@ struct (`tests/roadmap/lists-fba/ListsFba/Witness.lean`) becomes its two words b
   that `P₀` leaves and `Q₀` names (the result `r` of the arena's `rresizePost … r`, constrained by
   a hypothesis `r = true`) is taken from the return's postcondition (`Q₀` unified with `Q v`, same
   head) before the side goals, which would otherwise take any fact of their shape; so one update
-  serves a return of `true` and one of a Boolean expression (`n ≤ len`) alike. A block fact of
+  serves a return of `true` and one of a Boolean expression (`n ≤ len`) alike. A return that
+  neither the planner nor an update closes, of a value of a non-recursive inductive type that is
+  not a constructor (the arena's `le false n len`) and that the postcondition depends on
+  (`rresizePost … r` matches on it), is split by cases on the value (generalized with its
+  equation, as a program's `match` on a term), each case a return of a constructor (`splitValue`;
+  ledger #return-bool-split; regressions `Split.state_if`, `Split.return_bool`). A block fact of
   `P₀` is read only for a known pointer. Side goals that are user
   definitions are proved by the hypothesis of their unfolded form, or by the case of a `match` that
   a hypothesis `d = C …` selects (`matchCase?`); a fact of a user structure (`NodeFacts N A sz`)

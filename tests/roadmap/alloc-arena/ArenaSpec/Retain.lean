@@ -46,7 +46,7 @@ theorem child_decode (CI : Child) : Enc.decode CI.bytes = pure (⟨CI.cctx, CI.v
 the last one, which the arena keeps (`Last`, `AllocArena/Reset.lean`), resized to the list's share
 of the limit (`std.mem.alignBackward(24 + limit, 2)` bytes): given back if that is just the header,
 kept as it is if it has that size, else shrunk or grown in place by the child
-(`CAllocSpec.resize_shrink`, `CAllocSpec.resize_grow`), else replaced by a new node of that size
+(`CAllocSpec.resize_upTo`, the walk splitting on its released bytes' `if`), else replaced by a new node of that size
 (`CAllocSpec.alloc_upTo`, the old one given back; the new node's header words are stored over the
 granted bytes: `region_storePacked_wpts`, `region_store_wpts`, `region_storeAll`), else kept as
 it is (the result `ok` false). Each kept node is a whole node with `end_index` `0` and no next node
