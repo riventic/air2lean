@@ -390,8 +390,8 @@ def importEnvFor? (e : Expr) : MetaM (Option Environment) := do
 options' heartbeat and recursion limits, as `addDecl` checks a declaration. -/
 def kernelChecks (env : Environment) (t pf : Expr) : CoreM Bool := do
   let opts ← getOptions
-  let decl : Declaration := .thmDecl { name := `_fsym_kernel_check, type := t, value := pf,
-                         levelParams := (collectLevelParams {} (mkApp t pf)).params.toList }
+  let levelParams := (collectLevelParams {} (mkApp t pf)).params.toList
+  let decl : Declaration := .thmDecl { name := `_fsym_kernel_check, levelParams, type := t, value := pf }
   return env.toKernelEnv.addDeclCore (Core.getMaxHeartbeats opts).toUSize
     (maxRecDepth.get opts).toUSize decl (← read).cancelTk? matches .ok _
 
