@@ -2579,7 +2579,8 @@ where
   n := ty.getArg! 1
   inst := ty.getArg! 2
   bits := mkApp (mkConst ``BitVec) n
-  /-- Both directions at once: an exhaustive enum, a type whose bits are its value. -/
+  /-- Both directions at once (`LawfulPacked`): an exhaustive enum, a type whose bits are its
+  value. -/
   whole? : TacticM (Option Expr) := do
     if let some e ← enum? then return some e
     byDefn?
@@ -2596,7 +2597,7 @@ where
   direction, over the lane's law of it, derived first (an enum's or a struct's is no instance). -/
   lanes? : TacticM (Option Expr) := do
     let T' ← whnfR T
-    unless T'.isAppOfArity ``Vector 2 || T'.isAppOfArity ``Vec 2 do return none
+    unless T'.isAppOfArity ``Vector 2 || T'.isAppOfArity ``Zig.Vec 2 do return none
     let α := T'.getArg! 0
     let w ← mkFreshExprMVar (mkConst ``Nat)
     let some iα ← trySynth? (mkApp2 (mkConst ``Packed) α w) | return none
@@ -2614,7 +2615,7 @@ where
     return some (← whnfR ob.headBeta)
   /-- A type whose bits are its value (a non-exhaustive enum). -/
   byDefn? : TacticM (Option Expr) := do
-    let g ← mkFreshExprSyntheticOpaqueMVar ty
+    let g ← mkFreshExprSyntheticOpaqueMVar (mkApp3 (mkConst ``LawfulPacked) T n inst)
     unless ← closeWith g.mvarId! (← `(tactic| exact ⟨fun _ _ => rfl, fun _ _ => ⟨rfl, rfl⟩⟩)) do
       return none
     return some g
