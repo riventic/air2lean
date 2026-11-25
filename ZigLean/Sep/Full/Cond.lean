@@ -1333,11 +1333,13 @@ theorem wp_bump (hC : L.Fits (C.prim L) P U ok) {q nw : Nat} {sh : Array Word.En
           (fun h' => by rw [C.sx_set, ← hg₁]; exact h') rfl hv hh (hC.keepS hU hms) hop.waiters
           hop.woken hop.threads (hC.keyE hU hms.addrs) (hwL.blk.key_of_addrs hms.addrs) hop.clock))
 
-/-- The signaller's wake of `c ≥ nw` waiters at the epoch, at `wk nw q h`: it is out, and its
-snapshot is a prefix of the state's writes. -/
+/-- The signaller's wake of `c` waiters at the epoch, at `wk nw q h`, with `min nw k ≤ c` for the
+`k` threads queued at the epoch (`Inv.wake`): it is out, and its snapshot is a prefix of the
+state's writes. -/
 theorem _root_.Zig.Full.FLock.Fits.afterWakeEp (hC : L.Fits (C.prim L) P U ok)
     {G₁ : ThreadId → γ} {rX : Res} {m₁ m' : Mem} {c q nw : Nat} {sh : Array Word.Entry}
-    {cs : List Nat} (hg₁ : G₁ t = g) (hg : C.ph g = .wk nw q sh) (hc : nw ≤ c) (hU : U G₁ rX m₁)
+    {cs : List Nat} (hg₁ : G₁ t = g) (hg : C.ph g = .wk nw q sh)
+    (hc : Min.min nw (Thread.waitersAt m₁.waiters (C.Ep.key m₁)) ≤ c) (hU : U G₁ rX m₁)
     (hwL : L.WInv (L.pl G₁) m₁)
     (hw : ((Thread.futexWake (C.Ep.key m₁) c cs).run { m₁ with current := t }).run =
       some (.ok ((), m'))) (hL : L.Inv G₁ rX m') :
@@ -1364,16 +1366,32 @@ theorem wp_wakeEp (hC : L.Fits (C.prim L) P U ok) {io : Io} {c : BitVec 32} {q n
     P.WP t ((futexWakeC io C.Ep.ptr c : CM Tgt σ Unit).run s) Q G m n :=
   FLock.wp_wordWake hC (hC.wRest (.inr rfl)) (hC.wAp (.inr rfl)) hi
     fun k hk G₁ _ _ _ m' hg₁ hU hwL hw hL =>
-      let ⟨h1, h2, h3⟩ := hC.afterWakeEp hg₁ hg hc hU hwL hw hL
+      let ⟨h1, h2, h3⟩ := hC.afterWakeEp hg₁ hg (Nat.le_trans (Nat.min_le_left _ _) hc) hU hwL hw hL
       h k hk G₁ m' h1 h2 h3
 
+/-- The threads queued at a key, as a list (`Mem.waitersAt`) and as a count (`Thread.waitersAt`). -/
+theorem length_waitersAt (m : Mem) (k : FutexKey) :
+    (m.waitersAt k).length = Thread.waitersAt m.waiters k := by
+  unfold Mem.waitersAt Thread.waitersAt
+  rw [List.length_map, ← Array.toList_filter, Array.length_toList]
+
+/-- An OS wake of up to `w` waiters (or all, `none`) of the `k` queued ones wakes at least
+`min nw k` of them when `nw` is within the request. -/
+theorem min_le_wakeSize {nw k : Nat} {w : Option Nat} (h : ∀ j, w = some j → nw ≤ j) :
+    Min.min nw k ≤ Os.wakeSize w k := by
+  cases w with
+  | none => exact Nat.min_le_right _ _
+  | some j => exact Nat.le_min.mpr ⟨Nat.le_trans (Nat.min_le_left _ _) (h j rfl), Nat.min_le_right _ _⟩
+
 /-- **The signaller's OS futex wake at the epoch** (`Os.futexWake`, OSF-02; std's translated
-`Thread.Futex.wake`) of up to `w ≥ 1` waiters (or all), at `wk nw q h` with `nw ≤ 1` (`signal`'s
-one wake): after a wake of `j` waiters, within the request (`j ≤ c` for `w = some c`), it is out;
-after a spurious `EINTR` (macOS; nobody woken) it is still at `wk` (std wakes again). -/
+`Thread.Futex.wake`) of up to `w` waiters (or all), at `wk nw q h` with `nw` within the request
+(`signal`'s one wake, `broadcast`'s `waiters - signals`): the OS wakes `min w k` of the `k` queued
+waiters, at least `min nw k` (`Inv.wake`). After a wake of `j` waiters, within the request
+(`j ≤ c` for `w = some c`), it is out; after a spurious `EINTR` (macOS; nobody woken) it is still
+at `wk` (std wakes again). -/
 theorem wp_osWakeEp (hC : L.Fits (C.prim L) P U ok) {w : Option Nat}
-    (hw : ∀ k, w = some k → 1 ≤ k) {spurious : Bool} {q nw : Nat} {sh : Array Word.Entry}
-    (hnw : nw ≤ 1) (hg : C.ph g = .wk nw q sh) (hi : P.inv (upd G t g) m)
+    {spurious : Bool} {q nw : Nat} {sh : Array Word.Entry}
+    (hnw : ∀ k, w = some k → nw ≤ k) (hg : C.ph g = .wk nw q sh) (hi : P.inv (upd G t g) m)
     {Q : Option Nat → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ k, n = k + 1 → ∀ r G₁ m', m'.current = t →
       ((∃ j, r = some j ∧ ∀ c, w = some c → j ≤ c) ∧ C.S.Prefix sh m' ∧
@@ -1384,8 +1402,8 @@ theorem wp_osWakeEp (hC : L.Fits (C.prim L) P U ok) {w : Option Nat}
   FLock.wp_wordOsWake hC (hC.wRest (.inr rfl)) (hC.wAp (.inr rfl)) hi
     fun k hk G₁ rX m₁ hg₁ hU hwL =>
     ⟨fun cs m' hr hL => by
-      obtain ⟨c, hc, hr'⟩ := Os.futexWake_pos (m := { m₁ with current := t }) hw hr
-      obtain ⟨h1, h2, h3⟩ := hC.afterWakeEp hg₁ hg (Nat.le_trans hnw hc) hU hwL hr' hL
+      obtain ⟨h1, h2, h3⟩ := hC.afterWakeEp hg₁ hg
+        (by rw [← length_waitersAt]; exact min_le_wakeSize hnw) hU hwL hr hL
       exact h k hk _ G₁ m' h1 (.inl ⟨⟨_, rfl, fun _ hc => Os.wakeSize_le_some hc _⟩, h2, h3⟩),
      fun hs hic => h k hk none G₁ _ rfl (.inr ⟨hs, rfl, hic⟩)⟩
 
@@ -1396,6 +1414,14 @@ theorem SigPost.ofPost {h : Array Word.Entry} {c : VClock} {X : Prop} {m m' : Me
     (hp : ∀ all, (all = true → X) → C.SigPost h c all m) (hx : C.S.Prefix (C.S.hist m) m') :
     C.SigPost h c false m' :=
   (hp false (fun h => Bool.noConfusion h)).extend hx
+
+/-- **`broadcast`'s history post at its return after a post** that served every waiter (`X`:
+the new state's `waiters ≤ signals`): the post's with `all = true`, carried to the return as in
+`SigPost.ofPost`. -/
+theorem SigPost.ofPostAll {h : Array Word.Entry} {c : VClock} {X : Prop} {m m' : Mem}
+    (hp : ∀ all, (all = true → X) → C.SigPost h c all m) (hX : X)
+    (hx : C.S.Prefix (C.S.hist m) m') : C.SigPost h c true m' :=
+  (hp true (fun _ => hX)).extend hx
 
 /-! ## The waiter's futex wait at the epoch -/
 
@@ -1820,10 +1846,10 @@ theorem wp_liftPartCurM (hC : L.Fits (C.prim L) P U ok) {α : Type} {x : MemM α
 
 end FCond
 
-/-- **A condition implementation** in generated code: `wait(cond, io, mutex)` and
-`signal(cond, io)` with the rules that a client uses, for every protocol that keeps the condition
-next to its mutex (`C.Fits L P U ok`, with the window; the mutex's contended value `c`) and
-counts no turns. Any number of threads may wait and signal.
+/-- **A condition implementation** in generated code: `wait(cond, io, mutex)`,
+`signal(cond, io)` and `broadcast(cond, io)` with the rules that a client uses, for every protocol
+that keeps the condition next to its mutex (`C.Fits L P U ok`, with the window; the mutex's
+contended value `c`) and counts no turns. Any number of threads may wait, signal and broadcast.
 
 - `wait_wp`: the mutex's holder, out of the condition's code, that waits returns holding the
   mutex again (after it took a signal). Fewer than `65535` waiters are registered at its entry
@@ -1849,17 +1875,25 @@ counts no turns. Any number of threads may wait and signal.
   call's writes and clock in the signaller's place (decision B', PR #599 comment 6633467470).
   Its caller part needs a positive unmetered fragment (each implementation's wake loop ticks);
   every implementation admits such a part and returns it exactly (`signal_unmetered_pre`,
-  `signal_unmetered_post`). Both operations frame the complete held resource; no profile is
+  `signal_unmetered_post`). The operations frame the complete held resource; no profile is
   assumed closed under adding or removing resources.
+- `broadcast_wp`: as `signal_wp` (same callers, caller parts and unmetered fragment), with the
+  history post `all = true`: the write `k` at or after the call's floor is served (`waiters ≤
+  signals`), never only a post. Every registered waiter whose registration happened before the
+  call has its signal. std's broadcast posts `waiters - signals` and wakes as many (`PostOk`,
+  `Inv.wake`); `Io.Condition.broadcast` (0.16.0, 0.17.1), `Thread.Condition.broadcast`
+  (`FutexImpl.wake(.all)`, 0.15.2).
 
-The primary fields (`wait_wp_resource`, `signal_wp_resource`) state caller parts the same way
-as the mutex and event (`LockRules`, "Caller parts of composite operations"); `CondImpl.wait_wp`
-(a Plain caller) and `CondImpl.signal_wp` (a positive unmetered fragment) are derived. Actual
+The primary fields (`wait_wp_resource`, `signal_wp_resource`, `broadcast_wp_resource`) state
+caller parts the same way as the mutex and event (`LockRules`, "Caller parts of composite
+operations"); `CondImpl.wait_wp` (a Plain caller), `CondImpl.signal_wp` and
+`CondImpl.broadcast_wp` (a positive unmetered fragment) are derived. Actual
 code proves payment at each reachable tick/retry and its native/stack obligations through the
 existing Full rules. -/
 structure CondImpl (Tgt : Type) where
   wait : Ptr → Io → Ptr → ConcM Tgt Unit
   signal : Ptr → Io → ConcM Tgt Unit
+  broadcast : Ptr → Io → ConcM Tgt Unit
   /-- The contended value of the mutex that `wait` unlocks and locks. -/
   c : Nat
   wait_pre : ThreadId → FAssn
@@ -1875,6 +1909,14 @@ structure CondImpl (Tgt : Type) where
   /-- `signal` returns such a caller part exactly. -/
   signal_unmetered_post : ∀ (t : ThreadId) (r r' : Res), 0 < r.gh.ac.frag .unmetered →
     signal_post t r r' → r' = r
+  broadcast_pre : ThreadId → FAssn
+  broadcast_post : ThreadId → Res → FAssn
+  /-- A caller part with a positive unmetered fragment admits `broadcast` (as `signal`). -/
+  broadcast_unmetered_pre : ∀ (t : ThreadId) (r : Res), 0 < r.gh.ac.frag .unmetered →
+    broadcast_pre t r
+  /-- `broadcast` returns such a caller part exactly. -/
+  broadcast_unmetered_post : ∀ (t : ThreadId) (r r' : Res), 0 < r.gh.ac.frag .unmetered →
+    broadcast_post t r r' → r' = r
   wait_wp_resource : ∀ {γ : Type} {L : FLock γ} {C : FCond γ} {P : Proto Tgt γ}
     {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}, C.Fits L P U ok →
     P.cost = none → ∀ {p q : Ptr}, p = C.S.ptr → q = L.ptr → L.c = c →
@@ -1899,6 +1941,15 @@ structure CondImpl (Tgt : Type) where
     P.WP t (signal p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       ∃ r', signal_post t (L.part g) r' ∧ P.inv (upd G' t (L.setPart g r')) m' ∧
         C.SigPost (C.S.hist m) (m.clocks[t]!) false m') G m d
+  broadcast_wp_resource : ∀ {γ : Type} {L : FLock γ} {C : FCond γ} {P : Proto Tgt γ}
+    {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}, C.Fits L P U ok →
+    P.cost = none → ∀ {p : Ptr}, p = C.S.ptr → ∀ (t : ThreadId) (g : γ), C.ph g = .out →
+    (L.ph g = .out ∨ L.ph g = .holds) → C.sx g →
+    ∀ (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat),
+    broadcast_pre t (L.part g) → P.inv (upd G t g) m →
+    P.WP t (broadcast p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      ∃ r', broadcast_post t (L.part g) r' ∧ P.inv (upd G' t (L.setPart g r')) m' ∧
+        C.SigPost (C.S.hist m) (m.clocks[t]!) true m') G m d
 
 namespace CondImpl
 
@@ -1940,6 +1991,25 @@ theorem signal_wp (I : CondImpl Tgt) {γ : Type} {L : FLock γ} {C : FCond γ} {
     (I.signal_unmetered_pre t (L.part g) hu) hi)
   rintro _ G' m' d' ⟨hd, hc, r', hr, hi', hsig⟩
   have he := I.signal_unmetered_post t (L.part g) r' hu hr
+  subst r'
+  exact ⟨hd, hc, by simpa only [L.setPart_self] using hi', hsig⟩
+
+/-- The exact-part broadcast rule for a caller part with a positive unmetered fragment: the
+implementation returns that part exactly (`broadcast_unmetered_post`), with the history post
+`all = true` (every write at or after the call's floor is served; `SigPost.mono` gives the
+`signal` one). -/
+theorem broadcast_wp (I : CondImpl Tgt) {γ : Type} {L : FLock γ} {C : FCond γ}
+    {P : Proto Tgt γ} {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
+    (hC : C.Fits L P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = C.S.ptr)
+    (t : ThreadId) (g : γ) (hg : C.ph g = .out) (hgo : L.ph g = .out ∨ L.ph g = .holds)
+    (hsx : C.sx g) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered) (hi : P.inv (upd G t g) m) :
+    P.WP t (I.broadcast p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      P.inv (upd G' t g) m' ∧ C.SigPost (C.S.hist m) (m.clocks[t]!) true m') G m d := by
+  refine WP.mono ?_ (I.broadcast_wp_resource hC hcost hp t g hg hgo hsx io G m d
+    (I.broadcast_unmetered_pre t (L.part g) hu) hi)
+  rintro _ G' m' d' ⟨hd, hc, r', hr, hi', hsig⟩
+  have he := I.broadcast_unmetered_post t (L.part g) r' hu hr
   subst r'
   exact ⟨hd, hc, by simpa only [L.setPart_self] using hi', hsig⟩
 
