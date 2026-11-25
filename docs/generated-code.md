@@ -523,34 +523,53 @@ A generic member (`inactiveUnionField`) is an instance named `<member>__anon_<n>
 
 ## Inline asm
 
-M21 (register operands only, x86_64): one `opaque` per distinct (source template, ordered constraint list, operand widths) tuple — a proof gets only what the caller states about an op, no built-in axiom for what it computes (`Air2Lean/Air/Op.lean`'s `.asm` doc comment). Two occurrences with the same source, constraints and widths share one opaque; the name is `airAsm_<hash>`, a hash of that tuple (`Air2Lean/Emit.lean`'s `asmDefName` — not Lean's own `hash`, just stable within one generation run). `Check.lean` rejects a memory or immediate constraint, so every operand is a register, hence a plain `BitVec`; the opaque is `BitVec` in, `BitVec` out (`Unit` for no output). An input may also carry a matching constraint (`0`) tying it to the sole output register — the standard idiom for a register-modify-in-place instruction (`bswap32`'s `bswap`, which both reads and writes one register); still a register operand, so the opaque's shape does not change:
+M21 (register operands, x86_64): one pure function per distinct (source template, ordered constraint list, operand widths) tuple. Two occurrences with the same source, constraints and widths share one function; its name carries a hash of that tuple (`Air2Lean/Emit.lean`'s `asmDefName` — not Lean's own `hash`, just stable within one generation run). Every operand is a register or a declared memory location, so the function is `BitVec` in, `BitVec` out (`Unit` for no output). An input may also carry a matching constraint (`0`) tying it to the sole output register — the standard idiom for a register-modify-in-place instruction (`bswap32`'s `bswap`).
+
+**Defined blocks (A02, premise [ASM-07](premises.md#asm-07)).** When the allowlist entry is `semantics := .isa` and the template's statements are all instructions of the x86_64 instruction model (`ZigLean/Isa/X86.lean`; `air2lean --print-asm-isa-table`), the translator decodes the template at this op's operand widths (`Air2Lean/AsmIsa.lean`) into a `Zig.Isa.X86.Block` with its declared inputs, outputs, early-clobber outputs and clobbers, and emits:
+
+- `airIsa_<hash>_block`, the decoded block;
+- `airIsa_<hash>_wf : airIsa_<hash>_block.check = none := by decide`, the kernel-checked footprint check (no read of undefined bits, no write outside the outputs and clobbers, no read of an input after a write to an output that may share its register, every output written at its width);
+- `def airIsa_<hash>`, the declared outputs after running the block from the inputs;
+- `airIsa_<hash>_fault` when an instruction can fault (`div`'s #DE); the wrapper then guards the call with `Zig.Asm.isaFault`, the instructions' own condition, not the allowlist entry's.
+
+A proof unfolds the definition (`@[zig_unfold]`); no instruction fact is a hypothesis. A template the model does not decode, or a block whose instructions do not match the declared operands at these widths (for example `incl` on a 64-bit memory operand), is rejected with the instruction and the location; an `isa` entry never falls back to an opaque. An entry whose `fault` disagrees with the model on whether the block can fault is rejected too.
 
 ```lean
-opaque airAsm_3500345798 (i0 : BitVec 32) : BitVec 32   -- bswap32: one input, one output, both 32 bits
+def airIsa_3500345798_block : Zig.Isa.X86.Block where
+  instrs := [.un .bswap .w32 (.vreg 0)]
+  inputs := [(.vreg 0, .w32)]
+  outputs := [(.vreg 0, .w32)]
+  early := []
+  clobbers := []
+
+theorem airIsa_3500345798_wf : airIsa_3500345798_block.check = none := by decide
+
+def airIsa_3500345798 (i0 : BitVec 32) : BitVec 32 :=
+  (airIsa_3500345798_block.out [i0.setWidth 64] 0).setWidth 32
 
 def bswap32 (p0 : BitVec 32) : Zig.Result (BitVec 32) := do
   let e ← ((do
-    let i1 ← pure (airAsm_3500345798 p0)
+    let i1 ← pure (airIsa_3500345798 p0)
     pure (.ret i1)) : Zig.M bswap32Locals bswap32Exit).run' (default : bswap32Locals)
   match e with
   | .ret v => pure v
 ```
 
-**More than one output.** Each output is a register output (`=r`, `={reg}`) of an integer. At most one is the expression's result (`-> T`); every other one is an lvalue output: the asm writes it to its operand, a pointer. The opaque then returns a tuple of all outputs, in output order. The translation binds the result output, and writes each lvalue output with the code of a `store` (a local's field, or `Zig.store` through a pointer). A matching input constraint (`"1"`) can name any output. `examples/asm/asm.zig`'s `divmod` (`divl`: the quotient is the result, the remainder goes to the local `rem`):
+**Opaque blocks (premise [ASM-01](premises.md#asm-01)).** An allowlisted block the model does not cover (today the memory-region entries `rep stosb` and `rep movsb`) is an `opaque airAsm_<hash>` (`airAsmFx_<hash>` with an effect contract): a proof gets only what the caller states about it (ASM-02), no built-in axiom for what it computes.
+
+**More than one output.** Each output is a register output (`=r`, `={reg}`) of an integer. At most one is the expression's result (`-> T`); every other one is an lvalue output: the asm writes it to its operand, a pointer. The function then returns a tuple of all outputs, in output order. The translation binds the result output, and writes each lvalue output with the code of a `store` (a local's field, or `Zig.store` through a pointer). A matching input constraint (`"1"`) can name any output. `examples/asm/asm.zig`'s `divmod` (`xorl %edx, %edx; divl`: the quotient is the result, the remainder goes to the local `rem`; the block faults on a zero divisor):
 
 ```lean
-opaque airAsm_2482283570 (i0 : BitVec 32) (i1 : BitVec 32) : BitVec 32 × BitVec 32
-
-    let a4 := airAsm_2482283570 p0 p1
+    let a4 ← Zig.Asm.isaFault (airIsa_3653072158_fault p0 p1) (airIsa_3653072158 p0 p1)
     let i4 ← pure a4.1
     modify (fun s => { s with rem := a4.2 })
 ```
 
-The diff test calls the opaque directly (below), so it checks the op; `Proofs/Asm/Proofs.lean`'s `divmod_spec` checks the translation around it.
+`Proofs/Asm/Proofs.lean` proves the wrappers from these definitions; the diff test runs them against the compiled inline asm (below).
 
 ### Effect contract: read-write and memory operands, aliases, clobbers (A01)
 
-A01 extends the accepted constraints only where the effect is explicit (`Air2Lean/AsmContract.lean`, `ZigLean/Asm.lean`, premise [ASM-03](premises.md#asm-03)). Register-only ops keep their exact translation and `airAsm_<hash>` name (`Proofs/Asm/Gen.lean` is byte-identical). An op with a read-write output, a memory output or a registry-approved `"memory"` clobber is named `airAsmFx_<hash>` (same hash):
+A01 extends the accepted constraints only where the effect is explicit (`Air2Lean/AsmContract.lean`, `ZigLean/Asm.lean`, premise [ASM-03](premises.md#asm-03)). Register-only ops keep their translation and name. An op with a read-write output, a memory output or a registry-approved `"memory"` clobber is named `airIsaFx_<hash>` when the instruction model covers it (`airAsmFx_<hash>` as an opaque otherwise; same hash):
 
 | Constraint | Operand | Translation |
 |---|---|---|
@@ -558,21 +577,19 @@ A01 extends the accepted constraints only where the effect is explicit (`Air2Lea
 | `=m` | lvalue output | the opaque's output is stored to the pointee: the footprint is exactly `Enc.size` bytes at the pointer (a 1, 2, 4 or 8 byte integer) |
 | `+m` | lvalue output | as `+r`, through the memory operand |
 
-The opaque's type is the contract: it takes the register inputs and the old values of the read-write outputs and returns the outputs, so it cannot touch memory or the locals. Every memory effect is in the wrapper, in this order: `Zig.Asm.guard` (when two or more outputs are written through memory pointers), the read-write loads in output order, the call, the stores in output order:
+The function's type is the contract: it takes the register inputs and the old values of the read-write outputs and returns the outputs, so it cannot touch memory or the locals. Every memory effect is in the wrapper, in this order: `Zig.Asm.guard` (when two or more outputs are written through memory pointers), the read-write loads in output order, the call, the stores in output order (here the two-`+m` swap through `eax`, a defined block):
 
 ```lean
-opaque airAsmFx_3102165980 (i0 : BitVec 32) (i1 : BitVec 32) : BitVec 32 × BitVec 32
-
     Zig.Asm.guard [(p0, 4), (p1, 4)]
     let a2o0 ← Zig.load (BitVec 32) 4 p0
     let a2o1 ← Zig.load (BitVec 32) 4 p1
-    let a2 := airAsmFx_3102165980 a2o0 a2o1
+    let a2 := airIsaFx_3102165980 a2o0 a2o1
     Zig.store (α := BitVec 32) 4 p0 a2.1
     Zig.store (α := BitVec 32) 4 p1 a2.2
 ```
 
 - **Frame.** A wrapper writes only its declared locations: `Proofs/Asm/Effects.lean`'s `Zig.Asm.Frame` (every block keeps its shape, every byte outside the locations its value) composes over loads and stores, and inverts any successful run. `tests/roadmap/asm-effects` proves it for the generated `+m`, `=m` and two-`+m` wrappers.
-- **Aliases.** Two written locations that overlap would make the result depend on the instructions' store order, which the opaque does not fix: `Zig.Asm.guard` throws `.unspecified` (the model picks no order). Two outputs with the same pointer value or the same local are rejected statically. A successful run therefore had disjoint operands (`swapm_disjoint`).
+- **Aliases.** Two written locations that overlap would make the result depend on the instructions' store order, which the pure function does not fix: `Zig.Asm.guard` throws `.unspecified` (the model picks no order). Two outputs with the same pointer value or the same local are rejected statically. A successful run therefore had disjoint operands (`swapm_disjoint`).
 - **Clobbers.** `cc`, flags and named registers have no Lean-visible state and are accepted, but a clobber may not name the register of a pinned operand (`{eax}` with a `rax` clobber: the x86_64 sub-register families are one register), two outputs or two inputs may not pin one register, and an input may not pin the register of an early-clobber or read-write output. A matching input may tie only to a write-only register output.
 - **`"memory"` clobber.** Rejected (the block may write any memory) unless the whole block is an entry of the reviewed `asmPureRegistry`. The only entry is the compiler barrier `asm volatile ("" ::: "memory")`: no instruction, so no effect in a model that runs accesses in program order.
 - **Still rejected.** immediate inputs, `m` inputs off the allowlist, `rm`/`g` alternatives, `=&m`, `+&r`, a read-write or memory result (`-> T`), a memory operand of another width, an output through a `const` pointer.
@@ -582,7 +599,7 @@ Zig source names a variable as an output operand, so real `=m`/`+m` refs are loc
 Register-only support does not make arbitrary asm safe: ASM-03 is the premise that the instructions behave like the wrapper (read only the declared inputs and read-write locations, write every declared output and nothing else, including through an integer input that holds an address).
 
 Every accepted asm op matches the reviewed allowlist `Air2Lean/AsmAllowlist.lean`: template,
-constraints, clobbers and target (L13, A01). An opaque is a repeatable function of its inputs,
+constraints, clobbers and target (L13, A01). The block's function is a repeatable function of its inputs,
 which is sound only for input-determined instructions. Any other asm, `volatile` or not, is
 `ASM_VOLATILE_EFFECT`. This covers `rdtsc`, `rdrand`, port I/O, output-less asm and `memory`
 clobbers. With `--device-contract`, a declared `asm volatile` is instead `Zig.vasm`, one event of
@@ -633,15 +650,11 @@ outside the entries.
 
 ### Differential-test implementation
 
-`Asm.airAsm_*` has no defining equation to run — that is M21's whole point — so `tests/diff/asm/asm.zig` gives the diff test one, the same role `tests/diff/libm/libm.zig` plays for `ZigLean/Float/Libm.lean`'s transcendental ops: one `export fn air2lean_asm_<op>` per op, reimplementing `examples/asm/asm.zig`'s behaviour with ordinary Zig builtins (`@byteSwap`, `@popCount`, `@clz`) instead of the inline asm itself — the diff test needs behavioural equivalence, not instruction equivalence, and a builtin-based archive builds on every host, not only x86_64. Built into `air2lean_asm.a` by `scripts/diff.sh` and linked into `difftest` (an `input_file` in `tests/diff/lakefile.toml`'s `moreLinkObjs`, so a changed archive relinks it).
+`examples/asm/asm.zig`'s blocks are defined functions over the instruction model, so `tests/diff/Diff.lean` runs the generated wrappers (`Asm.bswap32`, `Asm.divmod`, …) as they are and compares them with the compiled inline asm on the native x86_64 CPU: the differential test checks the model's instruction semantics, fault included (a zero divisor is `trap` in the model and `SIGFPE` natively). No archive stands in for an instruction.
 
-Wiring an already-imported opaque to an `@[extern]` archive function needs `@[csimp]`, not `@[implemented_by]`: both attributes refuse to attach to a declaration from an already-imported module (`Asm.airAsm_*` lives in `Proofs/Asm/Gen.lean`, imported by `tests/diff/Diff.lean`), but `@[csimp]` tags a fresh theorem instead (`@Asm.airAsm_3500345798 = @airAsm_3500345798_impl`, one per op, in `Diff.lean`) and swaps `f` for `g` in compiled code only, never in the kernel. The theorem needs a real proof, and none exists (again, M21's point) — `Diff.lean` uses `sorry` for it, the one place in the repo that assumes rather than proves; confined to `tests/diff/`, outside the theorem universe (`scripts/theorem_universe.py`) that `scripts/no-sorry.sh` scans.
+The wrappers themselves (operand order, result placement, lvalue-output stores) are covered by [tests/roadmap/asm-wrappers](../tests/roadmap/asm-wrappers/README.md). It runs the unchanged generated text, checks each wrapper against the Zig source semantics and cross-checks each `airIsa_<hash>` against a test-only interpretation of its template text (`Interp.lean`, which shares no code with the model or the decoder), with wrapper mutants and an audit that keeps the harness out of theorem dependencies.
 
-`@[csimp]` only redirects references *compiled after* the theorem — `Asm.bswap32` (and `lzcnt64`, `popcnt64`) are compiled once, inside `Proofs/Asm/Gen.lean`, long before `Diff.lean`'s theorems exist, so a call through the generated wrapper never sees the swap and stays on the opaque's `Inhabited`-default placeholder. `Diff.lean`'s `runBswap32`/`runLzcnt64`/`runPopcnt64` call `Asm.airAsm_*` directly instead, bypassing the wrapper: those calls compile after the theorems, so the swap applies.
-
-The wrappers themselves (operand order, result placement, lvalue-output stores) are covered by [tests/roadmap/asm-wrappers](../tests/roadmap/asm-wrappers/README.md). It runs the unchanged generated wrapper text against a test-only x86_64 register-machine interpretation bound to each opaque by its translator hash, with wrapper mutants and an audit that keeps the harness out of theorem dependencies.
-
-Mutation (i) (`scripts/mutate.sh`) mutates this archive (`air2lean_asm_bswap32` returns its input unchanged), not a Lean file: there is no Lean-side equation to mutate for an opaque, so this is the only way to confirm the comparison against `examples/asm/asm.zig`'s real inline asm is live, not vacuous.
+Mutation (i) (`scripts/mutate.sh`) mutates the model: `bswap` in `ZigLean/Isa/X86.lean` returns its operand unchanged, which the differential test of `examples/asm/asm.zig` must detect.
 
 ## Differential test
 

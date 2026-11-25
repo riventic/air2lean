@@ -215,7 +215,11 @@ two counter reads are equal. The checker now accepts inline asm only in these tw
    the quotient always fits: the zero divisor is its only fault. Premise
    [ASM-04](premises.md#asm-04) states that each condition is the instruction's whole fault
    set; `scripts/claims.py` lists it for every no-panic or guaranteed-return goal over an asm
-   opaque. The differential test runs `divmod` on zero divisors too: native SIGFPE against the
+   opaque. A block that the x86_64 instruction model covers (A02, premise
+   [ASM-07](premises.md#asm-07)) is a definition instead, and the wrapper guards it with the
+   block's own fault function (`Zig.Asm.isaFault (airIsa_N_fault …) (airIsa_N …)`, `div`'s #DE);
+   the translator rejects an entry whose `AsmFault` disagrees with the model on whether the
+   block can fault. The differential test runs `divmod` on zero divisors too: native SIGFPE against the
    model's `trap` is a `trap_match` ([outcome-taxonomy.md](outcome-taxonomy.md)).
 
 2. **Declared device event.** With `--device-contract`, an `asm` entry
