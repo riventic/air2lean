@@ -10,6 +10,7 @@ proofs fail in exactly the theorems that state the fact (`broken`), never by an 
 error. Only then it reports the kill (`kill`). `--self-test` checks every anchor.
 """
 from pathlib import Path
+import shutil
 import sys
 
 sys.dont_write_bytecode = True
@@ -57,7 +58,9 @@ def build(name, work):
     namespace, edits, broken = MUTANTS[name]
     gen = f"PointerWidth/{namespace}/Gen.lean"
     target = Path(work) / "mutants" / name
-    (target / gen).parent.mkdir(parents=True, exist_ok=True)
+    # Lean resolves a module by the first search-path entry that holds its root directory, so the
+    # copy holds the other translations' oleans too.
+    shutil.copytree(Path(work) / "PointerWidth", target / "PointerWidth")
     (target / gen).write_text(edit((HERE / gen).read_text(encoding="utf-8"), edits, name), encoding="utf-8")
     rc, out = run_lean(["-R", target, "-o", (target / gen).with_suffix(".olean"), target / gen], target, work)
     if rc != 0:

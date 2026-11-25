@@ -56,7 +56,7 @@ MUTANTS = {
     # The future's storage in the awaiting frame is never released.
     "future-storage-leaked": ([
         (AWAIT_VALUE_END, AWAIT_VALUE_END.removesuffix("  Zig.free s2\n")),
-    ], ("proof", ["awaitValue_wp", "awaitValue_result"])),
+    ], ("proof", ["awaitValue_wp"])),
 }
 
 

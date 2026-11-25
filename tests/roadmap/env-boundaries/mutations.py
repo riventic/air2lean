@@ -18,6 +18,7 @@ A mutant that fails to build, or fails outside the named declarations, aborts th
 a finding. Only a rejected mutant reports its kill (`kill`). `--self-test` checks every anchor.
 """
 from pathlib import Path
+import shutil
 import sys
 
 sys.dont_write_bytecode = True
@@ -98,7 +99,10 @@ def run_std(name, work):
     namespace, edits, broken = STD_MUTANTS[name]
     target = Path(work) / "mutants" / name
     gen = target / namespace / "Gen.lean"
-    gen.parent.mkdir(parents=True, exist_ok=True)
+    # Lean resolves a module by the first search-path entry that holds its root directory, so the
+    # copy holds the other translation's olean too.
+    for other in GEN:
+        shutil.copytree(Path(work) / other, target / other)
     gen.write_text(edit(GEN[namespace].read_text(encoding="utf-8"), edits, name), encoding="utf-8")
     rc, out = run_lean(["-R", target, "-o", gen.with_suffix(".olean"), gen], target, work)
     if rc != 0:
