@@ -1796,6 +1796,11 @@ jobs:
           case '${{ matrix.zig }}' in
             0.17.1) bash tests/roadmap/big-endian/check.sh --native '${{ matrix.zig }}' ;;
           esac
+          # T02 pointer_width.zig and names.zig natively and under Node's WASI (0.16.0: the
+          # pointer-width step of the native part).
+          case '${{ matrix.zig }}' in
+            0.17.1) bash tests/roadmap/pointer-width/check.sh --native ;;
+          esac
 
       # Registry fixtures are version neutral; check their typed imported evidence and client
       # once, with generated files/logs isolated from the checkout. No additional upload.
@@ -2319,6 +2324,8 @@ jobs:
           lake build ZigLean Air2Lean air2lean ZigLean.Mem.WidthLemmas
           bash tests/roadmap/pointer-width/check.sh
           bash tests/roadmap/pointer-width/check.sh --native
+          # A fresh names.zig export equals the committed AIR (exports.json).
+          python3 -B scripts/fixture-exports.py verify pointer-width --version ${{ matrix.zig }}
 
       # T05: re-observe the 0.16.0 x86_64-linux and wasm32-freestanding records (wasm32 under Node).
       - name: Native/WASM correspondence records (x86_64-linux, wasm32)

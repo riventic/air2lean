@@ -20,21 +20,32 @@ has 12 (wasm32) or 24 (x86_64) bytes, with `restLen` and `setFirst` reading the 
 and the pointer at their target offsets. `ZigLean/Mem/WidthLemmas.lean` proves the encodings
 of both widths round-trip and that every `.w64` definition is the 64-bit model.
 
+`names.zig` (`@tagName` of an exhaustive and a non-exhaustive enum, `@errorName`, a byte read
+through a name) is declared in `exports.json` for Zig 0.17.1 and 0.16.0 and the same three
+targets (`air/<version>/names/<target>/`, pinned by `exports.lock.json`). A name is a
+`[:0]const u8` into a static block of `mem0`: `Zig.Slice32` on wasm32, `Zig.Slice` on x86_64.
+`PointerWidth/Names/V0_17_1/Proofs.lean` proves for all three translations that the returned
+length is the name's byte count, the bytes read through the slice are the name, index `len`
+reads the sentinel and `len + 1` is out of bounds, and an unnamed non-exhaustive value panics;
+`V0_16_0/Proofs.lean` is the same file for the 0.16.0 translations (`scripts/fixtures.py
+instance`).
+
 `test_cli.py` checks the translations' runtime names, that an exported pointer layout of
 the other width is rejected (the model's sizes come from the profile), that
-`pointer_bits` must match the triple, and the rejections of atomics, `@tagName` and
-`Allocator.dupe` on wasm32.
+`pointer_bits` must match the triple, that the name functions use the profile's slice type,
+and the rejections of atomics and `Allocator.dupe` on wasm32.
 
 Run under the serialized build queue:
 
 ```sh
 lake build ZigLean Air2Lean air2lean ZigLean.Mem.WidthLemmas
 bash tests/roadmap/pointer-width/check.sh                 # translate, compare, prove, reject
-AIR2LEAN_ZIG_NATIVE=<stock zig 0.16.0> bash tests/roadmap/pointer-width/check.sh --native
-AIR2LEAN_ZIG_AIR=<patched zig> bash tests/roadmap/pointer-width/check.sh --export DIR
+AIR2LEAN_ZIG_NATIVE=<stock zig 0.16.0 or 0.17.1> bash tests/roadmap/pointer-width/check.sh --native
+AIR2LEAN_ZIG_AIR=<patched zig 0.16.0> bash tests/roadmap/pointer-width/check.sh --export DIR
+python3 -B scripts/fixture-exports.py verify pointer-width   # names.zig, every version
 ```
 
-`--native` runs the source's layout and `usize`-boundary tests on the host, evaluates the
+`--native` runs each source's layout, `usize`-boundary and name tests on the host, evaluates the
 comptime layout asserts for wasm32-freestanding, and runs the wasm32-wasi test binary under
 Node's WASI (`run-wasi.mjs`). This qualifies the recorded layouts and the boundary
 behavior on those targets; it is not a binary correspondence claim for the generated model.

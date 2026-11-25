@@ -164,10 +164,11 @@ A 64-bit translation is unchanged: it uses the definitions of `ZigLean/Mem/Basic
 | `Zig.Allocator.create`, `.alloc`, `.free` | `.createOf .w32`, `.allocOf .w32`, `.freeOf` (`.destroy` is width-independent) |
 | `@intFromPtr`: `BitVec.ofInt 64 (← Zig.ptrAddr p)` | `Zig.ptrAddrOf .w32 p`: `.unspecified` for a model address outside `0 ≤ a < 2 ^ 32` |
 | a slice's length field at offset 8 | offset 4 |
+| `<E>.tagName`, `errorNameOf : … → Zig.Result Zig.Slice` | `… → Zig.Result Zig.Slice32` (the same name blocks in `mem0`) |
 
 `alloc(T, n)` returns `error.OutOfMemory` when `n * @sizeOf(T) ≥ 2 ^ bits` (`math.mul` overflow) before any allocator decision (`Allocator.allocOf_overflow`); a successful allocation has a byte count below the bound (`Allocator.allocOf_ok`). A zero-byte allocation's pointer has the highest aligned address below `2 ^ bits` (`zeroAllocPtrOf`). The model's block addresses are not bounded by the target's address space: a proof about a 32-bit `@intFromPtr` shows that the address fits.
 
-`main` refuses a 32-bit output that still names a 64-bit runtime term (`width64Leak`). The checker rejects, for a 32-bit profile, `std.Thread`/`std.Io` values and every thread, futex and `Io.Group` model, vectors in memory, atomic ops, `@tagName`, `@errorName`, inline assembly, allocator models other than `create`/`alloc`/`alignedAlloc`/`destroy`/`free`, and external model registries. Fixtures and proofs: `tests/roadmap/pointer-width/`.
+`main` refuses a 32-bit output that still names a 64-bit runtime term (`width64Leak`). The checker rejects, for a 32-bit profile, `std.Thread`/`std.Io` values and every thread, futex and `Io.Group` model, vectors in memory, atomic ops, inline assembly, allocator models other than `create`/`alloc`/`alignedAlloc`/`destroy`/`free`, and external model registries. Fixtures and proofs: `tests/roadmap/pointer-width/`.
 
 A function **uses memory** if a parameter or the return type contains a pointer (a top-level `[]const T` with a pointer-free `T` does not count), an `alloc` escapes (§Places), it has a pointer constant (a global, a string literal), an integer-to-pointer `bitcast` (`@ptrFromInt`) or a memory op (pointer arithmetic, an item pointer, `@memset`, `@memcpy`, `@tagName`, a call to the allocator model, …; `memoryOp`), or it calls a function that uses memory (`Air2Lean/Memory.lean`). Every other function is **pure**: its translation does not change.
 
