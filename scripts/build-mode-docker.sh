@@ -5,7 +5,7 @@
 # float model's reference host (Linux x86_64) applies. Writes the differential summary and cases
 # next to the requested output directory (docs/build-modes.md).
 #
-# The native side (harnesses, libm and asm archives) is cross-compiled on the host for
+# The native side (harnesses, the libm archive) is cross-compiled on the host for
 # x86_64-linux by the host's stock Zig of the same version (`scripts/cas.py host-zig`; with
 # AIR2LEAN_CAS_DIR set, through the shared cache) and only run in the container, so no compiler
 # runs emulated (`diff.sh --build-only`, AIR2LEAN_DIFF_PREBUILT). AIR2LEAN_BUILD_MODE_CROSS=0 builds

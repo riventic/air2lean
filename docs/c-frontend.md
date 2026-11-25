@@ -2,7 +2,7 @@
 
 air2lean verifies C programs by first turning them into Zig with Zig's own C translator,
 then running the ordinary Zig route. This page records the route, the trust statement, the
-measured coverage of a 40-file C corpus, the named gates, the gaps in priority order, the
+measured coverage of a 41-file C corpus, the named gates, the gaps in priority order, the
 libc boundary, and a phased plan. The harness is `tests/roadmap/c-frontend/` (`check.sh`,
 `run.py`, `cgen.py`, `test_run.py`). The register row (X01) is at the end.
 
@@ -11,8 +11,9 @@ libc boundary, and a phased plan. The harness is `tests/roadmap/c-frontend/` (`c
 ```
 f.c ──zig translate-c──▶ c_f.zig ──patched Zig 0.17.1 (AIR only)──▶ AIR JSON ──air2lean──▶ Gen.lean ──▶ proofs
         (stock 0.17.1,             (build-obj -fno-emit-bin -OReleaseSafe          (--allocator-model translated,
-         -target x86_64-linux-      -target x86_64-linux -mcpu=baseline,             --diagnostics-json, then
-         musl -lc)                  ZIG_AIR_JSON_FILTER = the closure of `c_f.`)      emission, Lean elaboration)
+         -target x86_64-linux-      -target x86_64-linux-musl -mcpu=baseline -lc,    --assume-weak-exports,
+         musl -lc)                  Zig's libc as the module `zigc`,                 --diagnostics-json, then
+                                    ZIG_AIR_JSON_FILTER = the closure of `c_f.`)      emission, Lean elaboration)
 ```
 
 * **translate-c** (Zig 0.17.1) is the Aro-based translator in `lib/compiler/translate-c/`,
@@ -38,18 +39,30 @@ f.c ──zig translate-c──▶ c_f.zig ──patched Zig 0.17.1 (AIR only)�
   (`?*anyopaque` → `[*c]T`), which it checks to be free of error storage.
 * Non-`static` C functions become `pub export fn`; `static` ones become `pub fn` with
   `callconv(.c)`. The harness exports every function reachable from `entry`.
+* The AIR is exported from the compilation that `zig build-exe -target x86_64-linux-musl -lc`
+  makes of the translated module. For a static musl target that compilation holds Zig's libc
+  (`lib/c.zig`) as its module `zigc` (`src/Compilation.zig`, `zigc_strat == .zcu`), built with
+  the program's own settings; the harness names the same module on the command line
+  (`--dep zigc -Mroot=c_f.zig -fno-stack-check -fno-stack-protector -fno-builtin
+  -Mzigc=<lib>/c.zig`), since the AIR-only compiler builds objects.
 * libc functions are `pub extern fn` declarations. They are the libc boundary below: the
   translator binds an extern call by its linker symbol only ([EXT-03](premises.md#ext-03),
-  [air-json.md](air-json.md#extern-calls)): to a trusted base model with a named premise, to a
-  translated definition in the AIR set, or it rejects the program with
-  `CALLEE_EXTERN_UNBOUND`, naming the symbol.
+  [air-json.md](air-json.md#extern-calls)): to a trusted base model with a named premise, to
+  the function of the AIR set that defines the symbol, or it rejects the program with
+  `CALLEE_EXTERN_UNBOUND`, naming the symbol. The definitions of Zig's libc are weak
+  `@export`s: the exporter's [export table](air-json.md#export-table) names them, the export
+  closure follows a called symbol to its defining function, and the translator binds it under
+  `--assume-weak-exports` ([EXT-07](premises.md#ext-07): the image links no other definition
+  of the symbol), which the generated header records.
 
 ### Trust statement
 
 > A theorem about `Gen.lean` produced from `f.c` is a theorem about the Zig program that
 > stock `zig translate-c -target x86_64-linux-musl -lc f.c` (Zig 0.17.1) emits, as that
-> Zig program is compiled by Zig 0.17.1 for x86_64-linux in ReleaseSafe and modelled by
-> air2lean under its existing claims ([claim-strength.md](claim-strength.md)). It is not a
+> Zig program is compiled by Zig 0.17.1 for x86_64-linux-musl with libc linked, in ReleaseSafe,
+> and modelled by air2lean under its existing claims ([claim-strength.md](claim-strength.md)).
+> A libc function that the program calls and Zig's libc defines in Zig is part of that
+> program, under premise EXT-07 (the image links no other definition of its symbol). It is not a
 > claim about `f.c` under ISO C or as compiled by gcc or clang. translate-c, the musl headers
 > it reads, the Zig front end up to AIR and the patched AIR exporter are in the trusted base.
 > Where translate-c's Zig is stricter than C (a ReleaseSafe panic on signed overflow, on a
@@ -198,15 +211,18 @@ the error-cleanup idiom), general goto only with upstream acceptance and L03.
 
 ## Results
 
-Corpus: 40 files in `tests/roadmap/c-frontend/corpus/`, one construct family each plus
+Corpus: 41 files in `tests/roadmap/c-frontend/corpus/`, one construct family each plus
 realistic programs (`strings_loops`, `memcpy_loops`, `linked_list`, `ring_buffer`,
 `sort_callback`, `hash_table`, `malloc_vec`, the goto state machine, the bitfield packet
 parser, `varargs_sum`). Recorded in `tests/roadmap/c-frontend/record.json` with stock Zig
-0.17.1/0.15.2 and the patched AIR-only Zig 0.17.1 (`scripts/zig-air.sh 0.17.1`); compilers
-and translator on aarch64-macos, Lean elaboration on the x86_64-linux build host.
+0.17.1 and the patched AIR-only Zig 0.17.1 (`scripts/zig-air.sh 0.17.1`), every stage on the
+x86_64-linux build host.
 
-* **26 of 40 files translate end to end** and their `Gen.lean` `entry` agrees with the C
-  program on all four inputs (`#guard`). These cover integer promotions, unsigned
+* **27 of 41 files translate end to end** and their `Gen.lean` `entry` agrees with the C
+  program on all four inputs (`#guard`). `libc_ctype` is the first with libc calls: its
+  `isdigit`, `isalpha`, `isspace`, `toupper`, `tolower`, `abs` and `labs` are the functions of
+  Zig's libc (`lib/c/ctype.zig`, `lib/c/stdlib.zig`), translated from the program's own
+  compilation and bound under EXT-07 (§libc boundary). The others cover integer promotions, unsigned
   wrapping, signed arithmetic (`signedRemainder`), 64-bit arithmetic, floats, `_Bool` and
   short-circuit logic, side-effecting expressions, `switch` (incl. fallthrough by
   duplication), loops with `break`/`continue`, enums, unions (type punning), structs and
@@ -219,10 +235,10 @@ and translator on aarch64-macos, Lean elaboration on the x86_64-linux build host
   call (`snprintf`), and two programs whose translated Zig panics natively where C does not
   (G8, the comparator idiom in `sort_callback` and `libc_stdlib`).
 * **4 files are open:** `casts` (G2: an optional-pointer cast of Zig 0.17.1), `libc_string`
-  and `malloc_vec` (G1b: libc symbols without a binding; `malloc_vec` also G2), and
-  `ptr_arith` (G4: accepted, but the model's result is `.illegal` where native Zig and C are
-  defined).
-* Every C program ran cleanly under UBSan; translate-c's Zig agreed with C natively in 31
+  and `malloc_vec` (G1b: their libc symbols have a definition in Zig, but none binds yet, for
+  the three reasons of §libc boundary; `malloc_vec` also G2), and `ptr_arith` (G4: accepted,
+  but the model's result is `.illegal` where native Zig and C are defined).
+* Every C program ran cleanly under UBSan; translate-c's Zig agreed with C natively in 32
   files. The 9 others: 6 do not compile (the demotions), `libc_stdlib`/`sort_callback` panic
   in ReleaseSafe on the comparator idiom (G8), and `setjmp_longjmp` returns 1000 where C
   returns 1006.
@@ -259,13 +275,14 @@ generated headline: {"lean_ok": 30}
 | initializers | ok | ok | ok | ok | ok | checked | ok | – | – |
 | inline_static | ok | ok | ok | ok | ok | checked | ok | – | – |
 | int_promotion | ok | ok | ok | ok | ok | checked | ok | – | – |
+| libc_ctype | ok | ok | ok | ok | ok | checked | ok | – | – |
 | libc_stdio | ok | ok | ok | ok | ok | rejected | – | CALLEE_EXTERN_UNBOUND×1, PROGRAM_FAILURE×1 | EXT-VARIADIC |
-| libc_stdlib | ok | ok | ok | runtime_error | ok | rejected | – | CALLEE_EXTERN_UNBOUND×5, INSTRUCTION_FAILURE×4, PROGRAM_FAILURE×6 | NATIVE-DIVERGENCE |
-| libc_string | ok | ok | ok | ok | ok | rejected | – | CALLEE_EXTERN_UNBOUND×6, PROGRAM_FAILURE×7 | – |
+| libc_stdlib | ok | ok | ok | runtime_error | ok | rejected | – | CALLEE_BLOCKED×6, CALLEE_EXTERN_UNBOUND×10, CONSTANT_FAILURE×2, INSTRUCTION_FAILURE×9, MODEL_FAILURE×4, PREREQUISITE_SKIPPED×1, PROGRAM_FAILURE×13, STRUCTURE_FAILURE×1 | NATIVE-DIVERGENCE |
+| libc_string | ok | ok | ok | ok | ok | rejected | – | CALLEE_BLOCKED×2, CALLEE_EXTERN_UNBOUND×6, NORMALIZATION_FAILURE×4, PREREQUISITE_SKIPPED×1, PROGRAM_FAILURE×7 | – |
 | linked_list | ok | ok | ok | ok | ok | checked | ok | – | – |
 | loops | ok | ok | ok | ok | ok | checked | ok | – | – |
 | macros | ok | ok | ok | ok | ok | checked | ok | – | – |
-| malloc_vec | ok | ok | ok | ok | ok | rejected | – | CALLEE_BLOCKED×1, CALLEE_EXTERN_UNBOUND×2, INSTRUCTION_FAILURE×1, PROGRAM_FAILURE×2 | – |
+| malloc_vec | ok | ok | ok | ok | ok | rejected | – | CALLEE_BLOCKED×8, CALLEE_EXTERN_UNBOUND×10, CONSTANT_FAILURE×5, INSTRUCTION_FAILURE×6, MODEL_FAILURE×6, PROGRAM_FAILURE×13 | – |
 | memcpy_loops | ok | ok | ok | ok | ok | checked | ok | – | – |
 | ptr_arith | ok | ok | ok | ok | ok | checked | guard_failed | – | – |
 | ptr_int_casts | ok | ok | ok | ok | ok | checked | ok | – | – |
@@ -291,7 +308,7 @@ Headline outcome (`lean_ok` = translated and #guard-checked; `gated` = rejected 
 | air2lean | 3 |
 | gated | 10 |
 | lean | 1 |
-| lean_ok | 26 |
+| lean_ok | 27 |
 
 Gates (files each named gate rejects):
 
@@ -309,10 +326,15 @@ Rejection histogram (files whose diagnostics contain the code):
 
 | code | files |
 |---|---|
-| CALLEE_BLOCKED | 2 |
+| CALLEE_BLOCKED | 4 |
 | CALLEE_EXTERN_UNBOUND | 9 |
+| CONSTANT_FAILURE | 2 |
 | INSTRUCTION_FAILURE | 5 |
+| MODEL_FAILURE | 2 |
+| NORMALIZATION_FAILURE | 1 |
+| PREREQUISITE_SKIPPED | 2 |
 | PROGRAM_FAILURE | 9 |
+| STRUCTURE_FAILURE | 1 |
 
 Outcome by C construct family:
 
@@ -328,8 +350,9 @@ Outcome by C construct family:
 | goto | gated: 2 |
 | integer casts | air2lean: 1 |
 | integer promotions | lean_ok: 1 |
+| libc ctype | lean_ok: 1 |
 | libc stdio | gated: 1 |
-| libc stdlib | air2lean: 1, gated: 1 |
+| libc stdlib | air2lean: 1, gated: 1, lean_ok: 1 |
 | libc string | air2lean: 1, gated: 1 |
 | loops/break/continue | lean_ok: 1 |
 | macros | lean_ok: 1 |
@@ -366,7 +389,7 @@ blocked (alone or with other gaps). G1, G3, G5, G6 and G9 of the 0.16.0 baseline
 | # | gap | translate-c Zig shape | rejected by | files | size | depends on |
 |---|---|---|---|---|---|---|
 | G2 | **Zig 0.17.1 casts of an optional pointer** | `@ptrCast(@alignCast(vp))` with `vp: ?*anyopaque` and a target alignment above 1: the alignment check is `int_from_ptr ?*anyopaque → usize`, then `ptr_cast ?*anyopaque → [*c]u32` | `Air2Lean/Check.lean`, the cast rule: "a bitcast between an optional pointer (`?*T`) and another type is outside the subset". The `?*T → usize` rule (`Zig.optPtrAddr`, null is 0) and the `?*T → *U` rule (`Zig.optPtrUnwrap`) are admitted only for the ≤0.16 `bitcast` (`unwrapRule`/`fromAddrRule` require `BitCast.memory`); 0.17.1's `int_from_ptr`/`ptr_cast` do not get them. An alignment of 1 (`void *` → `char *`, `memcpy_loops`) has no `int_from_ptr` and translates | 4 (`casts`; also `sort_callback`, `libc_stdlib`, `malloc_vec`) | S: qualify the two rules for 0.17.1's `int_from_ptr`/`ptr_cast` | L07 (cast rules) |
-| G1b | **libc symbols without a binding** | `pub extern fn strlen([*c]const u8) usize;` | `CALLEE_EXTERN_UNBOUND`, naming the symbol (EXT-03): no registry model with a premise and no translated definition | 3 (`libc_string`, `malloc_vec`, `libc_stdlib`) | M–L: per symbol, below | libc boundary; E01, E04, M01–M03 |
+| G1b | **libc symbols whose Zig definition does not bind** | `pub extern fn strcmp([*c]const u8, [*c]const u8) c_int;` against `fn strcmp(a: [*:0]const c_char, b: [*:0]const c_char) callconv(.c) c_int` | (a) `CALLEE_EXTERN_UNBOUND` at the binding ("extern function 'strcmp' differs from its definition 'zigc:c.string.strcmp' in its parameter 0 type"): declaration and definition agree only at the C ABI; (b) `CALLEE_EXTERN_UNBOUND` for `memcpy`, `memset`, `memcmp`, `strlen`: `compiler_rt` is another compilation, in ReleaseFast ([build-modes.md](build-modes.md)); (c) `lib/c/malloc.zig` reaches code outside the subset (§libc boundary) | 3 (`libc_string`, `malloc_vec`, `libc_stdlib`) | (a) M: a C-ABI conversion at the binding, a statement decision; (b) M: programs of two build profiles; (c) L | libc boundary; L07, Q07, M01–M03 |
 | G4 | **negative `[*c]` index** | `p[@bitCast(@as(isize, @intCast(-1)))]` = index 2⁶⁴−1 | accepted, but the model's `p.elem 4 (2^64-1)` is past the block, so `entry` is `.illegal` while native Zig and C are defined (conservative, not unsound) | 1 (`ptr_arith`) | M: a signed (two's-complement) item offset for `[*c]`/many-item `ptr_elem_*`/`ptr_add` in the memory model, not a plain wrap modulo 2⁶⁴ (that would make index 2⁶² of a 4-byte item the same place as item 0, which the compiler's in-bounds pointer arithmetic does not promise) | L05 |
 | G7 | **translate-c refusals** | `goto`/labels; bitfields; variadic definitions; case labels inside nested statements | gates `TC-GOTO`, `TC-BITFIELD`, `TC-VARIADIC-DEF`, `TC-COMPLEX-SWITCH` | 6 | goto: forward-only Aro patch M, general L (§goto); bitfields M–L (C ABI storage units as packed host integers); variadic definitions L; Duff M | upstream Aro translate-c or a pinned patch (joins the trusted base); L03, L08, L14 |
 | G8 | **translate-c semantic divergences** | `(a > b) - (a < b)` → `@intFromBool(a > b) - @intFromBool(a < b)` (`u1` arithmetic); `setjmp`/`longjmp` as plain calls | gates `NATIVE-DIVERGENCE`, `LIBC-SETJMP` | 3 | S: upstream promotion fix | upstream translate-c |
@@ -376,6 +399,10 @@ Closed since the 0.16.0 baseline:
 * **G1 (calls to `extern` functions).** The exporter writes an `externs` table and the
   translator binds each extern call by its linker symbol (EXT-03); an unbound symbol is
   `CALLEE_EXTERN_UNBOUND`.
+* **G1b, the binding mechanism.** The exporter writes the compilation's `@export` records
+  (the export table), the export closure follows a called symbol to its defining function in
+  Zig's libc, and the translator binds a weak definition under EXT-07 (`libc_ctype`). What
+  still keeps `libc_string` and `malloc_vec` out is G1b above.
 * **G2, the `void *` part.** `--allocator-model translated` admits `?*anyopaque` ↔ `[*c]T`
   for error-free pointees (`memcpy_loops`); the self-referential struct cast (`linked_list`)
   translates in both modes.
@@ -396,37 +423,79 @@ Closed since the 0.16.0 baseline:
 ## libc boundary
 
 Symbols the translated Zig calls (`extern_calls` in the record). The rule is EXT-03: a symbol
-is bound to a translated definition (an `export fn` of that name in the AIR set: the real
-implementation compiled through this same route), or to a trusted base model registered with
-a premise (`--model-registry`, [external-models.md](external-models.md#extern-functions)),
-never to a C-specific runtime model; without either the program is rejected. No corpus symbol
-has a binding yet.
+is bound to the function of the AIR set that defines it (the real implementation compiled
+through this same route), or to a trusted base model registered with a premise
+(`--model-registry`, [external-models.md](external-models.md#extern-functions)), never to a
+C-specific runtime model; without either the program is rejected.
 
-**The pinned real code is Zig.** For a musl target, the Zig 0.17.1 distribution defines every
-corpus symbol except `snprintf`, `setjmp` and `longjmp` in Zig, not in musl's C (its
-`lib/libc/musl/src/string/` no longer has `strlen.c`, `memcpy.c`, …): `lib/c/string.zig`,
-`lib/c/ctype.zig`, `lib/c/stdlib.zig`, `lib/c/malloc.zig` and `lib/compiler_rt/`. So these
-symbols need no translate-c: their definitions are ordinary Zig for the existing route, the
-allocator included (`lib/c/malloc.zig` sits on a Zig allocator, hence on the page mapping of
-OSM-01). Two things stand between that code and a binding, and both are decisions rather than
+**The pinned real code is Zig, and it is part of the program's compilation.** For a musl
+target, the Zig 0.17.1 distribution defines every corpus symbol except `snprintf`, `setjmp`
+and `longjmp` in Zig, not in musl's C (its `lib/libc/musl/src/string/` no longer has
+`strlen.c`, `memcpy.c`, …): `lib/c/string.zig`, `lib/c/ctype.zig`, `lib/c/stdlib.zig`,
+`lib/c/malloc.zig` and `lib/compiler_rt/`. `zig build-exe -lc` puts `lib/c.zig` into the
+program's own compilation as the module `zigc`, with the program's build mode and panic
+handler, so these functions are ordinary Zig for the existing route. The mechanism
+(maintainer decision 2026-11-24):
+
+* **Export records.** `lib/c.zig` defines each symbol with
+  `@export(func, .{ .name = …, .linkage = .weak, .visibility = .hidden })`. The exporter
+  writes the compilation's exports as `export-table.air2lean`
+  ([air-json.md](air-json.md#export-table)).
+* **Closure.** The harness's export closure follows an extern symbol to the function that
+  the table names for it, as it follows a std callee without AIR.
+* **Binding.** The translator binds the call to that function when it is the symbol's one
+  definition in the program. A weak definition binds only with `--assume-weak-exports`:
+  premise [EXT-07](premises.md#ext-07), the image links no other definition of the symbol
+  (a strong `strcmp` in another object, archive or interposing shared library would replace
+  Zig's). The harness passes the flag, and each generated header records `weak-exports`.
+* **No conversion at the binding.** The bound call is a direct call: the declared parameter
+  and result types must be the definition's. `isdigit`, `abs` and the like (`c_int` in,
+  `c_int` out) bind. A declaration that agrees with the definition only at the C ABI does not.
+
+Three things keep the other corpus symbols rejected. Each is a translator or model rule, not
 harness work:
 
-* The definitions are exported with `@export(func, .{ .name = …, .linkage = .weak })`
-  (`lib/c.zig` `symbol`), and EXT-03 binds only an `export fn` (a strong definition): `@export`
-  aliases and weak definitions are outside it. Binding them needs the exporter to write the
-  `@export` records and a premise that the image links exactly this libc (no other definition
-  of the symbol).
-* They are a separate compilation (`lib/c.zig`, `compiler_rt`), so the AIR set of a program
-  has to include their export, selected by symbol.
+1. **Types that agree only at the C ABI.** translate-c declares C pointers
+   (`[*c]const u8`, `?*anyopaque`); Zig's libc defines the functions with Zig pointer types
+   (`[*:0]const c_char`, `[*]const u8`, `?[*]u8`, `?[*]align(16) u8`). At the machine level
+   the call is defined when the argument values meet what the definition's types state
+   (non-null for `strcmp`'s and `memcmp`'s pointers, alignment 16 for `free`'s, `noalias` for
+   `memcpy`'s); the binding converts no value, so the translator does not bind them
+   (`CALLEE_EXTERN_UNBOUND`, naming the symbol, the definition and the first differing
+   parameter or the result). Binding these needs a
+   conversion rule at the extern boundary: each argument reinterpreted as the definition's
+   parameter type and the result as the declared one, with illegal behaviour where a value
+   does not meet the type it is given (a null `[*c]` pointer for a `[*:0]` parameter is not a
+   panic there: no safety check stands at a linker boundary). That is a new statement of
+   EXT-03 over the cast rules (L07), so a maintainer decision.
+2. **`compiler_rt` is another compilation.** For an executable, `memcpy`, `memset`, `memcmp`
+   and `strlen` come from `compiler_rt`, which the compiler builds separately and always in
+   ReleaseFast (`Compilation.compilerRtOptMode`; not a qualified mode,
+   [build-modes.md](build-modes.md)) while the program is ReleaseSafe. Their AIR
+   can be exported (`zig build-lib … lib/compiler_rt.zig`), but one program then has two build
+   profiles, which the translator rejects (`PROFILE_FAILURE`: mixed `build_mode`). Needs
+   per-compilation profiles in one program (Q07) and an export table per compilation.
+3. **`lib/c/malloc.zig` leaves the subset.** With libc linked, `malloc` is
+   `std.heap.SmpAllocator` behind a size header. The translator rejects, in order of
+   distance: the `undefined` context pointer it passes to the allocator's functions
+   (`no_context: *anyopaque = undefined`, "an `undefined` operand is outside the subset");
+   `SmpAllocator`'s `unordered` atomic load of a non-integer and its optional-pointer casts
+   (G2); `Thread.getCpuCount` through libc's `sched_getaffinity`; and the page mapping: the
+   trusted boundary `posix.mmap`/`munmap`/`mremap` (OSM-01) is qualified for Zig 0.16.0 only
+   ("no reviewed std source for Zig 0.17.1 signature"), and below it std, with libc linked,
+   calls musl's C functions `mmap`, `munmap`, `mremap` (variadic) and `__errno_location`,
+   which no premise covers. No model is written by hand for any of this: `malloc`, `calloc`,
+   `realloc` and `free` stay rejected until that code translates and OSM-01 is qualified for
+   0.17.1.
 
 | symbol | corpus files | status | definition in Zig 0.17.1 (x86_64-linux-musl) | notes |
 |---|---|---|---|---|
-| `memcpy`, `memset`, `memcmp`, `strlen` | `libc_string` | rejected: `CALLEE_EXTERN_UNBOUND` | `lib/compiler_rt/` (`memcpy.zig`, …) | weak `@export` |
-| `strcmp`, `strchr` | `libc_string` | rejected: `CALLEE_EXTERN_UNBOUND` | `lib/c/string.zig` | weak `@export`; `strings_loops` already passes with equivalent hand-written C loops |
-| `abs` | `libc_stdlib` | rejected: `CALLEE_EXTERN_UNBOUND` | `lib/c/stdlib.zig` | |
-| `isdigit`, `isalpha` | `libc_stdio` | rejected with the file (`EXT-VARIADIC`) | `lib/c/ctype.zig` | |
-| `qsort` | `libc_stdlib` | rejected: `CALLEE_EXTERN_UNBOUND` | `lib/c/stdlib.zig` | needs function pointers (E02, L11), G2 and G8 in the caller |
-| `malloc`, `calloc`, `realloc`, `free` | `libc_stdlib`, `malloc_vec` | rejected: `CALLEE_EXTERN_UNBOUND` | `lib/c/malloc.zig` | translated like any allocator (M01–M03), down to `mmap` (OSM-01) |
+| `isdigit`, `isalpha`, `isspace`, `toupper`, `tolower` | `libc_ctype` (`isdigit`, `isalpha` also `libc_stdio`) | **bound** (EXT-07) | `lib/c/ctype.zig`, over `std.ascii` | `libc_stdio` is rejected with the file (`EXT-VARIADIC`) |
+| `abs`, `labs` | `libc_ctype`, `libc_stdlib` | **bound** (EXT-07) | `lib/c/stdlib.zig` | `@intCast(@abs(a))`: `abs(INT_MIN)` is a ReleaseSafe panic of the model and of the native program |
+| `strcmp`, `strchr` | `libc_string` | rejected: `CALLEE_EXTERN_UNBOUND`, the declared and defined types differ (1) | `lib/c/string.zig` | `strchr` also reaches `std.mem.findScalarPos`, whose Zig 0.17.1 `array_to_vector` is outside the subset; `strings_loops` passes with equivalent hand-written C loops |
+| `memcpy`, `memset`, `memcmp`, `strlen` | `libc_string` | rejected: `CALLEE_EXTERN_UNBOUND` (2), then (1) | `lib/compiler_rt.zig`, `lib/compiler_rt/memcpy.zig` | |
+| `qsort` | `libc_stdlib` | rejected: (1) | `lib/c/stdlib.zig` | needs function pointers (E02, L11), G2 and G8 in the caller |
+| `malloc`, `calloc`, `realloc`, `free` | `libc_stdlib`, `malloc_vec` | rejected: (1) and (3) | `lib/c/malloc.zig` | |
 | `snprintf` | `libc_stdio` | gate `EXT-VARIADIC` | musl C (`src/stdio/snprintf.c`, `vfprintf.c`) | variadic, large, locale-dependent: a trusted base contract over a byte buffer first; translating it waits for variadic definitions (G7) |
 | `setjmp`, `longjmp` | `setjmp_longjmp` | gate `LIBC-SETJMP` | musl assembly (`src/setjmp/x86_64/`) | not supported: no `returns_twice` in Zig; measured divergence |
 

@@ -1,6 +1,7 @@
 # `std.heap.PageAllocator` against `AllocSpec` (phase P4b): findings
 
-Status: the translated `PageAllocator` (Zig 0.16.0, x86_64-linux and aarch64-macos, from
+Status: the translated `PageAllocator` (Zig 0.17.1 and 0.16.0: one proof text over both
+versions' translations, `tests/roadmap/alloc-translated/check.sh`; x86_64-linux and aarch64-macos, from
 `posix.mmap`/`munmap`/`mremap` only, premise [OSM-01](premises.md#osm-01)) does **not** satisfy
 `AllocSpec` ([alloc-spec.md](alloc-spec.md)) as it is stated, in any sound logic and for any invariant
 that holds at program start. This is a limit of the specification's logic, not a bug of the
@@ -69,7 +70,7 @@ also unsatisfiable at those sizes; a fixed spec needs the bounds as precondition
 passes any comptime alignment, so the `alloc` overflow is reachable through the wrappers, and
 `resize` passes any length). Not filed upstream (needs the user).
 
-## Native comparison (stock Zig 0.16.0, `ReleaseSafe`)
+## Native comparison (stock Zig 0.16.0 and 0.17.1, `ReleaseSafe`: the same output)
 
 | | aarch64-macos (16 KiB pages) | x86_64-linux (4 KiB pages, Docker `linux/amd64`) | model |
 |---|---|---|---|
@@ -86,7 +87,8 @@ cases; the `(10,20000)`, `remap` and aligned-alloc rows are from one-off native 
 
 ### Growth by `remap` and `realloc` (M02)
 
-The proved paths and their native comparison. Every row is Zig 0.16.0; the model's lines
+The proved paths and their native comparison. Every row holds for Zig 0.16.0 and 0.17.1 (both
+versions' proofs, model lines and native runs); the model's lines
 (`Eval.lean` `growLinux`, `growMacos`) and the native run's lines are compared with the same
 file per target (`expected-linux.txt`, `expected.txt`;
 [the fixture's README](../tests/roadmap/alloc-translated/README.md) has the calls and words).
@@ -104,8 +106,11 @@ The native x86_64-linux run is on a Linux 6.6 kernel, not under Rosetta: Rosetta
 
 Not compared natively: a kernel that moves a mapping although there is room in place and a
 `mremap` that fails for lack of memory (the model's oracles `mremapMoves` and the failure
-decision; no native run forces them), alignments above a page, and Zig 0.17.1 (there is no
-translated `PageAllocator` of that version yet).
+decision; no native run forces them) and alignments above a page. The model's lines are run
+with an 8 MiB main-thread stack reserve (`Eval.stackBytes`, premise STK-02): with the fresh
+placement alone, a stack block of 0.17.1's `realloc` wrapper lies right behind the mapping, and
+the model's `mremap` moves the block where the kernel, whose stack is elsewhere, grows it in place.
+Both are outcomes the proofs cover; the reserve gives the native layout.
 
 ## Status with the full-state logic (`codex/alloc-p4b-page`)
 

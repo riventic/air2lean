@@ -42,7 +42,8 @@ lake env lean -R "$work/mutants" "$work/mutants/control.lean"
 # shellcheck disable=SC2016  # expanded by the job's shell
 python3 -B scripts/par.py --mem-mib 2048 -- bash -c 'lean_status=0
 lake env lean -R "$1" "$1/$2.lean" > "$1/$2.log" 2>&1 || lean_status=$?
-python3 -B tests/roadmap/bitops/classify_mutant.py "$lean_status" "$1/$2.log"' mutant "$work/mutants" {} ::: \
+python3 -B tests/roadmap/bitops/classify_mutant.py "$lean_status" "$1/$2.log" &&
+python3 -B scripts/mutation_kill_log.py --check tests/roadmap/byte-permutation/check.sh tests/roadmap/byte-permutation/mutations.py "$2"' mutant "$work/mutants" {} ::: \
   reverse_is_identity swap_is_identity swap_reverses_bits byte_index_off_by_one reverse_negates_bits lane_order_reversed
 python3 -B tests/roadmap/byte-permutation/manifest.py "$work" "$version" "$AIR2LEAN_ZIG_AIR" "$zig_stock"
 if [ -n "${AIR2LEAN_PERMUTATIONS_OUT_DIR:-}" ]; then

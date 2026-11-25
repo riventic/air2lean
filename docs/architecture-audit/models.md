@@ -129,7 +129,7 @@ the B1 name-identity weakness.
 | X01 | `panicErrorFor?` (`Air2Lean/Air/Op.lean:299`) | `debug.defaultPanic` and `debug.FullPanic(defaultPanic).*` → a `Zig.Error` constructor. The std panic handler (printing, abort) is not translated. User-overridden handlers are rejected. | diff harness panic report | SEM-01 | C |
 | X02 | `@tagName` helpers (`Emit.lean` enum helpers) | names come from the exporter's type table | goldens | SEM-01 | C |
 | X03 | `errorNameOf` (`Emit.lean:2956`) | name table of the program's error sets; an unknown error is `.unspecified` | goldens | SEM-01 | C |
-| X04 | register-only inline asm → opaque `airAsm_<n>` | — | — | ASM-01, ASM-02 | A |
+| X04 | allowlisted inline asm → `def airIsa_<n>` over the x86_64 instruction model `ZigLean/Isa/X86.lean` (covered blocks, Intel SDM / AMD APM by hand), else opaque `airAsm_<n>` | instruction behaviour | diff test (native x86_64), `tests/roadmap/asm-wrappers` cross-check, `ZigLean/Isa/X86Vectors.lean` | ASM-01, ASM-02, ASM-07 | A |
 | X05 | `extern` globals → `ExternInit` fields | link-time environment | — | (environment) | A |
 | X06 | `ret_addr` → return-address oracle | `codex/alloc-translated-p1` only | — | — | C |
 | X07 | project registry `--model-registry` (`ModelRegistry.lean`) | binds **any** untranslated direct callee except built-in std names. Nothing stops a project, or the unmerged `codex/roadmap-io-boundary` (`registry/std15.json`, `std16.json`), from hand-modelling std functions. | proof or axiom per binding | EXT-01, EXT-02 | U, plus a policy hole (W4) |

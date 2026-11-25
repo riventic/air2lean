@@ -5,6 +5,8 @@ import re
 import subprocess
 import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+from mutation_kill_log import killed as log_kill  # noqa: E402
 
 # Pinned Lean's located refutation format; parse errors independently of source text.
 HEADER = re.compile(r"^(?:(.+?):([0-9]+):([0-9]+): )?(error(?:\([^)]*\))?|warning|information): (.*)$")
@@ -105,6 +107,7 @@ def main():
         if not is_semantic_rejection(result.returncode, diagnostics):
             raise AssertionError(f"mutant failed for an unexpected reason: {name}\n{diagnostics}")
         print(f"dispatch semantic mutant rejected: {name}")
+        log_kill("tests/roadmap/dispatch/mutations.py", name, "tests/roadmap/dispatch/check.sh")
 
 
 if __name__ == "__main__":

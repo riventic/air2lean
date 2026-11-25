@@ -61,19 +61,20 @@ case "${1:---check-artifacts}" in
 esac
 python3 -B scripts/lean-deps.py --build tests/roadmap/thread-tuples
 python3 tests/roadmap/thread-tuples/check-artifacts.py
-python3 - tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean <<'PYPROOF'
+python3 - tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean \
+    tests/roadmap/thread-tuples/ThreadTuples/Nonvacuity.lean <<'PYPROOF'
 from pathlib import Path
 import re
 import sys
 
-path = Path(sys.argv[1])
-try:
-    source = path.read_text(encoding="utf-8")
-except (OSError, UnicodeError) as error:
-    sys.exit(f"proof scan failed: {path}: {error}")
-for number, line in enumerate(source.splitlines(), 1):
-    if re.search(r"\b(sorry|admit|native_decide|axiom)\b", line):
-        sys.exit(f"proof contains an untrusted declaration: {path}:{number}: {line}")
+for path in map(Path, sys.argv[1:]):
+    try:
+        source = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        sys.exit(f"proof scan failed: {path}: {error}")
+    for number, line in enumerate(source.splitlines(), 1):
+        if re.search(r"\b(sorry|admit|native_decide|axiom)\b", line):
+            sys.exit(f"proof contains an untrusted declaration: {path}:{number}: {line}")
 PYPROOF
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first' >&2; exit 1; }
@@ -95,7 +96,10 @@ for version in $(python3 -c 'import json, sys; print(*json.load(open(sys.argv[1]
     "$gen/ThreadTuples/Gen.lean" "$gen/generated-report.json"
   export LEAN_PATH="$gen:$lean_path"
   "${lean_cmd[@]}" -R "$gen" -o "$gen/ThreadTuples/Gen.olean" "$gen/ThreadTuples/Gen.lean"
-  "${lean_cmd[@]}" -R "$repo_root/tests/roadmap/thread-tuples" tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean
+  "${lean_cmd[@]}" -R "$repo_root/tests/roadmap/thread-tuples" -o "$gen/ThreadTuples/Proofs.olean" \
+    tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean
+  # The non-vacuity witnesses of the proofs' specs (imported by tests/roadmap/strength-log/ThreadFixtures.lean).
+  "${lean_cmd[@]}" -R "$repo_root/tests/roadmap/thread-tuples" tests/roadmap/thread-tuples/ThreadTuples/Nonvacuity.lean
   "${lean_cmd[@]}" -R "$repo_root/tests/roadmap/thread-tuples" --run tests/roadmap/thread-tuples/ThreadTuples/Runtime.lean
   # groupMixed under failing assignment: every exit must finish the group before freeing its frame.
   "$translator" "$air" -o "$gen/ThreadTuplesFallible/Gen.lean" \
@@ -125,4 +129,6 @@ mutation_status=0
 "${lean_cmd[@]}" -R "$work" "$work/Mutated.lean" >"$work/mutation.log" 2>&1 || mutation_status=$?
 # Require normal exit 1 and only the located dispatcher equality's rfl diagnostic.
 python3 tests/roadmap/thread-tuples/classify_mutant.py "$mutation_status" "$work/mutation.log" "$work/Mutated.lean"
+python3 -B scripts/mutation_kill_log.py --check tests/roadmap/thread-tuples/check.sh \
+  tests/roadmap/thread-tuples/check.sh tuple-capture-order
 echo 'thread tuple artifact, runtime, signature, slice, and order mutation gates passed'

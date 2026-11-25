@@ -64,6 +64,61 @@ def AsmOperand.isReadWrite (o : AsmOperand) : Bool :=
 value, or a memory operand)? -/
 def AsmOutput.isEffect (o : AsmOutput) : Bool := o.readWrite || o.memory
 
+/-! ## Operand names
+
+A template refers to an operand by name, `%[name]` or `%[name:modifier]`. The Zig compiler
+resolves the name against the operands' names (`src/codegen/llvm/FuncGen.zig` `airAssembly`,
+0.15 to 0.17): `_` names no operand, two operands with one name are an error, and so is a name
+that no operand has. Sema does not check them ("we should validate the assembly in Sema"), so
+the exported AIR of a program that does not compile can carry such a block. The checker
+resolves every reference of every asm block with the same rule (`checkAsmOperandNames`), so an
+allowlist entry, which matches the template text, never matches a block whose template names
+another operand, and a device event never declares one. -/
+
+/-- The scanner state of `asmTemplateRefs`, the states of the compiler's template rewrite. -/
+private inductive AsmRefState where
+  | text
+  | percent
+  /-- Inside `%[`: the name so far, reversed. -/
+  | name (rev : List Char)
+  /-- After `%[name:`, up to the `]`; `name` for the diagnostic. -/
+  | modifier (name : String)
+
+/-- The operand names that a template refers to, in order, read as the compiler reads them:
+`%%` is a `%`, `%=` a unique number, `%[name]` and `%[name:modifier]` refer to the operand
+`name`, any other `%c` is text. A reference that the template ends inside is an error. -/
+def asmTemplateRefs (template : String) : Except String (List String) :=
+  let step : AsmRefState × List String → Char → AsmRefState × List String
+    | (.text, refs), c => (if c == '%' then .percent else .text, refs)
+    | (.percent, refs), c => (if c == '[' then .name [] else .text, refs)
+    | (.name rev, refs), c =>
+      let name := String.ofList rev.reverse
+      if c == ']' then (.text, name :: refs)
+      else if c == ':' then (.modifier name, name :: refs)
+      else (.name (c :: rev), refs)
+    | (.modifier name, refs), c => (if c == ']' then .text else .modifier name, refs)
+  match template.toList.foldl step (.text, []) with
+  | (.name rev, _) => throw s!"'%[{String.ofList rev.reverse}' is not closed by ']'"
+  | (.modifier name, _) => throw s!"'%[{name}:' is not closed by ']'"
+  | (_, refs) => pure refs.reverse
+
+/-- The operand (AIR order: outputs, then inputs) that the reference `%[name]` names. -/
+def asmOperandIndex (names : Array String) (name : String) : Except String Nat :=
+  match names.findIdx? (· == name) with
+  | some k => if name != "_" then pure k else unknown
+  | none => unknown
+where
+  unknown : Except String Nat := throw s!"'%[{name}]' names no operand of the block (its operands are named \
+    {names.toList}; `_` names none)"
+
+/-- Every operand reference of the template names exactly one operand (`names`, AIR order). -/
+def checkAsmOperandNames (template : String) (names : Array String) : Except String Unit := do
+  for (n, k) in names.zipIdx do
+    if n != "_" && names.findIdx? (· == n) != some k then
+      throw s!"two operands of the block are named '{n}'"
+  for name in ← asmTemplateRefs template do
+    discard <| asmOperandIndex names name
+
 /-- The x86_64 general-purpose register family (0 = `rax` … 15 = `r15`) of a register name, at
 any width (`rax`, `eax`, `ax`, `al`, `ah`, `r8`, `r8d`, `r8w`, `r8b`). Clobber names and `{reg}`
 pins of one family are the same physical register. -/

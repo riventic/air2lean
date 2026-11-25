@@ -778,6 +778,18 @@ structure ExportDecl where
   cc : String
   deriving Repr, Inhabited, BEq
 
+/-- One definition of a linker symbol by the compilation (`docs/air-json.md` §Export table): a
+record of the exporter's `export-table.air2lean`, or the `export` of a function's own file.
+`function` is the defining function's name (its module-qualified key) and calling convention,
+`none` for a symbol that is not a function of the compilation (an exported variable, an
+`@export` of an extern declaration). A `weak` definition is the symbol's only while the image
+links no other one (premise EXT-07). -/
+structure ExportRecord where
+  name : String
+  weak : Bool
+  function : Option (String × String)
+  deriving Repr, Inhabited, BEq
+
 /-- The callee name of a call to the extern function `symbol`. No function's fully qualified
 name has this form (`Check.resolveExterns` rejects one that does), so an extern call can never
 be taken for a call to a translated function or a project model of the same bare name. -/

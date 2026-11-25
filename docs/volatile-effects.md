@@ -215,7 +215,11 @@ two counter reads are equal. The checker now accepts inline asm only in these tw
    the quotient always fits: the zero divisor is its only fault. Premise
    [ASM-04](premises.md#asm-04) states that each condition is the instruction's whole fault
    set; `scripts/claims.py` lists it for every no-panic or guaranteed-return goal over an asm
-   opaque. The differential test runs `divmod` on zero divisors too: native SIGFPE against the
+   opaque. A block that the x86_64 instruction model covers (A02, premise
+   [ASM-07](premises.md#asm-07)) is a definition instead, and the wrapper guards it with the
+   block's own fault function (`Zig.Asm.isaFault (airIsa_N_fault …) (airIsa_N …)`, `div`'s #DE);
+   the translator rejects an entry whose `AsmFault` disagrees with the model on whether the
+   block can fault. The differential test runs `divmod` on zero divisors too: native SIGFPE against the
    model's `trap` is a `trap_match` ([outcome-taxonomy.md](outcome-taxonomy.md)).
 
 2. **Declared device event.** With `--device-contract`, an `asm` entry
@@ -233,6 +237,14 @@ two counter reads are equal. The checker now accepts inline asm only in these tw
    answers. This holds for non-volatile asm too: a run in which the compiler merged two reads is
    one of the oracle's answer sequences. When the device contract declares the same template,
    the device event takes precedence (the device rules then apply: `volatile`, one result).
+
+In both forms every operand reference of the template (`%[name]`, `%[name:modifier]`) must name
+exactly one operand of the block, as the Zig compiler resolves it (`codegen/llvm/FuncGen.zig`
+`airAssembly`): a name that no operand has, `_`, two operands with one name and an unclosed
+`%[` are rejected (`checkAsmOperandNames`, `Air2Lean/AsmContract.lean`). The compiler only finds
+these at code generation, after the AIR is exported, and both forms match the template text,
+not the names: without the check, `rdrand %[ret]` with an output named `foo`, a program that
+does not compile, matched its entry.
 
 Every other asm is `ASM_VOLATILE_EFFECT` (phase `check`, category `unsupported_semantics`, with
 guidance). This covers `cpuid`, port I/O, fences, output-less asm, every `memory` clobber other

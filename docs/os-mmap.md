@@ -5,7 +5,7 @@ allocator and user-written allocators are translated from their Zig code and pro
 three OS calls. Only these calls get a trusted model, premise
 [OSM-01](premises.md#osm-01):
 
-| Zig 0.16.0 (`lib/std/posix.zig`) | Model (`ZigLean/Os/Mmap.lean`) |
+| Zig 0.16.0 and 0.17.1 (`lib/std/posix.zig`, reviewed per version: `Air2Lean/StdModels.lean` `posixZig`, [std-models.md](std-models.md#zig-0171-audit)) | Model (`ZigLean/Os/Mmap.lean`) |
 |---|---|
 | `mmap(ptr: ?[*]align(page_size_min) u8, length: usize, prot: PROT, flags: MAP, fd: fd_t, offset: u64) MMapError![]align(page_size_min) u8` | `Zig.Os.mmap (target : Os.Target) (hint : Option Ptr) (len : BitVec 64) (prot flags : BitVec 32) (fd : BitVec 32) (offset : BitVec 64) : MemM (Except ErrName Slice)` |
 | `munmap(memory: []align(page_size_min) const u8) void` | `Zig.Os.munmap (target : Os.Target) (memory : Slice) : MemM Unit` |

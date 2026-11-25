@@ -3,6 +3,7 @@ import copy
 import importlib.util
 import json
 from pathlib import Path
+import unittest
 import subprocess
 import sys
 import tempfile
@@ -123,6 +124,13 @@ def main():
         malformed = run('index', str(work / 'missing.json'))
         assert malformed.returncode == 2 and 'error:' in malformed.stderr
     print('stable-generation fingerprint checks passed')
+
+
+class FingerprintTests(unittest.TestCase):
+    """The checks above as one test: Q02's Python mutants (mutants.py) name it as their killer."""
+
+    def test_fold_invalidation_and_sidecar_checks(self):
+        main()
 
 
 if __name__ == '__main__':

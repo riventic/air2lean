@@ -85,7 +85,7 @@ Counts from `coverage/<version>.json` (`scripts/coverage.py`). This is a source 
 
 ## Requirement register
 
-From [ROADMAP.md](../ROADMAP.md): 90 requirements, 55 complete, 25 partial, 2 open, 8 research. Only `complete` rows are finished; every other ID is current open work (acceptance in [remaining-acceptance.md](../remaining-acceptance.md)). A bounded merged slice does not complete a requirement.
+From [ROADMAP.md](../ROADMAP.md): 90 requirements, 55 complete, 26 partial, 2 open, 7 research. Only `complete` rows are finished; every other ID is current open work (acceptance in [remaining-acceptance.md](../remaining-acceptance.md)). A bounded merged slice does not complete a requirement.
 
 | Area | Complete | Partial | Open | Research |
 |---|---|---|---|---|
@@ -94,7 +94,7 @@ From [ROADMAP.md](../ROADMAP.md): 90 requirements, 55 complete, 25 partial, 2 op
 | C: Concurrency | C01, C02, C03, C04, C05, C06, C09, C11, C12 | C07, C08, C14 | — | C10, C13 |
 | M: Memory and allocation | M05, M06 | M01, M02, M03, M04 | — | — |
 | F: Floats | F01, F05, F06 | F04 | — | F02, F03 |
-| A: Inline assembly | A01, A03 | — | — | A02 |
+| A: Inline assembly | A01, A03 | A02 | — | — |
 | E: External boundaries | E01, E02, E04 | E03 | — | — |
 | P: Proof support | P01, P02, P05 | P03, P04, P06, P07, P08 | P09 | — |
 | I: Integration and tooling | I01, I02, I03, I04, I05, I06, I07, I08, I09 | — | — | — |

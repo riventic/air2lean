@@ -118,7 +118,84 @@ def main(binary):
     assert "Zig.vasm air2lean_device" in text and "Zig.Asm.envWord" not in text, text
     checks += 1
     checks += check_cpu_features(binary, docs)
+    checks += check_isa_coverage(binary, retained)
+    checks += check_operand_names(binary, docs)
     print(f"{checks} asm environment/region CLI checks passed")
+
+
+def check_operand_names(binary, docs):
+    """Every `%[name]` of a template names one operand of the block, as the Zig compiler resolves
+    it (`codegen/llvm/FuncGen.zig` `airAssembly`: an unknown name, `_` and a duplicate name are
+    compile errors), for every accepted asm: allowlisted (whatever its semantics) or a device
+    event (`checkAsmOperandNames`). The allowlist matches the template text, not the names, so
+    without the check a renamed operand would match the entry."""
+    checks = 0
+    def rename(k, name):
+        def mutate(i, _):
+            operands = i["outputs"] + i["inputs"]
+            operands[k]["name"] = name
+        return mutate
+    # An environment read, an `isa` entry and a two-output environment read.
+    for doc, k in (("asm_env.random.json", 0), ("asm_env.loadm.json", 1), ("asm_env.rand64.json", 1)):
+        checks += reject(binary, docs, doc, rename(k, "foo"), "names no operand of the block")
+    # A device event (L13): the device contract declares the template, the names are the
+    # program's. The duplicate names need two operands (`rand64`; the names are checked before the
+    # device rule that allows one output).
+    for name, source, names, marker in (
+            ("asm_env.random.json", "rdrand %[foo]", ["ret"], "'%[foo]' names no operand of the block"),
+            ("asm_env.random.json", "rdrand %[ret:q]", ["foo"], "'%[ret]' names no operand of the block"),
+            ("asm_env.random.json", "rdrand %[_]", ["_"], "'%[_]' names no operand of the block"),
+            ("asm_env.random.json", "rdrand %[ret", ["ret"], "'%[ret' is not closed by ']'"),
+            ("asm_env.rand64.json", "rdrand %[v]\n\tsetc %[v]", ["v", "v"],
+             "two operands of the block are named 'v'"),
+            ("asm_env.random.json", "rdrand %[ret]", ["ret"], None)):
+        document = json.loads(json.dumps(docs[name]))
+        block = asm_inst(document)
+        block["source"] = source
+        for o, n in zip(block["outputs"], names):
+            o["name"] = n
+        checks += device_case(binary, name, document, marker)
+    return checks
+
+
+def device_case(binary, name, document, marker):
+    """Translate `document` with a device contract that declares its asm block: accepted as a
+    device event (`marker` None), or rejected with `marker`."""
+    block = asm_inst(document)
+    constraints = [o["constraint"] for o in block["outputs"]] + [i["constraint"] for i in block["inputs"]]
+    with tempfile.TemporaryDirectory(prefix="air2lean-asm-device-") as d:
+        contract = Path(d) / "cpu.json"
+        contract.write_text(json.dumps({"schema": 1, "device": "cpu", "registers": [], "asm": [
+            {"template": block["source"], "constraints": constraints, "clobbers": block["clobbers"]}]}))
+        result, text = run(binary, {name: document}, ("--device-contract", str(contract)))
+    if marker is None:
+        assert result.returncode == 0 and "Zig.vasm air2lean_device" in text, result.stderr
+    else:
+        assert result.returncode == 1 and text == "sentinel\n" and marker in result.stderr, result.stderr
+    return 1
+
+
+def check_isa_coverage(binary, retained):
+    """A02 decision 1: an allowlist entry is a defined function over the instruction model
+    (`isa`, premise ASM-07) exactly when the model covers its block; only an uncovered entry
+    stays uninterpreted (`opaque`, premises ASM-01/02) (`--print-asm-isa-table`)."""
+    table = json.loads(subprocess.run([str(binary), "--print-asm-isa-table"], text=True, capture_output=True,
+                                      check=True, timeout=60).stdout)
+    assert table["model"] == "ZigLean/Isa/X86.lean" and table["allowlist"], table
+    for entry in table["allowlist"]:
+        assert entry["covered"] == (entry["semantics"] == "isa"), entry
+        assert ("reason" in entry) != entry["covered"], entry
+    by_semantics = {}
+    for entry in table["allowlist"]:
+        by_semantics.setdefault(entry["semantics"], []).append(entry["template"])
+    assert by_semantics["opaque"] == ["rep stosb", "rep movsb"], by_semantics
+    assert len(by_semantics["isa"]) == 12, by_semantics
+    # The retained translation: the two region blocks are the only uninterpreted functions; the
+    # memory-value input (`movq %[x], %[ret]`) is a definition with its footprint theorem.
+    opaques = [line for line in retained.splitlines() if line.startswith("opaque ")]
+    assert len(opaques) == 2 and all(line.startswith("opaque airAsmFx_") for line in opaques), opaques
+    assert retained.count(".check = none := by decide") == 1 and "def airIsa_" in retained, retained
+    return 3
 
 
 def header(text):
@@ -186,7 +263,7 @@ def check_cpu_features(binary, docs):
             result, text = run(binary, {"asm_env.loadm.json": document})
             if accepted:
                 assert result.returncode == 0 and "admission" not in header(text), result.stderr
-                assert "opaque airAsm_" in text, text
+                assert "def airIsa_" in text and "opaque" not in text, text
             else:
                 assert result.returncode == 1 and text == "sentinel\n", result.stderr
                 assert "instruction 'lzcnt' needs the CPU feature(s) [lzcnt]" in result.stderr, result.stderr
@@ -242,24 +319,14 @@ def check_cpu_features(binary, docs):
     document = json.loads(json.dumps(docs["asm_env.random.json"]))
     document["profile"].update(target_triple="aarch64-linux.5.10...6.16-gnu.2.31", abi="gnu", cpu="generic")
     block = asm_inst(document)
-    constraints = [o["constraint"] for o in block["outputs"]] + [i["constraint"] for i in block["inputs"]]
-    with tempfile.TemporaryDirectory(prefix="air2lean-asm-a64-") as d:
-        contract = Path(d) / "cpu.json"
-        for source, features, marker in (
-                ("crc32b w0, w0, w0", [], "instruction 'crc32b' needs the CPU feature(s) [crc]"),
-                ("nop %%%% crc32b w0, w0, w0", [], "an aarch64 template with '%%'"),
-                ("nop %%%% crc32b w0, w0, w0", ["crc"], "an aarch64 template with '%%'"),
-                ("crc32b w0, w0, w0", ["crc"], None)):
-            block["source"] = source
-            document["profile"]["features"] = features
-            contract.write_text(json.dumps({"schema": 1, "device": "cpu", "registers": [], "asm": [
-                {"template": source, "constraints": constraints, "clobbers": block["clobbers"]}]}))
-            result, text = run(binary, {"asm_env.random.json": document}, ("--device-contract", str(contract)))
-            if marker is None:
-                assert result.returncode == 0 and "Zig.vasm air2lean_device" in text, result.stderr
-            else:
-                assert result.returncode == 1 and text == "sentinel\n" and marker in result.stderr, result.stderr
-            checks += 1
+    for source, features, marker in (
+            ("crc32b w0, w0, w0", [], "instruction 'crc32b' needs the CPU feature(s) [crc]"),
+            ("nop %%%% crc32b w0, w0, w0", [], "an aarch64 template with '%%'"),
+            ("nop %%%% crc32b w0, w0, w0", ["crc"], "an aarch64 template with '%%'"),
+            ("crc32b w0, w0, w0", ["crc"], None)):
+        block["source"] = source
+        document["profile"]["features"] = features
+        checks += device_case(binary, "asm_env.random.json", document, marker)
     return checks
 
 

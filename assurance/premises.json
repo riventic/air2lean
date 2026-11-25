@@ -55,7 +55,8 @@
   "admissions": {
     "unqualified-build-mode": [],
     "no-libc": ["MTH-05"],
-    "asm-cpu-features": ["ASM-09"]
+    "asm-cpu-features": ["ASM-09"],
+    "weak-exports": ["EXT-07"]
   },
   "float_semantics": {
     "ieee": [],
@@ -88,6 +89,8 @@
     "ZigLean.External": ["EXT-01"],
     "ZigLean.External.Callback": ["EXT-01"],
     "ZigLean.Asm": ["ASM-03"],
+    "ZigLean.Isa.X86": ["ASM-07"],
+    "ZigLean.Isa.X86Vectors": ["ASM-07"],
     "ZigLean.Time": ["TMR-02"],
     "ZigLean.Env": ["ENV-01"],
     "ZigLean.Env.Host": ["SEM-02"],
@@ -318,9 +321,10 @@
     {"premise": "MTH-02", "scope": "closure", "pattern": "(?:^|\\.)libm(?:\\.|$)"},
     {"premise": "MTH-03", "scope": "closure", "pattern": "Rt016|(?:^|\\.)mulRt$|RtChk|Xf3$|fmaRtFused"},
     {"premise": "MTH-04", "scope": "closure", "pattern": "softF80Chk|Xf3$|fmaFused|fmaRtFused|sqrtF80ViaF64"},
-    {"premise": "ASM-01", "scope": "closure", "pattern": "(?:^|\\.)airAsm_[0-9]+$"},
+    {"premise": "ASM-01", "scope": "closure", "pattern": "(?:^|\\.)airAsm(?:Fx)?_[0-9]+$"},
     {"premise": "ASM-02", "scope": "statement", "pattern": "(?:^|\\.)airAsm(?:Fx)?_[0-9]+$"},
-    {"premise": "ASM-03", "scope": "closure", "pattern": "(?:^|\\.)airAsmFx_[0-9]+$"},
+    {"premise": "ASM-03", "scope": "closure", "pattern": "(?:^|\\.)air(?:Asm|Isa)Fx_[0-9]+$"},
+    {"premise": "ASM-07", "scope": "closure", "pattern": "(?:^|\\.)airIsa(?:Fx)?_[0-9]+(?:_block|_fault|_wf)?$"},
     {"premise": "ASM-05", "scope": "closure", "pattern": "(?:^|\\.)Asm\\.envWord$"},
     {"premise": "ASM-06", "scope": "closure", "pattern": "(?:^|\\.)Asm\\.(?:readRegion|writeRegion|movePtr)$"},
     {"premise": "EXT-04", "scope": "closure", "pattern": "(?:^|\\.)External\\.claim$"},
@@ -376,11 +380,10 @@
     "MTH-04": ["MTH-01"],
     "ASM-01": ["TRU-04", "ASM-04"],
     "ASM-02": ["ASM-01"],
-    "ASM-03": ["ASM-01"],
     "ASM-05": ["ASM-04"],
     "ASM-06": ["ASM-03"],
     "EXT-04": ["EXT-01", "THR-01"],
-    "EXT-02": ["EXT-01"], "EXT-03": ["EXT-01"],
+    "EXT-02": ["EXT-01"], "EXT-03": ["EXT-01"], "EXT-07": ["EXT-03"],
     "SEM-02": ["SEM-01", "SEM-07"],
     "SEM-03": ["SEM-01"],
     "SEM-06": ["SEM-01", "SEM-02", "SEM-03"],
@@ -397,8 +400,31 @@
     "OSM-02": ["SEM-02", "ALC-02"]
   },
   "target_qualified": [
-    "memory_model"
+    "memory_model",
+    "instruction_model"
   ],
+  "instruction_model": {
+    "premise": "ASM-07",
+    "modules": [
+      "ZigLean.Isa.X86"
+    ],
+    "note": "A02 decision 1 (docs/research/A02.md): an inline-asm block that the instruction model covers is a defined function over ZigLean/Isa/X86.lean, and every theorem or claim whose closure reaches the model lists ASM-07 (scripts/premises.py runtime_modules and rules; scripts/claims.py instruction_model.modules). targets: the targets whose compiled blocks the model has been compared with. unqualified: targets without an instruction model; the translator emits no defined block for them (Air2Lean/AsmIsa.lean asmIsaStmts), so no theorem can carry ASM-07 for them.",
+    "unrecorded": "A generated module without a recorded target (no profile header or the legacy profile: PRF-01) leaves the target unverified. The translator emits a defined block only for an allowlist entry of the x86_64 target, so a theorem over it carries ASM-07 for x86_64 code only: it claims nothing about the compiled block of any other architecture.",
+    "targets": {
+      "x86_64-linux": {
+        "evidence": [
+          "ZigLean/Isa/X86Vectors.lean",
+          "tests/roadmap/asm-semantics/expected_x86_64.txt",
+          "tests/diff/asm",
+          "tests/roadmap/asm-wrappers/Interp.lean"
+        ]
+      }
+    },
+    "unqualified": {
+      "aarch64-linux": "No aarch64 instruction model: an aarch64 asm block is never a defined function (the allowlist's only aarch64 entry is the spin hint `isb`).",
+      "aarch64-macos": "As aarch64-linux."
+    }
+  },
   "memory_model": {
     "premise": "ORD-06",
     "concurrency": [

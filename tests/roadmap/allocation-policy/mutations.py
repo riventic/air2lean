@@ -4,9 +4,12 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / 'scripts'))
+from mutation_kill_log import killed as log_kill  # noqa: E402
 MUTANTS = {
     'ignore-failure-trace': (' or std.mem.indexOfScalar(usize, self.failures, k) != null', ''),
     'ignore-request-cap': (' or len > self.request_cap', ''),
@@ -43,6 +46,7 @@ def main():
             if result.returncode != 1 or 'error: PolicyOrCleanupMismatch' not in result.stderr:
                 raise RuntimeError(f'{name}: expected an explicit semantic assertion failure, got {result.returncode}')
             print(f'{name}: detected by fixture outcome/ownership assertion')
+            log_kill('tests/roadmap/allocation-policy/mutations.py', name, 'tests/roadmap/allocation-policy/mutations.py')
 
 if __name__ == '__main__':
     main()
