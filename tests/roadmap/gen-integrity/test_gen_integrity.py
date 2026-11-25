@@ -621,8 +621,9 @@ class InvgenRecordTests(unittest.TestCase):
                      modules=("Air2Lean.InvGen", "Air2Lean.InvGenMain"), **changes):
         generator = {"lean": "4.34.0", "modules": [[m, self.digest(m.replace(".", "/") + ".lean")] for m in modules]}
         generator["revision"] = revision or self.REVISION(generator)
-        record = {"version": 2, "generator": generator, "inputs": [["Fx/Fx/Gen.lean", self.digest("Fx/Fx/Gen.lean")]],
-                  "module": "Fx.Gen", "namespace": "Fx", "loops": [],
+        record = {"version": 3, "generator": generator, "inputs": [["Fx/Fx/Gen.lean", self.digest("Fx/Fx/Gen.lean")]],
+                  "module": "Fx.Gen", "namespace": "Fx",
+                  "loops": [{"loop": "f.loop5", "function": "f", "fingerprint": "ab" * 32, "none": "a call"}],
                   "output": hashlib.sha256(body.encode()).hexdigest(), **changes}
         (self.root / path).write_text(f"-- air2lean-invgen: {json.dumps(record)}\n{body}")
 
@@ -653,7 +654,10 @@ class InvgenRecordTests(unittest.TestCase):
                              ({"inputs": [[1, "x"]]}, "not the record of Fx.Gen"),
                              ({"inputs": [["/etc/hosts", "x"]]}, "not the record of Fx.Gen"),
                              ({"namespace": "Other"}, "not the record of Fx.Gen"),
-                             ({"version": 1}, "not a version 2 record"),
+                             ({"version": 2}, "not a version 3 record"),
+                             ({"loops": [{"loop": "f.loop5", "none": "a call"}]}, "semantic fingerprint"),
+                             ({"loops": [{"loop": "f.loop5", "function": "f", "fingerprint": "x"}]},
+                              "semantic fingerprint"),
                              ({"modules": ("Air2Lean.InvGen",)}, "not the generator's")):
             self.write_record(**changes)
             error, = self.errors()

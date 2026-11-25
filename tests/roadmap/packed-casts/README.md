@@ -37,6 +37,7 @@ instances of `ZigLean/PackedRepr.lean` for floats, packed unions, arrays and vec
 | `reject_lanes.zig` | Rejected: a lane pointer into a vector field of a packed struct, which 0.14.1 and 0.15.2 miscompile ([upstream draft](../../../docs/upstream/packed-vector-lane-ptr.md)) |
 | `reject_sentinel.zig` | Rejected on 0.17.1: a sentinel-terminated array in a logical cast. Comptime evaluation, the LLVM backend and the self-hosted x86_64 backend give three different results ([upstream draft](../../../docs/upstream/bitcast-sentinel-array.md)) |
 | `reject_items.zig` | Rejected on 0.14.1 and 0.15.2 (compile errors from 0.16.0): arrays of tuples, of error sets or error unions, and of optionals in a cast |
+| `reject_ptrfield.zig` | Rejected on 0.14.1 and 0.15.2 (a compile error from 0.16.0): a pointer field in a packed struct, which has no bits in the model (Scope) |
 | `reject/expected.txt` | Every function of the rejected sources with the text its diagnostic must contain; each is translated alone |
 | `expected/wrong.txt` | Results of wrong models (the sentinel left out of the bits, the sentinel forced to the type's, `void` with bits, bytes swapped). The comparison with the model's lines and with the native output must reject each one |
 | `compile-errors/` | Casts that Sema rejects, with `expected.txt` per version. An `auto` struct, tuple or tagged union fails on every version. Arrays of `auto` structs and tagged unions fail from 0.16.0, and an `extern` struct from 0.17.0 |
@@ -63,7 +64,7 @@ wrong model of `expected/wrong.txt` must fail the comparison.
 
 - **Pointer fields.** Allowed in 0.14.1 and 0.15.2 packed structs and rejected: the model's
   pointers carry provenance, not bits. Zig 0.16 made them a compile error ("pointers cannot be
-  directly bitpacked").
+  directly bitpacked"). `reject_ptrfield.zig` asserts the diagnostic (`reject/expected.txt`).
 - **Partly undefined packed values.** A packed struct whose host has an undefined bit loads as
   `.unspecified`. 0.14.1 and 0.15.2 read a field by loading the whole struct, so each fixture
   function defines its host first.
@@ -75,7 +76,7 @@ wrong model of `expected/wrong.txt` must fail the comparison.
 - **Rejected by name** (`reject/expected.txt`): a sentinel-terminated array in a 0.17 cast
   (upstream bug); an array of tuples (the memory model has no tuple layout), of error sets or
   error unions (symbolic error storage) or of optionals in a 0.14.1 or 0.15.2 cast; a sentinel
-  array and a vector in a ≤0.16 cast.
+  array and a vector in a ≤0.16 cast; a pointer field in a 0.14.1 or 0.15.2 packed struct.
 - **Not modelled.** Big-endian packed structs with a float field (fail closed).
 - **NaN bits through memory.** Up to 0.16, a NaN's bits stored to memory and read as an integer
   are the model's canonical bits, the same as for any float in memory. This is pre-existing
