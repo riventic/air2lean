@@ -75,7 +75,7 @@ private def tyOk (layouts : Array Layout) (id : TyId) : Bool :=
 def main : IO Unit := do
   let llvm ← layoutsOf "stage2_llvm"
   require ([1, 4, 7, 9, 11, 14].all fun i => llvm[i]!.packedLanes) "LLVM vector layouts are not marked bit-packed"
-  require ([0, 2, 3, 5, 6, 8, 10, 13, 15, 18, 19].all fun i => !llvm[i]!.packedLanes)
+  require ([0, 2, 3, 5, 6, 8, 10, 13, 15, 18].all fun i => !llvm[i]!.packedLanes)
     "a non-vector layout is marked"
   require (modelLayout types llvm 1 == .ok (8, 8)) "u9x4: bit-packed 36 bits, 8 bytes"
   require (modelLayout types llvm 9 == .ok (16, 16)) "u24x3: bit-packed 72 bits, 16 bytes"
@@ -139,6 +139,6 @@ def main : IO Unit := do
       ("stage2_llvm", 12, "riscv64-linux.5.10...6.19-musl"),
       ("stage2_llvm", 12, "arm-linux.5.10...6.19-musleabihf")] do
     let other ← layoutsOf backend schema triple
-    require ([12, 16, 17].all fun i => !tyOk other i && !other[i]!.laneBitPtr)
+    require ([12, 16, 17, 19].all fun i => !tyOk other i && !other[i]!.laneBitPtr)
       s!"{backend} {triple}: a lane pointer is accepted"
   IO.println "lane pointers: other backends and targets rejected"

@@ -5,7 +5,7 @@
 //! `&v[i]` of a bit-packed lane (`lane_shapes.zig`) in every version: one model, the bit-pointer
 //! into the vector's integer. Up to 0.16.0 `&v[i]` of such a lane is a plain element pointer
 //! (`*T` at the lane's address). `offset` tells the two apart: `@intFromPtr(&v[1])` is the
-//! vector's address in 0.17.1 and the lane's up to 0.16.0. `probe_lane_values.zig` prints the
+//! vector's address (that of `&v[0]`) in 0.17.1 and the lane's up to 0.16.0. `probe_lane_values.zig` prints the
 //! native results, `ModelLaneValues.lean` the model's.
 fn Lanes(comptime T: type) type {
     return struct {
@@ -83,12 +83,12 @@ fn Lanes(comptime T: type) type {
             return pack(g) ^ old << 64;
         }
 
-        /// The lane pointer's address relative to the vector's.
+        /// The address of lane 1's pointer relative to lane 0's.
         fn offset(a: u32) usize {
             var v = lanes(a);
             const p = &v[1];
             p.* = of(a +% 1);
-            return @intFromPtr(p) - @intFromPtr(&v);
+            return @intFromPtr(p) - @intFromPtr(&v[0]);
         }
     };
 }

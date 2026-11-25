@@ -222,12 +222,12 @@
    "tag": "dbg_stmt",
    "ty": 2,
    "line": 5,
-   "column": 37
+   "column": 51
   },
   {
    "id": 19,
-   "tag": "int_from_ptr",
-   "ty": 1,
+   "tag": "ptr_cast",
+   "ty": 8,
    "args": [
     {
      "inst": 2
@@ -239,16 +239,13 @@
    "tag": "dbg_stmt",
    "ty": 2,
    "line": 5,
-   "column": 35
+   "column": 37
   },
   {
    "id": 21,
-   "tag": "sub_safe",
+   "tag": "int_from_ptr",
    "ty": 1,
    "args": [
-    {
-     "inst": 17
-    },
     {
      "inst": 19
     }
@@ -259,15 +256,35 @@
    "tag": "dbg_stmt",
    "ty": 2,
    "line": 5,
-   "column": 13
+   "column": 35
   },
   {
    "id": 23,
-   "tag": "ret_safe",
-   "ty": 8,
+   "tag": "sub_safe",
+   "ty": 1,
    "args": [
     {
+     "inst": 17
+    },
+    {
      "inst": 21
+    }
+   ]
+  },
+  {
+   "id": 24,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 5,
+   "column": 13
+  },
+  {
+   "id": 25,
+   "tag": "ret_safe",
+   "ty": 9,
+   "args": [
+    {
+     "inst": 23
     }
    ]
   }
@@ -336,6 +353,22 @@
   {
    "k": "other",
    "name": "fn (u32) u32"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 0,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 4,
+   "bit_offset": 0,
+   "vector_index": 0,
+   "abi_size": 8,
+   "abi_align": 8
   },
   {
    "k": "noreturn"

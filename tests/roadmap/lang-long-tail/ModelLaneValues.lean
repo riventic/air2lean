@@ -7,7 +7,7 @@ import LangLongTail.LaneValues
 (with the compiled `LangLongTail.LaneValues` of a version on `LEAN_PATH`, as `check.sh` does)
 prints the probe's lines from the translation: lane pointers of whole-byte lanes (`u8`, `i16`,
 `u32`, `u64`, `u128`, `f32`, `f64`) as a parameter, a result, a struct field, a `const` lane and
-a constant, and `@intFromPtr` of `&v[1]` relative to the vector (the vector's address in Zig
+a constant, and `@intFromPtr` of `&v[1]` relative to `&v[0]` (the vector's address in Zig
 0.17.1, the lane's up to 0.16.0). Every call starts from the program's initial memory, as the
 probe's one call of each `global*` function does. It fails unless the native file has exactly
 these lines. -/

@@ -226,15 +226,19 @@
    "tag": "dbg_stmt",
    "ty": 2,
    "line": 5,
-   "column": 37
+   "column": 51
   },
   {
    "id": 19,
-   "tag": "bitcast",
-   "ty": 1,
+   "tag": "ptr_elem_ptr",
+   "ty": 6,
    "args": [
     {
      "inst": 2
+    },
+    {
+     "ty": 1,
+     "val": "0"
     }
    ]
   },
@@ -243,16 +247,13 @@
    "tag": "dbg_stmt",
    "ty": 2,
    "line": 5,
-   "column": 35
+   "column": 37
   },
   {
    "id": 21,
-   "tag": "sub_safe",
+   "tag": "bitcast",
    "ty": 1,
    "args": [
-    {
-     "inst": 17
-    },
     {
      "inst": 19
     }
@@ -263,15 +264,35 @@
    "tag": "dbg_stmt",
    "ty": 2,
    "line": 5,
-   "column": 13
+   "column": 35
   },
   {
    "id": 23,
+   "tag": "sub_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 17
+    },
+    {
+     "inst": 21
+    }
+   ]
+  },
+  {
+   "id": 24,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 5,
+   "column": 13
+  },
+  {
+   "id": 25,
    "tag": "ret_safe",
    "ty": 8,
    "args": [
     {
-     "inst": 21
+     "inst": 23
     }
    ]
   }
