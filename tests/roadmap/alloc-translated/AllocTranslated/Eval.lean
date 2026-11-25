@@ -49,6 +49,36 @@ open AllocTranslated.FbaMacos
 #guard [word (fba_reset 100) (mem0 .fresh), word (fba_reset 200) (mem0 .fresh)] = ["ok 200", "ok 400"]
 end Macos
 
+/-! ## M02: the fixed buffer's growth by `remap` and `realloc` against the native run
+
+`fba.zig`'s `fba_grow` observes a growth as one word (its bits and the buffer's end index are in
+`fba.zig`). `fbaGrowLine` prints the model's results in the format of `native.zig`'s `fba_grow`
+line; `check.sh` compares it with `expected-linux.txt` and `expected.txt`, the files the native
+run is compared with. -/
+
+/-- The five growths of one `native.zig` row (`how`: `0` is `remap`, `1` is `realloc`), one after
+another in one run as natively: in place as the last allocation, a shrink, behind another block,
+past the buffer, and behind another block past the buffer. -/
+def fbaGrowRow (grow : BitVec 64 → BitVec 64 → BitVec 8 → Bool → Zig.MemM (BitVec 64))
+    (how : BitVec 8) : Zig.MemM (List (BitVec 64)) :=
+  [(10, 20, false), (100, 10, false), (10, 20, true), (10, 300, false), (10, 250, true)].mapM
+    fun (n, m, behind) => grow n m how behind
+
+/-- The model's `fba_grow` line. -/
+def fbaGrowLine (grow : BitVec 64 → BitVec 64 → BitVec 8 → Bool → Zig.MemM (BitVec 64))
+    (m : Zig.Mem) : String :=
+  let row := fun how => match ((fbaGrowRow grow how).run m).run with
+    | some (.ok (vs, _)) => s!"ok {" ".intercalate (vs.map fun v => toString v.toNat)}"
+    | some (.error e) => s!"fail {repr e}"
+    | none => "diverge"
+  s!"fba_grow remap {row 0} realloc {row 1}"
+
+/-- The model's `fba_grow` line for x86_64-linux (`expected-linux.txt`). -/
+def fbaGrowLinux : IO Unit := IO.println (fbaGrowLine FbaLinux.fba_grow (FbaLinux.mem0 .fresh))
+
+/-- The model's `fba_grow` line for aarch64-macos (`expected.txt`). -/
+def fbaGrowMacos : IO Unit := IO.println (fbaGrowLine FbaMacos.fba_grow (FbaMacos.mem0 .fresh))
+
 /-- The first schedule's result of a concurrent page-allocator client, printed by `fmt` from
 the value and the final memory. -/
 def firstWith {α : Type} (fmt : α → Zig.Mem → String) (main : Zig.ConcM Tgt α)
