@@ -407,7 +407,7 @@ STEPS = [
             [PY, '-B', 'scripts/lean-deps.py', '--precompiled', 'write'])),
     ('gen', 'pr', ['Gen.lean modules (scripts/gen-integrity.py list)'], step_gen),
     ('invgen', 'pr', ['Inv.lean generated invariants (scripts/invgen.py TARGETS)'], step_invgen),
-    ('ci-matrix', 'pr', ['.github/workflows/ci.yml (generated matrix regions)'],
+    ('ci-matrix', 'pr', ['.github/workflows/ci.yml, ci-macos.yml (generated matrix regions)'],
      simple([PY, 'scripts/ci-matrix.py', 'check'], [PY, 'scripts/ci-matrix.py', 'write'])),
     ('trust-report', 'pr', ['docs/trust-report.md'],
      simple([PY, 'scripts/trust-report.py', 'check'], [PY, 'scripts/trust-report.py', 'write'])),

@@ -10,7 +10,8 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = ROOT / 'scripts/ci-matrix.py'
-COPIED = ('.github/workflows/ci.yml', 'compatibility.json', 'scripts/mutation-shards.txt',
+MACOS = '.github/workflows/ci-macos.yml'
+COPIED = ('.github/workflows/ci.yml', MACOS, 'compatibility.json', 'scripts/mutation-shards.txt',
           'scripts/example-selection.sh')
 
 
@@ -44,7 +45,8 @@ class CiMatrix(unittest.TestCase):
         workflow = (self.root / '.github/workflows/ci.yml').read_text()
         for part in ('golden', 'lean'):
             self.assertIn(f'- zig: "9.9.9"\n            part: "{part}"\n', workflow)
-        self.assertEqual(workflow.count('- zig: "9.9.9"'), 4)  # golden, lean, macos and zig-air
+        self.assertEqual(workflow.count('- zig: "9.9.9"'), 3)  # golden, lean and zig-air
+        self.assertEqual((self.root / MACOS).read_text().count('- zig: "9.9.9"'), 1)
         self.assertEqual(self.run_script('check').returncode, 0)
 
     def test_hand_edited_row_is_stale(self):
@@ -53,8 +55,14 @@ class CiMatrix(unittest.TestCase):
         self.assertEqual(self.run_script('check').returncode, 1)
 
     def test_missing_region_fails_closed(self):
-        path = self.root / '.github/workflows/ci.yml'
+        path = self.root / MACOS
         path.write_text(path.read_text().replace('# END macos rows', '# end', 1))
+        self.assertEqual(self.run_script('check').returncode, 2)
+
+    def test_region_in_two_workflows_fails_closed(self):
+        region = '          # BEGIN macos rows (scripts/ci-matrix.py write)\n          # END macos rows\n'
+        path = self.root / '.github/workflows/ci.yml'
+        path.write_text(path.read_text() + region)
         self.assertEqual(self.run_script('check').returncode, 2)
 
 

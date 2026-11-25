@@ -1130,11 +1130,11 @@
    "progress": "open, unchanged (checked 2026-11-24): `loop78_step` still splits the list by hand (`rcases ns with _ | ⟨nd, _ | ⟨nd2, ns⟩⟩ <;> cases it`, ArenaSpec.lean) in the three arena specs. The uniform walk is the list-walk engine work of row list-walk-step (owned by running work); this row closes with it.",
    "request": "**A loop over a linked list whose invariant names the rest of the list as one recursive predicate is not walked uniformly.** The arena's `loop78` keeps the last node: its invariant is `Chain CI true (ns.map NodeV.full) s.it` (`Chain` recursive over the list, its next pointer null at the last node). `fsym` needs the list's cases split by hand (`rcases ns with _ | ⟨nd, _ | ⟨nd2, ns⟩⟩ <;> cases it`), `Chain` kept folded (`attribute [local fsym_atom] Chain FreeCl`) and, per case, a hand unfolding of the first node and the folded rest (`chain_one`, `chain_full_cons2`, Reset.lean) with its own rule list. Needed: unfold a recursive predicate of the state by one constructor at the step that tests its pointer (the `if next == null` of the body), keeping the rest folded where the invariant names it again; then `loop78_step` takes the shape of `loop19_step` (one `cases … <;> simp only … <;> fsym`).",
    "workaround_sites": [
-    "tests/roadmap/alloc-arena/ArenaSpec.lean",
-    "tests/roadmap/alloc-arena/ArenaSpecMacos.lean",
-    "tests/roadmap/alloc-arena/ArenaSpecFixed.lean"
+    "tests/roadmap/alloc-arena/ArenaSpec/Retain.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecMacos/Retain.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed/Retain.lean"
    ],
-   "deletion_plan": "replace the per-case bullets of `loop78_step` (ArenaSpec.lean, ArenaSpecMacos.lean, ArenaSpecFixed.lean) with one uniform `fsym` walk, drop the local `fsym_atom` attribute and delete `chain_one`, `chain_cons2`, `chain_full_cons2` and `chain_head` (Reset.lean) if no other proof uses them, once fsym unfolds a recursive list predicate by the case the step tests."
+   "deletion_plan": "replace the per-case bullets of `loop78_step` (ArenaSpec/Retain.lean, ArenaSpecMacos/Retain.lean, ArenaSpecFixed/Retain.lean) with one uniform `fsym` walk, drop the local `fsym_atom` attribute and delete `chain_one`, `chain_cons2`, `chain_full_cons2` and `chain_head` (Reset.lean) if no other proof uses them, once fsym unfolds a recursive list predicate by the case the step tests."
   },
   {
    "id": "77",
@@ -1618,11 +1618,14 @@
    "progress": "open (workaround: the limit split before the walk)",
    "request": "**(perf)** The arena's `loop66` body computes a kept node's size `adj = (24 + v) &&& ~1` from a list's limit `v` and branches on `adj == 24` (give the node back) before the long keep path (resize in place, or a new node from the child). Walked once with the branch undecided, both list indices time out at 4M heartbeats each (one file, 428 s, 11 GB peak) and one index alone is killed at 16M (12 GB guard, 315 s); split before the walk on `v.toNat < 2` (which decides the branch) both paths of both indices take 247 s and 7 GB together. Suspected: the negative branch's fact `¬ adj = 24` (a disequality of a masked value) makes every later `omega` problem of the keep path split. Needed: the walk's cost with an undecided branch near that of the split cases (a disequality fact that `omega` does not split when the goal does not need it).",
    "workaround_sites": [
-    "tests/roadmap/alloc-arena/ArenaSpec.lean",
-    "tests/roadmap/alloc-arena/ArenaSpecMacos.lean",
-    "tests/roadmap/alloc-arena/ArenaSpecFixed.lean"
+    "tests/roadmap/alloc-arena/ArenaSpec/Loop66C0.lean",
+    "tests/roadmap/alloc-arena/ArenaSpec/Loop66C1.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecMacos/Loop66C0.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecMacos/Loop66C1.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed/Loop66C0.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed/Loop66C1.lean"
    ],
-   "deletion_plan": "delete the `by_cases hsm : v.toNat < 2` before `fsym` in `loop66_c0` and `loop66_c1` of each ArenaSpec*.lean once one walk of the body with the undecided branch stays within the budget."
+   "deletion_plan": "delete the `by_cases hsm : v.toNat < 2` before `fsym` in `loop66_c0` and `loop66_c1` of each ArenaSpec*/Loop66C0.lean, Loop66C1.lean once one walk of the body with the undecided branch stays within the budget."
   },
   {
    "id": "per-translation-walks",
@@ -1633,9 +1636,17 @@
    "request": "**The arena's three translations (`AllocArena.ArenaLinux`, `ArenaMacos`, `ArenaFixedLinux`) are separate Lean modules with their own constants and types**, even where the source is the same: `heap_ArenaAllocator_reset`, `.loop66`, `.loop78`, `heap_ArenaAllocator_deinit`, `countListCapacity` are byte-identical text in the three files (diff of the `reset` section: empty), but `heap_ArenaAllocator_resetLocals`, `heap_ArenaAllocator_resetExit`, `heap_ArenaAllocator_deinitLocals`, `heap_ArenaAllocator_State` are three distinct structures and inductives, and the generated functions three distinct constants. A specification is stated over a module's own types (`Inv66 … (s : heap_ArenaAllocator_resetLocals)` reads `s.local55`; `Exit66`/`Exit78`/`Exit9`/`Exit19` match the module's exit constructors `.br65`, `.br77`, `.br8`, `.br18`; `tables` names the module's entries) and proved by `fsym` unfolding the module's concrete body, so it cannot be stated once and instantiated: there is no common type to state `Inv66` over, and no shared code for one walk. After renaming the namespaces, `ArenaSpecMacos.lean` and `ArenaSpecFixed.lean` differ only in their doc comments (17 lines), and from `ArenaSpec.lean` only in its extra M01 statements; the module-independent layer (invariant, updates, ghost part, kept nodes) is already shared (`AllocArena/Core.lean`, `AllocArena/Reset.lean`). Needed: the translator emits std code that does not depend on the target once, in a module the target translations share (target constants as parameters, ledger mechanism M10-style generic code), or a module-generic presentation of a translation (a record of its types and functions with the defining equations, which `fsym` walks and each translation proves by `rfl`), so that a specification and its walk are stated once over it.",
    "workaround_sites": [
     "tests/roadmap/alloc-arena/ArenaSpecMacos.lean",
-    "tests/roadmap/alloc-arena/ArenaSpecFixed.lean"
+    "tests/roadmap/alloc-arena/ArenaSpecMacos/Entries.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecMacos/Retain.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecMacos/Loop66C0.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecMacos/Loop66C1.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed/Entries.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed/Retain.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed/Loop66C0.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed/Loop66C1.lean"
    ],
-   "deletion_plan": "state once, in a shared module over the generic translation, the defs and theorems that ArenaSpecMacos.lean and ArenaSpecFixed.lean repeat from ArenaSpec.lean (main's 24: `free_ct`/`free_spec`, `resize_ct`/`resize_granted_ct`/`remap_ct`/`resize_spec`/`remap_spec`, `al`, `tables`, `child_decode`, `count_loop`/`count_spec`, `Inv19`/`Exit19`/`loop19_step`/`loop19_ct`, `Lists9`/`Inv9`/`Exit9`/`loop9_step`/`loop9_ct`, `deinit_ct`, `reset_free_all_ct`/`reset_free_all_spec`; and the retaining reset's 15: `count_free`, `Inv78`/`Exit78`/`loop78_step`/`loop78_ct`, `Inv66`/`Exit66`/`loop66_c0`/`loop66_c1`/`loop66_step`/`loop66_ct`, `reset_retain_capacity_ct`/`reset_retain_with_limit_ct`/`reset_retain_capacity_spec`/`reset_retain_with_limit_spec`), and make each ArenaSpec*.lean an instance (only a walk over code that differs between translations, the patched `free` and `resize`, stays per module), once the translator emits the shared std code once or fsym walks a module-generic presentation."
+   "deletion_plan": "state once, in a shared module over the generic translation, the defs and theorems that ArenaSpecMacos.lean and ArenaSpecFixed.lean (with their modules ArenaSpecMacos/*.lean, ArenaSpecFixed/*.lean) repeat from ArenaSpec.lean (with ArenaSpec/*.lean) (main's 24: `free_ct`/`free_spec`, `resize_ct`/`resize_granted_ct`/`remap_ct`/`resize_spec`/`remap_spec`, `al`, `tables`, `child_decode`, `count_loop`/`count_spec`, `Inv19`/`Exit19`/`loop19_step`/`loop19_ct`, `Lists9`/`Inv9`/`Exit9`/`loop9_step`/`loop9_ct`, `deinit_ct`, `reset_free_all_ct`/`reset_free_all_spec`; and the retaining reset's 15: `count_free`, `Inv78`/`Exit78`/`loop78_step`/`loop78_ct`, `Inv66`/`Exit66`/`loop66_c0`/`loop66_c1`/`loop66_step`/`loop66_ct`, `reset_retain_capacity_ct`/`reset_retain_with_limit_ct`/`reset_retain_capacity_spec`/`reset_retain_with_limit_spec`), and make each ArenaSpec*.lean an instance (only a walk over code that differs between translations, the patched `free` and `resize`, stays per module), once the translator emits the shared std code once or fsym walks a module-generic presentation."
   },
   {
    "id": "arena-retained-capacity",
@@ -1660,10 +1671,16 @@
    "request": "**`attribute [local fsym_facts] MemFacts.region_end` (ArenaSpec.lean, ArenaSpecMacos.lean, ArenaSpecFixed.lean, before `Inv66`) lets `fsym` derive that an owned region ends at an offset of at most `2 ^ 63` (`ZigLean/Sep/Full/OwnedBound.lean`).** The retaining reset's `loop66` additions need it for the overflow-checked sums, and it is switched on by hand per file because making it a default fact costs every other walk. Needed: `fsym` derives or demands the bound only where an arithmetic side goal asks for it (on-demand facts from the state's owned regions), so no proof opts in.",
    "workaround_sites": [
     "tests/roadmap/alloc-arena/ArenaSpec.lean",
+    "tests/roadmap/alloc-arena/ArenaSpec/Loop66C0.lean",
+    "tests/roadmap/alloc-arena/ArenaSpec/Loop66C1.lean",
     "tests/roadmap/alloc-arena/ArenaSpecMacos.lean",
-    "tests/roadmap/alloc-arena/ArenaSpecFixed.lean"
+    "tests/roadmap/alloc-arena/ArenaSpecMacos/Loop66C0.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecMacos/Loop66C1.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed/Loop66C0.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed/Loop66C1.lean"
    ],
-   "deletion_plan": "delete the three `attribute [local fsym_facts] MemFacts.region_end` lines (ArenaSpec.lean, ArenaSpecMacos.lean, ArenaSpecFixed.lean) once `fsym` supplies the owned-region end bound on demand (or as a default fact without a measurable cost)."
+   "deletion_plan": "delete the nine `attribute [local fsym_facts] MemFacts.region_end` lines (ArenaSpec.lean, ArenaSpecMacos.lean, ArenaSpecFixed.lean and the Loop66C0.lean, Loop66C1.lean modules of each) once `fsym` supplies the owned-region end bound on demand (or as a default fact without a measurable cost)."
   },
   {
    "id": "l10-native-lock-step-contract",
@@ -1898,9 +1915,9 @@
   {
    "id": "mutex-impl-relaxed-witness",
    "title": "No kernel-checked witness that `MutexImpl` rejects a relaxed `unlock`",
-   "status": "open",
+   "status": "closed",
    "requester": "L21 (retirement of ZigLean/Conc/Spec, PR677)",
-   "progress": "open",
+   "progress": "closed by tests/roadmap/sep-full/RelaxedUnlockCX.lean, checked in CI's full-state step: `relaxed_unlock_not_wp` refutes `MutexImpl.unlock_wp` (c = 2, `Io.Mutex`'s states) for `Io.Mutex.unlock` with a relaxed swap; `no_relaxed_mutexImpl`: no `MutexImpl` has that unlock. The state (thread 0 holds the lock after writing the resource, thread 1 live) is reached from the start memory by real code and proved rules (`FLock.Inv.make`, `FLock.wp_casOn`, `Fits.wp_hold`, `Fits.ofLockAll`), so it does not build `Mem` or ghost values by hand. The WP inversions it uses are library lemmas (`ZigLean/Conc/RunInv.lean`).",
    "request": "The retired `Conc/Spec/MutexToy.relaxed_not_spec` showed that `MutexSpec` rejects a spin mutex whose `unlock` writes with `monotonic` (the next holder misses the previous holder's write). No statement shows the same of `MutexImpl`. Needed: a test (`tests/roadmap/sep-full/*CX.lean` style) that refutes `unlock_wp` for a `monotonic` unlock: a concrete memory satisfying `FLock.Inv` with a holder that wrote the lock's resource, a protocol with `FLock.Fits` (e.g. via `Fits.ofLock`), and the step after which `LockWord.Owns` fails for a live thread.",
    "workaround_sites": [],
    "deletion_plan": "Closes when the witness is in tests and checked by its fixture's check script."

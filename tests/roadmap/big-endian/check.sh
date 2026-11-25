@@ -49,28 +49,38 @@ case "${1:---check}" in
     trap 'rm -rf "$work"' EXIT
     host_arch=$(uname -m)
     [ "$host_arch" = arm64 ] && host_arch=aarch64
+    # run ARCH NAME: run the static binary $work/NAME on ARCH, its stderr to stdout.
+    run() {
+      local var runner
+      var=AIR2LEAN_$(tr a-z A-Z <<<"$1")_RUN
+      if [ -n "${!var+set}" ]; then runner=${!var}
+      elif [ "$host_arch" = "$1" ] && [ "$(uname -s)" = Linux ]; then runner=
+      else runner=docker; fi
+      if [ "$runner" = docker ]; then
+        docker run --rm --platform "linux/$([ "$1" = s390x ] && echo s390x || echo amd64)" \
+          -v "$work:/w:ro" alpine:3 sh -c "/w/$2 2>&1"
+      else
+        # shellcheck disable=SC2086
+        $runner "$work/$2" 2>&1
+      fi
+    }
     for pair in "${pairs[@]}"; do
       arch=$(cut -d: -f3 <<<"$pair")
-      bin="$work/native-$arch"
       abi=musl
       [ "$arch" = mips64 ] && abi=muslabi64
       "$AIR2LEAN_ZIG_NATIVE" build-exe -OReleaseSafe -target "$arch-linux-$abi" \
-        -femit-bin="$bin" "$case_dir/native.zig"
+        -femit-bin="$work/native-$arch" "$case_dir/native.zig"
+      # names.zig's endian-aware test (`@tagName`, `@errorName`, a stored name's length bytes).
+      "$AIR2LEAN_ZIG_NATIVE" test -OReleaseSafe -target "$arch-linux-$abi" --test-no-exec \
+        -femit-bin="$work/names-$arch" "$case_dir/names.zig"
       # mips64 runs through the Docker VM's qemu-mips64 binfmt handler (concurrency.sh).
-      [ "$arch" = mips64 ] && python3 "$case_dir/elf-abiversion.py" "$bin"
-      var=AIR2LEAN_$(tr a-z A-Z <<<"$arch")_RUN
-      if [ -n "${!var+set}" ]; then runner=${!var}
-      elif [ "$host_arch" = "$arch" ] && [ "$(uname -s)" = Linux ]; then runner=
-      else runner=docker; fi
-      if [ "$runner" = docker ]; then
-        docker run --rm --platform "linux/$([ "$arch" = s390x ] && echo s390x || echo amd64)" \
-          -v "$work:/w:ro" alpine:3 sh -c "/w/native-$arch 2>&1" > "$work/native-$arch.txt"
-      else
-        # shellcheck disable=SC2086
-        $runner "$bin" 2> "$work/native-$arch.txt"
-      fi
+      [ "$arch" != mips64 ] || for bin in native names; do
+        python3 "$case_dir/elf-abiversion.py" "$work/$bin-$arch"
+      done
+      run "$arch" "native-$arch" > "$work/native-$arch.txt"
       diff -u "$case_dir/observed/$version-$arch-linux-musl-ReleaseSafe.txt" "$work/native-$arch.txt"
       echo "native $arch-linux-$abi ($version) matches the retained observation ($(wc -l < "$work/native-$arch.txt" | tr -d " ") lines)"
+      run "$arch" "names-$arch"
     done
     exit ;;
   --check) [ "$#" -le 1 ] || { echo 'usage: check.sh [--check|--native VERSION]' >&2; exit 2; } ;;
@@ -108,6 +118,18 @@ for v in "${versions[@]}"; do
   diff <(unversioned "$gen/S390x/Gen.lean") <(unversioned "$gen/X64/Gen.lean") \
     | grep '^[<>]' | sed -E 's/^([<>]) .*air2lean-profile.*/\1 PROFILE/' > "$work/gen-$v.diff" || true
   cmp "$work/gen-$v.diff" "$case_dir/expected-gen.diff"
+  # names.zig (`@tagName`, `@errorName`): the retained translations are the fresh ones, and the
+  # version's proofs (BigEndian.Names.<V>.Proofs, built with the library) are the written 0.17.1
+  # ones renamed.
+  for pair in "${pairs[@]}"; do
+    ns=$(cut -d: -f1 <<<"$pair")
+    t=$(cut -d: -f2 <<<"$pair")
+    "$translator" "$case_dir/air/$v/names/$t" -o "$work/names-$V-$ns.lean" \
+      --namespace "BigEndian.Names.$V.$ns" --prefix names.
+    cmp "$work/names-$V-$ns.lean" "$case_dir/BigEndian/Names/$V/$ns/Gen.lean"
+  done
+  [ "$V" = V0_17_1 ] || python3 -B scripts/fixtures.py instance \
+    "$case_dir/BigEndian/Names/V0_17_1/Proofs.lean" --subst "V0_17_1=$V"
 done
 python3 -B scripts/fixtures.py build BigEndian
 python3 -B scripts/fixtures.py run "$work/out" "${mains[@]}"

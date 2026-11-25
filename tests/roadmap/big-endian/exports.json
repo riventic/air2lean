@@ -55,6 +55,30 @@
       "versions": ["0.17.1", "0.15.2"],
       "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
       "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/names/s390x-linux",
+      "source": "names.zig",
+      "filter": "names.",
+      "versions": ["0.17.1", "0.16.0"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "s390x-linux"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/names/mips64-linux",
+      "source": "names.zig",
+      "filter": "names.",
+      "versions": ["0.17.1", "0.16.0"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "mips64-linux"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/names/x86_64-linux",
+      "source": "names.zig",
+      "filter": "names.",
+      "versions": ["0.17.1", "0.16.0"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
     }
   ]
 }

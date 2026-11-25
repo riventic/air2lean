@@ -4408,19 +4408,20 @@ def errorNames (funcs : Array Func) : Array String :=
 /-- `errorNameOf`: the name of each error of the program (`@errorName`), in the blocks from
 `first` on. An error that no error set of the program names throws `.unspecified`. With the
 compilation's numbering (`numbered`), the blocks are in code order and the name is found by the
-error's position in `errorTable`, as the compiler's name table is indexed by the code. -/
-def emitErrorNameOf (names : Array String) (first : Nat) (numbered : Bool := false) : String :=
+error's position in `errorTable`, as the compiler's name table is indexed by the code. The name
+is a slice of the profile's pointer width (`ptrBits`, `sliceTyName`): its length is a `usize`. -/
+def emitErrorNameOf (names : Array String) (first : Nat) (numbered : Bool) (ptrBits : Nat) :
+    String :=
+  let head := s!"def errorNameOf (e : Zig.ErrName) : Zig.Result {sliceTyName ptrBits} :="
   if numbered then
-    String.intercalate "\n" ["def errorNameOf (e : Zig.ErrName) : Zig.Result Zig.Slice :=",
+    String.intercalate "\n" [head,
       "  match errorTable.idxOf? e with",
-      s!"  | some k => pure ⟨⟨some ({first} + k), 0⟩, BitVec.ofNat 64 e.utf8ByteSize⟩",
+      s!"  | some k => pure ⟨⟨some ({first} + k), 0⟩, BitVec.ofNat {ptrBits} e.utf8ByteSize⟩",
       "  | none => throw .unspecified"]
   else
   let arms := names.toList.zipIdx.map fun (n, k) =>
     s!"  if e = {n.quote} then pure ⟨⟨some {first + k}, 0⟩, {n.toUTF8.size}⟩ else"
-  String.intercalate "\n"
-    (["def errorNameOf (e : Zig.ErrName) : Zig.Result Zig.Slice :="] ++ arms ++
-      ["  throw .unspecified"])
+  String.intercalate "\n" ([head] ++ arms ++ ["  throw .unspecified"])
 
 /-- The bytes of the name `s` with a 0 sentinel. -/
 def nameBytes (s : String) : String :=
@@ -4485,14 +4486,15 @@ def emitMem0 (gs : Array ProgGlobal) (translated : Bool := false) : String :=
       are added in order; an `extern` block holds its `ext` field, never a default.{tlsDoc}{oracleDoc} -/\n\
       def mem0 (σ : Zig.Placement) (ext : {externInitName}){oracleParam} : Zig.Mem := {body}{tlsInit}"
 
-/-- `<E>.tagName`: the name of each tag of `E` (`@tagName`), in the blocks from `first` on. -/
+/-- `<E>.tagName`: the name of each tag of `E` (`@tagName`), in the blocks from `first` on, as a
+slice of the profile's pointer width (`ptrBits`). -/
 def emitTagName (lean : String) (fields : Array (String × Int)) (exhaustive : Bool) (bits : Nat)
-    (first : Nat) (reserved : Array String := #[]) : String :=
+    (first : Nat) (reserved : Array String) (ptrBits : Nat) : String :=
   let ty := Ty.enum "" 0 exhaustive fields
   let fm := memberLookup ty reserved
   let hn := helperLookup ty reserved
   let slice (k : Nat) (f : String) := s!"⟨⟨some {first + k}, 0⟩, {f.toUTF8.size}⟩"
-  let head := s!"def {lean}.{hn "tagName"} (e : {lean}) : Zig.Result Zig.Slice :="
+  let head := s!"def {lean}.{hn "tagName"} (e : {lean}) : Zig.Result {sliceTyName ptrBits} :="
   if exhaustive then
     let arms := fields.toList.zipIdx.map fun ((f, _), k) => s!"  | .{fm f} => pure {slice k f}"
     String.intercalate "\n" ([head, "  match e with"] ++ arms)
@@ -4868,10 +4870,15 @@ def emitModel (m : ModelBinding) (index : Nat) (site : ModelRegistry.CallSite)
     s!"def {base} {" ".intercalate binders.toList} : Zig.MemM ({result}) := {claims}_root_.{m.implementation} {tuple}"] ++
     runAttribute #[base] ++ footprintDef ++ [evidence])
 
+/-- The program's pointer width in bits (`FCtx.ptrBits`): every function of one export has the
+same profile (`Air2Lean/Air/Profile.lean`). -/
+def programPtrBits (funcs : Array Func) : Nat :=
+  8 * ((funcs[0]?.map (ptrBytesOf ·.layouts)).getD 8)
+
 /-- A 32-bit profile opens the 4-byte `Enc` instances of `Ptr`, `?*T` and `std.mem.Allocator`
 (`ZigLean/Mem/Width.lean`); a 64-bit program keeps the global ones. -/
 def wasm32Open (funcs : Array Func) : List String :=
-  if funcs.any (fun f => ptrBytesOf f.layouts == 4) then ["open scoped Zig.Wasm32"] else []
+  if programPtrBits funcs == 32 then ["open scoped Zig.Wasm32"] else []
 
 /-- Runtime names of the 64-bit model that a 32-bit translation must not contain: each has a
 width-parameterized form (`ZigLean/Mem/Width.lean`). `Main` refuses such an output. -/
@@ -5003,15 +5010,16 @@ def emitProgramParts (program : Program) (prefix_ : String)
     mkFCtxUnprepared f structNames funcNames floatSemantics memFuncs #[] concFuncs raw
   let (globals, ids) := collectGlobals funcs mkFc prefix_
   -- The tag names are blocks after the globals.
+  let ptrBits := programPtrBits funcs
   let (globals, tagDefs) := (tagNameEnums funcs structNames).foldl (init := (globals, #[]))
     fun (gs, defs) (_, lean, fields, exhaustive, bits) =>
-      let d := emitTagName lean fields exhaustive bits gs.size (structNames.map (·.2))
+      let d := emitTagName lean fields exhaustive bits gs.size (structNames.map (·.2)) ptrBits
       let gs := fields.foldl (fun gs (f, _) =>
         gs.push { label := s!"the name of {lean}.{f}", bytes := nameBytes f, align := 1 }) gs
       (gs, defs.push d)
   let errNames := errorNames funcs
   let errDefs := if hasErrorName then
-    [emitErrorNameOf errNames globals.size (numbered := errorTable.isSome)] else []
+    [emitErrorNameOf errNames globals.size (numbered := errorTable.isSome) ptrBits] else []
   let globals := errNames.foldl (fun gs n =>
     gs.push { label := s!"the name of error.{n}", bytes := nameBytes n, align := 1 }) globals
   let translated := funcs.any (·.allocatorModel == .translated)

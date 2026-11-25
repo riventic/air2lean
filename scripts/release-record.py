@@ -8,9 +8,13 @@
   release-record.py verify RECORD [--root DIR]            re-check a published record against its revision
   release-record.py ledger [--root DIR] [--allow-unfetched | --revisions]
 
-The profile is the CI matrix of .github/workflows/ci.yml at the recorded revision; every matrix
+The profile is the CI matrix of the CI workflows (target-matrix.py CI_WORKFLOWS: ci.yml, and
+ci-macos.yml with the `macos` rows) at the recorded revision; a GitHub run is evidence only for
+the jobs of its own workflow, so a complete record cites a run of each. Every matrix
 row is one job and every `run:` step whose condition holds for that row is a gate (actions and the
-tool-setup recipes that scripts/local-ci.sh substitutes are not gates); the matrix-free `macos`,
+tool-setup recipes that scripts/local-ci.sh substitutes are not gates); a condition on
+`github.event_name` is evaluated for each run event, and a gate that only some events execute
+(`gate_events`) takes its evidence only from a GitHub run of such an event; the matrix-free `macos`,
 `aarch64-linux`, `bitops-native-arm` and `build-modes-aarch64-linux` jobs are native-runner jobs that only GitHub evidence covers. A workflow whose gate lets a proof
 receipt bind a dirty tree (`AIR2LEAN_RECEIPT_ALLOW_DIRTY`, `proof-receipt.py ... --allow-dirty`)
 is refused. `record` requires a clean
@@ -90,6 +94,23 @@ def parse_workflow_yaml(text):
         raise ReleaseError(str(error)) from error
 
 
+def ci_workflow(texts):
+    """The CI workflows ({path: text}) as one (target-matrix.py merge_workflows)."""
+    try:
+        return TM.merge_workflows({path: TM.parse_workflow_yaml(text, path) for path, text in texts.items()})
+    except TM.Unreadable as error:
+        raise ReleaseError(str(error)) from error
+
+
+def ci_texts(root, revision):
+    """{path: text} of the CI workflows (target-matrix.py CI_WORKFLOWS) that exist at `revision`."""
+    present = set(git_text(root, 'ls-tree', '--name-only', revision, '--', *TM.CI_WORKFLOWS).split('\n'))
+    try:
+        return TM.ci_workflows(lambda path: show(root, revision, path) if path in present else None)
+    except TM.Unreadable as error:
+        raise ReleaseError(str(error)) from error
+
+
 # --- Profile and gate plan, all read from Git objects at one revision. ---
 
 def local_ci_helpers(source):
@@ -156,24 +177,36 @@ SUPPORT_JOBS = {'lake', 'zig-air', 'preflight', 'all-checks'}
 # lists the gates of an executing part.
 REUSE_CONTEXT = {'env.AIR2LEAN_REUSED': ''}
 REUSE_STEP = 'Reuse a recorded result'
+# The events of a run that is evidence (`github_evidence`) or a reuse reference's producing run
+# (`referenced_gates`; scripts/ci-reuse.py `RECORD_EVENTS`, which imports this module, so the
+# list is spelled in both). A condition on `github.event_name` is evaluated for each of them.
+EVIDENCE_EVENTS = ('push', 'workflow_dispatch', 'merge_group', 'schedule')
+REFERENCE_EVENTS = ('pull_request', 'push', 'merge_group', 'workflow_dispatch')
+RUN_EVENTS = tuple(sorted(set(EVIDENCE_EVENTS) | set(REFERENCE_EVENTS)))
 
 
 def row_gates(job, row, wanted, where):
-    """(gates, not applicable) among the `wanted` step names of one matrix row (or `{}`)."""
+    """(gates, not applicable, gate events) among the `wanted` step names of one matrix row (or
+    `{}`). A step whose condition holds for some run events (`RUN_EVENTS`) and not for others is a
+    gate with `gate events[step]`, the events whose runs execute it: only such a run is evidence
+    for it, and a run of another event must skip it."""
     context = {'matrix': row}
     context.update(REUSE_CONTEXT)
     runner = str(job.get('runs-on', ''))
     context.update({'runner.os': 'macOS' if runner.startswith('macos') else 'Linux', 'github.workspace': '/work'})
-    gates, skipped = [], []
+    gates, skipped, events = [], [], {}
     for step in job.get('steps') or []:
         if step['name'] not in wanted:
             continue
         try:
-            applies = TM.condition(step.get('if'), context)
+            holds = [event for event in RUN_EVENTS
+                     if TM.condition(step.get('if'), dict(context, **{'github.event_name': event}))]
         except TM.Unknown as error:
             raise ReleaseError('%s: %sstep %r: unsupported condition: %s' % (WORKFLOW, where, step['name'], error))
-        (gates if applies else skipped).append(step['name'])
-    return gates, skipped
+        (gates if holds else skipped).append(step['name'])
+        if holds and len(holds) < len(RUN_EVENTS):
+            events[step['name']] = holds
+    return gates, skipped, events
 
 
 def native_plan(name, job, commands, setup):
@@ -199,21 +232,23 @@ def native_plan(name, job, commands, setup):
             commands[name + '::' + step['name']] = {key: step[key] for key in ('if', 'env', 'run') if key in step}
     plans = []
     for row in rows:
-        gates, skipped = row_gates(job, row, wanted, name + ' ')
+        gates, skipped, events = row_gates(job, row, wanted, name + ' ')
         plans.append({'name': job_name(name, row) if row else name, 'matrix': None,
-                      'reproduce': NATIVE_JOBS[name], 'gates': gates, 'not_applicable': skipped})
+                      'reproduce': NATIVE_JOBS[name], 'gates': gates, 'not_applicable': skipped,
+                      'gate_events': events})
     return plans
 
 
 def build_plan(root, revision):
-    text = show(root, revision, WORKFLOW)
-    # Anywhere in the workflow (step, job or workflow env, a continued command line).
-    if DIRTY_RECEIPT.search(text.replace('\\\n', ' ')):
-        raise ReleaseError('%s: a gate lets a proof receipt bind a dirty tree (tree.dirty_allowed); '
-                           'a release binds only clean-tree receipts' % WORKFLOW)
-    workflow = parse_workflow_yaml(text)
+    texts = ci_texts(root, revision)
+    for path, text in texts.items():
+        # Anywhere in the workflow (step, job or workflow env, a continued command line).
+        if DIRTY_RECEIPT.search(text.replace('\\\n', ' ')):
+            raise ReleaseError('%s: a gate lets a proof receipt bind a dirty tree (tree.dirty_allowed); '
+                               'a release binds only clean-tree receipts' % path)
+    workflow = ci_workflow(texts)
     setup = local_ci_helpers(show(root, revision, STEPS_SCRIPT))
-    jobs = workflow.get('jobs') or {}
+    jobs = workflow['jobs']
     if set(jobs) - set(NATIVE_JOBS) - SUPPORT_JOBS != {'test'}:
         raise ReleaseError('%s: only the test, %s jobs are qualified for release records'
                            % (WORKFLOW, ', '.join(sorted(set(NATIVE_JOBS) | SUPPORT_JOBS))))
@@ -227,24 +262,33 @@ def build_plan(root, revision):
         raise ReleaseError('%s: every step needs a unique name' % WORKFLOW)
     commands = {step['name']: {key: step[key] for key in ('if', 'env', 'run') if key in step}
                 for step in steps if 'run' in step and step['name'] not in setup}
+    # A job's evidence is a run of the workflow file that defines it: `workflow` is that file's
+    # `name` (GitHub's workflowName).
+    names = {path: fields.get('name', path) for path, fields in workflow['workflows'].items()}
+    if len(set(names.values())) != len(names):
+        raise ReleaseError('the CI workflows need distinct names: %s' % names)
+    source = {job_id: names[path] for job_id, path in workflow['files'].items()}
     plan_jobs = []
     for row in rows:
-        gates, skipped = row_gates(job, row, commands, '')
+        gates, skipped, events = row_gates(job, row, commands, '')
         plan_jobs.append({'name': job_name('test', row), 'matrix': row, 'reproduce': reproduce(row),
-                          'gates': gates, 'not_applicable': skipped})
+                          'gates': gates, 'not_applicable': skipped, 'gate_events': events,
+                          'workflow': source['test']})
     if len({j['name'] for j in plan_jobs}) != len(plan_jobs):
         raise ReleaseError('%s: matrix rows have identical job names' % WORKFLOW)
     for name in NATIVE_JOBS:
         if name in jobs:
-            plan_jobs.extend(native_plan(name, jobs[name], commands, setup))
+            plan_jobs.extend(dict(plan, workflow=source[name]) for plan in native_plan(name, jobs[name], commands, setup))
     for name in sorted(SUPPORT_JOBS & set(jobs)):
         support_rows = (((jobs[name].get('strategy') or {}).get('matrix') or {}).get('include')) or [{}]
         for row in support_rows:
             plan_jobs.append({'name': job_name(name, row) if row else name, 'matrix': None,
-                              'reproduce': 'not a gate', 'gates': [], 'not_applicable': []})
+                              'reproduce': 'not a gate', 'gates': [], 'not_applicable': [], 'gate_events': {},
+                              'workflow': source[name]})
     blob = lambda path: git_text(root, 'rev-parse', '%s:%s' % (revision, path))
     compatibility = json.loads(show(root, revision, 'compatibility.json'))
-    return {'workflow': WORKFLOW, 'workflow_name': workflow.get('name'), 'workflow_blob': blob(WORKFLOW),
+    return {'workflow': WORKFLOW, 'workflow_name': names[WORKFLOW], 'workflow_blob': blob(WORKFLOW),
+            'workflow_blobs': {path: blob(path) for path in texts},
             'local_ci_steps_blob': blob(STEPS_SCRIPT), 'compatibility_blob': blob('compatibility.json'),
             'translation': compatibility.get('translation'), 'zig_default': compatibility['zig']['default'],
             'jobs': plan_jobs, 'commands': commands}
@@ -256,17 +300,25 @@ def sha256_bytes(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def referenced_job(ref, runs, name, gates):
-    """The reference's producing job when the supplied run JSON shows it passed every gate."""
+def event_gates(job, event):
+    """The gates of a plan job that a run of `event` executes."""
+    return [step for step in job['gates'] if event in job['gate_events'].get(step, RUN_EVENTS)]
+
+
+def referenced_gates(ref, runs, plan_job, workflow_name):
+    """The gates passed by the reference's producing job when the supplied run JSON (a run of
+    `workflow_name`, the workflow that defines the job) shows it passed every gate its event
+    executes; else None."""
     run = runs.get(str(ref['run_id']))
-    if not run or run.get('workflowName') != 'CI' or run.get('status') != 'completed' or run.get('event') not in (
-            'pull_request', 'push', 'merge_group', 'workflow_dispatch'):
+    if not run or run.get('workflowName') != workflow_name or run.get('status') != 'completed' or run.get('event') not in (
+            REFERENCE_EVENTS):
         return None
+    gates = event_gates(plan_job, run['event'])
     for job in run.get('jobs') or []:
-        if job.get('name') == name and str(job.get('databaseId', ref['job_id'])) == str(ref['job_id']):
+        if job.get('name') == plan_job['name'] and str(job.get('databaseId', ref['job_id'])) == str(ref['job_id']):
             steps = {step.get('name'): step.get('conclusion') for step in job.get('steps') or []}
             if job.get('conclusion') == 'success' and all(steps.get(step) == 'success' for step in gates):
-                return job
+                return gates
     return None
 
 
@@ -282,7 +334,7 @@ def github_evidence(path, revision, plan, references=None, reference_runs=None):
     if data['headSha'] != revision:
         raise ReleaseError('%s: run %s is for %s, not the recorded revision %s'
                            % (path, data['databaseId'], data['headSha'], revision))
-    if data['event'] not in ('push', 'workflow_dispatch', 'merge_group', 'schedule'):
+    if data['event'] not in EVIDENCE_EVENTS:
         # pull_request runs test a PR head or GitHub's merge with the base branch; a merge_group
         # run tests exactly the commit that the merge queue then fast-forwards main to; a
         # schedule run tests main's head.
@@ -290,10 +342,12 @@ def github_evidence(path, revision, plan, references=None, reference_runs=None):
                            % (path, data['databaseId'], data['event'], revision))
     if data['status'] != 'completed':
         raise ReleaseError('%s: run %s is %s, not completed' % (path, data['databaseId'], data['status']))
-    if data['workflowName'] != plan['workflow_name']:
-        raise ReleaseError('%s: run %s is workflow %r, not %r'
-                           % (path, data['databaseId'], data['workflowName'], plan['workflow_name']))
-    by_name = {job['name']: job for job in plan['jobs']}
+    workflows = sorted({job['workflow'] for job in plan['jobs']})
+    if data['workflowName'] not in workflows:
+        raise ReleaseError('%s: run %s is workflow %r, not one of %r'
+                           % (path, data['databaseId'], data['workflowName'], workflows))
+    # Only the jobs of the run's own workflow.
+    by_name = {job['name']: job for job in plan['jobs'] if job['workflow'] == data['workflowName']}
     results = {}
     seen = set()
     reused = []
@@ -307,25 +361,29 @@ def github_evidence(path, revision, plan, references=None, reference_runs=None):
             if step.get('name') in conclusions:
                 raise ReleaseError('%s: job %r repeats step %r' % (path, name, step.get('name')))
             conclusions[step.get('name')] = step.get('conclusion')
-        for step in by_name[name]['not_applicable']:
+        # The gates this run's event executes; it must skip the others (a gate for other events
+        # stays missing unless a run of such an event is passed too).
+        gates = event_gates(by_name[name], data['event'])
+        for step in by_name[name]['not_applicable'] + [s for s in by_name[name]['gates'] if s not in gates]:
             if conclusions.get(step, 'skipped') != 'skipped':
-                raise ReleaseError('%s: job %r ran step %r whose condition is false at %s; '
-                                   'the run used another workflow' % (path, name, step, revision))
+                raise ReleaseError('%s: job %r ran step %r whose condition is false for a %s run at %s; '
+                                   'the run used another workflow' % (path, name, step, data['event'], revision))
         # A reused part (docs/ci.md): the decision step passed, nothing failed and every gate was
         # skipped. Its run executed none of them: with the reuse reference this run uploaded
         # (`ci-reuse-ref-<key>`: the run and job that passed on a tree with the same input key)
-        # its gates are passed by reference, else they stay missing unless the run that executed
-        # them is passed too. Any other skip is a failure.
-        gates = by_name[name]['gates']
+        # the gates the producing run executed are passed by reference, else they stay missing
+        # unless the run that executed them is passed too. Any other skip is a failure.
         if (conclusions.get(REUSE_STEP) == 'success' and gates
                 and all(conclusions.get(step) == 'skipped' for step in gates)
                 and not {'failure', 'cancelled'} & set(conclusions.values())):
             reused.append(name)
             ref = (references or {}).get((str(data['databaseId']), name))
-            # Passed by reference only with the producing run's JSON showing every gate passed,
-            # and a reference made for this revision; else the gates stay missing.
-            if ref and ref.get('tested_commit') == revision and referenced_job(ref, reference_runs or {}, name, gates):
-                for step in gates:
+            # Passed by reference only with the producing run's JSON showing every gate it
+            # executes passed, and a reference made for this revision; else the gates stay missing.
+            passed = ref and ref.get('tested_commit') == revision and referenced_gates(
+                ref, reference_runs or {}, by_name[name], data['workflowName'])
+            if passed:
+                for step in passed:
                     results[(name, step)] = ('by-reference', 'passed by reference: run %s job %s, input key %s'
                                              % (ref['run_id'], ref['job_id'], ref['key']))
             continue
@@ -338,7 +396,7 @@ def github_evidence(path, revision, plan, references=None, reference_runs=None):
               'head_sha': data['headSha'], 'head_branch': data.get('headBranch'), 'event': data.get('event'),
               'conclusion': data.get('conclusion'), 'jobs': sorted(seen), 'reused_jobs': sorted(reused),
               'references': [dict(references[(str(data['databaseId']), name)], job=name) for name in sorted(reused)
-                             if (name, by_name[name]['gates'][0]) in results],
+                             if any((name, step) in results for step in by_name[name]['gates'])],
               'file_sha256': sha256_bytes(raw)}
     return source, results
 
@@ -394,6 +452,10 @@ def local_ci_evidence(directory, revision, plan):
         expected = [j['name'] for j in rows]
     if set(started) - set(expected):
         raise ReleaseError('%s: %s run started jobs outside its rows' % (directory, mode))
+    by_event = ['%s / %s' % (name, step) for name in expected for step in by_name[name]['gate_events']]
+    if by_event:
+        raise ReleaseError('%s: local CI runs for no GitHub event; these gates depend on the event: %s'
+                           % (directory, '; '.join(by_event)))
     if status == 0 and any(started.get(name) != by_name[name]['gates'] for name in expected):
         raise ReleaseError('%s: exit status 0 but not every gate of %s started' % (directory, ', '.join(expected)))
     results = {}
@@ -581,9 +643,11 @@ def build_record(root, github_runs=(), local_runs=(), unavailable=(), reference_
     summary = summarize(gates)
     return {
         'schema': SCHEMA, 'revision': revision, 'tree': 'clean',
-        'profile': {key: plan[key] for key in ('workflow', 'workflow_name', 'workflow_blob', 'local_ci_steps_blob',
-                                               'compatibility_blob', 'translation', 'zig_default')},
-        'jobs': [{key: job[key] for key in ('name', 'matrix', 'reproduce', 'not_applicable')} for job in plan['jobs']],
+        'profile': {key: plan[key] for key in ('workflow', 'workflow_name', 'workflow_blob', 'workflow_blobs',
+                                               'local_ci_steps_blob', 'compatibility_blob', 'translation',
+                                               'zig_default')},
+        'jobs': [{key: job[key] for key in ('name', 'matrix', 'reproduce', 'not_applicable', 'gate_events')}
+                 for job in plan['jobs']],
         'commands': plan['commands'],
         'evidence': [source for source, _ in evidence],
         'gates': gates,
@@ -603,9 +667,13 @@ def verify_record(root, record):
     if not SHA1.fullmatch(revision or ''):
         return ['record does not name a full revision']
     plan = build_plan(root, revision)
+    profile = record.get('profile', {})
     for key in ('workflow_blob', 'local_ci_steps_blob', 'compatibility_blob'):
-        if record.get('profile', {}).get(key) != plan[key]:
+        if profile.get(key) != plan[key]:
             problems.append('profile %s does not match revision %s' % (key, revision))
+    # A record from before ci-macos.yml names only ci.yml's blob.
+    if profile.get('workflow_blobs', {WORKFLOW: profile.get('workflow_blob')}) != plan['workflow_blobs']:
+        problems.append('profile workflow_blobs does not match revision %s' % revision)
     evidence = record.get('evidence') or []
     for index, source in enumerate(evidence):
         if source.get('head_sha') != revision or source.get('kind') not in ('github-actions', 'local-ci'):
