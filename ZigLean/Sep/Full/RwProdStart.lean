@@ -10,12 +10,15 @@ thread that owns the lock's bytes and gives them to the rest. This file proves t
 there once for every program: the two-lock pair's start (`FLock.Pair.start`) and the base at a
 fresh lock (`FRw.Base.start`).
 
-- `RwProd.start`: thread `t`, whose clock is above every thread's, has in its part the outer
-  mutex's word, the semaphore's count (`0`) and its mutex's word, the state word and the
+- `RwProd.start`: thread `t`, whose clock happened before every thread's, has in its part the
+  outer mutex's word, the semaphore's count (`0`) and its mutex's word, the state word and the
   condition's two words (`rYw`), the protected resource `rR` and the rest of the program's rest
   `rI` (a pin of the lock's block, the bytes every thread reads). The five words hold `0` (the
-  epoch any value), no atomic location is in the lock's block, no thread waits at a futex, and
-  every thread is out of every code (and alive) or ended. Then the invariant holds.
+  epoch any value), no atomic location overlaps the lock's 40 bytes (one can be elsewhere in its
+  block), no thread waits at a futex, and every thread is out of every code (and alive) or ended.
+  Then the invariant holds. The clock and waiter premises range over every thread and the whole
+  queue because the condition's start (`FCond.Inv.start`) and words (`Word.Ok` at every thread)
+  ask that (ledger #cond-start-anywhere).
 -/
 
 namespace Zig
@@ -71,7 +74,8 @@ theorem start {own : ThreadId → Res} {rO rWM rCnt rWL rYw rR rI : Res} {G : Th
       (G u).1.phB = .gone)
     (hblk : ∃ blk, m.blocks[b]? = some blk ∧ blk.live = true ∧ o + 40 ≤ blk.bytes.size ∧
       (blk.addr + o) % 8 = 0 ∧ blk.kind ≠ .constGlobal ∧ blk.kind.mappedLo ≤ o)
-    (hat : ∀ l ∈ m.atomics, l.block ≠ b) (hq : m.waiters = #[])
+    (hat : ∀ l ∈ m.atomics, l.block = b → o + 40 ≤ l.off ∨ (l.off < o ∧ l.off + l.len ≤ o))
+    (hq : m.waiters = #[])
     (hst : (W b o R R_plain R_fixed).st.Holds m (RwState.encode 0 0 false))
     (hS0 : (C b o (Xc := Xc)).S.Holds m 0) (hE0 : (C b o (Xc := Xc)).Ep.Holds m e0)
     (hM0 : (M b o (Xc := Xc)).U32 m 0) (hL0 : (L b o R).U32 m 0)
@@ -81,6 +85,11 @@ theorem start {own : ThreadId → Res} {rO rWM rCnt rWL rYw rR rI : Res} {G : Th
     ∃ rX, (M b o).Inv G rX m ∧
       FLock.Pair.U (L b o R) ((W b o R R_plain R_fixed).Base E Sz K) G rX m := by
   obtain ⟨blk, hb, hlv, hsz, hal, hkd, hlo⟩ := hblk
+  -- a word inside the lock's 40 bytes: no atomic location overlaps it
+  have hin : ∀ v nb, o ≤ v → v + nb ≤ o + 40 → ∀ l ∈ m.atomics, l.block = b →
+      v + nb ≤ l.off ∨ (l.off < v ∧ l.off + l.len ≤ v) := fun v nb h1 h2 l hl hlb => by
+    have := hat l hl hlb
+    omega
   -- the two-lock pair
   have hnp : ¬ RwPosted Prod.fst (fun u => sx (G u).2) := fun ⟨⟨u, hu⟩, _⟩ => by
     have h : (G u).2.w = .ww := hu
@@ -92,13 +101,17 @@ theorem start {own : ThreadId → Res} {rO rWM rCnt rWL rYw rR rI : Res} {G : Th
     exact sep_emp.mpr hCnt
   obtain ⟨hi, hk⟩ := FLock.Pair.start (A := M b o) (B := L b o R) (G := G) (rLA := rnil)
     (rY := rsum rR rI) ho hjt ht hown hsplit hdP (fun _ => .inl rfl) hdAB hdB hdBY hdY hYw hYwk
-    hYwg hWM hWMk hWMg hWL hWLk hWLg hphA hphB (fun u => (hG u).2.2.2.1) (fun u => (hG u).2.2.2.2)
+    hYwg hWM hWMk hWMg hWL hWLk hWLg
+    (fun u => (hphA u).imp_left fun h => ⟨.inl h.1, h.2⟩)
+    (fun u => (hphB u).imp_left fun h => ⟨.inl h.1, h.2⟩)
+    (fun u => (hG u).2.2.2.1) (fun u => (hG u).2.2.2.2)
     ⟨rfl, rfl, rfl⟩ hRB
     ⟨blk, hb, hlv, by show o + 32 + 4 ≤ _; omega, by show (blk.addr + (o + 32)) % 4 = 0; omega,
       hkd, by show _ ≤ o + 32; omega⟩ hM0
     ⟨blk, hb, hlv, by show o + 16 + 4 ≤ _; omega, by show (blk.addr + (o + 16)) % 4 = 0; omega,
       hkd, by show _ ≤ o + 16; omega⟩ hL0
-    (fun l hl => ⟨hat l hl, hat l hl⟩) hq hall
+    (hin (o + 32) 4 (by omega) (by omega)) (hin (o + 16) 4 (by omega) (by omega))
+    (LockWord.waiters_empty hq) (LockWord.waiters_empty hq) (hall.on _)
   -- `t` owns the pieces of its part: an access to them happened before every thread
   have hown0 : ∀ e ∈ m.footprint, (e.Touches (own t).excl ∨ m.blocks.size ≤ e.block) →
       AllLe m e.clock := fun e he htc u hu =>
@@ -161,21 +174,21 @@ theorem start {own : ThreadId → Res} {rO rWM rCnt rWL rYw rR rI : Res} {G : Th
       ∀ e ∈ m.footprint, V.Hits e → AllLe m e.clock := fun V hV e he hh =>
     hown0 e he (.inl (Word.touches_of hh fun x h1 h2 =>
       Res.excl_of_heap (hYwT _ (hV (V.b, x) ⟨rfl, h1, h2⟩))))
-  have hat' : ∀ {n nb : Nat} (V : Word n nb), V.b = b → ∀ l ∈ m.atomics, l.block = V.b →
-      V.o + nb ≤ l.off ∨ (l.off < V.o ∧ l.off + l.len ≤ V.o) := fun V hV l hl hb' =>
-    absurd (hb'.trans hV) (hat l hl)
   obtain ⟨hstOk, hst1, hstV, -⟩ := Word.Ok.init (W := (W b o R R_plain R_fixed).st)
     (A := fun u => (M b o).ph (G u) ≠ .gone)
     ⟨blk, hb, hlv, by show o + 8 ≤ _; omega, hal, hkd, hlo⟩
-    (hat' _ rfl) hst fun e he hh => (htouch _ hstin e he hh).on _
+    (hin o 8 (Nat.le_refl o) (by omega)) hst
+    fun e he hh => (htouch _ hstin e he hh).on _
   obtain ⟨hSOk, hS1, hSV, -⟩ := Word.Ok.init (W := (C b o (Xc := Xc)).S) (A := fun _ => True)
     ⟨blk, hb, hlv, by show o + 20 + 4 ≤ _; omega, by show (blk.addr + (o + 20)) % 4 = 0; omega,
       hkd, by show _ ≤ o + 20; omega⟩
-    (hat' _ rfl) hS0 fun e he hh => (htouch _ hSin e he hh).on _
+    (hin (o + 20) 4 (by omega) (by omega)) hS0
+    fun e he hh => (htouch _ hSin e he hh).on _
   obtain ⟨hEOk, hE1, hEV, hEc⟩ := Word.Ok.init (W := (C b o (Xc := Xc)).Ep) (A := fun _ => True)
     ⟨blk, hb, hlv, by show o + 24 + 4 ≤ _; omega, by show (blk.addr + (o + 24)) % 4 = 0; omega,
       hkd, by show _ ≤ o + 24; omega⟩
-    (hat' _ rfl) hE0 fun e he hh => (htouch _ hEin e he hh).on _
+    (hin (o + 24) 4 (by omega) (by omega)) hE0
+    fun e he hh => (htouch _ hEin e he hh).on _
   -- the rest of the rest
   have hRO : FHeap.Disjoint rR.heap rO.heap := hOoff hRT
   have hIO : FHeap.Disjoint rI.heap rO.heap := hOoff hIT

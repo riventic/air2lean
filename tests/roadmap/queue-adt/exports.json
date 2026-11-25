@@ -1,0 +1,11 @@
+{
+  "exports": [
+    {
+      "out": "air",
+      "source": "queue.zig",
+      "filter": "queue.",
+      "versions": ["0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"]
+    }
+  ]
+}
