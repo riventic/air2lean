@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 185 rows, 63 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 185 rows, 62 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -28,7 +28,6 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [case-family-enrollment](#row-case-family-enrollment) | Remove transitional golden case-family enrollment markers | Task23; coordinator decision 6258258831 | `examples/threadsync/all-cases`, `examples/sync/all-cases` | When the last golden family is enrolled, remove every all-cases marker and the marker/history ratchet, derive all case families unconditionally from the full golden enumeration, and retire when_defined with its remaining users. Preserve complete output/import coverage and exact retranslation checks. |
 | [3](#row-3) | ruleConcl? recognize generic FLogic.T L … rules (FAllocSpec generic in partial/total) | coordinator for D2/allocator | - | - |
 | [13](#row-13) | optPayload | one-logic-tactics (Lists.sum) | - | - |
-| [21](#row-21) | fsym_arith: disjunctive goals, user Nat functions on constructors, constructor injectivity | one-logic-tactics (dispatch, PR #222) | `tests/roadmap/dispatch-templates/TokenizerProof.lean` | delete `attribute [local fsym_arith] rank` from TokenizerProof.lean, run tests/roadmap/dispatch-templates/check.sh (Zig 0.16.0 compiler pair) and close the row. |
 | [21a](#row-21a) | a pure generated helper with literal args (mem_Alignment_fromByteUnits 8) is unfolded and sticks at enumOf... | alloc-param (lists destroy) | `Proofs/Lists/Append.lean`, `Proofs/Lists/Alloc.lean`, `tests/roadmap/interfaces/Interfaces/SentinelSpec.lean` | delete the manual evaluation of the pure helper on its literal once fsym evaluates pure generated helpers on literals (or uses the x.toNat fact). |
 | [27](#row-27) | Planning a user rule whose precondition holds an if-guarded grant (I.owned 0 s.ptr bs = if bs.size = 0 then... | one-logic-alloc | `tests/roadmap/alloc-fba/AllocFba/Wrappers.lean` | state realloc_spec through reallocAdvanced_spec once fsym plans an if-guarded grant against the opened state; delete the inlined walk. |
 | [59](#row-59) | A rule's precondition fact that is an implication | arena | - | - |
@@ -116,6 +115,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [19](#row-19) | (same shape as 9b, second user) Pair facts from the memory | open |
 | [20](#row-20) | Split a match on a symbolic Except result | DONE codex/fsym-wp (agent 13: a body's match on a variable as the command is split) |
 | [20a](#row-20a) | Atoms equal up to arithmetic | READY #250 (allocSentinel + realloc drafts close) |
+| [21](#row-21) | fsym_arith: disjunctive goals, user Nat functions on constructors, constructor injectivity | DONE (2026-11-25, lane ledger-quick). All three parts are fixed in the engine (checked 2026-11-24, regressions in SepAuto/Arith.lean: (a) `or_goal`, `or_goal_imp`; (b) `rank_of_ctor`, an untagged user function on a constructor, by the `unfoldUserValue` simproc of `fsym_arith`; (c) `ctor_inj`, `ctor_inj_post`). `attribute [local fsym_arith] rank flatRank` is deleted from DispatchTemplate/Template.lean, and `attribute [local fsym_arith] rank` from TokenizerProof.lean; tests/roadmap/dispatch-templates/check.sh passes without them on the 0.16.0 and 0.17.1 exports (all four `Dispatch-loop regressions` fixture units green on arc). The measure `B * data + rank` of `loop_dispatch` stays: it is the rule's statement, not glue. |
 | [22](#row-22) | fold the open arm of an indirect call | DONE in alloc-param PR (a) (M10 library part, 2026-10-12; small Auto/AutoConc edits, heads-up for merges): `callIndirect f arms d` takes the last arm `d` (no MonadExceptOf; args α m f arms d, so indirectWalk reads a[2..4]); `callIndirect_fold_ext` registered in foldCtx; `C.callIndirect_pos/_neg` take implicit `d`, `C.callIndirect_nil f d : callIndirect f [] d = d`; `pullIndirect` pulls `g` from `d >>= g` or keeps `throw e` |
 | [23](#row-23) | CTriple rule commands over interface tables | DONE in alloc-param PR (a): `reduceProjs` after `unfoldToHead` (tryRule, CTriple branch) |
 | [23b](#row-23b) | row 23 for a table WITH closure arms (CVTable.dispatch (tables e) fns) | DONE on codex/iface-contracts (PR (b)): `expandMapLits` (List.map over a literal expanded, beta-reduced) between two `reduceProjs` in tryRule's CTriple branch. ACCEPTED by the coordinator 2026-10-13 as an engine edit made outside the engine lane: engine lane, review/own it (Auto.lean `expandMapLits`, `unfoldToHead` headBeta first) and fold it into the general rule-matching normalization when convenient |
@@ -577,13 +577,11 @@ Request: **Atoms equal up to arithmetic** (return/planner matching): a state ato
 <a id="row-21"></a>
 ### #21 fsym_arith: disjunctive goals, user Nat functions on constructors, constructor injectivity
 
-Status: **open**. Requester: one-logic-tactics (dispatch, PR #222).
+Status: **closed**. Requester: one-logic-tactics (dispatch, PR #222).
 
-Progress: all three parts are fixed in the engine (checked 2026-11-24, regressions in SepAuto/Arith.lean: (a) `or_goal`, `or_goal_imp`; (b) `rank_of_ctor`, an untagged user function on a constructor, by the `unfoldUserValue` simproc of `fsym_arith`; (c) `ctor_inj`, `ctor_inj_post`). `attribute [local fsym_arith] rank flatRank` is deleted from DispatchTemplate/Template.lean, which builds without it. Open only for the last site: `attribute [local fsym_arith] rank` in TokenizerProof.lean, which is elaborated against a fresh Zig 0.16.0 export (tests/roadmap/dispatch-templates/check.sh, not run in the triage). The measure `B * data + rank` of `loop_dispatch` stays: it is the rule's statement, not glue.
+Progress: DONE (2026-11-25, lane ledger-quick). All three parts are fixed in the engine (checked 2026-11-24, regressions in SepAuto/Arith.lean: (a) `or_goal`, `or_goal_imp`; (b) `rank_of_ctor`, an untagged user function on a constructor, by the `unfoldUserValue` simproc of `fsym_arith`; (c) `ctor_inj`, `ctor_inj_post`). `attribute [local fsym_arith] rank flatRank` is deleted from DispatchTemplate/Template.lean, and `attribute [local fsym_arith] rank` from TokenizerProof.lean; tests/roadmap/dispatch-templates/check.sh passes without them on the 0.16.0 and 0.17.1 exports (all four `Dispatch-loop regressions` fixture units green on arc). The measure `B * data + rank` of `loop_dispatch` stays: it is the rule's statement, not glue.
 
 Request: fsym_arith: (a) disjunctive goals are not proved (`n < n ∨ 1 < 2`, `m ≤ n → m < n ∨ m = n ∧ 1 < 2`): `omega` handles them, the pipeline does not; (b) a user Nat function on a constructor (`rank Phase.count`, a `match` on a constructor) is not evaluated unless tagged `attribute [local fsym_arith] rank`; (c) `machExit.ret acc = machExit.ret N` with `acc = N` in context is not closed (constructor injectivity in the return entailment; same family as #13). Workarounds in PR #222: `loop_dispatch` takes the measure `B * data + rank` (no Prod.Lex disjunction), local fsym_arith tags, unfold the invariant before `cases`
-
-Workaround sites: `tests/roadmap/dispatch-templates/TokenizerProof.lean`
 
 Deletion plan: delete `attribute [local fsym_arith] rank` from TokenizerProof.lean, run tests/roadmap/dispatch-templates/check.sh (Zig 0.16.0 compiler pair) and close the row.
 
