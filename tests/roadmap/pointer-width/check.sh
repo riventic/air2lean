@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# T02 pointer-width fixtures. `--export DIR` writes fresh AIR for every profile with a
-# patched compiler; `--native` runs the source's layout/boundary tests on the host and
-# under wasm32-wasi (Node WASI). The default re-translates the retained AIR, compares it
-# with the retained Gen.lean files byte for byte and checks the proofs and rejections.
+# T02 pointer-width fixtures. `--export DIR` writes fresh AIR of pointer_width.zig and
+# reject.zig (Zig 0.16.0) for every profile with a patched compiler; names.zig is declared in
+# exports.json (0.17.1, 0.16.0) and pinned by exports.lock.json (scripts/fixture-exports.py
+# verify|export pointer-width). `--native` runs the sources' layout/boundary/name tests on the
+# host and under wasm32-wasi (Node WASI). The default re-translates the retained AIR, compares
+# it with the retained Gen.lean files byte for byte and checks the proofs and rejections.
 # Needs `lake build ZigLean Air2Lean air2lean ZigLean.Mem.WidthLemmas`. All tool invocations
 # must run in the root's serialized build queue.
 set -euo pipefail
@@ -34,16 +36,18 @@ case "${1:---check}" in
     exit ;;
   --native)
     [ "$#" -eq 1 ] || { echo 'usage: check.sh --native' >&2; exit 2; }
-    : "${AIR2LEAN_ZIG_NATIVE:?set a stock host Zig 0.16.0}"
-    "$AIR2LEAN_ZIG_NATIVE" test -OReleaseSafe "$src"
-    # The comptime layout asserts are evaluated by the compiler for each target's ABI.
-    "$AIR2LEAN_ZIG_NATIVE" build-obj -OReleaseSafe -target wasm32-freestanding -fno-emit-bin "$src"
-    # The wasm32-wasi test binary runs under Node's WASI (32-bit usize boundaries).
+    : "${AIR2LEAN_ZIG_NATIVE:?set a stock host Zig (0.16.0 or 0.17.1)}"
     wasm_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-pointer-width-wasi.XXXXXX")
     trap 'rm -rf "$wasm_dir"' EXIT
-    "$AIR2LEAN_ZIG_NATIVE" test -OReleaseSafe -target wasm32-wasi --test-no-exec \
-      -femit-bin="$wasm_dir/test.wasm" "$src"
-    node --no-warnings "$case_dir/run-wasi.mjs" "$wasm_dir/test.wasm"
+    for s in "$src" "$case_dir/names.zig"; do
+      "$AIR2LEAN_ZIG_NATIVE" test -OReleaseSafe "$s"
+      # The comptime layout asserts are evaluated by the compiler for each target's ABI.
+      "$AIR2LEAN_ZIG_NATIVE" build-obj -OReleaseSafe -target wasm32-freestanding -fno-emit-bin "$s"
+      # The wasm32-wasi test binary runs under Node's WASI (32-bit usize boundaries).
+      "$AIR2LEAN_ZIG_NATIVE" test -OReleaseSafe -target wasm32-wasi --test-no-exec \
+        -femit-bin="$wasm_dir/test.wasm" "$s"
+      node --no-warnings "$case_dir/run-wasi.mjs" "$wasm_dir/test.wasm"
+    done
     exit ;;
   --check) [ "$#" -le 1 ] || { echo 'usage: check.sh [--check]' >&2; exit 2; } ;;
   *) echo 'usage: check.sh [--check|--native|--export OUTPUT_DIR]' >&2; exit 2 ;;
@@ -66,6 +70,25 @@ for pair in Wasm32:wasm32-freestanding Wasi:wasm32-wasi X64:x86_64-linux; do
   "${lean_cmd[@]}" -R "$work" -o "$work/PointerWidth/$ns/Gen.olean" "$work/PointerWidth/$ns/Gen.lean"
 done
 "${lean_cmd[@]}" -R "$case_dir" "$case_dir/PointerWidth/Proofs.lean"
+# names.zig (`@tagName`, `@errorName`) per Zig version of exports.json and target. The proofs are
+# stated once (0.17.1) and instantiated for 0.16.0 (scripts/fixtures.py instance).
+python3 -B scripts/fixture-exports.py check pointer-width
+for v in 0.17.1 0.16.0; do
+  V="V${v//./_}"
+  for pair in Wasm32:wasm32-freestanding Wasi:wasm32-wasi X64:x86_64-linux; do
+    ns=${pair%%:*}
+    t=${pair#*:}
+    gen="PointerWidth/Names/$V/$ns/Gen.lean"
+    mkdir -p "$(dirname "$work/$gen")"
+    "$translator" "$case_dir/air/$v/names/$t" -o "$work/$gen" \
+      --namespace "PointerWidth.Names.$V.$ns" --prefix names.
+    cmp "$work/$gen" "$case_dir/$gen"
+    "${lean_cmd[@]}" -R "$work" -o "$work/${gen%.lean}.olean" "$work/$gen"
+  done
+  [ "$V" = V0_17_1 ] || python3 -B scripts/fixtures.py instance \
+    "$case_dir/PointerWidth/Names/V0_17_1/Proofs.lean" --subst "V0_17_1=$V"
+  "${lean_cmd[@]}" -R "$case_dir" "$case_dir/PointerWidth/Names/$V/Proofs.lean"
+done
 # Layout, overflow and bounds mutants of the retained translations (mutations.py): each builds,
 # and PointerWidth.Proofs fails in the theorems of the changed fact.
 python3 -B "$case_dir/mutations.py" --self-test
