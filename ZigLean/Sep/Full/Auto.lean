@@ -1824,14 +1824,22 @@ partial def arithGoals (g : MVarId) (quick := false) (cases := true) : TacticM (
   if !t.hasFVar && !t.hasMVar then
     if ← closeWith g (← `(tactic| decide)) then return []
     -- (a closed fact whose instance the elaborator's reduction does not evaluate, the size of a
-    -- structure's encoding `(Enc.encode v).size`: the kernel evaluates it). The kernel checks
-    -- `decide`'s proof `of_decide_eq_true inst rfl` as `decide +kernel` checks its auxiliary
-    -- lemma (the same check, within the same limits), over imported constants in the imports'
-    -- environment (`importEnvFor?`), and the goal takes the proof itself, which the kernel checks
-    -- again with the theorem: an auxiliary lemma would wait for every earlier theorem of the
-    -- file, so that the file's theorems ran one after the other.
+    -- structure's encoding `(Enc.encode v).size`: the kernel evaluates it, `decide +kernel`).
+    -- Over imported constants, the kernel makes `decide +kernel`'s check of `decide`'s proof
+    -- `of_decide_eq_true inst rfl` in the imports' environment (`importEnvFor?`,
+    -- `kernelDecides?`), and the goal takes the proof itself, which the kernel checks again with
+    -- the theorem: `decide +kernel`'s auxiliary lemma would wait for every earlier theorem of the
+    -- file, so that the file's theorems ran one after the other. A fact the kernel finds false
+    -- there is false for `decide +kernel` too.
+    let mut kernel := true
     if let some pf ← observing? (mkDecideProof t) then
-      if ← kernelChecks ((← importEnvFor? pf).getD (← getEnv)) t pf then g.assign pf; return []
+      if let some env ← importEnvFor? pf then
+        match kernelDecides? env (mkApp2 (mkConst ``Decidable.decide) t pf.appFn!.appArg!) with
+        | some true => g.assign pf; return []
+        | some false => kernel := false
+        | none => pure ()
+    if kernel then
+      if ← closeWith g (← `(tactic| decide +kernel)) then return []
   if let some (ty, x, y) := t.eq? then
     -- an unknown ghost list that the equation fixes (a loop's parameter at its entry,
     -- `?xs = [].reverse ++ xs`): its value in the normal form of lists (`xs`)
