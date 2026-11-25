@@ -272,6 +272,9 @@ def asmIsaViolation (stmts : List AsmStmt) (v : Violation) : String :=
       instruction of the block defines (an unbound register, or the bits above a narrower input)"
   | .staleRead i l => s!"{at_ i} reads the input {asmIsaLocName l} after a write to an output \
       that the compiler may place in the same register (declare the output early-clobber, '=&')"
+  | .staleAddress i l => s!"{at_ i} accesses {asmIsaLocName l} after a write to a register output \
+      that the compiler may place in the register of its address (declare the output \
+      early-clobber, '=&')"
   | .undeclaredWrite i l => s!"{at_ i} writes {asmIsaLocName l}, which is neither an output nor \
       a clobber of the block"
   | .outputUndefined k => s!"output {k} is not written by the block at the width of its type"

@@ -865,7 +865,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
      for every emitted block, `airIsa_<hash>_wf`) rejects a block that reads bits that neither
      an input nor an earlier instruction defines, that writes a register or memory operand that
      is neither an output nor a clobber, that reads an input after a write to an output it may
-     share a register with, or that leaves an output undefined at its type's width. That the
+     share a register with, that accesses a memory operand after a write to a register output
+     without `&` (which may take the register of the operand's address), or that leaves an
+     output undefined at its type's width. That the
      value of a checked block is the same under every such placement, and independent of the
      registers' other contents, is the intent of the check; it is not yet a Lean theorem.
   5. *Flags.* The model has no flag state. No modelled instruction reads a flag, and Zig's LLVM

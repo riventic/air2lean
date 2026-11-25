@@ -108,6 +108,17 @@ example : ({ instrs := [.bin .mov .w16 (.loc (.vreg 1)) (.vreg 0)], inputs := [(
              outputs := [(.vreg 0, .w64)] } : Block).check = some (.outputUndefined 0) := by decide
 example : ({ instrs := [.bin .mov .w32 (.loc (.vreg 1)) (.vreg 0)], inputs := [(.vreg 1, .w32)],
              outputs := [(.vreg 0, .w64)] } : Block).check = none := by decide
+-- `movl %[a], %[r]; movl %[r], %[m]` (`=r`, `=m`, `r`): the compiler may put `r` in the register
+-- that holds `m`'s address, so the store after the write to `r` may go elsewhere. With `=&r`
+-- the block is accepted.
+example : ({ instrs := [.bin .mov .w32 (.loc (.vreg 2)) (.vreg 0),
+                        .bin .mov .w32 (.loc (.vreg 0)) (.mem 1)],
+             inputs := [(.vreg 2, .w32)], outputs := [(.vreg 0, .w32), (.mem 1, .w32)] } : Block).check
+    = some (.staleAddress 1 (.mem 1)) := by decide
+example : ({ instrs := [.bin .mov .w32 (.loc (.vreg 2)) (.vreg 0),
+                        .bin .mov .w32 (.loc (.vreg 0)) (.mem 1)],
+             inputs := [(.vreg 2, .w32)], outputs := [(.vreg 0, .w32), (.mem 1, .w32)],
+             early := [.vreg 0] } : Block).check = none := by decide
 -- A clobbered register carries an operand.
 example : ({ instrs := [], inputs := [(rax, .w32)], outputs := [], clobbers := [0] } : Block).check
     = some .declaration := by decide

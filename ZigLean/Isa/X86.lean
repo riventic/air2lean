@@ -256,6 +256,9 @@ choose and whatever the registers held before:
 * an output without `&` may get the register of an input (the compiler assumes that every input
   is read before any output is written), so after a write to such an output no other input may
   be read;
+* the address of a memory operand is an input too (a pointer in a register the compiler
+  chooses), so after a write to a register output without `&` no memory operand may be
+  accessed;
 * a memory operand is accessed at exactly its own width;
 * every output holds defined bits at the end.
 
@@ -274,6 +277,9 @@ inductive Violation where
   /-- Instruction `i` reads the input `l` after a write to an output that may share its
   register. -/
   | staleRead (i : Nat) (l : Loc)
+  /-- Instruction `i` accesses the memory operand `l` after a write to a register output that
+  may share the register holding `l`'s address. -/
+  | staleAddress (i : Nat) (l : Loc)
   /-- Instruction `i` writes `l`, which is neither an output nor a clobber (or is `rsp`). -/
   | undeclaredWrite (i : Nat) (l : Loc)
   /-- Output `k` does not hold defined bits at the end of the block. -/
@@ -356,7 +362,8 @@ def checkReads (b : Block) (n : Nat) (t : Track) : List (Loc × Width) → Optio
   | (l, w) :: rest =>
     if !b.memWidthOk l w then some (.memWidth n l)
     else if t.defined l < w.bits then some (.undefinedRead n l)
-    else if t.stale.contains l then some (.staleRead n l)
+    else if t.stale.contains l then
+      some (if l.isMem then .staleAddress n l else .staleRead n l)
     else checkReads b n t rest
 
 def applyWrites (b : Block) (n : Nat) : List (Loc × Width) → Track → Except Violation Track
@@ -364,6 +371,7 @@ def applyWrites (b : Block) (n : Nat) : List (Loc × Width) → Track → Except
   | (l, w) :: rest, t =>
     if !b.memWidthOk l w then .error (.memWidth n l)
     else if !b.writable l then .error (.undeclaredWrite n l)
+    else if l.isMem && t.stale.contains l then .error (.staleAddress n l)
     else applyWrites b n rest
       { defined := fun l' =>
           if l' = l then
@@ -373,7 +381,9 @@ def applyWrites (b : Block) (n : Nat) : List (Loc × Width) → Track → Except
           else t.defined l'
         stale :=
           if b.outputLocs.contains l && !b.early.contains l then
-            t.stale ++ b.inputLocs.filter fun i => !b.outputLocs.contains i && mayShare i l
+            t.stale ++ b.inputLocs.filter (fun i => !b.outputLocs.contains i && mayShare i l) ++
+              -- A register output may take the register of a memory operand's address.
+              (if l.isMem then [] else (b.inputLocs ++ b.outputLocs).filter (·.isMem))
           else t.stale }
 
 def checkOutputs (t : Track) : Nat → List (Loc × Width) → Option Violation
