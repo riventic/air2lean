@@ -2014,6 +2014,18 @@
    ],
    "deletion_plan": "Restate `putc_trace`, `putc_eventually`, `statusTwice_trace`, `clearStatus_trace`, `sendThenStatus_trace` and `elapsed_trace` as `FTotalTriple`s over the trace resource, walked by `fsym`; delete the run-equation lemmas (`status_read`, `data_write`, `data_ptr`, `loop_busy`, `loop_ready`, `poll_run`, `tsc_run`) and the local `after`/`ticked` memory updates. The semantic mutants (device-mutants.py) keep their expected failures against the new statements.",
    "note": "Not a weakening: the run equations fix the whole final memory (trace, tick count, everything else unchanged), which is stronger than a triple with a frame; only the proof style is outside the framework."
+  },
+  {
+   "id": "fba-0171-wrapper-stack",
+   "title": "std.mem.Allocator wrapper contracts with stack room for Zig 0.17.1's result slots",
+   "status": "open",
+   "requester": "fba-0171 lane (2026-11-25)",
+   "progress": "Open, a statement decision. Zig 0.17.1's `mem.Allocator.alloc`, `reallocAdvanced`, `allocSentinel` (24 bytes) and `create` (16 bytes) keep their error-union result in a stack slot (`Zig.allocStack`); 0.16.0's return it as a value. tests/roadmap/alloc-fba/AllocFba/Wrappers.lean states the wrapper contracts as `FTotalTriple`s with no stack resource, which do not hold for the 0.17.1 translation (the push may throw `.stackOverflow`: `FTriple.allocStack` is partial, the total rule `FTotalTriple.allocStack_sp` needs `cur t ⋆ sp t S D` with room), and `Client.client_spec`'s room `D + stackCharge 24 8 ≤ S` covers the client's frame but not a wrapper's slot behind it. Build of the library over the 0.17.1 translation (p0, 2026-11-25): only AllocFba.Wrappers fails (alloc_spec, create_spec, dupe_spec, allocSentinel_spec, reallocAdvanced_spec, realloc_spec; free_spec, freeSentinel_spec, destroy_spec fail at ledger 21a). Options: (a) one statement for every version with the stack room as an owned resource (`cur t ⋆ sp t S D ⋆ ⟪D + need ≤ S⟫` in the precondition, `sp t S D` back), true for 0.16.0 too but a stronger precondition than its current statement; (b) the stack need per translation (`when_defined`, as `Proofs/Lists/Append.lean`'s `hdrVal`), which keeps 0.16.0's statement but still needs the `sp` token in it; (c) partial-correctness wrapper contracts in the plain mode (as `Interfaces/SentinelSpec.lean`), a weakening: rejected.",
+   "request": "Decide how the generated std.mem.Allocator wrapper contracts state stack room, so that one Wrappers.lean/Client.lean text holds over the 0.16.0 and 0.17.1 translations.",
+   "workaround_sites": [
+    "tests/roadmap/alloc-fba/check.sh"
+   ],
+   "deletion_plan": "Once the wrapper contracts are restated (and ledger 21a is closed): the retained AllocFba/Gen.lean becomes the 0.17.1 translation, and check.sh builds and audits the whole library over the 0.16.0 translation in its check tree instead of only Full/Creation/CreationDomain/Eval over 0.17.1's."
   }
  ],
  "mechanisms": [
