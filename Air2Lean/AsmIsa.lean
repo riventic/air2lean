@@ -136,9 +136,9 @@ def asmIsaArg (names : Array String) (locs : Array Loc) (widths : Array Width) (
     let name := String.ofList (rest.takeWhile (· != ']'))
     if rest.dropWhile (· != ']') != [']'] || name.any (· == ':') then
       throw (.uncovered s!"operand '{text}' (a modifier or trailing text)")
-    else match names.idxOf? name with
-      | none => throw (.uncovered s!"operand '{text}' names no operand of the block")
-      | some k =>
+    else match asmOperandIndex names name with
+      | .error e => throw (.uncovered e)
+      | .ok k =>
         match locs[k]?, widths[k]? with
         | some l, some w => pure (.loc l w !l.isMem)
         | _, _ => throw (.uncovered s!"operand '{text}' has no location")
