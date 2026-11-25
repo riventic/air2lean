@@ -1408,7 +1408,7 @@ theorem WInv.recordStep {P : ThreadId → LPh} {m : Mem} {t : ThreadId} {k : Acc
   have hcs : t < m.clocks.size := by rw [hi.csize]; exact ht
   refine ⟨rfl, fun e he => ?_, rfl, by simp [Mem.recordAt], ?_, ?_, rfl, .inl rfl,
     rfl, fun _ _ h => h, fun _ h => h, .inl rfl, fun e he => ?_, .of_atomics rfl,
-    ⟨rfl, rfl, rfl⟩,
+    ⟨rfl, rfl, rfl, rfl⟩,
     Mem.MsgCov.recordAt, Nat.le_refl _, fun _ _ => ⟨some, AMap.of_eq rfl rfl⟩,
     newQ_of_sub fun _ h => h⟩
   · simp only [Mem.recordAt, Array.mem_push] at he

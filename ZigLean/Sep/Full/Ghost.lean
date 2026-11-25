@@ -1218,7 +1218,7 @@ theorem Ghost.devAt_add_dev (D : DevState) (g gF : Ghost) (X : DevState) :
 theorem Holds.dev {m : Mem} {r rF : Res} {R : FAssn} {D : DevState} (hh : Holds m r rF)
     (h : (devOwn D ⋆ R) r) : m.dev = D := by
   obtain ⟨r₁, r₂, -, rfl, ⟨-, -, g1⟩, -⟩ := h
-  exact (hh.ghost.2.2.2.dev_only (e := fun X => r₂.gh.dev X + rF.gh.dev X) fun X => by
+  exact (hh.ghost.2.2.2.dev_only (D := D) (e := fun X => r₂.gh.dev X + rF.gh.dev X) fun X => by
     simp only [Ghost.add_dev, g1, Ghost.devAt_dev]; omega).1
 
 /-- **Two `devOwn` never compose**: a held resource has at most one device fragment. -/
@@ -1226,8 +1226,8 @@ theorem Holds.devOwn_excl {m : Mem} {r rF : Res} {R : FAssn} {D D' : DevState} (
     (h : (devOwn D ⋆ devOwn D' ⋆ R) r) : False := by
   obtain ⟨r₁, r₂, -, rfl, ⟨-, -, g1⟩, ⟨r₃, r₄, -, rfl, ⟨-, -, g3⟩, -⟩⟩ := h
   have h3 : (r₃.gh.add r₄.gh).dev D' + rF.gh.dev D' = 0 :=
-    (hh.ghost.2.2.2.dev_only (e := fun X => (r₃.gh.add r₄.gh).dev X + rF.gh.dev X) fun X => by
-      simp only [Ghost.add_dev, g1, Ghost.devAt_dev]; omega).2 D'
+    (hh.ghost.2.2.2.dev_only (D := D) (e := fun X => (r₃.gh.add r₄.gh).dev X + rF.gh.dev X)
+      fun X => by simp only [Ghost.add_dev, g1, Ghost.devAt_dev]; omega).2 D'
   rw [Ghost.add_dev, g3, Ghost.devAt_dev, DCell.one_self] at h3
   omega
 
@@ -1274,7 +1274,7 @@ theorem Holds.addDev {m : Mem} {r rF : Res} (hh : Holds m r rF) (h0 : ∀ X, (r.
 /-- The resource with `devOwn D` added. -/
 theorem devOwn_sep_intro {R : FAssn} {r : Res} {D : DevState} (h : R r) :
     (devOwn D ⋆ R) ⟨r.heap, r.know, (Ghost.devAt D).add r.gh⟩ :=
-  ⟨⟨FHeap.empty, Know.none, Ghost.devAt D⟩, r, FHeap.disjoint_empty _,
+  ⟨⟨FHeap.empty, Know.none, Ghost.devAt D⟩, r, (FHeap.disjoint_empty _).symm,
     by simp [FHeap.empty_union, Know.none_union], devOwn_intro D, h⟩
 
 end Full
