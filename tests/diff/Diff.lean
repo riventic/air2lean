@@ -973,7 +973,8 @@ def allocationOracleRule (j : Json) : IO (Nat → Nat → Bool) := do
 `fail_at`, `failures`, `max_bytes`, `oracle` (a list of rules: `AllocPolicy.fails` holds when
 one matches) and `budget` (`AllocPolicy.budget`). This is the test-model policy, not native
 malloc. The harness keeps its 1 MiB request cap (`AllocPolicy.harness`,
-`TestAllocator.max_alloc_bytes`) explicitly; the model default has no fixed cap. -/
+`TestAllocator.max_alloc_bytes`) explicitly; the model default has no fixed cap, and
+`"max_bytes": null` selects it (`unboundedAllocBytes`; natively `maxInt(usize)`). -/
 def withFailAt {α : Type} (fa : Json) (r : Zig.MemM α) : IO (Zig.MemM α) := do
   let (f, policy) ← match fa with
     | .null => pure (none, Zig.AllocPolicy.harness)
@@ -981,8 +982,10 @@ def withFailAt {α : Type} (fa : Json) (r : Zig.MemM α) : IO (Zig.MemM α) := d
       let n ← allocationPolicyNat fa
       pure (some n, Zig.AllocPolicy.harness)
     | .obj _ => do
-      let nat ← allocationPolicyFields fa ["fail_at", "max_bytes", "budget"] ["fail_at", "budget"]
-        (skip := ["failures", "oracle"])
+      let nat ← allocationPolicyFields fa ["fail_at", "max_bytes", "budget"]
+        ["fail_at", "max_bytes", "budget"] (skip := ["failures", "oracle"])
+      -- `"max_bytes": null` is the model default, no cap; a missing field is the harness cap.
+      let uncapped := match fa.getObjVal? "max_bytes" with | .ok .null => true | _ => false
       let failures ← match fa.getObjVal? "failures" with
         | .ok j => do
           let items ← getArr j
@@ -992,7 +995,7 @@ def withFailAt {α : Type} (fa : Json) (r : Zig.MemM α) : IO (Zig.MemM α) := d
         | .ok j => do (← getArr j).toList.mapM allocationOracleRule
         | .error _ => pure []
       let policy : Zig.AllocPolicy :=
-        { maxBytes := (nat "max_bytes").getD Zig.maxAllocBytes
+        { maxBytes := if uncapped then Zig.unboundedAllocBytes else (nat "max_bytes").getD Zig.maxAllocBytes
           failures := failures
           fails := fun i n => rules.any fun rule => rule i n
           budget := nat "budget" }

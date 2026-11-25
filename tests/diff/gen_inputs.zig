@@ -1760,6 +1760,9 @@ fn writeFailAt(writer: anytype, rng: std.Random, i: usize, max: usize) !void {
 /// object with a failure oracle and a live-byte budget (M03, docs/allocation-policy.md).
 const policy_lines = 40;
 
+/// The lines of `sumRange` under the model's default policy, with requests above 1 MiB.
+const large_lines = 6;
+
 /// The generator of one function's policy lines: its own stream, so the `N` lines of every
 /// function stay the same.
 fn policyPrng(comptime name: []const u8) std.Random.DefaultPrng {
@@ -1835,6 +1838,21 @@ fn genLists(rng: std.Random) !void {
             try writer.writeAll("{\"bufs\":[],\"args\":[");
             try writePolicy(writer, policy_rng, 1, 160);
             try writer.print(",{d}]}}\n", .{policy_rng.uintAtMost(usize, 40)});
+        }
+        // Under the model's default policy (`"max_bytes": null`: no cap), requests above the
+        // harness's 1 MiB cap succeed: a buffer of 1 MiB + 4 bytes up to 4 MiB, written and read
+        // item by item (M03). An overflow of `4 * n` still fails, before any request. A request
+        // the host cannot hold is not an input: the model represents every allocated byte.
+        var large_prng = policyPrng("large sumRange");
+        const large_rng = large_prng.random();
+        for (0..large_lines) |k| {
+            const n: usize = if (k == 0)
+                (1 << 18) + 1
+            else if (k + 1 == large_lines)
+                1 << 62
+            else
+                large_rng.intRangeAtMost(usize, (1 << 18) + 2, 1 << 20);
+            try writer.print("{{\"bufs\":[],\"args\":[{{\"max_bytes\":null}},{d}]}}\n", .{n});
         }
     }
     // dupe(xs: []const u8), evens(xs: []const u32), listSum(xs: []const u32): the allocation that
