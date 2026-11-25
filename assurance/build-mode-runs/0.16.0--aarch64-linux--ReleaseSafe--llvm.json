@@ -1,12 +1,12 @@
 {
   "backend": "llvm",
-  "cases": 86210,
+  "cases": 86410,
   "counts": {
-    "error_return_match": 892,
+    "error_return_match": 1002,
     "illegal_exclusion": 794,
     "panic_match": 4922,
     "unspecified_exclusion": 1669,
-    "value_match": 77933
+    "value_match": 78023
   },
   "emulated": false,
   "examples": {
@@ -18,7 +18,7 @@
     "floats": 2100,
     "iogroup": 40,
     "layout": 12241,
-    "lists": 1504,
+    "lists": 1704,
     "options": 900,
     "pointers": 3300,
     "recursion": 1200,
@@ -209,7 +209,7 @@
     "asm": "host_excluded",
     "threadsync": "version_excluded"
   },
-  "sources_sha256": "c2ec593143580960677995f58d2ac95959268c3253bf72801d233048e5133242",
+  "sources_sha256": "4daed57a6886a073551ba5e637b5890e094e314153c0ba4720848b808847f79c",
   "stock_zig_sha256": "6e2989a7efbd4e81acbacb6c6378e34340d8e88bb023b10c4a941021be55cdcb",
   "target": "aarch64-linux",
   "triage": [],
