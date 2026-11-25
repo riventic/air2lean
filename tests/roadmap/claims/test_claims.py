@@ -393,7 +393,7 @@ class ClassifyTests(unittest.TestCase):
         report = copy.deepcopy(FIXTURE)
         for theorem in report['theorems']:
             if theorem['name'] == 'ClaimFixture.ret_run':
-                theorem['runtime_modules'] = theorem['runtime_modules'] + ['ZigLean.Conc.Word']
+                theorem['runtime_modules'] = theorem['runtime_modules'] + ['ZigLean.Conc.Base.Word']
         goal = {'theorem': 'ClaimFixture.ret_run', 'strength': 'total_correctness', 'domain': 'all'}
 
         def status(source, targets):
