@@ -479,16 +479,15 @@ def main(argv=None):
               '\n'.join('%-15s %-5s %s' % (r['step'], r['scope'], ', '.join(r['outputs'])) for r in rows))
         return 0
     if a.check and not only:
-        # preflight runs the checks of these steps (plus the record gates) except the op table and
-        # the try-pointers pins, checked here; the claims fixture needs a Lean build (--only claims).
+        # preflight runs the checks of these steps (plus the record gates) except the op table,
+        # checked here; the claims fixture needs a Lean build (--only claims).
         code = run(['bash', 'scripts/preflight.sh'] + (['--pr'] if a.pr else []), check=False).returncode
         if not a.pr:
-            for name, function in (('op-table', step_op_table), ('pins', step_pins)):
-                try:
-                    function(True)
-                except (Failed, OSError) as error:
-                    log('FAILED %s: %s' % (name, error))
-                    code = code or 1
+            try:
+                step_op_table(True)
+            except (Failed, OSError) as error:
+                log('FAILED op-table: %s' % error)
+                code = code or 1
         return code
     selected = [s for s in STEPS if (not only or s[0] in only) and not (a.pr and s[1] == 'tree')]
     if any(s[0] in ('gen', 'op-table', 'inventory') for s in selected) and 'translator' not in [s[0] for s in selected]:

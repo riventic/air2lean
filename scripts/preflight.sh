@@ -26,7 +26,8 @@
 #   one proof framework (only shrinks)    proof-framework.py (base: --base or CI's base branch)
 #   fsym engine ledger                    engine-ledger.py (rows and view; every "ledger #N"
 #                                         citation names a row; a closed row is no workaround)
-#   AIR and trust                         validate-air.py, trust-report.py,
+#   AIR and trust                         validate-air.py, fixture-exports.py check, regen.py
+#                                         --check --only pins, trust-report.py,
 #                                         float-semantics.py, mutation-map.py, model inclusion
 #   review ledger (structure only)        release-record.py ledger --allow-unfetched
 #   coverage inventories                  coverage.py l14 over the regenerated inventories
@@ -109,6 +110,10 @@ check 'one proof framework: ratchet regressions' python3 -B -m unittest discover
 check 'fsym engine ledger: rows, view, citations' python3 -B scripts/engine-ledger.py check
 check 'fsym engine ledger: gate regressions' python3 -B -m unittest discover -s tests/roadmap/engine-ledger -p 'test_*.py'
 check 'golden AIR export validation' python3 -B scripts/validate-air.py
+# No compiler: a change to zig-patch/, a fixture's source or its manifest makes its committed
+# export stale (regenerate: scripts/regen.sh --only exports,pins).
+check 'fixture AIR export locks' python3 -B scripts/fixture-exports.py check
+check 'try-pointers exporter and translation pins' python3 -B scripts/regen.py --check --only pins
 check 'stage trust report' python3 -B scripts/trust-report.py check
 check 'float-semantics labels' python3 scripts/float-semantics.py check
 check 'mutation map' python3 -B scripts/mutation-map.py check

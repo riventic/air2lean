@@ -2,12 +2,13 @@
   "air_sha256": {
     "stage2-air/0.16.0/stage2-x86_64-divergences.modF16.json": "607cfec5fcb7098776cec2bcaffdb83b78663a6e0af7c8c8668341ff4b40cc74",
     "stage2-air/0.16.0/stage2-x86_64-divergences.setNib.json": "0efa1b91dfe576068ba24cf5e67d9d9100cc27887bde3286c6a2a02be9125309",
+    "stage2-air/0.17.1/export-table.air2lean": "8f15a70932389353de03b3bf313b5554950ac128056fa7fda1e292f54e18c94e",
     "stage2-air/0.17.1/stage2-x86_64-divergences.modF16.json": "47643ec725cbcd3dc61a2758100c94b7610d781a52a1ca16417d846ae6b6a68d",
     "stage2-air/0.17.1/stage2-x86_64-divergences.setNib.json": "0ce22bcaee82df9f39d9fa1dd6b052f67f84af4d0c1d185d378cc57c4ae969ae"
   },
   "compilers": {
-    "0.16.0": "c35d1d0fd41d541243c0847224f1f9567baa82e2bc9fca8ea5e5cc6bfa4a8294",
-    "0.17.1": "84a8a3bdf2a5766e405d422289fdcea5eab58b4acca120b145ecbcac86b75e8f"
+    "0.16.0": "ac86370329eafe688257f5404d52c03c5f6f447fd99db8b9d35f7e92272ea3fa",
+    "0.17.1": "a7a36d6ec8882fa27172eafd4215b5535dcac0b47315f9e2f20ddb7291b93852"
   },
   "manifest_sha256": "cdd28f1454aad8fde340909fbde18c6c12b02c87f11ae07336019ddd7f004315",
   "schema": 1,

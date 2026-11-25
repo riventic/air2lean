@@ -1,0 +1,36 @@
+{
+ "schema": 12,
+ "zig_version": "0.17.1",
+ "exports": [
+  {
+   "name": "_start",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "std",
+    "name": "start._start",
+    "cc": "naked"
+   }
+  },
+  {
+   "name": "getauxval",
+   "linkage": "weak",
+   "visibility": "default",
+   "function": {
+    "module": "std",
+    "name": "os.linux.getauxvalImpl",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__tls_get_addr",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "std",
+    "name": "os.linux.tls.comptime__struct_720.__tls_get_addr",
+    "cc": "x86_64_sysv"
+   }
+  }
+ ]
+}
