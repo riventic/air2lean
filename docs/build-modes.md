@@ -69,6 +69,11 @@ ReleaseSafe does not check. The memory-model audit
 gap, now closed: an inexact float `@divExact` quotient, which the ReleaseSafe check catches only
 when it is NaN, is `.illegal` in the model ([illegal-behavior.md](illegal-behavior.md)), and the
 re-recorded runs of all three targets record it as `illegal_exclusion`, with no mismatch.
+**Open finding (BM-1, 2026-11-25).** The premise also fails on legal executions that use a bare
+union: its hidden safety tag exists only with runtime safety, so its layout and `@sizeOf` differ
+in ReleaseFast and ReleaseSmall, and a no-throw proof can transfer a wrong value or miss an
+out-of-bounds index ([2026-11-25-build-modes-0171.md](architecture-audit/2026-11-25-build-modes-0171.md)).
+The premise change it needs is a maintainer decision.
 
 **Fixed.** Address observation (MM-1, MM-2): every block's address is the environment's
 placement (`Mem.place`, premise SEM-07), and generated theorems hold for every placement, so a
@@ -142,18 +147,15 @@ ReleaseSafe and Debug runs of x86_64-linux (arc, native; 87614 cases), aarch64-l
 `linux/arm64` container; 86410) and aarch64-macos (Apple host; 86410), each against that host's
 0.17.1 translations (`check-tree.py create --host-goldens 0.17.1`): 0 mismatches, 0 `ub_excluded`.
 `examples/threadsync` is `version_excluded` (its `zig-versions` does not list 0.17.1). There is
-no ReleaseFast or ReleaseSmall record for 0.17.1: both modes show a mismatch that is not triaged
-(`layout.setNum`, 171 cases, on all three hosts; `floatops.op80`, 2 cases, ReleaseSmall on
-x86_64-linux). The 0.16.0 records show neither. Two `tests/diff/layout/inputs/setNum.jsonl` rows
-(1: `big=false`, 4: `big=true`) show the first. The model stores the hidden tag byte of the bare
-union `Num` at offset 4 (`NumTag.small`/`NumTag.int`, 1 and 0); an unchecked build has no tag and
-leaves the byte as it was (input 1: native buffer `a0b02a43002a5f8a`, the model's store gives tag
-byte `01`; input 4: native `a7c2e12901eec554`, model tag byte `00`). The 0.16.0 run compares equal
-on the same native bytes; the cause of that difference (the 0.17.1 `Gen.lean` encodes `NumTag`
-with `Zig.intEncExt`) is not established. The second: `@trunc` of the
-f80 pseudo-denormal `0x00008000000000000000` (rows 3647 and 3741) returns it unchanged in 0.17.1
-Debug, ReleaseSafe and ReleaseFast and in the model, and `+0` in ReleaseSmall (and in every 0.16.0
-mode).
+no ReleaseFast or ReleaseSmall record for 0.17.1: `layout.setNum` (171 cases, all three hosts)
+mismatches there: it is the open finding BM-1 above (the model writes `Num`'s hidden tag byte at
+offset 4, which the unchecked build's 4-byte `Num` does not have;
+[reproducer](../tests/roadmap/build-modes/reproducers/bare-union-safety-tag.zig)). The 0.16.0
+runs hide it only because the oracle renders the 0.16.0 tag byte as a wildcard (BM-3). The other
+0.17.1 mismatch, `floatops.op80`
+`@trunc` of the zero-extension f80 pseudo-denormal `0x00008000000000000000` (2 cases, ReleaseSmall
+on x86_64-linux), is fixed (BM-2): its result depends on the mode and target, so the model gives
+`.unspecified` there (docs/floats.md group I).
 
 **aarch64-linux runs.** They were recorded from `scripts/diff.sh` in a native `linux/arm64`
 container (Ubuntu 24.04, stock Zig 0.16.0 `aarch64-linux`, the Lean toolchain from

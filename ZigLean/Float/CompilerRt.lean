@@ -131,14 +131,18 @@ def Float.isZeroExtPseudoDenormalF80 {fmt : FloatFmt} (x : Float fmt) : Bool :=
   x.isPseudoDenormalF80 && x.bits.toNat % 2 ^ 63 == 0
 
 /-- Zig 0.17.1's f80 `@trunc` (`truncl` → `trunc_f80`, `@floatCast(trunc_f128(x))`): when the
-f128 extension has no fraction bits to clear, `trunc_f128` returns its argument, and LLVM 22 folds
-`fptrunc (fpext x)` back to the original f80 `x`. For a value that is its own truncation this is
-the same result; for a pseudo-denormal whose extension is a signed zero the original encoding is
-returned instead of zero. Observed with stock 0.17.1 on x86_64-linux (`truncl`'s
-disassembly reloads the saved operand; a 200,000-encoding scan finds no other difference from
-0.16.0, which returns the signed zero). -/
+f128 extension has no fraction bits to clear, `trunc_f128` returns its argument, and LLVM 22 may
+fold `fptrunc (fpext x)` back to the original f80 `x`. For a value that is its own truncation
+both give the same result; for a pseudo-denormal whose extension is a signed zero they do not,
+and which one a binary returns depends on the build mode and the target: stock 0.17.1 returns the
+operand unchanged in Debug, ReleaseSafe and ReleaseFast on x86_64-linux and in Debug and
+ReleaseSafe on x86_64-macos, and the signed zero in ReleaseSmall on x86_64-linux, in ReleaseFast
+and ReleaseSmall on x86_64-macos and in every mode of 0.16.0
+(`docs/architecture-audit/2026-11-25-build-modes-0171.md`). Zig defines no value for this
+encoding, so the result is `.unspecified` (group C). A 200,000-encoding scan finds no other
+difference from 0.16.0. -/
 def Float.truncRt017Chk {fmt : FloatFmt} (x : Float fmt) : Result (Float fmt) :=
-  if x.isZeroExtPseudoDenormalF80 then pure x else Float.truncChk x
+  if x.isZeroExtPseudoDenormalF80 then throw .unspecified else Float.truncChk x
 
 theorem Float.truncRt017Chk_eq {fmt : FloatFmt} (x : Float fmt)
     (h : x.isPseudoDenormalF80 = false) : Float.truncRt017Chk x = Float.truncChk x := by
