@@ -955,9 +955,33 @@ where
       instantiateMVars m
     -- Without unknowns, one depth deeper: `omega`'s goals (the unshared certificate) and
     -- postponed constraints are dropped with the depth; a proof needing one is no proof
+    -- (the facts that are not locals enter `omega` as locals, their proofs applied afterwards:
+    -- `omega`'s own term operations, `mkLambdaFVars` at each case split and `instantiateMVars`,
+    -- then walk the certificate only, not the facts' proofs, which hold earlier certificates)
+    let proveAbs : MetaM Expr := do
+      let idx := (List.range facts.size).toArray.filter fun i => !facts[i]!.isFVar
+      if idx.isEmpty then return ← prove
+      let decls ← idx.mapM fun i => do
+        return (Name.mkSimple s!"fact{i}", ← instantiateMVars (← inferType facts[i]!))
+      withLocalDeclsDND decls fun hs => do
+        let mut fs := facts
+        for i in idx, h in hs do fs := fs.set! i h
+        let m ← mkFreshExprMVar ty
+        let before := (← getLCtx).lastDecl.map (·.fvarId)
+        if let some g ← m.mvarId!.falseOrByContra then
+          g.withContext do
+            let neg := match (← getLCtx).lastDecl with
+              | some d => if some d.fvarId != before then #[d.toExpr] else #[]
+              | none => #[]
+            withTheReader Core.Context
+              (fun c => { c with maxRecDepth := Nat.max c.maxRecDepth 20000 }) do
+              Lean.Elab.Tactic.Omega.omega (neg ++ fs).toList g
+        let pf ← instantiateMVars m
+        -- (the proofs substituted back: the term as `omega` on the facts would give it)
+        return pf.replaceFVars hs (idx.map (facts[·]!))
     let proveClosed : MetaM (Option Expr) := do
       let some pf ← withNewMCtxDepth do
-          let pf ← prove
+          let pf ← proveAbs
           return if (← getPostponed).isEmpty then some pf else none
         | return none
       let mctx ← getMCtx
