@@ -1,4 +1,4 @@
-import Proofs.Threadsync.Variant
+import Proofs.Threadsync.Futex
 import ZigLean.Sep.Full.Mutex
 import ZigLean.Sep.Full.LockSteps
 import ZigLean.Sep.Full.AutoWP
@@ -173,6 +173,21 @@ theorem unlock_eq (p : Ptr) : Thread_Mutex_unlock p =
   simp only [StateT.run'_eq, StateT.run_bind, StateT.run_pure, pure_bind, callC, StateT.run_lift,
     bind_assoc, map_bind, map_pure]
 
+/-- `unlock`'s wake of one waiter (translated `Thread.Futex.wake`, down to the OS wake:
+`Futex.wake_wp`, `wp_osWake`), by thread `t` at `wake` (`g`): it goes on at `out`. -/
+theorem wake_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {t : ThreadId}
+    {G : ThreadId → γ} {m : Mem} {n : Nat} {g : γ} (hg : L.ph g = .wake) (hok : ok g)
+    (hi : P.inv (upd G t g) m) {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop}
+    (h : ∀ k, n = k + 1 → ∀ G₁ m', m'.current = t →
+      P.inv (upd G₁ t (L.set g .out rnil)) m' → Q () G₁ m' k) :
+    P.WP t (Thread_Futex_wake L.ptr (1 : BitVec 32)) Q G m n :=
+  Futex.wake_wp hcost (by decide) (hP.wordAt hi) fun v _ =>
+    wp_osWake hP (fun k hk => by cases hk; exact Os.Linux.wakeLimit_pos v) hg hok hi
+      fun k hk r G₁ m' hcu hr => by
+        rcases hr with ⟨⟨j, rfl, hj⟩, hi'⟩ | ⟨hs, -⟩
+        · exact ⟨j, rfl, Nat.le_trans (hj _ rfl) (Os.Linux.wakeLimit_le v), h k hk G₁ m' hcu hi'⟩
+        · cases hs
+
 /-- `unlock` (Linux) by the holder `t` (`g`), the current thread: the owner check passes, and it
 goes to `out`. -/
 theorem unlock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = L.ptr)
@@ -188,8 +203,8 @@ theorem unlock_wp (hP : L.Fits K P U ok) (hcost : P.cost = none) {p : Ptr} (hp :
   unfold Thread_Mutex_unlock Thread_Mutex_FutexImpl_unlock mutexOwnerCheck
   fsym [WP.liftMem_pure (x := Thread.mutexOwnerCheck L.ptr) hrun rfl,
     WP.liftMem_pure (x := StateT.lift (debug_assert true)) (by rfl) rfl,
-    wp_xchgUnlockOn hP threadMutexW hS, wp_wakeOn hP,
-    atomicRmwC_eq, threadFutexWakeC_eq, L.ph_set, L.set_set, hP.ok_set, threadMutexW]
+    wp_xchgUnlockOn hP threadMutexW hS, wake_wp hP hcost,
+    atomicRmwC_eq, L.ph_set, L.set_set, hP.ok_set, threadMutexW]
 
 end_when
 

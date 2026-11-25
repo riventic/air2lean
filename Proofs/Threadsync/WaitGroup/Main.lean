@@ -227,11 +227,11 @@ theorem shape_main {G : ThreadId → Gh} {m : Mem} {g : Gh} (h : Shape (fun u =>
   · dsimp only; rw [hX u (by unfold ThreadId at *; omega)]; exact hn u hu
   dsimp only at hc ⊢
   simp only [upd_self, hX 1 (by decide), hX 2 (by decide)]
-  rcases hc with ⟨a, b, c, d⟩ | ⟨a, b, c, d, f⟩ | ⟨a, b, c, d, f, k⟩
+  rcases hc with ⟨a, b, c, d⟩ | ⟨a, b, c, d, f⟩ | ⟨a, b, c, d, f, k, kj⟩
   · exact .inl ⟨a, h1 b, c, d⟩
   · exact .inr (.inl ⟨a, h2 b, c, d, f⟩)
   · obtain ⟨b', hj⟩ := h3 b
-    refine .inr (.inr ⟨a, b', c, d, ?_, k⟩)
+    refine .inr (.inr ⟨a, b', c, d, ?_, k, fun hj' => kj (hj.mpr hj')⟩)
     rw [show decide (g.2.ph = .j1) = decide ((G 0).2.ph = .j1) from decide_eq_decide.mpr hj.symm]
     exact f
 
@@ -506,7 +506,7 @@ theorem shape_spawn {G : ThreadId → Gh} {m : Mem} {k : ThreadId} {rM rP : Res}
     · have : 3 ≤ (G 0).2.ph.rank := b; rw [h0] at this; simp [Ph.rank] at this
   · rcases hc with ⟨-, b, -⟩ | ⟨a, -, c, d, f⟩ | ⟨-, b, -⟩
     · have : (G 0).2.ph.rank ≤ 1 := b; rw [h0] at this; simp [Ph.rank] at this
-    · refine ⟨a, f, ?_, ?_, fun u hu => ?_, .inr (.inr ⟨?_, ?_, ?_, ?_, ?_, ?_⟩)⟩
+    · refine ⟨a, f, ?_, ?_, fun u hu => ?_, .inr (.inr ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩)⟩
       · show (m.threads.push _)[0]? = _; rw [hpush 0 (by omega)]; exact h00
       · show (G' 0).2.ph.isMain = true; rw [e0, h1]; rfl
       · show (G' u).2 = _
@@ -518,6 +518,8 @@ theorem shape_spawn {G : ThreadId → Gh} {m : Mem} {k : ThreadId} {rM rP : Res}
       · show (m.threads.push _)[1]? = some { spawner := 0, joined := decide ((G' 0).2.ph = Ph.j1) }
         rw [hpush 1 (by omega), c, e0, h1]; rfl
       · show (m.threads.push _)[2]? = _; rw [show 2 = m.threads.size by omega]; exact hnew
+      · show (G' 0).2.ph = .j1 → _
+        intro hj; rw [e0, h1] at hj; cases hj
     · have : 3 ≤ (G 0).2.ph.rank := b; rw [h0] at this; simp [Ph.rank] at this
 
 /-- The counter after a spawn: the new task has not stored it. -/

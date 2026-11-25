@@ -68,9 +68,43 @@ property is a lemma about abstract lists. `addEvens`, a Lean client modelled on 
 (not the generated `evens` body), always keeps `xs` as a prefix. The same client theorems are
 instantiated unchanged to both containers. A rejected attempt shows that an `OutOfMemory` outcome cannot claim every item was added. Run the fixture
 with `lake build Proofs.Lists.Container` and
-`lake env lean tests/roadmap/container-contracts/Clients.lean`. Queues with removal, maps,
+`lake env lean tests/roadmap/container-contracts/Clients.lean`. Maps,
 container deallocation through the interface, and a general ADT library remain outside this
 bounded P04 contribution.
+
+`ZigLean/Sep/Full/Queue.lean` defines `Zig.Full.QueueImpl H α push pop len`, the contract of a
+bounded FIFO queue for every item type, handle type and implementation: a representation
+predicate `Rep h C xs` (capacity `C`, abstract sequence `xs`, front first) and total
+specifications (`FTotalTriple`) of `push` (the item at the back, or an error and the same queue
+exactly when it is full: `QueueImpl.Pushed`), `pop` (the front item and the rest, or `none`:
+`QueueImpl.Popped`) and `len`, each with its **declared step count** (`pushSteps`, `popSteps`,
+`lenSteps`: functions of the capacity and the abstract queue), paid with as many credits and
+returning as many receipts. The operations are parameters, so a generated client, whose body
+names the generated operations, is stated for every contract over them; a step-free
+implementation enters through `QueueImpl.ofStepFree`. The specifications hold no stack resource:
+an operation pushes no stack block (engine ledger `contract-stack-room`).
+`tests/roadmap/queue-adt` (Zig 0.17.1) has two implementations over a caller's buffer:
+`QueueAdt/Ring.lean` proves the contract for the ring buffer's `Ring_push`, `Ring_pop` and
+`Ring_count` (`ringQueue`, no step; the representation `ring q C xs` is the header, the cells and
+`xs = window items head len`, the wrap-around in the pure `QueueAdt/Window.lean`), and
+`QueueAdt/Shift.lean` for the linear array of `u16` items whose `pop` moves the rest down
+(`shiftQueue`, `popSteps C xs = xs.length`; the loop by `loop_exact` over the cells after the
+moves so far, `QueueAdt/Moved.lean`). Each operation is one `fsym` walk with the
+implementation's update at its return. `QueueAdt/Clients.lean` proves the generated clients for
+every contract over the operations they call, with `S.Rep` opaque and the contract's
+specifications as the only rules: `rotate_spec`/`rotateShift_spec` (the front item moves to the
+back in the declared steps of the `pop` and the `push`; the `catch unreachable` of its `push` is
+not reached) and, for P06, `pushAll_exact`: under the capacity premise
+`xs.length + ys.length ≤ C`, `pushAll` pushes every item of the slice for `ys.length + 1` credits
+and as many receipts, for every implementation whose `push` runs no step (`pushAll_steps`:
+exactly that many steps of a run; `pushAll_not_within`: `ys.length` credits do not pay it). A
+loop over an operation of a nonzero count needs `fsym` to split `credits` at the call (engine
+ledger #T1). The counts are loop-body runs of the model (SEM-05), not CPU time. `check.sh`
+retranslates the retained AIR, audits the axioms, runs five seeded mutants (`mutants.sh`: a ring
+push or pop that does not wrap, a shifting pop that moves nothing or is stated one credit short,
+the capacity premise weakened) and compares the native run with `expected.txt`. The sequence
+contract `SeqImpl` above is stated over the lists program's allocator type and is not yet an
+instance of one shared library contract.
 
 `FTotalTriple P c Q` (`ZigLean/Sep/Full/Logic.lean`) is `FTriple P c Q ∧ FReturns P c`:
 `FReturns` requires an explicit `c.run m = pure (v, m')` witness for every `Mem.FSeq`
