@@ -19,14 +19,24 @@ namespace Graph
 def dedupKeys {κ : Type} [BEq κ] (a : Array κ) : Array κ :=
   a.foldl (fun acc x => if acc.contains x then acc else acc.push x) #[]
 
-/-- Prepare one finite adjacency table from the producer's nodes and references. References to
-external declarations are excluded from this graph; they cannot form a component with its nodes. -/
+/-- One finite adjacency table from the producer's nodes and references. References to external
+declarations are excluded from this graph; they cannot form a component with its nodes. -/
+private def successorTable {α κ : Type} [BEq κ] (nodes : Array α) (key : α → κ)
+    (successors : α → Array κ) : Array (κ × Array κ) :=
+  let keys := nodes.map key
+  nodes.map fun node => (key node, dedupKeys ((successors node).filter keys.contains))
+
+/-- The successors of `k` in a table (`successorTable`). -/
+private def successorsIn {κ : Type} [BEq κ] (edges : Array (κ × Array κ)) (k : κ) : Array κ :=
+  ((edges.find? (·.1 == k)).map (·.2)).getD #[]
+
+/-- The successor function of the table. The table is an argument of the partial application, so
+the compiled closure computes it once: a `let` before `fun k`, as this was written first, is
+compiled into a function of `k` that rebuilt the table, and so called `successors` on every node,
+at each lookup (threadsync: 0.02 s -> 0.45 s of `emit`, docs/perf-budgets.md). -/
 private def successorsBy {α κ : Type} [BEq κ] (nodes : Array α) (key : α → κ)
     (successors : α → Array κ) : κ → Array κ :=
-  let keys := nodes.map key
-  let edges := nodes.map fun node =>
-    (key node, dedupKeys ((successors node).filter keys.contains))
-  fun k => ((edges.find? (·.1 == k)).map (·.2)).getD #[]
+  successorsIn (successorTable nodes key successors)
 
 /-- The single bounded DFS used by both source-function and emitted-declaration graphs. -/
 private def topoVisitCore {α κ : Type} [BEq κ] (nodes : Array α) (key : α → κ)
@@ -103,7 +113,7 @@ private theorem successorsBy_map {A B K : Type} [BEq K]
     (nodes : Array A) (project : A → B) (key : B → K) (next : B → Array K) :
     successorsBy (nodes.map project) key next =
       successorsBy nodes (fun x => key (project x)) (fun x => next (project x)) := by
-  simp only [successorsBy, Array.map_map, Function.comp_def]
+  simp only [successorsBy, successorTable, Array.map_map, Function.comp_def]
 
 /-- Naturality of the existing bounded walk, with its fuel left unchanged. -/
 private theorem topoVisitCore_visit_map {A B K : Type} [BEq K]
