@@ -1061,7 +1061,11 @@ set, `zig_run` (`ZigLean/SimpAttr.lean`), and names no generated declaration:
   `(0 : BitVec 1)`).
 * Library facts that are not arithmetic (`keepsPrefix`, fractions): `macro_rules | `(tactic| fsym_fact) => …`.
 * Generated code computes constants at run time (`alignment - 1`): `+ - *` of two word literals
-  are folded by proof-producing simprocs (`add_lit`, `sub_lit`, `mul_lit`). `~~~` of a literal is
+  are folded by proof-producing simprocs (`add_lit`, `sub_lit`, `mul_lit`), and so are the casts,
+  bit counts and values of a word literal to a literal width that generated pure helpers compute
+  (`mem_Alignment.fromByteUnits 8`: `Zig.ctz`, `Zig.intCast`, `Zig.val`; also `Zig.clz`,
+  `Zig.popcount`, `Zig.trunc`): the value computed by the simproc, the equation decided on the
+  literal (`litStep`; an `intCast` out of range becomes its `throw`; ledger #21a). `~~~` of a literal is
   not folded in programs (the kernel would check the folded program by a deep unfolding); the
   arithmetic solver reads literal high masks (`2 ^ w - 2 ^ j`) directly.
 
