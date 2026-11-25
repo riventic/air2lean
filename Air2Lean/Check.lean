@@ -4400,8 +4400,7 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
           else if declared.isSome && cc != e.cc then
             unbound := reject (s!"is declared with calling convention '{e.cc}', but its \
               definition '{name}' has '{cc}'")
-          else if let some position := (if declared.isNone then none
-              else externSignatureMismatch f e definition) then
+          else if let some position := declared.bind (externSignatureMismatch f · definition) then
             -- The bound call is a direct call: no conversion stands at the boundary. A
             -- declaration that agrees with the definition only at the C ABI (translate-c's
             -- `[*c]const u8` for Zig libc's `[*:0]const c_char`) is not bound.

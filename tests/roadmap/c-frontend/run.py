@@ -31,6 +31,7 @@ values come from the C program compiled natively by `zig cc` with UBSan traps. S
 """
 import argparse
 import collections
+import functools
 import hashlib
 import json
 import os
@@ -315,8 +316,9 @@ def symbol_definitions(air):
     return definitions
 
 
+@functools.cache
 def zigc_module(zig_air):
-    """The compiler's `lib/c.zig`: the root file of the module `zigc`."""
+    """The compiler's `lib/c.zig`: the root file of the module `zigc` (one `zig env` per run)."""
     code, out = run([zig_air, "env"], 60)
     found = re.search(r'\.lib_dir = "([^"]+)"', out)
     if code != 0 or not found:
