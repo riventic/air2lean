@@ -17,7 +17,8 @@ path = "../.."
 [[lean_lib]]
 name = "AllocArena"
 srcDir = "alloc-arena"
-globs = ["AllocArena.+", "ArenaObstruction", "ArenaSpec.+", "ArenaSpecFixed.+", "ArenaSpecMacos.+",
+globs = ["AllocArena.+", "ArenaObstruction", "ArenaSpec", "ArenaSpec.+", "ArenaSpecFixed", "ArenaSpecFixed.+",
+         "ArenaSpecMacos", "ArenaSpecMacos.+",
          "HeaderMixCX", "HeaderTagCX"]
 
 [[lean_lib]]
