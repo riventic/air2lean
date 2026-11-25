@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# P04/P06: the ring-buffer queue of queue.zig (Zig 0.17.1) against the queue contract
+# P04/P06: the two queues of queue.zig (Zig 0.17.1) against the queue contract
 # Zig.Full.QueueImpl (ZigLean/Sep/Full/Queue.lean). The retained AIR is its fixture's export
 # (exports.lock.json) and the retained translation QueueAdt/Gen.lean is the fresh one, byte for
-# byte; the ring proves the contract (QueueAdt/Ring.lean: push, pop, count, each one fsym walk);
-# the clients rotate and pushAll are proved for every contract over the generated operations
+# byte; the ring buffer (QueueAdt/Ring.lean) and the shifting array (QueueAdt/Shift.lean, its pop
+# in exactly xs.length steps) prove the contract, each operation one fsym walk; the clients
+# rotate, rotateShift and pushAll are proved for every contract over the operations they call
 # (QueueAdt/Clients.lean), pushAll with its exact step count under the capacity premise
 # (`pushAll_exact`, `pushAll_steps`, tight by `pushAll_not_within`); QueueAdt/Instances.lean
-# instantiates them to the ring. Every theorem of the library depends on the standard axioms
+# instantiates them. Every theorem of the library depends on the standard axioms
 # only. Seeded mutants must fail their proofs (mutants.sh). Every Lean file is a module of the
 # fixture's library QueueAdt (tests/roadmap/lakefile.toml), built by Lake with what it imports
 # (scripts/fixtures.py; run it under scripts/build-guard.py). Needs a built translator; runs no

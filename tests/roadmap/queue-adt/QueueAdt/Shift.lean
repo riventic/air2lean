@@ -161,8 +161,8 @@ theorem pop_spec (q : Ptr) (C : Nat) (xs : List (BitVec 16)) :
   unfold Shift_pop
   cases xs with
   | nil =>
-    simp only [List.length_nil, credits_zero, spent_zero, sep_emp]
-    fsym
+    simp only [List.length_nil]
+    exact FTotalTriple.credits_zero_iff.mpr (by fsym)
   | cons x xs =>
     simp only [List.length_cons]
     fsym [pop_loop_exact, popped_upd]

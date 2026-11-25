@@ -1287,10 +1287,13 @@
    "title": "credits n is not split for tick_credit",
    "status": "open",
    "requester": "stack-ac lane (codex/stack-ac-ticks)",
-   "progress": "see request text (tick rows, plans/tick-cost.md)",
+   "progress": "see request text (tick rows, plans/tick-cost.md). 2026-11-25 (queue-adt lane): the same gap at a call. A contract with declared step counts (`QueueImpl`: `push_spec` takes `credits (pushSteps C xs v)`) cannot be called from a state that holds the credits as one sum (`credits (a + b)`), and receipts of several calls are not merged into the post's `spent (a + b)`. Observed: `rotate`'s walk with `credits (rotateSteps …)` finds no plan for `push`'s `credits (pushSteps …)` and inlines the body; a loop whose invariant holds the credits of the calls left cannot pay one call per repetition. Also: a fact equating two list constructors (`[] = x :: xs'`, `h :: t = x :: xs'`) is neither refuted nor split into argument equations, so a client cannot case-split the abstract list before the walk.",
    "request": "HIT (open): `FTotalTriple (R ⋆ credits 2) (tick; tick) (fun _ => R)` -> fsym leaves the goal unsolved: the planner does not split `credits 2` into `credits 1 ⋆ credits 1` for `FTotalTriple.tick_credit`. Needs counted atoms (`credits`, `spent`: `spent_add`/`spent_zero`, `credits_add`/`credits_zero` exist in Full/Ghost + Full/Tick). Leftover `spent n`/`credits n` drop already works (`@[fsym_drop] EUpd.spent_drop`, `EUpd.credits_drop`).",
-   "workaround_sites": [],
-   "deletion_plan": ""
+   "workaround_sites": [
+    "ZigLean/Sep/Full/Queue.lean",
+    "tests/roadmap/queue-adt/QueueAdt/Clients.lean"
+   ],
+   "deletion_plan": "Delete `QueueImpl.PushStepFree` and `QueueImpl.push_spec_stepFree` (Queue.lean) and `RotatedPaid`/`rotated_of_paid` (Clients.lean); prove `rotate_spec`/`rotateShift_spec` by `fsym [S.push_spec, S.pop_spec]` directly, and restate `pushAll_exact`/`pushAll_total`/`pushAll_steps`/`pushAll_not_within` without the `h0` premise for `ys.length + 1` plus the declared counts of the pushes."
   },
   {
    "id": "T2",
