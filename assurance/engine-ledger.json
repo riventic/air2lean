@@ -1232,10 +1232,20 @@
   {
    "id": "lock-start-anywhere",
    "title": "a lock's start at any point of a program: the clock, waiter and atomics premises of `FLock.Inv.make` range over the whole machine",
-   "status": "open",
+   "status": "closed",
    "requester": "critic run 43 (2026-11-24) on #770-#773; every lock start: `FLock.Inv.make`/`make_word` (Lock.lean), `FLock.Pair.start` (LockProd.lean), `RwProd.start` (RwProdStart.lean)",
    "request": "A lock, a pair of locks and a reader/writer lock start at any point of a program: after earlier threads were joined, while other threads wait at other futexes, and next to other atomic locations in the same block.",
-   "progress": "OPEN, by reading (not kernel-checked). (1) `hall : AllLe m (m.clocks[t]!)` ranges over joined threads: after `main` spawns and joins a helper, `clocks[t]` is the merge and `clocks[u]` stays, so `hall` is false and no lock can start afterwards. Plan: `AllLeOn` over the threads that are not `gone`, as `Word.Ok.init` already takes. (2) `hq : m.waiters = #[]` is the whole machine's queue: a lock created while any thread waits at any futex cannot start. Plan: no waiter at the lock's keys. (3) `hat : ∀ l ∈ m.atomics, l.block ≠ b` is block-wide: `struct { hits: std.atomic.Value(u32), lock: RwLock }` with `hits.store(0)` before the start, or two locks in one block, fails it although no atomic location overlaps the lock. Plan: `LockWord.WInv.make` takes the no-overlap form `Word.Ok.init` has. (4) The doc comments of these lemmas say `t`'s clock is above every thread's; the premise says at or below. Also recorded there: the rwlock's layout and width are fixed (`Word 64 8`, offsets 8/16/20/24/32; fails closed on a 32-bit target), and the spawn and join lemmas take a protocol whose invariant is exactly one rwlock's pair (a program with a second primitive needs the product of invariants).",
+   "progress": "CLOSED by branch claude/lock-start (kernel-checked: full build). `LockWord.WInv.make`, `FLock.make_word`, `FLock.Inv.make` and `FLock.Pair.start` now take (1) `hall : AllLeOn (fun u => L.ph (G u) ≠ .gone) m (m.clocks[t]!)` (the pair: not gone at either lock); (2) `hq : ∀ w ∈ m.waiters, w.2 ≠ L.key m ∧ L.ph (G w.1) = .away`, with `hph` admitting `.away` beside `.out` (the word invariant's queue `fq` asks a waiter at another key to be `away`, so the plan's `no waiter at the lock's key` alone is not enough); (3) `hat : ∀ l ∈ m.atomics, l.block = L.b → L.o + 4 ≤ l.off ∨ (l.off < L.o ∧ l.off + l.len ≤ L.o)`; (4) doc comments say `t`'s clock happened before the others'. Every old premise implies the new one; no conclusion changed; the seven `FLock.Inv.make` callers pass `.on _`, `.inl rfl` and the empty queue. `RwProd.start`/`start_bytes` take the no-overlap form over the lock's 40 bytes; they keep `AllLe` and `m.waiters = #[]` because the condition's start needs them (row cond-start-anywhere). The original finding (by reading): (1) `hall : AllLe m (m.clocks[t]!)` ranges over joined threads: after `main` spawns and joins a helper, `clocks[t]` is the merge and `clocks[u]` stays, so `hall` is false and no lock can start afterwards. Plan: `AllLeOn` over the threads that are not `gone`, as `Word.Ok.init` already takes. (2) `hq : m.waiters = #[]` is the whole machine's queue: a lock created while any thread waits at any futex cannot start. Plan: no waiter at the lock's keys. (3) `hat : ∀ l ∈ m.atomics, l.block ≠ b` is block-wide: `struct { hits: std.atomic.Value(u32), lock: RwLock }` with `hits.store(0)` before the start, or two locks in one block, fails it although no atomic location overlaps the lock. Plan: `LockWord.WInv.make` takes the no-overlap form `Word.Ok.init` has. (4) The doc comments of these lemmas say `t`'s clock is above every thread's; the premise says at or below. Also recorded there: the rwlock's layout and width are fixed (`Word 64 8`, offsets 8/16/20/24/32; fails closed on a 32-bit target), and the spawn and join lemmas take a protocol whose invariant is exactly one rwlock's pair (a program with a second primitive needs the product of invariants).",
+   "workaround_sites": [],
+   "deletion_plan": ""
+  },
+  {
+   "id": "cond-start-anywhere",
+   "title": "a condition's start at any point of a program: `FCond.Inv.start` asks an empty futex queue and the condition's words `Ok` at every thread",
+   "status": "open",
+   "requester": "lane lock-start (2026-11-25), the rest of #lock-start-anywhere; `FRw.Base.start` (RwLockStart.lean) and `RwProd.start` (RwProdStart.lean) inherit it",
+   "request": "A condition (and so a reader/writer lock) starts after earlier threads were joined and while other threads wait at other futexes, as a lock does since #lock-start-anywhere.",
+   "progress": "OPEN, by reading (not kernel-checked). `FCond.Inv.start` (CondInv.lean) takes `hq : m.waiters = #[]`, and `FRw.Base.start` takes the condition's words as `C.S.Ok m` / `C.Ep.Ok m`, whose live set is every thread (`Word.Ok`'s default `A`). After `main` spawns and joins a helper `u`, `main`'s plain store of the condition's word has `main`'s clock, which is not below `clocks[u]` (a join sets only the joiner's clock), so the word is not `Ok` at every thread and no condition can start. Plan: the condition's words `Ok` at the threads that are not `gone`, and no waiter at the condition's keys, as `FLock.Inv.make` now takes; then `RwProd.start` drops its `AllLe` and empty-queue premises. CondInv.lean and Cond.lean belong to lane c14-broadcast at the time of writing.",
    "workaround_sites": [],
    "deletion_plan": ""
   },
@@ -2069,6 +2079,30 @@
     "tests/roadmap/queue-adt/QueueAdt/Ring.lean"
    ],
    "deletion_plan": "Write the header of `pushed_upd`, `popped_upd` and `ring` with one value definition."
+  },
+  {
+   "id": "arith-word-ne-cons-length",
+   "title": "the walk's arithmetic leaves update premises that need a word disequality fact or a cons length",
+   "status": "open",
+   "requester": "queue-adt lane (tests/roadmap/queue-adt/QueueAdt/Shift.lean, 2026-11-25)",
+   "progress": "Open; observed, not yet reduced to a minimal case. After `fsym [pushed_upd v]` on `Shift_push`, the update's count premises (`len.toNat < cap.toNat`, `len'.toNat = len.toNat + 1` with `len' = len + 1#64`) stay open although the branch fact `¬len = cap` and the representation's `len.toNat ≤ cap.toNat` decide them; after `fsym [pop_loop_exact, popped_upd]` on `Shift_pop` with `xs := x :: xs`, the front cell's bound `0 < items.length` stays open over the facts `(x :: xs).length = len.toNat` and `len.toNat ≤ cap.toNat = items.length`. Both close by `bv_omega` (after `List.length_cons` for the second), so the arithmetic's one normal form (`x.toNat`, then `omega`) does not reach a word disequality fact, the `(1#64).toNat` literal of an increment, or a cons length in a fact. Ring.lean's update premises of the same shape close inside the walk (its branch facts are orderings, not disequalities).",
+   "request": "fsym's arithmetic brings a word disequality fact (`¬a = b`, `a ≠ b` over `BitVec w`) and a list-constructor length (`(x :: xs).length`) in facts to the `toNat` normal form before `omega`, so the side goals close in the walk.",
+   "workaround_sites": [
+    "tests/roadmap/queue-adt/QueueAdt/Shift.lean"
+   ],
+   "deletion_plan": "Delete the two `all_goals … bv_omega` lines after the walks in `Shift.push_spec` and `Shift.pop_spec`."
+  },
+  {
+   "id": "fba-0171-wrapper-stack",
+   "title": "std.mem.Allocator wrapper contracts with stack room for Zig 0.17.1's result slots",
+   "status": "open",
+   "requester": "fba-0171 lane (2026-11-25)",
+   "progress": "Open, a statement decision. Zig 0.17.1's `mem.Allocator.alloc`, `reallocAdvanced`, `allocSentinel` (24 bytes) and `create` (16 bytes) keep their error-union result in a stack slot (`Zig.allocStack`); 0.16.0's return it as a value. tests/roadmap/alloc-fba/AllocFba/Wrappers.lean states the wrapper contracts as `FTotalTriple`s with no stack resource, which do not hold for the 0.17.1 translation (the push may throw `.stackOverflow`: `FTriple.allocStack` is partial, the total rule `FTotalTriple.allocStack_sp` needs `cur t ⋆ sp t S D` with room), and `Client.client_spec`'s room `D + stackCharge 24 8 ≤ S` covers the client's frame but not a wrapper's slot behind it. Build of the library over the 0.17.1 translation (p0, 2026-11-25): only AllocFba.Wrappers fails (alloc_spec, create_spec, dupe_spec, allocSentinel_spec, reallocAdvanced_spec, realloc_spec; free_spec, freeSentinel_spec, destroy_spec fail at ledger 21a). Options: (a) one statement for every version with the stack room as an owned resource (`cur t ⋆ sp t S D ⋆ ⟪D + need ≤ S⟫` in the precondition, `sp t S D` back), true for 0.16.0 too but a stronger precondition than its current statement; (b) the stack need per translation (`when_defined`, as `Proofs/Lists/Append.lean`'s `hdrVal`), which keeps 0.16.0's statement but still needs the `sp` token in it; (c) partial-correctness wrapper contracts in the plain mode (as `Interfaces/SentinelSpec.lean`), a weakening: rejected.",
+   "request": "Decide how the generated std.mem.Allocator wrapper contracts state stack room, so that one Wrappers.lean/Client.lean text holds over the 0.16.0 and 0.17.1 translations.",
+   "workaround_sites": [
+    "tests/roadmap/alloc-fba/check.sh"
+   ],
+   "deletion_plan": "Once the wrapper contracts are restated (and ledger 21a is closed): the retained AllocFba/Gen.lean becomes the 0.17.1 translation, and check.sh builds and audits the whole library over the 0.16.0 translation in its check tree instead of only Full/Creation/CreationDomain/Eval over 0.17.1's."
   }
  ],
  "mechanisms": [

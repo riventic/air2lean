@@ -83,6 +83,16 @@ All three run in CI ("Mutation map and Python-side mutants"). The other Lean/Zig
 map names (`tests/roadmap/*/check.sh`, `mutations.py`) stay in their own gates, which report
 their kills to the ledger below.
 
+## Lean-side fixture mutants
+
+A fixture whose check elaborates retained Lean (`tests/roadmap/{pointer-width,futures,env-boundaries}/mutations.py`)
+builds one mutated copy of its translation (or of its scripted client instance) per mutant below the
+check's work directory and runs the fixture's own proofs or runtime schedules on it. `scripts/lean_mutant.py`
+holds the shared steps: `edit` (each anchor occurs exactly once), `build_gen` (an invalid mutant aborts the
+run) and `reject`, which accepts a kill only when Lean fails, every error lies in the checked file and each
+declaration the mutant must break contains an error; a runtime mutant is killed only by the named `require`
+message. A mutant that passes or fails for another reason aborts the check: a survivor is a finding.
+
 ## Kill evidence
 
 `assurance/mutation-kills.json` records, for each `scripts/mutate.sh` mutation and each
