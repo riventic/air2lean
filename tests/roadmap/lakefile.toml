@@ -109,7 +109,30 @@ globs = ["Outcomes.+"]
 [[lean_lib]]
 name = "StrengthLog"
 srcDir = "strength-log"
-globs = ["OutcomeTaxonomy"]
+globs = ["OutcomeTaxonomy", "ThreadFixtures", "Vcs"]
+
+# The verification-condition fixture's extraction module (strength-log/Vcs.lean imports it;
+# CI's golden part also compiles it into the Extract.olean its mutants are checked against).
+[[lean_lib]]
+name = "VcsExtract"
+srcDir = "vcs"
+globs = ["Extract"]
+
+# The proofs of the tuple-capture fixture over its retained translation, and their non-vacuity
+# witnesses (ThreadTuples.Nonvacuity: imported by strength-log/ThreadFixtures.lean).
+# thread-tuples/check.sh also compiles them against each version's fresh translation.
+[[lean_lib]]
+name = "ThreadTuples"
+srcDir = "thread-tuples"
+globs = ["ThreadTuples.Gen", "ThreadTuples.Proofs", "ThreadTuples.Nonvacuity"]
+
+# The failed-spawn fixture's retained translation, proofs and non-vacuity witnesses
+# (SpawnFailure.Nonvacuity imports the kernel-run theorems of Runtime; strength-log/ThreadFixtures.lean
+# imports it). spawn-failure/qualify.py compiles the proofs again on its checked translation.
+[[lean_lib]]
+name = "SpawnFailure"
+srcDir = "spawn-failure"
+globs = ["SpawnFailure.Gen", "SpawnFailure.Group", "SpawnFailure.Pair", "SpawnFailure.Nonvacuity", "Runtime"]
 
 # The small dispatch machines of dispatch-templates/check.sh (DispatchTemplate.Template).
 [[lean_lib]]

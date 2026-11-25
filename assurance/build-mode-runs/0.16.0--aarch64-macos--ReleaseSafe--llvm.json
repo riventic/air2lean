@@ -1,12 +1,12 @@
 {
   "backend": "llvm",
-  "cases": 86209,
+  "cases": 86410,
   "counts": {
-    "error_return_match": 892,
+    "error_return_match": 1002,
     "illegal_exclusion": 794,
     "panic_match": 4922,
-    "unspecified_exclusion": 1668,
-    "value_match": 77933
+    "unspecified_exclusion": 1669,
+    "value_match": 78023
   },
   "emulated": false,
   "examples": {
@@ -18,7 +18,7 @@
     "floats": 2100,
     "iogroup": 40,
     "layout": 12241,
-    "lists": 1503,
+    "lists": 1704,
     "options": 900,
     "pointers": 3300,
     "recursion": 1200,
@@ -145,6 +145,12 @@
       "status": "illegal_exclusion"
     },
     {
+      "cases": 1,
+      "example": "lists",
+      "function": "allocatorWord",
+      "status": "unspecified_exclusion"
+    },
+    {
       "cases": 26,
       "example": "slices",
       "function": "copyWithin",
@@ -203,7 +209,7 @@
     "asm": "host_excluded",
     "threadsync": "version_excluded"
   },
-  "sources_sha256": "640d6f03a0c59d918a3626c3c2379f5cdd96a01c7828919e15442236d61f6051",
+  "sources_sha256": "8f33059aa47c313804e72410dfeff66a453797f1b819558a4fab95e91d68dd4c",
   "stock_zig_sha256": "e6cd688d25664983833aae272f501d4bceeae304875b8f1741209d15fd13a4ec",
   "target": "aarch64-macos",
   "triage": [],

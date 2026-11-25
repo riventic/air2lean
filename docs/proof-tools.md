@@ -248,8 +248,8 @@ data rank B post step`; a machine supplies:
 * the invariant indexed by the selector's state, `inv k s` (one case per state);
 * the consumed data `data s` and the state's rank `rank k`, with a bound `B` above every rank: the
   measure `B * data + rank` is the lexicographic order of (data, rank), so a transition that
-  consumes nothing must lower the rank. Tag the ranks `attribute [local fsym_arith] rank` so that
-  `fsym` reads their values;
+  consumes nothing must lower the rank. `fsym_arith` evaluates a rank on a constructor without a
+  tag (engine ledger #21);
 * the step premise, by a case split on the selector (`cases`) followed by `fsym`, which walks each
   prong. An integer selector needs no split: `fsym` splits on the selector's tests and the
   invariant excludes the other values.
