@@ -597,6 +597,25 @@ fixture_pause()
         code, _ = self.attempt("--mem-budget-mib", "3072", "--lock-wait", "2", cwd=self.worktree("b"))
         self.assertEqual(code, 75)  # three free still admit the head (2) first
 
+    def test_a_larger_budget_backfills_beyond_the_heads_capacity(self):
+        # The head (2 slots, past its ramp) lacks 2 and would take every free slot below its
+        # capacity; a guard started with a larger budget runs in the slots beyond it, never below.
+        self.stand_in_head({"pid": os.getpid(), "unmet": 2, "need": 2, "capacity": 2})
+        code, evidence = self.attempt("--mem-budget-mib", "3072", "--lock-wait", "2", cwd=self.worktree("a"))
+        self.assertEqual((code, evidence["admission"]["backfilled"]), (0, True))
+        code, _ = self.attempt("--mem-budget-mib", "3072", "--rss-mib", "2048", "--lock-wait", "1.5",
+                               cwd=self.worktree("b"))
+        self.assertEqual(code, 75)  # one slot beyond the head's capacity: too few for two
+        code, _ = self.attempt("--mem-budget-mib", "2048", "--lock-wait", "1.5", cwd=self.worktree("c"))
+        self.assertEqual(code, 75)  # the head's own budget: nothing beyond it
+        with contextlib.ExitStack() as stack:  # a second head without a capacity: fail closed
+            enter = stack.enter_context
+            directory = Path(str(self.root / "shared.lock") + ".d")
+            enter(guard.publish_entry(directory / "heads", "1-2", {"pid": os.getpid(), "unmet": 0, "need": 2},
+                                      lambda path: path.open("a")))
+            code, _ = self.attempt("--mem-budget-mib", "3072", "--lock-wait", "1.5", cwd=self.worktree("d"))
+            self.assertEqual(code, 75)
+
     def test_a_head_entry_of_another_shape_gets_no_backfill(self):
         for content in ({"unmet": "x", "need": 3}, {"unmet": 1}, {"unmet": 2, "need": 1}, {"unmet": None, "need": 3}):
             with self.subTest(content=content), contextlib.ExitStack() as stack:
