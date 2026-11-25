@@ -20,8 +20,9 @@ No hand-written model of the wrappers is involved (`docs/alloc-spec.md`, §Retir
 
 **Stack room.** A wrapper may keep its result in a stack slot: from Zig 0.17.1 on, `alloc`,
 `reallocAdvanced` (so `realloc`) and `allocSentinel` push a 24-byte slot, `create` a 16-byte one,
-and `dupe` calls `alloc`. Their contracts own the running thread's stack token and room for that
-slot (`cur t ⋆ sp t S D ⋆ ⟪D + need ≤ S⟫`) and give the token back at the same depth
+and `dupe` calls `alloc` (`alignedAlloc`, `free` and `destroy` push none in any version). Their
+contracts own the running thread's stack token and room for that slot
+(`cur t ⋆ sp t S D ⋆ ⟪D + need ≤ S⟫`) and give the token back at the same depth
 (`cur t ⋆ sp t S D`), so they are total over every translation: `need` is one constant per wrapper,
 `stackCharge 24 8` (`stackCharge 16 8` for `create`), an upper bound of the slot every supported Zig
 version pushes (none in 0.16.0, whose walk frames the token). The statement names no version. -/

@@ -38,8 +38,8 @@ room for the client's 24-byte stack frame and, behind it, the slot of a wrapper 
 (`cur 0 ⋆ sp 0 S D`, `D + stackCharge 24 8 + stackCharge 24 8 ≤ S`): the stack room is an owned
 resource, not a premise. `Client.client_start` shows that this precondition is met at the
 program's real start: for every placement with room for a stack of `S` bytes
-(`stackCharge 24 8 + stackCharge 24 8 ≤ S`), the client run from `mem0` returns a result that satisfies `Res`
-(`FTotalTriple.run_init_stack_claims`). The `mem0` run is checked by `AllocFba/Eval.lean`.
+(`stackCharge 24 8 + stackCharge 24 8 ≤ S`), the client run from `mem0` returns a result that
+satisfies `Res` (`FTotalTriple.run_init_stack_claims`). The `mem0` run is checked by `AllocFba/Eval.lean`.
 
 ## Zig 0.17.1
 

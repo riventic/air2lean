@@ -125,9 +125,8 @@ def fnBlocks (a1 a2 a3 a4 : Nat) : FAssn :=
           (bclaim 4 0 1 ⋆ (bclaim 3 0 1 ⋆ (bclaim 2 0 1 ⋆ bclaim 1 0 1))))))
 
 /-- **The client from the program's start.** With a stack budget that covers its frame and the
-slot of a wrapper it calls, and a
-placement that has room for the stack, the client run from `Gen.mem0` returns a result that
-satisfies `Res`. -/
+slot of a wrapper it calls, and a placement that has room for the stack, the client run from
+`Gen.mem0` returns a result that satisfies `Res`. -/
 theorem client_start (σ : Placement) (S : Nat) (hS : stackCharge 24 8 + stackCharge 24 8 ≤ S)
     (hr : ((mem0 σ).reserveAt? 0 S).isSome) (v : BitVec 8) :
     ∃ x m', (fba_client v).run ((mem0 σ).withStack S) = pure (x, m') ∧ Res v x := by
