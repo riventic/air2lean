@@ -1027,6 +1027,7 @@ open Lean Meta Simp in
 the literal (`litStep`). Generated pure helpers compute constants this way
 (`mem_Alignment.fromByteUnits 8`: `ctz`, then `intCast`, then `val`; ledger #21a). -/
 def reduceLitWordCore (op : Name) : Simproc := fun e => do
+  unless e.isAppOfArity op 3 do return .continue
   let some ⟨_, a⟩ ← getBitVecValue? e.appArg! | return .continue
   if op == ``Zig.val then
     let some s := (e.getArg! 1).constName? | return .continue

@@ -250,6 +250,68 @@ theorem ctor_inj_post (P : FAssn) (acc N : Nat) (h : acc = N) :
       (fun r => ⟪r.1 = .ret N ∧ rk r.2 < rk .idle⟫ ⋆ P) := by
   fsym
 
+/-! ## Casts and bit counts of word literals (ledger #21a)
+
+`fsym_norm` evaluates `@intCast`, `@ctz`, `@clz`, `@popCount`, `@truncate` and `Zig.val` of a word
+literal to a literal width (`reduceLitIntCast`, `reduceLitWordCore`). Each equation below is
+closed by the one simproc alone: what it rewrites to is exactly the definition's value, an
+`@intCast` out of range its `throw` (with the `safe` flag of the cast). -/
+
+section Lits
+open Zig.Full.Auto
+
+/-- Unsigned to unsigned: in range, at the top boundary, one past it. -/
+example : Zig.intCast false false 8 (255 : BitVec 16) = pure 255 := by simp only [reduceLitIntCast]
+example : Zig.intCast false false 8 (256 : BitVec 16) = throw (.ifSafe true .overflow) := by
+  simp only [reduceLitIntCast]
+/-- … the unchecked form panics as illegal behaviour (`Error.ifSafe false`). -/
+example : Zig.intCast false false 8 (256 : BitVec 16) false = throw (.ifSafe false .overflow) := by
+  simp only [reduceLitIntCast]
+
+/-- Signed to signed: both boundaries and one past each. -/
+example : Zig.intCast true true 8 (-128 : BitVec 16) = pure (-128) := by simp only [reduceLitIntCast]
+example : Zig.intCast true true 8 (127 : BitVec 16) = pure 127 := by simp only [reduceLitIntCast]
+example : Zig.intCast true true 8 (-129 : BitVec 16) = throw (.ifSafe true .overflow) := by
+  simp only [reduceLitIntCast]
+example : Zig.intCast true true 8 (128 : BitVec 16) = throw (.ifSafe true .overflow) := by
+  simp only [reduceLitIntCast]
+
+/-- Across signedness: a negative value to an unsigned type, an unsigned value above the signed
+range, a widening of `-1`. -/
+example : Zig.intCast true false 64 (-1 : BitVec 8) = throw (.ifSafe true .overflow) := by
+  simp only [reduceLitIntCast]
+example : Zig.intCast false true 8 (200 : BitVec 8) = throw (.ifSafe true .overflow) := by
+  simp only [reduceLitIntCast]
+example : Zig.intCast false true 8 (127 : BitVec 8) = pure 127 := by simp only [reduceLitIntCast]
+example : Zig.intCast true true 64 (-1 : BitVec 8) = pure (-1) := by simp only [reduceLitIntCast]
+
+/-- Zero-width targets hold only `0`. -/
+example : Zig.intCast false false 0 (0 : BitVec 8) = pure 0 := by simp only [reduceLitIntCast]
+example : Zig.intCast true true 0 (1 : BitVec 8) = throw (.ifSafe true .overflow) := by
+  simp only [reduceLitIntCast]
+
+/-- Bit counts (zero counts the width), truncation and the value of literals. -/
+example : Zig.ctz 7 (8 : BitVec 64) = 3 := by simp only [reduceLitCtz]
+example : Zig.ctz 7 (0 : BitVec 64) = 64 := by simp only [reduceLitCtz]
+example : Zig.clz 7 (1 : BitVec 64) = 63 := by simp only [reduceLitClz]
+example : Zig.popcount 4 (0xff : BitVec 64) = 8 := by simp only [reduceLitPopcount]
+example : Zig.trunc 8 (0x1ff : BitVec 16) = 0xff := by simp only [reduceLitTrunc]
+example : Zig.val true (0xff : BitVec 8) = -1 := by simp only [reduceLitVal]
+example : Zig.val false (0xff : BitVec 8) = 255 := by simp only [reduceLitVal]
+
+/-- `mem.Alignment.fromByteUnits 8`: `ctz`, then `intCast` to the `u6` log2. -/
+example : Zig.intCast false false 6 (Zig.ctz 7 (8 : BitVec 64)) = pure 3 := by
+  simp only [reduceLitCtz, reduceLitIntCast]
+
+set_option linter.unusedVariables false in
+/-- A symbolic operand is not evaluated. -/
+example (a : BitVec 16) : True := by
+  fail_if_success
+    have : Zig.intCast false false 8 a = pure (a.setWidth 8) := by simp only [reduceLitIntCast]
+  trivial
+
+end Lits
+
 /-! ## A probe's budget (`withBudget`, ledger #probe-case-budget)
 
 A probe searches the case facts within a budget of heartbeats of its own. These checks spend the
