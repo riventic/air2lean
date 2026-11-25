@@ -125,13 +125,15 @@ def main : IO Unit := do
     let of ← layoutsOf "stage2_llvm" 12 "x86_64-linux.5.10...6.19-musl" version
     require ([12, 16, 17].all fun i => tyOk of i && of[i]! == llvm[i]!)
       s!"{version}: a bit-packed lane pointer is not the bit-pointer of 0.16.0"
-    -- A lane of whole power-of-two bytes (Zig 0.17.1 types `&v[1]` of a `u32` vector so): an
-    -- element pointer where it is made (`Canon.laneElemPtrs`), no model as a value of this type.
-    require (!tyOk of 19 && !of[19]!.laneBitPtr) s!"{version}: a whole-byte lane pointer type is accepted"
-    require (!wholeByteLane types of 0 && !wholeByteLane types of 8 && !wholeByteLane types of 6 &&
-        !wholeByteLane types of 13 && wholeByteLane types of 3)
-      s!"{version}: whole-byte lanes are u32, not u9, u24, f80 or bool"
-  IO.println "lane pointers: one model for every Zig version; whole-byte lane pointer types rejected"
+    -- A lane of whole power-of-two bytes (Zig 0.17.1 types `&v[1]` of a `u32` vector so; up to
+    -- 0.16.0 it is a plain `*u32`): the same bit-pointer, the vector's address, lane 1 at bit 32.
+    let u32l := of[19]!
+    require (tyOk of 19 && u32l.laneBitPtr && u32l.hostSize == 16 && u32l.bitOffset == 32)
+      s!"{version}: lane 1 of u32x4 is not the bit-pointer at bit 32 of 16 host bytes"
+    let lane (cx : CheckCtx) (ty : TyId) (k : Int) := (cx.lanePtr 0 ty (.inst 0) (.int 3 k)).toOption.isSome
+    require (lane (laneCx of 5) 19 1 && !lane (laneCx of 5) 19 2 && !lane (laneCx of 2) 19 1)
+      s!"{version}: a u32 lane pointer is not checked against its vector and lane"
+  IO.println "lane pointers: one model for every Zig version and every lane width"
   for (backend, schema, triple) in [("stage2_x86_64", 12, "x86_64-linux.5.10...6.19-musl"),
       ("stage2_c", 12, "x86_64-linux.5.10...6.19-musl"), ("unverified", 11, "unverified"),
       ("stage2_llvm", 12, "riscv64-linux.5.10...6.19-musl"),

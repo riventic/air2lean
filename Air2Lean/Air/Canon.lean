@@ -22,8 +22,8 @@ supported version, so one translation (and the proofs over it) serves all versio
    rewrites below match one vocabulary. 0.17.0 also dropped `bool_and`/`bool_or`: Sema's
    safety checks combine their conditions with `bit_and`/`bit_or` on `bool` (or `bool` vector)
    operands, which the pass renames to `bool_and`/`bool_or` (both evaluate both operands, so
-   the meaning is the same). A `ptr_cast` to a whole-byte vector lane becomes 0.16.0's
-   `ptr_elem_ptr` (`laneElemPtrs`). It rejects a tag that the file's `zig_version` does not
+   the meaning is the same). A `ptr_cast` of a vector pointer to one of its lane pointers
+   becomes 0.16.0's `ptr_elem_ptr` (`laneElemPtrs`). It rejects a tag that the file's `zig_version` does not
    have (`airTagReason?`), before the rename can make a misplaced tag look canonical.
 
 1. `forwardReadOnlyCopies`. Sema lowers `&v` of a constant value `v` (a parameter, a union
@@ -141,48 +141,31 @@ partial def rewriteBody (g : RawInst → Option RawInst) (body : Array RawInst) 
       cases := i.cases.map fun c => { c with body := rewriteBody g c.body } }
 
 /-- Zig 0.17.1 writes `&v[i]` as a `ptr_cast` of the vector pointer to a lane pointer
-(`Layout.vectorIndex`). 0.16.0 wrote `ptr_elem_ptr` of the vector pointer and the lane index,
-typed as a plain element pointer, when the lane is a power-of-two number of whole bytes
-(`wholeByteLane`), and typed as the lane pointer for every other lane (`u9`, `u24`, `bool`,
-`f80`). This gives every `&v[i]` the 0.16.0 form: `ptr_elem_ptr` of the vector pointer and the
-lane index (adding the `usize` type if the table lacks it), with the plain element pointer type
-for a whole-byte lane (added if the table lacks it) and the lane pointer type kept for the others
-(`Check.lean`'s `CheckCtx.lanePtr` then compares the type's lane with the index). A `ptr_cast` to
-a lane pointer from anything else than a pointer to its vector stays a cast. A lane pointer
-carries the vector pointer's alignment (`*align(16:0:4:1) u32`); the element pointer gets the
-alignment of its own address, as in 0.16.0: `gcd(align, k * size)`, the power of two the lane
-offset keeps. -/
+(`Layout.vectorIndex`) for every lane type. 0.16.0 wrote `ptr_elem_ptr` of the vector pointer and
+the lane index, typed as the lane pointer for a lane that is not a power-of-two number of whole
+bytes (`u9`, `u24`, `bool`, `f80`) and as a plain element pointer `*T` for the others (`u8`,
+`u32`, `f64`). This gives every 0.17.1 `&v[i]` the 0.16.0 form of the first case: `ptr_elem_ptr`
+of the vector pointer and the lane index (adding the `usize` type if the table lacks it), keeping
+the lane pointer type (`Check.lean`'s `CheckCtx.lanePtr` then compares the type's lane with the
+index). The type decides the model: a lane pointer type, whatever its lane, is the vector's
+address with the lane in the type (`lanePtrLayout`), as natively (`@intFromPtr(&v[1])` is
+`@intFromPtr(v)` in 0.17.1, `lang-long-tail/lane_values.zig`); a plain `*T` is the element's
+address. A `ptr_cast` to a lane pointer from anything else than a pointer to its vector stays a
+cast. -/
 def laneElemPtrs (f : RawFunc) : RawFunc := Id.run do
-  let mut types := f.types
-  let mut layouts := f.layouts
   let producers : Std.HashMap InstId TyId := (flatten f.body).foldl (init := {}) fun m i =>
     match i.ty with | some t => m.insert i.id t | none => m
-  let mut repl : Std.HashMap InstId (TyId × Nat) := {}
+  let mut repl : Std.HashMap InstId Nat := {}
   for i in flatten f.body do
     let (true, #[.inst p], some ty) := (i.tag == "ptr_cast", i.args, i.ty) | continue
-    let some (.ptr "one" isConst lane) := types[ty]? | continue
-    let some l := layouts[ty]? | continue
-    let some k := l.vectorIndex | continue
-    let some (.ptr "one" _ vec) := (producers[p]?).bind (types[·]?) | continue
-    let some (.vector n child) := types[vec]? | continue
-    unless child == lane && k < n do continue
-    -- A bit-packed lane keeps its lane pointer type (`lanePtrLayout`).
-    unless wholeByteLane types layouts lane do
-      repl := repl.insert i.id (ty, k)
-      continue
-    let bytes := ((layouts[lane]?).bind (·.size)).getD 0
-    let plain : Layout :=
-      { l with hostSize := 0, bitOffset := 0, vectorIndex := none, vectorIndexExported := false,
-               ptrAlign := l.ptrAlign.map (Nat.gcd · (k * bytes)) }
-    let t := Ty.ptr "one" isConst lane
-    let id := match (types.zip layouts).findIdx? (· == (t, plain)) with
-      | some id => id
-      | none => types.size
-    if id == types.size then
-      types := types.push t
-      layouts := layouts.push plain
-    repl := repl.insert i.id (id, k)
+    let some (.ptr "one" _ lane) := f.types[ty]? | continue
+    let some k := (f.layouts[ty]?).bind (·.vectorIndex) | continue
+    let some (.ptr "one" _ vec) := (producers[p]?).bind (f.types[·]?) | continue
+    let some (.vector n child) := f.types[vec]? | continue
+    if child == lane && k < n then repl := repl.insert i.id k
   if repl.isEmpty then return f
+  let mut types := f.types
+  let mut layouts := f.layouts
   let usize : Layout := { size := some 8, align := some 8 }
   let u := match (types.zip layouts).findIdx? (· == (.int false 64, usize)) with
     | some u => u
@@ -192,7 +175,7 @@ def laneElemPtrs (f : RawFunc) : RawFunc := Id.run do
     layouts := layouts.push usize
   let body := rewriteBody (body := f.body) fun i =>
     some <| match repl[i.id]? with
-      | some (ty, k) => { i with tag := "ptr_elem_ptr", ty := some ty, args := #[i.args[0]!, .int u k] }
+      | some k => { i with tag := "ptr_elem_ptr", args := #[i.args[0]!, .int u k] }
       | none => i
   return { f with body, types, layouts }
 
