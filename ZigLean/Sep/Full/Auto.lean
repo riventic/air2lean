@@ -5574,14 +5574,14 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
     let pf ← instantiateMVars pf
     if pf.hasExprMVar then
       -- (the unknowns of the planned state and the target)
-      let used := (T'.collectMVars (Qf.collectMVars {})).result
+      let mentioned := (T'.collectMVars (Qf.collectMVars {})).result
       for m in ← getMVars pf do
         unless left.contains m do
           if ← isProp (← m.getType) then continue
           -- a witness that neither the planned state nor the target mentions, only the proof of
           -- an `if` the facts decided (a rule's released bytes `relBytes … tl` of a growth, where
           -- `tl` is in the refuted branch): any value serves, as the rule holds for every one
-          unless used.contains m do
+          unless mentioned.contains m do
             if let some d ← observing? (mkDefault (← m.getType)) then
               trace[fsym] "plan: witness ?{m.name} not used: {d}"
               m.assign d
