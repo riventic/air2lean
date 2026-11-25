@@ -255,8 +255,8 @@ Every claim it makes is either **replaced** by a statement over translated alloc
 `FAllocSpec` in the full-state logic, or **retired** with the reason below. Retired claims are
 about the hand-written model itself. The executable checks of the `std` allocator model
 (`tests/roadmap/{allocation-policy, byte-sentinel, sentinel-realloc, resize-remap}`: kernel runs
-of `Zig.Allocator`) test the semantics that `--allocator-model std` still emits (the arena
-model's checks, `tests/roadmap/allocator-identity`, are deleted with `ZigLean/Mem/Owned.lean`). They are **legacy std allocator model checks**: they
+of `Zig.Allocator`) test the semantics that `--allocator-model std` still emits; the arena
+model's checks went with `ZigLean/Mem/Owned.lean`. They are **legacy std allocator model checks**: they
 stay, importing `ZigLean/Mem/*` only, and retire with `--allocator-model std`
 ([allocator-model.md](allocator-model.md), step 3 onwards). No new evidence is built on them.
 

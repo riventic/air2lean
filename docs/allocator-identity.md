@@ -7,7 +7,7 @@ Allocators other than the model's `std.mem.Allocator` (`ZigLean/Mem/Alloc.lean`,
 `Client.client_spec`), `std.heap.PageAllocator` (`tests/roadmap/alloc-translated`) and
 `std.heap.ArenaAllocator` (`tests/roadmap/alloc-arena`, [alloc-arena.md](alloc-arena.md)). An
 allocator's identity is its state and its token in the full-state logic, not a block kind: its
-slices lie in the blocks it gets from its child or the OS (`.mapped`, a global buffer), and a
+slices lie in the blocks it gets from its child or the OS (`.mapped`, a global or stack buffer), and a
 slice it did not grant has no token.
 
 The hand-written model that gave each allocator an id and its blocks the kind `.owned a`
