@@ -7,6 +7,7 @@
     python3 -B scripts/lean-deps.py --elaborate [--jobs N] [--mem-mib M]
     python3 -B scripts/lean-deps.py --precompiled check|write
     python3 -B scripts/lean-deps.py --prune-orphans
+    python3 -B scripts/lean-deps.py --lean [LEAN-OPTION...] FILE.lean [ARG...]
 
 Prints the imports of the given `.lean` files (a directory: every `.lean` file below it) that are
 modules of this package's libraries (`lakefile.toml`; `import ZigLean.Sep.Full.Auto` with
@@ -36,6 +37,12 @@ A file with imports of a fixture's own modules is elaborated by the check of tha
 modules that have no source there any more (`orphan_outputs`), and prints them;
 scripts/full-build.sh runs it first.
 
+`--lean ARGS` is `lake env $LEAN ARGS` (LEAN: a build guard's Lean, else `lean`) with the native
+code a Lake build of the first `.lean` argument would load (`native_options`), for a check script's
+`lean_cmd`: the library modules among the file's imports decide it, so a file that reaches `fsym`
+only through a module of the check's own work directory still runs it interpreted (the same terms,
+slower). With `--run` it adds nothing: the file's code is evaluated by the interpreter as before.
+
 A check that runs `lake env lean` on test files builds their imports first with `--build`: the
 modules are derived from the files, so the list cannot drift, and a stale `.olean` (a merge that
 changed a library module without a rebuild) is never tested silently.
@@ -51,6 +58,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import tomllib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -308,18 +316,48 @@ def input_key(f: str, toolchain: bytes, memo: dict[str, bytes]) -> str:
     return h.hexdigest()
 
 
+_NATIVE: dict[tuple, list[str]] = {}
+_NATIVE_LOCK = threading.Lock()
+
+
+def native_code(lake_imports) -> list[str]:
+    """The `lean` options that load the native code Lake loads into a build of a module whose
+    import closure has the Lake modules `lake_imports`: `lake setup-file` computes the shared
+    libraries of their precompiled imports (fsym's engine, docs/build-cache.md#precompiled-fsym)
+    in Lake's load order. With them a file runs the same native tactic code as its Lake build and
+    spends the heartbeats that build spends; interpreted, `fsym` spends more, and a budget the Lake
+    build meets can time out. The elaborated terms are the same."""
+    key = tuple(sorted(set(lake_imports)))
+    with _NATIVE_LOCK:  # parallel callers: one Lake run (which may build the libraries) at a time
+        if key in _NATIVE:
+            return _NATIVE[key]
+        header = {'imports': [{'module': m, 'importAll': False, 'isExported': True, 'isMeta': False}
+                              for m in key], 'isModule': False}
+        # With a header, Lake reads no source: the file names no module of the workspace.
+        result = subprocess.run(['lake', 'setup-file', 'universe-unit.lean', json.dumps(header)],
+                                cwd=ROOT, text=True, capture_output=True)
+        try:
+            setup = json.loads(result.stdout) if not result.returncode else None
+        except ValueError:
+            setup = None
+        if (not isinstance(setup, dict) or not isinstance(setup.get('dynlibs'), list)
+                or not isinstance(setup.get('plugins'), list)
+                or any(not isinstance(p, dict) or p.get('initFn?') or p.get('initFn')
+                       for p in setup['plugins'])):
+            raise RuntimeError(f'lake setup-file gave no supported module setup for {list(key)}:\n'
+                               f'{result.stdout[-2000:]}{result.stderr[-2000:]}')
+        _NATIVE[key] = ([f'--load-dynlib={(ROOT / path).absolute()}' for path in setup['dynlibs']]
+                        + [f'--plugin={(ROOT / p["path"]).absolute()}' for p in setup['plugins']])
+        return _NATIVE[key]
+
+
 def native_options(f: str, memo: dict[str, bytes], precompiled_mods: set[str]) -> list[str]:
-    """The `lean` options that load the native code a Lake build of the file f would load: Lake
-    loads a precompiled library into every elaboration whose import closure has one of its modules
-    (`precompiled_mods`; docs/build-cache.md#precompiled-fsym), so the closure's precompiled
-    modules decide them; `lake setup-file` (scripts/theorem_universe.py `native_code`, one Lake
-    query per set) names them in Lake's order. Without them `fsym` runs in Lean's interpreter: the
-    same proof terms, several times slower and with more heartbeats."""
+    """`native_code` for the file f: Lake loads a precompiled library into every elaboration whose
+    import closure has one of its modules (`precompiled_mods`), so the precompiled modules of the
+    file's library closure decide it (one Lake query per set). Without them `fsym` runs in Lean's
+    interpreter: the same proof terms, several times slower and with more heartbeats."""
     mods = sorted(library_closure(f, memo) & precompiled_mods)
-    if not mods:
-        return []
-    import theorem_universe
-    return theorem_universe.native_code(mods)
+    return native_code(mods) if mods else []
 
 
 def elaborate(jobs: int | None, mem_mib: int) -> int:
@@ -396,6 +434,17 @@ def main(argv: list[str]) -> int:
                 print(f"lean-deps: removing {path} (its module has no source)")
                 path.unlink(missing_ok=True)  # another prune of this tree may have removed it
         return 0
+    if argv[:1] == ["--lean"]:
+        files = [a for a in argv[1:] if a.endswith(".lean")]
+        if not files:
+            print("usage: lean-deps.py --lean [LEAN-OPTION...] FILE.lean [ARG...]", file=sys.stderr)
+            return 2
+        # `--run` evaluates the file's code: it stays in the interpreter, as in a plain `lake env lean`.
+        native = [] if "--run" in argv else \
+            native_options(files[0], {}, set().union(*precompiled_libs().values()))
+        lean = os.environ.get("LEAN") or "lean"
+        os.execvp("lake", ["lake", "env", lean, *native, *argv[1:]])
+        return 127  # not reached: execvp replaces this process or raises
     if argv[:1] == ["--elaborate"]:
         opts = dict(zip(argv[1::2], argv[2::2]))
         if set(opts) - {"--jobs", "--mem-mib"} or len(argv) % 2 == 0:

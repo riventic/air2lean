@@ -155,7 +155,7 @@ class Classify(unittest.TestCase):
     def test_elaborate_loads_the_native_code_lake_loads(self):
         # Lib.B is precompiled (as fsym's engine is): a file whose import closure reaches it runs
         # with the libraries `lake setup-file` names for the closure's precompiled modules
-        # (`theorem_universe.native_code`); a file below it runs with none and asks nothing.
+        # (`native_code`); a file below it runs with none and asks nothing.
         self.write("lakefile.toml", '[[lean_lib]]\nname = "Lib"\n\n[[lean_lib]]\nname = "Fast"\n'
                                     'roots = ["Lib.B"]\nglobs = ["Lib.B"]\nprecompileModules = true\n')
         self.write("Lib/C.lean", "import Lib.B\n")
@@ -170,9 +170,7 @@ class Classify(unittest.TestCase):
             commands.update({job.argv[-1]: job.argv for job in jobs})
             stats[:] = [None] * len(jobs)
             return [0] * len(jobs)
-        import theorem_universe
-        self.enterContext(mock.patch.object(theorem_universe, "native_code",
-                                            lambda mods: asked.append(mods) or [option]))
+        self.enterContext(mock.patch.object(ld, "native_code", lambda mods: asked.append(mods) or [option]))
         self.enterContext(mock.patch.object(ld, "REGISTRY", self.repo / "assurance/lean-files.json"))
         self.enterContext(mock.patch.object(par, "run", fake_run))
         self.enterContext(mock.patch.dict(os.environ, {"AIR2LEAN_CAS_DIR": str(self.repo / "cas"), "LEAN": "lean"}))
@@ -183,6 +181,25 @@ class Classify(unittest.TestCase):
                                     "t/Direct.lean": ["lake", "env", "lean", option, "t/Direct.lean"],
                                     "t/Through.lean": ["lake", "env", "lean", option, "t/Through.lean"]})
         self.assertEqual(asked, [["Lib.B"], ["Lib.B"]])
+
+    def test_lean_command_loads_the_native_code_of_the_file(self):
+        # A check's `lean_cmd`: a work-directory import is not followed, a library import is.
+        self.write("lakefile.toml", '[[lean_lib]]\nname = "Lib"\n\n[[lean_lib]]\nname = "Fast"\n'
+                                    'roots = ["Lib.B"]\nglobs = ["Lib.B"]\nprecompileModules = true\n')
+        self.write("t/Proof.lean", "import Work.Gen\nimport Lib.B\n")
+        self.write("t/Gen.lean", "import Lib.A\n")
+        option = "--load-dynlib=/x/libFast.so"
+        self.enterContext(mock.patch.object(ld, "native_code", lambda mods: [option]))
+        self.enterContext(mock.patch.dict(os.environ, {"LEAN": "/g/lean"}))
+        runs = []
+        self.enterContext(mock.patch.object(ld.os, "execvp", lambda prog, argv: runs.append(argv)))
+        for args in (["-R", "w", "-o", "w/P.olean", "t/Proof.lean"], ["t/Gen.lean"],
+                     ["--run", "t/Proof.lean", "x.lean"]):
+            ld.main(["--lean", *args])
+        self.assertEqual(runs, [["lake", "env", "/g/lean", option, "-R", "w", "-o", "w/P.olean", "t/Proof.lean"],
+                                ["lake", "env", "/g/lean", "t/Gen.lean"],
+                                ["lake", "env", "/g/lean", "--run", "t/Proof.lean", "x.lean"]])
+        self.assertEqual(ld.main(["--lean", "-v"]), 2)
 
     def fake_lake_query(self, targets):
         # Lake's answers in the tiny repo: transitive imports by the file headers, a library's
