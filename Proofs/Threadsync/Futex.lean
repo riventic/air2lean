@@ -56,7 +56,12 @@ theorem errno_count {j : Nat} (hj : j ≤ 2 ^ 31 - 1) :
 theorem min_toNat (c : BitVec 32) :
     (Zig.min false (2147483647 : BitVec 32) c).toNat = min c.toNat (2 ^ 31 - 1) := by
   have h2 : (2147483647 : BitVec 32).toNat = 2147483647 := rfl
-  rw [min_false, h2]; omega
+  show (if (2147483647 : BitVec 32).ule c = true then (2147483647 : BitVec 32) else c).toNat = _
+  by_cases hle : (2147483647 : BitVec 32).ule c = true
+  · have hn : (2147483647 : BitVec 32).toNat ≤ c.toNat := by simpa [BitVec.ule] using hle
+    simp only [hle, ↓reduceIte]; rw [h2] at hn ⊢; omega
+  · have hn : ¬ (2147483647 : BitVec 32).toNat ≤ c.toNat := by simpa [BitVec.ule] using hle
+    simp only [hle, Bool.false_eq_true, ↓reduceIte]; rw [h2] at hn; omega
 
 /-- **`Thread.Futex.wake(p, c)`** (Linux, `c ≠ 0`) at a live word `p`: the OS wake of up to
 `wakeLimit v` waiters at `p`'s private key, where `v = min(c, maxInt(i32))`; it returns after a
