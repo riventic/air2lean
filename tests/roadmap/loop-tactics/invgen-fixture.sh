@@ -28,6 +28,7 @@ invgen_fixture() {
   # functions' semantic fingerprints (scripts/invgen.py, its target for this fixture).
   AIR2LEAN_TRANSLATOR=$translator python3 -B scripts/invgen.py check "$dir/$ns/Inv.lean"
   lake env lean -R "$dir" -o "$work/olean/$ns/Inv.olean" "$dir/$ns/Inv.lean"
-  lake env lean -R "$dir" -o "$work/olean/Proof.olean" "$dir/Proof.lean"
+  # With Lake's native fsym (scripts/lean-deps.py --lean).
+  python3 -B scripts/lean-deps.py --lean -R "$dir" -o "$work/olean/Proof.olean" "$dir/Proof.lean"
   python3 -B tests/roadmap/loop-tactics/invgen_mutants.py "$dir" "$ns" "$work"
 }
