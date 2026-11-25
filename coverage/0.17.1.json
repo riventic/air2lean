@@ -25467,7 +25467,7 @@
       "ZigLean/Conc/Spawn.lean": "06c90901a36bae32d15b3cc7cfa040f7a7bacaf4a4cc7032c6aaebedd6388de6",
       "ZigLean/Conc/SpawnLemmas.lean": "ef6e19c47354e904ee1dcd4e52bfe5ae623a08300db790dea261b9659244ca11",
       "ZigLean/Conc/TimedBody.lean": "8983c398730244fa96d55d394acaf66170aa528a46102b4f93f873aa3ebb3fda",
-      "ZigLean/Conc/TimedBudget.lean": "1a61248bf2fbcb733368351c7d9ce9357fd7642100c39ac070df5f20c2405fbf",
+      "ZigLean/Conc/TimedBudget.lean": "4262e3800625227bbe026b598e2dc4c3a8a6ca4081c61ec076f3f86681779fa2",
       "ZigLean/Conc/TimedCall.lean": "d198cee0989bb310de4d9e055c702f6dd802992a449259f4c613fb8e7a0d3d85",
       "ZigLean/Conc/TimedClient.lean": "40149542dac6763e5d0d7c52aa74b2cf9d1de012221a193d6cbaa197f1e3c97a",
       "ZigLean/Conc/TimedCompare.lean": "f5836c221c4ce38cbd128f3a63627fd1516812c1360669e3babac73232a3c16e",
