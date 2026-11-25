@@ -9,7 +9,7 @@ import ZigLean.VersionGate
 
 The per-item obligation of `Io.Condition` (Zig 0.16.0's std code; 0.17.1 inlines the
 uncancelable loops of `waitInner` into `waitUncancelable`) in this program's generated code:
-`waitUncancelable` and `signal` walked with the rules of the futex-epoch condition
+`waitUncancelable`, `signal` and `broadcast` walked with the rules of the futex-epoch condition
 (`ZigLean/Sep/Full/Cond.lean`), with the program's `Io.Mutex` (`ioMutex`), for every protocol
 that has the condition next to its mutex. The wait is walked once per translation
 (`ZigLean.VersionGate`); `ioCond` is version-neutral.
@@ -84,6 +84,24 @@ theorem condS_post {b : BitVec 32} {r : BitVec 16}
       (Packed.toBits (Io_Condition_State.mk (Packed.ofBits b : Io_Condition_State).waiters r)) := by
   unfold FCond.PostOk
   rw [condS_bits, condS_mk, condS_w, hr]
+  omega
+
+/-- `broadcast`'s post: a signal for every waiter, `(w, s) → (w, w)`, to a state with a waiter
+lacking one. -/
+theorem condS_bpost {b : BitVec 32} (hlt : ¬b.toNat % 65536 ≤ b.toNat / 65536) :
+    FCond.PostOk (Packed.toBits (Packed.ofBits b : Io_Condition_State))
+      (Packed.toBits (Io_Condition_State.mk (Packed.ofBits b : Io_Condition_State).waiters
+        (Packed.ofBits b : Io_Condition_State).waiters)) := by
+  unfold FCond.PostOk
+  rw [condS_bits, condS_mk, condS_w]
+  omega
+
+/-- The state `(w, w)` is served. -/
+theorem condS_bserved (x : BitVec 16) :
+    (Packed.toBits (Io_Condition_State.mk x x)).toNat % 65536 ≤
+      (Packed.toBits (Io_Condition_State.mk x x)).toNat / 65536 := by
+  rw [condS_mk]
+  have : x.toNat < 65536 := x.isLt
   omega
 
 theorem condS_bits1 : Packed.toBits (Packed.ofBits (1 : BitVec 32) : Io_Condition_State) = 1 :=
@@ -225,6 +243,97 @@ theorem ioCond_signal_wp_resource (hC : L.Fits (C.prim L) P U ok) (hcost : P.cos
       ∃ r', keepPart t (L.part g) r' ∧ P.inv (upd G' t (L.setPart g r')) m' ∧
         C.SigPost (C.S.hist m) (m.clocks[t]!) false m') G m d := by
   refine WP.mono ?_ (ioCond_signal_wp_unmetered hC hcost hp t g hgx hgo hsx hu io G m d hi)
+  rintro _ G' m' d' ⟨hd, hc, hi', hsig⟩
+  exact ⟨hd, hc, L.part g, rfl, by simpa only [L.setPart_self] using hi', hsig⟩
+
+/-! ## `broadcast`
+
+As `signal`, with the post `(w, s) → (w, w)` (every waiter gets its signal: the history post with
+`all = true`) and a wake of `w - s`. -/
+
+/-- `broadcast`'s loop invariant, for the call snapshot `h c` (as `sigInv`). -/
+def bcInv (P : Proto Tgt γ) (C : FCond γ) (t : ThreadId) (g : γ) (h : Array Word.Entry)
+    (c : VClock) (D : Nat) (s : Io_Condition_broadcastLocals) (G : ThreadId → γ) (m : Mem)
+    (d : Nat) : Prop :=
+  d < D ∧ m.current = t ∧ ∃ b : BitVec 32, s.prev_state = Packed.ofBits b ∧ FCond.SOk b ∧
+    (b.toNat % 65536 ≤ b.toNat / 65536 → ∀ all, C.SigPost h c all m) ∧
+    P.inv (upd G t (C.set g (FCond.afterSRead h c b))) m
+
+/-- `broadcast`'s loop ends with `t` out and the history post with `all = true`. -/
+def bcPost (P : Proto Tgt γ) (C : FCond γ) (t : ThreadId) (g : γ) (h : Array Word.Entry)
+    (c : VClock) (D : Nat) (r : Io_Condition_broadcastExit × Io_Condition_broadcastLocals)
+    (G : ThreadId → γ) (m : Mem) (d : Nat) : Prop :=
+  (r.1 = .ret ∨ r.1 = .br10) ∧ d < D ∧ m.current = t ∧ P.inv (upd G t g) m ∧
+    C.SigPost h c true m
+
+theorem bc_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
+    (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hu : 0 < (L.part g).gh.ac.frag .unmetered)
+    (h : Array Word.Entry) (c : VClock) (D : Nat)
+    (io : Io) (s : Io_Condition_broadcastLocals) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hs : bcInv P C t g h c D s G m d) :
+    P.WP t ((Io_Condition_broadcast.loop11 C.S.ptr io).run s) (fun r G' m' d' =>
+      if Io_Condition_broadcast.again11 r.1 then bcInv P C t g h c D r.2 G' m' d' ∧
+        (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : Io_Condition_broadcastLocals) => 0) s)
+      else bcPost P C t g h c D r G' m' d') G m d := by
+  obtain ⟨hd, hcur, b, hb, hok, hsp₀, hi₀⟩ := hs
+  -- the loop's tick, paid from the unmetered fragment: the same writes (`m.ticked`)
+  unfold Io_Condition_broadcast.loop11
+  rw [StateT.run_bind]
+  refine WP.bind ?_
+  show P.WP t (ConcM.liftMem Zig.tick >>= fun a => pure (a, s)) _ _ _ _
+  refine WP.bind (hC.wp_tick_unmetered_exact hi₀ hcur
+    (by rw [hC.lph]; rcases hgo with hh | hh <;> rw [hh] <;> decide)
+    (by rw [hC.lpart]; exact hu) fun hcur hi => WP.pure' ?_)
+  have hsp : b.toNat % 65536 ≤ b.toNat / 65536 → ∀ all, C.SigPost h c all m.ticked :=
+    fun hsv all => (hsp₀ hsv all).extend (Word.Extends.congr rfl rfl)
+  clear hsp₀ hi₀
+  obtain ⟨ps⟩ := s
+  simp only at hb
+  subst hb
+  by_cases hsv : b.toNat % 65536 ≤ b.toNat / 65536
+  · have hp := hsp hsv true
+    rw [show FCond.afterSRead h c b = .out by simp [FCond.afterSRead, hsv],
+      FCond.set_of hgx] at hi
+    clear hsp
+    fsym [condS_w, condS_s, FCond.SOk, bcPost, Io_Condition_broadcast.again11]
+  · rw [show FCond.afterSRead h c b = .sl h c by simp [FCond.afterSRead, hsv]] at hi
+    clear hsp
+    fsym [FCond.wp_postAs hC condS_dec (sh := h) (c := c), FCond.wp_bump hC, FCond.wp_wakeEp hC,
+      hC.wp_projE (t := t), FCond.SigPost.ofPostAll, condS_bpost hsv, condS_bserved,
+      Zig.intCast_unsigned_widen, BitVec.toNat_setWidth,
+      condS_eq, condS_w, condS_s, condS_mk, condS_bits,
+      C.ph_set, hC.lph, C.set_set, FCond.set_of, (FCond.set_of hgx), FCond.ptr_ep,
+      FCond.SOk, bcInv, bcPost, Io_Condition_broadcast.again11]
+
+/-- **`Io.Condition.broadcast`** outside or holding the mutex, preserving its complete resource,
+with the history post of its call with `all = true` (`FCond.SigPost`). -/
+theorem ioCond_broadcast_wp_unmetered (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
+    {p : Ptr} (hp : p = C.S.ptr) (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered)
+    (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
+    P.WP t (Io_Condition_broadcast p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      P.inv (upd G' t g) m' ∧ C.SigPost (C.S.hist m) (m.clocks[t]!) true m') G m d := by
+  have hi' := hC.enterSl hgx hgo hsx hi
+  generalize C.S.hist m = h at hi' ⊢
+  generalize m.clocks[t]! = c at hi' ⊢
+  clear hi
+  fsym [FCond.wp_sloadAs hC condS_dec, condS_eq, C.ph_set, hC.lph, C.set_set,
+    WP.loop _ _ (bcInv P C t g h c d) (fun _ => 0) (bcPost P C t g h c d)
+      (bc_body hC hcost t g hgx hgo hu h c d io),
+    bcInv, bcPost]
+
+/-- The broadcast contract at its caller part (`keepPart`, as `signal`). -/
+theorem ioCond_broadcast_wp_resource (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
+    {p : Ptr} (hp : p = C.S.ptr) (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g)
+    (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hu : payUnmetered t (L.part g)) (hi : P.inv (upd G t g) m) :
+    P.WP t (Io_Condition_broadcast p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      ∃ r', keepPart t (L.part g) r' ∧ P.inv (upd G' t (L.setPart g r')) m' ∧
+        C.SigPost (C.S.hist m) (m.clocks[t]!) true m') G m d := by
+  refine WP.mono ?_ (ioCond_broadcast_wp_unmetered hC hcost hp t g hgx hgo hsx hu io G m d hi)
   rintro _ G' m' d' ⟨hd, hc, hi', hsig⟩
   exact ⟨hd, hc, L.part g, rfl, by simpa only [L.setPart_self] using hi', hsig⟩
 
@@ -809,6 +918,7 @@ end
 def ioCond : CondImpl Tgt where
   wait := Io_Condition_waitUncancelable
   signal := Io_Condition_signal
+  broadcast := Io_Condition_broadcast
   c := ioMutex.c
   wait_pre := payUnmetered
   wait_post := keepPart
@@ -818,7 +928,12 @@ def ioCond : CondImpl Tgt where
   signal_post := keepPart
   signal_unmetered_pre _ _ hu := hu
   signal_unmetered_post _ _ _ _ hr := hr
+  broadcast_pre := payUnmetered
+  broadcast_post := keepPart
+  broadcast_unmetered_pre _ _ hu := hu
+  broadcast_unmetered_post _ _ _ _ hr := hr
   wait_wp_resource := ioCond_wait_wp_resource
   signal_wp_resource hC := ioCond_signal_wp_resource hC.toFits
+  broadcast_wp_resource hC := ioCond_broadcast_wp_resource hC.toFits
 
 end Sync

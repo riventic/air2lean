@@ -390,7 +390,7 @@
        "ty": 2,
        "callee": {
         "ty": 11,
-        "func": "Io.futexWaitUncancelable__func_674",
+        "func": "Io.futexWaitUncancelable__func_672",
         "module": "std",
         "instance_key": "db8d73c2f746be9b7960618f66cdb98ec19c348b56d5cf441d40720fdf2b7d01",
         "noreturn": false
