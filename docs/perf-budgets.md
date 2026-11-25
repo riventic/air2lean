@@ -95,7 +95,8 @@ Limits:
   including reaped descendants (`lake` → `lean`). It is not a sum.
   `scripts/build-guard.py` reports the sampled sum.
 - "Cold" proof builds remove only the selected modules' `.olean`/`.ilean`/trace/IR
-  outputs. `ZigLean` and other dependencies stay built. The proof builds run with Lake's
+  outputs. `ZigLean` and other dependencies stay built: `record` first builds the modules
+  (unmeasured), so a stale dependency is not timed as part of the cold build. The proof builds run with Lake's
   artifact cache off (`LAKE_ARTIFACT_CACHE=false`; `scripts/build-guard.py` turns it on under
   `AIR2LEAN_CAS_DIR`), and `record` fails a workload whose cold build did not write each
   module's `.olean` anew: a restored output would time the cache, not the proof.

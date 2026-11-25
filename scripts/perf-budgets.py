@@ -632,6 +632,10 @@ def run_workload(workload, args, work, log):
     modules = workload.get("proof_modules", [])
     if modules and not args.skip_proof:
         env = uncached_env()
+        # Bring the modules and every dependency up to date first (not measured): the cold build
+        # then elaborates only the selected modules, not a stale dependency of theirs.
+        require_success(measure([args.lake, "build", *modules], ROOT, log, args.timeout, env),
+                        "proof build (dependencies)")
         removed = remove_module_artifacts(ROOT, modules)
         since = time.time()
         for cache in ("cold", "warm"):
