@@ -14,11 +14,13 @@ import sys
 import tempfile
 
 HERE = Path(__file__).resolve().parent
+# The retained exports, one directory per Zig version (alloc-arena points it at its own).
+AIR = HERE / "air"
 TRANSLATED = ["--allocator-model", "translated"]
 
 
 def load(program, version="0.16.0"):
-    air = HERE / "air" / version / program
+    air = AIR / version / program
     return {p.name: json.loads(p.read_text()) for p in sorted(air.glob("*.json"))}
 
 
