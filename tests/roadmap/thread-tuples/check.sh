@@ -129,4 +129,6 @@ mutation_status=0
 "${lean_cmd[@]}" -R "$work" "$work/Mutated.lean" >"$work/mutation.log" 2>&1 || mutation_status=$?
 # Require normal exit 1 and only the located dispatcher equality's rfl diagnostic.
 python3 tests/roadmap/thread-tuples/classify_mutant.py "$mutation_status" "$work/mutation.log" "$work/Mutated.lean"
+python3 -B scripts/mutation_kill_log.py --check tests/roadmap/thread-tuples/check.sh \
+  tests/roadmap/thread-tuples/check.sh tuple-capture-order
 echo 'thread tuple artifact, runtime, signature, slice, and order mutation gates passed'

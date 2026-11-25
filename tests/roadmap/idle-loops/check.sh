@@ -25,4 +25,6 @@ lake env lean "$dir/Check.lean"
 # Semantic mutants of the client (bounded runtime witnesses): a skipped idle loop and a
 # relaxed publication must make the read of data race.
 lake env lean --run "$dir/Mutants.lean"
+python3 -B scripts/mutation_kill_log.py --check tests/roadmap/idle-loops/check.sh tests/roadmap/idle-loops/Mutants.lean \
+  relaxed-publish idle-loop-skipped
 echo 'idle-loop translation, safety, progress-under-premise, starvation and mutant checks passed'

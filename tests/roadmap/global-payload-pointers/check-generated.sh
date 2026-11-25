@@ -28,6 +28,8 @@ for name in control wrong_global missing_small_payload_offset forget_parent; do
   test "$status" = 0
  else
   python3 tests/roadmap/error-storage/classify_mutant.py "$status" "$work/Oracle.lean" "$work/oracle.log"
+  python3 -B scripts/mutation_kill_log.py --check tests/roadmap/global-payload-pointers/check-generated.sh \
+    "$clients/generated-mutations.py" "$name"
  fi
 done
 cmp "$AIR2LEAN_GLOBAL_ACTUAL_GEN" "$out/baseline/Gen.lean"

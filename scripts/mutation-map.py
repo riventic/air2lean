@@ -9,19 +9,25 @@ mutants, each mutant with one category. `check` fails when
     of the categories it declares;
   * a mutation of scripts/mutate.sh or tests/roadmap/mutation-map/mutants.py is mapped nowhere;
   * a mutant category has no mutant anywhere in the map;
-  * a designated scripts/mutate.sh mutant has no recorded kill in assurance/mutation-kills.json
-    (which regression killed it: a differential example or a proof module), the record names a
-    regression that does not exist, was recorded for another version of the mutation's block in
-    scripts/mutate.sh (stale), or the ledger names a mutation that is gone. A mutation that cannot
-    run on the recording host (asm is x86_64 only) may carry `{"unrecorded": reason, block_sha256}`:
-    `check` lists it as a kill gap, and only `kills record` from a host that runs it clears it.
+  * a designated mutant outside tests/roadmap/mutation-map/mutants.py has no recorded kill in
+    assurance/mutation-kills.json (which regression killed it: a differential example `diff`, a
+    proof module `proof`, or a CI check script `check`, e.g. tests/roadmap/big-endian/check.sh),
+    the record names a regression that does not exist (a `check` must be a script a workflow step
+    names), was recorded for another version of the mutant (stale), or the ledger names a mutant
+    that is gone. A scripts/mutate.sh mutation is keyed by its label and bound to the sha256 of its
+    block; a fixture-local mutant is keyed `<path>#<name>` and bound to the sha256 of its file, so
+    any edit of that file needs a new recorded run. A mutant that cannot run on the recording host
+    (asm is x86_64 only) may carry `{"unrecorded": reason, block_sha256}`: `check` lists it as a
+    kill gap, and only `kills record` from a host that runs it clears it. The Python mutants are
+    killed by assertion failures in every CI run of mutants.py, which needs no ledger.
 Gaps of incomplete rows (declared category without a mutant, no negative test, no mutant) are
 reported, not failed: a partial row may still lack evidence.
 
 `check` reads committed text only; it never runs a test, a mutant or a toolchain. The kills come
-from `scripts/mutate.sh` runs with AIR2LEAN_MUTATION_KILL_LOG set:
-  kills record --log LOG   merge the killed mutations of LOG into the ledger (fails on a survivor)
-  kills verify --log LOG   fail unless LOG's mutations were killed by the regression the ledger names
+from runs with AIR2LEAN_MUTATION_KILL_LOG set: of `scripts/mutate.sh`, and of the fixture checks,
+whose mutant runners report each kill they observed (scripts/mutation_kill_log.py):
+  kills record --log LOG   merge the killed mutants of LOG into the ledger (fails on a survivor)
+  kills verify --log LOG   fail unless LOG's mutants were killed by the regression the ledger names
 """
 
 import argparse
@@ -35,6 +41,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import register as register_data  # noqa: E402
+from mutation_kill_log import key as mutant_key  # noqa: E402
 MAP = 'assurance/mutation-map.json'
 SCHEMA = 'air2lean-mutation-map/1'
 CATEGORIES = ('forwarding', 'layout', 'operand-order', 'failure-cleanup',
@@ -44,7 +51,8 @@ MUTATE_SH = 'scripts/mutate.sh'
 SHARDS = 'scripts/mutation-shards.txt'
 KILLS = 'assurance/mutation-kills.json'
 KILLS_SCHEMA = 'air2lean-mutation-kills/1'
-KILL_KINDS = ('diff', 'proof')
+KILL_KINDS = ('diff', 'proof', 'check')
+WORKFLOWS = '.github/workflows'
 MUTATION_MARK = re.compile(r'^echo "== mutation \(([a-z]+)\)', re.M)
 BLOCK_END = '[ "$mutations_run" -gt 0 ]'
 PY_MUTANTS = 'tests/roadmap/mutation-map/mutants.py'
@@ -71,20 +79,54 @@ def mutation_blocks(root):
     return blocks
 
 
+def fixture_blocks(root, keys):
+    """`<path>#<name>` -> sha256 of the file that defines that fixture-local mutant."""
+    digests = {}
+    for k in keys:
+        path = root / k.rsplit('#', 1)[0]
+        if path not in digests:
+            digests[path] = hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
+    return {k: digests[root / k.rsplit('#', 1)[0]] for k in keys}
+
+
+def mutant_blocks(root, fixture):
+    """Ledger key -> the sha256 its kill is bound to: every mutate.sh block, the given fixture keys."""
+    return {**mutation_blocks(root), **fixture_blocks(root, fixture)}
+
+
+def map_fixture_keys(root):
+    """The ledger keys of the fixture-local mutants the committed map designates (`kills`)."""
+    data = json.loads((root / MAP).read_text())
+    return {mutant_key(m['path'], m['name']) for entry in data['requirements'].values()
+            for m in entry.get('mutants', []) if m['path'] not in (MUTATE_SH, PY_MUTANTS)}
+
+
+def ci_names(root, rel):
+    """Whether a workflow file under .github/workflows names the repository path REL."""
+    pattern = re.compile(r'(?<![\w/.-])' + re.escape(rel) + r'(?![\w/.-])')
+    workflows = root / WORKFLOWS
+    return workflows.is_dir() and any(pattern.search(p.read_text(encoding='utf-8', errors='replace'))
+                                      for p in sorted(workflows.glob('*.yml')))
+
+
 def kill_target_exists(root, kind, target):
+    """A diff example, a root-package proof module, or a script a CI step runs (any fixture's check)."""
     if kind == 'diff':
         return bool(re.fullmatch(r'[a-zA-Z0-9_-]+', target)) and (root / 'examples' / target / f'{target}.zig').is_file()
+    if kind == 'check':
+        return (bool(re.fullmatch(r'(?:tests|scripts)(?:/[\w.-]+)+', target)) and '..' not in target.split('/')
+                and (root / target).is_file() and ci_names(root, target))
     return bool(re.fullmatch(r'\w+(\.\w+)+', target)) and (root / (target.replace('.', '/') + '.lean')).is_file()
 
 
 def check_kills(root, kills, designated, blocks, problems, gaps):
-    """Every designated mutate.sh mutant needs a current recorded kill by an existing regression."""
+    """Every designated mutant outside mutants.py needs a current recorded kill by an existing regression."""
     if not isinstance(kills, dict) or kills.get('schema') != KILLS_SCHEMA or not isinstance(kills.get('mutants'), dict):
         problems.append(f'{KILLS}: expected schema {KILLS_SCHEMA!r} with a mutants object')
         return
     entries = kills['mutants']
     for name in sorted(entries.keys() - blocks.keys()):
-        problems.append(f'{KILLS}: kill recorded for {name}, which {MUTATE_SH} no longer has')
+        problems.append(f'{KILLS}: kill recorded for {name}, which is no longer a designated mutant')
     for name in sorted(designated):
         entry, where = entries.get(name), f'{KILLS}: {name}'
         if entry is None:
@@ -97,7 +139,7 @@ def check_kills(root, kills, designated, blocks, problems, gaps):
             gaps.append(f'{name}: {entry["unrecorded"]}')
         elif (not isinstance(entry, dict) or set(entry) != {'killed_by', 'block_sha256'} or not isinstance(by, dict) or set(by) != {'kind', 'target'}
                 or by['kind'] not in KILL_KINDS or not isinstance(by['target'], str)):
-            problems.append(f'{where}: needs killed_by {{kind: diff|proof, target}} and block_sha256')
+            problems.append(f'{where}: needs killed_by {{kind: {"|".join(KILL_KINDS)}, target}} and block_sha256')
         elif not kill_target_exists(root, by['kind'], by['target']):
             problems.append(f'{where}: killing {by["kind"]} regression {by["target"]!r} does not exist')
         elif entry['block_sha256'] != blocks.get(name):
@@ -207,6 +249,7 @@ def analyze(root=ROOT, data=None, kills=None):
     labels = {'mutate.sh': mutate_sh_labels(root), 'shards': shard_labels(root), 'python': py_mutant_names(root)}
     by_category = {c: [] for c in MUTANT_CATEGORIES}
     mapped = {MUTATE_SH: set(), PY_MUTANTS: set()}
+    fixture, complete_keys = set(), []
     gaps = []
     for rid, _ in rows:
         entry = entries.get(rid)
@@ -218,6 +261,10 @@ def analyze(root=ROOT, data=None, kills=None):
                 by_category[m['category']].append(f'{rid}:{m["name"]}')
             if m['path'] in mapped:
                 mapped[m['path']].add(m['name'])
+            else:
+                fixture.add(mutant_key(m['path'], m['name']))
+            if status[rid] == 'complete' and m['path'] != PY_MUTANTS:
+                complete_keys.append((rid, m['name'] if m['path'] == MUTATE_SH else mutant_key(m['path'], m['name'])))
         missing = [c for c in declared if c not in found]
         lacks = [what for what, items in (('negative tests', tests), ('designated mutants', mutants)) if not items]
         if missing:
@@ -232,7 +279,12 @@ def analyze(root=ROOT, data=None, kills=None):
         for name in sorted(names - mapped[path]):
             problems.append(f'{path}: mutation {name} is mapped to no register ID')
     kill_gaps = []
-    check_kills(root, kills, mapped[MUTATE_SH], mutation_blocks(root), problems, kill_gaps)
+    check_kills(root, kills, mapped[MUTATE_SH] | fixture, mutant_blocks(root, fixture), problems, kill_gaps)
+    # A complete row's mutants detect the wrong behaviour only if a run killed each one.
+    ledger = kills.get('mutants') if isinstance(kills, dict) and isinstance(kills.get('mutants'), dict) else {}
+    for rid, k in complete_keys:
+        if isinstance(ledger.get(k), dict) and 'unrecorded' in ledger[k]:
+            problems.append(f'{rid}: complete row relies on mutant {k}, whose kill is unrecorded')
     for category in CATEGORIES:
         if not by_category[category]:
             problems.append(f'category {category}: no designated mutant in the map')
@@ -254,12 +306,16 @@ def read_kill_log(path):
 
 
 def kills_command(args):
-    log, blocks = read_kill_log(args.log), mutation_blocks(args.root)
+    log, blocks = read_kill_log(args.log), mutant_blocks(args.root, map_fixture_keys(args.root))
     path = args.root / KILLS
     ledger = json.loads(path.read_text()) if path.is_file() else {'schema': KILLS_SCHEMA, 'mutants': {}}
     problems = [f'{name}: survived (ran {kind} {target})' for name, (status, kind, target) in sorted(log.items())
                 if status != 'killed']
-    problems += [f'{name}: not a {MUTATE_SH} mutation' for name in sorted(log.keys() - blocks.keys())]
+    problems += [f'{name}: not a {MUTATE_SH} mutation or a designated fixture mutant'
+                 for name in sorted(log.keys() - blocks.keys())]
+    problems += [f'{name}: killing {kind} regression {target!r} does not exist'
+                 for name, (status, kind, target) in sorted(log.items())
+                 if status == 'killed' and not kill_target_exists(args.root, kind, target)]
     if args.kills_command == 'verify':
         for name, (status, kind, target) in sorted(log.items()):
             entry = ledger['mutants'].get(name)
@@ -284,10 +340,10 @@ def main(argv=None):
     check = sub.add_parser('check', help='validate the map and report per-category coverage gaps')
     check.add_argument('--root', type=Path, default=ROOT)
     check.add_argument('--json', action='store_true', help='print the report as JSON')
-    kills = sub.add_parser('kills', help='record or verify which regression kills each mutate.sh mutant')
+    kills = sub.add_parser('kills', help='record or verify which regression kills each designated mutant')
     kills.add_argument('kills_command', choices=('record', 'verify'))
     kills.add_argument('--root', type=Path, default=ROOT)
-    kills.add_argument('--log', type=Path, required=True, help='AIR2LEAN_MUTATION_KILL_LOG of a mutate.sh run')
+    kills.add_argument('--log', type=Path, required=True, help='AIR2LEAN_MUTATION_KILL_LOG of a mutate.sh or fixture-check run')
     args = parser.parse_args(argv)
     try:
         if args.command == 'kills':

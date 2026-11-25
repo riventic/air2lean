@@ -4,8 +4,11 @@ from pathlib import Path
 import importlib.util
 import re
 import subprocess
+import sys
 import tempfile
 ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / 'scripts'))
+from mutation_kill_log import killed as log_kill  # noqa: E402
 # Share the strict located-diagnostic classifier with the existing bitops gate.
 _spec = importlib.util.spec_from_file_location(
     "bitops_mutant_classifier", ROOT / "tests/roadmap/bitops/classify_mutant.py")
@@ -54,5 +57,6 @@ def main():
             if not is_semantic_rejection(result.returncode, log):
                 raise RuntimeError(f'{name}: not an exclusive semantic decide refutation:\n{log}')
             print(f'{name}: killed by false kernel proposition')
+            log_kill('tests/roadmap/byte-sentinel/mutations.py', name, 'tests/roadmap/byte-sentinel/check.sh')
 if __name__ == '__main__':
     main()

@@ -15,6 +15,8 @@ import sys
 
 sys.dont_write_bytecode = True
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parents[2] / "scripts"))
+from mutation_kill_log import killed as log_kill  # noqa: E402
 VLOAD = "Zig.vload air2lean_device 32 4"
 VASM = 'Zig.vasm air2lean_device "rdtsc\\n\\tshlq $32, %%rdx\\n\\torq %%rdx, %%rax" [] 64'
 
@@ -87,6 +89,7 @@ def classify(name, status, log, proofs):
         raise SystemExit(f"{name}: failing theorems {sorted(map(str, failed))}, want {sorted(required)} "
                          f"(allowed {sorted(allowed)})")
     print(f"{name}: rejected by {sorted(failed)}")
+    log_kill("tests/roadmap/volatile-effects/device-mutants.py", name, "tests/roadmap/volatile-effects/check-device.sh")
 
 
 def self_test():
