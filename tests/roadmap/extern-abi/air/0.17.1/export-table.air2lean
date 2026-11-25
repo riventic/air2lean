@@ -1,0 +1,2886 @@
+{
+ "schema": 12,
+ "zig_version": "0.17.1",
+ "exports": [
+  {
+   "name": "main",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "std",
+    "name": "start.main",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "uname",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.sys.utsname.unameLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "reboot",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.sys.reboot.rebootLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "flock",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.sys.file.flockLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "isastream",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stropts.isastream",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "usable_case",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "abi.usable_case",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "rfind_case",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "abi.rfind_case",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "last_case",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "abi.last_case",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "cmp_case",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "abi.cmp_case",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "wmemchr",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.wchar.wmemchr",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "wmemcmp",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.wchar.wmemcmp",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "wmemcpy",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.wchar.wmemcpy",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "wmemmove",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.wchar.wmemmove",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "wmemset",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.wchar.wmemset",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "wcslen",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.wchar.wcslen",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "wcsnlen",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.wchar.wcsnlen",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "wcscmp",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.wchar.wcscmp",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "wcsncmp",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.wchar.wcsncmp",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "wcpcpy",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.wchar.wcpcpy",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "wcpncpy",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.wchar.wcpncpy",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "wcscpy",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.wchar.wcscpy",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "wcsncpy",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.wchar.wcsncpy",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "wcscat",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.wchar.wcscat",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "wcsncat",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.wchar.wcsncat",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "wcschr",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.wchar.wcschr",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "wcsrchr",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.wchar.wcsrchr",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "wcsspn",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.wchar.wcsspn",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "wcscspn",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.wchar.wcscspn",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "wcspbrk",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.wchar.wcspbrk",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "wcstok",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.wchar.wcstok",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "wcsstr",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.wchar.wcsstr",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "wcsdup",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.wchar.wcsdup",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "wcswcs",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.wchar.wcswcs",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "madvise",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.sys.mman.madviseLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__madvise",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.sys.mman.madviseLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "mincore",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.sys.mman.mincoreLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "mlock",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.sys.mman.mlockLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "mlockall",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.sys.mman.mlockallLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "mprotect",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.sys.mman.mprotectLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__mprotect",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.sys.mman.mprotectLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "munlock",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.sys.mman.munlockLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "munlockall",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.sys.mman.munlockallLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "posix_madvise",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.sys.mman.posix_madviseLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "capset",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.sys.capability.capsetLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "capget",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.sys.capability.capgetLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "bcopy",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.strings.bcopy",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "bzero",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.strings.bzero",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "index",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.strings.index",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "rindex",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.strings.rindex",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "ffs",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.strings.ffs",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "ffsl",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.strings.ffsl",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "ffsll",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.strings.ffsll",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strcasecmp",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.strings.strcasecmp",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strncasecmp",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.strings.strncasecmp",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__strcasecmp_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.strings.__strcasecmp_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__strncasecmp_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.strings.__strncasecmp_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strcasecmp_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.strings.__strcasecmp_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strncasecmp_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.strings.__strncasecmp_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strndup",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.strndup",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "memchr",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.memchr",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strcpy",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.strcpy",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strncpy",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.strncpy",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strcat",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.strcat",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strncat",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.strncat",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strcmp",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.strcmp",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strncmp",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.strncmp",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strcoll",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.strcoll",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strxfrm",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.strxfrm",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strchr",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.strchr",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strrchr",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.strrchr",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strcspn",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.strcspn",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strspn",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.strspn",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strpbrk",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.strpbrk",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strstr",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.strstr",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strtok",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.strtok",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strdup",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.strdup",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strtok_r",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.strtok_r",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "stpcpy",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.stpcpy",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "stpncpy",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.stpncpy",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strnlen",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.strnlen",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "memmem",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.memmem",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "memccpy",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.memccpy",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strsep",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.strsep",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strlcat",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.strlcat",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strlcpy",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.strlcpy",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "explicit_bzero",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.explicit_bzero",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strchrnul",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.strchrnul",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strcasestr",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.strcasestr",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "memrchr",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.memrchr",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "mempcpy",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.mempcpy",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__strcoll_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.__strcoll_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__strxfrm_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.__strxfrm_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strcoll_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.__strcoll_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strxfrm_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.__strxfrm_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__stpcpy",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.stpcpy",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__stpncpy",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.stpncpy",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__strchrnul",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.strchrnul",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__memrchr",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.string.memrchr",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "abs",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.abs",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "labs",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.labs",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "llabs",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.llabs",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "div",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.div",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "ldiv",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.ldiv",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "lldiv",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.lldiv",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "atoi",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.atoi",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "atol",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.atol",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "atoll",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.atoll",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strtol",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.strtol",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strtoll",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.strtoll",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strtoul",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.strtoul",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strtoull",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.strtoull",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strtoimax",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.strtoimax",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strtoumax",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.strtoumax",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__strtol_internal",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.strtol",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__strtoll_internal",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.strtoll",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__strtoul_internal",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.strtoul",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__strtoull_internal",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.strtoull",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__strtoimax_internal",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.strtoimax",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__strtoumax_internal",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.strtoumax",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "qsort_r",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.qsort_r",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "qsort",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.qsort",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "bsearch",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.bsearch",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "insque",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.search.insque",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "remque",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.search.remque",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "erand48",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.drand48.erand48",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "jrand48",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.drand48.jrand48",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "nrand48",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.drand48.nrand48",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "drand48",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.drand48.drand48",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "lrand48",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.drand48.lrand48",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "mrand48",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.drand48.mrand48",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "lcong48",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.drand48.lcong48",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "seed48",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.drand48.seed48",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "srand48",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.drand48.srand48",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "rand",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.rand.rand",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "srand",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.rand.srand",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "rand_r",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.stdlib.rand.rand_r",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "pthread_spin_init",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.pthread.pthread_spin_init",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "pthread_spin_destroy",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.pthread.pthread_spin_destroy",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "pthread_spin_trylock",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.pthread.pthread_spin_trylock",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "pthread_spin_lock",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.pthread.pthread_spin_lock",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "pthread_spin_unlock",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.pthread.pthread_spin_unlock",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "frexpf",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.frexpf",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "frexpl",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.frexpl",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "hypotf",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.hypotf",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "hypotl",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.hypotl",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "lrintl",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.lrintl",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "lroundl",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.lroundl",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "modfl",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.modfl",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "rintl",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.rintl",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "atanl",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.atanl",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "copysignl",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.copysignl",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "fdiml",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.fdiml",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "nanl",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.nanl",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "acosf",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.acosf",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "atanf",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.atanf",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "coshf",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.coshf",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "modff",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.modff",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "tanhf",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.tanhf",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "acos",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.acos",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "acoshf",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.acoshf",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "asin",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.asin",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "atan",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.atan",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "cbrt",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.cbrt",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "cbrtf",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.cbrtf",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "cosh",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.cosh",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "exp10",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.exp10",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "exp10f",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.exp10f",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "fdim",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.fdim",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "fdimf",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.fdimf",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "finite",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.finite",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "finitef",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.finitef",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "frexp",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.frexp",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "hypot",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.hypot",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "log1p",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.log1p",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "log1pf",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.log1pf",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "lrint",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.lrint",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "lrintf",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.lrintf",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "lround",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.lround",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "lroundf",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.lroundf",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "modf",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.modf",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "nan",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.nan",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "nanf",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.nanf",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "pow10",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.pow10",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "pow10f",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.pow10f",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "tanh",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.tanh",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "copysign",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.copysign",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "copysignf",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.copysignf",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "rint",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.rint",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "rintf",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.math.rintf",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "malloc",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.malloc.malloc",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "aligned_alloc",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.malloc.aligned_alloc",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "posix_memalign",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.malloc.posix_memalign",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "calloc",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.malloc.calloc",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "realloc",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.malloc.realloc",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "reallocarray",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.malloc.reallocarray",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "free",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.malloc.free",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "malloc_usable_size",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.malloc.malloc_usable_size",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "valloc",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.malloc.valloc",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "memalign",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.malloc.memalign",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "_exit",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd._exit",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "access",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.accessLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "acct",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.acctLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "chdir",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.chdirLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "chown",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.chownLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "close",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.close",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "posix_close",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.posix_close",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "fchownat",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.fchownatLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "lchown",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.lchownLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "chroot",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.chrootLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "ctermid",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.ctermidLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "dup",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.dupLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "dup2",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.dup2Linux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "dup3",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.dup3Linux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__dup3",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.dup3Linux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "getegid",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.getegidLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "geteuid",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.geteuidLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "getgid",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.getgidLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "getgroups",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.getgroupsLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "getpgid",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.getpgidLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "getpgrp",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.getpgrpLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "setpgid",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.setpgidLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "setpgrp",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.setpgrpLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "getsid",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.getsidLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "getpid",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.getpidLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "getppid",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.getppidLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "getuid",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.getuidLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "rmdir",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.rmdirLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "link",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.linkLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "linkat",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.linkatLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "pipe",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.pipeLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "renameat",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.renameatLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "symlink",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.symlinkLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "symlinkat",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.symlinkatLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "sync",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.syncLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "unlink",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.unlinkLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "unlinkat",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.unlinkatLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "execve",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.execveLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "swab",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.unistd.swab",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "imaxabs",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.inttypes.imaxabs",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "imaxdiv",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.inttypes.imaxdiv",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "fallocate",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.fcntl.fallocateLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "posix_fadvise",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.fcntl.posix_fadviseLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "posix_fallocate",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.fcntl.posix_fallocateLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "tee",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.fcntl.teeLinux",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "isalnum",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.isalnum",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "isalpha",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.isalpha",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "isblank",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.isblank",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "iscntrl",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.iscntrl",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "isdigit",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.isdigit",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "isgraph",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.isgraph",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "islower",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.islower",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "isprint",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.isprint",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "ispunct",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.ispunct",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "isspace",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.isspace",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "isupper",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.isupper",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "isxdigit",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.isxdigit",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "tolower",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.tolower",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "toupper",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.toupper",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__isalnum_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.__isalnum_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__isalpha_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.__isalpha_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__isblank_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.__isblank_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__iscntrl_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.__iscntrl_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__isdigit_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.__isdigit_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__isgraph_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.__isgraph_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__islower_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.__islower_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__isprint_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.__isprint_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__ispunct_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.__ispunct_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__isspace_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.__isspace_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__isupper_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.__isupper_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__isxdigit_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.__isxdigit_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__tolower_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.__tolower_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "__toupper_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.__toupper_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "isalnum_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.__isalnum_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "isalpha_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.__isalpha_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "isblank_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.__isblank_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "iscntrl_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.__iscntrl_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "isdigit_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.__isdigit_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "isgraph_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.__isgraph_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "islower_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.__islower_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "isprint_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.__isprint_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "ispunct_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.__ispunct_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "isspace_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.__isspace_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "isupper_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.__isupper_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "isxdigit_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.__isxdigit_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "tolower_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.__tolower_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "toupper_l",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.__toupper_l",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "isascii",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.isascii",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "toascii",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "zigc",
+    "name": "c.ctype.toascii",
+    "cc": "x86_64_sysv"
+   }
+  }
+ ]
+}

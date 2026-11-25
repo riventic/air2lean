@@ -408,6 +408,7 @@ NON_COMPILER_AIR = {
         'wasm32 compiler export of rejected forms (reject.zig, README), not this inventory',
     'tests/roadmap/noreturn-variants/air-reject': 'compiler AIR for layout rejections (test_cli.py, provenance.json); not tag evidence',
     'tests/roadmap/union-bases/air-reject': 'compiler AIR of rejected union-member bases (test_cli.py, exports.json); not tag evidence',
+    'tests/roadmap/extern-abi/air-reject': 'compiler AIR of extern calls the C-ABI conversion leaves rejected (test_cli.py, exports.json); not tag evidence',
     'tests/roadmap/fuzz': 'fuzzer-mutated AIR regressions',
     'tests/roadmap/models': 'synthetic model-boundary inputs',
     'tests/roadmap/profiles': 'synthetic profile inputs',

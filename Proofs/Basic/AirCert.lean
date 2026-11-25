@@ -807,7 +807,11 @@ def source_0 : _root_.Air2Lean.Func :=
 (@_root_.List.toArray
 @_root_.String
 (@_root_.List.nil
-@_root_.String)))
+@_root_.String))
+(@_root_.List.toArray
+@_root_.Air2Lean.AbiCall
+(@_root_.List.nil
+@_root_.Air2Lean.AbiCall)))
 
 def source_1 : _root_.Air2Lean.Func :=
 (@_root_.Air2Lean.Func.mk
@@ -1192,7 +1196,11 @@ def source_1 : _root_.Air2Lean.Func :=
 (@_root_.List.toArray
 @_root_.String
 (@_root_.List.nil
-@_root_.String)))
+@_root_.String))
+(@_root_.List.toArray
+@_root_.Air2Lean.AbiCall
+(@_root_.List.nil
+@_root_.Air2Lean.AbiCall)))
 
 def source_2 : _root_.Air2Lean.Func :=
 (@_root_.Air2Lean.Func.mk
@@ -1739,7 +1747,11 @@ def source_2 : _root_.Air2Lean.Func :=
 (@_root_.List.toArray
 @_root_.String
 (@_root_.List.nil
-@_root_.String)))
+@_root_.String))
+(@_root_.List.toArray
+@_root_.Air2Lean.AbiCall
+(@_root_.List.nil
+@_root_.Air2Lean.AbiCall)))
 
 def source_3 : _root_.Air2Lean.Func :=
 (@_root_.Air2Lean.Func.mk
@@ -2206,7 +2218,11 @@ def source_3 : _root_.Air2Lean.Func :=
 (@_root_.List.toArray
 @_root_.String
 (@_root_.List.nil
-@_root_.String)))
+@_root_.String))
+(@_root_.List.toArray
+@_root_.Air2Lean.AbiCall
+(@_root_.List.nil
+@_root_.Air2Lean.AbiCall)))
 
 def source_4 : _root_.Air2Lean.Func :=
 (@_root_.Air2Lean.Func.mk
@@ -3618,7 +3634,11 @@ def source_4 : _root_.Air2Lean.Func :=
 (@_root_.List.toArray
 @_root_.String
 (@_root_.List.nil
-@_root_.String)))
+@_root_.String))
+(@_root_.List.toArray
+@_root_.Air2Lean.AbiCall
+(@_root_.List.nil
+@_root_.Air2Lean.AbiCall)))
 
 def source_5 : _root_.Air2Lean.Func :=
 (@_root_.Air2Lean.Func.mk
@@ -4205,7 +4225,11 @@ def source_5 : _root_.Air2Lean.Func :=
 (@_root_.List.toArray
 @_root_.String
 (@_root_.List.nil
-@_root_.String)))
+@_root_.String))
+(@_root_.List.toArray
+@_root_.Air2Lean.AbiCall
+(@_root_.List.nil
+@_root_.Air2Lean.AbiCall)))
 
 def source_6 : _root_.Air2Lean.Func :=
 (@_root_.Air2Lean.Func.mk
@@ -6872,7 +6896,11 @@ def source_6 : _root_.Air2Lean.Func :=
 (@_root_.List.toArray
 @_root_.String
 (@_root_.List.nil
-@_root_.String)))
+@_root_.String))
+(@_root_.List.toArray
+@_root_.Air2Lean.AbiCall
+(@_root_.List.nil
+@_root_.Air2Lean.AbiCall)))
 
 def source_7 : _root_.Air2Lean.Func :=
 (@_root_.Air2Lean.Func.mk
@@ -7790,7 +7818,11 @@ def source_7 : _root_.Air2Lean.Func :=
 (@_root_.List.toArray
 @_root_.String
 (@_root_.List.nil
-@_root_.String)))
+@_root_.String))
+(@_root_.List.toArray
+@_root_.Air2Lean.AbiCall
+(@_root_.List.nil
+@_root_.Air2Lean.AbiCall)))
 
 /-- The complete original translation input, before certificate selection. -/
 def program : _root_.Air2Lean.Program := ⟨#[source_0, source_1, source_2, source_3, source_4, source_5, source_6, source_7], (@_root_.List.toArray

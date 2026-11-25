@@ -2,8 +2,8 @@
   "schema": "air2lean-perf-budgets/1",
   "status": "recorded",
   "reference_platform": {
-    "system": "Darwin",
-    "machine": "arm64"
+    "system": "Linux",
+    "machine": "x86_64"
   },
   "tolerance": {
     "translator": {
@@ -159,83 +159,83 @@
       ],
       "budget": {
         "recorded": {
-          "revision": "fce33b590c4bcda3075652adf5b6b654461a6817",
-          "recorded_at": "2026-10-18T22:09:19+00:00",
-          "translator_sha256": "02b6bc217f03830c9b495d5ac764789c07269ccac084438af84604a3d6053f62"
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
         },
         "output": {
-          "bytes": 8631,
-          "sha256": "4da9e9f44890d55004f2f2053a04d4fb0e204c04d931af99639017af78846ee2",
+          "bytes": 8925,
+          "sha256": "f49f903db823f57b876e2b3285bb20c74bb70f3bc3d680fe12cca8b1b80ef51e",
           "matches_reference": true,
           "functions": 8,
           "input_bytes": 31105
         },
         "phases": {
           "check": {
-            "baseline_seconds": 0.000629,
+            "baseline_seconds": 0.001169,
             "max_seconds": 0.251,
             "portable_max_seconds": 1.001
           },
           "elaborate": {
-            "baseline_seconds": 1.9828,
-            "max_seconds": 11.983,
-            "portable_max_seconds": 31.983,
-            "baseline_peak_rss_kib": 687584,
-            "max_peak_rss_kib": 949728,
-            "portable_max_peak_rss_kib": 1375168,
-            "baseline_ratio": 0.268,
-            "max_ratio": 2.268
+            "baseline_seconds": 0.6753,
+            "max_seconds": 10.675,
+            "portable_max_seconds": 30.675,
+            "baseline_peak_rss_kib": 839228,
+            "max_peak_rss_kib": 1101372,
+            "portable_max_peak_rss_kib": 1678456,
+            "baseline_ratio": 0.09,
+            "max_ratio": 2.09
           },
           "emit": {
-            "baseline_seconds": 0.000994,
+            "baseline_seconds": 0.002281,
+            "max_seconds": 0.252,
+            "portable_max_seconds": 1.002
+          },
+          "normalize": {
+            "baseline_seconds": 0.000672,
             "max_seconds": 0.251,
             "portable_max_seconds": 1.001
           },
-          "normalize": {
-            "baseline_seconds": 0.000494,
-            "max_seconds": 0.25,
-            "portable_max_seconds": 1.0
-          },
           "parse": {
-            "baseline_seconds": 0.000709,
+            "baseline_seconds": 0.00097,
             "max_seconds": 0.251,
             "portable_max_seconds": 1.001
           },
           "proof.cold": {
-            "baseline_seconds": 7.035,
-            "max_seconds": 17.035,
-            "portable_max_seconds": 42.21,
-            "baseline_peak_rss_kib": 1381456,
-            "max_peak_rss_kib": 1795892,
-            "portable_max_peak_rss_kib": 2762912,
-            "baseline_ratio": 0.951,
-            "max_ratio": 2.951
+            "baseline_seconds": 3.6409,
+            "max_seconds": 13.641,
+            "portable_max_seconds": 33.641,
+            "baseline_peak_rss_kib": 1711764,
+            "max_peak_rss_kib": 2225293,
+            "portable_max_peak_rss_kib": 3423528,
+            "baseline_ratio": 0.487,
+            "max_ratio": 2.487
           },
           "proof.warm": {
-            "baseline_seconds": 0.1543,
-            "max_seconds": 10.154,
-            "portable_max_seconds": 30.154,
-            "baseline_peak_rss_kib": 59552,
-            "max_peak_rss_kib": 321696,
-            "portable_max_peak_rss_kib": 583840,
-            "baseline_ratio": 0.021,
-            "max_ratio": 2.021
+            "baseline_seconds": 0.1358,
+            "max_seconds": 10.136,
+            "portable_max_seconds": 30.136,
+            "baseline_peak_rss_kib": 120368,
+            "max_peak_rss_kib": 382512,
+            "portable_max_peak_rss_kib": 644656,
+            "baseline_ratio": 0.018,
+            "max_ratio": 2.018
           },
           "translate.cold": {
-            "baseline_seconds": 0.0509,
-            "max_seconds": 0.301,
-            "portable_max_seconds": 1.051,
-            "baseline_peak_rss_kib": 41600,
-            "max_peak_rss_kib": 107136,
-            "portable_max_peak_rss_kib": 172672
+            "baseline_seconds": 0.0324,
+            "max_seconds": 0.282,
+            "portable_max_seconds": 1.032,
+            "baseline_peak_rss_kib": 73136,
+            "max_peak_rss_kib": 138672,
+            "portable_max_peak_rss_kib": 219408
           },
           "translate.warm": {
-            "baseline_seconds": 0.0274,
-            "max_seconds": 0.277,
-            "portable_max_seconds": 1.027,
-            "baseline_peak_rss_kib": 41584,
-            "max_peak_rss_kib": 107120,
-            "portable_max_peak_rss_kib": 172656
+            "baseline_seconds": 0.033,
+            "max_seconds": 0.283,
+            "portable_max_seconds": 1.033,
+            "baseline_peak_rss_kib": 72748,
+            "max_peak_rss_kib": 138284,
+            "portable_max_peak_rss_kib": 218244
           }
         },
         "modules": {}
@@ -263,100 +263,90 @@
       ],
       "budget": {
         "recorded": {
-          "revision": "fce33b590c4bcda3075652adf5b6b654461a6817",
-          "recorded_at": "2026-10-18T22:09:19+00:00",
-          "translator_sha256": "02b6bc217f03830c9b495d5ac764789c07269ccac084438af84604a3d6053f62"
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
         },
         "output": {
-          "bytes": 27349,
-          "sha256": "5d71c78e3406dd49099e82b6a2a61b895814c68feb43d6b2f4d4134c2076b2e6",
+          "bytes": 28107,
+          "sha256": "3cc1e73d9eaffdab396eb4e4f10a36acf3c9dc2719dd28be7e5b1a99acc2c611",
           "matches_reference": true,
           "functions": 22,
           "input_bytes": 104376
         },
         "phases": {
           "check": {
-            "baseline_seconds": 0.001994,
+            "baseline_seconds": 0.003962,
+            "max_seconds": 0.254,
+            "portable_max_seconds": 1.004
+          },
+          "elaborate": {
+            "baseline_seconds": 2.1127,
+            "max_seconds": 12.113,
+            "portable_max_seconds": 32.113,
+            "baseline_peak_rss_kib": 876916,
+            "max_peak_rss_kib": 1139990,
+            "portable_max_peak_rss_kib": 1753832,
+            "baseline_ratio": 0.283,
+            "max_ratio": 2.283
+          },
+          "emit": {
+            "baseline_seconds": 0.00761,
+            "max_seconds": 0.258,
+            "portable_max_seconds": 1.008
+          },
+          "normalize": {
+            "baseline_seconds": 0.001858,
             "max_seconds": 0.252,
             "portable_max_seconds": 1.002
           },
-          "elaborate": {
-            "baseline_seconds": 2.3272,
-            "max_seconds": 12.327,
-            "portable_max_seconds": 32.327,
-            "baseline_peak_rss_kib": 726384,
-            "max_peak_rss_kib": 988528,
-            "portable_max_peak_rss_kib": 1452768,
-            "baseline_ratio": 0.314,
-            "max_ratio": 2.314
-          },
-          "emit": {
-            "baseline_seconds": 0.003322,
-            "max_seconds": 0.253,
-            "portable_max_seconds": 1.003
-          },
-          "normalize": {
-            "baseline_seconds": 0.001456,
-            "max_seconds": 0.251,
-            "portable_max_seconds": 1.001
-          },
           "parse": {
-            "baseline_seconds": 0.002576,
+            "baseline_seconds": 0.003209,
             "max_seconds": 0.253,
             "portable_max_seconds": 1.003
           },
           "proof.cold": {
-            "baseline_seconds": 8.9999,
-            "max_seconds": 19.0,
-            "portable_max_seconds": 53.999,
-            "baseline_peak_rss_kib": 1506512,
-            "max_peak_rss_kib": 1958465,
-            "portable_max_peak_rss_kib": 3013024,
-            "baseline_ratio": 1.216,
-            "max_ratio": 3.216
+            "baseline_seconds": 4.9461,
+            "max_seconds": 14.946,
+            "portable_max_seconds": 34.946,
+            "baseline_peak_rss_kib": 1852620,
+            "max_peak_rss_kib": 2408406,
+            "portable_max_peak_rss_kib": 3705240,
+            "baseline_ratio": 0.662,
+            "max_ratio": 2.662
           },
           "proof.warm": {
-            "baseline_seconds": 0.2736,
-            "max_seconds": 10.274,
-            "portable_max_seconds": 30.274,
-            "baseline_peak_rss_kib": 63120,
-            "max_peak_rss_kib": 325264,
-            "portable_max_peak_rss_kib": 587408,
-            "baseline_ratio": 0.037,
-            "max_ratio": 2.037
+            "baseline_seconds": 0.1385,
+            "max_seconds": 10.139,
+            "portable_max_seconds": 30.139,
+            "baseline_peak_rss_kib": 122548,
+            "max_peak_rss_kib": 384692,
+            "portable_max_peak_rss_kib": 646836,
+            "baseline_ratio": 0.019,
+            "max_ratio": 2.019
           },
           "translate.cold": {
-            "baseline_seconds": 0.1448,
-            "max_seconds": 0.395,
-            "portable_max_seconds": 1.448,
-            "baseline_peak_rss_kib": 42464,
-            "max_peak_rss_kib": 108000,
-            "portable_max_peak_rss_kib": 173536
+            "baseline_seconds": 0.0456,
+            "max_seconds": 0.296,
+            "portable_max_seconds": 1.046,
+            "baseline_peak_rss_kib": 75960,
+            "max_peak_rss_kib": 141496,
+            "portable_max_peak_rss_kib": 227880
           },
           "translate.warm": {
-            "baseline_seconds": 0.0413,
-            "max_seconds": 0.291,
-            "portable_max_seconds": 1.041,
-            "baseline_peak_rss_kib": 42592,
-            "max_peak_rss_kib": 108128,
-            "portable_max_peak_rss_kib": 173664
+            "baseline_seconds": 0.0459,
+            "max_seconds": 0.296,
+            "portable_max_seconds": 1.046,
+            "baseline_peak_rss_kib": 75320,
+            "max_peak_rss_kib": 140856,
+            "portable_max_peak_rss_kib": 225960
           }
         },
         "modules": {
           "Proofs.Slices.Gen": {
-            "baseline_seconds": 2.0177,
-            "baseline_ratio": 0.273,
-            "max_ratio": 1.273
-          },
-          "Proofs.Slices.Proofs": {
-            "baseline_seconds": 4.3715,
-            "baseline_ratio": 0.591,
-            "max_ratio": 1.591
-          },
-          "Proofs.Slices.Sep": {
-            "baseline_seconds": 6.2083,
-            "baseline_ratio": 0.839,
-            "max_ratio": 1.839
+            "baseline_seconds": 2.3417,
+            "baseline_ratio": 0.313,
+            "max_ratio": 1.313
           }
         }
       }
@@ -379,100 +369,95 @@
       ],
       "budget": {
         "recorded": {
-          "revision": "fce33b590c4bcda3075652adf5b6b654461a6817",
-          "recorded_at": "2026-10-18T22:09:19+00:00",
-          "translator_sha256": "02b6bc217f03830c9b495d5ac764789c07269ccac084438af84604a3d6053f62"
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
         },
         "output": {
-          "bytes": 48080,
-          "sha256": "cc81fbd873d441e62670f75167fc6ed4aba2973d3657b03bd763e66fa6cf2b61",
+          "bytes": 49609,
+          "sha256": "4b0a2e79ca2d527fcf17ab00c75897a213cb39ceeb6aa3b53cf88f2fdf144ff7",
           "matches_reference": true,
           "functions": 51,
           "input_bytes": 240946
         },
         "phases": {
           "check": {
-            "baseline_seconds": 0.003342,
-            "max_seconds": 0.253,
-            "portable_max_seconds": 1.003
-          },
-          "elaborate": {
-            "baseline_seconds": 2.5314,
-            "max_seconds": 12.531,
-            "portable_max_seconds": 32.531,
-            "baseline_peak_rss_kib": 775888,
-            "max_peak_rss_kib": 1038032,
-            "portable_max_peak_rss_kib": 1551776,
-            "baseline_ratio": 0.342,
-            "max_ratio": 2.342
-          },
-          "emit": {
-            "baseline_seconds": 0.005077,
+            "baseline_seconds": 0.00477,
             "max_seconds": 0.255,
             "portable_max_seconds": 1.005
           },
+          "elaborate": {
+            "baseline_seconds": 3.0462,
+            "max_seconds": 13.046,
+            "portable_max_seconds": 33.046,
+            "baseline_peak_rss_kib": 932376,
+            "max_peak_rss_kib": 1212088,
+            "portable_max_peak_rss_kib": 1864752,
+            "baseline_ratio": 0.408,
+            "max_ratio": 2.408
+          },
+          "emit": {
+            "baseline_seconds": 0.010639,
+            "max_seconds": 0.261,
+            "portable_max_seconds": 1.011
+          },
           "normalize": {
-            "baseline_seconds": 0.002247,
-            "max_seconds": 0.252,
-            "portable_max_seconds": 1.002
+            "baseline_seconds": 0.002692,
+            "max_seconds": 0.253,
+            "portable_max_seconds": 1.003
           },
           "parse": {
-            "baseline_seconds": 0.008337,
-            "max_seconds": 0.258,
-            "portable_max_seconds": 1.008
+            "baseline_seconds": 0.009339,
+            "max_seconds": 0.259,
+            "portable_max_seconds": 1.009
           },
           "proof.cold": {
-            "baseline_seconds": 9.5569,
-            "max_seconds": 19.557,
-            "portable_max_seconds": 57.341,
-            "baseline_peak_rss_kib": 1506256,
-            "max_peak_rss_kib": 1958132,
-            "portable_max_peak_rss_kib": 3012512,
-            "baseline_ratio": 1.291,
-            "max_ratio": 3.291
+            "baseline_seconds": 6.6526,
+            "max_seconds": 16.653,
+            "portable_max_seconds": 39.916,
+            "baseline_peak_rss_kib": 1912708,
+            "max_peak_rss_kib": 2486520,
+            "portable_max_peak_rss_kib": 3825416,
+            "baseline_ratio": 0.89,
+            "max_ratio": 2.89
           },
           "proof.warm": {
-            "baseline_seconds": 0.3816,
-            "max_seconds": 10.382,
-            "portable_max_seconds": 30.382,
-            "baseline_peak_rss_kib": 63312,
-            "max_peak_rss_kib": 325456,
-            "portable_max_peak_rss_kib": 587600,
-            "baseline_ratio": 0.052,
-            "max_ratio": 2.052
+            "baseline_seconds": 0.1364,
+            "max_seconds": 10.136,
+            "portable_max_seconds": 30.136,
+            "baseline_peak_rss_kib": 124728,
+            "max_peak_rss_kib": 386872,
+            "portable_max_peak_rss_kib": 649016,
+            "baseline_ratio": 0.018,
+            "max_ratio": 2.018
           },
           "translate.cold": {
-            "baseline_seconds": 0.1781,
-            "max_seconds": 0.428,
-            "portable_max_seconds": 1.781,
-            "baseline_peak_rss_kib": 44048,
-            "max_peak_rss_kib": 109584,
-            "portable_max_peak_rss_kib": 175120
+            "baseline_seconds": 0.0631,
+            "max_seconds": 0.313,
+            "portable_max_seconds": 1.063,
+            "baseline_peak_rss_kib": 79412,
+            "max_peak_rss_kib": 144948,
+            "portable_max_peak_rss_kib": 238236
           },
           "translate.warm": {
-            "baseline_seconds": 0.0575,
-            "max_seconds": 0.307,
-            "portable_max_seconds": 1.058,
-            "baseline_peak_rss_kib": 44144,
-            "max_peak_rss_kib": 109680,
-            "portable_max_peak_rss_kib": 175216
+            "baseline_seconds": 0.0617,
+            "max_seconds": 0.312,
+            "portable_max_seconds": 1.062,
+            "baseline_peak_rss_kib": 79416,
+            "max_peak_rss_kib": 144952,
+            "portable_max_peak_rss_kib": 238248
           }
         },
         "modules": {
           "Proofs.Layout.Gen": {
-            "baseline_seconds": 5.3955,
-            "baseline_ratio": 0.729,
-            "max_ratio": 1.729
-          },
-          "Proofs.Layout.Mem": {
-            "baseline_seconds": 4.3089,
-            "baseline_ratio": 0.582,
-            "max_ratio": 1.582
+            "baseline_seconds": 3.3416,
+            "baseline_ratio": 0.447,
+            "max_ratio": 1.447
           },
           "Proofs.Layout.Proofs": {
-            "baseline_seconds": 2.1134,
-            "baseline_ratio": 0.286,
-            "max_ratio": 1.286
+            "baseline_seconds": 2.342,
+            "baseline_ratio": 0.313,
+            "max_ratio": 1.313
           }
         }
       }
@@ -498,86 +483,92 @@
       ],
       "budget": {
         "recorded": {
-          "revision": "fce33b590c4bcda3075652adf5b6b654461a6817",
-          "recorded_at": "2026-10-18T22:09:19+00:00",
-          "translator_sha256": "02b6bc217f03830c9b495d5ac764789c07269ccac084438af84604a3d6053f62"
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
         },
         "output": {
-          "bytes": 16527,
-          "sha256": "38440d2e77c6f1ce991635e0710ac3f6c754994eb4886b026c676687537ad6c6",
+          "bytes": 17405,
+          "sha256": "36c8bf4d6bb7ccd5484159b4d84f46d7d865e5a7d8969f1196a0e6588a5dff79",
           "matches_reference": true,
           "functions": 31,
           "input_bytes": 41420
         },
         "phases": {
           "check": {
-            "baseline_seconds": 0.000897,
-            "max_seconds": 0.251,
-            "portable_max_seconds": 1.001
+            "baseline_seconds": 0.001579,
+            "max_seconds": 0.252,
+            "portable_max_seconds": 1.002
           },
           "elaborate": {
-            "baseline_seconds": 2.7776,
-            "max_seconds": 12.778,
-            "portable_max_seconds": 32.778,
-            "baseline_peak_rss_kib": 705728,
-            "max_peak_rss_kib": 967872,
-            "portable_max_peak_rss_kib": 1411456,
-            "baseline_ratio": 0.375,
-            "max_ratio": 2.375
+            "baseline_seconds": 1.0866,
+            "max_seconds": 11.087,
+            "portable_max_seconds": 31.087,
+            "baseline_peak_rss_kib": 859412,
+            "max_peak_rss_kib": 1121556,
+            "portable_max_peak_rss_kib": 1718824,
+            "baseline_ratio": 0.145,
+            "max_ratio": 2.145
           },
           "emit": {
-            "baseline_seconds": 0.001426,
-            "max_seconds": 0.251,
-            "portable_max_seconds": 1.001
+            "baseline_seconds": 0.003269,
+            "max_seconds": 0.253,
+            "portable_max_seconds": 1.003
           },
           "normalize": {
-            "baseline_seconds": 0.000729,
+            "baseline_seconds": 0.000865,
             "max_seconds": 0.251,
             "portable_max_seconds": 1.001
           },
           "parse": {
-            "baseline_seconds": 0.001324,
-            "max_seconds": 0.251,
-            "portable_max_seconds": 1.001
+            "baseline_seconds": 0.001525,
+            "max_seconds": 0.252,
+            "portable_max_seconds": 1.002
           },
           "proof.cold": {
-            "baseline_seconds": 5.671,
-            "max_seconds": 15.671,
-            "portable_max_seconds": 35.671,
-            "baseline_peak_rss_kib": 1416160,
-            "max_peak_rss_kib": 1841008,
-            "portable_max_peak_rss_kib": 2832320,
-            "baseline_ratio": 0.766,
-            "max_ratio": 2.766
+            "baseline_seconds": 3.9448,
+            "max_seconds": 13.945,
+            "portable_max_seconds": 33.945,
+            "baseline_peak_rss_kib": 1741532,
+            "max_peak_rss_kib": 2263991,
+            "portable_max_peak_rss_kib": 3483064,
+            "baseline_ratio": 0.528,
+            "max_ratio": 2.528
           },
           "proof.warm": {
-            "baseline_seconds": 0.1623,
-            "max_seconds": 10.162,
-            "portable_max_seconds": 30.162,
-            "baseline_peak_rss_kib": 59760,
-            "max_peak_rss_kib": 321904,
-            "portable_max_peak_rss_kib": 584048,
-            "baseline_ratio": 0.022,
-            "max_ratio": 2.022
+            "baseline_seconds": 0.135,
+            "max_seconds": 10.135,
+            "portable_max_seconds": 30.135,
+            "baseline_peak_rss_kib": 120368,
+            "max_peak_rss_kib": 382512,
+            "portable_max_peak_rss_kib": 644656,
+            "baseline_ratio": 0.018,
+            "max_ratio": 2.018
           },
           "translate.cold": {
-            "baseline_seconds": 0.6856,
-            "max_seconds": 1.371,
-            "portable_max_seconds": 6.856,
-            "baseline_peak_rss_kib": 41664,
-            "max_peak_rss_kib": 107200,
-            "portable_max_peak_rss_kib": 172736
+            "baseline_seconds": 0.0344,
+            "max_seconds": 0.284,
+            "portable_max_seconds": 1.034,
+            "baseline_peak_rss_kib": 73516,
+            "max_peak_rss_kib": 139052,
+            "portable_max_peak_rss_kib": 220548
           },
           "translate.warm": {
-            "baseline_seconds": 0.0309,
-            "max_seconds": 0.281,
-            "portable_max_seconds": 1.031,
-            "baseline_peak_rss_kib": 41776,
-            "max_peak_rss_kib": 107312,
-            "portable_max_peak_rss_kib": 172848
+            "baseline_seconds": 0.0342,
+            "max_seconds": 0.284,
+            "portable_max_seconds": 1.034,
+            "baseline_peak_rss_kib": 73648,
+            "max_peak_rss_kib": 139184,
+            "portable_max_peak_rss_kib": 220944
           }
         },
-        "modules": {}
+        "modules": {
+          "Proofs.Vectors.Proofs": {
+            "baseline_seconds": 2.2414,
+            "baseline_ratio": 0.3,
+            "max_ratio": 1.3
+          }
+        }
       }
     },
     {
@@ -600,92 +591,86 @@
       ],
       "budget": {
         "recorded": {
-          "revision": "fce33b590c4bcda3075652adf5b6b654461a6817",
-          "recorded_at": "2026-10-18T22:09:19+00:00",
-          "translator_sha256": "02b6bc217f03830c9b495d5ac764789c07269ccac084438af84604a3d6053f62"
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
         },
         "output": {
-          "bytes": 15567,
-          "sha256": "737e6a59fd00b5a57ab78b0b754ec64e4b8a535b4392e791bb522143133cbe92",
+          "bytes": 15941,
+          "sha256": "4a11dfa97f903bc896d9e75b6dbf827532234b2b394e4f1548d52ee39109a3bd",
           "matches_reference": true,
           "functions": 12,
           "input_bytes": 46378
         },
         "phases": {
           "check": {
-            "baseline_seconds": 0.000728,
-            "max_seconds": 0.251,
-            "portable_max_seconds": 1.001
-          },
-          "elaborate": {
-            "baseline_seconds": 0.7068,
-            "max_seconds": 10.707,
-            "portable_max_seconds": 30.707,
-            "baseline_peak_rss_kib": 702400,
-            "max_peak_rss_kib": 964544,
-            "portable_max_peak_rss_kib": 1404800,
-            "baseline_ratio": 0.096,
-            "max_ratio": 2.096
-          },
-          "emit": {
-            "baseline_seconds": 0.001918,
+            "baseline_seconds": 0.001669,
             "max_seconds": 0.252,
             "portable_max_seconds": 1.002
           },
+          "elaborate": {
+            "baseline_seconds": 0.982,
+            "max_seconds": 10.982,
+            "portable_max_seconds": 30.982,
+            "baseline_peak_rss_kib": 856492,
+            "max_peak_rss_kib": 1118636,
+            "portable_max_peak_rss_kib": 1712984,
+            "baseline_ratio": 0.131,
+            "max_ratio": 2.131
+          },
+          "emit": {
+            "baseline_seconds": 0.00418,
+            "max_seconds": 0.254,
+            "portable_max_seconds": 1.004
+          },
           "normalize": {
-            "baseline_seconds": 0.000482,
-            "max_seconds": 0.25,
-            "portable_max_seconds": 1.0
+            "baseline_seconds": 0.000794,
+            "max_seconds": 0.251,
+            "portable_max_seconds": 1.001
           },
           "parse": {
-            "baseline_seconds": 0.000898,
+            "baseline_seconds": 0.001351,
             "max_seconds": 0.251,
             "portable_max_seconds": 1.001
           },
           "proof.cold": {
-            "baseline_seconds": 1.9201,
-            "max_seconds": 11.92,
-            "portable_max_seconds": 31.92,
-            "baseline_peak_rss_kib": 1413952,
-            "max_peak_rss_kib": 1838137,
-            "portable_max_peak_rss_kib": 2827904,
-            "baseline_ratio": 0.259,
-            "max_ratio": 2.259
+            "baseline_seconds": 2.5402,
+            "max_seconds": 12.54,
+            "portable_max_seconds": 32.54,
+            "baseline_peak_rss_kib": 1744908,
+            "max_peak_rss_kib": 2268380,
+            "portable_max_peak_rss_kib": 3489816,
+            "baseline_ratio": 0.34,
+            "max_ratio": 2.34
           },
           "proof.warm": {
-            "baseline_seconds": 0.1528,
-            "max_seconds": 10.153,
-            "portable_max_seconds": 30.153,
-            "baseline_peak_rss_kib": 59808,
-            "max_peak_rss_kib": 321952,
-            "portable_max_peak_rss_kib": 584096,
-            "baseline_ratio": 0.021,
-            "max_ratio": 2.021
+            "baseline_seconds": 0.1382,
+            "max_seconds": 10.138,
+            "portable_max_seconds": 30.138,
+            "baseline_peak_rss_kib": 120372,
+            "max_peak_rss_kib": 382516,
+            "portable_max_peak_rss_kib": 644660,
+            "baseline_ratio": 0.018,
+            "max_ratio": 2.018
           },
           "translate.cold": {
-            "baseline_seconds": 0.1437,
-            "max_seconds": 0.394,
-            "portable_max_seconds": 1.437,
-            "baseline_peak_rss_kib": 41728,
-            "max_peak_rss_kib": 107264,
-            "portable_max_peak_rss_kib": 172800
+            "baseline_seconds": 0.0357,
+            "max_seconds": 0.286,
+            "portable_max_seconds": 1.036,
+            "baseline_peak_rss_kib": 75952,
+            "max_peak_rss_kib": 141488,
+            "portable_max_peak_rss_kib": 227856
           },
           "translate.warm": {
-            "baseline_seconds": 0.0261,
-            "max_seconds": 0.276,
-            "portable_max_seconds": 1.026,
-            "baseline_peak_rss_kib": 41680,
-            "max_peak_rss_kib": 107216,
-            "portable_max_peak_rss_kib": 172752
+            "baseline_seconds": 0.0353,
+            "max_seconds": 0.285,
+            "portable_max_seconds": 1.035,
+            "baseline_peak_rss_kib": 75700,
+            "max_peak_rss_kib": 141236,
+            "portable_max_peak_rss_kib": 227100
           }
         },
-        "modules": {
-          "Proofs.Variants.Proofs": {
-            "baseline_seconds": 3.9983,
-            "baseline_ratio": 0.54,
-            "max_ratio": 1.54
-          }
-        }
+        "modules": {}
       }
     },
     {
@@ -710,90 +695,90 @@
       ],
       "budget": {
         "recorded": {
-          "revision": "fce33b590c4bcda3075652adf5b6b654461a6817",
-          "recorded_at": "2026-10-18T22:09:19+00:00",
-          "translator_sha256": "02b6bc217f03830c9b495d5ac764789c07269ccac084438af84604a3d6053f62"
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
         },
         "output": {
-          "bytes": 38244,
-          "sha256": "818b2e5961d7c3b868450a28fa120fb7df176d0725060cfa419a04c73790fb8f",
+          "bytes": 38434,
+          "sha256": "10674e21efe541025ae0c251d7b02eb98207eef58e904d0d1104634a41852f1b",
           "matches_reference": true,
           "functions": 7,
           "input_bytes": 103606
         },
         "phases": {
           "check": {
-            "baseline_seconds": 0.000951,
+            "baseline_seconds": 0.001406,
             "max_seconds": 0.251,
             "portable_max_seconds": 1.001
           },
           "elaborate": {
-            "baseline_seconds": 0.785,
-            "max_seconds": 10.785,
-            "portable_max_seconds": 30.785,
-            "baseline_peak_rss_kib": 696896,
-            "max_peak_rss_kib": 959040,
-            "portable_max_peak_rss_kib": 1393792,
-            "baseline_ratio": 0.106,
-            "max_ratio": 2.106
+            "baseline_seconds": 1.1345,
+            "max_seconds": 11.134,
+            "portable_max_seconds": 31.134,
+            "baseline_peak_rss_kib": 850400,
+            "max_peak_rss_kib": 1112544,
+            "portable_max_peak_rss_kib": 1700800,
+            "baseline_ratio": 0.152,
+            "max_ratio": 2.152
           },
           "emit": {
-            "baseline_seconds": 0.003197,
-            "max_seconds": 0.253,
-            "portable_max_seconds": 1.003
+            "baseline_seconds": 0.004892,
+            "max_seconds": 0.255,
+            "portable_max_seconds": 1.005
           },
           "normalize": {
-            "baseline_seconds": 0.000956,
+            "baseline_seconds": 0.001439,
             "max_seconds": 0.251,
             "portable_max_seconds": 1.001
           },
           "parse": {
-            "baseline_seconds": 0.001699,
+            "baseline_seconds": 0.002335,
             "max_seconds": 0.252,
             "portable_max_seconds": 1.002
           },
           "proof.cold": {
-            "baseline_seconds": 6.1591,
-            "max_seconds": 16.159,
-            "portable_max_seconds": 36.955,
-            "baseline_peak_rss_kib": 1488352,
-            "max_peak_rss_kib": 1934857,
-            "portable_max_peak_rss_kib": 2976704,
-            "baseline_ratio": 0.832,
-            "max_ratio": 2.832
+            "baseline_seconds": 4.6471,
+            "max_seconds": 14.647,
+            "portable_max_seconds": 34.647,
+            "baseline_peak_rss_kib": 1802796,
+            "max_peak_rss_kib": 2343634,
+            "portable_max_peak_rss_kib": 3605592,
+            "baseline_ratio": 0.622,
+            "max_ratio": 2.622
           },
           "proof.warm": {
-            "baseline_seconds": 0.1659,
-            "max_seconds": 10.166,
-            "portable_max_seconds": 30.166,
-            "baseline_peak_rss_kib": 60096,
-            "max_peak_rss_kib": 322240,
-            "portable_max_peak_rss_kib": 584384,
-            "baseline_ratio": 0.022,
-            "max_ratio": 2.022
+            "baseline_seconds": 0.1424,
+            "max_seconds": 10.142,
+            "portable_max_seconds": 30.142,
+            "baseline_peak_rss_kib": 120372,
+            "max_peak_rss_kib": 382516,
+            "portable_max_peak_rss_kib": 644660,
+            "baseline_ratio": 0.019,
+            "max_ratio": 2.019
           },
           "translate.cold": {
-            "baseline_seconds": 0.1428,
-            "max_seconds": 0.393,
-            "portable_max_seconds": 1.428,
-            "baseline_peak_rss_kib": 42016,
-            "max_peak_rss_kib": 107552,
-            "portable_max_peak_rss_kib": 173088
+            "baseline_seconds": 0.0387,
+            "max_seconds": 0.289,
+            "portable_max_seconds": 1.039,
+            "baseline_peak_rss_kib": 75448,
+            "max_peak_rss_kib": 140984,
+            "portable_max_peak_rss_kib": 226344
           },
           "translate.warm": {
-            "baseline_seconds": 0.0303,
-            "max_seconds": 0.28,
-            "portable_max_seconds": 1.03,
-            "baseline_peak_rss_kib": 42096,
-            "max_peak_rss_kib": 107632,
-            "portable_max_peak_rss_kib": 173168
+            "baseline_seconds": 0.0379,
+            "max_seconds": 0.288,
+            "portable_max_seconds": 1.038,
+            "baseline_peak_rss_kib": 75188,
+            "max_peak_rss_kib": 140724,
+            "portable_max_peak_rss_kib": 225564
           }
         },
         "modules": {
           "Proofs.Floatops.Proofs": {
-            "baseline_seconds": 2.0172,
-            "baseline_ratio": 0.273,
-            "max_ratio": 1.273
+            "baseline_seconds": 3.545,
+            "baseline_ratio": 0.474,
+            "max_ratio": 1.474
           }
         }
       }
@@ -826,110 +811,120 @@
       ],
       "budget": {
         "recorded": {
-          "revision": "fce33b590c4bcda3075652adf5b6b654461a6817",
-          "recorded_at": "2026-10-18T22:09:19+00:00",
-          "translator_sha256": "02b6bc217f03830c9b495d5ac764789c07269ccac084438af84604a3d6053f62"
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
         },
         "output": {
-          "bytes": 89348,
-          "sha256": "8f597d922203403f800db8c54f12742aab5e2579d22d3b6e8fdf4eef26e3e60e",
+          "bytes": 91752,
+          "sha256": "d0a37e15b281a3384ef2f5e50adefa38f0e0959deac4e8789f0219ebec304a4b",
           "matches_reference": true,
           "functions": 43,
           "input_bytes": 498365
         },
         "phases": {
           "check": {
-            "baseline_seconds": 0.004619,
+            "baseline_seconds": 0.013441,
+            "max_seconds": 0.263,
+            "portable_max_seconds": 1.013
+          },
+          "elaborate": {
+            "baseline_seconds": 4.4891,
+            "max_seconds": 14.489,
+            "portable_max_seconds": 34.489,
+            "baseline_peak_rss_kib": 985416,
+            "max_peak_rss_kib": 1281040,
+            "portable_max_peak_rss_kib": 1970832,
+            "baseline_ratio": 0.601,
+            "max_ratio": 2.601
+          },
+          "emit": {
+            "baseline_seconds": 0.047617,
+            "max_seconds": 0.298,
+            "portable_max_seconds": 1.048
+          },
+          "normalize": {
+            "baseline_seconds": 0.005423,
             "max_seconds": 0.255,
             "portable_max_seconds": 1.005
           },
-          "elaborate": {
-            "baseline_seconds": 2.6384,
-            "max_seconds": 12.638,
-            "portable_max_seconds": 32.638,
-            "baseline_peak_rss_kib": 825840,
-            "max_peak_rss_kib": 1087984,
-            "portable_max_peak_rss_kib": 1651680,
-            "baseline_ratio": 0.357,
-            "max_ratio": 2.357
-          },
-          "emit": {
-            "baseline_seconds": 0.020321,
-            "max_seconds": 0.27,
-            "portable_max_seconds": 1.02
-          },
-          "normalize": {
-            "baseline_seconds": 0.002946,
-            "max_seconds": 0.253,
-            "portable_max_seconds": 1.003
-          },
           "parse": {
-            "baseline_seconds": 0.010453,
-            "max_seconds": 0.26,
-            "portable_max_seconds": 1.01
+            "baseline_seconds": 0.018132,
+            "max_seconds": 0.268,
+            "portable_max_seconds": 1.018
           },
           "proof.cold": {
-            "baseline_seconds": 115.6724,
-            "max_seconds": 173.509,
-            "portable_max_seconds": 694.034,
-            "baseline_peak_rss_kib": 2617216,
-            "max_peak_rss_kib": 3402380,
-            "portable_max_peak_rss_kib": 5234432,
-            "baseline_ratio": 15.631,
-            "max_ratio": 31.263
+            "baseline_seconds": 79.1839,
+            "max_seconds": 118.776,
+            "portable_max_seconds": 475.103,
+            "baseline_peak_rss_kib": 2832544,
+            "max_peak_rss_kib": 3682307,
+            "portable_max_peak_rss_kib": 5665088,
+            "baseline_ratio": 10.595,
+            "max_ratio": 21.189
           },
           "proof.warm": {
-            "baseline_seconds": 0.632,
-            "max_seconds": 10.632,
-            "portable_max_seconds": 30.632,
-            "baseline_peak_rss_kib": 64544,
-            "max_peak_rss_kib": 326688,
-            "portable_max_peak_rss_kib": 588832,
-            "baseline_ratio": 0.085,
-            "max_ratio": 2.085
+            "baseline_seconds": 0.1368,
+            "max_seconds": 10.137,
+            "portable_max_seconds": 30.137,
+            "baseline_peak_rss_kib": 126780,
+            "max_peak_rss_kib": 388924,
+            "portable_max_peak_rss_kib": 651068,
+            "baseline_ratio": 0.018,
+            "max_ratio": 2.018
           },
           "translate.cold": {
-            "baseline_seconds": 0.1922,
-            "max_seconds": 0.442,
-            "portable_max_seconds": 1.922,
-            "baseline_peak_rss_kib": 46896,
-            "max_peak_rss_kib": 112432,
-            "portable_max_peak_rss_kib": 177968
+            "baseline_seconds": 0.1265,
+            "max_seconds": 0.377,
+            "portable_max_seconds": 1.265,
+            "baseline_peak_rss_kib": 83512,
+            "max_peak_rss_kib": 149048,
+            "portable_max_peak_rss_kib": 250536
           },
           "translate.warm": {
-            "baseline_seconds": 0.0751,
-            "max_seconds": 0.325,
-            "portable_max_seconds": 1.075,
-            "baseline_peak_rss_kib": 46912,
-            "max_peak_rss_kib": 112448,
-            "portable_max_peak_rss_kib": 177984
+            "baseline_seconds": 0.1334,
+            "max_seconds": 0.383,
+            "portable_max_seconds": 1.334,
+            "baseline_peak_rss_kib": 83512,
+            "max_peak_rss_kib": 149048,
+            "portable_max_peak_rss_kib": 250536
           }
         },
         "modules": {
-          "Proofs.Threadsync.Deadline": {
-            "baseline_seconds": 7.4008,
-            "baseline_ratio": 1.0,
-            "max_ratio": 2.0
-          },
           "Proofs.Threadsync.Gen": {
-            "baseline_seconds": 11.9499,
-            "baseline_ratio": 1.615,
-            "max_ratio": 3.23
+            "baseline_seconds": 5.7476,
+            "baseline_ratio": 0.769,
+            "max_ratio": 1.769
           },
           "Proofs.Threadsync.Handoff": {
-            "baseline_seconds": 27.9649,
-            "baseline_ratio": 3.779,
-            "max_ratio": 7.558
+            "baseline_seconds": 9.9553,
+            "baseline_ratio": 1.332,
+            "max_ratio": 2.664
           },
           "Proofs.Threadsync.Mutex": {
-            "baseline_seconds": 8.7796,
-            "baseline_ratio": 1.186,
-            "max_ratio": 2.373
+            "baseline_seconds": 4.1424,
+            "baseline_ratio": 0.554,
+            "max_ratio": 1.554
           },
           "Proofs.Threadsync.WaitGroup": {
-            "baseline_seconds": 13.0774,
-            "baseline_ratio": 1.767,
-            "max_ratio": 3.534
+            "baseline_seconds": 12.1574,
+            "baseline_ratio": 1.627,
+            "max_ratio": 3.253
+          },
+          "Proofs.Threadsync.WaitGroup.Main": {
+            "baseline_seconds": 2.6441,
+            "baseline_ratio": 0.354,
+            "max_ratio": 1.354
+          },
+          "Proofs.Threadsync.WaitGroup.Task": {
+            "baseline_seconds": 9.6521,
+            "baseline_ratio": 1.291,
+            "max_ratio": 2.583
+          },
+          "Proofs.Threadsync.WaitGroup.Wait": {
+            "baseline_seconds": 28.1849,
+            "baseline_ratio": 3.771,
+            "max_ratio": 7.542
           }
         }
       }
@@ -956,83 +951,83 @@
       ],
       "budget": {
         "recorded": {
-          "revision": "fce33b590c4bcda3075652adf5b6b654461a6817",
-          "recorded_at": "2026-10-18T22:09:19+00:00",
-          "translator_sha256": "02b6bc217f03830c9b495d5ac764789c07269ccac084438af84604a3d6053f62"
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
         },
         "output": {
-          "bytes": 2561,
-          "sha256": "119ffa2876104ebae192916ee113967295064728f92dea5522b279192f667058",
+          "bytes": 2715,
+          "sha256": "6d6a0f38f5369598c089a33570af65f5bebce039cc1bd713a4244e2cfe235534",
           "matches_reference": true,
           "functions": 4,
           "input_bytes": 5773
         },
         "phases": {
           "check": {
-            "baseline_seconds": 0.000216,
+            "baseline_seconds": 0.000202,
             "max_seconds": 0.25,
             "portable_max_seconds": 1.0
           },
           "elaborate": {
-            "baseline_seconds": 0.5055,
-            "max_seconds": 10.505,
-            "portable_max_seconds": 30.506,
-            "baseline_peak_rss_kib": 671792,
-            "max_peak_rss_kib": 933936,
-            "portable_max_peak_rss_kib": 1343584,
-            "baseline_ratio": 0.068,
-            "max_ratio": 2.068
+            "baseline_seconds": 0.3728,
+            "max_seconds": 10.373,
+            "portable_max_seconds": 30.373,
+            "baseline_peak_rss_kib": 821904,
+            "max_peak_rss_kib": 1084048,
+            "portable_max_peak_rss_kib": 1643808,
+            "baseline_ratio": 0.05,
+            "max_ratio": 2.05
           },
           "emit": {
-            "baseline_seconds": 0.000299,
+            "baseline_seconds": 0.000338,
             "max_seconds": 0.25,
             "portable_max_seconds": 1.0
           },
           "normalize": {
-            "baseline_seconds": 0.000141,
+            "baseline_seconds": 0.00016,
             "max_seconds": 0.25,
             "portable_max_seconds": 1.0
           },
           "parse": {
-            "baseline_seconds": 0.000206,
+            "baseline_seconds": 0.000236,
             "max_seconds": 0.25,
             "portable_max_seconds": 1.0
           },
           "proof.cold": {
-            "baseline_seconds": 1.0119,
-            "max_seconds": 11.012,
-            "portable_max_seconds": 31.012,
-            "baseline_peak_rss_kib": 682528,
-            "max_peak_rss_kib": 944672,
-            "portable_max_peak_rss_kib": 1365056,
-            "baseline_ratio": 0.137,
-            "max_ratio": 2.137
+            "baseline_seconds": 0.7359,
+            "max_seconds": 10.736,
+            "portable_max_seconds": 30.736,
+            "baseline_peak_rss_kib": 837608,
+            "max_peak_rss_kib": 1099752,
+            "portable_max_peak_rss_kib": 1675216,
+            "baseline_ratio": 0.098,
+            "max_ratio": 2.098
           },
           "proof.warm": {
-            "baseline_seconds": 0.1618,
-            "max_seconds": 10.162,
-            "portable_max_seconds": 30.162,
-            "baseline_peak_rss_kib": 60208,
-            "max_peak_rss_kib": 322352,
-            "portable_max_peak_rss_kib": 584496,
-            "baseline_ratio": 0.022,
-            "max_ratio": 2.022
+            "baseline_seconds": 0.1383,
+            "max_seconds": 10.138,
+            "portable_max_seconds": 30.138,
+            "baseline_peak_rss_kib": 120368,
+            "max_peak_rss_kib": 382512,
+            "portable_max_peak_rss_kib": 644656,
+            "baseline_ratio": 0.019,
+            "max_ratio": 2.019
           },
           "translate.cold": {
-            "baseline_seconds": 0.1544,
-            "max_seconds": 0.404,
-            "portable_max_seconds": 1.544,
-            "baseline_peak_rss_kib": 41168,
-            "max_peak_rss_kib": 106704,
-            "portable_max_peak_rss_kib": 172240
+            "baseline_seconds": 0.0273,
+            "max_seconds": 0.277,
+            "portable_max_seconds": 1.027,
+            "baseline_peak_rss_kib": 70692,
+            "max_peak_rss_kib": 136228,
+            "portable_max_peak_rss_kib": 212076
           },
           "translate.warm": {
-            "baseline_seconds": 0.0279,
+            "baseline_seconds": 0.0275,
             "max_seconds": 0.278,
             "portable_max_seconds": 1.028,
-            "baseline_peak_rss_kib": 41184,
-            "max_peak_rss_kib": 106720,
-            "portable_max_peak_rss_kib": 172256
+            "baseline_peak_rss_kib": 71076,
+            "max_peak_rss_kib": 136612,
+            "portable_max_peak_rss_kib": 213228
           }
         },
         "modules": {}
@@ -1061,110 +1056,105 @@
       ],
       "budget": {
         "recorded": {
-          "revision": "fce33b590c4bcda3075652adf5b6b654461a6817",
-          "recorded_at": "2026-10-18T22:09:19+00:00",
-          "translator_sha256": "02b6bc217f03830c9b495d5ac764789c07269ccac084438af84604a3d6053f62"
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
         },
         "output": {
-          "bytes": 24620,
-          "sha256": "2c40a8d8e49a6b0b24f077660ef5eb4c521bbe53a546433d60c05beea81ae677",
+          "bytes": 25024,
+          "sha256": "db0f84d98c11c2326a02508940241cad05a1f1286b3b797183fd0f12471ad0ef",
           "matches_reference": true,
           "functions": 11,
           "input_bytes": 141523
         },
         "phases": {
           "check": {
-            "baseline_seconds": 0.00223,
-            "max_seconds": 0.252,
-            "portable_max_seconds": 1.002
-          },
-          "elaborate": {
-            "baseline_seconds": 2.8338,
-            "max_seconds": 12.834,
-            "portable_max_seconds": 32.834,
-            "baseline_peak_rss_kib": 734800,
-            "max_peak_rss_kib": 996944,
-            "portable_max_peak_rss_kib": 1469600,
-            "baseline_ratio": 0.383,
-            "max_ratio": 2.383
-          },
-          "emit": {
-            "baseline_seconds": 0.003614,
+            "baseline_seconds": 0.004454,
             "max_seconds": 0.254,
             "portable_max_seconds": 1.004
           },
+          "elaborate": {
+            "baseline_seconds": 2.1333,
+            "max_seconds": 12.133,
+            "portable_max_seconds": 32.133,
+            "baseline_peak_rss_kib": 888008,
+            "max_peak_rss_kib": 1154410,
+            "portable_max_peak_rss_kib": 1776016,
+            "baseline_ratio": 0.285,
+            "max_ratio": 2.285
+          },
+          "emit": {
+            "baseline_seconds": 0.007061,
+            "max_seconds": 0.257,
+            "portable_max_seconds": 1.007
+          },
           "normalize": {
-            "baseline_seconds": 0.001616,
+            "baseline_seconds": 0.002072,
             "max_seconds": 0.252,
             "portable_max_seconds": 1.002
           },
           "parse": {
-            "baseline_seconds": 0.00343,
-            "max_seconds": 0.253,
-            "portable_max_seconds": 1.003
+            "baseline_seconds": 0.004453,
+            "max_seconds": 0.254,
+            "portable_max_seconds": 1.004
           },
           "proof.cold": {
-            "baseline_seconds": 24.4138,
-            "max_seconds": 36.621,
-            "portable_max_seconds": 146.483,
-            "baseline_peak_rss_kib": 1984032,
-            "max_peak_rss_kib": 2579241,
-            "portable_max_peak_rss_kib": 3968064,
-            "baseline_ratio": 3.299,
-            "max_ratio": 6.598
+            "baseline_seconds": 16.5709,
+            "max_seconds": 26.571,
+            "portable_max_seconds": 99.425,
+            "baseline_peak_rss_kib": 2248608,
+            "max_peak_rss_kib": 2923190,
+            "portable_max_peak_rss_kib": 4497216,
+            "baseline_ratio": 2.217,
+            "max_ratio": 4.434
           },
           "proof.warm": {
-            "baseline_seconds": 0.1675,
-            "max_seconds": 10.168,
-            "portable_max_seconds": 30.168,
-            "baseline_peak_rss_kib": 61696,
-            "max_peak_rss_kib": 323840,
-            "portable_max_peak_rss_kib": 585984,
-            "baseline_ratio": 0.023,
-            "max_ratio": 2.023
+            "baseline_seconds": 0.1397,
+            "max_seconds": 10.14,
+            "portable_max_seconds": 30.14,
+            "baseline_peak_rss_kib": 122424,
+            "max_peak_rss_kib": 384568,
+            "portable_max_peak_rss_kib": 646712,
+            "baseline_ratio": 0.019,
+            "max_ratio": 2.019
           },
           "translate.cold": {
-            "baseline_seconds": 0.0403,
-            "max_seconds": 0.29,
-            "portable_max_seconds": 1.04,
-            "baseline_peak_rss_kib": 43104,
-            "max_peak_rss_kib": 108640,
-            "portable_max_peak_rss_kib": 174176
+            "baseline_seconds": 0.0512,
+            "max_seconds": 0.301,
+            "portable_max_seconds": 1.051,
+            "baseline_peak_rss_kib": 75184,
+            "max_peak_rss_kib": 140720,
+            "portable_max_peak_rss_kib": 225552
           },
           "translate.warm": {
-            "baseline_seconds": 0.0515,
-            "max_seconds": 0.301,
+            "baseline_seconds": 0.0525,
+            "max_seconds": 0.302,
             "portable_max_seconds": 1.052,
-            "baseline_peak_rss_kib": 43184,
-            "max_peak_rss_kib": 108720,
-            "portable_max_peak_rss_kib": 174256
+            "baseline_peak_rss_kib": 75696,
+            "max_peak_rss_kib": 141232,
+            "portable_max_peak_rss_kib": 227088
           }
         },
         "modules": {
           "Proofs.Atomics.Gen": {
-            "baseline_seconds": 2.055,
-            "baseline_ratio": 0.278,
-            "max_ratio": 1.278
+            "baseline_seconds": 2.3421,
+            "baseline_ratio": 0.313,
+            "max_ratio": 1.313
           },
           "Proofs.Atomics.MessagePassing": {
-            "baseline_seconds": 2.4002,
-            "baseline_ratio": 0.324,
-            "max_ratio": 1.324
+            "baseline_seconds": 2.6434,
+            "baseline_ratio": 0.354,
+            "max_ratio": 1.354
           },
           "Proofs.Atomics.Proofs": {
-            "baseline_seconds": 4.3648,
-            "baseline_ratio": 0.59,
-            "max_ratio": 1.59
-          },
-          "Proofs.Atomics.Relaxed": {
-            "baseline_seconds": 2.5738,
-            "baseline_ratio": 0.348,
-            "max_ratio": 1.348
+            "baseline_seconds": 3.0409,
+            "baseline_ratio": 0.407,
+            "max_ratio": 1.407
           },
           "Proofs.Atomics.Stack": {
-            "baseline_seconds": 18.5487,
-            "baseline_ratio": 2.507,
-            "max_ratio": 5.013
+            "baseline_seconds": 7.2527,
+            "baseline_ratio": 0.97,
+            "max_ratio": 1.97
           }
         }
       }
@@ -1189,92 +1179,86 @@
       ],
       "budget": {
         "recorded": {
-          "revision": "fce33b590c4bcda3075652adf5b6b654461a6817",
-          "recorded_at": "2026-10-18T22:09:19+00:00",
-          "translator_sha256": "02b6bc217f03830c9b495d5ac764789c07269ccac084438af84604a3d6053f62"
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
         },
         "output": {
-          "bytes": 4323,
-          "sha256": "978de42831cab4c43de6c786eab3f4e719d4457aff0a299d5d221b893beff16b",
+          "bytes": 4435,
+          "sha256": "6a170a244afaf9ad3990052e302f1d825e2f19f7f014c10153ae11483e4864a2",
           "matches_reference": true,
           "functions": 3,
           "input_bytes": 13399
         },
         "phases": {
           "check": {
-            "baseline_seconds": 0.000397,
+            "baseline_seconds": 0.000498,
             "max_seconds": 0.25,
             "portable_max_seconds": 1.0
           },
           "elaborate": {
-            "baseline_seconds": 2.8325,
-            "max_seconds": 12.832,
-            "portable_max_seconds": 32.833,
-            "baseline_peak_rss_kib": 676272,
-            "max_peak_rss_kib": 938416,
-            "portable_max_peak_rss_kib": 1352544,
-            "baseline_ratio": 0.383,
-            "max_ratio": 2.383
+            "baseline_seconds": 0.4283,
+            "max_seconds": 10.428,
+            "portable_max_seconds": 30.428,
+            "baseline_peak_rss_kib": 824028,
+            "max_peak_rss_kib": 1086172,
+            "portable_max_peak_rss_kib": 1648056,
+            "baseline_ratio": 0.057,
+            "max_ratio": 2.057
           },
           "emit": {
-            "baseline_seconds": 0.000538,
+            "baseline_seconds": 0.000902,
             "max_seconds": 0.251,
             "portable_max_seconds": 1.001
           },
           "normalize": {
-            "baseline_seconds": 0.000268,
+            "baseline_seconds": 0.000287,
             "max_seconds": 0.25,
             "portable_max_seconds": 1.0
           },
           "parse": {
-            "baseline_seconds": 0.000479,
+            "baseline_seconds": 0.000423,
             "max_seconds": 0.25,
             "portable_max_seconds": 1.0
           },
           "proof.cold": {
-            "baseline_seconds": 7.644,
-            "max_seconds": 17.644,
-            "portable_max_seconds": 45.864,
-            "baseline_peak_rss_kib": 1396608,
-            "max_peak_rss_kib": 1815590,
-            "portable_max_peak_rss_kib": 2793216,
-            "baseline_ratio": 1.033,
-            "max_ratio": 3.033
+            "baseline_seconds": 1.7403,
+            "max_seconds": 11.74,
+            "portable_max_seconds": 31.74,
+            "baseline_peak_rss_kib": 1717828,
+            "max_peak_rss_kib": 2233176,
+            "portable_max_peak_rss_kib": 3435656,
+            "baseline_ratio": 0.233,
+            "max_ratio": 2.233
           },
           "proof.warm": {
-            "baseline_seconds": 0.1867,
-            "max_seconds": 10.187,
-            "portable_max_seconds": 30.187,
-            "baseline_peak_rss_kib": 61408,
-            "max_peak_rss_kib": 323552,
-            "portable_max_peak_rss_kib": 585696,
-            "baseline_ratio": 0.025,
-            "max_ratio": 2.025
+            "baseline_seconds": 0.14,
+            "max_seconds": 10.14,
+            "portable_max_seconds": 30.14,
+            "baseline_peak_rss_kib": 118300,
+            "max_peak_rss_kib": 380444,
+            "portable_max_peak_rss_kib": 642588,
+            "baseline_ratio": 0.019,
+            "max_ratio": 2.019
           },
           "translate.cold": {
-            "baseline_seconds": 0.2349,
-            "max_seconds": 0.485,
-            "portable_max_seconds": 2.349,
-            "baseline_peak_rss_kib": 41504,
-            "max_peak_rss_kib": 107040,
-            "portable_max_peak_rss_kib": 172576
+            "baseline_seconds": 0.0293,
+            "max_seconds": 0.279,
+            "portable_max_seconds": 1.029,
+            "baseline_peak_rss_kib": 72244,
+            "max_peak_rss_kib": 137780,
+            "portable_max_peak_rss_kib": 216732
           },
           "translate.warm": {
-            "baseline_seconds": 0.0332,
-            "max_seconds": 0.283,
-            "portable_max_seconds": 1.033,
-            "baseline_peak_rss_kib": 41360,
-            "max_peak_rss_kib": 106896,
-            "portable_max_peak_rss_kib": 172432
+            "baseline_seconds": 0.0279,
+            "max_seconds": 0.278,
+            "portable_max_seconds": 1.028,
+            "baseline_peak_rss_kib": 73136,
+            "max_peak_rss_kib": 138672,
+            "portable_max_peak_rss_kib": 219408
           }
         },
-        "modules": {
-          "Proofs.Errors.Proofs": {
-            "baseline_seconds": 3.781,
-            "baseline_ratio": 0.511,
-            "max_ratio": 1.511
-          }
-        }
+        "modules": {}
       }
     },
     {
@@ -1297,97 +1281,86 @@
       ],
       "budget": {
         "recorded": {
-          "revision": "fce33b590c4bcda3075652adf5b6b654461a6817",
-          "recorded_at": "2026-10-18T22:09:19+00:00",
-          "translator_sha256": "02b6bc217f03830c9b495d5ac764789c07269ccac084438af84604a3d6053f62"
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
         },
         "output": {
-          "bytes": 3962,
-          "sha256": "52bed68256357fa44b1a597b76a09ad314184acc591d5340ea86aea28f226761",
+          "bytes": 4252,
+          "sha256": "21770642a3700777c7ac8437a2add1876dc33f9854f368246d07fdf92d699bc7",
           "matches_reference": true,
           "functions": 10,
           "input_bytes": 8289
         },
         "phases": {
           "check": {
-            "baseline_seconds": 0.000263,
+            "baseline_seconds": 0.000187,
             "max_seconds": 0.25,
             "portable_max_seconds": 1.0
           },
           "elaborate": {
-            "baseline_seconds": 2.766,
-            "max_seconds": 12.766,
-            "portable_max_seconds": 32.766,
-            "baseline_peak_rss_kib": 675376,
-            "max_peak_rss_kib": 937520,
-            "portable_max_peak_rss_kib": 1350752,
-            "baseline_ratio": 0.374,
-            "max_ratio": 2.374
+            "baseline_seconds": 0.4362,
+            "max_seconds": 10.436,
+            "portable_max_seconds": 30.436,
+            "baseline_peak_rss_kib": 828012,
+            "max_peak_rss_kib": 1090156,
+            "portable_max_peak_rss_kib": 1656024,
+            "baseline_ratio": 0.058,
+            "max_ratio": 2.058
           },
           "emit": {
-            "baseline_seconds": 0.000345,
+            "baseline_seconds": 0.000384,
             "max_seconds": 0.25,
             "portable_max_seconds": 1.0
           },
           "normalize": {
-            "baseline_seconds": 0.000234,
+            "baseline_seconds": 0.000194,
             "max_seconds": 0.25,
             "portable_max_seconds": 1.0
           },
           "parse": {
-            "baseline_seconds": 0.000329,
+            "baseline_seconds": 0.000316,
             "max_seconds": 0.25,
             "portable_max_seconds": 1.0
           },
           "proof.cold": {
-            "baseline_seconds": 8.5431,
-            "max_seconds": 18.543,
-            "portable_max_seconds": 51.259,
-            "baseline_peak_rss_kib": 1374960,
-            "max_peak_rss_kib": 1787448,
-            "portable_max_peak_rss_kib": 2749920,
-            "baseline_ratio": 1.154,
-            "max_ratio": 3.154
+            "baseline_seconds": 1.2464,
+            "max_seconds": 11.246,
+            "portable_max_seconds": 31.246,
+            "baseline_peak_rss_kib": 1701788,
+            "max_peak_rss_kib": 2212324,
+            "portable_max_peak_rss_kib": 3403576,
+            "baseline_ratio": 0.167,
+            "max_ratio": 2.167
           },
           "proof.warm": {
-            "baseline_seconds": 0.2809,
-            "max_seconds": 10.281,
-            "portable_max_seconds": 30.281,
-            "baseline_peak_rss_kib": 61440,
-            "max_peak_rss_kib": 323584,
-            "portable_max_peak_rss_kib": 585728,
-            "baseline_ratio": 0.038,
-            "max_ratio": 2.038
+            "baseline_seconds": 0.1361,
+            "max_seconds": 10.136,
+            "portable_max_seconds": 30.136,
+            "baseline_peak_rss_kib": 120348,
+            "max_peak_rss_kib": 382492,
+            "portable_max_peak_rss_kib": 644636,
+            "baseline_ratio": 0.018,
+            "max_ratio": 2.018
           },
           "translate.cold": {
-            "baseline_seconds": 0.2111,
-            "max_seconds": 0.461,
-            "portable_max_seconds": 2.111,
-            "baseline_peak_rss_kib": 41072,
-            "max_peak_rss_kib": 106608,
-            "portable_max_peak_rss_kib": 172144
+            "baseline_seconds": 0.0267,
+            "max_seconds": 0.277,
+            "portable_max_seconds": 1.027,
+            "baseline_peak_rss_kib": 71076,
+            "max_peak_rss_kib": 136612,
+            "portable_max_peak_rss_kib": 213228
           },
           "translate.warm": {
-            "baseline_seconds": 0.0331,
-            "max_seconds": 0.283,
-            "portable_max_seconds": 1.033,
-            "baseline_peak_rss_kib": 41088,
-            "max_peak_rss_kib": 106624,
-            "portable_max_peak_rss_kib": 172160
+            "baseline_seconds": 0.0263,
+            "max_seconds": 0.276,
+            "portable_max_seconds": 1.026,
+            "baseline_peak_rss_kib": 71204,
+            "max_peak_rss_kib": 136740,
+            "portable_max_peak_rss_kib": 213612
           }
         },
-        "modules": {
-          "Proofs.Floatconv.Gen": {
-            "baseline_seconds": 2.6404,
-            "baseline_ratio": 0.357,
-            "max_ratio": 1.357
-          },
-          "Proofs.Floatconv.Proofs": {
-            "baseline_seconds": 6.6844,
-            "baseline_ratio": 0.903,
-            "max_ratio": 1.903
-          }
-        }
+        "modules": {}
       }
     },
     {
@@ -1411,97 +1384,86 @@
       ],
       "budget": {
         "recorded": {
-          "revision": "fce33b590c4bcda3075652adf5b6b654461a6817",
-          "recorded_at": "2026-10-18T22:09:19+00:00",
-          "translator_sha256": "02b6bc217f03830c9b495d5ac764789c07269ccac084438af84604a3d6053f62"
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
         },
         "output": {
-          "bytes": 7409,
-          "sha256": "34290ade352ecefaf83f22b4375fc63ef21176d8eb96cc8ba1defc018592e23b",
+          "bytes": 7626,
+          "sha256": "d3f16e95491cfb64c786b113d319ce67073fa5306a089fbf393fa4bbb4727588",
           "matches_reference": true,
           "functions": 7,
           "input_bytes": 25390
         },
         "phases": {
           "check": {
-            "baseline_seconds": 0.00058,
+            "baseline_seconds": 0.000929,
             "max_seconds": 0.251,
             "portable_max_seconds": 1.001
           },
           "elaborate": {
-            "baseline_seconds": 1.5541,
-            "max_seconds": 11.554,
-            "portable_max_seconds": 31.554,
-            "baseline_peak_rss_kib": 682240,
-            "max_peak_rss_kib": 944384,
-            "portable_max_peak_rss_kib": 1364480,
-            "baseline_ratio": 0.21,
-            "max_ratio": 2.21
+            "baseline_seconds": 0.5467,
+            "max_seconds": 10.547,
+            "portable_max_seconds": 30.547,
+            "baseline_peak_rss_kib": 833456,
+            "max_peak_rss_kib": 1095600,
+            "portable_max_peak_rss_kib": 1666912,
+            "baseline_ratio": 0.073,
+            "max_ratio": 2.073
           },
           "emit": {
-            "baseline_seconds": 0.000923,
+            "baseline_seconds": 0.001689,
+            "max_seconds": 0.252,
+            "portable_max_seconds": 1.002
+          },
+          "normalize": {
+            "baseline_seconds": 0.000614,
             "max_seconds": 0.251,
             "portable_max_seconds": 1.001
           },
-          "normalize": {
-            "baseline_seconds": 0.000437,
-            "max_seconds": 0.25,
-            "portable_max_seconds": 1.0
-          },
           "parse": {
-            "baseline_seconds": 0.000653,
+            "baseline_seconds": 0.000835,
             "max_seconds": 0.251,
             "portable_max_seconds": 1.001
           },
           "proof.cold": {
-            "baseline_seconds": 12.7708,
-            "max_seconds": 22.771,
-            "portable_max_seconds": 76.625,
-            "baseline_peak_rss_kib": 1405152,
-            "max_peak_rss_kib": 1826697,
-            "portable_max_peak_rss_kib": 2810304,
-            "baseline_ratio": 1.726,
-            "max_ratio": 3.726
+            "baseline_seconds": 2.9461,
+            "max_seconds": 12.946,
+            "portable_max_seconds": 32.946,
+            "baseline_peak_rss_kib": 1732920,
+            "max_peak_rss_kib": 2252796,
+            "portable_max_peak_rss_kib": 3465840,
+            "baseline_ratio": 0.394,
+            "max_ratio": 2.394
           },
           "proof.warm": {
-            "baseline_seconds": 0.3135,
-            "max_seconds": 10.313,
-            "portable_max_seconds": 30.314,
-            "baseline_peak_rss_kib": 61232,
-            "max_peak_rss_kib": 323376,
-            "portable_max_peak_rss_kib": 585520,
-            "baseline_ratio": 0.042,
-            "max_ratio": 2.042
+            "baseline_seconds": 0.1408,
+            "max_seconds": 10.141,
+            "portable_max_seconds": 30.141,
+            "baseline_peak_rss_kib": 120352,
+            "max_peak_rss_kib": 382496,
+            "portable_max_peak_rss_kib": 644640,
+            "baseline_ratio": 0.019,
+            "max_ratio": 2.019
           },
           "translate.cold": {
-            "baseline_seconds": 0.4046,
-            "max_seconds": 0.809,
-            "portable_max_seconds": 4.046,
-            "baseline_peak_rss_kib": 41552,
-            "max_peak_rss_kib": 107088,
-            "portable_max_peak_rss_kib": 172624
+            "baseline_seconds": 0.0333,
+            "max_seconds": 0.283,
+            "portable_max_seconds": 1.033,
+            "baseline_peak_rss_kib": 71980,
+            "max_peak_rss_kib": 137516,
+            "portable_max_peak_rss_kib": 215940
           },
           "translate.warm": {
-            "baseline_seconds": 0.0402,
-            "max_seconds": 0.29,
-            "portable_max_seconds": 1.04,
-            "baseline_peak_rss_kib": 41568,
-            "max_peak_rss_kib": 107104,
-            "portable_max_peak_rss_kib": 172640
+            "baseline_seconds": 0.0323,
+            "max_seconds": 0.282,
+            "portable_max_seconds": 1.032,
+            "baseline_peak_rss_kib": 73772,
+            "max_peak_rss_kib": 139308,
+            "portable_max_peak_rss_kib": 221316
           }
         },
-        "modules": {
-          "Proofs.Floats.Dot": {
-            "baseline_seconds": 8.5217,
-            "baseline_ratio": 1.152,
-            "max_ratio": 2.303
-          },
-          "Proofs.Floats.Proofs": {
-            "baseline_seconds": 15.3272,
-            "baseline_ratio": 2.071,
-            "max_ratio": 4.142
-          }
-        }
+        "modules": {}
       }
     },
     {
@@ -1524,95 +1486,90 @@
       ],
       "budget": {
         "recorded": {
-          "revision": "fce33b590c4bcda3075652adf5b6b654461a6817",
-          "recorded_at": "2026-10-18T22:09:19+00:00",
-          "translator_sha256": "02b6bc217f03830c9b495d5ac764789c07269ccac084438af84604a3d6053f62"
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
         },
         "output": {
-          "bytes": 18651,
-          "sha256": "3d377b7965a1d71a9dc6c1a7d6f188cc7353e0088ad41825f44f6c59c0fb7bc7",
+          "bytes": 19153,
+          "sha256": "b978641e6c4fd14771966d6296a0657fcf3ccb19323ed5960e50aea4e47dfe48",
           "matches_reference": true,
           "functions": 8,
           "input_bytes": 415948
         },
         "phases": {
           "check": {
-            "baseline_seconds": 0.002016,
-            "max_seconds": 0.252,
-            "portable_max_seconds": 1.002
+            "baseline_seconds": 0.002843,
+            "max_seconds": 0.253,
+            "portable_max_seconds": 1.003
           },
           "elaborate": {
-            "baseline_seconds": 3.7623,
-            "max_seconds": 13.762,
-            "portable_max_seconds": 33.762,
-            "baseline_peak_rss_kib": 712000,
-            "max_peak_rss_kib": 974144,
-            "portable_max_peak_rss_kib": 1424000,
-            "baseline_ratio": 0.508,
-            "max_ratio": 2.508
+            "baseline_seconds": 1.1138,
+            "max_seconds": 11.114,
+            "portable_max_seconds": 31.114,
+            "baseline_peak_rss_kib": 863224,
+            "max_peak_rss_kib": 1125368,
+            "portable_max_peak_rss_kib": 1726448,
+            "baseline_ratio": 0.149,
+            "max_ratio": 2.149
           },
           "emit": {
-            "baseline_seconds": 0.005336,
-            "max_seconds": 0.255,
-            "portable_max_seconds": 1.005
+            "baseline_seconds": 0.007554,
+            "max_seconds": 0.258,
+            "portable_max_seconds": 1.008
           },
           "normalize": {
-            "baseline_seconds": 0.001155,
+            "baseline_seconds": 0.001245,
             "max_seconds": 0.251,
             "portable_max_seconds": 1.001
           },
           "parse": {
-            "baseline_seconds": 0.006426,
-            "max_seconds": 0.256,
-            "portable_max_seconds": 1.006
+            "baseline_seconds": 0.006789,
+            "max_seconds": 0.257,
+            "portable_max_seconds": 1.007
           },
           "proof.cold": {
-            "baseline_seconds": 31.6171,
-            "max_seconds": 47.426,
-            "portable_max_seconds": 189.703,
-            "baseline_peak_rss_kib": 2149344,
-            "max_peak_rss_kib": 2794147,
-            "portable_max_peak_rss_kib": 4298688,
-            "baseline_ratio": 4.273,
-            "max_ratio": 8.545
+            "baseline_seconds": 7.7601,
+            "max_seconds": 17.76,
+            "portable_max_seconds": 46.561,
+            "baseline_peak_rss_kib": 2468784,
+            "max_peak_rss_kib": 3209419,
+            "portable_max_peak_rss_kib": 4937568,
+            "baseline_ratio": 1.038,
+            "max_ratio": 3.038
           },
           "proof.warm": {
-            "baseline_seconds": 0.2835,
-            "max_seconds": 10.284,
-            "portable_max_seconds": 30.284,
-            "baseline_peak_rss_kib": 63696,
-            "max_peak_rss_kib": 325840,
-            "portable_max_peak_rss_kib": 587984,
-            "baseline_ratio": 0.038,
-            "max_ratio": 2.038
+            "baseline_seconds": 0.1359,
+            "max_seconds": 10.136,
+            "portable_max_seconds": 30.136,
+            "baseline_peak_rss_kib": 126776,
+            "max_peak_rss_kib": 388920,
+            "portable_max_peak_rss_kib": 651064,
+            "baseline_ratio": 0.018,
+            "max_ratio": 2.018
           },
           "translate.cold": {
-            "baseline_seconds": 0.4578,
-            "max_seconds": 0.916,
-            "portable_max_seconds": 4.578,
-            "baseline_peak_rss_kib": 45472,
-            "max_peak_rss_kib": 111008,
-            "portable_max_peak_rss_kib": 176544
+            "baseline_seconds": 0.0701,
+            "max_seconds": 0.32,
+            "portable_max_seconds": 1.07,
+            "baseline_peak_rss_kib": 80048,
+            "max_peak_rss_kib": 145584,
+            "portable_max_peak_rss_kib": 240144
           },
           "translate.warm": {
-            "baseline_seconds": 0.0782,
-            "max_seconds": 0.328,
-            "portable_max_seconds": 1.078,
-            "baseline_peak_rss_kib": 45536,
-            "max_peak_rss_kib": 111072,
-            "portable_max_peak_rss_kib": 176608
+            "baseline_seconds": 0.0707,
+            "max_seconds": 0.321,
+            "portable_max_seconds": 1.071,
+            "baseline_peak_rss_kib": 79412,
+            "max_peak_rss_kib": 144948,
+            "portable_max_peak_rss_kib": 238236
           }
         },
         "modules": {
           "Proofs.Iogroup.Counter": {
-            "baseline_seconds": 13.8648,
-            "baseline_ratio": 1.874,
-            "max_ratio": 3.747
-          },
-          "Proofs.Iogroup.Gen": {
-            "baseline_seconds": 3.3852,
-            "baseline_ratio": 0.457,
-            "max_ratio": 1.457
+            "baseline_seconds": 6.4505,
+            "baseline_ratio": 0.863,
+            "max_ratio": 1.863
           }
         }
       }
@@ -1637,83 +1594,83 @@
       ],
       "budget": {
         "recorded": {
-          "revision": "fce33b590c4bcda3075652adf5b6b654461a6817",
-          "recorded_at": "2026-10-18T22:09:19+00:00",
-          "translator_sha256": "02b6bc217f03830c9b495d5ac764789c07269ccac084438af84604a3d6053f62"
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
         },
         "output": {
-          "bytes": 3504,
-          "sha256": "71416b68c966061413a3d01981ea324025839b93fad9faf0aa8cd9980772080c",
+          "bytes": 3608,
+          "sha256": "d85a4d1035468c90e31349d5b0334721cb7d22ad0d82a891976a8d7e2661478b",
           "matches_reference": true,
           "functions": 3,
           "input_bytes": 11707
         },
         "phases": {
           "check": {
-            "baseline_seconds": 0.000359,
-            "max_seconds": 0.25,
-            "portable_max_seconds": 1.0
+            "baseline_seconds": 0.0006,
+            "max_seconds": 0.251,
+            "portable_max_seconds": 1.001
           },
           "elaborate": {
-            "baseline_seconds": 0.5578,
-            "max_seconds": 10.558,
-            "portable_max_seconds": 30.558,
-            "baseline_peak_rss_kib": 674032,
-            "max_peak_rss_kib": 936176,
-            "portable_max_peak_rss_kib": 1348064,
-            "baseline_ratio": 0.075,
-            "max_ratio": 2.075
+            "baseline_seconds": 0.4055,
+            "max_seconds": 10.405,
+            "portable_max_seconds": 30.405,
+            "baseline_peak_rss_kib": 823996,
+            "max_peak_rss_kib": 1086140,
+            "portable_max_peak_rss_kib": 1647992,
+            "baseline_ratio": 0.054,
+            "max_ratio": 2.054
           },
           "emit": {
-            "baseline_seconds": 0.000656,
+            "baseline_seconds": 0.001127,
             "max_seconds": 0.251,
             "portable_max_seconds": 1.001
           },
           "normalize": {
-            "baseline_seconds": 0.000222,
+            "baseline_seconds": 0.000264,
             "max_seconds": 0.25,
             "portable_max_seconds": 1.0
           },
           "parse": {
-            "baseline_seconds": 0.000337,
+            "baseline_seconds": 0.000385,
             "max_seconds": 0.25,
             "portable_max_seconds": 1.0
           },
           "proof.cold": {
-            "baseline_seconds": 1.6093,
-            "max_seconds": 11.609,
-            "portable_max_seconds": 31.609,
-            "baseline_peak_rss_kib": 698704,
-            "max_peak_rss_kib": 960848,
-            "portable_max_peak_rss_kib": 1397408,
-            "baseline_ratio": 0.217,
-            "max_ratio": 2.217
+            "baseline_seconds": 1.1388,
+            "max_seconds": 11.139,
+            "portable_max_seconds": 31.139,
+            "baseline_peak_rss_kib": 855856,
+            "max_peak_rss_kib": 1118000,
+            "portable_max_peak_rss_kib": 1711712,
+            "baseline_ratio": 0.152,
+            "max_ratio": 2.152
           },
           "proof.warm": {
-            "baseline_seconds": 0.1692,
-            "max_seconds": 10.169,
-            "portable_max_seconds": 30.169,
-            "baseline_peak_rss_kib": 61248,
-            "max_peak_rss_kib": 323392,
-            "portable_max_peak_rss_kib": 585536,
-            "baseline_ratio": 0.023,
-            "max_ratio": 2.023
+            "baseline_seconds": 0.1396,
+            "max_seconds": 10.14,
+            "portable_max_seconds": 30.14,
+            "baseline_peak_rss_kib": 118324,
+            "max_peak_rss_kib": 380468,
+            "portable_max_peak_rss_kib": 642612,
+            "baseline_ratio": 0.019,
+            "max_ratio": 2.019
           },
           "translate.cold": {
-            "baseline_seconds": 0.1901,
-            "max_seconds": 0.44,
-            "portable_max_seconds": 1.901,
-            "baseline_peak_rss_kib": 41328,
-            "max_peak_rss_kib": 106864,
-            "portable_max_peak_rss_kib": 172400
+            "baseline_seconds": 0.0285,
+            "max_seconds": 0.279,
+            "portable_max_seconds": 1.028,
+            "baseline_peak_rss_kib": 70820,
+            "max_peak_rss_kib": 136356,
+            "portable_max_peak_rss_kib": 212460
           },
           "translate.warm": {
-            "baseline_seconds": 0.0324,
-            "max_seconds": 0.282,
-            "portable_max_seconds": 1.032,
-            "baseline_peak_rss_kib": 41376,
-            "max_peak_rss_kib": 106912,
-            "portable_max_peak_rss_kib": 172448
+            "baseline_seconds": 0.0293,
+            "max_seconds": 0.279,
+            "portable_max_seconds": 1.029,
+            "baseline_peak_rss_kib": 71460,
+            "max_peak_rss_kib": 136996,
+            "portable_max_peak_rss_kib": 214380
           }
         },
         "modules": {}
@@ -1740,90 +1697,90 @@
       ],
       "budget": {
         "recorded": {
-          "revision": "fce33b590c4bcda3075652adf5b6b654461a6817",
-          "recorded_at": "2026-10-18T22:09:19+00:00",
-          "translator_sha256": "02b6bc217f03830c9b495d5ac764789c07269ccac084438af84604a3d6053f62"
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
         },
         "output": {
-          "bytes": 8766,
-          "sha256": "9a76315d55c28cfc63755fefe07c15b12e3fd2b7e8e23a9ef797b3ebcbd01350",
+          "bytes": 9151,
+          "sha256": "882aac3b8e030c1ee5a9b4fb12ee47aec1e443583d9f0ea02671805d83119725",
           "matches_reference": true,
           "functions": 12,
           "input_bytes": 31237
         },
         "phases": {
           "check": {
-            "baseline_seconds": 0.000566,
+            "baseline_seconds": 0.00075,
             "max_seconds": 0.251,
             "portable_max_seconds": 1.001
           },
           "elaborate": {
-            "baseline_seconds": 1.2083,
-            "max_seconds": 11.208,
-            "portable_max_seconds": 31.208,
-            "baseline_peak_rss_kib": 694288,
-            "max_peak_rss_kib": 956432,
-            "portable_max_peak_rss_kib": 1388576,
-            "baseline_ratio": 0.163,
-            "max_ratio": 2.163
+            "baseline_seconds": 0.8613,
+            "max_seconds": 10.861,
+            "portable_max_seconds": 30.861,
+            "baseline_peak_rss_kib": 843848,
+            "max_peak_rss_kib": 1105992,
+            "portable_max_peak_rss_kib": 1687696,
+            "baseline_ratio": 0.115,
+            "max_ratio": 2.115
           },
           "emit": {
-            "baseline_seconds": 0.000977,
+            "baseline_seconds": 0.001394,
             "max_seconds": 0.251,
             "portable_max_seconds": 1.001
           },
           "normalize": {
-            "baseline_seconds": 0.000465,
-            "max_seconds": 0.25,
-            "portable_max_seconds": 1.0
+            "baseline_seconds": 0.000659,
+            "max_seconds": 0.251,
+            "portable_max_seconds": 1.001
           },
           "parse": {
-            "baseline_seconds": 0.000899,
+            "baseline_seconds": 0.001086,
             "max_seconds": 0.251,
             "portable_max_seconds": 1.001
           },
           "proof.cold": {
-            "baseline_seconds": 12.8006,
-            "max_seconds": 22.801,
-            "portable_max_seconds": 76.804,
-            "baseline_peak_rss_kib": 1456864,
-            "max_peak_rss_kib": 1893923,
-            "portable_max_peak_rss_kib": 2913728,
-            "baseline_ratio": 1.73,
-            "max_ratio": 3.73
+            "baseline_seconds": 5.5496,
+            "max_seconds": 15.55,
+            "portable_max_seconds": 35.55,
+            "baseline_peak_rss_kib": 1848820,
+            "max_peak_rss_kib": 2403466,
+            "portable_max_peak_rss_kib": 3697640,
+            "baseline_ratio": 0.743,
+            "max_ratio": 2.743
           },
           "proof.warm": {
-            "baseline_seconds": 0.2913,
-            "max_seconds": 10.291,
-            "portable_max_seconds": 30.291,
-            "baseline_peak_rss_kib": 62864,
-            "max_peak_rss_kib": 325008,
-            "portable_max_peak_rss_kib": 587152,
-            "baseline_ratio": 0.039,
-            "max_ratio": 2.039
+            "baseline_seconds": 0.1395,
+            "max_seconds": 10.139,
+            "portable_max_seconds": 30.14,
+            "baseline_peak_rss_kib": 122680,
+            "max_peak_rss_kib": 384824,
+            "portable_max_peak_rss_kib": 646968,
+            "baseline_ratio": 0.019,
+            "max_ratio": 2.019
           },
           "translate.cold": {
-            "baseline_seconds": 0.0451,
-            "max_seconds": 0.295,
-            "portable_max_seconds": 1.045,
-            "baseline_peak_rss_kib": 41584,
-            "max_peak_rss_kib": 107120,
-            "portable_max_peak_rss_kib": 172656
+            "baseline_seconds": 0.0311,
+            "max_seconds": 0.281,
+            "portable_max_seconds": 1.031,
+            "baseline_peak_rss_kib": 72876,
+            "max_peak_rss_kib": 138412,
+            "portable_max_peak_rss_kib": 218628
           },
           "translate.warm": {
-            "baseline_seconds": 0.0441,
-            "max_seconds": 0.294,
-            "portable_max_seconds": 1.044,
-            "baseline_peak_rss_kib": 41648,
-            "max_peak_rss_kib": 107184,
-            "portable_max_peak_rss_kib": 172720
+            "baseline_seconds": 0.0318,
+            "max_seconds": 0.282,
+            "portable_max_seconds": 1.032,
+            "baseline_peak_rss_kib": 73516,
+            "max_peak_rss_kib": 139052,
+            "portable_max_peak_rss_kib": 220548
           }
         },
         "modules": {
           "Proofs.Pointers.Proofs": {
-            "baseline_seconds": 3.87,
-            "baseline_ratio": 0.523,
-            "max_ratio": 1.523
+            "baseline_seconds": 3.4456,
+            "baseline_ratio": 0.461,
+            "max_ratio": 1.461
           }
         }
       }
@@ -1848,83 +1805,83 @@
       ],
       "budget": {
         "recorded": {
-          "revision": "fce33b590c4bcda3075652adf5b6b654461a6817",
-          "recorded_at": "2026-10-18T22:09:19+00:00",
-          "translator_sha256": "02b6bc217f03830c9b495d5ac764789c07269ccac084438af84604a3d6053f62"
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
         },
         "output": {
-          "bytes": 3389,
-          "sha256": "e07cae0304eb955c3102371100bd9386a60c0bb58ca3ef6a84f0a8e1aa0b072c",
+          "bytes": 3502,
+          "sha256": "44b01307a19a5fa1424cc82dcf958642db8775a231bddbcdcfd76c02f7ea081d",
           "matches_reference": true,
           "functions": 4,
           "input_bytes": 9467
         },
         "phases": {
           "check": {
-            "baseline_seconds": 0.000324,
-            "max_seconds": 0.25,
-            "portable_max_seconds": 1.0
+            "baseline_seconds": 0.000766,
+            "max_seconds": 0.251,
+            "portable_max_seconds": 1.001
           },
           "elaborate": {
-            "baseline_seconds": 0.7242,
-            "max_seconds": 10.724,
-            "portable_max_seconds": 30.724,
-            "baseline_peak_rss_kib": 677440,
-            "max_peak_rss_kib": 939584,
-            "portable_max_peak_rss_kib": 1354880,
-            "baseline_ratio": 0.098,
-            "max_ratio": 2.098
+            "baseline_seconds": 0.4991,
+            "max_seconds": 10.499,
+            "portable_max_seconds": 30.499,
+            "baseline_peak_rss_kib": 828560,
+            "max_peak_rss_kib": 1090704,
+            "portable_max_peak_rss_kib": 1657120,
+            "baseline_ratio": 0.067,
+            "max_ratio": 2.067
           },
           "emit": {
-            "baseline_seconds": 0.00051,
+            "baseline_seconds": 0.001358,
             "max_seconds": 0.251,
             "portable_max_seconds": 1.001
           },
           "normalize": {
-            "baseline_seconds": 0.000186,
+            "baseline_seconds": 0.000252,
             "max_seconds": 0.25,
             "portable_max_seconds": 1.0
           },
           "parse": {
-            "baseline_seconds": 0.000286,
+            "baseline_seconds": 0.000377,
             "max_seconds": 0.25,
             "portable_max_seconds": 1.0
           },
           "proof.cold": {
-            "baseline_seconds": 5.32,
-            "max_seconds": 15.32,
-            "portable_max_seconds": 35.32,
-            "baseline_peak_rss_kib": 1383968,
-            "max_peak_rss_kib": 1799158,
-            "portable_max_peak_rss_kib": 2767936,
-            "baseline_ratio": 0.719,
-            "max_ratio": 2.719
+            "baseline_seconds": 1.5431,
+            "max_seconds": 11.543,
+            "portable_max_seconds": 31.543,
+            "baseline_peak_rss_kib": 1810376,
+            "max_peak_rss_kib": 2353488,
+            "portable_max_peak_rss_kib": 3620752,
+            "baseline_ratio": 0.206,
+            "max_ratio": 2.206
           },
           "proof.warm": {
-            "baseline_seconds": 0.1913,
-            "max_seconds": 10.191,
-            "portable_max_seconds": 30.191,
-            "baseline_peak_rss_kib": 61392,
-            "max_peak_rss_kib": 323536,
-            "portable_max_peak_rss_kib": 585680,
-            "baseline_ratio": 0.026,
-            "max_ratio": 2.026
+            "baseline_seconds": 0.1352,
+            "max_seconds": 10.135,
+            "portable_max_seconds": 30.135,
+            "baseline_peak_rss_kib": 124728,
+            "max_peak_rss_kib": 386872,
+            "portable_max_peak_rss_kib": 649016,
+            "baseline_ratio": 0.018,
+            "max_ratio": 2.018
           },
           "translate.cold": {
-            "baseline_seconds": 0.1809,
-            "max_seconds": 0.431,
-            "portable_max_seconds": 1.809,
-            "baseline_peak_rss_kib": 41136,
-            "max_peak_rss_kib": 106672,
-            "portable_max_peak_rss_kib": 172208
+            "baseline_seconds": 0.0289,
+            "max_seconds": 0.279,
+            "portable_max_seconds": 1.029,
+            "baseline_peak_rss_kib": 70948,
+            "max_peak_rss_kib": 136484,
+            "portable_max_peak_rss_kib": 212844
           },
           "translate.warm": {
-            "baseline_seconds": 0.0284,
-            "max_seconds": 0.278,
-            "portable_max_seconds": 1.028,
-            "baseline_peak_rss_kib": 41088,
-            "max_peak_rss_kib": 106624,
-            "portable_max_peak_rss_kib": 172160
+            "baseline_seconds": 0.0286,
+            "max_seconds": 0.279,
+            "portable_max_seconds": 1.029,
+            "baseline_peak_rss_kib": 71460,
+            "max_peak_rss_kib": 136996,
+            "portable_max_peak_rss_kib": 214380
           }
         },
         "modules": {}
@@ -1955,120 +1912,115 @@
       ],
       "budget": {
         "recorded": {
-          "revision": "fce33b590c4bcda3075652adf5b6b654461a6817",
-          "recorded_at": "2026-10-18T22:09:19+00:00",
-          "translator_sha256": "02b6bc217f03830c9b495d5ac764789c07269ccac084438af84604a3d6053f62"
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
         },
         "output": {
-          "bytes": 57364,
-          "sha256": "954954f6b98098d036ca9127259e4eb658010865dd858cb93058a9d59366ee1b",
+          "bytes": 58959,
+          "sha256": "041d31e092e77b7e17196540f3a2854b4879d3021aa124073ff72171dadaa858",
           "matches_reference": null,
           "functions": 26,
           "input_bytes": 1597117
         },
         "phases": {
           "check": {
-            "baseline_seconds": 0.006894,
-            "max_seconds": 0.257,
-            "portable_max_seconds": 1.007
+            "baseline_seconds": 0.011388,
+            "max_seconds": 0.261,
+            "portable_max_seconds": 1.011
           },
           "elaborate": {
-            "baseline_seconds": 3.4592,
-            "max_seconds": 13.459,
-            "portable_max_seconds": 33.459,
-            "baseline_peak_rss_kib": 776912,
-            "max_peak_rss_kib": 1039056,
-            "portable_max_peak_rss_kib": 1553824,
-            "baseline_ratio": 0.467,
-            "max_ratio": 2.467
+            "baseline_seconds": 3.1015,
+            "max_seconds": 13.101,
+            "portable_max_seconds": 33.102,
+            "baseline_peak_rss_kib": 931040,
+            "max_peak_rss_kib": 1210352,
+            "portable_max_peak_rss_kib": 1862080,
+            "baseline_ratio": 0.415,
+            "max_ratio": 2.415
           },
           "emit": {
-            "baseline_seconds": 0.022277,
-            "max_seconds": 0.272,
-            "portable_max_seconds": 1.022
+            "baseline_seconds": 0.03143,
+            "max_seconds": 0.281,
+            "portable_max_seconds": 1.031
           },
           "normalize": {
-            "baseline_seconds": 0.004315,
+            "baseline_seconds": 0.004435,
             "max_seconds": 0.254,
             "portable_max_seconds": 1.004
           },
           "parse": {
-            "baseline_seconds": 0.02567,
-            "max_seconds": 0.276,
-            "portable_max_seconds": 1.026
+            "baseline_seconds": 0.027414,
+            "max_seconds": 0.277,
+            "portable_max_seconds": 1.027
           },
           "proof.cold": {
-            "baseline_seconds": 155.075,
-            "max_seconds": 232.612,
-            "portable_max_seconds": 930.45,
-            "baseline_peak_rss_kib": 5456144,
-            "max_peak_rss_kib": 7092987,
-            "portable_max_peak_rss_kib": 10912288,
-            "baseline_ratio": 20.956,
-            "max_ratio": 41.912
+            "baseline_seconds": 64.8634,
+            "max_seconds": 97.295,
+            "portable_max_seconds": 389.18,
+            "baseline_peak_rss_kib": 5532136,
+            "max_peak_rss_kib": 7191776,
+            "portable_max_peak_rss_kib": 11064272,
+            "baseline_ratio": 8.679,
+            "max_ratio": 17.357
           },
           "proof.warm": {
-            "baseline_seconds": 0.4061,
-            "max_seconds": 10.406,
-            "portable_max_seconds": 30.406,
-            "baseline_peak_rss_kib": 64416,
-            "max_peak_rss_kib": 326560,
-            "portable_max_peak_rss_kib": 588704,
-            "baseline_ratio": 0.055,
-            "max_ratio": 2.055
+            "baseline_seconds": 0.1364,
+            "max_seconds": 10.136,
+            "portable_max_seconds": 30.136,
+            "baseline_peak_rss_kib": 126776,
+            "max_peak_rss_kib": 388920,
+            "portable_max_peak_rss_kib": 651064,
+            "baseline_ratio": 0.018,
+            "max_ratio": 2.018
           },
           "translate.cold": {
-            "baseline_seconds": 0.3888,
-            "max_seconds": 0.778,
-            "portable_max_seconds": 3.888,
-            "baseline_peak_rss_kib": 54640,
-            "max_peak_rss_kib": 120176,
-            "portable_max_peak_rss_kib": 185712
+            "baseline_seconds": 0.1942,
+            "max_seconds": 0.444,
+            "portable_max_seconds": 1.942,
+            "baseline_peak_rss_kib": 88888,
+            "max_peak_rss_kib": 154424,
+            "portable_max_peak_rss_kib": 266664
           },
           "translate.warm": {
-            "baseline_seconds": 0.1966,
-            "max_seconds": 0.447,
-            "portable_max_seconds": 1.966,
-            "baseline_peak_rss_kib": 54656,
-            "max_peak_rss_kib": 120192,
-            "portable_max_peak_rss_kib": 185728
+            "baseline_seconds": 0.2053,
+            "max_seconds": 0.455,
+            "portable_max_seconds": 2.053,
+            "baseline_peak_rss_kib": 90300,
+            "max_peak_rss_kib": 155836,
+            "portable_max_peak_rss_kib": 270900
           }
         },
         "modules": {
           "Proofs.Sync.Gen": {
-            "baseline_seconds": 4.2253,
-            "baseline_ratio": 0.571,
-            "max_ratio": 1.571
+            "baseline_seconds": 3.8457,
+            "baseline_ratio": 0.515,
+            "max_ratio": 1.515
           },
           "Proofs.Sync.Handoff": {
-            "baseline_seconds": 27.5541,
-            "baseline_ratio": 3.724,
-            "max_ratio": 7.447
+            "baseline_seconds": 17.7701,
+            "baseline_ratio": 2.378,
+            "max_ratio": 4.755
           },
           "Proofs.Sync.Mailbox": {
-            "baseline_seconds": 9.9811,
-            "baseline_ratio": 1.349,
-            "max_ratio": 2.698
+            "baseline_seconds": 2.7422,
+            "baseline_ratio": 0.367,
+            "max_ratio": 1.367
           },
           "Proofs.Sync.Mutex": {
-            "baseline_seconds": 17.3692,
-            "baseline_ratio": 2.347,
-            "max_ratio": 4.694
-          },
-          "Proofs.Sync.Proofs": {
-            "baseline_seconds": 8.5576,
-            "baseline_ratio": 1.156,
-            "max_ratio": 2.313
+            "baseline_seconds": 9.9561,
+            "baseline_ratio": 1.332,
+            "max_ratio": 2.664
           },
           "Proofs.Sync.SemCounter": {
-            "baseline_seconds": 26.4403,
-            "baseline_ratio": 3.573,
-            "max_ratio": 7.146
+            "baseline_seconds": 23.0809,
+            "baseline_ratio": 3.088,
+            "max_ratio": 6.176
           },
           "Proofs.Sync.SnapshotCache": {
-            "baseline_seconds": 16.3468,
-            "baseline_ratio": 2.209,
-            "max_ratio": 4.418
+            "baseline_seconds": 8.8491,
+            "baseline_ratio": 1.184,
+            "max_ratio": 2.368
           }
         }
       }
@@ -2095,105 +2047,1512 @@
       ],
       "budget": {
         "recorded": {
-          "revision": "fce33b590c4bcda3075652adf5b6b654461a6817",
-          "recorded_at": "2026-10-18T22:09:19+00:00",
-          "translator_sha256": "02b6bc217f03830c9b495d5ac764789c07269ccac084438af84604a3d6053f62"
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
         },
         "output": {
-          "bytes": 25649,
-          "sha256": "c7ab8d18e373256516d3a3691cc94a7775e66a9030c9d98b01b405d44ba8e156",
+          "bytes": 26255,
+          "sha256": "125af24faa184755c6a03a669f68bcc283f2d96989f4175d2b9b4f0adabfd8e3",
           "matches_reference": true,
           "functions": 11,
           "input_bytes": 139049
         },
         "phases": {
           "check": {
-            "baseline_seconds": 0.002236,
-            "max_seconds": 0.252,
-            "portable_max_seconds": 1.002
-          },
-          "elaborate": {
-            "baseline_seconds": 2.1672,
-            "max_seconds": 12.167,
-            "portable_max_seconds": 32.167,
-            "baseline_peak_rss_kib": 729776,
-            "max_peak_rss_kib": 991920,
-            "portable_max_peak_rss_kib": 1459552,
-            "baseline_ratio": 0.293,
-            "max_ratio": 2.293
-          },
-          "emit": {
-            "baseline_seconds": 0.004101,
+            "baseline_seconds": 0.00407,
             "max_seconds": 0.254,
             "portable_max_seconds": 1.004
           },
+          "elaborate": {
+            "baseline_seconds": 1.8455,
+            "max_seconds": 11.845,
+            "portable_max_seconds": 31.846,
+            "baseline_peak_rss_kib": 883816,
+            "max_peak_rss_kib": 1148960,
+            "portable_max_peak_rss_kib": 1767632,
+            "baseline_ratio": 0.247,
+            "max_ratio": 2.247
+          },
+          "emit": {
+            "baseline_seconds": 0.006858,
+            "max_seconds": 0.257,
+            "portable_max_seconds": 1.007
+          },
           "normalize": {
-            "baseline_seconds": 0.001602,
+            "baseline_seconds": 0.001882,
             "max_seconds": 0.252,
             "portable_max_seconds": 1.002
           },
           "parse": {
-            "baseline_seconds": 0.003369,
+            "baseline_seconds": 0.004002,
+            "max_seconds": 0.254,
+            "portable_max_seconds": 1.004
+          },
+          "proof.cold": {
+            "baseline_seconds": 22.3855,
+            "max_seconds": 33.578,
+            "portable_max_seconds": 134.313,
+            "baseline_peak_rss_kib": 2523516,
+            "max_peak_rss_kib": 3280570,
+            "portable_max_peak_rss_kib": 5047032,
+            "baseline_ratio": 2.995,
+            "max_ratio": 5.99
+          },
+          "proof.warm": {
+            "baseline_seconds": 0.1418,
+            "max_seconds": 10.142,
+            "portable_max_seconds": 30.142,
+            "baseline_peak_rss_kib": 126776,
+            "max_peak_rss_kib": 388920,
+            "portable_max_peak_rss_kib": 651064,
+            "baseline_ratio": 0.019,
+            "max_ratio": 2.019
+          },
+          "translate.cold": {
+            "baseline_seconds": 0.0515,
+            "max_seconds": 0.301,
+            "portable_max_seconds": 1.052,
+            "baseline_peak_rss_kib": 77236,
+            "max_peak_rss_kib": 142772,
+            "portable_max_peak_rss_kib": 231708
+          },
+          "translate.warm": {
+            "baseline_seconds": 0.0512,
+            "max_seconds": 0.301,
+            "portable_max_seconds": 1.051,
+            "baseline_peak_rss_kib": 78000,
+            "max_peak_rss_kib": 143536,
+            "portable_max_peak_rss_kib": 234000
+          }
+        },
+        "modules": {
+          "Proofs.Threads.Counter": {
+            "baseline_seconds": 12.5591,
+            "baseline_ratio": 1.68,
+            "max_ratio": 3.361
+          },
+          "Proofs.Threads.Disjoint": {
+            "baseline_seconds": 6.9536,
+            "baseline_ratio": 0.93,
+            "max_ratio": 1.93
+          },
+          "Proofs.Threads.Gen": {
+            "baseline_seconds": 2.0398,
+            "baseline_ratio": 0.273,
+            "max_ratio": 1.273
+          }
+        }
+      }
+    },
+    {
+      "id": "asm-0.17.1",
+      "description": "asm on Zig 0.17.1 (fixture export, x86_64-linux baseline CPU)",
+      "air": [
+        "tests/roadmap/perf-budgets/air/0.17.1/asm"
+      ],
+      "air_zig_version": "0.17.1",
+      "namespace": "Asm",
+      "prefix": "asm.",
+      "translate_args": [
+        "--assume-asm-cpu-features",
+        "lzcnt,popcnt"
+      ],
+      "reference_gen": "Proofs/Asm/Gen.lean",
+      "proof_modules": [],
+      "budget": {
+        "recorded": {
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
+        },
+        "output": {
+          "bytes": 2856,
+          "sha256": "ecf989da687b6a730e675928ed096b3bd87084968c37d3f696918dd0006ea011",
+          "matches_reference": true,
+          "functions": 4,
+          "input_bytes": 8999
+        },
+        "phases": {
+          "check": {
+            "baseline_seconds": 0.00021,
+            "max_seconds": 0.25,
+            "portable_max_seconds": 1.0
+          },
+          "elaborate": {
+            "baseline_seconds": 0.3685,
+            "max_seconds": 10.368,
+            "portable_max_seconds": 30.369,
+            "baseline_peak_rss_kib": 823992,
+            "max_peak_rss_kib": 1086136,
+            "portable_max_peak_rss_kib": 1647984,
+            "baseline_ratio": 0.049,
+            "max_ratio": 2.049
+          },
+          "emit": {
+            "baseline_seconds": 0.000372,
+            "max_seconds": 0.25,
+            "portable_max_seconds": 1.0
+          },
+          "normalize": {
+            "baseline_seconds": 0.000185,
+            "max_seconds": 0.25,
+            "portable_max_seconds": 1.0
+          },
+          "parse": {
+            "baseline_seconds": 0.000462,
+            "max_seconds": 0.25,
+            "portable_max_seconds": 1.0
+          },
+          "translate.cold": {
+            "baseline_seconds": 0.0273,
+            "max_seconds": 0.277,
+            "portable_max_seconds": 1.027,
+            "baseline_peak_rss_kib": 70948,
+            "max_peak_rss_kib": 136484,
+            "portable_max_peak_rss_kib": 212844
+          },
+          "translate.warm": {
+            "baseline_seconds": 0.0285,
+            "max_seconds": 0.279,
+            "portable_max_seconds": 1.028,
+            "baseline_peak_rss_kib": 71204,
+            "max_peak_rss_kib": 136740,
+            "portable_max_peak_rss_kib": 213612
+          }
+        }
+      }
+    },
+    {
+      "id": "atomics-0.17.1",
+      "description": "atomics on Zig 0.17.1 (fixture export, x86_64-linux baseline CPU)",
+      "air": [
+        "tests/roadmap/perf-budgets/air/0.17.1/atomics"
+      ],
+      "air_zig_version": "0.17.1",
+      "namespace": "Atomics",
+      "prefix": "atomics.",
+      "translate_args": [],
+      "reference_gen": "Proofs/Atomics/Gen.lean",
+      "proof_modules": [],
+      "budget": {
+        "recorded": {
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
+        },
+        "output": {
+          "bytes": 25165,
+          "sha256": "7942f96b047e7912fec62e0186dfdf91805e9ef0693f428ecb7f1e76848db772",
+          "matches_reference": true,
+          "functions": 11,
+          "input_bytes": 169389
+        },
+        "phases": {
+          "check": {
+            "baseline_seconds": 0.004502,
+            "max_seconds": 0.255,
+            "portable_max_seconds": 1.005
+          },
+          "elaborate": {
+            "baseline_seconds": 2.1244,
+            "max_seconds": 12.124,
+            "portable_max_seconds": 32.124,
+            "baseline_peak_rss_kib": 887952,
+            "max_peak_rss_kib": 1154337,
+            "portable_max_peak_rss_kib": 1775904,
+            "baseline_ratio": 0.284,
+            "max_ratio": 2.284
+          },
+          "emit": {
+            "baseline_seconds": 0.007052,
+            "max_seconds": 0.257,
+            "portable_max_seconds": 1.007
+          },
+          "normalize": {
+            "baseline_seconds": 0.002255,
+            "max_seconds": 0.252,
+            "portable_max_seconds": 1.002
+          },
+          "parse": {
+            "baseline_seconds": 0.006712,
+            "max_seconds": 0.257,
+            "portable_max_seconds": 1.007
+          },
+          "translate.cold": {
+            "baseline_seconds": 0.0582,
+            "max_seconds": 0.308,
+            "portable_max_seconds": 1.058,
+            "baseline_peak_rss_kib": 77232,
+            "max_peak_rss_kib": 142768,
+            "portable_max_peak_rss_kib": 231696
+          },
+          "translate.warm": {
+            "baseline_seconds": 0.0562,
+            "max_seconds": 0.306,
+            "portable_max_seconds": 1.056,
+            "baseline_peak_rss_kib": 77364,
+            "max_peak_rss_kib": 142900,
+            "portable_max_peak_rss_kib": 232092
+          }
+        }
+      }
+    },
+    {
+      "id": "basic-0.17.1",
+      "description": "basic on Zig 0.17.1 (fixture export, x86_64-linux baseline CPU)",
+      "air": [
+        "tests/roadmap/perf-budgets/air/0.17.1/basic"
+      ],
+      "air_zig_version": "0.17.1",
+      "namespace": "Basic",
+      "prefix": "basic.",
+      "translate_args": [],
+      "reference_gen": "Proofs/Basic/Gen.lean",
+      "proof_modules": [],
+      "budget": {
+        "recorded": {
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
+        },
+        "output": {
+          "bytes": 9066,
+          "sha256": "952187dba48404206724b4238d4dbed666d7d8846671ac11d42666dbbe356b03",
+          "matches_reference": true,
+          "functions": 8,
+          "input_bytes": 42648
+        },
+        "phases": {
+          "check": {
+            "baseline_seconds": 0.00119,
+            "max_seconds": 0.251,
+            "portable_max_seconds": 1.001
+          },
+          "elaborate": {
+            "baseline_seconds": 0.6804,
+            "max_seconds": 10.68,
+            "portable_max_seconds": 30.68,
+            "baseline_peak_rss_kib": 839444,
+            "max_peak_rss_kib": 1101588,
+            "portable_max_peak_rss_kib": 1678888,
+            "baseline_ratio": 0.091,
+            "max_ratio": 2.091
+          },
+          "emit": {
+            "baseline_seconds": 0.002318,
+            "max_seconds": 0.252,
+            "portable_max_seconds": 1.002
+          },
+          "normalize": {
+            "baseline_seconds": 0.000768,
+            "max_seconds": 0.251,
+            "portable_max_seconds": 1.001
+          },
+          "parse": {
+            "baseline_seconds": 0.001795,
+            "max_seconds": 0.252,
+            "portable_max_seconds": 1.002
+          },
+          "translate.cold": {
+            "baseline_seconds": 0.036,
+            "max_seconds": 0.286,
+            "portable_max_seconds": 1.036,
+            "baseline_peak_rss_kib": 72496,
+            "max_peak_rss_kib": 138032,
+            "portable_max_peak_rss_kib": 217488
+          },
+          "translate.warm": {
+            "baseline_seconds": 0.0353,
+            "max_seconds": 0.285,
+            "portable_max_seconds": 1.035,
+            "baseline_peak_rss_kib": 73516,
+            "max_peak_rss_kib": 139052,
+            "portable_max_peak_rss_kib": 220548
+          }
+        }
+      }
+    },
+    {
+      "id": "errors-0.17.1",
+      "description": "errors on Zig 0.17.1 (fixture export, x86_64-linux baseline CPU)",
+      "air": [
+        "tests/roadmap/perf-budgets/air/0.17.1/errors"
+      ],
+      "air_zig_version": "0.17.1",
+      "namespace": "Errors",
+      "prefix": "errors.",
+      "translate_args": [],
+      "reference_gen": "Proofs/Errors/Gen.lean",
+      "proof_modules": [],
+      "budget": {
+        "recorded": {
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
+        },
+        "output": {
+          "bytes": 4576,
+          "sha256": "46d980ee719d5dc046b10600032072815eabd8d07a7bf7e6f7295cfd658c4927",
+          "matches_reference": true,
+          "functions": 3,
+          "input_bytes": 16203
+        },
+        "phases": {
+          "check": {
+            "baseline_seconds": 0.000533,
+            "max_seconds": 0.251,
+            "portable_max_seconds": 1.001
+          },
+          "elaborate": {
+            "baseline_seconds": 0.4319,
+            "max_seconds": 10.432,
+            "portable_max_seconds": 30.432,
+            "baseline_peak_rss_kib": 825824,
+            "max_peak_rss_kib": 1087968,
+            "portable_max_peak_rss_kib": 1651648,
+            "baseline_ratio": 0.058,
+            "max_ratio": 2.058
+          },
+          "emit": {
+            "baseline_seconds": 0.000936,
+            "max_seconds": 0.251,
+            "portable_max_seconds": 1.001
+          },
+          "normalize": {
+            "baseline_seconds": 0.000347,
+            "max_seconds": 0.25,
+            "portable_max_seconds": 1.0
+          },
+          "parse": {
+            "baseline_seconds": 0.000749,
+            "max_seconds": 0.251,
+            "portable_max_seconds": 1.001
+          },
+          "translate.cold": {
+            "baseline_seconds": 0.0298,
+            "max_seconds": 0.28,
+            "portable_max_seconds": 1.03,
+            "baseline_peak_rss_kib": 70436,
+            "max_peak_rss_kib": 135972,
+            "portable_max_peak_rss_kib": 211308
+          },
+          "translate.warm": {
+            "baseline_seconds": 0.0301,
+            "max_seconds": 0.28,
+            "portable_max_seconds": 1.03,
+            "baseline_peak_rss_kib": 71332,
+            "max_peak_rss_kib": 136868,
+            "portable_max_peak_rss_kib": 213996
+          }
+        }
+      }
+    },
+    {
+      "id": "floatconv-0.17.1",
+      "description": "floatconv on Zig 0.17.1 (fixture export, x86_64-linux baseline CPU)",
+      "air": [
+        "tests/roadmap/perf-budgets/air/0.17.1/floatconv"
+      ],
+      "air_zig_version": "0.17.1",
+      "namespace": "Floatconv",
+      "prefix": "floatconv.",
+      "translate_args": [],
+      "reference_gen": "Proofs/Floatconv/Gen.lean",
+      "proof_modules": [],
+      "budget": {
+        "recorded": {
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
+        },
+        "output": {
+          "bytes": 4393,
+          "sha256": "1448c5b7190c32b064b00e753077ff176f7792e0df2b7f0a4b646b90cd51dd91",
+          "matches_reference": true,
+          "functions": 10,
+          "input_bytes": 16290
+        },
+        "phases": {
+          "check": {
+            "baseline_seconds": 0.000212,
+            "max_seconds": 0.25,
+            "portable_max_seconds": 1.0
+          },
+          "elaborate": {
+            "baseline_seconds": 0.4472,
+            "max_seconds": 10.447,
+            "portable_max_seconds": 30.447,
+            "baseline_peak_rss_kib": 828056,
+            "max_peak_rss_kib": 1090200,
+            "portable_max_peak_rss_kib": 1656112,
+            "baseline_ratio": 0.06,
+            "max_ratio": 2.06
+          },
+          "emit": {
+            "baseline_seconds": 0.000411,
+            "max_seconds": 0.25,
+            "portable_max_seconds": 1.0
+          },
+          "normalize": {
+            "baseline_seconds": 0.000269,
+            "max_seconds": 0.25,
+            "portable_max_seconds": 1.0
+          },
+          "parse": {
+            "baseline_seconds": 0.000709,
+            "max_seconds": 0.251,
+            "portable_max_seconds": 1.001
+          },
+          "translate.cold": {
+            "baseline_seconds": 0.03,
+            "max_seconds": 0.28,
+            "portable_max_seconds": 1.03,
+            "baseline_peak_rss_kib": 71588,
+            "max_peak_rss_kib": 137124,
+            "portable_max_peak_rss_kib": 214764
+          },
+          "translate.warm": {
+            "baseline_seconds": 0.0296,
+            "max_seconds": 0.28,
+            "portable_max_seconds": 1.03,
+            "baseline_peak_rss_kib": 71460,
+            "max_peak_rss_kib": 136996,
+            "portable_max_peak_rss_kib": 214380
+          }
+        }
+      }
+    },
+    {
+      "id": "floatops-0.17.1",
+      "description": "floatops on Zig 0.17.1 (fixture export, x86_64-linux baseline CPU)",
+      "air": [
+        "tests/roadmap/perf-budgets/air/0.17.1/floatops"
+      ],
+      "air_zig_version": "0.17.1",
+      "namespace": "Floatops",
+      "prefix": "floatops.",
+      "translate_args": [
+        "--float-semantics",
+        "compiler-rt",
+        "--assume-no-libc"
+      ],
+      "reference_gen": "tests/golden/0.17.1/floatops/Gen.lean",
+      "proof_modules": [],
+      "budget": {
+        "recorded": {
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
+        },
+        "output": {
+          "bytes": 38639,
+          "sha256": "cc4bf06670668a2cd3da4a17eaa76c1b62071a0e7688bf44cdf72f36a945b08c",
+          "matches_reference": true,
+          "functions": 7,
+          "input_bytes": 114104
+        },
+        "phases": {
+          "check": {
+            "baseline_seconds": 0.001532,
+            "max_seconds": 0.252,
+            "portable_max_seconds": 1.002
+          },
+          "elaborate": {
+            "baseline_seconds": 1.1522,
+            "max_seconds": 11.152,
+            "portable_max_seconds": 31.152,
+            "baseline_peak_rss_kib": 850412,
+            "max_peak_rss_kib": 1112556,
+            "portable_max_peak_rss_kib": 1700824,
+            "baseline_ratio": 0.154,
+            "max_ratio": 2.154
+          },
+          "emit": {
+            "baseline_seconds": 0.005209,
+            "max_seconds": 0.255,
+            "portable_max_seconds": 1.005
+          },
+          "normalize": {
+            "baseline_seconds": 0.001739,
+            "max_seconds": 0.252,
+            "portable_max_seconds": 1.002
+          },
+          "parse": {
+            "baseline_seconds": 0.00402,
+            "max_seconds": 0.254,
+            "portable_max_seconds": 1.004
+          },
+          "translate.cold": {
+            "baseline_seconds": 0.0418,
+            "max_seconds": 0.292,
+            "portable_max_seconds": 1.042,
+            "baseline_peak_rss_kib": 74680,
+            "max_peak_rss_kib": 140216,
+            "portable_max_peak_rss_kib": 224040
+          },
+          "translate.warm": {
+            "baseline_seconds": 0.043,
+            "max_seconds": 0.293,
+            "portable_max_seconds": 1.043,
+            "baseline_peak_rss_kib": 75832,
+            "max_peak_rss_kib": 141368,
+            "portable_max_peak_rss_kib": 227496
+          }
+        }
+      }
+    },
+    {
+      "id": "floats-0.17.1",
+      "description": "floats on Zig 0.17.1 (fixture export, x86_64-linux baseline CPU)",
+      "air": [
+        "tests/roadmap/perf-budgets/air/0.17.1/floats"
+      ],
+      "air_zig_version": "0.17.1",
+      "namespace": "Floats",
+      "prefix": "floats.",
+      "translate_args": [],
+      "reference_gen": "Proofs/Floats/Gen.lean",
+      "proof_modules": [],
+      "budget": {
+        "recorded": {
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
+        },
+        "output": {
+          "bytes": 7767,
+          "sha256": "c715aa745914c8bebc21e143d12b2fe2d5c2550b733c8b171ad27d3ac017a69c",
+          "matches_reference": true,
+          "functions": 7,
+          "input_bytes": 31895
+        },
+        "phases": {
+          "check": {
+            "baseline_seconds": 0.000909,
+            "max_seconds": 0.251,
+            "portable_max_seconds": 1.001
+          },
+          "elaborate": {
+            "baseline_seconds": 0.5611,
+            "max_seconds": 10.561,
+            "portable_max_seconds": 30.561,
+            "baseline_peak_rss_kib": 833316,
+            "max_peak_rss_kib": 1095460,
+            "portable_max_peak_rss_kib": 1666632,
+            "baseline_ratio": 0.075,
+            "max_ratio": 2.075
+          },
+          "emit": {
+            "baseline_seconds": 0.001651,
+            "max_seconds": 0.252,
+            "portable_max_seconds": 1.002
+          },
+          "normalize": {
+            "baseline_seconds": 0.000667,
+            "max_seconds": 0.251,
+            "portable_max_seconds": 1.001
+          },
+          "parse": {
+            "baseline_seconds": 0.001427,
+            "max_seconds": 0.251,
+            "portable_max_seconds": 1.001
+          },
+          "translate.cold": {
+            "baseline_seconds": 0.0328,
+            "max_seconds": 0.283,
+            "portable_max_seconds": 1.033,
+            "baseline_peak_rss_kib": 73520,
+            "max_peak_rss_kib": 139056,
+            "portable_max_peak_rss_kib": 220560
+          },
+          "translate.warm": {
+            "baseline_seconds": 0.032,
+            "max_seconds": 0.282,
+            "portable_max_seconds": 1.032,
+            "baseline_peak_rss_kib": 73136,
+            "max_peak_rss_kib": 138672,
+            "portable_max_peak_rss_kib": 219408
+          }
+        }
+      }
+    },
+    {
+      "id": "iogroup-0.17.1",
+      "description": "iogroup on Zig 0.17.1 (fixture export, x86_64-linux baseline CPU)",
+      "air": [
+        "tests/roadmap/perf-budgets/air/0.17.1/iogroup"
+      ],
+      "air_zig_version": "0.17.1",
+      "namespace": "Iogroup",
+      "prefix": "iogroup.",
+      "translate_args": [],
+      "reference_gen": "Proofs/Iogroup/Gen.lean",
+      "proof_modules": [],
+      "budget": {
+        "recorded": {
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
+        },
+        "output": {
+          "bytes": 19294,
+          "sha256": "8d3981ed460706f49048ed3e2f34b874e24d54222d9de5a7daeb52afb3b0dbe6",
+          "matches_reference": true,
+          "functions": 8,
+          "input_bytes": 434703
+        },
+        "phases": {
+          "check": {
+            "baseline_seconds": 0.003162,
             "max_seconds": 0.253,
             "portable_max_seconds": 1.003
           },
+          "elaborate": {
+            "baseline_seconds": 1.1034,
+            "max_seconds": 11.103,
+            "portable_max_seconds": 31.103,
+            "baseline_peak_rss_kib": 862996,
+            "max_peak_rss_kib": 1125140,
+            "portable_max_peak_rss_kib": 1725992,
+            "baseline_ratio": 0.148,
+            "max_ratio": 2.148
+          },
+          "emit": {
+            "baseline_seconds": 0.007875,
+            "max_seconds": 0.258,
+            "portable_max_seconds": 1.008
+          },
+          "normalize": {
+            "baseline_seconds": 0.001418,
+            "max_seconds": 0.251,
+            "portable_max_seconds": 1.001
+          },
+          "parse": {
+            "baseline_seconds": 0.009604,
+            "max_seconds": 0.26,
+            "portable_max_seconds": 1.01
+          },
+          "translate.cold": {
+            "baseline_seconds": 0.0807,
+            "max_seconds": 0.331,
+            "portable_max_seconds": 1.081,
+            "baseline_peak_rss_kib": 81840,
+            "max_peak_rss_kib": 147376,
+            "portable_max_peak_rss_kib": 245520
+          },
+          "translate.warm": {
+            "baseline_seconds": 0.0801,
+            "max_seconds": 0.33,
+            "portable_max_seconds": 1.08,
+            "baseline_peak_rss_kib": 81968,
+            "max_peak_rss_kib": 147504,
+            "portable_max_peak_rss_kib": 245904
+          }
+        }
+      }
+    },
+    {
+      "id": "layout-0.17.1",
+      "description": "layout on Zig 0.17.1 (fixture export, x86_64-linux baseline CPU)",
+      "air": [
+        "tests/roadmap/perf-budgets/air/0.17.1/layout"
+      ],
+      "air_zig_version": "0.17.1",
+      "namespace": "Layout",
+      "prefix": "layout.",
+      "translate_args": [],
+      "reference_gen": "tests/golden/0.17.1/layout/Gen.lean",
+      "proof_modules": [],
+      "budget": {
+        "recorded": {
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
+        },
+        "output": {
+          "bytes": 49566,
+          "sha256": "d635d98b9ca173a1d03044942476137616ef3861cd1e52d70d19ff0a5a555c69",
+          "matches_reference": true,
+          "functions": 51,
+          "input_bytes": 203202
+        },
+        "phases": {
+          "check": {
+            "baseline_seconds": 0.005147,
+            "max_seconds": 0.255,
+            "portable_max_seconds": 1.005
+          },
+          "elaborate": {
+            "baseline_seconds": 3.0571,
+            "max_seconds": 13.057,
+            "portable_max_seconds": 33.057,
+            "baseline_peak_rss_kib": 930428,
+            "max_peak_rss_kib": 1209556,
+            "portable_max_peak_rss_kib": 1860856,
+            "baseline_ratio": 0.409,
+            "max_ratio": 2.409
+          },
+          "emit": {
+            "baseline_seconds": 0.011095,
+            "max_seconds": 0.261,
+            "portable_max_seconds": 1.011
+          },
+          "normalize": {
+            "baseline_seconds": 0.003,
+            "max_seconds": 0.253,
+            "portable_max_seconds": 1.003
+          },
+          "parse": {
+            "baseline_seconds": 0.009263,
+            "max_seconds": 0.259,
+            "portable_max_seconds": 1.009
+          },
+          "translate.cold": {
+            "baseline_seconds": 0.0622,
+            "max_seconds": 0.312,
+            "portable_max_seconds": 1.062,
+            "baseline_peak_rss_kib": 77492,
+            "max_peak_rss_kib": 143028,
+            "portable_max_peak_rss_kib": 232476
+          },
+          "translate.warm": {
+            "baseline_seconds": 0.0633,
+            "max_seconds": 0.313,
+            "portable_max_seconds": 1.063,
+            "baseline_peak_rss_kib": 77240,
+            "max_peak_rss_kib": 142776,
+            "portable_max_peak_rss_kib": 231720
+          }
+        }
+      }
+    },
+    {
+      "id": "lists-0.17.1",
+      "description": "lists on Zig 0.17.1 (fixture export with the std callees, x86_64-linux baseline CPU) and the lists proofs",
+      "air": [
+        "tests/roadmap/perf-budgets/air/0.17.1/lists"
+      ],
+      "air_zig_version": "0.17.1",
+      "namespace": "Lists",
+      "prefix": "lists.",
+      "translate_args": [],
+      "reference_gen": "tests/golden/0.17.1/lists/Gen.lean",
+      "proof_modules": [
+        "Proofs.Lists.Alloc",
+        "Proofs.Lists.AllocInv",
+        "Proofs.Lists.AllocNode",
+        "Proofs.Lists.Append",
+        "Proofs.Lists.Bounded",
+        "Proofs.Lists.Client",
+        "Proofs.Lists.Container",
+        "Proofs.Lists.Gen",
+        "Proofs.Lists.Linked",
+        "Proofs.Lists.Open",
+        "Proofs.Lists.OpenInv",
+        "Proofs.Lists.Policy"
+      ],
+      "budget": {
+        "recorded": {
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
+        },
+        "output": {
+          "bytes": 47510,
+          "sha256": "9304c6c0d3afc7fbd4d49c1a74eea730e790c25e286d4aeb408f656e2985713b",
+          "matches_reference": true,
+          "functions": 25,
+          "input_bytes": 277337
+        },
+        "phases": {
+          "check": {
+            "baseline_seconds": 0.009375,
+            "max_seconds": 0.259,
+            "portable_max_seconds": 1.009
+          },
+          "elaborate": {
+            "baseline_seconds": 3.1518,
+            "max_seconds": 13.152,
+            "portable_max_seconds": 33.152,
+            "baseline_peak_rss_kib": 893128,
+            "max_peak_rss_kib": 1161066,
+            "portable_max_peak_rss_kib": 1786256,
+            "baseline_ratio": 0.422,
+            "max_ratio": 2.422
+          },
+          "emit": {
+            "baseline_seconds": 0.017213,
+            "max_seconds": 0.267,
+            "portable_max_seconds": 1.017
+          },
+          "normalize": {
+            "baseline_seconds": 0.003766,
+            "max_seconds": 0.254,
+            "portable_max_seconds": 1.004
+          },
+          "parse": {
+            "baseline_seconds": 0.011238,
+            "max_seconds": 0.261,
+            "portable_max_seconds": 1.011
+          },
           "proof.cold": {
-            "baseline_seconds": 61.846,
-            "max_seconds": 92.769,
-            "portable_max_seconds": 371.076,
-            "baseline_peak_rss_kib": 2495856,
-            "max_peak_rss_kib": 3244612,
-            "portable_max_peak_rss_kib": 4991712,
-            "baseline_ratio": 8.358,
-            "max_ratio": 16.715
+            "baseline_seconds": 31.0033,
+            "max_seconds": 46.505,
+            "portable_max_seconds": 186.02,
+            "baseline_peak_rss_kib": 2106756,
+            "max_peak_rss_kib": 2738782,
+            "portable_max_peak_rss_kib": 4213512,
+            "baseline_ratio": 4.148,
+            "max_ratio": 8.296
           },
           "proof.warm": {
-            "baseline_seconds": 0.4105,
-            "max_seconds": 10.411,
-            "portable_max_seconds": 30.41,
-            "baseline_peak_rss_kib": 63216,
-            "max_peak_rss_kib": 325360,
-            "portable_max_peak_rss_kib": 587504,
+            "baseline_seconds": 0.1401,
+            "max_seconds": 10.14,
+            "portable_max_seconds": 30.14,
+            "baseline_peak_rss_kib": 124728,
+            "max_peak_rss_kib": 386872,
+            "portable_max_peak_rss_kib": 649016,
+            "baseline_ratio": 0.019,
+            "max_ratio": 2.019
+          },
+          "translate.cold": {
+            "baseline_seconds": 0.0819,
+            "max_seconds": 0.332,
+            "portable_max_seconds": 1.082,
+            "baseline_peak_rss_kib": 76208,
+            "max_peak_rss_kib": 141744,
+            "portable_max_peak_rss_kib": 228624
+          },
+          "translate.warm": {
+            "baseline_seconds": 0.0835,
+            "max_seconds": 0.334,
+            "portable_max_seconds": 1.083,
+            "baseline_peak_rss_kib": 77232,
+            "max_peak_rss_kib": 142768,
+            "portable_max_peak_rss_kib": 231696
+          }
+        },
+        "modules": {
+          "Proofs.Lists.Alloc": {
+            "baseline_seconds": 2.9413,
+            "baseline_ratio": 0.394,
+            "max_ratio": 1.394
+          },
+          "Proofs.Lists.Append": {
+            "baseline_seconds": 13.7692,
+            "baseline_ratio": 1.842,
+            "max_ratio": 3.685
+          },
+          "Proofs.Lists.Gen": {
+            "baseline_seconds": 3.1453,
+            "baseline_ratio": 0.421,
+            "max_ratio": 1.421
+          },
+          "Proofs.Lists.Open": {
+            "baseline_seconds": 3.4456,
+            "baseline_ratio": 0.461,
+            "max_ratio": 1.461
+          }
+        }
+      }
+    },
+    {
+      "id": "options-0.17.1",
+      "description": "options on Zig 0.17.1 (fixture export, x86_64-linux baseline CPU)",
+      "air": [
+        "tests/roadmap/perf-budgets/air/0.17.1/options"
+      ],
+      "air_zig_version": "0.17.1",
+      "namespace": "Options",
+      "prefix": "options.",
+      "translate_args": [],
+      "reference_gen": "Proofs/Options/Gen.lean",
+      "proof_modules": [],
+      "budget": {
+        "recorded": {
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
+        },
+        "output": {
+          "bytes": 3749,
+          "sha256": "37708d81495702b9c2142277be91da2f4b3ec0d15fb213f35fc45a0fba2583cc",
+          "matches_reference": true,
+          "functions": 3,
+          "input_bytes": 15613
+        },
+        "phases": {
+          "check": {
+            "baseline_seconds": 0.000615,
+            "max_seconds": 0.251,
+            "portable_max_seconds": 1.001
+          },
+          "elaborate": {
+            "baseline_seconds": 0.409,
+            "max_seconds": 10.409,
+            "portable_max_seconds": 30.409,
+            "baseline_peak_rss_kib": 826020,
+            "max_peak_rss_kib": 1088164,
+            "portable_max_peak_rss_kib": 1652040,
             "baseline_ratio": 0.055,
             "max_ratio": 2.055
           },
+          "emit": {
+            "baseline_seconds": 0.001019,
+            "max_seconds": 0.251,
+            "portable_max_seconds": 1.001
+          },
+          "normalize": {
+            "baseline_seconds": 0.00031,
+            "max_seconds": 0.25,
+            "portable_max_seconds": 1.0
+          },
+          "parse": {
+            "baseline_seconds": 0.000684,
+            "max_seconds": 0.251,
+            "portable_max_seconds": 1.001
+          },
           "translate.cold": {
-            "baseline_seconds": 0.2026,
-            "max_seconds": 0.453,
-            "portable_max_seconds": 2.026,
-            "baseline_peak_rss_kib": 43296,
-            "max_peak_rss_kib": 108832,
-            "portable_max_peak_rss_kib": 174368
+            "baseline_seconds": 0.0288,
+            "max_seconds": 0.279,
+            "portable_max_seconds": 1.029,
+            "baseline_peak_rss_kib": 70692,
+            "max_peak_rss_kib": 136228,
+            "portable_max_peak_rss_kib": 212076
+          },
+          "translate.warm": {
+            "baseline_seconds": 0.029,
+            "max_seconds": 0.279,
+            "portable_max_seconds": 1.029,
+            "baseline_peak_rss_kib": 71204,
+            "max_peak_rss_kib": 136740,
+            "portable_max_peak_rss_kib": 213612
+          }
+        }
+      }
+    },
+    {
+      "id": "pointers-0.17.1",
+      "description": "pointers on Zig 0.17.1 (fixture export, x86_64-linux baseline CPU)",
+      "air": [
+        "tests/roadmap/perf-budgets/air/0.17.1/pointers"
+      ],
+      "air_zig_version": "0.17.1",
+      "namespace": "Pointers",
+      "prefix": "pointers.",
+      "translate_args": [],
+      "reference_gen": "Proofs/Pointers/Gen.lean",
+      "proof_modules": [],
+      "budget": {
+        "recorded": {
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
+        },
+        "output": {
+          "bytes": 9292,
+          "sha256": "c381901a1a8e18afdbb0bcd76f06c535a9f8a8328545e9b95825a94648e151c1",
+          "matches_reference": true,
+          "functions": 12,
+          "input_bytes": 41999
+        },
+        "phases": {
+          "check": {
+            "baseline_seconds": 0.000763,
+            "max_seconds": 0.251,
+            "portable_max_seconds": 1.001
+          },
+          "elaborate": {
+            "baseline_seconds": 0.8665,
+            "max_seconds": 10.867,
+            "portable_max_seconds": 30.866,
+            "baseline_peak_rss_kib": 846024,
+            "max_peak_rss_kib": 1108168,
+            "portable_max_peak_rss_kib": 1692048,
+            "baseline_ratio": 0.116,
+            "max_ratio": 2.116
+          },
+          "emit": {
+            "baseline_seconds": 0.001403,
+            "max_seconds": 0.251,
+            "portable_max_seconds": 1.001
+          },
+          "normalize": {
+            "baseline_seconds": 0.000749,
+            "max_seconds": 0.251,
+            "portable_max_seconds": 1.001
+          },
+          "parse": {
+            "baseline_seconds": 0.001941,
+            "max_seconds": 0.252,
+            "portable_max_seconds": 1.002
+          },
+          "translate.cold": {
+            "baseline_seconds": 0.0336,
+            "max_seconds": 0.284,
+            "portable_max_seconds": 1.034,
+            "baseline_peak_rss_kib": 73132,
+            "max_peak_rss_kib": 138668,
+            "portable_max_peak_rss_kib": 219396
+          },
+          "translate.warm": {
+            "baseline_seconds": 0.0334,
+            "max_seconds": 0.283,
+            "portable_max_seconds": 1.033,
+            "baseline_peak_rss_kib": 73260,
+            "max_peak_rss_kib": 138796,
+            "portable_max_peak_rss_kib": 219780
+          }
+        }
+      }
+    },
+    {
+      "id": "recursion-0.17.1",
+      "description": "recursion on Zig 0.17.1 (fixture export, x86_64-linux baseline CPU)",
+      "air": [
+        "tests/roadmap/perf-budgets/air/0.17.1/recursion"
+      ],
+      "air_zig_version": "0.17.1",
+      "namespace": "Recursion",
+      "prefix": "recursion.",
+      "translate_args": [],
+      "reference_gen": "Proofs/Recursion/Gen.lean",
+      "proof_modules": [],
+      "budget": {
+        "recorded": {
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
+        },
+        "output": {
+          "bytes": 3643,
+          "sha256": "75a213701943a95618bd061fe459580cf86fa938ee69164cbb980e7d5fad0fa3",
+          "matches_reference": true,
+          "functions": 4,
+          "input_bytes": 13238
+        },
+        "phases": {
+          "check": {
+            "baseline_seconds": 0.000799,
+            "max_seconds": 0.251,
+            "portable_max_seconds": 1.001
+          },
+          "elaborate": {
+            "baseline_seconds": 0.4936,
+            "max_seconds": 10.494,
+            "portable_max_seconds": 30.494,
+            "baseline_peak_rss_kib": 826364,
+            "max_peak_rss_kib": 1088508,
+            "portable_max_peak_rss_kib": 1652728,
+            "baseline_ratio": 0.066,
+            "max_ratio": 2.066
+          },
+          "emit": {
+            "baseline_seconds": 0.001425,
+            "max_seconds": 0.251,
+            "portable_max_seconds": 1.001
+          },
+          "normalize": {
+            "baseline_seconds": 0.000317,
+            "max_seconds": 0.25,
+            "portable_max_seconds": 1.0
+          },
+          "parse": {
+            "baseline_seconds": 0.000711,
+            "max_seconds": 0.251,
+            "portable_max_seconds": 1.001
+          },
+          "translate.cold": {
+            "baseline_seconds": 0.0302,
+            "max_seconds": 0.28,
+            "portable_max_seconds": 1.03,
+            "baseline_peak_rss_kib": 69924,
+            "max_peak_rss_kib": 135460,
+            "portable_max_peak_rss_kib": 209772
+          },
+          "translate.warm": {
+            "baseline_seconds": 0.0303,
+            "max_seconds": 0.28,
+            "portable_max_seconds": 1.03,
+            "baseline_peak_rss_kib": 71844,
+            "max_peak_rss_kib": 137380,
+            "portable_max_peak_rss_kib": 215532
+          }
+        }
+      }
+    },
+    {
+      "id": "slices-0.17.1",
+      "description": "slices on Zig 0.17.1 (fixture export, x86_64-linux baseline CPU)",
+      "air": [
+        "tests/roadmap/perf-budgets/air/0.17.1/slices"
+      ],
+      "air_zig_version": "0.17.1",
+      "namespace": "Slices",
+      "prefix": "slices.",
+      "translate_args": [],
+      "reference_gen": "Proofs/Slices/Gen.lean",
+      "proof_modules": [],
+      "budget": {
+        "recorded": {
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
+        },
+        "output": {
+          "bytes": 28571,
+          "sha256": "c289a579106c4b0287cac6afc82ec55ff021729ae396d477df81e3973bccdaf6",
+          "matches_reference": true,
+          "functions": 22,
+          "input_bytes": 131377
+        },
+        "phases": {
+          "check": {
+            "baseline_seconds": 0.004347,
+            "max_seconds": 0.254,
+            "portable_max_seconds": 1.004
+          },
+          "elaborate": {
+            "baseline_seconds": 2.1716,
+            "max_seconds": 12.172,
+            "portable_max_seconds": 32.172,
+            "baseline_peak_rss_kib": 876740,
+            "max_peak_rss_kib": 1139762,
+            "portable_max_peak_rss_kib": 1753480,
+            "baseline_ratio": 0.291,
+            "max_ratio": 2.291
+          },
+          "emit": {
+            "baseline_seconds": 0.007885,
+            "max_seconds": 0.258,
+            "portable_max_seconds": 1.008
+          },
+          "normalize": {
+            "baseline_seconds": 0.002196,
+            "max_seconds": 0.252,
+            "portable_max_seconds": 1.002
+          },
+          "parse": {
+            "baseline_seconds": 0.005877,
+            "max_seconds": 0.256,
+            "portable_max_seconds": 1.006
+          },
+          "translate.cold": {
+            "baseline_seconds": 0.0535,
+            "max_seconds": 0.303,
+            "portable_max_seconds": 1.054,
+            "baseline_peak_rss_kib": 75440,
+            "max_peak_rss_kib": 140976,
+            "portable_max_peak_rss_kib": 226320
           },
           "translate.warm": {
             "baseline_seconds": 0.0522,
             "max_seconds": 0.302,
             "portable_max_seconds": 1.052,
-            "baseline_peak_rss_kib": 43248,
-            "max_peak_rss_kib": 108784,
-            "portable_max_peak_rss_kib": 174320
+            "baseline_peak_rss_kib": 75696,
+            "max_peak_rss_kib": 141232,
+            "portable_max_peak_rss_kib": 227088
           }
+        }
+      }
+    },
+    {
+      "id": "sync-0.17.1",
+      "description": "sync on Zig 0.17.1 (fixture export, x86_64-linux baseline CPU)",
+      "air": [
+        "tests/roadmap/perf-budgets/air/0.17.1/sync"
+      ],
+      "air_zig_version": "0.17.1",
+      "namespace": "Sync",
+      "prefix": "sync.",
+      "translate_args": [],
+      "reference_gen": "tests/golden/0.17.1/sync/Gen.lean",
+      "proof_modules": [],
+      "budget": {
+        "recorded": {
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
         },
-        "modules": {
-          "Proofs.Threads.Counter": {
-            "baseline_seconds": 15.0837,
-            "baseline_ratio": 2.038,
-            "max_ratio": 4.077
+        "output": {
+          "bytes": 57751,
+          "sha256": "c010a8c60e5e8115e23d8c15753880b93637dcbf5f6c272b0dda07b1ec2571f2",
+          "matches_reference": true,
+          "functions": 25,
+          "input_bytes": 1664067
+        },
+        "phases": {
+          "check": {
+            "baseline_seconds": 0.01108,
+            "max_seconds": 0.261,
+            "portable_max_seconds": 1.011
           },
-          "Proofs.Threads.Disjoint": {
-            "baseline_seconds": 39.489,
-            "baseline_ratio": 5.336,
-            "max_ratio": 10.673
+          "elaborate": {
+            "baseline_seconds": 3.0667,
+            "max_seconds": 13.067,
+            "portable_max_seconds": 33.067,
+            "baseline_peak_rss_kib": 935196,
+            "max_peak_rss_kib": 1215754,
+            "portable_max_peak_rss_kib": 1870392,
+            "baseline_ratio": 0.41,
+            "max_ratio": 2.41
           },
-          "Proofs.Threads.Gen": {
-            "baseline_seconds": 2.7466,
-            "baseline_ratio": 0.371,
-            "max_ratio": 1.371
+          "emit": {
+            "baseline_seconds": 0.030434,
+            "max_seconds": 0.28,
+            "portable_max_seconds": 1.03
           },
-          "Proofs.Threads.Proofs": {
-            "baseline_seconds": 7.0337,
-            "baseline_ratio": 0.95,
-            "max_ratio": 1.95
+          "normalize": {
+            "baseline_seconds": 0.004623,
+            "max_seconds": 0.255,
+            "portable_max_seconds": 1.005
+          },
+          "parse": {
+            "baseline_seconds": 0.036094,
+            "max_seconds": 0.286,
+            "portable_max_seconds": 1.036
+          },
+          "translate.cold": {
+            "baseline_seconds": 0.2274,
+            "max_seconds": 0.477,
+            "portable_max_seconds": 2.274,
+            "baseline_peak_rss_kib": 97460,
+            "max_peak_rss_kib": 162996,
+            "portable_max_peak_rss_kib": 292380
+          },
+          "translate.warm": {
+            "baseline_seconds": 0.2214,
+            "max_seconds": 0.471,
+            "portable_max_seconds": 2.214,
+            "baseline_peak_rss_kib": 98108,
+            "max_peak_rss_kib": 163644,
+            "portable_max_peak_rss_kib": 294324
+          }
+        }
+      }
+    },
+    {
+      "id": "threads-0.17.1",
+      "description": "threads on Zig 0.17.1 (fixture export, x86_64-linux baseline CPU)",
+      "air": [
+        "tests/roadmap/perf-budgets/air/0.17.1/threads"
+      ],
+      "air_zig_version": "0.17.1",
+      "namespace": "Threads",
+      "prefix": "threads.",
+      "translate_args": [],
+      "reference_gen": "Proofs/Threads/Gen.lean",
+      "proof_modules": [],
+      "budget": {
+        "recorded": {
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
+        },
+        "output": {
+          "bytes": 26396,
+          "sha256": "13bf565d32ec3eab6af923c56598032acadd44ce0185b6dec163e909dd827ed9",
+          "matches_reference": true,
+          "functions": 11,
+          "input_bytes": 165979
+        },
+        "phases": {
+          "check": {
+            "baseline_seconds": 0.004499,
+            "max_seconds": 0.254,
+            "portable_max_seconds": 1.004
+          },
+          "elaborate": {
+            "baseline_seconds": 1.7872,
+            "max_seconds": 11.787,
+            "portable_max_seconds": 31.787,
+            "baseline_peak_rss_kib": 880040,
+            "max_peak_rss_kib": 1144052,
+            "portable_max_peak_rss_kib": 1760080,
+            "baseline_ratio": 0.239,
+            "max_ratio": 2.239
+          },
+          "emit": {
+            "baseline_seconds": 0.007586,
+            "max_seconds": 0.258,
+            "portable_max_seconds": 1.008
+          },
+          "normalize": {
+            "baseline_seconds": 0.002205,
+            "max_seconds": 0.252,
+            "portable_max_seconds": 1.002
+          },
+          "parse": {
+            "baseline_seconds": 0.00691,
+            "max_seconds": 0.257,
+            "portable_max_seconds": 1.007
+          },
+          "translate.cold": {
+            "baseline_seconds": 0.0572,
+            "max_seconds": 0.307,
+            "portable_max_seconds": 1.057,
+            "baseline_peak_rss_kib": 79024,
+            "max_peak_rss_kib": 144560,
+            "portable_max_peak_rss_kib": 237072
+          },
+          "translate.warm": {
+            "baseline_seconds": 0.0582,
+            "max_seconds": 0.308,
+            "portable_max_seconds": 1.058,
+            "baseline_peak_rss_kib": 79796,
+            "max_peak_rss_kib": 145332,
+            "portable_max_peak_rss_kib": 239388
+          }
+        }
+      }
+    },
+    {
+      "id": "variants-0.17.1",
+      "description": "variants on Zig 0.17.1 (fixture export, x86_64-linux baseline CPU)",
+      "air": [
+        "tests/roadmap/perf-budgets/air/0.17.1/variants"
+      ],
+      "air_zig_version": "0.17.1",
+      "namespace": "Variants",
+      "prefix": "variants.",
+      "translate_args": [],
+      "reference_gen": "Proofs/Variants/Gen.lean",
+      "proof_modules": [],
+      "budget": {
+        "recorded": {
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
+        },
+        "output": {
+          "bytes": 16082,
+          "sha256": "3ed7e75e9ad553029ee0d9c73cfe63ecb4cd09843760bd1f0990829eba44590c",
+          "matches_reference": true,
+          "functions": 12,
+          "input_bytes": 61506
+        },
+        "phases": {
+          "check": {
+            "baseline_seconds": 0.001818,
+            "max_seconds": 0.252,
+            "portable_max_seconds": 1.002
+          },
+          "elaborate": {
+            "baseline_seconds": 0.9808,
+            "max_seconds": 10.981,
+            "portable_max_seconds": 30.981,
+            "baseline_peak_rss_kib": 858544,
+            "max_peak_rss_kib": 1120688,
+            "portable_max_peak_rss_kib": 1717088,
+            "baseline_ratio": 0.131,
+            "max_ratio": 2.131
+          },
+          "emit": {
+            "baseline_seconds": 0.004604,
+            "max_seconds": 0.255,
+            "portable_max_seconds": 1.005
+          },
+          "normalize": {
+            "baseline_seconds": 0.000962,
+            "max_seconds": 0.251,
+            "portable_max_seconds": 1.001
+          },
+          "parse": {
+            "baseline_seconds": 0.002596,
+            "max_seconds": 0.253,
+            "portable_max_seconds": 1.003
+          },
+          "translate.cold": {
+            "baseline_seconds": 0.0401,
+            "max_seconds": 0.29,
+            "portable_max_seconds": 1.04,
+            "baseline_peak_rss_kib": 75316,
+            "max_peak_rss_kib": 140852,
+            "portable_max_peak_rss_kib": 225948
+          },
+          "translate.warm": {
+            "baseline_seconds": 0.039,
+            "max_seconds": 0.289,
+            "portable_max_seconds": 1.039,
+            "baseline_peak_rss_kib": 75568,
+            "max_peak_rss_kib": 141104,
+            "portable_max_peak_rss_kib": 226704
+          }
+        }
+      }
+    },
+    {
+      "id": "vectors-0.17.1",
+      "description": "vectors on Zig 0.17.1 (fixture export, x86_64-linux baseline CPU)",
+      "air": [
+        "tests/roadmap/perf-budgets/air/0.17.1/vectors"
+      ],
+      "air_zig_version": "0.17.1",
+      "namespace": "Vectors",
+      "prefix": "vectors.",
+      "translate_args": [],
+      "reference_gen": "Proofs/Vectors/Gen.lean",
+      "proof_modules": [],
+      "budget": {
+        "recorded": {
+          "revision": "446c159cf85bfe6666fae5e35d97c9955bea2745",
+          "recorded_at": "2026-11-25T07:42:56+00:00",
+          "translator_sha256": "3f134368ed4a9aaf4757aed32c81896170b70794fe16ba372c586862c2c1eaea"
+        },
+        "output": {
+          "bytes": 17546,
+          "sha256": "05db00b13e5e76dff0084ba796bfd159300dab755aa9c6de78e5b92b58ac1812",
+          "matches_reference": true,
+          "functions": 31,
+          "input_bytes": 68270
+        },
+        "phases": {
+          "check": {
+            "baseline_seconds": 0.001758,
+            "max_seconds": 0.252,
+            "portable_max_seconds": 1.002
+          },
+          "elaborate": {
+            "baseline_seconds": 1.1007,
+            "max_seconds": 11.101,
+            "portable_max_seconds": 31.101,
+            "baseline_peak_rss_kib": 859604,
+            "max_peak_rss_kib": 1121748,
+            "portable_max_peak_rss_kib": 1719208,
+            "baseline_ratio": 0.147,
+            "max_ratio": 2.147
+          },
+          "emit": {
+            "baseline_seconds": 0.003606,
+            "max_seconds": 0.254,
+            "portable_max_seconds": 1.004
+          },
+          "normalize": {
+            "baseline_seconds": 0.001046,
+            "max_seconds": 0.251,
+            "portable_max_seconds": 1.001
+          },
+          "parse": {
+            "baseline_seconds": 0.003072,
+            "max_seconds": 0.253,
+            "portable_max_seconds": 1.003
+          },
+          "translate.cold": {
+            "baseline_seconds": 0.0393,
+            "max_seconds": 0.289,
+            "portable_max_seconds": 1.039,
+            "baseline_peak_rss_kib": 73908,
+            "max_peak_rss_kib": 139444,
+            "portable_max_peak_rss_kib": 221724
+          },
+          "translate.warm": {
+            "baseline_seconds": 0.0386,
+            "max_seconds": 0.289,
+            "portable_max_seconds": 1.039,
+            "baseline_peak_rss_kib": 73268,
+            "max_peak_rss_kib": 138804,
+            "portable_max_peak_rss_kib": 219804
           }
         }
       }
@@ -2202,11 +3561,11 @@
   "calibration": {
     "file": "tests/roadmap/perf-budgets/Calibration.lean",
     "sha256": "f98c978d7875b0188c940d99a227659b6822b922df315c3b0b234049581608a1",
-    "baseline_seconds": 7.4,
+    "baseline_seconds": 7.474,
     "runs": [
-      8.2399,
-      7.4,
-      6.7531
+      7.9174,
+      7.474,
+      7.466
     ]
   },
   "normalized_tolerance": {

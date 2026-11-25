@@ -263,7 +263,7 @@ generated headline: {"lean_ok": 30}
 | bitfield_packet | ok | demoted (entry) | demoted | compile_error | failed | – | – | – | TC-BITFIELD |
 | bitfields | ok | demoted (entry) | demoted | compile_error | failed | – | – | – | TC-BITFIELD |
 | bool_logic | ok | ok | ok | ok | ok | checked | ok | – | – |
-| casts | ok | ok | ok | ok | ok | rejected | – | INSTRUCTION_FAILURE×1 | – |
+| casts | ok | ok | ok | ok | ok | checked | ok | – | – |
 | enums | ok | ok | ok | ok | ok | checked | ok | – | – |
 | expressions | ok | ok | ok | ok | ok | checked | ok | – | – |
 | float_basic | ok | ok | ok | ok | ok | checked | ok | – | – |
@@ -277,12 +277,12 @@ generated headline: {"lean_ok": 30}
 | int_promotion | ok | ok | ok | ok | ok | checked | ok | – | – |
 | libc_ctype | ok | ok | ok | ok | ok | checked | ok | – | – |
 | libc_stdio | ok | ok | ok | ok | ok | rejected | – | CALLEE_EXTERN_UNBOUND×1, PROGRAM_FAILURE×1 | EXT-VARIADIC |
-| libc_stdlib | ok | ok | ok | runtime_error | ok | rejected | – | CALLEE_BLOCKED×6, CALLEE_EXTERN_UNBOUND×10, CONSTANT_FAILURE×2, INSTRUCTION_FAILURE×9, MODEL_FAILURE×4, PREREQUISITE_SKIPPED×1, PROGRAM_FAILURE×13, STRUCTURE_FAILURE×1 | NATIVE-DIVERGENCE |
-| libc_string | ok | ok | ok | ok | ok | rejected | – | CALLEE_BLOCKED×2, CALLEE_EXTERN_UNBOUND×6, NORMALIZATION_FAILURE×4, PREREQUISITE_SKIPPED×1, PROGRAM_FAILURE×7 | – |
+| libc_stdlib | ok | ok | ok | runtime_error | ok | rejected | – | CALLEE_BLOCKED×4, CALLEE_EXTERN_UNBOUND×7, CONSTANT_FAILURE×2, INSTRUCTION_FAILURE×1, PREREQUISITE_SKIPPED×1, PROGRAM_FAILURE×9, STRUCTURE_FAILURE×1 | NATIVE-DIVERGENCE |
+| libc_string | ok | ok | ok | ok | ok | rejected | – | CALLEE_BLOCKED×2, CALLEE_EXTERN_UNBOUND×4, NORMALIZATION_FAILURE×4, PREREQUISITE_SKIPPED×1, PROGRAM_FAILURE×5 | – |
 | linked_list | ok | ok | ok | ok | ok | checked | ok | – | – |
 | loops | ok | ok | ok | ok | ok | checked | ok | – | – |
 | macros | ok | ok | ok | ok | ok | checked | ok | – | – |
-| malloc_vec | ok | ok | ok | ok | ok | rejected | – | CALLEE_BLOCKED×8, CALLEE_EXTERN_UNBOUND×10, CONSTANT_FAILURE×5, INSTRUCTION_FAILURE×6, MODEL_FAILURE×6, PROGRAM_FAILURE×13 | – |
+| malloc_vec | ok | ok | ok | ok | ok | rejected | – | CALLEE_BLOCKED×5, CALLEE_EXTERN_UNBOUND×8, CONSTANT_FAILURE×5, INSTRUCTION_FAILURE×1, PROGRAM_FAILURE×11 | – |
 | memcpy_loops | ok | ok | ok | ok | ok | checked | ok | – | – |
 | ptr_arith | ok | ok | ok | ok | ok | checked | guard_failed | – | – |
 | ptr_int_casts | ok | ok | ok | ok | ok | checked | ok | – | – |
@@ -305,10 +305,10 @@ Headline outcome (`lean_ok` = translated and #guard-checked; `gated` = rejected 
 
 | outcome | files |
 |---|---|
-| air2lean | 3 |
+| air2lean | 2 |
 | gated | 10 |
 | lean | 1 |
-| lean_ok | 27 |
+| lean_ok | 28 |
 
 Gates (files each named gate rejects):
 
@@ -329,8 +329,7 @@ Rejection histogram (files whose diagnostics contain the code):
 | CALLEE_BLOCKED | 4 |
 | CALLEE_EXTERN_UNBOUND | 9 |
 | CONSTANT_FAILURE | 2 |
-| INSTRUCTION_FAILURE | 5 |
-| MODEL_FAILURE | 2 |
+| INSTRUCTION_FAILURE | 4 |
 | NORMALIZATION_FAILURE | 1 |
 | PREREQUISITE_SKIPPED | 2 |
 | PROGRAM_FAILURE | 9 |
@@ -348,7 +347,7 @@ Outcome by C construct family:
 | function pointers | gated: 2, lean_ok: 1 |
 | globals | lean_ok: 1 |
 | goto | gated: 2 |
-| integer casts | air2lean: 1 |
+| integer casts | lean_ok: 1 |
 | integer promotions | lean_ok: 1 |
 | libc ctype | lean_ok: 1 |
 | libc stdio | gated: 1 |
@@ -357,7 +356,7 @@ Outcome by C construct family:
 | loops/break/continue | lean_ok: 1 |
 | macros | lean_ok: 1 |
 | multi-dim arrays | lean_ok: 1 |
-| object-representation casts | air2lean: 1 |
+| object-representation casts | lean_ok: 1 |
 | pointer arithmetic | lean: 1, lean_ok: 1 |
 | pointer<->integer casts | lean_ok: 1 |
 | realistic | air2lean: 1, gated: 1, lean_ok: 5 |
@@ -388,8 +387,7 @@ blocked (alone or with other gaps). G1, G3, G5, G6 and G9 of the 0.16.0 baseline
 
 | # | gap | translate-c Zig shape | rejected by | files | size | depends on |
 |---|---|---|---|---|---|---|
-| G2 | **Zig 0.17.1 casts of an optional pointer** | `@ptrCast(@alignCast(vp))` with `vp: ?*anyopaque` and a target alignment above 1: the alignment check is `int_from_ptr ?*anyopaque → usize`, then `ptr_cast ?*anyopaque → [*c]u32` | `Air2Lean/Check.lean`, the cast rule: "a bitcast between an optional pointer (`?*T`) and another type is outside the subset". The `?*T → usize` rule (`Zig.optPtrAddr`, null is 0) and the `?*T → *U` rule (`Zig.optPtrUnwrap`) are admitted only for the ≤0.16 `bitcast` (`unwrapRule`/`fromAddrRule` require `BitCast.memory`); 0.17.1's `int_from_ptr`/`ptr_cast` do not get them. An alignment of 1 (`void *` → `char *`, `memcpy_loops`) has no `int_from_ptr` and translates | 4 (`casts`; also `sort_callback`, `libc_stdlib`, `malloc_vec`) | S: qualify the two rules for 0.17.1's `int_from_ptr`/`ptr_cast` | L07 (cast rules) |
-| G1b | **libc symbols whose Zig definition does not bind** | `pub extern fn strcmp([*c]const u8, [*c]const u8) c_int;` against `fn strcmp(a: [*:0]const c_char, b: [*:0]const c_char) callconv(.c) c_int` | (a) `CALLEE_EXTERN_UNBOUND` at the binding ("extern function 'strcmp' differs from its definition 'zigc:c.string.strcmp' in its parameter 0 type"): declaration and definition agree only at the C ABI; (b) `CALLEE_EXTERN_UNBOUND` for `memcpy`, `memset`, `memcmp`, `strlen`: `compiler_rt` is another compilation, in ReleaseFast ([build-modes.md](build-modes.md)); (c) `lib/c/malloc.zig` reaches code outside the subset (§libc boundary) | 3 (`libc_string`, `malloc_vec`, `libc_stdlib`) | (a) M: a C-ABI conversion at the binding, a statement decision; (b) M: programs of two build profiles; (c) L | libc boundary; L07, Q07, M01–M03 |
+| G1b | **libc symbols whose Zig definition does not translate** | `strcmp`, `strchr`, `malloc`, `free`, … bind through the C-ABI conversion (closed below) | (b) `CALLEE_EXTERN_UNBOUND` for `memcpy`, `memset`, `memcmp`, `strlen`: `compiler_rt` is another compilation, in ReleaseFast ([build-modes.md](build-modes.md)); (c) `lib/c/malloc.zig` reaches code outside the subset (§libc boundary); (d) `strchr` reaches `std.mem.findScalarPos`, whose Zig 0.17.1 `array_to_vector` is outside the subset; `qsort`'s definition fails normalization ("global initializer") | 3 (`libc_string`, `malloc_vec`, `libc_stdlib`) | (b) M: programs of two build profiles; (c) L; (d) S–M | libc boundary; Q07, M01–M03, L09 |
 | G4 | **negative `[*c]` index** | `p[@bitCast(@as(isize, @intCast(-1)))]` = index 2⁶⁴−1 | accepted, but the model's `p.elem 4 (2^64-1)` is past the block, so `entry` is `.illegal` while native Zig and C are defined (conservative, not unsound) | 1 (`ptr_arith`) | M: a signed (two's-complement) item offset for `[*c]`/many-item `ptr_elem_*`/`ptr_add` in the memory model, not a plain wrap modulo 2⁶⁴ (that would make index 2⁶² of a 4-byte item the same place as item 0, which the compiler's in-bounds pointer arithmetic does not promise) | L05 |
 | G7 | **translate-c refusals** | `goto`/labels; bitfields; variadic definitions; case labels inside nested statements | gates `TC-GOTO`, `TC-BITFIELD`, `TC-VARIADIC-DEF`, `TC-COMPLEX-SWITCH` | 6 | goto: forward-only Aro patch M, general L (§goto); bitfields M–L (C ABI storage units as packed host integers); variadic definitions L; Duff M | upstream Aro translate-c or a pinned patch (joins the trusted base); L03, L08, L14 |
 | G8 | **translate-c semantic divergences** | `(a > b) - (a < b)` → `@intFromBool(a > b) - @intFromBool(a < b)` (`u1` arithmetic); `setjmp`/`longjmp` as plain calls | gates `NATIVE-DIVERGENCE`, `LIBC-SETJMP` | 3 | S: upstream promotion fix | upstream translate-c |
@@ -401,11 +399,15 @@ Closed since the 0.16.0 baseline:
   `CALLEE_EXTERN_UNBOUND`.
 * **G1b, the binding mechanism.** The exporter writes the compilation's `@export` records
   (the export table), the export closure follows a called symbol to its defining function in
-  Zig's libc, and the translator binds a weak definition under EXT-07 (`libc_ctype`). What
-  still keeps `libc_string` and `malloc_vec` out is G1b above.
-* **G2, the `void *` part.** `--allocator-model translated` admits `?*anyopaque` ↔ `[*c]T`
-  for error-free pointees (`memcpy_loops`); the self-referential struct cast (`linked_list`)
-  translates in both modes.
+  Zig's libc, and the translator binds a weak definition under EXT-07 (`libc_ctype`).
+* **G1b (a), declarations that agree with the definition only at the C ABI.** The C-ABI
+  conversion at the binding (§libc boundary, maintainer decision 2026-11-25): `strcmp`,
+  `strchr`, `malloc`, `calloc`, `free` and `realloc` bind (`tests/roadmap/extern-abi`). What
+  still keeps `libc_string`, `malloc_vec` and `libc_stdlib` out is G1b above.
+* **G2 (Zig 0.17.1 casts of an optional pointer).** `--allocator-model translated` admits
+  `?*anyopaque` ↔ `[*c]T` for error-free pointees (`memcpy_loops`); the self-referential struct
+  cast (`linked_list`) translates in both modes; Zig 0.17.1's `int_from_ptr`/`ptr_cast` of
+  `?*T` get the cast rules of the ≤0.16 `bitcast` (`casts`).
 * **G3 (Zig 0.16.0 `p.*.f[i]`).** Not in 0.17.1.
 * **G5 (zero-initialised globals whose address escapes).** The exporter writes the initial
   value (`linked_list`, `ptr_int_casts`).
@@ -448,26 +450,67 @@ handler, so these functions are ordinary Zig for the existing route. The mechani
   premise [EXT-07](premises.md#ext-07), the image links no other definition of the symbol
   (a strong `strcmp` in another object, archive or interposing shared library would replace
   Zig's). The harness passes the flag, and each generated header records `weak-exports`.
-* **No conversion at the binding.** The bound call is a direct call: the declared parameter
-  and result types must be the definition's. `isdigit`, `abs` and the like (`c_int` in,
-  `c_int` out) bind. A declaration that agrees with the definition only at the C ABI does not.
+* **The C-ABI conversion at the binding** (maintainer decision 2026-11-25). The bound call is
+  a direct call. Where the declared and the defined type of a parameter or of the result are
+  the same, the value passes unchanged (`isdigit`, `abs`: `c_int` in, `c_int` out). Where they
+  differ as the C ABI allows, the value is converted once at the call: each argument from the
+  declared to the definition's parameter type, the result from the definition's to the declared
+  result type. This is one general rule, not a model of any symbol. See below.
 
-Three things keep the other corpus symbols rejected. Each is a translator or model rule, not
-harness work:
+### The C-ABI conversion
 
-1. **Types that agree only at the C ABI.** translate-c declares C pointers
-   (`[*c]const u8`, `?*anyopaque`); Zig's libc defines the functions with Zig pointer types
-   (`[*:0]const c_char`, `[*]const u8`, `?[*]u8`, `?[*]align(16) u8`). At the machine level
-   the call is defined when the argument values meet what the definition's types state
-   (non-null for `strcmp`'s and `memcmp`'s pointers, alignment 16 for `free`'s, `noalias` for
-   `memcpy`'s); the binding converts no value, so the translator does not bind them
-   (`CALLEE_EXTERN_UNBOUND`, naming the symbol, the definition and the first differing
-   parameter or the result). Binding these needs a
-   conversion rule at the extern boundary: each argument reinterpreted as the definition's
-   parameter type and the result as the declared one, with illegal behaviour where a value
-   does not meet the type it is given (a null `[*c]` pointer for a `[*:0]` parameter is not a
-   panic there: no safety check stands at a linker boundary). That is a new statement of
-   EXT-03 over the cast rules (L07), so a maintainer decision.
+translate-c declares C pointers (`[*c]const u8`, `?*anyopaque`); Zig's libc defines the
+functions with Zig pointer types (`[*:0]const c_char`, `*const anyopaque`, `?[*]align(16) u8`).
+Natively the value crosses the call unchanged: a pointer is an address in a register. The
+definition's type still asserts things about it, and nothing checks them at a linker boundary
+(no safety check is emitted for a value the caller passes), so a value that does not meet them
+is illegal behaviour of the callee. The model makes that explicit
+(`Air2Lean/Check.lean` `externAbiCall` chooses the conversion, `Emit.lean` applies it,
+`ZigLean/Mem/Abi.lean` defines it):
+
+| the target type asserts | where | a value that does not meet it |
+|---|---|---|
+| non-null | a single or many pointer (`*T`, `[*]T`, not optional, not C/allowzero) from an optional or C/allowzero one | `.illegal` |
+| its alignment | a stricter alignment than the source's (`?[*]align(16) u8` from `?*anyopaque`) | `.illegal` (a null value has none) |
+| its sentinel | a sentinel byte the source does not assert (`[*:0]const c_char` from `[*c]const u8`) | `.illegal` unless the byte occurs at or after the pointer in its live object (a null value has none) |
+
+The conversion of the form is the cast rules' (L07): `ptrOfOptional` from `?*T`, the pointer
+itself from `*T`, `[*]T` and a C/allowzero pointer, `ptrToOptional` to `?*T`.
+`abiPtr_nonNull_eq`, `abiPtr_align_eq` and `abiPtrOpt_eq` state that the conversion agrees with
+`ptrRequireNonNull`, `checkAlign` and `ptrToOptional` where only that requirement applies. The
+test reads no byte as an access: it changes no state (`abiPtrCheck_run`), and the full-state
+rules `FTotalTriple.abiPtrCheck_*` (`ZigLean/Sep/Full/Abi.lean`) let `fsym` walk it.
+
+The sentinel test is a conservative over-approximation. A `strcmp` of two unterminated buffers
+that differ before their end does not fail natively, but the model says `.illegal`. A pointer
+into an object that does not exist is `.illegal`, as its address is (`ptrAddr`).
+
+Only pointers are converted, and only when the pointees are compatible (or both free of error
+storage, as the translated allocator model admits for `?*anyopaque` ↔ `[*c]T`). Everything else
+stays rejected with `CALLEE_EXTERN_UNBOUND`, naming the symbol, the definition, the position
+and the reason:
+
+* a type that is not a pointer, or a differing integer, struct or other value;
+* a function pointer: a call through it would need a conversion of its own (`bsearch`'s
+  comparator);
+* a sentinel the export does not record as a value. The exporter writes `sentinel_byte` for an
+  8-bit item only, so `wcschr`'s `[*:0]const wchar_t` is rejected;
+* a volatile, bit-offset or vector-element pointer, and a vector pointee;
+* a callee whose address is taken: a call through the pointer would pass the value
+  unconverted. A call through a pointer to the definition is checked as an indirect call,
+  which needs equal types;
+* a function that also calls the definition directly (`CALLEE_AMBIGUOUS`).
+
+A function with a converted call is outside the certificate fragment and the timed subset.
+`tests/roadmap/extern-abi` evaluates the conversion on translate-c output against Zig 0.17.1's
+libc (`strcmp`, `strrchr`, `memrchr`, `malloc_usable_size`). It covers each `.illegal` case and
+the rejected pairs (`test_cli.py`).
+
+The remaining corpus symbols stay rejected for three reasons. Each is a translator or model rule,
+not harness work:
+
+1. **Definitions outside the subset.** `strchr` reaches `std.mem.findScalarPos`, whose
+   Zig 0.17.1 `array_to_vector` is outside the subset. `qsort`'s definition fails normalization.
 2. **`compiler_rt` is another compilation.** For an executable, `memcpy`, `memset`, `memcmp`
    and `strlen` come from `compiler_rt`, which the compiler builds separately and always in
    ReleaseFast (`Compilation.compilerRtOptMode`; not a qualified mode,
@@ -479,8 +522,7 @@ harness work:
    `std.heap.SmpAllocator` behind a size header. The translator rejects, in order of
    distance: the `undefined` context pointer it passes to the allocator's functions
    (`no_context: *anyopaque = undefined`, "an `undefined` operand is outside the subset");
-   `SmpAllocator`'s `unordered` atomic load of a non-integer and its optional-pointer casts
-   (G2); `Thread.getCpuCount` through libc's `sched_getaffinity`; and the page mapping: the
+   the `unordered` atomic load of a non-integer in `atomic.Mutex.unlock`; `Thread.getCpuCount` through libc's `sched_getaffinity`; and the page mapping: the
    trusted boundary `posix.mmap`/`munmap`/`mremap` (OSM-01) is qualified for Zig 0.16.0 only
    ("no reviewed std source for Zig 0.17.1 signature"), and below it std, with libc linked,
    calls musl's C functions `mmap`, `munmap`, `mremap` (variadic) and `__errno_location`,
@@ -492,10 +534,11 @@ harness work:
 |---|---|---|---|---|
 | `isdigit`, `isalpha`, `isspace`, `toupper`, `tolower` | `libc_ctype` (`isdigit`, `isalpha` also `libc_stdio`) | **bound** (EXT-07) | `lib/c/ctype.zig`, over `std.ascii` | `libc_stdio` is rejected with the file (`EXT-VARIADIC`) |
 | `abs`, `labs` | `libc_ctype`, `libc_stdlib` | **bound** (EXT-07) | `lib/c/stdlib.zig` | `@intCast(@abs(a))`: `abs(INT_MIN)` is a ReleaseSafe panic of the model and of the native program |
-| `strcmp`, `strchr` | `libc_string` | rejected: `CALLEE_EXTERN_UNBOUND`, the declared and defined types differ (1) | `lib/c/string.zig` | `strchr` also reaches `std.mem.findScalarPos`, whose Zig 0.17.1 `array_to_vector` is outside the subset; `strings_loops` passes with equivalent hand-written C loops |
-| `memcpy`, `memset`, `memcmp`, `strlen` | `libc_string` | rejected: `CALLEE_EXTERN_UNBOUND` (2), then (1) | `lib/compiler_rt.zig`, `lib/compiler_rt/memcpy.zig` | |
-| `qsort` | `libc_stdlib` | rejected: (1) | `lib/c/stdlib.zig` | needs function pointers (E02, L11), G2 and G8 in the caller |
-| `malloc`, `calloc`, `realloc`, `free` | `libc_stdlib`, `malloc_vec` | rejected: (1) and (3) | `lib/c/malloc.zig` | |
+| `strcmp` | `libc_string` | **bound** (EXT-07, C-ABI conversion) | `lib/c/string.zig` | the file is rejected for the other symbols; `strings_loops` passes with equivalent hand-written C loops |
+| `strchr` | `libc_string` | bound (EXT-07, C-ABI conversion); its definition is rejected (1) | `lib/c/string.zig` | |
+| `memcpy`, `memset`, `memcmp`, `strlen` | `libc_string` | rejected: `CALLEE_EXTERN_UNBOUND` (2) | `lib/compiler_rt.zig`, `lib/compiler_rt/memcpy.zig` | |
+| `qsort` | `libc_stdlib` | rejected: its definition fails normalization (1) | `lib/c/stdlib.zig` | the comparator is a function pointer, which the C-ABI conversion does not convert; G8 in the caller |
+| `malloc`, `calloc`, `realloc`, `free` | `libc_stdlib`, `malloc_vec` | bound (EXT-07, C-ABI conversion); their definitions are rejected (3) | `lib/c/malloc.zig` | |
 | `snprintf` | `libc_stdio` | gate `EXT-VARIADIC` | musl C (`src/stdio/snprintf.c`, `vfprintf.c`) | variadic, large, locale-dependent: a trusted base contract over a byte buffer first; translating it waits for variadic definitions (G7) |
 | `setjmp`, `longjmp` | `setjmp_longjmp` | gate `LIBC-SETJMP` | musl assembly (`src/setjmp/x86_64/`) | not supported: no `returns_twice` in Zig; measured divergence |
 
@@ -508,7 +551,7 @@ so it is not a boundary symbol of the translated Zig.
 | phase | scope | acceptance |
 |---|---|---|
 | 0 (done) | corpus, harness, generator, committed records, CI record check | `check.sh --light` exits 0 in CI; `--heavy` reproduces `record.json` on a host with the patched compiler |
-| 1: libc-free C kernels (done except G2, G4) | the export closure, `void *` casts, array `splat`, named gates for translate-c demotions and divergences; the route on Zig 0.17.1 | every corpus file whose translate-c output has no demotion and no `extern` call is `lean_ok` or gated, except `casts` (G2) and `ptr_arith` (G4); `cgen.py` seeds 0–29 all `lean_ok` |
+| 1: libc-free C kernels (done except G4) | the export closure, `void *` casts, array `splat`, named gates for translate-c demotions and divergences; the route on Zig 0.17.1 | every corpus file whose translate-c output has no demotion and no `extern` call is `lean_ok` or gated, except `casts` (G2) and `ptr_arith` (G4); `cgen.py` seeds 0–29 all `lean_ok` |
 | 2: libc boundary | musl string/ctype/`abs`/`qsort` translated with the musl revision recorded; malloc family as trusted base with contracts in `docs/premises.md` | `libc_string`, `libc_stdlib`, `malloc_vec` `lean_ok`; every `extern_calls` symbol in the record is either a registered trusted-base row or translated AIR; a proof of one libc-using function (e.g. a `memcpy`/`strlen` specification) is kernel-checked |
 | 3: translate-c completeness | G7, G8 upstream or as a pinned, reviewed translate-c patch | `goto_*`, `bitfields`, `bitfield_packet`, `varargs_sum`, `switch_fallthrough`, `sort_callback` `lean_ok`; the comparator idiom agrees natively |
 | 4: realistic programs and proofs | project manifests accept C sources (I01); csmith (Docker image) differential at ≥ 1000 seeds; tutorial | csmith seeds with no out-of-scope constructs are `lean_ok` or carry a typed rejection; two kernel-checked proofs over translated C (ring buffer invariant, linked-list reversal) using P01–P05 tactics |

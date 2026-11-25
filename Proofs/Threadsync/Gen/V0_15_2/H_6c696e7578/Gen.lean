@@ -480,6 +480,105 @@ def debug_assert (p0 : Bool) : Zig.Result (Unit) := do
 
 attribute [zig_run] debug_assert
 
+structure os_linux_errnoFromSyscallLocals where
+  deriving Inhabited
+
+inductive os_linux_errnoFromSyscallExit where
+  | ret (v : os_linux_E__enum_1)
+  | br5 (v : Bool)
+  | br2 (v : BitVec 64)
+
+def os_linux_errnoFromSyscall (p0 : BitVec 64) : Zig.Result (os_linux_E__enum_1) := do
+  let e ← ((do
+    let i1 ← pure (p0)
+    match ← ((do
+      let i3 ← pure (i1)
+      let i4 ← pure (Zig.gt true i3 (-(4096 : BitVec 64)))
+      match ← ((do
+        if i4 then (do
+          let i7 ← pure (i1)
+          let i8 ← pure (Zig.lt true i7 (0 : BitVec 64))
+          pure (.br5 i8))
+        else (do
+          pure (.br5 false))) : Zig.M os_linux_errnoFromSyscallLocals os_linux_errnoFromSyscallExit) with
+      | .br5 v5 => (do
+        if v5 then (do
+          let i12 ← Zig.sub true (0 : BitVec 64) i1
+          pure (.br2 i12))
+        else (do
+          pure (.br2 (0 : BitVec 64))))
+      | e => pure e) : Zig.M os_linux_errnoFromSyscallLocals os_linux_errnoFromSyscallExit) with
+    | .br2 v2 => (do
+      let i15 ← Zig.enumOf (os_linux_E__enum_1.ofInt? (Zig.val true v2))
+      pure (.ret i15))
+    | e => pure e) : Zig.M os_linux_errnoFromSyscallLocals os_linux_errnoFromSyscallExit).run' (default : os_linux_errnoFromSyscallLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+attribute [zig_run] os_linux_errnoFromSyscall
+
+structure Thread_Futex_LinuxImpl_wakeLocals where
+  deriving Inhabited
+
+inductive Thread_Futex_LinuxImpl_wakeExit where
+  | ret
+  | br9
+
+def Thread_Futex_LinuxImpl_wake (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.ConcM Tgt (Unit) := do
+  let e ← ((do
+    let i2 ← pure p0
+    let i3 ← pure (i2)
+    let i4 ← pure (Zig.min false (2147483647 : BitVec 32) p1)
+    let i5 ← Zig.intCast false false 31 i4 (safe := false)
+    let i6 ← Zig.intCast false false 32 i5 (safe := false)
+    let i7 ← Zig.callC (Zig.Os.Linux.futex_3arg i3 (Zig.Packed.toBits ({ cmd := os_linux_FUTEX_COMMAND.WAKE, «private» := true, realtime := false, _reserved := (0 : BitVec 23) } : os_linux_FUTEX_OP)) i6)
+    let i8 ← Zig.callRC (os_linux_errnoFromSyscall i7)
+    match ← ((do
+      if i8 == os_linux_E__enum_1.SUCCESS then (do
+        pure .br9)
+      else (do
+        if i8 == os_linux_E__enum_1.INVAL then (do
+          pure .br9)
+        else (do
+          if i8 == os_linux_E__enum_1.FAULT then (do
+            pure .br9)
+          else (do
+            throw .unreachable)))) : Zig.CM Tgt Thread_Futex_LinuxImpl_wakeLocals Thread_Futex_LinuxImpl_wakeExit) with
+    | .br9 => (do
+      pure .ret)
+    | e => pure e) : Zig.CM Tgt Thread_Futex_LinuxImpl_wakeLocals Thread_Futex_LinuxImpl_wakeExit).run' (default : Thread_Futex_LinuxImpl_wakeLocals)
+  match e with
+  | .ret => pure ()
+  | _ => throw .panic
+
+attribute [zig_run] Thread_Futex_LinuxImpl_wake
+
+structure Thread_Futex_wakeLocals where
+  deriving Inhabited
+
+inductive Thread_Futex_wakeExit where
+  | ret
+  | br2
+
+def Thread_Futex_wake (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.ConcM Tgt (Unit) := do
+  let e ← ((do
+    match ← ((do
+      let i3 ← pure (p1 == (0 : BitVec 32))
+      if i3 then (do
+        pure .ret)
+      else (do
+        pure .br2)) : Zig.CM Tgt Thread_Futex_wakeLocals Thread_Futex_wakeExit) with
+    | .br2 => (do
+      let _i7 ← Zig.callC (Thread_Futex_LinuxImpl_wake p0 p1)
+      pure .ret)
+    | e => pure e) : Zig.CM Tgt Thread_Futex_wakeLocals Thread_Futex_wakeExit).run' (default : Thread_Futex_wakeLocals)
+  match e with
+  | .ret => pure ()
+  | _ => throw .panic
+
+attribute [zig_run] Thread_Futex_wake
+
 structure Thread_Mutex_FutexImpl_unlockLocals where
   deriving Inhabited
 
@@ -504,7 +603,7 @@ def Thread_Mutex_FutexImpl_unlock (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
         if i9 then (do
           let i11 ← pure p0
           let i12 ← pure (i11)
-          let _i13 ← Zig.threadFutexWakeC i12 (1 : BitVec 32)
+          let _i13 ← Zig.callC (Thread_Futex_wake i12 (1 : BitVec 32))
           pure .br8)
         else (do
           pure .br8)) : Zig.CM Tgt Thread_Mutex_FutexImpl_unlockLocals Thread_Mutex_FutexImpl_unlockExit) with
@@ -919,44 +1018,6 @@ def math_sub__anon_85a035d52c51 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (
   | _ => throw .panic
 
 attribute [zig_run] math_sub__anon_85a035d52c51
-
-structure os_linux_errnoFromSyscallLocals where
-  deriving Inhabited
-
-inductive os_linux_errnoFromSyscallExit where
-  | ret (v : os_linux_E__enum_1)
-  | br5 (v : Bool)
-  | br2 (v : BitVec 64)
-
-def os_linux_errnoFromSyscall (p0 : BitVec 64) : Zig.Result (os_linux_E__enum_1) := do
-  let e ← ((do
-    let i1 ← pure (p0)
-    match ← ((do
-      let i3 ← pure (i1)
-      let i4 ← pure (Zig.gt true i3 (-(4096 : BitVec 64)))
-      match ← ((do
-        if i4 then (do
-          let i7 ← pure (i1)
-          let i8 ← pure (Zig.lt true i7 (0 : BitVec 64))
-          pure (.br5 i8))
-        else (do
-          pure (.br5 false))) : Zig.M os_linux_errnoFromSyscallLocals os_linux_errnoFromSyscallExit) with
-      | .br5 v5 => (do
-        if v5 then (do
-          let i12 ← Zig.sub true (0 : BitVec 64) i1
-          pure (.br2 i12))
-        else (do
-          pure (.br2 (0 : BitVec 64))))
-      | e => pure e) : Zig.M os_linux_errnoFromSyscallLocals os_linux_errnoFromSyscallExit) with
-    | .br2 v2 => (do
-      let i15 ← Zig.enumOf (os_linux_E__enum_1.ofInt? (Zig.val true v2))
-      pure (.ret i15))
-    | e => pure e) : Zig.M os_linux_errnoFromSyscallLocals os_linux_errnoFromSyscallExit).run' (default : os_linux_errnoFromSyscallLocals)
-  match e with
-  | .ret v => pure v
-  | _ => throw .panic
-
-attribute [zig_run] os_linux_errnoFromSyscall
 
 structure Thread_Futex_LinuxImpl_waitLocals where
   ts : Zig.Ptr
@@ -1659,7 +1720,7 @@ def Thread_Condition_FutexImpl_wake__anon_b3c587c57789.loop9 (p0 : Zig.Ptr) : Zi
             | .br37 _v37 => (do
               let i41 ← Zig.callMC (Zig.ptrProject p0 (·.add 4))
               let i42 ← pure (i41)
-              let _i43 ← Zig.threadFutexWakeC i42 (1 : BitVec 32)
+              let _i43 ← Zig.callC (Thread_Futex_wake i42 (1 : BitVec 32))
               pure .ret)
             | e => pure e))
         | e => pure e) : Zig.CM Tgt Thread_Condition_FutexImpl_wake__anon_b3c587c57789Locals Thread_Condition_FutexImpl_wake__anon_b3c587c57789Exit) with
@@ -1815,7 +1876,7 @@ def Thread_ResetEvent_FutexImpl_set (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
           if i18 then (do
             let i20 ← pure p0
             let i21 ← pure (i20)
-            let _i22 ← Zig.threadFutexWakeC i21 (4294967295 : BitVec 32)
+            let _i22 ← Zig.callC (Thread_Futex_wake i21 (4294967295 : BitVec 32))
             pure .br12)
           else (do
             pure .br12))

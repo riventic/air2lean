@@ -15,3 +15,7 @@
 0.14.1 reject_items intToErrors an opaque bitcast involving optional, aggregate or error-union error storage
 0.14.1 reject_items errorUnionsToInt an opaque bitcast involving optional, aggregate or error-union error storage
 0.14.1 reject_items optionalsToInt a Zig ≤0.16 representation `@bitCast` involving an optional (type
+0.15.2 reject_ptrfield readThrough packed struct 'reject_ptrfield.P' has a field other than an integer, a `bool`, a float, an enum, a packed struct, a packed union or a vector of these (a pointer field, Zig 0.14.1/0.15.2 only, has no bits in the model): outside the subset
+0.15.2 reject_ptrfield make packed struct 'reject_ptrfield.P' has a field other than an integer, a `bool`, a float, an enum, a packed struct, a packed union or a vector of these (a pointer field, Zig 0.14.1/0.15.2 only, has no bits in the model): outside the subset
+0.14.1 reject_ptrfield readThrough packed struct 'reject_ptrfield.P' has a field other than an integer, a `bool`, a float, an enum, a packed struct, a packed union or a vector of these (a pointer field, Zig 0.14.1/0.15.2 only, has no bits in the model): outside the subset
+0.14.1 reject_ptrfield make packed struct 'reject_ptrfield.P' has a field other than an integer, a `bool`, a float, an enum, a packed struct, a packed union or a vector of these (a pointer field, Zig 0.14.1/0.15.2 only, has no bits in the model): outside the subset

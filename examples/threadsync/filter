@@ -11,6 +11,9 @@ math.sub
 Thread.Futex.timedWait
 Thread.Futex.DarwinImpl.wait
 Thread.Futex.LinuxImpl.wait
+Thread.Futex.wake
+Thread.Futex.DarwinImpl.wake
+Thread.Futex.LinuxImpl.wake
 time.Timer.
 time.Instant.
 posix.clock_gettime

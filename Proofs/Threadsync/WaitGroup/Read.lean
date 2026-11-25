@@ -34,7 +34,7 @@ theorem shape3 {G : ThreadId → Gh} {m : Mem} (h : Shape (fun u => (G u).2) m)
     m.threads[1]? = some { spawner := 0, joined := decide ((G 0).2.ph = .j1) } ∧
     m.threads[2]? = some { spawner := 0, joined := false } ∧
     (G 1).2.ph.isTask = true ∧ (G 2).2.ph.isTask = true := by
-  obtain ⟨h00, -, -, ⟨-, h1, -⟩ | ⟨-, h2, -⟩ | ⟨a, -, c, d, f, k⟩⟩ := h
+  obtain ⟨h00, -, -, ⟨-, h1, -⟩ | ⟨-, h2, -⟩ | ⟨a, -, c, d, f, k, -⟩⟩ := h
   · exfalso; dsimp only at h1; omega
   · exfalso; dsimp only at h2; rw [h2] at h3; exact absurd h3 (by decide)
   · exact ⟨h00, a, f, k, c, d⟩

@@ -116,7 +116,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Target and build profiles | [PRF-01](#prf-01) [PRF-02](#prf-02) [PRF-03](#prf-03) [PRF-04](#prf-04) [PRF-05](#prf-05) |
 | Allocator policies | [ALC-01](#alc-01) [ALC-02](#alc-02) [ALC-03](#alc-03) [ALC-04](#alc-04) [ALC-05](#alc-05) [ALC-06](#alc-06) [ALC-07](#alc-07) [ALC-08](#alc-08) [ALC-09](#alc-09) [ALC-10](#alc-10) |
 | Io interface | [IOM-01](#iom-01) |
-| Thread creation and scheduling | [THR-01](#thr-01) [THR-02](#thr-02) [THR-03](#thr-03) [THR-04](#thr-04) [THR-05](#thr-05) [THR-06](#thr-06) [THR-07](#thr-07) [THR-08](#thr-08) [THR-09](#thr-09) [THR-10](#thr-10) [THR-11](#thr-11) |
+| Thread creation and scheduling | [THR-01](#thr-01) [THR-02](#thr-02) [THR-03](#thr-03) [THR-04](#thr-04) [THR-05](#thr-05) [THR-06](#thr-06) [THR-07](#thr-07) [THR-08](#thr-08) [THR-09](#thr-09) [THR-10](#thr-10) [THR-11](#thr-11) [THR-12](#thr-12) |
 | Memory ordering | [ORD-01](#ord-01) [ORD-02](#ord-02) [ORD-03](#ord-03) [ORD-04](#ord-04) [ORD-05](#ord-05) [ORD-06](#ord-06) |
 | Timers and clocks | [TMR-02](#tmr-02) |
 | Environment operations | [ENV-01](#env-01) [ENV-02](#env-02) [ENV-03](#env-03) |
@@ -262,18 +262,19 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Sources: [allocation-policy.md](allocation-policy.md), [sentinel realloc README](../tests/roadmap/sentinel-realloc/README.md).
 
 <a id="alc-07"></a>
-### ALC-07 — Allocator identity, arena and fixed-buffer policies
+### ALC-07 — Allocator identity and the arena policy
 
 - Kind: environment.
-- Statement: `Mem.allocators[a]` is allocator `a`; its blocks have kind `.owned a`. A free,
-  destroy or remap through one allocator of another's block is `.illegal`. An arena request is
-  an `ALC-02` attempt; an arena free ends one block's lifetime; reset/deinit end exactly the
-  arena's blocks. A fixed buffer pads from its base address, fails past its capacity and gives
-  bytes back only for its last allocation. Owned blocks get fresh model addresses unless the
-  reuse policy (`ALC-08`) selects a valid reused one; growing remap fails; reset records no race-check access. The translator does not route
-  `std.heap` arena or fixed-buffer calls.
+- Statement: `Mem.allocators[a]` is allocator `a`, an arena; its blocks have kind `.owned a`. A
+  free, destroy or remap through one allocator of another's block is `.illegal`. An arena
+  request is an `ALC-02` attempt of `failAt`, `maxBytes` and the failure indices (not of the
+  oracle `fails` or the `budget`, which only `rawAlloc` asks); an arena free ends one block's lifetime; reset/deinit end
+  exactly the arena's blocks. Owned blocks get fresh model addresses unless the reuse policy
+  (`ALC-08`) selects a valid reused one; growing remap fails; reset records no race-check
+  access. In `std` mode the translator does not route `std.heap` arena calls. (The
+  `FixedBufferAllocator` is not modelled: it is translated from its Zig code, OSM-01.)
 - Derived from: `ZigLean.Mem.Owned`; tokens
-  `AllocRef`, `Arena.`, `FixedBuffer.`, `Owned.`, `ownedFree`, `resetOwned`.
+  `AllocRef`, `Arena.`, `Owned.`, `ownedFree`, `resetOwned`.
 - Sources: [allocator-identity.md](allocator-identity.md), `tests/roadmap/allocator-identity`.
 
 <a id="alc-08"></a>
@@ -494,6 +495,27 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Derived from: `ZigLean.Conc.Future`, `ZigLean.Conc.FutureLemmas`; tokens `asyncC`, `awaitC`,
   `cancelC`, `checkCancelC`, `futureProto`.
 - Sources: [futures.md](futures.md).
+
+<a id="thr-12"></a>
+### THR-12 — A gone event setter is not joined while it sets
+
+- Kind: environment.
+- Statement: `EventImpl.set_wp_resource` (and the derived `EventImpl.set_wp`) take, for a setter
+  `t` that has left the lock's code for good (lock place `gone`), the hypothesis
+  `L.ph g = .gone → ∀ G₁ m₁ q, G₁ t = E.set g q → P.inv G₁ m₁ → joinedB m₁ t = false`: in every
+  state of the protocol where `t` is at any place of the event's code with its other ghost
+  fields unchanged, `t` has not been joined. The theorem is proved under it; the client
+  discharges it from its own invariant (`Proofs/Threadsync/WaitGroup`: thread 1 is joined only
+  once it is `fin`). It is needed because an implementation's wake may tick in a loop (std's
+  translated macOS `Thread.Futex.DarwinImpl.wake` under `ResetEvent.set` repeats on `EINTR`),
+  and a tick of a `gone` thread's part needs a thread that was not joined
+  (`FLock.Fits.wp_tick_exactUnjoined`); the model's `Thread.detach` sets `joined` on a thread
+  that keeps running, so the scheduler's resumption cannot supply it. Maintainer decision
+  2026-11-25 (audit S6 finding 4, slice D2, option (ii')); widening `FLock.PartTick` to every
+  gone thread was rejected. A setter out of the lock's code (`out`) does not use it.
+- Derived from: tokens `set_wp_resource`, `EventImpl.set_wp`.
+- Sources: `ZigLean/Sep/Full/Event.lean` (`EventImpl`),
+  [soundness-2026-10-14.md](architecture-audit/soundness-2026-10-14.md) (S6 finding 4).
 
 ## Memory ordering
 
@@ -1267,9 +1289,10 @@ deletion plan of each. No new hand model of std code is added (CLAUDE.md, Truste
 
 - Kind: trusted.
 - Statement: `Io.futexWait`, `Io.futexWaitUncancelable`, `Io.futexWake` (0.16.0, 0.17.1) and
-  `Thread.Futex.wait`, `Thread.Futex.wake` (0.14.1, 0.15.2) are the futex ops of THR-05 instead
-  of the `Io` implementation behind the vtable (`Io.Threaded`) or `lib/std/Thread/Futex.zig`
-  over the OS futex (OSF-01, OSF-02).
+  `Thread.Futex.wait` (0.14.1, 0.15.2) are the futex ops of THR-05 instead of the `Io`
+  implementation behind the vtable (`Io.Threaded`) or `lib/std/Thread/Futex.zig` over the OS
+  futex (OSF-01). `Thread.Futex.wake` (0.14.1, 0.15.2) is translated std code over the OS wake
+  rows (OSF-02; audit S6 finding 4, slice D2).
 - Derived from: implied by THR-05.
 - Sources: [std-models.md](std-models.md#retiring-the-hand-models), `Air2Lean/StdModels.lean`,
   `ZigLean/Conc/Call.lean`.
@@ -1438,8 +1461,8 @@ decision D2). Zig 0.16.0, x86_64-linux and aarch64-macos. Details: [os-threads.m
   extra outcome). It gives no happens-before edge. The translator binds
   `os.linux.futex_3arg` (0.15.2 on), `os.linux.futex_wake` (0.14.1, the same system call) and
   libc's `__ulock_wake` (macOS) to it in every allocator model (`Air2Lean/StdModels.lean`).
-  `std.Thread.Futex.wake` (0.14.1, 0.15.2) itself still binds to its hand row (STD-05) until
-  that row is deleted (audit S6 finding 4, slice D2).
+  `std.Thread.Futex.wake` (0.14.1, 0.15.2) is translated and reaches it through these rows
+  (audit S6 finding 4, slice D2).
 - Model gaps (OSF-01 and OSF-02): address validation follows Linux v6.16 `get_futex_key` and
   xnu-12377.121.6 `sys_ulock.c`. Where the native result needs mapping or address-limit
   knowledge outside the model, it is a conservative `.illegal` refusal

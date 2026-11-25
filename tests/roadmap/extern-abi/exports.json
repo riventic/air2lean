@@ -1,0 +1,24 @@
+{
+  "exports": [
+    {
+      "out": "air/{version}",
+      "source": "abi_main.zig",
+      "filter": "abi.,zig.c_translation.,c.string.,c.malloc.,mem.,math.,simd.,debug.assert",
+      "versions": ["0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux-musl", "-mcpu=baseline", "-lc"],
+      "command": "build-exe",
+      "closure": ["abi.*", "c.string.strcmp", "c.string.strrchr", "c.string.memrchr", "c.malloc.malloc_usable_size"],
+      "stop": ["debug.FullPanic((function 'defaultPanic')).*"]
+    },
+    {
+      "out": "air-reject/{version}",
+      "source": "rejected_main.zig",
+      "filter": "rejected.,zig.c_translation.,c.string.strcmp,c.stdlib.bsearch,c.wchar.wcschr,mem.,math.,simd.,debug.assert",
+      "versions": ["0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux-musl", "-mcpu=baseline", "-lc"],
+      "command": "build-exe",
+      "closure": ["rejected.*", "c.string.strcmp", "c.stdlib.bsearch", "c.wchar.wcschr"],
+      "stop": ["debug.FullPanic((function 'defaultPanic')).*"]
+    }
+  ]
+}
