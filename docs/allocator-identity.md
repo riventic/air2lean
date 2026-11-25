@@ -24,7 +24,7 @@ The policy follows the Zig 0.16.0 source `lib/std/heap/ArenaAllocator.zig`.
 | Operation | Model |
 | --- | --- |
 | `ArenaAllocator.init(child)` | `Arena.init`: a new id; no block. |
-| arena `alloc` | a new `.owned a` block; one attempt of `Mem.allocPolicy`/`failAt` (every arena request may fail; Zig asks the child only for a new node). |
+| arena `alloc` | a new `.owned a` block; one attempt of `failAt`, `maxBytes` and the failure indices of `Mem.allocPolicy`, not of its oracle `fails` or `budget` (every arena request may fail; Zig asks the child only for a new node). |
 | arena `free` | the block must be a whole live `.owned a` block, else `.illegal`; its lifetime ends. Zig gives the bytes back only for the last allocation; the arena model has no capacity, so nothing else changes. |
 | `arena.reset(mode)` | `Owned.reset`: every `.owned a` block dies, no other block changes. The boolean result (a capacity hint for the retaining modes) is not modelled, nor is the capacity the retaining modes keep. |
 | `arena.deinit()` | `Arena.deinit`: reset, then the arena is dead; later use throws `.illegal`. |

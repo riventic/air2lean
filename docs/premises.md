@@ -267,7 +267,8 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Kind: environment.
 - Statement: `Mem.allocators[a]` is allocator `a`, an arena; its blocks have kind `.owned a`. A
   free, destroy or remap through one allocator of another's block is `.illegal`. An arena
-  request is an `ALC-02` attempt; an arena free ends one block's lifetime; reset/deinit end
+  request is an `ALC-02` attempt of `failAt`, `maxBytes` and the failure indices (not of the
+  oracle `fails` or the `budget`, which only `rawAlloc` asks); an arena free ends one block's lifetime; reset/deinit end
   exactly the arena's blocks. Owned blocks get fresh model addresses unless the reuse policy
   (`ALC-08`) selects a valid reused one; growing remap fails; reset records no race-check
   access. In `std` mode the translator does not route `std.heap` arena calls. (The

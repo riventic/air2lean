@@ -19,8 +19,9 @@ the allocator that owns it.
   has no other effect.
 * `Owned.reset` (`ArenaAllocator.reset`) ends the lifetime of exactly the blocks of the
   allocator; `Arena.deinit` also ends the allocator.
-* An arena request is an allocation attempt of `Mem.allocPolicy`/`Mem.failAt`, as `rawAlloc`:
-  every arena request may fail (Zig asks the child allocator only for a new node).
+* An arena request is an allocation attempt of `Mem.failAt`, `maxBytes` and the failure indices
+  of `Mem.allocPolicy` (unlike `rawAlloc`, not of the oracle `fails` or the `budget`): every
+  arena request may fail (Zig asks the child allocator only for a new node).
 
 Remap keeps lengths and shrinks in place; growth fails (Zig grows the last allocation in place
 when it fits, M02). Owned blocks get the placement's addresses (`Mem.place`), possibly the
