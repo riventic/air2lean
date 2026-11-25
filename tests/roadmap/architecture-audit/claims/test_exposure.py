@@ -123,12 +123,13 @@ def lean_case(name):
     exposed, detail = verdict(name, definition, strength)
     if finding == 'S7':
         # The hypothesis-free zero-divisor theorem must not be a claim, and a total claim that
-        # avoids the fault must carry the asm fault-condition premise (ASM-04).
+        # avoids the fault must carry the premise its fault condition rests on: the instruction
+        # model's (ASM-07; the block is a defined function, A02).
         module = NODES[definition]['module']
         nonzero = claims.check_goal({'theorem': 'AuditClaims.asm_divmod_nonzero', 'strength': strength,
                                      'domain': 'scoped: b != 0'}, THEOREMS, definition=definition, heads=HEADS,
                                     generated=claims.generated_definitions(NODES, {module}), nodes=NODES)
-        carried = nonzero['status'] == 'accepted' and 'ASM-04' in (nonzero['premises'] or ())
+        carried = nonzero['status'] == 'accepted' and 'ASM-07' in (nonzero['premises'] or ())
         exposed = exposed or not carried
         detail += f'; nonzero: claims={nonzero["status"]} premises={nonzero["premises"]} ({nonzero["reason"]})'
     return exposed, detail

@@ -40,12 +40,10 @@
 # (h) Lean-runtime mutation, lists: `Zig.rawAlloc` (ZigLean/Mem/Alloc.lean) never fails at
 #     `Mem.failAt`. Every lists function then returns a value where Zig returns
 #     `error.OutOfMemory`.
-# (i) Diff-test-archive mutation, asm: `tests/diff/asm/asm.zig`'s `air2lean_asm_bswap32` returns
-#     `x` unchanged instead of `@byteSwap(x)`. This archive (docs/generated-code.md §Inline asm)
-#     is the diff test's own stand-in for `Asm.airAsm_*`'s opaque behaviour (M21: no defining
-#     equation exists to mutate on the Lean side, unlike (b)/(d)/(f)/(g)/(h) above) -- mutating
-#     it and comparing against `examples/asm/asm.zig`'s real inline asm checks that the
-#     comparison is live, not vacuous. x86_64 only, same as `asm` itself.
+# (i) Lean-runtime mutation, asm: the x86_64 instruction model's `bswap` (`UnOp.eval`,
+#     ZigLean/Isa/X86.lean) returns its operand unchanged. `Asm.bswap32` is a defined function
+#     over that model (A02, premise ASM-07), so the differential test of `examples/asm/asm.zig`'s
+#     real inline asm must see the wrong bytes. x86_64 only, same as `asm` itself.
 # (j) Lean-runtime mutation, vectors: `Vec.reduce` (ZigLean/Vec.lean) folds only lanes
 #     `1..n-1`, dropping the last lane. `maxLane`'s `@reduce(.Max)` then ignores the vector's
 #     last lane, so an input whose max is in that lane disagrees with Zig.
@@ -125,9 +123,16 @@
 #     evidence, not a semantic detection.
 # (af) Lean-runtime mutation, threads: `Thread.join` (ZigLean/Mem/Thread.lean) does not merge the
 #     joined thread's clock, so the joiner does not happen after that thread's writes. Detected by
-#     the proof build: `join_eq` (ZigLean/Conc/Lemmas.lean) fails first; `Owned.join`
-#     (ZigLean/Conc/Csl.lean), which `disjoint_safe` (Proofs/Threads/Disjoint.lean) needs, uses the
+#     the proof build: `join_eq` (ZigLean/Conc/Lemmas.lean) fails first; `FOwned.join`
+#     (ZigLean/Sep/Full/ThreadOwned.lean), which `disjoint_safe` (Proofs/Threads/Disjoint.lean) needs, uses the
 #     merged clock too (`main`'s read of a flag would race with its kid's write).
+# (ag) Lean-runtime mutation, floats: `Float.Allowed` (ZigLean/Float/Allowed.lean) admits only the
+#     model's own NaN where the model returns a NaN, so a proof stated with it would cover no
+#     other target. Detected by the proof build: `nan_varies` (Proofs/Floats/AllowedNeg.lean)
+#     evaluates the relation on another NaN; the library's `Float.Allowed.of_isNaN` fails too.
+# (ah) Lean-runtime mutation, floats: `Float.MinAllowed`/`MaxAllowed` admit only `+0` for
+#     `@min`/`@max` of `+0` and `−0` (group D). Detected by the proof build: `min_zero_varies`
+#     (Proofs/Floats/AllowedNeg.lean).
 #
 # Usage: mutate.sh
 # Env:
@@ -136,7 +141,7 @@
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
 #                         (basic for (a)/(b), options for (c), floatops for (d), variants for (e),
 #                         pointers (f), slices (g), lists (h), asm (i), vectors (j),
-#                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q), slices (r), lists (s), layout (t)/(u), threads (v), atomics (w)/(x), sync (y)/(z), threads (aa)/(ab))
+#                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q), slices (r), lists (s), layout (t)/(u), threads (v), atomics (w)/(x), sync (y)/(z), threads (aa)/(ab), floats (ag)/(ah))
 #                         is in the list.
 #                         Default: every dir in examples/.
 #   AIR2LEAN_MUTATION_SHARD   Run only the mutations of line N (from 1) of
@@ -235,7 +240,7 @@ diff_baseline_for threads k l v
 diff_baseline_for layout m n o p t u
 diff_baseline_for iogroup ae
 if [ -n "$diff_baselines" ]; then
-  # Batch the examples so their shared libm/asm archives and Lean executable build once.
+  # Batch the examples so their shared libm archive and Lean executable build once.
   echo "== unmutated differential baseline:$diff_baselines ==" >&2
   AIR2LEAN_EXAMPLES="$diff_baselines" bash scripts/diff.sh || {
     echo "error: unmutated differential baseline failed:$diff_baselines" >&2
@@ -266,6 +271,7 @@ baseline_for threads Proofs.Threads.Counter aa ab
 baseline_for sync Proofs.Sync.Mutex ac
 baseline_for atomics Proofs.Atomics.Stack ad
 baseline_for threads Proofs.Threads.Disjoint af
+baseline_for floats Proofs.Floats.AllowedNeg ag ah
 if [ "${#proof_baselines[@]}" -gt 0 ]; then
   echo "== building unmutated proof baseline ==" >&2
   lake build "${proof_baselines[@]}"
@@ -282,11 +288,12 @@ round_lean="ZigLean/Float/Round.lean"
 mem_lean="ZigLean/Mem/Basic.lean"
 enc_lean="ZigLean/Mem/Enc.lean"
 alloc_lean="ZigLean/Mem/Alloc.lean"
-asm_zig="tests/diff/asm/asm.zig"
+asm_zig="ZigLean/Isa/X86.lean"
 vec_lean="ZigLean/Vec.lean"
 thread_lean="ZigLean/Mem/Thread.lean"
 sched_lean="ZigLean/Conc/Sched.lean"
 conc_lean="ZigLean/Conc.lean"
+allowed_lean="ZigLean/Float/Allowed.lean"
 gen_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-gen.XXXXXX")
 options_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-options-gen.XXXXXX")
 variants_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-variants-gen.XXXXXX")
@@ -303,6 +310,7 @@ vec_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-vec.XXXXXX")
 thread_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-thread.XXXXXX")
 sched_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-sched.XXXXXX")
 conc_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-conc.XXXXXX")
+allowed_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-allowed.XXXXXX")
 cp "$gen_file" "$gen_backup"
 cp "$options_gen" "$options_backup"
 cp "$variants_gen" "$variants_backup"
@@ -319,6 +327,7 @@ cp "$vec_lean" "$vec_backup"
 cp "$thread_lean" "$thread_backup"
 cp "$sched_lean" "$sched_backup"
 cp "$conc_lean" "$conc_backup"
+cp "$allowed_lean" "$allowed_backup"
 
 mutate_tmp=""
 air_dir=""
@@ -343,8 +352,9 @@ cleanup() {
   cp "$thread_backup" "$thread_lean"
   cp "$sched_backup" "$sched_lean"
   cp "$conc_backup" "$conc_lean"
+  cp "$allowed_backup" "$allowed_lean"
   rm -f "$gen_backup" "$options_backup" "$variants_backup" "$layout_backup" "$slices_backup" "$basic_backup" "$lemmas_backup" "$round_backup" \
-    "$mem_backup" "$enc_backup" "$alloc_backup" "$asm_backup" "$vec_backup" "$thread_backup" "$sched_backup" "$conc_backup"
+    "$mem_backup" "$enc_backup" "$alloc_backup" "$asm_backup" "$vec_backup" "$thread_backup" "$sched_backup" "$conc_backup" "$allowed_backup"
   [ -n "$mutate_tmp" ] && rm -rf "$mutate_tmp"
   [ -n "$air_dir" ] && rm -rf "$air_dir"
   [ -n "$mutation_outcome_tmp" ] && rm -rf "$mutation_outcome_tmp"
@@ -393,7 +403,7 @@ require_mutated() {
       "$layout_gen:$layout_backup" "$slices_gen:$slices_backup" "$basic_lean:$basic_backup" \
       "$lemmas_lean:$lemmas_backup" "$round_lean:$round_backup" "$mem_lean:$mem_backup" \
       "$enc_lean:$enc_backup" "$alloc_lean:$alloc_backup" "$asm_zig:$asm_backup" "$vec_lean:$vec_backup" \
-      "$thread_lean:$thread_backup" "$sched_lean:$sched_backup" "$conc_lean:$conc_backup"; do
+      "$thread_lean:$thread_backup" "$sched_lean:$sched_backup" "$conc_lean:$conc_backup" "$allowed_lean:$allowed_backup"; do
     cmp -s "${pair%%:*}" "${pair#*:}" || return 0
   done
   echo "error: $1: the mutation changed no source file (its pattern no longer matches?)" >&2
@@ -655,16 +665,16 @@ else
   cp "$alloc_backup" "$alloc_lean"
 fi
 
-echo "== mutation (i): air2lean_asm_bswap32 returns x unchanged (diff-test archive) ==" >&2
+echo "== mutation (i): the instruction model's bswap returns its operand unchanged (Lean runtime) ==" >&2
 if ! want_mutation i; then
   echo "mutation (i): skipped (not in this shard)"
 elif ! has_example asm; then
   echo "mutation (i): skipped (AIR2LEAN_EXAMPLES excludes asm)"
 else
-  sed -i.bak 's/return @byteSwap(x);/return x;/' "$asm_zig"
+  sed -i.bak 's/^  | \.bswap, a => Zig\.byteSwap a$/  | .bswap, a => a/' "$asm_zig"
   rm -f "$asm_zig.bak"
-  grep -q 'return x;' "$asm_zig" || {
-    echo "error: mutation (i): sed did not change air2lean_asm_bswap32" >&2
+  grep -q '^  | \.bswap, a => a$' "$asm_zig" || {
+    echo "error: mutation (i): sed did not change UnOp.eval's bswap" >&2
     exit 1
   }
 
@@ -1022,9 +1032,10 @@ if ! want_mutation ac; then
 elif ! has_example sync; then
   echo "mutation (ac): skipped (AIR2LEAN_EXAMPLES excludes sync)"
 else
-  sed -i.bak 's/^  let woke := wakeSet m.waiters p n cs$/  let woke : Array ThreadId := #[]/' "$thread_lean"
+  # Both wakes: `futexWake` (at a key) and `futexWakePtr` (at a pointer, the one the std code calls).
+  sed -i.bak 's/^\( *\)let woke := wakeSet m.waiters k n cs$/\1let woke : Array ThreadId := #[]/' "$thread_lean"
   rm -f "$thread_lean.bak"
-  grep -q '^  let woke : Array ThreadId := #\[\]$' "$thread_lean" || {
+  [ "$(grep -c '^ *let woke : Array ThreadId := #\[\]$' "$thread_lean")" -eq 2 ] || {
     echo "error: mutation (ac): sed did not change futexWake" >&2
     exit 1
   }
@@ -1088,6 +1099,42 @@ else
   proof_report "mutation (af)" Proofs.Threads.Disjoint
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$thread_backup" "$thread_lean"
+fi
+
+echo "== mutation (ag): an allowed result of a NaN is only the model's NaN (Lean runtime, proof build) ==" >&2
+if ! want_mutation ag; then
+  echo "mutation (ag): skipped (not in this shard)"
+elif ! has_example floats; then
+  echo "mutation (ag): skipped (AIR2LEAN_EXAMPLES excludes floats)"
+else
+  sed -i.bak 's/^  if x\.isNaN then r\.isNaN = true else r = x$/  if x.isNaN then r = x else r = x/' "$allowed_lean"
+  rm -f "$allowed_lean.bak"
+  grep -q '^  if x\.isNaN then r = x else r = x$' "$allowed_lean" || {
+    echo "error: mutation (ag): sed did not change Float.Allowed" >&2
+    exit 1
+  }
+
+  proof_report "mutation (ag)" Proofs.Floats.AllowedNeg
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$allowed_backup" "$allowed_lean"
+fi
+
+echo "== mutation (ah): @min/@max of +0 and -0 may give only +0 (Lean runtime, proof build) ==" >&2
+if ! want_mutation ah; then
+  echo "mutation (ah): skipped (not in this shard)"
+elif ! has_example floats; then
+  echo "mutation (ah): skipped (AIR2LEAN_EXAMPLES excludes floats)"
+else
+  sed -i.bak 's/^  if Float\.zeroSignVaries a b then r = Float\.zero false ∨ r = Float\.zero true$/  if Float.zeroSignVaries a b then r = Float.zero false/' "$allowed_lean"
+  rm -f "$allowed_lean.bak"
+  [ "$(grep -c '^  if Float\.zeroSignVaries a b then r = Float\.zero false$' "$allowed_lean")" -eq 2 ] || {
+    echo "error: mutation (ah): sed did not change Float.MinAllowed and Float.MaxAllowed" >&2
+    exit 1
+  }
+
+  proof_report "mutation (ah)" Proofs.Floats.AllowedNeg
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$allowed_backup" "$allowed_lean"
 fi
 
 [ "$mutations_run" -gt 0 ] || { echo "error: selection ran no mutations" >&2; exit 1; }

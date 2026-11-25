@@ -31,8 +31,12 @@ class Guards(unittest.TestCase):
         self.path = self.air / "thread_tuples.empty.json"
         self.path.write_text(json.dumps({"schema":11,"zig_version":"0.16.0", "target_endian":"little", "name":"thread_tuples.empty"}))
         self.manifest = {"source_sha256": hashlib.sha256((self.root / "thread_tuples.zig").read_bytes()).hexdigest(),
-            "air":{"zig_version":"0.16.0","schema":11}, "functions":["empty"],
-            "air_sha256":{self.path.name:hashlib.sha256(self.path.read_bytes()).hexdigest()}}
+            "air":{"schema":11}, "versions":["0.16.0"], "functions":["empty"],
+            "air_sha256":{"0.16.0":{self.path.name:hashlib.sha256(self.path.read_bytes()).hexdigest()}}}
+        self.save()
+
+    def rehash(self):
+        self.manifest["air_sha256"]["0.16.0"][self.path.name] = hashlib.sha256(self.path.read_bytes()).hexdigest()
         self.save()
 
     def save(self):
@@ -72,16 +76,25 @@ class Guards(unittest.TestCase):
         data = json.loads(self.path.read_text())
         data["schema"] = 10
         self.path.write_text(json.dumps(data))
-        self.manifest["air_sha256"][self.path.name] = hashlib.sha256(self.path.read_bytes()).hexdigest()
-        self.save()
+        self.rehash()
         self.check(False, "wrong schema")
+
+    def test_wrong_version(self):
+        data = json.loads(self.path.read_text())
+        data["zig_version"] = "0.17.1"
+        self.path.write_text(json.dumps(data))
+        self.rehash()
+        self.check(False, "wrong zig_version")
+
+    def test_unlisted_version_directory(self):
+        (self.root / "air/0.17.1").mkdir()
+        self.check(False, "version directories")
 
     def test_wrong_function(self):
         data = json.loads(self.path.read_text())
         data["name"] = "thread_tuples.wrong"
         self.path.write_text(json.dumps(data))
-        self.manifest["air_sha256"][self.path.name] = hashlib.sha256(self.path.read_bytes()).hexdigest()
-        self.save()
+        self.rehash()
         self.check(False, "function inventory")
 
 class ExportGate(unittest.TestCase):
@@ -109,7 +122,7 @@ manifest=json.loads(Path('tests/roadmap/thread-tuples/provenance.json').read_tex
 mode=os.environ.get('FAKE_AIR_MODE','good')
 version=os.environ.get('FAKE_AIR_VERSION','0.16.0')  # zig-pin: test double
 names=['thread_tuples.'+n for n in manifest['functions']] + manifest['stdlib_functions']
-if version!='0.16.0': names.remove('thread_tuples.groupMixed')
+if version in ('0.14.1','0.15.2'): names.remove('thread_tuples.groupMixed')
 if mode=='missing': names.pop()
 if mode=='duplicate': names.append(names[0])
 for i, name in enumerate(names):
@@ -161,6 +174,9 @@ for i, name in enumerate(names):
 
     def test_previous_version_no_group(self):
         self.check(True, version="0.15.2")
+
+    def test_default_version_has_group(self):
+        self.check(True, version="0.17.1")
 
     def test_missing_callee(self):
         self.check(False, mode="missing", expected="function inventory")
@@ -304,6 +320,9 @@ class ProofTrustScan(unittest.TestCase):
         # Isolate the source scan from unrelated AIR/provenance checks.
         (self.fixture / "check-artifacts.py").write_text("pass\n")
         self.proof = self.fixture / "ThreadTuples/Proofs.lean"
+        # The scan reads both proof files; the tests below vary one and keep the other clean.
+        self.witness = self.fixture / "ThreadTuples/Nonvacuity.lean"
+        self.witness.write_text("theorem clean : True := by trivial\n")
 
     def check(self, expected):
         result = subprocess.run(["bash", str(self.fixture / "check.sh"), "--check-artifacts"],
@@ -321,6 +340,16 @@ class ProofTrustScan(unittest.TestCase):
                 # The original scan also rejected forbidden words in comments.
                 self.proof.write_text(f"theorem clean : True := by trivial\n-- {word}\n")
                 self.check(f"proof contains an untrusted declaration: {self.proof.relative_to(self.root)}:2:")
+
+    def test_forbidden_word_in_the_nonvacuity_witness_rejected(self):
+        self.proof.write_text("theorem clean : True := by trivial\n")
+        self.witness.write_text("theorem clean : True := by trivial\n-- sorry\n")
+        self.check(f"proof contains an untrusted declaration: {self.witness.relative_to(self.root)}:2:")
+
+    def test_missing_nonvacuity_witness_rejected(self):
+        self.proof.write_text("theorem clean : True := by trivial\n")
+        self.witness.unlink()
+        self.check("proof scan failed:")
 
     def test_unreadable_sources_rejected(self):
         self.check("proof scan failed:")  # Missing file.

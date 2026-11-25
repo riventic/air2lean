@@ -12,6 +12,7 @@ import ZigLean.Mem.ErrWidth
 import ZigLean.Vec
 import Air2Lean.Device
 import Air2Lean.AsmAllowlist
+import Air2Lean.AsmIsa
 
 /-!
 # Subset checker
@@ -206,8 +207,15 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
     let l := layouts[id]?.getD {}
     -- `Canon.lean` rewrites the whole-byte lanes that 0.16.0 also addressed as elements.
     if l.isLanePtr && !l.laneBitPtr then
+      -- Zig 0.17.1 only: `&v[i]` of such a lane is an element pointer (`Canon.laneElemPtrs`),
+      -- which a value of the lane pointer type (the vector's address) is not.
+      if l.vectorIndex.isSome && wholeByteLane types layouts child then
+        throw s!"{fnName}: near line {line}: a value of a lane pointer type whose lane is a whole \
+          power-of-two number of bytes (vector_index; a parameter, a stored or returned `&v[i]`) \
+          is outside the subset: only `&v[i]` used where it is made is modelled, as an element \
+          pointer"
       throw s!"{fnName}: near line {line}: a pointer to a vector lane (vector_index) is outside \
-        the subset, except a comptime lane of an integer or `bool` vector with a schema-12 \
+        the subset, except a comptime lane of an integer, float or `bool` vector with a schema-12 \
         profile of Zig {", ".intercalate (ZigVersion.lanePtrVersions.map toString)} for the LLVM backend \
         ({Target.llvmBackend}) on {", ".intercalate Dialect.lanePtrTargets}"
     if nullablePtrTy types layouts id && l.isVolatile then
@@ -1522,11 +1530,16 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     -- and result types and uses `Zig.ptrAddr`/`Zig.ptrFromAddr` (M20). An optional pointer
     -- (`?*T`) is `Option Zig.Ptr` in the model, null = `none` = address 0: a bitcast to another
     -- optional pointer (a `@constCast`) is a no-op, and one from a pointer is Lean's coercion
-    -- `Zig.Ptr → Option Zig.Ptr` (wrapping). Up to 0.16.0 (`BitCast.memory`) three more
-    -- casts have explicit rules (`ZigLean/Mem/Repr.lean`): `?*T` → `*U` unwraps and requires
-    -- non-null (`Zig.optPtrUnwrap`), `?*T` → `usize` gives 0 for null (`Zig.optPtrAddr`), and
-    -- `usize` → `?*T` gives null for 0 (`Zig.optPtrFromAddr`). Any other bitcast to or from an
-    -- optional pointer is rejected.
+    -- `Zig.Ptr → Option Zig.Ptr` (wrapping). Three more casts have explicit rules
+    -- (`ZigLean/Mem/Repr.lean`) in every Zig version: `?*T` → `*U` (`@ptrCast`) unwraps and
+    -- requires non-null (`Zig.optPtrUnwrap`), `?*T` → `usize` (`@intFromPtr`) gives 0 for null
+    -- (`Zig.optPtrAddr`), and `usize` → `?*T` (`@ptrFromInt`) gives null for 0
+    -- (`Zig.optPtrFromAddr`). They are pointer casts, not `@bitCast`s: Sema rejects a `@bitCast`
+    -- to or from an optional pointer in 0.16.0 and 0.17.1 alike, so 0.17.0's redefinition of
+    -- `@bitCast` (`BitCast.logical`) does not reach them, and 0.17.1 writes the same three casts
+    -- as `ptr_cast`, `int_from_ptr` and `ptr_from_int` where 0.16.0 writes `bitcast`
+    -- (`Canon.lean` `versionTags`). A context without a version rejects them. Any other bitcast
+    -- to or from an optional pointer is rejected.
     let isOptPtr (t : TyId) : Bool := match cx.types[t]? with
       | some (.optional c) => match cx.types[c]? with | some (.ptr ..) => true | _ => false
       | _ => false
@@ -1537,7 +1550,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     | some aty =>
       let isPtr (t : TyId) : Bool := match cx.types[t]? with | some (.ptr ..) => true | _ => false
       let isUsize (t : TyId) : Bool := cx.types[t]? == some (.int false 64)
-      let memCast := cx.bitCast == some .memory
+      let versioned := cx.bitCast.isSome
       let nullable (t : TyId) := nullablePtrTy cx.types cx.layouts t
       -- `?*allowzero T`/`?[*c]T` (payload and flag) is a value only: Zig 0.16.0 and 0.17.1
       -- miscompile its `@ptrCast` and `@ptrFromInt` (`docs/upstream/optional-nullable-casts.md`),
@@ -1560,9 +1573,9 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         unless isOptScalarPtr (if isOptPtr ty then ty else aty) do
           cx.fail line "converting between a C/allowzero pointer and an optional slice is outside the qualified pointer fragment"
         return line
-      let unwrapRule := memCast && optSinglePtrTy cx.types cx.layouts aty &&
+      let unwrapRule := versioned && optSinglePtrTy cx.types cx.layouts aty &&
         (singlePtrTy cx.types cx.layouts ty || isUsize ty)
-      let fromAddrRule := memCast && isUsize aty && optSinglePtrTy cx.types cx.layouts ty
+      let fromAddrRule := versioned && isUsize aty && optSinglePtrTy cx.types cx.layouts ty
       if (isOptPtr aty && !isOptPtr ty && !unwrapRule) ||
           (isOptPtr ty && !isOptPtr aty && !isPtr aty && !fromAddrRule) then
         throw s!"{fnName}: near line {line}: a bitcast between an optional pointer (`?*T`) and \
@@ -1846,6 +1859,10 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   | .asm source isVolatile clobbers outputs inputs =>
     if op.isSpinHint && cx.types[ty]? != some .void then
       throw s!"{fnName}: near line {line}: a spin hint must return void"
+    -- Every `%[name]` names one operand, as the compiler resolves it (`checkAsmOperandNames`),
+    -- whether the block is allowlisted or a device event.
+    if let .error e := checkAsmOperandNames source ((outputs ++ inputs).map (·.name)) then
+      throw s!"{fnName}: near line {line}: asm {source.quote}: {e} (M21, A01)"
     -- Register operands (M21) and the explicit effect contract (A01, `Air2Lean/AsmContract.lean`):
     -- every operand value is an integer, so `Emit.lean` can map it to a `BitVec`.
     let isIntTy (tid : TyId) : Bool := match cx.types[tid]? with | some (.int ..) => true | _ => false
@@ -1979,6 +1996,29 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       if rg.access == .write && (operandTy rg.base).any constPtr then
         throw s!"{fnName}: near line {line}: an asm memory region writes through a const \
           pointer (A01)"
+    -- A02 (premise ASM-07): the block of an `isa` allowlist entry is a defined function over the
+    -- instruction model. At this op's operand widths the template must decode, and what the
+    -- instructions read and write must match the declared operands and clobbers
+    -- (`Air2Lean/AsmIsa.lean`); the entry's reviewed fault must agree with the instructions.
+    if let some entry := op.asmAllowEntry? cx.targetArch then
+      if entry.semantics == .isa then
+        let bitsOf (t : Option TyId) : Nat := match t.bind (cx.types[·]?) with
+          | some (.int _ b) => b
+          | _ => 0
+        let outBits := outputs.map fun o => bitsOf <| match o.ref with
+          | none => some ty
+          | some r => (cx.valTy? r).bind (ptrChild cx.types)
+        let inBits := inputs.map fun i => bitsOf (i.ref.bind cx.valTy?)
+        match asmIsaBlock cx.targetArch source outputs inputs outBits inBits clobbers
+            entry.regions with
+        | .error e =>
+          throw s!"{fnName}: near line {line}: asm {source.quote} (operand widths \
+            {(outBits ++ inBits).toList}) is rejected: {e.message} (A02, premise ASM-07)"
+        | .ok block =>
+          if block.mayFault != (entry.fault != .never) then
+            throw s!"{fnName}: near line {line}: asm {source.quote}: the allowlist entry's fault \
+              condition disagrees with the instruction model on whether the block can fault \
+              (Air2Lean/AsmAllowlist.lean, A02)"
     pure line
   -- The operator must exist for the lane type (Sema: bitwise ops on `bool` and integer lanes,
   -- arithmetic on integer and float lanes); the result is one lane.
@@ -4247,26 +4287,51 @@ def externUnbound (caller : String) (e : ExternDecl) (why : String) : String :=
   s!"{caller}: CALLEE_EXTERN_UNBOUND: extern function '{e.name}'\
     {(e.library.map (s!" (library '{·}')")).getD ""} {why} (docs/air-json.md §Extern calls)"
 
+/-- The first position at which the extern declaration `e` of `f` and the signature of its
+definition differ (`compatibleType`: exact modeled type and layout, no casts), if any. -/
+def externSignatureMismatch (f : Func) (e : ExternDecl) (definition : Func) : Option String :=
+  if e.params.size != definition.params.size then some "parameter count"
+  else if !compatibleType f definition e.ret definition.ret then some "result type"
+  else (e.params.zip definition.params).zipIdx.findSome? fun ((x, y), k) =>
+    if compatibleType f definition x y then none else some s!"parameter {k} type"
+
 /-- Bind each extern call (`externCallee`, `docs/air-json.md` §Extern calls) at its linker
 symbol, never at a Zig declaration name:
 (a) to a registry model whose `symbol` is the extern callee and whose `extern.library` is the
     declared library, if the program does not define the symbol; the call stays an extern
     callee, which the model implements;
-(b) else to the one `export fn` of the program that defines the symbol, with the declared
-    calling convention; the call becomes a direct call of that function, whose signature
-    `checkProgram` then checks like any direct call's.
+(b) else to the one function of the program that defines the symbol, with the declared
+    calling convention and signature (`externSignatureMismatch`: no conversion at the
+    boundary); the call becomes a direct call of that function, which `checkProgram` then
+    checks like any direct call.
+The definitions of a symbol are the `export` of each function's own file (an `export fn`) and
+the records of the compilation's export table (`table`, `docs/air-json.md` §Export table: the
+`@export` symbols too, and those of functions without AIR in the set). (b) needs exactly one,
+a function with AIR in the set; a weak one binds only with `assumeWeak`
+(`--assume-weak-exports`, premise EXT-07: the image links no other definition of the symbol).
 A variadic extern is outside the subset. The result is the rewritten functions and one
 rejection per (caller, symbol) that neither binds; callers that need all-or-nothing use
 `resolveExterns`. -/
-def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #[]) :
+def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #[])
+    (table : Array ExportRecord := #[]) (assumeWeak : Bool := false) :
     Except String (Array Func × Array (String × String)) := do
   -- Every definition of each symbol; more than one is ambiguous only for a call that needs it.
-  let mut exports : Std.HashMap String (Array Func) := {}
+  -- A table record that repeats a function's own `export` is that definition, not a second one.
+  let mut exports : Std.HashMap String (Array ExportRecord) := {}
+  let mut defined : Std.HashMap String Func := {}
   for f in funcs do
     if (externSymbol? f.name).isSome then
       throw s!"{f.name}: a function name cannot have the extern callee form 'extern:<symbol>'"
+    defined := defined.insert f.name f
     if let some e := f.exportDecl then
-      exports := exports.insert e.name ((exports.getD e.name #[]).push f)
+      exports := exports.insert e.name ((exports.getD e.name #[]).push
+        { name := e.name, weak := false, function := some (f.name, e.cc) })
+  for r in table do
+    let known := exports.getD r.name #[]
+    unless r.function.isSome && known.contains r do exports := exports.insert r.name (known.push r)
+  let definedBy (r : ExportRecord) : String := match r.function with
+    | some (name, _) => s!"'{name}'"
+    | none => "a symbol that is not a function of the compilation"
   let mut unbound : Array (String × String) := #[]
   let mut out : Array Func := #[]
   for f in funcs do
@@ -4304,17 +4369,17 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
         { name := symbol, library := none, cc := "", params := #[], ret := 0, varargs := false }
       let reject (why : String) := unbound.push (f.name, externUnbound f.name e (note.getD "" ++ why))
       let definitions := exports.getD symbol #[]
-      let names := ", ".intercalate (definitions.map (·.name)).toList
+      let names := ", ".intercalate (definitions.map definedBy).toList
       if e.varargs then
         unbound := reject "is variadic, which is outside the subset"
       else if definitions.size > 1 then
-        unbound := reject s!"is defined by several functions ({names}) (CALLEE_AMBIGUOUS)"
+        unbound := reject s!"has several definitions ({names}) (CALLEE_AMBIGUOUS)"
       else if (anyStdModel? callee).any (match ·.kind with | .os _ => true | _ => false) then
         -- (c) a libc OS primitive with a built-in model (`OsFn`, e.g. `extern:sched_yield`):
         -- the call stays an extern callee, which the model implements. It must be libc's
         -- symbol, called directly, and not defined by the program.
         if let some target := definitions[0]? then
-          unbound := reject s!"is both defined by '{target.name}' and a built-in OS primitive (CALLEE_AMBIGUOUS)"
+          unbound := reject s!"is both defined by {definedBy target} and a built-in OS primitive (CALLEE_AMBIGUOUS)"
         else if note.isSome then
           unbound := reject "is a built-in OS primitive, whose address is outside the model"
         else unless e.library == some "c" do
@@ -4324,17 +4389,38 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
           | throw s!"{f.name}: model '{m.symbol}' has no extern binding"
         -- The linker would resolve the symbol to the program's own definition, not the model's.
         if let some target := definitions[0]? then
-          unbound := reject s!"is both defined by '{target.name}' and bound to registry model '{callee}' (CALLEE_AMBIGUOUS)"
+          unbound := reject s!"is both defined by {definedBy target} and bound to registry model '{callee}' (CALLEE_AMBIGUOUS)"
         else unless declared.isNone || binding.library == e.library do
           unbound := reject s!"is declared with another library than its registry model's ({binding.library.getD "none"})"
       else if let some target := definitions[0]? then
-        let cc := (target.exportDecl.map (·.cc)).getD ""
-        if declared.isNone || cc == e.cc then renames := renames.insert callee target.name
-        else unbound := reject (s!"is declared with calling convention '{e.cc}', but its \
-          definition '{target.name}' has '{cc}'")
+        match target.function with
+        | none =>
+          unbound := reject "is defined by the compilation, but not as a function (an exported \
+            variable, or an `@export` of an extern declaration)"
+        | some (name, cc) =>
+          let some definition := defined[name]?
+            | unbound := reject s!"is defined by '{name}', which has no AIR in the set (export it \
+                with the program)"
+              continue
+          if target.weak && !assumeWeak then
+            unbound := reject s!"has only the weak definition '{name}' (`@export` with `.linkage = \
+              .weak`), which another definition in the linked image would replace; \
+              --assume-weak-exports states that the image links none (premise EXT-07)"
+          else if declared.isSome && cc != e.cc then
+            unbound := reject (s!"is declared with calling convention '{e.cc}', but its \
+              definition '{name}' has '{cc}'")
+          else if let some position := declared.bind (externSignatureMismatch f · definition) then
+            -- The bound call is a direct call: no conversion stands at the boundary. A
+            -- declaration that agrees with the definition only at the C ABI (translate-c's
+            -- `[*c]const u8` for Zig libc's `[*:0]const c_char`) is not bound.
+            unbound := reject s!"differs from its definition '{name}' in its {position}: the \
+              two may agree at the C ABI, but the binding converts no value \
+              (docs/c-frontend.md §libc boundary)"
+          else renames := renames.insert callee name
       else
-        unbound := reject s!"has no definition in the program (an `export fn {symbol}` in the AIR set) and no \
-          registry model '{callee}' (--model-registry, docs/external-models.md)"
+        unbound := reject s!"has no definition in the program (an `export fn {symbol}` in the AIR set, or an \
+          `@export` record of the export table) and no registry model '{callee}' \
+          (--model-registry, docs/external-models.md)"
     let rename (n : String) := renames.getD n n
     out := out.push (if renames.isEmpty then f
       else { f with body := f.body.map (renameCallees rename),
@@ -4346,9 +4432,10 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
   return (out, unbound)
 
 /-- `resolveExternsCollect`, rejecting the program at the first unbound extern call. -/
-def resolveExterns (funcs : Array Func) (models : Array ModelBinding := #[]) :
+def resolveExterns (funcs : Array Func) (models : Array ModelBinding := #[])
+    (table : Array ExportRecord := #[]) (assumeWeak : Bool := false) :
     Except String (Array Func) := do
-  let (resolved, unbound) ← resolveExternsCollect funcs models
+  let (resolved, unbound) ← resolveExternsCollect funcs models table assumeWeak
   if let some (_, message) := unbound[0]? then throw message
   return resolved
 

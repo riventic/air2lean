@@ -16,6 +16,13 @@ schema in `docs/air-json.md`, for the Lean 4 translator to read.
   which the illegal behaviour already permits. The only per-version file of the exporter.
 - `<version>/TAGS.md`: that version's AIR differences from the other versions.
 
+After analysis the exporter writes two tables beside the function files, each only when the
+compilation needs it: `error-table.air2lean` (the error numbering, for a compilation that
+converts between errors and integers) and, on Zig 0.17.1, `export-table.air2lean` (every
+linker symbol the compilation defines, for a compilation that defines one with `@export`: its
+name, linkage and exporting function). The translator binds an extern call to a symbol that
+`@export` defines through the second (`docs/air-json.md` §Export table).
+
 New dumps include `target_endian` (`little` or `big`) in schema 11. The translator rejects
 explicitly non-little-endian dumps; older dumps without this optional field assume little
 endian. Memory layout checks also enforce the model's 64-bit ABI.

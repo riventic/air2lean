@@ -290,6 +290,16 @@ def laneBits? : Ty → Option Nat
   | .bool => some 1
   | _ => none
 
+/-- A lane type of a whole power-of-two number of bytes (`u8`, `u32`, `f64`, not `u9`, `u24`,
+`f80`, `bool`). `&v[i]` of such a lane is a plain element pointer: Zig up to 0.16.0 types it so,
+and `Canon.laneElemPtrs` gives Zig 0.17.1's lane pointer that form. Every other lane pointer is
+a bit-pointer into the vector's integer (`lanePtrLayout`). The two rules split on this one
+predicate, so no lane pointer is modelled both ways. -/
+def wholeByteLane (types : Array Ty) (layouts : Array Layout) (lane : TyId) : Bool :=
+  let bits := match types[lane]? with | some (.int _ b) | some (.float b) => b | _ => 0
+  let bytes := ((layouts[lane]?).bind (·.size)).getD 0
+  bytes ∈ [1, 2, 4, 8, 16] && bits == 8 * bytes
+
 /-- A bit-pointer whose export has no `vector_index`. It can be a packed field pointer or a lane
 pointer. -/
 def Layout.unverifiedBitPtr (l : Layout) : Bool :=
@@ -766,6 +776,18 @@ structure ExternDecl where
 structure ExportDecl where
   name : String
   cc : String
+  deriving Repr, Inhabited, BEq
+
+/-- One definition of a linker symbol by the compilation (`docs/air-json.md` §Export table): a
+record of the exporter's `export-table.air2lean`, or the `export` of a function's own file.
+`function` is the defining function's name (its module-qualified key) and calling convention,
+`none` for a symbol that is not a function of the compilation (an exported variable, an
+`@export` of an extern declaration). A `weak` definition is the symbol's only while the image
+links no other one (premise EXT-07). -/
+structure ExportRecord where
+  name : String
+  weak : Bool
+  function : Option (String × String)
   deriving Repr, Inhabited, BEq
 
 /-- The callee name of a call to the extern function `symbol`. No function's fully qualified

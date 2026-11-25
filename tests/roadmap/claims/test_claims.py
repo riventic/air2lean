@@ -333,15 +333,29 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(claims.claims_of({'conclusion': {'head': 'Eq'}}, HEADS), frozenset())
 
     def test_asm_effect_opaque_carries_fault_premise(self):
-        """airAsmFx_ is classified by the same policy rule table as airAsm_ and, over an absence
-        claim, carries ASM-04 too (ASM-03 implies ASM-01 implies ASM-04)."""
+        """airAsmFx_ is classified by the same policy rule table as airAsm_ (an opaque, ASM-01,
+        with an effect contract, ASM-03) and, over an absence claim, carries ASM-04 too (ASM-01
+        implies ASM-04)."""
         report = copy.deepcopy(FIXTURE)
         for theorem in report['theorems']:
             if theorem['name'] in ('ClaimFixture.ret_run', 'ClaimFixture.panic_pure'):
                 theorem['opaque_dependencies'] = ['Asm.airAsmFx_3653072158']
         theorems = classified(report)
-        self.assertEqual(theorems['ClaimFixture.ret_run']['premises'], ['ASM-03', 'ASM-04'])
-        self.assertEqual(theorems['ClaimFixture.panic_pure']['premises'], ['ASM-03'])
+        self.assertEqual(theorems['ClaimFixture.ret_run']['premises'], ['ASM-01', 'ASM-03', 'ASM-04'])
+        self.assertEqual(theorems['ClaimFixture.panic_pure']['premises'], ['ASM-01', 'ASM-03'])
+
+    def test_defined_asm_block_carries_instruction_model_premise(self):
+        """A02: a closure that reaches the instruction model (a defined `airIsa_<n>` block) carries
+        ASM-07 and no opaque premise; its fault set is the model's, so an absence claim adds no
+        ASM-04."""
+        report = copy.deepcopy(FIXTURE)
+        for theorem in report['theorems']:
+            if theorem['name'] in ('ClaimFixture.ret_run', 'ClaimFixture.panic_pure'):
+                theorem['runtime_modules'] = theorem['runtime_modules'] + ['ZigLean.Isa.X86']
+        theorems = classified(report)
+        self.assertEqual(theorems['ClaimFixture.ret_run']['premises'], ['ASM-07'])
+        self.assertEqual(theorems['ClaimFixture.panic_pure']['premises'], ['ASM-07'])
+        self.assertEqual(theorems['ClaimFixture.ret_some']['premises'], [])
 
     def test_asm_closure_carries_fault_premise(self):
         """S7: a no-panic or guaranteed-return claim over an inline-asm opaque carries ASM-04
@@ -374,7 +388,7 @@ class ClassifyTests(unittest.TestCase):
         report = copy.deepcopy(FIXTURE)
         for theorem in report['theorems']:
             if theorem['name'] == 'ClaimFixture.ret_run':
-                theorem['runtime_modules'] = theorem['runtime_modules'] + ['ZigLean.Conc.Word']
+                theorem['runtime_modules'] = theorem['runtime_modules'] + ['ZigLean.Conc.Base.Word']
         goal = claims.check_goal({'theorem': 'ClaimFixture.ret_run', 'strength': 'total_correctness',
                                   'domain': 'all'}, theorems_of(report), definition='ClaimFixture.ret')
         self.assertEqual((goal['status'], goal['premises']), ('accepted', ['ORD-06']))
@@ -393,7 +407,7 @@ class ClassifyTests(unittest.TestCase):
         report = copy.deepcopy(FIXTURE)
         for theorem in report['theorems']:
             if theorem['name'] == 'ClaimFixture.ret_run':
-                theorem['runtime_modules'] = theorem['runtime_modules'] + ['ZigLean.Conc.Word']
+                theorem['runtime_modules'] = theorem['runtime_modules'] + ['ZigLean.Conc.Base.Word']
         goal = {'theorem': 'ClaimFixture.ret_run', 'strength': 'total_correctness', 'domain': 'all'}
 
         def status(source, targets):
@@ -737,7 +751,8 @@ class ManifestTests(unittest.TestCase):
         # The statement fixture is synthetic CLI input, not a kernel replay receipt. Use the
         # ordinary writer BEFORE the fake compiler, keeping its real Unit/source/path checks.
         # No extractor is needed to construct these already-recorded statement shapes.
-        with mock.patch.object(assumptions, 'prepared_tool', contextlib.nullcontext):
+        with mock.patch.object(assumptions, 'prepared_tool', contextlib.nullcontext), \
+                mock.patch.object(universe, 'native_code', return_value=[]):
             context = universe.prepare_compilation(selected, by_file, output)
 
         def compile_fixture(source, root, olean, lean_path, log, **kwargs):

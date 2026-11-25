@@ -17,7 +17,7 @@ _spec = importlib.util.spec_from_file_location(
     "alloc_translated_cli", HERE.parent / "alloc-translated" / "test_cli.py")
 base = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(base)
-base.AIR = HERE / "air" / "0.16.0"
+base.AIR = HERE / "air"
 CYCLIC = "a pointer cast has unresolved or cyclic symbolic storage provenance"
 
 

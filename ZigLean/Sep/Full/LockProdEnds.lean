@@ -10,15 +10,12 @@ takes the ended thread's, and the joiner's part takes the ended thread's). For o
 `FLock.Inv.ghost` and `FLock.Inv.join`. This file gives them for the lock the product keeps in the
 other lock's view, and for the product.
 
-- `FLock.Facts.ghostOff`, `Facts.ghost`, `Facts.join`: the lock's invariant without the parts
-  (`FLock.Facts`) over a change of one thread's place outside the lock's code, and over a join
-  (`LockWord.WInv.ghostOff`, `WInv.join`).
-- `FLock.Keeps.ghost`, `Keeps.join`: what the product keeps of `B`. No thread that ends or joins
-  holds `B`, so the holders' resources and their owners' clocks stay (`Mem.OwnsRes.join_other`),
-  and a join keeps the blocks, so `B`'s side stays.
+- `FLock.Keeps.ghost`, `Keeps.join`: what the product keeps of `B` (`FLock.Facts.ghost`,
+  `Facts.join`, `ZigLean/Sep/Full/LockProd.lean`). No thread that ends or joins holds `B`, so the
+  holders' resources and their owners' clocks stay (`Mem.OwnsRes.join_other`), and a join keeps
+  the blocks, so `B`'s side stays (`joinedB_join`, `ZigLean/Conc/Base/Lock.lean`).
 - `FLock.Pair.U_ghost`, `U_join`: the product's rest, when the client's own `U` is kept.
 - `FLock.Pair.inv_ghost`, `inv_join`: `A`'s invariant with the product's rest, over each.
-- `joinedB_join`, `join_mem`: the joined threads and the memory after a join.
 -/
 
 namespace Zig
@@ -26,100 +23,9 @@ namespace Full
 
 open FAssn Conc Proto
 
-/-- **The joined threads after a join of `u`**: `u`, and those before it. -/
-theorem joinedB_join {m m' : Mem} {t u : ThreadId} (hu0 : u ≠ 0)
-    (hj : ((Thread.join u).run { m with current := t }).run = some (.ok ((), m')))
-    (w : ThreadId) : joinedB m' w = if w = u then true else joinedB m w := by
-  obtain ⟨rec, hr, -, rfl⟩ := Proto.join_eq hj
-  have hul : u < m.threads.size := (Array.getElem?_eq_some_iff.mp hr).1
-  unfold joinedB
-  simp only [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds]
-  by_cases hw : w = u
-  · subst hw; simp [hu0, hul]
-  · simp [hw, Ne.symm hw]
-
-/-- **The memory after a join by `t`**: the current thread is `t`, the clocks grew, and there are
-as many threads; the blocks, the atomic locations, the record of accesses and the futex queue
-stay. -/
-theorem join_mem {m m' : Mem} {t u : ThreadId}
-    (hj : ((Thread.join u).run { m with current := t }).run = some (.ok ((), m'))) :
-    ∃ cs ts, m' = { m with current := t, clocks := cs, threads := ts } ∧
-      ts.size = m.threads.size ∧ ∀ w : Nat, VClock.le (m.clocks[w]!) (cs[w]!) = true := by
-  obtain ⟨rec, -, -, rfl⟩ := Proto.join_eq hj
-  refine ⟨_, _, rfl, by simp, fun w => ?_⟩
-  show VClock.le (m.clocks[w]!) ((m.clocks.set! t _)[w]!) = true
-  rw [getElem!_set!_ite]
-  split
-  · rename_i h; rw [h.1]
-    exact VClock.le_trans (VClock.le_bump _ _) (VClock.le_merge_left _ _)
-  · exact VClock.le_refl _
-
 namespace FLock
 
-variable {γ : Type} {L : FLock γ} {G : ThreadId → γ} {m : Mem} {rL : Res}
-
-/-- **The facts over a change of thread `t`'s ghost value outside the lock's code**
-(`Inv.ghostOff` without the parts): `t` is `out` or `away` before and not in the futex queue, and
-`out`, `gone` or `away` after; it holds nothing. -/
-theorem Facts.ghostOff {t : ThreadId} {g : γ} (hf : L.Facts G m rL)
-    (hph : L.ph (G t) = .out ∨ L.ph (G t) = .away) (hq : ∀ w ∈ m.waiters, w.1 ≠ t)
-    (hg : L.ph g = .out ∨ L.ph g = .gone ∨ L.ph g = .away) (hheld : L.held g = rnil)
-    (hRk : ∀ r, L.R G r → L.R (upd G t g) r) : L.Facts (upd G t g) m rL := by
-  have hnh : (L.ph (G t)).held = false := by rcases hph with h | h <;> rw [h] <;> rfl
-  have hgh : (L.ph g).held = false := by rcases hg with h | h | h <;> rw [h] <;> rfl
-  have hne : L.ph (G t) ≠ .gone := by rcases hph with h | h <;> rw [h] <;> decide
-  have hphu : ∀ u, L.ph (upd G t g u) = if u = t then L.ph g else L.ph (G u) := fun u => by
-    unfold upd; split <;> rfl
-  have hholds : ∀ u, (L.ph (upd G t g u)).held = true ↔ (L.ph (G u)).held = true := by
-    intro u; rw [hphu]; split
-    · rename_i h; subst h; rw [hgh, hnh]
-    · exact Iff.rfl
-  have hfree := free_iff_of (L := L) hholds
-  have hgw : ∀ u, L.ph (upd G t g u) ≠ .gone → L.ph (G u) ≠ .gone := fun u h => by
-    rw [hphu] at h; split at h
-    · rename_i e; subst e; exact hne
-    · exact h
-  refine ⟨by rw [pl_upd]; exact hf.w.ghostOff hph hq hg fun _ => hf.w.live t hne, hf.loff,
-    fun hF' => ?_, fun h => hf.busy fun h' => h (hfree.mpr h'), fun u => ?_, fun u hu => ?_,
-    fun u hu => ?_⟩
-  · obtain ⟨h1, h2⟩ := hf.free (hfree.mp hF')
-    exact ⟨hRk rL h1, h2.weaken fun u h => hgw u h⟩
-  · unfold upd; split
-    · rw [hheld]; exact FHeap.disjoint_empty _
-    · exact hf.pdisj u
-  · unfold upd; split
-    · exact hheld
-    · rename_i h; rw [hphu, ite_eq_right h] at hu; exact hf.idle u hu
-  · have hut : u ≠ t := fun e => by
-      have := (hholds u).mp hu; rw [e, hnh] at this; cases this
-    rw [upd_ne _ _ hut]; exact hRk _ (hf.res u ((hholds u).mp hu))
-
-/-- **The facts over the end of thread `t`**, which is out of the lock's code: it is `out`, `gone`
-or `away` after, and holds nothing (`Facts.ghostOff`; `Inv.ghost` without the parts). -/
-theorem Facts.ghost {t : ThreadId} {g : γ} (hf : L.Facts G m rL) (hph : L.ph (G t) = .out)
-    (hg : L.ph g = .out ∨ L.ph g = .gone ∨ L.ph g = .away) (hheld : L.held g = rnil)
-    (hRk : ∀ r, L.R G r → L.R (upd G t g) r) : L.Facts (upd G t g) m rL :=
-  hf.ghostOff (.inl hph) (hf.w.notQ_mem (t := t) (by show L.ph (G t) ≠ _; rw [hph]; decide)
-    (by show L.ph (G t) ≠ _; rw [hph]; decide) (by show L.ph (G t) ≠ _; rw [hph]; decide))
-    hg hheld hRk
-
-/-- **The facts over a join of `u` by `t`**, both out of the lock's code (`Inv.join` without the
-parts): the joiner stays `out` and holds nothing. -/
-theorem Facts.join {m' : Mem} {t u : ThreadId} {g : γ} (hf : L.Facts G m rL) (hut : u ≠ t)
-    (hu0 : u ≠ 0) (hout : L.ph (G t) = .out) (huo : L.ph (G u) = .gone)
-    (hj : ((Thread.join u).run { m with current := t }).run = some (.ok ((), m')))
-    (hgo : L.ph g = .out) (hgh : L.held g = rnil) (hRk : ∀ r, L.R G r → L.R (upd G t g) r) :
-    L.Facts (upd G t g) m' rL := by
-  obtain ⟨hw, hown⟩ := hf.w.join hut hu0 (by exact hout) (by exact huo) hj
-  have hheld : L.held (G t) = rnil := hf.idle t (by rw [hout]; rfl)
-  have hk := keep_upd L (G := G) (t := t) (g := g) (hgo.trans hout.symm) (hgh.trans hheld.symm)
-  refine hf.relabel (fun w => (hk w).1) (fun w => (hk w).2) hRk hw
-    (fun hF => ⟨hown _ _ (hf.free hF).2.1, hown _ _ (hf.free hF).2.2⟩) fun w => ?_
-  by_cases e : w = t
-  · rw [e, upd_self, hgh]; exact FHeap.disjoint_empty _
-  · rw [upd_ne _ _ e]; exact hf.pdisj w
-
-variable {B : FLock γ} {rH rX : Res}
+variable {γ : Type} {B : FLock γ} {G : ThreadId → γ} {m : Mem} {rL rH rX : Res}
 
 /-- **The end of thread `t`, which is out of `B`'s code, keeps what the product keeps of `B`**
 (`Facts.ghost`): `t` held nothing of `B`, so the holders' resources stay. -/

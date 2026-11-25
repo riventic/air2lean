@@ -12,8 +12,11 @@ The generated `Tgt.captures` classifies every captured field from its AIR type. 
 
 ## Qualification and provenance
 
-`provenance.json` records the twelve required AIR roots, their hashes, inspected std Thread
-source hashes, and the declared Zig 0.16.0 export profile. The checked source SHA-256 is
+`provenance.json` records the twelve required AIR roots, their hashes for each exported Zig
+version (`air/0.17.1`, `air/0.16.0`), inspected std Thread source hashes, and the declared export
+profile. Both exports translate to the same body, the retained `ThreadTuples/Gen.lean`;
+`check.sh` checks the proofs, runtime schedules and fallible-policy schedules against each
+version's fresh translation. The checked source SHA-256 is
 `77ecd985ecaf82efa54412941189af7b1eaed6e5338a90b1bc4eb20363336a9d`.
 The export command uses `-target x86_64-linux -mcpu=baseline -OReleaseSafe
 -fno-error-tracing`. The checked AIR is schema 12 and carries the exported
@@ -44,8 +47,8 @@ which of the two occurred. Both follow from the missing await.
 The native test runs the failing path with `std.Io.Threaded` `concurrent_limit = .nothing`. It
 exercises the failure exit natively; it cannot itself detect a late write to a freed frame.
 
-The inspected Zig 0.14.1, 0.15.2 and 0.16.0 std `Thread.zig` implementations copy the entire
-generic `Args` into child storage and invoke `@call(.auto, f, args)`. Zig 0.16 `Io.Group`
+The inspected Zig 0.14.1, 0.15.2, 0.16.0 and 0.17.1 std `Thread.zig` implementations copy the
+entire generic `Args` into child storage and invoke `@call(.auto, f, args)`. Zig 0.16 and 0.17 `Io.Group`
 converts the capture to `std.meta.ArgsTuple`, copies the context by value, and calls the
 worker with that tuple. AIR fields supply logical argument order; translation does not
 assume tuple byte offsets or host layout. Source inspection alone does not qualify live

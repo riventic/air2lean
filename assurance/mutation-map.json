@@ -48,8 +48,26 @@
       "categories": [
         "layout"
       ],
-      "negative_tests": [],
-      "mutants": []
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/big-endian/test_cli.py",
+          "anchor": "run(binary, mixed, error=\"mixed AIR profiles\")"
+        },
+        {
+          "path": "tests/roadmap/big-endian/test_cli.py",
+          "anchor": "run(binary, bad, error=\"target_endian differs from profile.endian\")"
+        },
+        {
+          "path": "tests/roadmap/big-endian/test_cli.py",
+          "anchor": "(\"reject.atomicU12.json\""
+        }
+      ],
+      "mutants": [
+        {"name": "bitptr-load-little-order", "path": "tests/roadmap/big-endian/mutations.py", "category": "layout"},
+        {"name": "bitptr-store-little-order", "path": "tests/roadmap/big-endian/mutations.py", "category": "layout"},
+        {"name": "big-endian-instances-dropped", "path": "tests/roadmap/big-endian/mutations.py", "category": "profile-selection"}
+      ],
+      "note": "mutations.py mutates the retained s390x translation; check.sh runs Diff.lean against each mutant and requires a full run whose output differs from the committed s390x observation."
     },
     "T04": {
       "categories": [
@@ -580,6 +598,11 @@
           "name": "f80_lane_stride",
           "path": "tests/roadmap/lang-long-tail/mutants.py",
           "category": "layout"
+        },
+        {
+          "name": "lane_constant_offset",
+          "path": "tests/roadmap/lang-long-tail/mutants.py",
+          "category": "layout"
         }
       ]
     },
@@ -622,6 +645,11 @@
           "name": "foreign_domain",
           "path": "tests/roadmap/error-storage/mutations.py",
           "category": "other"
+        },
+        {
+          "name": "optional_flag",
+          "path": "tests/roadmap/error-storage/mutations.py",
+          "category": "layout"
         },
         {
           "name": "error_param_constant",
@@ -1107,9 +1135,9 @@
         },
         {
           "name": "spurious-failure-removed",
-          "path": "tests/roadmap/weak-cas/Mutation.lean",
+          "path": "tests/roadmap/weak-cas/qualify.py",
           "category": "other",
-          "anchor": "C11_ASSERTION: spurious failure branch removed"
+          "anchor": "\"weak-failure-mutant\""
         }
       ],
       "note": "Retry loops under permitted spurious failure: weak-cas Runtime.lean and the Mutation.lean spurious-failure-removed mutant (scripts/weak-cas.sh). Message precision: Messages.lean (kernel decide +kernel and runtime, run by the weak-CAS gate) checks repeated equal values as distinct write events, coherent read pairs, CAS on an older equal message, release sequences and the rejection (.unspecified) of overlapping atomic accesses of another size. Mutants v and ad (scripts/mutate.sh) change the CAS comparison and stale-message selection; their kill is the proof build."
@@ -1366,6 +1394,14 @@
         {
           "path": "tests/roadmap/sentinel-realloc/Check.lean",
           "anchor": "\"non-power-of-two alignment\""
+        },
+        {
+          "path": "tests/roadmap/interfaces/Interfaces/SentinelSpec.lean",
+          "anchor": "| .error e => ⟪e = \"OutOfMemory\"⟫ ⋆ (I.granted old 0 φ bs ⋆ I.fee φ)"
+        },
+        {
+          "path": "tests/roadmap/interfaces/test_cli.py",
+          "anchor": "assert \"Ext\" not in closed and \"extCall\" not in closed and \"throw .illegal)\" in closed"
         }
       ],
       "mutants": [
@@ -1383,8 +1419,19 @@
           "name": "s",
           "path": "scripts/mutate.sh",
           "category": "other"
+        },
+        {
+          "name": "sentinel-alloc-omits-extra-byte",
+          "path": "tests/roadmap/callbacks/mutants.py",
+          "category": "layout"
+        },
+        {
+          "name": "sentinel-stored-at-item-0",
+          "path": "tests/roadmap/callbacks/mutants.py",
+          "category": "layout"
         }
-      ]
+      ],
+      "note": "byte-sentinel and mutate.sh s mutate the retiring hand model (ZigLean/Mem/Alloc.lean); the sentinel-* mutants mutate the translated std allocator path (interfaces/Interfaces/Sentinel.lean), killed by the unchanged Interfaces.SentinelSpec in interfaces/check.sh."
     },
     "M05": {
       "categories": [
@@ -1498,8 +1545,25 @@
     },
     "F04": {
       "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "negative_tests": [
+        {
+          "path": "Proofs/Floats/AllowedNeg.lean",
+          "anchor": "theorem nan_varies"
+        },
+        {
+          "path": "Proofs/Floats/AllowedNeg.lean",
+          "anchor": "theorem min_zero_varies"
+        },
+        {
+          "path": "Proofs/Floats/AllowedNeg.lean",
+          "anchor": "theorem toInt_allowed_nan"
+        }
+      ],
+      "mutants": [
+        {"name": "ag", "path": "scripts/mutate.sh", "category": "other"},
+        {"name": "ah", "path": "scripts/mutate.sh", "category": "other"}
+      ],
+      "note": "The clients isNan_allowed/clamp_allowed survive a collapsed relation (a stronger hypothesis still proves them); the negative theorems that variation is real kill both mutants."
     },
     "F05": {
       "categories": [
@@ -1606,6 +1670,11 @@
           "category": "other"
         },
         {
+          "name": "rw_read_dropped",
+          "path": "tests/roadmap/asm-effects/harness.py",
+          "category": "forwarding"
+        },
+        {
           "name": "env_read_constant",
           "path": "tests/roadmap/callbacks/mutants.py",
           "category": "forwarding"
@@ -1625,8 +1694,24 @@
     },
     "A02": {
       "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/asm-effects/test_cli.py",
+          "anchor": "def wide_incl"
+        },
+        {
+          "path": "tests/roadmap/asm-effects/test_env_cli.py",
+          "anchor": "def check_isa_coverage"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "i",
+          "path": "scripts/mutate.sh",
+          "category": "other"
+        }
+      ],
+      "note": "A02 decision 1: a block outside the instruction model or whose operands do not match its instructions is rejected (test_cli.py), only uncovered entries stay opaque (test_env_cli.py), and mutation (i) breaks the model's bswap, which the differential test of examples/asm must detect."
     },
     "A03": {
       "categories": [
@@ -1637,7 +1722,7 @@
       "negative_tests": [
         {
           "path": "tests/roadmap/asm-wrappers/test_harness.py",
-          "anchor": "def test_rejects_unbound_or_reshaped_opaques"
+          "anchor": "def test_rejects_unbound_or_uninterpreted_asm"
         },
         {
           "path": "tests/roadmap/asm-wrappers/test_harness.py",
@@ -1913,7 +1998,21 @@
           "anchor": "/-- Without a range premise the sum may wrap: nothing is proved. -/"
         }
       ],
-      "mutants": []
+      "mutants": [
+        {
+          "name": "queue-overflow-premise-dropped",
+          "path": "tests/roadmap/loop-tactics/Queue.lean",
+          "category": "other",
+          "anchor": "/-- `queue-overflow-premise-dropped`: the same walk without the overflow premise fails. -/"
+        },
+        {
+          "name": "queue-sum-off-by-one",
+          "path": "tests/roadmap/loop-tactics/Queue.lean",
+          "category": "other",
+          "anchor": "/-- `queue-sum-off-by-one`: the same walk does not prove a sum one too large. -/"
+        }
+      ],
+      "note": "The queue mutants are fail_if_success walks next to a control walk in Queue.lean; the CI step that elaborates the file records their kills."
     },
     "P04": {
       "categories": [],
@@ -2068,7 +2167,29 @@
           "anchor": "--source-map-json changed generated Lean"
         }
       ],
-      "mutants": []
+      "mutants": [
+        {
+          "name": "fingerprint-callers-not-invalidated",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "forwarding"
+        },
+        {
+          "name": "fingerprint-body-ignored",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "fingerprint-translator-revision-ignored",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "sidecar-runtime-revision-unchecked",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        }
+      ],
+      "note": "Python mutants of scripts/semantic-fingerprints.py, killed by test_fingerprints.py (FingerprintTests): a callee change must invalidate its callers, a body change its own fingerprint, a translator change every fingerprint; a sidecar with an inconsistent runtime revision is rejected."
     },
     "P08": {
       "categories": [],

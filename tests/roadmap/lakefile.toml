@@ -84,11 +84,13 @@ name = "PackedCasts"
 srcDir = "packed-casts"
 globs = ["PackedCasts.+"]
 
-# big-endian/concurrency.sh: as NanBits, per Zig version and target (BigEndian.Conc.V0_17_1.X64.Gen).
+# big-endian/check.sh and concurrency.sh: as NanBits, per Zig version and target
+# (BigEndian.V0_17_1.X64.Gen, BigEndian.Conc.V0_17_1.X64.Gen), the shared lines (BigEndian.Lines)
+# and the byte-order facts (BigEndian.Proofs).
 [[lean_lib]]
 name = "BigEndian"
 srcDir = "big-endian"
-globs = ["BigEndian.Conc.+"]
+globs = ["BigEndian.+"]
 
 # As NanBits: one retained translation and one model per Zig version.
 [[lean_lib]]

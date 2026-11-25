@@ -39,7 +39,8 @@ LEAN_PATH="$dir:$2" lake env lean -R "$dir" --run "$3/Cases.lean" > "$dir/log" 2
 if [ "$status" = 0 ] || ! grep -q "^uncaught exception: illegal-behavior case" "$dir/log"; then
   echo "mutant $name survived (status $status)" >&2; cat "$dir/log" >&2; exit 1
 fi
-echo "mutant $name killed"' mutant {} "$lean_path" "$here" ::: "$work"/mutants/*/
+echo "mutant $name killed"
+python3 -B scripts/mutation_kill_log.py --check "$3/check.sh" "$3/mutations.py" "$name"' mutant {} "$lean_path" "$here" ::: "$work"/mutants/*/
 
 if [ -n "${AIR2LEAN_ZIG:-}" ]; then
   [ "$("$AIR2LEAN_ZIG" version)" = 0.16.0 ] || { echo 'native.zig needs stock Zig 0.16.0' >&2; exit 1; }

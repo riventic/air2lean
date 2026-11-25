@@ -282,6 +282,52 @@ class SyntheticTests(unittest.TestCase):
                 gi.compose([source], output, "0.17.1", require_profile=True, host=host)
                 self.assertEqual(json.loads((output / "demo.f.json").read_text()), doc)
 
+    def test_kept_profile_must_be_the_golden_hosts_target(self):
+        # A bare `linux` host is x86_64-linux and `darwin` aarch64-macos, enrolled or not
+        # (docs/architecture-audit/golden-host.md: a Mac export filed as the linux golden).
+        for host, target, namespaced in (("linux", "aarch64-macos-none", False),
+                                         ("linux", "aarch64-macos-none", True),
+                                         ("linux", "aarch64-linux-gnu", False),
+                                         ("linux", "aarch64-linux-gnu", True),
+                                         ("darwin", "x86_64-linux-gnu", False),
+                                         ("linux-aarch64", "x86_64-linux-gnu", False)):
+            with self.subTest(host=host, target=target, namespaced=namespaced), \
+                    tempfile.TemporaryDirectory() as work:
+                source, output = Path(work) / "air", Path(work) / "output"
+                source.mkdir()
+                output.mkdir()
+                doc = json.loads(air("demo.f", "0.17.1", 12))
+                doc["profile"] = profile("0.17.1", target)
+                (source / "demo.f.json").write_text(json.dumps(doc))
+                with self.assertRaisesRegex(ValueError, f"actual profile {target} does not match golden host {host} "):
+                    gi.compose([source], output, "0.17.1", require_profile=namespaced, host=host)
+                self.assertEqual(list(output.iterdir()), [])
+
+    def test_golden_check_refuses_another_hosts_export_filed_as_linux(self):
+        for path in (self.fx.root / "tests/golden/demo/air").glob("*.json"):
+            doc = json.loads(path.read_text())
+            doc.update(schema=12, zig_version="0.15.2", profile=profile("0.15.2", "aarch64-macos-none"))
+            path.write_text(json.dumps(doc))
+        self.assertFails("0.15.2 linux: actual profile aarch64-macos-none does not match golden host linux "
+                         "(x86_64-linux)", "check")
+
+    def test_profile_record_names_the_translated_target(self):
+        def generated(target):
+            record = dict(correspondence="model", float_semantics="ieee",
+                          profile=dict(profile("0.17.1", target), schema=12))
+            return gi.PROFILE_PREFIX + json.dumps(record).encode() + b"\nimport ZigLean\n"
+        self.assertIsNone(gi.header_error(generated("x86_64-linux-gnu"), generated("x86_64-linux-gnu")))
+        self.assertIn("translation used aarch64-macos-none",
+                      gi.header_error(generated("x86_64-linux-gnu"), generated("aarch64-macos-none")))
+        # A darwin case whose body equals the linux one shares the linux module and its record.
+        self.assertIsNone(gi.header_error(generated("x86_64-linux-gnu"), generated("aarch64-macos-none"), own=False))
+        golden = lambda host: gi.Case("p", [], [], "golden", "l", host=host)
+        self.assertTrue(gi.owns_record(golden("linux"), "Proofs/Demo/Gen.lean"))
+        self.assertTrue(gi.owns_record(golden("linux"), "tests/golden/0.17.1/demo/Gen.lean"))
+        self.assertFalse(gi.owns_record(golden("darwin"), "Proofs/Demo/Gen.lean"))
+        self.assertTrue(gi.owns_record(golden("darwin"), "tests/golden/0.17.1/demo/Gen-darwin.lean"))
+        self.assertFalse(gi.owns_record(golden("linux-aarch64"), "tests/golden/0.17.1/demo/Gen-linux.lean"))
+
     def test_namespaced_composition_requires_explicit_valid_host(self):
         source = self.fx.write("single-air/demo.f.json", json.dumps(dict(
             schema=12, zig_version="0.17.1", name="demo.f", body=[], profile=profile("0.17.1")))).parent

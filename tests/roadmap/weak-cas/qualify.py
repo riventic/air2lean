@@ -16,6 +16,8 @@ import time
 
 ROOT = Path(__file__).resolve().parents[3]
 FIXTURES = ROOT / "tests/roadmap/weak-cas"
+sys.path.insert(0, str(ROOT / "scripts"))
+from mutation_kill_log import killed as log_kill  # noqa: E402
 
 
 def digest(path):
@@ -200,7 +202,7 @@ def main():
             executable_log = run(tool + "-executable", ["lake", "env", "which", tool])
             executable = Path(executable_log.read_text().strip()).resolve()
             report["lean_toolchain_binaries"][tool] = {"path": str(executable), "sha256": digest(executable)}
-        run("build", ["lake", "build", "ZigLean", "ZigLean.Conc.WeakWord", "Air2Lean", "air2lean"])
+        run("build", ["lake", "build", "ZigLean", "ZigLean.Sep.Full.WordRules", "Air2Lean", "air2lean"])
         run("shipped-client-proofs", ["lake", "build", "Proofs"])
         translator = ROOT / ".lake/build/bin/air2lean"
         report["translator_binary"] = {"path": str(translator), "sha256": digest(translator)}
@@ -219,6 +221,7 @@ def main():
         mutant.write_text(original.replace(marker, "cmpxchgAt 0 .acqRel .acquire 1 p (42#8) (7#8)"))
         run("weak-failure-mutant", ["lake", "env", "lean", "-R", artifacts, "--run", mutant],
             expected_failure="C11_ASSERTION: spurious failure branch removed")
+        log_kill("tests/roadmap/weak-cas/qualify.py", "spurious-failure-removed", "scripts/weak-cas.sh")
         if args.mode == "full":
             patched = compiler("patched-zig", "AIR2LEAN_ZIG_AIR")
             stock = compiler("stock-zig", "AIR2LEAN_ZIG")

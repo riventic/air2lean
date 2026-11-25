@@ -8,7 +8,7 @@ case "${1:---check-artifacts}" in
     [ "$#" -eq 1 ] || { echo 'usage: check.sh --native' >&2; exit 2; }
     : "${AIR2LEAN_ZIG_NATIVE:?set a stock host Zig binary}"
     version=$("$AIR2LEAN_ZIG_NATIVE" version)
-    case "$version" in 0.14.1|0.15.2|0.16.0) ;; *) echo "unsupported native Zig: $version" >&2; exit 1;; esac
+    case "$version" in 0.14.1|0.15.2|0.16.0|0.17.1) ;; *) echo "unsupported native Zig: $version" >&2; exit 1;; esac
     "$AIR2LEAN_ZIG_NATIVE" test -OReleaseSafe --dep thread_tuple_source \
       -Mroot=tests/roadmap/thread-tuples/native.zig \
       -Mthread_tuple_source=tests/roadmap/thread-tuples/thread_tuples.zig
@@ -32,7 +32,7 @@ case "${1:---check-artifacts}" in
     ;;
   --adapter-contract)
     [ "$#" -eq 2 ] || { echo 'usage: check.sh --adapter-contract OUTPUT_DIR' >&2; exit 2; }
-    : "${AIR2LEAN_ZIG_AIR:?set matching patched 0.16 AIR compiler}"
+    : "${AIR2LEAN_ZIG_AIR:?set a patched 0.17.1 or 0.16.0 AIR compiler}"
     mkdir -p "$2"
     [ -z "$(find "$2" -mindepth 1 -maxdepth 1 -print -quit)" ] || { echo 'adapter output must be empty' >&2; exit 1; }
     adapter_output=$(cd -- "$2" && pwd)
@@ -61,19 +61,20 @@ case "${1:---check-artifacts}" in
 esac
 python3 -B scripts/lean-deps.py --build tests/roadmap/thread-tuples
 python3 tests/roadmap/thread-tuples/check-artifacts.py
-python3 - tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean <<'PYPROOF'
+python3 - tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean \
+    tests/roadmap/thread-tuples/ThreadTuples/Nonvacuity.lean <<'PYPROOF'
 from pathlib import Path
 import re
 import sys
 
-path = Path(sys.argv[1])
-try:
-    source = path.read_text(encoding="utf-8")
-except (OSError, UnicodeError) as error:
-    sys.exit(f"proof scan failed: {path}: {error}")
-for number, line in enumerate(source.splitlines(), 1):
-    if re.search(r"\b(sorry|admit|native_decide|axiom)\b", line):
-        sys.exit(f"proof contains an untrusted declaration: {path}:{number}: {line}")
+for path in map(Path, sys.argv[1:]):
+    try:
+        source = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        sys.exit(f"proof scan failed: {path}: {error}")
+    for number, line in enumerate(source.splitlines(), 1):
+        if re.search(r"\b(sorry|admit|native_decide|axiom)\b", line):
+            sys.exit(f"proof contains an untrusted declaration: {path}:{number}: {line}")
 PYPROOF
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first' >&2; exit 1; }
@@ -81,23 +82,33 @@ lean_cmd=(lake env lean)
 if [ -n "${AIR2LEAN_LEAN:-}" ]; then lean_cmd=("$AIR2LEAN_LEAN"); fi
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-thread-tuples.XXXXXX")
 trap 'rm -rf "$work"' EXIT
-mkdir -p "$work/ThreadTuples"
-"$translator" tests/roadmap/thread-tuples/air/0.16.0 -o "$work/ThreadTuples/Gen.lean" \
-  --namespace ThreadTuples --prefix thread_tuples.
-python3 scripts/normalize-generated.py report "$work/ThreadTuples/Gen.lean" \
-  tests/roadmap/thread-tuples/air/0.16.0 "$work/generated-report.json"
-python3 scripts/normalize-generated.py compare tests/roadmap/thread-tuples/ThreadTuples/Gen.lean \
-  "$work/ThreadTuples/Gen.lean" "$work/generated-report.json"
-export LEAN_PATH="$work:$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
-"${lean_cmd[@]}" -R "$work" -o "$work/ThreadTuples/Gen.olean" "$work/ThreadTuples/Gen.lean"
-"${lean_cmd[@]}" -R "$repo_root/tests/roadmap/thread-tuples" tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean
-"${lean_cmd[@]}" -R "$repo_root/tests/roadmap/thread-tuples" --run tests/roadmap/thread-tuples/ThreadTuples/Runtime.lean
-# groupMixed under failing assignment: every exit must finish the group before freeing its frame.
-mkdir -p "$work/ThreadTuplesFallible"
-"$translator" tests/roadmap/thread-tuples/air/0.16.0 -o "$work/ThreadTuplesFallible/Gen.lean" \
-  --namespace ThreadTuplesFallible --prefix thread_tuples. --spawn-policy fallible
-"${lean_cmd[@]}" -R "$work" -o "$work/ThreadTuplesFallible/Gen.olean" "$work/ThreadTuplesFallible/Gen.lean"
-"${lean_cmd[@]}" -R "$repo_root/tests/roadmap/thread-tuples" --run tests/roadmap/thread-tuples/ThreadTuples/FallibleRuntime.lean
+lean_path=$repo_root/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}
+# Every exported version (provenance.json): the proofs, runtime schedules and fallible-policy
+# schedules are checked against that version's fresh translation, which is the retained one.
+for version in $(python3 -c 'import json, sys; print(*json.load(open(sys.argv[1]))["versions"])' \
+    tests/roadmap/thread-tuples/provenance.json); do
+  air=tests/roadmap/thread-tuples/air/$version
+  gen="$work/$version"
+  mkdir -p "$gen/ThreadTuples" "$gen/ThreadTuplesFallible"
+  "$translator" "$air" -o "$gen/ThreadTuples/Gen.lean" --namespace ThreadTuples --prefix thread_tuples.
+  python3 scripts/normalize-generated.py report "$gen/ThreadTuples/Gen.lean" "$air" "$gen/generated-report.json"
+  python3 scripts/normalize-generated.py compare tests/roadmap/thread-tuples/ThreadTuples/Gen.lean \
+    "$gen/ThreadTuples/Gen.lean" "$gen/generated-report.json"
+  export LEAN_PATH="$gen:$lean_path"
+  "${lean_cmd[@]}" -R "$gen" -o "$gen/ThreadTuples/Gen.olean" "$gen/ThreadTuples/Gen.lean"
+  "${lean_cmd[@]}" -R "$repo_root/tests/roadmap/thread-tuples" -o "$gen/ThreadTuples/Proofs.olean" \
+    tests/roadmap/thread-tuples/ThreadTuples/Proofs.lean
+  # The non-vacuity witnesses of the proofs' specs (imported by tests/roadmap/strength-log/ThreadFixtures.lean).
+  "${lean_cmd[@]}" -R "$repo_root/tests/roadmap/thread-tuples" tests/roadmap/thread-tuples/ThreadTuples/Nonvacuity.lean
+  "${lean_cmd[@]}" -R "$repo_root/tests/roadmap/thread-tuples" --run tests/roadmap/thread-tuples/ThreadTuples/Runtime.lean
+  # groupMixed under failing assignment: every exit must finish the group before freeing its frame.
+  "$translator" "$air" -o "$gen/ThreadTuplesFallible/Gen.lean" \
+    --namespace ThreadTuplesFallible --prefix thread_tuples. --spawn-policy fallible
+  "${lean_cmd[@]}" -R "$gen" -o "$gen/ThreadTuplesFallible/Gen.olean" "$gen/ThreadTuplesFallible/Gen.lean"
+  "${lean_cmd[@]}" -R "$repo_root/tests/roadmap/thread-tuples" --run tests/roadmap/thread-tuples/ThreadTuples/FallibleRuntime.lean
+  echo "thread tuple proofs and schedules passed on the $version translation"
+done
+export LEAN_PATH="$work:$lean_path"
 "${lean_cmd[@]}" --run tests/roadmap/thread-tuples/Pipeline.lean "$work/TuplePipeline.lean"
 "${lean_cmd[@]}" -R "$work" "$work/TuplePipeline.lean"
 "${lean_cmd[@]}" -R "$work" "$work/TuplePipeline.lean.slices.lean"
@@ -118,4 +129,6 @@ mutation_status=0
 "${lean_cmd[@]}" -R "$work" "$work/Mutated.lean" >"$work/mutation.log" 2>&1 || mutation_status=$?
 # Require normal exit 1 and only the located dispatcher equality's rfl diagnostic.
 python3 tests/roadmap/thread-tuples/classify_mutant.py "$mutation_status" "$work/mutation.log" "$work/Mutated.lean"
+python3 -B scripts/mutation_kill_log.py --check tests/roadmap/thread-tuples/check.sh \
+  tests/roadmap/thread-tuples/check.sh tuple-capture-order
 echo 'thread tuple artifact, runtime, signature, slice, and order mutation gates passed'

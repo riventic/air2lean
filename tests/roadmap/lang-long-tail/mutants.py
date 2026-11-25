@@ -16,6 +16,8 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 LIB = HERE.parents[2] / ".lake/build/lib/lean"
+sys.path.insert(0, str(HERE.parents[2] / "scripts"))
+from mutation_kill_log import killed as log_kill  # noqa: E402
 
 MUTANTS = {
     # L10: the one-name error passed on is replaced by another name.
@@ -48,6 +50,11 @@ MUTANTS = {
     "f80_lane_stride": ("FloatLanes", "float_lanes",
                         r"Zig\.loadLane \(Zig\.F80\) 20 16 80 i2",
                         "Zig.loadLane (Zig.F80) 20 16 64 i2"),
+    # L09: a constant lane pointer (`&g[2]`) that writes the neighbouring lane (bit 9, not 18),
+    # against the stock 0.17.1 probe (0.17.1's translation is the retained 0.16.0 text).
+    "lane_constant_offset": ("LaneShapes", "lane_shapes",
+                             r"Zig\.storeLane \(α := BitVec 9\) 5 2 18 \(⟨some 0, 0⟩ : Zig\.Ptr\) i3",
+                             "Zig.storeLane (α := BitVec 9) 5 2 9 (⟨some 0, 0⟩ : Zig.Ptr) i3", "0.17.1"),
 }
 
 
@@ -75,6 +82,7 @@ def main():
         killed = result.returncode == 1 and "differs from the model" in result.stderr
         assert killed, f"{name}: the mutant survived or failed otherwise\n{result.stdout}{result.stderr}"
         print(f"lang-long-tail mutant killed: {name}")
+        log_kill("tests/roadmap/lang-long-tail/mutants.py", name, "tests/roadmap/lang-long-tail/check.sh")
 
 
 if __name__ == "__main__":

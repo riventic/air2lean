@@ -251,6 +251,22 @@ def zig_air_key(root, version, host):
     return digest(preimage), preimage
 
 
+ZIG_BUILD_RSS_MIB = 16384
+
+
+def zig_build_rss_mib():
+    """The RSS cap of the patched-compiler build guard: 16 GiB, or the enclosing guard's cap when that
+    is lower (a nested guard may not exceed its parent, build-guard.py `inherited`, else exit 75)."""
+    try:
+        grant = json.loads(os.environ.get('AIR2LEAN_GUARD_ADMISSION') or 'null')
+    except ValueError:
+        grant = None
+    outer = grant.get('rss_mib') if isinstance(grant, dict) else None
+    if isinstance(outer, (int, float)) and not isinstance(outer, bool) and outer > 0:
+        return min(ZIG_BUILD_RSS_MIB, outer)
+    return ZIG_BUILD_RSS_MIB
+
+
 def build_compiler(root, version, host, prefix, no_xcrun, logs):
     """zig-patch/build.sh VERSION PREFIX under scripts/build-guard.py (heavy: ~10 min, ~8 GB)."""
     env = dict(os.environ)
@@ -266,7 +282,7 @@ def build_compiler(root, version, host, prefix, no_xcrun, logs):
     report, log = logs / ('zig-%s.guard.json' % version), logs / ('zig-%s.guard.log' % version)
     command = [sys.executable, str(root / 'scripts/build-guard.py'), '--cwd', str(root),
                '--lock-wait', os.environ.get('AIR2LEAN_LOCK_WAIT', '21600'), '--timeout', '10800',
-               '--rss-mib', '16384', '--log-bytes', str(16 << 20), '--report', str(report), '--log', str(log),
+               '--rss-mib', '%g' % zig_build_rss_mib(), '--log-bytes', str(16 << 20), '--report', str(report), '--log', str(log),
                '--', str(root / 'zig-patch/build.sh'), version, str(prefix)]
     print('building patched Zig %s -> %s (log %s)' % (version, prefix, log), file=sys.stderr)
     try:
@@ -275,7 +291,13 @@ def build_compiler(root, version, host, prefix, no_xcrun, logs):
         if shim:
             shutil.rmtree(shim, ignore_errors=True)
     if code != 0 or not (prefix / 'bin/zig').is_file():
-        raise CasError('building patched Zig %s failed (exit %d); see %s' % (version, code, log), code)
+        # A guard that refuses the build (exit 75) writes its report but never opens the log.
+        try:
+            why = json.loads(report.read_text()).get('error')
+        except (OSError, ValueError):
+            why = None
+        raise CasError('building patched Zig %s failed (exit %d)%s; see %s' % (
+            version, code, ': %s' % why if why else '', log if log.exists() else report), code)
 
 
 def zig_air(root, version, key_only=False):

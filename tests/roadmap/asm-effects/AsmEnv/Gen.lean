@@ -8,7 +8,19 @@ opaque airAsmFx_2096841937 (i0 : BitVec 64) (r0 : Array Zig.Byte) : BitVec 64 ×
 
 opaque airAsmFx_2696465393 (i0 : BitVec 8) (i1 : BitVec 64) : BitVec 64 × BitVec 64 × Array Zig.Byte
 
-opaque airAsm_1506351414 (i0 : BitVec 64) : BitVec 64
+def airIsa_1506351414_block : Zig.Isa.X86.Block where
+  instrs := [.bin .mov .w64 (.loc (.mem 1)) (.vreg 0)]
+  inputs := [(.mem 1, .w64)]
+  outputs := [(.vreg 0, .w64)]
+  early := []
+  clobbers := []
+
+theorem airIsa_1506351414_wf : airIsa_1506351414_block.check = none := by decide
+
+def airIsa_1506351414 (i0 : BitVec 64) : BitVec 64 :=
+  (airIsa_1506351414_block.out [i0.setWidth 64] 0).setWidth 64
+
+attribute [zig_unfold] airIsa_1506351414_block airIsa_1506351414
 
 /-- The memory at program start under the placement `σ`: block `k` is global `k`. -/
 def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ []
@@ -108,7 +120,7 @@ inductive loadmExit where
 def loadm (p0 : Zig.Ptr) : Zig.MemM (BitVec 64) := do
   let e ← ((do
     let i1 ← Zig.load (BitVec 64) 8 p0
-    let i2 ← pure (airAsm_1506351414 i1)
+    let i2 ← pure (airIsa_1506351414 i1)
     pure (.ret i2)) : Zig.MM loadmLocals loadmExit).run' (default : loadmLocals)
   match e with
   | .ret v => pure v

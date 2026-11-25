@@ -108,6 +108,17 @@ theorem WP.liftMem_sub {w : Nat} {a b : BitVec w} {safe : Bool}
       Q G m n :=
   WP.liftMem_pure (by rw [Auto.sub_ok hle]; rfl) rfl (h _ (Auto.sub_val hle))
 
+/-- **A checked unsigned `*` that does not overflow** (as `WP.liftMem_add`): its value as a
+fact. -/
+theorem WP.liftMem_mul {w : Nat} {a b : BitVec w} {safe : Bool}
+    {Q : BitVec w → (ThreadId → γ) → Mem → Nat → Prop}
+    (hlt : a.toNat * b.toNat < 2 ^ w)
+    (h : ∀ r : BitVec w, r.toNat = a.toNat * b.toNat → Q r G m n) :
+    P.WP t (ConcM.liftMem (StateT.lift (Zig.mul false a b safe) : MemM (BitVec w)) :
+      ConcM Tgt (BitVec w)) Q G m n :=
+  WP.liftMem_pure (by rw [Auto.mul_ok hlt]; rfl) rfl
+    (h _ (by rw [BitVec.toNat_mul, Nat.mod_eq_of_lt hlt]))
+
 /-! ## The facts of a step's run (`@[fsym_run]`)
 
 A segment's rule gives the continuation the step's run (`(x.run m).run = some (.ok (a, m'))`);
@@ -231,7 +242,7 @@ theorem WP.spawnC_after {tgt : Tgt} {s : σ}
 
 -- (after the general pure step: tried first, they leave facts instead of a run's equation)
 attribute [fsym] WP.liftMem_liftR
-attribute [fsym] WP.liftMem_add WP.liftMem_sub
+attribute [fsym] WP.liftMem_add WP.liftMem_sub WP.liftMem_mul
 
 -- the total forms first: the rules are tried last-registered first, so a partial protocol
 -- takes the partial triple (no termination needed) and a turn-counting one the total triple

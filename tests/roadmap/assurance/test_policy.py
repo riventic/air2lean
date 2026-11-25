@@ -154,12 +154,20 @@ class PolicyTests(unittest.TestCase):
         self.assertTrue(audit.is_compiler_axiom("fixture._native.bv_decide.ax_3_2"))
 
     def test_opaque_body_does_not_make_an_axiom(self):
-        opaque = self.node("Asm.airAsm_3500345798", "opaque", module="Proofs.Asm.Gen")
-        report = apply_policy(self.raw([opaque["name"]], [opaque]), self.policy)
+        # `rep stosb`: a block outside the instruction model, so still a generated opaque (A02).
+        sources = {"AsmEnv.Gen": "tests/roadmap/asm-effects/AsmEnv/Gen.lean"}
+        opaque = self.node("AsmEnv.airAsmFx_2696465393", "opaque", module="AsmEnv.Gen")
+        report = apply_policy(self.raw([opaque["name"]], [opaque]), self.policy, None, True, sources)
         self.assertEqual(report["status"], "pass")
         self.assertEqual(report["theorems"][0]["axioms"], [])
+        self.assertEqual(report["theorems"][0]["declaration_premises"], ["ASM-01", "ASM-03"])
         opaque["module"] = "Untrusted.Import"
-        self.assertEqual(apply_policy(self.raw([opaque["name"]], [opaque]), self.policy)["status"], "fail")
+        self.assertEqual(apply_policy(self.raw([opaque["name"]], [opaque]), self.policy, None, True, sources)["status"],
+                         "fail")
+        # A block the model covers is a definition: an opaque under its old name in the generated
+        # module of examples/asm is declared by no source, so it is a violation.
+        stale = self.node("Asm.airAsm_3500345798", "opaque", module="Proofs.Asm.Gen")
+        self.assertEqual(apply_policy(self.raw([stale["name"]], [stale]), self.policy)["status"], "fail")
 
     def test_simp_extension_policy_is_exact(self):
         name = "ext._@.ZigLean.SimpAttr.2786263690._hygCtx._hyg.3"
@@ -376,7 +384,7 @@ class GeneratedDeclarationTests(unittest.TestCase):
                               self.node("Fix.airAsm_7", "opaque"), self.node("Fix.airAsmFx_8", "opaque"),
                               self.node("Model.visit", "opaque", "Model"))
         self.assertEqual(found, {"Fix.air2lean_model_0_evidence": ["EXT-02", "EXT-03"],
-                                 "Fix.airAsm_7": ["ASM-01"], "Fix.airAsmFx_8": ["ASM-03"],
+                                 "Fix.airAsm_7": ["ASM-01"], "Fix.airAsmFx_8": ["ASM-01", "ASM-03"],
                                  "Model.visit": ["EXT-01", "EXT-03"]})
 
     def test_unknown_axioms_and_opaques_stay_unclassified(self):

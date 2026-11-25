@@ -164,11 +164,24 @@ private def asmWords (template : String) : List (Option String) :=
   (splitNonEmpty (fun c => c == '\n' || c == '\r' || c == ';') template).flatMap fun statement =>
     (splitNonEmpty Char.isWhitespace statement).map some ++ [none]
 
+/-- One instruction (or prefix) of a template, as the statement scanner reads it. -/
+structure AsmStmt where
+  /-- The mnemonic as the template spells it (`divl`). -/
+  mnemonic : String
+  /-- The mnemonic of the feature row it matched: without its AT&T size suffix (`div`). -/
+  stem : String
+  features : List String
+  /-- A prefix (`rep`, `lock`): the next entry is the instruction it stands before. -/
+  isPrefix : Bool
+  /-- The operand text, cut at commas (empty for a prefix). -/
+  operands : List String
+  deriving Repr
+
 /-- The instructions of a template's words. `pending` is the prefix before the next instruction
 (its mnemonic and `prefixOf`); `mnemonic` holds where the next word is a mnemonic: at the start
 of a statement and after a prefix. The other words are operands. -/
 private def asmWordInstrs (arch : String) : Option (String × List String) → Bool →
-    List (Option String) → Except String (List (String × List String))
+    List (Option String) → Except String (List AsmStmt)
   | some (p, _), _, [] =>
     throw s!"prefix '{p}' ends the template: it would prefix the instruction after the asm"
   | none, _, [] => pure []
@@ -188,15 +201,26 @@ private def asmWordInstrs (arch : String) : Option (String × List String) → B
     let isPrefix := !row.prefixOf.isEmpty
     let rest ← asmWordInstrs arch (if isPrefix then some (word, row.prefixOf) else none) isPrefix
       words
-    pure ((word, row.features) :: rest)
+    -- The operands: the other words of the statement, cut at commas.
+    let operandText := " ".intercalate ((words.takeWhile (·.isSome)).filterMap id)
+    let operands := if isPrefix then [] else
+      (operandText.splitOn ",").map (fun o => o.trimAscii.toString) |>.filter (!·.isEmpty)
+    pure ({ mnemonic := word, stem, features := row.features, isPrefix, operands } :: rest)
 
-/-- The instructions of an asm template on `arch`, in order, each with the features it needs. An
-empty template has no instruction. An error names the first word that is not an instruction of
-the table, or the construct that hides one (fail closed; see the module comment). -/
-def asmTemplateInstrs (arch template : String) : Except String (List (String × List String)) := do
+/-- The instructions of an asm template on `arch`, in order: mnemonic, CPU features and operand
+text. An empty template has no instruction. An error names the first word that is not an
+instruction of the table, or the construct that hides one (fail closed; see the module comment).
+The one statement scanner: the CPU-feature check and the instruction decoder
+(`Air2Lean/AsmIsa.lean`) both read its result. -/
+def asmTemplateStmts (arch template : String) : Except String (List AsmStmt) := do
   if asmTargetArch arch == "aarch64" && (template.splitOn "%%").length > 1 then
     throw "an aarch64 template with '%%': '%%' separates statements on Apple targets (LLVM \
       AArch64MCAsmInfoDarwin), so its instructions are not known"
   asmWordInstrs arch none true (asmWords template)
+
+/-- The instructions of an asm template on `arch`, in order, each with the features it needs
+(`asmTemplateStmts`). -/
+def asmTemplateInstrs (arch template : String) : Except String (List (String × List String)) :=
+  (asmTemplateStmts arch template).map fun stmts => stmts.map fun s => (s.mnemonic, s.features)
 
 end Air2Lean

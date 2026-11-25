@@ -28,6 +28,8 @@ case "${1:-}" in
           "$name" "$status" "$work/$name.log"; then
         cat "$work/$name.log" >&2; exit 1
       fi
+      python3 -B scripts/mutation_kill_log.py --check tests/roadmap/global-payload-pointers/check.sh \
+        tests/roadmap/global-payload-pointers/mutations.py "$name"
     done
     ;;
   --native)

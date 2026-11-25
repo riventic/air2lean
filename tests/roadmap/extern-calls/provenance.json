@@ -2,7 +2,8 @@
   "source_sha256": {
     "extern_calls.zig": "a3b2623b6ec44732a94c42bd9adeec4b5b1c8710d5283232901318620342c5c0",
     "libc_ref.zig": "fab8a2a56bb80a188a19429ae2eb15db8de252e1bc89c7daede0c66a96aef19f",
-    "trusted.zig": "80df9e4b16f1729a84b614975125437ee7ac4420f322cced37922b3bc1594c48"
+    "trusted.zig": "80df9e4b16f1729a84b614975125437ee7ac4420f322cced37922b3bc1594c48",
+    "weak_exports.zig": "615e2999dcaa95826d6abefd3d4f25efa7a0a1283ecd36dcf156e4cfe76d1e5f"
   },
   "air": {
     "exporter": "zig-patch/air-json/json.zig of this branch (scratch compilers built by zig-patch/build.sh)",
@@ -11,7 +12,8 @@
     "error_tracing": false,
     "filters": {
       "air/<version>": "extern_calls.,libc_ref.",
-      "air/0.16.0-trusted": "trusted. (-lc)"
+      "air/0.16.0-trusted": "trusted. (-lc)",
+      "air/0.17.1-weak": "weak_exports. (-mcpu=baseline; with the exporter's export-table.air2lean)"
     }
   },
   "air_sha256": {
@@ -27,6 +29,11 @@
     "0.16.0/extern_calls.greetLen.json": "f2a8b193e689aaa8fdc9ebe09f6645a88a29d700a1e3335868eb317c89e554b8",
     "0.16.0/libc_ref.memset.json": "5294bd265940ff85fdadf7f2d9f624e00f48734ffdbbbcd30b48cab74c1394e9",
     "0.16.0/libc_ref.strlen.json": "c5de7bd83d8bea856fcb31578407343f49387a9a8458ec23f64cfa6ddc3136b3",
-    "0.16.0-trusted/trusted.absSum.json": "c151e846b87671a6088d2ea53aebd353d5ddbca9932653cfdb54335b7132a22e"
+    "0.16.0-trusted/trusted.absSum.json": "c151e846b87671a6088d2ea53aebd353d5ddbca9932653cfdb54335b7132a22e",
+    "0.17.1-weak/export-table.air2lean": "f7f0e58036443fdae52da6d4fc366d075d5e7bf7cbcbd2a0c04f2068d1696fd9",
+    "0.17.1-weak/weak_exports.clampAdd.json": "6aa23d6ef3fbd91c01a97869d8c82a47a75b57fb4ac171c94e81ddf7291acb89",
+    "0.17.1-weak/weak_exports.twice.json": "02a8f5d4cf0fb5144a50ce5c1420b44959032d82bd149a5d37c6140306083c2b",
+    "0.17.1-weak/weak_exports.viaStrong.json": "36bebdb341b9d4de1cb9d0db3460321df014eee64a8b5271ba768a581686318b",
+    "0.17.1-weak/weak_exports.viaWeak.json": "58e809f85bd7b12213095b6eede420d627055bc01054d2ee420de0ba654c4c38"
   }
 }

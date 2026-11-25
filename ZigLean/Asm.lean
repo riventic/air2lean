@@ -3,16 +3,18 @@ import ZigLean.Mem.Basic
 /-!
 # Inline asm effect contract (A01, ASM-03)
 
-The translator turns every accepted `assembly` instruction into an `opaque` pure function and an
-explicit wrapper (`docs/generated-code.md` §Inline asm). The opaque's type is the contract: it
-takes the register inputs and the old value of each read-write (`+r`, `+m`) output, and returns
-one value per output. It cannot touch `Mem` or the locals. Every memory effect of the block is
-in the wrapper:
+The translator turns every accepted `assembly` instruction into a pure function and an explicit
+wrapper (`docs/generated-code.md` §Inline asm). The function is defined over the instruction
+model when the model covers the block (`airIsa_<hash>`, `ZigLean/Isa/X86.lean`, premise ASM-07),
+else it is an `opaque` (`airAsm_<hash>`, premise ASM-01). Its type is the contract: it takes
+the register inputs and the old value of each read-write (`+r`, `+m`) output, and returns one
+value per output. It cannot touch `Mem` or the locals. Every memory effect of the block is in
+the wrapper:
 
 1. `Zig.Asm.guard` over the memory locations that the block writes, when there are two or
    more (two lvalue outputs through memory pointers);
 2. a load of each read-write output's location, in output order;
-3. the opaque call;
+3. the call of the pure function;
 4. a store of each lvalue output to its own location, in output order.
 
 So the block writes exactly its declared locations (`Proofs/Asm/Effects.lean` proves the frame

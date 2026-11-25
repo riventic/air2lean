@@ -12,6 +12,8 @@ spec = importlib.util.spec_from_file_location("dispatch_mutations", Path(__file_
 classifier = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(classifier)
 classifier.REFUTATION = "Tactic `decide` proved that the proposition"
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+from mutation_kill_log import killed as log_kill  # noqa: E402
 
 
 def in_def(source, name, pattern, replacement):
@@ -45,6 +47,7 @@ def main():
         if not classifier.is_semantic_rejection(result.returncode, result.stdout + result.stderr):
             raise AssertionError(f"mutant survived or failed outside semantic assertion: {name}\n{result.stdout}{result.stderr}")
         print(f"indirect call semantic mutant rejected: {name}")
+        log_kill("tests/roadmap/indirect-calls/mutations.py", name, "tests/roadmap/indirect-calls/check.sh")
 
 
 if __name__ == "__main__":

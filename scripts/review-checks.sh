@@ -225,7 +225,7 @@ touch "$mutate/examples/atomics/atomics.zig" "$mutate/examples/recursion/recursi
 for path in Proofs/Basic/Gen.lean Proofs/Options/Gen.lean Proofs/Variants/Gen.lean \
   Proofs/Layout/Gen.lean Proofs/Slices/Gen.lean ZigLean/Basic.lean ZigLean/Lemmas.lean \
   ZigLean/Float/Round.lean ZigLean/Mem/Basic.lean ZigLean/Mem/Enc.lean ZigLean/Mem/Alloc.lean \
-  tests/diff/asm/asm.zig ZigLean/Vec.lean ZigLean/Mem/Thread.lean ZigLean/Conc/Sched.lean \
+  ZigLean/Isa/X86.lean ZigLean/Vec.lean ZigLean/Mem/Thread.lean ZigLean/Conc/Sched.lean \
   ZigLean/Conc.lean; do
   mkdir -p "$mutate/$(dirname "$path")"
   cp "$repo_root/$path" "$mutate/$path"
@@ -291,7 +291,7 @@ set -euo pipefail
 if [ "${3:-}" = --run ]; then
   output=$5
   mkdir -p "$output"
-  for name in pointerCasts tuples names indirectCapture blockLoopExits unionTagCapture spawnedSlice floatIeee floatCompilerRt legacyUnionTag escapingSafetyCheck derivedInstanceNames binderTypeNames classNames underscoreName ctorIndexNames generatedBinderTypeNames indexedBinderTypeNames generatedBinderFunctionNames reservedKeywordNames; do
+  for name in pointerCasts tuples names indirectCapture blockLoopExits unionTagCapture spawnedSlice tickControls floatIeee floatCompilerRt legacyUnionTag escapingSafetyCheck derivedInstanceNames binderTypeNames classNames underscoreName ctorIndexNames generatedBinderTypeNames indexedBinderTypeNames generatedBinderFunctionNames reservedKeywordNames; do
     [ "${EMITTER_MODE:-}" != missing ] || [ "$name" != tuples ] || continue
     : > "$output/$name.lean"
   done
@@ -318,8 +318,8 @@ run_emitter() {
     bash "$emitter/tests/review/emitter.sh" -fixtures
 }
 for name in parser1 parser2 parser3 parser4 parser5 parser6; do : > "$emitter/-fixtures/$name.lean"; done
-expect_pass "emitter checks 26 fixtures in leading-hyphen directory" run_emitter healthy
-expect_pass "all 26 emitter and caller fixtures elaborated" test "$(wc -l < "$emitter/checked" | tr -d ' ')" -eq 26
+expect_pass "emitter checks 27 fixtures in leading-hyphen directory" run_emitter healthy
+expect_pass "all 27 emitter and caller fixtures elaborated" test "$(wc -l < "$emitter/checked" | tr -d ' ')" -eq 27
 expect_failure "failed emitter find" "find failed" run_emitter find-failure
 expect_failure "failed emitter sort" "sort failed" run_emitter sort-failure
 expect_failure "truncated emitter find" "listing incomplete" run_emitter truncated

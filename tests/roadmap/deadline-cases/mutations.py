@@ -17,6 +17,8 @@ import tempfile
 sys.dont_write_bytecode = True
 
 ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / 'scripts'))
+from mutation_kill_log import killed as log_kill  # noqa: E402
 MODULE = 'ZigLean/Conc/TimedBudget.lean'
 HEADER = re.compile(r'^(.+?\.lean):(\d+):(\d+): (error|warning)(?:\([^)]*\))?: (.*)$')
 DECL = re.compile(r'^(?:private |protected |noncomputable )*(theorem|def|abbrev|inductive|structure|instance)\s+(\S+)')
@@ -97,6 +99,7 @@ def main():
         found = killed_by(text, output, killers) if result.returncode == 1 else None
         if found:
             print(f'{name}: killed by {", ".join(sorted(found))}')
+            log_kill('tests/roadmap/deadline-cases/mutations.py', name, 'tests/roadmap/deadline-cases/mutations.py')
         else:
             survivors += 1
             print(f'SURVIVED {name} (exit {result.returncode}):\n{output[-4000:]}', file=sys.stderr)

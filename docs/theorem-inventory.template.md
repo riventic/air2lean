@@ -122,9 +122,9 @@ translation files remain committed goldens; this is not a fresh Zig export.
   `@divTrunc`, `@divFloor`, `@sqrt`), which call a different model function per Zig version;
   its domain says so. `op128_spec_full` covers every selector with each translation's helpers
   ([floats.md](floats.md) §Per-version differences).
-- C14: `snapshotPair_spec`/`snapshotPair_safe` hold for the restricted protocol of
-  `Proofs/Sync/RwLockContract.lean` (one fixed client: main reader, one writer, writer count
-  at most 2). `cache_spec`/`cache_safe` and `mailbox_spec`/`mailbox_safe` are Lean model
+- C14: `snapshotPair_spec`/`snapshotPair_safe` (`Proofs/Sync/RwLockFixture.lean`, over the
+  contract `RwLockImpl`) hold for one fixed client: main reader, one writer, writer count
+  at most 2. `cache_spec`/`cache_safe` and `mailbox_spec`/`mailbox_safe` are Lean model
   clients proved only against the full-state contracts `MutexImpl`/`SemImpl`, for every
   implementation; they have no Zig source or native/model differential. There is
   no reusable RwLock contract for arbitrary readers or resources, no Event/WaitGroup contract,

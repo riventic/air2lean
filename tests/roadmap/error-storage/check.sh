@@ -53,6 +53,7 @@ while IFS= read -r name; do
   status=0
   "${lean_cmd[@]}" -R "$work/mutants" "$work/mutants/$name.lean" > "$work/mutants/$name.log" 2>&1 || status=$?
   python3 tests/roadmap/error-storage/classify_mutant.py "$status" "$work/mutants/$name.lean" "$work/mutants/$name.log"
+  python3 -B scripts/mutation_kill_log.py --check tests/roadmap/error-storage/check.sh tests/roadmap/error-storage/mutations.py "$name"
   mutant_count=$((mutant_count + 1))
 done < "$work/mutants/mutants.txt"
 [ "$mutant_count" -gt 0 ] || { echo 'empty mutation inventory' >&2; exit 1; }
