@@ -134,7 +134,7 @@ def Float.isZeroExtPseudoDenormalF80 {fmt : FloatFmt} (x : Float fmt) : Bool :=
 f128 extension has no fraction bits to clear, `trunc_f128` returns its argument, and LLVM 22 may
 fold `fptrunc (fpext x)` back to the original f80 `x`. For a value that is its own truncation
 both give the same result; for a pseudo-denormal whose extension is a signed zero they do not,
-and which one a binary returns depends on how compiler_rt was optimized: stock 0.17.1 returns the
+and which one a binary returns depends on the build mode and the target: stock 0.17.1 returns the
 operand unchanged in Debug, ReleaseSafe and ReleaseFast on x86_64-linux and in Debug and
 ReleaseSafe on x86_64-macos, and the signed zero in ReleaseSmall on x86_64-linux, in ReleaseFast
 and ReleaseSmall on x86_64-macos and in every mode of 0.16.0
