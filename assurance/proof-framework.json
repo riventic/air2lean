@@ -25,11 +25,6 @@
       "status": "target"
     },
     {
-      "name": "CancelSpec",
-      "module": "tests.roadmap.futures.Futures.Proofs",
-      "status": "legacy-to-retire"
-    },
-    {
       "name": "CondImpl",
       "module": "ZigLean.Sep.Full.Cond",
       "status": "target",
@@ -337,11 +332,6 @@
     {
       "name": "Spec",
       "module": "ZigLean.Conc.TimedBudget",
-      "status": "legacy-to-retire"
-    },
-    {
-      "name": "Spec",
-      "module": "tests.roadmap.asm-wrappers.Interp",
       "status": "legacy-to-retire"
     },
     {

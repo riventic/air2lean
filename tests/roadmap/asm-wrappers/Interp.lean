@@ -8,7 +8,7 @@ model (A02, premise ASM-07) against this interpretation of the same template tex
 code with the model or the translator's decoder. Nothing here is a proof premise (`audit.py`
 checks that the proofs never reach it).
 
-The interpretation is a small x86_64 register machine. One `Spec` is one AIR `assembly`
+The interpretation is a small x86_64 register machine. One `Insn` is one AIR `assembly`
 instruction (source template, constraints, operand widths). `exec`:
 
 1. allocates registers from the constraints (`{reg}` pins, `r` takes the next free register of
@@ -42,7 +42,7 @@ structure Operand where
   width : Nat
 
 /-- One AIR `assembly` instruction. -/
-structure Spec where
+structure Insn where
   source : String
   outputs : List Operand
   inputs : List Operand
@@ -102,7 +102,7 @@ def pick (pool used : List Nat) : Except String Nat :=
 /-- Registers of outputs then inputs. An `r` operand gets a pool register no constraint pins and
 no other operand uses. With `share`, an `r` input instead reuses the register of a plain `=r`
 output (not early-clobber) that no other input took, as a compiler may. -/
-def allocate (spec : Spec) (pool : List Nat) (share : Bool) : Except String (List Nat) := do
+def allocate (spec : Insn) (pool : List Nat) (share : Bool) : Except String (List Nat) := do
   let mut pins : List Nat := []
   for o in spec.outputs ++ spec.inputs do
     if let some r ← pinned o.constraint then pins := r :: pins
@@ -132,7 +132,7 @@ def allocate (spec : Spec) (pool : List Nat) (share : Bool) : Except String (Lis
       | _, _ => regs := regs ++ [← pick pool (pins ++ regs)]
   return regs
 
-def operands (spec : Spec) : List Operand := spec.outputs ++ spec.inputs
+def operands (spec : Insn) : List Operand := spec.outputs ++ spec.inputs
 
 partial def expandChars (ops : List Operand) (rename : Nat → Except String String) :
     List Char → Except String (List Char)
@@ -150,7 +150,7 @@ partial def expandChars (ops : List Operand) (rename : Nat → Except String Str
   | [] => return []
 
 /-- Expand `%%`, `%[name]` and `%<digit>` with the allocated register names. -/
-def expand (spec : Spec) (regs : List Nat) : Except String String := do
+def expand (spec : Insn) (regs : List Nat) : Except String String := do
   let ops := operands spec
   let rename (k : Nat) : Except String String := do
     match ops[k]?, regs[k]? with
@@ -249,7 +249,7 @@ def step (m : Machine) (line : List Char) : Except String Machine := do
 
 /-- Execute `spec` on `args` (one natural number per input, then one old value per read-write
 output) under one allocation; `seed` varies the junk of memory slots between allocations. -/
-def exec (spec : Spec) (pool : List Nat) (share : Bool) (seed : Nat) (args : List Nat) :
+def exec (spec : Insn) (pool : List Nat) (share : Bool) (seed : Nat) (args : List Nat) :
     Except String (List Nat) := do
   let rwOuts := spec.outputs.filter (·.readWrite)
   if args.length != spec.inputs.length + rwOuts.length then
@@ -277,7 +277,7 @@ def exec (spec : Spec) (pool : List Nat) (share : Bool) (seed : Nat) (args : Lis
   return (outRegs.zip spec.outputs).map fun (r, o) => m.read r o.width
 
 /-- The interpretation the harness binds to an opaque: three allocations must agree. -/
-def run (spec : Spec) (args : List Nat) : List Nat :=
+def run (spec : Insn) (args : List Nat) : List Nat :=
   match [(poolA, false, 0), (poolB, false, 1), (poolA, true, 2)].mapM fun (p, s, seed) =>
       exec spec p s seed args with
   | .ok (a :: rest) =>
