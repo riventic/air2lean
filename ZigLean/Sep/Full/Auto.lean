@@ -682,6 +682,12 @@ structure RunCaches where
   /-- The failed demands of the current step (unknowns abstracted): an original failed atom,
   or requested known atoms separated from that intact target on the right (`viewDemand`). -/
   wanted : IO.Ref (Array AbstractMVarsResult)
+  /-- The conditions of the current step that a plan of a rule's precondition met undecided in
+  an assertion-level `if` (the rule's `relBytes … n len …`, or the state's) while it had a frame
+  to infer (`noteSplit`): one frame cannot serve both cases, so the planner's own split fails;
+  when no rule applies, the walk splits the goal on such a condition (`walkCore`), as on a rule's
+  undecided side condition. -/
+  splits : IO.Ref (Array Expr)
   /-- The atoms the innermost plan of a rule's precondition missed, each occurrence (`wanted`
   keeps each once per step; `none` outside a plan, `withPlanNotes`), and the rules of the
   current step whose precondition had no plan, for a report (P09-E3; collected only while a
@@ -759,7 +765,7 @@ def RunCaches.new : IO RunCaches :=
            rules := ← IO.mkRef none, fold := ← IO.mkRef none, factLemmas := ← IO.mkRef none,
            detFail := ← IO.mkRef {}, boolCtx := ← IO.mkRef none, fields := ← IO.mkRef {},
            layouts := ← IO.mkRef {}, lawful := ← IO.mkRef {},
-           wanted := ← IO.mkRef #[], planNotes := ← IO.mkRef none, plans := ← IO.mkRef #[],
+           wanted := ← IO.mkRef #[], splits := ← IO.mkRef #[], planNotes := ← IO.mkRef none, plans := ← IO.mkRef #[],
            inferPosts := ← IO.mkRef #[], exits := ← IO.mkRef #[], viewProg := ← IO.mkRef none,
            recBoundary := ← IO.mkRef none, userCtx := ← IO.mkRef {},
            wpProg := ← IO.mkRef none, wpHyp := ← IO.mkRef none, substs := ← IO.mkRef {},
@@ -1829,12 +1835,12 @@ partial def arithGoals (g : MVarId) (quick := false) (cases := true) : TacticM (
       let s ← saveState
       if let some e ← congrEq x y (cases := cases) then g.assign e; return []
       s.restore
-  -- `x ≤ x` (a carved region that starts where the state's does)
+  -- `x ≤ x` (a carved region that starts where the state's does; a share's fraction `q.val ≤ q.val`
+  -- of a rule stated for a part `q' ≤ q` of it): in any type with a reflexive order
   if t.isAppOfArity ``LE.le 4 then
-    let ty := t.getArg! 0
-    if ty.isConstOf ``Nat || ty.isConstOf ``Int then
-      if ← withReducible (isDefEq (t.getArg! 2) (t.getArg! 3)) then
-        g.assign (← mkAppM (if ty.isConstOf ``Nat then ``Nat.le_refl else ``Int.le_refl) #[t.getArg! 2])
+    if ← withReducible (isDefEq (t.getArg! 2) (t.getArg! 3)) then
+      if let some pf ← observing? (mkAppM ``Std.le_refl #[t.getArg! 2]) then
+        g.assign pf
         return []
   if ← arithCore g quick cases then return []
   unless quick do
@@ -5048,6 +5054,16 @@ def noteExit (g E : MVarId) (P w : Expr) : TacticM Bool := g.withContext do
     trace[fsym] "exit post inference: {ex.toMessageData}"
     return false
 
+/-- Note the undecided condition `c` of an assertion-level `if` that the planner splits for
+`EUpd P Q` when `Q` has a frame to infer (an assertion unknown: a rule's precondition `P₀ ⋆ ?R`):
+the frame is one term for both cases, so the split fails unless they leave the same atoms. The
+walk splits the goal on a noted condition when no rule applies (`caches.splits`, `walkCore`). -/
+def noteSplit (Q c : Expr) : TacticM Unit := do
+  let c ← instantiateMVars c
+  if c.hasExprMVar || c.hasLooseBVars then return
+  unless (atoms (← instantiateMVars Q)).any isAssnHole do return
+  (← caches).splits.modify fun cs => if cs.contains c then cs else cs.push c
+
 /-- Close `EUpd P Q`: open `Q`'s existentials, plan regions and shares, match the remaining
 atoms (up to provable equations of their arguments), drop `up` atoms into `Junk`, prove `Q`'s
 facts by arithmetic. Unproved facts are left as goals; on failure the update goal is left. -/
@@ -5070,6 +5086,7 @@ partial def closeEntail (g : MVarId) (sizes : Array (Expr × Expr) := #[]) : Tac
       closeEntail g2.mvarId! sizes
     if let some (pf, br) ← decideIte a false then return ← swap pf br
     trace[fsym] "state if: split on {a.getArg! 1}"
+    noteSplit Q (a.getArg! 1)
     let (sp, sn) ← g.byCases (a.getArg! 1) `hc
     let gp ← sp.mvarId.withContext (closeEntail sp.mvarId sizes)
     let gn ← sn.mvarId.withContext (closeEntail sn.mvarId sizes)
@@ -5168,6 +5185,7 @@ partial def closeEntail (g : MVarId) (sizes : Array (Expr × Expr) := #[]) : Tac
       if let some (s2, left) := part? then s2.restore; return left
     if !c.hasExprMVar && !known then
       trace[fsym] "postcondition if: split on {c}"
+      noteSplit Q c
       let (sp, sn) ← g.byCases c `hc
       let gp ← sp.mvarId.withContext (closeEntail sp.mvarId sizes)
       let gn ← sn.mvarId.withContext (closeEntail sn.mvarId sizes)
@@ -5555,9 +5573,20 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
     let pf ← mkAppM ``imp_trans #[← mkAppM ``imp_trans #[body, ← mkAppM ``imp_eq #[eT]], pQ]
     let pf ← instantiateMVars pf
     if pf.hasExprMVar then
+      -- (the unknowns of the planned state and the target)
+      let mentioned := (T'.collectMVars (Qf.collectMVars {})).result
       for m in ← getMVars pf do
         unless left.contains m do
-          unless ← isProp (← m.getType) do throwError "fsym: undetermined witness ?{m.name}"
+          if ← isProp (← m.getType) then continue
+          -- a witness that neither the planned state nor the target mentions, only the proof of
+          -- an `if` the facts decided (a rule's released bytes `relBytes … tl` of a growth, where
+          -- `tl` is in the refuted branch): any value serves, as the rule holds for every one
+          unless mentioned.contains m do
+            if let some d ← observing? (mkDefault (← m.getType)) then
+              trace[fsym] "plan: witness ?{m.name} not used: {d}"
+              m.assign d
+              continue
+          throwError "fsym: undetermined witness ?{m.name}"
     g.assign (← mkAppM ``EUpd.trans #[st.pf, ← mkAppM ``EUpd.of_imp #[pf]])
     return left
   catch ex =>
@@ -7481,7 +7510,54 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
       return some gs
     catch ex => rollback; throw ex
   (← caches).wanted.set #[]
+  (← caches).splits.set #[]
   (← caches).plans.set #[]
+  -- split the goal on `cond` and walk both cases (with the condition, or its negation, as a fact)
+  let splitWalk (g : MVarId) (cond : Expr) : TacticM (List MVarId) := do
+    let (sp, sn) ← g.byCases cond `hc
+    let [gp, gn] ← joinPosts Q [sp.mvarId, sn.mvarId] | throwError "fsym: join"
+    let lp ← walk (← destruct gp sp.fvarId) user extra (fuel - 1)
+    return lp ++ (← walk (← destruct gn sn.fvarId) user extra (fuel - 1))
+  -- a condition that can be split on: closed and in the goal's context
+  let splittable (cond : Expr) : TacticM Bool := g.withContext do
+    let cond ← instantiateMVars cond
+    if cond.hasExprMVar || cond.hasLooseBVars then return false
+    let lctx ← getLCtx
+    return !cond.hasAnyFVar (!lctx.contains ·)
+  -- … that neither it nor its negation is proved by the facts (a quick probe)
+  let undecided (cond : Expr) : TacticM Bool := g.withContext do
+    unless ← splittable cond do return false
+    let hp ← mkFreshExprMVar cond
+    if ← arith hp.mvarId! (quick := true) then return false
+    let hn ← mkFreshExprMVar (mkNot cond)
+    return !(← arith hn.mvarId! (quick := true))
+  -- the condition of an assertion-level `if` of the state that the facts do not decide
+  -- (`decideIte`'s cached probe): each case has its own atoms and facts
+  let stateIf? : TacticM (Option Expr) := g.withContext do
+    for a in atoms P do
+      if a.isAppOfArity ``ite 5 then
+        if (← splittable (a.getArg! 1)) && (← decideIte a).isNone then return some (a.getArg! 1)
+    return none
+  -- a returned value `v` of a non-recursive inductive type with several constructors that is not
+  -- a constructor and that the postcondition depends on: split by cases (a local), or
+  -- generalized with its equation `hr : v = r` first (a term), as a program's `match` on a term
+  let splitValue (v : Expr) : TacticM (Option (List MVarId)) := g.withContext do
+    let v ← instantiateMVars v
+    if v.hasExprMVar || v.hasLooseBVars then return none
+    if let some n := v.getAppFn.constName? then
+      if (← getEnv).find? n matches some (.ctorInfo _) then return none
+    let ty ← inferType v
+    let .const tn _ := (← whnfD ty).getAppFn | return none
+    let some ii ← caseInduct? tn | return none
+    if ii.isRec || ii.numIndices != 0 then return none
+    unless ← withLocalDeclD `r ty fun r => return (mkApp Q r).headBeta.containsFVar r.fvarId! do
+      return none
+    if ← hasExitPost (mkApp Q v).headBeta then return none
+    trace[fsym] "return: split the value {v}"
+    if v.isFVar then return some (← casesWalk g v user extra fuel)
+    let some (xs, g') ← observing? (g.generalize #[{ expr := v, xName? := `r, hName? := `hr }])
+      | return none
+    return some (← casesWalk g' (.fvar xs[0]!) user extra fuel)
   -- return
   if c.isAppOfArity ``Pure.pure 4 then
     let v := c.appArg!
@@ -7492,6 +7568,14 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
         return []
     -- (a return into a loop's unknown exit post: noted by the entailment, `noteExit`)
     let Qv := (mkApp Q v).headBeta
+    -- the caller's updates are planned against the state's atoms as they are: an assertion-level
+    -- `if` of the state that the facts do not decide is split on first, so that each case tries
+    -- the updates with its own atoms (the entailment alone splits it inside, ledger #64)
+    if (atoms P).any (·.isAppOfArity ``ite 5) then
+      if ← user.anyM fun u => do isUpd (← refreshUser u) then
+        if let some cond ← stateIf? then
+          trace[fsym] "return: split on the state's condition {cond}"
+          return ← splitWalk g cond
     let s ← saveState
     let entail : TacticM (List MVarId) := do
       let h ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, Qv])
@@ -7531,8 +7615,17 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
       trace[fsym] "update {u}: goals left {← left.mapM fun g => do instantiateMVars (← g.getType)}"
       if part?.isNone then part? := some (← saveState, left)
     let wanted ← (← caches).wanted.get
-    -- more facts (of the atoms) may close it, or views of its atoms
     s.restore
+    -- a returned value of an enumeration (a `Bool` expression `n ≤ len`, not a constructor) that
+    -- the postcondition matches on: split it, each case a return of a constructor (ledger
+    -- #return-bool-split), as a `match` of the program on a term. Kept only if it closes the
+    -- return: a post that merely mentions the value (`⟪v = f a⟫`) leaves its cases weaker than
+    -- the unsplit goal (`true = …` with `hr : f a = true`), so that goal is left as it is
+    if let some r ← splitValue v then
+      if r.isEmpty then return r
+      trace[fsym] "return: the value's split leaves goals; not split"
+      s.restore
+    -- more facts (of the atoms) may close it, or views of its atoms
     if let some r ← moreFacts then return r
     if part?.isNone then
       if let some r ← viewed wanted then return r
@@ -7733,6 +7826,8 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
         return left ++ (← walk k user extra (fuel - 1))
   s.restore
   restoreSplitArith
+  -- (the conditions the rules' plans met undecided with a frame to infer, `noteSplit`)
+  let splits ← (← caches).splits.get
   let partialRule := partial?.isSome
   -- (a refuted rule only for a command that cannot be inlined either)
   let unfold? ← if partial?.isNone then unfoldCmd x else pure none
@@ -7804,6 +7899,24 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
       Report.stopMessage m!"fsym: {why}{indentExpr x}\nwith the precondition{indentExpr P}"
       return ← Report.leave g [g] "invariant_not_established" "loop_entry" (some x)
         (plans := ← (← caches).plans.get)
+  -- a precondition with an assertion-level `if` that the facts do not decide (the refined
+  -- `resize`'s `relBytes … n len …`, or the state's): its plan cannot take both cases with one
+  -- frame, so the goal is split on the condition and each case plans the decided precondition
+  -- (ledger #61): when no rule applies, or only one whose side goal is refuted, before the
+  -- command is inlined
+  unless partialRule do
+    for cond in splits do
+      if ← undecided cond then
+        trace[fsym] "split on a condition of a rule's precondition {cond}"
+        return ← splitWalk g cond
+  -- a rule's side goal that the facts do not decide, with an assertion-level `if` of the state
+  -- that they do not decide either: the `if` first, as each case has its own atoms and their
+  -- facts may decide the side goal (`resize`'s `end_index -= len - n`: its bound follows from the
+  -- released bytes' claim, in the case `n < len` of their `if`)
+  if partial?.isSome then
+    if let some cond ← stateIf? then
+      trace[fsym] "side goal left: split on the state's condition {cond}"
+      return ← splitWalk g cond
   -- a side condition that the facts do not decide: split on it (the rules' cases)
   if let some (s, restoreChoiceArith, _, left) := partial? then
     let s1 ← saveState

@@ -41,6 +41,21 @@ def condCode : IoCondCode Tgt where
   signal_eq := ⟨_, _, fun _ _ => by
     simp only [Io_Condition_signal, IoCondCode.signalOf, bind_assoc, pure_bind]; rfl,
     by rfl, by rfl, by rfl⟩
+  σb := Io_Condition_broadcastLocals
+  Eb := Io_Condition_broadcastExit
+  bprev := Io_Condition_broadcastLocals.prev_state
+  bsetPrev s v := { s with prev_state := v }
+  bret := .ret
+  bstop := .br10
+  brep := .rep11
+  bagain := Io_Condition_broadcast.again11
+  bbody := Io_Condition_broadcast.loop11
+  bbody_eq _ _ := by
+    simp only [Io_Condition_broadcast.loop11, bind_assoc, pure_bind, Norm.ite_bind]; rfl
+  broadcast := Io_Condition_broadcast
+  broadcast_eq := ⟨_, _, fun _ _ => by
+    simp only [Io_Condition_broadcast, IoCondCode.signalOf, bind_assoc, pure_bind]; rfl,
+    by rfl, by rfl, by rfl⟩
   σ := Io_Condition_waitUncancelableLocals
   E := Io_Condition_waitUncancelableExit
   ep := Io_Condition_waitUncancelableLocals.epoch
@@ -101,6 +116,21 @@ def condCode : IoCondCode Tgt where
   signal := Io_Condition_signal
   signal_eq := ⟨_, _, fun _ _ => by
     simp only [Io_Condition_signal, IoCondCode.signalOf, bind_assoc, pure_bind]; rfl,
+    by rfl, by rfl, by rfl⟩
+  σb := Io_Condition_broadcastLocals
+  Eb := Io_Condition_broadcastExit
+  bprev := Io_Condition_broadcastLocals.prev_state
+  bsetPrev s v := { s with prev_state := v }
+  bret := .ret
+  bstop := .br10
+  brep := .rep11
+  bagain := Io_Condition_broadcast.again11
+  bbody := Io_Condition_broadcast.loop11
+  bbody_eq _ _ := by
+    simp only [Io_Condition_broadcast.loop11, bind_assoc, pure_bind, Norm.ite_bind]; rfl
+  broadcast := Io_Condition_broadcast
+  broadcast_eq := ⟨_, _, fun _ _ => by
+    simp only [Io_Condition_broadcast, IoCondCode.signalOf, bind_assoc, pure_bind]; rfl,
     by rfl, by rfl, by rfl⟩
   σ := Io_Condition_waitInnerLocals
   E := Io_Condition_waitInnerExit
@@ -165,6 +195,21 @@ def condCode : IoCondCode Tgt where
   signal := Io_Condition_signal
   signal_eq := ⟨_, _, fun _ _ => by
     simp only [Io_Condition_signal, IoCondCode.signalOf, bind_assoc, pure_bind]; rfl,
+    by rfl, by rfl, by rfl⟩
+  σb := Io_Condition_broadcastLocals
+  Eb := Io_Condition_broadcastExit
+  bprev := Io_Condition_broadcastLocals.prev_state
+  bsetPrev s v := { s with prev_state := v }
+  bret := .ret
+  bstop := .br10
+  brep := .rep11
+  bagain := Io_Condition_broadcast.again11
+  bbody := Io_Condition_broadcast.loop11
+  bbody_eq _ _ := by
+    simp only [Io_Condition_broadcast.loop11, bind_assoc, pure_bind, Norm.ite_bind]; rfl
+  broadcast := Io_Condition_broadcast
+  broadcast_eq := ⟨_, _, fun _ _ => by
+    simp only [Io_Condition_broadcast, IoCondCode.signalOf, bind_assoc, pure_bind]; rfl,
     by rfl, by rfl, by rfl⟩
   σ := Io_Condition_waitInnerLocals
   E := Io_Condition_waitInnerExit

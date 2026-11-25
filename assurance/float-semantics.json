@@ -1,7 +1,16 @@
 {
   "schema_version": 1,
   "theorems": {
-    "BigEndian.Proofs::BigEndianClients.f32ToBytes_orders": {
+    "BigEndian.Proofs::BigEndianClients.f32ToBytes_logical_0_17": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "BigEndian.Proofs::BigEndianClients.f32ToBytes_orders_0_16": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",
@@ -1681,6 +1690,15 @@
       "correspondence": "model"
     },
     "Proofs.Floats.AllowedNeg::Zig.AllowedNeg.nan_varies": {
+      "semantics": "ieee",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "Proofs.Floats.AllowedNeg::Zig.AllowedNeg.qnan_classify": {
       "semantics": "ieee",
       "targets": [
         "aarch64-linux",

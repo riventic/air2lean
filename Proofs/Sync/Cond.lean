@@ -5,7 +5,7 @@ import ZigLean.Sep.Full.IoCond
 # `Io.Condition` of `examples/sync` as a condition (`CondImpl`)
 
 The per-item obligation of `Io.Condition` (Zig 0.16.0's std code) in this program's generated
-code: its `signal`, `waitInner(…, true)` and `waitUncancelable` are `Io.Condition`'s code
+code: its `signal`, `broadcast`, `waitInner(…, true)` and `waitUncancelable` are `Io.Condition`'s code
 (`IoCondCode`, `ZigLean/Sep/Full/IoCond.lean`), with the program's `Io.Mutex` (`ioMutex`), so
 they satisfy the condition contract (`CondImpl`) for every protocol that has the condition next
 to its mutex. This file gives the program's names and the unfolding equations. Every golden case
@@ -39,6 +39,21 @@ def ioCondCode : IoCondCode Tgt where
   signal := Io_Condition_signal
   signal_eq := ⟨_, _, fun _ _ => by
     simp only [Io_Condition_signal, IoCondCode.signalOf, bind_assoc, pure_bind]; rfl,
+    by rfl, by rfl, by rfl⟩
+  σb := Io_Condition_broadcastLocals
+  Eb := Io_Condition_broadcastExit
+  bprev := Io_Condition_broadcastLocals.prev_state
+  bsetPrev s v := { s with prev_state := v }
+  bret := .ret
+  bstop := .br10
+  brep := .rep11
+  bagain := Io_Condition_broadcast.again11
+  bbody := Io_Condition_broadcast.loop11
+  bbody_eq _ _ := by
+    simp only [Io_Condition_broadcast.loop11, bind_assoc, pure_bind, Norm.ite_bind]; rfl
+  broadcast := Io_Condition_broadcast
+  broadcast_eq := ⟨_, _, fun _ _ => by
+    simp only [Io_Condition_broadcast, IoCondCode.signalOf, bind_assoc, pure_bind]; rfl,
     by rfl, by rfl, by rfl⟩
   σ := Io_Condition_waitInnerLocals
   E := Io_Condition_waitInnerExit

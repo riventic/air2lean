@@ -498,8 +498,25 @@ ALLOWED_ACTIONS = {'actions/checkout', 'actions/cache', 'actions/cache/restore',
                    'actions/upload-artifact', 'actions/download-artifact'}
 
 
+def load_ci_workflow():
+    """The checkout's CI workflows as one (target-matrix.py merge_workflows)."""
+    try:
+        return TM.ci_workflow(lambda path: Path(path).read_text() if Path(path).is_file() else None)
+    except TM.Unreadable as error:
+        raise ValueError(str(error)) from error
+
+
+def ci_workflow_sha(root=Path('.')):
+    """One digest of the checkout's CI workflow files (their paths and bytes)."""
+    digest = hashlib.sha256()
+    for path in TM.CI_WORKFLOWS:
+        if (root / path).is_file():
+            digest.update(b'%s\0%s\0' % (path.encode(), hashlib.sha256((root / path).read_bytes()).hexdigest().encode()))
+    return digest.hexdigest()
+
+
 def workflow_rows(workflow, *, check_dependencies=True):
-    if 'defaults' in workflow or 'env' in workflow:
+    if any('defaults' in fields or 'env' in fields for fields in workflow['workflows'].values()):
         raise ValueError('unsupported workflow defaults/environment')
     rows = {}
     for name, job in workflow['jobs'].items():
@@ -513,7 +530,7 @@ def workflow_rows(workflow, *, check_dependencies=True):
         strategy = job.get('strategy', {})
         if set(strategy) - {'fail-fast', 'matrix'}:
             raise ValueError(f'{name}: unsupported CI matrix')
-        for row in TM.matrix_include(job, f'.github/workflows/ci.yml: job {name}') or [{}]:
+        for row in TM.matrix_include(job, f'{workflow["files"][name]}: job {name}') or [{}]:
             if not isinstance(row, dict) or set(row) - {'zig', 'part', 'examples', 'full', 'mutate', 'shard'}:
                 raise ValueError(f'{name}: unsupported matrix row fields')
             part = reuse_helpers().part_id(name, row)
@@ -731,7 +748,7 @@ class WorkflowRun:
             return
         self.workflow = workflow
         self.rows = workflow_rows(workflow)
-        self.workflow_sha = hashlib.sha256(Path('.github/workflows/ci.yml').read_bytes()).hexdigest()
+        self.workflow_sha = ci_workflow_sha()
         if dispatch:
             if not self.image_id or not re.fullmatch(r'sha256:[0-9a-f]{64}', self.image_id):
                 raise ValueError('local CI dispatch needs its immutable Docker image ID')
@@ -776,7 +793,9 @@ class WorkflowRun:
                 or CR.part_id(name, row) != payload['part'] or CR.job_rows(job) != [row]
                 or CR.job_definition(job, row, name) != job):
             raise ValueError('local CI job payload does not contain exactly its keyed row and direct needs')
-        self.workflow = dict(definitions['workflow'], jobs={name: job, **definitions['needs']})
+        # The one workflow file of the job and its needs, as load_ci_workflow's merged view.
+        self.workflow = TM.merge_workflows({'job payload': dict(definitions['workflow'],
+                                                                 jobs={name: job, **definitions['needs']})})
         # Direct producer definitions are keyed in full; their transitive dependencies are not.
         # The host already validated the full graph, and this worker never traverses it.
         self.rows = workflow_rows(self.workflow, check_dependencies=False)
@@ -1029,7 +1048,7 @@ class WorkflowRun:
         temp.mkdir(parents=True)
         context = {'matrix': row}
         number = list(self.workflow['jobs'][name].get('strategy', {}).get('matrix', {}).get('include', [{}])).index(row)
-        where = f'.github/workflows/ci.yml: {name} row {number}'
+        where = f'{self.workflow["files"][name]}: {name} row {number}'
         runner = RUNNERS[job['runs-on']]
         actual = 'host' if sys.platform == 'darwin' else 'linux/' + {'x86_64': 'amd64', 'aarch64': 'arm64'}.get(os.uname().machine, 'unknown')
         if runner != actual or (runner == 'host' and os.uname().machine != 'arm64'):
@@ -1271,10 +1290,7 @@ def main(argv):
                           restricted=mode == 'part', row_only=True)
         run.run(selected)
         return
-    try:
-        workflow = TM.parse_workflow_yaml(Path('.github/workflows/ci.yml').read_text())
-    except TM.Unreadable as error:
-        raise ValueError(str(error)) from error
+    workflow = load_ci_workflow()
     rows = workflow_rows(workflow)
     if len(argv) == 3 and argv[0] == '--host':
         run_host(workflow, *argv[1:])

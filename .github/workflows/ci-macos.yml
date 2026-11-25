@@ -1,0 +1,356 @@
+name: CI macOS
+
+# docs/ci.md#3-macos-rows. The macOS rows of CI, in their own workflow: the same events, trees,
+# reuse decisions and records as ci.yml (whose design comment applies here), but a run of their
+# own. A CI run is therefore complete when its Linux part is, and generated.yml, which wakes on
+# that completion, never waits for a macOS runner. GitHub-hosted macOS capacity is small, so a
+# ref keeps at most one running and one pending macOS run: a newer push to main replaces the
+# pending run of an older commit (GitHub cancels it), the running one finishes, and a new push
+# to a PR cancels the older commit's run. Queue, manual and nightly runs are grouped by their
+# commit and never cancelled.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  merge_group:
+  workflow_dispatch:
+  # Nightly on main, with ci.yml's: every row on the whole, unrestricted checkout.
+  schedule:
+    - cron: "17 2 * * *"
+
+# actions:read: the reuse decision looks records up through the Actions API.
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ci-macos-${{ (github.event_name == 'pull_request' || github.event_name == 'push') && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Q05: native aarch64-macos evidence for the Darwin paths compatibility.json declares
+  # (assurance/target-matrix.json, docs/target-matrix.md): one row per version whose hosts include
+  # aarch64-macos (scripts/ci-matrix.py). Each evidence step binds AIR2LEAN_ZIG_VERSION.
+  # WASM is not a declared target (T02/T05).
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # BEGIN macos rows (scripts/ci-matrix.py write)
+          - zig: "0.17.1"
+          - zig: "0.16.0"
+          - zig: "0.15.2"
+          # END macos rows
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # docs/ci.md#1-input-hash-result-reuse: on a pull request or in the merge queue, a part
+      # whose input key a passing run already recorded is reused (every later step is skipped and
+      # the summary names that run); otherwise the part runs in a restricted checkout
+      # (docs/ci.md#restricted-checkout) and records its result when it passes.
+      - name: Reuse a recorded result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AIR2LEAN_EVENT: ${{ github.event_name }}
+          AIR2LEAN_ROW: ${{ toJSON(matrix) }}
+        run: python3 scripts/ci-reuse.py decide --job macos --row "$AIR2LEAN_ROW"
+
+      # A reused part names the run, job and key it passed by reference to (release records).
+      - name: Upload the reuse reference
+        if: ${{ env.AIR2LEAN_REUSED != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ci-reuse-ref-${{ env.AIR2LEAN_REUSE_KEY }}
+          path: ${{ runner.temp }}/ci-reuse/reference.json
+          if-no-files-found: error
+          retention-days: 90
+
+      # The stock aarch64-macos release of this row's version bootstraps zig-patch/build.sh and
+      # builds the native probes/harnesses. sha256 from https://ziglang.org/download/index.json
+      # ("<version>" -> "aarch64-macos".shasum), confirmed by downloading and hashing each.
+      - name: Install stock zig (aarch64-macos)
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        run: |
+          set -euo pipefail
+          versions='${{ matrix.zig }}'
+          # 0.14.1 has no row of its own; its aarch64 ABI qualification runs in the 0.15.2 row.
+          if [ "$versions" = 0.15.2 ]; then versions="$versions 0.14.1"; fi
+          for version in $versions; do
+            case "$version" in
+              0.17.1) sha256=75f1bc7a1e9852f17ec9a0c1895f767c4ec56d46bc8a834920eece1d0359dd8d ;;
+              0.16.0) sha256=b23d70deaa879b5c2d486ed3316f7eaa53e84acf6fc9cc747de152450d401489 ;;
+              0.15.2) sha256=3cc2bab367e185cdfb27501c4b30b1b0653c28d9f73df8dc91488e66ece5fa6b ;;
+              0.14.1) sha256=39f3dc5e79c22088ce878edc821dedb4ca5a1cd9f5ef915e9b3cc3053e8faefa ;;
+              *) echo "no pinned aarch64-macos stock zig for $version" >&2; exit 1 ;;
+            esac
+            curl -fL --output "$RUNNER_TEMP/zig-$version.tar.xz" \
+              "https://ziglang.org/download/$version/zig-aarch64-macos-$version.tar.xz"
+            echo "$sha256  $RUNNER_TEMP/zig-$version.tar.xz" | shasum -a 256 -c -
+            mkdir -p "$RUNNER_TEMP/host-zig-$version"
+            tar -xJf "$RUNNER_TEMP/zig-$version.tar.xz" -C "$RUNNER_TEMP/host-zig-$version" --strip-components=1
+            [ "$("$RUNNER_TEMP/host-zig-$version/zig" version)" = "$version" ]
+            if [ "$version" = '${{ matrix.zig }}' ]; then echo "AIR2LEAN_HOST_PIN=$sha256" >> "$GITHUB_ENV"; fi
+          done
+
+      # Builds and executes probe.zig for aarch64-macos-none (docs/profiles.md).
+      - name: macOS ABI target probe (0.16.0)
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.zig == '0.16.0' }}
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.16.0"
+        run: |
+          set -euo pipefail
+          python3 tests/roadmap/abi-probes/test_probe.py
+          # ReleaseSafe-bits8/-bits32: the error integer at --error-limit 255 / 2^32-1 (L10).
+          for mode in ReleaseSafe ReleaseFast ReleaseSafe-bits8 ReleaseSafe-bits32; do
+            python3 scripts/abi-probe.py observe --zig "$RUNNER_TEMP/host-zig-0.16.0/zig" \
+              --profile "tests/roadmap/abi-probes/aarch64-macos-none-$mode.json" \
+              --output "$RUNNER_TEMP/abi-aarch64-macos-none-$mode.json"
+          done
+
+      # 0.15.2's contracts (tests/roadmap/abi-probes/0.15.2/) differ from 0.16.0's only in
+      # the LLVM feature names (zcm vs zcm_fpr64/zcm_gpr64).
+      - name: macOS ABI target probe (0.15.2)
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.zig == '0.15.2' }}
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.15.2"
+        run: |
+          set -euo pipefail
+          for mode in ReleaseSafe ReleaseFast; do
+            python3 scripts/abi-probe.py observe --zig "$RUNNER_TEMP/host-zig-0.15.2/zig" \
+              --profile "tests/roadmap/abi-probes/0.15.2/aarch64-macos-none-$mode.json" \
+              --output "$RUNNER_TEMP/abi-0.15.2-aarch64-macos-none-$mode.json"
+          done
+
+      # T04: the native aarch64-macos-none probe against its versioned expected results, for each
+      # Zig version with recorded results.
+      - name: aarch64-macos ABI qualification (T04, 0.16.0)
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.zig == '0.16.0' }}
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.16.0"
+        run: |
+          set -euo pipefail
+          python3 scripts/aarch64-abi.py check --zig "$RUNNER_TEMP/host-zig-0.16.0/zig" \
+            --target aarch64-macos-none --output "$RUNNER_TEMP/aarch64-macos-none-0.16.0-ReleaseSafe.txt"
+
+      - name: aarch64-macos ABI qualification (T04, 0.15.2)
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.zig == '0.15.2' }}
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.15.2"
+        run: |
+          set -euo pipefail
+          python3 scripts/aarch64-abi.py check --zig "$RUNNER_TEMP/host-zig-0.15.2/zig" \
+            --target aarch64-macos-none --output "$RUNNER_TEMP/aarch64-macos-none-0.15.2-ReleaseSafe.txt"
+
+      - name: aarch64-macos ABI qualification (T04, 0.14.1)
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.zig == '0.15.2' }}
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.14.1"
+        run: |
+          set -euo pipefail
+          python3 scripts/aarch64-abi.py check --zig "$RUNNER_TEMP/host-zig-0.14.1/zig" \
+            --target aarch64-macos-none --output "$RUNNER_TEMP/aarch64-macos-none-0.14.1-ReleaseSafe.txt"
+
+      - name: aarch64-macos ABI qualification (T04, 0.17.1)
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.zig == '0.17.1' }}
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.17.1"
+        run: |
+          set -euo pipefail
+          python3 scripts/aarch64-abi.py check --zig "$RUNNER_TEMP/host-zig-0.17.1/zig" \
+            --target aarch64-macos-none --output "$RUNNER_TEMP/aarch64-macos-none-0.17.1-ReleaseSafe.txt"
+
+      # Zig 0.17.1 (in qualification) contract: tests/roadmap/abi-probes/0.17.1/ (LLVM 22 features).
+      - name: macOS ABI target probe (0.17.1)
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.zig == '0.17.1' }}
+        env:
+          AIR2LEAN_ZIG_VERSION: "0.17.1"
+        run: |
+          set -euo pipefail
+          for mode in ReleaseSafe ReleaseFast ReleaseSafe-bits8 ReleaseSafe-bits32; do
+            python3 scripts/abi-probe.py observe --zig "$RUNNER_TEMP/host-zig-0.17.1/zig" \
+              --profile "tests/roadmap/abi-probes/aarch64-macos-none-$mode.json" \
+              --output "$RUNNER_TEMP/abi-0.17.1-aarch64-macos-none-$mode.json"
+          done
+
+      # Keyed on exactly what zig-patch/build.sh reads for this version and the stock-Zig pin
+      # above (scripts/ci-cache.py); saved by ci-cache.yml on main.
+      - name: Patched zig cache key (macOS)
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        id: zig-key
+        run: |
+          echo "key=$(python3 scripts/ci-cache.py zig-air-key '${{ matrix.zig }}' --host-pin "aarch64-macos $AIR2LEAN_HOST_PIN")" >> "$GITHUB_OUTPUT"
+
+      - name: Restore patched zig (macOS)
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        id: cache-zig-air
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: zig-air-${{ matrix.zig }}/
+          key: ${{ steps.zig-key.outputs.key }}
+
+      # One retry, as in the Linux job. The 7 GiB runner is below the 7.8/8 GB bound that Zig's
+      # build.zig declares for compiling the compiler; --maxrss lets it start.
+      - name: Build patched zig (macOS)
+        if: ${{ !env.AIR2LEAN_REUSED && steps.cache-zig-air.outputs.cache-hit != 'true' }}
+        env:
+          AIR2LEAN_ZIG_MAXRSS: "8000000000"
+        run: |
+          set -euo pipefail
+          v='${{ matrix.zig }}'
+          PATH="$RUNNER_TEMP/host-zig-$v:$PATH" zig-patch/build.sh "$v" \
+            || PATH="$RUNNER_TEMP/host-zig-$v:$PATH" zig-patch/build.sh "$v"
+
+      # zig-patch/versions.toml [ci.elan] pins elan v4.2.4's Linux asset; this is the same
+      # release's aarch64-apple-darwin asset (sha256 = the release asset digest, confirmed).
+      - name: Install elan (macOS)
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        run: |
+          set -euo pipefail
+          curl -fL --output "$RUNNER_TEMP/elan.tar.gz" \
+            https://github.com/leanprover/elan/releases/download/v4.2.4/elan-aarch64-apple-darwin.tar.gz
+          echo "7ad829861392c718dfebde3a83b5c8508df47be02af68894b094b0b3952616e5  $RUNNER_TEMP/elan.tar.gz" \
+            | shasum -a 256 -c -
+          tar -xzf "$RUNNER_TEMP/elan.tar.gz" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/elan-init" --default-toolchain none -y
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      # Keyed on every Lean source like the Linux `lake` job; ci-cache.yml saves it on main with
+      # `Proofs` built, so the proof build below only rebuilds what this tree changes.
+      - name: Restore Lake build (macOS root package)
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .lake/*
+            !.lake/check-tree
+          key: lake-root-macos-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('.github/workflows/ci-cache.yml') }}-${{ hashFiles('lakefile.toml', '*.lean', 'Air2Lean/**/*.lean', 'ZigLean/**/*.lean', 'Proofs/**/*.lean', 'tools/**/*.lean') }}
+          restore-keys: |
+            lake-root-macos-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ hashFiles('.github/workflows/ci-cache.yml') }}-
+            lake-root-macos-arm64-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
+
+      - name: Restore Lake build (macOS tests/diff package)
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: tests/diff/.lake
+          key: lake-diff-macos-arm64-${{ hashFiles('tests/diff/lean-toolchain', 'tests/diff/lake-manifest.json') }}
+
+      # As in the test job: the stock-Zig harness builds of scripts/diff.sh only, exact key.
+      - name: Restore native differential harness builds (macOS)
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/zig-diff-cache
+          key: zig-diff-${{ runner.os }}-${{ matrix.zig }}-golden-${{ hashFiles('examples/**/*.zig', 'tests/diff/**/*.zig', 'scripts/diff.sh') }}
+
+      - name: Prune absent-source Lake modules
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        run: python3 scripts/local-ci-steps.py --prune-cache
+
+      - name: Build runtime library + translator (macOS)
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        run: lake build
+
+      # T04 weak ordering (docs/weak-ordering.md): this row's version natively on aarch64-macos.
+      - name: macOS weak-ordering litmus tests (T04)
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        run: |
+          set -euo pipefail
+          v='${{ matrix.zig }}'
+          python3 scripts/weak-ordering.py observe --zig "$RUNNER_TEMP/host-zig-$v/zig" \
+            --target aarch64-macos-none --output "$RUNNER_TEMP/weak-aarch64-macos-none-$v.txt"
+          python3 scripts/weak-ordering.py check "$RUNNER_TEMP/weak-aarch64-macos-none-$v.txt"
+
+      # Fresh Darwin AIR export, compared with the goldens and their air-darwin/Gen-darwin
+      # overrides, translated, built and differentially tested against native Zig (host-listed
+      # float differences count as `host`, scripts/diff.sh). Never writes a tracked file: a
+      # translation that differs from the committed module is built in a check tree. 0.15.2's
+      # Thread.Mutex is os_unfair_lock here: check.sh selects
+      # tests/golden/0.15.2/threadsync/Gen-darwin.lean and runs the differential test on it.
+      # `threadsync` is a case family, so its proofs build against that translation in the
+      # "Build threadsync proofs (macOS translation)" step, not in the build tree.
+      - name: macOS golden AIR, translate, differential test
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        env:
+          AIR2LEAN_CI: "1"
+          AIR2LEAN_ZIG_VERSION: ${{ matrix.zig }}
+          AIR2LEAN_DIFF: "1"
+          AIR2LEAN_ZIG: ${{ runner.temp }}/host-zig-${{ matrix.zig }}/zig
+          AIR2LEAN_OUT_DIR: ${{ runner.temp }}/air-out/${{ matrix.zig }}
+          AIR2LEAN_DIFF_REPORT: ${{ runner.temp }}/diff-summary/${{ matrix.zig }}/report.json
+          AIR2LEAN_DIFF_ZIG_CACHE: ${{ runner.temp }}/zig-diff-cache
+        run: scripts/check.sh
+
+      # Q04/Q05: this version's macOS row of the accounting table (docs/host-accounting.md).
+      # Kept even when the differential gate fails: an incomplete summary records why.
+      - name: Upload the macOS differential summary
+        if: ${{ !env.AIR2LEAN_REUSED && !cancelled() && matrix.zig == '0.16.0' || !env.AIR2LEAN_REUSED && !cancelled() && matrix.zig == '0.15.2' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: diff-summary-${{ matrix.zig }}-${{ runner.os }}-${{ runner.arch }}
+          path: ${{ runner.temp }}/diff-summary/${{ matrix.zig }}/report.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: macOS proofs
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        env:
+          AIR2LEAN_ZIG_VERSION: ${{ matrix.zig }}
+        run: |
+          tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)
+          cd "$tree"
+          lake build Proofs
+
+      # As in the test job: no step may modify, delete or add a tracked or unignored file.
+      - name: Checkout unchanged by verification (macOS)
+        if: ${{ !env.AIR2LEAN_REUSED }}
+        run: |
+          changes=$(git status --porcelain=v1 --untracked-files=all)
+          if [ -n "$changes" ]; then
+            printf 'error: verification changed the checkout:\n%s\n' "$changes" >&2
+            exit 1
+          fi
+          python3 scripts/ci-reuse.py check-restricted
+
+      # L02: wide bit operations, native aarch64-macos (0.14.1 has no macOS patched compiler;
+      # 0.17.1 has no wide bit-operation evidence yet).
+      - name: macOS wide integer bit operations native differential
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.zig == '0.16.0' || !env.AIR2LEAN_REUSED && matrix.zig == '0.15.2' }}
+        run: |
+          set -euo pipefail
+          v='${{ matrix.zig }}'
+          python3 -B tests/roadmap/bitops-native/qualify.py run --version "$v" \
+            --zig-air "$PWD/zig-air-$v/bin/zig" --zig "$RUNNER_TEMP/host-zig-$v/zig" \
+            --targets aarch64-macos --exec aarch64-macos=host \
+            --evidence "$RUNNER_TEMP/bitops-native-$v.json"
+          python3 -B tests/roadmap/bitops-native/qualify.py verify --fresh "$RUNNER_TEMP/bitops-native-$v.json" \
+            --committed "tests/roadmap/bitops-native/evidence/$v.json"
+
+      - name: Record the result for reuse
+        if: ${{ !env.AIR2LEAN_REUSED && success() && env.AIR2LEAN_RECORD == '1' }}
+        run: python3 scripts/ci-reuse.py record --out "$RUNNER_TEMP/ci-reuse/record.json"
+
+      - name: Upload the reuse record
+        if: ${{ !env.AIR2LEAN_REUSED && success() && env.AIR2LEAN_RECORD == '1' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ci-reuse-${{ env.AIR2LEAN_REUSE_KEY }}
+          path: ${{ runner.temp }}/ci-reuse/record.json
+          if-no-files-found: error
+          retention-days: 90
+
+      # The Darwin dumps are the source of tests/golden/<version>/<ex>/air-darwin/ overrides.
+      - name: Upload the dumped Darwin AIR
+        if: ${{ !env.AIR2LEAN_REUSED && failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: air-macos-arm64-${{ matrix.zig }}
+          path: ${{ runner.temp }}/air-out
+          if-no-files-found: ignore
+          retention-days: 7

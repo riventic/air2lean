@@ -570,6 +570,28 @@ def remove_module_artifacts(root, modules):
     return removed
 
 
+def uncached_env():
+    """The environment of a measured proof build: Lake's artifact cache off. With it on
+    (`scripts/cas.py lake_env`, which build-guard.py applies under AIR2LEAN_CAS_DIR) a "cold"
+    build restores the deleted outputs from the cache instead of elaborating the modules."""
+    env = {key: value for key, value in os.environ.items() if key != "LAKE_RESTORE_ARTIFACTS"}
+    env["LAKE_ARTIFACT_CACHE"] = "false"
+    return env
+
+
+def require_rebuilt(root, modules, since):
+    """Fail closed unless the cold build wrote each module's .olean anew (after `since`, not a
+    hard link into an artifact cache): a restored output would time the cache, not the proof.
+    The mtime is compared to the second, for file systems that store coarser times."""
+    stale = []
+    for module in modules:
+        olean = (root / ".lake/build/lib/lean").joinpath(*module.split(".")).with_suffix(".olean")
+        if not olean.is_file() or olean.stat().st_mtime < math.floor(since) - 1 or olean.stat().st_nlink != 1:
+            stale.append(module)
+    if stale:
+        raise RuntimeError(f"cold proof build did not rebuild {', '.join(stale)} (artifact cache?)")
+
+
 def run_workload(workload, args, work, log):
     ident = workload["id"]
     phases = {}
@@ -609,18 +631,28 @@ def run_workload(workload, args, work, log):
         phases["elaborate"] = wall_and_rss(step)
     modules = workload.get("proof_modules", [])
     if modules and not args.skip_proof:
+        env = uncached_env()
+        # Bring the modules and every dependency up to date first (not measured): the cold build
+        # then elaborates only the selected modules, not a stale dependency of theirs.
+        require_success(measure([args.lake, "build", *modules], ROOT, log, args.timeout, env),
+                        "proof build (dependencies)")
         removed = remove_module_artifacts(ROOT, modules)
+        since = time.time()
         for cache in ("cold", "warm"):
-            step = measure([args.lake, "build", *modules], ROOT, log, args.timeout)
+            step = measure([args.lake, "build", *modules], ROOT, log, args.timeout, env)
             require_success(step, f"proof build ({cache})")
             phases[f"proof.{cache}"] = wall_and_rss(step)
+            if cache == "cold":
+                require_rebuilt(ROOT, modules, since)
         phases["proof.cold"]["artifacts_removed"] = removed
         if args.per_module:
             result_modules = {}
             for module in modules:
                 remove_module_artifacts(ROOT, [module])
-                step = measure([args.lake, "build", module], ROOT, log, args.timeout)
+                since = time.time()
+                step = measure([args.lake, "build", module], ROOT, log, args.timeout, env)
                 require_success(step, f"cold build of {module}")
+                require_rebuilt(ROOT, [module], since)
                 result_modules[module] = wall_and_rss(step)
             return {"status": "ok", "phases": phases, "output": output, "modules": result_modules}
     return {"status": "ok", "phases": phases, "output": output}

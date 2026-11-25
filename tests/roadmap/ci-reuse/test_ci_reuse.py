@@ -142,12 +142,13 @@ class Workflow(unittest.TestCase):
 
 class Repository(unittest.TestCase):
     """A scratch repository with the reuse machinery, the real workflow and a small tree."""
+    WORKFLOWS = (cr.WORKFLOW,)  # the real CI workflows this fixture copies
 
     def setUp(self):
         temp = tempfile.TemporaryDirectory(prefix='air2lean ci-reuse key ')
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name) / 'repo'
-        for rel in ('.github/workflows/ci.yml', *cr.MACHINERY):
+        for rel in (*self.WORKFLOWS, *cr.MACHINERY):
             (self.root / rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / rel, self.root / rel)
         data = json.loads((self.root / '.github/ci-inputs.json').read_text())
@@ -334,6 +335,7 @@ class RevisionCapture(Repository):
 
 class Keys(Repository):
     """A key changes with a declared input or any tracked name, and stays with undeclared content."""
+    WORKFLOWS = cr.TM.CI_WORKFLOWS
 
     def test_git_attributes_are_inputs_of_every_reusable_part_and_support_job(self):
         attributes = self.add_attributes()
@@ -394,6 +396,32 @@ class Keys(Repository):
         first = self.key('macos/0.16.0')
         self.commit()
         self.assertEqual(self.key('macos/0.16.0'), first)
+
+    def test_a_part_reuses_only_records_of_its_own_workflow(self):
+        """The macos rows are ci-macos.yml's: a ci.yml run's record never stands in for one, and
+        the key carries that file's workflow-level fields."""
+        workflow = cr.load_workflow(self.root)
+        self.assertEqual(cr.keyed_definitions(workflow, 'macos', {'zig': '0.16.0'})['workflow']['name'], 'CI macOS')
+        self.assertEqual(cr.keyed_definitions(workflow, 'bitops-native-arm', None)['workflow']['name'], 'CI')
+        preimage = cr.manifest(self.root, 'macos/0.16.0', {})
+        responses = Lookup()
+        artifact = dict(responses.artifact(), name='ci-reuse-' + cr.key_of(preimage))
+        jobs = [dict(responses.JOBS[0], name=preimage['job_name'])]
+        macos_parts = [part for part in cr.parts(workflow) if part.startswith('macos/')]
+        # A ci.yml run last: an executing part restricts the checkout.
+        for path, name, reused in (('.github/workflows/ci-macos.yml', 'CI macOS', True), (cr.WORKFLOW, 'CI', False)):
+            with self.subTest(path=path):
+                temp = self.root.parent / ('decision-' + name.replace(' ', '-'))
+                temp.mkdir()
+                environ = {'AIR2LEAN_EVENT': 'pull_request', 'RUNNER_TEMP': str(temp), 'GITHUB_REPOSITORY': Lookup.REPO,
+                           'GITHUB_ENV': str(temp / 'env'), 'GITHUB_STEP_SUMMARY': str(temp / 'summary'),
+                           'GITHUB_RUN_ATTEMPT': '1'}
+                environ['GITHUB_RUN_ID'] = next(str(n) for n in range(100, 200) if cr.self_check_part(
+                    dict(environ, GITHUB_RUN_ID=str(n)), macos_parts) != 'macos/0.16.0')
+                fetch = responses.fetch_for([artifact], responses.run_data(path=path, name=name), jobs)
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(cr.decide(self.root, 'macos', '{"zig": "0.16.0"}', environ, fetch), 0)
+                self.assertEqual('AIR2LEAN_REUSED=u' in (temp / 'env').read_text(), reused)
 
     def test_steps_of_other_rows_are_not_inputs(self):
         part, workflow = 'test/0.16.0/mutation/1', self.root / '.github/workflows/ci.yml'
@@ -828,7 +856,8 @@ class DataIdentity(Repository):
             self.assertEqual(cr.manifest(self.root,'solo',{})['definitions']['job']['steps'][0]['name'],'Supported gate')
 
     def workflow(self,rows,condition='matrix.full',job='test'):
-        text='''jobs:
+        text='''name: CI
+jobs:
   JOB:
     runs-on: ubuntu-24.04
     strategy:

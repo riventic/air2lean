@@ -6,8 +6,8 @@ import ZigLean.Sep.Full.AutoWP
 /-!
 # `Io.Condition` as a condition (`CondImpl`), once for every program and Zig version
 
-`Io.Condition`'s `signal` and `waitUncancelable` (Zig 0.16.0 and 0.17.1) are the same code in
-every program that uses them, up to names and one difference between the versions: 0.16.0's
+`Io.Condition`'s `signal`, `broadcast` and `waitUncancelable` (Zig 0.16.0 and 0.17.1) are the
+same code in every program that uses them, up to names and one difference between the versions: 0.16.0's
 `waitUncancelable` calls `waitInner(…, true)`, which holds the registration and the loops, and
 0.17.1 inlines that code into `waitUncancelable`. `IoCondCode Tgt` is that code passed as
 parameters, as `IoMutexCode` (`ZigLean/Sep/Full/IoMutex.lean`) is for `Io.Mutex`: a program's
@@ -19,8 +19,8 @@ uses only their values at the exits it takes, and the mutex the wait unlocks and
 its core, directly (0.17.1) or through a call that checks the core's return (0.16.0).
 
 `IoCondCode.impl` proves the condition contract (`CondImpl`, `ZigLean/Sep/Full/Cond.lean`) once,
-from the rules of the futex-epoch condition: `signal` and `waitUncancelable`, for every protocol
-that has the condition next to its mutex. A program instantiates it with its generated names and
+from the rules of the futex-epoch condition: `signal`, `broadcast` and `waitUncancelable`, for
+every protocol that has the condition next to its mutex. A program instantiates it with its generated names and
 `rfl`/`simp` proofs of the equations, once per translation (`Proofs/Sync/Cond.lean`, and one
 instance per golden case in `Proofs/Sync/CondCases.lean`). The wait's walks are rule-by-rule term
 proofs: `fsym` cannot yet walk a shape whose continuations are hypotheses (ledger
@@ -67,8 +67,38 @@ def sbodyOf {σ E : Type} (wa si : S → BitVec 16) (mk : BitVec 16 → BitVec 1
       pure ret
   else pure stop
 
-/-- `signal` in normal form: the relaxed load of the state, then the loop. `k` is the generated
-match after the loop, `fin` the one on the function's exit. -/
+/-- `broadcast`'s loop body, in normal form: as `signal`'s (`sbodyOf`), but the `cmpxchg` gives
+every waiter its signal (`signals := waiters`) and the wake is of `waiters - signals` threads. -/
+def bbodyOf {σ E : Type} (wa si : S → BitVec 16) (mk : BitVec 16 → BitVec 16 → S)
+    (prev : σ → S) (setPrev : σ → S → σ) (rep stop ret : E) (p : Ptr) (io : Io) :
+    CM Tgt σ E := do
+  callMC tick
+  let x ← get
+  let x_1 ← get
+  if gt false (wa (prev x)) (si (prev x_1)) = true then do
+    let x ← get
+    let x_2 ← get
+    let x_3 ← get
+    let x ← cmpxchgWeakAsC AtomicOrder.release AtomicOrder.relaxed 4 p (prev x)
+      (mk (wa (prev x_2)) (wa (prev x_3)))
+    if x.isSome = true then do
+      let x ← optPayload x
+      modify fun s => setPrev s x
+      pure rep
+    else do
+      let i35 ← callMC (ptrProject p fun x => x.add 4)
+      let _ ← atomicRmwC RmwOp.add false AtomicOrder.release 4 i35 (1 : BitVec 32)
+      let i40 ← callMC (ptrProject p fun x => x.add 4)
+      let x_4 ← get
+      let x_5 ← get
+      let i47 ← sub false (wa (prev x_4)) (si (prev x_5))
+      let i48 ← intCast false false 32 i47 (safe := false)
+      futexWakeC io i40 i48
+      pure ret
+  else pure stop
+
+/-- `signal` and `broadcast` in normal form: the relaxed load of the state, then the loop. `k` is
+the generated match after the loop, `fin` the one on the function's exit. -/
 def signalOf {σ E : Type} [Inhabited σ] (setPrev : σ → S → σ) (body : Ptr → Io → CM Tgt σ E)
     (again : E → Bool) (k : E → CM Tgt σ E) (fin : E → ConcM Tgt Unit) (p : Ptr) (io : Io) :
     ConcM Tgt Unit := do
@@ -194,6 +224,28 @@ structure IoCondCode (Tgt : Type) where
   signal_eq : ∃ (k : Es → CM Tgt σs Es) (fin : Es → ConcM Tgt Unit),
     (∀ p io, signal p io = IoCondCode.signalOf ssetPrev sbody sagain k fin p io) ∧
     k sstop = pure sret ∧ k sret = pure sret ∧ fin sret = pure ()
+  /-- `broadcast`'s locals (`prev_state`) and exits, as `signal`'s. -/
+  σb : Type
+  [inhb : Inhabited σb]
+  Eb : Type
+  bprev : σb → S
+  bsetPrev : σb → S → σb
+  bprev_set : ∀ s v, bprev (bsetPrev s v) = v := by intros; rfl
+  bret : Eb
+  bstop : Eb
+  brep : Eb
+  bagain : Eb → Bool
+  bagain_rep : bagain brep = true := by rfl
+  bagain_stop : bagain bstop = false := by rfl
+  bagain_ret : bagain bret = false := by rfl
+  /-- `broadcast`'s loop body. -/
+  bbody : Ptr → Io → CM Tgt σb Eb
+  bbody_eq : ∀ p io, bbody p io = IoCondCode.bbodyOf wa si pack bprev bsetPrev brep bstop bret p io
+  /-- `broadcast`: `signal`'s entry around its own loop. -/
+  broadcast : Ptr → Io → ConcM Tgt Unit
+  broadcast_eq : ∃ (k : Eb → CM Tgt σb Eb) (fin : Eb → ConcM Tgt Unit),
+    (∀ p io, broadcast p io = IoCondCode.signalOf bsetPrev bbody bagain k fin p io) ∧
+    k bstop = pure bret ∧ k bret = pure bret ∧ fin bret = pure ()
   /-- The wait core's locals (`epoch`, `prev_state`) and exits: the core's return (`done`), the
   inner loop's end and repeat, the outer loop's repeat. -/
   σ : Type
@@ -239,7 +291,7 @@ structure IoCondCode (Tgt : Type) where
 
 namespace IoCondCode
 
-attribute [instance] IoCondCode.pk IoCondCode.inhs IoCondCode.inh
+attribute [instance] IoCondCode.pk IoCondCode.inhs IoCondCode.inhb IoCondCode.inh
 
 variable {Tgt : Type} (X : IoCondCode Tgt)
 
@@ -296,6 +348,22 @@ theorem s_post {b : BitVec 32} {r : BitVec 16}
   rw [s_bits, s_mk, s_w, hr]
   omega
 
+/-- `broadcast`'s post: a signal for every waiter, `(w, s) → (w, w)`, to a state with a waiter
+lacking one. -/
+theorem s_bpost {b : BitVec 32} (hlt : ¬b.toNat % 65536 ≤ b.toNat / 65536) :
+    FCond.PostOk (Packed.toBits (Packed.ofBits b : X.S))
+      (Packed.toBits (X.pack (X.wa (Packed.ofBits b)) (X.wa (Packed.ofBits b)))) := by
+  unfold FCond.PostOk
+  rw [s_bits, s_mk, s_w]
+  omega
+
+/-- The state `(w, w)` is served. -/
+theorem s_bserved (x : BitVec 16) :
+    (Packed.toBits (X.pack x x)).toNat % 65536 ≤ (Packed.toBits (X.pack x x)).toNat / 65536 := by
+  rw [s_mk]
+  have : x.toNat < 65536 := x.isLt
+  omega
+
 /-- The waiter's take of a signal: `(w, s) - (1, 1)`, with `0 < s ≤ w`. -/
 theorem s_take {b : BitVec 32} (hok : FCond.SOk b) (hs : b.toNat / 65536 ≠ 0) :
     Packed.toBits (X.pack (X.wa (Packed.ofBits b) - 1) (X.si (Packed.ofBits b) - 1)) =
@@ -348,33 +416,86 @@ section
 variable {γ : Type} {L : FLock γ} {C : FCond γ} {P : Proto Tgt γ}
   {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
 
-/-! ## `signal` -/
+/-! ## `signal` and `broadcast`
 
-/-- `signal`'s loop invariant, for the call snapshot `h c` (`FCond.Fits.enterSl`): `t` last read
-the state value `b` (`waiters ≥ signals`); a served value (`waiters ≤ signals`) gave the history
-post and `t` is out, else `t` is still at `sl h c`. -/
-def sigInv (P : Proto Tgt γ) (C : FCond γ) (t : ThreadId) (g : γ) (h : Array Word.Entry)
-    (c : VClock) (D : Nat) (s : X.σs) (G : ThreadId → γ) (m : Mem) (d : Nat) : Prop :=
-  d < D ∧ m.current = t ∧ ∃ b : BitVec 32, X.sprev s = Packed.ofBits b ∧ FCond.SOk b ∧
+Both are the relaxed load of the state and a loop (`signalOf`) that ends when every waiter has
+its signal; they differ in the loop's `cmpxchg` and wake, and in the history post: `signal`'s
+for `all = false`, `broadcast`'s for `all = true` (`FCond.SigPost`). -/
+
+/-- The loop invariant of `signal` and `broadcast` (locals `prev_state` read by `prev`), for the
+call snapshot `h c` (`FCond.Fits.enterSl`): `t` last read the state value `b`
+(`waiters ≥ signals`); a served value (`waiters ≤ signals`) gave the history post and `t` is out,
+else `t` is still at `sl h c`. -/
+def sigInv {σ : Type} (prev : σ → X.S) (P : Proto Tgt γ) (C : FCond γ) (t : ThreadId) (g : γ)
+    (h : Array Word.Entry) (c : VClock) (D : Nat) (s : σ) (G : ThreadId → γ) (m : Mem)
+    (d : Nat) : Prop :=
+  d < D ∧ m.current = t ∧ ∃ b : BitVec 32, prev s = Packed.ofBits b ∧ FCond.SOk b ∧
     (b.toNat % 65536 ≤ b.toNat / 65536 → ∀ all, C.SigPost h c all m) ∧
     P.inv (upd G t (C.set g (FCond.afterSRead h c b))) m
 
-/-- `signal`'s loop ends with `t` out and the history post. -/
-def sigPost (P : Proto Tgt γ) (C : FCond γ) (t : ThreadId) (g : γ) (h : Array Word.Entry)
-    (c : VClock) (D : Nat) (r : X.Es × X.σs) (G : ThreadId → γ) (m : Mem) (d : Nat) : Prop :=
-  (r.1 = X.sret ∨ r.1 = X.sstop) ∧ d < D ∧ m.current = t ∧ P.inv (upd G t g) m ∧
-    C.SigPost h c false m
+/-- The loop ends (at `ret` or `stop`) with `t` out and the history post for `all`. -/
+def sigPost {σ E : Type} (ret stop : E) (all : Bool) (P : Proto Tgt γ) (C : FCond γ)
+    (t : ThreadId) (g : γ) (h : Array Word.Entry) (c : VClock) (D : Nat) (r : E × σ)
+    (G : ThreadId → γ) (m : Mem) (d : Nat) : Prop :=
+  (r.1 = ret ∨ r.1 = stop) ∧ d < D ∧ m.current = t ∧ P.inv (upd G t g) m ∧
+    C.SigPost h c all m
+
+/-- **The entry of `signal` and `broadcast`** (`signalOf`) outside or holding the mutex,
+preserving its complete resource, with the history post of its call for `all`, from its loop
+body's step (`hbody`). -/
+theorem entry_wp {σ E : Type} [Inhabited σ] {prev : σ → X.S} {setPrev : σ → X.S → σ}
+    (prev_set : ∀ s v, prev (setPrev s v) = v) {body : Ptr → Io → CM Tgt σ E}
+    {again : E → Bool} {ret stop : E} {k : E → CM Tgt σ E} {fin : E → ConcM Tgt Unit}
+    (hkstop : k stop = pure ret) (hkret : k ret = pure ret) (hfin : fin ret = pure ())
+    {all : Bool} (hC : L.Fits (C.prim L) P U ok) {p : Ptr} (hp : p = C.S.ptr) (t : ThreadId)
+    (g : γ) (hgx : C.ph g = .out) (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g)
+    (io : Io)
+    (hbody : ∀ (h : Array Word.Entry) (c : VClock) (D : Nat) (s : σ) (G : ThreadId → γ)
+      (m : Mem) (d : Nat), X.sigInv prev P C t g h c D s G m d →
+      P.WP t ((body C.S.ptr io).run s) (fun r G' m' d' =>
+        if again r.1 then X.sigInv prev P C t g h c D r.2 G' m' d' ∧
+          (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : σ) => 0) s)
+        else X.sigPost ret stop all P C t g h c D r G' m' d') G m d)
+    (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
+    P.WP t (signalOf setPrev body again k fin p io) (fun _ G' m' d' => d' < d ∧
+      m'.current = t ∧ P.inv (upd G' t g) m' ∧ C.SigPost (C.S.hist m) (m.clocks[t]!) all m')
+      G m d := by
+  subst hp
+  have hi' := hC.enterSl hgx hgo hsx hi
+  generalize C.S.hist m = h at hi' ⊢
+  generalize m.clocks[t]! = c at hi' ⊢
+  clear hi
+  rw [signalOf]
+  refine WP.bind ?_
+  rw [StateT.run'_eq]
+  refine WP.map ?_
+  simp only [StateT.run_bind]
+  refine WP.bind (FCond.wp_sloadAs hC X.s_dec (C.ph_set _ _) hi'
+    fun k₁ hk₁ G₁ m₁ b r hc₁ hd hb hsp hi₁ => ?_)
+  obtain rfl := X.s_eq hd
+  rw [C.set_set] at hi₁
+  simp only [StateT.run_modify, pure_bind]
+  refine WP.bind (WP.mono ?_ (WP.loop _ _ (X.sigInv prev P C t g h c d) (fun _ => 0)
+    (X.sigPost ret stop all P C t g h c d) (hbody h c d) _ G₁ m₁ k₁
+    ⟨by omega, hc₁, b, prev_set _ _, hb, hsp, hi₁⟩))
+  rintro ⟨x, s'⟩ G₂ m₂ d₂ ⟨hx, hd₂, hc₂, hi₂, hp₂⟩
+  have hkx : k x = pure ret := by rcases hx with rfl | rfl <;> assumption
+  rw [hkx, StateT.run_pure]
+  refine WP.pure' ?_
+  show P.WP t (fin ret) _ G₂ m₂ d₂
+  rw [hfin]
+  exact WP.pure' ⟨hd₂, hc₂, hi₂, hp₂⟩
 
 theorem sig_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
     (hgo : L.ph g = .out ∨ L.ph g = .holds) (hu : 0 < (L.part g).gh.ac.frag .unmetered)
     (h : Array Word.Entry) (c : VClock) (D : Nat)
     (io : Io) (s : X.σs) (G : ThreadId → γ) (m : Mem) (d : Nat)
-    (hs : X.sigInv P C t g h c D s G m d) :
+    (hs : X.sigInv X.sprev P C t g h c D s G m d) :
     P.WP t ((X.sbody C.S.ptr io).run s) (fun r G' m' d' =>
-      if X.sagain r.1 then X.sigInv P C t g h c D r.2 G' m' d' ∧
+      if X.sagain r.1 then X.sigInv X.sprev P C t g h c D r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : X.σs) => 0) s)
-      else X.sigPost P C t g h c D r G' m' d') G m d := by
+      else X.sigPost X.sret X.sstop false P C t g h c D r G' m' d') G m d := by
   obtain ⟨hd, hcur, b, hb, hok, hsp₀, hi₀⟩ := hs
   rw [X.sbody_eq, sbodyOf, StateT.run_bind]
   refine WP.bind ?_
@@ -412,32 +533,10 @@ theorem signal_wp_unmetered (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = no
     (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
     P.WP t (X.signal p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
       P.inv (upd G' t g) m' ∧ C.SigPost (C.S.hist m) (m.clocks[t]!) false m') G m d := by
-  subst hp
-  have hi' := hC.enterSl hgx hgo hsx hi
-  generalize C.S.hist m = h at hi' ⊢
-  generalize m.clocks[t]! = c at hi' ⊢
-  clear hi
   obtain ⟨k, fin, hsig, hkstop, hkret, hfin⟩ := X.signal_eq
-  rw [hsig, signalOf]
-  refine WP.bind ?_
-  rw [StateT.run'_eq]
-  refine WP.map ?_
-  simp only [StateT.run_bind]
-  refine WP.bind (FCond.wp_sloadAs hC X.s_dec (C.ph_set _ _) hi'
-    fun k₁ hk₁ G₁ m₁ b r hc₁ hd hb hsp hi₁ => ?_)
-  obtain rfl := X.s_eq hd
-  rw [C.set_set] at hi₁
-  simp only [StateT.run_modify, pure_bind]
-  refine WP.bind (WP.mono ?_ (WP.loop _ _ (X.sigInv P C t g h c d) (fun _ => 0)
-    (X.sigPost P C t g h c d) (X.sig_body hC hcost t g hgx hgo hu h c d io) _ G₁ m₁ k₁
-    ⟨by omega, hc₁, b, X.sprev_set _ _, hb, hsp, hi₁⟩))
-  rintro ⟨x, s'⟩ G₂ m₂ d₂ ⟨hx, hd₂, hc₂, hi₂, hp₂⟩
-  have hkx : k x = pure X.sret := by rcases hx with rfl | rfl <;> assumption
-  rw [hkx, StateT.run_pure]
-  refine WP.pure' ?_
-  show P.WP t (fin X.sret) _ G₂ m₂ d₂
-  rw [hfin]
-  exact WP.pure' ⟨hd₂, hc₂, hi₂, hp₂⟩
+  rw [hsig]
+  exact X.entry_wp X.sprev_set hkstop hkret hfin hC hp t g hgx hgo hsx io
+    (fun h c D => X.sig_body hC hcost t g hgx hgo hu h c D io) G m d hi
 
 /-- The signal contract at its caller part: this implementation's proved profile returns the
 part it was called with (`keepPart`). -/
@@ -450,6 +549,72 @@ theorem signal_wp_resource (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = non
       ∃ r', keepPart t (L.part g) r' ∧ P.inv (upd G' t (L.setPart g r')) m' ∧
         C.SigPost (C.S.hist m) (m.clocks[t]!) false m') G m d := by
   refine WP.mono ?_ (X.signal_wp_unmetered hC hcost hp t g hgx hgo hsx hu io G m d hi)
+  rintro _ G' m' d' ⟨hd, hc, hi', hsig⟩
+  exact ⟨hd, hc, L.part g, rfl, by simpa only [L.setPart_self] using hi', hsig⟩
+
+theorem bc_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
+    (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hu : 0 < (L.part g).gh.ac.frag .unmetered)
+    (h : Array Word.Entry) (c : VClock) (D : Nat)
+    (io : Io) (s : X.σb) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hs : X.sigInv X.bprev P C t g h c D s G m d) :
+    P.WP t ((X.bbody C.S.ptr io).run s) (fun r G' m' d' =>
+      if X.bagain r.1 then X.sigInv X.bprev P C t g h c D r.2 G' m' d' ∧
+        (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : X.σb) => 0) s)
+      else X.sigPost X.bret X.bstop true P C t g h c D r G' m' d') G m d := by
+  obtain ⟨hd, hcur, b, hb, hok, hsp₀, hi₀⟩ := hs
+  rw [X.bbody_eq, bbodyOf, StateT.run_bind]
+  refine WP.bind ?_
+  -- the loop's tick, paid from the unmetered fragment: the same writes (`m.ticked`)
+  show P.WP t (ConcM.liftMem Zig.tick >>= fun a => pure (a, s)) _ _ _ _
+  refine WP.bind (hC.wp_tick_unmetered_exact hi₀ hcur
+    (by rw [hC.lph]; rcases hgo with hh | hh <;> rw [hh] <;> decide)
+    (by rw [hC.lpart]; exact hu) fun hcur hi => WP.pure' ?_)
+  have hsp : b.toNat % 65536 ≤ b.toNat / 65536 → ∀ all, C.SigPost h c all m.ticked :=
+    fun hsv all => (hsp₀ hsv all).extend (Word.Extends.congr rfl rfl)
+  clear hsp₀ hi₀
+  simp only [StateT.run_bind, StateT.run_get, pure_bind, hb, s_gt]
+  by_cases hsv : b.toNat % 65536 ≤ b.toNat / 65536
+  · -- every waiter has its signal: the loop ends, `t` out with the history post
+    have hp := hsp hsv true
+    rw [show FCond.afterSRead h c b = .out by simp [FCond.afterSRead, hsv],
+      FCond.set_of hgx] at hi
+    clear hsp
+    fsym [X.s_w, X.s_s, FCond.SOk, sigPost, X.bagain_stop, hb]
+  · -- a waiter lacks its signal: the `cmpxchg` that gives every waiter one; on success the
+    -- epoch's increment and the wake of `waiters - signals`, on failure a repeat with the value
+    rw [show FCond.afterSRead h c b = .sl h c by simp [FCond.afterSRead, hsv]] at hi
+    clear hsp
+    fsym [FCond.wp_postAs hC X.s_dec (sh := h) (c := c), FCond.wp_bump hC, FCond.wp_wakeEp hC,
+      hC.wp_projE (t := t), FCond.SigPost.ofPostAll, X.s_bpost hsv, X.s_bserved,
+      Zig.intCast_unsigned_widen, BitVec.toNat_setWidth, X.s_eq, X.s_w, X.s_s, X.s_mk,
+      X.s_bits, C.ph_set, hC.lph, C.set_set, FCond.set_of, (FCond.set_of hgx), FCond.ptr_ep,
+      FCond.SOk, sigInv, sigPost, X.bagain_ret, X.bagain_rep, X.bprev_set, hb]
+
+/-- **`Io.Condition.broadcast`** outside or holding the mutex, preserving its complete resource,
+with the history post of its call for `all = true` (`FCond.SigPost`). -/
+theorem broadcast_wp_unmetered (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
+    {p : Ptr} (hp : p = C.S.ptr) (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered)
+    (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat) (hi : P.inv (upd G t g) m) :
+    P.WP t (X.broadcast p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      P.inv (upd G' t g) m' ∧ C.SigPost (C.S.hist m) (m.clocks[t]!) true m') G m d := by
+  obtain ⟨k, fin, hbc, hkstop, hkret, hfin⟩ := X.broadcast_eq
+  rw [hbc]
+  exact X.entry_wp X.bprev_set hkstop hkret hfin hC hp t g hgx hgo hsx io
+    (fun h c D => X.bc_body hC hcost t g hgx hgo hu h c D io) G m d hi
+
+/-- The broadcast contract at its caller part (`keepPart`, as `signal`). -/
+theorem broadcast_wp_resource (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
+    {p : Ptr} (hp : p = C.S.ptr) (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g)
+    (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hu : payUnmetered t (L.part g)) (hi : P.inv (upd G t g) m) :
+    P.WP t (X.broadcast p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      ∃ r', keepPart t (L.part g) r' ∧ P.inv (upd G' t (L.setPart g r')) m' ∧
+        C.SigPost (C.S.hist m) (m.clocks[t]!) true m') G m d := by
+  refine WP.mono ?_ (X.broadcast_wp_unmetered hC hcost hp t g hgx hgo hsx hu io G m d hi)
   rintro _ G' m' d' ⟨hd, hc, hi', hsig⟩
   exact ⟨hd, hc, L.part g, rfl, by simpa only [L.setPart_self] using hi', hsig⟩
 
@@ -734,6 +899,7 @@ version whose code it is. -/
 def impl : CondImpl Tgt where
   wait := X.wait
   signal := X.signal
+  broadcast := X.broadcast
   c := X.M.c
   wait_pre := payUnmetered
   wait_post := keepPart
@@ -743,8 +909,13 @@ def impl : CondImpl Tgt where
   signal_post := keepPart
   signal_unmetered_pre _ _ hu := hu
   signal_unmetered_post _ _ _ _ hr := hr
+  broadcast_pre := payUnmetered
+  broadcast_post := keepPart
+  broadcast_unmetered_pre _ _ hu := hu
+  broadcast_unmetered_post _ _ _ _ hr := hr
   wait_wp_resource := X.wait_wp_resource
   signal_wp_resource hC := X.signal_wp_resource hC.toFits
+  broadcast_wp_resource hC := X.broadcast_wp_resource hC.toFits
 
 end IoCondCode
 
