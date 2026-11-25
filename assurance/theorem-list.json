@@ -360,6 +360,7 @@
       "name": "Sync.Handoff.handoff_spec",
       "module": "Proofs.Sync.Handoff",
       "example": "sync",
+      "excluded": [{"zig": "0.17.1", "target": "linux", "reason": "the module imports Proofs.Sync.Cond, the IoCondCode instance of the public (0.16.0) translation: 0.17.1 Linux has its Io.Condition contract only per case (Proofs/Sync/CondCases.lean), not this client proof"}],
       "scope": "all-schedules",
       "domain": "`handoff` with 0.16.0 `Io.Mutex`, `Io.Condition` and `Io.Event`, for every `io`: every completed run returns 7; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
@@ -367,6 +368,7 @@
       "name": "Sync.Handoff.handoff_safe",
       "module": "Proofs.Sync.Handoff",
       "example": "sync",
+      "excluded": [{"zig": "0.17.1", "target": "linux", "reason": "the module imports Proofs.Sync.Cond, the IoCondCode instance of the public (0.16.0) translation: 0.17.1 Linux has its Io.Condition contract only per case (Proofs/Sync/CondCases.lean), not this client proof"}],
       "scope": "all-schedules",
       "domain": "`handoff` with 0.16.0 `Io.Mutex`, `Io.Condition` and `Io.Event`, for every `io`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
@@ -374,6 +376,7 @@
       "name": "Sync.SemCounter.semaphoreCounter_spec",
       "module": "Proofs.Sync.SemCounter",
       "example": "sync",
+      "excluded": [{"zig": "0.17.1", "target": "linux", "reason": "the module imports Proofs.Sync.Cond, the IoCondCode instance of the public (0.16.0) translation: 0.17.1 Linux has its Io.Condition contract only per case (Proofs/Sync/CondCases.lean), not this client proof"}],
       "scope": "all-schedules",
       "domain": "`semaphoreCounter` with 0.16.0 `Io.Semaphore`, `Io.Mutex` and `Io.Condition`, for every `io`: every completed run returns 4; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
@@ -381,6 +384,7 @@
       "name": "Sync.SemCounter.semaphoreCounter_safe",
       "module": "Proofs.Sync.SemCounter",
       "example": "sync",
+      "excluded": [{"zig": "0.17.1", "target": "linux", "reason": "the module imports Proofs.Sync.Cond, the IoCondCode instance of the public (0.16.0) translation: 0.17.1 Linux has its Io.Condition contract only per case (Proofs/Sync/CondCases.lean), not this client proof"}],
       "scope": "all-schedules",
       "domain": "`semaphoreCounter` with 0.16.0 `Io.Semaphore`, `Io.Mutex` and `Io.Condition`, for every `io`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
@@ -388,6 +392,7 @@
       "name": "Sync.RwLockRead.rwLockRead_spec",
       "module": "Proofs.Sync.RwLockFixture",
       "example": "sync",
+      "excluded": [{"zig": "0.17.1", "target": "linux", "reason": "the module imports Proofs.Sync.Cond, the IoCondCode instance of the public (0.16.0) translation: 0.17.1 Linux has its Io.Condition contract only per case (Proofs/Sync/CondCases.lean), not this client proof"}],
       "scope": "all-schedules",
       "domain": "`rwLockRead` with 0.16.0 `Io.RwLock` (its `Io.Mutex` and `Io.Semaphore`), for every `io`; the fixed client: main reader and one writer adding 1 twice: every completed run returns 2, 12 or 22; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
@@ -395,6 +400,7 @@
       "name": "Sync.RwLockRead.rwLockRead_safe",
       "module": "Proofs.Sync.RwLockFixture",
       "example": "sync",
+      "excluded": [{"zig": "0.17.1", "target": "linux", "reason": "the module imports Proofs.Sync.Cond, the IoCondCode instance of the public (0.16.0) translation: 0.17.1 Linux has its Io.Condition contract only per case (Proofs/Sync/CondCases.lean), not this client proof"}],
       "scope": "all-schedules",
       "domain": "`rwLockRead` with 0.16.0 `Io.RwLock` (its `Io.Mutex` and `Io.Semaphore`), for every `io`; the fixed client: main reader and one writer adding 1 twice: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
@@ -402,6 +408,7 @@
       "name": "Sync.RwLockSnapshotPair.snapshotPair_spec",
       "module": "Proofs.Sync.RwLockFixture",
       "example": "sync",
+      "excluded": [{"zig": "0.17.1", "target": "linux", "reason": "the module imports Proofs.Sync.Cond, the IoCondCode instance of the public (0.16.0) translation: 0.17.1 Linux has its Io.Condition contract only per case (Proofs/Sync/CondCases.lean), not this client proof"}],
       "scope": "all-schedules",
       "domain": "`snapshotPair` (`rwLockSnapshotPair`, C14) for every `io`; the fixed client, proved over the contract `RwLockImpl` in Proofs/Sync/RwLockFixture.lean (main reader, one writer, writer count ≤ 2, one shared hold over both loads, join before reclamation); not a reusable RwLock contract for arbitrary readers or resources: every completed run returns 0, 11 or 22; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
@@ -409,6 +416,7 @@
       "name": "Sync.RwLockSnapshotPair.snapshotPair_safe",
       "module": "Proofs.Sync.RwLockFixture",
       "example": "sync",
+      "excluded": [{"zig": "0.17.1", "target": "linux", "reason": "the module imports Proofs.Sync.Cond, the IoCondCode instance of the public (0.16.0) translation: 0.17.1 Linux has its Io.Condition contract only per case (Proofs/Sync/CondCases.lean), not this client proof"}],
       "scope": "all-schedules",
       "domain": "`snapshotPair` (`rwLockSnapshotPair`, C14) for every `io`; the fixed client, proved over the contract `RwLockImpl` in Proofs/Sync/RwLockFixture.lean (main reader, one writer, writer count ≤ 2, one shared hold over both loads, join before reclamation); not a reusable RwLock contract for arbitrary readers or resources: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
@@ -502,6 +510,7 @@
       "name": "tryLock_new",
       "module": "Proofs.Sync.Proofs",
       "example": "sync",
+      "excluded": [{"zig": "0.17.1", "target": "linux", "reason": "the module imports Proofs.Sync.Cond, the IoCondCode instance of the public (0.16.0) translation: 0.17.1 Linux has its Io.Condition contract only per case (Proofs/Sync/CondCases.lean), not this client proof"}],
       "scope": "single-schedule",
       "domain": "`Io.Mutex.tryLock` of a new mutex succeeds; the oracle that always picks option 0, fuel 10, computed by the kernel; one schedule only"
     },
@@ -509,6 +518,7 @@
       "name": "tryLock_twice",
       "module": "Proofs.Sync.Proofs",
       "example": "sync",
+      "excluded": [{"zig": "0.17.1", "target": "linux", "reason": "the module imports Proofs.Sync.Cond, the IoCondCode instance of the public (0.16.0) translation: 0.17.1 Linux has its Io.Condition contract only per case (Proofs/Sync/CondCases.lean), not this client proof"}],
       "scope": "single-schedule",
       "domain": "a second `tryLock` of a taken mutex fails; the oracle that always picks option 0, fuel 10, computed by the kernel; one schedule only"
     },
@@ -516,6 +526,7 @@
       "name": "wait_alone_deadlock",
       "module": "Proofs.Sync.Proofs",
       "example": "sync",
+      "excluded": [{"zig": "0.17.1", "target": "linux", "reason": "the module imports Proofs.Sync.Cond, the IoCondCode instance of the public (0.16.0) translation: 0.17.1 Linux has its Io.Condition contract only per case (Proofs/Sync/CondCases.lean), not this client proof"}],
       "scope": "single-schedule",
       "domain": "the only thread waiting at an unwoken futex is `.deadlock`; the oracle that always picks option 0, fuel 10, computed by the kernel; one schedule only"
     },
@@ -523,6 +534,7 @@
       "name": "wait_other_value",
       "module": "Proofs.Sync.Proofs",
       "example": "sync",
+      "excluded": [{"zig": "0.17.1", "target": "linux", "reason": "the module imports Proofs.Sync.Cond, the IoCondCode instance of the public (0.16.0) translation: 0.17.1 Linux has its Io.Condition contract only per case (Proofs/Sync/CondCases.lean), not this client proof"}],
       "scope": "single-schedule",
       "domain": "a futex wait on a different value goes on; the oracle that always picks option 0, fuel 10, computed by the kernel; one schedule only"
     },
@@ -530,6 +542,7 @@
       "name": "snapshot_without_clock_edge_rejected",
       "module": "Proofs.Sync.Proofs",
       "example": "sync",
+      "excluded": [{"zig": "0.17.1", "target": "linux", "reason": "the module imports Proofs.Sync.Cond, the IoCondCode instance of the public (0.16.0) translation: 0.17.1 Linux has its Io.Condition contract only per case (Proofs/Sync/CondCases.lean), not this client proof"}],
       "scope": "single-schedule",
       "domain": "one fixed `MemM` run (child write, parent read without acquire or join) ends in `.illegal` (C14 race negative)"
     },
@@ -551,6 +564,7 @@
       "name": "Sync.Mailbox.mailbox_spec",
       "module": "Proofs.Sync.Mailbox",
       "example": "sync",
+      "excluded": [{"zig": "0.17.1", "target": "linux", "reason": "the module imports Proofs.Sync.Cond, the IoCondCode instance of the public (0.16.0) translation: 0.17.1 Linux has its Io.Condition contract only per case (Proofs/Sync/CondCases.lean), not this client proof"}],
       "scope": "all-schedules",
       "domain": "the Lean model producer/consumer `mailMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Semaphore` wait (condition-variable loop with predicate recheck) and post, for every `io`: one producer, one consumer, one two-field message moved by ownership transfer; proved against the semaphore contract `SemImpl` only (for every implementation; instance `Sync.ioSem`): every completed run returns 34; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
@@ -558,6 +572,7 @@
       "name": "Sync.Mailbox.mailbox_safe",
       "module": "Proofs.Sync.Mailbox",
       "example": "sync",
+      "excluded": [{"zig": "0.17.1", "target": "linux", "reason": "the module imports Proofs.Sync.Cond, the IoCondCode instance of the public (0.16.0) translation: 0.17.1 Linux has its Io.Condition contract only per case (Proofs/Sync/CondCases.lean), not this client proof"}],
       "scope": "all-schedules",
       "domain": "the Lean model producer/consumer `mailMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Semaphore` wait (condition-variable loop with predicate recheck) and post, for every `io`: one producer, one consumer, one two-field message moved by ownership transfer; proved against the semaphore contract `SemImpl` only (for every implementation; instance `Sync.ioSem`): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, lifetime or other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     }
