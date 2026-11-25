@@ -240,10 +240,43 @@ def with_lean_path(paths) -> dict:
     return {**os.environ, "LEAN_PATH": os.pathsep.join(str(p) for p in paths)}
 
 
+_NATIVE: dict[tuple, list[str]] = {}
+
+
+def native_code(lake_imports) -> list[str]:
+    """The `lean` options that load the native code Lake loads into a build of a module whose
+    import closure has the Lake modules `lake_imports`: `lake setup-file` computes the shared
+    libraries of their precompiled imports (fsym's engine, docs/build-cache.md#precompiled-fsym)
+    in Lake's load order. With them a universe module runs the same native tactic code as its
+    Lake build and spends the heartbeats that build spends; interpreted, `fsym` spends more, and
+    a budget the fixture build meets times out. The elaborated terms, so the oleans the audit
+    checks, are the same."""
+    key = tuple(sorted(set(lake_imports)))
+    if key not in _NATIVE:
+        header = {'imports': [{'module': m, 'importAll': False, 'isExported': True, 'isMeta': False}
+                              for m in key], 'isModule': False}
+        # With a header, Lake reads no source: the file names no module of the workspace.
+        result = subprocess.run(['lake', 'setup-file', 'universe-unit.lean', json.dumps(header)],
+                                cwd=ROOT, text=True, capture_output=True)
+        try:
+            setup = json.loads(result.stdout) if not result.returncode else None
+        except ValueError:
+            setup = None
+        if (not isinstance(setup, dict) or not isinstance(setup.get('dynlibs'), list)
+                or not isinstance(setup.get('plugins'), list)
+                or any(not isinstance(p, dict) or p.get('initFn?') or p.get('initFn')
+                       for p in setup['plugins'])):
+            raise RuntimeError(f'lake setup-file gave no supported module setup for {list(key)}:\n'
+                               f'{result.stdout[-2000:]}{result.stderr[-2000:]}')
+        _NATIVE[key] = ([f'--load-dynlib={(ROOT / path).absolute()}' for path in setup['dynlibs']]
+                        + [f'--plugin={(ROOT / p["path"]).absolute()}' for p in setup['plugins']])
+    return _NATIVE[key]
+
+
 def compile_unit(file: str, root: str, olean: Path, lean_path, log: Path, *,
-                 resolved_path: str | None = None) -> str | None:
+                 resolved_path: str | None = None, native: list[str] = ()) -> str | None:
     olean.parent.mkdir(parents=True, exist_ok=True)
-    arguments = ['-R', root, '-o', str(olean), file]
+    arguments = [*native, '-R', root, '-o', str(olean), file]
     result = (run(assumptions.lean_command(arguments, resolved_path)) if resolved_path is not None else
               run(["lake", "env", "lean", *arguments], with_lean_path(lean_path)))
     log.parent.mkdir(parents=True, exist_ok=True)
@@ -333,6 +366,16 @@ def closure(units, by_file: dict[str, Unit]) -> list[Unit]:
             seen[current.file] = current
             pending.extend(by_file[d] for d in current.deps)
     return list(seen.values())
+
+
+def closure_lake(u: Unit, by_file: dict[str, Unit]) -> list[str]:
+    """The Lake modules that `u` and the local modules it imports import."""
+    return sorted({m for c in closure([u], by_file) for m in c.lake})
+
+
+def native_record(options: list[str]) -> list:
+    """Each native-code option with the identity of the library it loads."""
+    return [[option, input_identity(Path(option.split('=', 1)[1]))] for option in options]
 
 
 def input_identity(path: Path) -> dict:
@@ -482,6 +525,8 @@ def prepare_compilation(selected: list[Unit], by_file: dict[str, Unit], output: 
             olean.parent.mkdir(parents=True, exist_ok=True)
         records[unit.module].update(source=original, compiler_source=compiler_source,
                                     compiler_root=source_root, output_path=str(olean.absolute()))
+        if fixture_modules is None:  # A fixture package's Lake build loads its own native code.
+            records[unit.module]['native'] = native_record(native_code(closure_lake(unit, by_file)))
     private_roots = {path.resolve() for path in libraries}
     base = (paths if fixture_modules is not None else
             [path for path in paths if path.resolve() not in private_roots])
@@ -569,6 +614,10 @@ def verify_compiler_inputs(context: dict) -> None:
                 raise ValueError(f'assurance report is stale: {module} {kind} changed')
         if unit['source']['sha256'] != unit['compiler_source']['sha256']:
             raise ValueError(f'compiler-owned Unit staged source differs: {module}')
+        if 'fixture_package' not in context and (
+                not isinstance(unit.get('native'), list)
+                or native_record([option for option, _ in unit['native']]) != unit['native']):
+            raise ValueError(f'compiler-owned Unit native code changed: {module}')
     toolchain = Path(assumptions.lake_env('LEAN_SYSROOT')).resolve()
     if (str(toolchain) != context['lean_sysroot'] or
             assumptions.toolchain_runtime_sha256(toolchain) != context['toolchain_runtime_sha256']):
@@ -748,12 +797,14 @@ def compile_all(local: list[Unit], by_file, output: Path, *, compiled_units: dic
             libs = []  # The SAME explicit ordered path is already frozen in this context.
             record = compiled_units['units'][u.module]
             source, root = record['compiler_source']['path'], record['compiler_root']
+            native = [option for option, _ in record['native']]
         else:
             libs = sorted({lib_of(output, c.root) for c in closure([u], by_file)})
             source, root = staged(output, u)
+            native = native_code(closure_lake(u, by_file))
         error = compile_unit(source, root, olean, libs, output / "logs" / (u.file.replace("/", "__") + ".log"),
-                             **({'resolved_path': compiled_units['lean_path']}
-                                if compiled_units is not None else {}))
+                             native=native, **({'resolved_path': compiled_units['lean_path']}
+                                               if compiled_units is not None else {}))
         if error is None and compiled_units is not None:
             record['outputs'] = compiled_output(olean)
         return error
@@ -867,12 +918,15 @@ def gate(source: Path, root: Path, lean_path: Path, output: Path, replay_cache: 
     The gates of one script run re-audit the same Lake-built library: `replay_cache` (a file in the
     run's own temporary directory, so nothing outlives the run) shares their replays, keyed as
     `assumptions.kernel_replay` keys it (byte-identical Lake-built oleans, same leanchecker)."""
-    if not any((ROOT / f).read_bytes() == source.read_bytes() for f in GATES if Path(f).name == source.name):
+    copied = [f for f in GATES if Path(f).name == source.name and (ROOT / f).read_bytes() == source.read_bytes()]
+    if not copied:
         raise ValueError(f"{source} is not a copy of a gate-audited file {sorted(GATES)}")
+    _, units = universe()
+    by_file = {u.file: u for u in units}
     lib = output / "lib"
     module = module_of(str(source), str(root))
     error = compile_unit(str(source), str(root), lib / (module.replace(".", "/") + ".olean"), [lib, lean_path],
-                         output / "compile.log")
+                         output / "compile.log", native=native_code(closure_lake(by_file[copied[0]], by_file)))
     if error:
         return {"schema_version": 1, "status": "fail", "errors": [error]}
     result = audit_modules([module], [lib, lean_path], output / "assurance.json", replay_cache)
