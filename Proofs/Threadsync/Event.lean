@@ -30,10 +30,7 @@ namespace ResetEvent
 variable {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}
   {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
 
-/-- A gone setter's hypothesis (THR-12, `EventImpl.set_wp_resource`): in every state where it is
-at a place of the event's code, it was not joined. -/
-abbrev GoneUnjoined (L : FLock γ) (E : FEvent γ) (P : Proto Tgt γ) (t : ThreadId) (g : γ) : Prop :=
-  L.ph g = .gone → ∀ G₁ m₁ q, G₁ t = E.set g q → P.inv G₁ m₁ → joinedB m₁ t = false
+open FEvent (GoneUnjoined)
 
 when_defined Thread_Futex_LinuxImpl_wake
 

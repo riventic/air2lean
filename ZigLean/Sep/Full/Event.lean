@@ -2193,6 +2193,13 @@ theorem setPart_set_self (hE : L.Fits (E.prim L) P U ok) (g : γ) (p : EPh) :
   have hpart : L.part g = L.part (E.set g p) := (hE.lpart g p).symm
   rw [hpart, L.setPart_self]
 
+/-- **A gone setter's hypothesis** (premise THR-12, `EventImpl.set_wp_resource`): if the setter
+`t` (`g`) is `gone` for the lock, it is not joined in any state of the protocol where it is at a
+place of the event's code. -/
+abbrev GoneUnjoined {Tgt : Type} (L : FLock γ) (E : FEvent γ) (P : Proto Tgt γ) (t : ThreadId)
+    (g : γ) : Prop :=
+  L.ph g = .gone → ∀ G₁ m₁ q, G₁ t = E.set g q → P.inv G₁ m₁ → joinedB m₁ t = false
+
 end FEvent
 
 /-- **An event implementation** in generated code: its `wait` and `set`, with the rules that a
@@ -2264,8 +2271,7 @@ structure EventImpl (Tgt : Type) where
   set_wp_resource : ∀ {γ : Type} {L : FLock γ} {E : FEvent γ} {P : Proto Tgt γ}
     {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}, L.Fits (E.prim L) P U ok →
     P.cost = none → ∀ {p : Ptr}, p = E.W.ptr → ∀ (t : ThreadId) (g : γ), E.ph g = .out →
-    (L.ph g = .out ∨ L.ph g = .gone) → E.sx g →
-    (L.ph g = .gone → ∀ G₁ m₁ q, G₁ t = E.set g q → P.inv G₁ m₁ → joinedB m₁ t = false) →
+    (L.ph g = .out ∨ L.ph g = .gone) → E.sx g → E.GoneUnjoined L P t g →
     ∀ (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat),
     set_pre t (L.part g) → P.inv (upd G t g) m →
     P.WP t (set p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
@@ -2279,9 +2285,7 @@ theorem set_wp (I : EventImpl Tgt) {γ : Type} {L : FLock γ} {E : FEvent γ} {P
     {U : (ThreadId → γ) → Res → Mem → Prop} {ok : γ → Prop}
     (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none) {p : Ptr} (hp : p = E.W.ptr)
     (t : ThreadId) (g : γ) (hg : E.ph g = .out) (hgo : L.ph g = .out ∨ L.ph g = .gone)
-    (hsx : E.sx g)
-    (hjoin : L.ph g = .gone → ∀ G₁ m₁ q, G₁ t = E.set g q → P.inv G₁ m₁ → joinedB m₁ t = false)
-    (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hsx : E.sx g) (hjoin : E.GoneUnjoined L P t g) (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
     (hu : 0 < (L.part g).gh.ac.frag .unmetered) (hi : P.inv (upd G t g) m) :
     P.WP t (I.set p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
       P.inv (upd G' t (E.set g .sd)) m') G m d := by

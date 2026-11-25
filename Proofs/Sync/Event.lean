@@ -73,8 +73,7 @@ admits every caller part and returns it exactly; it does not use the gone setter
 theorem ioEvent_set_wp_resource (hE : L.Fits (E.prim L) P U ok) (hcost : P.cost = none)
     {p : Ptr} (hp : p = E.W.ptr) (t : ThreadId) (g : γ) (hgx : E.ph g = .out)
     (hgo : L.ph g = .out ∨ L.ph g = .gone) (hsx : E.sx g)
-    (_ : L.ph g = .gone → ∀ G₁ m₁ q, G₁ t = E.set g q → P.inv G₁ m₁ → joinedB m₁ t = false)
-    (io : Io) (G : ThreadId → γ) (m : Mem)
+    (_ : E.GoneUnjoined L P t g) (io : Io) (G : ThreadId → γ) (m : Mem)
     (d : Nat) (_ : anyPart t (L.part g)) (hi : P.inv (upd G t g) m) :
     P.WP t (Io_Event_set p io) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧ E.IsSet m' ∧
       ∃ r', keepPart t (L.part g) r' ∧ P.inv (upd G' t (L.setPart (E.set g .sd) r')) m')

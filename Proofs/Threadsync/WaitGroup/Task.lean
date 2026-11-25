@@ -451,7 +451,7 @@ theorem inv_fin {G : ThreadId → Gh} {rY : Res} {m m' : Mem} {t : ThreadId} {rp
     rw [upd_snd]
     exact (Shape.task hu.shape (by rw [hg]; rfl) (by cases b <;> rfl) fun h => by
       have h' : (G t).2.ph = .fin := h
-      rw [hg] at h'; exact absurd h' (by decide)).threads hs.threads
+      rw [hg] at h'; cases h').threads hs.threads
   · -- the group's live set: `t` leaves it
     by_cases e : u = t
     · subst e; unfold WLive at h; rw [hGt, hfd'] at h; cases h
@@ -659,9 +659,9 @@ theorem unjoined {G : ThreadId → Gh} {rX : Res} {m : Mem} (hu : U G rX m) {t :
     · have hn : ¬ (G 0).2.ph = Ph.j1 := fun h => hf (cj h)
       simp [joinedB, c, hn]
   · rcases hc with ⟨-, -, -, c⟩ | ⟨-, -, -, -, c⟩ | ⟨-, -, -, -, -, c, -⟩
-    · rw [show (G 2).2 = {} from c] at ht; exact absurd ht (by decide)
-    · rw [show (G 2).2 = {} from c] at ht; exact absurd ht (by decide)
-    · simp [joinedB, c]
+    <;> first
+      | (rw [show (G 2).2 = {} from c] at ht; exact absurd ht (by decide))
+      | simp [joinedB, c]
 
 section Sync
 
@@ -690,7 +690,8 @@ theorem wp_setT {p : Ptr} (hp : p = EV.ptr) (io : Io) {t : ThreadId} {G : Thread
       proto.inv (upd G' t (gE rp fc)) m') G m d :=
   WP.mono (fun _ _ _ _ ⟨hd, hc, hs, hi'⟩ => ⟨hd, hc, inv_end hi' hs⟩)
     (ei.set_wp fitsE rfl hp t (gS rp fc) rfl (.inr rfl) ⟨rfl, rfl⟩
-      (fun _ _ _ _ hG ⟨_, _, hu₁⟩ => unjoined hu₁ (by rw [hG]; rfl) (by rw [hG]; decide))
+      (fun _ _ _ _ hG ⟨_, _, hu₁⟩ => unjoined hu₁ (by rw [hG]; rfl)
+        fun h => by rw [hG] at h; cases h)
       io G m d hpP.unmetered hi)
 
 end Sync

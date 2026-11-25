@@ -56,12 +56,7 @@ theorem errno_count {j : Nat} (hj : j ≤ 2 ^ 31 - 1) :
 theorem min_toNat (c : BitVec 32) :
     (Zig.min false (2147483647 : BitVec 32) c).toNat = min c.toNat (2 ^ 31 - 1) := by
   have h2 : (2147483647 : BitVec 32).toNat = 2147483647 := rfl
-  show (if (2147483647 : BitVec 32).ule c = true then (2147483647 : BitVec 32) else c).toNat = _
-  by_cases hle : (2147483647 : BitVec 32).ule c = true
-  · have hn : (2147483647 : BitVec 32).toNat ≤ c.toNat := by simpa [BitVec.ule] using hle
-    simp only [hle, ↓reduceIte]; rw [h2] at hn ⊢; omega
-  · have hn : ¬ (2147483647 : BitVec 32).toNat ≤ c.toNat := by simpa [BitVec.ule] using hle
-    simp only [hle, Bool.false_eq_true, ↓reduceIte]; rw [h2] at hn; omega
+  rw [min_false, h2]; omega
 
 /-- **`Thread.Futex.wake(p, c)`** (Linux, `c ≠ 0`) at a live word `p`: the OS wake of up to
 `wakeLimit v` waiters at `p`'s private key, where `v = min(c, maxInt(i32))`; it returns after a
@@ -239,7 +234,7 @@ the steps of its primitive at an invariant `I` of the wake's place: the loop's t
 paid from the caller's part), the oracle stop before each wake (`hpick`) and the OS wake of one
 waiter, or of all for `c > 1` (`hwake`: done, `D`, after a wake of some `j` waiters; still at
 `I` after a spurious `EINTR`, when std wakes again). -/
-theorem wake_wp (hcost : P.cost = none) {t : ThreadId} {p : Ptr} {c : BitVec 32} (hc : c ≠ 0)
+theorem wake_wp (_hcost : P.cost = none) {t : ThreadId} {p : Ptr} {c : BitVec 32} (hc : c ≠ 0)
     {I D : (ThreadId → γ) → Mem → Prop}
     (hword : ∀ G m, I G m → m.wordAt p = true)
     (htick : ∀ {G : ThreadId → γ} {m : Mem} {d : Nat}
