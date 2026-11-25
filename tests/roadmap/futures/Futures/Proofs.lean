@@ -512,8 +512,9 @@ theorem cancelValue_wp (σ : Placement) (io : Io) (x : BitVec 32) (n : Nat) :
   unfold asyncOutcomeC
   split
   · -- `Io.async` ran the task in the caller (`main`): a consumed future
-    refine FutureProto.wp_asyncEagerC (WP.mono (fun r G' m' d (h : (r = .ok (x + 1) ∨ r = .error "Canceled") ∧
-        G' 0 = .none ∧ (cancelProto x).inv G' m') => ?_) (cancellable_body x io 0 .none G₀ _ _ hg₀ hi₀))
+    refine FutureProto.wp_asyncEagerC (WP.mono (fun r G' m' d
+        (h : (r = .ok (x + 1) ∨ r = .error "Canceled") ∧ G' 0 = .none ∧ (cancelProto x).inv G' m') =>
+        ?_) (cancellable_body x io 0 .none G₀ _ _ hg₀ hi₀))
     obtain ⟨hr, -, -⟩ := h
     obtain ⟨hsz, hdec⟩ := cancelSpec_lawful x r hr
     refine WP.bind (WP.liftM (ErrOk.of_run rfl store_native) fun _ m₆ hs =>

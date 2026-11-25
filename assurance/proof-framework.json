@@ -169,6 +169,18 @@
       "status": "target"
     },
     {
+      "name": "FTripleCell",
+      "module": "tests.roadmap.sep-full.BlockExtentsCX",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
+      "name": "FTripleExact",
+      "module": "tests.roadmap.sep-full.ExactTags",
+      "status": "legacy-to-retire",
+      "approved": "coordinator 2026-10-13 (structural gate seed)"
+    },
+    {
       "name": "FWrapped",
       "module": "tests.roadmap.claims.Fixture",
       "status": "legacy-to-retire",
