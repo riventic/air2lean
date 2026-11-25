@@ -1670,6 +1670,11 @@
           "category": "other"
         },
         {
+          "name": "rw_read_dropped",
+          "path": "tests/roadmap/asm-effects/harness.py",
+          "category": "forwarding"
+        },
+        {
           "name": "env_read_constant",
           "path": "tests/roadmap/callbacks/mutants.py",
           "category": "forwarding"

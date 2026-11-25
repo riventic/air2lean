@@ -50,6 +50,20 @@
       },
       "block_sha256": "412837370e4391f8714bdec8a0060978905936ed094b8b7ec19e76eb9a454fc8"
     },
+    "ag": {
+      "killed_by": {
+        "kind": "proof",
+        "target": "Proofs.Floats.AllowedNeg"
+      },
+      "block_sha256": "41d787fb0123bee5960d2d62114e3a3cc85e22c21061b8e3d9508341b36b731f"
+    },
+    "ah": {
+      "killed_by": {
+        "kind": "proof",
+        "target": "Proofs.Floats.AllowedNeg"
+      },
+      "block_sha256": "8139eaad94e0961dcbff60494c287985cf2eb5e8a04d60c9c5537295eb45ef3c"
+    },
     "b": {
       "killed_by": {
         "kind": "diff",
@@ -183,6 +197,699 @@
       },
       "block_sha256": "2cedf87bae4be8a55f889b02bca57965adafee56a141ef9e52576db0219714cf"
     },
+    "tests/roadmap/address-reuse/Check.lean#provenance-mode-ignored": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/address-reuse/check.sh"
+      },
+      "block_sha256": "365d0d1c8791d852265069910265eaa889440e6f11c8df05a2c944f3ef79fafb"
+    },
+    "tests/roadmap/address-reuse/Check.lean#reuse-policy-ignored": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/address-reuse/check.sh"
+      },
+      "block_sha256": "365d0d1c8791d852265069910265eaa889440e6f11c8df05a2c944f3ef79fafb"
+    },
+    "tests/roadmap/allocation-policy/mutations.py#budget-ignores-live-bytes": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/allocation-policy/mutations.py"
+      },
+      "block_sha256": "38cc291c279750ed50bb182ae4dfb4d69a8409a3bb28fa7abe1e4fc5623fa625"
+    },
+    "tests/roadmap/allocation-policy/mutations.py#ignore-budget": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/allocation-policy/mutations.py"
+      },
+      "block_sha256": "38cc291c279750ed50bb182ae4dfb4d69a8409a3bb28fa7abe1e4fc5623fa625"
+    },
+    "tests/roadmap/allocation-policy/mutations.py#ignore-failure-oracle": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/allocation-policy/mutations.py"
+      },
+      "block_sha256": "38cc291c279750ed50bb182ae4dfb4d69a8409a3bb28fa7abe1e4fc5623fa625"
+    },
+    "tests/roadmap/allocation-policy/mutations.py#ignore-failure-trace": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/allocation-policy/mutations.py"
+      },
+      "block_sha256": "38cc291c279750ed50bb182ae4dfb4d69a8409a3bb28fa7abe1e4fc5623fa625"
+    },
+    "tests/roadmap/allocation-policy/mutations.py#ignore-request-cap": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/allocation-policy/mutations.py"
+      },
+      "block_sha256": "38cc291c279750ed50bb182ae4dfb4d69a8409a3bb28fa7abe1e4fc5623fa625"
+    },
+    "tests/roadmap/allocation-policy/mutations.py#omit-live-removal": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/allocation-policy/mutations.py"
+      },
+      "block_sha256": "38cc291c279750ed50bb182ae4dfb4d69a8409a3bb28fa7abe1e4fc5623fa625"
+    },
+    "tests/roadmap/allocation-policy/mutations.py#oracle-ignores-bytes-upper-bound": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/allocation-policy/mutations.py"
+      },
+      "block_sha256": "38cc291c279750ed50bb182ae4dfb4d69a8409a3bb28fa7abe1e4fc5623fa625"
+    },
+    "tests/roadmap/asm-effects/harness.py#guard_dropped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/asm-effects/check.sh"
+      },
+      "block_sha256": "39654e2d7b83790b4c3eb01a6ef2c1bae78a4e3b9e1274f859fbfb46a9ab4fee"
+    },
+    "tests/roadmap/asm-effects/harness.py#local_store_dropped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/asm-effects/check.sh"
+      },
+      "block_sha256": "39654e2d7b83790b4c3eb01a6ef2c1bae78a4e3b9e1274f859fbfb46a9ab4fee"
+    },
+    "tests/roadmap/asm-effects/harness.py#rw_order": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/asm-effects/check.sh"
+      },
+      "block_sha256": "39654e2d7b83790b4c3eb01a6ef2c1bae78a4e3b9e1274f859fbfb46a9ab4fee"
+    },
+    "tests/roadmap/asm-effects/harness.py#rw_read_dropped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/asm-effects/check.sh"
+      },
+      "block_sha256": "39654e2d7b83790b4c3eb01a6ef2c1bae78a4e3b9e1274f859fbfb46a9ab4fee"
+    },
+    "tests/roadmap/asm-effects/harness.py#store_wrong_location": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/asm-effects/check.sh"
+      },
+      "block_sha256": "39654e2d7b83790b4c3eb01a6ef2c1bae78a4e3b9e1274f859fbfb46a9ab4fee"
+    },
+    "tests/roadmap/asm-effects/harness.py#swap_targets": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/asm-effects/check.sh"
+      },
+      "block_sha256": "39654e2d7b83790b4c3eb01a6ef2c1bae78a4e3b9e1274f859fbfb46a9ab4fee"
+    },
+    "tests/roadmap/asm-wrappers/harness.py#operand_order": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/asm-wrappers/harness.py"
+      },
+      "block_sha256": "4913a27f04cdd63bf08e62fd2ecdb769383e669cf9c35bddbd128f2d471ef9ae"
+    },
+    "tests/roadmap/asm-wrappers/harness.py#result_placement": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/asm-wrappers/harness.py"
+      },
+      "block_sha256": "4913a27f04cdd63bf08e62fd2ecdb769383e669cf9c35bddbd128f2d471ef9ae"
+    },
+    "tests/roadmap/asm-wrappers/harness.py#single_result_placement": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/asm-wrappers/harness.py"
+      },
+      "block_sha256": "4913a27f04cdd63bf08e62fd2ecdb769383e669cf9c35bddbd128f2d471ef9ae"
+    },
+    "tests/roadmap/asm-wrappers/harness.py#store_dropped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/asm-wrappers/harness.py"
+      },
+      "block_sha256": "4913a27f04cdd63bf08e62fd2ecdb769383e669cf9c35bddbd128f2d471ef9ae"
+    },
+    "tests/roadmap/asm-wrappers/harness.py#store_misplaced": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/asm-wrappers/harness.py"
+      },
+      "block_sha256": "4913a27f04cdd63bf08e62fd2ecdb769383e669cf9c35bddbd128f2d471ef9ae"
+    },
+    "tests/roadmap/big-endian/mutations.py#big-endian-instances-dropped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/big-endian/check.sh"
+      },
+      "block_sha256": "6d87e3c5684065f52880ded29aa21d1fce766597bfd012640738fbdcf83d8dc0"
+    },
+    "tests/roadmap/big-endian/mutations.py#bitptr-load-little-order": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/big-endian/check.sh"
+      },
+      "block_sha256": "6d87e3c5684065f52880ded29aa21d1fce766597bfd012640738fbdcf83d8dc0"
+    },
+    "tests/roadmap/big-endian/mutations.py#bitptr-store-little-order": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/big-endian/check.sh"
+      },
+      "block_sha256": "6d87e3c5684065f52880ded29aa21d1fce766597bfd012640738fbdcf83d8dc0"
+    },
+    "tests/roadmap/bitops/mutations.py#clz_is_ctz": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/bitops/check.sh"
+      },
+      "block_sha256": "7f45e06fd233c3cf16d84e15c088f7e145052df4fb841fc11ff454f1e2b95fea"
+    },
+    "tests/roadmap/bitops/mutations.py#count_bound_operands_swapped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/bitops/check.sh"
+      },
+      "block_sha256": "7f45e06fd233c3cf16d84e15c088f7e145052df4fb841fc11ff454f1e2b95fea"
+    },
+    "tests/roadmap/bitops/mutations.py#ctz_is_clz": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/bitops/check.sh"
+      },
+      "block_sha256": "7f45e06fd233c3cf16d84e15c088f7e145052df4fb841fc11ff454f1e2b95fea"
+    },
+    "tests/roadmap/bitops/mutations.py#overflow_flag_inverted": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/bitops/check.sh"
+      },
+      "block_sha256": "7f45e06fd233c3cf16d84e15c088f7e145052df4fb841fc11ff454f1e2b95fea"
+    },
+    "tests/roadmap/bitops/mutations.py#oversized_shift_allowed": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/bitops/check.sh"
+      },
+      "block_sha256": "7f45e06fd233c3cf16d84e15c088f7e145052df4fb841fc11ff454f1e2b95fea"
+    },
+    "tests/roadmap/bitops/mutations.py#population_is_zero": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/bitops/check.sh"
+      },
+      "block_sha256": "7f45e06fd233c3cf16d84e15c088f7e145052df4fb841fc11ff454f1e2b95fea"
+    },
+    "tests/roadmap/bitops/mutations.py#reverse_shift_operands_swapped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/bitops/check.sh"
+      },
+      "block_sha256": "7f45e06fd233c3cf16d84e15c088f7e145052df4fb841fc11ff454f1e2b95fea"
+    },
+    "tests/roadmap/bitops/mutations.py#signed_shift_is_unsigned": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/bitops/check.sh"
+      },
+      "block_sha256": "7f45e06fd233c3cf16d84e15c088f7e145052df4fb841fc11ff454f1e2b95fea"
+    },
+    "tests/roadmap/byte-permutation/mutations.py#byte_index_off_by_one": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/byte-permutation/check.sh"
+      },
+      "block_sha256": "ae18a3e686d73de5c033894df656ad897b9443c2a3f668d7368a69e9f588d95f"
+    },
+    "tests/roadmap/byte-permutation/mutations.py#lane_order_reversed": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/byte-permutation/check.sh"
+      },
+      "block_sha256": "ae18a3e686d73de5c033894df656ad897b9443c2a3f668d7368a69e9f588d95f"
+    },
+    "tests/roadmap/byte-permutation/mutations.py#reverse_is_identity": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/byte-permutation/check.sh"
+      },
+      "block_sha256": "ae18a3e686d73de5c033894df656ad897b9443c2a3f668d7368a69e9f588d95f"
+    },
+    "tests/roadmap/byte-permutation/mutations.py#reverse_negates_bits": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/byte-permutation/check.sh"
+      },
+      "block_sha256": "ae18a3e686d73de5c033894df656ad897b9443c2a3f668d7368a69e9f588d95f"
+    },
+    "tests/roadmap/byte-permutation/mutations.py#swap_is_identity": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/byte-permutation/check.sh"
+      },
+      "block_sha256": "ae18a3e686d73de5c033894df656ad897b9443c2a3f668d7368a69e9f588d95f"
+    },
+    "tests/roadmap/byte-permutation/mutations.py#swap_reverses_bits": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/byte-permutation/check.sh"
+      },
+      "block_sha256": "ae18a3e686d73de5c033894df656ad897b9443c2a3f668d7368a69e9f588d95f"
+    },
+    "tests/roadmap/byte-sentinel/mutations.py#omit-extra-byte": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/byte-sentinel/check.sh"
+      },
+      "block_sha256": "18b2253ac3f8afccac011fc2e45aac8f4704248ff3ca9a993724a31fb80d2520"
+    },
+    "tests/roadmap/byte-sentinel/mutations.py#wrong-sentinel-offset": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/byte-sentinel/check.sh"
+      },
+      "block_sha256": "18b2253ac3f8afccac011fc2e45aac8f4704248ff3ca9a993724a31fb80d2520"
+    },
+    "tests/roadmap/callbacks/mutants.py#claim_dropped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/callbacks/check.sh"
+      },
+      "block_sha256": "4049d09fa28d842bcdfb7e0b5c3bd0f6a07c3231a8fb824767d7d94c40318136"
+    },
+    "tests/roadmap/callbacks/mutants.py#env_read_constant": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/asm-effects/check.sh"
+      },
+      "block_sha256": "4049d09fa28d842bcdfb7e0b5c3bd0f6a07c3231a8fb824767d7d94c40318136"
+    },
+    "tests/roadmap/callbacks/mutants.py#model_arm_dropped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/callbacks/check.sh"
+      },
+      "block_sha256": "4049d09fa28d842bcdfb7e0b5c3bd0f6a07c3231a8fb824767d7d94c40318136"
+    },
+    "tests/roadmap/callbacks/mutants.py#region_guard_dropped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/asm-effects/check.sh"
+      },
+      "block_sha256": "4049d09fa28d842bcdfb7e0b5c3bd0f6a07c3231a8fb824767d7d94c40318136"
+    },
+    "tests/roadmap/callbacks/mutants.py#region_write_dropped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/asm-effects/check.sh"
+      },
+      "block_sha256": "4049d09fa28d842bcdfb7e0b5c3bd0f6a07c3231a8fb824767d7d94c40318136"
+    },
+    "tests/roadmap/callbacks/mutants.py#sentinel-alloc-omits-extra-byte": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/interfaces/check.sh"
+      },
+      "block_sha256": "4049d09fa28d842bcdfb7e0b5c3bd0f6a07c3231a8fb824767d7d94c40318136"
+    },
+    "tests/roadmap/callbacks/mutants.py#sentinel-stored-at-item-0": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/interfaces/check.sh"
+      },
+      "block_sha256": "4049d09fa28d842bcdfb7e0b5c3bd0f6a07c3231a8fb824767d7d94c40318136"
+    },
+    "tests/roadmap/callbacks/mutants.py#unknown_admitted": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/callbacks/check.sh"
+      },
+      "block_sha256": "4049d09fa28d842bcdfb7e0b5c3bd0f6a07c3231a8fb824767d7d94c40318136"
+    },
+    "tests/roadmap/cancellation/Runtime.lean#cancel-is-await": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/cancellation/Runtime.lean"
+      },
+      "block_sha256": "807fdea4e41c366aa2a21faef263d5d8aad31adb07f2b33c75f0098284f3b15d"
+    },
+    "tests/roadmap/cancellation/Runtime.lean#canceled-status-dropped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/cancellation/Runtime.lean"
+      },
+      "block_sha256": "807fdea4e41c366aa2a21faef263d5d8aad31adb07f2b33c75f0098284f3b15d"
+    },
+    "tests/roadmap/deadline-cases/mutations.py#boundary-solves-at-deadline": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/deadline-cases/mutations.py"
+      },
+      "block_sha256": "a35538a12974ffbdd6243c33e219d4e8cb2b9209aaa496f49d5d336bc43f94fc"
+    },
+    "tests/roadmap/deadline-cases/mutations.py#paused-expires-without-recheck": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/deadline-cases/mutations.py"
+      },
+      "block_sha256": "a35538a12974ffbdd6243c33e219d4e8cb2b9209aaa496f49d5d336bc43f94fc"
+    },
+    "tests/roadmap/dispatch/mutations.py#dropped_capture": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/dispatch/check.sh"
+      },
+      "block_sha256": "f3b9f32f9dab236645ce525c6a852ec32c4c4fb0c85c258d1ae6de3efbebd7b1"
+    },
+    "tests/roadmap/dispatch/mutations.py#dropped_selector": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/dispatch/check.sh"
+      },
+      "block_sha256": "f3b9f32f9dab236645ce525c6a852ec32c4c4fb0c85c258d1ae6de3efbebd7b1"
+    },
+    "tests/roadmap/dispatch/mutations.py#wrong_exit": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/dispatch/check.sh"
+      },
+      "block_sha256": "f3b9f32f9dab236645ce525c6a852ec32c4c4fb0c85c258d1ae6de3efbebd7b1"
+    },
+    "tests/roadmap/dispatch/mutations.py#wrong_initial": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/dispatch/check.sh"
+      },
+      "block_sha256": "f3b9f32f9dab236645ce525c6a852ec32c4c4fb0c85c258d1ae6de3efbebd7b1"
+    },
+    "tests/roadmap/dispatch/mutations.py#wrong_target": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/dispatch/check.sh"
+      },
+      "block_sha256": "f3b9f32f9dab236645ce525c6a852ec32c4c4fb0c85c258d1ae6de3efbebd7b1"
+    },
+    "tests/roadmap/error-storage/mutations.py#collapse_names": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/error-storage/check.sh"
+      },
+      "block_sha256": "a769440a916ba81e311f9a3ce148188b52a9094b767f0293b175753a53f9e349"
+    },
+    "tests/roadmap/error-storage/mutations.py#foreign_domain": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/error-storage/check.sh"
+      },
+      "block_sha256": "a769440a916ba81e311f9a3ce148188b52a9094b767f0293b175753a53f9e349"
+    },
+    "tests/roadmap/error-storage/mutations.py#optional_flag": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/error-storage/check.sh"
+      },
+      "block_sha256": "a769440a916ba81e311f9a3ce148188b52a9094b767f0293b175753a53f9e349"
+    },
+    "tests/roadmap/error-storage/mutations.py#standalone_accepts_zero": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/error-storage/check.sh"
+      },
+      "block_sha256": "a769440a916ba81e311f9a3ce148188b52a9094b767f0293b175753a53f9e349"
+    },
+    "tests/roadmap/error-storage/mutations.py#swap_indices": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/error-storage/check.sh"
+      },
+      "block_sha256": "a769440a916ba81e311f9a3ce148188b52a9094b767f0293b175753a53f9e349"
+    },
+    "tests/roadmap/global-payload-pointers/generated-mutations.py#forget_parent": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/global-payload-pointers/check-generated.sh"
+      },
+      "block_sha256": "0d65e88601ced7a78b16f05c12d13c7d04afee4ef2a63dd41d0fbef9255ec6ef"
+    },
+    "tests/roadmap/global-payload-pointers/generated-mutations.py#missing_small_payload_offset": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/global-payload-pointers/check-generated.sh"
+      },
+      "block_sha256": "0d65e88601ced7a78b16f05c12d13c7d04afee4ef2a63dd41d0fbef9255ec6ef"
+    },
+    "tests/roadmap/global-payload-pointers/generated-mutations.py#wrong_global": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/global-payload-pointers/check-generated.sh"
+      },
+      "block_sha256": "0d65e88601ced7a78b16f05c12d13c7d04afee4ef2a63dd41d0fbef9255ec6ef"
+    },
+    "tests/roadmap/global-payload-pointers/mutations.py#forget-parent": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/global-payload-pointers/check.sh"
+      },
+      "block_sha256": "17ea40480bd5106a5a6ee4888150245b8fa3a77fa5afb2f7e5812f16c1b62fb6"
+    },
+    "tests/roadmap/global-payload-pointers/mutations.py#forget-payload": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/global-payload-pointers/check.sh"
+      },
+      "block_sha256": "17ea40480bd5106a5a6ee4888150245b8fa3a77fa5afb2f7e5812f16c1b62fb6"
+    },
+    "tests/roadmap/global-payload-pointers/mutations.py#unbounded": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/global-payload-pointers/check.sh"
+      },
+      "block_sha256": "17ea40480bd5106a5a6ee4888150245b8fa3a77fa5afb2f7e5812f16c1b62fb6"
+    },
+    "tests/roadmap/global-payload-pointers/mutations.py#wrap-offset": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/global-payload-pointers/check.sh"
+      },
+      "block_sha256": "17ea40480bd5106a5a6ee4888150245b8fa3a77fa5afb2f7e5812f16c1b62fb6"
+    },
+    "tests/roadmap/idle-loops/Mutants.lean#idle-loop-skipped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/idle-loops/check.sh"
+      },
+      "block_sha256": "3220ca3508a93a2a2c22cd86dee3826a6a9349c2c89e4641b1dc5b8223e432a6"
+    },
+    "tests/roadmap/idle-loops/Mutants.lean#relaxed-publish": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/idle-loops/check.sh"
+      },
+      "block_sha256": "3220ca3508a93a2a2c22cd86dee3826a6a9349c2c89e4641b1dc5b8223e432a6"
+    },
+    "tests/roadmap/illegal-behavior/mutations.py#divexact-safe-truncates": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/illegal-behavior/check.sh"
+      },
+      "block_sha256": "b5317c159290dd815a6890c01045427ea8e46513287c8d312d7fbfe746524776"
+    },
+    "tests/roadmap/illegal-behavior/mutations.py#divexact-unsafe-divides": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/illegal-behavior/check.sh"
+      },
+      "block_sha256": "b5317c159290dd815a6890c01045427ea8e46513287c8d312d7fbfe746524776"
+    },
+    "tests/roadmap/illegal-behavior/mutations.py#for-length-unchecked": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/illegal-behavior/check.sh"
+      },
+      "block_sha256": "b5317c159290dd815a6890c01045427ea8e46513287c8d312d7fbfe746524776"
+    },
+    "tests/roadmap/illegal-behavior/mutations.py#item-pointer-unchecked": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/illegal-behavior/check.sh"
+      },
+      "block_sha256": "b5317c159290dd815a6890c01045427ea8e46513287c8d312d7fbfe746524776"
+    },
+    "tests/roadmap/illegal-behavior/mutations.py#item-read-unchecked": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/illegal-behavior/check.sh"
+      },
+      "block_sha256": "b5317c159290dd815a6890c01045427ea8e46513287c8d312d7fbfe746524776"
+    },
+    "tests/roadmap/illegal-behavior/mutations.py#memcpy-as-memmove": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/illegal-behavior/check.sh"
+      },
+      "block_sha256": "b5317c159290dd815a6890c01045427ea8e46513287c8d312d7fbfe746524776"
+    },
+    "tests/roadmap/illegal-behavior/mutations.py#parent-unchecked": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/illegal-behavior/check.sh"
+      },
+      "block_sha256": "b5317c159290dd815a6890c01045427ea8e46513287c8d312d7fbfe746524776"
+    },
+    "tests/roadmap/illegal-behavior/mutations.py#sentinel-unchecked": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/illegal-behavior/check.sh"
+      },
+      "block_sha256": "b5317c159290dd815a6890c01045427ea8e46513287c8d312d7fbfe746524776"
+    },
+    "tests/roadmap/illegal-behavior/mutations.py#shift-count-unchecked": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/illegal-behavior/check.sh"
+      },
+      "block_sha256": "b5317c159290dd815a6890c01045427ea8e46513287c8d312d7fbfe746524776"
+    },
+    "tests/roadmap/illegal-behavior/mutations.py#shrexact-unchecked": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/illegal-behavior/check.sh"
+      },
+      "block_sha256": "b5317c159290dd815a6890c01045427ea8e46513287c8d312d7fbfe746524776"
+    },
+    "tests/roadmap/illegal-behavior/mutations.py#slice-end-unchecked": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/illegal-behavior/check.sh"
+      },
+      "block_sha256": "b5317c159290dd815a6890c01045427ea8e46513287c8d312d7fbfe746524776"
+    },
+    "tests/roadmap/indirect-calls/mutations.py#lost_target": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/indirect-calls/check.sh"
+      },
+      "block_sha256": "a4c0eda0238158e975337a535a50036221d8e0bb2e220a5c38d9edfeb5611132"
+    },
+    "tests/roadmap/indirect-calls/mutations.py#unknown_admitted": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/indirect-calls/check.sh"
+      },
+      "block_sha256": "a4c0eda0238158e975337a535a50036221d8e0bb2e220a5c38d9edfeb5611132"
+    },
+    "tests/roadmap/indirect-calls/mutations.py#wrong_target": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/indirect-calls/check.sh"
+      },
+      "block_sha256": "a4c0eda0238158e975337a535a50036221d8e0bb2e220a5c38d9edfeb5611132"
+    },
+    "tests/roadmap/lang-long-tail/mutants.py#error_numbering_guessed": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/lang-long-tail/check.sh"
+      },
+      "block_sha256": "d75645f370ff8fe7581a5ea0e41f12092595a358fd50d525b3268c4045b638d1"
+    },
+    "tests/roadmap/lang-long-tail/mutants.py#error_param_constant": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/lang-long-tail/check.sh"
+      },
+      "block_sha256": "d75645f370ff8fe7581a5ea0e41f12092595a358fd50d525b3268c4045b638d1"
+    },
+    "tests/roadmap/lang-long-tail/mutants.py#extern_storage_dropped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/lang-long-tail/check.sh"
+      },
+      "block_sha256": "d75645f370ff8fe7581a5ea0e41f12092595a358fd50d525b3268c4045b638d1"
+    },
+    "tests/roadmap/lang-long-tail/mutants.py#f80_lane_stride": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/lang-long-tail/check.sh"
+      },
+      "block_sha256": "d75645f370ff8fe7581a5ea0e41f12092595a358fd50d525b3268c4045b638d1"
+    },
+    "tests/roadmap/lang-long-tail/mutants.py#item_cast_lanewise": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/lang-long-tail/check.sh"
+      },
+      "block_sha256": "d75645f370ff8fe7581a5ea0e41f12092595a358fd50d525b3268c4045b638d1"
+    },
+    "tests/roadmap/lang-long-tail/mutants.py#lane_constant_offset": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/lang-long-tail/check.sh"
+      },
+      "block_sha256": "d75645f370ff8fe7581a5ea0e41f12092595a358fd50d525b3268c4045b638d1"
+    },
+    "tests/roadmap/lang-long-tail/mutants.py#lane_order_reversed": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/lang-long-tail/check.sh"
+      },
+      "block_sha256": "d75645f370ff8fe7581a5ea0e41f12092595a358fd50d525b3268c4045b638d1"
+    },
+    "tests/roadmap/lang-long-tail/mutants.py#runtime_lane_count": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/lang-long-tail/check.sh"
+      },
+      "block_sha256": "d75645f370ff8fe7581a5ea0e41f12092595a358fd50d525b3268c4045b638d1"
+    },
+    "tests/roadmap/local-parent/mutations.py#lost_outer_alias": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/local-parent/check.sh"
+      },
+      "block_sha256": "597a1633824e23fa97314b8a3c5fe474d89f76f3d30b878759ed898a4fc72f79"
+    },
+    "tests/roadmap/local-parent/mutations.py#wrong_parent_field": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/local-parent/check.sh"
+      },
+      "block_sha256": "597a1633824e23fa97314b8a3c5fe474d89f76f3d30b878759ed898a4fc72f79"
+    },
+    "tests/roadmap/loop-tactics/Queue.lean#queue-overflow-premise-dropped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/loop-tactics/Queue.lean"
+      },
+      "block_sha256": "d8e87e125b8222452c2541c79b3d215d5bf8cfbf72d13d29065ae0766f9fb9c2"
+    },
+    "tests/roadmap/loop-tactics/Queue.lean#queue-sum-off-by-one": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/loop-tactics/Queue.lean"
+      },
+      "block_sha256": "d8e87e125b8222452c2541c79b3d215d5bf8cfbf72d13d29065ae0766f9fb9c2"
+    },
+    "tests/roadmap/null-pointers/classify_mutant.py#ptrIsNull-inverted": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/null-pointers/check.sh"
+      },
+      "block_sha256": "ff54fa5e5a6929213afdb3b48a073c323efc9cdb4b0aebd887457a1e3fe3dacb"
+    },
+    "tests/roadmap/pointer-atomics/Mutants.lean#free-before-join": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/pointer-atomics/Mutants.lean"
+      },
+      "block_sha256": "0715d5f3fa74172e6e6a4de4c1b034bf12242b1881419a8aed2c8de0c904079d"
+    },
+    "tests/roadmap/pointer-atomics/Mutants.lean#relaxed-pointer-publish": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/pointer-atomics/Mutants.lean"
+      },
+      "block_sha256": "0715d5f3fa74172e6e6a4de4c1b034bf12242b1881419a8aed2c8de0c904079d"
+    },
     "tests/roadmap/resize-remap/mutations.py#copy-lost-prefix-and-defined-suffix": {
       "unrecorded": "mutations.py only writes patches of the retiring hand model ZigLean/Mem/Alloc.lean; no CI check applies them and runs Check.lean",
       "block_sha256": "c93cec4e6d0892a52c2894febf66de31e627b278f2a2da8d4f0005b2f4c36c89"
@@ -202,6 +909,153 @@
     "tests/roadmap/resize-remap/mutations.py#moved-old-stays-live": {
       "unrecorded": "mutations.py only writes patches of the retiring hand model ZigLean/Mem/Alloc.lean; no CI check applies them and runs Check.lean",
       "block_sha256": "c93cec4e6d0892a52c2894febf66de31e627b278f2a2da8d4f0005b2f4c36c89"
+    },
+    "tests/roadmap/sep-auto/SepAuto/Steps.lean#array-update-wrong-neighbor": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/sep-auto/check.sh"
+      },
+      "block_sha256": "2c43733fa9609e82e60c80005c561e780913d8ce873fde5c57a05b4e1814ca3f"
+    },
+    "tests/roadmap/sep-auto/SepAuto/Steps.lean#frame-atom-dropped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/sep-auto/check.sh"
+      },
+      "block_sha256": "2c43733fa9609e82e60c80005c561e780913d8ce873fde5c57a05b4e1814ca3f"
+    },
+    "tests/roadmap/sep-auto/SepAuto/Steps.lean#store-keeps-old-value": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/sep-auto/check.sh"
+      },
+      "block_sha256": "2c43733fa9609e82e60c80005c561e780913d8ce873fde5c57a05b4e1814ca3f"
+    },
+    "tests/roadmap/shared-reclamation/Runtime.lean#heap-free-before-readers-joined": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/shared-reclamation/Runtime.lean"
+      },
+      "block_sha256": "cd86b82aa745df39dc164a29b08957a430a54c7183c7cf44eb39047117c075b6"
+    },
+    "tests/roadmap/shared-reclamation/Runtime.lean#stack-free-before-readers-joined": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/shared-reclamation/Runtime.lean"
+      },
+      "block_sha256": "cd86b82aa745df39dc164a29b08957a430a54c7183c7cf44eb39047117c075b6"
+    },
+    "tests/roadmap/spawn-failure/qualify.py#no-failure": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/spawn-failure/check.sh"
+      },
+      "block_sha256": "0b0ca14b136791e95b1b3efa90879405123f4f032d18654d114810fe5d8f9523"
+    },
+    "tests/roadmap/spawn-failure/qualify.py#no-fallback": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/spawn-failure/check.sh"
+      },
+      "block_sha256": "0b0ca14b136791e95b1b3efa90879405123f4f032d18654d114810fe5d8f9523"
+    },
+    "tests/roadmap/thread-locals/ThreadLocals/Runtime.lean#immortal-instance": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/thread-locals/check.sh"
+      },
+      "block_sha256": "4b627a800f5f01bf70f3da48f7fffacf10b799c5e3108665456843a2f8407ac0"
+    },
+    "tests/roadmap/thread-locals/ThreadLocals/Runtime.lean#shared-instance": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/thread-locals/check.sh"
+      },
+      "block_sha256": "4b627a800f5f01bf70f3da48f7fffacf10b799c5e3108665456843a2f8407ac0"
+    },
+    "tests/roadmap/thread-tuples/check.sh#tuple-capture-order": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/thread-tuples/check.sh"
+      },
+      "block_sha256": "dcd5b83619cee2c86ee8f333ebc7b374fb32e335a89024562b78fc6cbf269653"
+    },
+    "tests/roadmap/try-pointers/mutate-offset.py#payload8-success-offset": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/try-pointers/check.sh"
+      },
+      "block_sha256": "29028a0bdda06ff678451d9d47722c9d0eef4d4a7042424bd37b718b7f67ddfa"
+    },
+    "tests/roadmap/vcs/Extract.lean#cells-not-swapped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/vcs/Extract.lean"
+      },
+      "block_sha256": "40977ad3bfe4454e70625f815c48f4c9d8941f7ffc2cafd3ffbd036fb9ee29fc"
+    },
+    "tests/roadmap/vcs/Extract.lean#overflow-bound-dropped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/vcs/Extract.lean"
+      },
+      "block_sha256": "40977ad3bfe4454e70625f815c48f4c9d8941f7ffc2cafd3ffbd036fb9ee29fc"
+    },
+    "tests/roadmap/vcs/Extract.lean#provenance-premise-dropped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/vcs/Extract.lean"
+      },
+      "block_sha256": "40977ad3bfe4454e70625f815c48f4c9d8941f7ffc2cafd3ffbd036fb9ee29fc"
+    },
+    "tests/roadmap/volatile-effects/device-mutants.py#drop_unused_read": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/volatile-effects/check-device.sh"
+      },
+      "block_sha256": "6e8cc927b4918c9e5680687798577e0fc78cf836921912209e4f5b71e3d9bc25"
+    },
+    "tests/roadmap/volatile-effects/device-mutants.py#merge_asm": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/volatile-effects/check-device.sh"
+      },
+      "block_sha256": "6e8cc927b4918c9e5680687798577e0fc78cf836921912209e4f5b71e3d9bc25"
+    },
+    "tests/roadmap/volatile-effects/device-mutants.py#merge_reads": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/volatile-effects/check-device.sh"
+      },
+      "block_sha256": "6e8cc927b4918c9e5680687798577e0fc78cf836921912209e4f5b71e3d9bc25"
+    },
+    "tests/roadmap/volatile-effects/device-mutants.py#ordinary_load": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/volatile-effects/check-device.sh"
+      },
+      "block_sha256": "6e8cc927b4918c9e5680687798577e0fc78cf836921912209e4f5b71e3d9bc25"
+    },
+    "tests/roadmap/volatile-effects/device-mutants.py#reorder_write_read": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/volatile-effects/check-device.sh"
+      },
+      "block_sha256": "6e8cc927b4918c9e5680687798577e0fc78cf836921912209e4f5b71e3d9bc25"
+    },
+    "tests/roadmap/volatile-effects/device-mutants.py#repeatable_asm": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/volatile-effects/check-device.sh"
+      },
+      "block_sha256": "6e8cc927b4918c9e5680687798577e0fc78cf836921912209e4f5b71e3d9bc25"
+    },
+    "tests/roadmap/weak-cas/qualify.py#spurious-failure-removed": {
+      "killed_by": {
+        "kind": "check",
+        "target": "scripts/weak-cas.sh"
+      },
+      "block_sha256": "ac2c6d77f737480e22ea3eeff5e12d13ad8dff71360e43f7f2d1090d53012542"
     },
     "u": {
       "killed_by": {
