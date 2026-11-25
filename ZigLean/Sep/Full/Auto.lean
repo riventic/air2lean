@@ -1046,6 +1046,51 @@ def relevantFacts (facts : Array (Expr × Expr)) (ty : Expr) : Array (Expr × Ex
       seen := fa[i]!.foldl (·.insert ·) seen
   return (facts.zip used).filterMap fun (f, u) => if u then some f else none
 
+/-- A fact that `omega` proves by cases: a disjunction, a negated conjunction (pairwise
+disjointness of the parts' bytes, `bs.size = 0 ∨ … ∨ …`). -/
+def isCaseFact (t : Expr) : Bool :=
+  (t.find? fun e => e.isAppOfArity ``Or 2 ||
+    (e.isAppOfArity ``Not 1 && e.appArg!.isAppOfArity ``And 2)).isSome
+
+/-- The facts in the order `omega` should case split them: the plain facts first, then the case
+facts (`isCaseFact`) farthest from `ty` first. `omega` splits the disjunction it was given last
+first (`MetaProblem.disjunctions` is a stack), and every disjunction split before the ones a
+proof needs doubles the search; so the case facts that share atoms with `ty` (through plain
+facts, which cost no split) come last. The distance of a case fact: the number of case facts on
+a shortest chain of shared atoms from `ty` to it. Facts no chain reaches (a goal without atoms)
+keep their order, first. -/
+def splitOrder (facts : Array (Expr × Expr)) (ty : Expr) : Array (Expr × Expr) := Id.run do
+  let fa := facts.map fun (_, t) => (arithAtoms t).toArray
+  let isCase := facts.map fun (_, t) => isCaseFact t
+  let mut seen := arithAtoms ty
+  let mut dist : Array (Option Nat) := Array.replicate facts.size none
+  let mut d := 0
+  let mut frontier := true
+  while frontier do
+    -- the plain facts reached: their atoms join at no cost
+    let mut changed := true
+    while changed do
+      changed := false
+      for i in [0:facts.size] do
+        if isCase[i]! || dist[i]!.isSome || !fa[i]!.any seen.contains then continue
+        dist := dist.set! i (some d); changed := true
+        seen := fa[i]!.foldl (·.insert ·) seen
+    -- the case facts reached at this distance
+    d := d + 1
+    frontier := false
+    let mut add : Array Nat := #[]
+    for i in [0:facts.size] do
+      if isCase[i]! && dist[i]!.isNone && fa[i]!.any seen.contains then add := add.push i
+    for i in add do
+      dist := dist.set! i (some d); frontier := true
+      seen := fa[i]!.foldl (·.insert ·) seen
+  let plain := (List.range facts.size).toArray.filter (!isCase[·]!)
+  let cases := (List.range facts.size).toArray.filter (isCase[·]!)
+  -- farthest (or unreached) first, the nearest last; ties in their given order
+  let key (i : Nat) : Nat := match dist[i]! with | some k => d + 1 - k | none => d + 2
+  let cases := cases.insertionSort fun i j => key i > key j
+  return (plain ++ cases).map (facts[·]!)
+
 /-- `omega` proves `ty` from `facts`: only arithmetic facts; the split terms whose case the
 linear facts decide become opaque atoms with linear defining facts (`subAtom`, `toNatAtom`,
 `minAtom`, `maxAtom`): `omega` explores no case split for them. (The facts: arithmetic, relevant
@@ -1113,12 +1158,6 @@ def omegaFactsOn (arith : Array (Expr × Expr)) (ty : Expr) : MetaM (Option Expr
   let some pf ← omegaRaw (facts' ++ defs) ty' | return none
   return some (← mkExpectedTypeHint pf ty)
 
-/-- A fact that `omega` proves by cases: a disjunction, a negated conjunction (pairwise
-disjointness of the parts' bytes, `bs.size = 0 ∨ … ∨ …`). -/
-def isCaseFact (t : Expr) : Bool :=
-  (t.find? fun e => e.isAppOfArity ``Or 2 ||
-    (e.isAppOfArity ``Not 1 && e.appArg!.isAppOfArity ``And 2)).isSome
-
 /-- The heartbeats (in thousands, as `maxHeartbeats`) of a probe's search through the case facts
 (a search that succeeds takes a few hundred). -/
 def probeCaseBudget : Nat := 10000
@@ -1155,7 +1194,7 @@ def omegaFacts (facts : Array Expr) (ty : Expr) (cases := true) (budget := false
     let t ← instantiateMVars (← inferType f)
     if ← isArithProp t then arith := arith.push (f, t)
   let ty ← instantiateMVars ty
-  arith := relevantFacts arith ty
+  arith := splitOrder (relevantFacts arith ty) ty
   let plain := arith.filter fun (_, t) => !isCaseFact t
   if plain.size < arith.size then
     if let some pf ← omegaFactsOn plain ty then return some pf
