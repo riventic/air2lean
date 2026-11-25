@@ -351,6 +351,11 @@ def native_code(lake_imports) -> list[str]:
         return _NATIVE[key]
 
 
+def precompiled_modules() -> set[str]:
+    """The modules of the precompiled libraries (`precompiled_libs`)."""
+    return set().union(*precompiled_libs().values())
+
+
 def native_options(f: str, memo: dict[str, bytes], precompiled_mods: set[str]) -> list[str]:
     """`native_code` for the file f: Lake loads a precompiled library into every elaboration whose
     import closure has one of its modules (`precompiled_mods`), so the precompiled modules of the
@@ -383,7 +388,7 @@ def elaborate(jobs: int | None, mem_mib: int) -> int:
         # `lake env` would put behind the toolchain's own bin on PATH.
         lean = os.environ.get("LEAN") or "lean"
         # Lake's native code for each file, asked before the parallel runs (one Lake at a time).
-        precompiled_mods = set().union(*precompiled_libs().values())
+        precompiled_mods = precompiled_modules()
         native = {f: native_options(f, memo, precompiled_mods) for f in todo}
         with open(os.devnull, "wb") as null:
             statuses = par.run([par.Job(names[f], ["lake", "env", lean, *native[f], f], cwd=str(ROOT))
@@ -440,8 +445,9 @@ def main(argv: list[str]) -> int:
             print("usage: lean-deps.py --lean [LEAN-OPTION...] FILE.lean [ARG...]", file=sys.stderr)
             return 2
         # `--run` evaluates the file's code: it stays in the interpreter, as in a plain `lake env lean`.
+        # The file is named relative to the caller's directory, not necessarily the repository's.
         native = [] if "--run" in argv else \
-            native_options(files[0], {}, set().union(*precompiled_libs().values()))
+            native_options(str(pathlib.Path(files[0]).resolve()), {}, precompiled_modules())
         lean = os.environ.get("LEAN") or "lean"
         os.execvp("lake", ["lake", "env", lean, *native, *argv[1:]])
         return 127  # not reached: execvp replaces this process or raises

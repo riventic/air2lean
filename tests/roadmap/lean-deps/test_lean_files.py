@@ -191,14 +191,15 @@ class Classify(unittest.TestCase):
         option = "--load-dynlib=/x/libFast.so"
         self.enterContext(mock.patch.object(ld, "native_code", lambda mods: [option]))
         self.enterContext(mock.patch.dict(os.environ, {"LEAN": "/g/lean"}))
+        self.enterContext(contextlib.chdir(self.repo / "t"))  # paths are the caller's: from t/
         runs = []
         self.enterContext(mock.patch.object(ld.os, "execvp", lambda prog, argv: runs.append(argv)))
-        for args in (["-R", "w", "-o", "w/P.olean", "t/Proof.lean"], ["t/Gen.lean"],
-                     ["--run", "t/Proof.lean", "x.lean"]):
+        for args in (["-R", "w", "-o", "w/P.olean", "Proof.lean"], ["Gen.lean"],
+                     ["--run", "Proof.lean", "x.lean"]):
             ld.main(["--lean", *args])
-        self.assertEqual(runs, [["lake", "env", "/g/lean", option, "-R", "w", "-o", "w/P.olean", "t/Proof.lean"],
-                                ["lake", "env", "/g/lean", "t/Gen.lean"],
-                                ["lake", "env", "/g/lean", "--run", "t/Proof.lean", "x.lean"]])
+        self.assertEqual(runs, [["lake", "env", "/g/lean", option, "-R", "w", "-o", "w/P.olean", "Proof.lean"],
+                                ["lake", "env", "/g/lean", "Gen.lean"],
+                                ["lake", "env", "/g/lean", "--run", "Proof.lean", "x.lean"]])
         self.assertEqual(ld.main(["--lean", "-v"]), 2)
 
     def fake_lake_query(self, targets):
