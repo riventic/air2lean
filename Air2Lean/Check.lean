@@ -1262,17 +1262,17 @@ def CheckCtx.intShape? (cx : CheckCtx) (t : TyId) : Option (Option Nat × Bool �
   | _ => none
 
 /-- Sentinel slicing (a `slice` of a type with a sentinel) needs the sentinel value for its own
-check (`Zig.checkSentinelByte`), which the export records only for a `u8` pointer on 0.16.0.
-Without it, only a Sema `sentinelMismatch` check can stand in (`sentinelCheckedSlices`);
-otherwise the sentinel is never checked, so the function is rejected (`docs/illegal-behavior.md`
-row 24). -/
+check (`Zig.checkSentinelByte`), which the export records only for an 8-bit integer item on
+Zig 0.16.0 and later. Without it, only a Sema `sentinelMismatch` check can stand in
+(`sentinelCheckedSlices`); otherwise the sentinel is never checked, so the function is rejected
+(`docs/illegal-behavior.md` row 24). -/
 def CheckCtx.checkSentinelSlice (cx : CheckCtx) (line : Nat) (inst : Inst) : Except String Unit := do
   if let .slice .. := inst.op then
     if let some l := cx.layouts[inst.ty]? then
       if l.sentinel && l.sentinelByte.isNone && !cx.sentinelChecked.contains inst.id then
         throw s!"{cx.fnName}: near line {line}: sentinel slicing without a safety check needs the \
-          exported sentinel value (only `u8` sentinels on Zig 0.16.0 have one); slice without the \
-          sentinel or keep runtime safety on"
+          exported sentinel value (only 8-bit integer sentinels on Zig 0.16.0 and later have \
+          one); slice without the sentinel or keep runtime safety on"
 
 /-- Zig's bit counts return the smallest unsigned type able to represent the source width. -/
 def bitCountWidth (n : Nat) : Nat := if n == 0 then 0 else Nat.log2 n + 1
@@ -3260,26 +3260,126 @@ private def localValueCompatible (f : Func) (index : OperandTypes) (v : Val) (ex
   | .void => f.types[expected]? == some .void
   | v => ((index.valTy? v).map fun t => localTypeCompatible f t expected).getD false
 
+/-! ### The C-ABI conversion at a bound extern call (X01)
+
+An extern declaration binds to the program's definition of its symbol (`resolveExternsCollect`).
+Where the two type a value differently but the C ABI passes it alike, the value is converted at
+the call, by the conversions of the cast rules (`ZigLean/Mem/Abi.lean`): both types are data
+pointers (single, many or C pointer, or an optional single or many pointer), the target type's
+assertions that the source type lacks are checked (non-null, alignment, sentinel byte), and a
+null or misaligned value or one without the sentinel is `.illegal`. Every other pair of types is
+not converted, and the declaration does not bind (fail closed): a non-pointer (an integer of
+another width or signedness), a slice, an optional C/allowzero pointer, a `volatile` or
+bit-pointer, a sentinel without an exported value (`sentinel_byte`), a function pointer (its
+signature would need a conversion at each indirect call: `qsort`'s comparator), and pointees that
+differ where one may hold error storage or has no known storage (a reinterpretation of symbolic
+error bytes, as for `@ptrCast`). -/
+
+/-- One side of a C-ABI pointer conversion. -/
+private structure AbiPtrSide where
+  form : AbiPtrForm
+  pointee : TyId
+  align : Nat
+  sentinel : Option Nat
+
+/-- The pointee `t` of `f` holds no symbolic error storage: `anyopaque`, or a type graph without
+an error set or error union (`hasErrorCapability`, a pointer cast's test). -/
+private def abiErrorFree (f : Func) (t : TyId) : Bool :=
+  f.types[t]? == some (.other "anyopaque") || hasErrorCapability f.types t (cycles := true) == some false
+
+/-- The type `t` of `f` as one side of a C-ABI pointer conversion, or why it is none. -/
+private def abiPtrSide (f : Func) (t : TyId) : Except String AbiPtrSide := do
+  let (optional, pid) := match f.types[t]? with
+    | some (.optional c) => (true, c)
+    | _ => (false, t)
+  let some (.ptr kind _ child) := f.types[pid]? | throw "is not a pointer"
+  let some l := f.layouts[pid]? | throw "has no layout"
+  unless kind == "one" || kind == "many" || kind == "c" do throw "is a slice"
+  if l.isVolatile then throw "is a `volatile` pointer"
+  if l.hostSize != 0 || l.isLanePtr then throw "is a bit-pointer"
+  unless l.unmodeled.isEmpty do throw s!"has the unmodelled attributes {l.unmodeled}"
+  let some c := f.types[child]? | throw "has an unknown pointee"
+  if isFnTy c then
+    throw "is a function pointer (its signature is not converted at an indirect call)"
+  if isVectorTy f.types child then throw "points to a vector (no defined byte layout)"
+  let some align := l.ptrAlign | throw "has no exported alignment"
+  let nullable := kind == "c" || l.allowzero
+  if optional && nullable then throw "is an optional C/allowzero pointer"
+  let sentinel ← if !l.sentinel then pure none else
+    match l.sentinelByte, c with
+    | some byte, .int _ 8 => pure (some byte)
+    | _, _ => throw "has a sentinel without an exported byte value (`sentinel_byte`)"
+  let form : AbiPtrForm := if optional then .optional else if nullable then .nullable else .plain
+  pure { form, pointee := child, align, sentinel }
+
+/-- The C-ABI conversion of a value of type `x` of `f` into the type `y` of `g`, or why the
+rule does not cover the pair. -/
+def abiPtrConv (f g : Func) (x y : TyId) : Except String AbiPtrConv := do
+  let a ← (abiPtrSide f x).mapError (s!"the source type {·}")
+  let b ← (abiPtrSide g y).mapError (s!"the target type {·}")
+  unless compatibleType f g a.pointee b.pointee ||
+      (abiErrorFree f a.pointee && abiErrorFree g b.pointee) do
+    throw "the pointees differ and one may hold symbolic error storage or has no known storage"
+  pure { src := a.form, dst := b.form,
+         nonNull := b.form == .plain && a.form != .plain,
+         align := if b.align > a.align then b.align else 1,
+         sentinel := if b.sentinel != a.sentinel then b.sentinel else none }
+
+/-- The conversion of a value of type `x` of `f` into the type `y` of `g` at a bound extern call:
+`none` for the same type, else `abiPtrConv` (the error names `position`). -/
+private def abiValueConv (position : String) (f g : Func) (x y : TyId) :
+    Except String (Option AbiPtrConv) :=
+  if compatibleType f g x y then pure none
+  else (abiPtrConv f g x y).map some |>.mapError
+    (s!"{position}, which the C-ABI conversion does not cover: {·}")
+
+/-- The C-ABI conversions of a call through the extern declaration `e` of `f` to `definition`:
+each argument from its declared type to the definition's, the result from the definition's type
+to the declared one (`AbiCall`). The error names the first position the rule does not cover. -/
+def externAbiCall (f : Func) (e : ExternDecl) (definition : Func) : Except String AbiCall := do
+  unless e.params.size == definition.params.size do
+    throw "parameter count, which the C-ABI conversion does not change"
+  let ret ← abiValueConv "result type" definition f definition.ret e.ret
+  let params ← (e.params.zip definition.params).zipIdx.mapM fun ((x, y), k) =>
+    abiValueConv s!"parameter {k} type" f definition x y
+  pure { callee := definition.name, params, ret }
+
 private def checkCallSignatureWith (f target : Func) (i : Inst) (args : Array Val)
-    (index : OperandTypes) (sameType : TyId → TyId → Bool) : Except String Unit := do
+    (index : OperandTypes) (sameType : TyId → TyId → Bool) (abi : Option AbiCall := none) :
+    Except String Unit := do
   unless args.size == target.params.size do
     throw s!"{f.name}: inst {i.id}: callee '{target.name}' has {args.size} arguments, expected {target.params.size}"
-  unless sameType i.ty target.ret do
+  -- A position with a C-ABI conversion (`Func.abiCalls`) agrees if the rule still gives it.
+  let converted (conv : Option AbiPtrConv) (f g : Func) (x y : TyId) : Bool :=
+    match conv with
+    | some c => match abiPtrConv f g x y with | .ok c' => c' == c | .error _ => false
+    | none => false
+  let retConv := abi.bind (·.ret)
+  unless (retConv.isNone && sameType i.ty target.ret) || converted retConv target f target.ret i.ty do
     throw s!"{f.name}: inst {i.id}: callee '{target.name}' has an incompatible result type ({i.ty} versus {target.ret})"
   for (arg, k) in args.zipIdx do
     if let .func .. := arg then
       throw s!"{f.name}: inst {i.id}: callee '{target.name}' argument {k}: function values lack a structured signature in this AIR schema"
+    let conv := abi.bind (·.params[k]?.join)
     let agrees : Bool := match arg with
-      | .bool _ => target.types[target.params[k]!]? == some .bool
-      | .void => target.types[target.params[k]!]? == some .void
-      | v => ((index.valTy? v).map fun t => sameType t target.params[k]!).getD false
+      | .bool _ => conv.isNone && target.types[target.params[k]!]? == some .bool
+      | .void => conv.isNone && target.types[target.params[k]!]? == some .void
+      | v => ((index.valTy? v).map fun t =>
+          if conv.isSome then converted conv f target t target.params[k]!
+          else sameType t target.params[k]!).getD false
     unless agrees do
       throw s!"{f.name}: inst {i.id}: callee '{target.name}' has an incompatible argument {k} type (expected local type {target.params[k]!})"
 
-/-- Validate a direct call (or one possible indirect target) against its exported signature. -/
+/-- The C-ABI conversions of `f`'s direct calls of `callee` (`Func.abiCalls`), if any. -/
+def Func.abiCallOf? (f : Func) (callee : String) : Option AbiCall :=
+  f.abiCalls.find? (·.callee == callee)
+
+/-- Validate a direct call (or one possible indirect target) against its exported signature.
+`direct`: the call names `target`, so its C-ABI conversions (`Func.abiCalls`) apply. -/
 def checkCallSignature (f target : Func) (i : Inst) (args : Array Val)
-    (index : OperandTypes := f.operandTypes) : Except String Unit :=
+    (index : OperandTypes := f.operandTypes) (direct : Bool := false) : Except String Unit :=
   checkCallSignatureWith f target i args index (compatibleType f target)
+    (if direct then f.abiCallOf? target.name else none)
 
 private abbrev SignaturePairs := Std.HashSet ((Nat × Nat) × (TyId × TyId))
 
@@ -3288,18 +3388,22 @@ Every call still checks its arity, operand types/forms and diagnostic context; o
 entirely successful signature check publishes new pairs. Untyped bool/void literals do
 not establish a local type/layout pair and therefore never add one. -/
 private def checkCallSignatureCached (f target : Func) (sourceIndex targetIndex : Nat)
-    (i : Inst) (args : Array Val) (index : OperandTypes) (completed : SignaturePairs) :
-    Except String SignaturePairs := do
+    (i : Inst) (args : Array Val) (index : OperandTypes) (completed : SignaturePairs)
+    (direct : Bool := false) : Except String SignaturePairs := do
   let key (x y : TyId) := ((sourceIndex, targetIndex), (x, y))
   let sameType (x y : TyId) := completed.contains (key x y) || compatibleType f target x y
-  checkCallSignatureWith f target i args index sameType
-  let mut completed := completed.insert (key i.ty target.ret)
+  let abi := if direct then f.abiCallOf? target.name else none
+  checkCallSignatureWith f target i args index sameType abi
+  -- A converted position's types are not equal: it publishes no pair.
+  let mut completed := if (abi.bind (·.ret)).isSome then completed
+    else completed.insert (key i.ty target.ret)
   for (arg, k) in args.zipIdx do
     match arg with
     | .bool _ | .void => pure ()
     | _ =>
       if let some ty := index.valTy? arg then
-        completed := completed.insert (key ty target.params[k]!)
+        if (abi.bind (·.params[k]?.join)).isNone then
+          completed := completed.insert (key ty target.params[k]!)
   return completed
 
 /-- Constant forms and nested payloads remain typed for direct normalized API clients too. -/
@@ -4301,9 +4405,12 @@ symbol, never at a Zig declaration name:
     declared library, if the program does not define the symbol; the call stays an extern
     callee, which the model implements;
 (b) else to the one function of the program that defines the symbol, with the declared
-    calling convention and signature (`externSignatureMismatch`: no conversion at the
-    boundary); the call becomes a direct call of that function, which `checkProgram` then
-    checks like any direct call.
+    calling convention; the call becomes a direct call of that function, which `checkProgram`
+    then checks like any direct call. A signature that differs from the declared one
+    (`externSignatureMismatch`) binds only through the C-ABI conversion of each differing
+    value (`externAbiCall`, recorded in `Func.abiCalls`), and only for a direct call: a
+    function pointer to the symbol would pass the values unconverted, and so would a direct
+    call of the definition by its own name or through another declaration in the same function.
 The definitions of a symbol are the `export` of each function's own file (an `export fn`) and
 the records of the compilation's export table (`table`, `docs/air-json.md` §Export table: the
 `@export` symbols too, and those of functions without AIR in the set). (b) needs exactly one,
@@ -4361,6 +4468,8 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
       unless callees.any (·.1 == callee) do
         callees := callees.push (callee, symbol, some "(its address is taken) ")
     let mut renames : Std.HashMap String String := {}
+    -- The bindings through a C-ABI conversion: (extern callee, conversions).
+    let mut converted : Array (String × AbiCall) := #[]
     for (callee, symbol, note) in callees do
       -- The AIR global of an address records no library or convention: only a declared
       -- `externs` entry fixes them.
@@ -4410,20 +4519,45 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
             unbound := reject (s!"is declared with calling convention '{e.cc}', but its \
               definition '{name}' has '{cc}'")
           else if let some position := declared.bind (externSignatureMismatch f · definition) then
-            -- The bound call is a direct call: no conversion stands at the boundary. A
-            -- declaration that agrees with the definition only at the C ABI (translate-c's
-            -- `[*c]const u8` for Zig libc's `[*:0]const c_char`) is not bound.
-            unbound := reject s!"differs from its definition '{name}' in its {position}: the \
-              two may agree at the C ABI, but the binding converts no value \
-              (docs/c-frontend.md §libc boundary)"
+            -- A declaration that agrees with the definition only at the C ABI (translate-c's
+            -- `[*c]const u8` for Zig libc's `[*:0]const c_char`) binds through the C-ABI
+            -- conversion of each differing value, at a direct call only.
+            if note.isSome || codeRefs.any (·.1 == callee) then
+              unbound := reject s!"differs from its definition '{name}' in its {position}, and \
+                its address is taken: a call through the pointer converts no value \
+                (docs/c-frontend.md §libc boundary)"
+            else match externAbiCall f (declared.getD e) definition with
+              | .error why =>
+                unbound := reject s!"differs from its definition '{name}' in its {why} \
+                  (docs/c-frontend.md §libc boundary)"
+              | .ok call =>
+                renames := renames.insert callee name
+                converted := converted.push (callee, call)
           else renames := renames.insert callee name
       else
         unbound := reject s!"has no definition in the program (an `export fn {symbol}` in the AIR set, or an \
           `@export` record of the export table) and no registry model '{callee}' \
           (--model-registry, docs/external-models.md)"
+    -- After renaming, a call of a converted definition must be one of the converted
+    -- declaration's: not a direct call of the definition by its own name, and not a call
+    -- through another declaration bound to it.
+    let mut abiCalls : Array AbiCall := #[]
+    for (callee, call) in converted do
+      let named := f.allInsts.any fun i => match i.op with
+        | .call (.func n ..) _ => n == call.callee
+        | _ => false
+      let shared := renames.fold (init := false) fun acc c n => acc || (c != callee && n == call.callee)
+      if named || shared then
+        renames := renames.erase callee
+        let e := (f.externs.find? (some ·.name == externSymbol? callee)).getD
+          { name := callee, library := none, cc := "", params := #[], ret := 0, varargs := false }
+        unbound := unbound.push (f.name, externUnbound f.name e s!"is bound through a C-ABI \
+          conversion to '{call.callee}', which this function also calls without it \
+          (CALLEE_AMBIGUOUS)")
+      else abiCalls := abiCalls.push call
     let rename (n : String) := renames.getD n n
     out := out.push (if renames.isEmpty then f
-      else { f with body := f.body.map (renameCallees rename),
+      else { f with abiCalls := f.abiCalls ++ abiCalls, body := f.body.map (renameCallees rename),
                     globals := f.globals.map fun g => match g.init with
                       | some (.func callee noreturn spawnFn) =>
                         { g with name := g.name.map rename,
@@ -4548,7 +4682,8 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
           issues := issues.push (issue .modelSignature message)
         if !modelledStdFn callee f.allocatorModel then
           if let some (targetIndex, target) := lookupFunction callee then
-            match checkCallSignatureCached f target fileIndex targetIndex i args index signatures with
+            match checkCallSignatureCached f target fileIndex targetIndex i args index signatures
+                (direct := true) with
             | .ok cache => signatures := cache
             | .error message => issues := issues.push (issue .callSignature message)
         if let some kind := threadFn? callee then
@@ -4840,7 +4975,7 @@ def collectCallChecksIndexed (file : String) (f : Func) (index : OperandTypes) (
         (checkModelSignature f callee args i.ty index)
       if !modelledStdFn callee f.allocatorModel then
         if let some target := snapshot.unique callee then
-          log := log.record diagnostic (checkCallSignature f target i args index)
+          log := log.record diagnostic (checkCallSignature f target i args index (direct := true))
       if let some kind := threadFn? callee then
         if let some k := kind.spawnArgs? then
           if let some target := worker.bind snapshot.unique then

@@ -853,6 +853,9 @@ structure FCtx where
   /-- `Func.openFnTys`: the program's open function types (`docs/interfaces.md`). Nonempty: the
   module declares `Ext`, and every concurrent definition takes `[Ext]`. -/
   openFnTys : Array String := #[]
+  /-- `Func.abiCalls`: the C-ABI conversions of the direct calls that extern declarations bound
+  (`FCtx.lowerCall`). -/
+  abiCalls : Array AbiCall := #[]
   /-- This function reaches an OS primitive that takes the OS environment (`envFunctions`): it
   takes `[Zig.Os.HasEnv]`. -/
   osEnv : Bool := false
@@ -2402,6 +2405,19 @@ def bindLet (fc : FCtx) (env : Array (InstId × String)) (id : InstId) (expr : S
   let name := if fc.isReferenced id then s!"i{id}" else s!"_i{id}"
   (env.push (id, name), s!"let {name} ← {expr}")
 
+/-- The `Zig.MemM` term of the C-ABI conversion `c` of the value `v` (`ZigLean/Mem/Abi.lean`): the
+source's form as a `Zig.Ptr` (`Zig.ptrOfOptional` of an optional), the check of the target's
+assertions, and the target's form (`Zig.abiPtrOpt` to an optional). The same form without
+assertions is the value itself. -/
+def abiConvExpr (c : AbiPtrConv) (v : String) : String :=
+  if c.src == c.dst && !c.nonNull && c.align == 1 && c.sentinel.isNone then s!"pure {v}" else
+  let p := if c.src == .optional then s!"(Zig.ptrOfOptional {v})" else v
+  let sentinel := match c.sentinel with
+    | some b => s!"some ({b} : BitVec 8)"
+    | none => "none"
+  let req := s!"(\{ nonNull := {c.nonNull}, align := {c.align}, sentinel := {sentinel} } : Zig.AbiPtrReq)"
+  s!"{if c.dst == .optional then "Zig.abiPtrOpt" else "Zig.abiPtr"} {req} {p}"
+
 /-- Select a call's actual lowering once, using the original canonical identity for model and
 panic classification. Only arms that name executable declarations contribute graph edges. -/
 def FCtx.lowerCall (fc : FCtx) (env : Array (InstId × String)) (inst : Inst)
@@ -2436,13 +2452,27 @@ def FCtx.lowerCall (fc : FCtx) (env : Array (InstId × String)) (inst : Inst)
     EmittedCode.combine s!"({String.join (arms.toList.map (·.code))}{last})" arms
   else
     let memCallee := fc.memFuncs.contains source
-    let term := s!"{cexpr} {String.intercalate " " (args.map (fc.callArg env memCallee)).toList}"
+    -- A bound extern call with C-ABI conversions (`Func.abiCalls`): each converted argument
+    -- before the call, the result after it (`abiConvExpr`).
+    let abi := match callee with
+      | .func name .. => fc.abiCalls.find? (fun (c : AbiCall) => c.callee == name)
+      | _ => none
+    let arg (k : Nat) (a : Val) : String :=
+      match abi.bind (·.params[k]?.join) with
+      | some c => s!"(← {fc.callMName} ({abiConvExpr c (fc.callArg env memCallee a)}))"
+      | none => fc.callArg env memCallee a
+    let term := s!"{cexpr} {String.intercalate " " (args.zipIdx.map fun (a, k) => arg k a).toList}"
     let expr := match callee with
       | .func name .. => fc.callOf name term memCallee
       | _ => fc.liftR term
     let expr := if fc.rawFuncs.contains source && !fc.rawInsts.contains inst.id then
       fc.storageExpr inst.ty s!"Zig.Bytes.get ({fc.emitTyOf inst.ty}) (← {expr}) 0"
       else expr
+    let expr := match abi.bind (·.ret) with
+      | some c =>
+        if fc.rawFuncs.contains source then placeholder "a C-ABI conversion of a raw result"
+        else s!"({expr} >>= fun r => {fc.callMName} ({abiConvExpr c "r"}))"
+      | none => expr
     match callee with
     | .func name .. => EmittedCode.withRefs expr #[.function name]
     | _ => EmittedCode.literal expr
@@ -3971,7 +4001,7 @@ private def mkFCtxUnprepared (f : Func) (structNames : Array (String × String))
       allocatorModel := f.allocatorModel, targetOs := f.targetOs, places := #[],
       mem := memFuncs.contains f.name, memFuncs, layouts := f.layouts,
       conc := concFuncs.contains f.name, concFuncs, openFnTys := f.openFnTys,
-      escaping := escapingAllocs f, globalIds, byteLocals := byteLocals f, rawFuncs,
+      abiCalls := f.abiCalls, escaping := escapingAllocs f, globalIds, byteLocals := byteLocals f, rawFuncs,
       rawRet := rawFuncs.contains f.name,
       exactFloatDivs := exactFloatDivs allInsts, sentinelChecked := sentinelCheckedSlices allInsts }
   let fc := { fc with places := fc.computePlaces, bytePlaces := fc.computeBytePlaces }

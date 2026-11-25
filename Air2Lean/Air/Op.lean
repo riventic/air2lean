@@ -772,6 +772,39 @@ structure ExternDecl where
   varargs : Bool
   deriving Repr, Inhabited, BEq
 
+/-- The form of a pointer value at a C-ABI conversion (`AbiPtrConv`): a `Zig.Ptr` that is never
+null (`plain`: `*T`, `[*]T`), a `Zig.Ptr` that may be address zero (`nullable`: `[*c]T`,
+`*allowzero T`), or an `Option Zig.Ptr` (`optional`: `?*T`, `?[*]T`). -/
+inductive AbiPtrForm where
+  | plain
+  | nullable
+  | optional
+  deriving Repr, Inhabited, BEq, DecidableEq
+
+/-- The C-ABI conversion of one pointer value at a bound extern call (`ZigLean/Mem/Abi.lean`):
+from the form `src` to the form `dst`, checking what the target type asserts and the source
+type does not (`Zig.AbiPtrReq`). -/
+structure AbiPtrConv where
+  src : AbiPtrForm
+  dst : AbiPtrForm
+  /-- The target is `plain` and the source is not. -/
+  nonNull : Bool
+  /-- The target's alignment where it is stricter than the source's, else 1. -/
+  align : Nat
+  /-- The target's sentinel byte where the source does not assert the same one. -/
+  sentinel : Option Nat
+  deriving Repr, Inhabited, BEq
+
+/-- The direct call of `callee` that an extern declaration of another, ABI-compatible signature
+was bound to (`Check.resolveExternsCollect`): the conversion of each argument from its declared
+type to the definition's and of the result from the definition's type to the declared one,
+`none` where the two types are the same. -/
+structure AbiCall where
+  callee : String
+  params : Array (Option AbiPtrConv)
+  ret : Option AbiPtrConv
+  deriving Repr, Inhabited, BEq
+
 /-- The linker symbol an `export fn` defines, and its calling convention. -/
 structure ExportDecl where
   name : String
@@ -836,6 +869,9 @@ structure Func where
   `Ext`'s fields (`docs/interfaces.md`, the model registry's `interfaces`): a call through a
   pointer of one of them that no function of the program serves calls the environment. -/
   openFnTys : Array String := #[]
+  /-- The direct calls whose extern declaration was bound to a definition of an ABI-compatible
+  but different signature, with their C-ABI conversions (`AbiCall`). -/
+  abiCalls : Array AbiCall := #[]
 
 /-- A single or many pointer type through which an access is an ordinary memory access: not a
 slice, not `volatile` (a device access, L13), not `allowzero` (stored as `Zig.nullablePtrEnc`, and
