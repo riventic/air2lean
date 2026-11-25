@@ -249,6 +249,7 @@ FIXTURES = [
         ("logical017", "Logical017", ("0.17.1",)),
         ("vector_fields", "VectorFields", ("0.14.1", "0.15.2")),
         ("auto_items", "AutoItems", ("0.14.1", "0.15.2")),
+        ("opt_items", "OptItems", ("0.14.1", "0.15.2")),
         ("sentinel_arrays", "SentinelArrays", ("0.14.1", "0.15.2", "0.16.0")),
         ("void_casts", "VoidCasts", ("0.14.1", "0.15.2", "0.16.0", "0.17.1")),
         ("void017", "Void017", ("0.17.1",)))
@@ -259,6 +260,13 @@ FIXTURES = [
      f"tests/roadmap/packed-casts/air-handwritten/{v}/void_cast",
      ["--namespace", f"PackedCasts.V{v.replace('.', '_')}.VoidCast", "--prefix", "void_cast."], "exact")
     for v in ("0.16.0", "0.17.1")
+] + [
+    # packed-casts/check.sh: opt_items.zig for the self-hosted x86_64 backend (opt-in mode).
+    (f"tests/roadmap/packed-casts/PackedCasts/V{v.replace('.', '_')}/OptItemsX64.lean",
+     f"tests/roadmap/packed-casts/air/{v}/opt_items_x64",
+     ["--namespace", f"PackedCasts.V{v.replace('.', '_')}.OptItemsX64", "--prefix", "opt_items.",
+      "--allow-unqualified-build-mode"], "exact")
+    for v in ("0.14.1", "0.15.2")
 ] + [
     # nan-bits/check.sh (docs/architecture-audit/nan-bits.md): one translation per version.
     (f"tests/roadmap/nan-bits/NanBits/V{v.replace('.', '_')}/Gen.lean", f"tests/roadmap/nan-bits/air/{v}/nan_bits",

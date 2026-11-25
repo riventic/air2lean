@@ -105,7 +105,7 @@ pub fn main() void {
         hex("opt_zerosToInt", oi.zerosToInt(.{ 0, null, 0, 0 }));
         hex("opt_intToZeros", oi.intToZeros(0x0100_0101));
         hex("opt_intToU12s", oi.intToU12s(0xAA01_0ABC));
-        hex("opt_intToU24s", oi.intToU24s(0x0000_0001_7712_3456_0000_0000_0000_0000));
+        hex("opt_intToU24s", oi.intToU24s(0x0000_0001_0012_3456_0000_0000_0000_0000));
         hex("opt_intToI8s", oi.intToI8s(0x0180_0000));
         hex("opt_intToU64", oi.intToU64(0x1_0123_4567_89AB_CDEF));
         hex("opt_intToU128", oi.intToU128((1 << 128) | 0x0123_4567_89AB_CDEF_FEDC_BA98_7654_3210));
