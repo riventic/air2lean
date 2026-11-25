@@ -3125,14 +3125,12 @@ def check (f : Func) (device : Option DeviceContract := none) : Except String Un
   let insts := f.allInsts
   checkForLenFact f insts
   -- The 32-bit pointer model (`ZigLean/Mem/Width.lean`) parameterizes pointers, slices,
-  -- `usize` and allocation; the ops below remain 64-bit only.
+  -- `usize`, allocation and the `@tagName`/`@errorName` slices; the ops below remain 64-bit only.
   let ptrBytes := ptrBytesOf f.layouts
   if ptrBytes != 8 then
     for i in insts do
       let what? : Option String := match i.op with
         | .atomicLoad .. | .atomicStore .. | .atomicRmw .. | .cmpxchg .. => some "an atomic op"
-        | .tagName _ => some "`@tagName`"
-        | .errorName _ => some "`@errorName`"
         | .asm .. => some "inline assembly"
         | _ => none
       if let some what := what? then

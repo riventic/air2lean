@@ -321,7 +321,9 @@ a whole-byte vector lane are stored as such integers; a vector's lane 0 comes fi
 reads and writes its host integer at the profile's order, with the exporter's bit offset counted
 from the least significant bit. Pointer and error-code bytes are symbolic and the same at both
 orders. A `@tagName`/`@errorName` result is a slice into a static name block whose bytes are the
-same at both orders; stored, its length is a `usize` at the profile's order. Each `.little`
+same at both orders; stored, its length is a `usize` at the profile's order. No 32-bit
+big-endian target is qualified: a profile declaring one (`pointer_bits` 32 on s390x, or a
+`mips`/`powerpc` triple) is rejected before translation (`big-endian/test_cli.py`). Each `.little`
 definition is the existing model by `rfl`, so little-endian translations and proofs are unchanged; `ZigLean/EndianLemmas.lean` (proof-only) proves the round trips at both
 orders.
 

@@ -115,6 +115,22 @@ def check_version(binary, version):
     del bad[name]["profile"]
     run(binary, bad, error="outside the little-endian memory model")
     checks += 1
+    # `@tagName`/`@errorName` are admitted on the 64-bit big-endian and the 32-bit little-endian
+    # models (T02); no 32-bit big-endian target is qualified, so a profile that declares one is
+    # rejected before any name slice is emitted (`BuildProfile.collect`).
+    names = load(version, "names/s390x-linux")
+    name = "names.colorName.json"
+    assert "Color.tagName" in run(binary, one(names, name), prefix="names.")
+    for fields, error in [
+        ({"pointer_bits": 32}, "differs from the s390x target's 64-bit pointer width"),
+        ({"pointer_bits": 32, "target_triple": "mips-linux-musl"}, "model ABI scope"),
+        ({"pointer_bits": 32, "target_triple": "powerpc-linux-musl"}, "model ABI scope"),
+        ({"pointer_bits": 32, "target_triple": "wasm32-wasi-musl"}, "byte order"),
+    ]:
+        bad = one(names, name)
+        bad[name]["profile"].update(fields)
+        run(binary, bad, error=error, prefix="names.")
+        checks += 1
     # Real s390x exports outside the qualified big-endian model (`reject.zig`).
     rejects = load(version, "s390x-reject")
     for name, error in [
