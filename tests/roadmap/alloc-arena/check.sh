@@ -80,8 +80,14 @@ for spec in ArenaSpec ArenaSpecMacos ArenaSpecFixed; do
   done
 done
 theorems+=(--declaration AllocArena.ArenaSpec.reset_free_all_frame --declaration AllocArena.ArenaSpec.loop78_ct)
+# Each spec is split into modules that build in parallel (ArenaSpec*.lean's module doc).
+specs=()
+for spec in ArenaSpec ArenaSpecMacos ArenaSpecFixed; do
+  specs+=("$spec")
+  for part in Entries Retain Loop66C0 Loop66C1; do specs+=("$spec.$part"); done
+done
 python3 -B scripts/fixtures.py audit ArenaObstruction HeaderTagCX HeaderMixCX AllocArena.Core \
-  AllocArena.Reset ArenaSpec ArenaSpecMacos ArenaSpecFixed "${theorems[@]}"
+  AllocArena.Reset "${specs[@]}" "${theorems[@]}"
 bash "$here/mutant.sh"
 PYTHONDONTWRITEBYTECODE=1 python3 "$here/test_cli.py" "$translator"
 if [ -n "${AIR2LEAN_NATIVE_ZIG:-}" ]; then
