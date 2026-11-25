@@ -9,9 +9,9 @@ import ZigLean.Sep.Full.AutoWP
 The per-item obligation of `Thread.Condition` (0.15.2's `FutexImpl`: the futex-epoch condition of
 `ZigLean/Sep/Full/Cond.lean` on bits) in this program's generated code: `wait` (with no timeout;
 its `Deadline` block is on the waiter's stack, allocated while it holds the mutex and freed after
-it locked it again: `Proofs/Threadsync/Deadline.lean`, `FCond.wp_liftPart`) and `signal`
-(`wake(1)`), walked with the rules of the condition, with the program's `Thread.Mutex`
-(`threadMutex`), for every protocol that has the condition next to its mutex. `wait` reaches the
+it locked it again: `Proofs/Threadsync/Deadline.lean`, `FCond.wp_liftPart`), `signal`
+(`wake(1)`) and `broadcast` (`wake(.all)`), walked with the rules of the condition, with the
+program's `Thread.Mutex` (`threadMutex`), for every protocol that has the condition next to its mutex. `wait` reaches the
 translated `std.time.Timer` (OSK-01), so it takes the OS environment: the results hold for every
 `[Zig.Os.HasEnv]`.
 -/
@@ -50,20 +50,25 @@ def wakePost (P : Proto Tgt γ) (C : FCond γ) (t : ThreadId) (g : γ) (h : Arra
 
 when_defined Thread_Futex_LinuxImpl_wake
 
-/-- `signal`'s wake of one waiter at the epoch (translated `Thread.Futex.wake`, down to the OS
-wake: `Futex.wake_wp`, `FCond.wp_osWakeEp`), at `wk nw q h` with `nw ≤ 1`: it is out. Linux:
-one OS wake, no tick (the caller's facts for the macOS loop are unused). -/
+/-- The signaller's wake of up to `w` waiters at the epoch (`signal`: `wake(1)`; `broadcast`:
+`wake(waiters - signals)`; translated `Thread.Futex.wake`, down to the OS wake: `Futex.wake_wp`,
+`FCond.wp_osWakeEp`), at `wk nw q h` with `0 < nw ≤ w` (and `nw < 2^31`, within std's clamp):
+it is out. Linux: one OS wake of `min(w, 2^31 − 1)`, no tick (the caller's facts for the macOS
+loop are unused). -/
 theorem epWake_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none) {t : ThreadId}
     {G : ThreadId → γ} {m : Mem} {n : Nat} {g : γ} {q nw : Nat} {sh : Array Word.Entry}
-    (hnw : nw ≤ 1) (hg : C.ph g = .wk nw q sh) (_hgo : L.ph g ≠ .gone)
+    {w : BitVec 32} (hw : 0 < w.toNat) (hnw : nw ≤ w.toNat) (hnb : nw < 2 ^ 31)
+    (hg : C.ph g = .wk nw q sh) (_hgo : L.ph g ≠ .gone)
     (_hu : 0 < (L.part g).gh.ac.frag .unmetered) (_hcur : m.current = t)
     (hi : P.inv (upd G t g) m)
     {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ d', d' < n → ∀ G₁ m', m'.current = t → C.S.Prefix sh m' →
       P.inv (upd G₁ t (C.set g .out)) m' → Q () G₁ m' d') :
-    P.WP t (Thread_Futex_wake C.Ep.ptr (1 : BitVec 32)) Q G m n :=
-  Futex.wake_wp hcost (by decide) (hC.wordWordAt (hC.wRest (.inr rfl)) hi) fun v _ =>
-    FCond.wp_osWakeEp hC (fun k hk => by cases hk; exact Os.Linux.wakeLimit_pos v) hnw hg hi
+    P.WP t (Thread_Futex_wake C.Ep.ptr w) Q G m n :=
+  Futex.wake_wp hcost (by rintro rfl; exact absurd hw (by decide))
+    (hC.wordWordAt (hC.wRest (.inr rfl)) hi) fun v hv =>
+    FCond.wp_osWakeEp hC (fun k hk => by cases hk; exact Os.Linux.le_wakeLimit (by omega) (by omega))
+      hg hi
       fun k hk r G₁ m' hcu hr => by
         rcases hr with ⟨⟨j, rfl, hj⟩, hp, hi'⟩ | ⟨hs, -⟩
         · exact ⟨j, rfl, Nat.le_trans (hj _ rfl) (Os.Linux.wakeLimit_le v),
@@ -78,14 +83,15 @@ when_defined Thread_Futex_DarwinImpl_wake
 fragment pays each tick of that loop (`hu`), at the same place (`wk`). -/
 theorem epWake_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none) {t : ThreadId}
     {G : ThreadId → γ} {m : Mem} {n : Nat} {g : γ} {q nw : Nat} {sh : Array Word.Entry}
-    (hnw : nw ≤ 1) (hg : C.ph g = .wk nw q sh) (hgo : L.ph g ≠ .gone)
+    {w : BitVec 32} (hw : 0 < w.toNat) (hnw : nw ≤ w.toNat) (_hnb : nw < 2 ^ 31)
+    (hg : C.ph g = .wk nw q sh) (hgo : L.ph g ≠ .gone)
     (hu : 0 < (L.part g).gh.ac.frag .unmetered) (hcur : m.current = t)
     (hi : P.inv (upd G t g) m)
     {Q : Unit → (ThreadId → γ) → Mem → Nat → Prop}
     (h : ∀ d', d' < n → ∀ G₁ m', m'.current = t → C.S.Prefix sh m' →
       P.inv (upd G₁ t (C.set g .out)) m' → Q () G₁ m' d') :
-    P.WP t (Thread_Futex_wake C.Ep.ptr (1 : BitVec 32)) Q G m n :=
-  Futex.wake_wp hcost (by decide)
+    P.WP t (Thread_Futex_wake C.Ep.ptr w) Q G m n :=
+  Futex.wake_wp hcost (by rintro rfl; exact absurd hw (by decide))
     (I := fun G m => m.current = t ∧ P.inv (upd G t g) m)
     (D := fun G m => m.current = t ∧ C.S.Prefix sh m ∧ P.inv (upd G t (C.set g .out)) m)
     (fun _ _ hI => hC.wordWordAt (hC.wRest (.inr rfl)) hI.2)
@@ -94,10 +100,16 @@ theorem epWake_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none) {t : T
       (fun k hk a G₁ m' hc hi' => hq k hk a G₁ m' ⟨hc, hi'⟩) hcost)
     (fun hI hq => FCond.wp_osWakeEp hC (spurious := true)
       (fun k hk => by
-        rw [show (if Zig.gt false (1 : BitVec 32) (1 : BitVec 32) then (none : Option Nat)
-          else some 1) = some 1 from by decide] at hk
-        cases hk; exact Nat.le_refl 1)
-      hnw hg hI.2 fun k hk r G₁ m' hc hr => hq k hk r G₁ m' (by
+        -- one waiter (`w = 1`), or all of them (`WAKE_ALL`, `w > 1`)
+        rw [Zig.gt_unsigned] at hk
+        split at hk
+        · cases hk
+        · rename_i hle
+          cases hk
+          have h1 : (1 : BitVec 32).toNat = 1 := rfl
+          simp only [decide_eq_true_eq] at hle
+          omega)
+      hg hI.2 fun k hk r G₁ m' hc hr => hq k hk r G₁ m' (by
         rcases hr with ⟨⟨j, rfl, -⟩, hp, hi'⟩ | ⟨-, rfl, hi'⟩
         · exact .inl ⟨⟨j, rfl⟩, hc, hp, hi'⟩
         · exact .inr ⟨rfl, hc, hi'⟩))
@@ -182,13 +194,116 @@ theorem cond_signal_wp_resource (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost 
   rintro _ G' m' d' ⟨hd, hc, hi', hs⟩
   exact ⟨hd, hc, L.part g, rfl, by simpa only [L.setPart_self] using hi', hs⟩
 
-/-! ## `wait`
+/-! ## `broadcast`: `wake(.all)`
 
-The state word's halves on bits: `waiters` the low and `signals` the high 16 bits (`FCond`). -/
+As `wake(.one)`, with the post `state + (w - s) · 2^16` (every waiter gets its signal: the history
+post with `all = true`) and a wake of `w - s`. -/
+
+/-- The low half of the state word (`waiters`), masked in place. -/
+theorem condT_lo (b : BitVec 32) : (b &&& 65535).toNat = b.toNat % 65536 := by
+  rw [BitVec.toNat_and, show (65535 : BitVec 32).toNat = 2 ^ 16 - 1 from rfl,
+    Nat.and_two_pow_sub_one_eq_mod]
 
 /-- The high half of the state word (`signals`), masked in place. -/
 theorem condT_hi (b : BitVec 32) : (b &&& 4294901760).toNat = 65536 * (b.toNat / 65536) := by
   fsym_arith
+
+/-- `wake(.all)`'s loop invariant (as `wakeInv`). -/
+def wakeAllInv (P : Proto Tgt γ) (C : FCond γ) (t : ThreadId) (g : γ) (h : Array Word.Entry)
+    (c : VClock) (D : Nat) (s : Thread_Condition_FutexImpl_wake__anon_2a7d9bbe22f6Locals)
+    (G : ThreadId → γ) (m : Mem) (d : Nat) : Prop :=
+  d < D ∧ m.current = t ∧ FCond.SOk s.state ∧
+    (s.state.toNat % 65536 ≤ s.state.toNat / 65536 → ∀ all, C.SigPost h c all m) ∧
+    P.inv (upd G t (C.set g (FCond.afterSRead h c s.state))) m
+
+/-- `wake(.all)`'s loop ends with `t` out and the history post with `all = true`. -/
+def wakeAllPost (P : Proto Tgt γ) (C : FCond γ) (t : ThreadId) (g : γ) (h : Array Word.Entry)
+    (c : VClock) (D : Nat)
+    (r : Thread_Condition_FutexImpl_wake__anon_2a7d9bbe22f6Exit ×
+      Thread_Condition_FutexImpl_wake__anon_2a7d9bbe22f6Locals) (G : ThreadId → γ) (m : Mem)
+    (d : Nat) : Prop :=
+  r.1 = .ret ∧ d < D ∧ m.current = t ∧ P.inv (upd G t g) m ∧ C.SigPost h c true m
+
+theorem wakeAll_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
+    (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hu : 0 < (L.part g).gh.ac.frag .unmetered)
+    (h : Array Word.Entry) (c : VClock) (D : Nat)
+    (s : Thread_Condition_FutexImpl_wake__anon_2a7d9bbe22f6Locals) (G : ThreadId → γ) (m : Mem)
+    (d : Nat) (hs : wakeAllInv P C t g h c D s G m d) :
+    P.WP t ((Thread_Condition_FutexImpl_wake__anon_2a7d9bbe22f6.loop9 C.S.ptr).run s)
+      (fun r G' m' d' =>
+        if Thread_Condition_FutexImpl_wake__anon_2a7d9bbe22f6.again9 r.1 then
+          wakeAllInv P C t g h c D r.2 G' m' d' ∧ (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 <
+            (fun (_ : Thread_Condition_FutexImpl_wake__anon_2a7d9bbe22f6Locals) => 0) s)
+        else wakeAllPost P C t g h c D r G' m' d') G m d := by
+  obtain ⟨hd, hcur, hok, hsp₀, hi₀⟩ := hs
+  -- the loop's tick, paid from the unmetered fragment: the same writes (`m.ticked`)
+  unfold Thread_Condition_FutexImpl_wake__anon_2a7d9bbe22f6.loop9
+  rw [StateT.run_bind]
+  refine WP.bind ?_
+  show P.WP t (ConcM.liftMem Zig.tick >>= fun a => pure (a, s)) _ _ _ _
+  refine WP.bind (hC.wp_tick_unmetered_exact hi₀ hcur
+    (by rw [hC.lph]; rcases hgo with hh | hh <;> rw [hh] <;> decide)
+    (by rw [hC.lpart]; exact hu) fun hcur hi => WP.pure' ?_)
+  have hsp : s.state.toNat % 65536 ≤ s.state.toNat / 65536 → ∀ all, C.SigPost h c all m.ticked :=
+    fun hsv all => (hsp₀ hsv all).extend (Word.Extends.congr rfl rfl)
+  clear hsp₀ hi₀
+  obtain ⟨b⟩ := s
+  simp only at hok hsp hi
+  by_cases hsv : b.toNat % 65536 ≤ b.toNat / 65536
+  · have hp := hsp hsv true
+    rw [show FCond.afterSRead h c b = .out by simp [FCond.afterSRead, hsv],
+      FCond.set_of hgx] at hi
+    clear hsp
+    fsym [(WP.liftMem_liftR (P := P) (t := t)
+        (hnone := fun _ => (show P.Partial from Or.inr hcost))),
+      BitVec.udiv_eq, condT_lo, condT_hi, FCond.SOk, wakeAllPost,
+      Thread_Condition_FutexImpl_wake__anon_2a7d9bbe22f6.again9]
+  · rw [show FCond.afterSRead h c b = .sl h c by simp [FCond.afterSRead, hsv]] at hi
+    clear hsp
+    have hgne : L.ph g ≠ .gone := by rcases hgo with hh | hh <;> rw [hh] <;> decide
+    fsym [FCond.wp_post hC (sh := h) (c := c), FCond.wp_bump hC, epWake_wp hC hcost,
+      hC.wp_projE (t := t), FCond.SigPost.ofPostAll, hC.lpart, hgne, hu,
+      (WP.liftMem_liftR (P := P) (t := t)
+        (hnone := fun _ => (show P.Partial from Or.inr hcost))),
+      C.ph_set, hC.lph, C.set_set, FCond.set_of, (FCond.set_of hgx), FCond.ptr_ep,
+      BitVec.udiv_eq, condT_lo, condT_hi, FCond.SOk, FCond.PostOk,
+      wakeAllInv, wakeAllPost, Thread_Condition_FutexImpl_wake__anon_2a7d9bbe22f6.again9]
+
+/-- **`Condition.broadcast`** (`wake(.all)`) outside or holding the mutex, preserving its
+complete resource, with the history post of its call with `all = true` (`FCond.SigPost`). -/
+theorem cond_broadcast_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
+    {p : Ptr} (hp : p = C.S.ptr) (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g)
+    (_io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered) (hi : P.inv (upd G t g) m) :
+    P.WP t (Thread_Condition_broadcast p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      P.inv (upd G' t g) m' ∧ C.SigPost (C.S.hist m) (m.clocks[t]!) true m') G m d := by
+  have hi' := hC.enterSl hgx hgo hsx hi
+  generalize C.S.hist m = h at hi' ⊢
+  generalize m.clocks[t]! = c at hi' ⊢
+  clear hi
+  fsym [FCond.wp_sload hC, C.ph_set, hC.lph, C.set_set,
+    WP.loop _ _ (wakeAllInv P C t g h c d) (fun _ => 0) (wakeAllPost P C t g h c d)
+      (wakeAll_body hC hcost t g hgx hgo hu h c d),
+    wakeAllInv, wakeAllPost]
+
+/-- The broadcast contract at its caller part (`keepPart`, as `signal`). -/
+theorem cond_broadcast_wp_resource (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
+    {p : Ptr} (hp : p = C.S.ptr) (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g)
+    (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hu : payUnmetered t (L.part g)) (hi : P.inv (upd G t g) m) :
+    P.WP t (Thread_Condition_broadcast p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      ∃ r', keepPart t (L.part g) r' ∧ P.inv (upd G' t (L.setPart g r')) m' ∧
+        C.SigPost (C.S.hist m) (m.clocks[t]!) true m') G m d := by
+  refine WP.mono ?_ (cond_broadcast_wp hC hcost hp t g hgx hgo hsx io G m d hu hi)
+  rintro _ G' m' d' ⟨hd, hc, hi', hs⟩
+  exact ⟨hd, hc, L.part g, rfl, by simpa only [L.setPart_self] using hi', hs⟩
+
+/-! ## `wait`
+
+The state word's halves on bits: `waiters` the low and `signals` the high 16 bits (`FCond`). -/
 
 /-- No signal: the high half is zero. -/
 theorem condT_hi0 {b : BitVec 32} (h : b.toNat / 65536 = 0) :
@@ -206,11 +321,8 @@ theorem condT_hi1 {b : BitVec 32} (h : ¬b.toNat / 65536 = 0) :
 /-- Room for one more waiter (`assert(prev_state & waiter_mask != waiter_mask)`). -/
 theorem condT_room {b : BitVec 32} (h : FCond.RegOld b) : (b &&& 65535 != 65535) = true := by
   unfold FCond.RegOld at h
-  have hm : (b &&& 65535).toNat = b.toNat % 65536 := by
-    rw [BitVec.toNat_and, show (65535 : BitVec 32).toNat = 2 ^ 16 - 1 from rfl,
-      Nat.and_two_pow_sub_one_eq_mod]
   have : b &&& 65535 ≠ 65535 := fun he => by
-    have := congrArg BitVec.toNat he; rw [hm] at this; simp at this; omega
+    have := congrArg BitVec.toNat he; rw [condT_lo] at this; simp at this; omega
   simpa using this
 
 /-! The waiter's ghost values carry its deadline block in its part (`FLock.setPart`): `gD g p r` in
@@ -617,6 +729,7 @@ end
 def threadCond [Zig.Os.HasEnv] : CondImpl Tgt where
   wait p _ q := Thread_Condition_wait p q
   signal p _ := Thread_Condition_signal p
+  broadcast p _ := Thread_Condition_broadcast p
   c := mutexC
   wait_pre := deadlinePre
   wait_post := keepPart
@@ -626,7 +739,12 @@ def threadCond [Zig.Os.HasEnv] : CondImpl Tgt where
   signal_post := keepPart
   signal_unmetered_pre _ _ hu := hu
   signal_unmetered_post _ _ _ _ hr := hr
+  broadcast_pre := payUnmetered
+  broadcast_post := keepPart
+  broadcast_unmetered_pre _ _ hu := hu
+  broadcast_unmetered_post _ _ _ _ hr := hr
   wait_wp_resource := cond_wait_wp_resource
   signal_wp_resource hC := cond_signal_wp_resource hC.toFits
+  broadcast_wp_resource hC := cond_broadcast_wp_resource hC.toFits
 
 end Threadsync

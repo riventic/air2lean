@@ -1,0 +1,22 @@
+{
+  "exports": [
+    {
+      "out": "air/{version}",
+      "source": "cond_broadcast.zig",
+      "filter": "Io.Condition.broadcast,Thread.Condition.broadcast,Thread.Condition.FutexImpl.wake,Thread.Futex.wake,Thread.Futex.LinuxImpl.wake,os.linux.errnoFromSyscall,posix.unexpectedErrno",
+      "versions": [
+        "0.17.1",
+        "0.16.0",
+        "0.15.2",
+        "0.14.1"
+      ],
+      "args": [
+        "-OReleaseSafe",
+        "-fno-error-tracing",
+        "-target",
+        "x86_64-linux",
+        "-mcpu=baseline"
+      ]
+    }
+  ]
+}

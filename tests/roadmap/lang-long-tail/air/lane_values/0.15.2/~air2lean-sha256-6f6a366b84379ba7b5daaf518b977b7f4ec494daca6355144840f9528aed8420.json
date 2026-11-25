@@ -1,0 +1,381 @@
+{
+ "schema": 12,
+ "zig_version": "0.15.2",
+ "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.16-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.15.2",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "lane_values.Lanes(u32).global",
+ "module": "root",
+ "src": {
+  "file": "lane_values.zig",
+  "module": "lane_values",
+  "decl_line": 79
+ },
+ "params": [
+  0
+ ],
+ "noalias": [],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2,
+   "column": 25
+  },
+  {
+   "id": 2,
+   "tag": "dbg_var_val",
+   "ty": 2,
+   "args": [
+    {
+     "ty": 3,
+     "ptr": {
+      "global": 0,
+      "off": 8
+     }
+    }
+   ],
+   "name": "p"
+  },
+  {
+   "id": 3,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 3,
+   "column": 29
+  },
+  {
+   "id": 4,
+   "tag": "load",
+   "ty": 0,
+   "args": [
+    {
+     "ty": 3,
+     "ptr": {
+      "global": 0,
+      "off": 8
+     }
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 3,
+   "column": 29
+  },
+  {
+   "id": 6,
+   "tag": "call",
+   "ty": 1,
+   "callee": {
+    "ty": 4,
+    "func": "lane_values.Lanes(u32).bits",
+    "module": "root",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 4
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "tag": "dbg_var_val",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 6
+    }
+   ],
+   "name": "old"
+  },
+  {
+   "id": 8,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 4,
+   "column": 21
+  },
+  {
+   "id": 9,
+   "tag": "call",
+   "ty": 0,
+   "callee": {
+    "ty": 5,
+    "func": "lane_values.Lanes(u32).of",
+    "module": "root",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "tag": "store_safe",
+   "ty": 2,
+   "args": [
+    {
+     "ty": 3,
+     "ptr": {
+      "global": 0,
+      "off": 8
+     }
+    },
+    {
+     "inst": 9
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 5,
+   "column": 24
+  },
+  {
+   "id": 12,
+   "tag": "load",
+   "ty": 6,
+   "args": [
+    {
+     "ty": 7,
+     "ptr": {
+      "global": 0,
+      "off": 0
+     }
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 5,
+   "column": 24
+  },
+  {
+   "id": 14,
+   "tag": "call",
+   "ty": 1,
+   "callee": {
+    "ty": 8,
+    "func": "lane_values.Lanes(u32).pack",
+    "module": "root",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 12
+    }
+   ]
+  },
+  {
+   "id": 15,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 5,
+   "column": 34
+  },
+  {
+   "id": 16,
+   "tag": "shl",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 6
+    },
+    {
+     "ty": 9,
+     "val": "64"
+    }
+   ]
+  },
+  {
+   "id": 17,
+   "tag": "xor",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 14
+    },
+    {
+     "inst": 16
+    }
+   ]
+  },
+  {
+   "id": 18,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 5,
+   "column": 13
+  },
+  {
+   "id": 19,
+   "tag": "ret_safe",
+   "ty": 10,
+   "args": [
+    {
+     "inst": 17
+    }
+   ]
+  }
+ ],
+ "globals": [
+  {
+   "name": "lane_values.Lanes(u32).g",
+   "module": "root",
+   "ty": 6,
+   "const": false,
+   "threadlocal": false,
+   "extern": false,
+   "init": {
+    "ty": 6,
+    "elems": [
+     {
+      "ty": 0,
+      "val": "1559087157"
+     },
+     {
+      "ty": 0,
+      "val": "3118174314"
+     },
+     {
+      "ty": 0,
+      "val": "382294175"
+     },
+     {
+      "ty": 0,
+      "val": "1941381332"
+     }
+    ]
+   }
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 128,
+   "abi_size": 16,
+   "abi_align": 16
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 0,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (u32) u128"
+  },
+  {
+   "k": "other",
+   "name": "fn (u32) u32"
+  },
+  {
+   "k": "vector",
+   "len": 4,
+   "child": 0,
+   "abi_size": 16,
+   "abi_align": 16
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 6,
+   "ptr_align": 16,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (@Vector(4, u32)) u128"
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 7,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  }
+ ]
+}
