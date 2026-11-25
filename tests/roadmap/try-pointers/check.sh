@@ -26,7 +26,7 @@ python3 -B scripts/lean-deps.py --build tests/roadmap/try-pointers
 python3 tests/roadmap/try-pointers/check-artifacts.py
 translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build translator first' >&2; exit 1; }
-lean_cmd=(lake env lean)
+lean_cmd=(python3 -B scripts/lean-deps.py --lean)  # `lake env lean` with Lake's native fsym
 if [ -n "${AIR2LEAN_LEAN:-}" ]; then lean_cmd=("$AIR2LEAN_LEAN"); fi
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-try-pointers.XXXXXX")
 trap 'rm -rf "$work"' EXIT

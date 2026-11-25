@@ -79,6 +79,14 @@
       "versions": ["0.15.2", "0.14.1"],
       "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
       "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/reject_ptrfield",
+      "source": "reject_ptrfield.zig",
+      "filter": "reject_ptrfield.",
+      "versions": ["0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
     }
   ]
 }
