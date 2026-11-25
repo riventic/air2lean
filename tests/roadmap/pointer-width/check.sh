@@ -66,5 +66,9 @@ for pair in Wasm32:wasm32-freestanding Wasi:wasm32-wasi X64:x86_64-linux; do
   "${lean_cmd[@]}" -R "$work" -o "$work/PointerWidth/$ns/Gen.olean" "$work/PointerWidth/$ns/Gen.lean"
 done
 "${lean_cmd[@]}" -R "$case_dir" "$case_dir/PointerWidth/Proofs.lean"
+# Layout, overflow and bounds mutants of the retained translations (mutations.py): each builds,
+# and PointerWidth.Proofs fails in the theorems of the changed fact.
+python3 -B "$case_dir/mutations.py" --self-test
+python3 -B "$case_dir/mutations.py" run "$work"
 python3 "$case_dir/test_cli.py" "$translator"
 echo 'pointer-width translation, layout, proof and rejection gates passed'

@@ -30,8 +30,9 @@ inductive ThreadFn where
   | detach
   /-- `Io.futexWait` (cancelable), `Io.futexWaitUncancelable`, `Io.futexWake` (0.16.0). -/
   | futexWait | futexWaitU | futexWake
-  /-- `Thread.Futex.wait`, `Thread.Futex.wake`. -/
-  | threadFutexWait | threadFutexWake
+  /-- `Thread.Futex.wait` (0.14.1, 0.15.2). `Thread.Futex.wake` has no model: it is translated
+  from std down to the OS wake rows (OSF-02; audit S6, finding 4). -/
+  | threadFutexWait
   /-- `Thread.Mutex.DarwinImpl.lock`, `.unlock`, `.tryLock` (0.15.2 on macOS): each is one call of
   `os_unfair_lock_*`, a C function (the exporter does not name an `extern` function). -/
   | osLock | osUnlock | osTryLock
@@ -253,7 +254,6 @@ def stdModels : Array StdModel := #[
   threadModel "Io.futexWaitUncancelable" "STD-05" .futexWaitU #["futexWaitC"] ioZig,
   threadModel "Io.futexWake" "STD-05" .futexWake #["futexWakeC"] ioZig,
   threadModel "Thread.Futex.wait" "STD-05" .threadFutexWait #["threadFutexWaitC"] futexZig,
-  threadModel "Thread.Futex.wake" "STD-05" .threadFutexWake #["threadFutexWakeC"] futexZig,
   threadModel "Thread.Mutex.DarwinImpl.lock" "STD-06" .osLock #["osUnfairLockC"] mutexZig,
   threadModel "Thread.Mutex.DarwinImpl.unlock" "STD-06" .osUnlock #["osUnfairUnlockC"] mutexZig,
   threadModel "Thread.Mutex.DarwinImpl.tryLock" "STD-06" .osTryLock #["osUnfairTryLockC"] mutexZig,
@@ -310,9 +310,8 @@ def stdModels : Array StdModel := #[
   osModel "os.linux.futex_wait" "OSF-01" .futexWaitRaw #["Linux.futex_4arg"] (only [.v0_14_1] linuxZig) none,
   osModel "extern:__ulock_wait2" "OSF-01" .ulockWait2 #["Darwin.__ulock_wait2"] darwinZig none,
   osModel "extern:__ulock_wait" "OSF-01" .ulockWait #["Darwin.__ulock_wait"] darwinZig none,
-  -- The futex wake with the kernel's wake count: the rows std's `Thread.Futex.wake`
-  -- (`LinuxImpl.wake`, `DarwinImpl.wake`; 0.14.1, 0.15.2) is translated down to once its hand
-  -- row above is deleted (audit S6, finding 4; engine-ledger row `s6-futex-hand-rows`).
+  -- The futex wake under std's translated `Thread.Futex.wake` (`LinuxImpl.wake`,
+  -- `DarwinImpl.wake`; 0.14.1, 0.15.2), with the kernel's wake count (audit S6, finding 4).
   osModel "os.linux.futex_3arg" "OSF-02" .futex3 #["Linux.futex_3arg"] (only [.v0_15_2, .v0_16_0, .v0_17_1] linuxZig) none,
   osModel "os.linux.futex_wake" "OSF-02" .futexWakeRaw #["Linux.futex_3arg"] (only [.v0_14_1] linuxZig) none,
   osModel "extern:__ulock_wake" "OSF-02" .ulockWake #["Darwin.__ulock_wake"] darwinZig none,

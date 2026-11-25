@@ -89,6 +89,33 @@
   ]
  },
  {
+  "name": "array-item-relation",
+  "def": "pairAt.loop5.inv",
+  "old": "w1.toNat = v1.toNat + 2 * (s.i",
+  "new": "w1.toNat = v1.toNat + 3 * (s.i",
+  "in": [
+   "pairAt_total"
+  ]
+ },
+ {
+  "name": "array-items-swapped",
+  "def": "pairAt.loop5.inv",
+  "old": "up (arr p0 (w0 :: w1 :: t0))",
+  "new": "up (arr p0 (w1 :: w0 :: t0))",
+  "in": [
+   "pairAt_total"
+  ]
+ },
+ {
+  "name": "sum-wrong-term",
+  "def": "tri.loop5.inv",
+  "old": "⟪v.toNat + (tsum p1.toNat (fun u => u) - tsum s.i.toNat (fun u => u)) =",
+  "new": "⟪v.toNat + (tsum p1.toNat (fun u => u + 1) - tsum s.i.toNat (fun u => u + 1)) =",
+  "in": [
+   "tri_total"
+  ]
+ },
+ {
   "name": "credits-plain-kept",
   "def": "upNe.loop5.credits.inv",
   "old": "up (pts p0 8 v))\n",

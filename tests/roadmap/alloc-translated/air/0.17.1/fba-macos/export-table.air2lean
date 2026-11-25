@@ -1,0 +1,52 @@
+{
+ "schema": 12,
+ "zig_version": "0.17.1",
+ "exports": [
+  {
+   "name": "fba_reset",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "fba.fba_reset",
+    "cc": "aarch64_aapcs_darwin"
+   }
+  },
+  {
+   "name": "fba_resize",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "fba.fba_resize",
+    "cc": "aarch64_aapcs_darwin"
+   }
+  },
+  {
+   "name": "_mh_execute_header",
+   "linkage": "weak",
+   "visibility": "default",
+   "function": null
+  },
+  {
+   "name": "fba_create",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "fba.fba_create",
+    "cc": "aarch64_aapcs_darwin"
+   }
+  },
+  {
+   "name": "fba_sum",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "fba.fba_sum",
+    "cc": "aarch64_aapcs_darwin"
+   }
+  }
+ ]
+}

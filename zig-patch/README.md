@@ -31,7 +31,8 @@ A pointer to one vector lane (`&v[i]`) exports `vector_index`; its `host_size` i
 vector length. Zig 0.17.0 makes every such pointer a lane pointer (earlier versions only for
 lanes that are not whole power-of-two bytes), so a reader must not take it as a bit-pointer.
 
-Zig 0.16.0 and 0.17.1 byte sentinel pointer types additionally export `sentinel_byte` as decimal text, read
+Zig 0.16.0 and 0.17.1 byte sentinel pointer types (an 8-bit integer item, `u8` or `i8`/`c_char`)
+additionally export `sentinel_byte` as decimal text (the two's-complement byte), read
 from the exact comptime sentinel in the result pointer type. `allocSentinel(u8, n, s)`
 requires this field; sentinel presence alone cannot supply the stored byte. Initial
 source/native qualification is restricted to Zig 0.16.0 (0.17.1 exports the field but is not

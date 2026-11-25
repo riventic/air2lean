@@ -1389,7 +1389,11 @@ def source_0 : _root_.Air2Lean.Func :=
 (@_root_.List.toArray
 @_root_.String
 (@_root_.List.nil
-@_root_.String)))
+@_root_.String))
+(@_root_.List.toArray
+@_root_.Air2Lean.AbiCall
+(@_root_.List.nil
+@_root_.Air2Lean.AbiCall)))
 
 def source_1 : _root_.Air2Lean.Func :=
 (@_root_.Air2Lean.Func.mk
@@ -2277,7 +2281,11 @@ def source_1 : _root_.Air2Lean.Func :=
 (@_root_.List.toArray
 @_root_.String
 (@_root_.List.nil
-@_root_.String)))
+@_root_.String))
+(@_root_.List.toArray
+@_root_.Air2Lean.AbiCall
+(@_root_.List.nil
+@_root_.Air2Lean.AbiCall)))
 
 def source_2 : _root_.Air2Lean.Func :=
 (@_root_.Air2Lean.Func.mk
@@ -3240,7 +3248,11 @@ def source_2 : _root_.Air2Lean.Func :=
 (@_root_.List.toArray
 @_root_.String
 (@_root_.List.nil
-@_root_.String)))
+@_root_.String))
+(@_root_.List.toArray
+@_root_.Air2Lean.AbiCall
+(@_root_.List.nil
+@_root_.Air2Lean.AbiCall)))
 
 /-- The complete original translation input, before certificate selection. -/
 def program : _root_.Air2Lean.Program := ⟨#[source_0, source_1, source_2], (@_root_.List.toArray

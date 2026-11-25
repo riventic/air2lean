@@ -47,10 +47,11 @@ caller-part assertions its actual code proves, as fields of the contract itself:
 part `r` that admits the call), `op_post t r r'` (the part `r'` it returns), and the two
 entailments that admit a caller with the minimal resource the operation family needs, with its
 exact part: a positive unmetered fragment for an operation that may tick (`lock_unmetered_pre`,
-`signal_unmetered_pre`, …), the plain mode for one that may also keep a stack block
-(`wait_plain_pre`, …). An operation that ticks in no implementation states no caller part
-(`MutexImpl.unlock_wp`, `EventImpl.set_wp`). They assert no tick count or repeated-payment
-obligation. The assertions below are the ones the translated code families share. -/
+`signal_unmetered_pre`, `set_unmetered_pre`, …), the plain mode for one that may also keep a
+stack block (`wait_plain_pre`, …). An operation that ticks in no implementation states no caller
+part (`MutexImpl.unlock_wp`). `EventImpl.set` states one: the wake of std's translated macOS
+`Thread.Futex` repeats on `EINTR`, and each repeat ticks (decision 2026-11-24, audit S6 finding
+4). They assert no tick count or repeated-payment obligation. The assertions below are the ones the translated code families share. -/
 
 /-- A Plain part has a positive unmetered fragment: a Plain caller meets every
 `…_unmetered_pre` admission. -/

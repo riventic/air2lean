@@ -545,11 +545,12 @@ def Func.usesMemoryAt (f : Func) (insts : Array Inst) (i : Inst) : Bool :=
   -- A place operand that is a pointer constant is memory, not a local.
   i.op.effects.places.any Val.pointsToMem
 
-/-- `f` uses memory by itself, not counting its calls. -/
+/-- `f` uses memory by itself, not counting its calls. A C-ABI conversion at a bound extern call
+(`Func.abiCalls`) reads addresses and bytes (`Zig.abiPtrCheck`). -/
 def Func.usesMemoryLocally (f : Func) : Bool :=
   let insts := f.allInsts
   !f.params.all (pureParam f.types f.layouts) || hasPtr f.types f.ret || !(escapingAllocs f).isEmpty ||
-    insts.any (f.usesMemoryAt insts)
+    !f.abiCalls.isEmpty || insts.any (f.usesMemoryAt insts)
 
 /-- Is `id`'s value read anywhere in `f`, chasing it through a block-exit `br` that only
 forwards it as the block's own value: a call to a generic/inline std function (e.g. `fetchAdd`)

@@ -165,6 +165,16 @@ const Compat = struct {
         try w.j.write(text);
     }
 
+    /// A value of an 8-bit integer type (`u8`, `i8`, `c_char`) as its byte, two's complement,
+    /// in decimal text (`sentinel_byte`).
+    fn writeByte(w: *W, val: Value) Error!void {
+        var space: Value.BigIntSpace = undefined;
+        const integer = if (v16) val.toBigInt(&space, w.pt.zcu) else try val.toBigIntSema(&space, w.pt);
+        const byte: u8 = integer.toInt(u8) catch @bitCast(integer.toInt(i8) catch unreachable);
+        const text = try std.fmt.allocPrint(w.gpa, "{d}", .{byte});
+        try w.j.write(text);
+    }
+
     fn isBitpack(key: InternPool.Key) bool {
         return if (v16) key == .bitpack else false;
     }
@@ -2195,9 +2205,14 @@ const W = struct {
                 try w.j.write(info.sentinel != .none);
                 // allocSentinel(u8, n, s): the result pointer type contains the exact
                 // comptime argument s. Export it explicitly; presence alone cannot model it.
-                if (Compat.v16 and info.sentinel != .none and ty.childType(zcu).toIntern() == .u8_type) {
+                // Every 8-bit integer child has it (`[*:0]const c_char`, Zig libc's strings),
+                // as the byte in memory.
+                const child_ty = ty.childType(zcu);
+                if (Compat.v16 and info.sentinel != .none and child_ty.zigTypeTag(zcu) == .int and
+                    child_ty.intInfo(zcu).bits == 8)
+                {
                     try w.field("sentinel_byte");
-                    try Compat.writeInt(w, Value.fromInterned(info.sentinel));
+                    try Compat.writeByte(w, Value.fromInterned(info.sentinel));
                 }
                 // A bit-pointer (`&packed_struct.field`): the size of its host integer in bytes.
                 try w.field("host_size");

@@ -1060,8 +1060,10 @@ class CompiledUnitTests(unittest.TestCase):
                  'plugins': [{'path': 'p/libPlug.so', 'initFn?': None}]}), '')
 
         native = self.unpatched_native_code
-        with mock.patch.object(universe, '_NATIVE', {}), \
-                mock.patch.object(universe.subprocess, 'run', side_effect=setup):
+        lean_deps = assumptions.lean_deps()  # the implementation (scripts/lean-deps.py)
+        with mock.patch.object(lean_deps, '_NATIVE', {}), \
+                mock.patch.object(lean_deps, 'ROOT', self.root), \
+                mock.patch.object(lean_deps.subprocess, 'run', side_effect=setup):
             self.assertEqual(native(['Z.Y', 'A.B', 'A.B']),
                              [f'--load-dynlib={self.root}/.lake/build/lib/libDeps.so', '--load-dynlib=/abs/libTop.so',
                               f'--plugin={self.root}/p/libPlug.so'])
@@ -1070,8 +1072,8 @@ class CompiledUnitTests(unittest.TestCase):
             self.assertEqual(calls[0][:3], ['lake', 'setup-file', 'universe-unit.lean'])
         for answer in ((1, ''), (0, 'not json'), (0, json.dumps({'dynlibs': []})),
                        (0, json.dumps({'dynlibs': [], 'plugins': [{'path': 'x', 'initFn?': 'init'}]}))):
-            with self.subTest(answer=answer), mock.patch.object(universe, '_NATIVE', {}), \
-                    mock.patch.object(universe.subprocess, 'run',
+            with self.subTest(answer=answer), mock.patch.object(lean_deps, '_NATIVE', {}), \
+                    mock.patch.object(lean_deps.subprocess, 'run',
                                       return_value=subprocess.CompletedProcess([], answer[0], answer[1], 'e')):
                 with self.assertRaisesRegex(RuntimeError, 'no supported module setup'):
                     native(['A.B'])

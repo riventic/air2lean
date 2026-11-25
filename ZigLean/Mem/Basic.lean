@@ -95,7 +95,7 @@ inductive BlockKind where
   /-- A `const` global, a string literal or a function: read-only. A write to it (through
   `@constCast`) throws `.illegal`. -/
   | constGlobal
-  /-- A block that the allocator `a` made: an arena or a fixed buffer (`Mem.allocators[a]`,
+  /-- A block that the allocator `a` made: an arena (`Mem.allocators[a]`,
   `ZigLean/Mem/Owned.lean`). A `.heap` block is one of the model's `std.mem.Allocator`, so a
   free through one allocator of a block that another one made throws `.illegal`. -/
   | owned (a : AllocId)
@@ -326,12 +326,12 @@ instance : Repr AllocPolicy where
 /-- The differential harness policy: the legacy 1 MiB request cap and no other failures. -/
 def AllocPolicy.harness : AllocPolicy := { maxBytes := maxAllocBytes }
 
-/-- The kind of an allocator with an identity (`ZigLean/Mem/Owned.lean`, M01). -/
+/-- The kind of an allocator with an identity (`ZigLean/Mem/Owned.lean`, M01). The
+`std.heap.FixedBufferAllocator` is translated from its Zig code (`--allocator-model
+translated`, `docs/allocator-model.md`), not modelled here. -/
 inductive OwnedPolicy where
   /-- `std.heap.ArenaAllocator` over the model's `std.mem.Allocator`. -/
   | arena
-  /-- `std.heap.FixedBufferAllocator` over a buffer of `cap` bytes at address `base`. -/
-  | fixedBuffer (base cap : Nat)
   deriving DecidableEq, Repr, Inhabited
 
 /-- The state of an allocator with an identity. -/
@@ -339,11 +339,6 @@ structure OwnedAlloc where
   policy : OwnedPolicy
   /-- `false` after `ArenaAllocator.deinit`: every later use throws `.illegal`. -/
   live : Bool := true
-  /-- `FixedBufferAllocator.end_index`. -/
-  used : Nat := 0
-  /-- The buffer index of the first byte of each block of a fixed buffer, for its
-  `isLastAllocation`. -/
-  starts : List (BlockId × Nat) := []
   deriving DecidableEq, Repr, Inhabited
 
 /-! ## Device effects (L13, `ZigLean/Mem/Device.lean`, `docs/volatile-effects.md`)
