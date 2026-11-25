@@ -4,7 +4,7 @@
 **enclosing loop-switch** using a replacement selector. It may target an outer loop-switch
 through nested dispatch loops, ordinary loops, conditionals, or blocks. It does not leave
 an ordinary block with a value. These contracts are the same in the pinned Zig 0.14.1,
-0.15.2, and 0.16.0 `src/Air.zig` definitions. The existing exporter decodes both tags.
+0.15.2, 0.16.0 and 0.17.1 `src/Air.zig` definitions. The existing exporter decodes both tags.
 
 The normalizer retains distinct `Op.loopSwitchBr` and `Op.switchDispatch` forms. Before
 renumbering, raw validation checks lexical target scope and SSA operand availability.
@@ -53,7 +53,7 @@ Run the serial gate under the project's compiler resource guard:
 
 ```sh
 LEAN_NUM_THREADS=1 \
-AIR2LEAN_DISPATCH_ZIG_VERSION=0.16.0 \
+AIR2LEAN_DISPATCH_ZIG_VERSION=0.17.1 \
 AIR2LEAN_DISPATCH_ZIG_AIR=/absolute/path/to/locked-zig \
 AIR2LEAN_DISPATCH_ZIG_STOCK=/absolute/path/to/stock-zig \
 tests/roadmap/dispatch/check.sh
@@ -83,8 +83,8 @@ AIR also exercises noreturn blocks that dispatch outward without an own-target b
 Set `AIR2LEAN_DISPATCH_KEEP_WORK=1` to retain the fresh temporary AIR and generated sources
 locally for inspection; the gate prints their directory. The default removes them on exit.
 
-CI runs the default gate on the primary Zig 0.16.0 profile and `--native-only` on Zig
-0.15.2/0.14.1 after building proofs, for non-mutation jobs. The fixed synthetic/proof/mutation
+CI runs the default gate on the default Zig 0.17.1 profile and `--native-only` on Zig
+0.16.0/0.15.2/0.14.1 after building proofs, for non-mutation jobs. The fixed synthetic/proof/mutation
 checks run once; fresh exporter/translation/native semantics remain required for each
 version. It executes checks and introduces no report upload step. Results qualify the pinned
 compiler, release-safe source fixture, and modeled selectors above; they do not establish

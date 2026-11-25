@@ -30,10 +30,14 @@ the proof API and typed outcomes) stay as they are. Their source/native qualific
 is version-specific (class b below), so they do not run on 0.17.1. One step ran on every
 row but rejects unknown versions. Its condition now lists the qualified versions:
 
-- **Loop-switch dispatch regressions**: `tests/roadmap/dispatch/check.sh` accepts only the
-  0.14.1/0.15.2/0.16.0 profiles. The step runs on `0.14.1 || 0.15.2 || 0.16.0`. It uses
-  only `==`/`&&`/`||`/`!` because `scripts/local-ci-steps.py` and
-  `scripts/release-record.py` evaluate conditions with that grammar.
+- **Loop-switch dispatch regressions**: `tests/roadmap/dispatch/check.sh` accepts the
+  0.17.1/0.16.0/0.15.2/0.14.1 profiles (0.17.1 qualified 2026-11-24: native run, fresh AIR,
+  translation and generated checks) and rejects any other. The step runs on
+  `0.14.1 || 0.15.2 || 0.16.0 || 0.17.1`, the full gate on 0.17.1. It uses only
+  `==`/`&&`/`||`/`!` because `scripts/local-ci-steps.py` and `scripts/release-record.py`
+  evaluate conditions with that grammar. `tests/roadmap/dispatch-templates/check.sh` (the
+  generated tokenizer proof and the real-AIR malformed-target rejections) runs fully on 0.17.1
+  and 0.16.0.
 
 `tests/review/exporter-checks.sh` also checks `AIR2LEAN_REVIEW_ZIG17` and expects
 0.16.0's packed-constant export shape there, because packed structs stay integers after 0.16.

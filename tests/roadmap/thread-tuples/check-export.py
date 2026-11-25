@@ -34,7 +34,7 @@ def check_export(directory, adapter=False):
         raise ValueError("AIR export has mixed profiles")
     version = profiles[0]["zig_version"]
     if adapter:
-        if version != "0.16.0":
+        if version not in ("0.17.1", "0.16.0"):
             raise ValueError("adapter AIR has a wrong version")
         expected = {"thread_adapter_contract." + name for name in
                     ("mutableCapture", "strongCapture", "weakCapture", "sliceWorker")}
@@ -42,7 +42,8 @@ def check_export(directory, adapter=False):
         manifest = HELPERS["parse_json"]((ROOT / "provenance.json").read_text())
         expected = {"thread_tuples." + n for n in manifest["functions"]}
         expected.update(manifest["stdlib_functions"])
-        if version != "0.16.0":
+        # `std.Io.Group` (and so `groupMixed`) exists from Zig 0.16 on.
+        if version in ("0.14.1", "0.15.2"):
             expected.remove("thread_tuples.groupMixed")
     names = [doc["name"] for doc in data]
     if set(names) != expected or len(names) != len(expected):

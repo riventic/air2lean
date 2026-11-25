@@ -37,6 +37,9 @@ fixtures=(
   "error_ints_w8 ErrorInts ErrorIntsW8"
   "runtime_lanes RuntimeLanes"
   "float_lanes FloatLanes"
+  "float_lanes_aarch64 FloatLanes"
+  "lane_values LaneValues"
+  "lane_shapes LaneShapes"
 )
 versions=(0.17.1 0.16.0 0.15.2 0.14.1)
 # The retained translation of a version: LangLongTail/<Key>-<version>.lean where the version's

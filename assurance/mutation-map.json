@@ -580,6 +580,11 @@
           "name": "f80_lane_stride",
           "path": "tests/roadmap/lang-long-tail/mutants.py",
           "category": "layout"
+        },
+        {
+          "name": "lane_constant_offset",
+          "path": "tests/roadmap/lang-long-tail/mutants.py",
+          "category": "layout"
         }
       ]
     },

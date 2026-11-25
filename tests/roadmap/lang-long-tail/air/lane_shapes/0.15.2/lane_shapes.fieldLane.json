@@ -1,0 +1,646 @@
+{
+ "schema": 12,
+ "zig_version": "0.15.2",
+ "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.16-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.15.2",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "lane_shapes.fieldLane",
+ "module": "root",
+ "src": {
+  "file": "lane_shapes.zig",
+  "module": "lane_shapes",
+  "decl_line": 58
+ },
+ "params": [
+  0,
+  1
+ ],
+ "noalias": [],
+ "ret": 2,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 1,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 3,
+   "tag": "alloc",
+   "ty": 4
+  },
+  {
+   "id": 4,
+   "tag": "struct_field_ptr_index_0",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "store_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 4
+    },
+    {
+     "ty": 6,
+     "val": "7"
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "tag": "struct_field_ptr_index_1",
+   "ty": 7,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 2,
+   "column": 42
+  },
+  {
+   "id": 8,
+   "tag": "call",
+   "ty": 8,
+   "callee": {
+    "ty": 9,
+    "func": "lane_shapes.lanes",
+    "module": "root",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "tag": "store_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 6
+    },
+    {
+     "inst": 8
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "tag": "dbg_var_ptr",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 3
+    }
+   ],
+   "name": "s"
+  },
+  {
+   "id": 11,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 3,
+   "column": 6
+  },
+  {
+   "id": 12,
+   "tag": "struct_field_ptr_index_1",
+   "ty": 7,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 3,
+   "column": 8
+  },
+  {
+   "id": 14,
+   "tag": "ptr_elem_ptr",
+   "ty": 10,
+   "args": [
+    {
+     "inst": 12
+    },
+    {
+     "ty": 11,
+     "val": "3"
+    }
+   ]
+  },
+  {
+   "id": 15,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 3,
+   "column": 14
+  },
+  {
+   "id": 16,
+   "tag": "trunc",
+   "ty": 12,
+   "args": [
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 17,
+   "tag": "store_safe",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 14
+    },
+    {
+     "inst": 16
+    }
+   ]
+  },
+  {
+   "id": 18,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 4,
+   "column": 17
+  },
+  {
+   "id": 19,
+   "tag": "struct_field_ptr_index_1",
+   "ty": 7,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 20,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 4,
+   "column": 19
+  },
+  {
+   "id": 21,
+   "tag": "ptr_elem_ptr",
+   "ty": 13,
+   "args": [
+    {
+     "inst": 19
+    },
+    {
+     "ty": 11,
+     "val": "0"
+    }
+   ]
+  },
+  {
+   "id": 22,
+   "tag": "dbg_var_val",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 21
+    }
+   ],
+   "name": "q"
+  },
+  {
+   "id": 23,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 5,
+   "column": 16
+  },
+  {
+   "id": 24,
+   "tag": "load",
+   "ty": 14,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 25,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 5,
+   "column": 18
+  },
+  {
+   "id": 26,
+   "tag": "struct_field_val",
+   "ty": 8,
+   "args": [
+    {
+     "inst": 24
+    }
+   ],
+   "index": 1
+  },
+  {
+   "id": 27,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 5,
+   "column": 16
+  },
+  {
+   "id": 28,
+   "tag": "call",
+   "ty": 2,
+   "callee": {
+    "ty": 15,
+    "func": "lane_shapes.pack",
+    "module": "root",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 26
+    }
+   ]
+  },
+  {
+   "id": 29,
+   "tag": "load",
+   "ty": 12,
+   "args": [
+    {
+     "inst": 21
+    }
+   ]
+  },
+  {
+   "id": 30,
+   "tag": "intcast",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 29
+    }
+   ]
+  },
+  {
+   "id": 31,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 5,
+   "column": 38
+  },
+  {
+   "id": 32,
+   "tag": "shl",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 30
+    },
+    {
+     "ty": 16,
+     "val": "36"
+    }
+   ]
+  },
+  {
+   "id": 33,
+   "tag": "bit_or",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 28
+    },
+    {
+     "inst": 32
+    }
+   ]
+  },
+  {
+   "id": 34,
+   "tag": "load",
+   "ty": 14,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 35,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 5,
+   "column": 56
+  },
+  {
+   "id": 36,
+   "tag": "struct_field_val",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 34
+    }
+   ],
+   "index": 0
+  },
+  {
+   "id": 37,
+   "tag": "intcast",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 36
+    }
+   ]
+  },
+  {
+   "id": 38,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 5,
+   "column": 60
+  },
+  {
+   "id": 39,
+   "tag": "shl",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 37
+    },
+    {
+     "ty": 16,
+     "val": "45"
+    }
+   ]
+  },
+  {
+   "id": 40,
+   "tag": "bit_or",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 33
+    },
+    {
+     "inst": 39
+    }
+   ]
+  },
+  {
+   "id": 41,
+   "tag": "dbg_stmt",
+   "ty": 3,
+   "line": 5,
+   "column": 5
+  },
+  {
+   "id": 42,
+   "tag": "ret_safe",
+   "ty": 17,
+   "args": [
+    {
+     "inst": 40
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 16,
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 14,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 6,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 8,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 8,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "vector",
+   "len": 4,
+   "child": 12,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (u32) @Vector(4, u9)"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 12,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 4,
+   "bit_offset": 0,
+   "vector_index": 3,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 9,
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 12,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 4,
+   "bit_offset": 0,
+   "vector_index": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "struct",
+   "name": "lane_shapes.Framed",
+   "module": "root",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "a",
+     "ty": 6,
+     "offset": 8
+    },
+    {
+     "name": "v",
+     "ty": 8,
+     "offset": 0
+    }
+   ],
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (@Vector(4, u9)) u64"
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 6,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  }
+ ]
+}
