@@ -1,5 +1,5 @@
 {
-  "manifest_sha256": "5b5b80d1e5a37e38fb6fc06eed061c2855b803533d56cc71008a4969646d2d4e",
+  "manifest_sha256": "f7af223e4df61db3f0c74133048acbf93b7f98754c060cd8116374eec2fff48f",
   "native_binary_sha256": "d3ccd02c0b7546b8657ead2bd668350ee14cb4de6fc870fced42256d2ee82cd6",
   "native_sha256": "7eb711b46f1ff501aaeea369d2a0e3419c251f709b9b9075377db2b0f1f47034",
   "note": "Reviewer pins for assurance/provenance/manifest.json (scripts/provenance-evidence.py). Update only with a regenerated, reviewed manifest.",
