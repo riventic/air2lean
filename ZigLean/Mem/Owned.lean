@@ -25,7 +25,7 @@ the allocator that owns it.
 Remap keeps lengths and shrinks in place; growth fails (Zig grows the last allocation in place
 when it fits, M02). Owned blocks get the placement's addresses (`Mem.place`), possibly the
 address of a freed or reset block; the model does not place them inside the arena's nodes
-(MM-10). Reset and deinit record no access for the race check: like Zig's,
+(M05). Reset and deinit record no access for the race check: like Zig's,
 they are not thread-safe.
 -/
 
@@ -62,16 +62,14 @@ def Arena.init : MemM AllocId := Owned.init .arena
 
 /-- A request of `n > 0` bytes from allocator `a`. `none`: the allocation fails. -/
 def ownedRawAlloc (a : AllocId) (n align : Nat) : MemM (Option Ptr) := do
-  let st ← ownedState a
-  match st.policy with
-  | .arena =>
-    let m ← get
-    set { m with allocs := m.allocs + 1 }
-    -- No room in the address space (O-H) is out of memory too.
-    if m.failAt = some m.allocs ∨ m.allocPolicy.maxBytes < n ∨ m.allocs ∈ m.allocPolicy.failures ∨
-      m.roomFor n align = false
-    then return none
-    some <$> alloc (.owned a) n align
+  discard <| ownedState a
+  let m ← get
+  set { m with allocs := m.allocs + 1 }
+  -- No room in the address space (O-H) is out of memory too.
+  if m.failAt = some m.allocs ∨ m.allocPolicy.maxBytes < n ∨ m.allocs ∈ m.allocPolicy.failures ∨
+    m.roomFor n align = false
+  then return none
+  some <$> alloc (.owned a) n align
 
 /-- `allocBytes` through allocator `a`. -/
 def ownedAllocBytes (a : AllocId) (align n : Nat) : MemM (Except ErrName Ptr) := do
