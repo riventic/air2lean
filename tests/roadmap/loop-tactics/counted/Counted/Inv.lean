@@ -1,5 +1,7 @@
--- air2lean-invgen: {"generator":{"lean":"4.34.0","modules":[["Air2Lean.InvGen","aa7ac33be1e25c5ed2a5f8716409e4c598f33a667313c1fc1cc85013230afd8a"],["Air2Lean.InvGenMain","6641279898d44a6114fa6c402e42cf6e23db77e655d112a4e8c74f5f25dc964f"],["Air2Lean.Revision","0abdb80bf11b8b7e1b0820755e2015f43cce91c00db65dd085b2a8afa6e65f8c"]],"revision":"c0851d35497ea3aa18117adc8a0a6d945fec0d8578db26de13a30557f41b0540"},"inputs":[["tests/roadmap/loop-tactics/counted/Counted/Gen.lean","6b5336d59d16c32dc7bfc75e0c59a1279667ba8cd632087aae8d8b803e0778e4"]],"loops":[{"credits":{"count":"s.i.toNat - 0"},"family":"counted","loop":"down.loop5","pruned":[{"fact":"s0.i.toNat ≤ s.i.toNat","residual":"cand0 p0 s0 v0 { i := x }","walk":1},{"fact":"v.toNat = v0.toNat + 3 * (s.i.toNat - s0.i.toNat)","residual":"cand4 p0 s0 v0 { i := x } x✝³","walk":1}]},{"credits":{"count":"p1.len.toNat - s.i.toNat"},"family":"counted","loop":"lenCount.loop5","pruned":[{"fact":"s.i.toNat ≤ s0.i.toNat","residual":"cand1 p0 p1 s0 v0 { i := x }","walk":1},{"fact":"v.toNat = v0.toNat + (s0.i.toNat - s.i.toNat)","residual":"cand5 p0 p1 s0 v0 { i := x } x✝³","walk":1}]},{"loop":"pairAt.loop5","none":"a pointer projection (a cell at an offset)"},{"credits":{"count":"v0.toNat - s.i.toNat"},"family":"counted","loop":"readBound.loop5","pruned":[{"fact":"s.i.toNat ≤ s0.i.toNat","residual":"cand1 p0 p1 s0 x✝⁵ v1 { i := x }","walk":1},{"fact":"v.toNat = v1.toNat + (s0.i.toNat - s.i.toNat)","residual":"cand5 p0 p1 s0 x✝⁵ v1 { i := x } x✝³","walk":1}]},{"loop":"tri.loop5","none":"a cell that does not go up by a constant (its increment depends on a value)"},{"credits":{"count":"p1.toNat + 1 - s.i.toNat"},"family":"counted","loop":"upLe.loop5","pruned":[{"fact":"s.i.toNat ≤ s0.i.toNat","residual":"cand1 p0 p1 s0 v0 { i := x }","walk":1},{"fact":"v.toNat = v0.toNat + (s0.i.toNat - s.i.toNat)","residual":"cand6 p0 p1 s0 v0 { i := x } x✝³","walk":1}]},{"credits":{"count":"p1.toNat - s.i.toNat"},"family":"counted","loop":"upNe.loop5","pruned":[{"fact":"s.i.toNat ≤ s0.i.toNat","residual":"cand1 p0 p1 s0 v0 { i := x }","walk":1},{"fact":"v.toNat = v0.toNat + (s0.i.toNat - s.i.toNat)","residual":"cand5 p0 p1 s0 v0 { i := x } x✝³","walk":1}]}],"module":"Counted.Gen","namespace":"Counted","output":"bb4c1bb9089baec8411bd253067962b3260cefecb07b21f6e6a9d04b0ff7424a","version":2}
+-- air2lean-invgen: {"generator":{"lean":"4.34.0","modules":[["Air2Lean.InvGen","17a28db29521c9a83879c472d0e57322859146be088a9ec942137281ae5b9895"],["Air2Lean.InvGenMain","22b19dfe5555c1ea5de459ad86070fc46b698e54d65dc614a06a7f55afe69c18"],["Air2Lean.Revision","0abdb80bf11b8b7e1b0820755e2015f43cce91c00db65dd085b2a8afa6e65f8c"]],"revision":"9e7d4376f2ac9596aac316ff8de8b78a4011173db277998b851e979774fabd6c"},"inputs":[["tests/roadmap/loop-tactics/counted/Counted/Gen.lean","6b5336d59d16c32dc7bfc75e0c59a1279667ba8cd632087aae8d8b803e0778e4"]],"loops":[{"credits":{"count":"s.i.toNat - 0"},"family":"counted","fingerprint":"7df77cc293be58d9bfbefa03bc9eb770b03c3dfb326b88ed37b719968d77eea6","function":"down","loop":"down.loop5","pruned":[{"fact":"s0.i.toNat ≤ s.i.toNat","residual":"cand0 p0 s0 v0 { i := x }","walk":1},{"fact":"v.toNat = v0.toNat + 3 * (s.i.toNat - s0.i.toNat)","residual":"cand4 p0 s0 v0 { i := x } x✝³","walk":1}]},{"credits":{"count":"p1.len.toNat - s.i.toNat"},"family":"counted","fingerprint":"fbe2f676de75dcd0e49b6e589bcb76460f55498739f3f5ccf8b30809c4b025c7","function":"lenCount","loop":"lenCount.loop5","pruned":[{"fact":"s.i.toNat ≤ s0.i.toNat","residual":"cand1 p0 p1 s0 v0 { i := x }","walk":1},{"fact":"v.toNat = v0.toNat + (s0.i.toNat - s.i.toNat)","residual":"cand5 p0 p1 s0 v0 { i := x } x✝³","walk":1}]},{"credits":{"count":"p1.toNat - s.i.toNat"},"family":"counted","fingerprint":"6bef318a43a9ff750af9cc32701b6a57170bf885570e02482a3a291042c5ee84","function":"pairAt","loop":"pairAt.loop5","pruned":[{"fact":"s.i.toNat ≤ s0.i.toNat","residual":"cand1 p0 p1 s0 v0 v1 t0 { i := x }","walk":1},{"fact":"w0.toNat = v0.toNat + (s0.i.toNat - s.i.toNat)","residual":"cand5 p0 p1 s0 v0 v1 t0 { i := x } x✝⁷","walk":1},{"fact":"w1.toNat = v1.toNat + 2 * (s0.i.toNat - s.i.toNat)","residual":"cand8 p0 p1 s0 v0 v1 t0 { i := x } x✝³","walk":1}]},{"credits":{"count":"v0.toNat - s.i.toNat"},"family":"counted","fingerprint":"85076bd60a436d2f2f765a771c346be8e9d3c797209c66825eb31ef02cb51fbb","function":"readBound","loop":"readBound.loop5","pruned":[{"fact":"s.i.toNat ≤ s0.i.toNat","residual":"cand1 p0 p1 s0 x✝⁵ v1 { i := x }","walk":1},{"fact":"v.toNat = v1.toNat + (s0.i.toNat - s.i.toNat)","residual":"cand5 p0 p1 s0 x✝⁵ v1 { i := x } x✝³","walk":1}]},{"credits":{"count":"p1.toNat - s.i.toNat"},"family":"counted","fingerprint":"8c2833d89c32abcec7ef6ab45507a5dd809b0bed1bf99b8af1cbc876873a8b11","function":"tri","loop":"tri.loop5","pruned":[{"fact":"s.i.toNat ≤ s0.i.toNat","residual":"cand1 p0 p1 s0 v0 { i := x }","walk":1}]},{"credits":{"count":"p1.toNat + 1 - s.i.toNat"},"family":"counted","fingerprint":"4042490cdfaed8863b90d459d8597276b33d529b84043c4f32bdba324955999c","function":"upLe","loop":"upLe.loop5","pruned":[{"fact":"s.i.toNat ≤ s0.i.toNat","residual":"cand1 p0 p1 s0 v0 { i := x }","walk":1},{"fact":"v.toNat = v0.toNat + (s0.i.toNat - s.i.toNat)","residual":"cand6 p0 p1 s0 v0 { i := x } x✝³","walk":1}]},{"credits":{"count":"p1.toNat - s.i.toNat"},"family":"counted","fingerprint":"02216f91786b770fddf8a3f7d20715cc4f72d4ced2bd4aaeb9679d6f4da0b13d","function":"upNe","loop":"upNe.loop5","pruned":[{"fact":"s.i.toNat ≤ s0.i.toNat","residual":"cand1 p0 p1 s0 v0 { i := x }","walk":1},{"fact":"v.toNat = v0.toNat + (s0.i.toNat - s.i.toNat)","residual":"cand5 p0 p1 s0 v0 { i := x } x✝³","walk":1}]}],"module":"Counted.Gen","namespace":"Counted","output":"67e889f3355065a094883516a289aec363344f8e1d0ee31d6196f1831c049591","version":3}
 import Counted.Gen
+import ZigLean.Sep.Full.Arr
+import ZigLean.Sep.Full.TSum
 import ZigLean.Sep.Full.Ghost
 import ZigLean.Sep.Full.AutoAttr
 import ZigLean.Sep.Full.ListSeg
@@ -86,6 +88,45 @@ open Zig Zig.Full Zig.Full.FAssn
       r.2.i.toNat = p1.len.toNat⟫ ⋆
     (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + (p1.len.toNat - s0.i.toNat)⟫ ⋆ up (pts p0 8 v))
 
+/-- The invariant of `pairAt.loop5`, a counted loop: `i` goes up by 1 while `i < p1`.
+`s0` holds the locals at loop entry.
+`v0` is `p0[0]` there, which goes up by 1 per iteration.
+`v1` is `p0[1]` there, which goes up by 2 per iteration. -/
+@[fsym_inv] def pairAt.loop5.inv (p0 : Zig.Ptr) (p1 : BitVec 32) (s0 : pairAtLocals) (v0 : BitVec 64) (v1 : BitVec 64) (t0 : List (BitVec 64)) (s : pairAtLocals) : FAssn :=
+  ⟪s0.i.toNat ≤ s.i.toNat ∧
+      s.i.toNat ≤ p1.toNat ∧
+      v0.toNat + (p1.toNat - s0.i.toNat) < 2 ^ 64 ∧
+      v1.toNat + 2 * (p1.toNat - s0.i.toNat) < 2 ^ 64⟫ ⋆
+    (FAssn.ex fun w0 : (BitVec 64) => FAssn.ex fun w1 : (BitVec 64) => ⟪w0.toNat = v0.toNat + (s.i.toNat - s0.i.toNat) ∧ w1.toNat = v1.toNat + 2 * (s.i.toNat - s0.i.toNat)⟫ ⋆ up (arr p0 (w0 :: w1 :: t0))) ⋆
+    plain
+
+/-- The measure of `pairAt.loop5`: the iterations left. -/
+@[fsym_inv] def pairAt.loop5.meas (p0 : Zig.Ptr) (p1 : BitVec 32) (s : pairAtLocals) : Nat :=
+  p1.toNat - s.i.toNat
+
+/-- The exit post of `pairAt.loop5`: the loop exits with `r`, after all iterations. -/
+@[fsym_inv] def pairAt.loop5.post (p0 : Zig.Ptr) (p1 : BitVec 32) (s0 : pairAtLocals) (v0 : BitVec 64) (v1 : BitVec 64) (t0 : List (BitVec 64)) (r : pairAtExit × pairAtLocals) : FAssn :=
+  ⟪r.1 = pairAtExit.br4 ∧
+      r.2.i.toNat = p1.toNat⟫ ⋆
+    (FAssn.ex fun w0 : (BitVec 64) => FAssn.ex fun w1 : (BitVec 64) => ⟪w0.toNat = v0.toNat + (p1.toNat - s0.i.toNat) ∧ w1.toNat = v1.toNat + 2 * (p1.toNat - s0.i.toNat)⟫ ⋆ up (arr p0 (w0 :: w1 :: t0))) ⋆
+    plain
+
+/-- The credit-mode invariant of `pairAt.loop5` (a walk that counts its steps, `loop_exact`): `pairAt.loop5.inv` without the plain mode, at the exact count `n` of the body runs left before the last one.
+`s0` holds the locals at loop entry. -/
+@[fsym_inv] def pairAt.loop5.credits.inv (p0 : Zig.Ptr) (p1 : BitVec 32) (s0 : pairAtLocals) (v0 : BitVec 64) (v1 : BitVec 64) (t0 : List (BitVec 64)) (s : pairAtLocals) (n : Nat) : FAssn :=
+  ⟪s0.i.toNat ≤ s.i.toNat ∧
+      s.i.toNat ≤ p1.toNat ∧
+      v0.toNat + (p1.toNat - s0.i.toNat) < 2 ^ 64 ∧
+      v1.toNat + 2 * (p1.toNat - s0.i.toNat) < 2 ^ 64 ∧
+      n = p1.toNat - s.i.toNat⟫ ⋆
+    (FAssn.ex fun w0 : (BitVec 64) => FAssn.ex fun w1 : (BitVec 64) => ⟪w0.toNat = v0.toNat + (s.i.toNat - s0.i.toNat) ∧ w1.toNat = v1.toNat + 2 * (s.i.toNat - s0.i.toNat)⟫ ⋆ up (arr p0 (w0 :: w1 :: t0)))
+
+/-- The exit post of `pairAt.loop5.credits`: the loop exits with `r`, after all iterations. -/
+@[fsym_inv] def pairAt.loop5.credits.post (p0 : Zig.Ptr) (p1 : BitVec 32) (s0 : pairAtLocals) (v0 : BitVec 64) (v1 : BitVec 64) (t0 : List (BitVec 64)) (r : pairAtExit × pairAtLocals) : FAssn :=
+  ⟪r.1 = pairAtExit.br4 ∧
+      r.2.i.toNat = p1.toNat⟫ ⋆
+    (FAssn.ex fun w0 : (BitVec 64) => FAssn.ex fun w1 : (BitVec 64) => ⟪w0.toNat = v0.toNat + (p1.toNat - s0.i.toNat) ∧ w1.toNat = v1.toNat + 2 * (p1.toNat - s0.i.toNat)⟫ ⋆ up (arr p0 (w0 :: w1 :: t0)))
+
 /-- The invariant of `readBound.loop5`, a counted loop: `i` goes up by 1 while `i < *p1`.
 `s0` holds the locals at loop entry.
 `v0` is `*p1`, which the loop only reads.
@@ -126,6 +167,42 @@ open Zig Zig.Full Zig.Full.FAssn
       r.2.i.toNat = v0.toNat⟫ ⋆
     up (pts p1 4 v0) ⋆
     (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v1.toNat + (v0.toNat - s0.i.toNat)⟫ ⋆ up (pts p0 8 v))
+
+/-- The invariant of `tri.loop5`, a counted loop: `i` goes up by 1 while `i < p1`.
+`s0` holds the locals at loop entry.
+`v0` is `*p0` there, which goes up by `(fun u => u) i` per iteration. -/
+@[fsym_inv] def tri.loop5.inv (p0 : Zig.Ptr) (p1 : BitVec 32) (s0 : triLocals) (v0 : BitVec 64) (s : triLocals) : FAssn :=
+  ⟪s0.i.toNat ≤ s.i.toNat ∧
+      s.i.toNat ≤ p1.toNat ∧
+      v0.toNat + (tsum p1.toNat (fun u => u) - tsum s0.i.toNat (fun u => u)) < 2 ^ 64⟫ ⋆
+    (FAssn.ex fun v : BitVec 64 => ⟪v.toNat + (tsum p1.toNat (fun u => u) - tsum s.i.toNat (fun u => u)) = v0.toNat + (tsum p1.toNat (fun u => u) - tsum s0.i.toNat (fun u => u))⟫ ⋆ up (pts p0 8 v)) ⋆
+    plain
+
+/-- The measure of `tri.loop5`: the iterations left. -/
+@[fsym_inv] def tri.loop5.meas (p0 : Zig.Ptr) (p1 : BitVec 32) (s : triLocals) : Nat :=
+  p1.toNat - s.i.toNat
+
+/-- The exit post of `tri.loop5`: the loop exits with `r`, after all iterations. -/
+@[fsym_inv] def tri.loop5.post (p0 : Zig.Ptr) (p1 : BitVec 32) (s0 : triLocals) (v0 : BitVec 64) (r : triExit × triLocals) : FAssn :=
+  ⟪r.1 = triExit.br4 ∧
+      r.2.i.toNat = p1.toNat⟫ ⋆
+    (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + (tsum p1.toNat (fun u => u) - tsum s0.i.toNat (fun u => u))⟫ ⋆ up (pts p0 8 v)) ⋆
+    plain
+
+/-- The credit-mode invariant of `tri.loop5` (a walk that counts its steps, `loop_exact`): `tri.loop5.inv` without the plain mode, at the exact count `n` of the body runs left before the last one.
+`s0` holds the locals at loop entry. -/
+@[fsym_inv] def tri.loop5.credits.inv (p0 : Zig.Ptr) (p1 : BitVec 32) (s0 : triLocals) (v0 : BitVec 64) (s : triLocals) (n : Nat) : FAssn :=
+  ⟪s0.i.toNat ≤ s.i.toNat ∧
+      s.i.toNat ≤ p1.toNat ∧
+      v0.toNat + (tsum p1.toNat (fun u => u) - tsum s0.i.toNat (fun u => u)) < 2 ^ 64 ∧
+      n = p1.toNat - s.i.toNat⟫ ⋆
+    (FAssn.ex fun v : BitVec 64 => ⟪v.toNat + (tsum p1.toNat (fun u => u) - tsum s.i.toNat (fun u => u)) = v0.toNat + (tsum p1.toNat (fun u => u) - tsum s0.i.toNat (fun u => u))⟫ ⋆ up (pts p0 8 v))
+
+/-- The exit post of `tri.loop5.credits`: the loop exits with `r`, after all iterations. -/
+@[fsym_inv] def tri.loop5.credits.post (p0 : Zig.Ptr) (p1 : BitVec 32) (s0 : triLocals) (v0 : BitVec 64) (r : triExit × triLocals) : FAssn :=
+  ⟪r.1 = triExit.br4 ∧
+      r.2.i.toNat = p1.toNat⟫ ⋆
+    (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + (tsum p1.toNat (fun u => u) - tsum s0.i.toNat (fun u => u))⟫ ⋆ up (pts p0 8 v))
 
 /-- The invariant of `upLe.loop5`, a counted loop: `i` goes up by 1 while `i <= p1`.
 `s0` holds the locals at loop entry.

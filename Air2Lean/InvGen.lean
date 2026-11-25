@@ -283,6 +283,8 @@ structure St where
   nodeOps : Array NodeOp := #[]
   /-- The calls with a contract, in order, each with the number of node accesses before it. -/
   calls : Array (Contract × Nat) := #[]
+  /-- Whether the path ran an inner loop that takes steps (`execInner`). -/
+  innerSteps : Bool := false
 
 /-- A path through the body and its result. -/
 structure Path where
@@ -602,6 +604,8 @@ structure Counted where
   (`none`: an exit that returns a constructor with a payload). -/
   exits : Option (Array Name)
   plain : Bool
+  /-- A path runs an inner loop that takes steps: a body run takes more than one step. -/
+  innerSteps : Bool := false
 
 /-- `R` includes the bound: the counter passes it by one before the loop exits. -/
 def Counted.incl (c : Counted) : Bool := c.rel == .le || c.rel == .ge
@@ -686,7 +690,7 @@ def counted (ctx : Ctx) (again : Expr → MetaM Bool) (paths : Array Path) : Met
       throwError "an add or subtraction that the counter's and the cells' bounds do not cover"
   -- (an exit with a payload has no label: the post then states only that it exits)
   return { counter := x, rel, bound := b, down, cells, scratch, exits := exitLabels exits,
-           plain := paths.any (·.st.tick) }
+           plain := paths.any (·.st.tick), innerSteps := paths.any (·.st.innerSteps) }
 
 /-- A definition's value with its leading instance binders named (`inst0`, by position): the
 generated definitions take them as explicit parameters. -/
@@ -933,7 +937,8 @@ partial def execInner (ctx : Ctx) (st : St) (body again : Expr) : MetaM Path := 
       let v := Sym.add st'.cells[k]!.val (scaleBy inc.k dist)
       st := { st' with cells := st'.cells.modify k ({ · with val := v, stored := true }),
                        checked := st'.checked.push v }
-    return { st := { st with locals := st.locals.set! (idx c.counter) exitV, tick := st.tick || c.plain },
+    return { st := { st with locals := st.locals.set! (idx c.counter) exitV, tick := st.tick || c.plain,
+                     innerSteps := st.innerSteps || c.plain },
              res := .val (.const label []) }
 
 end
@@ -1165,6 +1170,8 @@ structure Cand where
   /-- The library modules that the definitions name besides the ones every generated file
   imports (the array assertion `arr`, the sum `tsum`). -/
   imports : Array Name := #[]
+  /-- The body runs an inner loop that takes steps (no credit mode: a run takes several steps). -/
+  innerSteps : Bool := false
 
 /-- An assertion over the resources `owned`: the facts `top`, and each written cell `k` at a
 value `v` with the facts `cell k`. -/
@@ -1731,7 +1738,7 @@ def candLoop (ns body again : Name) (contracts : Array (Name × Name) := #[]) : 
       return {
         name, again := relName ns again, binders, tbinders, args, run, triple, loc, entry,
         vargs, measEntry, measArgs,
-        facts, owned, meas := left, exit, postFacts := post, postCells,
+        facts, owned, meas := left, exit, postFacts := post, postCells, innerSteps := c.innerSteps,
         imports := (if arrs.isEmpty then #[] else #[`ZigLean.Sep.Full.Arr]) ++
           if cells.any (fun (cell, inc) => cell.stored && !inc.terms.isEmpty) then #[`ZigLean.Sep.Full.TSum] else #[],
         doc := s!"/-- The invariant of `{name}`, a counted loop: `{x}` goes {if c.down then "down" else "up"} \
@@ -1745,6 +1752,9 @@ the plain-mode invariant for it (fail closed). -/
 def creditOf (ns : Name) (c : Cand) (keep : Array Bool) : MetaM (String × Json) := do
   unless c.ticks do
     return ("", Json.mkObj [("none", "the body takes no step (`Zig.tick`): there is nothing to count")])
+  if c.innerSteps then
+    return ("", Json.mkObj [("none", "the body runs an inner loop that takes steps: a body run takes \
+      more than the one step that the counted loop rule pays with one credit")])
   withCurrHeartbeats <| tryCatchRuntimeEx
     (do
       let out := c.creditOutput keep

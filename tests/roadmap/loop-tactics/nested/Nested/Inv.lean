@@ -1,5 +1,6 @@
--- air2lean-invgen: {"generator":{"lean":"4.34.0","modules":[["Air2Lean.InvGen","aa7ac33be1e25c5ed2a5f8716409e4c598f33a667313c1fc1cc85013230afd8a"],["Air2Lean.InvGenMain","6641279898d44a6114fa6c402e42cf6e23db77e655d112a4e8c74f5f25dc964f"],["Air2Lean.Revision","0abdb80bf11b8b7e1b0820755e2015f43cce91c00db65dd085b2a8afa6e65f8c"]],"revision":"c0851d35497ea3aa18117adc8a0a6d945fec0d8578db26de13a30557f41b0540"},"inputs":[["tests/roadmap/loop-tactics/nested/Nested/Gen.lean","897e4f877a7ea682858b8f501e6efdd5595f922c1c5a43aa9e10cb3e09baff66"]],"loops":[{"credits":{"count":"s.i.toNat - s.j.toNat"},"family":"counted","loop":"pairs.loop14","pruned":[{"fact":"s.j.toNat ≤ s0.j.toNat","residual":"cand2 p0 s0 v0 { i := s.i, j := x }","walk":1},{"fact":"v.toNat = v0.toNat + (s0.j.toNat - s.j.toNat)","residual":"cand6 p0 s0 v0 { i := s.i, j := x } x✝³","walk":1}]},{"loop":"pairs.loop5","none":"a nested loop"}],"module":"Nested.Gen","namespace":"Nested","output":"938004479f9fcf34a3ec9a1f3c5e74bdeccdbd23d077866d6482550ce84b93ff","version":2}
+-- air2lean-invgen: {"generator":{"lean":"4.34.0","modules":[["Air2Lean.InvGen","17a28db29521c9a83879c472d0e57322859146be088a9ec942137281ae5b9895"],["Air2Lean.InvGenMain","22b19dfe5555c1ea5de459ad86070fc46b698e54d65dc614a06a7f55afe69c18"],["Air2Lean.Revision","0abdb80bf11b8b7e1b0820755e2015f43cce91c00db65dd085b2a8afa6e65f8c"]],"revision":"9e7d4376f2ac9596aac316ff8de8b78a4011173db277998b851e979774fabd6c"},"inputs":[["tests/roadmap/loop-tactics/nested/Nested/Gen.lean","897e4f877a7ea682858b8f501e6efdd5595f922c1c5a43aa9e10cb3e09baff66"]],"loops":[{"credits":{"count":"s.i.toNat - s.j.toNat"},"family":"counted","fingerprint":"4f3ed0036d4d10a5364c3eef016269edae2e7a18562dfa1d22e2b40460a4582f","function":"pairs","loop":"pairs.loop14","pruned":[{"fact":"s.j.toNat ≤ s0.j.toNat","residual":"cand2 p0 s0 v0 { i := s.i, j := x }","walk":1},{"fact":"v.toNat = v0.toNat + (s0.j.toNat - s.j.toNat)","residual":"cand6 p0 s0 v0 { i := s.i, j := x } x✝³","walk":1}]},{"credits":{"none":"the step does not keep the count (each body run one step, the measure lowered by exactly one, zero at the exit): `FLogic.total.T (spent 1 ⋆ up (pts p0 8 v))\n  (do\n    let p ← StateT.run (loop (loop14 p0) again14) { i := s.i, j := 0#32 }\n    StateT.run\n        (do\n          let __do_lift ←\n            do\n              let __do_lift ←\n                match p.fst with\n                  | pairsExit.br13 => pure pairsExit.br10\n                  | e => pure e\n              match __do_lift with\n                | pairsExit.br10 => do\n                  let __do_lift ← get\n                  let i30 ← pure __do_lift.i\n                  let i31 ← liftM (add false i30 1)\n                  modify fun s => { i := i31, j := s.j }\n                  pure pairsExit.br6\n                | e => pure e\n          match __do_lift with\n            | pairsExit.br6 => pure pairsExit.rep5\n            | e => pure e)\n        p.snd)\n  fun r =>\n  floopExact again5\n      (fun s n =>\n        ⟪s0.i.toNat ≤ s.i.toNat ∧\n              s.i.toNat ≤ p1.toNat ∧\n                v0.toNat + ((tsum p1.toNat fun u => u) - tsum s0.i.toNat fun u => u) < 2 ^ 64 ∧\n                  n = p1.toNat - s.i.toNat⟫ ⋆\n          ex fun v =>\n            ⟪v.toNat + ((tsum p1.toNat fun u => u) - tsum s.i.toNat fun u => u) =\n                  v0.toNat + ((tsum p1.toNat fun u => u) - tsum s0.i.toNat fun u => u)⟫ ⋆\n              up (pts p0 8 v))\n      (fun r =>\n        ⟪r.fst = pairsExit.br4 ∧ r.snd.i.toNat = p1.toNat⟫ ⋆\n          ex fun v =>\n            ⟪v.toNat = v0.toNat + ((tsum p1.toNat fun u => u) - tsum s0.i.toNat fun u => u)⟫ ⋆ up (pts p0 8 v))\n      (p1.toNat - s.i.toNat) r ⋆\n    spent 1` (invariant_not_established)"},"family":"counted","fingerprint":"4f3ed0036d4d10a5364c3eef016269edae2e7a18562dfa1d22e2b40460a4582f","function":"pairs","loop":"pairs.loop5","pruned":[{"fact":"s.i.toNat ≤ s0.i.toNat","residual":"cand1 p0 p1 s0 v0 { i := x, j := snd✝.j }","walk":1}]}],"module":"Nested.Gen","namespace":"Nested","output":"9e761a92e382fd69f900df79c8754dde55c913273a2fec8970250d03a51c7d27","version":3}
 import Nested.Gen
+import ZigLean.Sep.Full.TSum
 import ZigLean.Sep.Full.Ghost
 import ZigLean.Sep.Full.AutoAttr
 import ZigLean.Sep.Full.ListSeg
@@ -53,5 +54,27 @@ open Zig Zig.Full Zig.Full.FAssn
       r.2.i = s0.i ∧
       r.2.j.toNat = r.2.i.toNat⟫ ⋆
     (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + (r.2.i.toNat - s0.j.toNat)⟫ ⋆ up (pts p0 8 v))
+
+/-- The invariant of `pairs.loop5`, a counted loop: `i` goes up by 1 while `i < p1`.
+`s0` holds the locals at loop entry.
+`v0` is `*p0` there, which goes up by `(fun u => u) i` per iteration.
+`j` is not stated: the body sets it before it reads it. -/
+@[fsym_inv] def pairs.loop5.inv (p0 : Zig.Ptr) (p1 : BitVec 32) (s0 : pairsLocals) (v0 : BitVec 64) (s : pairsLocals) : FAssn :=
+  ⟪s0.i.toNat ≤ s.i.toNat ∧
+      s.i.toNat ≤ p1.toNat ∧
+      v0.toNat + (tsum p1.toNat (fun u => u) - tsum s0.i.toNat (fun u => u)) < 2 ^ 64⟫ ⋆
+    (FAssn.ex fun v : BitVec 64 => ⟪v.toNat + (tsum p1.toNat (fun u => u) - tsum s.i.toNat (fun u => u)) = v0.toNat + (tsum p1.toNat (fun u => u) - tsum s0.i.toNat (fun u => u))⟫ ⋆ up (pts p0 8 v)) ⋆
+    plain
+
+/-- The measure of `pairs.loop5`: the iterations left. -/
+@[fsym_inv] def pairs.loop5.meas (p0 : Zig.Ptr) (p1 : BitVec 32) (s : pairsLocals) : Nat :=
+  p1.toNat - s.i.toNat
+
+/-- The exit post of `pairs.loop5`: the loop exits with `r`, after all iterations. -/
+@[fsym_inv] def pairs.loop5.post (p0 : Zig.Ptr) (p1 : BitVec 32) (s0 : pairsLocals) (v0 : BitVec 64) (r : pairsExit × pairsLocals) : FAssn :=
+  ⟪r.1 = pairsExit.br4 ∧
+      r.2.i.toNat = p1.toNat⟫ ⋆
+    (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + (tsum p1.toNat (fun u => u) - tsum s0.i.toNat (fun u => u))⟫ ⋆ up (pts p0 8 v)) ⋆
+    plain
 
 end Nested
