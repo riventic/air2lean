@@ -86,6 +86,16 @@ class Names(Repo):
         self.assertEqual(fx.files(self.repo), ["tests/roadmap/a/A/Eval.lean", "tests/roadmap/a/Spec.lean",
                                                "tests/roadmap/b/B/Eval.lean"])
 
+    def test_source_roots_read_globs_as_lake(self):
+        # Lake/Config/Glob.lean: `M.+` is M's submodules only, `M.*` M and its submodules.
+        for name in ("P", "P/X", "S", "S/Y", "One", "One/Z"):
+            self.write(f"tests/roadmap/a/{name}.lean", "def v := 1\n")
+        self.fixtures([("A", "a", '["P.+", "S.*", "One"]')])
+        modules = ["One", "P.X", "S", "S.Y"]
+        self.assertEqual(sorted(fx.check_names(self.package)["A"]), modules)
+        self.assertEqual(fx.source_roots(self.repo),
+                         {f"tests/roadmap/a/{m.replace('.', '/')}.lean": "tests/roadmap/a" for m in modules})
+
 
 class Mutant(Repo):
     def mutant(self, base, use, expect=()):
