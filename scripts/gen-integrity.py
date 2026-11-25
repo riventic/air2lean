@@ -736,9 +736,20 @@ def comparable(data, mode):
     return rest if first.startswith(PROFILE_PREFIX) else data
 
 
-def header_error(committed, fresh):
+def owns_record(case, path):
+    """Whether `case` is the one whose target the profile record of `path` names: a golden
+    `Gen-<host>.lean` is its host's, any other golden module the `linux` reference host's (a host
+    whose translation has the same body shares it, check.sh's fallback); a fixture's is its own."""
+    if case.mode != "golden":
+        return True
+    name = Path(path).name
+    return case.host == (name[4:-5] if name.startswith("Gen-") else "linux")
+
+
+def header_error(committed, fresh, own=True):
     """A committed profile record must be valid (not ignorable metadata) and name the float
-    semantics the translation used: consumers attach it to the generated module."""
+    semantics the translation used, and for its owning case (`owns_record`) the target:
+    consumers attach it to the generated module."""
     if not committed.startswith(PROFILE_PREFIX):
         return None
     mine = split_generated()(committed, required=True)[0]
@@ -748,7 +759,7 @@ def header_error(committed, fresh):
     # `scripts/premises.py profile_target` binds target-qualified premises to the record's target.
     # A legacy translation records no target and keeps the committed record (its body is checked).
     targets = [triple_target(record["profile"].get("target_triple")) for record in (mine, theirs) if record]
-    if len(targets) == 2 and None not in targets and targets[0] != targets[1]:
+    if own and len(targets) == 2 and None not in targets and targets[0] != targets[1]:
         return (f"profile record says target {mine['profile'].get('target_triple')}, "
                 f"translation used {theirs['profile'].get('target_triple')}")
     return None
@@ -821,7 +832,7 @@ class Translator:
         """None if `path` equals the fresh output of `case`, else the difference."""
         fresh = self.output(index, case)
         committed = (ROOT / path).read_bytes()
-        if case.mode != "exact" and (error := header_error(committed, fresh)):
+        if case.mode != "exact" and (error := header_error(committed, fresh, owns_record(case, path))):
             return error
         mine, theirs = comparable(committed, case.mode), comparable(fresh, case.mode)
         return None if mine == theirs else first_difference(mine, theirs)
@@ -888,17 +899,15 @@ def run_write(translator, cases, only):
                 continue
             committed = (ROOT / path).read_bytes() if (ROOT / path).is_file() else b""
             fresh = {}
-            for index, case in members:
-                out = translator.output(index, case)
-                if case.mode == "exact":
-                    fresh[case.label] = out
-                else:
-                    # The committed profile record, unless its float semantics are stale.
-                    first, sep, _ = committed.partition(b"\n")
-                    if header_error(committed, out):
-                        first, sep, _ = out.partition(b"\n")
-                    header = first + sep if first.startswith(PROFILE_PREFIX) else b""
-                    fresh[case.label] = header + comparable(out, case.mode)
+            outs = [(case, translator.output(index, case)) for index, case in members]
+            # The committed profile record, unless it is stale for a case (`header_error`): then
+            # that case's fresh one, for every case of the module.
+            record = next((out for case, out in outs if case.mode != "exact" and
+                           header_error(committed, out, owns_record(case, path))), committed)
+            first, sep, _ = record.partition(b"\n")
+            header = first + sep if first.startswith(PROFILE_PREFIX) else b""
+            for case, out in outs:
+                fresh[case.label] = out if case.mode == "exact" else header + comparable(out, case.mode)
         except ValueError as error:
             errors.append(f"{path}: {error}")
             continue

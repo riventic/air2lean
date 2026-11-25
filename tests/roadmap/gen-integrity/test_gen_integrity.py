@@ -319,6 +319,14 @@ class SyntheticTests(unittest.TestCase):
         self.assertIsNone(gi.header_error(generated("x86_64-linux-gnu"), generated("x86_64-linux-gnu")))
         self.assertIn("translation used aarch64-macos-none",
                       gi.header_error(generated("x86_64-linux-gnu"), generated("aarch64-macos-none")))
+        # A darwin case whose body equals the linux one shares the linux module and its record.
+        self.assertIsNone(gi.header_error(generated("x86_64-linux-gnu"), generated("aarch64-macos-none"), own=False))
+        golden = lambda host: gi.Case("p", [], [], "golden", "l", host=host)
+        self.assertTrue(gi.owns_record(golden("linux"), "Proofs/Demo/Gen.lean"))
+        self.assertTrue(gi.owns_record(golden("linux"), "tests/golden/0.17.1/demo/Gen.lean"))
+        self.assertFalse(gi.owns_record(golden("darwin"), "Proofs/Demo/Gen.lean"))
+        self.assertTrue(gi.owns_record(golden("darwin"), "tests/golden/0.17.1/demo/Gen-darwin.lean"))
+        self.assertFalse(gi.owns_record(golden("linux-aarch64"), "tests/golden/0.17.1/demo/Gen-linux.lean"))
 
     def test_namespaced_composition_requires_explicit_valid_host(self):
         source = self.fx.write("single-air/demo.f.json", json.dumps(dict(
