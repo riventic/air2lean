@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 189 rows, 64 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 193 rows, 68 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -47,7 +47,7 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [P09-E5](#row-p09-e5) | @[fsym_upd] ghost-update registry keyed by heads, tried at returns | P09 | - | - |
 | [cond-start-anywhere](#row-cond-start-anywhere) | a condition's start at any point of a program: `FCond.Inv.start` asks an empty futex queue and the condition's words `Ok` at every thread | lane lock-start (2026-11-25), the rest of #lock-start-anywhere; `FRw.Base.start` (RwLockStart.lean) and `RwProd.start` (RwProdStart.lean) inherit it | - | - |
 | [recursive-group-total](#row-recursive-group-total) | Generic total correctness of a recursive function group | L8b-1 tick coverage (Task 09); P03/stack | `Proofs/Pointers/Sep.lean` | Proofs/Pointers/Sep.lean (#617): the private `addDown_group`, which `addDown_total` applies, closes the postcondition by hand after fsym: `EUpd.of_imp`, two `sep_left_comm_eq` reorderings and `congrArg (BitVec.ofNat 64)` with `addDown_sum_step`, because fsym's frame planner cannot match `pts p 8 v` against `pts p 8 v'` when the values are equal only by arithmetic. Missing fsym capability: matching values that are equal by arithmetic (a kernel-checked value-congruence step in the frame planner, or an existential postcondition `∃ y, ⟪y.toNat = x.toNat + sumDown n.toNat⟫ ⋆ pts p 8 y` closed by `fsym_arith`). This capability is separate from this row's generic recursive-group rule (which is why no row of its own tracks it yet: open one when the engine work starts); delete that hand block from `addDown_group` and this site when it lands, and do not close this row while the site stays. |
-| [T1](#row-t1) | credits n is not split for tick_credit | stack-ac lane (codex/stack-ac-ticks) | - | - |
+| [T1](#row-t1) | credits n is not split for tick_credit | stack-ac lane (codex/stack-ac-ticks) | `ZigLean/Sep/Full/Queue.lean`, `tests/roadmap/queue-adt/QueueAdt/Clients.lean` | Delete `QueueImpl.PushStepFree` and `QueueImpl.push_spec_stepFree` (Queue.lean) and `RotatedPaid`/`rotated_of_paid` (Clients.lean); prove `rotate_spec`/`rotateShift_spec` by `fsym [S.push_spec, S.pop_spec]` directly, and restate `pushAll_exact`/`pushAll_total`/`pushAll_steps`/`pushAll_not_within` without the `h0` premise for `ys.length + 1` plus the declared counts of the pushes. |
 | [fowned-bridges](#row-fowned-bridges) | Step through the WP.liftMem_fowned* / callMC_fownedS bridges | coordinator | - | - |
 | [ofseq-one-liners](#row-ofseq-one-liners) | Seven remaining hand ofSeq one-liners | coordinator (critic run 9) | - | - |
 | [stack-child-budget](#row-stack-child-budget) | A spawned thread's stack budget, reserve and sp token | stack-region lane (codex/stack-pr5) | - | - |
@@ -84,7 +84,11 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [returns-within-adequacy](#row-returns-within-adequacy) | Proto.returnsWithin concludes ReturnsWithin directly | legacy-flip lane (maintainer decision 2026-11-25: ReturnsWithin, EventuallyReturns, EventuallyReturnsUnder are `target` outcome vocabulary of Sched.run, proved through Proto.WP + Proto.returnsWithin) | - | Not a workaround: the hand `countdown_total`/`countdown_within` proofs in ZigLean/Conc/Total.lean are replaced by the Proto route once the two lemmas exist. |
 | [timed-budget-concm](#row-timed-budget-concm) | TimedBudget *_sound theorems are over the opt-in TimedSched interpreter | legacy-flip lane (maintainer decision 2026-11-25; design file note on TimedBudget) | - | When the deadline wait is a `SyncOp` of `ConcM` the `TimedSched` interpreter and its `resume_sound` rule are deleted and the `*_sound` theorems are restated over `ConcM`. |
 | [device-read-rules](#row-device-read-rules) | full-state rules for volatile device accesses and the device trace | device-proofs lane (fix-forward of tests/roadmap/volatile-effects/check-device.sh, 2026-11-24) | `tests/roadmap/volatile-effects/DeviceEffects/Proofs.lean`, `tests/roadmap/volatile-effects/DeviceAsm/Proofs.lean` | Restate `putc_trace`, `putc_eventually`, `statusTwice_trace`, `clearStatus_trace`, `sendThenStatus_trace` and `elapsed_trace` as `FTotalTriple`s over the trace resource, walked by `fsym`; delete the run-equation lemmas (`status_read`, `data_write`, `data_ptr`, `loop_busy`, `loop_ready`, `poll_run`, `tsc_run`) and the local `after`/`ticked` memory updates. The semantic mutants (device-mutants.py) keep their expected failures against the new statements. |
-| [fba-0171-wrapper-stack](#row-fba-0171-wrapper-stack) | std.mem.Allocator wrapper contracts with stack room for Zig 0.17.1's result slots | fba-0171 lane (2026-11-25) | `tests/roadmap/alloc-fba/check.sh` | Once the wrapper contracts are restated (and ledger 21a is closed): the retained AllocFba/Gen.lean becomes the 0.17.1 translation, and check.sh builds and audits the whole library over the 0.16.0 translation in its check tree instead of only Full/Creation/CreationDomain/Eval over 0.17.1's. |
+| [contract-stack-room](#row-contract-stack-room) | a declared stack need in an interface contract, for both modes | queue-adt lane (P04/P06, ZigLean/Sep/Full/Queue.lean, 2026-11-25) | - | - |
+| [queue-length-fact-loop](#row-queue-length-fact-loop) | a length fact over a representation's list makes the arithmetic simp loop | queue-adt lane (tests/roadmap/queue-adt/QueueAdt/Ring.lean, observed 2026-11-24 at f75425bf1) | `tests/roadmap/queue-adt/QueueAdt/Ring.lean` | Restate `ring` with the fact `xs.length = len.toNat` and delete the local `fsym_arith` attribute on `length_window` in Ring.lean. |
+| [upd-precondition-user-def](#row-upd-precondition-user-def) | an update whose precondition names a user value definition is not planned | queue-adt lane (tests/roadmap/queue-adt/QueueAdt/Ring.lean, observed 2026-11-24 at f75425bf1) | `tests/roadmap/queue-adt/QueueAdt/Ring.lean` | Write the header of `pushed_upd`, `popped_upd` and `ring` with one value definition. |
+| [arith-word-ne-cons-length](#row-arith-word-ne-cons-length) | the walk's arithmetic leaves update premises that need a word disequality fact or a cons length | queue-adt lane (tests/roadmap/queue-adt/QueueAdt/Shift.lean, 2026-11-25) | `tests/roadmap/queue-adt/QueueAdt/Shift.lean` | Delete the two `all_goals … bv_omega` lines after the walks in `Shift.push_spec` and `Shift.pop_spec`. |
+| [fba-0171-wrapper-stack](#row-fba-0171-wrapper-stack) | std.mem.Allocator wrapper contracts with stack room for Zig 0.17.1's result slots | fba-0171 lane (2026-11-25) | `tests/roadmap/alloc-fba/check.sh` | The wrapper contracts are restated (2026-11-25); once ledger 21a is closed: the retained AllocFba/Gen.lean becomes the 0.17.1 translation, and check.sh builds and audits the whole library over the 0.16.0 translation in its check tree instead of only Full/Creation/CreationDomain/Eval over 0.17.1's. |
 
 ## Closed rows
 
@@ -1472,9 +1476,13 @@ Deletion plan: Proofs/Pointers/Sep.lean (#617): the private `addDown_group`, whi
 
 Status: **open**. Requester: stack-ac lane (codex/stack-ac-ticks).
 
-Progress: see request text (tick rows, plans/tick-cost.md)
+Progress: see request text (tick rows, plans/tick-cost.md). 2026-11-25 (queue-adt lane): the same gap at a call. A contract with declared step counts (`QueueImpl`: `push_spec` takes `credits (pushSteps C xs v)`) cannot be called from a state that holds the credits as one sum (`credits (a + b)`), and receipts of several calls are not merged into the post's `spent (a + b)`. Observed: `rotate`'s walk with `credits (rotateSteps …)` finds no plan for `push`'s `credits (pushSteps …)` and inlines the body; a loop whose invariant holds the credits of the calls left cannot pay one call per repetition. Also: a fact equating two list constructors (`[] = x :: xs'`, `h :: t = x :: xs'`) is neither refuted nor split into argument equations, so a client cannot case-split the abstract list before the walk.
 
 Request: HIT (open): `FTotalTriple (R ⋆ credits 2) (tick; tick) (fun _ => R)` -> fsym leaves the goal unsolved: the planner does not split `credits 2` into `credits 1 ⋆ credits 1` for `FTotalTriple.tick_credit`. Needs counted atoms (`credits`, `spent`: `spent_add`/`spent_zero`, `credits_add`/`credits_zero` exist in Full/Ghost + Full/Tick). Leftover `spent n`/`credits n` drop already works (`@[fsym_drop] EUpd.spent_drop`, `EUpd.credits_drop`).
+
+Workaround sites: `ZigLean/Sep/Full/Queue.lean`, `tests/roadmap/queue-adt/QueueAdt/Clients.lean`
+
+Deletion plan: Delete `QueueImpl.PushStepFree` and `QueueImpl.push_spec_stepFree` (Queue.lean) and `RotatedPaid`/`rotated_of_paid` (Clients.lean); prove `rotate_spec`/`rotateShift_spec` by `fsym [S.push_spec, S.pop_spec]` directly, and restate `pushAll_exact`/`pushAll_total`/`pushAll_steps`/`pushAll_not_within` without the `h0` premise for `ys.length + 1` plus the declared counts of the pushes.
 
 <a id="row-t2"></a>
 ### #T2 plain atom: tick_plain receipt dropped (bare fsym)
@@ -2256,15 +2264,63 @@ Workaround sites: `tests/roadmap/volatile-effects/DeviceEffects/Proofs.lean`, `t
 
 Deletion plan: Restate `putc_trace`, `putc_eventually`, `statusTwice_trace`, `clearStatus_trace`, `sendThenStatus_trace` and `elapsed_trace` as `FTotalTriple`s over the trace resource, walked by `fsym`; delete the run-equation lemmas (`status_read`, `data_write`, `data_ptr`, `loop_busy`, `loop_ready`, `poll_run`, `tsc_run`) and the local `after`/`ticked` memory updates. The semantic mutants (device-mutants.py) keep their expected failures against the new statements.
 
+<a id="row-contract-stack-room"></a>
+### #contract-stack-room a declared stack need in an interface contract, for both modes
+
+Status: **open**. Requester: queue-adt lane (P04/P06, ZigLean/Sep/Full/Queue.lean, 2026-11-25).
+
+Progress: Open. `QueueImpl`'s specifications hold no stack resource and not the plain mode, so an implementation whose operation pushes a stack block is not an instance. A function that needs `k` bytes is stated at every depth of one thread under a budget (`∀ D, D + k ≤ S → FTotalTriple (cur t ⋆ sp t S D ⋆ P) …`) or in the plain mode (`⋆ plain`), and no assertion holds in both: `sp` does not exist where `noStack` is held and `plain` cannot be made under a budget. A contract that fixed one mode would have its clients proved for that mode only.
+
+Request: A room assertion of the library that both modes provide (a budget's `sp` and the plain mode), with the push rules of `fsym` over it, so that a contract (`QueueImpl`, `SeqImpl`, the allocator and sync contracts) declares its operations' stack need once and a client is proved for both modes.
+
+<a id="row-queue-length-fact-loop"></a>
+### #queue-length-fact-loop a length fact over a representation's list makes the arithmetic simp loop
+
+Status: **open**. Requester: queue-adt lane (tests/roadmap/queue-adt/QueueAdt/Ring.lean, observed 2026-11-24 at f75425bf1).
+
+Progress: Open; not re-checked after the merge of 2026-11-25. A representation that states both `len.toNat = xs.length` and `xs = window items head len.toNat` gives, once `xs` is substituted, the fact `len.toNat = (window items head len.toNat).length`, and the walk stops with "fsym: recursion depth limit in the rule @FTotalTriple.arr_store_zero on the command store 4 (buf.elem 4 x) v". Ring.lean states the length as a conditional `fsym_arith` rewrite (`length_window`) instead of a fact.
+
+Request: Facts whose two sides normalize into each other (a variable and a term that rewrites to it under a side condition) are oriented or dropped instead of looping, so that a representation may state its length as a fact.
+
+Workaround sites: `tests/roadmap/queue-adt/QueueAdt/Ring.lean`
+
+Deletion plan: Restate `ring` with the fact `xs.length = len.toNat` and delete the local `fsym_arith` attribute on `length_window` in Ring.lean.
+
+<a id="row-upd-precondition-user-def"></a>
+### #upd-precondition-user-def an update whose precondition names a user value definition is not planned
+
+Status: **open**. Requester: queue-adt lane (tests/roadmap/queue-adt/QueueAdt/Ring.lean, observed 2026-11-24 at f75425bf1).
+
+Progress: Open; not re-checked after the merge of 2026-11-25. `fsym [u]` with an update `u` whose precondition holds `pts q 8 (hdr buf cap head len)` (a definition that builds the header structure) is not matched against the state's struct literal ("no plan for its precondition"); Ring.lean's `pushed_upd` and `popped_upd` write the literal `{ items := { ptr := buf, len := cap }, head := head, len := len }`.
+
+Request: The planner unfolds a reducible value definition (or matches up to `whnfR` of the value) in an update's precondition atom.
+
+Workaround sites: `tests/roadmap/queue-adt/QueueAdt/Ring.lean`
+
+Deletion plan: Write the header of `pushed_upd`, `popped_upd` and `ring` with one value definition.
+
+<a id="row-arith-word-ne-cons-length"></a>
+### #arith-word-ne-cons-length the walk's arithmetic leaves update premises that need a word disequality fact or a cons length
+
+Status: **open**. Requester: queue-adt lane (tests/roadmap/queue-adt/QueueAdt/Shift.lean, 2026-11-25).
+
+Progress: Open; observed, not yet reduced to a minimal case. After `fsym [pushed_upd v]` on `Shift_push`, the update's count premises (`len.toNat < cap.toNat`, `len'.toNat = len.toNat + 1` with `len' = len + 1#64`) stay open although the branch fact `¬len = cap` and the representation's `len.toNat ≤ cap.toNat` decide them; after `fsym [pop_loop_exact, popped_upd]` on `Shift_pop` with `xs := x :: xs`, the front cell's bound `0 < items.length` stays open over the facts `(x :: xs).length = len.toNat` and `len.toNat ≤ cap.toNat = items.length`. Both close by `bv_omega` (after `List.length_cons` for the second), so the arithmetic's one normal form (`x.toNat`, then `omega`) does not reach a word disequality fact, the `(1#64).toNat` literal of an increment, or a cons length in a fact. Ring.lean's update premises of the same shape close inside the walk (its branch facts are orderings, not disequalities).
+
+Request: fsym's arithmetic brings a word disequality fact (`¬a = b`, `a ≠ b` over `BitVec w`) and a list-constructor length (`(x :: xs).length`) in facts to the `toNat` normal form before `omega`, so the side goals close in the walk.
+
+Workaround sites: `tests/roadmap/queue-adt/QueueAdt/Shift.lean`
+
+Deletion plan: Delete the two `all_goals … bv_omega` lines after the walks in `Shift.push_spec` and `Shift.pop_spec`.
+
 <a id="row-fba-0171-wrapper-stack"></a>
 ### #fba-0171-wrapper-stack std.mem.Allocator wrapper contracts with stack room for Zig 0.17.1's result slots
 
 Status: **open**. Requester: fba-0171 lane (2026-11-25).
 
-Progress: Open, a statement decision. Zig 0.17.1's `mem.Allocator.alloc`, `reallocAdvanced`, `allocSentinel` (24 bytes) and `create` (16 bytes) keep their error-union result in a stack slot (`Zig.allocStack`); 0.16.0's return it as a value. tests/roadmap/alloc-fba/AllocFba/Wrappers.lean states the wrapper contracts as `FTotalTriple`s with no stack resource, which do not hold for the 0.17.1 translation (the push may throw `.stackOverflow`: `FTriple.allocStack` is partial, the total rule `FTotalTriple.allocStack_sp` needs `cur t ⋆ sp t S D` with room), and `Client.client_spec`'s room `D + stackCharge 24 8 ≤ S` covers the client's frame but not a wrapper's slot behind it. Build of the library over the 0.17.1 translation (p0, 2026-11-25): only AllocFba.Wrappers fails (alloc_spec, create_spec, dupe_spec, allocSentinel_spec, reallocAdvanced_spec, realloc_spec; free_spec, freeSentinel_spec, destroy_spec fail at ledger 21a). Options: (a) one statement for every version with the stack room as an owned resource (`cur t ⋆ sp t S D ⋆ ⟪D + need ≤ S⟫` in the precondition, `sp t S D` back), true for 0.16.0 too but a stronger precondition than its current statement; (b) the stack need per translation (`when_defined`, as `Proofs/Lists/Append.lean`'s `hdrVal`), which keeps 0.16.0's statement but still needs the `sp` token in it; (c) partial-correctness wrapper contracts in the plain mode (as `Interfaces/SentinelSpec.lean`), a weakening: rejected.
+Progress: Open, a statement decision. Zig 0.17.1's `mem.Allocator.alloc`, `reallocAdvanced`, `allocSentinel` (24 bytes) and `create` (16 bytes) keep their error-union result in a stack slot (`Zig.allocStack`); 0.16.0's return it as a value. tests/roadmap/alloc-fba/AllocFba/Wrappers.lean states the wrapper contracts as `FTotalTriple`s with no stack resource, which do not hold for the 0.17.1 translation (the push may throw `.stackOverflow`: `FTriple.allocStack` is partial, the total rule `FTotalTriple.allocStack_sp` needs `cur t ⋆ sp t S D` with room), and `Client.client_spec`'s room `D + stackCharge 24 8 ≤ S` covers the client's frame but not a wrapper's slot behind it. Build of the library over the 0.17.1 translation (p0, 2026-11-25): only AllocFba.Wrappers fails (alloc_spec, create_spec, dupe_spec, allocSentinel_spec, reallocAdvanced_spec, realloc_spec; free_spec, freeSentinel_spec, destroy_spec fail at ledger 21a). Options: (a) one statement for every version with the stack room as an owned resource (`cur t ⋆ sp t S D ⋆ ⟪D + need ≤ S⟫` in the precondition, `sp t S D` back), true for 0.16.0 too but a stronger precondition than its current statement; (b) the stack need per translation (`when_defined`, as `Proofs/Lists/Append.lean`'s `hdrVal`), which keeps 0.16.0's statement but still needs the `sp` token in it; (c) partial-correctness wrapper contracts in the plain mode (as `Interfaces/SentinelSpec.lean`), a weakening: rejected. Decided 2026-11-25 (maintainer): option (a). Done (lane wrapper-stack): every wrapper contract that may push a slot owns `cur t ⋆ sp t S D ⋆ ⟪D + need ≤ S⟫` and gives `cur t ⋆ sp t S D` back, total, one text for both versions; `need` is one constant per wrapper (`stackCharge 24 8`, `create`: `stackCharge 16 8`), the largest slot any supported version pushes (0.16.0 pushes none and frames the token); `Client.client_spec`'s room grew to `D + stackCharge 24 8 + stackCharge 24 8 ≤ S` (its frame and a wrapper's slot behind it), `client_start`'s budget likewise. Over 0.17.1 (p0 check tree, 2026-11-25): alloc_spec, alignedAlloc_spec, create_spec, dupe_spec, allocSentinel_spec build; reallocAdvanced_spec and realloc_spec now pass the slot and stop, like free_spec, freeSentinel_spec, destroy_spec, at ledger 21a (`enumOf (mem_Alignment.ofInt? (val false x))`, `fromByteUnits`' intCast). Remaining, after 21a: flip the retained translation to 0.17.1 and check the whole library over 0.16.0 in check.sh's tree, then close this row.
 
 Request: Decide how the generated std.mem.Allocator wrapper contracts state stack room, so that one Wrappers.lean/Client.lean text holds over the 0.16.0 and 0.17.1 translations.
 
 Workaround sites: `tests/roadmap/alloc-fba/check.sh`
 
-Deletion plan: Once the wrapper contracts are restated (and ledger 21a is closed): the retained AllocFba/Gen.lean becomes the 0.17.1 translation, and check.sh builds and audits the whole library over the 0.16.0 translation in its check tree instead of only Full/Creation/CreationDomain/Eval over 0.17.1's.
+Deletion plan: The wrapper contracts are restated (2026-11-25); once ledger 21a is closed: the retained AllocFba/Gen.lean becomes the 0.17.1 translation, and check.sh builds and audits the whole library over the 0.16.0 translation in its check tree instead of only Full/Creation/CreationDomain/Eval over 0.17.1's.

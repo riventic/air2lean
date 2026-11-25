@@ -1295,10 +1295,13 @@
    "title": "credits n is not split for tick_credit",
    "status": "open",
    "requester": "stack-ac lane (codex/stack-ac-ticks)",
-   "progress": "see request text (tick rows, plans/tick-cost.md)",
+   "progress": "see request text (tick rows, plans/tick-cost.md). 2026-11-25 (queue-adt lane): the same gap at a call. A contract with declared step counts (`QueueImpl`: `push_spec` takes `credits (pushSteps C xs v)`) cannot be called from a state that holds the credits as one sum (`credits (a + b)`), and receipts of several calls are not merged into the post's `spent (a + b)`. Observed: `rotate`'s walk with `credits (rotateSteps …)` finds no plan for `push`'s `credits (pushSteps …)` and inlines the body; a loop whose invariant holds the credits of the calls left cannot pay one call per repetition. Also: a fact equating two list constructors (`[] = x :: xs'`, `h :: t = x :: xs'`) is neither refuted nor split into argument equations, so a client cannot case-split the abstract list before the walk.",
    "request": "HIT (open): `FTotalTriple (R ⋆ credits 2) (tick; tick) (fun _ => R)` -> fsym leaves the goal unsolved: the planner does not split `credits 2` into `credits 1 ⋆ credits 1` for `FTotalTriple.tick_credit`. Needs counted atoms (`credits`, `spent`: `spent_add`/`spent_zero`, `credits_add`/`credits_zero` exist in Full/Ghost + Full/Tick). Leftover `spent n`/`credits n` drop already works (`@[fsym_drop] EUpd.spent_drop`, `EUpd.credits_drop`).",
-   "workaround_sites": [],
-   "deletion_plan": ""
+   "workaround_sites": [
+    "ZigLean/Sep/Full/Queue.lean",
+    "tests/roadmap/queue-adt/QueueAdt/Clients.lean"
+   ],
+   "deletion_plan": "Delete `QueueImpl.PushStepFree` and `QueueImpl.push_spec_stepFree` (Queue.lean) and `RotatedPaid`/`rotated_of_paid` (Clients.lean); prove `rotate_spec`/`rotateShift_spec` by `fsym [S.push_spec, S.pop_spec]` directly, and restate `pushAll_exact`/`pushAll_total`/`pushAll_steps`/`pushAll_not_within` without the `h0` premise for `ys.length + 1` plus the declared counts of the pushes."
   },
   {
    "id": "T2",
@@ -2044,16 +2047,62 @@
    "note": "Not a weakening: the run equations fix the whole final memory (trace, tick count, everything else unchanged), which is stronger than a triple with a frame; only the proof style is outside the framework."
   },
   {
+   "id": "contract-stack-room",
+   "title": "a declared stack need in an interface contract, for both modes",
+   "status": "open",
+   "requester": "queue-adt lane (P04/P06, ZigLean/Sep/Full/Queue.lean, 2026-11-25)",
+   "progress": "Open. `QueueImpl`'s specifications hold no stack resource and not the plain mode, so an implementation whose operation pushes a stack block is not an instance. A function that needs `k` bytes is stated at every depth of one thread under a budget (`∀ D, D + k ≤ S → FTotalTriple (cur t ⋆ sp t S D ⋆ P) …`) or in the plain mode (`⋆ plain`), and no assertion holds in both: `sp` does not exist where `noStack` is held and `plain` cannot be made under a budget. A contract that fixed one mode would have its clients proved for that mode only.",
+   "request": "A room assertion of the library that both modes provide (a budget's `sp` and the plain mode), with the push rules of `fsym` over it, so that a contract (`QueueImpl`, `SeqImpl`, the allocator and sync contracts) declares its operations' stack need once and a client is proved for both modes.",
+   "workaround_sites": [],
+   "deletion_plan": ""
+  },
+  {
+   "id": "queue-length-fact-loop",
+   "title": "a length fact over a representation's list makes the arithmetic simp loop",
+   "status": "open",
+   "requester": "queue-adt lane (tests/roadmap/queue-adt/QueueAdt/Ring.lean, observed 2026-11-24 at f75425bf1)",
+   "progress": "Open; not re-checked after the merge of 2026-11-25. A representation that states both `len.toNat = xs.length` and `xs = window items head len.toNat` gives, once `xs` is substituted, the fact `len.toNat = (window items head len.toNat).length`, and the walk stops with \"fsym: recursion depth limit in the rule @FTotalTriple.arr_store_zero on the command store 4 (buf.elem 4 x) v\". Ring.lean states the length as a conditional `fsym_arith` rewrite (`length_window`) instead of a fact.",
+   "request": "Facts whose two sides normalize into each other (a variable and a term that rewrites to it under a side condition) are oriented or dropped instead of looping, so that a representation may state its length as a fact.",
+   "workaround_sites": [
+    "tests/roadmap/queue-adt/QueueAdt/Ring.lean"
+   ],
+   "deletion_plan": "Restate `ring` with the fact `xs.length = len.toNat` and delete the local `fsym_arith` attribute on `length_window` in Ring.lean."
+  },
+  {
+   "id": "upd-precondition-user-def",
+   "title": "an update whose precondition names a user value definition is not planned",
+   "status": "open",
+   "requester": "queue-adt lane (tests/roadmap/queue-adt/QueueAdt/Ring.lean, observed 2026-11-24 at f75425bf1)",
+   "progress": "Open; not re-checked after the merge of 2026-11-25. `fsym [u]` with an update `u` whose precondition holds `pts q 8 (hdr buf cap head len)` (a definition that builds the header structure) is not matched against the state's struct literal (\"no plan for its precondition\"); Ring.lean's `pushed_upd` and `popped_upd` write the literal `{ items := { ptr := buf, len := cap }, head := head, len := len }`.",
+   "request": "The planner unfolds a reducible value definition (or matches up to `whnfR` of the value) in an update's precondition atom.",
+   "workaround_sites": [
+    "tests/roadmap/queue-adt/QueueAdt/Ring.lean"
+   ],
+   "deletion_plan": "Write the header of `pushed_upd`, `popped_upd` and `ring` with one value definition."
+  },
+  {
+   "id": "arith-word-ne-cons-length",
+   "title": "the walk's arithmetic leaves update premises that need a word disequality fact or a cons length",
+   "status": "open",
+   "requester": "queue-adt lane (tests/roadmap/queue-adt/QueueAdt/Shift.lean, 2026-11-25)",
+   "progress": "Open; observed, not yet reduced to a minimal case. After `fsym [pushed_upd v]` on `Shift_push`, the update's count premises (`len.toNat < cap.toNat`, `len'.toNat = len.toNat + 1` with `len' = len + 1#64`) stay open although the branch fact `¬len = cap` and the representation's `len.toNat ≤ cap.toNat` decide them; after `fsym [pop_loop_exact, popped_upd]` on `Shift_pop` with `xs := x :: xs`, the front cell's bound `0 < items.length` stays open over the facts `(x :: xs).length = len.toNat` and `len.toNat ≤ cap.toNat = items.length`. Both close by `bv_omega` (after `List.length_cons` for the second), so the arithmetic's one normal form (`x.toNat`, then `omega`) does not reach a word disequality fact, the `(1#64).toNat` literal of an increment, or a cons length in a fact. Ring.lean's update premises of the same shape close inside the walk (its branch facts are orderings, not disequalities).",
+   "request": "fsym's arithmetic brings a word disequality fact (`¬a = b`, `a ≠ b` over `BitVec w`) and a list-constructor length (`(x :: xs).length`) in facts to the `toNat` normal form before `omega`, so the side goals close in the walk.",
+   "workaround_sites": [
+    "tests/roadmap/queue-adt/QueueAdt/Shift.lean"
+   ],
+   "deletion_plan": "Delete the two `all_goals … bv_omega` lines after the walks in `Shift.push_spec` and `Shift.pop_spec`."
+  },
+  {
    "id": "fba-0171-wrapper-stack",
    "title": "std.mem.Allocator wrapper contracts with stack room for Zig 0.17.1's result slots",
    "status": "open",
    "requester": "fba-0171 lane (2026-11-25)",
-   "progress": "Open, a statement decision. Zig 0.17.1's `mem.Allocator.alloc`, `reallocAdvanced`, `allocSentinel` (24 bytes) and `create` (16 bytes) keep their error-union result in a stack slot (`Zig.allocStack`); 0.16.0's return it as a value. tests/roadmap/alloc-fba/AllocFba/Wrappers.lean states the wrapper contracts as `FTotalTriple`s with no stack resource, which do not hold for the 0.17.1 translation (the push may throw `.stackOverflow`: `FTriple.allocStack` is partial, the total rule `FTotalTriple.allocStack_sp` needs `cur t ⋆ sp t S D` with room), and `Client.client_spec`'s room `D + stackCharge 24 8 ≤ S` covers the client's frame but not a wrapper's slot behind it. Build of the library over the 0.17.1 translation (p0, 2026-11-25): only AllocFba.Wrappers fails (alloc_spec, create_spec, dupe_spec, allocSentinel_spec, reallocAdvanced_spec, realloc_spec; free_spec, freeSentinel_spec, destroy_spec fail at ledger 21a). Options: (a) one statement for every version with the stack room as an owned resource (`cur t ⋆ sp t S D ⋆ ⟪D + need ≤ S⟫` in the precondition, `sp t S D` back), true for 0.16.0 too but a stronger precondition than its current statement; (b) the stack need per translation (`when_defined`, as `Proofs/Lists/Append.lean`'s `hdrVal`), which keeps 0.16.0's statement but still needs the `sp` token in it; (c) partial-correctness wrapper contracts in the plain mode (as `Interfaces/SentinelSpec.lean`), a weakening: rejected.",
+   "progress": "Open, a statement decision. Zig 0.17.1's `mem.Allocator.alloc`, `reallocAdvanced`, `allocSentinel` (24 bytes) and `create` (16 bytes) keep their error-union result in a stack slot (`Zig.allocStack`); 0.16.0's return it as a value. tests/roadmap/alloc-fba/AllocFba/Wrappers.lean states the wrapper contracts as `FTotalTriple`s with no stack resource, which do not hold for the 0.17.1 translation (the push may throw `.stackOverflow`: `FTriple.allocStack` is partial, the total rule `FTotalTriple.allocStack_sp` needs `cur t ⋆ sp t S D` with room), and `Client.client_spec`'s room `D + stackCharge 24 8 ≤ S` covers the client's frame but not a wrapper's slot behind it. Build of the library over the 0.17.1 translation (p0, 2026-11-25): only AllocFba.Wrappers fails (alloc_spec, create_spec, dupe_spec, allocSentinel_spec, reallocAdvanced_spec, realloc_spec; free_spec, freeSentinel_spec, destroy_spec fail at ledger 21a). Options: (a) one statement for every version with the stack room as an owned resource (`cur t ⋆ sp t S D ⋆ ⟪D + need ≤ S⟫` in the precondition, `sp t S D` back), true for 0.16.0 too but a stronger precondition than its current statement; (b) the stack need per translation (`when_defined`, as `Proofs/Lists/Append.lean`'s `hdrVal`), which keeps 0.16.0's statement but still needs the `sp` token in it; (c) partial-correctness wrapper contracts in the plain mode (as `Interfaces/SentinelSpec.lean`), a weakening: rejected. Decided 2026-11-25 (maintainer): option (a). Done (lane wrapper-stack): every wrapper contract that may push a slot owns `cur t ⋆ sp t S D ⋆ ⟪D + need ≤ S⟫` and gives `cur t ⋆ sp t S D` back, total, one text for both versions; `need` is one constant per wrapper (`stackCharge 24 8`, `create`: `stackCharge 16 8`), the largest slot any supported version pushes (0.16.0 pushes none and frames the token); `Client.client_spec`'s room grew to `D + stackCharge 24 8 + stackCharge 24 8 ≤ S` (its frame and a wrapper's slot behind it), `client_start`'s budget likewise. Over 0.17.1 (p0 check tree, 2026-11-25): alloc_spec, alignedAlloc_spec, create_spec, dupe_spec, allocSentinel_spec build; reallocAdvanced_spec and realloc_spec now pass the slot and stop, like free_spec, freeSentinel_spec, destroy_spec, at ledger 21a (`enumOf (mem_Alignment.ofInt? (val false x))`, `fromByteUnits`' intCast). Remaining, after 21a: flip the retained translation to 0.17.1 and check the whole library over 0.16.0 in check.sh's tree, then close this row.",
    "request": "Decide how the generated std.mem.Allocator wrapper contracts state stack room, so that one Wrappers.lean/Client.lean text holds over the 0.16.0 and 0.17.1 translations.",
    "workaround_sites": [
     "tests/roadmap/alloc-fba/check.sh"
    ],
-   "deletion_plan": "Once the wrapper contracts are restated (and ledger 21a is closed): the retained AllocFba/Gen.lean becomes the 0.17.1 translation, and check.sh builds and audits the whole library over the 0.16.0 translation in its check tree instead of only Full/Creation/CreationDomain/Eval over 0.17.1's."
+   "deletion_plan": "The wrapper contracts are restated (2026-11-25); once ledger 21a is closed: the retained AllocFba/Gen.lean becomes the 0.17.1 translation, and check.sh builds and audits the whole library over the 0.16.0 translation in its check tree instead of only Full/Creation/CreationDomain/Eval over 0.17.1's."
   }
  ],
  "mechanisms": [
