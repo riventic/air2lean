@@ -45,10 +45,11 @@ def runtime : Revision.Translator := runtime_revision%
 
 def usage : String :=
   "usage: air2lean <air-dir> -o <out.lean> --namespace <Ns> [--prefix <p>] " ++
-    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1|abi64-be-v1] [--allow-unqualified-build-mode] [--assume-no-libc] [--assume-asm-cpu-features <f,...>] [--model-registry <json>] [--model-registry-template] [--proof-api] [--assume-no-lb] [--timing-json <json>] [--source-map-json <json>] [--split-modules <Module>] [--device-contract <json>] [--air-certificate <lean> --air-certificate-import <Module>] [--canon-certificate] [--allocator-model std|translated]\n" ++
-    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--allow-unqualified-build-mode] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--assume-no-lb] [--assume-asm-cpu-features <f,...>] [--device-contract <json>] [--allocator-model std|translated]\n" ++
+    "[--float-semantics ieee|compiler-rt] [--spawn-policy available|fallible] [--profile legacy-abi64-le|abi64-le-v1|abi64-be-v1] [--allow-unqualified-build-mode] [--assume-no-libc] [--assume-asm-cpu-features <f,...>] [--assume-weak-exports] [--model-registry <json>] [--model-registry-template] [--proof-api] [--assume-no-lb] [--timing-json <json>] [--source-map-json <json>] [--split-modules <Module>] [--device-contract <json>] [--air-certificate <lean> --air-certificate-import <Module>] [--canon-certificate] [--allocator-model std|translated]\n" ++
+    "       air2lean --diagnostics-json <air-dir> [--profile <name>] [--allow-unqualified-build-mode] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--assume-no-lb] [--assume-weak-exports] [--assume-asm-cpu-features <f,...>] [--device-contract <json>] [--allocator-model std|translated]\n" ++
     "       air2lean --print-op-table\n" ++
-    "       air2lean --print-asm-feature-table"
+    "       air2lean --print-asm-feature-table\n" ++
+    "       air2lean --print-asm-isa-table"
 
 def help : String :=
   "Translate exported Zig AIR JSON into Lean definitions.\n\n" ++ usage ++
@@ -69,6 +70,8 @@ def help : String :=
   "                               although the profile's CPU lacks them: the running CPU has them\n" ++
   "                               (premise ASM-09; recorded in the header). Other asm whose feature\n" ++
   "                               the profile lacks stays rejected; see docs/volatile-effects.md.\n" ++
+  "  --assume-weak-exports        Bind an extern call to the program's weak definition of the symbol: the\n" ++
+  "                               image links no other definition (premise EXT-07; recorded in the header).\n" ++
   "  --model-registry <json>      Bind external calls to user models; see docs/external-models.md.\n" ++
   "  --model-registry-template    Write a registry template to -o instead of Lean.\n" ++
   "  --proof-api                  Emit stable model/unfold/loop-step lemmas; see docs/generated-code.md.\n" ++
@@ -88,6 +91,7 @@ def help : String :=
   "  --canon-certificate          Check native debug-ID binding; print JSON evidence, no files.\n" ++
   "  --print-op-table             Print every known AIR tag's op, effect class and emitter route (JSON).\n" ++
   "  --print-asm-feature-table    Print the CPU features of every inline-asm instruction (JSON).\n" ++
+  "  --print-asm-isa-table        Print which inline-asm allowlist entries the instruction model covers (JSON).\n" ++
   "  -h, --help                   Show this help.\n\n" ++
   "Supported AIR: Zig " ++ ZigVersion.helpList ++ ", a checked subset only;\n" ++
   "see docs/support-matrix.md for versions, examples and open requirements.\n\n" ++
@@ -121,6 +125,9 @@ structure Args where
   although the profile lacks them (premise ASM-09; `parseAsmCpuFeatures`); recorded in the
   generated header. -/
   asmCpuFeatures : Option (List String) := none
+  /-- `--assume-weak-exports`: `resolveExterns` binds an extern call to a weak definition
+  (premise EXT-07); recorded in the generated header. -/
+  assumeWeakExports : Bool := false
   /-- `--timing-json`: per-phase timing report path (`docs/perf-budgets.md`). -/
   timingJson : Option String := none
   /-- `--source-map-json`: per-function source map sidecar (`docs/stable-generation.md`). -/
@@ -191,6 +198,9 @@ private partial def parseArgsGo (args : List String)
   | "--assume-no-libc" :: rest =>
     (parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate).map
       (fun a => { a with assumeNoLibc := true })
+  | "--assume-weak-exports" :: rest =>
+    (parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate).map
+      (fun a => { a with assumeWeakExports := true })
   | "--assume-asm-cpu-features" :: v :: rest => do
     let features ← (parseAsmCpuFeatures v).mapError (fun message => s!"{message}\n{usage}")
     let a ← parseArgsGo rest airDir outPath ns prefix_ floatSemantics profile modelRegistry spawnPolicy registryTemplate
@@ -397,6 +407,7 @@ private def run (args : List String) : IO UInt32 := do
         try StrictJson.readFile path catch e =>
           throw (IO.userError s!"reading AIR file {path}: {e}")
       let errorTable ← readErrorTable a.airDir
+      let exportTable ← readExportTable a.airDir
       let (models, interfaces) ← match a.modelRegistry with
         | none => pure (#[], #[])
         | some path =>
@@ -468,8 +479,10 @@ private def run (args : List String) : IO UInt32 := do
       let (checked, programNs) ← timed fun _ => (do
         match err with | some e => throw e | none => pure ()
         -- A template lists the extern calls that bind to no definition as model symbols.
-        if a.registryTemplate && !a.canonCertificate then return (← resolveExternsCollect funcs models).1
-        let resolved ← resolveExterns funcs models
+        let exports ← exportRecordsFor funcs exportTable
+        if a.registryTemplate && !a.canonCertificate then
+          return (← resolveExternsCollect funcs models exports a.assumeWeakExports).1
+        let resolved ← resolveExterns funcs models exports a.assumeWeakExports
         -- docs/interfaces.md: the open function types, before every whole-program analysis
         -- (a function that calls the environment is concurrent).
         let openTys ← ModelRegistry.openFnTypes interfaces resolved
@@ -515,7 +528,8 @@ private def run (args : List String) : IO UInt32 := do
             -- An admission opt-in is part of the claim scope: the header records it.
             let optIns := (if a.allowUnqualified then ["unqualified-build-mode"] else []) ++
               (if a.assumeNoLibc then ["no-libc"] else []) ++
-              (if a.asmCpuFeatures.isSome then ["asm-cpu-features"] else [])
+              (if a.asmCpuFeatures.isSome then ["asm-cpu-features"] else []) ++
+              (if a.assumeWeakExports then ["weak-exports"] else [])
             let admission := if optIns.isEmpty then [] else
               [("admission", Lean.Json.str (",".intercalate optIns))]
             -- ASM-09 names its features: the claim is about exactly these.
@@ -663,8 +677,30 @@ def asmFeatureTableJson : Lean.Json :=
       ("constraints", Lean.toJson e.constraints), ("clobbers", Lean.toJson e.clobbers)] ++
       instrs e.instrs)))]
 
+/-- `--print-asm-isa-table`: the coverage of the reviewed allowlist by the instruction model
+(`Air2Lean/AsmIsa.lean`, A02). For every entry: its semantics and whether the model covers its
+template (`asmIsaStmts`), with the modelled instructions or the reason it is not covered. An
+`isa` entry is covered; an `opaque` entry is not (no covered entry stays an opaque). -/
+def asmIsaTableJson : Lean.Json :=
+  Lean.Json.mkObj [
+    ("format", Lean.toJson (1 : Nat)),
+    ("model", .str "ZigLean/Isa/X86.lean"),
+    ("instructions", Lean.toJson asmIsaStems),
+    ("allowlist", .arr (asmAllowlist.toArray.map fun e => Lean.Json.mkObj ([
+      ("template", .str e.template), ("target", .str e.target),
+      ("constraints", Lean.toJson e.constraints), ("clobbers", Lean.toJson e.clobbers),
+      ("semantics", .str (match e.semantics with
+        | .isa => "isa" | .opaque => "opaque" | .spinHint => "spinHint" | .envRead => "envRead"))] ++
+      match asmIsaStmts e.target e.template e.regions with
+      | .ok stmts => [("covered", Lean.toJson true),
+          ("modelled", Lean.toJson (stmts.map (·.mnemonic)))]
+      | .error err => [("covered", Lean.toJson false), ("reason", .str err.message)])))]
+
 def main (args : List String) : IO UInt32 := do
-  if args.head? == some "--diagnostics-json" then
+  if args == ["--print-asm-isa-table"] then
+    IO.println asmIsaTableJson.pretty
+    pure 0
+  else if args.head? == some "--diagnostics-json" then
     Diagnostics.runCheck args
   else if args == ["--print-op-table"] then
     IO.println opTableJson.pretty

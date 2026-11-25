@@ -390,14 +390,23 @@ class ReplayTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp:
             work = Path(temp)
-            gated = sorted(universe.GATES)[0]  # a real gate-audited file: gate() checks the copy's bytes
+            _, units = universe.universe()
+            by_file = {u.file: u for u in units}
+            # A real gate-audited file with Lake imports: gate() checks the copy's bytes.
+            gated = next(f for f in sorted(universe.GATES) if by_file[f].lake)
+            lake_imports = universe.closure_lake(by_file[gated], by_file)
             source = work / Path(gated).name
             source.write_bytes((ROOT / gated).read_bytes())
-            universe.compile_unit = lambda *a, **k: None
+            natives = []
+            universe.compile_unit = lambda *a, native=(), **k: natives.append(native)
             universe.audit_modules = audit
+            patched = mock.patch.object(universe, 'native_code', lambda lake: [f'--load-dynlib={",".join(lake)}'])
+            patched.start()
             try:
                 run = lambda name: universe.gate(source, work, work, work / name, cache)
                 self.assertEqual(run('a')['status'], 'pass')
+                # The gate's copy loads the native code of the gated file's Lake imports.
+                self.assertEqual(natives, [[f'--load-dynlib={",".join(lake_imports)}']])
                 module = universe.module_of(str(source), str(work))
                 self.assertEqual(self.checked(), sorted([module, 'Lib', 'Other']))
                 self.calls.unlink()
@@ -408,6 +417,7 @@ class ReplayTests(unittest.TestCase):
                 self.assertEqual(run('c')['status'], 'pass')
                 self.assertEqual(self.checked(), sorted([module, 'Lib', 'Other']))
             finally:
+                patched.stop()
                 universe.compile_unit, universe.audit_modules = original
 
     def worker_counts(self, env, work):
@@ -447,7 +457,8 @@ class ReplayTests(unittest.TestCase):
 
         def compile_all():
             compiled.clear()
-            universe.compile_all(units, by_file, self.toolchain / 'out')
+            with mock.patch.object(universe, 'native_code', return_value=[]):
+                universe.compile_all(units, by_file, self.toolchain / 'out')
             self.assertEqual(sorted(compiled), sorted(by_file))
 
         try:
@@ -830,6 +841,7 @@ class FreshnessTests(unittest.TestCase):
 
 class CompiledUnitTests(unittest.TestCase):
     """Same compiler/audit/freshness flow; all compiler and installation inputs are synthetic."""
+    unpatched_native_code = staticmethod(universe.native_code)
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -877,6 +889,11 @@ class CompiledUnitTests(unittest.TestCase):
             return self.active_context
 
         self.patch(universe, 'prepare_compilation', preparing)
+        # Lake's precompiled libraries for a closure importing ZigLean.Basic (`lake setup-file`).
+        self.dynlib = self.root / '.lake/build/lib/libsynthetic_Native.so'
+        self.dynlib.write_bytes(b'native code')
+        self.patch(universe, 'native_code', lambda lake: [f'--load-dynlib={self.dynlib}']
+                   if 'ZigLean.Basic' in lake else [])
         self.patch(universe, 'run', self.compiler)
         self.patch(assumptions, 'run', lambda command: '')
         self.patch(assumptions, 'lake_env', {'LEAN_SYSROOT': str(self.toolchain),
@@ -914,6 +931,8 @@ class CompiledUnitTests(unittest.TestCase):
         unit = next(record for record in self.active_context['units'].values()
                     if record['compiler_source']['path'] == command[-1])
         self.assertEqual(command[command.index('-R') + 1], unit['compiler_root'])
+        # The native code Lake loads into a build with this unit's Lake imports, recorded at preparation.
+        self.assertEqual(command[5:command.index('-R')], [option for option, _ in unit['native']])
         output, source = Path(command[command.index('-o') + 1]), self.root / command[-1]
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(b'compiled: ' + source.read_bytes())
@@ -1008,6 +1027,54 @@ class CompiledUnitTests(unittest.TestCase):
                 finally:
                     path.write_bytes(original)
                 assumptions.verify_fresh(report, allow_dirty=True)
+
+    def test_units_load_the_native_code_of_their_closures_lake_imports(self):
+        # Owned.Main imports no Lake module itself, but Owned.Basic does: Lake would load its
+        # precompiled libraries, so the universe compile does too (the compiler stub checks the
+        # command line); a changed library after compilation makes the report stale.
+        context = self.compiled()
+        option = f'--load-dynlib={self.dynlib}'
+        self.assertEqual({module: [o for o, _ in unit['native']] for module, unit in context['units'].items()},
+                         {'Owned.Main': [option], 'Owned.Basic': [option]})
+        report = self.audited(context)
+        original = self.dynlib.read_bytes()
+        try:
+            self.dynlib.write_bytes(b'other native code')
+            with self.assertRaisesRegex(ValueError, 'native code changed: Owned.(Main|Basic)'):
+                assumptions.verify_fresh(report, allow_dirty=True)
+        finally:
+            self.dynlib.write_bytes(original)
+        assumptions.verify_fresh(report, allow_dirty=True)
+        staged = self.compiled([self.staged])  # no Lake import: no native code
+        self.assertEqual(staged['units']['Universe.Staged']['native'], [])
+
+    def test_native_code_is_lakes_module_setup_in_its_order(self):
+        calls = []
+
+        def setup(command, **kwargs):
+            calls.append(command)
+            header = json.loads(command[-1])
+            self.assertEqual([i['module'] for i in header['imports']], ['A.B', 'Z.Y'])
+            return subprocess.CompletedProcess(command, 0, json.dumps(
+                {'name': '_unknown', 'dynlibs': ['.lake/build/lib/libDeps.so', '/abs/libTop.so'],
+                 'plugins': [{'path': 'p/libPlug.so', 'initFn?': None}]}), '')
+
+        native = self.unpatched_native_code
+        with mock.patch.object(universe, '_NATIVE', {}), \
+                mock.patch.object(universe.subprocess, 'run', side_effect=setup):
+            self.assertEqual(native(['Z.Y', 'A.B', 'A.B']),
+                             [f'--load-dynlib={self.root}/.lake/build/lib/libDeps.so', '--load-dynlib=/abs/libTop.so',
+                              f'--plugin={self.root}/p/libPlug.so'])
+            self.assertEqual(native(['A.B', 'Z.Y']), native(['Z.Y', 'A.B']))
+            self.assertEqual(len(calls), 1)  # one Lake query per import set
+            self.assertEqual(calls[0][:3], ['lake', 'setup-file', 'universe-unit.lean'])
+        for answer in ((1, ''), (0, 'not json'), (0, json.dumps({'dynlibs': []})),
+                       (0, json.dumps({'dynlibs': [], 'plugins': [{'path': 'x', 'initFn?': 'init'}]}))):
+            with self.subTest(answer=answer), mock.patch.object(universe, '_NATIVE', {}), \
+                    mock.patch.object(universe.subprocess, 'run',
+                                      return_value=subprocess.CompletedProcess([], answer[0], answer[1], 'e')):
+                with self.assertRaisesRegex(RuntimeError, 'no supported module setup'):
+                    native(['A.B'])
 
     def test_missing_transplanted_or_stripped_context_is_refused_by_generic_admission(self):
         report = self.audited()

@@ -225,7 +225,7 @@ touch "$mutate/examples/atomics/atomics.zig" "$mutate/examples/recursion/recursi
 for path in Proofs/Basic/Gen.lean Proofs/Options/Gen.lean Proofs/Variants/Gen.lean \
   Proofs/Layout/Gen.lean Proofs/Slices/Gen.lean ZigLean/Basic.lean ZigLean/Lemmas.lean \
   ZigLean/Float/Round.lean ZigLean/Mem/Basic.lean ZigLean/Mem/Enc.lean ZigLean/Mem/Alloc.lean \
-  tests/diff/asm/asm.zig ZigLean/Vec.lean ZigLean/Mem/Thread.lean ZigLean/Conc/Sched.lean \
+  ZigLean/Isa/X86.lean ZigLean/Vec.lean ZigLean/Mem/Thread.lean ZigLean/Conc/Sched.lean \
   ZigLean/Conc.lean; do
   mkdir -p "$mutate/$(dirname "$path")"
   cp "$repo_root/$path" "$mutate/$path"

@@ -25,11 +25,6 @@
       "status": "target"
     },
     {
-      "name": "CancelSpec",
-      "module": "tests.roadmap.futures.Futures.Proofs",
-      "status": "legacy-to-retire"
-    },
-    {
       "name": "CondImpl",
       "module": "ZigLean.Sep.Full.Cond",
       "status": "target",
@@ -340,20 +335,9 @@
       "status": "legacy-to-retire"
     },
     {
-      "name": "Spec",
-      "module": "tests.roadmap.asm-wrappers.Interp",
-      "status": "legacy-to-retire"
-    },
-    {
       "name": "Step",
       "module": "ZigLean.Sep.Full.LockWord",
       "status": "target",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
-      "name": "StepIn",
-      "module": "ZigLean.Conc.Clock",
-      "status": "legacy-to-retire",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {

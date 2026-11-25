@@ -171,6 +171,12 @@ theorem rnil_rsum (r : Res) : rsum rnil r = r := by
 theorem rsum_rnil (r : Res) : rsum r rnil = r := by
   simp [rsum, Know.union_none]
 
+/-- A resource with the plain mode keeps it next to anything (`Res.plain_of_sep`, on the left). -/
+theorem Res.Plain.rsum_left {a : Res} (h : a.Plain) (b : Res) : (rsum a b).Plain := by
+  obtain ⟨h1, h2⟩ := h
+  exact ⟨by simp only [Ghost.add_ac, ACell.add_frag]; omega,
+    by simp only [Ghost.add_ac, ACell.add_frag]; omega⟩
+
 theorem partOf_rnil : (fun r => r = rnil) = (emp : FAssn) := by
   funext r; apply propext
   constructor

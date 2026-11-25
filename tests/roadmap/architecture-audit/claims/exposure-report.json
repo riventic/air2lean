@@ -7,6 +7,7 @@
    "module": "AuditClaims.AsmTotal",
    "axioms": [
     "propext",
+    "Classical.choice",
     "Quot.sound"
    ],
    "conclusion": {
@@ -31,23 +32,26 @@
     "Nat",
     "Ne",
     "Option",
+    "instHDiv",
+    "instHMod",
     "instHOrOfOrOp",
     "instMonadOption",
     "instOfNatNat",
     "Applicative.toPure",
-    "Asm.airAsm_3653072158",
     "Asm.divmod",
+    "BitVec.instDiv",
     "BitVec.instHShiftLeftNat",
+    "BitVec.instMod",
     "BitVec.instOfNat",
     "BitVec.instOrOp",
     "BitVec.setWidth",
     "ExceptT.instMonad",
+    "HDiv.hDiv",
+    "HMod.hMod",
     "HOr.hOr",
     "HShiftLeft.hShiftLeft",
     "Monad.toApplicative",
     "OfNat.ofNat",
-    "Prod.fst",
-    "Prod.snd",
     "Pure.pure",
     "Zig.Error",
     "Zig.Result"
@@ -57,33 +61,37 @@
     "Eq",
     "Nat",
     "Option",
+    "instHDiv",
+    "instHMod",
     "instHOrOfOrOp",
     "instMonadOption",
     "instOfNatNat",
     "Applicative.toPure",
-    "Asm.airAsm_3653072158",
     "Asm.divmod",
+    "BitVec.instDiv",
     "BitVec.instHShiftLeftNat",
+    "BitVec.instMod",
     "BitVec.instOrOp",
     "BitVec.setWidth",
     "ExceptT.instMonad",
+    "HDiv.hDiv",
+    "HMod.hMod",
     "HOr.hOr",
     "HShiftLeft.hShiftLeft",
     "Monad.toApplicative",
     "OfNat.ofNat",
-    "Prod.fst",
-    "Prod.snd",
     "Pure.pure",
     "Zig.Error",
     "Zig.Result"
    ],
    "opaque_dependencies": [
-    "Asm.airAsm_3653072158",
     "String.Internal.append"
    ],
    "runtime_modules": [
     "ZigLean.Basic",
-    "ZigLean.Lemmas"
+    "ZigLean.Isa.X86",
+    "ZigLean.Lemmas",
+    "ZigLean.Permutation"
    ],
    "extern_dependencies": [
     "Array.emptyWithCapacity",
@@ -128,6 +136,7 @@
     "Nat.shiftLeft",
     "Nat.shiftRight",
     "Nat.sub",
+    "Nat.xor",
     "String.Internal.append",
     "String.ofByteArray",
     "String.ofList",
@@ -407,6 +416,7 @@
    "module": "AuditClaims.AsmTotal",
    "axioms": [
     "propext",
+    "Classical.choice",
     "Quot.sound"
    ],
    "conclusion": {
@@ -452,12 +462,13 @@
     "Zig.Error.trap"
    ],
    "opaque_dependencies": [
-    "Asm.airAsm_3653072158",
     "String.Internal.append"
    ],
    "runtime_modules": [
     "ZigLean.Basic",
-    "ZigLean.Lemmas"
+    "ZigLean.Isa.X86",
+    "ZigLean.Lemmas",
+    "ZigLean.Permutation"
    ],
    "extern_dependencies": [
     "Array.emptyWithCapacity",
@@ -502,6 +513,7 @@
     "Nat.shiftLeft",
     "Nat.shiftRight",
     "Nat.sub",
+    "Nat.xor",
     "String.Internal.append",
     "String.ofByteArray",
     "String.ofList",

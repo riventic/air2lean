@@ -20,15 +20,18 @@
   ]
  ],
  "translate_c_target": "x86_64-linux-musl",
- "air_target": "-target x86_64-linux -mcpu=baseline",
+ "air_target": "-target x86_64-linux-musl -mcpu=baseline -lc",
  "std_filter": [
   "zig.c_translation."
  ],
  "allocator_model": "translated",
+ "link_premises": [
+  "--assume-weak-exports"
+ ],
  "tools": {
   "zig_native": "0.17.1",
   "zig_air": "0.17.1",
-  "zig_native_0152": null
+  "zig_native_0152": "0.15.2"
  },
  "files": {
   "gen_s0": {
@@ -87,6 +90,13 @@
     "h0"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 648,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s1": {
@@ -145,6 +155,13 @@
     "h1"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 710,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s10": {
@@ -201,6 +218,13 @@
     "entry_body"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 521,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s11": {
@@ -256,6 +280,13 @@
     "entry_body"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 638,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s12": {
@@ -314,6 +345,13 @@
     "h0"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 703,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s13": {
@@ -372,6 +410,13 @@
     "h0"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 661,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s14": {
@@ -430,6 +475,13 @@
     "h1"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 734,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s15": {
@@ -486,6 +538,13 @@
     "entry"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 601,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s16": {
@@ -544,6 +603,13 @@
     "h0"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 558,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s17": {
@@ -602,6 +668,13 @@
     "h0"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 850,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s18": {
@@ -654,6 +727,13 @@
     "entry"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 522,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s19": {
@@ -711,6 +791,13 @@
     "entry_body"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 523,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s2": {
@@ -767,6 +854,13 @@
     "entry"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 531,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s20": {
@@ -825,6 +919,13 @@
     "h0"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 646,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s21": {
@@ -879,6 +980,13 @@
     "entry"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 542,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s22": {
@@ -931,6 +1039,13 @@
     "entry"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 536,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s23": {
@@ -984,6 +1099,13 @@
     "entry_body"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 519,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s24": {
@@ -1042,6 +1164,13 @@
     "h0"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 641,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s25": {
@@ -1095,6 +1224,13 @@
     "entry_body"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 515,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s26": {
@@ -1151,6 +1287,13 @@
     "entry_body"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 524,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s27": {
@@ -1207,6 +1350,13 @@
     "h0"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 576,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s28": {
@@ -1264,6 +1414,13 @@
     "h1"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 642,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s29": {
@@ -1317,6 +1474,13 @@
     "entry_body"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 539,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s3": {
@@ -1375,6 +1539,13 @@
     "h1"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 723,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s4": {
@@ -1432,6 +1603,13 @@
     "h0"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 591,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s5": {
@@ -1490,6 +1668,13 @@
     "h0"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 627,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s6": {
@@ -1547,6 +1732,13 @@
     "entry_body"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 537,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s7": {
@@ -1603,6 +1795,13 @@
     "entry_body"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 519,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s8": {
@@ -1660,6 +1859,13 @@
     "h0"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 601,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   },
   "gen_s9": {
@@ -1719,6 +1925,13 @@
     "h1"
    ],
    "libc_symbols": [],
+   "translate_c_0.15.2": {
+    "status": "ok",
+    "lines": 660,
+    "warnings": [],
+    "demoted_functions": [],
+    "extern_calls": []
+   },
    "gates": []
   }
  },

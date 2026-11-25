@@ -17,18 +17,13 @@ parts (`hRk`, as `FLock.Inv.ghost`'s and `FLock.Inv.join`'s `hRk`). The thread k
 the rwlock's, the condition's and the semaphore's code; out of the outer mutex's code it is out of
 the latter two (`Base.sout_of_m`).
 
-- `FClient.Holds.relabel`, `Holds.threads`, `Holds.join`: the program's facts over a change of the
-  client parts and of the thread table that keeps the number of threads and the record of accesses
-  and makes no clock smaller. The read-shared region stays shared (`ReadShared.keep`) and its
-  bytes stay in the rest.
-- `FSem.Inv.keep`: the semaphore's invariant over a step that keeps `FLock.HB`, with at least as
-  many threads (`FSem.Inv.monoTk` asks for the same thread table, which a join changes).
-- `FRw.Inv.keepR`: the rwlock's invariant over a step that keeps the state word and the number of
-  threads, at client parts that keep the resource (`FRw.Inv.keep` asks for the same thread table
-  and client parts).
 - `FRw.Shares.join`: the joiner's part takes the ended thread's, which holds no reader's share.
 - `FRw.Base.thread`: the base over a change of one thread's ghost value outside both mutexes'
-  code, in a memory with a new current thread, clocks and thread table.
+  code, in a memory with a new current thread, clocks and thread table. The program's facts are
+  kept by `FClient.Holds.relabel` and `Holds.join` (`ZigLean/Sep/Full/Client.lean`), the
+  semaphore's invariant by `FSem.Inv.keep` (`ZigLean/Sep/Full/Sem.lean`: the thread table is free,
+  a join marks a thread joined), and the rwlock's by `FRw.Inv.keepR`
+  (`ZigLean/Sep/Full/RwLockImpl.lean`: the client parts are free too).
 - `FRw.Base.ghost`, `Base.join`: the base over the end and over the join.
 - `FRw.Base.inv_ghost`, `Base.inv_join`: the invariant of every protocol of the two-lock product
   at the base, over the end and over the join.
@@ -40,132 +35,9 @@ namespace Full
 
 open FAssn Conc Proto
 
-namespace FClient.Holds
-
-variable {X : Type} {E : FClient X} {xs xs' : ThreadId → X} {rX : Res} {m m' : Mem}
-
-/-- **A change of the client parts keeps the program's facts**, given the threads' fact at the
-new parts: the read-shared region and its bytes stay. -/
-theorem relabel (h : E.Holds xs rX m) (hT : E.T xs' m.threads) : E.Holds xs' rX m :=
-  ⟨hT, h.sh, h.io⟩
-
-/-- **A change of the thread table and the client parts keeps the program's facts**, given the
-threads' fact after it: there are as many threads, no clock is smaller and the record of accesses
-stays, so the region stays read-shared (`ReadShared.keep`); its bytes stay in the rest. -/
-theorem threads (h : E.Holds xs rX m) (hT : E.T xs' m'.threads)
-    (hsz : m'.threads.size = m.threads.size)
-    (hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
-    (hfp : m'.footprint = m.footprint) : E.Holds xs' rX m' :=
-  ⟨hT, h.sh.keep hsz (fun u _ => hcl u) fun _ he _ => hfp ▸ he, h.io⟩
-
-/-- **A join keeps the program's facts**, given the threads' fact after it (`Holds.threads`). -/
-theorem join {t u : ThreadId} (h : E.Holds xs rX m)
-    (hj : ((Thread.join u).run { m with current := t }).run = some (.ok ((), m')))
-    (hT : E.T xs' m'.threads) : E.Holds xs' rX m' := by
-  obtain ⟨cs, ts, rfl, hsz, hcl⟩ := join_mem hj
-  exact h.threads hT hsz hcl rfl
-
-end FClient.Holds
-
-namespace FSem
-
-variable {γ X : Type} {L : FLock γ} {C : FCond γ} {S : FSem γ X L C}
-
-/-- **`S.Inv` stays** over a step that keeps every thread's places, the count, the holders at
-`pst`, the state's writes and the takers' queue entries but for entries at the mutex, grows the
-clocks, keeps `HB` (`hHB`: `FLock.HB.mono`, or a step that keeps as many threads) and loses no
-thread (`Inv.monoTk` with the thread table free: a join marks a thread joined). -/
-theorem Inv.keep {G G' : ThreadId → γ} {m m' : Mem} (hI : S.Inv G m)
-    (hsph : ∀ u, S.ph (G' u) = S.ph (G u)) (hcph : ∀ u, C.ph (G' u) = C.ph (G u))
-    (hpv : S.cnt G' = S.cnt G)
-    (hpst : ∀ u, (S.ph (G u)).isPst → L.ph (G' u) = .holds)
-    (hHB : ∀ c, L.HB G m c → L.HB G' m' c)
-    (hcl : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
-    (ht : m.threads.size ≤ m'.threads.size)
-    (hwq : ∀ w ∈ m'.waiters, S.Tk G' w.1 → w ∈ m.waiters ∨ w.2 = L.key m)
-    (hkL : L.key m' = L.key m) (hS : C.S.hist m' = C.S.hist m) : S.Inv G' m' := by
-  have hTk : ∀ v, S.Tk G' v ↔ S.Tk G v := fun v => by unfold Tk; rw [hsph, hcph]
-  have hlast : C.lastS m' = C.lastS m := by unfold FCond.lastS; rw [hS]
-  refine ⟨fun u hu => ?_, fun u hu => hpst u (by rw [← hsph u]; exact hu),
-    fun u hu => by rw [hpv]; exact hI.crit u (by rw [← hcph u]; exact hu),
-    fun u hu => by rw [hsph]; exact hI.wt u (by rw [← hcph u]; exact hu),
-    fun u v hu hv => hI.cp u v (by rw [← hcph u]; exact hu) (by rw [← hsph v]; exact hv),
-    fun w hw hk => ?_, fun p h0 hp => ?_, fun u h c hu => ?_, fun u h c hu p h0 hp => ?_,
-    fun u h c hu p h0 hp => ?_, fun hc hpw => ?_⟩
-  · exact Nat.lt_of_lt_of_le (hI.ex u (by rw [← hsph u]; exact hu)) ht
-  · rw [hkL]
-    rcases hwq w hw hk with hw | hw
-    · exact hI.tq w hw ((hTk _).mp hk)
-    · exact hw
-  · rw [hS] at hp ⊢
-    rcases hI.hw p h0 hp with h | h | ⟨u, hu, hle⟩
-    · exact .inl h
-    · exact .inr (.inl (hHB _ h))
-    · exact .inr (.inr ⟨u, (hTk u).mpr hu, VClock.le_trans hle (hcl u)⟩)
-  · obtain ⟨⟨r, hr⟩, hc⟩ := hI.sp u h c (by rw [← hsph u]; exact hu)
-    exact ⟨⟨r, by rw [hS]; exact hr⟩, VClock.le_trans hc (hcl u)⟩
-  · rcases hI.sb u h c (by rw [← hsph u]; exact hu) p h0 hp with h | h | ⟨v, hv⟩
-    · exact .inl h
-    · exact .inr (.inl h)
-    · exact .inr (.inr ⟨v, (hTk v).mpr hv⟩)
-  · rw [hS] at hp ⊢
-    rcases hI.sa u h c (by rw [← hsph u]; exact hu) p h0 hp with h | ⟨v, hv⟩
-    · exact .inl h
-    · exact .inr ⟨v, (hTk v).mpr hv⟩
-  · rw [hlast] at hpw ⊢
-    rcases hI.live (by rwa [← hpv]) hpw with h | ⟨u, hu⟩ | ⟨v, hv⟩
-    · exact .inl h
-    · exact .inr (.inl ⟨u, by rw [hsph]; exact hu⟩)
-    · exact .inr (.inr ⟨v, (hTk v).mpr hv⟩)
-
-end FSem
-
 namespace FRw
 
 variable {γ X Y : Type} {M L : FLock γ} {C : FCond γ} {S : FSem γ Y L C} {W : FRw γ X Y M L C S}
-
-/-- **The invariant over a step that keeps the state word and the number of threads, at client
-parts that keep the resource** (`Inv.keep` with the thread table and the client parts free: a join
-marks a thread joined, and a thread's end or join changes its client part): the word stays `Ok`,
-its history and cells stay, the places stay, the resource stays at the new client parts (`hR`),
-the writer's hold of the outer mutex stays, and the free resource stays owned through the word. -/
-theorem Inv.keepR {G G' : ThreadId → γ} {rX : Res} {m m' : Mem} (hI : W.Inv G rX m)
-    (hok : W.st.Ok m' fun u => M.ph (G' u) ≠ .gone) (hhist : W.st.hist m' = W.st.hist m)
-    (hcells : W.st.cellsR m' = W.st.cellsR m) (hth : m'.threads.size = m.threads.size)
-    (hph : ∀ u, W.ph (G' u) = W.ph (G u)) (hR : ∀ r, W.R (W.xs G) r → W.R (W.xs G') r)
-    (hwm : ∀ u, (W.ph (G u)).isW = true → (M.ph (G' u)).held = true)
-    (how : ∀ rF rO, rX = rsum (W.st.cellsR m) (rsum rF rO) → W.FreeRes G m rF → W.Owns G m rF →
-      W.Owns G' m' rF) : W.Inv G' rX m' := by
-  have hnrd : W.nrd G' m' = W.nrd G m := by simp only [nrd, hth, hph]
-  have hnwi : W.nwi G' m' = W.nwi G m := by simp only [nwi, hth, hph]
-  have hwr : W.writing G' m' = W.writing G m := by simp only [writing, hth, hph]
-  have hfs : W.fsum G' m' = W.fsum G m := by simp only [fsum, hth, hph]
-  have hbusy : W.Busy G' ↔ W.Busy G := by simp only [Busy, RwPosted, hph]
-  obtain ⟨rF, rO, he, hoffF, hd, hfr, ho⟩ := hI.rest
-  obtain ⟨hf1, hf2, hf3⟩ := hfr
-  exact {
-    ok := hok
-    ex := fun u h => by rw [hth]; exact hI.ex u (by rwa [← hph u])
-    room := by rw [hnrd, hnwi]; exact hI.room
-    word := by rw [hnrd, hnwi, hwr, hhist]; exact hI.word
-    msgs := by rw [hhist]; exact hI.msgs
-    one := fun u v hu hv => hI.one u v (by rwa [← hph u]) (by rwa [← hph v])
-    wm := fun u hu => hwm u (by rwa [← hph u])
-    wr := fun u hu => by rw [hnrd]; exact hI.wr u (by rwa [← hph u])
-    rp := fun u hu => by
-      obtain ⟨h1, ⟨w, hw⟩, h3⟩ := hI.rp u (by rwa [← hph u])
-      exact ⟨by rw [hnrd]; exact h1, ⟨w, by rw [hph w]; exact hw⟩,
-        fun v hv => h3 v (by rwa [← hph v])⟩
-    rpR := fun u r hu => hR r (hI.rpR u r (by rwa [← hph u]))
-    rest := ⟨rF, rO, by rw [hcells]; exact he, hoffF, hd,
-      ⟨fun hb => hf1 (hbusy.mp hb),
-        fun hb h0 => hR _ (hf2 (fun h => hb (hbusy.mpr h)) (by rwa [← hnrd])),
-        fun hb h0 => by
-          obtain ⟨H, f, hRr, hf, hs, hr, hq⟩ :=
-            hf3 (fun h => hb (hbusy.mpr h)) (by rwa [← hnrd])
-          exact ⟨H, f, hR _ hRr, hf, by rw [hfs]; exact hs, hr,
-            fun u q H' hu => hq u q H' (by rwa [← hph u])⟩⟩,
-      how rF rO he ⟨hf1, hf2, hf3⟩ ho⟩ }
 
 /-- **The readers' shares over a join of `u` by `t`**: the ended thread `u` is out of the rwlock's
 code and holds nothing of the outer mutex, so its part holds no share of the readers' heap, and

@@ -1,34 +1,40 @@
 # Generated asm wrappers under an executable interpretation (A03)
 
-The differential test (`tests/diff/Diff.lean`) calls the `Asm.airAsm_*` opaques directly: the
-generated wrappers in `Proofs/Asm/Gen.lean` were compiled against the opaques' `Inhabited`
-placeholders. This gate runs the wrappers themselves.
+Every inline-asm statement of `examples/asm/asm.zig` is a defined function over the x86_64
+instruction model (`def airIsa_<hash>`, `ZigLean/Isa/X86.lean`; A02, premise ASM-07), so the
+generated wrappers in `Proofs/Asm/Gen.lean` run as they are. The differential test
+(`tests/diff/Diff.lean`) runs them against the compiled inline asm. This gate checks the
+wrappers against the Zig source semantics and the model against a second, independent
+interpretation of each template.
 
 `harness.py` reads `Proofs/Asm/Gen.lean`, the translator's checked output for
 `examples/asm/asm.zig`. It recomputes the translator's `asmDefName` hash from each AIR
-`assembly` instruction in `tests/golden/asm/air/`, so every `opaque airAsm_<hash>` is bound to
-its exact source template, constraints and operand widths. It rewrites only the opaque lines
-(into `def`s calling `AsmHarness.Interp.run`), the namespace lines (`Asm` becomes
-`AsmHarness.Wrappers`) and the `import`. It fails if any other uninterpreted declaration, an
-unbound opaque or a width or type mismatch appears. Every wrapper line is kept verbatim.
+`assembly` instruction in `tests/golden/asm/air/`, so every `airIsa_<hash>` is bound to its exact
+source template, constraints and operand widths. It changes only the namespace lines (`Asm`
+becomes `AsmHarness.Wrappers`) and the `import`. It fails if an uninterpreted declaration, an
+unbound definition or a width or type mismatch appears. Every generated line is kept verbatim.
 
-`Interp.lean` is a small x86_64 register machine. It allocates registers from the
-constraints, fills unbound registers and the upper bits of inputs with junk, expands the
-template and runs `bswap`, `popcnt`, `lzcnt`, `xor` and `div` (and A01's `inc`, `add`, `mov`,
-`xchg`). It rejects writes to undeclared
-registers, `#DE` and unsupported syntax, and requires the same outputs under three allocations:
-two distinct-register pools and one where an `r` input shares a plain `=r` output's register. `Runner.lean` compares every wrapper with the Zig source semantics (`AsmHarness.Oracle`) on
-about 700 inputs per function, including the diff-test inputs, edge values and deterministic
-pseudo-random values. It also evaluates the ASM-02 hypotheses that `Proofs/Asm/Proofs.lean`
-states, under the interpretation. `divmod`'s remainder reaches the result only through the
-wrapper's store to the local `rem`, so the result comparison also checks the memory plumbing.
+`Interp.lean` is a small x86_64 register machine that shares no code with the model or the
+translator's decoder. It allocates registers from the constraints, fills unbound registers and
+the upper bits of inputs with junk, expands the template text and runs `bswap`, `popcnt`,
+`lzcnt`, `xor` and `div` (and A01's `inc`, `add`, `mov`, `xchg`). It rejects writes to
+undeclared registers, `#DE` and unsupported syntax, and requires the same outputs under three
+allocations: two distinct-register pools and one where an `r` input shares a plain `=r` output's
+register. `Runner.lean` runs two checks on about 700 inputs per function (the diff-test inputs,
+edge values and deterministic pseudo-random values):
 
-Mutants are applied in memory to the generated text before the rewrite. Each must elaborate and
-then exit 1 with a `MISMATCH wrapper <fn>` line, without a panic:
+- wrapper: each generated wrapper returns what the Zig source defines (`AsmHarness.Oracle`).
+  `divmod`'s remainder reaches the result only through the wrapper's store to the local `rem`,
+  so this also checks the memory plumbing.
+- model: each `airIsa_<hash>` returns what `Interp.lean` returns for its template
+  (`AsmHarness.Cross`). This is evidence for ASM-07 from a second implementation, not a premise.
+
+Mutants are applied in memory to the generated text. Each must elaborate and then exit 1 with a
+`MISMATCH wrapper <fn>` line, without a panic:
 
 | Mutant | Change in the generated wrapper |
 |---|---|
-| `operand_order` | `airAsm_<divmod> p0 p1` becomes `p1 p0` |
+| `operand_order` | `airIsa_<divmod> p0 p1` becomes `p1 p0` |
 | `result_placement` | `divmod` binds `a4.2` instead of `a4.1` as the asm result |
 | `store_dropped` | `divmod` drops `modify (fun s => { s with rem := a4.2 })` |
 | `store_misplaced` | `divmod` stores `a4.1` to `rem` |
@@ -45,15 +51,15 @@ declares only in `AsmHarness.*` and adds no theorem, axiom, instance, `@[csimp]`
 `scripts/assumptions.py` report and requires the following:
 
 - No `AsmHarness` or `tests` declaration appears in the audited graph.
-- Every `Asm.airAsm_*` is still a plain opaque.
-- The `Proofs.Asm.Proofs` theorems depend on no other project opaque, redirection or extern.
+- Every `Asm.airIsa_*` is a plain definition, and no uninterpreted `Asm.airAsm_*` remains.
+- The `Proofs.Asm.Proofs` theorems depend on no project opaque, redirection or extern.
 
 ## Harness assumptions
 
-These assumptions belong to this test only. They are not theorem premises; ASM-01 and ASM-02 in
-`docs/premises.md` remain the only asm assumptions of the proofs.
+These assumptions belong to this test only. They are not theorem premises; the proofs' asm
+premise is ASM-07 (`docs/premises.md`).
 
-- AH-01: The instruction semantics in `Interp.lean` follow the Intel SDM for the five
+- AH-01: The instruction semantics in `Interp.lean` follow the Intel SDM for the nine
   mnemonics. This was not checked against hardware here. The diff test compares the same ops
   natively on x86_64.
 - AH-02: Flags are not modeled. No template in `examples/asm` reads a flag.
@@ -62,12 +68,12 @@ These assumptions belong to this test only. They are not theorem premises; ASM-0
   that shares an input with a non-early-clobber output.
 - AH-04: `Proofs/Asm/Gen.lean` is the current translation of `examples/asm/asm.zig`.
   `scripts/check.sh` compares it with fresh output on x86_64.
-- AH-05: The AIR in `tests/golden/asm/air/` (Zig 0.16.0) is the AIR the opaques were generated
-  from. The hash binding fails otherwise.
+- AH-05: The AIR in `tests/golden/asm/air/` (Zig 0.16.0) is the AIR the definitions were
+  generated from. The hash binding fails otherwise.
 - AH-06: `divmod` inputs exclude zero operands. A zero divisor is a CPU fault in Zig too
-  (`examples/asm/asm.zig`; the model traps on it through `Zig.asmTrap`, and the differential
-  test covers it), and the operand-swap mutant would otherwise fault rather than return a
-  wrong result.
+  (`examples/asm/asm.zig`; the model traps on it through the block's fault function and
+  `Zig.Asm.isaFault`, and the differential test covers it), and the operand-swap mutant would
+  otherwise fault rather than return a wrong result.
 
 ## Running
 
