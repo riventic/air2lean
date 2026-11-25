@@ -10,10 +10,10 @@ calls (indirect calls), `FixedBufferAllocator` and `PageAllocator`. Only `posix.
 
 | File | Content |
 |---|---|
-| `air/0.16.0/<prog>-<os>/` | Zig 0.16.0 AIR, x86_64-linux and aarch64-macos, `ReleaseSafe`: the call/function-value closure of the exported functions, cut at the panic handlers and at `posix.mmap`/`munmap`/`mremap` |
+| `air/0.16.0/<prog>-<os>/`, `air/0.17.1/page-<os>/` | Zig 0.16.0 AIR (both programs) and Zig 0.17.1 AIR (the page programs), x86_64-linux and aarch64-macos, `ReleaseSafe`: the call/function-value closure of the exported functions, cut at the panic handlers and at `posix.mmap`/`munmap`/`mremap` |
 | `exports.json`, `exports.lock.json` | how the page programs' AIR is exported, and its pin (`scripts/fixture-exports.py`) |
 | `provenance.json` | the fixed buffer's source, compiler and per-file hashes. The exporter is this repository's (`zig-patch`: vtable initializers, `VTable` fields, schema 12 module identity); exporters before P0 fail on these programs |
-| `AllocTranslated/{Page,Fba}{Linux,Macos}.lean` | the retained translations; `check.sh` requires the fresh ones to be byte-identical |
+| `AllocTranslated/{Page,Fba}{Linux,Macos}.lean` | the retained translations (the page programs' of Zig 0.17.1, the fixed buffer's of 0.16.0); `check.sh` requires the fresh ones to be byte-identical, and builds, audits and runs the same library over the page programs' 0.16.0 translations in a check tree (`scripts/check-tree.py`) |
 | `AllocTranslated/Eval.lean` | `#guard`s: the `FixedBufferAllocator` clients evaluate to the native results on both targets, also with other `@returnAddress` values; the page clients (`page_sum`, `page_create`, `page_resize`) evaluate through the page-mapping model to the native results of their target's page size (on the schedule of the oracle `fun _ => 0`), a zero-length allocation returns without a mapping, and a failing mapping takes the `OutOfMemory` path; the page allocator under allocation policies (M03: failure lists, index and size oracles, a cap, a list policy and its oracle form), with several failures in one run; the growths by `remap` and `realloc` (M02, below) |
 | `native.zig`, `expected.txt`, `expected-linux.txt` | the native run of the same functions with a stock Zig 0.16.0 on aarch64-macos (16 KiB pages) and on x86_64-linux (4 KiB pages: `page_resize(10, 5000)` is `false`, `resize` never calls `mremap` on a stack-grows-down target); `check.sh` picks the file by the host's page size |
 | `PageThread.lean` | `alloc` (its in-thread reading, `CTriple.toSoloThread`), `free`, `resize` and `remap` as thread triples (`FTTriple`), `fallocSpec`'s statements, and `cAllocSpec`: the page allocator as an environment of an open `std.mem.Allocator` (`CAllocSpec`) |
@@ -31,7 +31,7 @@ bash tests/roadmap/alloc-translated/check.sh
 AIR2LEAN_NATIVE_ZIG=/path/to/zig-0.16.0/zig bash tests/roadmap/alloc-translated/check.sh   # also the native run
 ```
 
-The page programs' AIR (`air/0.16.0/page-{linux,macos}`) is the export of `exports.json`,
+The page programs' AIR (`air/{0.16.0,0.17.1}/page-{linux,macos}`) is the export of `exports.json`,
 pinned by `exports.lock.json`: `python3 -B scripts/fixture-exports.py export alloc-translated`
 re-exports it, then translate again (the command is in `check.sh`). The fixed buffer's AIR is
 still pinned by `provenance.json`; to re-export it: `ZIG_AIR_JSON_DIR=<dir> zig build-obj

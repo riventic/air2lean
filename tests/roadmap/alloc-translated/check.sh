@@ -10,11 +10,13 @@
 # by Lake with what it imports (scripts/fixtures.py; run it under scripts/build-guard.py). Needs
 # a built translator; runs no compiler. The page programs' AIR is exports.json's export, pinned
 # by exports.lock.json (scripts/fixture-exports.py); the fixed buffer's is pinned by
-# provenance.json.
+# provenance.json. The page programs are exported by Zig 0.17.1 and 0.16.0: the retained page
+# translations are 0.17.1's, and the same proofs, audit and growth lines are checked over the
+# 0.16.0 ones in a check tree (scripts/check-tree.py). The fixed buffer is 0.16.0's.
 # M02: the model's lines of the growths by `remap` and `realloc` (in place, moved, failed, the
 # read of a moved block's old address; Eval.lean `growLinux`, `growMacos`) are compared with the
 # `page_grow` lines of expected-linux.txt and expected.txt on every host. With
-# AIR2LEAN_NATIVE_ZIG (a stock Zig 0.16.0), also builds and runs native.zig and compares it with
+# AIR2LEAN_NATIVE_ZIG (a stock Zig 0.16.0 or 0.17.1), also builds and runs native.zig and compares it with
 # expected.txt (16 KiB pages, recorded on aarch64-macos) or expected-linux.txt (4 KiB pages,
 # recorded on x86_64-linux): the output depends on the page size only, not on the OS. So the
 # model and the native run of one target are compared with the same file.
@@ -37,25 +39,24 @@ files = {str(p.relative_to(here / 'air')): hashlib.sha256(p.read_bytes()).hexdig
 assert files == record['air_sha256'], 'AIR fixtures differ from provenance.json'
 EOF
 python3 -B scripts/fixture-exports.py check alloc-translated
-for prog in page fba; do
+translate() {  # translate VERSION PROG OS OUT: OUT is AllocTranslated.<Prog><Os> of that AIR
+  local module
+  module="$(printf '%s' "${2:0:1}" | tr '[:lower:]' '[:upper:]')${2:1}"
+  module+="$(printf '%s' "${3:0:1}" | tr '[:lower:]' '[:upper:]')${3:1}"
+  "$translator" "$here/air/$1/$2-$3" -o "$4" --namespace "AllocTranslated.$module" \
+    --prefix "$2." --allocator-model translated
+}
+# The retained translations are the fresh ones, byte for byte (Lake builds the retained files):
+# the page programs' of Zig 0.17.1, the fixed buffer's of 0.16.0.
+for entry in page:0.17.1:Page fba:0.16.0:Fba; do
+  IFS=: read -r prog version Prog <<< "$entry"
   for os in linux macos; do
-    Prog="$(printf '%s' "${prog:0:1}" | tr '[:lower:]' '[:upper:]')${prog:1}"
     Os="$(printf '%s' "${os:0:1}" | tr '[:lower:]' '[:upper:]')${os:1}"
-    module="$Prog$Os"
-    # The retained translation is the fresh one, byte for byte (Lake builds the retained file).
-    "$translator" "$here/air/0.16.0/$prog-$os" -o "$work/$module.lean" \
-      --namespace "AllocTranslated.$module" --prefix "$prog." --allocator-model translated
-    cmp "$work/$module.lean" "$here/AllocTranslated/$module.lean"
+    translate "$version" "$prog" "$os" "$work/$Prog$Os.lean"
+    cmp "$work/$Prog$Os.lean" "$here/AllocTranslated/$Prog$Os.lean"
   done
 done
-# The library: the translations, AllocTranslated/Eval.lean (`#guard`s), P4b's obstruction (the
-# translated PageAllocator cannot satisfy AllocSpec, docs/alloc-page.md: PageObstruction.lean),
-# resize/remap/free against the full-state FAllocSpec (PageSpec.lean for x86_64-linux,
-# PageSpecMacos.lean for aarch64-macos: the invariant PageTok.lean and `fsym`), PageAlloc,
-# PageThread, PageCreation, ListsPage and KernelBytes.
-python3 -B scripts/fixtures.py build AllocTranslated
-# Axioms of every theorem of the proof modules, from the built environment: only the standard
-# ones. A mutant whose shrink leaks the cut pages fails PageSpec (mutant.sh).
+# Axioms of every theorem of the proof modules (below): only the standard ones.
 theorems=()
 for name in KernelBytes.start_admissible KernelBytes.push_succeeds ListsPage.controls \
     ListsPage.reuse_happens ListsPage.pushThenFree_returns PageThread.fthread_alloc \
@@ -66,13 +67,36 @@ for name in KernelBytes.start_admissible KernelBytes.push_succeeds ListsPage.con
     PageSpecMacos.free_spec PageSpecMacos.resize_spec PageSpecMacos.remap_spec; do
   theorems+=(--declaration "AllocTranslated.$name")
 done
-python3 -B scripts/fixtures.py audit PageObstruction PageTok PageSpec PageSpecMacos PageAlloc PageThread PageCreation \
-  ListsPage KernelBytes "${theorems[@]}"
-# M02: the model's growth lines against the files the native runs are compared with.
-python3 -B scripts/fixtures.py run "$work/lines" AllocTranslated.Eval:AllocTranslated.Eval.growLinux \
-  AllocTranslated.Eval:AllocTranslated.Eval.growMacos
-diff <(grep '^page_grow' "$here/expected-linux.txt") "$work/lines/AllocTranslated.Eval.growLinux.txt"
-diff <(grep '^page_grow' "$here/expected.txt") "$work/lines/AllocTranslated.Eval.growMacos.txt"
+prove() {  # prove LINES: build, audit and run the library of the current tree; LINES: output dir
+  # The library: the translations, AllocTranslated/Eval.lean (`#guard`s), P4b's obstruction (the
+  # translated PageAllocator cannot satisfy AllocSpec, docs/alloc-page.md: PageObstruction.lean),
+  # resize/remap/free against the full-state FAllocSpec (PageSpec.lean for x86_64-linux,
+  # PageSpecMacos.lean for aarch64-macos: the invariant PageTok.lean and `fsym`), PageAlloc,
+  # PageThread, PageCreation, ListsPage and KernelBytes.
+  python3 -B scripts/fixtures.py build AllocTranslated
+  # Axioms from the built environment. A mutant whose shrink leaks the cut pages fails PageSpec
+  # (mutant.sh).
+  python3 -B scripts/fixtures.py audit PageObstruction PageTok PageSpec PageSpecMacos PageAlloc \
+    PageThread PageCreation ListsPage KernelBytes "${theorems[@]}"
+  # M02: the model's growth lines against the files the native runs are compared with.
+  python3 -B scripts/fixtures.py run "$1" AllocTranslated.Eval:AllocTranslated.Eval.growLinux \
+    AllocTranslated.Eval:AllocTranslated.Eval.growMacos
+  diff <(grep '^page_grow' "$here/expected-linux.txt") "$1/AllocTranslated.Eval.growLinux.txt"
+  diff <(grep '^page_grow' "$here/expected.txt") "$1/AllocTranslated.Eval.growMacos.txt"
+}
+prove "$work/lines"
+# The same proof text over the page programs' Zig 0.16.0 translations, in a check tree with them
+# in place of the retained 0.17.1 ones (scripts/check-tree.py: the tree clones the root build;
+# with AIR2LEAN_CAS_DIR, only the page translations and what imports them are elaborated again).
+tree=$repo_root/.lake/check-tree/alloc-translated-page-0.16.0
+replace=()
+for os in linux macos; do
+  Os="$(printf '%s' "${os:0:1}" | tr '[:lower:]' '[:upper:]')${os:1}"
+  translate 0.16.0 page "$os" "$work/Page$Os-0.16.0.lean"
+  replace+=(--replace "$here/AllocTranslated/Page$Os.lean=$work/Page$Os-0.16.0.lean")
+done
+python3 -B scripts/check-tree.py create "$tree" "${replace[@]}"
+(cd "$tree" && prove "$work/lines-0.16.0")
 bash "$here/mutant.sh"
 PYTHONDONTWRITEBYTECODE=1 python3 "$here/test_cli.py" "$translator"
 if [ -n "${AIR2LEAN_NATIVE_ZIG:-}" ]; then
