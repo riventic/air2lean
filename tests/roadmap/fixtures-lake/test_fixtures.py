@@ -131,6 +131,17 @@ class Instance(unittest.TestCase):
                          "-- XV0_17_1 V0_17_1x stay\nend Fix.V0_14_1.Model\n")
         self.assertEqual(fx.instance(self.primary, ["V0_17_1=V0_14_1"], False), 0)
 
+    def test_dotted_new_nests_namespace_and_directory(self):
+        primary = self.dir / "Old/Model.lean"
+        primary.parent.mkdir(parents=True)
+        primary.write_text("import Old.Gen\nnamespace Old.Model\nend Old.Model\n")
+        self.assertEqual(fx.instance(primary, ["Old=Old.V0_17_1"], True), 0)
+        self.assertEqual((self.dir / "Old/V0_17_1/Model.lean").read_text(),
+                         "import Old.V0_17_1.Gen\nnamespace Old.V0_17_1.Model\nend Old.V0_17_1.Model\n")
+        self.assertEqual(fx.instance(primary, ["Old=Old.V0_17_1"], False), 0)
+        with self.assertRaises(SystemExit):
+            fx.instance(primary, ["Old=Old..V0_17_1"], False)
+
     def test_drift_fails(self):
         fx.instance(self.primary, ["V0_17_1=V0_14_1"], True)
         self.instance.write_text(self.instance.read_text() + "theorem extra : True := trivial\n")

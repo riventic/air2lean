@@ -17,6 +17,10 @@ import tempfile
 
 HERE = Path(__file__).resolve().parent
 TARGETS = ("wasm32-freestanding", "wasm32-wasi", "x86_64-linux")
+# The AIR directories of pointer_width.zig and reject.zig per exported Zig version (0.16.0 by
+# check.sh --export, 0.17.1 by exports.json).
+POINTER_WIDTH = {"0.16.0": "{target}", "0.17.1": "pointer_width/{target}"}
+REJECT = {"0.16.0": "wasm32-reject", "0.17.1": "reject/wasm32-freestanding"}
 
 
 def load(target, version="0.16.0"):
@@ -50,13 +54,14 @@ def one(docs, name):
 def main():
     binary = Path(sys.argv[1]).resolve(strict=True)
     checks = 0
-    for target in TARGETS:
-        docs = load(target)
+    for version, target in [(v, t) for v in POINTER_WIDTH for t in TARGETS]:
+        docs = load(POINTER_WIDTH[version].format(target=target), version)
         wasm = target.startswith("wasm32")
         bits = 32 if wasm else 64
-        assert all(d["profile"]["pointer_bits"] == bits for d in docs.values()), target
+        assert all(d["profile"]["pointer_bits"] == bits for d in docs.values()), (version, target)
         text = run(binary, docs)
         header = json.loads(text.splitlines()[0].removeprefix("-- air2lean-profile: "))
+        assert header["profile"]["zig_version"] == version, (version, target)
         assert header["profile"]["pointer_bits"] == bits
         assert header["profile"]["target_triple"].startswith(target.replace("-linux", "-linux."))
         if wasm:
@@ -111,14 +116,15 @@ def main():
                 assert not re.search(r"\bZig\.Slice\b", text), (version, target)
             checks += 1
 
-    # Real wasm32 exports of operations that stay 64-bit only (`reject.zig`).
-    rejects = load("wasm32-reject")
-    for name, error in [
-        ("reject.atomicRead.json", "an atomic op is outside the 32-bit pointer model"),
-        ("reject.copyOf.json", "is outside the 32-bit pointer model (only create, alloc"),
-    ]:
-        run(binary, one(rejects, name), error=error)
-        checks += 1
+    # Real wasm32 exports of operations that stay 64-bit only (`reject.zig`), every version.
+    for version, directory in REJECT.items():
+        rejects = load(directory, version)
+        for name, error in [
+            ("reject.atomicRead.json", "an atomic op is outside the 32-bit pointer model"),
+            ("reject.copyOf.json", "is outside the 32-bit pointer model (only create, alloc"),
+        ]:
+            run(binary, one(rejects, name), error=error)
+            checks += 1
 
     print(f"pointer-width CLI checks passed ({checks})")
 
