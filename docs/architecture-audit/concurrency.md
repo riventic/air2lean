@@ -50,7 +50,7 @@ default or reading of a theorem silently assumes something), **HARDENING**.
 |---|---|---|---|---|
 | 1 | SOUNDNESS | `Io.Group.async` is always a new concurrent thread | model + native (deadlock) | open |
 | 2 | SOUNDNESS | futex has no spurious return | model + native (EINTR) | fixed by C05 |
-| 3 | SOUNDNESS | a stack frame's end records no access | model (no `.illegal`); native not observable | open |
+| 3 | SOUNDNESS | a stack frame's end records no access | model (no `.illegal`); native not observable | fixed (2b000bede: `Mem.freeRaces`, a frame exit is a write of the block for the race check; `stack_read_before_exit`) |
 | 4 | SOUNDNESS (trusted) | no load buffering for `.monotonic` | model forbids; host 0/10M | open |
 | 5 | SOUNDNESS | `os_unfair_lock` contract has no owner | model returns; native killed | n/a |
 | 6 | SOUNDNESS (minor) | futex wake is FIFO-deterministic | model only; host FIFO 20/20 | open |
@@ -107,6 +107,10 @@ not affected. User code that calls the futex directly is affected. Batch7 C05 ad
 then produce `ok(1)`.
 
 ### 3. SOUNDNESS: the end of a stack frame is not an access
+
+**Fixed** (commit 2b000bede, 2026-10-09): `free` throws `.illegal` when an access to the block by
+another thread did not happen before it (`Mem.freeRaces`); witness `stack_read_before_exit`
+(`tests/roadmap/detached-threads/Runtime.lean`). The text below is the original finding.
 
 `free` (used for stack blocks at frame exit) only marks the block dead. It records no
 footprint, unlike the heap `poisonFree`. A plain access by another thread that is not

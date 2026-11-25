@@ -14,7 +14,8 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[3]
 TM = runpy.run_path(str(ROOT/'scripts/target-matrix.py'))
-SOURCES = ['compatibility.json', TM['MAP'], TM['WORKFLOW']] + [
+MACOS = TM['CI_WORKFLOWS'][1]  # the macos rows' own workflow
+SOURCES = ['compatibility.json', TM['MAP'], *TM['CI_WORKFLOWS']] + [
     p['expected'] for p in json.loads((ROOT/TM['MAP']).read_text())['abi_profiles']]
 DARWIN_15 = ('0.15.2', 'aarch64-macos')
 
@@ -135,7 +136,7 @@ class ForeignGoldens(Scratch):
         self.check_fails('compiles foreign golden Gen-darwin.lean on linux')
 
     def test_macos_runner_moved_to_linux_unbacks_the_darwin_paths(self):
-        self.edit_text(TM['WORKFLOW'], 'runs-on: macos-15', 'runs-on: ubuntu-24.04')
+        self.edit_text(MACOS, 'runs-on: macos-15', 'runs-on: ubuntu-24.04')
         self.check_fails('0.16.0/aarch64-macos/aarch64-macos/abi64-le-v1: job',
                          '0.15.2/aarch64-macos/aarch64-macos/abi64-le-v1: job')
 
@@ -208,7 +209,7 @@ class Evidence(Scratch):
         self.check_fails('bound to Zig 0.16.0, not 0.15.2')
 
     def test_step_bound_to_another_version_fails(self):
-        self.edit_text(TM['WORKFLOW'], '      - name: macOS proofs\n' + GUARD + '        env:\n'
+        self.edit_text(MACOS, '      - name: macOS proofs\n' + GUARD + '        env:\n'
                        '          AIR2LEAN_ZIG_VERSION: ${{ matrix.zig }}\n',
                        '      - name: macOS proofs\n' + GUARD + '        env:\n'
                        '          AIR2LEAN_ZIG_VERSION: "0.17.1"\n')
@@ -216,15 +217,15 @@ class Evidence(Scratch):
 
     def test_unbound_step_in_a_job_without_matrix_fails(self):
         # The macos job without its matrix: one version, bound by each step's environment.
-        workflow = (self.root/TM['WORKFLOW']).read_text()
+        workflow = (self.root/MACOS).read_text()
         start = workflow.index('  macos:\n')
-        end = workflow.index('\n  # T04: native aarch64-linux', start)
+        end = len(workflow)  # the workflow's last job
         job = workflow[start:end]
         rows = job[job.index('    strategy:\n'):job.index('    steps:\n')]
         job = job.replace(rows, '').replace('${{ matrix.zig }}', '0.16.0').replace(
             '      - name: macOS proofs\n' + GUARD + '        env:\n          AIR2LEAN_ZIG_VERSION: 0.16.0\n',
             '      - name: macOS proofs\n' + GUARD + '        env:\n          OTHER: 0.16.0\n')
-        (self.root/TM['WORKFLOW']).write_text(workflow[:start] + job + workflow[end:])
+        (self.root/MACOS).write_text(workflow[:start] + job + workflow[end:])
 
         def change(data):
             data['paths'] = [p for p in data['paths'] if p['host'] != 'aarch64-macos' or p['zig'] == '0.16.0']
@@ -234,17 +235,17 @@ class Evidence(Scratch):
         self.check_fails('must bind AIR2LEAN_ZIG_VERSION')
 
     def test_step_commands_must_perform_the_kind(self):
-        self.edit_text(TM['WORKFLOW'], '          lake build Proofs\n\n      # As in the test job',
+        self.edit_text(MACOS, '          lake build Proofs\n\n      # As in the test job',
                        '          lake build ZigLean\n\n      # As in the test job')
         self.check_fails("'macOS proofs': its commands do not perform proof_check")
 
     def test_missing_or_renamed_step_fails(self):
-        self.edit_text(TM['WORKFLOW'], 'name: macOS ABI target probe (0.16.0)',
+        self.edit_text(MACOS, 'name: macOS ABI target probe (0.16.0)',
                        'name: macOS ABI probe (0.16.0)')
         self.check_fails("'macOS ABI target probe (0.16.0)': not found in the job")
 
     def test_unknown_condition_context_fails_closed(self):
-        self.edit_text(TM['WORKFLOW'], '      - name: macOS proofs\n' + GUARD,
+        self.edit_text(MACOS, '      - name: macOS proofs\n' + GUARD,
                        "      - name: macOS proofs\n        if: ${{ !env.AIR2LEAN_REUSED && steps.x.outputs.y == 'true' }}\n")
         self.check_fails("unsupported term 'steps.x.outputs.y'")
 
