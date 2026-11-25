@@ -1180,23 +1180,6 @@ theorem ReadAt.of_bytesRead {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array By
     · exact e
     · rename_i hn; exact (hn (by omega)).elim
 
-/-- **A rule on a shared typed value** (`spts`) from a rule on bytes that every resource of the
-precondition reads (`Holds.sbytesRead`): the share stays. -/
-theorem FTotalTriple.spts_read {T β : Type} [Enc T] {s : T} {c : MemM β} {Φ : β → Prop}
-    (h : ∀ (A S : Nat) (K : BlockKind) (bs : Array Byte) (P : FAssn),
-      (A + q.off.toNat) % a = 0 → bs.size = Enc.size T → Enc.decode bs = pure s →
-      (∀ m r rF, Holds m r rF → P r → m.BytesRead q A S K bs) →
-      FTotalTriple P c (fun x => ⟪Φ x⟫ ⋆ P)) :
-    FTotalTriple (spts q a φ s) c (fun x => ⟪Φ x⟫ ⋆ spts q a φ s) :=
-  FTotalTriple.of_cases fun _ hp => by
-    obtain ⟨hφ, H, hP, hs⟩ := hp
-    obtain ⟨A, S, K, bs, ha, hsz, hv, hb, -⟩ := hP.1
-    refine ⟨fun r => spts q a φ s r ∧ sbytesAt q A S K bs φ r, _,
-      h A S K bs _ ha hsz hv fun _ _ _ hh hp => hh.sbytesRead hp.2 hφ,
-      ⟨⟨hφ, H, hP, hs⟩, H, ⟨hb, rfl, rfl⟩, hs⟩, fun _ _ h => ?_⟩
-    obtain ⟨hΦ, hb'⟩ := sep_lift.mp h
-    exact sep_lift.mpr ⟨hΦ, hb'.1⟩
-
 theorem errCode_size {bs : Array Byte} (hs : bs.size = Enc.size (Except ErrName α)) :
     (bs.extract (errUnionOffsets (Enc.size α) (Enc.align α)).1
       ((errUnionOffsets (Enc.size α) (Enc.align α)).1 + 2)).size = 2 := by
@@ -1278,21 +1261,6 @@ pointer. -/
 
 /-! ### Locality in a thread -/
 
-/-- The `n` bytes from byte `k` of a shared typed value are read. -/
-theorem ReadsPtr.spts_add {T : Type} [Enc T] {s : T} {k n : Nat} (hk : k + n ≤ Enc.size T) :
-    ReadsPtr (spts q a φ s) (q.add k) n := fun b hb r hp x h1 h2 => by
-  have h0 : 0 ≤ q.off := by
-    obtain ⟨-, H, hP, -⟩ := hp
-    obtain ⟨A, S, K, bs, -, -, -, ⟨-, -, h0, -⟩, -⟩ := hP.1
-    exact h0
-  have e : (q.add k).off.toNat = q.off.toNat + k := by simp only [Ptr.add]; omega
-  exact spts_owned (p := q) hb hp (by omega) (by omega)
-
-/-- The first `n` bytes of a shared typed value are read. -/
-@[fsym_provider] theorem ReadsPtr.spts_in {T : Type} [Enc T] {s : T} {n : Nat}
-    (hn : n ≤ Enc.size T) : ReadsPtr (spts q a φ s) q n :=
-  fun _ hb _ hp _ h1 h2 => spts_owned hb hp h1 (by omega)
-
 /-- The error code of a shared error union is read. -/
 @[fsym_provider] theorem ReadsPtr.errCode_spts {x : Except ErrName α} :
     ReadsPtr (spts q a φ x) (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2 :=
@@ -1302,8 +1270,6 @@ theorem ReadsPtr.spts_add {T : Type} [Enc T] {s : T} {k n : Nat} (hk : k + n ≤
 @[fsym_provider] theorem OwnsPtr.errCode {x : Except ErrName α} :
     OwnsPtr (up (Zig.pts q a x)) (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2 :=
   OwnsPtr.pts_add (errUnion_bounds _ _).1
-
-attribute [fsym_provider] ReadsPtr.of_owns
 
 /-- **A payload load of a shared error union** is local (`ThreadLocal.loadOwned`). -/
 @[fsym_provider] theorem ThreadLocal.errPayload_sload {x : Except ErrName α} {b : Nat} :

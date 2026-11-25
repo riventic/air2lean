@@ -288,7 +288,7 @@ attribute [fsym_provider] ThreadLocal.load ThreadLocal.loadBytes ThreadLocal.sto
   ThreadLocal.memcpy ThreadLocal.alloc ThreadLocal.allocStack ThreadLocal.returnAddress
   ThreadLocal.free_of ThreadLocal.pure ThreadLocal.throw ThreadLocal.liftR ThreadLocal.checkAddr
   ThreadLocal.ptrFromAddr ThreadLocal.optPtrFromAddr OwnsPtr.pts_in OwnsPtr.bytesAt_in
-  ThreadLocal.ite OwnsPtr.of_zero ThreadLocal.ptrProject ThreadLocal.exLift
+  ThreadLocal.ite OwnsPtr.of_zero ThreadLocal.ptrProject ThreadLocal.exLift ReadsPtr.of_owns
 
 /-! ## Native thread rules -/
 

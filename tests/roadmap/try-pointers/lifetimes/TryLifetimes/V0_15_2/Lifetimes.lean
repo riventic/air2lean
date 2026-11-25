@@ -65,6 +65,13 @@ theorem writePayload_ok (p : Ptr) (x w : BitVec 8) :
       (fun r => ⟪r = .ok ()⟫ ⋆ up (pts p 2 (Except.ok w : Except ErrName (BitVec 8)))) := by
   fsym
 
+/-- A writer of an owned union that holds an error gets the error and writes nothing. -/
+theorem writePayload_error (p : Ptr) (w : BitVec 8) :
+    FTTotalTriple (up (pts p 2 (Except.error "Bad" : Except ErrName (BitVec 8)))) (writePayload p w)
+      (fun r => ⟪r = .error "Bad"⟫ ⋆
+        up (pts p 2 (Except.error "Bad" : Except ErrName (BitVec 8)))) := by
+  fsym
+
 end Threads
 
 private def require (ok : Bool) (message : String) : IO Unit :=

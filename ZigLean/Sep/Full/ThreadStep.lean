@@ -784,20 +784,6 @@ theorem noRace_owned {m : Mem} {r : Res} {o : Nat} (hc : m.FConc)
   refine ⟨noRace_of_singleThread hc.noFp.1.single _ _ _ _, ?_⟩
   rw [Mem.noFp_withFp]; exact ho.cells.noRace fun x h1 h2 => hin x h1 h2
 
-/-- **An owned read of bytes** (`loadBytes`) is local. Its access is a read (`hk`): `loadBytes`
-checks no `const` global, so a recorded write kind would be a write to one. -/
-theorem loadBytes (hown : OwnsPtr P p n) (hk : k.isWrite = false := by decide) :
-    ThreadLocal P (Zig.loadBytes p n a k) := by
-  refine intro fun m r rF hh hp hc ho => ⟨?_, fun v m₀ e => ?_⟩
-  · refine RunFp.loadBytes fun b blk o h => ?_
-    obtain ⟨hpb, rfl, -⟩ := access_at h
-    exact noRace_owned hc ho (hown b hpb r hp)
-  · obtain ⟨b, blk, o, h, -, -, rfl⟩ := Proto.loadBytes_ok (m := m.noFp) e
-    obtain ⟨hpb, rfl, -, hb⟩ := access_at h
-    exact ⟨FStepIn.readAt hc.1 (hh.erase_disj_owned) (hown b hpb r hp) hb
-        (fun hw => absurd hw (by simp [hk])),
-      fun _ _ _ h => by rwa [Mem.heap_readAt] at h⟩
-
 /-- **A typed load of bytes the resource holds or reads** (a cell or a share: `Res.owned`, §Read
 shares) is local: the thread's read ownership orders every write to them before it
 (`Mem.OwnsRes.ownsR`, `Mem.OwnsR.noRace`), and the frame holds at most read shares of them
@@ -817,7 +803,8 @@ theorem loadOwned {T : Type} [Enc T] (hin : ReadsPtr P p (Enc.size T)) :
       fun _ _ _ h => by rwa [Mem.heap_readAt] at h⟩
 
 /-- **A read of bytes the resource holds or reads** (`ReadsPtr`) is local, as a typed one
-(`loadOwned`): several holders of a share may read one byte at once. -/
+(`loadOwned`): several holders of a share may read one byte at once. Its access is a read
+(`hk`): `loadBytes` checks no `const` global, so a recorded write kind would be a write to one. -/
 theorem loadBytesOwned (hin : ReadsPtr P p n) (hk : k.isWrite = false := by decide) :
     ThreadLocal P (Zig.loadBytes p n a k) := by
   refine intro fun m r rF hh hp hc ho => ⟨?_, fun v m₀ e => ?_⟩
@@ -831,6 +818,11 @@ theorem loadBytesOwned (hin : ReadsPtr P p n) (hk : k.isWrite = false := by deci
         (fun x h1 h2 hF => Heap.inter_ne.mpr ⟨hh.frame_shared (hin b hpb r hp x h1 h2) hF,
           hh.swap.frame_shared hF (hin b hpb r hp x h1 h2)⟩) hb,
       fun _ _ _ h => by rwa [Mem.heap_readAt] at h⟩
+
+/-- **An owned read of bytes** (`loadBytes`) is local (`loadBytesOwned`). -/
+theorem loadBytes (hown : OwnsPtr P p n) (hk : k.isWrite = false := by decide) :
+    ThreadLocal P (Zig.loadBytes p n a k) :=
+  loadBytesOwned (ReadsPtr.of_owns hown) hk
 
 /-- **An owned typed load** is local (`loadOwned`: a cell is a byte the resource holds). -/
 theorem load {T : Type} [Enc T] (hown : OwnsPtr P p (Enc.size T)) :
