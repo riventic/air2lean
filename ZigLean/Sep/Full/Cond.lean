@@ -1380,8 +1380,8 @@ theorem length_waitersAt (m : Mem) (k : FutexKey) :
 theorem min_le_wakeSize {nw k : Nat} {w : Option Nat} (h : ∀ j, w = some j → nw ≤ j) :
     Min.min nw k ≤ Os.wakeSize w k := by
   cases w with
-  | none => exact Nat.min_le_right _ _
-  | some j => exact Nat.le_min.mpr ⟨Nat.le_trans (Nat.min_le_left _ _) (h j rfl), Nat.min_le_right _ _⟩
+  | none => show Min.min nw k ≤ k; omega
+  | some j => show Min.min nw k ≤ Min.min j k; have := h j rfl; omega
 
 /-- **The signaller's OS futex wake at the epoch** (`Os.futexWake`, OSF-02; std's translated
 `Thread.Futex.wake`) of up to `w` waiters (or all), at `wk nw q h` with `nw` within the request

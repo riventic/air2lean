@@ -1862,6 +1862,12 @@ jobs:
           lake build ZigLean.Sep.Full.ThreadTls ZigLean.Sep.Full.ThreadFacts
           bash tests/roadmap/thread-locals/check.sh
 
+      # C14: std's condition broadcast of every supported version translates to the code that
+      # the condition contract's implementations prove (`CondImpl.broadcast_wp`).
+      - name: Condition broadcast exports (C14)
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && matrix.full && !matrix.mutate }}
+        run: bash tests/roadmap/cond-broadcast/check.sh
+
       # Translation and input/output hash checks; declared proof goals remain unverified.
       - name: Project manifest regressions and example translation
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' }}

@@ -10,7 +10,7 @@ The per-item obligation of `Thread.Condition` (0.15.2's `FutexImpl`: the futex-e
 `ZigLean/Sep/Full/Cond.lean` on bits) in this program's generated code: `wait` (with no timeout;
 its `Deadline` block is on the waiter's stack, allocated while it holds the mutex and freed after
 it locked it again: `Proofs/Threadsync/Deadline.lean`, `FCond.wp_liftPart`) and `signal`
-(`wake(1)`), walked with the rules of the condition, with the program's `Thread.Mutex`
+(`wake(1)`) and `broadcast` (`wake(.all)`), walked with the rules of the condition, with the program's `Thread.Mutex`
 (`threadMutex`), for every protocol that has the condition next to its mutex. `wait` reaches the
 translated `std.time.Timer` (OSK-01), so it takes the OS environment: the results hold for every
 `[Zig.Os.HasEnv]`.
@@ -121,6 +121,107 @@ theorem cond_signal_wp_resource (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost 
       ∃ r', keepPart t (L.part g) r' ∧ P.inv (upd G' t (L.setPart g r')) m' ∧
         C.SigPost (C.S.hist m) (m.clocks[t]!) false m') G m d := by
   refine WP.mono ?_ (cond_signal_wp hC hcost hp t g hgx hgo hsx io G m d hu hi)
+  rintro _ G' m' d' ⟨hd, hc, hi', hs⟩
+  exact ⟨hd, hc, L.part g, rfl, by simpa only [L.setPart_self] using hi', hs⟩
+
+/-! ## `broadcast`: `wake(.all)`
+
+As `wake(.one)`, with the post `state + (w - s) · 2^16` (every waiter gets its signal: the history
+post with `all = true`) and a wake of `w - s`. -/
+
+/-- The low half of the state word (`waiters`), masked in place. -/
+theorem condT_lo (b : BitVec 32) : (b &&& 65535).toNat = b.toNat % 65536 := by
+  fsym_arith
+
+/-- `wake(.all)`'s loop invariant (as `wakeInv`). -/
+def wakeAllInv (P : Proto Tgt γ) (C : FCond γ) (t : ThreadId) (g : γ) (h : Array Word.Entry)
+    (c : VClock) (D : Nat) (s : Thread_Condition_FutexImpl_wake__anon_2a7d9bbe22f6Locals)
+    (G : ThreadId → γ) (m : Mem) (d : Nat) : Prop :=
+  d < D ∧ m.current = t ∧ FCond.SOk s.state ∧
+    (s.state.toNat % 65536 ≤ s.state.toNat / 65536 → ∀ all, C.SigPost h c all m) ∧
+    P.inv (upd G t (C.set g (FCond.afterSRead h c s.state))) m
+
+/-- `wake(.all)`'s loop ends with `t` out and the history post with `all = true`. -/
+def wakeAllPost (P : Proto Tgt γ) (C : FCond γ) (t : ThreadId) (g : γ) (h : Array Word.Entry)
+    (c : VClock) (D : Nat)
+    (r : Thread_Condition_FutexImpl_wake__anon_2a7d9bbe22f6Exit ×
+      Thread_Condition_FutexImpl_wake__anon_2a7d9bbe22f6Locals) (G : ThreadId → γ) (m : Mem)
+    (d : Nat) : Prop :=
+  r.1 = .ret ∧ d < D ∧ m.current = t ∧ P.inv (upd G t g) m ∧ C.SigPost h c true m
+
+theorem wakeAll_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
+    (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hu : 0 < (L.part g).gh.ac.frag .unmetered)
+    (h : Array Word.Entry) (c : VClock) (D : Nat)
+    (s : Thread_Condition_FutexImpl_wake__anon_2a7d9bbe22f6Locals) (G : ThreadId → γ) (m : Mem)
+    (d : Nat) (hs : wakeAllInv P C t g h c D s G m d) :
+    P.WP t ((Thread_Condition_FutexImpl_wake__anon_2a7d9bbe22f6.loop9 C.S.ptr).run s)
+      (fun r G' m' d' =>
+        if Thread_Condition_FutexImpl_wake__anon_2a7d9bbe22f6.again9 r.1 then
+          wakeAllInv P C t g h c D r.2 G' m' d' ∧ (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 <
+            (fun (_ : Thread_Condition_FutexImpl_wake__anon_2a7d9bbe22f6Locals) => 0) s)
+        else wakeAllPost P C t g h c D r G' m' d') G m d := by
+  obtain ⟨hd, hcur, hok, hsp₀, hi₀⟩ := hs
+  -- the loop's tick, paid from the unmetered fragment: the same writes (`m.ticked`)
+  unfold Thread_Condition_FutexImpl_wake__anon_2a7d9bbe22f6.loop9
+  rw [StateT.run_bind]
+  refine WP.bind ?_
+  show P.WP t (ConcM.liftMem Zig.tick >>= fun a => pure (a, s)) _ _ _ _
+  refine WP.bind (hC.wp_tick_unmetered_exact hi₀ hcur
+    (by rw [hC.lph]; rcases hgo with hh | hh <;> rw [hh] <;> decide)
+    (by rw [hC.lpart]; exact hu) fun hcur hi => WP.pure' ?_)
+  have hsp : s.state.toNat % 65536 ≤ s.state.toNat / 65536 → ∀ all, C.SigPost h c all m.ticked :=
+    fun hsv all => (hsp₀ hsv all).extend (Word.Extends.congr rfl rfl)
+  clear hsp₀ hi₀
+  obtain ⟨b⟩ := s
+  simp only at hok hsp hi
+  by_cases hsv : b.toNat % 65536 ≤ b.toNat / 65536
+  · have hp := hsp hsv true
+    rw [show FCond.afterSRead h c b = .out by simp [FCond.afterSRead, hsv],
+      FCond.set_of hgx] at hi
+    clear hsp
+    fsym [(WP.liftMem_liftR (P := P) (t := t)
+        (hnone := fun _ => (show P.Partial from Or.inr hcost))),
+      BitVec.udiv_eq, condT_lo, condT_hi, FCond.SOk, wakeAllPost,
+      Thread_Condition_FutexImpl_wake__anon_2a7d9bbe22f6.again9]
+  · rw [show FCond.afterSRead h c b = .sl h c by simp [FCond.afterSRead, hsv]] at hi
+    clear hsp
+    fsym [FCond.wp_post hC (sh := h) (c := c), FCond.wp_bump hC, FCond.wp_wakeEp hC,
+      hC.wp_projE (t := t), FCond.SigPost.ofPostAll,
+      (WP.liftMem_liftR (P := P) (t := t)
+        (hnone := fun _ => (show P.Partial from Or.inr hcost))),
+      C.ph_set, hC.lph, C.set_set, FCond.set_of, (FCond.set_of hgx), FCond.ptr_ep,
+      threadFutexWakeC_eq, BitVec.udiv_eq, condT_lo, condT_hi, FCond.SOk, FCond.PostOk,
+      wakeAllInv, wakeAllPost, Thread_Condition_FutexImpl_wake__anon_2a7d9bbe22f6.again9]
+
+/-- **`Condition.broadcast`** (`wake(.all)`) outside or holding the mutex, preserving its
+complete resource, with the history post of its call with `all = true` (`FCond.SigPost`). -/
+theorem cond_broadcast_wp (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
+    {p : Ptr} (hp : p = C.S.ptr) (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g)
+    (_io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hu : 0 < (L.part g).gh.ac.frag .unmetered) (hi : P.inv (upd G t g) m) :
+    P.WP t (Thread_Condition_broadcast p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      P.inv (upd G' t g) m' ∧ C.SigPost (C.S.hist m) (m.clocks[t]!) true m') G m d := by
+  have hi' := hC.enterSl hgx hgo hsx hi
+  generalize C.S.hist m = h at hi' ⊢
+  generalize m.clocks[t]! = c at hi' ⊢
+  clear hi
+  fsym [FCond.wp_sload hC, C.ph_set, hC.lph, C.set_set,
+    WP.loop _ _ (wakeAllInv P C t g h c d) (fun _ => 0) (wakeAllPost P C t g h c d)
+      (wakeAll_body hC hcost t g hgx hgo hu h c d),
+    wakeAllInv, wakeAllPost]
+
+/-- The broadcast contract at its caller part (`keepPart`, as `signal`). -/
+theorem cond_broadcast_wp_resource (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
+    {p : Ptr} (hp : p = C.S.ptr) (t : ThreadId) (g : γ) (hgx : C.ph g = .out)
+    (hgo : L.ph g = .out ∨ L.ph g = .holds) (hsx : C.sx g)
+    (io : Io) (G : ThreadId → γ) (m : Mem) (d : Nat)
+    (hu : payUnmetered t (L.part g)) (hi : P.inv (upd G t g) m) :
+    P.WP t (Thread_Condition_broadcast p) (fun _ G' m' d' => d' < d ∧ m'.current = t ∧
+      ∃ r', keepPart t (L.part g) r' ∧ P.inv (upd G' t (L.setPart g r')) m' ∧
+        C.SigPost (C.S.hist m) (m.clocks[t]!) true m') G m d := by
+  refine WP.mono ?_ (cond_broadcast_wp hC hcost hp t g hgx hgo hsx io G m d hu hi)
   rintro _ G' m' d' ⟨hd, hc, hi', hs⟩
   exact ⟨hd, hc, L.part g, rfl, by simpa only [L.setPart_self] using hi', hs⟩
 
@@ -559,6 +660,7 @@ end
 def threadCond [Zig.Os.HasEnv] : CondImpl Tgt where
   wait p _ q := Thread_Condition_wait p q
   signal p _ := Thread_Condition_signal p
+  broadcast p _ := Thread_Condition_broadcast p
   c := mutexC
   wait_pre := deadlinePre
   wait_post := keepPart
@@ -568,7 +670,12 @@ def threadCond [Zig.Os.HasEnv] : CondImpl Tgt where
   signal_post := keepPart
   signal_unmetered_pre _ _ hu := hu
   signal_unmetered_post _ _ _ _ hr := hr
+  broadcast_pre := payUnmetered
+  broadcast_post := keepPart
+  broadcast_unmetered_pre _ _ hu := hu
+  broadcast_unmetered_post _ _ _ _ hr := hr
   wait_wp_resource := cond_wait_wp_resource
   signal_wp_resource hC := cond_signal_wp_resource hC.toFits
+  broadcast_wp_resource hC := cond_broadcast_wp_resource hC.toFits
 
 end Threadsync
