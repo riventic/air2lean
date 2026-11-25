@@ -275,6 +275,13 @@ FIXTURES = [
      ["--namespace", f"PointerWidth.{ns}", "--prefix", "pointer_width."], "exact")
     for ns, target in (("Wasm32", "wasm32-freestanding"), ("Wasi", "wasm32-wasi"), ("X64", "x86_64-linux"))
 ] + [
+    # T02 check.sh: names.zig (`@tagName`, `@errorName`) per Zig version and target.
+    (f"tests/roadmap/pointer-width/PointerWidth/Names/V{v.replace('.', '_')}/{ns}/Gen.lean",
+     f"tests/roadmap/pointer-width/air/{v}/names/{target}",
+     ["--namespace", f"PointerWidth.Names.V{v.replace('.', '_')}.{ns}", "--prefix", "names."], "exact")
+    for v in ("0.16.0", "0.17.1")
+    for ns, target in (("Wasm32", "wasm32-freestanding"), ("Wasi", "wasm32-wasi"), ("X64", "x86_64-linux"))
+] + [
     # tests/roadmap/env-boundaries/translate.sh: the committed ENV-03 registry binds the OS primitives.
     (f"tests/roadmap/env-boundaries/expected/EnvStd{v}.lean", f"tests/roadmap/env-boundaries/air/{zv}",
      ["--namespace", f"EnvStd{v}", "--prefix", f"std_io{v}.",

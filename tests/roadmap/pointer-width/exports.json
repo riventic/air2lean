@@ -1,0 +1,28 @@
+{
+  "exports": [
+    {
+      "out": "air/{version}/names/wasm32-freestanding",
+      "source": "names.zig",
+      "filter": "names.",
+      "versions": ["0.17.1", "0.16.0"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "wasm32-freestanding"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/names/wasm32-wasi",
+      "source": "names.zig",
+      "filter": "names.",
+      "versions": ["0.17.1", "0.16.0"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "wasm32-wasi"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/names/x86_64-linux",
+      "source": "names.zig",
+      "filter": "names.",
+      "versions": ["0.17.1", "0.16.0"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    }
+  ]
+}
