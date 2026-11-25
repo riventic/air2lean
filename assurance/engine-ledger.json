@@ -800,10 +800,10 @@
    "title": "A rule whose precondition has an if the facts do not decide",
    "status": "closed",
    "requester": "arena",
-   "progress": "closed by PR #PRNUM (claude/fsym-split): the planner notes the undecided condition of an assertion-level `if` it meets while a frame is to be inferred (`noteSplit`), and when no rule applies (or only one with a refuted side goal) the walk splits the goal on it before inlining the command (Auto.lean `walkCore`, `splitWalk`); a rule argument that only the refuted case mentions (`relBytes … tl` of a growth) takes a default value. Regressions SepAuto/Updates.lean `Split.rule_if`, `Split.rule_if_unused`; `CAllocSpec.resize_shrink`/`resize_grow` deleted for `CAllocSpec.resize_upTo` in the arena's `loop66` proofs.",
+   "progress": "closed by PR #843 (claude/fsym-split): the planner notes the undecided condition of an assertion-level `if` it meets while a frame is to be inferred (`noteSplit`), and when no rule applies (or only one with a refuted side goal) the walk splits the goal on it before inlining the command (Auto.lean `walkCore`, `splitWalk`); a rule argument that only the refuted case mentions (`relBytes … tl` of a growth) takes a default value. Regressions SepAuto/Updates.lean `Split.rule_if`, `Split.rule_if_unused`; `CAllocSpec.resize_shrink`/`resize_grow` deleted for `CAllocSpec.resize_upTo` in the arena's `loop66` proofs.",
    "request": "**A rule whose precondition has an `if` the facts do not decide** (`relBytes s.ptr … n len tl`: `if n < len`) is not applied; `fsym` then walks the `callIndirect` arms inline (into the page allocator's `munmap`) and stops with \"no rule\". Needed: split on the undecided condition, as for side conditions. Workaround: `resize_shrink`/`resize_grow` (Core), the condition a side goal of each.",
    "workaround_sites": [],
-   "deletion_plan": "Done (PR #PRNUM): `CAllocSpec.resize_shrink`/`resize_grow` deleted; the arena's `loop66` proofs pass `CAllocSpec.resize_upTo`.",
+   "deletion_plan": "Done (PR #843): `CAllocSpec.resize_shrink`/`resize_grow` deleted; the arena's `loop66` proofs pass `CAllocSpec.resize_upTo`.",
    "note": "plain case works; the arena case REPRODUCED on codex/arena-reset-retain (2026-10-19): `loop66_c0` with the plain refined `resize` under `FitsUpTo` in place of `resize_shrink`/`resize_grow` walks the dispatch arms inline and stops with \"no rule for the command ConcM.liftMem (Os.munmap …)\" (scratch arena-retain9/exp/E14.lean). Workaround site: the arena's `reset` (`loop66`, ArenaSpec*.lean) resizes a kept node through `CAllocSpec.resize_shrink`/`resize_grow`."
   },
   {
@@ -831,12 +831,12 @@
    "title": "An update at a return against a state with an undecided if",
    "status": "open",
    "requester": "fba-reset",
-   "progress": "engine part done by PR #PRNUM (claude/fsym-split): at a return with the caller's updates, the walk splits the state's undecided assertion-level `if` first, so each case plans the updates with its own atoms; a rule's side goal left with such an `if` in the state splits the `if` first too (Auto.lean `walkCore`, `stateIf?`). Regression SepAuto/Updates.lean `Split.state_if` (the former LedgerOpen repro); the arena's `resize_ct` (ArenaSpec*.lean) dropped its `rcases Nat.lt_trichotomy`. Open only for the FBA site (`fresize_spec`'s `by_cases`, lane fba-0171).",
+   "progress": "engine part done by PR #843 (claude/fsym-split): at a return with the caller's updates, the walk splits the state's undecided assertion-level `if` first, so each case plans the updates with its own atoms; a rule's side goal left with such an `if` in the state splits the `if` first too (Auto.lean `walkCore`, `stateIf?`). Regression SepAuto/Updates.lean `Split.state_if` (the former LedgerOpen repro); the arena's `resize_ct` (ArenaSpec*.lean) dropped its `rcases Nat.lt_trichotomy`. Open only for the FBA site (`fresize_spec`'s `by_cases`, lane fba-0171).",
    "request": "**An update at a return against a state with an undecided `if`** (FBA `resize`: the spec's `relBytes … n len tl` = `if n < len then region ⋆ claim else emp`): the walk keeps the `if` to the return; `closeEntail` splits it, but `tryUpd` plans the update's P₀ in the unsplit state, so an update that applies in one branch (resize of the last grant: the released region joins the tail) applies in neither. Needed: split the state's undecided `if` before trying the caller's updates (each branch with its own update). WORKAROUND: `by_cases hc : n.toNat < s.len.toNat <;> fsym [...]` in tests/roadmap/alloc-fba/AllocFba/Full.lean `fresize_spec` (codex/fba-reset-ledger).",
    "workaround_sites": [
     "tests/roadmap/alloc-fba/AllocFba/Full.lean"
    ],
-   "deletion_plan": "delete the `by_cases hc : n.toNat < s.len.toNat` split in `fresize_spec` now that the walk splits the state's undecided `if` before the caller's updates (the arena's sites went with PR #PRNUM)."
+   "deletion_plan": "delete the `by_cases hc : n.toNat < s.len.toNat` split in `fresize_spec` now that the walk splits the state's undecided `if` before the caller's updates (the arena's sites went with PR #843)."
   },
   {
    "id": "65",
@@ -1005,10 +1005,10 @@
    "title": "A return whose Boolean value the postcondition matches on is not split",
    "status": "closed",
    "requester": "arena-gen (arena macros -> fsym)",
-   "progress": "closed by PR #PRNUM (claude/fsym-split): a return that neither the entailment nor an update closes, of a value of a non-recursive inductive type that is not a constructor and that the postcondition depends on, is split by cases on the value (generalized with its equation), each case a return of a constructor (Auto.lean `walkCore`, `splitValue`). Regressions SepAuto/Updates.lean `Split.return_bool`, `Split.return_bool_match` (the former LedgerOpen repros); the arena's `resize_ct` (ArenaSpec*.lean) dropped its `rcases Nat.lt_trichotomy`.",
+   "progress": "closed by PR #843 (claude/fsym-split): a return that neither the entailment nor an update closes, of a value of a non-recursive inductive type that is not a constructor and that the postcondition depends on, is split by cases on the value (generalized with its equation), each case a return of a constructor (Auto.lean `walkCore`, `splitValue`). Regressions SepAuto/Updates.lean `Split.return_bool`, `Split.return_bool_match` (the former LedgerOpen repros); the arena's `resize_ct` (ArenaSpec*.lean) dropped its `rcases Nat.lt_trichotomy`.",
    "request": "**A return of an undecided Boolean expression that the postcondition matches on is not split**: the arena's `resize` returns `pure (le false n len)` on the path of a grant that is not the first node's last; the postcondition `rresizePost … (le false n len)` matches on it, and with `n` against `len` undecided (`n ≥ len` known, `n = len` or `n > len` not) no update closes the return (`resize_other_upd` needs `n ≤ len`, `resize_false_upd` needs `n > len`). Needed: at a return, split on an undecided `Bool`/`Prop` that the postcondition matches on, as on an `if` of the program.",
    "workaround_sites": [],
-   "deletion_plan": "Done (PR #PRNUM): the `rcases Nat.lt_trichotomy` in each arena `resize_ct` is gone."
+   "deletion_plan": "Done (PR #843): the `rcases Nat.lt_trichotomy` in each arena `resize_ct` is gone."
   },
   {
    "id": "arena-resize-update-cost",
