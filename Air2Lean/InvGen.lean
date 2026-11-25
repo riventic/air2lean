@@ -1160,6 +1160,9 @@ structure Cand where
   /-- The generated definitions of the inner loops that the body runs, which the walks of its step
   apply (not part of the output: they are the inner loops' own). -/
   deps : String := ""
+  /-- The library modules that the definitions name besides the ones every generated file
+  imports (the array assertion `arr`, the sum `tsum`). -/
+  imports : Array Name := #[]
 
 /-- An assertion over the resources `owned`: the facts `top`, and each written cell `k` at a
 value `v` with the facts `cell k`. -/
@@ -1727,6 +1730,8 @@ def candLoop (ns body again : Name) (contracts : Array (Name × Name) := #[]) : 
         name, again := relName ns again, binders, tbinders, args, run, triple, loc, entry,
         vargs, measEntry, measArgs,
         facts, owned, meas := left, exit, postFacts := post, postCells,
+        imports := (if arrs.isEmpty then #[] else #[`ZigLean.Sep.Full.Arr]) ++
+          if cells.any (fun (cell, inc) => cell.stored && !inc.terms.isEmpty) then #[`ZigLean.Sep.Full.TSum] else #[],
         doc := s!"/-- The invariant of `{name}`, a counted loop: `{x}` goes {if c.down then "down" else "up"} \
           by 1 while `{x} {c.rel.text} {boundName}`.\n`s0` holds the locals at loop entry.{String.join doc.toList} -/\n" }
 
@@ -1746,6 +1751,15 @@ def creditOf (ns : Name) (c : Cand) (keep : Array Bool) : MetaM (String × Json)
       return (s!"\n{out}", Json.mkObj [("count", count)]))
     fun ex => return ("", Json.mkObj [("none", ← ex.toMessageData.toString)])
 
+/-- A loop's generated definitions (plain and credit mode) as text, its family, the pruning
+decisions and the credit mode's record entry, and the library modules they name. -/
+structure LoopOut where
+  family : String
+  text : String
+  pruned : Array Json
+  credits : Json
+  imports : Array Name
+
 /-- The invariant `body.inv`, measure `body.meas` and exit post `body.post` of the loop `body`
 with exit test `again` (`candLoop`, pruned by `houdini`, the output walked once more with its exit
 post) as source text with the pruning decisions, or why there are none; then its credit-mode
@@ -1753,7 +1767,7 @@ definitions `body.credits.inv` and `body.credits.post` with the record's entry f
 (`creditOf`). Each loop has its own heartbeat budget: the walks of the loops before it do not
 count. `deps`: the generated definitions of the inner loops that the body runs (`Cand.deps`). -/
 def genLoop (ns body again : Name) (contracts : Array (Name × Name) := #[]) (deps := "") :
-    MetaM (Except String (String × String × Array Json × Json)) :=
+    MetaM (Except String LoopOut) :=
   -- (a heartbeat or recursion limit, too, only costs this loop its invariant)
   withCurrHeartbeats <| tryCatchRuntimeEx
     (do
@@ -1767,7 +1781,8 @@ def genLoop (ns body again : Name) (contracts : Array (Name × Name) := #[]) (de
       discard <| walk ns c keep (final := true)
       -- the second invariant of the body, for the credit mode
       let (creditText, credits) ← creditOf ns c keep
-      return .ok (c.family, c.output keep ++ creditText, pruned, credits))
+      return .ok { family := c.family, text := c.output keep ++ creditText, pruned, credits,
+                   imports := c.imports })
     fun ex => return .error (← ex.toMessageData.toString)
 
 /-- The loops that `e` runs: each `Zig.loop (body …) again` as the body's definition and the
@@ -1813,7 +1828,7 @@ def generate (module ns : Name) (generator inputs : Json) (specs contracts : Arr
   let inner ← all.mapM fun (b, _) => do
     let some (.defnInfo d) := (← getEnv).find? b | return #[]
     return (← loopApps d.value).map (·.1)
-  let mut results : Std.HashMap Name (Except String (String × String × Array Json × Json)) := {}
+  let mut results : Std.HashMap Name (Except String LoopOut) := {}
   let mut pending := (List.range all.size).toArray
   while !pending.isEmpty do
     let (ready, wait) := pending.partition fun i => inner[i]!.all results.contains
@@ -1821,7 +1836,7 @@ def generate (module ns : Name) (generator inputs : Json) (specs contracts : Arr
     for i in ready do
       let (b, a) := all[i]!
       let deps := inner[i]!.filterMap fun ib => match results[ib]? with
-        | some (.ok (_, t, _, _)) => some t
+        | some (.ok o) => some o.text
         | _ => none
       let r ← if deps.size < inner[i]!.size then
           pure (.error s!"a nested loop without generated definitions: \
@@ -1829,22 +1844,27 @@ def generate (module ns : Name) (generator inputs : Json) (specs contracts : Arr
         else genLoop ns b a rules (String.join deps.toList)
       results := results.insert b r
     pending := wait
-  -- (in the order of `loopsOf`)
+  -- (in the order of `loopsOf`; `libs`: the library modules the definitions name besides the
+  -- ones every file imports)
+  let mut libs : Array Name := #[]
   let mut loops := #[]
   let mut defs := #[]
   let mut skipped := #[]
   for (b, _) in all do
     let loop := relName ns b
     match results[b]! with
-    | .ok (family, t, pruned, credits) =>
-      loops := loops.push (Json.mkObj [("loop", loop), ("family", family),
-        ("pruned", Json.arr pruned), ("credits", credits)])
-      defs := defs.push t
+    | .ok o =>
+      loops := loops.push (Json.mkObj [("loop", loop), ("family", o.family),
+        ("pruned", Json.arr o.pruned), ("credits", o.credits)])
+      defs := defs.push o.text
+      for m in o.imports do
+        unless libs.contains m do libs := libs.push m
     | .error why =>
       loops := loops.push (Json.mkObj [("loop", loop), ("none", why)])
       skipped := skipped.push (loop, why)
   let body := s!"import {module}\n\
     {String.join (specs.toList.map (s!"import {·}\n"))}\
+    {String.join ((libs.qsort (·.toString < ·.toString)).toList.map (s!"import {·}\n"))}\
     import ZigLean.Sep.Full.Ghost\n\
     import ZigLean.Sep.Full.AutoAttr\n\
     import ZigLean.Sep.Full.ListSeg\n\n\
