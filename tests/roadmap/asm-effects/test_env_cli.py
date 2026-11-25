@@ -119,7 +119,51 @@ def main(binary):
     checks += 1
     checks += check_cpu_features(binary, docs)
     checks += check_isa_coverage(binary, retained)
+    checks += check_operand_names(binary, docs)
     print(f"{checks} asm environment/region CLI checks passed")
+
+
+def check_operand_names(binary, docs):
+    """Every `%[name]` of a template names one operand of the block, as the Zig compiler resolves
+    it (`codegen/llvm/FuncGen.zig` `airAssembly`: an unknown name, `_` and a duplicate name are
+    compile errors), for every accepted asm: allowlisted (whatever its semantics) or a device
+    event (`checkAsmOperandNames`). The allowlist matches the template text, not the names, so
+    without the check a renamed operand would match the entry."""
+    checks = 0
+    def rename(k, name):
+        def mutate(i, _):
+            (i["outputs"] + i["inputs"])[k]["name"] = name
+        return mutate
+    marker = "names no operand of the block"
+    # An environment read, an `isa` entry and a two-output environment read.
+    for doc, k in (("asm_env.random.json", 0), ("asm_env.loadm.json", 1), ("asm_env.rand64.json", 1)):
+        checks += reject(binary, docs, doc, rename(k, "foo"), marker)
+    # A device event (L13): the device contract declares the template, the names are the
+    # program's.
+    document = json.loads(json.dumps(docs["asm_env.rand64.json"]))
+    block = asm_inst(document)
+    constraints = [o["constraint"] for o in block["outputs"]] + [i["constraint"] for i in block["inputs"]]
+    with tempfile.TemporaryDirectory(prefix="air2lean-asm-names-") as d:
+        contract = Path(d) / "cpu.json"
+        for source, names, marker in (
+                ("rdrand %[v]\n\tsetc %[foo]", ["v", "ok"], "'%[foo]' names no operand of the block"),
+                ("rdrand %[v]\n\tsetc %[ok:b]", ["v", "foo"], "'%[ok]' names no operand of the block"),
+                ("rdrand %[v]\n\tsetc %[_]", ["v", "_"], "'%[_]' names no operand of the block"),
+                ("rdrand %[v]\n\tsetc %[v]", ["v", "v"], "two operands of the block are named 'v'"),
+                ("rdrand %[v]\n\tsetc %[ok", ["v", "ok"], "'%[ok' is not closed by ']'"),
+                ("rdrand %[v]\n\tsetc %[ok]", ["v", "ok"], None)):
+            block["source"] = source
+            for o, name in zip(block["outputs"], names):
+                o["name"] = name
+            contract.write_text(json.dumps({"schema": 1, "device": "cpu", "registers": [], "asm": [
+                {"template": source, "constraints": constraints, "clobbers": block["clobbers"]}]}))
+            result, text = run(binary, {"asm_env.rand64.json": document}, ("--device-contract", str(contract)))
+            if marker is None:
+                assert result.returncode == 0 and "Zig.vasm air2lean_device" in text, result.stderr
+            else:
+                assert result.returncode == 1 and text == "sentinel\n" and marker in result.stderr, result.stderr
+            checks += 1
+    return checks
 
 
 def check_isa_coverage(binary, retained):
