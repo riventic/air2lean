@@ -9,7 +9,10 @@ matching theorem declarations in source text. It fails if no checked theorem is 
 The default report is `.lake/assurance/assumptions.json`. Use `--output <path>` to retain a
 release artifact. Exit codes are 0 for an allowed report, 1 for a policy violation, and 2
 for a build, extraction, or policy error. Errors replace an old successful report with an
-error report; they do not leave stale success evidence at that output path.
+error report; they do not leave stale success evidence at that output path. The report is written
+as compact JSON (no indentation, keys in construction order, one trailing newline): the all-shipped
+report is machine-read only, and indented it exceeded the receipt's 256 MiB JSON cap
+(`proof-receipt.py` `MAX_JSON`). Use `python3 -m json.tool` to read one by eye.
 
 `scripts/no-sorry.sh` remains a separate source-level gate. Run all three:
 

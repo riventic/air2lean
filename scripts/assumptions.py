@@ -1697,7 +1697,9 @@ def write_report(path: Path, report: dict) -> None:
     with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as handle:
         temporary = Path(handle.name)
         try:
-            json.dump(report, handle, indent=2)
+            # Compact: the all-shipped report is parsed by tools, never read or diffed as text, and
+            # its indentation alone was ~100 MB of a 265 MB file against the receipt's 256 MiB cap.
+            json.dump(report, handle, separators=(",", ":"))
             handle.write("\n")
             handle.flush()
             os.fsync(handle.fileno())
