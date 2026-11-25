@@ -49,8 +49,9 @@ and 0.17.1, so `FBA.fallocSpec` and the creation theorems are one proof text for
 `std.mem.Allocator` wrappers differ: 0.17.1's `alloc`, `reallocAdvanced`, `allocSentinel` and
 `create` keep their result in a stack slot. Their contracts own the stack room for it (one
 statement for both versions, engine ledger row `fba-0171-wrapper-stack`, option (a)), and with
-them every wrapper contract and `Client.lean` hold over 0.17.1 except `free_spec`,
-`freeSentinel_spec` and `destroy_spec`: `fsym` sticks at 0.17.1's `intCast` in
+them `alloc_spec`, `alignedAlloc_spec`, `create_spec`, `dupe_spec` and `allocSentinel_spec` build
+over 0.17.1. `reallocAdvanced_spec`, `realloc_spec`, `free_spec`, `freeSentinel_spec` and
+`destroy_spec` (so `Client.lean`) do not yet: `fsym` sticks at 0.17.1's `intCast` in
 `mem.Alignment.fromByteUnits` (engine ledger row 21a). Until 21a is closed, the retained
 translation stays 0.16.0's; afterwards it becomes 0.17.1's, with the whole library checked over
 0.16.0's in the check tree.
