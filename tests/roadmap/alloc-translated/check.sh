@@ -37,12 +37,15 @@ translate() {  # translate VERSION PROG OS OUT: OUT is AllocTranslated.<module> 
     --prefix "$2." --allocator-model translated
 }
 # The retained translations are the fresh ones of Zig 0.17.1, byte for byte (Lake builds the
-# retained files).
+# retained files). The 0.16.0 ones replace them in the check tree (below).
+replace=()
 for prog in page fba; do
   for os in linux macos; do
     m=$(module "$prog" "$os")
     translate 0.17.1 "$prog" "$os" "$work/$m.lean"
     cmp "$work/$m.lean" "$here/AllocTranslated/$m.lean"
+    translate 0.16.0 "$prog" "$os" "$work/$m-0.16.0.lean"
+    replace+=(--replace "$here/AllocTranslated/$m.lean=$work/$m-0.16.0.lean")
   done
 done
 # Axioms of every theorem of the proof modules (below): only the standard ones.
@@ -78,14 +81,6 @@ prove "$work/lines"
 # retained 0.17.1 ones (scripts/check-tree.py: the tree clones the root build; with
 # AIR2LEAN_CAS_DIR, only the translations and what imports them are elaborated again).
 tree=$repo_root/.lake/check-tree/alloc-translated-0.16.0
-replace=()
-for prog in page fba; do
-  for os in linux macos; do
-    m=$(module "$prog" "$os")
-    translate 0.16.0 "$prog" "$os" "$work/$m-0.16.0.lean"
-    replace+=(--replace "$here/AllocTranslated/$m.lean=$work/$m-0.16.0.lean")
-  done
-done
 python3 -B scripts/check-tree.py create "$tree" "${replace[@]}"
 (cd "$tree" && prove "$work/lines-0.16.0")
 bash "$here/mutant.sh"

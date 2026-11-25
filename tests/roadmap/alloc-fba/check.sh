@@ -36,11 +36,14 @@ python3 -B scripts/fixtures.py build AllocFba
 fba=(FBA.fallocSpec FBA.fthread_alloc FBA.fthread_resize FBA.fthread_remap FBA.fthread_free
   FBA.freset_spec FBA.fown_init FBA.fallocator_init FBA.fallocator_creation FBA.fallocSpec.creation
   FBA.ledger)
-named=()
-for name in Wrappers.realloc_of Wrappers.allocSentinel_of "${fba[@]}" Client.client_spec \
-    Client.client_start; do
-  named+=(--declaration "AllocFba.$name")
-done
+declare_all() {  # declare_all NAME...: `--declaration AllocFba.NAME` for each, into `named`
+  named=()
+  for name in "$@"; do
+    named+=(--declaration "AllocFba.$name")
+  done
+}
+declare_all Wrappers.realloc_of Wrappers.allocSentinel_of "${fba[@]}" Client.client_spec \
+  Client.client_start
 python3 -B scripts/fixtures.py audit AllocFba.Client AllocFba.Full \
   AllocFba.Wrappers AllocFba.Creation AllocFba.CreationDomain "${named[@]}"
 # The same FAllocSpec proof text and `#guard`s over the Zig 0.17.1 translation, in a check tree with
@@ -49,10 +52,7 @@ python3 -B scripts/fixtures.py audit AllocFba.Client AllocFba.Full \
 tree=$repo_root/.lake/check-tree/alloc-fba-0.17.1
 translate 0.17.1 "$work/Gen-0.17.1.lean"
 python3 -B scripts/check-tree.py create "$tree" --replace "$here/AllocFba/Gen.lean=$work/Gen-0.17.1.lean"
-named=()
-for name in "${fba[@]}"; do
-  named+=(--declaration "AllocFba.$name")
-done
+declare_all "${fba[@]}"
 (cd "$tree" && python3 -B scripts/fixtures.py build AllocFba.Full AllocFba.Creation \
   AllocFba.CreationDomain AllocFba.Eval &&
   python3 -B scripts/fixtures.py audit AllocFba.Full AllocFba.Creation AllocFba.CreationDomain \

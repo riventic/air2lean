@@ -46,20 +46,8 @@ The allocator's entries (`heap_FixedBufferAllocator_*`) translate to the same co
 and 0.17.1, so `FBA.fallocSpec` and the creation theorems are one proof text for both:
 `check.sh` builds and audits them, and the `#guard`s, over the 0.17.1 translation. The
 `std.mem.Allocator` wrappers differ, and `Wrappers.lean` (so `Client.lean`) does not build over
-0.17.1. Two obstructions, both decisions outside this fixture:
-
-* `mem.Alignment.fromByteUnits` casts `@ctz` of its argument to `u6` in 0.17.1 (`intCast`);
-  `fsym` keeps the cast's result opaque (`intCast_step`: a fact on its `toNat`) and then sticks at
-  `enumOf (mem_Alignment.ofInt? (val false x))`. Every wrapper that calls it (`free`, `destroy`,
-  `realloc`, ...) stops there: engine ledger row 21a.
-* `alloc`, `reallocAdvanced` and `allocSentinel` (24 bytes) and `create` (16 bytes) keep their
-  error-union result in a stack slot (`Zig.allocStack`). A total triple over them needs the
-  running thread's stack room (`cur t ⋆ sp t S D`, `FTotalTriple.allocStack_sp`): without it the
-  push may throw `.stackOverflow` (a full address space, or a budget without the token), so the
-  wrapper contracts, stated without a stack resource, do not hold for these translations, and
-  `client_spec`'s room `stackCharge 24 8` does not cover a wrapper's slot behind the client's
-  frame. Stating the contracts with stack room changes their statements: engine ledger row
-  `fba-0171-wrapper-stack`.
-
-Until both are decided, the retained translation stays 0.16.0's; afterwards it becomes 0.17.1's,
+0.17.1: `fsym` sticks at 0.17.1's `intCast` in `mem.Alignment.fromByteUnits` (engine ledger row
+21a), and `alloc`, `reallocAdvanced`, `allocSentinel` and `create` keep their result in a stack
+slot, which the wrapper contracts (stated without stack room) do not cover (engine ledger row
+`fba-0171-wrapper-stack`, with the options). Until both are decided, the retained translation stays 0.16.0's; afterwards it becomes 0.17.1's,
 with the whole library checked over 0.16.0's in the check tree.
