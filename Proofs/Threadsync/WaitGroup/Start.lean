@@ -216,7 +216,8 @@ theorem inv_of_box {m : Mem} {r : Res} {A : Nat} {bs : Array Byte}
     (fun l => ?_) hW₁.2.1 hW₁.2.2 (fun u => ?_) (fun u => ?_) ?_
     ⟨blk, hblk, hl, by rw [hS]; decide, by show (blk.addr + 16) % 4 = 0; rw [hAd]; omega,
       by rw [hK]; decide, by rw [hK]; simp [BlockKind.mappedLo]⟩
-    h0 (by rw [hat]; simp) hq (allLe_of_one h1 (VClock.le_refl _)), ?_⟩
+    h0 (by rw [hat]; simp) (fun w hw => by rw [hq] at hw; simp at hw)
+    ((allLe_of_one h1 (VClock.le_refl _)).on _), ?_⟩
   · rw [upd_ne _ _ hu]
     unfold FLock.own; rw [hGu u hu]; split <;> simp [G0, FLock.prod, rnil_rsum]
   · rw [up_bytesAt_some hW₁ rfl l]
@@ -225,7 +226,7 @@ theorem inv_of_box {m : Mem} {r : Res} {A : Nat} {bs : Array Byte}
     show _ ↔ l.1 = 0 ∧ 16 ≤ l.2 ∧ l.2 < 16 + 4
     simp
   · by_cases hu : u = 0
-    · subst hu; rw [upd_self]; exact .inl ⟨rfl, ht, rfl⟩
+    · subst hu; rw [upd_self]; exact .inl ⟨.inl rfl, ht, rfl⟩
     · rw [hGu u hu]; exact .inr rfl
   · by_cases hu : u = 0
     · subst hu; rw [upd_self]; rfl
