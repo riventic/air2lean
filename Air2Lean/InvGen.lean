@@ -682,7 +682,7 @@ def counted (ctx : Ctx) (again : Expr → MetaM Bool) (paths : Array Path) : Met
     let (base, k) := a.split
     unless (base == .local x && (k == 0 || k == step)) ||
         cells.any (fun (cell, _) => cell.stored && (cell.val.partialSums (.cell cell.loc)).contains a) do
-      throwError "an add or subtraction that the counter's and the cells' bounds do not cover: {repr a}"
+      throwError "an add or subtraction that the counter's and the cells' bounds do not cover: {(repr a).pretty 100000} cells {(c.st.cells.map fun cell => ((repr cell.loc).pretty 100000, (repr cell.val).pretty 100000, cell.stored, (cell.val.partialSums (.cell cell.loc)).size)).toList}"
   -- (an exit with a payload has no label: the post then states only that it exits)
   return { counter := x, rel, bound := b, down, cells, scratch, exits := exitLabels exits,
            plain := paths.any (·.st.tick) }
