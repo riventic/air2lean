@@ -81,7 +81,7 @@ theorem gF_ok : GOk m1 Ghost.unit gF := by
     split
     · have := (ECell.dormant_unit (Ghost.ls ⟨fun γ => GCell.unit.add GCell.unit,
         fun b' => if b' = 0 then ECell.auth1 1 .heap Frac.one else ECell.unit, fun _ _ => ECell.unit,
-        ACell.unit.add ACell.unit, fun _ => SCell.zero.add SCell.zero⟩)).auth1_ok
+        ACell.unit.add ACell.unit, fun _ => SCell.zero.add SCell.zero, fun _ => 0 + 0⟩)).auth1_ok
         (S := 1) (K := .heap)
       rwa [ECell.add_unit] at this
     · exact ⟨ECell.valid_unit, ECell.tagOk_unit _⟩
