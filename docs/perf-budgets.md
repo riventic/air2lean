@@ -247,14 +247,14 @@ A line-level diff of each reference translation from `fce33b590` to the measured
 other change. The measurement also found a translator regression from #562/#626, which is fixed,
 not absorbed: the call-graph walks (`Air2Lean/Program.lean`) were compiled into functions that
 rebuilt the whole successor table, calling `calleesOf` on every function, at each lookup;
-`emit` of threadsync went from 0.02 s to 0.45 s (sync 0.02 to 0.17 s; bisected to #562 with
-#626). The table is now built once per graph (output byte-identical: `gen-integrity.py check`,
+`emit` of threadsync went from 0.02 s to 0.45 s (sync 0.02 to 0.17 s; bisected: #562 0.23 s,
+then #626 doubled it, as `Program.tickPolicies` computes the call groups once more). The table is now built once per graph (output byte-identical: `gen-integrity.py check`,
 `timing_cli.py`, `tests/review/emitter.sh`): threadsync `emit` 0.045 s, sync 0.031 s. A first
 record also showed that the cold proof builds restored their outputs from Lake's artifact cache
 (0.14 s each); `record` now turns that cache off and fails a cold build that did not rebuild.
 
 The whole suite was then recorded once on the new reference platform (`record --per-module`,
-exclusive guard, calibration 7.47 s) and rebaselined. Against the October Darwin baseline, 13
+exclusive guard, calibration 7.47 s) and rebaselined. Against the October Darwin baseline, 14
 of the 18 workloads take fewer calibration units in both Lean phases (`elaborate`,
 `proof.cold`); more take `threadsync` `elaborate` (0.36 to 0.60 units: the generated module grew
 by the tick and `zig_run` lines), `layout` and `floatops` `elaborate` (0.34 to 0.41, 0.11 to

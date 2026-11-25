@@ -581,11 +581,12 @@ def uncached_env():
 
 def require_rebuilt(root, modules, since):
     """Fail closed unless the cold build wrote each module's .olean anew (after `since`, not a
-    hard link into an artifact cache): a restored output would time the cache, not the proof."""
+    hard link into an artifact cache): a restored output would time the cache, not the proof.
+    The mtime is compared to the second, for file systems that store coarser times."""
     stale = []
     for module in modules:
         olean = (root / ".lake/build/lib/lean").joinpath(*module.split(".")).with_suffix(".olean")
-        if not olean.is_file() or olean.stat().st_mtime < since or olean.stat().st_nlink != 1:
+        if not olean.is_file() or olean.stat().st_mtime < math.floor(since) - 1 or olean.stat().st_nlink != 1:
             stale.append(module)
     if stale:
         raise RuntimeError(f"cold proof build did not rebuild {', '.join(stale)} (artifact cache?)")

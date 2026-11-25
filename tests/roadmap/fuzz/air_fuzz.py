@@ -22,6 +22,7 @@ input that keeps the same failure signature.
 """
 import argparse
 import copy
+import functools
 import json
 from pathlib import Path
 import random
@@ -35,6 +36,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from shrink import ddmin, nodes, shrink_bytes, shrink_json  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "scripts"))
+import compat  # noqa: E402
 HERE = Path(__file__).resolve().parent
 REGRESSIONS = HERE / "regressions"
 CORPUS_MAX_BYTES = 16 * 1024
@@ -95,7 +98,7 @@ def _builtin_seeds(version=None, profile=None):
 
 
 def supported_versions():
-    return [v["version"] for v in json.loads((ROOT / "compatibility.json").read_text())["zig"]["versions"]]
+    return [v["version"] for v in compat.load(ROOT)["zig"]["versions"]]
 
 
 def _committed_air(version):
@@ -109,6 +112,7 @@ def _committed_air(version):
     return paths
 
 
+@functools.cache
 def _committed_docs(version=None):
     """(path, [document]) of each committed file of at most CORPUS_MAX_BYTES: without VERSION
     every golden file, with VERSION that version's committed compiler AIR (`_committed_air`)."""
@@ -122,20 +126,26 @@ def _committed_docs(version=None):
                 continue
             if version is None or (isinstance(doc, dict) and doc.get("zig_version") == version):
                 found.append((str(path.relative_to(ROOT)), [doc]))
-    return found
+    return tuple(found)  # cached: shared, so immutable
+
+
+def seed_set(version=None):
+    """The in-file seeds: legacy without VERSION, else VERSION's with the profile of its first
+    committed schema-12 export; a version without one fails closed."""
+    if version is None:
+        return _builtin_seeds()
+    profiles = (docs[0]["profile"] for _, docs in _committed_docs(version)
+                if isinstance(docs[0].get("profile"), dict))
+    profile = next(profiles, None)
+    if profile is None:
+        raise SystemExit(f"no committed schema-12 AIR of Zig {version} to fuzz")
+    return _builtin_seeds(version, profile)
 
 
 def load_corpus(version=None):
-    """Without VERSION: the legacy seeds plus every committed golden file, of every version.
-    With VERSION: that version's seeds plus its committed compiler AIR only; a version without
-    committed schema-12 AIR fails closed."""
-    found = _committed_docs(version)
-    if version is None:
-        return _builtin_seeds() + found
-    profiles = [docs[0]["profile"] for _, docs in found if isinstance(docs[0].get("profile"), dict)]
-    if not profiles:
-        raise SystemExit(f"no committed schema-12 AIR of Zig {version} to fuzz")
-    return _builtin_seeds(version, profiles[0]) + found
+    """The seeds (`seed_set`), then without VERSION every committed golden file, of every
+    version, and with VERSION that version's committed compiler AIR only."""
+    return seed_set(version) + list(_committed_docs(version))
 
 
 def _collect(corpus):
@@ -537,9 +547,8 @@ def cmd_replay(args):
     print(f"{len(cases) - bad}/{len(cases)} committed fuzz regressions pass the oracle")
     # Every in-file seed is a well-formed program the translator accepts, so that mutations start
     # from accepted input: the legacy seeds and those of each supported version.
-    count = len(_builtin_seeds())
     seeds = [(version, name, docs) for version in (None, *supported_versions())
-             for name, docs in load_corpus(version)[:count]]
+             for name, docs in seed_set(version)]
     rejected = 0
     for version, name, docs in seeds:
         kind, observed = evaluate(binary, [_dump(doc) for doc in docs])

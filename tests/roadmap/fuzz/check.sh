@@ -58,11 +58,11 @@ case "${1:-}" in
   --air)
     [ "$#" -ge 2 ] || { echo 'usage: check.sh --air BINARY [SEEDS] [SAVE_DIR] [ZIG_VERSION]' >&2; exit 2; }
     python3 "$here/air_fuzz.py" replay "$2"
-    save=()
-    if [ -n "${4:-}" ]; then save=(--save "$4" --report "$4/report.json"); mkdir -p "$4"; fi
+    extra=()
+    if [ -n "${4:-}" ]; then extra=(--save "$4" --report "$4/report.json"); mkdir -p "$4"; fi
     # ZIG_VERSION: that version's seeds and committed AIR only (default: the mixed corpus).
-    if [ -n "${5:-}" ]; then save+=(--zig-version "$5"); fi
-    python3 "$here/air_fuzz.py" run "$2" --seeds "${3:-200}" ${save[@]+"${save[@]}"}
+    if [ -n "${5:-}" ]; then extra+=(--zig-version "$5"); fi
+    python3 "$here/air_fuzz.py" run "$2" --seeds "${3:-200}" ${extra[@]+"${extra[@]}"}
     ;;
   --reproduces)
     [ "$#" -ge 3 ] || { echo 'usage: check.sh --reproduces CASE_DIR STAGE [SIG]' >&2; exit 2; }

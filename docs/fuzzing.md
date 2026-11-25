@@ -25,7 +25,8 @@ goldens and the outputs of every fixture export manifest (`tests/roadmap/*/expor
 supported versions' committed AIR uses (for 0.17.1: 0.16's `bitcast`, `intcast`,
 `struct_field_val`, `bool_and` and others, which a 0.17 file must not contain), and one more
 mutation relabels a `zig_version` (top-level or the profile's) as another supported version.
-Without the flag the corpus, and so every seed's case, is unchanged.
+Without the flag the corpus is the mixed one as before, except that the in-file seeds' `arg`
+instructions no longer carry an `args` key, which no export writes and schema 12 rejects.
 
 Each case must end predictably:
 
