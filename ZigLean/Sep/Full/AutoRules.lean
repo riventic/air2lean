@@ -1027,29 +1027,30 @@ def boolLit? (x : Lean.Expr) : Option Bool :=
   else none
 
 open Lean Meta Simp in
-/-- A bit count (`Zig.ctz`, `Zig.clz`, `Zig.popcount`), a truncation (`Zig.trunc`) or the value
-(`Zig.val`) of a word literal to a literal result width: its value, computed here and decided on
-the literal (`litStep`). Generated pure helpers compute constants this way
+/-- A bit count (`Zig.ctz`, `Zig.clz`, `Zig.popcount`) or a truncation (`Zig.trunc`) `f m a` of a
+word literal `a` to a literal result width `m`: its value, computed here and decided on the
+literal (`litStep`). Generated pure helpers compute constants this way
 (`mem_Alignment.fromByteUnits 8`: `ctz`, then `intCast`, then `val`; ledger #21a). -/
-def reduceLitWordCore (op : Name) : Simproc := fun e => do
-  unless e.isAppOfArity op 3 do return .continue
-  let some ⟨_, a⟩ ← getBitVecValue? e.appArg! | return .continue
-  if op == ``Zig.val then
-    let some s := boolLit? (e.getArg! 1) | return .continue
-    return ← litStep e (toExpr (Zig.val s a))
-  let some m ← getNatValue? (e.getArg! 1) | return .continue
-  let r : BitVec m :=
-    if op == ``Zig.ctz then Zig.ctz m a
-    else if op == ``Zig.clz then Zig.clz m a
-    else if op == ``Zig.popcount then Zig.popcount m a
-    else Zig.trunc m a
-  litStep e (toExpr r)
+def reduceLitWordCore (op : Name) (f : {n : Nat} → (m : Nat) → BitVec n → BitVec m) : Simproc :=
+  fun e => do
+    unless e.isAppOfArity op 3 do return .continue
+    let some ⟨_, a⟩ ← getBitVecValue? e.appArg! | return .continue
+    let some m ← getNatValue? (e.getArg! 1) | return .continue
+    litStep e (toExpr (f m a))
 
-simproc [fsym_norm, fsym_arith] reduceLitCtz (Zig.ctz _ _) := reduceLitWordCore ``Zig.ctz
-simproc [fsym_norm, fsym_arith] reduceLitClz (Zig.clz _ _) := reduceLitWordCore ``Zig.clz
-simproc [fsym_norm, fsym_arith] reduceLitPopcount (Zig.popcount _ _) := reduceLitWordCore ``Zig.popcount
-simproc [fsym_norm, fsym_arith] reduceLitTrunc (Zig.trunc _ _) := reduceLitWordCore ``Zig.trunc
-simproc [fsym_norm, fsym_arith] reduceLitVal (Zig.val _ _) := reduceLitWordCore ``Zig.val
+simproc [fsym_norm, fsym_arith] reduceLitCtz (Zig.ctz _ _) := reduceLitWordCore ``Zig.ctz Zig.ctz
+simproc [fsym_norm, fsym_arith] reduceLitClz (Zig.clz _ _) := reduceLitWordCore ``Zig.clz Zig.clz
+simproc [fsym_norm, fsym_arith] reduceLitPopcount (Zig.popcount _ _) :=
+  reduceLitWordCore ``Zig.popcount Zig.popcount
+simproc [fsym_norm, fsym_arith] reduceLitTrunc (Zig.trunc _ _) := reduceLitWordCore ``Zig.trunc Zig.trunc
+
+open Lean Meta Simp in
+/-- The value (`Zig.val`) of a word literal with a literal signedness (`litStep`). -/
+simproc [fsym_norm, fsym_arith] reduceLitVal (Zig.val _ _) := fun e => do
+  unless e.isAppOfArity ``Zig.val 3 do return .continue
+  let some ⟨_, a⟩ ← getBitVecValue? e.appArg! | return .continue
+  let some s := boolLit? (e.getArg! 1) | return .continue
+  litStep e (toExpr (Zig.val s a))
 
 open Lean Meta Simp in
 /-- `@intCast` of a word literal to a literal width: `pure` of its value when it fits, else its
@@ -1061,17 +1062,16 @@ simproc [fsym_norm] reduceLitIntCast (Zig.intCast _ _ _ _ _) := fun e => do
   let some m ← getNatValue? args[3]! | return .continue
   let some ⟨_, a⟩ ← getBitVecValue? args[4]! | return .continue
   let v := Zig.val s₁ a
-  let vE ← mkAppOptM ``Zig.val #[args[0]!, args[1]!, args[4]!]
-  let range ← mkAppM ``And #[← mkAppM ``LE.le #[← mkAppM ``Zig.intLo #[args[2]!, args[3]!], vE],
-    ← mkAppM ``LE.le #[vE, ← mkAppM ``Zig.intHi #[args[2]!, args[3]!]]]
+  -- the lemma's side conditions are its own hypotheses' types, each decided on the literal
+  let lits := #[none, none, some args[1]!, some args[2]!, some args[5]!, some args[4]!]
   let pf ← if Zig.intLo s₂ m ≤ v ∧ v ≤ Zig.intHi s₂ m then do
-      let r := toExpr (BitVec.ofInt m v)
-      let hr ← mkDecideProof (← mkEq (← mkAppM ``BitVec.ofInt #[args[3]!, vE]) r)
-      mkAppOptM ``intCast_lit #[none, none, args[1]!, args[2]!, args[5]!, args[4]!, r,
-        ← mkDecideProof range, hr]
-    else
-      mkAppOptM ``intCast_lit_out #[none, none, args[1]!, args[2]!, args[5]!, args[4]!,
-        ← mkDecideProof (mkNot range)]
+      let f ← mkAppOptM ``intCast_lit (lits.push (some (toExpr (BitVec.ofInt m v))))
+      let .forallE _ hTy (.forallE _ hrTy _ _) _ ← inferType f
+        | throwError "reduceLitIntCast: {f} takes no side conditions"
+      pure (mkApp2 f (← mkDecideProof hTy) (← mkDecideProof hrTy))
+    else do
+      let f ← mkAppOptM ``intCast_lit_out lits
+      pure (mkApp f (← mkDecideProof (← inferType f).bindingDomain!))
   return .visit { expr := (← inferType pf).appArg!, proof? := some pf }
 
 open Lean Meta Simp in
