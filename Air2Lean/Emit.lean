@@ -1865,9 +1865,8 @@ def FCtx.lowerThreadCall (fc : FCtx) (env : Array (InstId × String)) (fn : Thre
   | .futexWait => EmittedCode.literal s!"{fc.atomicFn "futexWaitCancelableC"} {String.intercalate " " (args.toList.map rv)}"
   | .futexWaitU => EmittedCode.literal s!"{fc.atomicFn "futexWaitC"} {String.intercalate " " (args.toList.map rv)}"
   | .futexWake => EmittedCode.literal s!"Zig.futexWakeC {String.intercalate " " (args.toList.map rv)}"
-  -- `Thread.Futex.wait(ptr, expect)`, `Thread.Futex.wake(ptr, max_waiters)`.
+  -- `Thread.Futex.wait(ptr, expect)`.
   | .threadFutexWait => EmittedCode.literal s!"{fc.atomicFn "threadFutexWaitC"} {String.intercalate " " (args.toList.map rv)}"
-  | .threadFutexWake => EmittedCode.literal s!"Zig.threadFutexWakeC {String.intercalate " " (args.toList.map rv)}"
   -- `DarwinImpl.lock(self)`: `self` points to the `os_unfair_lock` (its only field).
   | .osLock => EmittedCode.literal s!"Zig.osUnfairLockC {rv (args[0]?.getD .void)}"
   | .osUnlock => EmittedCode.literal s!"Zig.osUnfairUnlockC {rv (args[0]?.getD .void)}"

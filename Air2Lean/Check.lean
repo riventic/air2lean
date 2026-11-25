@@ -4058,9 +4058,9 @@ def checkModelSignature (f : Func) (callee : String) (args : Array Val) (ret : T
       checkFutex 1 2 (fn != .futexWake)
       if fn == .futexWake then require (isCode (argTy 2)) "wake-count argument"
       require (if fn == .futexWait then errorUnit else unit) "result"
-    | .threadFutexWait | .threadFutexWake =>
+    | .threadFutexWait =>
       count 2
-      checkFutex 0 1 (fn != .threadFutexWake)
+      checkFutex 0 1
       require (isCode (argTy 1) && unit) "u32/void"
     | .osLock | .osUnlock | .osTryLock =>
       count 1
