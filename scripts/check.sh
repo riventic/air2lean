@@ -10,6 +10,9 @@
 # record), else in a check tree (scripts/check-tree.py): a copy of the checkout with the new
 # translations in place of the committed ones. Its path is written to
 # $AIR2LEAN_CHECK_REPORT_DIR/build-tree; later steps that build this version's proofs run there.
+# A case family (examples/<ex>/all-cases) keeps its committed public module there: each of its
+# golden cases is its own committed module with per-case proofs. Step 4 runs in the tree with
+# every new translation, $AIR2LEAN_CHECK_REPORT_DIR/diff-tree (the build tree when they agree).
 #
 # Steps 1-2 run for each example in parallel (scripts/par.py: AIR2LEAN_JOBS workers, bounded by
 # memory), each example's output written in example order, so the output and every file are the
@@ -34,6 +37,7 @@
 #   AIR2LEAN_CHECK_REPORT_DIR  Profile/input/generated-hash receipts. Default:
 #                         .lake/check-reports/<zig-version>/; actual generated sources are retained.
 #   AIR2LEAN_CHECK_TREE   The check tree, when one is needed. Default: .lake/check-tree/<zig-version>.
+#                         The diff tree, when it differs, is this path with `-diff` appended.
 #                         This and AIR2LEAN_CHECK_REPORT_DIR are relative to the repository root.
 #   AIR2LEAN_DIFF_REPORT  Differential summary (scripts/diff.sh), relative to the repository root
 #                         also when the test runs in a check tree. Default: tests/diff/out/report.json.
@@ -237,7 +241,7 @@ else
   source "$repo_root/scripts/example-selection.sh"
   examples=$(air2lean_default_examples "$repo_root" "$zig_version" "$(uname -m)")
 fi
-rm -f "$report_dir/build-tree"  # Written only once this run has selected its modules.
+rm -f "$report_dir/build-tree" "$report_dir/diff-tree"  # Written once this run has selected its modules.
 if [ "${AIR2LEAN_CI:-0}" = 1 ]; then
   # The checkout's modules are compared with HEAD's and may be built: they must be HEAD's.
   python3 scripts/normalize-generated.py proof-status
@@ -261,19 +265,36 @@ done <"$results_dir/.case-targets"
 # Each example's stages keep their own timeout; the examples together have none.
 # shellcheck disable=SC2086  # $examples is a space-separated list
 workflow_run_jobs --mem-mib 512 -- "$BASH" "$repo_root/scripts/check.sh" --example {} "$results_dir/{}" ::: $examples
-replacements=()
+# A case family (examples/<ex>/all-cases, scripts/gen-integrity.py) has every golden case as its
+# own committed module, checked exactly by case-check above and built with the case targets; its
+# version- and host-specific proofs are per-case contract instances (Proofs/<Ex>/*Cases.lean).
+# Its public Proofs/<Ex>/Gen.lean therefore stays the committed one in the build tree, where the
+# proofs are built; the differential test compares this translation and runs in the diff tree,
+# which has every replacement (the build tree when no case family's module differs).
+replacements=() proof_replacements=()
 for ex in $examples; do
-  if [ -s "$results_dir/$ex" ]; then replacements+=(--replace "$(cat "$results_dir/$ex")"); fi
+  if [ -s "$results_dir/$ex" ]; then
+    replacements+=(--replace "$(cat "$results_dir/$ex")")
+    [ -f "examples/$ex/all-cases" ] || proof_replacements+=(--replace "$(cat "$results_dir/$ex")")
+  fi
 done
 
-tree=$repo_root
-if [ "${#replacements[@]}" -gt 0 ]; then
-  tree=${AIR2LEAN_CHECK_TREE:-$repo_root/.lake/check-tree/$zig_version}
-  echo "== check tree $tree: this translation in place of committed modules (${replacements[*]}) ==" >&2
-  python3 "$repo_root/scripts/check-tree.py" create "$tree" "${replacements[@]}"
-  tree=$(cd -- "$tree" && pwd)
+make_tree() {  # make_tree DEFAULT-DIR REPLACEMENT-ARGS...: the tree path (the checkout with none)
+  local dir=$1
+  shift
+  if [ "$#" -eq 0 ]; then printf '%s\n' "$repo_root"; return; fi
+  echo "== check tree $dir: this translation in place of committed modules ($*) ==" >&2
+  python3 "$repo_root/scripts/check-tree.py" create "$dir" "$@" >&2
+  (cd -- "$dir" && pwd)
+}
+check_tree=${AIR2LEAN_CHECK_TREE:-$repo_root/.lake/check-tree/$zig_version}
+tree=$(make_tree "$check_tree" ${proof_replacements[@]+"${proof_replacements[@]}"})
+diff_tree=$tree
+if [ "${#replacements[@]}" != "${#proof_replacements[@]}" ]; then
+  diff_tree=$(make_tree "$check_tree-diff" "${replacements[@]}")
 fi
 printf '%s\n' "$tree" > "$report_dir/build-tree"
+printf '%s\n' "$diff_tree" > "$report_dir/diff-tree"
 cd "$tree"
 echo "== building Lean ==" >&2
 workflow_run_stage lake build "${gen_targets[@]}"
@@ -283,6 +304,7 @@ if [ "${AIR2LEAN_DIFF:-1}" = 0 ]; then
   exit 0
 fi
 
+cd "$diff_tree"
 echo "== differential testing ==" >&2
 AIR2LEAN_DIFF_REPORT=${AIR2LEAN_DIFF_REPORT:-tests/diff/out/report.json}
 case "$AIR2LEAN_DIFF_REPORT" in /*) ;; *) AIR2LEAN_DIFF_REPORT=$repo_root/$AIR2LEAN_DIFF_REPORT ;; esac
