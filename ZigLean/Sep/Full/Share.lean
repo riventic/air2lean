@@ -448,6 +448,39 @@ theorem EUpd.spts_join {q₁ q₂ : Frac} :
     ⟨r₁, r₂, hd, e, h1.2, h2.2⟩ hs
   exact ⟨r', hh', by have := h1.1; have := h2.1; simp only [Frac.add]; grind, hr'⟩
 
+/-! ## A load through a share of a named heap
+
+A typed load through the share `q` of a named heap `H` (`sheap H q`), which stays. A reader's
+part after `RwLockImpl.lockShared_wp` holds `shareRes H q` of the heap `H` its place names, and
+`RwLockImpl.unlockShared_wp` asks for that share of that heap; `sload` reads a share of some heap
+with the value (`spts`) and so does not keep the name. -/
+
+variable {H : FHeap}
+
+/-- **Load of a typed value through the share `q` of the heap `H`** that holds it: the share of
+`H` stays. -/
+theorem FTotalTriple.load_sheap (hq : 0 < q.val) (hn : 0 < Enc.size T)
+    (hH : up (pts p a v) ⟨H, Know.none, Ghost.unit⟩) :
+    FTotalTriple (sheap H q) (Zig.load T a p) (fun x => ⟪x = v⟫ ⋆ sheap H q) := by
+  obtain ⟨A, S, K, bs, ha, hsz, hv, hb, -⟩ := hH.1
+  have t := FTotalTriple.load_of_read (P := sheap H q) (q := p) (k := 0) (al := a)
+    (fun _ _ _ hh hp => hh.sbytesRead ⟨H, ⟨hb, rfl, rfl⟩, hp⟩ hq) hn (by omega)
+    (by simpa using ha) (by rw [Nat.zero_add, ← hsz, Array.extract_size]; exact hv)
+  simp only [Int.natCast_zero, Ptr.add_zero] at t
+  exact t
+
+/-- The load through a share of a named heap is local to the thread (`ThreadLocal.sload`). -/
+theorem ThreadLocal.load_sheap (hq : 0 < q.val)
+    (hH : up (pts p a v) ⟨H, Know.none, Ghost.unit⟩) :
+    ThreadLocal (sheap H q) (Zig.load T a p) :=
+  ThreadLocal.loadOwned fun _ hpb _ hp _ h1 h2 => spts_owned hpb ⟨hq, H, hH, hp⟩ h1 h2
+
+/-- `FTotalTriple.load_sheap` for a thread's step. -/
+theorem FTTotalTriple.load_sheap (hq : 0 < q.val) (hn : 0 < Enc.size T)
+    (hH : up (pts p a v) ⟨H, Know.none, Ghost.unit⟩) :
+    FTTotalTriple (sheap H q) (Zig.load T a p) (fun x => ⟪x = v⟫ ⋆ sheap H q) :=
+  FTTotalTriple.ofSeq (FTotalTriple.load_sheap hq hn hH) (ThreadLocal.load_sheap hq hH)
+
 end Typed
 
 end Full

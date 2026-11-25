@@ -122,10 +122,12 @@ class Scan(unittest.TestCase):
                          "legacy-to-retire")
 
     def test_legacy(self):
-        self.assertEqual(pf.scan_file("A.lean", "import ZigLean.Sep.Total\n")[2], "imports ZigLean.Sep.Total")
         self.assertEqual(pf.scan_file("A.lean", "theorem t : TTriple P c Q := h\n")[2], "names TTriple")
         # An import line is not a use of the name `Triple`; a Conc-cluster import is a legacy use.
         self.assertIsNone(pf.scan_file("A.lean", "import ZigLean.Sep.Full.Triple\ndef x := 1\n")[2])
+        # `ZigLean/Sep` is the one logic's directory: a module there is not legacy by its name.
+        for module in ("Triple", "Loop", "Block", "Try", "Cost", "Witness", "Mmap", "AllocSpec"):
+            self.assertIsNone(pf.scan_file("A.lean", f"import ZigLean.Sep.{module}\ndef x := 1\n")[2])
         self.assertEqual(pf.scan_file("A.lean", "import ZigLean.Conc.Csl\n")[2], "imports ZigLean.Conc.Csl")
         self.assertEqual(pf.scan_file("A.lean", "import ZigLean.Conc.TlsLemmas\n")[2],
                          "imports ZigLean.Conc.TlsLemmas")
@@ -339,7 +341,7 @@ class Ratchet(unittest.TestCase):
         self.assertEqual(self.check(), 0)
 
     def test_new_legacy_user_fails(self):
-        (self.repo / "New.lean").write_text("import ZigLean.Sep.Loop\n")
+        (self.repo / "New.lean").write_text("import ZigLean.Conc.Csl\n")
         self.assertEqual(self.check(), 1)
 
     def declare_retiring_tactic(self):

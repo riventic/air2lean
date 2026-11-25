@@ -78,7 +78,7 @@ nonvacuity_witness makeZeroPair_spec := by
   obtain ⟨hh, hp⟩ := initRes_holds_plain Placement.fresh [] (by simp)
   have hs := Mem.init_fseq Placement.fresh [] (by simp [Mem.GlobalsFit])
   exact ⟨ThreadTuples.mem0 Placement.fresh, _, rnil, hh, hp, hs.fconc,
-    Witness.owns_of_footprint rfl _ _, trivial⟩
+    .of_owns (Witness.owns_of_footprint rfl _ _), trivial⟩
 
 /- The computed liveness companion is tied to the same actual initializer run. -/
 liveness_witness makeZeroPair_spec := by
@@ -87,7 +87,7 @@ liveness_witness makeZeroPair_spec := by
   obtain ⟨hh, hp⟩ := initRes_holds_plain Placement.fresh [] (by simp)
   have hs := Mem.init_fseq Placement.fresh [] (by simp [Mem.GlobalsFit])
   exact ⟨ThreadTuples.mem0 Placement.fresh, _, rnil, hh, hp, hs.fconc,
-    Witness.owns_of_footprint rfl _ _,
+    .of_owns (Witness.owns_of_footprint rfl _ _),
     (((⟨some 0, 0⟩ : Ptr), (⟨some 1, 0⟩ : Ptr)), m'), hr⟩
 
 /-- Apply the one whole-initializer thread judgment at the real initial part.

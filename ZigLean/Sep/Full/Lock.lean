@@ -1911,6 +1911,27 @@ theorem HB.mono {G G' : ThreadId → γ} {m m' : Mem} {c : VClock} (h : L.HB G m
   · exact .inr (.inr (fun u hu hg =>
       VClock.le_trans (hlive u (ht ▸ hu) (hgone u hg)) (hcl u)))
 
+/-- **`HB` over a step that adds a thread** (a spawn by `t`, which has not ended): the new
+thread's clock is above `t`'s, so a clock below every thread that has not ended is below the new
+thread's too. The holders stay, the clocks grow, the word's newest release stays, and no old
+thread comes back from its end. -/
+theorem HB.fork {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} {c : VClock} (h : L.HB G m c)
+    (hcl : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
+    (hnew : VClock.le (m.clocks[t]!) (m'.clocks[m.threads.size]!) = true)
+    (hsz : m'.threads.size = m.threads.size + 1) (hbef : ∀ c, L.Before m c → L.Before m' c)
+    (hhold : ∀ u, (L.ph (G u)).held = true → (L.ph (G' u)).held = true)
+    (ht : t < m.threads.size) (hgt : L.ph (G t) ≠ .gone)
+    (hgone : ∀ u, u < m.threads.size → L.ph (G' u) ≠ .gone → L.ph (G u) ≠ .gone) :
+    L.HB G' m' c := by
+  rcases h with ⟨u, hu, hle⟩ | hb | hlive
+  · exact .inl ⟨u, hhold u hu, VClock.le_trans hle (hcl u)⟩
+  · exact .inr (.inl (hbef c hb))
+  · refine .inr (.inr fun u hu hg => ?_)
+    by_cases hu' : u < m.threads.size
+    · exact VClock.le_trans (hlive u hu' (hgone u hu' hg)) (hcl u)
+    · obtain rfl : u = m.threads.size := by omega
+      exact VClock.le_trans (hlive t ht hgt) hnew
+
 /-- A clock that happened before thread `t`, which holds the lock. -/
 theorem HB.of_holder {G : ThreadId → γ} {m : Mem} {c : VClock} {t : ThreadId}
     (ht : (L.ph (G t)).held = true) (hle : VClock.le c (m.clocks[t]!) = true) : L.HB G m c :=

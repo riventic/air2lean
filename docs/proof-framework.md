@@ -41,8 +41,11 @@ proof framework").
   `@[fsym]` and `fsym_norm`, so a new attribute or simp set is a reviewed decision like a new tactic.
   Applying one (`@[fsym]`, `attribute [fsym] …`, `simp [fsym_norm]`, `simproc [fsym_norm] …`) is
   not a declaration and is not recorded;
-* `legacy_users`: every Lean file that imports a module of the legacy logic or names a legacy
-  triple;
+* `legacy_users`: every Lean file that imports a module of the legacy concurrent chain
+  (`ZigLean/Conc/{Own,Csl,TlsLemmas,Witness,Lock,LockBase,LockRules}`) or names a legacy triple
+  (`Triple`, `TotalTriple`, `TTriple`, …). The legacy logic is deleted and the list is empty; the
+  check stays so that none of it comes back. The modules of the legacy sequential logic are not
+  matched by name: `ZigLean/Sep` is the directory of the one logic;
 * `tactic_uses`: per file and per tactic, the number of uses of every tactic with kind `syntax` and
   status `legacy-to-retire`, found as a word match in
   the code outside comments and strings. Declaring such a tactic is gated by `tactics`; this list
@@ -64,18 +67,18 @@ moves to another module, unless the entry records the maintainer's `"status_appr
 
 | legacy | where | target |
 | --- | --- | --- |
-| `Triple` | `Sep/Triple` | `FTriple` over `up P`; the strength lemma `FTriple.toTriple_on` gives the legacy statement back on every `Mem.FSeqPlain` memory (`Mem.FSeq` without a stack budget, which the legacy logic does not have; Plan A, D1) |
+| `Triple` | `Sep/Triple` (deleted, D-e) | `FTriple` over `up P`; the strength lemma `FTriple.toTriple_on` gives the legacy statement back on every `Mem.FSeqPlain` memory (`Mem.FSeq` without a stack budget, which the legacy logic does not have; Plan A, D1) |
 | `TotalTriple`, `Returns`, loop rules | `Sep/Total`, `Sep/Loop` (deleted, L13) | `FTotalTriple`, `FReturns` (`FTotalTriple.toTotal_on`); loops: `Full/Loop` |
 | `TotalTripleIn`, `TotalTripleStk` (#166) | `Sep/Total` (deleted, L13), stack work | `FTotalTriple` whose precondition owns the room it needs (a stack-room resource) |
 | `TotalTripleWithin`, `FailsWithin` (#166), `Sep/Cost` | `Sep/Bounded`, `Sep/Cost` (deleted, L8) | `FTotalTriple` with a cost resource (credits in the ghost state, spent by the step rules; `Full/Cost`: exact counts, tight bounds, counted loops) |
-| `TTriple` (`TTripleIn` and `Conc/TlsLemmas` deleted) | `Conc/Own` | `CTriple` (thread-local resources in `FAssn`; Plan A4) |
+| `TTriple` (`TTripleIn` and `Conc/TlsLemmas` deleted) | `Conc/Own` (deleted, D-d) | `FTTriple` in a thread, `CTriple` (thread-local resources in `FAssn`; Plan A4) |
 | `EventuallyReturns`, `EventuallyReturnsUnder`, `ReturnsWithin`, `Stops`, `Turns` (#178) | `Conc/Total` | a total `CTriple` with turn credits as a ghost resource |
 | `MemM.Halts` (#178) | | a consequence of the total step rules (`FReturns`) |
 | `LoopTemplate`, `DispatchTemplate`, `DispatchSpec`, `RecTemplate` | `Sep/LoopTemplate`, `Sep/DispatchTemplate`, `RecTemplate` | loop, dispatch and call rules for `fsym` (`Full/Loop`: `FTotalTriple.loop_ghost`, `FTriple.loop`; recursion by `FTriple.admissible_fun`) |
 | `AllocSpec` | `Sep/AllocSpec` | `FAllocSpec` |
 | `MutexSpec`, `CondSpec`, `FutexSpec`, `WaitGroupSpec`, `EventSpec` | `Conc/Spec/*` (deleted, L21) | `MutexImpl`, `CondImpl`, `EventImpl` over the model futex's rules ([thread-specs.md](thread-specs.md)) |
-| `Sem.Spec`, `CancelSpec` | proofs | the same contracts stated with `CTriple` (Plan A4) |
-| `TimedBudget.Spec`/`WithinSpec`, test `Spec`s | pure results | propositions about a `Result` (no memory); they stay until a pure-result rule set replaces them |
+| `Sem.Spec`, `CancelSpec` | proofs (deleted: `Sem.Spec` with Sync/Semaphore, D-d; `CancelSpec` written out as the futures protocol's result predicate) | the same contracts stated with `CTriple` (Plan A4) |
+| `TimedBudget.Spec`/`WithinSpec`, test `Spec`s | pure results (the asm-wrappers `Spec`, a data structure, is `Interp.Insn`) | propositions about a `Result` (no memory); they stay until a pure-result rule set replaces them |
 
 `Float.AllowedSpec` is `target` (maintainer, 2026-10-18, #439): it is the pure-result fragment. It
 states that a float computation succeeds and that every result IEEE allows for it satisfies the

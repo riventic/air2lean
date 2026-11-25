@@ -148,6 +148,41 @@ theorem read (h : E.Holds xs rX m) (ht : m.current < m.threads.size)
     E.Holds xs rX (m.recordAt b o len .read) :=
   ⟨h.thr, h.sh.read ht hcs b o len, h.io⟩
 
+/-- **A change of the client parts keeps the program's facts**, given the threads' fact at the
+new parts: the read-shared region and its bytes stay. -/
+theorem relabel {xs' : ThreadId → X} (h : E.Holds xs rX m) (hT : E.T xs' m.threads) :
+    E.Holds xs' rX m :=
+  ⟨hT, h.sh, h.io⟩
+
+/-- **A change of the thread table and the client parts keeps the program's facts**, given the
+threads' fact after it: there are as many threads, no clock is smaller and the record of accesses
+stays, so the region stays read-shared (`ReadShared.keep`); its bytes stay in the rest. -/
+theorem threads {xs' : ThreadId → X} (h : E.Holds xs rX m) (hT : E.T xs' m'.threads)
+    (hsz : m'.threads.size = m.threads.size)
+    (hcl : ∀ u : Nat, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
+    (hfp : m'.footprint = m.footprint) : E.Holds xs' rX m' :=
+  ⟨hT, h.sh.keep hsz (fun u _ => hcl u) fun _ he _ => hfp ▸ he, h.io⟩
+
+/-- **A join keeps the program's facts**, given the threads' fact after it (`Holds.threads`). -/
+theorem join {xs' : ThreadId → X} {t u : ThreadId} (h : E.Holds xs rX m)
+    (hj : ((Thread.join u).run { m with current := t }).run = some (.ok ((), m')))
+    (hT : E.T xs' m'.threads) : E.Holds xs' rX m' := by
+  obtain ⟨cs, ts, rfl, hsz, hcl⟩ := join_mem hj
+  exact h.threads hT hsz hcl rfl
+
+/-- **A spawn keeps the program's facts**: the new thread holds a share of every read of the
+region (`ReadShared.fork`: its clock is above its parent's), the rest keeps the region's bytes,
+and the program gives its threads' fact at the new client parts and thread table (`hT`). -/
+theorem fork {xs' : ThreadId → X} {t c : ThreadId} {gt : Bool} (h : E.Holds xs rX m)
+    (ht : t < m.threads.size) (hcs : m.clocks.size = m.threads.size)
+    (hf : ((Thread.forkWith gt).run { m with current := t }).run = some (.ok (c, m')))
+    (hT : E.T xs' m'.threads) : E.Holds xs' rX m' := by
+  obtain ⟨hclk, hnew⟩ := fork_mem_clocks ht hcs hf
+  rw [Proto.forkWith_run] at hf
+  simp only [Option.some.injEq, Except.ok.injEq, Prod.mk.injEq] at hf
+  obtain ⟨-, rfl⟩ := hf
+  exact ⟨hT, h.sh.fork (t := t) ht (by simp) (fun u _ => hclk u) hnew fun _ he _ => he, h.io⟩
+
 end Holds
 
 end FClient

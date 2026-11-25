@@ -951,4 +951,37 @@ def parseErrorTable (contents : String) : Except String ErrorTableFile := do
   return { zigVersion := ← j.getObjValAs? String "zig_version",
            errorSetBits := ← j.getObjValAs? Nat "error_set_bits", names }
 
+/-- The file of the compilation's export records beside the AIR files (`docs/air-json.md`
+§Export table). -/
+def exportTableFileName : String := "export-table.air2lean"
+
+/-- The linker symbols the compilation defines. -/
+structure ExportTableFile where
+  zigVersion : String
+  records : Array ExportRecord
+
+/-- Parse `export-table.air2lean`: schema 12, the Zig version and one record per export. A
+linkage other than `strong` or `weak` is rejected, never read as one of them. -/
+def parseExportTable (contents : String) : Except String ExportTableFile := do
+  let j ← StrictJson.parse contents
+  let schema ← j.getObjValAs? Nat "schema"
+  unless schema == 12 do throw s!"export table: schema {schema}, expected 12"
+  let records ← (← j.getObjValAs? (Array Json) "exports").mapM fun r => do
+    let name ← r.getObjValAs? String "name"
+    if name.isEmpty then throw "export table: an export without a symbol name"
+    let weak ← match ← r.getObjValAs? String "linkage" with
+      | "strong" => pure false
+      | "weak" => pure true
+      | other => throw s!"export table: symbol '{name}' has the unknown linkage '{other}'"
+    let _ ← r.getObjValAs? String "visibility"
+    let function ← match ← r.getObjVal? "function" with
+      | .null => pure none
+      | f => do
+        let module ← f.getObjValAs? String "module"
+        if module.isEmpty then throw s!"export table: symbol '{name}': 'module' must not be empty"
+        pure (some (Identity.key (some module) (← f.getObjValAs? String "name"),
+                    ← f.getObjValAs? String "cc"))
+    pure ({ name, weak, function } : ExportRecord)
+  return { zigVersion := ← j.getObjValAs? String "zig_version", records }
+
 end Air2Lean.Raw

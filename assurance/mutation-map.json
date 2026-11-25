@@ -1694,8 +1694,24 @@
     },
     "A02": {
       "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/asm-effects/test_cli.py",
+          "anchor": "def wide_incl"
+        },
+        {
+          "path": "tests/roadmap/asm-effects/test_env_cli.py",
+          "anchor": "def check_isa_coverage"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "i",
+          "path": "scripts/mutate.sh",
+          "category": "other"
+        }
+      ],
+      "note": "A02 decision 1: a block outside the instruction model or whose operands do not match its instructions is rejected (test_cli.py), only uncovered entries stay opaque (test_env_cli.py), and mutation (i) breaks the model's bswap, which the differential test of examples/asm must detect."
     },
     "A03": {
       "categories": [
@@ -1706,7 +1722,7 @@
       "negative_tests": [
         {
           "path": "tests/roadmap/asm-wrappers/test_harness.py",
-          "anchor": "def test_rejects_unbound_or_reshaped_opaques"
+          "anchor": "def test_rejects_unbound_or_uninterpreted_asm"
         },
         {
           "path": "tests/roadmap/asm-wrappers/test_harness.py",

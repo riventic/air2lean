@@ -70,26 +70,36 @@ def premises_of(theorem: dict, claims) -> list[str] | None:
     """Premises a theorem's claims rest on that its type does not show (S7): ASM-01 for an asm
     opaque in its closure, and ASM-04 too if it claims no-panic or guaranteed-return over one;
     the premises of the generated axioms and opaques it reaches (`declaration_premises`);
-    the memory-model adequacy premise (ORD-06) for a concurrency claim (C12). None if the report
-    lacks the closure (`opaque_dependencies`, `runtime_modules`)."""
+    the instruction-model premise (ASM-07) for a closure that reaches the model, so a defined asm
+    block (A02); the memory-model adequacy premise (ORD-06) for a concurrency claim (C12). None
+    if the report lacks the closure (`opaque_dependencies`, `runtime_modules`)."""
     opaques = theorem.get('opaque_dependencies')
     memory = memory_model_premises(theorem)
     if not isinstance(opaques, list) or memory is None:
         return None
+    memory = instruction_model_premises(theorem) + memory
     found = []
     for name in opaques:
         for regex, premises in generated_opaques():
             if isinstance(name, str) and regex.search(name):
                 found += [p for p in premises if p not in found]
-    # An absence claim over an opaque whose premises imply ASM-04 (asm entries: ASM-01, ASM-03)
-    # carries the entry's fault condition.
+    # An absence claim over an opaque whose premises imply ASM-04 (an asm opaque: ASM-01) carries
+    # the entry's fault condition. A defined block's fault set is the instruction model's (ASM-07).
     if ABSENCE_CLAIMS & set(claims) and FAULT_PREMISE not in found \
             and FAULT_PREMISE in PREMISES.close(premise_config(), {p: [] for p in found}):
         found.append(FAULT_PREMISE)
     # The premises of the generated axioms and opaques it reaches (scripts/assumptions.py
     # `declaration_premises`: assumed model evidence, extern bindings, asm effect contracts).
     declared = [p for p in theorem.get('declaration_premises') or () if isinstance(p, str) and p not in found]
-    return found + declared + memory
+    return found + declared + [p for p in memory if p not in found and p not in declared]
+
+
+def instruction_model_premises(theorem: dict) -> list[str]:
+    """[ASM-07] when the theorem's closure reaches a runtime module of the instruction model
+    (assurance/premises.json `instruction_model.modules`): the value and the fault set of a
+    defined asm block are the model's, which no hypothesis in the theorem's type shows."""
+    record = premise_config()['instruction_model']
+    return [record['premise']] if set(record['modules']) & set(theorem.get('runtime_modules') or ()) else []
 
 
 def memory_model_premises(theorem: dict) -> list[str] | None:
@@ -749,6 +759,7 @@ def check(manifest_path: Path, report: dict, diffs=()) -> dict:
                      'holds: the caller passes the model one. premises lists what an accepted goal rests on '
                      'beyond its type: an inline-asm opaque in the closure carries ASM-01, and ASM-04 (allowlist '
                      'fault conditions) for a no-panic or guaranteed-return claim; a closure that reaches the '
+                     'instruction model (a defined asm block) carries ASM-07; a closure that reaches the '
                      'scheduler or the atomics model carries ORD-06 (memory-model adequacy), and is rejected when '
                      'the target its translation records has no qualification entry for that premise. Differential outcomes (when supplied) can only '
                      'refuse absence claims: capped, fuel-bounded, unsupported, unsupported-timer or unspecified '

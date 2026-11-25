@@ -140,6 +140,7 @@ NATIVE_JOBS = {
     # and strict checks are gates of the run that produced them.
     'generated': 'scripts/generated.py produce --group coverage --group premise-index --out DIR',
     'provenance': 'scripts/generated.py produce --group provenance --group provenance-gap --out DIR',
+    'theorem-inventory': 'scripts/generated.py produce --group theorem-inventory --out DIR',
     'macos': MACOS_REPRODUCE,
     'aarch64-linux': ARM_REPRODUCE,
     'bitops-native-arm': ARM_REPRODUCE,

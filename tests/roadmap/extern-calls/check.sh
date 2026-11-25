@@ -3,7 +3,9 @@
 # `lake build ZigLean`; runs no compiler. For each Zig version, extern_calls.zig's `memset`/
 # `strlen` calls bind to libc_ref.zig's `export fn` definitions, and the translation evaluates to
 # expected.txt (Eval.lean). trusted.zig's `extern "c" fn abs` binds to a registry model with a
-# premise. With AIR2LEAN_NATIVE_ZIG (a stock Zig 0.16.0), also runs native.zig against expected.txt.
+# premise. weak_exports.zig's `@export` symbols (Zig 0.17.1, with the exporter's export table)
+# bind through test_cli.py, the weak one under premise EXT-07 only.
+# With AIR2LEAN_NATIVE_ZIG (a stock Zig 0.16.0), also runs native.zig against expected.txt.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
@@ -24,7 +26,7 @@ record = json.loads((here / 'provenance.json').read_text())
 for name, digest in record['source_sha256'].items():
     assert hashlib.sha256((here / name).read_bytes()).hexdigest() == digest, name
 files = {str(p.relative_to(here / 'air')): hashlib.sha256(p.read_bytes()).hexdigest()
-         for p in sorted((here / 'air').rglob('*.json'))}
+         for pattern in ('*.json', '*.air2lean') for p in sorted((here / 'air').rglob(pattern))}
 assert files == record['air_sha256'], 'AIR fixtures differ from provenance.json'
 EOF
 for version in 0.16.0 0.15.2 0.14.1; do

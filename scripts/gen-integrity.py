@@ -196,11 +196,13 @@ FIXTURES = [
     ("tests/roadmap/alloc-fba/AllocFba/Gen.lean", "tests/roadmap/alloc-fba/air/0.16.0/client-linux",
      ["--namespace", "AllocFba.Gen", "--prefix", "client.", "--allocator-model", "translated"], "exact"),
 ] + [
+    # tests/roadmap/alloc-translated/check.sh: the page programs' Zig 0.17.1 translations (0.16.0's
+    # are checked in a check tree), the fixed buffer's 0.16.0 ones.
     (f"tests/roadmap/alloc-translated/AllocTranslated/{prog.title()}{target.title()}.lean",
-     f"tests/roadmap/alloc-translated/air/0.16.0/{prog}-{target}",
+     f"tests/roadmap/alloc-translated/air/{version}/{prog}-{target}",
      ["--namespace", f"AllocTranslated.{prog.title()}{target.title()}", "--prefix", f"{prog}.",
       "--allocator-model", "translated"], "exact")
-    for prog in ("page", "fba") for target in ("linux", "macos")
+    for prog, version in (("page", "0.17.1"), ("fba", "0.16.0")) for target in ("linux", "macos")
 ] + [
     # tests/roadmap/alloc-arena/check.sh: the stock arena (both targets) and the patched one.
     (f"tests/roadmap/alloc-arena/AllocArena/{module}.lean", f"tests/roadmap/alloc-arena/air/0.16.0/{d}",
@@ -753,8 +755,9 @@ class Translator:
             else:
                 # A fixture's AIR is a directory, or the one file its check translates.
                 source = case.dirs[0]
-                # With the compilation's error numbering (`error-table.air2lean`, L10).
-                for src in (sorted([*source.glob("*.json"), *source.glob("error-table.air2lean")])
+                # With the compilation's tables: its error numbering (`error-table.air2lean`,
+                # L10) and its export records (`export-table.air2lean`).
+                for src in (sorted([*source.glob("*.json"), *source.glob("*-table.air2lean")])
                             if source.is_dir() else [source]):
                     shutil.copyfile(src, air / src.name)
             out = self.work / f"Gen{index}.lean"

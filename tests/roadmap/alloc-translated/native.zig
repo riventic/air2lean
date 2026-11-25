@@ -37,10 +37,9 @@ fn stale(how: u8) []const u8 {
         const r = page.page_grow_stale(10, how);
         system.exit(@intCast(r));
     }
-    const Status = if (@import("builtin").link_libc) c_int else u32;
-    var status: Status = undefined;
-    _ = system.waitpid(@intCast(pid), &status, 0);
-    const s: u32 = @bitCast(status);
+    // The status word is `c_int` with libc, `u32` in 0.16.0's and `i32` in 0.17.1's Linux syscalls.
+    var s: u32 = undefined;
+    _ = system.waitpid(@intCast(pid), @ptrCast(&s), 0);
     const sig = s & 0x7f;
     if (sig == 0) return switch ((s >> 8) & 0xff) {
         0 => "ok 0",

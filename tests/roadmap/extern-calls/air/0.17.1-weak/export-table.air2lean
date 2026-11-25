@@ -1,0 +1,46 @@
+{
+ "schema": 12,
+ "zig_version": "0.17.1",
+ "exports": [
+  {
+   "name": "viaStrong",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "weak_exports.viaStrong",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "viaWeak",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "weak_exports.viaWeak",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "weak_clamp_add",
+   "linkage": "weak",
+   "visibility": "hidden",
+   "function": {
+    "module": "root",
+    "name": "weak_exports.clampAdd",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "strong_twice",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "weak_exports.twice",
+    "cc": "x86_64_sysv"
+   }
+  }
+ ]
+}

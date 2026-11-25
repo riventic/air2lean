@@ -2,8 +2,8 @@
 # Test-only runner: generated effect-contract asm wrappers on model memory (A01)
 
 `harness.py` appends this after `Interp.lean` (A03's interpretation, with read-write and memory
-operands) and the rebound wrappers (`AsmHarness.Wrappers`, the unchanged text of
-`AsmEffects/Gen.lean`). Each memory check runs the wrapper on one 32-byte global block holding a
+operands), the generated module (`AsmHarness.Wrappers`, the unchanged text of
+`AsmEffects/Gen.lean`) and the interpreted counterparts (`AsmHarness.Cross`). Each memory check runs the wrapper on one 32-byte global block holding a
 distinct byte pattern, then compares the whole block with the expected bytes: the declared
 location holds the instruction's result and every other byte is unchanged (the frame). The
 alias check passes one pointer for both `swapm` operands and expects `.unspecified`.
@@ -91,7 +91,9 @@ def failures : List String :=
   check "incLocal" values32 toString
     (fun x => (Wrappers.incLocal (b32 x)).run == some (.ok (b32 x + 1))) (fun _ => "not x + 1") ++
   check "barrier" [()] (fun _ => "()") (fun _ => Wrappers.barrier.run == some (.ok ()))
-    (fun _ => "not pure ()")
+    (fun _ => "not pure ()") ++
+  -- Each `airIsaFx_<hash>` against the interpretation of its template text (`harness.py`).
+  Cross.failures
 
 def main : IO UInt32 := do
   let bad := failures

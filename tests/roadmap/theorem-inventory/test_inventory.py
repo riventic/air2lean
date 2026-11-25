@@ -1226,7 +1226,7 @@ class RepositoryTests(unittest.TestCase):
             self.assertEqual(scope[name], 'all-schedules', name)
         for name in ('sb_sc', 'mp_sees_data', 'tryLock_new'):
             self.assertEqual(scope[name], 'single-schedule', name)
-        for name in ('Zig.readOpts_zero', 'Sync.RwLockContract.held_pair_wp', 'Sync.MutexOps.lock_spec'):
+        for name in ('Zig.readOpts_zero', 'Zig.noRace_of_atomic'):
             self.assertEqual(scope[name], 'single-step', name)
 
     def test_f05_exclusion_is_in_the_statement_and_the_domain(self):
