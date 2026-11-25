@@ -407,9 +407,11 @@ theorem GOk.ext1 {m : Mem} {L : Ghost} (hL : ∀ x, L.extent x = ECell.unit) {b 
     (by rw [← eb]; exact ht b)
   have ecl : ((L.add (Ghost.atExt b c')).add gF).cl = ((L.add (Ghost.atExt b c)).add gF).cl := by
     funext x y; simp
+  have edev : ((L.add (Ghost.atExt b c')).add gF).dev = ((L.add (Ghost.atExt b c)).add gF).dev := by
+    funext D; simp [Ghost.add, Ghost.atExt]
   refine ⟨⟨⟨by rw [eled]; exact hv, fun x => ?_, hcv.1.congr ecl eep, by simpa using hcv.2⟩, N, fun γ hγ =>
     ⟨by rw [eled]; exact (hN γ hγ).1, fun x e k => ?_, by rw [eled]; exact (hN γ hγ).2.2⟩⟩, fun x => ?_,
-    hcf.congr ecl, by simpa using hma⟩
+    hcf.congr ecl, by rw [edev]; simpa using hma⟩
   · rw [eep]
     by_cases e : x = b
     · subst e; rw [eb]; exact ⟨hb.1, hb.2.1⟩
