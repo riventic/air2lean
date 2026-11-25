@@ -163,7 +163,7 @@ private def threadZig : Array StdReview := review "Thread.zig" [
 reader/writer namespace). -/
 private def ioZig : Array StdReview := review "Io.zig" [
   (.v0_16_0, "2d452f28cbeca10280f471b8e1962cdfe2a01000535050af6f6ebcc1a56365d6"),
-  (.v0_17_1, "382a4e343017183eff88e311f983066f88306e7bfcd85a890723b3697f4b2732")]
+  (.v0_17_1, "f9f8a0b04f98eee2d9fc4991f9a0c80e6b462f796894ba75cb5fbe70f4b7f075")]
 /-- `std.Thread.Futex` is removed in 0.16.0 (replaced by `Io.futex*`). -/
 private def futexZig : Array StdReview := review "Thread/Futex.zig" [
   (.v0_14_1, "f1f8fd850c94e0eb99a9332a2e51dd793f4057e35b6e8f7a04efd46a65c04960"),
@@ -186,14 +186,14 @@ private def linuxZig : Array StdReview := review "os/linux.zig" [
   (.v0_14_1, "36e1b68b9c747a426c110fa8ce588253ca8a895a5241ab1452e8340901ee7d81"),
   (.v0_15_2, "49e632c05b4b5e3333ed318b8ae9ad26997fd507bcea111d88cabc628ba748d3"),
   (.v0_16_0, "54d019f38778161dfd57e0da36fcf9ed0cd25e4ac792617dff2dc35b7513f185"),
-  (.v0_17_1, "34f8a2301eb7f01c4747d70440c773790284dd074861086aab52bdaac75090a0")]
+  (.v0_17_1, "99ca417fabe39a928b282ece89ad5e222fe33a992c99d03578c52f6511b0688c")]
 /-- libc's `extern "c" fn sched_yield() c_int`, `fn __error() *c_int` and
 `fn clock_gettime(clk_id: clockid_t, tp: *timespec) c_int` (unchanged in every version). -/
 private def cZig : Array StdReview := review "c.zig" [
   (.v0_14_1, "d4139b4464d840a2cb538970edbeffee386bee6ef3122512ef2d2410be69c5ef"),
   (.v0_15_2, "a8138d10955a61fae402e1235e81685732f46e4cacca1e922609034183824bb1"),
   (.v0_16_0, "f7062a55808aac78c515abd8bee5d36a596ee2de4116f61a51125107f84be158"),
-  (.v0_17_1, "b1046cea3ed2f6310ba251b74da05faa323222779942ec7d11285979d48d71db")]
+  (.v0_17_1, "134c44b6d84f2b74913e59b48b5292b1786cf9d6facb8e94f4d3d933d72f9103")]
 /-- macOS libc's `extern "c" fn __ulock_wait2(op: UL, addr: ?*const anyopaque, val: u64,
 timeout_ns: u64, val2: u64) c_int`, `__ulock_wait(…, timeout_us: u32) c_int` and
 `__ulock_wake(op: UL, addr: ?*const anyopaque, val: u64) c_int` (unchanged in every version). -/
