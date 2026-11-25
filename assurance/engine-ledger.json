@@ -355,13 +355,11 @@
   {
    "id": "21",
    "title": "fsym_arith: disjunctive goals, user Nat functions on constructors, constructor injectivity",
-   "status": "open",
+   "status": "closed",
    "requester": "one-logic-tactics (dispatch, PR #222)",
-   "progress": "all three parts are fixed in the engine (checked 2026-11-24, regressions in SepAuto/Arith.lean: (a) `or_goal`, `or_goal_imp`; (b) `rank_of_ctor`, an untagged user function on a constructor, by the `unfoldUserValue` simproc of `fsym_arith`; (c) `ctor_inj`, `ctor_inj_post`). `attribute [local fsym_arith] rank flatRank` is deleted from DispatchTemplate/Template.lean, which builds without it. Open only for the last site: `attribute [local fsym_arith] rank` in TokenizerProof.lean, which is elaborated against a fresh Zig 0.16.0 export (tests/roadmap/dispatch-templates/check.sh, not run in the triage). The measure `B * data + rank` of `loop_dispatch` stays: it is the rule's statement, not glue.",
+   "progress": "DONE (2026-11-25, lane ledger-quick). All three parts are fixed in the engine (checked 2026-11-24, regressions in SepAuto/Arith.lean: (a) `or_goal`, `or_goal_imp`; (b) `rank_of_ctor`, an untagged user function on a constructor, by the `unfoldUserValue` simproc of `fsym_arith`; (c) `ctor_inj`, `ctor_inj_post`). `attribute [local fsym_arith] rank flatRank` is deleted from DispatchTemplate/Template.lean, and `attribute [local fsym_arith] rank` from TokenizerProof.lean; tests/roadmap/dispatch-templates/check.sh passes without them on the 0.16.0 and 0.17.1 exports (all four `Dispatch-loop regressions` fixture units green on arc). The measure `B * data + rank` of `loop_dispatch` stays: it is the rule's statement, not glue.",
    "request": "fsym_arith: (a) disjunctive goals are not proved (`n < n ∨ 1 < 2`, `m ≤ n → m < n ∨ m = n ∧ 1 < 2`): `omega` handles them, the pipeline does not; (b) a user Nat function on a constructor (`rank Phase.count`, a `match` on a constructor) is not evaluated unless tagged `attribute [local fsym_arith] rank`; (c) `machExit.ret acc = machExit.ret N` with `acc = N` in context is not closed (constructor injectivity in the return entailment; same family as #13). Workarounds in PR #222: `loop_dispatch` takes the measure `B * data + rank` (no Prod.Lex disjunction), local fsym_arith tags, unfold the invariant before `cases`",
-   "workaround_sites": [
-    "tests/roadmap/dispatch-templates/TokenizerProof.lean"
-   ],
+   "workaround_sites": [],
    "deletion_plan": "delete `attribute [local fsym_arith] rank` from TokenizerProof.lean, run tests/roadmap/dispatch-templates/check.sh (Zig 0.16.0 compiler pair) and close the row."
   },
   {
