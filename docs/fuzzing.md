@@ -48,7 +48,9 @@ the seed, the original failure kind, the fix and `expected_exit` (written as nul
 and the seed set's `zig_version` when it has one (the directory is then `seed-<version>-<N>`); `air_fuzz.py replay
 BINARY` requires every case to pass the oracle with that exit status, and every in-file seed
 (legacy and each supported version's) to be accepted, so that mutations start from accepted
-input. Seeds 0–9999 found
+input. A case whose files are all legacy schema-11 documents without a target profile runs with
+the explicit `--profile legacy-abi64-le` admission (docs/profiles.md), as a user would translate
+it, so that it reaches the checker instead of ending at the profile check. Seeds 0–9999 found
 three failure classes, each now rejected by the checker before emission:
 
 | Shrunk reproducers | Original failure | Fix |

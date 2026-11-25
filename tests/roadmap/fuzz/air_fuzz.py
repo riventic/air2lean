@@ -79,10 +79,10 @@ def _builtin_seeds(version=None, profile=None):
         pointer.update(volatile=False, allowzero=False, address_space="generic", sentinel=False, host_size=0)
         fn_type, callee, module = [dict(k="other", name="fn (u32) u32")], dict(ty=3, module="root"), {"module": "root"}
     ident = dict(head, name="seed.ident", types=[void, _int(), noret, *fn_type], params=[1], ret=1, globals=[],
-                 body=[dict(id=0, tag="arg", ty=1, args=[], param=0),
+                 body=[dict(id=0, tag="arg", ty=1, param=0),
                        dict(id=1, tag="ret", ty=2, args=[dict(inst=0)])])
     caller = dict(ident, name="seed.caller", body=[
-        dict(id=0, tag="arg", ty=1, args=[], param=0),
+        dict(id=0, tag="arg", ty=1, param=0),
         dict(id=1, tag="call", ty=1, args=[dict(inst=0)],
              callee=dict(callee, func="seed.ident", noreturn=False)),
         dict(id=2, tag="ret", ty=2, args=[dict(inst=1)])])
@@ -414,8 +414,21 @@ def classify_diagnostics(code, stdout, stderr):
     return None
 
 
+def _legacy(files):
+    """True if every file is a legacy schema-11 document without a target profile. Such a set
+    is translated only with the explicit `--profile legacy-abi64-le` admission (docs/profiles.md),
+    which the oracle passes as a user would, so that legacy cases reach the checker."""
+    try:
+        docs = [json.loads(data) for data in files]
+    except (ValueError, UnicodeDecodeError):
+        return False
+    return bool(docs) and all(isinstance(doc, dict) and "profile" not in doc and type(doc.get("schema")) is int
+                              and doc["schema"] <= 11 for doc in docs)
+
+
 def evaluate(binary, files, modes=("emit", "diag"), timeout=TIMEOUT):
     """Return (failure kind or None, observation dict)."""
+    flags = ["--profile", "legacy-abi64-le"] if _legacy(files) else []
     with tempfile.TemporaryDirectory(prefix="air2lean-q01-") as tmp:
         tmp = Path(tmp)
         air = _write(tmp, files)
@@ -424,13 +437,13 @@ def evaluate(binary, files, modes=("emit", "diag"), timeout=TIMEOUT):
         if "emit" in modes:
             out = tmp / "Gen.lean"
             out.write_text(SENTINEL)
-            code, _, stderr = _exec([str(binary), str(air), "-o", str(out), "--namespace", "Fuzz"], timeout)
+            code, _, stderr = _exec([str(binary), str(air), "-o", str(out), "--namespace", "Fuzz", *flags], timeout)
             output = out.read_text(errors="replace") if out.exists() else ""
             observed["emit"] = code
             observed["emit_stderr"] = stderr.strip()[:300]
             failure = classify_emit(code, stderr, output)
         if failure is None and "diag" in modes:
-            code, stdout, stderr = _exec([str(binary), "--diagnostics-json", str(air)], timeout)
+            code, stdout, stderr = _exec([str(binary), "--diagnostics-json", str(air), *flags], timeout)
             observed["diag"] = code
             failure = classify_diagnostics(code, stdout, stderr)
             if failure is None and "emit" in modes:
