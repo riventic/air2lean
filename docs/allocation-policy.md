@@ -97,7 +97,9 @@ the live allocations plus the request exceed it (`Mem.oracleDenies`; natively
 `TestAllocator.overBudget` over its live list). The model side builds the policy from the
 same object (`withFailAt`, `tests/diff/Diff.lean`).
 
-Missing fields default to the legacy policy; malformed/negative policy values, an
+Missing fields default to the legacy policy; `"max_bytes": null` selects the model's default,
+no request cap (`unboundedAllocBytes`; natively `TestAllocator.request_cap = maxInt(usize)`, so
+on both sides every `usize` request passes the size check). Malformed/negative policy values, an
 `attempt_mod` of 0 and a field that is not part of the policy are rejected on both sides.
 The shared JSON transport uses nonnegative signed-64-bit integers on native 64-bit fixtures,
 while semantic indices/caps are Lean naturals. The complete input object is part of the
@@ -116,6 +118,20 @@ and `listSum` (every node live) make the budget and the attempt rules decide lat
 too. Each case compares the result, the buffers and the live-allocation count, as every lists
 case does; there are no exclusion pins for these lines. The functions return at their first
 `OutOfMemory`, so a run with several failures is compared by the standalone fixture.
+
+**Large requests under the default policy.** After its policy lines, `sumRange` gets six lines
+under `{"max_bytes": null}` (`large_lines`, a generator stream of their own): a buffer of
+1 MiB + 4 bytes (`n = 2^18 + 1`, one item past the harness cap), four of up to 4 MiB, each
+written and read item by item, and `n = 2^62`, whose byte count `4 * n` overflows, so
+`Allocator.alloc` returns `OutOfMemory` before any request. Natively and in the model the large
+buffers are allocated and the sums agree: a valid large input does not fail because of a
+model constant. The lines are only requests the host can hold, because the model represents
+every allocated byte. They are practical because a store costs its own bytes, not its
+block's ([kernel-eval-bytes.md](kernel-eval-bytes.md#compiled-execution-stores-in-place-m03));
+before, a loop of stores into one block was quadratic in its size. Run of 2026-11-25 on native
+x86_64-linux (ReleaseSafe), Zig 0.16.0, 0.17.1 and 0.15.2 each: 1,710 lists cases, 1,709 exact
+matches (the six large lines among them), 0 mismatches, the pinned `allocatorWord` exclusion;
+each whole run, the build of the Lean side included, took under two minutes.
 
 **Standalone fixture.** `tests/roadmap/allocation-policy` compares twenty exact cases of
 `rawAlloc` against `TestAllocator`. Ten cover the failure index, the list and the cap: legacy
