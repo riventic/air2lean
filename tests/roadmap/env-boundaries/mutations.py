@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """E03 mutants of the environment-boundary fixture.
 
-`run WORK` takes the directory `check.sh` built the clean `EnvStd15/Gen.olean` and
-`EnvStd16/Gen.olean` in (LEAN_PATH must reach the Lake libraries) and builds each mutant below
+`run WORK` takes the directory `check.sh` built the clean `EnvStd<NN>/Gen.olean` files and
+`EnvStdIo.olean` in (LEAN_PATH must reach the Lake libraries) and builds each mutant below
 `WORK/mutants/NAME`:
 
 - `client` mutants change the scripted `Ops` instance of `WriteAll.lean`, the non-vacuous witness of
@@ -11,8 +11,8 @@
   runs backwards, an error outside the allowed list). `WriteAll.lean` must then fail in the
   declarations that state the violated field, not elsewhere.
 - `std` mutants change the retained translation of real std I/O (`expected/EnvStd15.lean`,
-  `expected/EnvStd16.lean`): `StdIo.lean`, the proofs about the generated code, must fail in the
-  theorems that walk the changed function.
+  `expected/EnvStd17.lean`): the proofs about that generated code (`StdIo.lean`,
+  `ReadClose/EnvStd17.lean`) must fail in the theorems that walk the changed function.
 
 A mutant that fails to build, or fails outside the named declarations, aborts the run; a survivor is
 a finding. Only a rejected mutant reports its kill (`kill`). `--self-test` checks every anchor.
@@ -28,8 +28,10 @@ from lean_mutant import build_gen, edit, reject, run as run_lean  # noqa: E402
 from mutation_kill_log import killed as log_kill  # noqa: E402
 
 CLIENT = HERE / "WriteAll.lean"
-STD_IO = HERE / "StdIo.lean"
-GEN = {"EnvStd15": HERE / "expected/EnvStd15.lean", "EnvStd16": HERE / "expected/EnvStd16.lean"}
+GEN = {ns: HERE / f"expected/{ns}.lean" for ns in ("EnvStd15", "EnvStd16", "EnvStd17")}
+# The proofs about each translation.
+PROOFS = {"EnvStd15": HERE / "StdIo.lean", "EnvStd16": HERE / "ReadClose/EnvStd16.lean",
+          "EnvStd17": HERE / "ReadClose/EnvStd17.lean"}
 
 # client: name -> (edits of WriteAll.lean, declarations that must fail). Each `old` occurs once.
 CLIENT_MUTANTS = {
@@ -75,11 +77,11 @@ STD_MUTANTS = {
          "let i36 ← pure ((.ok ()) : Except Zig.ErrName (Unit))"),
     ], []),
     # `readClose` returns without closing the handle.
-    "read-close-skipped": ("EnvStd16", [
+    "read-close-skipped": ("EnvStd17", [
         ("let _i3 ← Zig.callM (Io_Threaded_closeFd p0)", "let _i3 ← pure ()"),
     ], []),
     # `posix.read` reports EAGAIN as another error.
-    "read-wouldblock-renamed": ("EnvStd16", [
+    "read-wouldblock-renamed": ("EnvStd17", [
         ("pure (.ret (.error \"WouldBlock\" : Except Zig.ErrName (BitVec 64)))",
          "pure (.ret (.error \"Unexpected\" : Except Zig.ErrName (BitVec 64)))"),
     ], []),
@@ -99,13 +101,14 @@ def run_std(name, work):
     namespace, edits, broken = STD_MUTANTS[name]
     target = Path(work) / "mutants" / name
     # Lean resolves a module by the first search-path entry that holds its root directory, so the
-    # copy holds the other translation's olean too.
+    # copy holds the other translations' oleans too.
     for other in GEN:
         shutil.copytree(Path(work) / other, target / other)
     build_gen(name, target, f"{namespace}/Gen.lean",
               edit(GEN[namespace].read_text(encoding="utf-8"), edits, name), work)
-    rc, out = run_lean(["-R", HERE, STD_IO], target, work)
-    reject(name, rc, out, STD_IO, broken)
+    proofs = PROOFS[namespace]
+    rc, out = run_lean(["-R", HERE, proofs], target, work)
+    reject(name, rc, out, proofs, broken)
 
 
 def run(work):
