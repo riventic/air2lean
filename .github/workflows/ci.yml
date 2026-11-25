@@ -1006,7 +1006,7 @@ jobs:
         run: tar -xf "$RUNNER_TEMP/zig-air/zig-air.tar"
 
       # elan installs `lake`/`lean` shims that read a package's lean-toolchain file (here:
-      # leanprover/lean4:v4.34.0) and fetch that exact toolchain on first use. Installer
+      # leanprover/lean4:v4.36.0) and fetch that exact toolchain on first use. Installer
       # pinned in zig-patch/versions.toml's [ci.elan] table.
       - name: Install elan
         if: ${{ !env.AIR2LEAN_REUSED }}
