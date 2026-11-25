@@ -2131,6 +2131,7 @@
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
+          "Proofs/Asm/Gen.lean",
           "Proofs/Floatops/Proofs.lean",
           "Proofs/Floats/Proofs.lean",
           "Proofs/Recursion/AirCert.lean",
@@ -2250,6 +2251,7 @@
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
+          "Proofs/Asm/Gen.lean",
           "Proofs/Floatops/Proofs.lean",
           "Proofs/Floats/Proofs.lean",
           "Proofs/Recursion/AirCert.lean",
@@ -2365,6 +2367,7 @@
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
+          "Proofs/Asm/Gen.lean",
           "Proofs/Floatops/Proofs.lean",
           "Proofs/Floats/Proofs.lean",
           "Proofs/Recursion/AirCert.lean",
@@ -2490,6 +2493,7 @@
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
+          "Proofs/Asm/Gen.lean",
           "Proofs/Floatops/Proofs.lean",
           "Proofs/Floats/Proofs.lean",
           "Proofs/Recursion/AirCert.lean",
@@ -2609,6 +2613,7 @@
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
+          "Proofs/Asm/Gen.lean",
           "Proofs/Floatops/Proofs.lean",
           "Proofs/Floats/Proofs.lean",
           "Proofs/Recursion/AirCert.lean",
@@ -4290,7 +4295,6 @@
         "paths": [
           "Proofs/Asm/AirCert.lean",
           "Proofs/Asm/Effects.lean",
-          "Proofs/Asm/Proofs.lean",
           "Proofs/Atomics/AirCert.lean",
           "Proofs/Atomics/MessagePassing.lean",
           "Proofs/Atomics/Proofs.lean",
@@ -4916,6 +4920,7 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Asm/Effects.lean",
+          "Proofs/Asm/Proofs.lean",
           "Proofs/Atomics/Gen.lean",
           "Proofs/Atomics/MessagePassing.lean",
           "Proofs/Atomics/PtrPublish.lean",
@@ -10157,6 +10162,7 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Asm/Effects.lean",
+          "Proofs/Asm/Proofs.lean",
           "Proofs/Atomics/Gen.lean",
           "Proofs/Atomics/MessagePassing.lean",
           "Proofs/Atomics/PtrPublish.lean",
@@ -11756,6 +11762,7 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Asm/Gen.lean",
+          "Proofs/Asm/Proofs.lean",
           "Proofs/Atomics/Gen.lean",
           "Proofs/Basic/AirCert.lean",
           "Proofs/Basic/Gen.lean",
@@ -12400,6 +12407,7 @@
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
           "Proofs/Asm/Gen.lean",
+          "Proofs/Asm/Proofs.lean",
           "Proofs/Atomics/Gen.lean",
           "Proofs/Basic/AirCert.lean",
           "Proofs/Basic/Gen.lean",
@@ -19564,21 +19572,22 @@
       "Air2Lean/Air/Profile.lean": "3887c7bbfc13a4159506392e754dec287279e6a315e6617f99afc969044b2384",
       "Air2Lean/Air/Schema.lean": "65086142d7c1782da2990ca61a807a5d94e6c50e4f5fd1952eb2d417961c2f61",
       "Air2Lean/Air/StrictJson.lean": "07d2196f6e0896e9b21ba7786bcbff3e3d92b393b27546bcc4a4e3c013673616",
-      "Air2Lean/AsmAllowlist.lean": "7bfed85d4c1231e4280e1e5f9b22d54e7b4c1ae63ced57cabec69e4730e9de83",
+      "Air2Lean/AsmAllowlist.lean": "87111076776ea60dbf17b4fcdef20926cca44e2779569c41d008227857c8fcc2",
       "Air2Lean/AsmContract.lean": "fd5ff97fc7e47a39d10ad2e32246cc0e9ec28bc431269a2711d03b0464ab0b55",
-      "Air2Lean/AsmFeatures.lean": "675b14313c30f5bbeed9e8c2d186686da8d86bb27139573b89e2f74876b80ac4",
+      "Air2Lean/AsmFeatures.lean": "589b86c7663666cda479f097c1865cb3b9d9df2386554c3b3b7622454b4cc64c",
+      "Air2Lean/AsmIsa.lean": "1e957455739cfdf20d406eaa5598c7ea75bc04b19a825009bd08f1889d30c28a",
       "Air2Lean/BitCast.lean": "25afef05300c7134f86cbf8fbe5bf510d952432d470cf3bfc262d1a64f0f80c7",
       "Air2Lean/CanonCertificate.lean": "509e268d25470ae66eb256cae9108367a580e95ac15940dd2c5cee583b59d92b",
       "Air2Lean/CanonSem.lean": "1934b61e7f210f3326dc79576108755a647d13077dbf8216478a7d39e6f1edc2",
       "Air2Lean/Certificate.lean": "9e9b590768972d1e48ec007c7e88e138e474ba75d2f4feddd66e96a5789d6912",
-      "Air2Lean/Check.lean": "e6a1244afaa8e1ae82aecabb218f8ead515d73dad1292643c5c1159341a46149",
+      "Air2Lean/Check.lean": "8f813f570b4facc7e22e40c31ca4f5d0afc22f8aa1f3e043bcdaae74a8c6cda0",
       "Air2Lean/Device.lean": "7e48f76d70f8f4b86b105fafa2fef56f6af37651ece3954c31deb7bb5f870aca",
       "Air2Lean/Diagnose.lean": "d25e0af2a8dc193cb26a38fb9c8d795d268e52a95e7709ec36c411998092e644",
       "Air2Lean/Diagnostic.lean": "b4eb8936309c08e347eb46efda85024aff252bca7814fbc06c1bad1a95d974c1",
-      "Air2Lean/Emit.lean": "e7ec0f1ba43af0f8856ed20a51f4463d367ec024b54452fbbf030837d4c9b335",
+      "Air2Lean/Emit.lean": "6aad81bc4d68dc5fc7923cde910fa80331e62bad77d3c5771cfd8c5fcce4505a",
       "Air2Lean/InvGen.lean": "aa7ac33be1e25c5ed2a5f8716409e4c598f33a667313c1fc1cc85013230afd8a",
       "Air2Lean/InvGenMain.lean": "6641279898d44a6114fa6c402e42cf6e23db77e655d112a4e8c74f5f25dc964f",
-      "Air2Lean/Main.lean": "bdc052e20d2eec1d906f48de002cd8232e9e7e4c724bcf2319e6c02e55ae12e0",
+      "Air2Lean/Main.lean": "2476ffc781d1ceb135fba6e82149c5a0141b2d36c10fb53bd876deaa521c8f23",
       "Air2Lean/Memory.lean": "f06c631529c25e50f00d4a88815faad2974f59c7cba9968f45a8476195f295be",
       "Air2Lean/ModelRegistry.lean": "8bb59b34ac67a093dc2b5ccaf3ba6f63d3332706b90dbcaf2912db404c1c1793",
       "Air2Lean/ModuleSplit.lean": "91ea309d092613d74f93d7caf7731e27b3becd1b0f1051b8b61b116d9fba8343",
@@ -19604,7 +19613,7 @@
       "coverage/op-table/op-table.json": "445110a7f52010e72a83c6db985cd5d98551e97dbe061ffd9fdb629e603ce95f"
     },
     "runtime-models": {
-      "ZigLean/Asm.lean": "cf39b126a97d57484872047af0b93b237ba4114e42f220393a666ddc5b091bcb",
+      "ZigLean/Asm.lean": "d5894da01f1616fabe811167bdeab985e1e8d90ee6051b306cb7c95df782ecd6",
       "ZigLean/Basic.lean": "0856aa50494605f02e97d6e4144eb3d7e75c4ff533df8b839f803d917fdaa056",
       "ZigLean/Bit.lean": "534f36e316895503c6691e7bf851e67a3542d488d4b8c668fa09ddba71d80c4b",
       "ZigLean/BitCast.lean": "377531b22e47bfa62ae05ceff68ce55e2eee4dcb5aaccce78f10d48162156700",
@@ -19663,6 +19672,8 @@
       "ZigLean/Float/RoundTrip.lean": "4af5c14ed4f12731cfe1780479264fff52ba165a3cf809e2b69ae0230c964889",
       "ZigLean/Float/Value.lean": "5fe060b996d257f191c9c323a9a97118c1696df08169a2834d082438e4e19a53",
       "ZigLean/Float.lean": "f3dc30217dfab347453408f310bd01b151f81db75f7a76a8177a5e745e1063bb",
+      "ZigLean/Isa/X86.lean": "2dea9d8ee588697c2df54beaf491d2df6d1381e51dfad4fb58e10892b46824ab",
+      "ZigLean/Isa/X86Vectors.lean": "9228b44aff73b7667b12b122b7e48450cc3034c1014b9667d8b07c6a25a87443",
       "ZigLean/Lemmas.lean": "276805de525cbe46500f8c20ea42e8f873ec1b65e816351a51c7db314dfb7a3e",
       "ZigLean/Loop.lean": "2861063f17b0def5ef78ec13f090402aa2de9e723ae2abec102db1eab6d73daa",
       "ZigLean/Mem/Alloc.lean": "c4d4c570b6b6f9b54618ee18d83b0b944435b0520df0d76d16113483cdd78fd9",
@@ -19835,8 +19846,8 @@
     "proof-sources": {
       "Proofs/Asm/AirCert.lean": "27494afac30c76be876f3902ac96da19941612ead3e45a8c7c17eaa057eae80c",
       "Proofs/Asm/Effects.lean": "908f8474c2d0c302456535a7f5e02da4d44dc9b4ef7f1f8c1395631800ce8e16",
-      "Proofs/Asm/Gen.lean": "821de005f6baa83ddf20d11bcdf7d7a1c26c85e954243c0053cb5dbab61c230b",
-      "Proofs/Asm/Proofs.lean": "9748c58faab2000b0e826ddd734d004052df370ab66ead8b6e5c7683f9b524f7",
+      "Proofs/Asm/Gen.lean": "ecc599f4c5772c875903518e98923ec6bea194a00dc94ccb78ae8ade7850d573",
+      "Proofs/Asm/Proofs.lean": "451bc007810fb7431de5860026884517f2934c80c188738b93dd6bae29461342",
       "Proofs/Atomics/AirCert.lean": "2d5ffcc587c9511a463c699632e08a7327b7ed5eb0b72b91e538b7435a7b00e0",
       "Proofs/Atomics/Gen.lean": "624765bdd7e5cd1ac1733846bed697b68edfc5ca8d56a7756e3482615d0f2177",
       "Proofs/Atomics/MessagePassing.lean": "32aeeaa36969dd7c7b0173c11aa4ac52334110ea2c66a8efcb740d64db612f3b",
@@ -19987,12 +19998,11 @@
     "qualification-probes": {
       "scripts/floatprobe.sh": "02b5c6bfb74b447fcf9d980f70372c71b154c3a72b02322e058c4903c1f3a9fc",
       "tests/diff/Concurrent.lean": "a1ff8627104b713aa5288e518de2df5c1b3dfaa5f8da6e6d9dd12b89e5ded191",
-      "tests/diff/Diff.lean": "5189a813cdca89e3c33b9cc1d53bfa951c9a5acccdb2d9addc5f1d4d55293cb9",
+      "tests/diff/Diff.lean": "db29ae993fe584efd77ee4fdb438bdb249af0a7fd8fa68b242a6df9ca39d0691",
       "tests/diff/Outcome.lean": "5a171734aa6ab8ff92098fb199a59b630e620cf50bac3159dc35b42d13014b1d",
       "tests/diff/ScheduleSearch.lean": "ee4ea6c96f8da944fad95895ffcc2bc181be886c9d3abd695f8d8891d782932a",
       "tests/diff/ScheduleSearchTest.lean": "aa14b06fc3ee19578b9bb51e2d6de7e0e8fcf5ef05765f9c7f46c072ce76795b",
       "tests/diff/Schedules.lean": "918e647b5d17391f53bd9febffd3d331e7113955b658e0cb746d7f82ec927d56",
-      "tests/diff/asm/asm.zig": "3e89bf407385d17a0e68bbd96fb8fbe7a04b0b7972eb6e72f0623f8ae1e2721d",
       "tests/diff/asm/harness.zig": "b5ee279223d7103115811f9519f98d0029d6a973d27c75758942ba1268e02a3f",
       "tests/diff/asm/inputs/bswap32.jsonl": "1c05640dbf91022e14d52d7b38e524236d434585d1916c5e7a499d6a61fa8436",
       "tests/diff/asm/inputs/divmod.jsonl": "8ac55a79b3fc03e72b5001f9c11edf6e70ed14713fe8224e9e93d4be1d5e4436",
@@ -20061,7 +20071,7 @@
       "tests/diff/iogroup/inputs/groupConcurrent.jsonl": "744fae7228bc4e8d77340d8d4dad21e63b9db25e7447811e405501924e522a44",
       "tests/diff/iogroup/inputs/groupCounter.jsonl": "744fae7228bc4e8d77340d8d4dad21e63b9db25e7447811e405501924e522a44",
       "tests/diff/lake-manifest.json": "011b335b7ddd5e7c3ef27fac1155c8136a2f93ea05dfd8580329516088212f40",
-      "tests/diff/lakefile.toml": "c041d68a4075be28adbc73ee43d87d1aed4eabaa52f953d7559a45f886eedb19",
+      "tests/diff/lakefile.toml": "16e993a4cbf73647db7cc4e7dfe932de7efdeca415fc5dfe4ccfb21b24060f60",
       "tests/diff/layout/harness.zig": "a5d4dc71d20d8f5a931b7f60a681494b0e229c7cf53c7291dac29e3112bf829a",
       "tests/diff/layout/inputs/addrEq.jsonl": "7449c046d34cabc9dfc2dd1f0458e676840a58565820b7f263a3114e3638a36e",
       "tests/diff/layout/inputs/align4.jsonl": "1747250462af1b101d2a9ccce991d7ca371fd134bcb2c691ae4df95faea250e2",
