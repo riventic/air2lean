@@ -937,9 +937,9 @@ partial def execInner (ctx : Ctx) (st : St) (body again : Expr) : MetaM Path := 
       let v := Sym.add st'.cells[k]!.val (scaleBy inc.k dist)
       st := { st' with cells := st'.cells.modify k ({ · with val := v, stored := true }),
                        checked := st'.checked.push v }
-    return { st := { st with locals := st.locals.set! (idx c.counter) exitV, tick := st.tick || c.plain,
-                     innerSteps := st.innerSteps || c.plain },
-             res := .val (.const label []) }
+    st := { st with locals := st.locals.set! (idx c.counter) exitV, tick := st.tick || c.plain,
+                    innerSteps := st.innerSteps || c.plain }
+    return { st, res := .val (.const label []) }
 
 end
 
@@ -1695,7 +1695,7 @@ def candLoop (ns body again : Name) (contracts : Array (Name × Name) := #[]) : 
             let c' := cells[k']!.1
             if c'.loc.param == cell.loc.param then some (c'.loc.item.getD 0, k', c'.stored) else none).toArray
           let items := items.qsort (·.1 < ·.1)
-          owned := owned.push (.arr p (items.map fun (_, k', w) => (k', if w then some (paren tys[k']!) else none))
+          owned := owned.push (.arr p (items.map fun (_, k', w) => (k', if w then some tys[k']! else none))
             s!"t{cell.loc.param}")
         if !cell.stored then
           if cell.loc.item.isNone then owned := owned.push (.read s!"up (pts {p} {cell.align} v{k})")
