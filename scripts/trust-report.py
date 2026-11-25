@@ -40,7 +40,8 @@ def validate(data, root=ROOT):
     if data.get('format') != 1:
         return [f'{STAGES}: unsupported format {data.get("format")!r}']
     premises = defined_premises(root)
-    ci = '\n'.join((root / path).read_text(encoding='utf-8') for path in CI if (root / path).is_file())
+    # ci.yml must exist; ci-macos.yml is absent before it existed.
+    ci = '\n'.join((root / path).read_text(encoding='utf-8') for path in CI if path == CI[0] or (root / path).is_file())
     seen, cited = set(), set()
 
     def exists(where, rel):

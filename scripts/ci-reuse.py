@@ -182,11 +182,13 @@ def blob(root, revision, path):
 def load_workflow(root, revision=None):
     """The CI workflows as one (target-matrix.py merge_workflows: jobs, the file of each job, each
     file's workflow-level fields), from the worktree or a commit."""
-    if revision is None:
-        present = {path for path in TM.CI_WORKFLOWS if Path(root, path).is_file()}
-    else:
-        present = set(git(root, 'ls-tree', '--name-only', revision, '--', *TM.CI_WORKFLOWS).decode().split('\n'))
-    return RR.ci_workflow({path: blob(root, revision, path) for path in TM.CI_WORKFLOWS if path in present})
+    if revision is not None:
+        return RR.ci_workflow(RR.ci_texts(root, revision))
+    try:
+        texts = TM.ci_workflows(lambda path: blob(root, None, path) if Path(root, path).is_file() else None)
+    except TM.Unreadable as error:
+        raise ReuseError(str(error)) from error
+    return RR.ci_workflow(texts)
 
 
 def job_rows(job):

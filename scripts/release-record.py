@@ -252,22 +252,22 @@ def build_plan(root, revision):
     names = {path: fields.get('name', path) for path, fields in workflow['workflows'].items()}
     if len(set(names.values())) != len(names):
         raise ReleaseError('the CI workflows need distinct names: %s' % names)
-    source = lambda job_id: names[workflow['files'][job_id]]
+    source = {job_id: names[path] for job_id, path in workflow['files'].items()}
     plan_jobs = []
     for row in rows:
         gates, skipped = row_gates(job, row, commands, '')
         plan_jobs.append({'name': job_name('test', row), 'matrix': row, 'reproduce': reproduce(row),
-                          'gates': gates, 'not_applicable': skipped, 'workflow': source('test')})
+                          'gates': gates, 'not_applicable': skipped, 'workflow': source['test']})
     if len({j['name'] for j in plan_jobs}) != len(plan_jobs):
         raise ReleaseError('%s: matrix rows have identical job names' % WORKFLOW)
     for name in NATIVE_JOBS:
         if name in jobs:
-            plan_jobs.extend(dict(plan, workflow=source(name)) for plan in native_plan(name, jobs[name], commands, setup))
+            plan_jobs.extend(dict(plan, workflow=source[name]) for plan in native_plan(name, jobs[name], commands, setup))
     for name in sorted(SUPPORT_JOBS & set(jobs)):
         support_rows = (((jobs[name].get('strategy') or {}).get('matrix') or {}).get('include')) or [{}]
         for row in support_rows:
             plan_jobs.append({'name': job_name(name, row) if row else name, 'matrix': None,
-                              'reproduce': 'not a gate', 'gates': [], 'not_applicable': [], 'workflow': source(name)})
+                              'reproduce': 'not a gate', 'gates': [], 'not_applicable': [], 'workflow': source[name]})
     blob = lambda path: git_text(root, 'rev-parse', '%s:%s' % (revision, path))
     compatibility = json.loads(show(root, revision, 'compatibility.json'))
     return {'workflow': WORKFLOW, 'workflow_name': names[WORKFLOW], 'workflow_blob': blob(WORKFLOW),
