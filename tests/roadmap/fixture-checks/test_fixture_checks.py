@@ -167,21 +167,25 @@ class Passes(unittest.TestCase):
         (self.hidden / "input").write_text("ok\n")
         self.assertEqual(self.run_checks()[0], 0)
         hint = json.loads((self.temp / "schedule.json").read_text())[self.unit["name"]]
-        self.assertEqual(sorted(hint), ["elapsed_s", "lean_threads", "peak_rss_kib"])  # no status
+        self.assertEqual(sorted(hint), ["elapsed_s", "lean_threads", "peak_rss_kib", "version"])  # no status
+        self.assertEqual(hint["version"], fc.HINT_VERSION)
         (self.hidden / "input").write_text("broken\n")
         self.assertEqual(self.run_checks()[0], 1)  # a measured unit still runs and fails
-        units = [{"name": n} for n in ("short", "long", "new", "bad", "wide")]
+        units = [{"name": n} for n in ("short", "long", "new", "bad", "wide", "old")]
+        v = fc.HINT_VERSION
         (self.temp / "schedule.json").write_text(json.dumps({
-            "short": {"elapsed_s": 1, "lean_threads": 2, "peak_rss_kib": [100 << 10]},
-            "long": {"elapsed_s": 9, "lean_threads": 2, "peak_rss_kib": [4000 << 10, 6000 << 10]},
-            "bad": {"elapsed_s": 5},  # malformed: unmeasured, not a crash
-            "wide": {"elapsed_s": 3, "lean_threads": 1, "peak_rss_kib": [1000 << 10]}}))
+            "short": {"version": v, "elapsed_s": 1, "lean_threads": 2, "peak_rss_kib": [100 << 10]},
+            "long": {"version": v, "elapsed_s": 9, "lean_threads": 2, "peak_rss_kib": [4000 << 10, 6000 << 10]},
+            "bad": {"version": v, "elapsed_s": 5},  # malformed: unmeasured, not a crash
+            "wide": {"version": v, "elapsed_s": 3, "lean_threads": 1, "peak_rss_kib": [1000 << 10]},
+            # Version 1 measured a sub-admission's guard alone (~36 MB): unmeasured, never trusted.
+            "old": {"elapsed_s": 2, "lean_threads": 2, "peak_rss_kib": [36 << 10]}}))
         with mock.patch.dict(os.environ, {"LEAN_NUM_THREADS": "2"}):
             order, requests = fc.schedule(units, 5000)
-        self.assertEqual([units[i]["name"] for i in order], ["new", "bad", "long", "wide", "short"])
+        self.assertEqual([units[i]["name"] for i in order], ["new", "bad", "old", "long", "wide", "short"])
         # A peak measured with fewer Lean threads is scaled up to this run's count.
         self.assertEqual(requests, [fc.MEM_FLOOR_MIB, int(6000 * fc.MEM_MARGIN), 5000, 5000,
-                                    int(1000 * fc.MEM_MARGIN * 2)])
+                                    int(1000 * fc.MEM_MARGIN * 2), 5000])
         with mock.patch.dict(os.environ, {"AIR2LEAN_FIXTURE_SCHEDULE": str(self.temp)}), \
              contextlib.redirect_stderr(io.StringIO()) as err:
             fc.write_hints(units[:1], [{"elapsed_s": 1, "peak_rss_kib": 1}])  # a directory: not written
@@ -191,7 +195,7 @@ class Passes(unittest.TestCase):
         # The rule of a Lean module never measured (lean-peaks.py `typical`), not the declared
         # bound: an 11000 MiB charge made every new unit an 11-slot queue head.
         units = [{"name": "u%02d" % k} for k in range(1, 21)] + [{"name": "new"}]
-        hints = {u["name"]: {"elapsed_s": 1, "lean_threads": 1, "peak_rss_kib": [(100 * k) << 10]}
+        hints = {u["name"]: {"version": fc.HINT_VERSION, "elapsed_s": 1, "lean_threads": 1, "peak_rss_kib": [(100 * k) << 10]}
                  for k, u in enumerate(units[:-1], 1)}
         (self.temp / "schedule.json").write_text(json.dumps(hints))
         with mock.patch.dict(os.environ, {"LEAN_NUM_THREADS": "1"}):

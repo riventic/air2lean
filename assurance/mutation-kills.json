@@ -589,6 +589,76 @@
       },
       "block_sha256": "f3b9f32f9dab236645ce525c6a852ec32c4c4fb0c85c258d1ae6de3efbebd7b1"
     },
+    "tests/roadmap/env-boundaries/mutations.py#close-keeps-handle-open": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/env-boundaries/check.sh"
+      },
+      "block_sha256": "8cce4e5f8951f635b0a46ac307a6fecac0a17a54746c578429984b8f2cd25b5e"
+    },
+    "tests/roadmap/env-boundaries/mutations.py#error-outside-allowed-list": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/env-boundaries/check.sh"
+      },
+      "block_sha256": "8cce4e5f8951f635b0a46ac307a6fecac0a17a54746c578429984b8f2cd25b5e"
+    },
+    "tests/roadmap/env-boundaries/mutations.py#monotonic-clock-runs-backwards": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/env-boundaries/check.sh"
+      },
+      "block_sha256": "8cce4e5f8951f635b0a46ac307a6fecac0a17a54746c578429984b8f2cd25b5e"
+    },
+    "tests/roadmap/env-boundaries/mutations.py#read-close-skipped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/env-boundaries/check.sh"
+      },
+      "block_sha256": "8cce4e5f8951f635b0a46ac307a6fecac0a17a54746c578429984b8f2cd25b5e"
+    },
+    "tests/roadmap/env-boundaries/mutations.py#read-wouldblock-renamed": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/env-boundaries/check.sh"
+      },
+      "block_sha256": "8cce4e5f8951f635b0a46ac307a6fecac0a17a54746c578429984b8f2cd25b5e"
+    },
+    "tests/roadmap/env-boundaries/mutations.py#write-all-advances-one-byte": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/env-boundaries/check.sh"
+      },
+      "block_sha256": "8cce4e5f8951f635b0a46ac307a6fecac0a17a54746c578429984b8f2cd25b5e"
+    },
+    "tests/roadmap/env-boundaries/mutations.py#write-all-close-skipped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/env-boundaries/check.sh"
+      },
+      "block_sha256": "8cce4e5f8951f635b0a46ac307a6fecac0a17a54746c578429984b8f2cd25b5e"
+    },
+    "tests/roadmap/env-boundaries/mutations.py#write-all-error-swallowed": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/env-boundaries/check.sh"
+      },
+      "block_sha256": "8cce4e5f8951f635b0a46ac307a6fecac0a17a54746c578429984b8f2cd25b5e"
+    },
+    "tests/roadmap/env-boundaries/mutations.py#write-reports-more-than-given": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/env-boundaries/check.sh"
+      },
+      "block_sha256": "8cce4e5f8951f635b0a46ac307a6fecac0a17a54746c578429984b8f2cd25b5e"
+    },
+    "tests/roadmap/env-boundaries/mutations.py#write-reports-zero-progress": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/env-boundaries/check.sh"
+      },
+      "block_sha256": "8cce4e5f8951f635b0a46ac307a6fecac0a17a54746c578429984b8f2cd25b5e"
+    },
     "tests/roadmap/error-storage/mutations.py#collapse_names": {
       "killed_by": {
         "kind": "check",
@@ -623,6 +693,55 @@
         "target": "tests/roadmap/error-storage/check.sh"
       },
       "block_sha256": "a769440a916ba81e311f9a3ce148188b52a9094b767f0293b175753a53f9e349"
+    },
+    "tests/roadmap/futures/mutations.py#cancel-is-await": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/futures/check.sh"
+      },
+      "block_sha256": "2a37ab0b829fd8482f53bafb82a77a882dd8dfc286cfab8ebadaebdf3097bdff"
+    },
+    "tests/roadmap/futures/mutations.py#cancel-point-skipped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/futures/check.sh"
+      },
+      "block_sha256": "2a37ab0b829fd8482f53bafb82a77a882dd8dfc286cfab8ebadaebdf3097bdff"
+    },
+    "tests/roadmap/futures/mutations.py#future-storage-leaked": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/futures/check.sh"
+      },
+      "block_sha256": "2a37ab0b829fd8482f53bafb82a77a882dd8dfc286cfab8ebadaebdf3097bdff"
+    },
+    "tests/roadmap/futures/mutations.py#second-await-result-dropped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/futures/check.sh"
+      },
+      "block_sha256": "2a37ab0b829fd8482f53bafb82a77a882dd8dfc286cfab8ebadaebdf3097bdff"
+    },
+    "tests/roadmap/futures/mutations.py#task-error-not-propagated": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/futures/check.sh"
+      },
+      "block_sha256": "2a37ab0b829fd8482f53bafb82a77a882dd8dfc286cfab8ebadaebdf3097bdff"
+    },
+    "tests/roadmap/futures/mutations.py#task-result-wrong": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/futures/check.sh"
+      },
+      "block_sha256": "2a37ab0b829fd8482f53bafb82a77a882dd8dfc286cfab8ebadaebdf3097bdff"
+    },
+    "tests/roadmap/futures/mutations.py#task-write-through-capture-lost": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/futures/check.sh"
+      },
+      "block_sha256": "2a37ab0b829fd8482f53bafb82a77a882dd8dfc286cfab8ebadaebdf3097bdff"
     },
     "tests/roadmap/global-payload-pointers/generated-mutations.py#forget_parent": {
       "killed_by": {
@@ -889,6 +1008,83 @@
         "target": "tests/roadmap/pointer-atomics/Mutants.lean"
       },
       "block_sha256": "0715d5f3fa74172e6e6a4de4c1b034bf12242b1881419a8aed2c8de0c904079d"
+    },
+    "tests/roadmap/pointer-width/mutations.py#wasm32-alloc-item-size-one": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/pointer-width/check.sh"
+      },
+      "block_sha256": "e36842265186b1e14a3dc454f5f73f748ccd04f3cc9348f82548b4c67a0fa08e"
+    },
+    "tests/roadmap/pointer-width/mutations.py#wasm32-bounds-check-allows-length": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/pointer-width/check.sh"
+      },
+      "block_sha256": "e36842265186b1e14a3dc454f5f73f748ccd04f3cc9348f82548b4c67a0fa08e"
+    },
+    "tests/roadmap/pointer-width/mutations.py#wasm32-usize-add-wraps": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/pointer-width/check.sh"
+      },
+      "block_sha256": "e36842265186b1e14a3dc454f5f73f748ccd04f3cc9348f82548b4c67a0fa08e"
+    },
+    "tests/roadmap/pointer-width/mutations.py#wasm32-view-uses-64-bit-pointer-layout": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/pointer-width/check.sh"
+      },
+      "block_sha256": "e36842265186b1e14a3dc454f5f73f748ccd04f3cc9348f82548b4c67a0fa08e"
+    },
+    "tests/roadmap/pointer-width/mutations.py#x64-byte-count-overflow-flag-inverted": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/pointer-width/check.sh"
+      },
+      "block_sha256": "e36842265186b1e14a3dc454f5f73f748ccd04f3cc9348f82548b4c67a0fa08e"
+    },
+    "tests/roadmap/pointer-width/mutations.py#x64-view-uses-32-bit-pointer-layout": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/pointer-width/check.sh"
+      },
+      "block_sha256": "e36842265186b1e14a3dc454f5f73f748ccd04f3cc9348f82548b4c67a0fa08e"
+    },
+    "tests/roadmap/queue-adt/mutants.sh#pushall-capacity-premise-dropped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/queue-adt/check.sh"
+      },
+      "block_sha256": "750ff1daa1907f7341e3c3e00a684fc697d1423910f787ec6b524e4a38a2351a"
+    },
+    "tests/roadmap/queue-adt/mutants.sh#ring-pop-no-wrap": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/queue-adt/check.sh"
+      },
+      "block_sha256": "750ff1daa1907f7341e3c3e00a684fc697d1423910f787ec6b524e4a38a2351a"
+    },
+    "tests/roadmap/queue-adt/mutants.sh#ring-push-no-wrap": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/queue-adt/check.sh"
+      },
+      "block_sha256": "750ff1daa1907f7341e3c3e00a684fc697d1423910f787ec6b524e4a38a2351a"
+    },
+    "tests/roadmap/queue-adt/mutants.sh#shift-pop-no-move": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/queue-adt/check.sh"
+      },
+      "block_sha256": "750ff1daa1907f7341e3c3e00a684fc697d1423910f787ec6b524e4a38a2351a"
+    },
+    "tests/roadmap/queue-adt/mutants.sh#shift-pop-steps-short": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/queue-adt/check.sh"
+      },
+      "block_sha256": "750ff1daa1907f7341e3c3e00a684fc697d1423910f787ec6b524e4a38a2351a"
     },
     "tests/roadmap/resize-remap/mutations.py#copy-lost-prefix-and-defined-suffix": {
       "unrecorded": "mutations.py only writes patches of the retiring hand model ZigLean/Mem/Alloc.lean; no CI check applies them and runs Check.lean",
