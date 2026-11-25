@@ -1,4 +1,4 @@
--- air2lean-invgen: {"contracts":["Lists.Alloc.destroy_fields"],"generator":{"lean":"4.34.0","modules":[["Air2Lean.InvGen","66ad481953e23d9c7e0a71474061ba54f18979ff7c3c6e7baf6fd5b17d82a90b"],["Air2Lean.InvGenMain","de6d02b6f751b7c66c5408950f0a96f96cd237ec0d8a7c83c6038d79f12cdb33"],["Air2Lean.Revision","0abdb80bf11b8b7e1b0820755e2015f43cce91c00db65dd085b2a8afa6e65f8c"]],"revision":"1c874a6831b45b77f823ce4e8705a954d666a5039d1bb58e21ee6d753a0ea1fa"},"inputs":[["Proofs/Lists/Open.lean","971a0bc5bb0cfc84900ef981cb5ece2ac23abc3b1c0044b723dcc973ab6083c1"],["Proofs/Lists/AllocNode.lean","87e990e3b2946d0ca01050c694ff1075e476899263ab3d6c0a196a47e3f5984a"]],"loops":[{"loop":"evens.loop8","none":"a call: Zig.callMC do\n  Zig.checkIndex p1.len i9\n  Zig.load (BitVec 32) 4 (p1.ptr.elem 4 i9)"},{"family":"list-walk","loop":"freeAll.loop5","pruned":[]},{"loop":"reverse.loop6","none":"no call by one of the given contracts (a loop of the file generated without them)"},{"loop":"sum.loop6","none":"no call by one of the given contracts (a loop of the file generated without them)"}],"module":"Proofs.Lists.Open","namespace":"Lists.Open","output":"8ddf41ae63ef7158169d4eadd4afa5c4447e633a772b4e64c0bf51c481e800e0","specs":["Proofs.Lists.AllocNode"],"version":2}
+-- air2lean-invgen: {"contracts":["Lists.Alloc.destroy_fields"],"generator":{"lean":"4.34.0","modules":[["Air2Lean.InvGen","aa7ac33be1e25c5ed2a5f8716409e4c598f33a667313c1fc1cc85013230afd8a"],["Air2Lean.InvGenMain","6641279898d44a6114fa6c402e42cf6e23db77e655d112a4e8c74f5f25dc964f"],["Air2Lean.Revision","0abdb80bf11b8b7e1b0820755e2015f43cce91c00db65dd085b2a8afa6e65f8c"]],"revision":"c0851d35497ea3aa18117adc8a0a6d945fec0d8578db26de13a30557f41b0540"},"inputs":[["Proofs/Lists/Open.lean","971a0bc5bb0cfc84900ef981cb5ece2ac23abc3b1c0044b723dcc973ab6083c1"],["Proofs/Lists/AllocNode.lean","87e990e3b2946d0ca01050c694ff1075e476899263ab3d6c0a196a47e3f5984a"]],"loops":[{"loop":"evens.loop8","none":"a call: Zig.callMC do\n  Zig.checkIndex p1.len i9\n  Zig.load (BitVec 32) 4 (p1.ptr.elem 4 i9)"},{"credits":{"count":"zs.length"},"family":"list-walk","loop":"freeAll.loop5","pruned":[]},{"loop":"reverse.loop6","none":"no call by one of the given contracts (a loop of the file generated without them)"},{"loop":"sum.loop6","none":"no call by one of the given contracts (a loop of the file generated without them)"}],"module":"Proofs.Lists.Open","namespace":"Lists.Open","output":"766bb2f07062f9d934e5b70099e71a5d82959a6581205066b3c525809b9fb8df","specs":["Proofs.Lists.AllocNode"],"version":2}
 import Proofs.Lists.Open
 import Proofs.Lists.AllocNode
 import ZigLean.Sep.Full.Ghost
@@ -42,5 +42,23 @@ abbrev freeAll.loop5.done (I : Zig.Full.FAllocInv) (φ : Zig.Full.Frac) (p : Zig
     I.own ⋆
     (Zig.Full.vtR p0.vtable fns.toList) ⋆
     plain
+
+/-- The credit-mode invariant of `freeAll.loop5` (a walk that counts its steps, `loop_exact`): `freeAll.loop5.inv` without the plain mode, at the exact count `n` of the body runs left before the last one.
+`s0` holds the locals at loop entry. -/
+@[fsym_inv] def freeAll.loop5.credits.inv (inst0 : Lists.Open.Ext) (p0 : Lists.Open.mem_Allocator) (fns : Zig.VTableFns) (I : Zig.Full.FAllocInv) (φ : Zig.Full.Frac) (xs : List (BitVec 32)) (s0 : freeAllLocals) (s : freeAllLocals) (n : Nat) : FAssn :=
+  FAssn.ex fun ys : List (BitVec 32) => FAssn.ex fun zs : List (BitVec 32) =>
+    ⟪xs = ys.reverse ++ zs ∧
+      zs.length = n⟫ ⋆
+    listSegRev (Lists.Open.freeAll.loop5.done I φ) s0.p s.p ys ⋆
+    listSeg (Lists.Open.freeAll.loop5.node I φ) s.p none zs ⋆
+    I.own ⋆
+    (Zig.Full.vtR p0.vtable fns.toList)
+
+/-- The exit post of `freeAll.loop5.credits`: the loop exits with `r`, after all iterations. -/
+@[fsym_inv] def freeAll.loop5.credits.post (inst0 : Lists.Open.Ext) (p0 : Lists.Open.mem_Allocator) (fns : Zig.VTableFns) (I : Zig.Full.FAllocInv) (φ : Zig.Full.Frac) (xs : List (BitVec 32)) (s0 : freeAllLocals) (r : freeAllExit × freeAllLocals) : FAssn :=
+  ⟪r.1 = freeAllExit.br4⟫ ⋆
+    listSegRev (Lists.Open.freeAll.loop5.done I φ) s0.p none xs.reverse ⋆
+    I.own ⋆
+    (Zig.Full.vtR p0.vtable fns.toList)
 
 end Lists.Open

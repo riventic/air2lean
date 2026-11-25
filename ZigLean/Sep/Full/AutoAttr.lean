@@ -34,7 +34,10 @@ import Lean
   postcondition), `fsym` applies the view to the state atoms of that block and walks on.
 * `@[fsym_inv]` marks a **loop's invariant** `B.inv`, its measure `B.meas` and its exit post
   `B.post`, definitions next to the loop body `B` (P09-E4): at `(Zig.loop (B …) again).run s`
-  with no rule, `fsym` applies its backend's loop rule with them and walks the body's step.
+  with no rule, `fsym` applies its backend's loop rule with them and walks the body's step. A
+  body registers a second invariant for the credit mode (`B.credits.inv … s n` with its exact
+  count `n`, and `B.credits.post`; `LoopMode`): `fsym` takes it when the state at the loop holds
+  credits and no plain mode, with the backend's counted loop rule (`loop_exact`).
 * `fsym_norm` is the simp set that normalizes generated programs (pushes `StateT.run` through the
   generated `MM` layer, flattens binds, folds trivial results).
 * `fsym_arith` is the simp set that prepares arithmetic side goals for `omega` (`Ptr` offsets,
@@ -200,6 +203,35 @@ initialize registerBuiltinAttribute {
 /-- The parts of a loop body `B` that `@[fsym_inv]` registers: `B.inv`, `B.meas` and `B.post`. -/
 def loopInvParts : List String := ["inv", "meas", "post"]
 
+/-- **The mode of a registered loop invariant** (P09, maintainer 2026-11-24): a loop body registers
+one invariant per mode, and `fsym` takes the one of the walk's mode.
+* `plain`: `B.inv`, `B.meas`, `B.post`, for a walk that bounds no steps (the backend's loop rule
+  with a measure, or the partial one).
+* `credits`: `B.credits.inv` and `B.credits.post`, for a walk that pays its steps with credits
+  (the state at the loop holds `credits` and no plain mode). The invariant's last parameter is
+  the exact count: the body runs left before the last one (`B.credits.inv … s n`). The rule is
+  the backend's counted loop rule (`loop_exact`), which adds the credits and the receipts, so the
+  invariant names neither. -/
+inductive LoopMode where
+  | plain
+  | credits
+  deriving BEq, Hashable, Inhabited, Repr
+
+/-- The name of the part `part` (`inv`, `meas`, `post`) of the loop body `body` in a mode. -/
+def LoopMode.name (mode : LoopMode) (body : Name) (part : String) : Name :=
+  match mode with
+  | .plain => body.str part
+  | .credits => (body.str "credits").str part
+
+/-- A registered name read as `(B, mode, part)`: `B.credits.part` is the credit mode's part of `B`
+unless `B.credits` is itself a declaration (a loop body of that name: its plain-mode part). -/
+def loopInvKey? (env : Environment) : Name → Option (Name × LoopMode × String)
+  | .str (.str b "credits") part =>
+    if env.contains (b.str "credits") then some (b.str "credits", .plain, part)
+    else some (b, .credits, part)
+  | .str b part => some (b, .plain, part)
+  | _ => none
+
 /-- The parameter of `B.inv` (and `B.meas`, `B.post`) that is the locals at the loop's entry. -/
 def loopEntryParam : Name := `s0
 
@@ -223,13 +255,18 @@ universe parameters whose parameters are explicit and named apart (`fsym` matche
 `B.inv`'s), whose last parameter is the loop's locals (`s : σ`; `r : ε × σ` for the post; for
 the invariant, the locals may be followed by a ghost measure `n : Nat`), whose
 parameter of the locals at the loop's entry is named `s0` and whose value is an `FAssn` (a `Nat`
-for the measure). -/
+for the measure). In the credit mode (`B.credits.inv`, `B.credits.post`) the invariant ends in
+the exact count `n : Nat` and there is no measure. -/
 def checkLoopInv (decl : Name) : MetaM Unit := do
   let fail {α} (why : MessageData) : MetaM α :=
     throwError "@[fsym_inv] {decl}: {why}; expected the definition `B.inv`, `B.meas` or `B.post` of \
       a loop body `B`"
-  let .str body last := decl | fail "not a name `B.inv`, `B.meas` or `B.post`"
+  let some (body, mode, last) := loopInvKey? (← getEnv) decl
+    | fail "not a name `B.inv`, `B.meas` or `B.post`"
   unless last ∈ loopInvParts do fail "its name does not end in `inv`, `meas` or `post`"
+  let credits := mode == .credits
+  if credits && last == "meas" then
+    fail m!"the credit mode has no measure (`{body}.credits.inv … s n` ends in its exact count `n`)"
   let some (.defnInfo b) := (← getEnv).find? body
     | fail m!"`{body}` is not a definition (declared before its invariant)"
   let some (.defnInfo d) := (← getEnv).find? decl | fail "not a definition"
@@ -247,6 +284,9 @@ def checkLoopInv (decl : Name) : MetaM Unit := do
     -- a ghost measure (`B.inv … s n`: a last parameter `n : Nat` after the locals; the loop rule
     -- is `loop_ghost_ex`, so there is no `B.meas`)
     let ghost ← if last == "inv" then isGhostInv xs (types?.map (·.1)) else pure false
+    if credits && last == "inv" && !ghost then
+      fail m!"a credit-mode invariant ends in its exact count (`{body}.credits.inv … s n`, with \
+        `n : Nat` the body runs left before the last one, after the locals)"
     let xs := if ghost then xs.pop else xs
     let some s := xs.back? | fail "no parameter for the loop's locals"
     if let some (σ, ε) := types? then
@@ -276,9 +316,11 @@ def checkLoopInv (decl : Name) : MetaM Unit := do
 
 /-- The loops' invariants (`@[fsym_inv]`): at a loop with no rule, `fsym` applies its backend's
 loop rule with them (`walkCore`). -/
-initialize fsymInvExt : SimpleScopedEnvExtension Name NameSet ←
+initialize fsymInvExt :
+    SimpleScopedEnvExtension ((Name × LoopMode × String) × Name)
+      (PersistentHashMap (Name × LoopMode × String) Name) ←
   registerSimpleScopedEnvExtension {
-    addEntry := fun s n => s.insert n
+    addEntry := fun s (key, decl) => s.insert key decl
     initial := {}
   }
 
@@ -288,13 +330,19 @@ initialize registerBuiltinAttribute {
     the full-state symbolic executor `fsym`"
   add := fun decl _ kind => do
     (checkLoopInv decl).run' {} {}
-    fsymInvExt.add decl kind
+    -- (keyed as `checkLoopInv` read the name, once: a later declaration does not re-read it)
+    let some key := loopInvKey? (← getEnv) decl
+      | throwError "@[fsym_inv] {decl}: not a name `B.inv`, `B.meas` or `B.post`"
+    fsymInvExt.add (key, decl) kind
 }
 
-/-- The registered invariant, measure and exit post of the loop body `body` (`@[fsym_inv]`). -/
-def loopInvOf (env : Environment) (body : Name) : Option Name × Option Name × Option Name :=
+/-- The registered invariant, measure and exit post of the loop body `body` in the mode `mode`
+(`@[fsym_inv]`: the registry is keyed by the body, the mode and the part, as `loopInvKey?` read
+the name at its registration). -/
+def loopInvOf (env : Environment) (body : Name) (mode : LoopMode := .plain) :
+    Option Name × Option Name × Option Name :=
   let s := fsymInvExt.getState env
-  let get (part : String) := let n := body.str part; if s.contains n then some n else none
+  let get (part : String) := s.find? (body, mode, part)
   (get "inv", get "meas", get "post")
 
 /-- `c` is an `@[fsym_atom]` or the head of a range law (planned by its law, never unfolded). -/

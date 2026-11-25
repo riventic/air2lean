@@ -360,11 +360,14 @@ rejects a goal that carries ORD-06 over a big-endian translation
 The evidence below is about the byte order of the atomic model, not the hardware's memory
 ordering.
 
-Evidence: `tests/roadmap/big-endian` exports one source with the patched Zig 0.16.0 for
-s390x-linux, mips64-linux and x86_64-linux (the AIR differs only in the profile), keeps the
-translations, proves byte-level facts of the s390x and x86_64 ones, and compares the model of each
-with the native program run on s390x-linux-musl (under qemu emulation), mips64-linux-muslabi64
-(qemu) and x86_64-linux-musl. `concurrency.sh` does the same for atomics, futexes, threads and the
+Evidence: `tests/roadmap/big-endian` exports one source with the patched Zig 0.17.1 and 0.16.0
+for s390x-linux, mips64-linux and x86_64-linux (the AIR of one version differs only in the
+profile), keeps the translations, proves byte-level facts of the s390x and x86_64 ones of both
+versions, and compares the model of each with the native program of that version run on
+s390x-linux-musl (under qemu emulation), mips64-linux-muslabi64 (qemu) and x86_64-linux-musl. On
+0.17.1 the `@bitCast`s to and from bytes give the same bytes on both byte orders (logical bit
+order, [bitcast-semantics.md](bitcast-semantics.md)); memory views keep the target's order.
+`concurrency.sh` does the same for atomics, futexes, threads and the
 allocator model, exported with Zig 0.17.1 and 0.15.2, under 24 scheduler oracles per case. These
 are bounded observations for those targets, backend and mode; they are not a binary
 correspondence claim.

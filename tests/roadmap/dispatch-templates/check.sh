@@ -23,11 +23,12 @@ lake build ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Arr ZigL
 python3 -B scripts/fixtures.py build DispatchTemplate
 if [ "$native" = 0 ]; then echo 'dispatch loop regressions passed'; exit 0; fi
 
-version=${AIR2LEAN_DISPATCH_ZIG_VERSION:-0.16.0}  # zig-pin: this check is qualified on 0.16.0 and older, not on the default
+version=${AIR2LEAN_DISPATCH_ZIG_VERSION:-$(python3 -B scripts/compat.py default)}
 zig_air=${AIR2LEAN_DISPATCH_ZIG_AIR:-"$repo_root/zig-air-$version/bin/zig"}
 zig_stock=${AIR2LEAN_DISPATCH_ZIG_STOCK:-zig}
-# The proof names the 0.16.0 translation's loop (`loop10`/`dispatchValue10`).
-[ "$version" = 0.16.0 ] || { echo "dispatch-template proof is qualified on 0.16.0 only, not $version" >&2; exit 2; }
+# The proof names the translation's renumbered loop (`loop10`/`dispatchValue10`), the same on
+# the 0.17.1 and 0.16.0 exports.
+case "$version" in 0.17.1|0.16.0) ;; *) echo "dispatch-template proof is qualified on 0.17.1 and 0.16.0, not $version" >&2; exit 2;; esac
 [ "$("$zig_stock" version)" = "$version" ] || { echo 'stock compiler version mismatch' >&2; exit 1; }
 [ "$("$zig_air" version)" = "$version" ] || { echo 'exporter version mismatch' >&2; exit 1; }
 work=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-dispatch-templates.XXXXXX")
