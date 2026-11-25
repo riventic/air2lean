@@ -419,7 +419,7 @@ theorem FTotalTriple.errIsErrAt_region {t : Option ErrName} (hal : Nat.min al 2 
   show FTotalTriple _ (do
     let x ← liftM (errOfBytes (← Zig.loadBytes (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1)
       2 (Nat.min al 2)))
-    pure x.isSome) _
+    Pure.pure x.isSome) _
   refine FTotalTriple.bind (FTotalTriple.errCode_bytes hal heo hfit) fun x =>
     FTotalTriple.lift fun hx => ?_
   subst hx
@@ -518,7 +518,7 @@ variable {d : ErrorDomain}
     show FTotalTriple _ (do
       let x ← liftM ((optionalErrorEnc d).decode
         (← Zig.loadBytes (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2 (Nat.min al 2)))
-      pure x.isSome) _
+      Pure.pure x.isSome) _
     refine FTotalTriple.bind (FTotalTriple.errCode_bytes hal heo (errCode_fit hs)) fun x =>
       FTotalTriple.lift fun hx => ?_
     subst hx
@@ -1174,9 +1174,11 @@ theorem ReadAt.of_bytesRead {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array By
     obtain ⟨b, blk, hpb, hblk, hl, h0, hlo, hsz, hA', -, hx⟩ :=
       Mem.bytes_block (hr m r rF hh hp) hpos
     refine ⟨b, blk, hpb, hblk, hl, h0, hlo, by rw [hA']; exact hA, fun i hi => ?_⟩
-    have hc : i < min (p.off.toNat + bs.size) blk.bytes.size - p.off.toNat := by omega
     have e : (blk.bytes.extract p.off.toNat (p.off.toNat + bs.size))[i]? = bs[i]? := by rw [hx]
-    rwa [Array.getElem?_extract, if_pos hc, Array.getElem?_eq_getElem hi] at e
+    rw [Array.getElem?_extract, Array.getElem?_eq_getElem hi] at e
+    split at e
+    · exact e
+    · rename_i hn; exact (hn (by omega)).elim
 
 /-- **A rule on a shared typed value** (`spts`) from a rule on bytes that every resource of the
 precondition reads (`Holds.sbytesRead`): the share stays. -/
@@ -1284,7 +1286,7 @@ theorem ReadsPtr.spts_add {T : Type} [Enc T] {s : T} {k n : Nat} (hk : k + n ≤
     obtain ⟨A, S, K, bs, -, -, -, ⟨-, -, h0, -⟩, -⟩ := hP.1
     exact h0
   have e : (q.add k).off.toNat = q.off.toNat + k := by simp only [Ptr.add]; omega
-  exact spts_owned hb hp (by omega) (by omega)
+  exact spts_owned (p := q) hb hp (by omega) (by omega)
 
 /-- The first `n` bytes of a shared typed value are read. -/
 @[fsym_provider] theorem ReadsPtr.spts_in {T : Type} [Enc T] {s : T} {n : Nat}
@@ -1298,7 +1300,7 @@ theorem ReadsPtr.spts_add {T : Type} [Enc T] {s : T} {k n : Nat} (hk : k + n ≤
 
 /-- The error code of an owned error union. -/
 @[fsym_provider] theorem OwnsPtr.errCode {x : Except ErrName α} :
-    OwnsPtr (up (pts q a x)) (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2 :=
+    OwnsPtr (up (Zig.pts q a x)) (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2 :=
   OwnsPtr.pts_add (errUnion_bounds _ _).1
 
 attribute [fsym_provider] ReadsPtr.of_owns
@@ -1324,8 +1326,8 @@ theorem ThreadLocal.tryPayloadPtr_bind {β : Type} {k : Except ErrName Ptr → M
   show ThreadLocal P ((do
     match ← liftM (errOfBytes (← Zig.loadBytes (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1)
       2 (Nat.min al 2))) with
-    | some e => pure (Except.error e : Except ErrName Ptr)
-    | none => (Except.ok <$> ptrProject q (errPayloadPtr α) : MemM (Except ErrName Ptr))) >>= k)
+    | some e => Pure.pure (Except.error e : Except ErrName Ptr)
+    | none => (Except.ok <$> Zig.ptrProject q (errPayloadPtr α) : MemM (Except ErrName Ptr))) >>= k)
   simp only [bind_assoc]
   refine ThreadLocal.loadBytes_bind h fun _ => ThreadLocal.liftR_bind fun t => ?_
   cases t with
@@ -1354,15 +1356,15 @@ theorem ThreadLocal.errCodeAt_bind {β : Type} {k : ErrName → MemM β}
   show ThreadLocal P ((do
     match ← liftM (errOfBytes (← Zig.loadBytes (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1)
       2 (Nat.min al 2))) with
-    | some e => pure e
-    | none => throw .unspecified) >>= k)
+    | some e => Pure.pure e
+    | none => MonadExcept.throw Error.unspecified) >>= k)
   simp only [bind_assoc]
   refine ThreadLocal.loadBytes_bind h fun _ => ThreadLocal.liftR_bind fun t => ?_
   cases t with
   | some e => simp only [pure_bind]; exact hk _
   | none =>
     exact ThreadLocal.bind_keep (ThreadLocal.throw _)
-      (fun m _ _ e => (Proto.MemM.throw_ok (m := m) e).elim) hk
+      (fun m _ _ e => (Conc.Proto.MemM.throw_ok (m := m) e).elim) hk
 
 /-- **The error of an error union** (`unwrap_errunion_err_ptr`) is local where its error code is
 read. -/
@@ -1385,7 +1387,7 @@ read. -/
   show ThreadLocal P (do
     let x ← liftM (errOfBytes (← Zig.loadBytes (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1)
       2 (Nat.min al 2)))
-    pure x.isSome)
+    Pure.pure x.isSome)
   exact ThreadLocal.loadBytes_bind h fun _ => ThreadLocal.liftR_bind fun _ => ThreadLocal.pure _
 
 /-- **Is it an error** with a finite error domain is local where the error code is read. -/
@@ -1395,7 +1397,7 @@ read. -/
   show ThreadLocal P (do
     let x ← liftM ((optionalErrorEnc d).decode
       (← Zig.loadBytes (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2 (Nat.min al 2)))
-    pure x.isSome)
+    Pure.pure x.isSome)
   exact ThreadLocal.loadBytes_bind h fun _ => ThreadLocal.liftR_bind fun _ => ThreadLocal.pure _
 
 end Shared
