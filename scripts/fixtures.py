@@ -44,8 +44,8 @@ Every Lean file of a converted fixture is elaborated by Lake, in one mode:
   another instance is PRIMARY with each OLD identifier token (`V0_17_1`, a whole name component)
   replaced by NEW, in its text and its path. Fails unless the instance file equals that text
   byte for byte (`--write`: writes it). Every OLD must occur in both text and path. A `--rename`
-  OLD (a generated name that differs between the versions' translations) is replaced in the text
-  only, and must occur there.
+  OLD (a generated name that differs between the versions' translations) need occur only in the
+  text.
 - `run`: runs each DECL (an `IO Unit`, of the built fixture MODULE) in one `lean --run` of the
   fixture package, its standard output to OUTDIR/DECL.txt. The modules must be up to date in
   Lake's trace (`lake build --no-build`), so a run never loads a stale module.
@@ -357,23 +357,20 @@ def token(name: str) -> re.Pattern:
     return re.compile(r"(?<![A-Za-z0-9_'])" + re.escape(name) + r"(?![A-Za-z0-9_'])")
 
 
-def instance(primary: Path, substs: list[str], write: bool, renames: list[str] = ()) -> int:
+def instance(primary: Path, substs: list[str], write: bool, renames: list[str]) -> int:
     """`primary` with each OLD replaced by its NEW (all at once, so substitutions never chain).
     A primary that already names a NEW (the 0.17.1 model importing the 0.16.0 translation) would
     make the instance agree while checking the wrong version, so it is refused. A `renames`
-    pair is replaced in the text only (a generated name that differs between the versions'
-    translations, such as an anonymous std instance); it must occur in the text."""
+    pair (a generated name that differs between the versions' translations, such as an
+    anonymous std instance) need occur only in the text."""
     text, path = primary.read_text(encoding="utf-8"), primary.as_posix()
-    mapping, text_only = {}, set()
+    mapping = {}
     for subst, in_path in [(s, True) for s in substs] + [(s, False) for s in renames]:
         old, sep, new = subst.partition("=")
         if not (sep and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", old) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", new)):
             raise SystemExit(f"fixtures instance: --subst/--rename needs OLD=NEW identifiers, not {subst!r}")
-        if old in mapping:
+        if mapping.setdefault(old, new) != new:
             raise SystemExit(f"fixtures instance: {old} is substituted twice")
-        mapping[old] = new
-        if not in_path:
-            text_only.add(old)
         if not token(old).search(text) or (in_path and not token(old).search(path)):
             where = " and its path" if in_path else ""
             raise SystemExit(f"fixtures instance: {old} does not occur in {primary}{where}")
@@ -382,13 +379,8 @@ def instance(primary: Path, substs: list[str], write: bool, renames: list[str] =
             raise SystemExit(f"fixtures instance: {primary} already names {new}")
     if all(old == new for old, new in mapping.items()):
         raise SystemExit(f"fixtures instance: {' '.join(substs)} leaves {primary} unchanged")
-
-    def replace(s: str, olds) -> str:
-        if not olds:
-            return s
-        combined = re.compile("|".join(token(old).pattern for old in sorted(olds, key=len, reverse=True)))
-        return combined.sub(lambda m: mapping[m.group(0)], s)
-    text, path = replace(text, mapping), replace(path, set(mapping) - text_only)
+    combined = re.compile("|".join(token(old).pattern for old in sorted(mapping, key=len, reverse=True)))
+    text, path = (combined.sub(lambda m: mapping[m.group(0)], s) for s in (text, path))
     target = Path(path)
     if write:
         target.parent.mkdir(parents=True, exist_ok=True)

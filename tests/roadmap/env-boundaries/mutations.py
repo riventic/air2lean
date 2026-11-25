@@ -29,9 +29,8 @@ from mutation_kill_log import killed as log_kill  # noqa: E402
 
 CLIENT = HERE / "WriteAll.lean"
 GEN = {ns: HERE / f"expected/{ns}.lean" for ns in ("EnvStd15", "EnvStd16", "EnvStd17")}
-# The proofs about each translation.
-PROOFS = {"EnvStd15": HERE / "StdIo.lean", "EnvStd16": HERE / "ReadClose/EnvStd16.lean",
-          "EnvStd17": HERE / "ReadClose/EnvStd17.lean"}
+# The proofs about each mutated translation (EnvStd16's proofs are EnvStd17's renamed).
+PROOFS = {"EnvStd15": HERE / "StdIo.lean", "EnvStd17": HERE / "ReadClose/EnvStd17.lean"}
 
 # client: name -> (edits of WriteAll.lean, declarations that must fail). Each `old` occurs once.
 CLIENT_MUTANTS = {
