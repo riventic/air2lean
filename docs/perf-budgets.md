@@ -265,8 +265,12 @@ higher on every workload, by about the same amount whatever its size (translator
 +150 to +400 MiB, the `asm` elaboration included), which is the platform and import cost, not a
 workload.
 
-After merging main into the branch, three outputs changed again and were rebaselined alone
-(`baseline --workload`), each equal to its updated reference translation:
+After merging main into the branch, three outputs changed again, each equal to its updated
+reference translation. They are not rebaselined yet: the only measurements of the merged tree
+ran on a loaded host (calibration 11.4 and 12.4 s instead of 7.5 s), whose absolute times would
+loosen the limits about 1.5-fold. They stay `output-changed` until a quiet-host
+`record --workload layout --workload asm --workload asm-0.17.1` is rebaselined alone
+(`baseline --workload`):
 
 | Change | Output change | Workloads |
 | --- | --- | --- |
