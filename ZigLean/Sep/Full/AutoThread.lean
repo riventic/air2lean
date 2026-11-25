@@ -216,6 +216,20 @@ theorem ptrProject (p : Ptr) (f : Ptr → Ptr) : ThreadLocal P (Zig.ptrProject p
       exact ⟨FStepIn.refl _ _, fun _ _ _ h => h⟩
     · exact (Proto.MemM.throw_ok (m := m.noFp) e).elim⟩
 
+/-- **A pure step, then a local step**: the lift keeps the memory (`bind_keep`). -/
+theorem liftR_bind {β : Type} {g : Result α} {f : α → MemM β} (hf : ∀ v, ThreadLocal P (f v)) :
+    ThreadLocal P (StateT.lift g >>= f) :=
+  bind_keep (liftR g) (fun _ _ _ e => (Proto.MemM.lift_ok e).2) hf
+
+/-- **Pointer formation, then a local step**: the formation keeps the memory (`bind_keep`). -/
+theorem ptrProject_bind {β : Type} {p : Ptr} {f : Ptr → Ptr} {k : Ptr → MemM β}
+    (hk : ∀ v, ThreadLocal P (k v)) : ThreadLocal P (Zig.ptrProject p f >>= k) :=
+  bind_keep (ptrProject p f) (fun m _ _ e => by
+    simp only [Zig.ptrProject, StateT.run] at e
+    split at e
+    · exact (Prod.mk.inj (Result.pure_inj e)).2.symm
+    · exact (Proto.MemM.throw_ok (m := m) e).elim) hk
+
 /-- **`@memset`** of `n` items over owned bytes, with the size of the bytes it writes (`hsz`, a
 fact of `fsym_arith`). -/
 theorem memset_of {δ : Type} [Enc δ] {al : Nat} {p : Ptr} {n : BitVec 64} {v : Option δ}
