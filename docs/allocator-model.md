@@ -113,25 +113,30 @@ translated `PageAllocator`
 `alloc` on x86_64-linux for every alignment, partial correctness) against the generic
 specification ([alloc-spec.md](alloc-spec.md), [alloc-page.md](alloc-page.md)), from their Zig
 code down to `posix.mmap`/`munmap`/`mremap` (OSM-01). The `std` mode still carries the
-hand-written models below. They are not removed in milestone 1; each step removes one only after
+hand-written models below except L1, which step 1 deleted. Each step removes one only after
 the translated mode covers every claim that rests on it, so no theorem disappears without a
 translated replacement or a register entry (`ROADMAP.md`, `remaining-acceptance.md`).
 
 | Legacy model | Where | Premise | Users |
 |---|---|---|---|
-| L1 fixed buffer: `OwnedPolicy.fixedBuffer`, `OwnedAlloc.used`/`starts` | `ZigLean/Mem/Owned.lean` | ALC-07 | `tests/roadmap/allocator-identity` |
+| L1 fixed buffer: `OwnedPolicy.fixedBuffer`, `OwnedAlloc.used`/`starts` | deleted (step 1) | ALC-07 narrowed to the arena | none |
 | L2 arena and identities: `OwnedPolicy.arena`, `AllocRef.owned`, `BlockKind.owned`, `Mem.allocators` | `ZigLean/Mem/Owned.lean` | ALC-07 | `tests/roadmap/allocator-identity`, `tests/roadmap/address-reuse/Check.lean` |
 | L3 remap/realloc policy variants: `AllocPolicy.byteRemap` (`ByteRemapMode.fail`/`inPlace`/`move`), sentinel realloc | `ZigLean/Mem/Alloc.lean` (its proof layer `Sep/RawAlloc.lean`, `Sep/Remap.lean`, `Sep/SentinelRealloc.lean` is retired) | ALC-03, ALC-05 | `tests/roadmap/resize-remap`, `tests/roadmap/sentinel-realloc`, `tests/roadmap/architecture-audit/models` |
 | L4 the std allocator: `Zig.Allocator`, `rawAlloc`/`rawFree`, the `mem.Allocator.*` rows of `Air2Lean/StdModels.lean`, `BlockKind.heap` | `ZigLean/Mem/Alloc.lean` (`Sep/Alloc.lean` and `Sep/Sentinel.lean` are retired) | ALC-01, ALC-02, ALC-04, ALC-06, ALC-09 | every std-mode proof that allocates (`Proofs/Lists`, `Proofs/Slices`, …), `tests/roadmap/allocation-policy` |
 
 Steps, one PR each, in this order:
 
-1. **FBA client port** (prerequisite of L1). Done: the generated wrappers' contracts are stated
+1. **FBA client port and L1** (done). The generated wrappers' contracts are stated
    over `FAllocSpec` directly (`tests/roadmap/alloc-fba/AllocFba/Wrappers.lean`, walked by
    `fsym`), and the client is proved through them on `FBA.fallocSpec` (`Client.client_spec`; the
-   legacy bridge and client are deleted, L6). Remaining: delete `OwnedPolicy.fixedBuffer`, `OwnedAlloc.used`,
-   `OwnedAlloc.starts`, their `Owned.lean` cases and the fixed-buffer cases of
-   `tests/roadmap/allocator-identity`; narrow ALC-07 to the arena.
+   legacy bridge and client are deleted, L6). `OwnedPolicy.fixedBuffer`, `FixedBuffer.init`,
+   `fixedBufferNext`, `OwnedAlloc.used`, `OwnedAlloc.starts`, their `Owned.lean` cases
+   (`giveBack`) and the fixed-buffer case of `tests/roadmap/allocator-identity` (`fixed-buffer-lifo`,
+   an executable regression with no theorem) are deleted, and ALC-07 is narrowed to the arena (no
+   theorem listed ALC-07, so no claim changes). The hand-written fixed buffer had no other user;
+   the translated `FixedBufferAllocator` (`tests/roadmap/alloc-fba`, `tests/roadmap/alloc-translated`)
+   replaces it, and audit finding MM-10 (fixed-buffer blocks did not alias their buffer) goes with
+   it.
 2. **Translated `ArenaAllocator`** (prerequisite of L2), the arena milestone: translated
    ([alloc-arena.md](alloc-arena.md)); its specification needs the obstructions there resolved
    (O-A needs ghost state, O-E an upstream fix). Then delete `OwnedPolicy`, `OwnedAlloc`, `AllocRef.owned`,
