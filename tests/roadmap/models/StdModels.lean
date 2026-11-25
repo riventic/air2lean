@@ -87,7 +87,7 @@ def main : IO Unit := do
     -- The page-mapping rows are translated-allocator-only; the other OS rows are active in
     -- every mode (their std callers, `Thread.yield`, are translated in both).
     | .os .mmap | .os .munmap | .os .mremap =>
-      m.allocatorModel == some .translated && m.zigVersions == #[.v0_16_0]
+      m.allocatorModel == some .translated && m.zigVersions == #[.v0_16_0, .v0_17_1]
     | _ => m.allocatorModel.isNone) "allocator-model row scopes"
   require ((allocFn? "mem.Allocator.alloc__anon_3" .translated).isNone) "translated allocator wrappers"
   require (osFn? "posix.mmap" .translated == some .mmap && (osFn? "posix.mmap").isNone) "OS projection"

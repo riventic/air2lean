@@ -149,15 +149,23 @@ def growLines {Tgt : Type} (dispatch : Tgt → Zig.ConcM Tgt Unit) (m : Zig.Mem)
   let old := fun how => nativeWord (fun v => toString v.toNat) (stale 10 how) dispatch m
   [s!"page_grow remap {row 0} realloc {row 1}", s!"page_grow_stale remap {old 0} realloc {old 1}"]
 
+/-- The main thread's stack budget of the compared runs: 8 MiB, the default main-thread stack of
+both targets. As natively, the stack is a reserve of its own (`Mem.withStack`, MM-18, premise
+STK-02) that no mapping meets. Without one (`mem0 .fresh` alone) a stack block of a wrapper
+(0.17.1's `reallocAdvanced` keeps its result in one) lies right behind the last mapping, so
+`mremap` finds no room and moves where the native kernel grows in place: one of the legal
+outcomes the proofs cover, but not the native layout. -/
+def stackBytes : Nat := 8 * 1024 * 1024
+
 /-- The model's `page_grow` lines for x86_64-linux (`expected-linux.txt`). -/
 def growLinux : IO Unit :=
-  (growLines PageLinux.dispatch (PageLinux.mem0 .fresh) PageLinux.page_grow PageLinux.page_grow_blocked
-    PageLinux.page_grow_stale).forM IO.println *> pure ()
+  (growLines PageLinux.dispatch ((PageLinux.mem0 .fresh).withStack stackBytes) PageLinux.page_grow
+    PageLinux.page_grow_blocked PageLinux.page_grow_stale).forM IO.println *> pure ()
 
 /-- The model's `page_grow` lines for aarch64-macos (`expected.txt`). -/
 def growMacos : IO Unit :=
-  (growLines PageMacos.dispatch (PageMacos.mem0 .fresh) PageMacos.page_grow PageMacos.page_grow_blocked
-    PageMacos.page_grow_stale).forM IO.println *> pure ()
+  (growLines PageMacos.dispatch ((PageMacos.mem0 .fresh).withStack stackBytes) PageMacos.page_grow
+    PageMacos.page_grow_blocked PageMacos.page_grow_stale).forM IO.println *> pure ()
 
 section GrowLinux
 open AllocTranslated.PageLinux

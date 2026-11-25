@@ -1530,11 +1530,16 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     -- and result types and uses `Zig.ptrAddr`/`Zig.ptrFromAddr` (M20). An optional pointer
     -- (`?*T`) is `Option Zig.Ptr` in the model, null = `none` = address 0: a bitcast to another
     -- optional pointer (a `@constCast`) is a no-op, and one from a pointer is Lean's coercion
-    -- `Zig.Ptr → Option Zig.Ptr` (wrapping). Up to 0.16.0 (`BitCast.memory`) three more
-    -- casts have explicit rules (`ZigLean/Mem/Repr.lean`): `?*T` → `*U` unwraps and requires
-    -- non-null (`Zig.optPtrUnwrap`), `?*T` → `usize` gives 0 for null (`Zig.optPtrAddr`), and
-    -- `usize` → `?*T` gives null for 0 (`Zig.optPtrFromAddr`). Any other bitcast to or from an
-    -- optional pointer is rejected.
+    -- `Zig.Ptr → Option Zig.Ptr` (wrapping). Three more casts have explicit rules
+    -- (`ZigLean/Mem/Repr.lean`) in every Zig version: `?*T` → `*U` (`@ptrCast`) unwraps and
+    -- requires non-null (`Zig.optPtrUnwrap`), `?*T` → `usize` (`@intFromPtr`) gives 0 for null
+    -- (`Zig.optPtrAddr`), and `usize` → `?*T` (`@ptrFromInt`) gives null for 0
+    -- (`Zig.optPtrFromAddr`). They are pointer casts, not `@bitCast`s: Sema rejects a `@bitCast`
+    -- to or from an optional pointer in 0.16.0 and 0.17.1 alike, so 0.17.0's redefinition of
+    -- `@bitCast` (`BitCast.logical`) does not reach them, and 0.17.1 writes the same three casts
+    -- as `ptr_cast`, `int_from_ptr` and `ptr_from_int` where 0.16.0 writes `bitcast`
+    -- (`Canon.lean` `versionTags`). A context without a version rejects them. Any other bitcast
+    -- to or from an optional pointer is rejected.
     let isOptPtr (t : TyId) : Bool := match cx.types[t]? with
       | some (.optional c) => match cx.types[c]? with | some (.ptr ..) => true | _ => false
       | _ => false
@@ -1545,7 +1550,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     | some aty =>
       let isPtr (t : TyId) : Bool := match cx.types[t]? with | some (.ptr ..) => true | _ => false
       let isUsize (t : TyId) : Bool := cx.types[t]? == some (.int false 64)
-      let memCast := cx.bitCast == some .memory
+      let versioned := cx.bitCast.isSome
       let nullable (t : TyId) := nullablePtrTy cx.types cx.layouts t
       -- `?*allowzero T`/`?[*c]T` (payload and flag) is a value only: Zig 0.16.0 and 0.17.1
       -- miscompile its `@ptrCast` and `@ptrFromInt` (`docs/upstream/optional-nullable-casts.md`),
@@ -1568,9 +1573,9 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
         unless isOptScalarPtr (if isOptPtr ty then ty else aty) do
           cx.fail line "converting between a C/allowzero pointer and an optional slice is outside the qualified pointer fragment"
         return line
-      let unwrapRule := memCast && optSinglePtrTy cx.types cx.layouts aty &&
+      let unwrapRule := versioned && optSinglePtrTy cx.types cx.layouts aty &&
         (singlePtrTy cx.types cx.layouts ty || isUsize ty)
-      let fromAddrRule := memCast && isUsize aty && optSinglePtrTy cx.types cx.layouts ty
+      let fromAddrRule := versioned && isUsize aty && optSinglePtrTy cx.types cx.layouts ty
       if (isOptPtr aty && !isOptPtr ty && !unwrapRule) ||
           (isOptPtr ty && !isOptPtr aty && !isPtr aty && !fromAddrRule) then
         throw s!"{fnName}: near line {line}: a bitcast between an optional pointer (`?*T`) and \
