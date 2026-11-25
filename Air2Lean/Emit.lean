@@ -2056,7 +2056,7 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .sqrt a => #[a]
   | .libm _ a => #[a]
   | .mulAdd a b c => #[a, b, c]
-  | .splat a | .reduce _ a => #[a]
+  | .splat a | .reduce _ a | .arrayToVector a => #[a]
   | .select pred a b => #[pred, a, b]
   | .shuffle a b mask =>
     #[a] ++ (match b with | some v => #[v] | none => #[]) ++
@@ -2597,6 +2597,14 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | .array len _ _ => s!"(Vector.replicate {len} {rv a} : {fc.emitTyOf inst.ty})"
       | _ => s!"Zig.Vec.splat {rv a}"
     let (env, l) := bindLet fc env inst.id s!"pure ({term})"; (env, some l)
+  | .arrayToVector a =>
+    -- Lane `i` is item `i` (`Check.lean`); a sentinel, the array's last item (`Ty.array`), is
+    -- dropped.
+    let items := match fc.valTy a with
+      | .array _ _ true => s!"({rv a} : {fc.emitValTy a}).pop"
+      | _ => rv a
+    let (env, l) := bindLet fc env inst.id s!"pure (⟨{items}⟩ : {fc.emitTyOf inst.ty})"
+    (env, some l)
   | .select pred a b =>
     let (env, l) := bindLet fc env inst.id s!"pure (Zig.Vec.select {rv pred} {rv a} {rv b})"
     (env, some l)

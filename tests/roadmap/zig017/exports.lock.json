@@ -11,17 +11,35 @@
     "divceil/air/0.17.1/divceil.divCeilU64.json": "eb3add66be540e4b6e29f0c54e80a874504f84b9c5a32874d5621c92e6dd067f",
     "divceil/air/0.17.1/divceil.divCeilU8.json": "fb560a2be51dd2a41a821d9b30d380c00b4473bc515a226d22072570284951cf",
     "overflow/air/0.17.1/overflow.mulOverflowI16.json": "ab15957c06304d3d92831f5f28aa51fc6ce19e437fae39e48e891179eaa95b0c",
-    "overflow/air/0.17.1/overflow.mulOverflowU32.json": "a592e988f8836c769df60578a44a4fc205abb6deeed91940943b6380efbfb984"
+    "overflow/air/0.17.1/overflow.mulOverflowU32.json": "a592e988f8836c769df60578a44a4fc205abb6deeed91940943b6380efbfb984",
+    "tovec/air/0.17.1/tovec.toVecBool.json": "2f0be0b0ef3df7db766be96d6ba61e8c689823c4d65e1a496a3a45a7d33daf70",
+    "tovec/air/0.17.1/tovec.toVecF128.json": "a9c64ff40d016356be92f875b39fcaa8ab7220dd64e79029e3d593cec05419b7",
+    "tovec/air/0.17.1/tovec.toVecF16.json": "8933b68147d16ed5dcd6cd7c44d25ae5a8b1d11f68bc9e11c3535d38d9523d86",
+    "tovec/air/0.17.1/tovec.toVecF32.json": "f6858673caa8ed8f9a7c1b741ffa235bd6db23109b20428d7bb54f824e80cfed",
+    "tovec/air/0.17.1/tovec.toVecF64.json": "8a17a4ad980c63bb448db7e3b2af947045941207c8d0b566561311e3b8f13d1f",
+    "tovec/air/0.17.1/tovec.toVecF80.json": "4c67a8e3e1df43633e8b1f9a6f3ccb92d6dbf37fd5a3714651b18dfa136755f5",
+    "tovec/air/0.17.1/tovec.toVecI128.json": "bcfb0ebf540971735e85f2483f2e4b756139faf21b742e388061ab2c3a7452e6",
+    "tovec/air/0.17.1/tovec.toVecI16.json": "54f9493dd010f5a6e4c3425b7f7224934cccdcc517494f4083a0cb2f21798fb3",
+    "tovec/air/0.17.1/tovec.toVecI32.json": "be1254b06db05c7e7322ce56b47f486c9ef6687f721c75cf6872761f28fa50bc",
+    "tovec/air/0.17.1/tovec.toVecI7.json": "28e5d51d53c52ae9e9e84b5e7b705b14720281eb742dcc02ac7417b53b405dfc",
+    "tovec/air/0.17.1/tovec.toVecU1.json": "d19c42399be6097bec2f3b2a9ef8046532c0e15b198dd1bbf3c37a32cde1f390",
+    "tovec/air/0.17.1/tovec.toVecU24.json": "fc46747995c05d9705cc90971aa0d15b124a509f3038298467f082a0ff109899",
+    "tovec/air/0.17.1/tovec.toVecU64.json": "b321f93908a06182926559313fc71e6afe6aadffa811035307aaafbfeafcf7e3",
+    "tovec/air/0.17.1/tovec.toVecU8.json": "ba5e55b709f7fb77e8e6b3f5f8c060cab2c5b98ccc664063d065d3144787decf",
+    "tovec/air/0.17.1/tovec.toVecZ16.json": "dfb48d9da4a95e384efdee52f02c75090b8e86897f70200fad518375d9a803db",
+    "tovec/air/0.17.1/tovec.toVecZ8.json": "297b9f8f8757440b0168fb4aeb273fcb4dd810b0768aa241ad6eb45dd719a7a9"
   },
   "compilers": {
     "0.17.1": "1953662bf1225a88b6c93545ccccf804f3eec5601df436181a1ba5b9ef1ab7c8"
   },
-  "manifest_sha256": "96d7a3415d7b9e74959595c06654e46ea4bf5dea51854b3317e159e824776abe",
+  "manifest_sha256": "63e0d148cb6313f7c38d418c653ab99ef99b01b631e1a59fd42b81b8b9e12ecd",
   "schema": 1,
   "sources_sha256": {
     "casts/casts.zig": "0c521dd7a4956a63edee49b87295cb0c857c17ec9f8115a794cc4d7dda3041e5",
     "divceil/divceil.zig": "130e9e776fb1e1346a5ebfdd0380e2b4ce93d6f957d834cdc81b00147578203b",
     "divceil/native.zig": "8a2993fe9642772954d99002d9ad25a1d0c52f6f124ddb115339c2b629de3fe5",
-    "overflow/overflow.zig": "85ced20a690526e16ee754c004b2a666f9880ff86e07a2000e4254b4b128d717"
+    "overflow/overflow.zig": "85ced20a690526e16ee754c004b2a666f9880ff86e07a2000e4254b4b128d717",
+    "tovec/native.zig": "217068d77f56e2c21750e0801d0a3f335d8d23d1a1c26ccba9f4207da7e2dae6",
+    "tovec/tovec.zig": "de5886db7d8f818f7bcc133a875bc88813ba6d741f347bc351ee09cfa823ce74"
   }
 }
