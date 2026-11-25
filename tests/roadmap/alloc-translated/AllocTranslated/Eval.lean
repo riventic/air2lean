@@ -67,8 +67,9 @@ def fbaGrowRow (grow : BitVec 64 → BitVec 64 → BitVec 8 → Bool → Zig.Mem
 /-- The model's `fba_grow` line. -/
 def fbaGrowLine (grow : BitVec 64 → BitVec 64 → BitVec 8 → Bool → Zig.MemM (BitVec 64))
     (m : Zig.Mem) : String :=
+  let words (vs : List (BitVec 64)) : String := " ".intercalate (vs.map fun v => toString v.toNat)
   let row := fun how => match ((fbaGrowRow grow how).run m).run with
-    | some (.ok (vs, _)) => s!"ok {" ".intercalate (vs.map fun v => toString v.toNat)}"
+    | some (.ok (vs, _)) => s!"ok {words vs}"
     | some (.error e) => s!"fail {repr e}"
     | none => "diverge"
   s!"fba_grow remap {row 0} realloc {row 1}"
