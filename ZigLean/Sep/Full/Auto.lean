@@ -1824,20 +1824,23 @@ partial def arithGoals (g : MVarId) (quick := false) (cases := true) : TacticM (
   if !t.hasFVar && !t.hasMVar then
     if ← closeWith g (← `(tactic| decide)) then return []
     -- (a closed fact whose instance the elaborator's reduction does not evaluate, the size of a
-    -- structure's encoding `(Enc.encode v).size`: the kernel evaluates it). Over imported
-    -- constants, the kernel evaluates its instance in the imports' environment (`importEnvFor?`)
-    -- and the proof is `decide`'s, `of_decide_eq_true inst rfl`, which the kernel evaluates again
-    -- when it checks the theorem: `decide +kernel`'s auxiliary lemma would wait for every earlier
-    -- theorem of the file. Else, or if that reduction is stuck, `decide +kernel`.
-    let mut kernelDecide := true
+    -- structure's encoding `(Enc.encode v).size`: the kernel evaluates it, `decide +kernel`).
+    -- Over imported constants, the kernel checks `decide`'s proof `of_decide_eq_true inst rfl`
+    -- in the imports' environment (`importEnvFor?`), as `decide +kernel` checks its auxiliary
+    -- lemma (the same check, within the same limits), and the goal takes the proof itself, which
+    -- the kernel checks again with the theorem: the auxiliary lemma would wait for every earlier
+    -- theorem of the file, so that the file's theorems ran one after the other.
+    let mut inFile := true
     if let some pf ← observing? (mkDecideProof t) then
-      let inst := pf.appFn!.appArg!
-      if let some env ← importEnvFor? inst then
-        if let .ok v := Kernel.whnf env {} inst then
-          if v.isAppOf ``Decidable.isTrue then g.assign pf; return []
-          -- (decided false: `decide +kernel` fails as well)
-          kernelDecide := !v.isAppOf ``Decidable.isFalse
-    if kernelDecide then
+      if let some env ← importEnvFor? pf then
+        inFile := false
+        let opts ← getOptions
+        let decl := .thmDecl { name := `_fsym_kernel_decide, type := t, value := pf,
+                               levelParams := (collectLevelParams {} pf).params.toList }
+        if env.toKernelEnv.addDeclCore (Core.getMaxHeartbeats opts).toUSize
+            (maxRecDepth.get opts).toUSize decl (← readThe Core.Context).cancelTk? matches .ok _ then
+          g.assign pf; return []
+    if inFile then
       if ← closeWith g (← `(tactic| decide +kernel)) then return []
   if let some (ty, x, y) := t.eq? then
     -- an unknown ghost list that the equation fixes (a loop's parameter at its entry,
