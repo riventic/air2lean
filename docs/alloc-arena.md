@@ -430,7 +430,7 @@ Not proved yet, in order:
   a list before its turn is `FreeList`, after it `KeptAt`): `loop78` gives every node but the
   last back to the child (`loop78_ct`), and the last is kept: given back if the list's share of
   the limit is just a header, kept as it is if it has that size, shrunk or grown in place by the
-  child's `resize` (`CAllocSpec.resize_shrink`, `resize_grow`), or replaced by a new node from
+  child's `resize` (`CAllocSpec.resize_upTo`, the walk splitting on its released bytes' `if`), or replaced by a new node from
   the child's `alloc` (`CAllocSpec.alloc_upTo`; the old one given back, the new header's words
   stored over the granted bytes as `wpts`: `region_storePacked_wpts`, `region_store_wpts`), or
   kept as it is when the child has no room (the result `false`). The new `size` word of a node

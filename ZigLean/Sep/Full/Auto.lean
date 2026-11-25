@@ -7809,6 +7809,7 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
   let partialRule := partial?.isSome
   -- (a refuted rule only for a command that cannot be inlined either)
   let unfold? ← if partial?.isNone then unfoldCmd x else pure none
+  let lastResort := partial?.isNone && unfold?.isNone && refuted?.isSome
   if partial?.isNone && unfold?.isNone then partial? := refuted?
   let wanted ← (← caches).wanted.get
   -- more facts (of the atoms) for the rules' side goals
@@ -7877,6 +7878,16 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
       Report.stopMessage m!"fsym: {why}{indentExpr x}\nwith the precondition{indentExpr P}"
       return ← Report.leave g [g] "invariant_not_established" "loop_entry" (some x)
         (plans := ← (← caches).plans.get)
+  -- a precondition with an assertion-level `if` that the facts do not decide (the refined
+  -- `resize`'s `relBytes … n len …`, or the state's): its plan cannot take both cases with one
+  -- frame, so the goal is split on the condition and each case plans the decided precondition
+  -- (ledger #61): when no rule applies, or only one whose side goal is refuted, before the
+  -- command is inlined
+  if partial?.isNone || lastResort then
+    for cond in splits do
+      if ← undecided cond then
+        trace[fsym] "split on a condition of a rule's precondition {cond}"
+        return ← splitWalk g cond
   -- a side condition that the facts do not decide: split on it (the rules' cases)
   if let some (s, restoreChoiceArith, _, left) := partial? then
     let s1 ← saveState
@@ -7899,14 +7910,6 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
     restoreChoiceArith
     let some (_, _, k, left) := partial? | return [g]
     return left ++ (← walk k user extra (fuel - 1))
-  -- a rule whose precondition has an assertion-level `if` that the facts do not decide (the
-  -- refined `resize`'s `relBytes … n len …`): its plan cannot take both cases with one frame, so
-  -- the goal is split on the condition and each case plans the decided precondition (ledger #61),
-  -- before the command is inlined
-  for cond in splits do
-    if ← undecided cond then
-      trace[fsym] "split on a rule's precondition condition {cond}"
-      return ← splitWalk g cond
   trace[fsym.prof] "norule {((← IO.getNumHeartbeats)-h2)/1000}"
   -- a literal pointer that the state does not name: from the region that holds it
   if let some (x', e) ← rebaseLitPtr? P x then
