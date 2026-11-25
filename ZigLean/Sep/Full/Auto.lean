@@ -7518,6 +7518,13 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
     if ← arith hp.mvarId! (quick := true) then return false
     let hn ← mkFreshExprMVar (mkNot cond)
     return !(← arith hn.mvarId! (quick := true))
+  -- the condition of an assertion-level `if` of the state that the facts do not decide: each case
+  -- has its own atoms and facts
+  let stateIf? : TacticM (Option Expr) := do
+    for a in atoms P do
+      if a.isAppOfArity ``ite 5 then
+        if ← undecided (a.getArg! 1) then return some (a.getArg! 1)
+    return none
   -- a returned value `v` of a non-recursive inductive type with several constructors that is not
   -- a constructor and that the postcondition depends on: split by cases (a local), or
   -- generalized with its equation `hr : v = r` first (a term), as a program's `match` on a term
@@ -7554,11 +7561,9 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
     -- the updates with its own atoms (the entailment alone splits it inside, ledger #64)
     let hasUpd ← user.anyM fun u => do isUpd (← refreshUser u)
     if hasUpd then
-      for a in atoms P do
-        if a.isAppOfArity ``ite 5 then
-          if ← undecided (a.getArg! 1) then
-            trace[fsym] "return: split on the state's condition {a.getArg! 1}"
-            return ← splitWalk g (a.getArg! 1)
+      if let some cond ← stateIf? then
+        trace[fsym] "return: split on the state's condition {cond}"
+        return ← splitWalk g cond
     let s ← saveState
     let entail : TacticM (List MVarId) := do
       let h ← mkFreshExprSyntheticOpaqueMVar (← mkAppM ``EUpd #[P, Qv])
@@ -7882,12 +7887,18 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
   -- `resize`'s `relBytes … n len …`, or the state's): its plan cannot take both cases with one
   -- frame, so the goal is split on the condition and each case plans the decided precondition
   -- (ledger #61): when no rule applies, or only one whose side goal is refuted, before the
-  -- command is inlined
+  -- command is inlined. With only a refuted rule, the facts of the state's undecided `if`'s
+  -- cases may refute the case that reaches the command (a subtraction whose bound holds in each
+  -- case of the released bytes' `if`, `resize`): split on it before the refuted side goal is left
   if partial?.isNone || lastResort then
     for cond in splits do
       if ← undecided cond then
         trace[fsym] "split on a condition of a rule's precondition {cond}"
         return ← splitWalk g cond
+  if lastResort then
+    if let some cond ← stateIf? then
+      trace[fsym] "refuted side goal: split on the state's condition {cond}"
+      return ← splitWalk g cond
   -- a side condition that the facts do not decide: split on it (the rules' cases)
   if let some (s, restoreChoiceArith, _, left) := partial? then
     let s1 ← saveState
