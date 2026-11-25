@@ -650,6 +650,43 @@ class MacosJobTests(Repo):
             rr.build_plan(self.repo, self.commit('conditional macos step'))
 
 
+class MacosWorkflowTests(Repo):
+    """The `macos` job in its own workflow (ci-macos.yml): its runs are its only evidence."""
+
+    def setUp(self):
+        super().setUp()
+        self.write('.github/workflows/ci-macos.yml', 'name: CI macOS\njobs:\n' + MACOS_JOB)
+        self.head = self.commit('macOS rows in their own workflow')
+
+    def test_plan_names_each_job_workflow_and_blob(self):
+        plan = rr.build_plan(self.repo, self.head)
+        self.assertEqual({job['name']: job['workflow'] for job in plan['jobs']},
+                         {FULL: 'CI', MUTATE: 'CI', 'macos': 'CI macOS'})
+        self.assertEqual(sorted(plan['workflow_blobs']), ['.github/workflows/ci-macos.yml', '.github/workflows/ci.yml'])
+
+    def test_a_run_covers_only_its_own_workflow_jobs(self):
+        macos = self.run_json({'macos': {'Unit': 'success'}}, workflowName='CI macOS')
+        record = self.record(github_runs=[self.passing_run(), macos])
+        self.assertEqual(record['status'], 'complete')
+        self.assertEqual(self.gate(record, 'macos', 'Unit')['status'], 'passed')
+        self.assertEqual(rr.verify_record(self.repo, record), [])
+        for jobs, name in (({'macos': {'Unit': 'success'}}, 'CI'), ({FULL: {'Unit': 'success'}}, 'CI macOS')):
+            with self.subTest(name=name), self.assertRaisesRegex(rr.ReleaseError, 'unknown or repeated'):
+                self.record(github_runs=[self.run_json(jobs, workflowName=name)])
+        with self.assertRaisesRegex(rr.ReleaseError, 'not one of'):
+            self.record(github_runs=[self.run_json({'macos': {'Unit': 'success'}}, workflowName='Other')])
+
+    def test_record_binds_the_macos_workflow_blob(self):
+        record = self.record(github_runs=[self.passing_run()])
+        record['profile']['workflow_blobs'].pop('.github/workflows/ci-macos.yml')
+        self.assertIn('profile workflow_blobs does not match revision %s' % self.head, rr.verify_record(self.repo, record))
+
+    def test_a_job_in_both_workflows_is_refused(self):
+        self.write('.github/workflows/ci.yml', WORKFLOW + MACOS_JOB)
+        with self.assertRaisesRegex(rr.ReleaseError, 'job macos is also a job of'):
+            rr.build_plan(self.repo, self.commit('macos twice'))
+
+
 class LedgerTests(Repo):
     def test_valid_ledger(self):
         errors, unverified, counts = rr.check_ledger(self.repo)

@@ -180,7 +180,13 @@ def blob(root, revision, path):
 
 
 def load_workflow(root, revision=None):
-    return RR.parse_workflow_yaml(blob(root, revision, WORKFLOW))
+    """The CI workflows as one (target-matrix.py merge_workflows: jobs, the file of each job, each
+    file's workflow-level fields), from the worktree or a commit."""
+    if revision is None:
+        present = {path for path in TM.CI_WORKFLOWS if Path(root, path).is_file()}
+    else:
+        present = set(git(root, 'ls-tree', '--name-only', revision, '--', *TM.CI_WORKFLOWS).decode().split('\n'))
+    return RR.ci_workflow({path: blob(root, revision, path) for path in TM.CI_WORKFLOWS if path in present})
 
 
 def job_rows(job):
@@ -313,11 +319,11 @@ def job_definition(job, row, job_id=None):
 
 
 def keyed_definitions(workflow, job_id, row):
-    """The selected job, its direct producers and workflow metadata in a part's key."""
+    """The selected job, its direct producers and the metadata of its workflow file in a part's key."""
     jobs = workflow['jobs']
     return {'job': job_definition(jobs[job_id], row, job_id),
             'needs': {name: jobs[name] for name in needs_of(jobs[job_id])},
-            'workflow': {key: value for key, value in workflow.items() if key != 'jobs'}}
+            'workflow': workflow['workflows'][workflow['files'][job_id]]}
 
 
 def tracked_tree(root, revision='HEAD'):
@@ -559,7 +565,7 @@ def check_workflow(root, revision=None):
     for part in sorted(set(found) - declared):
         errors.append('part %s has no declaration in %s' % (part, DECLARATIONS))
     for part in sorted(declared - set(found)):
-        errors.append('%s declares %s, which is not a part of %s' % (DECLARATIONS, part, WORKFLOW))
+        errors.append('%s declares %s, which is not a part of %s' % (DECLARATIONS, part, ' or '.join(workflow['workflows'])))
     for part in sorted(set(found) & declared):
         try:
             declaration(data, part)
@@ -615,12 +621,14 @@ def on_main(repository, commit, token, fetch=api):
     return compared.get('status') in ('identical', 'ahead')
 
 
-def lookup(key, job_name, repository, token, fetch=api, events=RECORD_EVENTS, require_main=False):
+def lookup(key, job_name, repository, token, fetch=api, events=RECORD_EVENTS, require_main=False,
+           workflow=(WORKFLOW, WORKFLOW_NAME)):
     """The newest acceptable record of `key`: (run id, run URL, job id, job URL) or None.
 
-    Accepted only from this repository's CI workflow (never a fork's head repository), from a
-    run of one of `events`, whose job `job_name` completed with success, per the GitHub API;
-    with `require_main`, only from a run whose head commit is on main.
+    Accepted only from this repository's CI workflow `workflow` (path, name: the file that defines
+    the part; never a fork's head repository), from a run of one of `events`, whose job
+    `job_name` completed with success, per the GitHub API; with `require_main`, only from a run
+    whose head commit is on main.
     """
     listed = fetch('/repos/%s/actions/artifacts?name=ci-reuse-%s&per_page=30' % (repository, key), token)
     for artifact in sorted(listed.get('artifacts', []), key=lambda a: a.get('created_at', ''), reverse=True):
@@ -630,7 +638,7 @@ def lookup(key, job_name, repository, token, fetch=api, events=RECORD_EVENTS, re
         if source.get('head_repository_id') != source.get('repository_id') or not source.get('id'):
             continue
         run = fetch('/repos/%s/actions/runs/%d' % (repository, source['id']), token)
-        if (run.get('path') != WORKFLOW or run.get('name') != WORKFLOW_NAME or run.get('event') not in events
+        if ((run.get('path'), run.get('name')) != tuple(workflow) or run.get('event') not in events
                 or (run.get('head_repository') or {}).get('full_name') != repository):
             continue
         if require_main and not on_main(repository, run.get('head_sha', ''), token, fetch):
@@ -706,13 +714,17 @@ def decide(root, job_id, row_json, environ=os.environ, fetch=api):
     if event in ('pull_request',) + MAIN_EVENTS:
         queue = event in MAIN_EVENTS
         reuse_record = None
+        path = workflow['files'][job_id]
         try:
             reuse_record = lookup(key, preimage['job_name'], environ['GITHUB_REPOSITORY'], environ.get('GH_TOKEN', ''), fetch,
-                           QUEUE_RECORD_EVENTS if queue else RECORD_EVENTS, require_main=queue)
+                           QUEUE_RECORD_EVENTS if queue else RECORD_EVENTS, require_main=queue,
+                           workflow=(path, workflow['workflows'][path].get('name', path)))
         except (urllib.error.URLError, OSError, ValueError, KeyError) as error:
             print('record lookup failed (%s): the part runs' % error)
+        # One part of this run (this workflow file's parts) executes again.
         chosen = None if queue else self_check_part(
-            environ, [p for p in captured_parts if (data['parts'].get(p) or {}).get('reuse') is not False])
+            environ, [p for p, (job, _row) in captured_parts.items()
+                      if workflow['files'][job] == path and (data['parts'].get(p) or {}).get('reuse') is not False])
         if reuse_record and part != chosen:
             run_id, run_url, job_id_, job_url = reuse_record
             (out / 'reference.json').write_text(canonical({
@@ -834,7 +846,8 @@ def main(argv=None):
             for error in errors:
                 print('error: ' + error, file=sys.stderr)
             if not errors:
-                print('OK: every part of %s is declared and every step after the reuse decision is guarded' % WORKFLOW)
+                print('OK: every part of %s is declared and every step after the reuse decision is guarded'
+                      % ' and '.join(load_workflow(args.root)['workflows']))
             return 1 if errors else 0
     except (ReuseError, RR.ReleaseError, OSError, ValueError) as error:
         print('error: %s' % error, file=sys.stderr)

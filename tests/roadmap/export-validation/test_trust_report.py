@@ -93,7 +93,7 @@ class TrustReport(unittest.TestCase):
     def test_test_reached_through_ci_script(self):
         # check-export-names.sh is named by CI and runs test_order_cli.py.
         check = stage(DATA, 'exporter')['checks'][2]
-        ci = (ROOT / t.CI).read_text(encoding='utf-8')
+        ci = '\n'.join((ROOT / path).read_text(encoding='utf-8') for path in t.CI)
         self.assertNotIn(check['test'], ci)
         self.assertTrue(t.runs_in_ci(check['test'], ci, check['ci'], ROOT))
 

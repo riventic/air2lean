@@ -17,9 +17,13 @@ python3 scripts/release-record.py ledger
 ## Source and profile
 
 `record` requires a clean checkout (no tracked changes, no untracked files) and binds to `HEAD`.
-The profile is read from Git objects at that revision: the `.github/workflows/ci.yml` matrix
-(one job per row, named as GitHub names matrix jobs), the blob ids of the workflow,
-`scripts/local-ci-steps.py` and `compatibility.json`, and the translation target. A gate is a
+The profile is read from Git objects at that revision: the matrix of the CI workflows
+`.github/workflows/ci.yml` and `.github/workflows/ci-macos.yml` (one job per row, named as
+GitHub names matrix jobs), the blob ids of the workflows (`workflow_blobs`; a record from
+before `ci-macos.yml` names only `ci.yml`'s), `scripts/local-ci-steps.py` and
+`compatibility.json`, and the translation target. A GitHub run is evidence only for the jobs of
+its own workflow, so a complete record cites a `CI` run and a `CI macOS` run of the revision
+([ci.md](ci.md#3-macos-rows)). A gate is a
 `run:` step whose `if:` holds for the row, evaluated by the current shared `target-matrix.py` policy; recorded runner source supplies only literal setup and CI-only step names and is never executed.
 Actions and the tool-setup recipes that `scripts/local-ci.sh` substitutes are not gates.
 Unsupported workflow syntax or conditions fail instead of guessing. Each job records its
