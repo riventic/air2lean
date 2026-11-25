@@ -9,9 +9,9 @@ import ZigLean.Sep.Full.AutoWP
 The per-item obligation of `Thread.Condition` (0.15.2's `FutexImpl`: the futex-epoch condition of
 `ZigLean/Sep/Full/Cond.lean` on bits) in this program's generated code: `wait` (with no timeout;
 its `Deadline` block is on the waiter's stack, allocated while it holds the mutex and freed after
-it locked it again: `Proofs/Threadsync/Deadline.lean`, `FCond.wp_liftPart`) and `signal`
-(`wake(1)`) and `broadcast` (`wake(.all)`), walked with the rules of the condition, with the program's `Thread.Mutex`
-(`threadMutex`), for every protocol that has the condition next to its mutex. `wait` reaches the
+it locked it again: `Proofs/Threadsync/Deadline.lean`, `FCond.wp_liftPart`), `signal`
+(`wake(1)`) and `broadcast` (`wake(.all)`), walked with the rules of the condition, with the
+program's `Thread.Mutex` (`threadMutex`), for every protocol that has the condition next to its mutex. `wait` reaches the
 translated `std.time.Timer` (OSK-01), so it takes the OS environment: the results hold for every
 `[Zig.Os.HasEnv]`.
 -/

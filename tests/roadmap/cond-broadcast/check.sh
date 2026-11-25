@@ -1,11 +1,6 @@
 #!/usr/bin/env bash
-# C14 condition broadcast: the committed export of every supported version (air/<version>,
-# exports.json) translates, and its broadcast is the code that the condition contract's
-# implementations prove (`CondImpl.broadcast_wp`): each function of the translation equals, line
-# for line, the same function in the proved program's translation (0.14.1 and 0.15.2:
-# `Thread.Condition.broadcast` of Proofs/Threadsync/Gen.lean; 0.16.0: `Io.Condition.broadcast` of
-# Proofs/Sync/Gen.lean; 0.17.1: of tests/golden/0.17.1/sync/Gen.lean, the 0.17.1 translation
-# that Proofs/Sync/Cond.lean is checked against).
+# C14 condition broadcast (README.md): every version's committed export translates to the
+# broadcast that the condition contract's implementations prove, function for function.
 #   check.sh                 the gate above (needs a built translator; no compiler, no Lean)
 #   check.sh --export [V..]  scripts/fixture-exports.py verify: a fresh export with the patched
 #                            compilers of versions V (default all) equals the committed one

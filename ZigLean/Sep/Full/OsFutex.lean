@@ -201,6 +201,21 @@ theorem wakeSize_le_some {n : Option Nat} {c : Nat} (h : n = some c) (k : Nat) :
   simp only [wakeSize, Option.map_some, Option.getD_some]
   exact Nat.min_le_left _ _
 
+/-- An OS wake of up to `w` waiters (or all, `none`) of the `k` queued ones wakes at least
+`min nw k` of them when `nw` is within the request. -/
+theorem min_le_wakeSize {nw k : Nat} {w : Option Nat} (h : ∀ j, w = some j → nw ≤ j) :
+    Min.min nw k ≤ wakeSize w k := by
+  cases w with
+  | none => show Min.min nw k ≤ k; omega
+  | some j => show Min.min nw k ≤ Min.min j k; have := h j rfl; omega
+
+/-- The threads queued at a key, as a list (`Mem.waitersAt`) and as a count
+(`Thread.waitersAt`). -/
+theorem length_waitersAt (m : Mem) (k : FutexKey) :
+    (m.waitersAt k).length = Thread.waitersAt m.waiters k := by
+  unfold Mem.waitersAt Thread.waitersAt
+  rw [List.length_map, ← Array.toList_filter, Array.length_toList]
+
 /-- An OS wake of up to `n ≥ 1` (or all) waiters takes the run of a scheduler wake of at least
 one (`WInv.wake`, `FEvent.Inv.wake`, …): with nobody queued, every count wakes nobody. -/
 theorem futexWake_pos {p : FutexKey} {n : Option Nat} (hn : ∀ k, n = some k → 1 ≤ k) {m m' : Mem}

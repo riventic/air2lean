@@ -1369,20 +1369,6 @@ theorem wp_wakeEp (hC : L.Fits (C.prim L) P U ok) {io : Io} {c : BitVec 32} {q n
       let ⟨h1, h2, h3⟩ := hC.afterWakeEp hg₁ hg (Nat.le_trans (Nat.min_le_left _ _) hc) hU hwL hw hL
       h k hk G₁ m' h1 h2 h3
 
-/-- The threads queued at a key, as a list (`Mem.waitersAt`) and as a count (`Thread.waitersAt`). -/
-theorem length_waitersAt (m : Mem) (k : FutexKey) :
-    (m.waitersAt k).length = Thread.waitersAt m.waiters k := by
-  unfold Mem.waitersAt Thread.waitersAt
-  rw [List.length_map, ← Array.toList_filter, Array.length_toList]
-
-/-- An OS wake of up to `w` waiters (or all, `none`) of the `k` queued ones wakes at least
-`min nw k` of them when `nw` is within the request. -/
-theorem min_le_wakeSize {nw k : Nat} {w : Option Nat} (h : ∀ j, w = some j → nw ≤ j) :
-    Min.min nw k ≤ Os.wakeSize w k := by
-  cases w with
-  | none => show Min.min nw k ≤ k; omega
-  | some j => show Min.min nw k ≤ Min.min j k; have := h j rfl; omega
-
 /-- **The signaller's OS futex wake at the epoch** (`Os.futexWake`, OSF-02; std's translated
 `Thread.Futex.wake`) of up to `w` waiters (or all), at `wk nw q h` with `nw` within the request
 (`signal`'s one wake, `broadcast`'s `waiters - signals`): the OS wakes `min w k` of the `k` queued
@@ -1403,7 +1389,7 @@ theorem wp_osWakeEp (hC : L.Fits (C.prim L) P U ok) {w : Option Nat}
     fun k hk G₁ rX m₁ hg₁ hU hwL =>
     ⟨fun cs m' hr hL => by
       obtain ⟨h1, h2, h3⟩ := hC.afterWakeEp hg₁ hg
-        (by rw [← length_waitersAt]; exact min_le_wakeSize hnw) hU hwL hr hL
+        (by rw [← Os.length_waitersAt]; exact Os.min_le_wakeSize hnw) hU hwL hr hL
       exact h k hk _ G₁ m' h1 (.inl ⟨⟨_, rfl, fun _ hc => Os.wakeSize_le_some hc _⟩, h2, h3⟩),
      fun hs hic => h k hk none G₁ _ rfl (.inr ⟨hs, rfl, hic⟩)⟩
 
