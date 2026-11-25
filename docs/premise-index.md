@@ -71,6 +71,7 @@ premise was derived. This index covers the committed generated modules.
 | [EXT-04](premises.md#ext-04) | 1371 | Registry models in concurrent programs |
 | [EXT-05](premises.md#ext-05) | 3002 | Environment implementations of open interfaces |
 | [EXT-06](premises.md#ext-06) | 4442 | External static storage is not written during the run |
+| [EXT-07](premises.md#ext-07) | 0 | A weak definition is the symbol's definition in the image |
 | [TRU-01](premises.md#tru-01) | 6160 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 1460 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 1460 | Backend lowering and native execution |
