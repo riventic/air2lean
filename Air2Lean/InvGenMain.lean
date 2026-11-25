@@ -4,7 +4,12 @@ import Air2Lean.Revision
 /-!
 The invariant generator as an executable (`lake build air2lean-invgen`):
 
-    air2lean-invgen MODULE NAMESPACE --source FILE [--spec MODULE FILE]... [--contract NAME]... [-o FILE]
+    air2lean-invgen MODULE NAMESPACE --source FILE [--spec MODULE FILE]... [--contract NAME]...
+      [--fingerprints FILE] [-o FILE]
+
+`--fingerprints FILE` (a JSON list of `[definition, fingerprint]`, `scripts/invgen.py`) gives the
+semantic fingerprints of the translated functions; the record then names, per loop, the function
+that runs it and its fingerprint.
 
 It imports the translated `MODULE`, whose source is `--source FILE` (a path relative to the
 repository root), and the library `ZigLean.Sep.Full.AutoAll`, whose `fsym` prunes the candidate
@@ -26,27 +31,43 @@ open Lean Meta
 /-- The generator's revision record. -/
 def generatorRecord : Json := toJson translator_revision%
 
-/-- The options after `MODULE NAMESPACE --source FILE`: the specification modules with their
-sources (`--spec MODULE FILE`), the contracts (`--contract NAME`) and the output (`-o FILE`);
-`none`: not an option list. -/
-def options : List String → Option (Array (String × String) × Array String × Option String)
-  | [] => some (#[], #[], none)
-  | "--spec" :: m :: f :: rest => (options rest).map fun (ss, cs, o) => (#[(m, f)] ++ ss, cs, o)
-  | "--contract" :: c :: rest => (options rest).map fun (ss, cs, o) => (ss, #[c] ++ cs, o)
-  | ["-o", f] => some (#[], #[], some f)
+/-- The options after `MODULE NAMESPACE --source FILE`. -/
+structure Options where
+  /-- The specification modules with their sources (`--spec MODULE FILE`). -/
+  specs : Array (String × String) := #[]
+  /-- The contracts (`--contract NAME`). -/
+  contracts : Array String := #[]
+  /-- The semantic fingerprints of the translated functions (`--fingerprints FILE`). -/
+  fingerprints : Option String := none
+  /-- The output (`-o FILE`). -/
+  out : Option String := none
+
+/-- The options after `MODULE NAMESPACE --source FILE`; `none`: not an option list. -/
+def options : List String → Option Options
+  | [] => some {}
+  | "--spec" :: m :: f :: rest => (options rest).map fun o => { o with specs := #[(m, f)] ++ o.specs }
+  | "--contract" :: c :: rest => (options rest).map fun o => { o with contracts := #[c] ++ o.contracts }
+  | "--fingerprints" :: f :: rest => (options rest).map fun o => { o with fingerprints := some f }
+  | ["-o", f] => some { out := some f }
   | _ => none
 
 unsafe def main (argv : List String) : IO UInt32 := do
   let usage : IO UInt32 := do
     IO.eprintln "usage: air2lean-invgen MODULE NAMESPACE --source FILE \
-      [--spec MODULE FILE]... [--contract NAME]... [-o FILE]"
+      [--spec MODULE FILE]... [--contract NAME]... [--fingerprints FILE] [-o FILE]"
     return 2
   let module :: ns :: "--source" :: source :: rest := argv | usage
   let some parsed := options rest | usage
-  let specs : Array (String × String) := parsed.1
-  let contracts : Array String := parsed.2.1
-  let out : Option String := parsed.2.2
+  let specs := parsed.specs
+  let contracts := parsed.contracts
+  let out := parsed.out
   try
+    -- `[[definition, fingerprint], …]` of the translated functions
+    let fingerprints ← parsed.fingerprints.mapM fun f => do
+      let rows ← IO.ofExcept ((Json.parse (← IO.FS.readFile f)).bind (·.getArr?))
+      rows.mapM fun row => IO.ofExcept do
+        let #[d, fp] ← row.getArr? | throw s!"{f}: a row that is not a pair"
+        return ((← d.getStr?), (← fp.getStr?))
     let mut inputs : Array Json := #[]
     let files : Array String := #[source] ++ specs.map fun (spec : String × String) => spec.2
     for file in files do
@@ -68,7 +89,7 @@ unsafe def main (argv : List String) : IO UInt32 := do
     -- The default heartbeat limit: a run is bounded and deterministic, never timed.
     let ((text, skipped), _) ←
       (Air2Lean.InvGen.generate module.toName ns.toName generatorRecord (Json.arr inputs)
-        specNames (contracts.map fun (c : String) => c.toName)).run'.toIO
+        specNames (contracts.map fun (c : String) => c.toName) fingerprints).run'.toIO
         { fileName := "<air2lean-invgen>", fileMap := default } { env }
     for (loop, why) in skipped do
       IO.eprintln s!"air2lean-invgen: {loop}: no invariant: {why}"

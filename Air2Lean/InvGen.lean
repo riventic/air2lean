@@ -1817,9 +1817,12 @@ SHA-256 of the rest of the file: with them, `scripts/gen-integrity.py invgen` fi
 hand-edited file without running the generator, except one made stale by a library change that
 changes the pruning (the library is not hashed; `scripts/invgen.py check` finds it). Each loop's
 entry in `loops` names its family and the facts Houdini pruned (`pruned`), or why it has no
-invariant (`none`). The current environment
-must import `ZigLean.Sep.Full.AutoAll`: the pruning walks run `fsym`. -/
-def generate (module ns : Name) (generator inputs : Json) (specs contracts : Array Name := #[]) :
+invariant (`none`). With `fingerprints` (`[definition, fingerprint]` of the translated functions,
+`docs/stable-generation.md`), it also names the function that runs the loop and its fingerprint
+(`function`, `fingerprint`), so that a stale file says which loops' functions changed. The
+current environment must import `ZigLean.Sep.Full.AutoAll`: the pruning walks run `fsym`. -/
+def generate (module ns : Name) (generator inputs : Json) (specs contracts : Array Name := #[])
+    (fingerprints : Option (Array (String × String)) := none) :
     MetaM (String × Array (String × String)) := do
   let rules ← contracts.mapM fun r => return (← contractOf r, r)
   let all ← loopsOf module ns
@@ -1852,15 +1855,25 @@ def generate (module ns : Name) (generator inputs : Json) (specs contracts : Arr
   let mut skipped := #[]
   for (b, _) in all do
     let loop := relName ns b
+    -- the function that runs the loop (the longest translated definition that names it, `F` of
+    -- `F.loopN`) and its semantic fingerprint
+    let fn : List (String × Json) ← match fingerprints with
+      | none => pure []
+      | some fps =>
+        let owners := fps.filter fun (d, _) => loop.startsWith (d ++ ".")
+        let some (d, fp) := owners.foldl (init := none) fun best (d, fp) =>
+            if best.all (·.1.length < d.length) then some (d, fp) else best
+          | throwError "no fingerprint of the function that runs the loop {loop}"
+        pure [("function", d), ("fingerprint", fp)]
     match results[b]! with
     | .ok o =>
-      loops := loops.push (Json.mkObj [("loop", loop), ("family", o.family),
-        ("pruned", Json.arr o.pruned), ("credits", o.credits)])
+      loops := loops.push (Json.mkObj ([("loop", loop)] ++ fn ++ [("family", o.family),
+        ("pruned", Json.arr o.pruned), ("credits", o.credits)]))
       defs := defs.push o.text
       for m in o.imports do
         unless libs.contains m do libs := libs.push m
     | .error why =>
-      loops := loops.push (Json.mkObj [("loop", loop), ("none", why)])
+      loops := loops.push (Json.mkObj ([("loop", loop)] ++ fn ++ [("none", why)]))
       skipped := skipped.push (loop, why)
   let body := s!"import {module}\n\
     {String.join (specs.toList.map (s!"import {·}\n"))}\
@@ -1882,7 +1895,7 @@ def generate (module ns : Name) (generator inputs : Json) (specs contracts : Arr
     ("specs", Json.arr (specs.map (Json.str ·.toString))),
     ("contracts", Json.arr (contracts.map (Json.str ·.toString)))]
   let fields : List (String × Json) := [
-    ("version", (2 : Nat)), ("generator", generator), ("inputs", inputs),
+    ("version", (3 : Nat)), ("generator", generator), ("inputs", inputs),
     ("module", module.toString), ("namespace", ns.toString), ("loops", Json.arr loops),
     ("output", Air2Lean.Revision.sha256 body.toUTF8)]
   let record := Json.mkObj (fields ++ extra)

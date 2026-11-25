@@ -35,8 +35,10 @@ other ones than the translation is replaced by the fresh one). A module whose ca
 without a translator or Lean: each target's first line is an `-- air2lean-invgen:` record of its
 module and namespace that names the generator revision of the checkout (its Lean version and the
 SHA-256 of each of its modules, `translator_revision%`), the current SHA-256 of the input it read
-(the translated module's source) and the SHA-256 of the rest of the file (no hand edit); no other
-tracked file has such a record. The generator is deterministic, so equal hashes mean the file is
+(the translated module's source) and the SHA-256 of the rest of the file (no hand edit), and each
+loop it lists names the function that runs it with that function's semantic fingerprint
+(`scripts/invgen.py check` names the functions whose fingerprints changed); no other tracked file
+has such a record. The generator is deterministic, so equal hashes mean the file is
 current; otherwise `scripts/invgen.py write` regenerates it. The runtime is not an input here
 (docs/invariant-synthesis.md): `scripts/invgen.py check` reruns the generator.
 
@@ -380,8 +382,12 @@ def invgen_errors(targets=None, contracts=None):
         try:
             record, body = invgen_record(path)
             generator, inputs = record["generator"], [(name, digest) for name, digest in record["inputs"]]
-            if record["version"] != 2 or not valid_revision(generator):
-                raise ValueError("not a version 2 record with a consistent generator revision")
+            if record["version"] != 3 or not valid_revision(generator):
+                raise ValueError("not a version 3 record with a consistent generator revision")
+            # each loop names the function that runs it and that function's semantic fingerprint
+            if not all(isinstance(e.get("function"), str) and e["function"] and
+                       re.fullmatch(r"[0-9a-f]{64}", str(e.get("fingerprint"))) for e in record["loops"]):
+                raise ValueError("a loop without its function's semantic fingerprint")
             if not {"Air2Lean.InvGen", "Air2Lean.InvGenMain"} <= {m for m, _ in generator["modules"]}:
                 raise ValueError("a revision that is not the generator's (no Air2Lean.InvGen, Air2Lean.InvGenMain)")
             if (record["module"], record["namespace"], [name for name, _ in inputs]) != (module, namespace, sources):
