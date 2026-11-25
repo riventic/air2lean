@@ -4278,14 +4278,23 @@ def externUnbound (caller : String) (e : ExternDecl) (why : String) : String :=
   s!"{caller}: CALLEE_EXTERN_UNBOUND: extern function '{e.name}'\
     {(e.library.map (s!" (library '{·}')")).getD ""} {why} (docs/air-json.md §Extern calls)"
 
+/-- The first position at which the extern declaration `e` of `f` and the signature of its
+definition differ (`compatibleType`: exact modeled type and layout, no casts), if any. -/
+def externSignatureMismatch (f : Func) (e : ExternDecl) (definition : Func) : Option String :=
+  if e.params.size != definition.params.size then some "parameter count"
+  else if !compatibleType f definition e.ret definition.ret then some "result type"
+  else (e.params.zip definition.params).zipIdx.findSome? fun ((x, y), k) =>
+    if compatibleType f definition x y then none else some s!"parameter {k} type"
+
 /-- Bind each extern call (`externCallee`, `docs/air-json.md` §Extern calls) at its linker
 symbol, never at a Zig declaration name:
 (a) to a registry model whose `symbol` is the extern callee and whose `extern.library` is the
     declared library, if the program does not define the symbol; the call stays an extern
     callee, which the model implements;
 (b) else to the one function of the program that defines the symbol, with the declared
-    calling convention; the call becomes a direct call of that function, whose signature
-    `checkProgram` then checks like any direct call's.
+    calling convention and signature (`externSignatureMismatch`: no conversion at the
+    boundary); the call becomes a direct call of that function, which `checkProgram` then
+    checks like any direct call.
 The definitions of a symbol are the `export` of each function's own file (an `export fn`) and
 the records of the compilation's export table (`table`, `docs/air-json.md` §Export table: the
 `@export` symbols too, and those of functions without AIR in the set). (b) needs exactly one,
@@ -4300,11 +4309,11 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
   -- Every definition of each symbol; more than one is ambiguous only for a call that needs it.
   -- A table record that repeats a function's own `export` is that definition, not a second one.
   let mut exports : Std.HashMap String (Array ExportRecord) := {}
-  let mut defined : Std.HashSet String := {}
+  let mut defined : Std.HashMap String Func := {}
   for f in funcs do
     if (externSymbol? f.name).isSome then
       throw s!"{f.name}: a function name cannot have the extern callee form 'extern:<symbol>'"
-    defined := defined.insert f.name
+    defined := defined.insert f.name f
     if let some e := f.exportDecl then
       exports := exports.insert e.name ((exports.getD e.name #[]).push
         { name := e.name, weak := false, function := some (f.name, e.cc) })
@@ -4380,16 +4389,26 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
           unbound := reject "is defined by the compilation, but not as a function (an exported \
             variable, or an `@export` of an extern declaration)"
         | some (name, cc) =>
-          if !defined.contains name then
-            unbound := reject s!"is defined by '{name}', which has no AIR in the set (export it \
-              with the program)"
-          else if target.weak && !assumeWeak then
+          let some definition := defined[name]?
+            | unbound := reject s!"is defined by '{name}', which has no AIR in the set (export it \
+                with the program)"
+              continue
+          if target.weak && !assumeWeak then
             unbound := reject s!"has only the weak definition '{name}' (`@export` with `.linkage = \
               .weak`), which another definition in the linked image would replace; \
               --assume-weak-exports states that the image links none (premise EXT-07)"
-          else if declared.isNone || cc == e.cc then renames := renames.insert callee name
-          else unbound := reject (s!"is declared with calling convention '{e.cc}', but its \
-            definition '{name}' has '{cc}'")
+          else if declared.isSome && cc != e.cc then
+            unbound := reject (s!"is declared with calling convention '{e.cc}', but its \
+              definition '{name}' has '{cc}'")
+          else if let some position := (if declared.isNone then none
+              else externSignatureMismatch f e definition) then
+            -- The bound call is a direct call: no conversion stands at the boundary. A
+            -- declaration that agrees with the definition only at the C ABI (translate-c's
+            -- `[*c]const u8` for Zig libc's `[*:0]const c_char`) is not bound.
+            unbound := reject s!"differs from its definition '{name}' in its {position}: the \
+              two may agree at the C ABI, but the binding converts no value \
+              (docs/c-frontend.md §libc boundary)"
+          else renames := renames.insert callee name
       else
         unbound := reject s!"has no definition in the program (an `export fn {symbol}` in the AIR set, or an \
           `@export` record of the export table) and no registry model '{callee}' \

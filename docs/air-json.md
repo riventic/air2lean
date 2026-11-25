@@ -316,10 +316,12 @@ function name has. Before the whole-program checks it binds each extern call
    with the declared `cc`. The definitions of a symbol are the `export` of each function's own
    file (an `export fn`) and the records of the compilation's [export table](#export-table)
    (the symbols that `@export` defines, and those of functions without AIR in the set). The
-   call becomes a direct call of that definition, and its argument and result types are
-   checked against the definition's parameters and return type like any direct call's: a
-   declaration that agrees with the definition only at the C ABI (`[*c]const u8` for a
-   `[*:0]const c_char` parameter, `?*anyopaque` for a `?[*]u8`) is rejected. Binding a strong definition
+   declared parameter and result types must be the definition's (exact modeled type and
+   layout): the call becomes a direct call of that definition, and no value is converted at
+   the boundary. A declaration that agrees with the definition only at the C ABI
+   (`[*c]const u8` for a `[*:0]const c_char` parameter, `?*anyopaque` for a `?[*]u8`) is not
+   bound: `CALLEE_EXTERN_UNBOUND`, naming the symbol, the definition and the first differing
+   position ([c-frontend.md](c-frontend.md#libc-boundary)). Binding a strong definition
    is the static linker's rule for a program linked as one image (EXT-03). A **weak**
    definition (`.linkage = .weak`: every symbol of Zig's `lib/c.zig` and `compiler_rt`) binds
    only with `--assume-weak-exports`, which states that the image links no other definition

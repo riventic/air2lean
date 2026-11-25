@@ -203,13 +203,20 @@ def main(exe):
         rejects(exe, stage(tmp, AIR, {"extern_calls.fillSum": lambda d: first_extern(d)["params"].pop()}),
                 "does not match its 'externs' entry", tmp=tmp)
 
-        # The definition's signature is checked like any direct call's: here the declared
-        # result type (the call's, unused) differs from the definition's.
+        # The declaration must have the definition's signature (no conversion at the binding):
+        # here the declared result type (the call's, unused) differs from the definition's.
         def wider_result(d):
             d["types"].append({"k": "int", "signed": False, "bits": 64, "abi_size": 8, "abi_align": 8})
             memset_call(d)["ty"] = first_extern(d)["ret"] = len(d["types"]) - 1
         rejects(exe, stage(tmp, AIR, {"extern_calls.fillSum": wider_result}),
-                "callee 'libc_ref.memset' has an incompatible result type", tmp=tmp)
+                "extern function 'memset' differs from its definition 'libc_ref.memset' in its "
+                "result type", tmp=tmp)
+        # ... and a parameter type (a `u64` for `memset`'s `c_int`).
+        def wider_param(d):
+            d["types"].append({"k": "int", "signed": False, "bits": 64, "abi_size": 8, "abi_align": 8})
+            first_extern(d)["params"][1] = len(d["types"]) - 1
+        rejects(exe, stage(tmp, AIR, {"extern_calls.fillSum": wider_param}),
+                "differs from its definition 'libc_ref.memset' in its parameter 1 type", tmp=tmp)
 
         # A call without an externs entry, and a noreturn extern call.
         no_entry = stage(tmp, AIR, {"extern_calls.fillSum": lambda d: d.pop("externs")})
