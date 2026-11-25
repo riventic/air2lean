@@ -76,6 +76,13 @@ noncomputable def DCell.one (D : DevState) : DCell := fun D' => if D' = D then 1
 
 theorem DCell.one_ne {D X : DevState} (h : X ≠ D) : DCell.one D X = 0 := by simp [DCell.one, h]
 
+/-- The single fragment of `D` is authorized where the device state is `D` (`MemAuth.dev`). -/
+theorem DCell.one_auth (D : DevState) :
+    ∀ X, 0 < DCell.one D X → DCell.one D X = 1 ∧ D = X := fun X hX => by
+  by_cases hXD : X = D
+  · subst hXD; exact ⟨DCell.one_self X, rfl⟩
+  · rw [DCell.one_ne hXD] at hX; exact absurd hX (Nat.lt_irrefl 0)
+
 /-- **The memory's authority over the counter cell and the device cell** (module doc). -/
 structure MemAuth (m : Mem) (c : KCell) (d : DCell) : Prop where
   stack : StackAuth m c
@@ -130,18 +137,21 @@ theorem dev_only {d e : DCell} {D : DevState} (h : MemAuth m c d) (hd : ∀ X, d
   · refine Nat.eq_zero_of_not_pos fun hp => hX ?_
     exact (h.dev X (by rw [hd]; omega)).2.symm.trans hD.2
 
+/-- **Another device state**: the memory with the device state `D'` authorizes the same counter
+cell and every device cell that `D'` authorizes. -/
+theorem withDevState {d' : DCell} (D' : DevState) (h : MemAuth m c d)
+    (hd : ∀ X, 0 < d' X → d' X = 1 ∧ D' = X) : MemAuth { m with dev := D' } c d' :=
+  ⟨h.stack.keep_shape rfl rfl rfl fun _ blk' hb' => ⟨blk', hb', rfl, rfl, rfl, rfl⟩,
+    ⟨h.tick.meter, h.tick.spent, h.tick.plain⟩, h.noStack, h.onlyCred, h.cur, hd⟩
+
 /-- **A device step's authority**: the memory with the device state `D'` in place of `D`
 authorizes the device cell with the fragment of `D'` in place of the fragment of `D`. -/
 theorem setDev {d d' e : DCell} {D : DevState} (D' : DevState) (h : MemAuth m c d)
     (hd : ∀ X, d X = DCell.one D X + e X) (hd' : ∀ X, d' X = DCell.one D' X + e X) :
-    MemAuth { m with dev := D' } c d' := by
-  have he := (h.dev_only hd).2
-  refine ⟨h.stack.keep_shape rfl rfl rfl fun _ blk' hb' => ⟨blk', hb', rfl, rfl, rfl, rfl⟩,
-    ⟨h.tick.meter, h.tick.spent, h.tick.plain⟩, h.noStack, h.onlyCred, h.cur, fun X hX => ?_⟩
-  rw [hd', he X, Nat.add_zero] at hX ⊢
-  by_cases hXD : X = D'
-  · subst hXD; exact ⟨DCell.one_self X, rfl⟩
-  · rw [DCell.one_ne hXD] at hX; exact absurd hX (Nat.lt_irrefl 0)
+    MemAuth { m with dev := D' } c d' :=
+  h.withDevState D' fun X hX => by
+    rw [hd', (h.dev_only hd).2 X, Nat.add_zero] at hX ⊢
+    exact DCell.one_auth D' X hX
 
 /-- **The device fragment of the memory's state can be added** next to a device cell without
 fragments. -/
@@ -149,9 +159,7 @@ theorem addDev {d d' : DCell} (h : MemAuth m c d) (h0 : ∀ X, d X = 0)
     (hd' : ∀ X, d' X = DCell.one m.dev X + d X) : MemAuth m c d' :=
   h.withDev fun X hX => by
     rw [hd', h0 X, Nat.add_zero] at hX ⊢
-    by_cases hXD : X = m.dev
-    · subst hXD; exact ⟨DCell.one_self _, rfl⟩
-    · rw [DCell.one_ne hXD] at hX; exact absurd hX (Nat.lt_irrefl 0)
+    exact DCell.one_auth m.dev X hX
 
 theorem Keep.refl (m : Mem) : Keep m m := ⟨fun _ h => h, rfl, id, rfl, rfl⟩
 

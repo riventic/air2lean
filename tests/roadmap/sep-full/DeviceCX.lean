@@ -38,11 +38,9 @@ def silent (m : Mem) : Mem := { m with dev := silentDev m }
 /-- **Without device fragments `Holds` does not read the device state.** -/
 theorem holds_silent {m : Mem} {r rF : Res} (hh : Holds m r rF)
     (h0 : ∀ D, (r.gh.add rF.gh).dev D = 0) : Holds (silent m) r rF := by
-  have hM := hh.ghost.2.2.2
   exact hh.devChange (g' := r.gh) (silentDev m) rfl
-    ⟨hM.stack.keep_shape rfl rfl rfl fun _ blk' hb' => ⟨blk', hb', rfl, rfl, rfl, rfl⟩,
-      ⟨hM.tick.meter, hM.tick.spent, hM.tick.plain⟩, hM.noStack, hM.onlyCred, hM.cur,
-      fun D hD => absurd hD (by rw [h0 D]; exact Nat.lt_irrefl 0)⟩
+    (hh.ghost.2.2.2.withDevState (silentDev m) fun D hD =>
+      absurd hD (by rw [h0 D]; exact Nat.lt_irrefl 0))
 
 theorem fseq_silent {m : Mem} (hs : m.FSeq) : (silent m).FSeq := ⟨⟨hs.1.single⟩, hs.2.1, hs.2.2⟩
 
