@@ -32,7 +32,7 @@ open Lean Meta
 def generatorRecord : Json := toJson translator_revision%
 
 /-- The options after `MODULE NAMESPACE --source FILE`. -/
-structure Options where
+structure CliOptions where
   /-- The specification modules with their sources (`--spec MODULE FILE`). -/
   specs : Array (String × String) := #[]
   /-- The contracts (`--contract NAME`). -/
@@ -43,7 +43,7 @@ structure Options where
   out : Option String := none
 
 /-- The options after `MODULE NAMESPACE --source FILE`; `none`: not an option list. -/
-def options : List String → Option Options
+def options : List String → Option CliOptions
   | [] => some {}
   | "--spec" :: m :: f :: rest => (options rest).map fun o => { o with specs := #[(m, f)] ++ o.specs }
   | "--contract" :: c :: rest => (options rest).map fun o => { o with contracts := #[c] ++ o.contracts }
