@@ -74,10 +74,9 @@ case "${1:---check}" in
       "$AIR2LEAN_ZIG_NATIVE" test -OReleaseSafe -target "$arch-linux-$abi" --test-no-exec \
         -femit-bin="$work/names-$arch" "$case_dir/names.zig"
       # mips64 runs through the Docker VM's qemu-mips64 binfmt handler (concurrency.sh).
-      if [ "$arch" = mips64 ]; then
-        python3 "$case_dir/elf-abiversion.py" "$work/native-$arch"
-        python3 "$case_dir/elf-abiversion.py" "$work/names-$arch"
-      fi
+      [ "$arch" != mips64 ] || for bin in native names; do
+        python3 "$case_dir/elf-abiversion.py" "$work/$bin-$arch"
+      done
       run "$arch" "native-$arch" > "$work/native-$arch.txt"
       diff -u "$case_dir/observed/$version-$arch-linux-musl-ReleaseSafe.txt" "$work/native-$arch.txt"
       echo "native $arch-linux-$abi ($version) matches the retained observation ($(wc -l < "$work/native-$arch.txt" | tr -d " ") lines)"
