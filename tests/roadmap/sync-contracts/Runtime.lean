@@ -30,7 +30,7 @@ theorem mailbox_completes :
     ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ stdDispatch 1000 (fun _ => 0) (stdMain ⟨⟩)
       (mem0 σ)) = some 34 := by
   refine ⟨.fresh, ?_⟩
-  delta stdDispatch stdMain dispatch producer mailMain ioSem ioSemCode IoSemCode.impl
+  delta stdDispatch stdMain dispatch producer mailMain ioSem ioSemCode Full.IoSemCode.impl
   iterate 8 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
   decide +kernel
 
