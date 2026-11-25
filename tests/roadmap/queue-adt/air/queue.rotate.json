@@ -1,0 +1,505 @@
+{
+ "schema": 12,
+ "zig_version": "0.17.1",
+ "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...7.2-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.17.1",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "queue.rotate",
+ "module": "root",
+ "src": {
+  "file": "queue.zig",
+  "module": "queue",
+  "decl_line": 51
+ },
+ "params": [
+  0
+ ],
+ "noalias": [],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "alloc",
+   "ty": 2
+  },
+  {
+   "id": 2,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 1
+    },
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "tag": "ptr_cast",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2,
+   "column": 9
+  },
+  {
+   "id": 5,
+   "tag": "block",
+   "ty": 1,
+   "body": [
+    {
+     "id": 6,
+     "tag": "dbg_stmt",
+     "ty": 1,
+     "line": 2,
+     "column": 14
+    },
+    {
+     "id": 7,
+     "tag": "load",
+     "ty": 0,
+     "args": [
+      {
+       "inst": 3
+      }
+     ]
+    },
+    {
+     "id": 8,
+     "tag": "dbg_stmt",
+     "ty": 1,
+     "line": 2,
+     "column": 14
+    },
+    {
+     "id": 9,
+     "tag": "call",
+     "ty": 4,
+     "callee": {
+      "ty": 5,
+      "func": "queue.Ring.pop",
+      "module": "root",
+      "noreturn": false
+     },
+     "args": [
+      {
+       "inst": 7
+      }
+     ]
+    },
+    {
+     "id": 10,
+     "tag": "is_non_null",
+     "ty": 6,
+     "args": [
+      {
+       "inst": 9
+      }
+     ]
+    },
+    {
+     "id": 28,
+     "tag": "cond_br",
+     "ty": 7,
+     "args": [
+      {
+       "inst": 10
+      }
+     ],
+     "then": [
+      {
+       "id": 11,
+       "tag": "optional_payload",
+       "ty": 8,
+       "args": [
+        {
+         "inst": 9
+        }
+       ]
+      },
+      {
+       "id": 12,
+       "tag": "dbg_var_val",
+       "ty": 1,
+       "args": [
+        {
+         "inst": 11
+        }
+       ],
+       "name": "v"
+      },
+      {
+       "id": 13,
+       "tag": "block",
+       "ty": 1,
+       "body": [
+        {
+         "id": 14,
+         "tag": "dbg_stmt",
+         "ty": 1,
+         "line": 2,
+         "column": 28
+        },
+        {
+         "id": 15,
+         "tag": "load",
+         "ty": 0,
+         "args": [
+          {
+           "inst": 3
+          }
+         ]
+        },
+        {
+         "id": 16,
+         "tag": "dbg_stmt",
+         "ty": 1,
+         "line": 2,
+         "column": 28
+        },
+        {
+         "id": 17,
+         "tag": "call",
+         "ty": 9,
+         "callee": {
+          "ty": 10,
+          "func": "queue.Ring.push",
+          "module": "root",
+          "noreturn": false
+         },
+         "args": [
+          {
+           "inst": 15
+          },
+          {
+           "inst": 11
+          }
+         ]
+        },
+        {
+         "id": 18,
+         "tag": "is_non_err",
+         "ty": 6,
+         "args": [
+          {
+           "inst": 17
+          }
+         ]
+        },
+        {
+         "id": 25,
+         "tag": "cond_br",
+         "ty": 7,
+         "args": [
+          {
+           "inst": 18
+          }
+         ],
+         "then": [
+          {
+           "id": 19,
+           "tag": "br",
+           "ty": 7,
+           "target": 13,
+           "args": [
+            {
+             "ty": 1,
+             "val": "{}"
+            }
+           ]
+          }
+         ],
+         "else": [
+          {
+           "id": 20,
+           "tag": "unwrap_errunion_err",
+           "ty": 11,
+           "args": [
+            {
+             "inst": 17
+            }
+           ]
+          },
+          {
+           "id": 21,
+           "tag": "dbg_stmt",
+           "ty": 1,
+           "line": 2,
+           "column": 38
+          },
+          {
+           "id": 22,
+           "tag": "error_cast",
+           "ty": 12,
+           "args": [
+            {
+             "inst": 20
+            }
+           ]
+          },
+          {
+           "id": 23,
+           "tag": "call",
+           "ty": 7,
+           "callee": {
+            "ty": 13,
+            "func": "debug.FullPanic((function 'defaultPanic')).unwrapError",
+            "module": "std",
+            "noreturn": true
+           },
+           "args": [
+            {
+             "inst": 22
+            }
+           ]
+          },
+          {
+           "id": 24,
+           "tag": "unreach",
+           "ty": 7
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "id": 26,
+       "tag": "br",
+       "ty": 7,
+       "target": 5,
+       "args": [
+        {
+         "ty": 1,
+         "val": "{}"
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 27,
+       "tag": "br",
+       "ty": 7,
+       "target": 5,
+       "args": [
+        {
+         "ty": 1,
+         "val": "{}"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 29,
+   "tag": "ret_safe",
+   "ty": 7,
+   "args": [
+    {
+     "ty": 1,
+     "val": "{}"
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 14,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 0,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 0,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "optional",
+   "child": 8,
+   "abi_size": 8,
+   "abi_align": 4
+  },
+  {
+   "k": "other",
+   "name": "fn (*queue.Ring) ?u32"
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "error_union",
+   "error": 11,
+   "payload": 1,
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "other",
+   "name": "fn (*queue.Ring, u32) error{Full}!void"
+  },
+  {
+   "k": "error_set",
+   "errors": [
+    "Full"
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "error_set",
+   "any": true,
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "other",
+   "name": "fn (anyerror) noreturn"
+  },
+  {
+   "k": "struct",
+   "name": "queue.Ring",
+   "module": "root",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "items",
+     "ty": 15,
+     "offset": 0
+    },
+    {
+     "name": "head",
+     "ty": 16,
+     "offset": 16
+    },
+    {
+     "name": "len",
+     "ty": 16,
+     "offset": 24
+    }
+   ],
+   "abi_size": 32,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "slice",
+   "const": false,
+   "child": 8,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  }
+ ]
+}
