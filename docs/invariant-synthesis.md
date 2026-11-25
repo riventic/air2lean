@@ -675,6 +675,10 @@ Three more shapes of the counted family, each a general reading (no per-loop cas
   `pairs_total` (unchanged statement) is a bare `fsym`. An inner loop with an increment that is not
   a constant, with a loop of its own or with several exits is outside (recorded).
 
+An outer body that runs an inner loop which takes steps gets no credit-mode definitions (the record
+says why): one run of it takes more than the one step that the counted loop rule pays with one
+credit, so its exact count is not the outer measure.
+
 A file whose definitions name `arr` or `tsum` imports `ZigLean.Sep.Full.Arr` or
 `ZigLean.Sep.Full.TSum` (`Cand.imports`), and only then.
 
