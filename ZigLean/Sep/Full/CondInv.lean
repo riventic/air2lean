@@ -2196,7 +2196,7 @@ theorem Inv.wake {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n q c : Nat}
   obtain ⟨wl, hwl⟩ : ∃ wl, wl = Thread.wakePick c l cs := ⟨_, rfl⟩
   have hlnd : l.Nodup := by rw [hl]; exact hI.qnd
   have hlk : l.length = Thread.waitersAt m.waiters (C.Ep.key m) := by
-    rw [hl]; simp [Thread.waitersAt]
+    simp only [hl, List.length_map, Array.length_toList, Thread.waitersAt]
   have hwnd : wl.Nodup := by rw [hwl]; exact Thread.wakePick_nodup hlnd
   have hws : Thread.wakeSet m.waiters (C.Ep.key m) c cs = wl.toArray := by
     unfold Thread.wakeSet; rw [← hl, ← hwl]
