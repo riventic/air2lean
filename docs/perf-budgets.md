@@ -94,7 +94,10 @@ Limits:
   including reaped descendants (`lake` → `lean`). It is not a sum.
   `scripts/build-guard.py` reports the sampled sum.
 - "Cold" proof builds remove only the selected modules' `.olean`/`.ilean`/trace/IR
-  outputs. `ZigLean` and other dependencies stay built.
+  outputs. `ZigLean` and other dependencies stay built. The proof builds run with Lake's
+  artifact cache off (`LAKE_ARTIFACT_CACHE=false`; `scripts/build-guard.py` turns it on under
+  `AIR2LEAN_CAS_DIR`), and `record` fails a workload whose cold build did not write each
+  module's `.olean` anew: a restored output would time the cache, not the proof.
 - `translate.cold` is the first process start of the run. The OS file cache is not
   flushed.
 - Times depend on the host. A budget applies only on its `reference_platform`

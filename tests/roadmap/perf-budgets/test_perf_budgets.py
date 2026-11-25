@@ -497,6 +497,28 @@ class RecordHelpers(unittest.TestCase):
             self.assertEqual(removed, 5)
             self.assertEqual(sorted(path.name for path in lib.iterdir()), ["GenExtra.olean", "Proofs.olean"])
 
+    def test_cold_builds_bypass_the_artifact_cache(self):
+        with mock.patch.dict(os.environ, {"LAKE_ARTIFACT_CACHE": "true", "LAKE_RESTORE_ARTIFACTS": "true"}):
+            env = perf.uncached_env()
+        self.assertEqual(env["LAKE_ARTIFACT_CACHE"], "false")
+        self.assertNotIn("LAKE_RESTORE_ARTIFACTS", env)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            lib = root / ".lake/build/lib/lean/Proofs/Basic"
+            lib.mkdir(parents=True)
+            olean = lib / "Gen.olean"
+            olean.write_text("x")
+            since = olean.stat().st_mtime
+            perf.require_rebuilt(root, ["Proofs.Basic.Gen"], since)
+            # Older than the build, a hard link into a cache, or missing: not rebuilt.
+            with self.assertRaisesRegex(RuntimeError, "did not rebuild Proofs.Basic.Gen"):
+                perf.require_rebuilt(root, ["Proofs.Basic.Gen"], since + 60)
+            os.link(olean, root / "cached.olean")
+            with self.assertRaisesRegex(RuntimeError, "did not rebuild"):
+                perf.require_rebuilt(root, ["Proofs.Basic.Gen"], since)
+            with self.assertRaisesRegex(RuntimeError, "Proofs.Basic.Missing"):
+                perf.require_rebuilt(root, ["Proofs.Basic.Missing"], 0)
+
     def test_measure_reports_time_rss_and_exit(self):
         with tempfile.TemporaryDirectory() as temporary:
             log = Path(temporary) / "log"
