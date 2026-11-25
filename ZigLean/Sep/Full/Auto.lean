@@ -1809,12 +1809,21 @@ partial def arithGoals (g : MVarId) (quick := false) (cases := true) : TacticM (
     -- (in the imports' environment where it suffices, `kernelEnvFor`: `decide +kernel` adds an
     -- auxiliary lemma, which waits for every earlier theorem of the file; the proof is `decide`'s,
     -- which the kernel evaluates again when it checks the theorem)
-    if let some pf ← observing? (mkDecideProof t) then
+    match ← observing? (mkDecideProof t) with
+    | some pf =>
       -- (`of_decide_eq_true inst rfl`: its instance)
       let inst := pf.appFn!.appArg!
-      if let .ok v := Kernel.whnf (← kernelEnvFor inst) (← getLCtx) inst then
-        if v.isAppOf ``Decidable.isTrue then g.assign pf; return []
-    if ← closeWith g (← `(tactic| decide +kernel)) then return []
+      let env ← getEnv
+      if inst.getUsedConstants.all env.isImportedConst then
+        -- (decided in the imports' environment: `decide +kernel` would decide it the same way)
+        if let some ienv := env.importEnv? then
+          if let .ok v := Kernel.whnf ienv (← getLCtx) inst then
+            if v.isAppOf ``Decidable.isTrue then g.assign pf; return []
+        else if ← closeWith g (← `(tactic| decide +kernel)) then return []
+      else
+        trace[fsym.prof] "decide +kernel over the file's constants: {t}"
+        if ← closeWith g (← `(tactic| decide +kernel)) then return []
+    | none => pure ()
   if let some (ty, x, y) := t.eq? then
     -- an unknown ghost list that the equation fixes (a loop's parameter at its entry,
     -- `?xs = [].reverse ++ xs`): its value in the normal form of lists (`xs`)
