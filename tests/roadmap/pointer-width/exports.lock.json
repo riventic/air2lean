@@ -1,0 +1,39 @@
+{
+  "air_sha256": {
+    "air/0.16.0/names/wasm32-freestanding/names.colorName.json": "7b6acf61cb14fdafd99ee2fc8e85224461f8c2159ec353a7800a70ffd841065b",
+    "air/0.16.0/names/wasm32-freestanding/names.faultName.json": "2b2fc6d74a927901c8dbaeb850340bc9bb8cd5a06e0716d665376dca6a67a22e",
+    "air/0.16.0/names/wasm32-freestanding/names.levelName.json": "8ceea6a4df4f39f1c5ccab9f9e2f9f8ca22057248157e9699808a17fbcdc91a6",
+    "air/0.16.0/names/wasm32-freestanding/names.nameByte.json": "7c8d0a15e962b8f4f8172563c708c22b45797d26ce25f44c0b0794d1ffdce6b1",
+    "air/0.16.0/names/wasm32-wasi/names.colorName.json": "f29e4c0d47810ab5b7f3f424260d6ebb82b636677581360478cc5bc7f4464448",
+    "air/0.16.0/names/wasm32-wasi/names.faultName.json": "c9e4b49a3cfed42fdb31a5134c6c04fc7c7672dc70ea8cdf1860e611130cf542",
+    "air/0.16.0/names/wasm32-wasi/names.levelName.json": "b9a3b0bb77395afffeaf30d540a1b98bb65a8d1a61a2575d8ec07ed62b80d823",
+    "air/0.16.0/names/wasm32-wasi/names.nameByte.json": "a9ccbb518061b795856a6dd3b882bc91f53bdcd0630ae53735a3b6b87eb4a0a6",
+    "air/0.16.0/names/x86_64-linux/names.colorName.json": "d642a94bbfb94048ea661a28f08e5a4025f04d2791d8ac70ef0dd5d9c030a213",
+    "air/0.16.0/names/x86_64-linux/names.faultName.json": "94e46b370bd95632d56e7ac793a4a76e59c7e8f8f66b33d04f64c407c78e7d71",
+    "air/0.16.0/names/x86_64-linux/names.levelName.json": "4166f36c69835af79873bcb4c7e75454cdcdd8670076db8462fe13139a27e38a",
+    "air/0.16.0/names/x86_64-linux/names.nameByte.json": "d95299df3f5a0a6b674dc96f01b08517567d48d2cd106f5ebf83edfd3fa57fb8",
+    "air/0.17.1/names/wasm32-freestanding/names.colorName.json": "bf2223353c8fa413e37b58ead1c2c0b81f1a2f97820b9c021453933f850db82d",
+    "air/0.17.1/names/wasm32-freestanding/names.faultName.json": "e60876d51062ec2de6b04315d344b696fc9e5e7011d7782589c6fdb85261d87b",
+    "air/0.17.1/names/wasm32-freestanding/names.levelName.json": "e5d6bdc256613e07244e950921d201553349989dba3c6ec86127de1b1d5cf456",
+    "air/0.17.1/names/wasm32-freestanding/names.nameByte.json": "9c9141446f68cd0c9b3d6c329fa02cea56d572820075f55aa20ec70eba1ec713",
+    "air/0.17.1/names/wasm32-wasi/names.colorName.json": "92413b4b10bf09a911a47d6f95342b474cb3162fcbb01c0ab4514ca4b1231b82",
+    "air/0.17.1/names/wasm32-wasi/names.faultName.json": "93d93d02c550d238357e2bee9d7a3680bab65bbfff28b3fffff3ed5dfd36367c",
+    "air/0.17.1/names/wasm32-wasi/names.levelName.json": "78f32b4d1181b734345ead69d69e1ccd44a1528570dd442aff2fd71746bce876",
+    "air/0.17.1/names/wasm32-wasi/names.nameByte.json": "0b9701fe98e4223bc41fd723456fe0435010f7f0a8e63d298c57999867fa71ff",
+    "air/0.17.1/names/x86_64-linux/names.colorName.json": "7b935dd7aa37bf11da5a3d074336afcfbaae22c5622022ba39317eb88aef263a",
+    "air/0.17.1/names/x86_64-linux/names.faultName.json": "bf2d19e7a8611fa97004fead7eb21e953c77dbc07daa9d1ef0f6941bf0663c52",
+    "air/0.17.1/names/x86_64-linux/names.levelName.json": "68ce98b2820067ef6609cc6dc19dcdf97c04dc8d7203c9147995aa701cee2e1b",
+    "air/0.17.1/names/x86_64-linux/names.nameByte.json": "2c5e8a0f8c1d4e75a3118d7d89e376b3a60248e0fa42c57a4535cbc96328461a"
+  },
+  "compilers": {
+    "0.16.0": "c7f33f99339241f401922ab14c913587f82ac814841847869f6b82050c76a815",
+    "0.17.1": "1953662bf1225a88b6c93545ccccf804f3eec5601df436181a1ba5b9ef1ab7c8"
+  },
+  "manifest_sha256": "eed41a807300a14154bdcde1cf89fa08f69fa05b333f7c082d4be1e94ba813cd",
+  "schema": 1,
+  "sources_sha256": {
+    "names.zig": "e537458fdfb7004a767a4774008242c7e8e19fe5f4c1921e031cd6bbc6b8eab6",
+    "pointer_width.zig": "c159b677b1c4b1f29da4a45e1cb4254b6fada56952c1181cee71df70fc0823ee",
+    "reject.zig": "45427fb0bedcf1233750a62fc4d5da2a907dc4e8f050a547f63d672527f29d2f"
+  }
+}

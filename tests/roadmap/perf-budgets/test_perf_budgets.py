@@ -82,10 +82,42 @@ class CommittedBudgets(unittest.TestCase):
         self.assertEqual(perf.validate_budgets(data), [])
         ids = [workload["id"] for workload in data["workloads"]]
         self.assertGreaterEqual(len(ids), 5)
+        # The proof phases build the committed Proofs/<Ex> modules, which are the same for every
+        # Zig version: a workload of another version of an example whose proofs a workload
+        # already measures lists none.
+        proved = {workload["namespace"] for workload in data["workloads"] if workload["proof_modules"]}
         for workload in data["workloads"]:
             if workload["reference_gen"] is not None:
                 self.assertTrue((ROOT / workload["reference_gen"]).is_file(), workload["id"])
-            self.assertTrue(workload["proof_modules"], workload["id"])
+            self.assertIn(workload["namespace"], proved, workload["id"])
+        modules = [module for workload in data["workloads"] for module in workload["proof_modules"]]
+        self.assertEqual(len(modules), len(set(modules)), "a proof module is measured by two workloads")
+        # The default Zig version's translations are measured (Zig 0.17 first).
+        default = json.loads((ROOT / "compatibility.json").read_text())["zig"]["default"]
+        self.assertIn(default, {workload["air_zig_version"] for workload in data["workloads"]})
+
+    def test_fixture_exports_follow_the_examples(self):
+        # The 0.17.1 workloads translate the perf-budgets fixture's exports (exports.json,
+        # scripts/fixture-exports.py); each export's filter is the one scripts/check.sh uses.
+        manifest = json.loads((ROOT / "tests/roadmap/perf-budgets/exports.json").read_text())
+        for entry in manifest["exports"]:
+            example = Path(entry["source"]).stem
+            prefixes = [example + "."]
+            for name in ("filter", *("filter-" + version for version in entry["versions"])):
+                path = ROOT / "examples" / example / name
+                if path.is_file():
+                    prefixes += [line.strip() for line in path.read_text().splitlines() if line.strip()]
+            self.assertEqual(entry["filter"], ",".join(prefixes), example)
+        outs = {"tests/roadmap/perf-budgets/" + entry["out"].format(version=version)
+                for entry in manifest["exports"] for version in entry["versions"]}
+        data = perf.load_json(perf.BUDGETS)
+        for workload in data["workloads"]:
+            if any(directory.startswith("tests/roadmap/perf-budgets/") for directory in workload["air"]):
+                self.assertTrue(set(workload["air"]) <= outs, workload["id"])
+                example = workload["prefix"].rstrip(".")
+                args = ROOT / "examples" / example / "translate.args"
+                self.assertEqual(workload["translate_args"], args.read_text().split() if args.is_file() else [],
+                                 workload["id"])
         if data["status"] == "pending":
             self.assertTrue(any(workload["budget"] is None for workload in data["workloads"]))
         for workload in data["workloads"]:
@@ -464,6 +496,28 @@ class RecordHelpers(unittest.TestCase):
             removed = perf.remove_module_artifacts(root, ["Proofs.Basic.Gen", "Proofs.Missing.X"])
             self.assertEqual(removed, 5)
             self.assertEqual(sorted(path.name for path in lib.iterdir()), ["GenExtra.olean", "Proofs.olean"])
+
+    def test_cold_builds_bypass_the_artifact_cache(self):
+        with mock.patch.dict(os.environ, {"LAKE_ARTIFACT_CACHE": "true", "LAKE_RESTORE_ARTIFACTS": "true"}):
+            env = perf.uncached_env()
+        self.assertEqual(env["LAKE_ARTIFACT_CACHE"], "false")
+        self.assertNotIn("LAKE_RESTORE_ARTIFACTS", env)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            lib = root / ".lake/build/lib/lean/Proofs/Basic"
+            lib.mkdir(parents=True)
+            olean = lib / "Gen.olean"
+            olean.write_text("x")
+            since = olean.stat().st_mtime
+            perf.require_rebuilt(root, ["Proofs.Basic.Gen"], since)
+            # Older than the build, a hard link into a cache, or missing: not rebuilt.
+            with self.assertRaisesRegex(RuntimeError, "did not rebuild Proofs.Basic.Gen"):
+                perf.require_rebuilt(root, ["Proofs.Basic.Gen"], since + 60)
+            os.link(olean, root / "cached.olean")
+            with self.assertRaisesRegex(RuntimeError, "did not rebuild"):
+                perf.require_rebuilt(root, ["Proofs.Basic.Gen"], since)
+            with self.assertRaisesRegex(RuntimeError, "Proofs.Basic.Missing"):
+                perf.require_rebuilt(root, ["Proofs.Basic.Missing"], 0)
 
     def test_measure_reports_time_rss_and_exit(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -705,21 +705,35 @@ def optPtrOf (g : Nat) (j : Json) : IO (Option Zig.Ptr) :=
 def sliceOf (g : Nat) (j : Json) : IO Zig.Slice := do
   pure ⟨← ptrOf g j, bv 64 (← getField j "len")⟩
 
-/-- A byte as two hex digits; `??` for an undefined byte (it matches any Zig byte, diff.sh). -/
-def byteStr : Zig.Byte → String
-  | .int x => natToHex x.toNat 2
-  | .undef => "??"
+/-- A byte of a buffer, per bit (docs/generated-code.md §Differential test): from its defined
+bits `d` and their values `x` (`Zig.Byte.defBits`), a hex digit where all four bits of the digit
+are defined and `?` where none is; a byte with a digit that is only partly defined is
+`(<d>:<x>)`, both two hex digits. `scripts/diff-report.py` matches a Zig byte `z` iff
+`z &&& d = x`, so every defined bit is compared (BM-3,
+docs/architecture-audit/2026-11-25-build-modes-0171.md). A pointer byte is `pp` (it matches no
+Zig byte). An error-code byte (the compiler numbers the errors per compilation; the model keeps
+the name) and a model handle's byte (the target's data the model does not have) have no defined
+bits: `??`. -/
+def byteStr (b : Zig.Byte) : String :=
+  match b with
   | .ptrFrag .. => "pp"
-  -- The compiler numbers the errors per compilation: the model keeps the name (a wildcard).
-  | .errFrag .. => "??"
-  -- A model handle's bytes are the target's data that the model does not have: a wildcard.
-  | .handle .. => "??"
-  -- Only the low `m` bits are defined: `?` for the high hex digit, and for the low one if `m < 4`.
-  | .part m x => if 4 ≤ m then "?" ++ natToHex (x.toNat % 16) 1 else "??"
-  -- Only the bits of `d` are defined: a hex digit only where all four of its bits are.
-  | .mask d x =>
-    let digit (k : Nat) := if (d.toNat >>> k) % 16 = 15 then natToHex ((x.toNat >>> k) % 16) 1 else "?"
-    digit 4 ++ digit 0
+  | _ =>
+    let (d, x) := b.defBits.getD (0, 0)
+    let nib (v : BitVec 8) (k : Nat) := (v.toNat >>> k) % 16
+    let digit (k : Nat) := if nib d k = 15 then natToHex (nib x k) 1 else "?"
+    if [0, 15].contains (nib d 4) && [0, 15].contains (nib d 0) then digit 4 ++ digit 0
+    else "(" ++ natToHex d.toNat 2 ++ ":" ++ natToHex x.toNat 2 ++ ")"
+
+-- BM-3 regression: a byte with 1 to 3 (or 5 to 7) defined bits shows them, so a wrong defined
+-- bit of a `bool`, `u1`…`u7` or packed field is a mismatch (tests/roadmap/outcome-accounting).
+#guard byteStr (.int 0xa5) = "a5"
+#guard byteStr .undef = "??"
+#guard byteStr (.part 1 1) = "(01:01)"
+#guard byteStr (.part 3 5) = "(07:05)"
+#guard byteStr (.part 4 0xc) = "?c"
+#guard byteStr (.part 7 0x5a) = "(7f:5a)"
+#guard byteStr (.mask 0xf0 0x30) = "3?"
+#guard byteStr (.mask 0x24 0x04) = "(24:04)"
 
 /-- A pointer result, the same as common.zig writes it: `{"buf":i,"off":o}` (with `"len":n` for
 a slice) into the input buffers, else `{"bytes":"<hex>"}`, the `size` bytes at the pointer (a

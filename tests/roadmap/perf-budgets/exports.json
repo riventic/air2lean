@@ -1,0 +1,148 @@
+{
+  "exports": [
+    {
+      "out": "air/{version}/asm",
+      "source": "../../../examples/asm/asm.zig",
+      "filter": "asm.",
+      "versions": ["0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/atomics",
+      "source": "../../../examples/atomics/atomics.zig",
+      "filter": "atomics.,atomic.Value(u32).init",
+      "versions": ["0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/basic",
+      "source": "../../../examples/basic/basic.zig",
+      "filter": "basic.",
+      "versions": ["0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/errors",
+      "source": "../../../examples/errors/errors.zig",
+      "filter": "errors.",
+      "versions": ["0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/floatconv",
+      "source": "../../../examples/floatconv/floatconv.zig",
+      "filter": "floatconv.",
+      "versions": ["0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/floatops",
+      "source": "../../../examples/floatops/floatops.zig",
+      "filter": "floatops.",
+      "versions": ["0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/floats",
+      "source": "../../../examples/floats/floats.zig",
+      "filter": "floats.",
+      "versions": ["0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/iogroup",
+      "source": "../../../examples/iogroup/iogroup.zig",
+      "filter": "iogroup.,Io.Mutex.,debug.assert",
+      "versions": ["0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/layout",
+      "source": "../../../examples/layout/layout.zig",
+      "filter": "layout.",
+      "versions": ["0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/lists",
+      "source": "../../../examples/lists/lists.zig",
+      "filter": "lists.,array_list.Aligned(u32,null).,debug.assert,mem.Allocator.dupeZ,mem.Allocator.dupeSentinel,debug.SafetyLock.",
+      "versions": ["0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/options",
+      "source": "../../../examples/options/options.zig",
+      "filter": "options.",
+      "versions": ["0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/pointers",
+      "source": "../../../examples/pointers/pointers.zig",
+      "filter": "pointers.",
+      "versions": ["0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/recursion",
+      "source": "../../../examples/recursion/recursion.zig",
+      "filter": "recursion.",
+      "versions": ["0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/slices",
+      "source": "../../../examples/slices/slices.zig",
+      "filter": "slices.",
+      "versions": ["0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/sync",
+      "source": "../../../examples/sync/sync.zig",
+      "filter": "sync.,Io.Mutex.,Io.Event.,Io.Semaphore.,Io.RwLock.,debug.assert,Io.Condition.signal,Io.Condition.waitUncancelable",
+      "versions": ["0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/threads",
+      "source": "../../../examples/threads/threads.zig",
+      "filter": "threads.,atomic.Value(u32).init,atomic.Value(threads.Phase).init",
+      "versions": ["0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/variants",
+      "source": "../../../examples/variants/variants.zig",
+      "filter": "variants.",
+      "versions": ["0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/vectors",
+      "source": "../../../examples/vectors/vectors.zig",
+      "filter": "vectors.",
+      "versions": ["0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    }
+  ]
+}

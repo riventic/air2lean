@@ -13,7 +13,7 @@
       "out": "air/{version}",
       "source": "std_io16.zig",
       "filter": "std_io16.,posix.,os.linux.,Io.Threaded.closeFd,Io.Threaded.recoverableOsBugDetected",
-      "versions": ["0.16.0"],
+      "versions": ["0.17.1", "0.16.0"],
       "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
       "closure": ["std_io16.readClose"],
       "stop": ["os.linux.read", "os.linux.write", "os.linux.close", "debug.FullPanic(*", "debug.defaultPanic"]

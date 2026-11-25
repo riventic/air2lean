@@ -8,7 +8,9 @@
   release-record.py verify RECORD [--root DIR]            re-check a published record against its revision
   release-record.py ledger [--root DIR] [--allow-unfetched | --revisions]
 
-The profile is the CI matrix of .github/workflows/ci.yml at the recorded revision; every matrix
+The profile is the CI matrix of the CI workflows (target-matrix.py CI_WORKFLOWS: ci.yml, and
+ci-macos.yml with the `macos` rows) at the recorded revision; a GitHub run is evidence only for
+the jobs of its own workflow, so a complete record cites a run of each. Every matrix
 row is one job and every `run:` step whose condition holds for that row is a gate (actions and the
 tool-setup recipes that scripts/local-ci.sh substitutes are not gates); the matrix-free `macos`,
 `aarch64-linux`, `bitops-native-arm` and `build-modes-aarch64-linux` jobs are native-runner jobs that only GitHub evidence covers. A workflow whose gate lets a proof
@@ -86,6 +88,23 @@ def clean_head(root):
 def parse_workflow_yaml(text):
     try:
         return TM.parse_workflow_yaml(text)
+    except TM.Unreadable as error:
+        raise ReleaseError(str(error)) from error
+
+
+def ci_workflow(texts):
+    """The CI workflows ({path: text}) as one (target-matrix.py merge_workflows)."""
+    try:
+        return TM.merge_workflows({path: TM.parse_workflow_yaml(text, path) for path, text in texts.items()})
+    except TM.Unreadable as error:
+        raise ReleaseError(str(error)) from error
+
+
+def ci_texts(root, revision):
+    """{path: text} of the CI workflows (target-matrix.py CI_WORKFLOWS) that exist at `revision`."""
+    present = set(git_text(root, 'ls-tree', '--name-only', revision, '--', *TM.CI_WORKFLOWS).split('\n'))
+    try:
+        return TM.ci_workflows(lambda path: show(root, revision, path) if path in present else None)
     except TM.Unreadable as error:
         raise ReleaseError(str(error)) from error
 
@@ -206,14 +225,15 @@ def native_plan(name, job, commands, setup):
 
 
 def build_plan(root, revision):
-    text = show(root, revision, WORKFLOW)
-    # Anywhere in the workflow (step, job or workflow env, a continued command line).
-    if DIRTY_RECEIPT.search(text.replace('\\\n', ' ')):
-        raise ReleaseError('%s: a gate lets a proof receipt bind a dirty tree (tree.dirty_allowed); '
-                           'a release binds only clean-tree receipts' % WORKFLOW)
-    workflow = parse_workflow_yaml(text)
+    texts = ci_texts(root, revision)
+    for path, text in texts.items():
+        # Anywhere in the workflow (step, job or workflow env, a continued command line).
+        if DIRTY_RECEIPT.search(text.replace('\\\n', ' ')):
+            raise ReleaseError('%s: a gate lets a proof receipt bind a dirty tree (tree.dirty_allowed); '
+                               'a release binds only clean-tree receipts' % path)
+    workflow = ci_workflow(texts)
     setup = local_ci_helpers(show(root, revision, STEPS_SCRIPT))
-    jobs = workflow.get('jobs') or {}
+    jobs = workflow['jobs']
     if set(jobs) - set(NATIVE_JOBS) - SUPPORT_JOBS != {'test'}:
         raise ReleaseError('%s: only the test, %s jobs are qualified for release records'
                            % (WORKFLOW, ', '.join(sorted(set(NATIVE_JOBS) | SUPPORT_JOBS))))
@@ -227,24 +247,31 @@ def build_plan(root, revision):
         raise ReleaseError('%s: every step needs a unique name' % WORKFLOW)
     commands = {step['name']: {key: step[key] for key in ('if', 'env', 'run') if key in step}
                 for step in steps if 'run' in step and step['name'] not in setup}
+    # A job's evidence is a run of the workflow file that defines it: `workflow` is that file's
+    # `name` (GitHub's workflowName).
+    names = {path: fields.get('name', path) for path, fields in workflow['workflows'].items()}
+    if len(set(names.values())) != len(names):
+        raise ReleaseError('the CI workflows need distinct names: %s' % names)
+    source = {job_id: names[path] for job_id, path in workflow['files'].items()}
     plan_jobs = []
     for row in rows:
         gates, skipped = row_gates(job, row, commands, '')
         plan_jobs.append({'name': job_name('test', row), 'matrix': row, 'reproduce': reproduce(row),
-                          'gates': gates, 'not_applicable': skipped})
+                          'gates': gates, 'not_applicable': skipped, 'workflow': source['test']})
     if len({j['name'] for j in plan_jobs}) != len(plan_jobs):
         raise ReleaseError('%s: matrix rows have identical job names' % WORKFLOW)
     for name in NATIVE_JOBS:
         if name in jobs:
-            plan_jobs.extend(native_plan(name, jobs[name], commands, setup))
+            plan_jobs.extend(dict(plan, workflow=source[name]) for plan in native_plan(name, jobs[name], commands, setup))
     for name in sorted(SUPPORT_JOBS & set(jobs)):
         support_rows = (((jobs[name].get('strategy') or {}).get('matrix') or {}).get('include')) or [{}]
         for row in support_rows:
             plan_jobs.append({'name': job_name(name, row) if row else name, 'matrix': None,
-                              'reproduce': 'not a gate', 'gates': [], 'not_applicable': []})
+                              'reproduce': 'not a gate', 'gates': [], 'not_applicable': [], 'workflow': source[name]})
     blob = lambda path: git_text(root, 'rev-parse', '%s:%s' % (revision, path))
     compatibility = json.loads(show(root, revision, 'compatibility.json'))
-    return {'workflow': WORKFLOW, 'workflow_name': workflow.get('name'), 'workflow_blob': blob(WORKFLOW),
+    return {'workflow': WORKFLOW, 'workflow_name': names[WORKFLOW], 'workflow_blob': blob(WORKFLOW),
+            'workflow_blobs': {path: blob(path) for path in texts},
             'local_ci_steps_blob': blob(STEPS_SCRIPT), 'compatibility_blob': blob('compatibility.json'),
             'translation': compatibility.get('translation'), 'zig_default': compatibility['zig']['default'],
             'jobs': plan_jobs, 'commands': commands}
@@ -256,10 +283,11 @@ def sha256_bytes(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def referenced_job(ref, runs, name, gates):
-    """The reference's producing job when the supplied run JSON shows it passed every gate."""
+def referenced_job(ref, runs, name, gates, workflow_name):
+    """The reference's producing job when the supplied run JSON (a run of `workflow_name`, the
+    workflow that defines the job) shows it passed every gate."""
     run = runs.get(str(ref['run_id']))
-    if not run or run.get('workflowName') != 'CI' or run.get('status') != 'completed' or run.get('event') not in (
+    if not run or run.get('workflowName') != workflow_name or run.get('status') != 'completed' or run.get('event') not in (
             'pull_request', 'push', 'merge_group', 'workflow_dispatch'):
         return None
     for job in run.get('jobs') or []:
@@ -290,10 +318,12 @@ def github_evidence(path, revision, plan, references=None, reference_runs=None):
                            % (path, data['databaseId'], data['event'], revision))
     if data['status'] != 'completed':
         raise ReleaseError('%s: run %s is %s, not completed' % (path, data['databaseId'], data['status']))
-    if data['workflowName'] != plan['workflow_name']:
-        raise ReleaseError('%s: run %s is workflow %r, not %r'
-                           % (path, data['databaseId'], data['workflowName'], plan['workflow_name']))
-    by_name = {job['name']: job for job in plan['jobs']}
+    workflows = sorted({job['workflow'] for job in plan['jobs']})
+    if data['workflowName'] not in workflows:
+        raise ReleaseError('%s: run %s is workflow %r, not one of %r'
+                           % (path, data['databaseId'], data['workflowName'], workflows))
+    # Only the jobs of the run's own workflow.
+    by_name = {job['name']: job for job in plan['jobs'] if job['workflow'] == data['workflowName']}
     results = {}
     seen = set()
     reused = []
@@ -324,7 +354,8 @@ def github_evidence(path, revision, plan, references=None, reference_runs=None):
             ref = (references or {}).get((str(data['databaseId']), name))
             # Passed by reference only with the producing run's JSON showing every gate passed,
             # and a reference made for this revision; else the gates stay missing.
-            if ref and ref.get('tested_commit') == revision and referenced_job(ref, reference_runs or {}, name, gates):
+            if ref and ref.get('tested_commit') == revision and referenced_job(ref, reference_runs or {}, name, gates,
+                                                                               data['workflowName']):
                 for step in gates:
                     results[(name, step)] = ('by-reference', 'passed by reference: run %s job %s, input key %s'
                                              % (ref['run_id'], ref['job_id'], ref['key']))
@@ -581,8 +612,9 @@ def build_record(root, github_runs=(), local_runs=(), unavailable=(), reference_
     summary = summarize(gates)
     return {
         'schema': SCHEMA, 'revision': revision, 'tree': 'clean',
-        'profile': {key: plan[key] for key in ('workflow', 'workflow_name', 'workflow_blob', 'local_ci_steps_blob',
-                                               'compatibility_blob', 'translation', 'zig_default')},
+        'profile': {key: plan[key] for key in ('workflow', 'workflow_name', 'workflow_blob', 'workflow_blobs',
+                                               'local_ci_steps_blob', 'compatibility_blob', 'translation',
+                                               'zig_default')},
         'jobs': [{key: job[key] for key in ('name', 'matrix', 'reproduce', 'not_applicable')} for job in plan['jobs']],
         'commands': plan['commands'],
         'evidence': [source for source, _ in evidence],
@@ -603,9 +635,13 @@ def verify_record(root, record):
     if not SHA1.fullmatch(revision or ''):
         return ['record does not name a full revision']
     plan = build_plan(root, revision)
+    profile = record.get('profile', {})
     for key in ('workflow_blob', 'local_ci_steps_blob', 'compatibility_blob'):
-        if record.get('profile', {}).get(key) != plan[key]:
+        if profile.get(key) != plan[key]:
             problems.append('profile %s does not match revision %s' % (key, revision))
+    # A record from before ci-macos.yml names only ci.yml's blob.
+    if profile.get('workflow_blobs', {WORKFLOW: profile.get('workflow_blob')}) != plan['workflow_blobs']:
+        problems.append('profile workflow_blobs does not match revision %s' % revision)
     evidence = record.get('evidence') or []
     for index, source in enumerate(evidence):
         if source.get('head_sha') != revision or source.get('kind') not in ('github-actions', 'local-ci'):
