@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
-"""A03: run the real generated asm wrappers against a test-only executable interpretation.
+"""A03: run the real generated asm wrappers and cross-check their instruction-model definitions.
 
-Proofs/Asm/Gen.lean is the translator's checked output for examples/asm/asm.zig. This script
-binds each `opaque airAsm_<hash>` to the AIR `assembly` instruction with the same translator
-hash (tests/golden/asm/air), rewrites only those opaque lines and the namespace lines, appends
-Interp.lean, the bindings, sampled inputs and Runner.lean, and runs the program with
-`lake env lean --run`. Mutants alter the generated wrapper text in memory before the rewrite;
-each must elaborate and then fail with a named wrapper mismatch.
+Proofs/Asm/Gen.lean is the translator's checked output for examples/asm/asm.zig. Every inline-asm
+statement in it is a defined function over the x86_64 instruction model (`def airIsa_<hash>`,
+A02, premise ASM-07), so the generated text runs as it is: this script changes only the `import`
+and the namespace lines. It binds each `airIsa_<hash>` to the AIR `assembly` instruction with the
+same translator hash (tests/golden/asm/air) and adds, for each, the test-only interpretation of
+that instruction's template text (Interp.lean, an implementation that shares no code with the
+model or the translator's decoder). `lake env lean --run` then checks
+
+* each wrapper against the Zig source semantics (Runner.lean), and
+* each `airIsa_<hash>` against the interpretation on sampled operands (`AsmHarness.Cross`).
+
+Mutants alter the generated wrapper text in memory; each must elaborate and then fail with a
+named wrapper mismatch.
 """
 from __future__ import annotations
 
@@ -26,7 +33,7 @@ AIR = ROOT / "tests/golden/asm/air"
 DIFF_INPUTS = ROOT / "tests/diff/asm/inputs"
 NAMESPACE = "AsmHarness.Wrappers"
 FUNCTIONS = ("bswap32", "popcnt64", "lzcnt64", "divmod")
-OPAQUE = re.compile(r"opaque (airAsm_\d+)((?: \(i\d+ : BitVec \d+\))*) : (.+)")
+ISA_DEF = re.compile(r"def (airIsa(?:Fx)?_\d+)((?: \(i\d+ : BitVec \d+\))*) : (.+) :=")
 PARAM = re.compile(r" \((i\d+) : BitVec (\d+)\)")
 LEAN_ERROR = re.compile(r"^\S.*:\d+:\d+: error")
 
@@ -40,7 +47,7 @@ def fnv1a(text: str) -> int:
 
 
 def asm_ops(air_dir: Path = AIR) -> dict[str, dict]:
-    """Each AIR `assembly` instruction keyed by the opaque name the translator gives it."""
+    """Each AIR `assembly` instruction keyed by the name the translator gives its definition."""
     ops: dict[str, dict] = {}
     for path in sorted(air_dir.glob("*.json")):
         func = json.loads(path.read_text())
@@ -61,14 +68,21 @@ def asm_ops(air_dir: Path = AIR) -> dict[str, dict]:
             # `asmKey`: the constraints are one field (empty when there are none).
             key = "\x01".join([inst["source"], "\x01".join(constraints),
                                 "[" + ", ".join(map(str, inputs)) + "]", outs])
-            name = f"airAsm_{fnv1a(key)}"
             op = {"function": func["name"].rsplit(".", 1)[-1], "source": inst["source"],
                   "outputs": [[o["constraint"], o["name"], w] for o, w in zip(inst["outputs"], outputs)],
                   "inputs": [[o["constraint"], o["name"], w] for o, w in zip(inst["inputs"], inputs)],
                   "clobbers": list(inst["clobbers"])}
+            name = ("airIsaFx_" if is_effect(op) else "airIsa_") + str(fnv1a(key))
             if ops.setdefault(name, op) != op:
                 raise ValueError(f"hash collision for {name}")
     return ops
+
+
+def is_effect(op: dict) -> bool:
+    """`Air2Lean/AsmContract.lean`'s `asmIsEffect`: a read-write or memory output, or a
+    `"memory"` clobber (registry-approved, else the translator rejects it)."""
+    return "memory" in op["clobbers"] or any(
+        c.startswith("+") or c[1:] == "m" for c, _, _ in op["outputs"])
 
 
 def lean_string(text: str) -> str:
@@ -79,11 +93,13 @@ def lean_operands(operands: list) -> str:
     return "[" + ", ".join(f"⟨{lean_string(c)}, {lean_string(n)}, {w}⟩" for c, n, w in operands) + "]"
 
 
-def binding(name: str, params: str, ret: str, op: dict) -> str:
-    """The `def` replacing one opaque line: same name, parameters and type."""
+def interpretation(name: str, params: str, ret: str, op: dict) -> str:
+    """The interpreted counterpart of one `def airIsa_<hash>`: same name, parameters (the
+    inputs, then the old value of each `+` output) and type."""
     args = [(p, int(w)) for p, w in PARAM.findall(params)]
-    if [w for _, w in args] != [w for _, _, w in op["inputs"]]:
-        raise ValueError(f"{name}: parameter widths differ from AIR inputs")
+    rw = [w for c, _, w in op["outputs"] if c.startswith("+")]
+    if [w for _, w in args] != [w for _, _, w in op["inputs"]] + rw:
+        raise ValueError(f"{name}: parameter widths differ from AIR inputs and read-write outputs")
     widths = [w for _, _, w in op["outputs"]]
     expected = "Unit" if not widths else " × ".join(f"BitVec {w}" for w in widths)
     if ret != expected:
@@ -97,44 +113,79 @@ def binding(name: str, params: str, ret: str, op: dict) -> str:
         value = f"BitVec.ofNat {widths[0]} (o.getD 0 0)"
     else:
         value = "(" + ", ".join(f"BitVec.ofNat {w} (o.getD {k} 0)" for k, w in enumerate(widths)) + ")"
-    return f"def {name}{params} : {ret} :=\n  let o := {run}\n  {value}"
+    return f"def {name}{params} : {ret} :=\n  let {'o' if widths else '_o'} := {run}\n  {value}"
 
 
-def rebind(gen: str, ops: dict[str, dict]) -> str:
-    """Change only `import`, namespace and opaque lines; every wrapper line stays verbatim."""
-    lines, seen = gen.split("\n"), set()
-    if lines.count("namespace Asm") != 1 or lines.count("end Asm") != 1:
+def isa_defs(gen: str, ops: dict[str, dict]) -> dict[str, tuple[str, str]]:
+    """Name -> (parameters, type) of each generated `def airIsa_<hash>`; exactly the AIR ops."""
+    defs: dict[str, tuple[str, str]] = {}
+    for line in gen.split("\n"):
+        match = ISA_DEF.fullmatch(line)
+        if match is None:
+            continue
+        name, params, ret = match.groups()
+        if name not in ops or name in defs:
+            raise ValueError(f"asm definition without one AIR assembly binding: {line}")
+        defs[name] = (params, ret)
+    if set(defs) != set(ops):
+        raise ValueError(f"AIR assembly without a generated definition: {sorted(set(ops) - set(defs))}")
+    return defs
+
+
+def rebind(gen: str, ops: dict[str, dict], namespace: str = "Asm") -> str:
+    """Change only the profile header, `import` and namespace lines; every generated declaration
+    stays verbatim. An uninterpreted declaration (the opaque fallback of a statement the
+    instruction model does not cover) cannot run and is refused."""
+    lines, out = gen.split("\n"), []
+    if lines.count(f"namespace {namespace}") != 1 or lines.count(f"end {namespace}") != 1:
         raise ValueError("generated namespace shape changed")
-    out = []
+    isa_defs(gen, ops)
     for line in lines:
+        if line.startswith("-- air2lean-profile:"):
+            continue
         if line.startswith("import "):
             if line != "import ZigLean":
                 raise ValueError(f"unexpected generated import: {line}")
             continue
-        if line == "namespace Asm":
+        if line == f"namespace {namespace}":
             line = f"namespace {NAMESPACE}"
-        elif line == "end Asm":
+        elif line == f"end {namespace}":
             line = f"end {NAMESPACE}"
-        elif line.startswith("opaque "):
-            match = OPAQUE.fullmatch(line)
-            if match is None or match.group(1) not in ops or match.group(1) in seen:
-                raise ValueError(f"opaque without one AIR assembly binding: {line}")
-            seen.add(match.group(1))
-            line = binding(*match.groups(), ops[match.group(1)])
-        elif "opaque" in line or "axiom" in line:
+        elif re.match(r"\s*(?:opaque|axiom)\b", line):
             raise ValueError(f"unexpected uninterpreted declaration: {line}")
         out.append(line)
-    if seen != set(ops):
-        raise ValueError(f"AIR assembly without generated opaque: {sorted(set(ops) - seen)}")
     return "\n".join(out)
 
 
-def bound(ops: dict[str, dict]) -> str:
-    by_function = {op["function"]: name for name, op in ops.items()}
-    if sorted(by_function) != sorted(FUNCTIONS) or len(by_function) != len(ops):
-        raise ValueError("expected exactly one asm statement in each of " + ", ".join(FUNCTIONS))
-    body = "".join(f"abbrev {fn} := {NAMESPACE}.{by_function[fn]}\n" for fn in FUNCTIONS)
-    return f"namespace AsmHarness.Bound\n{body}end AsmHarness.Bound\n"
+def cross(gen: str, ops: dict[str, dict]) -> str:
+    """`AsmHarness.Cross`: each `airIsa_<hash>` against the interpretation of its template on
+    sampled operands. Operands on which the model reports a fault are skipped (the
+    interpretation panics there; the wrapper checks and the differential test cover faults)."""
+    defs = isa_defs(gen, ops)
+    body, checks = [], []
+    for name, (params, ret) in defs.items():
+        body.append(interpretation(name, params, ret, ops[name]))
+        args = PARAM.findall(params)
+        call = " ".join(p for p, _ in args)
+        shown = " ".join(f"{{{p}.toNat}}" for p, _ in args)
+        agree = f"{NAMESPACE}.{name} {call} == {name} {call}".replace("  ", " ")
+        if f"def {name}_fault" in gen:
+            agree = f"({NAMESPACE}.{name}_fault {call}).isSome || {agree}"
+        check = f'if {agree} then [] else [s!"MISMATCH model {name} {shown}"]'
+        for p, w in reversed(args):
+            check = f"(samples {w}).flatMap fun {p} => {check}"
+        checks.append(f"  ({check})")
+    return ("namespace AsmHarness.Cross\n"
+            "def lcg (seed count : Nat) : List Nat :=\n"
+            "  (List.range count).foldl (init := ([], seed)) (fun (acc, s) _ =>\n"
+            "    let s := (s * 6364136223846793005 + 1442695040888963407) % 2 ^ 64\n"
+            "    (acc ++ [s], s)) |>.1\n"
+            "def samples (w : Nat) : List (BitVec w) :=\n"
+            "  ([0, 1, 2, 0xFF, 2 ^ (w - 1) - 1, 2 ^ (w - 1), 2 ^ (w - 1) + 1, 2 ^ w - 2, 2 ^ w - 1]\n"
+            "    ++ lcg (0xA02 + w) 24).map (BitVec.ofNat w)\n"
+            + "\n".join(body) + "\n"
+            "def failures : List String :=\n" + " ++\n".join(checks or ["  []"]) + "\n"
+            "end AsmHarness.Cross\n")
 
 
 def lcg(seed: int, count: int, bits: int) -> list[int]:
@@ -191,8 +242,11 @@ def inputs_module(inputs: dict[str, list]) -> str:
 
 
 def program(gen: str, ops: dict[str, dict], inputs: dict[str, list]) -> str:
+    functions = sorted(op["function"] for op in ops.values())
+    if functions != sorted(FUNCTIONS):
+        raise ValueError("expected exactly one asm statement in each of " + ", ".join(FUNCTIONS))
     return "\n".join(["import ZigLean", (HERE / "Interp.lean").read_text(), rebind(gen, ops),
-                      bound(ops), inputs_module(inputs), (HERE / "Runner.lean").read_text()])
+                      cross(gen, ops), inputs_module(inputs), (HERE / "Runner.lean").read_text()])
 
 
 def function_span(gen: str, fn: str) -> tuple[int, int]:
@@ -210,11 +264,12 @@ def alter(gen: str, fn: str, before: str, after: str) -> str:
 
 
 def divmod_shape(gen: str, ops: dict[str, dict]) -> tuple[str, str]:
-    """The divmod opaque name and the tuple variable its outputs are bound to."""
+    """The divmod definition's name and the tuple variable its outputs are bound to."""
     name = next(n for n, op in ops.items() if op["function"] == "divmod")
     start, end = function_span(gen, "divmod")
-    # S7: the divisor-zero fault guard (`Zig.asmTrap`) wraps the call.
-    match = re.search(rf"let (a\d+) ← Zig\.asmTrap \(p1 = 0\) \({name} p0 p1\)\n", gen[start:end])
+    # The call is guarded by the model's own fault condition (`Zig.Asm.isaFault`).
+    match = re.search(rf"let (a\d+) ← Zig\.Asm\.isaFault \({name}_fault p0 p1\) \({name} p0 p1\)\n",
+                      gen[start:end])
     if match is None:
         raise ValueError("generated shape changed: divmod asm call")
     return name, match.group(1)
@@ -225,7 +280,7 @@ def mutants(gen: str, ops: dict[str, dict]) -> dict[str, tuple[str, str]]:
     name, tup = divmod_shape(gen, ops)
     store = f"modify (fun s => {{ s with rem := {tup}.2 }})"
     return {
-        "operand_order": (alter(gen, "divmod", f"{name} p0 p1", f"{name} p1 p0"), "divmod"),
+        "operand_order": (alter(gen, "divmod", f"({name} p0 p1)", f"({name} p1 p0)"), "divmod"),
         "result_placement": (alter(gen, "divmod", f"pure {tup}.1", f"pure {tup}.2"), "divmod"),
         "store_dropped": (alter(gen, "divmod", f"    {store}\n", ""), "divmod"),
         "store_misplaced": (alter(gen, "divmod", store, store.replace(f"{tup}.2", f"{tup}.1")), "divmod"),
@@ -246,6 +301,8 @@ def classify(status: int, output: str, expected: str | None) -> None:
         raise ValueError("mutant did not elaborate and fail at the runner verdict")
     if any("PANIC" in line or line.startswith("INTERNAL PANIC") for line in lines):
         raise ValueError("mutant faulted instead of producing a wrong result")
+    if any(line.startswith("MISMATCH model ") for line in lines):
+        raise ValueError("the instruction model disagrees with the interpretation")
     if not any(line.startswith(f"MISMATCH wrapper {expected} ") for line in lines):
         raise ValueError(f"mutant did not fail the {expected} wrapper check")
 
