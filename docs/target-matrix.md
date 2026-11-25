@@ -4,7 +4,8 @@
 build hosts of each version and the target profiles. Every version × host × native
 target × profile path it declares must be backed **on that platform** by CI.
 [`assurance/target-matrix.json`](../assurance/target-matrix.json) maps each path to one
-job of [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) and, for a matrix job,
+job of the CI workflows ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml), and
+[`ci-macos.yml`](../.github/workflows/ci-macos.yml) for the `macos` rows) and, for a matrix job,
 its exact `include` row, and names the steps that provide three kinds of evidence:
 
 | Kind | Counts when the step runs |

@@ -177,7 +177,7 @@ class Workflow(unittest.TestCase):
         job={'runs-on':self.runner_name,'steps':steps}|fields
         (self.root/'.github/ci-inputs.json').write_text(json.dumps({'schema':'air2lean-ci-inputs/2','parts':{name:{'reuse':False}}}))
         self.commit()
-        return {'jobs':{name:job}}
+        return runner.TM.merge_workflows({'.github/workflows/ci.yml':{'jobs':{name:job}}})
 
     def run_row(self,workflow,name='sample'):
         run=runner.WorkflowRun(workflow,self.artifacts,self.snapshot)
@@ -292,6 +292,7 @@ class Workflow(unittest.TestCase):
     def test_dependency_cycle_and_missing_github_evidence_fail_closed(self):
         workflow=self.workflow([],name='first',needs=['second'])
         workflow['jobs']['second']={'runs-on':self.runner_name,'needs':['first'],'steps':[]}
+        workflow['files']['second']=workflow['files']['first']
         run=runner.WorkflowRun(workflow,self.artifacts,self.snapshot)
         with self.assertRaisesRegex(ValueError,'cyclic local CI artifact dependency'):run.run('first')
         workflow=self.workflow([],name='all-checks')
@@ -1014,7 +1015,7 @@ jobs:
         from contextlib import nullcontext
 
         actual_popen=subprocess.Popen;executed=[];decoded=[]
-        def decode(text):
+        def decode(text,_path=None):
             # Expression controls inject decoded DATA at the canonical reader boundary;
             # separate controls below use the actual reader on real captured YAML.
             decoded.append(text)
@@ -1703,7 +1704,7 @@ else:raise SystemExit('unexpected pinned field: '+field)
         declarations['parts']['exporter/0.17.1/isolation']=declarations['parts'].pop('test/0.17.1/isolation')
         declarations_path.write_text(json.dumps(declarations))
         self.commit();self.pinned=self.revision();self.capture()
-        workflow=runner.TM.parse_workflow_yaml(workflow_path.read_text())
+        workflow=runner.TM.merge_workflows({'.github/workflows/ci.yml':runner.TM.parse_workflow_yaml(workflow_path.read_text())})
         part='exporter/0.17.1/isolation';safe=part.replace('/','-');container_id='f'*64
         image='sha256:'+'a'*64
         with patch.object(runner,'in_container',return_value=False),\
