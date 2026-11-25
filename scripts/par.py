@@ -21,7 +21,9 @@ running the jobs one after another. --log-dir DIR also writes each job's combine
 DIR/<item>.log.
 
 Statistics (`run(..., stats=[])`, scripts/fixture-checks.py's report): each job's wall time, the
-peak RSS of its process group (summed, sampled with `ps` every SAMPLE_SECONDS) and its wall time
+peak RSS of its processes (summed, sampled with `ps` every SAMPLE_SECONDS: its process group and
+every descendant of it, also one in a session of its own such as the workload of a build-guard
+sub-admission) and its wall time
 by the kind of process running in it (KINDS: the first kind present in a sample, in that order,
 takes the sample's interval). Scheduling (`run(..., order=, mem_budget_mib=)`): the start order
 and per-job memory requests (`Job.mem_mib`) admitted within a budget; scripts/fixture-checks.py
@@ -146,6 +148,37 @@ def _kind(name: str) -> str:
     return next((k for k in KINDS[:-1] if name == k or (k == 'python' and name.startswith('python'))), 'other')
 
 
+def group_usage(text: str, groups: set[int]) -> tuple[dict[int, int], dict[int, set]]:
+    """From `ps -o pid=,ppid=,pgid=,rss=,comm=` output: each tracked group's summed RSS (KiB) and
+    process kinds. A group's processes are its members and their descendants: a child that starts
+    a session of its own (build-guard runs its workload so; a fixture unit in an elastic guard is
+    such a sub-admission) still counts for the job that started it. Counting only the members
+    measured the sub-admission guard's own ~36 MB, so every unit was charged the 1 GiB floor, outgrew
+    it and ran again at 11 GiB, one at a time (remote hosts, 2026-11-25)."""
+    rows = {}
+    for line in text.splitlines():
+        fields = line.split(None, 4)
+        if len(fields) == 5 and all(f.isdigit() for f in fields[:4]):
+            pid, parent, group, rss = map(int, fields[:4])
+            rows[pid] = (parent, group, rss, _kind(Path(fields[4]).name))
+    children: dict[int, list[int]] = {}
+    for pid, (parent, *_) in rows.items():
+        children.setdefault(parent, []).append(pid)
+    usage: dict[int, int] = {}
+    kinds: dict[int, set] = {}
+    for group in groups:
+        owned = {pid for pid, row in rows.items() if row[1] == group}
+        pending = list(owned)
+        while pending:
+            for child in children.get(pending.pop(), []):
+                if child not in owned:
+                    owned.add(child)
+                    pending.append(child)
+        usage[group] = sum(rows[pid][2] for pid in owned)
+        kinds[group] = {rows[pid][3] for pid in owned}
+    return usage, kinds
+
+
 class _Sampler(threading.Thread):
     """Per process group (a job's): the peak summed RSS and the wall time by kind, from `ps`."""
 
@@ -168,18 +201,13 @@ class _Sampler(threading.Thread):
     def run(self):
         while not self.done.wait(SAMPLE_SECONDS):
             try:
-                text = subprocess.run(['ps', '-axo', 'pgid=,rss=,comm='], capture_output=True, text=True,
+                text = subprocess.run(['ps', '-axo', 'pid=,ppid=,pgid=,rss=,comm='], capture_output=True, text=True,
                                       timeout=30, env=dict(os.environ, LC_ALL='C')).stdout
             except (OSError, subprocess.SubprocessError):
                 continue
-            rss: dict[int, int] = {}
-            kinds: dict[int, set] = {}
-            for line in text.splitlines():
-                fields = line.split(None, 2)
-                if len(fields) == 3 and fields[0].isdigit() and fields[1].isdigit():
-                    group = int(fields[0])
-                    rss[group] = rss.get(group, 0) + int(fields[1])
-                    kinds.setdefault(group, set()).add(_kind(Path(fields[2]).name))
+            with self.lock:
+                tracked = set(self.groups)
+            rss, kinds = group_usage(text, tracked)
             now = time.monotonic()
             with self.lock:
                 for group, entry in self.groups.items():

@@ -60,7 +60,8 @@ theorem start_bytes {own : ThreadId → Res} {rO : Res} {m : Mem} {t : ThreadId}
     (hS : bs.extract (o + 20) (o + 24) = Enc.encode (0 : BitVec 32))
     (hEp : bs.extract (o + 24) (o + 28) = Enc.encode e0)
     (hM : bs.extract (o + 32) (o + 36) = Enc.encode (0 : BitVec 32))
-    (hat : ∀ l ∈ m.atomics, l.block ≠ b) (hq : m.waiters = #[])
+    (hat : ∀ l ∈ m.atomics, l.block = b → o + 40 ≤ l.off ∨ (l.off < o ∧ l.off + l.len ≤ o))
+    (hq : m.waiters = #[])
     (hall : AllLe m (m.clocks[t]!)) :
     ∃ rM, Q rM ∧ ∀ (G : ThreadId → Gh Xc) (I : FAssn), (G t).1.part = rM →
       (∀ u, u ≠ t → (M b o).own G m u = own u) →

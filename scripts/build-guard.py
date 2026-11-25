@@ -25,7 +25,9 @@ Admission (the lock `--lock`, default AIR2LEAN_BUILD_LOCK or ~/.cache/air2lean/b
   them and the free slots would not admit the head now (serialized by `<lock>.d/register`, taken
   without blocking). So the head's admission is never delayed by more than the ramp plus the
   backfilled workloads already running, each bounded by its --timeout. A queue holder that
-  publishes nothing (a guard of an older checkout) gets no backfill.
+  publishes nothing (a guard of an older checkout) gets no backfill. Guards may see different
+  budgets (one raised while others wait): a head publishes its capacity, and a guard that numbers
+  more slots may also run in slots beyond every head's capacity, which no head can take.
 - Drain tickets: a merge guard (AIR2LEAN_GUARD_PRIORITY=merge or --priority merge, only for the
   coordinator's integration gate) and an `--exclusive` guard take a ticket
   `<lock>.d/merge/<ns>-<pid>-<lane>`, flock-held by its guard. While a ticket is queued no normal
@@ -851,6 +853,16 @@ def head_reservations(directory):
     return None
 
 
+def heads_capacity(directory):
+    """The smallest capacity (slots) the waiting queue heads publish: slots from it on are beyond
+    every head's budget, so none of them can ever take them. None when an entry names none (a
+    guard of an older checkout): then no slot counts as beyond (fail closed)."""
+    capacities = [entry.get("capacity") for entry in held_entries(directory).values()]
+    if capacities and all(type(capacity) is int and capacity > 0 for capacity in capacities):
+        return min(capacities)
+    return None
+
+
 class Admission:
     """The locks a workload holds while it runs (module docstring). flock locks end with their
     descriptors, also when the guard dies; lock files are never unlinked (waiters reuse them)."""
@@ -1118,7 +1130,8 @@ class Admission:
         """As the waiting queue head, publish the slots it reserves but does not hold yet (unmet)
         and those it still lacks (need). A new entry, then the old one goes: a reader may count
         both, never neither."""
-        content = {"pid": os.getpid(), "unmet": unmet, "need": need, "lifeline_aware": True}
+        content = {"pid": os.getpid(), "unmet": unmet, "need": need, "lifeline_aware": True,
+                   "capacity": self.capacity}
         if self.head and self.head[2] == content:
             return
         name = entry_name()
@@ -1208,6 +1221,8 @@ class Admission:
         reservations = head_reservations(self.heads)
         if not reservations or self.drain_tickets():
             return False
+        if self.backfill_beyond(main, slots, register):
+            return True
         want = self.weight + sum(unmet for unmet, _ in reservations)
         head_need = max(need for _, need in reservations)
         if want >= head_need or not try_flock(register, fcntl.LOCK_EX):
@@ -1228,6 +1243,34 @@ class Admission:
                 self.backfilled = True
                 return True
             for handle in (*keep, main):
+                fcntl.flock(handle, fcntl.LOCK_UN)
+            return False
+        finally:
+            fcntl.flock(register, fcntl.LOCK_UN)
+
+    def backfill_beyond(self, main, slots, register):
+        """Whether this guard ran ahead in slots beyond every waiting head's capacity
+        (`heads_capacity`): guards started with a larger budget than the heads' (AIR2LEAN_BUILD_MEM_MIB
+        raised while they wait) number more slots, and a head never takes one past its own capacity,
+        so running there delays no head. Without it those slots stayed idle behind a head that
+        could not use them (remote host, 2026-11-25: 16 GiB idle beside a 46-slot head)."""
+        capacity = heads_capacity(self.heads)
+        beyond = slots[capacity:] if capacity is not None else []
+        if len(beyond) < self.weight or not try_flock(register, fcntl.LOCK_EX):
+            return False
+        try:
+            if not try_flock(main, fcntl.LOCK_SH):
+                return False
+            taken = []
+            for handle in beyond:
+                if len(taken) == self.weight:
+                    break
+                if try_flock(handle, fcntl.LOCK_EX):
+                    taken.append(handle)
+            if len(taken) == self.weight and self.admit_overcommitted():
+                self.backfilled = True
+                return True
+            for handle in (*taken, main):
                 fcntl.flock(handle, fcntl.LOCK_UN)
             return False
         finally:

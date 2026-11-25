@@ -88,7 +88,8 @@ Earlier 0.16.0 exporters wrote `heap.*.vtable` without its initializer and
 (`global has no initial value`, `inconsistent shared type 'mem.Allocator'`). The current
 exporter resolves both (`Compat.ensureNavVal`, `Compat.ensureLayout` in
 `zig-patch/air-json/json.zig`, [air-json.md](air-json.md)); the regression fixtures were
-exported with it (`provenance.json`).
+exported with it (`exports.lock.json` of `alloc-fba` and `alloc-translated`, `provenance.json` of
+`alloc-arena`).
 
 ## Regression and scope
 

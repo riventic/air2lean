@@ -72,13 +72,13 @@ moves to another module, unless the entry records the maintainer's `"status_appr
 | `TotalTripleIn`, `TotalTripleStk` (#166) | `Sep/Total` (deleted, L13), stack work | `FTotalTriple` whose precondition owns the room it needs (a stack-room resource) |
 | `TotalTripleWithin`, `FailsWithin` (#166), `Sep/Cost` | `Sep/Bounded`, `Sep/Cost` (deleted, L8) | `FTotalTriple` with a cost resource (credits in the ghost state, spent by the step rules; `Full/Cost`: exact counts, tight bounds, counted loops) |
 | `TTriple` (`TTripleIn` and `Conc/TlsLemmas` deleted) | `Conc/Own` (deleted, D-d) | `FTTriple` in a thread, `CTriple` (thread-local resources in `FAssn`; Plan A4) |
-| `EventuallyReturns`, `EventuallyReturnsUnder`, `ReturnsWithin`, `Stops`, `Turns` (#178) | `Conc/Total` | a total `CTriple` with turn credits as a ghost resource |
+| `EventuallyReturns`, `EventuallyReturnsUnder`, `ReturnsWithin`, `Stops`, `Turns` (#178) | `Conc/Total` | `Proto.WP` with the opt-in turn cost `Proto.cost`, concluded by `Proto.returnsWithin` (coordinator decision 2026-10-12, [sep-threads.md](sep-threads.md) §Termination; a `CTriple` answers solo stops only, a spawn/join fails closed). The three outcome predicates stay as `target` vocabulary of `Sched.run` (maintainer 2026-11-25); `Proto.returnsWithin` concluding `ReturnsWithin` is engine-ledger row `returns-within-adequacy` |
 | `MemM.Halts` (#178) | | a consequence of the total step rules (`FReturns`) |
 | `LoopTemplate`, `DispatchTemplate`, `DispatchSpec`, `RecTemplate` | `Sep/LoopTemplate`, `Sep/DispatchTemplate`, `RecTemplate` | loop, dispatch and call rules for `fsym` (`Full/Loop`: `FTotalTriple.loop_ghost`, `FTriple.loop`; recursion by `FTriple.admissible_fun`) |
 | `AllocSpec` | `Sep/AllocSpec` | `FAllocSpec` |
 | `MutexSpec`, `CondSpec`, `FutexSpec`, `WaitGroupSpec`, `EventSpec` | `Conc/Spec/*` (deleted, L21) | `MutexImpl`, `CondImpl`, `EventImpl` over the model futex's rules ([thread-specs.md](thread-specs.md)) |
 | `Sem.Spec`, `CancelSpec` | proofs (deleted: `Sem.Spec` with Sync/Semaphore, D-d; `CancelSpec` written out as the futures protocol's result predicate) | the same contracts stated with `CTriple` (Plan A4) |
-| `TimedBudget.Spec`/`WithinSpec`, test `Spec`s | pure results (the asm-wrappers `Spec`, a data structure, is `Interp.Insn`) | propositions about a `Result` (no memory); they stay until a pure-result rule set replaces them |
+| `TimedBudget.Spec`/`WithinSpec` (2026-11-25) | renamed `TimedBudget.SolverPost`/`BudgetPost` (bodies unchanged); the asm-wrappers `Spec`, a data structure, is `Interp.Insn` | postconditions on a solver `Verdict`: they take no program and no precondition, so they are not judgments and are off the allow-list |
 
 `Float.AllowedSpec` is `target` (maintainer, 2026-10-18, #439): it is the pure-result fragment. It
 states that a float computation succeeds and that every result IEEE allows for it satisfies the
