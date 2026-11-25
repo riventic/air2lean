@@ -259,8 +259,9 @@ example {T : Type} {n k : Nat} [Zig.Packed T n] [LawfulPackedVal T n] :
 theorem reg_bits (x : BitVec 8) : Packed.toBits (Packed.ofBits x : Reg) = x :=
   PackedU.bitsOf_intBytes x (by decide)
 
-/-- No value direction: a byte whose bits are all determined in a form other than `.int` reads
-back as `.int` (the reason the law is split by direction). -/
+/-- No value direction: a byte whose bits are all determined in a form other than `.int` (here
+`.mask 0xFF 0`, which `Byte.ofDefBits` never makes) reads back as `.int`. So do the padding bytes
+of a union wider than its bits: `ofBits` makes them undefined, whatever they held. -/
 theorem reg_no_val : ∃ u : Reg, Packed.mask u = BitVec.allOnes 8 ∧
     (Packed.ofBits (Packed.toBits u) : Reg) ≠ u :=
   ⟨⟨#v[.mask 0xFF 0]⟩, by decide, by decide +kernel⟩
