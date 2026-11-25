@@ -39,21 +39,22 @@ files = {str(p.relative_to(here / 'air')): hashlib.sha256(p.read_bytes()).hexdig
 assert files == record['air_sha256'], 'AIR fixtures differ from provenance.json'
 EOF
 python3 -B scripts/fixture-exports.py check alloc-translated
-translate() {  # translate VERSION PROG OS OUT: OUT is AllocTranslated.<Prog><Os> of that AIR
-  local module
-  module="$(printf '%s' "${2:0:1}" | tr '[:lower:]' '[:upper:]')${2:1}"
-  module+="$(printf '%s' "${3:0:1}" | tr '[:lower:]' '[:upper:]')${3:1}"
-  "$translator" "$here/air/$1/$2-$3" -o "$4" --namespace "AllocTranslated.$module" \
+module() {  # module PROG OS: the translation's module name, `PageLinux` for `page linux`
+  printf '%s%s%s%s' "$(printf '%s' "${1:0:1}" | tr '[:lower:]' '[:upper:]')" "${1:1}" \
+    "$(printf '%s' "${2:0:1}" | tr '[:lower:]' '[:upper:]')" "${2:1}"
+}
+translate() {  # translate VERSION PROG OS OUT: OUT is AllocTranslated.<module> of that AIR
+  "$translator" "$here/air/$1/$2-$3" -o "$4" --namespace "AllocTranslated.$(module "$2" "$3")" \
     --prefix "$2." --allocator-model translated
 }
 # The retained translations are the fresh ones, byte for byte (Lake builds the retained files):
 # the page programs' of Zig 0.17.1, the fixed buffer's of 0.16.0.
-for entry in page:0.17.1:Page fba:0.16.0:Fba; do
-  IFS=: read -r prog version Prog <<< "$entry"
+for entry in page:0.17.1 fba:0.16.0; do
+  IFS=: read -r prog version <<< "$entry"
   for os in linux macos; do
-    Os="$(printf '%s' "${os:0:1}" | tr '[:lower:]' '[:upper:]')${os:1}"
-    translate "$version" "$prog" "$os" "$work/$Prog$Os.lean"
-    cmp "$work/$Prog$Os.lean" "$here/AllocTranslated/$Prog$Os.lean"
+    m=$(module "$prog" "$os")
+    translate "$version" "$prog" "$os" "$work/$m.lean"
+    cmp "$work/$m.lean" "$here/AllocTranslated/$m.lean"
   done
 done
 # Axioms of every theorem of the proof modules (below): only the standard ones.
@@ -91,9 +92,9 @@ prove "$work/lines"
 tree=$repo_root/.lake/check-tree/alloc-translated-page-0.16.0
 replace=()
 for os in linux macos; do
-  Os="$(printf '%s' "${os:0:1}" | tr '[:lower:]' '[:upper:]')${os:1}"
-  translate 0.16.0 page "$os" "$work/Page$Os-0.16.0.lean"
-  replace+=(--replace "$here/AllocTranslated/Page$Os.lean=$work/Page$Os-0.16.0.lean")
+  m=$(module page "$os")
+  translate 0.16.0 page "$os" "$work/$m-0.16.0.lean"
+  replace+=(--replace "$here/AllocTranslated/$m.lean=$work/$m-0.16.0.lean")
 done
 python3 -B scripts/check-tree.py create "$tree" "${replace[@]}"
 (cd "$tree" && prove "$work/lines-0.16.0")

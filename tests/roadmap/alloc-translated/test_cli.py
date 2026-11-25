@@ -2,7 +2,8 @@
 """CLI regressions for `--allocator-model translated`, for a root-built translator.
 
 The retained compiler exports (air/0.16.0, air/0.17.1, provenance.json) are accepted only in
-translated mode, and the OS boundary only for a Zig version with a reviewed posix.zig. Every admission is narrow: mutating one fact of an admitted program into the
+translated mode, and the OS boundary only for a Zig version with a reviewed posix.zig. Every
+admission is narrow: mutating one fact of an admitted program into the
 neighbouring unsupported case fails closed with a stable message. Never builds or invokes
 compilers.
 """
