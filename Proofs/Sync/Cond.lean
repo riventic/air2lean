@@ -301,6 +301,7 @@ theorem bc_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
     clear hsp
     fsym [FCond.wp_postAs hC condS_dec (sh := h) (c := c), FCond.wp_bump hC, FCond.wp_wakeEp hC,
       hC.wp_projE (t := t), FCond.SigPost.ofPostAll, condS_bpost hsv, condS_bserved,
+      Zig.intCast_unsigned_widen, BitVec.toNat_setWidth,
       condS_eq, condS_w, condS_s, condS_mk, condS_bits,
       C.ph_set, hC.lph, C.set_set, FCond.set_of, (FCond.set_of hgx), FCond.ptr_ep,
       FCond.SOk, bcInv, bcPost, Io_Condition_broadcast.again11]

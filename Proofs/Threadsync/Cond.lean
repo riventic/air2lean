@@ -131,6 +131,11 @@ post with `all = true`) and a wake of `w - s`. -/
 
 /-- The low half of the state word (`waiters`), masked in place. -/
 theorem condT_lo (b : BitVec 32) : (b &&& 65535).toNat = b.toNat % 65536 := by
+  rw [BitVec.toNat_and, show (65535 : BitVec 32).toNat = 2 ^ 16 - 1 from rfl,
+    Nat.and_two_pow_sub_one_eq_mod]
+
+/-- The high half of the state word (`signals`), masked in place. -/
+theorem condT_hi (b : BitVec 32) : (b &&& 4294901760).toNat = 65536 * (b.toNat / 65536) := by
   fsym_arith
 
 /-- `wake(.all)`'s loop invariant (as `wakeInv`). -/
@@ -229,10 +234,6 @@ theorem cond_broadcast_wp_resource (hC : L.Fits (C.prim L) P U ok) (hcost : P.co
 
 The state word's halves on bits: `waiters` the low and `signals` the high 16 bits (`FCond`). -/
 
-/-- The high half of the state word (`signals`), masked in place. -/
-theorem condT_hi (b : BitVec 32) : (b &&& 4294901760).toNat = 65536 * (b.toNat / 65536) := by
-  fsym_arith
-
 /-- No signal: the high half is zero. -/
 theorem condT_hi0 {b : BitVec 32} (h : b.toNat / 65536 = 0) :
     (b &&& 4294901760 != 0) = false := by
@@ -249,11 +250,8 @@ theorem condT_hi1 {b : BitVec 32} (h : ¬b.toNat / 65536 = 0) :
 /-- Room for one more waiter (`assert(prev_state & waiter_mask != waiter_mask)`). -/
 theorem condT_room {b : BitVec 32} (h : FCond.RegOld b) : (b &&& 65535 != 65535) = true := by
   unfold FCond.RegOld at h
-  have hm : (b &&& 65535).toNat = b.toNat % 65536 := by
-    rw [BitVec.toNat_and, show (65535 : BitVec 32).toNat = 2 ^ 16 - 1 from rfl,
-      Nat.and_two_pow_sub_one_eq_mod]
   have : b &&& 65535 ≠ 65535 := fun he => by
-    have := congrArg BitVec.toNat he; rw [hm] at this; simp at this; omega
+    have := congrArg BitVec.toNat he; rw [condT_lo] at this; simp at this; omega
   simpa using this
 
 /-! The waiter's ghost values carry its deadline block in its part (`FLock.setPart`): `gD g p r` in
