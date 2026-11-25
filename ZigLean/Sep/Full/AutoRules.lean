@@ -6,6 +6,7 @@ import ZigLean.Sep.Full.Reclaim
 import ZigLean.Sep.AllocSpec.Ops
 import ZigLean.Sep.AllocSpec.Norm
 import ZigLean.Range
+import ZigLean.Bit
 
 /-!
 # The rule library of the full-state symbolic executor (`fsym`, `docs/proof-automation.md`)
