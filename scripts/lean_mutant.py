@@ -42,6 +42,17 @@ def run(args, *dirs):
     return done.returncode, done.stdout
 
 
+def build_gen(name, target, gen, text, work):
+    """Write the mutated translation TEXT to TARGET/GEN and build its olean there (the other
+    modules' oleans come from WORK on LEAN_PATH); an invalid mutant aborts the run."""
+    (target / gen).parent.mkdir(parents=True, exist_ok=True)
+    (target / gen).write_text(text, encoding="utf-8")
+    rc, out = run(["-R", target, "-o", (target / gen).with_suffix(".olean"), target / gen], target, work)
+    if rc != 0:
+        sys.stderr.write(out[-4000:])
+        raise SystemExit(f"{name}: the mutated translation does not build (an invalid mutant)")
+
+
 def error_decls(output, source):
     """(declarations of SOURCE that contain an error, errors reported in another file)."""
     source = Path(source)

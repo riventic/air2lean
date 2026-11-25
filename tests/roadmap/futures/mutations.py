@@ -15,7 +15,7 @@ import sys
 sys.dont_write_bytecode = True
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[2] / "scripts"))
-from lean_mutant import edit, reject, run as run_lean  # noqa: E402
+from lean_mutant import build_gen, edit, reject, run as run_lean  # noqa: E402
 from mutation_kill_log import killed as log_kill  # noqa: E402
 
 GEN = "Futures/Gen.lean"
@@ -63,12 +63,7 @@ MUTANTS = {
 def build(name, work):
     edits, _ = MUTANTS[name]
     target = Path(work) / "mutants" / name
-    (target / GEN).parent.mkdir(parents=True, exist_ok=True)
-    (target / GEN).write_text(edit((HERE / GEN).read_text(encoding="utf-8"), edits, name), encoding="utf-8")
-    rc, out = run_lean(["-R", target, "-o", (target / GEN).with_suffix(".olean"), target / GEN], target, work)
-    if rc != 0:
-        sys.stderr.write(out[-4000:])
-        raise SystemExit(f"{name}: the mutated translation does not build (an invalid mutant)")
+    build_gen(name, target, GEN, edit((HERE / GEN).read_text(encoding="utf-8"), edits, name), work)
     return target
 
 

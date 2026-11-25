@@ -24,7 +24,7 @@ import sys
 sys.dont_write_bytecode = True
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[2] / "scripts"))
-from lean_mutant import edit, reject, run as run_lean  # noqa: E402
+from lean_mutant import build_gen, edit, reject, run as run_lean  # noqa: E402
 from mutation_kill_log import killed as log_kill  # noqa: E402
 
 CLIENT = HERE / "WriteAll.lean"
@@ -98,16 +98,12 @@ def run_client(name, work):
 def run_std(name, work):
     namespace, edits, broken = STD_MUTANTS[name]
     target = Path(work) / "mutants" / name
-    gen = target / namespace / "Gen.lean"
     # Lean resolves a module by the first search-path entry that holds its root directory, so the
     # copy holds the other translation's olean too.
     for other in GEN:
         shutil.copytree(Path(work) / other, target / other)
-    gen.write_text(edit(GEN[namespace].read_text(encoding="utf-8"), edits, name), encoding="utf-8")
-    rc, out = run_lean(["-R", target, "-o", gen.with_suffix(".olean"), gen], target, work)
-    if rc != 0:
-        sys.stderr.write(out[-4000:])
-        raise SystemExit(f"{name}: the mutated translation does not build (an invalid mutant)")
+    build_gen(name, target, f"{namespace}/Gen.lean",
+              edit(GEN[namespace].read_text(encoding="utf-8"), edits, name), work)
     rc, out = run_lean(["-R", HERE, STD_IO], target, work)
     reject(name, rc, out, STD_IO, broken)
 
