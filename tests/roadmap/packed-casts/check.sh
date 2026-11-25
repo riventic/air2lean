@@ -13,6 +13,7 @@
 #   reject_lanes.zig   0.14.1 0.15.2                 (rejected: docs/upstream/packed-vector-lane-ptr.md)
 #   reject_sentinel.zig 0.17.1                       (rejected: docs/upstream/bitcast-sentinel-array.md)
 #   reject_items.zig   0.14.1 0.15.2                 (rejected: arrays of tuples, errors, optionals)
+#   reject_ptrfield.zig 0.14.1 0.15.2                (rejected: a pointer field in a packed struct)
 # (<version> as a name: V0_17_1). Each model is written for the newest version of its source; the
 # other versions' models are that one with the version renamed (scripts/fixtures.py instance).
 # reject/expected.txt lists every rejected function with its diagnostic; expected/wrong.txt lists
@@ -203,7 +204,7 @@ while read -r v src fn text; do
 done < "$dir/reject/expected.txt"
 # Every exported function of those sources has a line there.
 for v in "${versions[@]}"; do
-  for src in reject_sentinel reject_items; do
+  for src in reject_sentinel reject_items reject_ptrfield; do
     [ -d "$dir/air/$v/$src" ] || continue
     for f in "$dir/air/$v/$src"/*.json; do
       fn=$(basename "$f" .json)

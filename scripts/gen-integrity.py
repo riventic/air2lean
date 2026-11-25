@@ -148,6 +148,10 @@ FIXTURES = [
     ("tests/roadmap/extern-calls/ExternCalls/Trusted.lean", "tests/roadmap/extern-calls/air/0.16.0-trusted",
      ["--namespace", "ExternCalls.Trusted", "--prefix", "trusted.", "--model-registry",
       "tests/roadmap/extern-calls/registry.json"], "exact"),
+    # X01 the C-ABI conversion at a bound extern call (translate-c declarations, Zig's libc).
+    ("tests/roadmap/extern-abi/ExternAbi/Gen.lean", "tests/roadmap/extern-abi/air/0.17.1",
+     ["--allocator-model", "translated", "--assume-weak-exports", "--namespace", "ExternAbi",
+      "--prefix", "abi."], "exact"),
     # Open interfaces (docs/interfaces.md): fresh 0.17.1 translations. The lists one is the
     # program of the full-state list proofs (Proofs/Lists), for every allocator.
     ("Proofs/Lists/Open.lean", "tests/roadmap/interfaces/air/0.17.1/lists",

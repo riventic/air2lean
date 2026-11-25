@@ -509,7 +509,7 @@ row `s6-futex-hand-rows` lists what is still transitional and when it is deleted
 | Slice | State |
 |---|---|
 | D1: the OS wake rows are bound (`os.linux.futex_3arg`, `os.linux.futex_wake` for 0.14.1, libc's `__ulock_wake`; OSF-02) | done |
-| D2: `Thread.Futex.wake` (0.14.1, 0.15.2) is translated down to them; its hand row is deleted | open, waits for a decision (below) |
+| D2: `Thread.Futex.wake` (0.14.1, 0.15.2) is translated down to them; its hand row is deleted | done (decisions below; premise THR-12) |
 | D3: `Thread.Futex.wait` (0.14.1, 0.15.2) is translated down to the OS wait rows; its hand row is deleted | open |
 | F: `os_unfair_lock_*` are OS rows (OSL-01); the STD-06 rows are deleted | open |
 | E: the `Io` futex is a contract that `Io.Threaded`'s translated code proves; the last STD-05 rows are deleted | open |
@@ -537,6 +537,15 @@ Options: (a) the `set` caller part in `EventImpl`, plus a tick rule for a lock-g
 still owns its part, with existence from the scheduler's resumption; (b) the `set` caller part,
 plus WaitGroup's finisher keeps a non-gone place until `set` returns (the waiter's whole-`Tally`
 read then needs another exclusion argument than "the only non-gone thread"). Recommended: (a).
+
+Decided (maintainer, 2026-11-24): (a), with `FLock.PartTick` admitting a gone thread that exists
+and was not joined. Existence comes from the event's invariant (`FEvent.Inv.swex`), but "not
+joined" holds in no protocol invariant and the scheduler cannot give it: the model's
+`Thread.detach` marks a thread joined while it keeps running. Decided (maintainer, 2026-11-25,
+option (ii')): `EventImpl.set_wp_resource` takes, for a `gone` setter, the hypothesis that it is
+not joined in any state where it is at a place of the event's code (premise THR-12); WaitGroup
+discharges it from its `Shape` (task 1 is joined only at `j1`, after its end). Rejected: widening
+`PartTick` to every gone thread.
 
 **Review finding of D1 (2026-11-24, fixed): a macOS wake of nobody may return `0`.** The OS
 model returned `-ENOENT` for every `__ulock_wake` that woke nobody. In xnu-12377.121.6
