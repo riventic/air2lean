@@ -181,6 +181,9 @@ FIXTURES = [
      ["--namespace", "Nested", "--prefix", "nested."], "exact"),
     ("tests/roadmap/loop-tactics/counted/Counted/Gen.lean", "tests/roadmap/loop-tactics/counted/air",
      ["--namespace", "Counted", "--prefix", "counted."], "exact"),
+    # P04/P06: the ring-buffer queue (0.17.1).
+    ("tests/roadmap/queue-adt/QueueAdt/Gen.lean", "tests/roadmap/queue-adt/air",
+     ["--namespace", "QueueAdt", "--prefix", "queue."], "exact"),
     ("tests/roadmap/thread-locals/ThreadLocals/Gen.lean", "tests/roadmap/thread-locals/air/0.16.0",
      ["--namespace", "ThreadLocals", "--prefix", "thread_locals."], "exact"),
     ("tests/roadmap/vector-layouts/Lanes/Gen.lean", "tests/roadmap/vector-layouts/air/0.16.0",
@@ -196,13 +199,13 @@ FIXTURES = [
     ("tests/roadmap/alloc-fba/AllocFba/Gen.lean", "tests/roadmap/alloc-fba/air/0.16.0/client-linux",
      ["--namespace", "AllocFba.Gen", "--prefix", "client.", "--allocator-model", "translated"], "exact"),
 ] + [
-    # tests/roadmap/alloc-translated/check.sh: the page programs' Zig 0.17.1 translations (0.16.0's
-    # are checked in a check tree), the fixed buffer's 0.16.0 ones.
+    # tests/roadmap/alloc-translated/check.sh: the Zig 0.17.1 translations (0.16.0's are checked in
+    # a check tree).
     (f"tests/roadmap/alloc-translated/AllocTranslated/{prog.title()}{target.title()}.lean",
-     f"tests/roadmap/alloc-translated/air/{version}/{prog}-{target}",
+     f"tests/roadmap/alloc-translated/air/0.17.1/{prog}-{target}",
      ["--namespace", f"AllocTranslated.{prog.title()}{target.title()}", "--prefix", f"{prog}.",
       "--allocator-model", "translated"], "exact")
-    for prog, version in (("page", "0.17.1"), ("fba", "0.16.0")) for target in ("linux", "macos")
+    for prog in ("page", "fba") for target in ("linux", "macos")
 ] + [
     # tests/roadmap/alloc-arena/check.sh: the stock arena (both targets) and the patched one.
     (f"tests/roadmap/alloc-arena/AllocArena/{module}.lean", f"tests/roadmap/alloc-arena/air/0.16.0/{d}",

@@ -113,6 +113,15 @@ theorem FTotalTriple.of_credits_plain {α : Type} {P : FAssn} {c : MemM α} {Q :
   · unfold plain
     rwa [show (Q v ⋆ (noStack ⋆ unmetered)) = ((Q v ⋆ noStack) ⋆ unmetered) by ac_rfl]
 
+/-- **A step-free statement is the cost statement of zero steps**: no credit and no receipt. A
+contract that states each operation's step count takes a step-free operation through it. -/
+theorem FTotalTriple.credits_zero_iff {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn} :
+    FTotalTriple (P ⋆ credits 0) c (fun v => Q v ⋆ spent 0) ↔ FTotalTriple P c Q := by
+  rw [credits_zero]
+  simp only [spent_zero]
+  exact ⟨fun h => h.conseq (fun _ hp => sep_emp.mpr hp) (fun _ _ hq => sep_emp.mp hq),
+    fun h => h.conseq (fun _ hp => sep_emp.mp hp) (fun _ _ hq => sep_emp.mpr hq)⟩
+
 /-! ## Exact step counts -/
 
 /-- **The adequacy step of receipts**: a memory whose resources hold no receipt holds them with the

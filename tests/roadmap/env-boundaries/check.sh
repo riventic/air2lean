@@ -23,4 +23,8 @@ done
 # Compiled and audited (axioms, sorry, kernel replay), not only elaborated: it is indexed (F2).
 python3 -B scripts/theorem_universe.py gate "$here/StdIo.lean" --root "$here" \
   --lean-path "$work" --output-dir "$work/universe"
+# Mutants (mutations.py): contract-violating instances of the scripted client and changed
+# translations of std I/O; WriteAll.lean and StdIo.lean fail in the theorems of the changed fact.
+python3 -B "$here/mutations.py" --self-test
+python3 -B "$here/mutations.py" run "$work"
 echo "env-boundaries passed: contract client, ENV-03 bindings, translated std I/O and its proofs"

@@ -87,7 +87,7 @@ def solveWithin (advance : σ → Except σ ρ) (budget : MonoDuration) (cap : N
   within budget fun deadline => loop advance deadline cap s
 
 /-- What a returned outcome guarantees about the solver and the monotonic observations. -/
-def Spec (advance : σ → Except σ ρ) (clock : Time.AwakeEnvironment)
+def SolverPost (advance : σ → Except σ ρ) (clock : Time.AwakeEnvironment)
     (deadline : Time.Timestamp) (start : σ) : Verdict σ ρ → Prop
   | .solved answer now => (∃ s, Reachable advance start s ∧ advance s = .ok answer) ∧
       now.nanoseconds < deadline.nanoseconds ∧ ∃ i, clock.observe i = now
@@ -132,7 +132,7 @@ inductive PausedControl (advance : σ → Except σ ρ) (clock : Time.AwakeEnvir
   | waiting {n s} : Reachable advance start s →
       PausedControl advance clock deadline word start
         (.waiting fun _ => pausedLoop advance deadline word n s)
-  | done {o} : Spec advance clock deadline start o →
+  | done {o} : SolverPost advance clock deadline start o →
       PausedControl advance clock deadline word start (.running (.done o))
 
 def PausedInv (advance : σ → Except σ ρ) (clock : Time.AwakeEnvironment)
@@ -151,7 +151,7 @@ theorem observe_awake {α : Type} {st : State α} {clock : Time.AwakeEnvironment
 private theorem decide_observed (advance : σ → Except σ ρ) (clock : Time.AwakeEnvironment)
     (deadline : Time.Timestamp) (start s : σ) (i : Nat) (hs : Reachable advance start s)
     (continue_ : σ → Program (Verdict σ ρ)) (Q : Program (Verdict σ ρ) → Prop)
-    (hdone : ∀ o, Spec advance clock deadline start o → Q (.done o))
+    (hdone : ∀ o, SolverPost advance clock deadline start o → Q (.done o))
     (hcont : ∀ s', Reachable advance start s' → Q (continue_ s')) :
     Q (if deadline.nanoseconds ≤ (clock.observe i).nanoseconds then
         .done (.expired s (clock.observe i))
@@ -167,7 +167,7 @@ private theorem decide_observed (advance : σ → Except σ ρ) (clock : Time.Aw
 theorem pausedInv_step (advance : σ → Except σ ρ) (clock : Time.AwakeEnvironment)
     (deadline : Time.Timestamp) (word : Ptr) (start : σ) (st : State (Verdict σ ρ))
     (ev : Event) (hI : PausedInv advance clock deadline word start st) :
-    (∀ o, (step st ev).result = some (.ok o) → Spec advance clock deadline start o) ∧
+    (∀ o, (step st ev).result = some (.ok o) → SolverPost advance clock deadline start o) ∧
     ((step st ev).result = none → PausedInv advance clock deadline word start (step st ev).state) := by
   obtain ⟨⟨policy, henv⟩, hc⟩ := hI
   obtain ⟨st₁, hobs, hin, hctl⟩ := observe_awake henv
@@ -177,7 +177,7 @@ theorem pausedInv_step (advance : σ → Except σ ρ) (clock : Time.AwakeEnviro
   | @done o hspec => cases ev <;> simp_all [step]
   | @loop n s hs =>
     cases n with
-    | zero => cases ev <;> simp_all [step, pausedLoop, Spec]
+    | zero => cases ev <;> simp_all [step, pausedLoop, SolverPost]
     | succ n =>
       cases ev with
       | observe | normal => simp [step, hcs, pausedLoop]
@@ -220,7 +220,7 @@ theorem pausedLoop_sound (advance : σ → Except σ ρ) (deadline : Time.Timest
     (oracle : Nat → Nat) (fuel : Nat) (mem : Mem) (o : Verdict σ ρ)
     (h : (run inputs fuel oracle (pausedLoop advance deadline word cap start) mem).result =
       some (.ok o)) :
-    Spec advance clock deadline start o :=
+    SolverPost advance clock deadline start o :=
   resume_sound (PausedInv advance clock deadline word start) _
     (fun _ _ _ hI => hI) (pausedInv_step advance clock deadline word start)
     oracle fuel _ ⟨⟨policy, henv⟩, .loop .refl⟩ o h
@@ -232,7 +232,7 @@ inductive LoopControl (advance : σ → Except σ ρ) (clock : Time.AwakeEnviron
     (deadline : Time.Timestamp) (start : σ) : Control (Verdict σ ρ) → Prop
   | loop {n s} : Reachable advance start s →
       LoopControl advance clock deadline start (.running (loop advance deadline n s))
-  | done {o} : Spec advance clock deadline start o →
+  | done {o} : SolverPost advance clock deadline start o →
       LoopControl advance clock deadline start (.running (.done o))
 
 def LoopInv (advance : σ → Except σ ρ) (clock : Time.AwakeEnvironment)
@@ -243,7 +243,7 @@ def LoopInv (advance : σ → Except σ ρ) (clock : Time.AwakeEnvironment)
 theorem loopInv_step (advance : σ → Except σ ρ) (clock : Time.AwakeEnvironment)
     (deadline : Time.Timestamp) (start : σ) (st : State (Verdict σ ρ)) (ev : Event)
     (hI : LoopInv advance clock deadline start st) :
-    (∀ o, (step st ev).result = some (.ok o) → Spec advance clock deadline start o) ∧
+    (∀ o, (step st ev).result = some (.ok o) → SolverPost advance clock deadline start o) ∧
     ((step st ev).result = none → LoopInv advance clock deadline start (step st ev).state) := by
   obtain ⟨⟨policy, henv⟩, hc⟩ := hI
   obtain ⟨st₁, hobs, hin, _⟩ := observe_awake henv
@@ -253,7 +253,7 @@ theorem loopInv_step (advance : σ → Except σ ρ) (clock : Time.AwakeEnvironm
   | @done o hspec => cases ev <;> simp_all [step]
   | @loop n s hs =>
     cases n with
-    | zero => cases ev <;> simp_all [step, loop, Spec]
+    | zero => cases ev <;> simp_all [step, loop, SolverPost]
     | succ n =>
       cases ev with
       | observe | normal => simp [step, hcs, loop]
@@ -269,7 +269,7 @@ theorem loop_sound (advance : σ → Except σ ρ) (deadline : Time.Timestamp) (
     (policy : Time.NoCancellation) (henv : inputs.environment = .awake clock policy)
     (oracle : Nat → Nat) (fuel : Nat) (mem : Mem) (o : Verdict σ ρ)
     (h : (run inputs fuel oracle (loop advance deadline cap start) mem).result = some (.ok o)) :
-    Spec advance clock deadline start o :=
+    SolverPost advance clock deadline start o :=
   resume_sound (LoopInv advance clock deadline start) _
     (fun _ _ _ hI => hI) (loopInv_step advance clock deadline start)
     oracle fuel _ ⟨⟨policy, henv⟩, .loop .refl⟩ o h
@@ -346,7 +346,7 @@ theorem loop_decides (advance : σ → Except σ ρ) (deadline : Time.Timestamp)
 
 /-- What `within` adds: the deadline is a representable `start + budget` for an actual
 monotonic observation `start`; otherwise the outcome is `unrepresentable`. -/
-def WithinSpec (budget : MonoDuration) (clock : Time.AwakeEnvironment)
+def BudgetPost (budget : MonoDuration) (clock : Time.AwakeEnvironment)
     (spec : Time.Timestamp → Verdict σ ρ → Prop) (o : Verdict σ ρ) : Prop :=
   (o = .unrepresentable ∧ ∃ i, budget.deadlineFrom (clock.observe i) = none) ∨
   ∃ i deadline, budget.deadlineFrom (clock.observe i) = some deadline ∧
@@ -375,14 +375,14 @@ theorem within_sound (budget : MonoDuration) (clock : Time.AwakeEnvironment)
     (henv : inputs.environment = .awake clock policy)
     (oracle : Nat → Nat) (fuel : Nat) (mem : Mem) (o : Verdict σ ρ)
     (h : (run inputs fuel oracle (within budget body) mem).result = some (.ok o)) :
-    WithinSpec budget clock spec o := by
+    BudgetPost budget clock spec o := by
   let J : State (Verdict σ ρ) → Prop := fun st =>
     ((∃ policy, st.inputs.environment = .awake clock policy) ∧
       st.control = .running (within budget body)) ∨
     ((∃ i, budget.deadlineFrom (clock.observe i) = none) ∧
       st.control = .running (.done .unrepresentable)) ∨
     ∃ i deadline, budget.deadlineFrom (clock.observe i) = some deadline ∧ I deadline st
-  refine resume_sound J (WithinSpec budget clock spec) ?_ ?_ oracle fuel _
+  refine resume_sound J (BudgetPost budget clock spec) ?_ ?_ oracle fuel _
     (.inl ⟨⟨policy, henv⟩, rfl⟩) o h
   · rintro st c t (hJ | hJ | ⟨i, d, hd, hI⟩)
     · exact .inl hJ
@@ -399,13 +399,13 @@ theorem within_sound (budget : MonoDuration) (clock : Time.AwakeEnvironment)
         | none => exact .inr (.inl ⟨⟨_, hdl⟩, rfl⟩)
         | some d =>
           exact .inr (.inr ⟨_, d, hdl, enter d _ ⟨pol, hin ▸ hen⟩ rfl⟩)
-    · cases ev <;> simp_all [step, WithinSpec]
+    · cases ev <;> simp_all [step, BudgetPost]
     · have hp := preserve d st ev hI
       exact ⟨fun o ho => .inr ⟨i, d, hd, deadlineFrom_nanoseconds hd, hp.1 o ho⟩,
         fun hn => .inr (.inr ⟨i, d, hd, hp.2 hn⟩)⟩
 
 /-- Solver budget path: from a monotonic duration budget, the result is either
-`unrepresentable` (overflowing start + budget) or satisfies `Spec` against the deadline
+`unrepresentable` (overflowing start + budget) or satisfies `SolverPost` against the deadline
 `start + budget` for an actual monotonic observation `start`. -/
 theorem solveWithin_sound (advance : σ → Except σ ρ) (budget : MonoDuration) (cap : Nat)
     (start : σ) (inputs : Inputs) (clock : Time.AwakeEnvironment)
@@ -413,7 +413,7 @@ theorem solveWithin_sound (advance : σ → Except σ ρ) (budget : MonoDuration
     (oracle : Nat → Nat) (fuel : Nat) (mem : Mem) (o : Verdict σ ρ)
     (h : (run inputs fuel oracle (solveWithin advance budget cap start) mem).result =
       some (.ok o)) :
-    WithinSpec budget clock (fun d => Spec advance clock d start) o :=
+    BudgetPost budget clock (fun d => SolverPost advance clock d start) o :=
   within_sound budget clock _ (fun d => LoopInv advance clock d start) _
     (fun _ _ hen hc => ⟨hen, hc ▸ .loop .refl⟩) (fun _ _ _ _ hI => hI)
     (fun d => loopInv_step advance clock d start) inputs policy henv oracle fuel mem o h
@@ -425,7 +425,7 @@ theorem pausedWithin_sound (advance : σ → Except σ ρ) (budget : MonoDuratio
     (oracle : Nat → Nat) (fuel : Nat) (mem : Mem) (o : Verdict σ ρ)
     (h : (run inputs fuel oracle
       (within budget fun d => pausedLoop advance d word cap start) mem).result = some (.ok o)) :
-    WithinSpec budget clock (fun d => Spec advance clock d start) o :=
+    BudgetPost budget clock (fun d => SolverPost advance clock d start) o :=
   within_sound budget clock _
     (fun d => PausedInv advance clock d word start) _
     (fun _ _ hen hc => ⟨hen, hc ▸ .loop .refl⟩) (fun _ _ _ _ hI => hI)

@@ -5172,7 +5172,7 @@
         "qualification/0.17.1.d/logs/translation_sync.log",
         "qualification/0.17.1.d/logs/translation_lists.log"
       ],
-      "note": "lib/std/Io.zig 0.17.0->0.17.1: Event.waitTimeout loops to the deadline instead of returning Timeout on a spurious wakeup, and failingFileWritePositional rejects a non-empty header; both are translated std code (no model row covers them); Io.futexWaitTimeout and Io.Clock.now keep their timed model (STD-10). Memory.lean/StdModels.lean/std-models.md changed only by the version rename (rows keyed 0.17.1 instead of 0.17.0); model recognition unchanged. sync and lists translations and differential tests pass on 0.17.1.",
+      "note": "lib/std/Io.zig 0.17.0->0.17.1: Event.waitTimeout loops to the deadline instead of returning Timeout on a spurious wakeup, and failingFileWritePositional rejects a non-empty header; both are translated std code (no model row covers them); Io.futexWaitTimeout and Io.Clock.now keep their timed model (STD-10). Memory.lean/StdModels.lean/std-models.md changed by the version rename (rows keyed 0.17.1 instead of 0.17.0) and, since PR #802, by the reviewed 0.17.1 hashes of Io.zig, os/linux.zig and c.zig (the rows had carried 0.17.0's hashes under 0.17.1; os/linux.zig and c.zig differ only in declarations no row names, docs/std-models.md section Zig 0.17.1 audit); model recognition unchanged. sync and lists translations and differential tests pass on 0.17.1.",
       "recorded_at": "2026-11-16T17:10:36+00:00",
       "git_head": "3d876a4f24938b13c41bc41a34b7165c88b75a76"
     },

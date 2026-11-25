@@ -142,6 +142,28 @@ class Output(unittest.TestCase):
         self.assertGreater(stats[0]['peak_rss_kib'], 64 << 10)
         self.assertGreater(stats[0]['busy_s'].get('python', 0), 0)
 
+    def test_stats_count_a_child_in_a_session_of_its_own(self):
+        # A build-guard sub-admission runs its workload in a new session: its memory is the job's.
+        hold = (f'import os, subprocess, sys; subprocess.run([sys.executable, "-c", "x = bytearray(64 << 20); '
+                f'import time; time.sleep(3 * {par.SAMPLE_SECONDS})"], start_new_session=True, check=True)')
+        stats = []
+        with open(os.devnull, 'wb') as null:
+            self.assertEqual(par.run([par.Job('a', [sys.executable, '-c', hold])], 1, null, null, stats=stats), [0])
+        self.assertGreater(stats[0]['peak_rss_kib'], 64 << 10)
+
+    def test_group_usage(self):
+        ps = '\n'.join(['  10     1   10  1000 bash',
+                        '  11    10   10  2000 python3',
+                        '  12    11   12 50000 lean',      # a session of its own under the job
+                        '  13    12   12   500 lake',
+                        '  20     1   20  7000 bash',      # another job
+                        '  21     1   10   300 orphan',    # reparented, still in the group
+                        'garbage'])
+        usage, kinds = par.group_usage(ps, {10, 20, 30})
+        self.assertEqual(usage, {10: 53800, 20: 7000, 30: 0})
+        self.assertEqual(kinds[10], {'other', 'python', 'lean', 'lake'})
+        self.assertEqual(kinds[30], set())
+
 
 class Workers(unittest.TestCase):
     def test_bounds(self):

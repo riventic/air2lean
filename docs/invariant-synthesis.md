@@ -863,8 +863,7 @@ New rows. Numbers are assigned when the fsym lane records them in its ledger.
 * **P09-E5** `@[fsym_upd]` ghost-update registry, keyed by heads, tried at returns. It generalizes
   the caller updates of 9f.
 
-Existing open rows on the path: #21 (disjunctions in `fsym_arith`:
-Houdini candidates with case splits), #55 and #60 (cost in large states: generation runs many
+Existing open rows on the path: #55 and #60 (cost in large states: generation runs many
 walks over the arena's state), #58, #59, #61 (arena planning), #62 (struct ownership in a thread),
 #64–#67 (the FBA updates' workarounds, which E5 and the bump-ledger family replace).
 

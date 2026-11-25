@@ -342,7 +342,7 @@ def elaborate(jobs: int | None, mem_mib: int) -> int:
         shutil.rmtree(logs, ignore_errors=True)
     print(f"lean-deps: {len(files)} standalone Lean files, {len(todo)} elaborated, "
           f"{len(files) - len(todo)} unchanged since their last pass")
-    # The files that size this phase's guard (sampled peak RSS of each file's process group).
+    # The files that size this phase's guard (sampled peak RSS of each file's process group and its descendants).
     peaks = sorted(((s["peak_rss_kib"], s["elapsed_s"], f) for f, s in zip(todo, stats) if s), reverse=True)
     if peaks:
         print("lean-deps: largest peaks (MiB, wall s): "
