@@ -93,16 +93,22 @@ other step.
    and `main` runs restore (Lake builds, patched compilers, harness caches) and prunes stale cache
    entries. Only `main` saves cache entries; PR and queue runs restore only and share in-run
    build products as artifacts (item 4).
-5. **macOS rows run only macOS evidence** and start from a warm `main` cache that already holds
-   the built `Proofs` (item 3).
+5. **macOS rows run only macOS evidence, in their own workflow** (`ci-macos.yml`, [section
+   3](#3-macos-rows)), and start from a warm `main` cache that already holds the built `Proofs`
+   (item 3). A `ci.yml` run therefore completes when its Linux part does, and `main` keeps at
+   most one running and one pending macOS run.
 
 ## 1. Input-hash result reuse
 
 ### Parts and their input sets
 
 A *part* is one CI job row: a `test` matrix row (`test/<zig>/<part>[/<shard>]`), a `macos` row
-(`macos/<zig>`) or a matrix-free job (`aarch64-linux`, `bitops-native-arm`,
-`build-modes-aarch64-linux`). `.github/ci-inputs.json` declares for each part either
+(`macos/<zig>`, in `ci-macos.yml`) or a matrix-free job (`aarch64-linux`, `bitops-native-arm`,
+`build-modes-aarch64-linux`). The CI workflows are `ci.yml` and `ci-macos.yml`
+(`scripts/target-matrix.py` `CI_WORKFLOWS`); a job ID names one job across them, and every tool
+that reads the workflow (reuse, release records, target matrix, local CI, matrix rows, fixture
+checks) reads both and fails closed on a job defined twice. A part's key carries the
+workflow-level fields of its own file. `.github/ci-inputs.json` declares for each part either
 `"reuse": false` (always runs, on the whole checkout) or its input set: `inputs`, path patterns
 (`dir/**`, `*.lean`, exact paths) of the tracked files whose content the part may read; the
 `exclude` patterns remove paths from the wildcard patterns (an exact path is always an input). `defaults` apply to every part; the reuse machinery
@@ -428,8 +434,9 @@ upload and GitHub binds it to the run that uploaded it; it is not in the evictab
 Retention: 90 days. A record is accepted only when, according to the API (not the artifact
 content):
 
-- the producing run belongs to this repository's `CI` workflow (`.github/workflows/ci.yml`) and
-  its head repository is this repository (no fork can produce a record);
+- the producing run belongs to the workflow that defines the part (`CI`,
+  `.github/workflows/ci.yml`, or `CI macOS`, `.github/workflows/ci-macos.yml`) and its head
+  repository is this repository (no fork can produce a record);
 - for a `pull_request` run: the producing event is `pull_request`, `push`, `merge_group` or
   `workflow_dispatch`; for a `push` or `merge_group` run: only `push`, `merge_group` or
   `workflow_dispatch`, and the producing run's head commit is `main` or an ancestor of it
@@ -467,7 +474,9 @@ the merge is fixed forward at once. The admin merge bypasses the ruleset below, 
   `push` and `merge_group` runs: only records of `push`/`merge_group`/`workflow_dispatch` runs
   on `main` reused (item 1), never a PR's (a PR controls its own `ci.yml`). Every executing part
   runs restricted and records its result.
-- `all-checks` aggregates every job.
+- `all-checks` aggregates every `ci.yml` job. The macOS rows report their own statuses
+  (`macos (<zig>)` of `ci-macos.yml`); the ruleset below requires only `all-checks`, so if the
+  queue is turned back on, add those checks to it.
 - Repository ruleset `main-protection` on `main` (applied with `gh api`, 2026-10-12):
   required status check `all-checks` (integration: GitHub Actions), merge queue with merge method
   `MERGE`, grouping `ALLGREEN`, build concurrency 2, group size 1-5, no wait for a minimum group,
@@ -477,7 +486,10 @@ the merge is fixed forward at once. The admin merge bypasses the ruleset below, 
   (append-only); bypass only for the admin role. `generated.yml` only fast-forwards it, so the
   Actions token needs no bypass.
 - `scripts/release-record.py` accepts `push`, `merge_group`, `workflow_dispatch` and `schedule`
-  runs as evidence (each tested its `headSha` itself), never a `pull_request` run.
+  runs as evidence (each tested its `headSha` itself), never a `pull_request` run. A step whose
+  condition reads `github.event_name` is evaluated for each run event: a gate only some events
+  execute (the plan's `gate_events`) takes evidence only from a run of such an event, must be
+  skipped by a run of another event, and has no local-CI evidence.
 
 ### Merge queue flow (not in use)
 
@@ -605,7 +617,10 @@ parent. Schedule and dispatch are not transitions: main already arrived through 
 push, so they skip this history comparison while keeping all producer and check steps.
 
 `.github/workflows/generated.yml` structurally wakes its publication step only after an
-original CI `push` to `main` completes in this repository. The wakeup can be unsuccessful:
+original CI `push` to `main` completes in this repository. The macOS rows are not part of that
+run (`ci-macos.yml`, [section 3](#3-macos-rows)), so publication never waits for a macOS runner:
+from 2026-11-25 09:00 to 21:00 UTC the CI push runs on `main` waited 4-9 hours for their macOS
+rows, and the freshness check failed 40 times in a row. The wakeup can be unsuccessful:
 if older push A was running when newer B with passing producers tried to publish, B waited for A;
 A's completion must wake catch-up so the publisher can publish A if its producers passed, or
 skip A otherwise, then publish B's producer evidence.
@@ -745,9 +760,11 @@ Queued `pull_request` runs of PRs that were already merged (admin merge, batch P
 ahead of `main`'s runs and starved the generated-files publisher (2026-10-15: 16 runs cancelled by
 hand). Two mechanisms, neither touches `main`:
 
-- `ci.yml` `concurrency`: a `pull_request` run is grouped by the PR ref with `cancel-in-progress`,
-  so a newer push to the PR cancels the older commit's queued and running run. `merge_group`,
-  `workflow_dispatch` and `schedule` runs are grouped by their own SHA and never cancelled.
+- `ci.yml` and `ci-macos.yml` `concurrency`: a `pull_request` run is grouped by the PR ref with
+  `cancel-in-progress`, so a newer push to the PR cancels the older commit's queued and running
+  run. `merge_group`, `workflow_dispatch` and `schedule` runs are grouped by their own SHA and
+  never cancelled. `ci.yml`'s `push` runs are grouped by SHA too; `ci-macos.yml`'s by the ref
+  ([section 3](#3-macos-rows)).
 - `.github/workflows/cancel-closed-pr.yml` (`pull_request: closed`, `actions: write`, no checkout):
   concurrency alone does not remove the queued runs once nothing newer is pushed, so this cancels
   every queued, waiting or running run with `event=pull_request` that belongs to the closed PR
@@ -756,6 +773,28 @@ hand). Two mechanisms, neither touches `main`:
 
 
 ## 3. macOS rows
+
+**Their own workflow** (2026-11-25). The `macos` job is `.github/workflows/ci-macos.yml`
+(`CI macOS`): the same triggers, checkout, reuse decision and records as `ci.yml`, in a run of
+its own. Two reasons, both measured on 2026-11-25:
+
+- GitHub-hosted macOS capacity is about five concurrent jobs, shared with every PR run and with
+  `ci-cache.yml`'s two macOS jobs per `main` push. A macOS row takes 19-54 minutes (median about
+  40: proofs 16-18, stock-Zig download 3-17, weak-ordering litmus 5.5, golden/differential 4-5,
+  `lake build` 3; the patched compiler is almost always a cache hit). Each of the 20+ daily
+  `main` pushes added three rows, so the backlog only grew: `main`'s rows waited 4-9 hours for a
+  runner.
+- In one run, the macOS rows held the run open, and with it the `generated` branch publisher
+  ([whole-tree generated files](#whole-tree-generated-files)), which wakes on CI completion.
+
+Concurrency: `pull_request` runs are grouped by the PR ref and cancel the older commit's run.
+`push` runs are grouped by the ref (`ci-macos-refs/heads/main`) without `cancel-in-progress`:
+GitHub keeps one running and one pending run per group and cancels the pending one when a newer
+push arrives, so `main` runs at most one macOS set at a time and the newest commit always gets
+one, while an intermediate commit may get none (its CI run still covers every Linux part).
+`merge_group`, `workflow_dispatch` and `schedule` runs are grouped by their commit and never
+cancelled. A release record cites a `CI macOS` run of its revision; for a commit without one,
+`gh workflow run ci-macos.yml --ref main` while it is `main`'s head.
 
 Each macOS row keeps only aarch64-macos evidence: stock-Zig install, ABI probes and T04 ABI
 qualification, the Darwin AIR export, translation and native differential test (`check.sh`),

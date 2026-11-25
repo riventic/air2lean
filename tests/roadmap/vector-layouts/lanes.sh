@@ -2,8 +2,9 @@
 # L09 lane pointers: translate the committed lanes.zig AIR of every version (0.17.1, 0.16.0,
 # 0.15.2), compare the 0.16.0 translation with Lanes/Gen.lean, and check the concrete runs on
 # each version's translation and the theorems on the 0.17.1 and 0.16.0 ones; --native runs lanes.zig's test with a stock Zig
-# (any of these versions); --export DIR [VERSION] exports fresh AIR with the patched Zig VERSION
-# (default 0.16.0) and compares its translation with that of the committed air/VERSION.
+# (any of these versions); --export DIR [VERSION] exports fresh AIR with the patched Zig
+# AIR2LEAN_ZIG_AIR (VERSION, if given, must be its version) and compares its translation with
+# that of the committed air/VERSION.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
@@ -18,9 +19,11 @@ case "${1:---check}" in
     exit ;;
   --export)
     [ "$#" -eq 2 ] || [ "$#" -eq 3 ] || { echo "$usage" >&2; exit 2; }
-    version=${3:-0.16.0}
-    [ -d "$dir/air/$version" ] || { echo "lanes.sh: no committed air/$version" >&2; exit 2; }
     : "${AIR2LEAN_ZIG_AIR:?set the patched Zig of the exported version}"
+    exporter=$("$AIR2LEAN_ZIG_AIR" version)
+    version=${3:-$exporter}
+    [ "$version" = "$exporter" ] || { echo "lanes.sh: AIR2LEAN_ZIG_AIR is $exporter, not $version" >&2; exit 2; }
+    [ -d "$dir/air/$version" ] || { echo "lanes.sh: no committed air/$version" >&2; exit 2; }
     mkdir -p "$2/air"
     [ -z "$(find "$2/air" -mindepth 1 -print -quit)" ] || { echo 'AIR output must be empty' >&2; exit 1; }
     ZIG_AIR_JSON_DIR="$(cd -- "$2/air" && pwd)" ZIG_AIR_JSON_FILTER=lanes. \

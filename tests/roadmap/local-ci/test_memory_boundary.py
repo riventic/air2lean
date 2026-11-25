@@ -17,6 +17,12 @@ runner = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(runner)
 IN_PROCESS_HOST = runner.in_process_host
 IMAGE = 'sha256:' + '1' * 64
+CI = '.github/workflows/ci.yml'
+
+
+def ci(workflow):
+    """A ci.yml workflow as the runner reads the CI workflows (target-matrix.py merge_workflows)."""
+    return runner.TM.merge_workflows({CI: workflow})
 
 
 class MemoryBoundary(unittest.TestCase):
@@ -34,18 +40,18 @@ class MemoryBoundary(unittest.TestCase):
         (self.root / '.github/workflows/ci.yml').write_bytes(self.workflow_bytes)
         self.source = b'withheld fixture marker: whole-source archive bytes'
         self.digest = hashlib.sha256(self.source).hexdigest()
-        self.workflow_digest = hashlib.sha256(self.workflow_bytes).hexdigest()
+        self.workflow_digest = runner.ci_workflow_sha(self.root)
         self.stamp = f'revision=test\ntracked_clean=yes\nsnapshot_sha256={self.digest}\n'
         (self.snapshot / 'source.tar').write_bytes(self.source)
         (self.snapshot / 'files').write_bytes(b'')
         for path in (self.snapshot, self.artifacts):
             (path / 'source-revision').write_text(self.stamp)
         (self.imports / 'manifest.json').write_text('{}\n')
-        self.workflow = {'jobs': {
+        self.workflow = ci({'jobs': {
             'producer': {'runs-on': 'ubuntu-24.04', 'steps': []},
             'consumer': {'runs-on': 'ubuntu-24.04', 'needs': ['producer'], 'steps': []},
             'other': {'runs-on': 'ubuntu-24.04', 'steps': []},
-        }}
+        }})
         previous = Path.cwd()
         os.chdir(self.root)
         self.addCleanup(os.chdir, previous)
@@ -323,7 +329,7 @@ class MemoryBoundary(unittest.TestCase):
         for arguments, dispatch, row_only in ((['--dispatch', 'part', 'consumer'], True, False),
                                                (['--row', 'full', 'consumer'], False, True)):
             with self.subTest(arguments=arguments), \
-                 patch.object(runner.TM, 'parse_workflow_yaml', return_value=self.workflow), \
+                 patch.object(runner, 'load_ci_workflow', return_value=self.workflow), \
                  patch.object(runner, 'WorkflowRun') as run:
                 runner.main(arguments)
             self.assertEqual(run.call_args.kwargs.get('dispatch', False), dispatch)
@@ -331,14 +337,14 @@ class MemoryBoundary(unittest.TestCase):
             run.return_value.run.assert_called_once_with('consumer')
 
     def test_cli_rejects_unknown_worker_modes_before_constructing_a_runner(self):
-        with patch.object(runner.TM, 'parse_workflow_yaml', return_value=self.workflow), \
+        with patch.object(runner, 'load_ci_workflow', return_value=self.workflow), \
              patch.object(runner, 'WorkflowRun') as run, \
              self.assertRaisesRegex(ValueError, 'unsupported local CI row mode'):
             runner.main(['--row', 'unrecognized', 'consumer'])
         run.assert_not_called()
 
     def test_keyed_projection_excludes_other_jobs_rows_and_never_run_steps(self):
-        self.workflow = {
+        source = {
             'name': 'keyed workflow metadata', 'permissions': {'contents': 'read'},
             'jobs': {
                 'test': {'runs-on': 'ubuntu-24.04', 'needs': ['producer'],
@@ -356,6 +362,7 @@ class MemoryBoundary(unittest.TestCase):
                 'other': {'runs-on': 'ubuntu-24.04',
                           'steps': [{'name': 'unrelated', 'run': 'UNRELATED_JOB_TEXT'}]},
             }}
+        self.workflow = ci(source)
         payload = runner.job_payload(self.workflow, 'test/0.17.1/lean', self.digest, self.workflow_digest)
         encoded = runner.CR.canonical(payload)
         for unkeyed in ('OTHER_ROW_DATA', 'OTHER_ROW_TEXT', 'NEVER_RUN_TEXT',
@@ -365,13 +372,13 @@ class MemoryBoundary(unittest.TestCase):
         self.assertIn('DIRECT_NEED_TEXT', encoded)
         self.assertEqual(payload['definitions']['needs'], {'producer': self.workflow['jobs']['producer']})
         self.assertEqual(payload['definitions']['workflow'],
-                         {'name': self.workflow['name'], 'permissions': self.workflow['permissions']})
+                         {'name': source['name'], 'permissions': source['permissions']})
         self.assertEqual(payload['row'], {'zig': '0.17.1', 'part': 'lean', 'examples': 'selected'})
         legacy_projection = {
             'job': runner.CR.job_definition(self.workflow['jobs']['test'], payload['row'], 'test'),
             'needs': {name: self.workflow['jobs'][name]
                       for name in runner.CR.needs_of(self.workflow['jobs']['test'])},
-            'workflow': {key: value for key, value in self.workflow.items() if key != 'jobs'},
+            'workflow': {key: value for key, value in source.items() if key != 'jobs'},
         }
         self.assertEqual(runner.CR.canonical(payload['definitions']), runner.CR.canonical(legacy_projection))
 
@@ -381,7 +388,7 @@ class MemoryBoundary(unittest.TestCase):
         legacy_projection = {
             'job': runner.CR.job_definition(selected, None, 'consumer'),
             'needs': {name: self.workflow['jobs'][name] for name in runner.CR.needs_of(selected)},
-            'workflow': {key: value for key, value in self.workflow.items() if key != 'jobs'},
+            'workflow': self.workflow['workflows'][CI],
         }
         actual = runner.CR.keyed_definitions(self.workflow, 'consumer', None)
         self.assertEqual(runner.CR.canonical(actual), runner.CR.canonical(legacy_projection))
@@ -390,6 +397,7 @@ class MemoryBoundary(unittest.TestCase):
     def test_worker_registry_does_not_require_unkeyed_transitive_jobs(self):
         self.workflow['jobs']['producer']['needs'] = ['grandproducer']
         self.workflow['jobs']['grandproducer'] = {'runs-on': 'ubuntu-24.04', 'steps': []}
+        self.workflow['files']['grandproducer'] = CI
         run = self.make_row('consumer')
         self.assertEqual(set(run.workflow['jobs']), {'consumer', 'producer'})
         self.assertEqual(run.workflow['jobs']['producer']['needs'], ['grandproducer'])
