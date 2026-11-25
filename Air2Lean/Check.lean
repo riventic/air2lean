@@ -1859,6 +1859,10 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   | .asm source isVolatile clobbers outputs inputs =>
     if op.isSpinHint && cx.types[ty]? != some .void then
       throw s!"{fnName}: near line {line}: a spin hint must return void"
+    -- Every `%[name]` names one operand, as the compiler resolves it (`checkAsmOperandNames`),
+    -- whether the block is allowlisted or a device event.
+    if let .error e := checkAsmOperandNames source ((outputs ++ inputs).map (·.name)) then
+      throw s!"{fnName}: near line {line}: asm {source.quote}: {e} (M21, A01)"
     -- Register operands (M21) and the explicit effect contract (A01, `Air2Lean/AsmContract.lean`):
     -- every operand value is an integer, so `Emit.lean` can map it to a `BitVec`.
     let isIntTy (tid : TyId) : Bool := match cx.types[tid]? with | some (.int ..) => true | _ => false
