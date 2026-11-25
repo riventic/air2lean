@@ -25,11 +25,6 @@
       "status": "target"
     },
     {
-      "name": "CancelSpec",
-      "module": "tests.roadmap.futures.Futures.Proofs",
-      "status": "legacy-to-retire"
-    },
-    {
       "name": "CondImpl",
       "module": "ZigLean.Sep.Full.Cond",
       "status": "target",
@@ -172,18 +167,6 @@
       "name": "FTriple",
       "module": "ZigLean.Sep.Full.Triple",
       "status": "target"
-    },
-    {
-      "name": "FTripleCell",
-      "module": "tests.roadmap.sep-full.BlockExtentsCX",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
-      "name": "FTripleExact",
-      "module": "tests.roadmap.sep-full.ExactTags",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
       "name": "FWrapped",
@@ -337,11 +320,6 @@
     {
       "name": "Spec",
       "module": "ZigLean.Conc.TimedBudget",
-      "status": "legacy-to-retire"
-    },
-    {
-      "name": "Spec",
-      "module": "tests.roadmap.asm-wrappers.Interp",
       "status": "legacy-to-retire"
     },
     {

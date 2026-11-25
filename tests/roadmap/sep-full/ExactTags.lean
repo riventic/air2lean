@@ -27,14 +27,6 @@ structure HoldsExact (m : Mem) (r rF : Res) : Prop where
   knowF : Know.Sub rF.know m.kn
   ghost : Ghost.Ok r.gh rF.gh
 
-/-- The old `FTriple`, over `HoldsExact`. -/
-def FTripleExact {α : Type} (P : FAssn) (c : MemM α) (Q : α → FAssn) : Prop :=
-  ∀ m r rF, HoldsExact m r rF → P r → m.FSeq →
-    match (c.run m).run with
-    | none => True
-    | some (.error _) => False
-    | some (.ok (v, m')) => ∃ r', HoldsExact m' r' rF ∧ Q v r' ∧ m'.FSeq
-
 def z8 : Array Byte := Array.replicate 8 (.int 0)
 def blk0 : Block := { bytes := Array.replicate 16 (.int 0), align := 16, kind := .heap, live := true, addr := 16 }
 def msg0 : Msg := Msg.mk 0 (Array.replicate 16 (.int 0)) #[] #[] none none
@@ -101,9 +93,14 @@ theorem pre0 : up (bytesAt p8 16 16 .heap z8) r := by
 
 /-- **With exact tags, no atomic rule for plainly owned bytes.** An 8-byte atomic store into
 bytes that the precondition owns as plain (`up`) bytes has no postcondition: a 16-byte location
-over them and the frame's bytes is retired, so the frame's atomic tags change. -/
+over them and the frame's bytes is retired, so the frame's atomic tags change. The negated
+statement is the old `FTriple` over `HoldsExact`, written out. -/
 theorem no_plain_atomic_triple (Q : Unit → FAssn) :
-    ¬ FTripleExact (up (bytesAt p8 16 16 .heap z8)) (atomicStoreAt (n := 64) 0 .relaxed 8 p8 0) Q := by
+    ¬ ∀ m r rF, HoldsExact m r rF → up (bytesAt p8 16 16 .heap z8) r → m.FSeq →
+      match ((atomicStoreAt (n := 64) 0 .relaxed 8 p8 0).run m).run with
+      | none => True
+      | some (.error _) => False
+      | some (.ok (v, m')) => ∃ r', HoldsExact m' r' rF ∧ Q v r' ∧ m'.FSeq := by
   intro h
   have hF : rF.heap (0, 0) = some ⟨⟨.int 0, 16, 16, .heap⟩, some (0, 16)⟩ := by
     show (if (0 : Nat) = 0 ∧ (0 : Nat) < 8 then m0.fheap (0, 0) else none) = _

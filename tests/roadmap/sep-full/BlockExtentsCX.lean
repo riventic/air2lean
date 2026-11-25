@@ -127,18 +127,14 @@ structure HoldsCell (m : Mem) (r rF : Res) : Prop where
   disj : FHeap.Disjoint r.heap rF.heap
   heap : m.heap = (r.heap ∪ rF.heap).erase
 
-/-- The old triple, over `HoldsCell`. -/
-def FTripleCell {α : Type} (P : FAssn) (c : MemM α) (Q : α → FAssn) : Prop :=
-  ∀ m r rF, HoldsCell m r rF → P r → m.FSeq →
-    match (c.run m).run with
-    | none => True
-    | some (.error _) => False
-    | some (.ok (v, m')) => ∃ r', HoldsCell m' r' rF ∧ Q v r' ∧ m'.FSeq
-
-/-- **Old model**: a byte whose cell records size `2` makes `q + 2` formable. -/
+/-- **Old model**: a byte whose cell records size `2` makes `q + 2` formable. The statement is
+the old triple over `HoldsCell`, written out. -/
 theorem cell_size_old {A : Nat} {x : Byte} :
-    FTripleCell (up (bytesAt q A 2 .heap #[x])) (ptrProject q (·.add 2))
-      (fun _ => up (bytesAt q A 2 .heap #[x])) := by
+    ∀ m r rF, HoldsCell m r rF → up (bytesAt q A 2 .heap #[x]) r → m.FSeq →
+      match ((ptrProject q (·.add 2)).run m).run with
+      | none => True
+      | some (.error _) => False
+      | some (.ok (_, m')) => ∃ r', HoldsCell m' r' rF ∧ up (bytesAt q A 2 .heap #[x]) r' ∧ m'.FSeq := by
   intro m r rF hh hp hs
   obtain ⟨⟨b, hb, -, hl⟩, -⟩ := id hp
   have hq : q.block = some 0 := rfl
