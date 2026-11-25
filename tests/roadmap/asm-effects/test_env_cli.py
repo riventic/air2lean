@@ -139,25 +139,27 @@ def check_operand_names(binary, docs):
     for doc, k in (("asm_env.random.json", 0), ("asm_env.loadm.json", 1), ("asm_env.rand64.json", 1)):
         checks += reject(binary, docs, doc, rename(k, "foo"), marker)
     # A device event (L13): the device contract declares the template, the names are the
-    # program's.
-    document = json.loads(json.dumps(docs["asm_env.rand64.json"]))
-    block = asm_inst(document)
-    constraints = [o["constraint"] for o in block["outputs"]] + [i["constraint"] for i in block["inputs"]]
+    # program's. The duplicate names need two operands (`rand64`; the names are checked before the
+    # device rule that allows one output).
     with tempfile.TemporaryDirectory(prefix="air2lean-asm-names-") as d:
         contract = Path(d) / "cpu.json"
-        for source, names, marker in (
-                ("rdrand %[v]\n\tsetc %[foo]", ["v", "ok"], "'%[foo]' names no operand of the block"),
-                ("rdrand %[v]\n\tsetc %[ok:b]", ["v", "foo"], "'%[ok]' names no operand of the block"),
-                ("rdrand %[v]\n\tsetc %[_]", ["v", "_"], "'%[_]' names no operand of the block"),
-                ("rdrand %[v]\n\tsetc %[v]", ["v", "v"], "two operands of the block are named 'v'"),
-                ("rdrand %[v]\n\tsetc %[ok", ["v", "ok"], "'%[ok' is not closed by ']'"),
-                ("rdrand %[v]\n\tsetc %[ok]", ["v", "ok"], None)):
+        for name, source, names, marker in (
+                ("asm_env.random.json", "rdrand %[foo]", ["ret"], "'%[foo]' names no operand of the block"),
+                ("asm_env.random.json", "rdrand %[ret:q]", ["foo"], "'%[ret]' names no operand of the block"),
+                ("asm_env.random.json", "rdrand %[_]", ["_"], "'%[_]' names no operand of the block"),
+                ("asm_env.random.json", "rdrand %[ret", ["ret"], "'%[ret' is not closed by ']'"),
+                ("asm_env.rand64.json", "rdrand %[v]\n\tsetc %[v]", ["v", "v"],
+                 "two operands of the block are named 'v'"),
+                ("asm_env.random.json", "rdrand %[ret]", ["ret"], None)):
+            document = json.loads(json.dumps(docs[name]))
+            block = asm_inst(document)
             block["source"] = source
-            for o, name in zip(block["outputs"], names):
-                o["name"] = name
+            for o, n in zip(block["outputs"], names):
+                o["name"] = n
+            constraints = [o["constraint"] for o in block["outputs"]] + [i["constraint"] for i in block["inputs"]]
             contract.write_text(json.dumps({"schema": 1, "device": "cpu", "registers": [], "asm": [
                 {"template": source, "constraints": constraints, "clobbers": block["clobbers"]}]}))
-            result, text = run(binary, {"asm_env.rand64.json": document}, ("--device-contract", str(contract)))
+            result, text = run(binary, {name: document}, ("--device-contract", str(contract)))
             if marker is None:
                 assert result.returncode == 0 and "Zig.vasm air2lean_device" in text, result.stderr
             else:
