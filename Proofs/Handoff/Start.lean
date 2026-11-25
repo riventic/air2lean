@@ -210,14 +210,15 @@ theorem inv_start {m : Mem} {own : ThreadId → Res} {A : Nat} {wb : Array Byte}
     rfl ht (fun u hu => ?_) (by rw [upd_self, upd_self]; rfl) (by rw [upd_self]; exact hdM) hdRW
     (fun l => ?_) hW.2.1 hW.2.2 (fun u => ?_) (fun u => ?_) ?_
     ⟨blk, hblk, hl, hBk, by show (blk.addr + Lo.mo) % 4 = 0; rw [hAd]; omega, by rw [hK]; decide, by rw [hK]; simp [BlockKind.mappedLo]⟩
-    h0 (by rw [hat]; simp) hq (allLe_of_one h1 (VClock.le_refl _)), ?_⟩
+    h0 (by rw [hat]; simp) (LockWord.waiters_empty hq)
+    ((allLe_of_one h1 (VClock.le_refl _)).on _), ?_⟩
   · rw [upd_ne _ _ hu, hown u hu]
     unfold FLock.own; rw [hGu u hu]; split <;> simp [G0, FLock.prod, rnil_rsum]
   · rw [up_bytesAt_some hW rfl l, off_add, hs4]
     show _ ↔ l.1 = 0 ∧ Lo.mo ≤ l.2 ∧ l.2 < Lo.mo + 4
     rfl
   · by_cases hu : u = 0
-    · subst hu; rw [upd_self]; exact .inl ⟨rfl, ht, rfl⟩
+    · subst hu; rw [upd_self]; exact .inl ⟨.inl rfl, ht, rfl⟩
     · rw [hGu u hu]; exact .inr rfl
   · by_cases hu : u = 0
     · subst hu; rw [upd_self]; rfl
