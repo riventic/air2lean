@@ -8,11 +8,10 @@
 # memory-safety tutorial's refuted clients over the page allocator (ListsPage.lean). Every Lean
 # file is a module of the fixture's library AllocTranslated (tests/roadmap/lakefile.toml), built
 # by Lake with what it imports (scripts/fixtures.py; run it under scripts/build-guard.py). Needs
-# a built translator; runs no compiler. The page programs' AIR is exports.json's export, pinned
-# by exports.lock.json (scripts/fixture-exports.py); the fixed buffer's is pinned by
-# provenance.json. The page programs are exported by Zig 0.17.1 and 0.16.0: the retained page
-# translations are 0.17.1's, and the same proofs, audit and growth lines are checked over the
-# 0.16.0 ones in a check tree (scripts/check-tree.py). The fixed buffer is 0.16.0's.
+# a built translator; runs no compiler. The AIR of both programs is exports.json's export, pinned
+# by exports.lock.json (scripts/fixture-exports.py), of Zig 0.17.1 and 0.16.0: the retained
+# translations are 0.17.1's, and the same proofs, audit, `#guard`s and growth lines are checked
+# over the 0.16.0 ones in a check tree (scripts/check-tree.py).
 # M02: the model's lines of the growths by `remap` and `realloc` (in place, moved, failed, the
 # read of a moved block's old address; Eval.lean `growLinux`, `growMacos`) are compared with the
 # `page_grow` lines of expected-linux.txt and expected.txt on every host. With
@@ -28,16 +27,6 @@ translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first (lake build air2lean)' >&2; exit 1; }
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-alloc-translated.XXXXXX")
 trap 'rm -rf "$work"' EXIT
-python3 - "$here" <<'EOF'
-import hashlib, json, pathlib, sys
-here = pathlib.Path(sys.argv[1])
-record = json.loads((here / 'provenance.json').read_text())
-for name, digest in record['source_sha256'].items():
-    assert hashlib.sha256((here / name).read_bytes()).hexdigest() == digest, name
-files = {str(p.relative_to(here / 'air')): hashlib.sha256(p.read_bytes()).hexdigest()
-         for p in sorted((here / 'air').glob('*/fba-*/*.json'))}
-assert files == record['air_sha256'], 'AIR fixtures differ from provenance.json'
-EOF
 python3 -B scripts/fixture-exports.py check alloc-translated
 module() {  # module PROG OS: the translation's module name, `PageLinux` for `page linux`
   printf '%s%s%s%s' "$(printf '%s' "${1:0:1}" | tr '[:lower:]' '[:upper:]')" "${1:1}" \
@@ -47,14 +36,16 @@ translate() {  # translate VERSION PROG OS OUT: OUT is AllocTranslated.<module> 
   "$translator" "$here/air/$1/$2-$3" -o "$4" --namespace "AllocTranslated.$(module "$2" "$3")" \
     --prefix "$2." --allocator-model translated
 }
-# The retained translations are the fresh ones, byte for byte (Lake builds the retained files):
-# the page programs' of Zig 0.17.1, the fixed buffer's of 0.16.0.
-for entry in page:0.17.1 fba:0.16.0; do
-  IFS=: read -r prog version <<< "$entry"
+# The retained translations are the fresh ones of Zig 0.17.1, byte for byte (Lake builds the
+# retained files). The 0.16.0 ones replace them in the check tree (below).
+replace=()
+for prog in page fba; do
   for os in linux macos; do
     m=$(module "$prog" "$os")
-    translate "$version" "$prog" "$os" "$work/$m.lean"
+    translate 0.17.1 "$prog" "$os" "$work/$m.lean"
     cmp "$work/$m.lean" "$here/AllocTranslated/$m.lean"
+    translate 0.16.0 "$prog" "$os" "$work/$m-0.16.0.lean"
+    replace+=(--replace "$here/AllocTranslated/$m.lean=$work/$m-0.16.0.lean")
   done
 done
 # Axioms of every theorem of the proof modules (below): only the standard ones.
@@ -86,16 +77,10 @@ prove() {  # prove LINES: build, audit and run the library of the current tree; 
   diff <(grep '^page_grow' "$here/expected.txt") "$1/AllocTranslated.Eval.growMacos.txt"
 }
 prove "$work/lines"
-# The same proof text over the page programs' Zig 0.16.0 translations, in a check tree with them
-# in place of the retained 0.17.1 ones (scripts/check-tree.py: the tree clones the root build;
-# with AIR2LEAN_CAS_DIR, only the page translations and what imports them are elaborated again).
-tree=$repo_root/.lake/check-tree/alloc-translated-page-0.16.0
-replace=()
-for os in linux macos; do
-  m=$(module page "$os")
-  translate 0.16.0 page "$os" "$work/$m-0.16.0.lean"
-  replace+=(--replace "$here/AllocTranslated/$m.lean=$work/$m-0.16.0.lean")
-done
+# The same proof text over the Zig 0.16.0 translations, in a check tree with them in place of the
+# retained 0.17.1 ones (scripts/check-tree.py: the tree clones the root build; with
+# AIR2LEAN_CAS_DIR, only the translations and what imports them are elaborated again).
+tree=$repo_root/.lake/check-tree/alloc-translated-0.16.0
 python3 -B scripts/check-tree.py create "$tree" "${replace[@]}"
 (cd "$tree" && prove "$work/lines-0.16.0")
 bash "$here/mutant.sh"
