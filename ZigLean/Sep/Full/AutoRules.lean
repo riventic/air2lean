@@ -1063,7 +1063,7 @@ simproc [fsym_norm] reduceLitIntCast (Zig.intCast _ _ _ _ _) := fun e => do
   let some ⟨_, a⟩ ← getBitVecValue? args[4]! | return .continue
   let v := Zig.val s₁ a
   -- the lemma's side conditions are its own hypotheses' types, each decided on the literal
-  let lits := #[none, none, some args[1]!, some args[2]!, some args[5]!, some args[4]!]
+  let lits := #[none, some args[3]!, some args[1]!, some args[2]!, some args[5]!, some args[4]!]
   let pf ← if Zig.intLo s₂ m ≤ v ∧ v ≤ Zig.intHi s₂ m then do
       let f ← mkAppOptM ``intCast_lit (lits.push (some (toExpr (BitVec.ofInt m v))))
       let .forallE _ hTy (.forallE _ hrTy _ _) _ ← inferType f
