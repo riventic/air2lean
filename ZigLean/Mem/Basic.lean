@@ -902,7 +902,9 @@ private theorem storeBytes_run_eq_impl (p : Ptr) (align : Nat) (bs : Array Byte)
       · have := hset m.blocks b blk (fun blk => { blk with bytes := writeBytes blk.bytes o bs }) hb
         simp only [StateT.run_set, StateT.run_modify, pure_bind, this]
 
-/-- The compiler runs `storeBytesImpl`; the kernel and every proof keep `storeBytes`. -/
+/-- The compiler runs `storeBytesImpl`; the kernel and every proof keep `storeBytes` (the
+lemmas that unfold it, e.g. `storeBytes_ok`, stay as they are). A change to `storeBytes` that
+`storeBytesImpl` does not mirror fails this theorem, so the two cannot drift apart. -/
 @[csimp] private theorem storeBytes_eq_impl : @storeBytes = @storeBytesImpl := by
   funext p align bs kind
   exact StateT.ext fun m => storeBytes_run_eq_impl p align bs kind m
