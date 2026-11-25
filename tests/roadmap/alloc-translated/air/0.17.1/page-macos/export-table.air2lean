@@ -1,0 +1,72 @@
+{
+ "schema": 12,
+ "zig_version": "0.17.1",
+ "exports": [
+  {
+   "name": "page_grow_stale",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "page.page_grow_stale",
+    "cc": "aarch64_aapcs_darwin"
+   }
+  },
+  {
+   "name": "page_grow_blocked",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "page.page_grow_blocked",
+    "cc": "aarch64_aapcs_darwin"
+   }
+  },
+  {
+   "name": "_mh_execute_header",
+   "linkage": "weak",
+   "visibility": "default",
+   "function": null
+  },
+  {
+   "name": "page_grow",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "page.page_grow",
+    "cc": "aarch64_aapcs_darwin"
+   }
+  },
+  {
+   "name": "page_resize",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "page.page_resize",
+    "cc": "aarch64_aapcs_darwin"
+   }
+  },
+  {
+   "name": "page_create",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "page.page_create",
+    "cc": "aarch64_aapcs_darwin"
+   }
+  },
+  {
+   "name": "page_sum",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "page.page_sum",
+    "cc": "aarch64_aapcs_darwin"
+   }
+  }
+ ]
+}

@@ -344,10 +344,14 @@ TSC_CONTRACT = Path(__file__).resolve().parent / "tsc.json"
 TSC = "rdtsc\n\tshlq $32, %%rdx\n\torq %%rdx, %%rax"
 
 
-def asm(i, ty, source, *, volatile=True, clobbers=(), outputs=(), inputs=()):
+def asm(i, ty, source, *, volatile=True, clobbers=(), outputs=(), inputs=(), names=()):
+    """An `assembly` instruction. NAMES are the operand names the template's `%[name]` refers to,
+    outputs first (`asm (… : [ret] "=r" … : [x] "r" …)`); unnamed operands get `o<k>`/`i<k>`."""
+    named = list(names) + [None] * (len(outputs) + len(inputs) - len(names))
     return inst(i, "assembly", ty, source=source, volatile=volatile, clobbers=list(clobbers),
-                outputs=[dict(constraint=c, name=f"o{k}") for k, c in enumerate(outputs)],
-                inputs=[dict(constraint=c, name=f"i{k}", ref=r) for k, (c, r) in enumerate(inputs)])
+                outputs=[dict(constraint=c, name=named[k] or f"o{k}") for k, c in enumerate(outputs)],
+                inputs=[dict(constraint=c, name=named[len(outputs) + k] or f"i{k}", ref=r)
+                        for k, (c, r) in enumerate(inputs)])
 
 
 def asm_fixtures(version="0.16.0"):
@@ -363,7 +367,8 @@ def asm_fixtures(version="0.16.0"):
         "rdtsc_twice": (f("rdtsc_twice", 8, [tsc(0), tsc(1), inst(2, "sub_wrap", 8, [ref(1), ref(0)]),
                                             returning(3, ref(2))]), 0, 0),
         "rdtsc_plain": (f("rdtsc_plain", 8, [tsc(0, volatile=False), returning(1, ref(0))]), 0, 1),
-        "rdrand": (f("rdrand", 8, [asm(0, 8, "rdrand %[ret]", clobbers=("cc",), outputs=("=r",)),
+        "rdrand": (f("rdrand", 8, [asm(0, 8, "rdrand %[ret]", clobbers=("cc",), outputs=("=r",),
+                                       names=("ret",)),
                                    returning(1, ref(0))]), 0, 0),
         "outputless": (f("outputless", 1, [asm(0, 1, "mfence"), returning(1, void)]), 1, 1),
         # A `memory` clobber off A01's registry (whose only entry is the empty barrier).
@@ -371,10 +376,11 @@ def asm_fixtures(version="0.16.0"):
         # Allowlisted (Air2Lean/AsmAllowlist.lean): input-determined, and the C03 spin hint.
         "lzcnt": (f("lzcnt", 8, [inst(0, "arg", 8, param=0),
                                  asm(1, 8, "lzcnt %[x], %[ret]", clobbers=("cc",), outputs=("=r",),
-                                     inputs=(("r", ref(0)),)),
+                                     inputs=(("r", ref(0)),), names=("ret", "x")),
                                  returning(2, ref(1))], params=(8,)), 0, 0),
         "lzcnt_other_clobbers": (f("lzcnt_other_clobbers", 8, [inst(0, "arg", 8, param=0),
-                                 asm(1, 8, "lzcnt %[x], %[ret]", outputs=("=r",), inputs=(("r", ref(0)),)),
+                                 asm(1, 8, "lzcnt %[x], %[ret]", outputs=("=r",), inputs=(("r", ref(0)),),
+                                     names=("ret", "x")),
                                  returning(2, ref(1))], params=(8,)), 1, 1),
         "pause": (f("pause", 1, [asm(0, 1, "pause"), returning(1, void)]), 0, 0),
     }
