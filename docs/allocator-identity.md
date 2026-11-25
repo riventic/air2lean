@@ -1,7 +1,7 @@
-# Allocator identity, arenas and fixed buffers (M01)
+# Allocator identity and arenas (M01)
 
 `ZigLean/Mem/Owned.lean` adds allocators with an identity to the heap model. Allocator `a`
-is `Mem.allocators[a]` (an `OwnedAlloc`: policy, liveness, fixed-buffer `end_index`). The
+is `Mem.allocators[a]` (an `OwnedAlloc`: policy and liveness). The
 kind of a block records its owner: `.heap` is the model's `std.mem.Allocator`
 (`ZigLean/Mem/Alloc.lean`, unchanged), `.owned a` is allocator `a`. `AllocRef` (`.std` or
 `.owned a`) gives the `std.mem.Allocator` calls (`create`, `destroy`, `alloc`, `free`,
@@ -11,10 +11,15 @@ Owned blocks get fresh model addresses by default. The opt-in address-reuse poli
 [address-reuse.md](address-reuse.md)) may give a new owned block the address of a freed or reset
 one; block ids, and so every ownership and liveness check, are unaffected.
 
+This model is legacy, scheduled for deletion ([allocator-model.md](allocator-model.md),
+"Removing the hand-written allocator models"). Its fixed-buffer policy is already deleted (step
+1): `std.heap.FixedBufferAllocator` is translated from its Zig code (`--allocator-model
+translated`) and proved against `FAllocSpec` (`tests/roadmap/alloc-fba`: `FBA.fallocSpec`,
+`Client.client_spec`).
+
 ## Semantics
 
-The policies follow the Zig 0.16.0 sources `lib/std/heap/ArenaAllocator.zig` and
-`lib/std/heap/FixedBufferAllocator.zig`.
+The policy follows the Zig 0.16.0 source `lib/std/heap/ArenaAllocator.zig`.
 
 | Operation | Model |
 | --- | --- |
@@ -23,11 +28,7 @@ The policies follow the Zig 0.16.0 sources `lib/std/heap/ArenaAllocator.zig` and
 | arena `free` | the block must be a whole live `.owned a` block, else `.illegal`; its lifetime ends. Zig gives the bytes back only for the last allocation; the arena model has no capacity, so nothing else changes. |
 | `arena.reset(mode)` | `Owned.reset`: every `.owned a` block dies, no other block changes. The boolean result (a capacity hint for the retaining modes) is not modelled, nor is the capacity the retaining modes keep. |
 | `arena.deinit()` | `Arena.deinit`: reset, then the arena is dead; later use throws `.illegal`. |
-| `FixedBufferAllocator.init(buf)` | `FixedBuffer.init base cap`: `end_index = 0`. |
-| fixed-buffer `alloc` | Zig's `alignPointerOffset` from `base + end_index`; `none` (`OutOfMemory`) if it does not fit, without a policy decision. |
-| fixed-buffer `free` | ownership check as for arenas; `end_index -= len` exactly when the block is the last allocation (`isLastAllocation`), else no bytes come back. |
-| fixed-buffer `reset()` | `Owned.reset`: every block dies, `end_index = 0`. |
-| `remap` | ownership check first; same or smaller length succeeds in place (a fixed buffer gives the tail back for its last allocation); growth fails. |
+| `remap` | ownership check first; same or smaller length succeeds in place; growth fails. |
 
 A free, destroy or remap through allocator `r` of a block of another kind throws `.illegal`:
 an arena's block through `std.mem.Allocator` or another arena, a `std.mem.Allocator` block
@@ -60,12 +61,12 @@ theorems are stated over the translated `std.heap.ArenaAllocator` in the full-st
 
 ## Limits
 
-* The translator does not route `std.heap.ArenaAllocator`/`FixedBufferAllocator` calls:
-  translated programs still use one `std.mem.Allocator` and their `heap.*` calls stay
-  rejected. A generated `Allocator` value carries no identity, so this model is for
-  hand-written clients and specifications until the vtable is modelled.
-* Owned blocks get fresh model addresses, not addresses inside the fixed buffer or the arena's
-  nodes; address-sensitive programs are M05.
+* In `std` mode the translator does not route `std.heap.ArenaAllocator` calls: translated
+  programs still use one `std.mem.Allocator` and their `heap.*` calls stay rejected. A
+  generated `Allocator` value carries no identity, so this model is for hand-written clients
+  and specifications. `--allocator-model translated` translates the arena itself.
+* Owned blocks get fresh model addresses, not addresses inside the arena's nodes;
+  address-sensitive programs are M05.
 * Growing remap of the last allocation fails in the model; Zig grows it in place when it fits
   (M02).
 * `reset`/`deinit` record no race-check access; Zig's are not thread-safe either, and the
@@ -74,6 +75,6 @@ theorems are stated over the translated `std.heap.ArenaAllocator` in the full-st
   route for them.
 
 Checks: `bash tests/roadmap/allocator-identity/check.sh` runs the executable regressions of
-this model (cross-allocator frees, double free, reset frame, deinit, fixed-buffer LIFO and a
-session with policy failures); `bash tests/roadmap/alloc-arena/check.sh` prints the axioms of the
+this model (cross-allocator frees, double free, reset frame, deinit and a session with policy
+failures); `bash tests/roadmap/alloc-arena/check.sh` prints the axioms of the
 M01 theorems over the translated arena.

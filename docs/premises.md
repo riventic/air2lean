@@ -262,18 +262,18 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Sources: [allocation-policy.md](allocation-policy.md), [sentinel realloc README](../tests/roadmap/sentinel-realloc/README.md).
 
 <a id="alc-07"></a>
-### ALC-07 — Allocator identity, arena and fixed-buffer policies
+### ALC-07 — Allocator identity and the arena policy
 
 - Kind: environment.
-- Statement: `Mem.allocators[a]` is allocator `a`; its blocks have kind `.owned a`. A free,
-  destroy or remap through one allocator of another's block is `.illegal`. An arena request is
-  an `ALC-02` attempt; an arena free ends one block's lifetime; reset/deinit end exactly the
-  arena's blocks. A fixed buffer pads from its base address, fails past its capacity and gives
-  bytes back only for its last allocation. Owned blocks get fresh model addresses unless the
-  reuse policy (`ALC-08`) selects a valid reused one; growing remap fails; reset records no race-check access. The translator does not route
-  `std.heap` arena or fixed-buffer calls.
+- Statement: `Mem.allocators[a]` is allocator `a`, an arena; its blocks have kind `.owned a`. A
+  free, destroy or remap through one allocator of another's block is `.illegal`. An arena
+  request is an `ALC-02` attempt; an arena free ends one block's lifetime; reset/deinit end
+  exactly the arena's blocks. Owned blocks get fresh model addresses unless the reuse policy
+  (`ALC-08`) selects a valid reused one; growing remap fails; reset records no race-check
+  access. In `std` mode the translator does not route `std.heap` arena calls. (The
+  `FixedBufferAllocator` is not modelled: it is translated from its Zig code, OSM-01.)
 - Derived from: `ZigLean.Mem.Owned`; tokens
-  `AllocRef`, `Arena.`, `FixedBuffer.`, `Owned.`, `ownedFree`, `resetOwned`.
+  `AllocRef`, `Arena.`, `Owned.`, `ownedFree`, `resetOwned`.
 - Sources: [allocator-identity.md](allocator-identity.md), `tests/roadmap/allocator-identity`.
 
 <a id="alc-08"></a>

@@ -303,7 +303,7 @@
     {"premise": "ALC-06", "scope": "closure", "pattern": "vtableAlloc|vtableResize|vtableRemap|vtableFree|rawAlignOk"},
     {"premise": "ALC-08", "scope": "closure", "pattern": "withPlacement|(?:^|\\.)liveBlock$"},
     {"premise": "SEM-04", "scope": "closure", "pattern": "^sep_(?:step|steps|unfold|intro|ret|close|split)$"},
-    {"premise": "ALC-07", "scope": "closure", "pattern": "AllocRef|(?:^|\\.)(?:Arena\\.(?:init|deinit)|FixedBuffer\\.init|Owned\\.(?:init|reset))|owned(?:RawAlloc|AllocBytes|Free|RemapBytes|State)|resetOwned"},
+    {"premise": "ALC-07", "scope": "closure", "pattern": "AllocRef|(?:^|\\.)(?:Arena\\.(?:init|deinit)|Owned\\.(?:init|reset))|owned(?:RawAlloc|AllocBytes|Free|RemapBytes|State)|resetOwned"},
     {"premise": "THR-02", "scope": "closure", "pattern": "(?:^|\\.)(?:spawnC|joinC)$|spawnInit"},
     {"premise": "THR-03", "scope": "closure", "pattern": "SpawnPolicy|WithPolicyC|spawnAdmits|assignment(?:Count|Outcome|ChoiceC)"},
     {"premise": "THR-04", "scope": "closure", "pattern": "group(?:Async|Defer|Await|Concurrent|Cancel)C|groupAsyncWithPolicyC"},
