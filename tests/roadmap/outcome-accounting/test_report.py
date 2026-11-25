@@ -88,6 +88,39 @@ class Outcomes(unittest.TestCase):
         self.assertTrue(REPORT.buffer_match('a1b2','??b?'))
         self.assertFalse(REPORT.buffer_match('a1b2','?1'))
         self.assertFalse(REPORT.buffer_match('a','?'))
+        for mask in ('(01:02)','(1:1)','(01:01','(01;01)','(0g:01)','(01:01)?'):
+            self.assertFalse(REPORT.buffer_match('01',mask),mask)
+
+    def test_partly_defined_byte_compares_every_defined_bit(self):
+        # BM-3: Diff.lean's byteStr of a `bool`/`u1` byte (`.part 1 1`) is `(01:01)` (it was `??`).
+        # Native bytes that agree on bit 0 match; a wrong bit 0 is a mismatch.
+        for native in ('01','ff','03','a1'):
+            self.assertTrue(REPORT.buffer_match(native,'(01:01)'),native)
+        for native in ('00','fe','02'):
+            self.assertFalse(REPORT.buffer_match(native,'(01:01)'),native)
+        # A `u3` 5 (`.part 3 5`), a `u7` (`.part 7 0x5a`), a packed field `.mask 0x24 0x04`.
+        self.assertTrue(REPORT.buffer_match('a1fd','?1(07:05)'))
+        self.assertFalse(REPORT.buffer_match('a1fc','?1(07:05)'))
+        self.assertTrue(REPORT.buffer_match('da','(7f:5a)'))
+        self.assertFalse(REPORT.buffer_match('db','(7f:5a)'))
+        self.assertFalse(REPORT.buffer_match('1a','(7f:5a)'))
+        self.assertTrue(REPORT.buffer_match('c5','(24:04)'))
+        self.assertFalse(REPORT.buffer_match('e5','(24:04)'))
+        # The nibble forms are the same rule.
+        self.assertTrue(REPORT.buffer_match('3c','3?'))
+        self.assertFalse(REPORT.buffer_match('2c','3?'))
+
+    def test_seeded_wrong_defined_bit_is_a_mismatch(self):
+        # End to end through the one classifier: a native byte whose defined bit 0 disagrees with
+        # the model's partly defined byte is counted as a mismatch, the agreeing one as a match.
+        self.seed({'ok':None,'bufs':['a000']},{'ok':None,'bufs':['?0(01:01)']})
+        code,data=self.compare()
+        self.assertEqual(code,1)
+        self.assertEqual(data['counts'],{'mismatch':1})
+        self.seed({'ok':None,'bufs':['a0ff']},{'ok':None,'bufs':['?0(01:01)']})
+        code,data=self.compare()
+        self.assertEqual(code,0)
+        self.assertEqual(data['counts'],{'value_match':1})
 
     def test_pointer_fragment_remains_mismatch_not_setup_failure(self):
         self.seed({'ok':0,'bufs':['0011']},{'ok':0,'bufs':['pppp']})
