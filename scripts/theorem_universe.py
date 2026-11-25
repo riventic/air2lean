@@ -32,6 +32,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -241,6 +242,7 @@ def with_lean_path(paths) -> dict:
 
 
 _NATIVE: dict[tuple, list[str]] = {}
+_NATIVE_LOCK = threading.Lock()
 
 
 def native_code(lake_imports) -> list[str]:
@@ -252,7 +254,9 @@ def native_code(lake_imports) -> list[str]:
     a budget the fixture build meets times out. The elaborated terms, so the oleans the audit
     checks, are the same."""
     key = tuple(sorted(set(lake_imports)))
-    if key not in _NATIVE:
+    with _NATIVE_LOCK:  # compile_all's workers: one Lake run (which may build the libraries) at a time
+        if key in _NATIVE:
+            return _NATIVE[key]
         header = {'imports': [{'module': m, 'importAll': False, 'isExported': True, 'isMeta': False}
                               for m in key], 'isModule': False}
         # With a header, Lake reads no source: the file names no module of the workspace.
@@ -270,7 +274,7 @@ def native_code(lake_imports) -> list[str]:
                                f'{result.stdout[-2000:]}{result.stderr[-2000:]}')
         _NATIVE[key] = ([f'--load-dynlib={(ROOT / path).absolute()}' for path in setup['dynlibs']]
                         + [f'--plugin={(ROOT / p["path"]).absolute()}' for p in setup['plugins']])
-    return _NATIVE[key]
+        return _NATIVE[key]
 
 
 def compile_unit(file: str, root: str, olean: Path, lean_path, log: Path, *,
