@@ -1021,6 +1021,11 @@ open Lean Meta Simp in
 def litStep (e r : Expr) : MetaM Simp.Step := do
   return .done { expr := r, proof? := some (← mkDecideProof (← mkEq e r)) }
 
+/-- A Boolean literal (`true`, `false`): the signedness arguments of casts and values. -/
+def boolLit? (x : Lean.Expr) : Option Bool :=
+  if x.isConstOf ``Bool.true then some true else if x.isConstOf ``Bool.false then some false
+  else none
+
 open Lean Meta Simp in
 /-- A bit count (`Zig.ctz`, `Zig.clz`, `Zig.popcount`), a truncation (`Zig.trunc`) or the value
 (`Zig.val`) of a word literal to a literal result width: its value, computed here and decided on
@@ -1030,10 +1035,8 @@ def reduceLitWordCore (op : Name) : Simproc := fun e => do
   unless e.isAppOfArity op 3 do return .continue
   let some ⟨_, a⟩ ← getBitVecValue? e.appArg! | return .continue
   if op == ``Zig.val then
-    let some s := (e.getArg! 1).constName? | return .continue
-    unless s == ``Bool.true || s == ``Bool.false do return .continue
-    let v := Zig.val (s == ``Bool.true) a
-    return ← litStep e (toExpr v)
+    let some s := boolLit? (e.getArg! 1) | return .continue
+    return ← litStep e (toExpr (Zig.val s a))
   let some m ← getNatValue? (e.getArg! 1) | return .continue
   let r : BitVec m :=
     if op == ``Zig.ctz then Zig.ctz m a
@@ -1054,10 +1057,7 @@ open Lean Meta Simp in
 simproc [fsym_norm] reduceLitIntCast (Zig.intCast _ _ _ _ _) := fun e => do
   unless e.isAppOfArity ``Zig.intCast 6 do return .continue
   let args := e.getAppArgs
-  let bool? (x : Expr) : Option Bool :=
-    if x.isConstOf ``Bool.true then some true else if x.isConstOf ``Bool.false then some false
-    else none
-  let (some s₁, some s₂) := (bool? args[1]!, bool? args[2]!) | return .continue
+  let (some s₁, some s₂) := (boolLit? args[1]!, boolLit? args[2]!) | return .continue
   let some m ← getNatValue? args[3]! | return .continue
   let some ⟨_, a⟩ ← getBitVecValue? args[4]! | return .continue
   let v := Zig.val s₁ a

@@ -254,7 +254,8 @@ theorem ctor_inj_post (P : FAssn) (acc N : Nat) (h : acc = N) :
 
 `fsym_norm` evaluates `@intCast`, `@ctz`, `@clz`, `@popCount`, `@truncate` and `Zig.val` of a word
 literal to a literal width (`reduceLitIntCast`, `reduceLitWordCore`). Each equation below is
-closed by the one simproc alone: what it rewrites to is exactly the definition's value, an
+closed by that simproc with Lean's literal simprocs (no lemma of the cast): what it rewrites to
+is exactly the definition's value, an
 `@intCast` out of range its `throw` (with the `safe` flag of the cast). -/
 
 section Lits
