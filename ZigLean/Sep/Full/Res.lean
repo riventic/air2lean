@@ -1560,6 +1560,11 @@ theorem Ghost.CValid.congr {g g' : Ghost} (hcl : g'.cl = g.cl) (hls : g'.ls = g.
 @[simp] theorem Ghost.add_dev (a b : Ghost) (D : DevState) : (a.add b).dev D = a.dev D + b.dev D :=
   rfl
 
+/-- The device cell of a sum, unapplied: `simp` normalizes `MemAuth m _ (g.add gF).dev` with it,
+as `Ghost.add_ac` does the counter cell. -/
+@[simp] theorem Ghost.add_dev_fun (a b : Ghost) : (a.add b).dev = fun D => a.dev D + b.dev D :=
+  rfl
+
 @[simp] theorem Ghost.unit_dev : Ghost.unit.dev = DCell.unit := rfl
 
 /-- The ghost states of a resource and its frame compose, their extent claims are true, they
