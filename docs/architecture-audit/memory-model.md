@@ -66,7 +66,8 @@ build for each fixed finding below.
 | MM-7 | qualified | `docs/build-modes.md` lists the remaining exceptions of the ReleaseFast premise |
 | MM-8 | fixed | no allocation-order address facts in Sep (every placement) |
 | MM-9 | fixed | address reuse is one case of the placement (ALC-08) |
-| MM-10, MM-12 | open | hardening (fixed-buffer aliasing; zero-length/address-zero projections) |
+| MM-10 | fixed | the hand-written fixed buffer is deleted; the translated `FixedBufferAllocator` hands out sub-ranges of its buffer's block (`docs/allocator-model.md`, step 1) |
+| MM-12 | open | hardening (zero-length/address-zero projections) |
 | MM-11 | fixed | `decodeLoad`: pointer bytes read as integers give the address; integer bytes read as a pointer give a blockless pointer |
 | MM-13 | fixed | a retag from another field leaves the payload undefined (`undef_f`) |
 | MM-14 | fixed | the race scan is skipped while only the main thread can run (`Mem.solo`) |
@@ -314,6 +315,13 @@ which is false natively. The translator does not route these allocators yet
 **Fix:** `init` takes ownership of the buffer's block (marks it lent: no direct access until
 `deinit`/`reset`), and allocations are sub-ranges of that block (`Ptr` = buffer block +
 offset).
+
+**Status: fixed by deletion (allocator removal plan step 1, `docs/allocator-model.md`).**
+`FixedBuffer.init` and the fixed-buffer policy are gone from `ZigLean/Mem/Owned.lean`.
+`std.heap.FixedBufferAllocator` is translated from its Zig code (`--allocator-model
+translated`): its allocations are pointers into the buffer's own block, so a write to `buf[0]`
+and the allocated object alias exactly as natively (`tests/roadmap/alloc-fba`,
+`FBA.fallocSpec`).
 
 ### MM-11. Pointer bytes vs integer bytes
 

@@ -35,8 +35,10 @@ other ones than the translation is replaced by the fresh one). A module whose ca
 without a translator or Lean: each target's first line is an `-- air2lean-invgen:` record of its
 module and namespace that names the generator revision of the checkout (its Lean version and the
 SHA-256 of each of its modules, `translator_revision%`), the current SHA-256 of the input it read
-(the translated module's source) and the SHA-256 of the rest of the file (no hand edit); no other
-tracked file has such a record. The generator is deterministic, so equal hashes mean the file is
+(the translated module's source) and the SHA-256 of the rest of the file (no hand edit), and each
+loop it lists names the function that runs it with that function's semantic fingerprint
+(`scripts/invgen.py check` names the functions whose fingerprints changed); no other tracked file
+has such a record. The generator is deterministic, so equal hashes mean the file is
 current; otherwise `scripts/invgen.py write` regenerates it. The runtime is not an input here
 (docs/invariant-synthesis.md): `scripts/invgen.py check` reruns the generator.
 
@@ -146,6 +148,10 @@ FIXTURES = [
     ("tests/roadmap/extern-calls/ExternCalls/Trusted.lean", "tests/roadmap/extern-calls/air/0.16.0-trusted",
      ["--namespace", "ExternCalls.Trusted", "--prefix", "trusted.", "--model-registry",
       "tests/roadmap/extern-calls/registry.json"], "exact"),
+    # X01 the C-ABI conversion at a bound extern call (translate-c declarations, Zig's libc).
+    ("tests/roadmap/extern-abi/ExternAbi/Gen.lean", "tests/roadmap/extern-abi/air/0.17.1",
+     ["--allocator-model", "translated", "--assume-weak-exports", "--namespace", "ExternAbi",
+      "--prefix", "abi."], "exact"),
     # Open interfaces (docs/interfaces.md): fresh 0.17.1 translations. The lists one is the
     # program of the full-state list proofs (Proofs/Lists), for every allocator.
     ("Proofs/Lists/Open.lean", "tests/roadmap/interfaces/air/0.17.1/lists",
@@ -181,6 +187,9 @@ FIXTURES = [
      ["--namespace", "Nested", "--prefix", "nested."], "exact"),
     ("tests/roadmap/loop-tactics/counted/Counted/Gen.lean", "tests/roadmap/loop-tactics/counted/air",
      ["--namespace", "Counted", "--prefix", "counted."], "exact"),
+    # P04/P06: the ring-buffer queue (0.17.1).
+    ("tests/roadmap/queue-adt/QueueAdt/Gen.lean", "tests/roadmap/queue-adt/air",
+     ["--namespace", "QueueAdt", "--prefix", "queue."], "exact"),
     ("tests/roadmap/thread-locals/ThreadLocals/Gen.lean", "tests/roadmap/thread-locals/air/0.16.0",
      ["--namespace", "ThreadLocals", "--prefix", "thread_locals."], "exact"),
     ("tests/roadmap/vector-layouts/Lanes/Gen.lean", "tests/roadmap/vector-layouts/air/0.16.0",
@@ -380,8 +389,12 @@ def invgen_errors(targets=None, contracts=None):
         try:
             record, body = invgen_record(path)
             generator, inputs = record["generator"], [(name, digest) for name, digest in record["inputs"]]
-            if record["version"] != 2 or not valid_revision(generator):
-                raise ValueError("not a version 2 record with a consistent generator revision")
+            if record["version"] != 3 or not valid_revision(generator):
+                raise ValueError("not a version 3 record with a consistent generator revision")
+            # each loop names the function that runs it and that function's semantic fingerprint
+            if not all(isinstance(e.get("function"), str) and e["function"] and
+                       re.fullmatch(r"[0-9a-f]{64}", str(e.get("fingerprint"))) for e in record["loops"]):
+                raise ValueError("a loop without its function's semantic fingerprint")
             if not {"Air2Lean.InvGen", "Air2Lean.InvGenMain"} <= {m for m, _ in generator["modules"]}:
                 raise ValueError("a revision that is not the generator's (no Air2Lean.InvGen, Air2Lean.InvGenMain)")
             if (record["module"], record["namespace"], [name for name, _ in inputs]) != (module, namespace, sources):

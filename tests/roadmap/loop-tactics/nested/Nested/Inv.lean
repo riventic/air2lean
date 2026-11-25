@@ -1,5 +1,6 @@
--- air2lean-invgen: {"generator":{"lean":"4.34.0","modules":[["Air2Lean.InvGen","aa7ac33be1e25c5ed2a5f8716409e4c598f33a667313c1fc1cc85013230afd8a"],["Air2Lean.InvGenMain","6641279898d44a6114fa6c402e42cf6e23db77e655d112a4e8c74f5f25dc964f"],["Air2Lean.Revision","0abdb80bf11b8b7e1b0820755e2015f43cce91c00db65dd085b2a8afa6e65f8c"]],"revision":"c0851d35497ea3aa18117adc8a0a6d945fec0d8578db26de13a30557f41b0540"},"inputs":[["tests/roadmap/loop-tactics/nested/Nested/Gen.lean","897e4f877a7ea682858b8f501e6efdd5595f922c1c5a43aa9e10cb3e09baff66"]],"loops":[{"credits":{"count":"s.i.toNat - s.j.toNat"},"family":"counted","loop":"pairs.loop14","pruned":[{"fact":"s.j.toNat ≤ s0.j.toNat","residual":"cand2 p0 s0 v0 { i := s.i, j := x }","walk":1},{"fact":"v.toNat = v0.toNat + (s0.j.toNat - s.j.toNat)","residual":"cand6 p0 s0 v0 { i := s.i, j := x } x✝³","walk":1}]},{"loop":"pairs.loop5","none":"a nested loop"}],"module":"Nested.Gen","namespace":"Nested","output":"938004479f9fcf34a3ec9a1f3c5e74bdeccdbd23d077866d6482550ce84b93ff","version":2}
+-- air2lean-invgen: {"generator":{"lean":"4.34.0","modules":[["Air2Lean.InvGen","e150e822f60c9665e6f579faa1228824dc14cc7f3bcadace35297fb22dcad67d"],["Air2Lean.InvGenMain","e061d338c83da8533f907187b602421b117875acffd7516867ba5ac7d821fb6e"],["Air2Lean.Revision","0abdb80bf11b8b7e1b0820755e2015f43cce91c00db65dd085b2a8afa6e65f8c"]],"revision":"a48bad5e2192bedfd42ead19f195fac848e59d0b0595aaa2ef3f25fac6c45d53"},"inputs":[["tests/roadmap/loop-tactics/nested/Nested/Gen.lean","897e4f877a7ea682858b8f501e6efdd5595f922c1c5a43aa9e10cb3e09baff66"]],"loops":[{"credits":{"count":"s.i.toNat - s.j.toNat"},"family":"counted","fingerprint":"4f3ed0036d4d10a5364c3eef016269edae2e7a18562dfa1d22e2b40460a4582f","function":"pairs","loop":"pairs.loop14","pruned":[{"fact":"s.j.toNat ≤ s0.j.toNat","residual":"cand2 p0 s0 v0 { i := s.i, j := x }","walk":1},{"fact":"v.toNat = v0.toNat + (s0.j.toNat - s.j.toNat)","residual":"cand6 p0 s0 v0 { i := s.i, j := x } x✝³","walk":1}]},{"credits":{"none":"the body runs an inner loop that takes steps: a body run takes more than the one step that the counted loop rule pays with one credit"},"family":"counted","fingerprint":"4f3ed0036d4d10a5364c3eef016269edae2e7a18562dfa1d22e2b40460a4582f","function":"pairs","loop":"pairs.loop5","pruned":[{"fact":"s.i.toNat ≤ s0.i.toNat","residual":"cand1 p0 p1 s0 v0 { i := x, j := snd✝.j }","walk":1}]}],"module":"Nested.Gen","namespace":"Nested","output":"9e761a92e382fd69f900df79c8754dde55c913273a2fec8970250d03a51c7d27","version":3}
 import Nested.Gen
+import ZigLean.Sep.Full.TSum
 import ZigLean.Sep.Full.Ghost
 import ZigLean.Sep.Full.AutoAttr
 import ZigLean.Sep.Full.ListSeg
@@ -53,5 +54,27 @@ open Zig Zig.Full Zig.Full.FAssn
       r.2.i = s0.i ∧
       r.2.j.toNat = r.2.i.toNat⟫ ⋆
     (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + (r.2.i.toNat - s0.j.toNat)⟫ ⋆ up (pts p0 8 v))
+
+/-- The invariant of `pairs.loop5`, a counted loop: `i` goes up by 1 while `i < p1`.
+`s0` holds the locals at loop entry.
+`v0` is `*p0` there, which goes up by `(fun u => u) i` per iteration.
+`j` is not stated: the body sets it before it reads it. -/
+@[fsym_inv] def pairs.loop5.inv (p0 : Zig.Ptr) (p1 : BitVec 32) (s0 : pairsLocals) (v0 : BitVec 64) (s : pairsLocals) : FAssn :=
+  ⟪s0.i.toNat ≤ s.i.toNat ∧
+      s.i.toNat ≤ p1.toNat ∧
+      v0.toNat + (tsum p1.toNat (fun u => u) - tsum s0.i.toNat (fun u => u)) < 2 ^ 64⟫ ⋆
+    (FAssn.ex fun v : BitVec 64 => ⟪v.toNat + (tsum p1.toNat (fun u => u) - tsum s.i.toNat (fun u => u)) = v0.toNat + (tsum p1.toNat (fun u => u) - tsum s0.i.toNat (fun u => u))⟫ ⋆ up (pts p0 8 v)) ⋆
+    plain
+
+/-- The measure of `pairs.loop5`: the iterations left. -/
+@[fsym_inv] def pairs.loop5.meas (p0 : Zig.Ptr) (p1 : BitVec 32) (s : pairsLocals) : Nat :=
+  p1.toNat - s.i.toNat
+
+/-- The exit post of `pairs.loop5`: the loop exits with `r`, after all iterations. -/
+@[fsym_inv] def pairs.loop5.post (p0 : Zig.Ptr) (p1 : BitVec 32) (s0 : pairsLocals) (v0 : BitVec 64) (r : pairsExit × pairsLocals) : FAssn :=
+  ⟪r.1 = pairsExit.br4 ∧
+      r.2.i.toNat = p1.toNat⟫ ⋆
+    (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + (tsum p1.toNat (fun u => u) - tsum s0.i.toNat (fun u => u))⟫ ⋆ up (pts p0 8 v)) ⋆
+    plain
 
 end Nested

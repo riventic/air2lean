@@ -1328,6 +1328,19 @@ authorized before a step and not after it), `tick_without_credit`
 (`¬ FTriple emp Zig.tick (fun _ => emp)`, decision D3), `no_mint_spent`,
 `no_plain_under_meter` and the positive control `tick_credit_live`.
 
+**A tick in a protocol with a lock** (`FLock.Fits`, `ZigLean/Sep/Full/LockSteps.lean`) is paid by
+the ticking thread's own part, and the protocol's rest `U` is kept by the contract's `kstep`
+obligation at `FLock.PartTick`. The ticking thread is not `gone` for the lock, or it exists and
+was not joined: a thread that left the lock for good still owns its part until it is joined and
+may run a loop of another sync object's code (the translated macOS `Thread.Futex.DarwinImpl.wake`
+repeats on `EINTR` under `ResetEvent.set`, which WaitGroup's last finisher calls at `gone`). So
+every protocol proves `U` over the tick of such a thread too, once, in its `kstep` (maintainer
+decision 2026-11-24, audit S6 finding 4; ledger #s6-futex-hand-rows). The rules:
+`Fits.wp_tick_exactUnjoined` and `Fits.wp_tick_unmetered_exactUnjoined` take the thread's
+existence and `joinedB m t = false` and hold at every place (over `Inv.wp_liftPartUnjoined`);
+`Fits.wp_tick_exact`, `wp_tick`, `wp_tick_unmetered` and `wp_tick_plain` are the instances at a
+place that is not `gone`, where the lock's invariant gives both facts (`Inv.ht`).
+
 **Cost bounds** (`ZigLean/Sep/Full/Cost.lean`) are statements over these resources, not a
 judgment of their own:
 

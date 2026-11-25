@@ -283,6 +283,12 @@
       "approved": "coordinator 2026-10-13 (structural gate seed)"
     },
     {
+      "name": "QueueImpl",
+      "module": "ZigLean.Sep.Full.Queue",
+      "status": "target",
+      "approved": "Konstantin Rolf, 2026-11-25"
+    },
+    {
       "name": "RelLe",
       "module": "Air2Lean.SemView",
       "status": "target",

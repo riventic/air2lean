@@ -1,6 +1,7 @@
 # Translation and proof performance budgets
 
-Status: **recorded** (Darwin arm64 reference platform, 18 workloads). The gate has three
+Status: **recorded** (Linux x86_64 reference platform, the `neo` build host, 36 workloads:
+18 on 0.15.2/0.16.0 and 18 on 0.17.1; see Rebaseline 2026-11-25). The gate has three
 modes: the strict reference-platform limits, a portable mode with generous limits that CI runs
 on any runner, and a normalized mode that also gates proof time on any machine (see Gate).
 
@@ -30,17 +31,33 @@ or mismatched set.
 
 Eleven more golden examples were added with the same shape (`asm`, `atomics`, `errors`,
 `floatconv`, `floats`, `iogroup`, `options`, `pointers`, `recursion`, `sync`, `threads`),
-for 18 workloads in all. `lists` is not a workload: its committed golden AIR lacks the std
-callees that `examples/lists/filter` adds, so it cannot be translated from the committed
-files alone. `sync` has `reference_gen: null`: `Proofs/Sync/Gen.lean` carries a hand-added
-function (`rwLockSnapshotPair`) that the golden AIR does not produce, so its output is
-pinned only by the recorded SHA-256.
+for 18 workloads on 0.15.2 and 0.16.0. `sync` has `reference_gen: null`: `Proofs/Sync/Gen.lean`
+carries a hand-added function (`rwLockSnapshotPair`) that the golden AIR does not produce, so its
+output is pinned only by the recorded SHA-256.
+
+**Zig 0.17.1, the default version.** The committed 0.17.1 goldens are overlays (only the files
+that differ from the shared folder after normalization), so most do not form a uniform 0.17.1
+set. The 18 `<ex>-0.17.1` workloads therefore translate the `perf-budgets` fixture's exports
+(`tests/roadmap/perf-budgets/exports.json`, `scripts/fixture-exports.py`): every example that
+supports 0.17.1 (`threadsync` is 0.15.2 only) plus `lists`, exported with the patched 0.17.1
+compiler for `x86_64-linux` and the baseline CPU, with the filters `scripts/check.sh` uses
+(`examples/<ex>/filter`, `filter-0.17.1`; a test keeps them equal) and the example's
+`translate.args`. The lock pins the exporter, the examples' sources and every file, so a stale
+export fails `fixture-exports.py check` (preflight). Each translation equals the committed one
+that `scripts/check.sh` compares on Linux (`tests/golden/0.17.1/<ex>/Gen.lean`, else
+`Proofs/<Ex>/Gen.lean`), which is the workload's `reference_gen`. With the std callees in the
+export, `lists` is a workload too, and `lists-0.17.1` carries the `Proofs.Lists` proof modules.
+The other 0.17.1 workloads carry none: the proof phases build the committed `Proofs/<Ex>`
+modules, the same for every Zig version, and the example's older-version workload measures
+them already (a test requires that each example's proofs are measured by exactly one workload).
+The proofs of the four 0.17.1 translations that differ from `Proofs/<Ex>/Gen.lean` (`floatops`,
+`layout`, `lists`, `sync`) are built only in a check tree, which `record` does not measure.
 
 The golden AIR is legacy schema 11 (no target profile), so the translation step does
 not depend on the host. `layout` is the exception: its goldens are per-version schema-12
 exports (the translator rejects integers with padding bits in memory under a profile that
 names no backend; docs/architecture-audit/enc-exactness.md), translated with their own
-profile. The proof phases build the committed `Proofs/<Ex>` modules
+profile, and so are the 0.17.1 exports. The proof phases build the committed `Proofs/<Ex>` modules
 (the reference-host 0.16.0 translation where it differs from the golden AIR). Those
 modules are proof workloads, not outputs of the measured translation.
 
@@ -78,7 +95,11 @@ Limits:
   including reaped descendants (`lake` → `lean`). It is not a sum.
   `scripts/build-guard.py` reports the sampled sum.
 - "Cold" proof builds remove only the selected modules' `.olean`/`.ilean`/trace/IR
-  outputs. `ZigLean` and other dependencies stay built.
+  outputs. `ZigLean` and other dependencies stay built: `record` first builds the modules
+  (unmeasured), so a stale dependency is not timed as part of the cold build. The proof builds run with Lake's
+  artifact cache off (`LAKE_ARTIFACT_CACHE=false`; `scripts/build-guard.py` turns it on under
+  `AIR2LEAN_CAS_DIR`), and `record` fails a workload whose cold build did not write each
+  module's `.olean` anew: a restored output would time the cache, not the proof.
 - `translate.cold` is the first process start of the run. The OS file cache is not
   flushed.
 - Times depend on the host. A budget applies only on its `reference_platform`
@@ -208,6 +229,53 @@ gate's `output-changed` check), or carry separate preservation evidence. For
 example, `scripts/check.sh` golden/committed-translation comparison and proof
 builds on the changed output. Rebaseline a changed output with
 `baseline --workload ID` only in the same commit as that evidence.
+
+### Rebaseline 2026-11-25 (reference platform Linux x86_64)
+
+The 18 recorded workloads failed `output-changed` (CI, test/0.16.0/lean) against the October
+baseline (revision `fce33b590`). Their AIR inputs are unchanged since then; the outputs changed
+with two merged translator changes, and each new output equals its committed reference
+translation (`matches_reference`, `timing_cli.py`; `sync` by `Proofs/Sync/Gen.lean`), which
+`scripts/check.sh` and `scripts/gen-integrity.py check` (all generated modules, run on the
+measured revision) compare and the example's proofs build on:
+
+| Change | What it adds to the output | Workloads |
+| --- | --- | --- |
+| #562 (L8 step ticks) | `Zig.tick` / `Zig.callM Zig.tick` / `Zig.callMC Zig.tick` at each memory-mode loop-body run and recursive entry; `recursion`'s `isEven`/`isOdd` mutual block in the new SCC order (same definitions, moved) | slices, threadsync, atomics, iogroup, pointers, recursion, sync, threads |
+| #690 (`zig_run` simp set) | one `attribute [zig_run] …` line after each declaration group (and `….eq_def` for recursive ones) | all 18 |
+
+A line-level diff of each reference translation from `fce33b590` to the measured revision has no
+other change. The measurement also found a translator regression from #562/#626, which is fixed,
+not absorbed: the call-graph walks (`Air2Lean/Program.lean`) were compiled into functions that
+rebuilt the whole successor table, calling `calleesOf` on every function, at each lookup;
+`emit` of threadsync went from 0.02 s to 0.45 s (sync 0.02 to 0.17 s; bisected: #562 0.23 s,
+then #626 doubled it, as `Program.tickPolicies` computes the call groups once more). The table is now built once per graph (output byte-identical: `gen-integrity.py check`,
+`timing_cli.py`, `tests/review/emitter.sh`): threadsync `emit` 0.045 s, sync 0.031 s. A first
+record also showed that the cold proof builds restored their outputs from Lake's artifact cache
+(0.14 s each); `record` now turns that cache off and fails a cold build that did not rebuild.
+
+The whole suite was then recorded once on the new reference platform (`record --per-module`,
+exclusive guard, calibration 7.47 s) and rebaselined. Against the October Darwin baseline, 14
+of the 18 workloads take fewer calibration units in both Lean phases (`elaborate`,
+`proof.cold`); more take `threadsync` `elaborate` (0.36 to 0.60 units: the generated module grew
+by the tick and `zig_run` lines), `layout` and `floatops` `elaborate` (0.34 to 0.41, 0.11 to
+0.15) and `variants` (`elaborate` 0.10 to 0.13, `proof.cold` 0.26 to 0.34), all within their
+old normalized limits; peak RSS is
+higher on every workload, by about the same amount whatever its size (translator +30%, Lean
++150 to +400 MiB, the `asm` elaboration included), which is the platform and import cost, not a
+workload.
+
+After merging main into the branch, three outputs changed again, each equal to its updated
+reference translation. They are not rebaselined yet: the only measurements of the merged tree
+ran on a loaded host (calibration 11.4 and 12.4 s instead of 7.5 s), whose absolute times would
+loosen the limits about 1.5-fold. They stay `output-changed` until a quiet-host
+`record --workload layout --workload asm --workload asm-0.17.1` is rebaselined alone
+(`baseline --workload`):
+
+| Change | Output change | Workloads |
+| --- | --- | --- |
+| #800 (A02: asm blocks as definitions over `ZigLean/Isa/X86`) | each `opaque airAsm_*` becomes a `def airIsa_*_block` with its `check` theorem and `airIsa_*` (and `_fault`) definitions, as in the updated `Proofs/Asm/Gen.lean` | asm, asm-0.17.1 |
+| #812 (golden host gate: layout goldens re-exported on x86_64-linux) | only the first-line profile record (target x86_64-linux instead of aarch64-macos); the body still equals `Proofs/Layout/Gen.lean` | layout |
 
 ## Measured hotspots and optimizations
 

@@ -577,6 +577,9 @@ def fragment (program : Program)
   for f in funcs do
     let reason : Except String (Array String) :=
       if concFuncs.contains f.name then .error "a concurrent function (`Zig.ConcM`)"
+      -- The semantics passes a call's values unchanged; the C-ABI conversion of a bound extern
+      -- call (`Func.abiCalls`, `Zig.abiPtr`) is not in it.
+      else if !f.abiCalls.isEmpty then .error "a call with a C-ABI conversion (`Func.abiCalls`)"
       else if budgeted.contains f.name then
         .error "a recursive function that uses memory (stack budget `Zig.enterFrame`, STK-01)"
       else match shapes.find? (·.1 == f.name) with

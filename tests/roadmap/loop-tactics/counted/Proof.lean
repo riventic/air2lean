@@ -19,8 +19,9 @@ the registered definitions, plans the invariant at the entry and walks one run o
 the functions' specifications are written here. Every body run takes a step (`Zig.tick`), so the
 invariants carry the plain mode.
 
-Two loops of `counted.zig` are outside the family, and `Counted/Inv.lean` records why: `pairAt`
-writes cells at offsets of its parameter (`Zig.ptrProject`) and `tri` adds the counter to its cell.
+Two more shapes widen the family (S2c′): `pairAt` writes two items of an array parameter
+(`acc[0]`, and `acc[1]` through `Zig.ptrProject`), so its invariant owns the array (`arr`), and
+`tri` adds the counter to its cell, so its invariant states the cell over the library sum `tsum`.
 -/
 
 namespace Counted.Proof
@@ -65,6 +66,25 @@ theorem readBound_total (p q : Ptr) (lim : BitVec 32) (v : BitVec 64) (hfit : v.
     FTotalTriple (up (pts q 4 lim) ⋆ (up (pts p 8 v) ⋆ plain)) (readBound p q)
       (fun _ => up (pts q 4 lim) ⋆ (up (pts p 8 (BitVec.ofNat 64 (v.toNat + lim.toNat))) ⋆ plain)) := by
   unfold readBound
+  fsym
+
+/-- `pairAt` (`acc[0] += 1; acc[1] += 2` while `i < n`) adds `n` to `acc[0]` and `2 * n` to
+`acc[1]`, under the premises that the sums fit. -/
+theorem pairAt_total (p : Ptr) (n : BitVec 32) (a b : BitVec 64) (ha : a.toNat + n.toNat < 2 ^ 64)
+    (hb : b.toNat + 2 * n.toNat < 2 ^ 64) :
+    FTotalTriple (up (arr p [a, b]) ⋆ plain) (pairAt p n)
+      (fun _ => (FAssn.ex fun x : BitVec 64 => FAssn.ex fun y : BitVec 64 =>
+        ⟪x.toNat = a.toNat + n.toNat ∧ y.toNat = b.toNat + 2 * n.toNat⟫ ⋆ up (arr p [x, y])) ⋆ plain) := by
+  unfold pairAt
+  fsym
+
+/-- `tri` (`while (i < n) : (i += 1) acc.* += i`) adds `0 + 1 + … + (n - 1)` to `*acc`, under the
+premise that the sum fits. -/
+theorem tri_total (p : Ptr) (n : BitVec 32) (v : BitVec 64)
+    (hfit : v.toNat + tsum n.toNat (fun u => u) < 2 ^ 64) :
+    FTotalTriple (up (pts p 8 v) ⋆ plain) (tri p n)
+      (fun _ => up (pts p 8 (BitVec.ofNat 64 (v.toNat + tsum n.toNat (fun u => u)))) ⋆ plain) := by
+  unfold tri
   fsym
 
 /-! ## Exact step counts (the credit mode)

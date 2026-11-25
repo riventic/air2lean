@@ -24,13 +24,11 @@ invgen_fixture() {
   mkdir -p "$work/olean/$ns"
   export LEAN_PATH="$work/olean:$PWD/.lake/build/lib/lean${LEAN_PATH:+:$LEAN_PATH}"
   lake env lean -R "$dir" -o "$work/olean/$ns/Gen.olean" "$dir/$ns/Gen.lean"
-  # The generated invariants, reproduced byte for byte from the committed translation (the
-  # generator's pruning walks import the library, scripts/invgen.py's LIBRARY).
-  # shellcheck disable=SC2046  # (module names: one word each)
-  lake build -q $(python3 -B -c 'import runpy; print(" ".join(runpy.run_path("scripts/invgen.py")["LIBRARY"]))')
-  lake exe air2lean-invgen "$ns.Gen" "$ns" --source "$dir/$ns/Gen.lean" -o "$work/Inv.lean"
-  cmp "$work/Inv.lean" "$dir/$ns/Inv.lean"
+  # The generated invariants, reproduced byte for byte from the committed translation, with the
+  # functions' semantic fingerprints (scripts/invgen.py, its target for this fixture).
+  AIR2LEAN_TRANSLATOR=$translator python3 -B scripts/invgen.py check "$dir/$ns/Inv.lean"
   lake env lean -R "$dir" -o "$work/olean/$ns/Inv.olean" "$dir/$ns/Inv.lean"
-  lake env lean -R "$dir" -o "$work/olean/Proof.olean" "$dir/Proof.lean"
+  # With Lake's native fsym (scripts/lean-deps.py --lean).
+  python3 -B scripts/lean-deps.py --lean -R "$dir" -o "$work/olean/Proof.olean" "$dir/Proof.lean"
   python3 -B tests/roadmap/loop-tactics/invgen_mutants.py "$dir" "$ns" "$work"
 }
