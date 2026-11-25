@@ -4861,6 +4861,7 @@
           "Proofs/Floatconv/Proofs.lean",
           "Proofs/Floatops/Proofs.lean",
           "Proofs/Floats/AirCert.lean",
+          "Proofs/Floats/AllowedNeg.lean",
           "Proofs/Floats/Proofs.lean",
           "Proofs/Handoff/Protocol.lean",
           "Proofs/Handoff/Steps.lean",
@@ -18872,7 +18873,8 @@
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
-          "Proofs/Floatconv/Proofs.lean"
+          "Proofs/Floatconv/Proofs.lean",
+          "Proofs/Floats/AllowedNeg.lean"
         ]
       },
       "rejection": null,
@@ -18988,7 +18990,8 @@
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": [
-          "Proofs/Floatconv/Proofs.lean"
+          "Proofs/Floatconv/Proofs.lean",
+          "Proofs/Floats/AllowedNeg.lean"
         ]
       },
       "rejection": null,
@@ -23082,6 +23085,7 @@
       "Proofs/Floatops/Gen.lean": "08362dab68169ddbaa379b2f2d826def0ce2365246d38fa41ce1b7334c596ec8",
       "Proofs/Floatops/Proofs.lean": "60d1d48f646b8477993a48c7b1261508bee6be4664d9e303ac36488fc9d7c615",
       "Proofs/Floats/AirCert.lean": "4b3dcf15ceb792212730a0674d14c2d51a6e0d5e24fa0e9e1c4790dbff45962b",
+      "Proofs/Floats/AllowedNeg.lean": "29e4f663d3956815d8060fc34d3b9b7eae97b5352652d42040fd10562e25e231",
       "Proofs/Floats/Dot.lean": "fbe5daf8119c0b33b8d33eeaf589bc191c5e7e7d7ca11631ad8638710cd1bca8",
       "Proofs/Floats/Fitness.lean": "3a0c1835dcc217d2a79fbdf93d112469411a5dbe08cb82d7eacc93682bc90ffa",
       "Proofs/Floats/Gen.lean": "3bf59d95f362ab1b281c6e8994994409872226d27127c9ea3d0ec96bbc691a67",
