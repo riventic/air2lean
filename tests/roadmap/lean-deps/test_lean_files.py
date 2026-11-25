@@ -152,6 +152,38 @@ class Classify(unittest.TestCase):
             self.assertEqual(ld.elaborate(None, 4000), 0)
         self.assertNotIn("largest peaks", output.getvalue())
 
+    def test_elaborate_loads_the_native_code_lake_loads(self):
+        # Lib.B is precompiled (as fsym's engine is): a file whose import closure reaches it runs
+        # with the libraries `lake setup-file` names for the closure's precompiled modules
+        # (`theorem_universe.native_code`); a file below it runs with none and asks nothing.
+        self.write("lakefile.toml", '[[lean_lib]]\nname = "Lib"\n\n[[lean_lib]]\nname = "Fast"\n'
+                                    'roots = ["Lib.B"]\nglobs = ["Lib.B"]\nprecompileModules = true\n')
+        self.write("Lib/C.lean", "import Lib.B\n")
+        self.write("t/Below.lean", "import Lib.A\n")
+        self.write("t/Direct.lean", "import Lib.B\n")
+        self.write("t/Through.lean", "import Lib.C\nimport Lean\n")
+        self.write("assurance/lean-files.json", json.dumps({"reject": []}))
+        option = "--load-dynlib=/x/libFast.so"
+        asked, commands = [], {}
+
+        def fake_run(jobs, workers, out=None, err=None, log_dir=None, stats=None):
+            commands.update({job.argv[-1]: job.argv for job in jobs})
+            stats[:] = [None] * len(jobs)
+            return [0] * len(jobs)
+        import theorem_universe
+        self.enterContext(mock.patch.object(theorem_universe, "native_code",
+                                            lambda mods: asked.append(mods) or [option]))
+        self.enterContext(mock.patch.object(ld, "REGISTRY", self.repo / "assurance/lean-files.json"))
+        self.enterContext(mock.patch.object(par, "run", fake_run))
+        self.enterContext(mock.patch.dict(os.environ, {"AIR2LEAN_CAS_DIR": str(self.repo / "cas"), "LEAN": "lean"}))
+        self.classify()
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(ld.elaborate(None, 4000), 0)
+        self.assertEqual(commands, {"t/Below.lean": ["lake", "env", "lean", "t/Below.lean"],
+                                    "t/Direct.lean": ["lake", "env", "lean", option, "t/Direct.lean"],
+                                    "t/Through.lean": ["lake", "env", "lean", option, "t/Through.lean"]})
+        self.assertEqual(asked, [["Lib.B"], ["Lib.B"]])
+
     def fake_lake_query(self, targets):
         # Lake's answers in the tiny repo: transitive imports by the file headers, a library's
         # modules by its globs (as Lake assigns them when the lakefile is well-formed).

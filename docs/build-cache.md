@@ -187,9 +187,10 @@ and the compiler arguments, and restores the shared libraries under their names
 (`buildLeanSharedLib`, `restore := true`).
 
 `lake env lean FILE` loads no native code; the checks that still elaborate with it (the ones not
-yet converted to the proof-fixture package, `perf-budgets.py heartbeats`,
-`lean-deps.py --elaborate`) run `fsym` interpreted. `theorem_universe.py` passes Lake's
-`--load-dynlib` options itself (above): interpreted, `fsym` exceeded the budgets of
+yet converted to the proof-fixture package, `perf-budgets.py heartbeats`) run `fsym` interpreted.
+`theorem_universe.py` and `lean-deps.py --elaborate` pass Lake's `--load-dynlib` options
+themselves (`lake setup-file` for the precompiled modules of the file's import closure, above):
+interpreted, `fsym` exceeded the budgets of
 `PageSpec.resize_spec` and the `ArenaSpec*` proofs that their Lake builds meet. Results agree,
 but a heartbeat count does not. The native engine spends no more heartbeats than the interpreter
 in every declaration measured (2026-10-20: `ArenaSpec.resize_ct` 3 383 680 thousand interpreted,

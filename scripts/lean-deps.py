@@ -19,7 +19,8 @@ full build (`all_targets`; scripts/full-build.sh builds them).
 the libraries' directories whose imports are Lean's own or modules of this package. `lake env lean
 FILE` elaborates each of them with no extra setup (the strength logs, the proof-client fixtures,
 the tutorials), so the build alone does not cover them. `--elaborate` does (scripts/full-build.sh
-runs it): it elaborates every one, in parallel, and fails when a file that should check does not,
+runs it): it elaborates every one, in parallel, with the native code a Lake build of it would load
+(`native_options`: precompiled `fsym`), and fails when a file that should check does not,
 when a file listed under `reject` in `assurance/lean-files.json` (a negative control: a false
 theorem Lean must refuse) checks after all, or when a tracked file imports a library module that
 does not exist (a renamed or split module). A result is remembered under the key of the file, its
@@ -282,12 +283,9 @@ def precompiled(write: bool) -> int:
     return 1 if wrong else 0
 
 
-def input_key(f: str, toolchain: bytes, memo: dict[str, bytes]) -> str:
-    """Hash of everything that decides whether `lake env lean f` checks: the file, the sources of
-    the library modules it imports (transitively), the lakefile and the toolchain."""
+def library_closure(f: str, memo: dict[str, bytes]) -> set[str]:
+    """The library modules the file f imports, transitively (their sources read into memo)."""
     roots = lib_roots()
-    h = hashlib.sha256(toolchain)
-    h.update((ROOT / f).read_bytes())
     seen, todo = set(), sorted(imports(ROOT / f))
     while todo:
         m = todo.pop()
@@ -297,9 +295,31 @@ def input_key(f: str, toolchain: bytes, memo: dict[str, bytes]) -> str:
         if m not in memo:
             memo[m] = module_file(m).read_bytes() if module_file(m).is_file() else b""
         todo += sorted(imports(module_file(m))) if module_file(m).is_file() else []
-    for m in sorted(seen):
+    return seen
+
+
+def input_key(f: str, toolchain: bytes, memo: dict[str, bytes]) -> str:
+    """Hash of everything that decides whether `lake env lean f` checks: the file, the sources of
+    the library modules it imports (transitively), the lakefile and the toolchain."""
+    h = hashlib.sha256(toolchain)
+    h.update((ROOT / f).read_bytes())
+    for m in sorted(library_closure(f, memo)):
         h.update(m.encode() + b"\0" + hashlib.sha256(memo[m]).digest())
     return h.hexdigest()
+
+
+def native_options(f: str, memo: dict[str, bytes], precompiled_mods: set[str]) -> list[str]:
+    """The `lean` options that load the native code a Lake build of the file f would load: Lake
+    loads a precompiled library into every elaboration whose import closure has one of its modules
+    (`precompiled_mods`; docs/build-cache.md#precompiled-fsym), so the closure's precompiled
+    modules decide them; `lake setup-file` (scripts/theorem_universe.py `native_code`, one Lake
+    query per set) names them in Lake's order. Without them `fsym` runs in Lean's interpreter: the
+    same proof terms, several times slower and with more heartbeats."""
+    mods = sorted(library_closure(f, memo) & precompiled_mods)
+    if not mods:
+        return []
+    import theorem_universe
+    return theorem_universe.native_code(mods)
 
 
 def elaborate(jobs: int | None, mem_mib: int) -> int:
@@ -324,8 +344,12 @@ def elaborate(jobs: int | None, mem_mib: int) -> int:
         # $LEAN: the Lean of a --lean-processes guard (build-guard.py `lean_processes_env`), which
         # `lake env` would put behind the toolchain's own bin on PATH.
         lean = os.environ.get("LEAN") or "lean"
+        # Lake's native code for each file, asked before the parallel runs (one Lake at a time).
+        precompiled_mods = set().union(*precompiled_libs().values())
+        native = {f: native_options(f, memo, precompiled_mods) for f in todo}
         with open(os.devnull, "wb") as null:
-            statuses = par.run([par.Job(names[f], ["lake", "env", lean, f], cwd=str(ROOT)) for f in todo],
+            statuses = par.run([par.Job(names[f], ["lake", "env", lean, *native[f], f], cwd=str(ROOT))
+                                for f in todo],
                                par.workers(jobs, mem_mib, len(todo)), out=null, err=null, log_dir=logs,
                                stats=stats)
         store.mkdir(parents=True, exist_ok=True)
