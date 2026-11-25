@@ -386,14 +386,13 @@ def importEnvFor? (e : Expr) : MetaM (Option Environment) := do
     return none
   return env.importEnv?
 
-/-- The kernel accepts `pf` as a proof of `t` in `env` (a theorem checked and dropped), within the
-options' heartbeat and recursion limits, as `addDecl` checks a declaration. -/
-def kernelChecks (env : Environment) (t pf : Expr) : CoreM Bool := do
-  let opts ← getOptions
-  let levelParams := (collectLevelParams {} (mkApp t pf)).params.toList
-  let decl : Declaration := .thmDecl { name := `_fsym_kernel_check, levelParams, type := t, value := pf }
-  return env.toKernelEnv.addDeclCore (Core.getMaxHeartbeats opts).toUSize
-    (maxRecDepth.get opts).toUSize decl (← read).cancelTk? matches .ok _
+/-- Whether the kernel finds `decide p` (`decP`) to be `true` in `env`: the check `decide +kernel`
+makes of its proof `of_decide_eq_true inst rfl` (`Kernel.isDefEq`); `none` where the kernel fails
+(it runs without the heartbeat limit, as `Kernel.whnf` in `reduceClosedSize`). -/
+def kernelDecides? (env : Environment) (decP : Expr) : Option Bool :=
+  match Kernel.isDefEq env {} decP (mkConst ``Bool.true) with
+  | .ok b => some b
+  | .error _ => none
 
 end Zig.Full.Auto
 
