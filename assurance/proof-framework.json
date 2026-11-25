@@ -45,7 +45,8 @@
     {
       "name": "EventuallyReturns",
       "module": "ZigLean.Conc.Total",
-      "status": "legacy-to-retire"
+      "status": "target",
+      "status_approved": "maintainer 2026-11-25 (approved: Konstantin Rolf, 2026-11-25; outcome vocabulary of Sched.run, proved through Proto.WP + Proto.returnsWithin (coordinator decision 2026-10-12, docs/sep-threads.md Termination))"
     },
     {
       "name": "EventuallyReturns",
@@ -56,7 +57,8 @@
     {
       "name": "EventuallyReturnsUnder",
       "module": "ZigLean.Conc.Total",
-      "status": "legacy-to-retire"
+      "status": "target",
+      "status_approved": "maintainer 2026-11-25 (approved: Konstantin Rolf, 2026-11-25; outcome vocabulary of Sched.run, proved through Proto.WP + Proto.returnsWithin (coordinator decision 2026-10-12, docs/sep-threads.md Termination))"
     },
     {
       "name": "EventuallyReturnsUnder",
@@ -171,20 +173,23 @@
     {
       "name": "FTripleCell",
       "module": "tests.roadmap.sep-full.BlockExtentsCX",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)",
+      "status_approved": "maintainer 2026-11-25 (approved: Konstantin Rolf, 2026-11-25; test-only kernel-checked counterexample about the old model)"
     },
     {
       "name": "FTripleExact",
       "module": "tests.roadmap.sep-full.ExactTags",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)",
+      "status_approved": "maintainer 2026-11-25 (approved: Konstantin Rolf, 2026-11-25; test-only kernel-checked counterexample about the old model)"
     },
     {
       "name": "FWrapped",
       "module": "tests.roadmap.claims.Fixture",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)",
+      "status_approved": "maintainer 2026-11-25 (approved: Konstantin Rolf, 2026-11-25; test-only negative test of the claims tool)"
     },
     {
       "name": "Fits",
@@ -225,8 +230,9 @@
     {
       "name": "Grows",
       "module": "ZigLean.Conc.Lemmas",
-      "status": "legacy-to-retire",
-      "approved": "coordinator 2026-10-13 (structural gate seed)"
+      "status": "target",
+      "approved": "coordinator 2026-10-13 (structural gate seed)",
+      "status_approved": "maintainer 2026-11-25 (approved: Konstantin Rolf, 2026-11-25; memory-model vocabulary: the stability condition of Proto.WP invariants, a field of the target structure GrowsAt; docs/legacy-retirement.md sec. 5)"
     },
     {
       "name": "GrowsAt",
@@ -303,7 +309,8 @@
     {
       "name": "ReturnsWithin",
       "module": "ZigLean.Conc.Total",
-      "status": "legacy-to-retire"
+      "status": "target",
+      "status_approved": "maintainer 2026-11-25 (approved: Konstantin Rolf, 2026-11-25; outcome vocabulary of Sched.run, proved through Proto.WP + Proto.returnsWithin (coordinator decision 2026-10-12, docs/sep-threads.md Termination))"
     },
     {
       "name": "ReturnsWithin",
@@ -328,11 +335,6 @@
       "module": "Proofs.Lists.Container",
       "status": "target",
       "approved": "coordinator 2026-10-13 (structural gate seed)"
-    },
-    {
-      "name": "Spec",
-      "module": "ZigLean.Conc.TimedBudget",
-      "status": "legacy-to-retire"
     },
     {
       "name": "Step",
@@ -369,11 +371,6 @@
       "module": "ZigLean.Sep.Full.Extent",
       "status": "target",
       "approved": "maintainer 2026-10-12 (handoffs/framework-approvals.md)"
-    },
-    {
-      "name": "WithinSpec",
-      "module": "ZigLean.Conc.TimedBudget",
-      "status": "legacy-to-retire"
     }
   ],
   "tactics": [
