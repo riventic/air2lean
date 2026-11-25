@@ -382,7 +382,18 @@ them, and the file's theorems would run one after the other (the pattern of
 `Lean.Meta.evalExprCore`). `none`: the current environment. -/
 def importEnvFor? (e : Expr) : MetaM (Option Environment) := do
   let env ← getEnv
-  return if !e.hasFVar && e.getUsedConstants.all env.isImportedConst then env.importEnv? else none
+  if e.hasFVar || (e.find? fun c => c.isConst && !env.isImportedConst c.constName!).isSome then
+    return none
+  return env.importEnv?
+
+/-- The kernel accepts `pf` as a proof of `t` in `env` (a theorem checked and dropped), within the
+options' heartbeat and recursion limits, as `addDecl` checks a declaration. -/
+def kernelChecks (env : Environment) (t pf : Expr) : CoreM Bool := do
+  let opts ← getOptions
+  let decl : Declaration := .thmDecl { name := `_fsym_kernel_check, type := t, value := pf,
+                         levelParams := (collectLevelParams {} (mkApp t pf)).params.toList }
+  return env.toKernelEnv.addDeclCore (Core.getMaxHeartbeats opts).toUSize
+    (maxRecDepth.get opts).toUSize decl (← read).cancelTk? matches .ok _
 
 end Zig.Full.Auto
 
