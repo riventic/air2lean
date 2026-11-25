@@ -9,7 +9,9 @@ import ZigLean.Sep.Full.WitnessStart
 `client_spec`: the generated client is walked by `fsym`, using the generated wrappers' contracts
 over `FAllocSpec`, the initialized FBA invariant and its reset contract. The buffer's authority is
 a positive extent share at bound 12 and an untagged claim on `[0,12)`; the other four bytes remain
-the client's. Stack allocation is paid by the running thread's token and room resource.
+the client's. Stack allocation is paid by the running thread's token and room resource: room for
+the client's own 24-byte frame and, behind it, for the slot of the wrappers it calls
+(`Wrappers.alloc_of`, `realloc_of`: `stackCharge 24 8`).
 
 `client_start` is the strength example: from the program's actual start memory (`Gen.mem0`) with
 a stack budget, the client runs to a result that satisfies `Res`. The precondition of
@@ -39,7 +41,7 @@ theorem client_spec (v : BitVec 8) (A₀ S D : Nat) (q : Frac) (bs : Array Byte)
     (hs : bs.size = 16) (hA : A₀ + 16 ≤ 2 ^ 64) :
     FTotalTriple
       (up (regionIn bufp A₀ 16 .global 1 bs) ⋆ (vtR vtp fns.toList ⋆
-        (cur 0 ⋆ (sp 0 S D ⋆ (⟪D + stackCharge 24 8 ≤ S⟫ ⋆
+        (cur 0 ⋆ (sp 0 S D ⋆ (⟪D + stackCharge 24 8 + stackCharge 24 8 ≤ S⟫ ⋆
           (bshare 0 q 12 ⋆ bclaim 0 0 12 none))))))
       (fba_client v)
       (fun r => ⟪Res v r⟫ ⋆ (sp 0 S D ⋆ Junk)) := by
@@ -63,10 +65,10 @@ theorem client_spec (v : BitVec 8) (A₀ S D : Nat) (q : Frac) (bs : Array Byte)
           (epFee_add γ e (a := Frac.one.half) (b := Frac.one.half) (Frac.half_pos (by decide)) (Frac.half_pos (by decide)))
   simp only [halfFees] at init reset
   fsym [init,
-    fun ctx Ac γ e n => Wrappers.alloc_of (vtp := vtp) (fallocSpec ctx (buf A₀ Ac) γ e)
-      Frac.one.half n,
-    fun ctx Ac γ e s n bs => Wrappers.realloc_of (vtp := vtp) (fallocSpec ctx (buf A₀ Ac) γ e)
-      Frac.one.half s n bs,
+    fun ctx Ac γ e n t S' D' => Wrappers.alloc_of (vtp := vtp) (t := t) (S := S') (D := D')
+      (fallocSpec ctx (buf A₀ Ac) γ e) Frac.one.half n,
+    fun ctx Ac γ e s n bs t S' D' => Wrappers.realloc_of (vtp := vtp) (t := t) (S := S') (D := D')
+      (fallocSpec ctx (buf A₀ Ac) γ e) Frac.one.half s n bs,
     fun ctx Ac γ e s bs => Wrappers.free_of (vtp := vtp) (fallocSpec ctx (buf A₀ Ac) γ e)
       Frac.one.half s bs,
     reset, fun (h : Heap) => EUpd.of_imp (@JunkAt.junk h)]
@@ -122,10 +124,11 @@ def fnBlocks (a1 a2 a3 a4 : Nat) : FAssn :=
         ((up (bytesAt ⟨some 1, 0⟩ a1 1 .constGlobal #[.undef]) ⋆ (known 1 a1 ⋆ bext 1 1 .constGlobal)) ⋆
           (bclaim 4 0 1 ⋆ (bclaim 3 0 1 ⋆ (bclaim 2 0 1 ⋆ bclaim 1 0 1))))))
 
-/-- **The client from the program's start.** With a stack budget that covers its frame and a
+/-- **The client from the program's start.** With a stack budget that covers its frame and the
+slot of a wrapper it calls, and a
 placement that has room for the stack, the client run from `Gen.mem0` returns a result that
 satisfies `Res`. -/
-theorem client_start (σ : Placement) (S : Nat) (hS : stackCharge 24 8 ≤ S)
+theorem client_start (σ : Placement) (S : Nat) (hS : stackCharge 24 8 + stackCharge 24 8 ≤ S)
     (hr : ((mem0 σ).reserveAt? 0 S).isSome) (v : BitVec 8) :
     ∃ x m', (fba_client v).run ((mem0 σ).withStack S) = pure (x, m') ∧ Res v x := by
   rw [mem0_eq] at hr ⊢
@@ -165,7 +168,7 @@ theorem client_start (σ : Placement) (S : Nat) (hS : stackCharge 24 8 ≤ S)
       fun _ _ h => ⟨_, sep_assoc h⟩)
     fun _ h => by
       rw [← bclaim_split (lo := 0) (m := 12) (hi := 16) (by omega) (by omega)] at h
-      have h := sep_lift.mpr ⟨(by omega : 0 + stackCharge 24 8 ≤ S), h⟩
+      have h := sep_lift.mpr ⟨(by omega : 0 + stackCharge 24 8 + stackCharge 24 8 ≤ S), h⟩
       exact ac_cast h (by ac_rfl)
 
 end AllocFba.Client
