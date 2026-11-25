@@ -1150,7 +1150,7 @@ theorem atomicLoadUnordered_run (p : Ptr) (v : BitVec 64) {m : Mem}
             exact hxr _ _ (abytesAt_cell hab hpb hin)
           · rfl)
         (fun b' x => by rw [hsz]; exact htag b' x)
-        (kmono_of_blocks hblocks (by rw [hm₁]; exact ⟨rfl, rfl, rfl⟩) (by rw [hm₁]; rfl))
+        (kmono_of_blocks hblocks (by rw [hm₁]; exact ⟨rfl, rfl, rfl, rfl⟩) (by rw [hm₁]; rfl))
       refine ⟨r', hh', sep_lift.mpr ⟨hwv, apts_of hal hK hsz hv hab'⟩, hwf,
         LDMono.of_blocks hblocks hld,
         (fstep_record hh.erase_disj_owned hc hab hsz hpb hblk hKb hK .atomicRead).trans

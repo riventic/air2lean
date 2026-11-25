@@ -251,9 +251,10 @@ theorem GOk.cl1 {m : Mem} {L : Ghost} (hL : ∀ x y, L.cl x y = ECell.unit) {b :
     · simp [Ghost.atCl, hL, hb]
   have hst := h ((L.add (Ghost.atCl b C)).add gF).ls
     (fun γ e p h => Ghost.ls_add _ _ _ _ _ (Ghost.ls_add _ _ _ _ _ h)) hV.uniq
+  have edev : ((L.add (Ghost.atCl b C')).add gF).dev = ((L.add (Ghost.atCl b C)).add gF).dev := rfl
   refine ⟨⟨⟨hv, by rw [ex, els]; exact hx, ⟨fun x y => ?_, Max.max NC N, fun γ hγ x y e k => ?_⟩,
     by simpa using hcr⟩, N, fun γ hγ => hN γ hγ⟩, ExtTrue.congr ex els ht, fun x hx y => ?_,
-    by simpa using hma⟩
+    by rw [edev]; simpa using hma⟩
   · rw [ecl, els]
     have h0 := hcv x y
     rw [ecl] at h0
@@ -450,9 +451,11 @@ theorem GOk.addCl {m : Mem} {g gF : Ghost} {b : BlockId} {C : Nat → ECell} (ho
     by_cases h : x = b
     · subst h; simp only [Ghost.add_cl, Ghost.atCl, if_true, hz, ECell.unit_add]
     · simp only [Ghost.add_cl, Ghost.atCl, h, if_false, ECell.add_unit]
+  have edev : ((g.add gF).add (Ghost.atCl b C)).dev = (g.add gF).dev := by
+    funext D; simp [Ghost.add, Ghost.atCl]
   refine ⟨⟨⟨by rw [eled]; exact hv, by rw [ex, els]; exact hx, ⟨fun x y => ?_, NC, fun γ hγ x y e k => ?_⟩,
     by simpa using hcr⟩, N, fun γ hγ => ?_⟩, ExtTrue.congr ex els ht, fun x hx y => ?_,
-    by simpa using hma⟩
+    by rw [edev]; simpa using hma⟩
   · rw [ecl, els]; split
     · exact hC y _ hu
     · exact hcv x y
