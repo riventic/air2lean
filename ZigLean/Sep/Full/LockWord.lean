@@ -1049,6 +1049,10 @@ theorem WInv.join {P : ThreadId → LPh} {m m' : Mem} {t u : ThreadId} (hi : L.W
     · exact .inl (hall h)
     · exact .inr ⟨i, l, hl, hle⟩
 
+/-- An empty futex queue meets every waiter premise (`WInv.make`'s `hq` at a program's start). -/
+theorem waiters_empty {m : Mem} {Q : ThreadId × FutexKey → Prop} (h : m.waiters = #[]) :
+    ∀ w ∈ m.waiters, Q w := fun w hw => by rw [h] at hw; simp at hw
+
 /-- The start of the lock, at any point of a program: each thread is out of the lock's code or
 `away` (and alive), or gone; the word holds `0`; no atomic location overlaps the word (`hat`: one
 can be elsewhere in its block); no thread waits at the word's futex key, and a thread that waits

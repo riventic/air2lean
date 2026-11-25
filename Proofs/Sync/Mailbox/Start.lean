@@ -230,7 +230,7 @@ theorem inv_of_box {m : Mem} {r : Res} {A : Nat} {bs : Array Byte}
     (fun l => ?_) hW₁.2.1 hW₁.2.2 (fun u => ?_) (fun u => ?_) ?_
     ⟨blk, hblk, hl, by rw [hS32]; show 8 + 4 ≤ 32; decide, by show (blk.addr + 8) % 4 = 0; rw [hAd]; omega,
       by rw [hK]; decide, by rw [hK]; simp [BlockKind.mappedLo]⟩
-    h0 (by rw [hat]; simp) (fun w hw => by rw [hq] at hw; simp at hw)
+    h0 (by rw [hat]; simp) (LockWord.waiters_empty hq)
     ((allLe_of_one h1 (VClock.le_refl _)).on _), ?_⟩
   · rw [upd_ne _ _ hu]
     unfold FLock.own; rw [hGu u hu]; split <;> simp [G0, FLock.prod, rnil_rsum]

@@ -1239,7 +1239,7 @@ theorem inv_start {m : Mem} {own : ThreadId → Res} {io : Io} {A A' : Nat} {rIO
     (by rw [upd_self, upd_self]; rfl) (by rw [upd_self]; exact hdM) hdCW (fun l => ?_) hW.2.1 hW.2.2
     (fun u => ?_) (fun u => ?_) ?_ ⟨blk, hblk, hl, by rw [hS']; decide,
       by show (blk.addr + 16) % 4 = 0; rw [hA']; omega, by rw [hK']; decide,
-      by rw [hK']; decide⟩ h0 (by rw [hat]; simp) (fun w hw => by rw [hq] at hw; simp at hw)
+      by rw [hK']; decide⟩ h0 (by rw [hat]; simp) (LockWord.waiters_empty hq)
     ((allLe_of_one h1 (VClock.le_refl _)).on _), ?_⟩
   · rw [upd_ne _ _ hu, hown u hu]
     unfold FLock.own; rw [hGu u hu]; split <;> simp [G0, FLock.prod, rnil_rsum]
