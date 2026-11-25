@@ -427,7 +427,7 @@ theorem signal_wp_unmetered (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = no
     fun k₁ hk₁ G₁ m₁ b r hc₁ hd hb hsp hi₁ => ?_)
   obtain rfl := X.s_eq hd
   rw [C.set_set] at hi₁
-  simp only [StateT.run_bind, StateT.run_modify, pure_bind]
+  simp only [StateT.run_modify, pure_bind]
   refine WP.bind (WP.mono ?_ (WP.loop _ _ (X.sigInv P C t g h c d) (fun _ => 0)
     (X.sigPost P C t g h c d) (X.sig_body hC hcost t g hgx hgo hu h c d io) _ G₁ m₁ k₁
     ⟨by omega, hc₁, b, X.sprev_set _ _, hb, hsp, hi₁⟩))
@@ -521,7 +521,7 @@ theorem inner_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
       StateT.run_get, pure_bind, hps] at hi ⊢
     refine WP.bind (WP.callRC_ok (X.s_subW hb hs) ?_)
     dsimp only
-    try simp only [StateT.run_bind, StateT.run_get, pure_bind, hps]
+    try simp only [hps]
     refine WP.bind (WP.callRC_ok (X.s_subS hs) ?_)
     dsimp only
     refine WP.bind (FCond.wp_consumeAs hC X.s_dec (by rw [s_bits]; omega)
@@ -544,7 +544,7 @@ theorem inner_body (hC : L.Fits (C.prim L) P U ok) (hcost : P.cost = none)
       rw [FCond.afterRead, gR_set] at hi₁
       simp only [Option.isSome_some, ↓reduceIte, StateT.run_bind]
       refine WP.bind (WP.callRC_ok (x := optPayload (some (Packed.ofBits b'))) rfl ?_)
-      simp only [StateT.run_bind, StateT.run_modify, StateT.run_pure, pure_bind]
+      simp only [StateT.run_modify, StateT.run_pure, pure_bind]
       refine WP.pure' ?_
       simp only [X.iagain_rep, ↓reduceIte]
       exact ⟨⟨by omega, hc₁, by rw [X.ep_setPrev, hep], b', X.prev_setPrev _ _, hb', hi₁⟩,
@@ -596,12 +596,12 @@ theorem outer_body (hC' : C.Fits L P U ok) (hcost : P.cost = none)
   refine WP.bind (FCond.wp_loadEp hC gR_ph hi₁
     fun k₂ hk₂ G₂ m₂ v i' hc₂ hi₂ => ?_)
   rw [gR_set] at hi₂
-  simp only [StateT.run_modify, StateT.run_bind, pure_bind]
+  simp only [StateT.run_modify, pure_bind]
   refine WP.bind (FCond.wp_loadSAs hC X.s_dec gR_ph hi₂
     fun k₃ hk₃ G₃ m₃ b r hc₃ hd hb hi₃ => ?_)
   obtain rfl := X.s_eq hd
   rw [FCond.afterRead, gR_set] at hi₃
-  simp only [StateT.run_modify, StateT.run_bind, pure_bind]
+  simp only
   refine WP.bind (WP.mono ?_ (WP.loop _ _ (X.innerInv P L C t g i' jr v d) (fun _ => 0)
     (X.innerPost P L C t g i' jr v d) (X.inner_body hC hcost hLc t g hgx hok hu i' jr v d io) _
     G₃ m₃ k₃ ⟨by omega, hc₃, by rw [X.ep_setPrev, X.ep_setEp], b, X.prev_setPrev _ _, hb, hi₃⟩))
@@ -645,13 +645,13 @@ theorem core_wp (hC' : C.Fits L P U ok) (hcost : P.cost = none)
   rw [FCond.ptr_ep]
   refine WP.bind (FCond.wp_ldEp hC (C.ph_set _ _) hgh0 hi0
     fun k₁ hk₁ G₁ m₁ v i hc₁ hi₁ => ?_)
-  simp only [StateT.run_modify, StateT.run_bind, pure_bind]
+  simp only [StateT.run_modify, pure_bind]
   refine WP.bind (FCond.wp_regAs hC (X.s_bits 1) (fun b _ => ⟨_, X.ofBits?_ok b⟩)
     (C.ph_set _ _) (by rw [hC.lph]; exact hgh0) hi₁
     fun k₂ hk₂ G₂ m₂ jr old r hc₂ hro hd hi₂ => ?_)
   obtain rfl := X.s_eq hd
   rw [C.set_set, C.set_set] at hi₂
-  simp only [StateT.run_bind]
+  simp only
   rw [X.s_room hro]
   refine WP.bind (WP.callRC_ok X.dassert_true ?_)
   dsimp only
