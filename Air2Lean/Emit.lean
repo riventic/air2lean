@@ -2020,6 +2020,15 @@ def emitExitInductive (structNames : Array (String × String)) (types : Array Ty
   String.intercalate "\n" ([s!"inductive {exitName} where", retLine] ++ brLines ++ repLines ++
     (dispatches.map fun (id, ty) => s!"  | dispatch{id} (v : {emitTy structNames types ty (pureSlice := !mem)})").toList)
 
+/-- The vector `ty` of the array `a` (emitted as `ra`), lane `i` = item `i`: Zig 0.17.1's
+`array_to_vector` and the ≤0.16 lane-wise `@bitCast` (`vectorLaneCast?`). A sentinel, the
+array's last item (`Ty.array`), is not a lane. -/
+def FCtx.vecOfArray (fc : FCtx) (a : Val) (ra : String) (ty : TyId) : String :=
+  let items := match fc.valTy a with
+    | .array _ _ true => s!"({ra} : {fc.emitValTy a}).pop"
+    | _ => ra
+  s!"pure (⟨{items}⟩ : {fc.emitTyOf ty})"
+
 /-! ## Loop-body capture analysis
 
 Every `loop` body becomes its own top-level def (`docs/generated-code.md` §Loops), so it needs
@@ -2598,13 +2607,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | _ => s!"Zig.Vec.splat {rv a}"
     let (env, l) := bindLet fc env inst.id s!"pure ({term})"; (env, some l)
   | .arrayToVector a =>
-    -- Lane `i` is item `i` (`Check.lean`); a sentinel, the array's last item (`Ty.array`), is
-    -- dropped.
-    let items := match fc.valTy a with
-      | .array _ _ true => s!"({rv a} : {fc.emitValTy a}).pop"
-      | _ => rv a
-    let (env, l) := bindLet fc env inst.id s!"pure (⟨{items}⟩ : {fc.emitTyOf inst.ty})"
-    (env, some l)
+    let (env, l) := bindLet fc env inst.id (fc.vecOfArray a (rv a) inst.ty); (env, some l)
   | .select pred a b =>
     let (env, l) := bindLet fc env inst.id s!"pure (Zig.Vec.select {rv pred} {rv a} {rv b})"
     (env, some l)
@@ -2750,7 +2753,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     else
     if let some fromArray := (fc.valTyId? a).bind (vectorLaneCast? fc.types · inst.ty) then
       -- Zig ≤0.16 `[n]T` ↔ `@Vector(n, T)`: lane `i` is item `i` (`Check.lean`, L09).
-      let expr := if fromArray then s!"pure (⟨{rv a}⟩ : {fc.emitTyOf inst.ty})"
+      let expr := if fromArray then fc.vecOfArray a (rv a) inst.ty
         else s!"pure ({rv a} : {fc.emitValTy a}).lanes"
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else

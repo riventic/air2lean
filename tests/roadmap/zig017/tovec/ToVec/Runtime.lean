@@ -19,8 +19,9 @@ private def float (fmt : FloatFmt) : Kind (Zig.Float fmt) :=
   ⟨fun x => ⟨BitVec.ofInt fmt.width x⟩, fun x => toString x.bits.toNat⟩
 
 /-- The array of the items `xs` followed by the sentinel, if any, the function's vector. -/
-private def call {α : Type} {m n : Nat} (k : Kind α) (sentinel : Option α)
-    (f : Vector α m → Zig.Result (Zig.Vec α n)) (xs : List Int) : Except String String := do
+private def call {α : Type} {m n : Nat} (k : Kind α)
+    (f : Vector α m → Zig.Result (Zig.Vec α n)) (xs : List Int) (sentinel : Option α := none) :
+    Except String String := do
   let items := (xs.map k.ofInt ++ sentinel.toList).toArray
   if h : items.size = m then
     match (f ⟨items, h⟩).run with
@@ -30,23 +31,23 @@ private def call {α : Type} {m n : Nat} (k : Kind α) (sentinel : Option α)
 
 private def run1 (name : String) (xs : List Int) : Except String String :=
   match name with
-  | "toVecU8" => call (unsigned 8) none toVecU8 xs
-  | "toVecI16" => call (signed 16) none toVecI16 xs
-  | "toVecU24" => call (unsigned 24) none toVecU24 xs
-  | "toVecI32" => call (signed 32) none toVecI32 xs
-  | "toVecU64" => call (unsigned 64) none toVecU64 xs
-  | "toVecI128" => call (signed 128) none toVecI128 xs
-  | "toVecU1" => call (unsigned 1) none toVecU1 xs
-  | "toVecI7" => call (signed 7) none toVecI7 xs
-  | "toVecBool" => call boolean none toVecBool xs
-  | "toVecF16" => call (float .f16) none toVecF16 xs
-  | "toVecF32" => call (float .f32) none toVecF32 xs
-  | "toVecF64" => call (float .f64) none toVecF64 xs
-  | "toVecF80" => call (float .f80) none toVecF80 xs
-  | "toVecF128" => call (float .f128) none toVecF128 xs
+  | "toVecU8" => call (unsigned 8) toVecU8 xs
+  | "toVecI16" => call (signed 16) toVecI16 xs
+  | "toVecU24" => call (unsigned 24) toVecU24 xs
+  | "toVecI32" => call (signed 32) toVecI32 xs
+  | "toVecU64" => call (unsigned 64) toVecU64 xs
+  | "toVecI128" => call (signed 128) toVecI128 xs
+  | "toVecU1" => call (unsigned 1) toVecU1 xs
+  | "toVecI7" => call (signed 7) toVecI7 xs
+  | "toVecBool" => call boolean toVecBool xs
+  | "toVecF16" => call (float .f16) toVecF16 xs
+  | "toVecF32" => call (float .f32) toVecF32 xs
+  | "toVecF64" => call (float .f64) toVecF64 xs
+  | "toVecF80" => call (float .f80) toVecF80 xs
+  | "toVecF128" => call (float .f128) toVecF128 xs
   -- `tovec.zig`'s sentinels: `[5:0]u8` and `[3:7]i16`.
-  | "toVecZ8" => call (unsigned 8) (some 0#8) toVecZ8 xs
-  | "toVecZ16" => call (signed 16) (some 7#16) toVecZ16 xs
+  | "toVecZ8" => call (unsigned 8) toVecZ8 xs (some 0#8)
+  | "toVecZ16" => call (signed 16) toVecZ16 xs (some 7#16)
   | _ => throw s!"unknown function: {name}"
 
 def main (args : List String) : IO Unit := do

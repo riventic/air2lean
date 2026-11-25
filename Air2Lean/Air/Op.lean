@@ -562,7 +562,7 @@ inductive Op where
   /-- `array_to_vector` (Zig 0.17.1's coercion `[n]T` → `@Vector(n, T)`, any lane type): lane `i`
   is item `i`; a sentinel of the array is not a lane. -/
   | arrayToVector (a : Val)
-  | bit(op : BitOp) (a b : Val)
+  | bit (op : BitOp) (a b : Val)
   /-- `not` on an integer (bitwise) or a `bool` (logical); `Emit` looks at the type. -/
   | not (a : Val)
   | neg (a : Val)
