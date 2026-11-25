@@ -1,0 +1,218 @@
+{
+  "backend": "llvm",
+  "cases": 87614,
+  "counts": {
+    "error_return_match": 1002,
+    "illegal_exclusion": 794,
+    "panic_match": 4922,
+    "trap_match": 4,
+    "unspecified_exclusion": 799,
+    "value_match": 80093
+  },
+  "emulated": false,
+  "examples": {
+    "asm": 1204,
+    "atomics": 100,
+    "basic": 2400,
+    "errors": 900,
+    "floatconv": 3000,
+    "floatops": 39625,
+    "floats": 2100,
+    "iogroup": 40,
+    "layout": 12241,
+    "lists": 1704,
+    "options": 900,
+    "pointers": 3300,
+    "recursion": 1200,
+    "slices": 6003,
+    "sync": 100,
+    "threads": 1220,
+    "variants": 2577,
+    "vectors": 9000
+  },
+  "excluded_examples": [],
+  "exclusions": [
+    {
+      "cases": 2,
+      "example": "floatconv",
+      "function": "bits32",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 3,
+      "example": "floatconv",
+      "function": "toByte",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 2,
+      "example": "floatconv",
+      "function": "toI32",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 2,
+      "example": "floatconv",
+      "function": "toU64",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 123,
+      "example": "floatops",
+      "function": "divExact64",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 16,
+      "example": "floatops",
+      "function": "op128",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 17,
+      "example": "floatops",
+      "function": "op16",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 16,
+      "example": "floatops",
+      "function": "op32",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 16,
+      "example": "floatops",
+      "function": "op64",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 381,
+      "example": "floatops",
+      "function": "op80",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 64,
+      "example": "layout",
+      "function": "ctlMode",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 64,
+      "example": "layout",
+      "function": "ctlSum",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 30,
+      "example": "layout",
+      "function": "growCircle",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 135,
+      "example": "layout",
+      "function": "maskCount",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 30,
+      "example": "layout",
+      "function": "numInt",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 114,
+      "example": "layout",
+      "function": "parentOfX",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 165,
+      "example": "layout",
+      "function": "setNib",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 30,
+      "example": "layout",
+      "function": "shapeArea",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 3,
+      "example": "layout",
+      "function": "writeTable",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 1,
+      "example": "lists",
+      "function": "allocatorWord",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 26,
+      "example": "slices",
+      "function": "copyWithin",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 27,
+      "example": "slices",
+      "function": "subZ",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 300,
+      "example": "threads",
+      "function": "race",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 10,
+      "example": "vectors",
+      "function": "fMax",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 10,
+      "example": "vectors",
+      "function": "fMin",
+      "status": "unspecified_exclusion"
+    },
+    {
+      "cases": 1,
+      "example": "vectors",
+      "function": "sMod",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 1,
+      "example": "vectors",
+      "function": "sRem",
+      "status": "illegal_exclusion"
+    },
+    {
+      "cases": 4,
+      "example": "vectors",
+      "function": "vMod",
+      "status": "illegal_exclusion"
+    }
+  ],
+  "flags": "-ODebug -mcpu=baseline -fllvm",
+  "float_mode_optimized_sources": [],
+  "host": "Linux-x86_64",
+  "mode": "Debug",
+  "pin_violations": 0,
+  "schema": "air2lean-build-mode-run/1",
+  "skipped_examples": {
+    "threadsync": "version_excluded"
+  },
+  "sources_sha256": "5ae727bf055027e01abe35c3c3d17c346fe71cc5ba41a07f90df85b4f2dd18fa",
+  "stock_zig_sha256": "58959f01285c05a74276f09327b551d42ed6006bf325a78dc661a024e314987b",
+  "target": "x86_64-linux",
+  "triage": [],
+  "zig_version": "0.17.1"
+}

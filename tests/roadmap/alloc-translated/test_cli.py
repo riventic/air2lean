@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """CLI regressions for `--allocator-model translated`, for a root-built translator.
 
-The retained compiler exports (air/0.16.0, air/0.17.1, provenance.json) are accepted only in
+The retained compiler exports (air/0.16.0, air/0.17.1) are accepted only in
 translated mode, and the OS boundary only for a Zig version with a reviewed posix.zig. Every
 admission is narrow: mutating one fact of an admitted program into the
 neighbouring unsupported case fails closed with a stable message. Never builds or invokes
@@ -86,6 +86,8 @@ def main(binary):
     accept(binary, load("fba-macos"), "fba.")
     accept(binary, load("page-linux", "0.17.1"), "page.")
     accept(binary, load("page-macos", "0.17.1"), "page.")
+    accept(binary, load("fba-linux", "0.17.1"), "fba.")
+    accept(binary, load("fba-macos", "0.17.1"), "fba.")
 
     # The OS boundary `posix.mmap`/`munmap`/`mremap` is admitted only for a Zig version whose
     # posix.zig is reviewed (Air2Lean/StdModels.lean `posixZig`: 0.16.0, 0.17.1). AIR claiming

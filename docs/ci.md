@@ -824,7 +824,7 @@ Lake. A pass is remembered under a hash of the file, its transitive package
 imports, the lakefile and the toolchain (`$AIR2LEAN_CAS_DIR/lean-files/`, else
 `.lake/lean-files/`), so a rerun after an unrelated change costs seconds; after a library change
 the files that import it run again (about 3.5 min for all 360 on the dev Mac). The phase prints
-its five largest sampled peaks (summed RSS of each file's process group, in MiB) with their files,
+its five largest sampled peaks (summed RSS of each file's process group and its descendants, in MiB) with their files,
 because they size its guard. On the remote build host the phase peaked at 10.4 GB with one Lean
 thread (2026-11-03), and the guard's whole-tree sample could not name the file.
 
@@ -897,7 +897,7 @@ requests, `main`, the nightly and release runs): its runs stay the independent c
 The phase takes 16 to 22 min on the dev Mac when its units run (75 units, 59 checks).
 `scripts/fixture-checks.sh` runs the phase on its own (`--only TEXT`: the units whose name or
 checks contain TEXT). It writes each unit's wall time,
-peak RSS (its process group, sampled) and wall time by process kind (lean, zig, the translator,
+peak RSS (its process group and its descendants, sampled) and wall time by process kind (lean, zig, the translator,
 lake, python) to `DIR/units.json` and prints the 20 longest units; these are measurements, used
 only for the order and admission above.
 `scripts/worktree-init.sh` passes `--no-fixtures` to the full build (it prepares a worktree, it
