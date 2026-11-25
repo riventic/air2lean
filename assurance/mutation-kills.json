@@ -978,7 +978,7 @@
         "kind": "check",
         "target": "tests/roadmap/thread-tuples/check.sh"
       },
-      "block_sha256": "dcd5b83619cee2c86ee8f333ebc7b374fb32e335a89024562b78fc6cbf269653"
+      "block_sha256": "b780a56c479d53f1f91c1b59c28830c7eb28c0e9d256e0a17594d927df4af3f8"
     },
     "tests/roadmap/try-pointers/mutate-offset.py#payload8-success-offset": {
       "killed_by": {
