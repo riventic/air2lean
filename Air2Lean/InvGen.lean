@@ -663,8 +663,9 @@ def counted (ctx : Ctx) (again : Expr → MetaM Bool) (paths : Array Path) : Met
       throwError "a cell that goes up by a value that is not a constant, in a loop that counts down"
     cells := cells.push (cell, inc)
   match b with
-  | .local y => if y == x then throwError "a bound that is the counter"
-    else unless unchanged y do throwError "a bound in a local the body writes"
+  | .local y =>
+    if y == x then throwError "a bound that is the counter"
+    unless unchanged y do throwError "a bound in a local the body writes"
   | .param _ | .lit _ | .slen _ => pure ()
   | .cell l => unless readOnly l do throwError "a bound in a cell the body writes"
   | _ => throwError "a bound that is not a local, a parameter, a literal, a slice length or a cell"
@@ -1068,7 +1069,7 @@ def reserved (n : Name) : Bool :=
   | .str .anonymous s => ["s", "s0", "v", "r", "n", "u", "xs", "ys", "zs", "X", "D", "V", "up", "pts",
       "arr", "tsum", "plain", "listSeg", "FAssn", "Zig", "BitVec", "List"].contains s ||
       -- (the cells' entry values `vₖ`, an array's items `wₖ` and its rest `tᵢ`)
-      (["v", "w", "t"].any s.startsWith && s.length > 1 && (s.toList.drop 1).all Char.isDigit)
+      (["v", "w", "t"].any (fun c : String => s.startsWith c) && s.length > 1 && (s.toList.drop 1).all Char.isDigit)
   | _ => false
 
 /-- `s` in parentheses if it has a space. -/
@@ -1838,8 +1839,8 @@ def generate (module ns : Name) (generator inputs : Json) (specs contracts : Arr
     if ready.isEmpty then throwError "loops that run each other: {pending.map fun i => all[i]!.1}"
     for i in ready do
       let (b, a) := all[i]!
-      let deps := inner[i]!.filterMap fun ib => match results[ib]? with
-        | some (.ok o) => some o.text
+      let deps := inner[i]!.filterMap fun ib => match (results[ib]? : Option (Except String LoopOut)) with
+        | some (Except.ok o) => some o.text
         | _ => none
       let r ← if deps.size < inner[i]!.size then
           pure (.error s!"a nested loop without generated definitions: \
@@ -1861,19 +1862,20 @@ def generate (module ns : Name) (generator inputs : Json) (specs contracts : Arr
       | none => pure []
       | some fps =>
         let owners := fps.filter fun (d, _) => loop.startsWith (d ++ ".")
-        let some (d, fp) := owners.foldl (init := none) fun best (d, fp) =>
-            if best.all (·.1.length < d.length) then some (d, fp) else best
+        let some (d, fp) := owners.foldl (init := (none : Option (String × String)))
+            fun best (d, fp) => if best.all (·.1.length < d.length) then some (d, fp) else best
           | throwError "no fingerprint of the function that runs the loop {loop}"
-        pure [("function", d), ("fingerprint", fp)]
+        pure [("function", Json.str d), ("fingerprint", Json.str fp)]
+    let head : List (String × Json) := [("loop", Json.str loop)] ++ fn
     match results[b]! with
     | .ok o =>
-      loops := loops.push (Json.mkObj ([("loop", loop)] ++ fn ++ [("family", o.family),
+      loops := loops.push (Json.mkObj (head ++ [("family", Json.str o.family),
         ("pruned", Json.arr o.pruned), ("credits", o.credits)]))
       defs := defs.push o.text
       for m in o.imports do
         unless libs.contains m do libs := libs.push m
     | .error why =>
-      loops := loops.push (Json.mkObj ([("loop", loop)] ++ fn ++ [("none", why)]))
+      loops := loops.push (Json.mkObj (head ++ [("none", Json.str why)]))
       skipped := skipped.push (loop, why)
   let body := s!"import {module}\n\
     {String.join (specs.toList.map (s!"import {·}\n"))}\
