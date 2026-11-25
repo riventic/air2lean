@@ -2014,6 +2014,40 @@
    ],
    "deletion_plan": "Restate `putc_trace`, `putc_eventually`, `statusTwice_trace`, `clearStatus_trace`, `sendThenStatus_trace` and `elapsed_trace` as `FTotalTriple`s over the trace resource, walked by `fsym`; delete the run-equation lemmas (`status_read`, `data_write`, `data_ptr`, `loop_busy`, `loop_ready`, `poll_run`, `tsc_run`) and the local `after`/`ticked` memory updates. The semantic mutants (device-mutants.py) keep their expected failures against the new statements.",
    "note": "Not a weakening: the run equations fix the whole final memory (trace, tick count, everything else unchanged), which is stronger than a triple with a frame; only the proof style is outside the framework."
+  },
+  {
+   "id": "contract-stack-room",
+   "title": "a declared stack need in an interface contract, for both modes",
+   "status": "open",
+   "requester": "queue-adt lane (P04/P06, ZigLean/Sep/Full/Queue.lean, 2026-11-25)",
+   "progress": "Open. `QueueImpl`'s specifications hold no stack resource and not the plain mode, so an implementation whose operation pushes a stack block is not an instance. A function that needs `k` bytes is stated at every depth of one thread under a budget (`∀ D, D + k ≤ S → FTotalTriple (cur t ⋆ sp t S D ⋆ P) …`) or in the plain mode (`⋆ plain`), and no assertion holds in both: `sp` does not exist where `noStack` is held and `plain` cannot be made under a budget. A contract that fixed one mode would have its clients proved for that mode only.",
+   "request": "A room assertion of the library that both modes provide (a budget's `sp` and the plain mode), with the push rules of `fsym` over it, so that a contract (`QueueImpl`, `SeqImpl`, the allocator and sync contracts) declares its operations' stack need once and a client is proved for both modes.",
+   "workaround_sites": [],
+   "deletion_plan": ""
+  },
+  {
+   "id": "queue-length-fact-loop",
+   "title": "a length fact over a representation's list makes the arithmetic simp loop",
+   "status": "open",
+   "requester": "queue-adt lane (tests/roadmap/queue-adt/QueueAdt/Ring.lean, observed 2026-11-24 at f75425bf1)",
+   "progress": "Open; not re-checked after the merge of 2026-11-25. A representation that states both `len.toNat = xs.length` and `xs = window items head len.toNat` gives, once `xs` is substituted, the fact `len.toNat = (window items head len.toNat).length`, and the walk stops with \"fsym: recursion depth limit in the rule @FTotalTriple.arr_store_zero on the command store 4 (buf.elem 4 x) v\". Ring.lean states the length as a conditional `fsym_arith` rewrite (`length_window`) instead of a fact.",
+   "request": "Facts whose two sides normalize into each other (a variable and a term that rewrites to it under a side condition) are oriented or dropped instead of looping, so that a representation may state its length as a fact.",
+   "workaround_sites": [
+    "tests/roadmap/queue-adt/QueueAdt/Ring.lean"
+   ],
+   "deletion_plan": "Restate `ring` with the fact `xs.length = len.toNat` and delete the local `fsym_arith` attribute on `length_window` in Ring.lean."
+  },
+  {
+   "id": "upd-precondition-user-def",
+   "title": "an update whose precondition names a user value definition is not planned",
+   "status": "open",
+   "requester": "queue-adt lane (tests/roadmap/queue-adt/QueueAdt/Ring.lean, observed 2026-11-24 at f75425bf1)",
+   "progress": "Open; not re-checked after the merge of 2026-11-25. `fsym [u]` with an update `u` whose precondition holds `pts q 8 (hdr buf cap head len)` (a definition that builds the header structure) is not matched against the state's struct literal (\"no plan for its precondition\"); Ring.lean's `pushed_upd` and `popped_upd` write the literal `{ items := { ptr := buf, len := cap }, head := head, len := len }`.",
+   "request": "The planner unfolds a reducible value definition (or matches up to `whnfR` of the value) in an update's precondition atom.",
+   "workaround_sites": [
+    "tests/roadmap/queue-adt/QueueAdt/Ring.lean"
+   ],
+   "deletion_plan": "Write the header of `pushed_upd`, `popped_upd` and `ring` with one value definition."
   }
  ],
  "mechanisms": [

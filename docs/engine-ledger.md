@@ -5,7 +5,7 @@ Engine features and fixes that proofs and libraries needed from `fsym`, and the 
 in for the missing ones. This is the recorded deletion plan that CLAUDE.md asks for: code cites a row as
 `ledger #<id>` (or ledger `` `<id>` ``), and `scripts/engine-ledger.py check` (preflight)
 fails on a citation of a row that does not exist and on a closed row cited as a workaround that is still
-there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 185 rows, 63 open.
+there. Data and rules: `assurance/engine-ledger.json`, `scripts/engine-ledger.py`. 188 rows, 66 open.
 
 A row closes when the engine part has landed and no workaround for it is left in the tree. A PR that adds
 a workaround adds or cites the row in the same PR; a PR that deletes the last workaround closes the row.
@@ -84,6 +84,9 @@ same slug for different titles, preflight fails even after merging main. No shar
 | [fsym-abstract-shape](#row-fsym-abstract-shape) | fsym walks over an abstract code shape (continuations as hypotheses) | B3 lane (Io.RwLock as RwLockImpl, PR #734) | `ZigLean/Sep/Full/IoMutex.lean`, `ZigLean/Sep/Full/IoRwLock.lean` | Replace the term walks of `IoMutexCode` (`body_wp`, `lock_wp`, `unlock_wp`) and `IoRwLockCode` (`wp_frame`, `lock_wp`, `unlock_wp`, `body_wp`, `lockShared_wp`, `unlockShared_wp`) by `fsym` walks with the same statements, and delete the hand steps; with them goes `bodyOf`'s `addR` parameter once the walk's steps are proof steps that do not reduce the checked add against an open term (`kernel-proj-ctor`). |
 | [s6-futex-hand-rows](#row-s6-futex-hand-rows) | Audit S6 finding 4: the hand rows of std's futex interface still in use, each with its deletion step | maintainer decision 2026-11-24 (soundness-2026-10-14 §S6 finding 4; lane claude/s6-futex) | `ZigLean/Conc/Call.lean`, `Air2Lean/StdModels.lean` | D2: delete the row `Thread.Futex.wake` and `ThreadFn.threadFutexWake` once `Proofs/Threadsync` (Linux, aarch64-linux and macOS translations) walks the translated `Thread.Futex.wake` over `futex_3arg`/`__ulock_wake` (needs the decision above for macOS). D3: delete the row `Thread.Futex.wait`, `ThreadFn.threadFutexWait`, `Zig.threadFutexWaitC`, `threadFutexWaitCOf` and `wp_waitD`'s use of it once `Proofs/Threadsync` and the big-endian 0.15.2 concurrency fixture walk the translated `Thread.Futex.wait` over `futex_4arg`/`__ulock_wait2` (the OS wait rows then need a byte order for the big-endian targets, or those targets reject the call). F: delete the rows `Thread.Mutex.DarwinImpl.*`, `Zig.osUnfair*C`, `Zig.threadFutexWakeC`, `wp_casD`/`wp_waitD`/`wp_xchgRel` and premise STD-06 once `os_unfair_lock_lock`/`unlock`/`trylock` are OS rows under OSL-01 and `Proofs/Threadsync/ThreadMutex.lean` (macOS half) is proved against them. E: delete the rows `Io.futexWait`/`Io.futexWaitUncancelable`/`Io.futexWake`, `Zig.futexWaitC`/`futexWaitCancelableC`/`futexWakeC`, the rules over them and premise STD-05 once the `Io` futex slots are a contract (docs/interfaces.md) that the translated `Io.Threaded` proves over OSF-01/02 and OSG-01 and every client is proved against it. Then close this row. |
 | [device-read-rules](#row-device-read-rules) | full-state rules for volatile device accesses and the device trace | device-proofs lane (fix-forward of tests/roadmap/volatile-effects/check-device.sh, 2026-11-24) | `tests/roadmap/volatile-effects/DeviceEffects/Proofs.lean`, `tests/roadmap/volatile-effects/DeviceAsm/Proofs.lean` | Restate `putc_trace`, `putc_eventually`, `statusTwice_trace`, `clearStatus_trace`, `sendThenStatus_trace` and `elapsed_trace` as `FTotalTriple`s over the trace resource, walked by `fsym`; delete the run-equation lemmas (`status_read`, `data_write`, `data_ptr`, `loop_busy`, `loop_ready`, `poll_run`, `tsc_run`) and the local `after`/`ticked` memory updates. The semantic mutants (device-mutants.py) keep their expected failures against the new statements. |
+| [contract-stack-room](#row-contract-stack-room) | a declared stack need in an interface contract, for both modes | queue-adt lane (P04/P06, ZigLean/Sep/Full/Queue.lean, 2026-11-25) | - | - |
+| [queue-length-fact-loop](#row-queue-length-fact-loop) | a length fact over a representation's list makes the arithmetic simp loop | queue-adt lane (tests/roadmap/queue-adt/QueueAdt/Ring.lean, observed 2026-11-24 at f75425bf1) | `tests/roadmap/queue-adt/QueueAdt/Ring.lean` | Restate `ring` with the fact `xs.length = len.toNat` and delete the local `fsym_arith` attribute on `length_window` in Ring.lean. |
+| [upd-precondition-user-def](#row-upd-precondition-user-def) | an update whose precondition names a user value definition is not planned | queue-adt lane (tests/roadmap/queue-adt/QueueAdt/Ring.lean, observed 2026-11-24 at f75425bf1) | `tests/roadmap/queue-adt/QueueAdt/Ring.lean` | Write the header of `pushed_upd`, `popped_upd` and `ring` with one value definition. |
 
 ## Closed rows
 
@@ -2220,3 +2223,38 @@ Request: `@[fsym]` rules for the device operations and an assertion for the devi
 Workaround sites: `tests/roadmap/volatile-effects/DeviceEffects/Proofs.lean`, `tests/roadmap/volatile-effects/DeviceAsm/Proofs.lean`
 
 Deletion plan: Restate `putc_trace`, `putc_eventually`, `statusTwice_trace`, `clearStatus_trace`, `sendThenStatus_trace` and `elapsed_trace` as `FTotalTriple`s over the trace resource, walked by `fsym`; delete the run-equation lemmas (`status_read`, `data_write`, `data_ptr`, `loop_busy`, `loop_ready`, `poll_run`, `tsc_run`) and the local `after`/`ticked` memory updates. The semantic mutants (device-mutants.py) keep their expected failures against the new statements.
+
+<a id="row-contract-stack-room"></a>
+### #contract-stack-room a declared stack need in an interface contract, for both modes
+
+Status: **open**. Requester: queue-adt lane (P04/P06, ZigLean/Sep/Full/Queue.lean, 2026-11-25).
+
+Progress: Open. `QueueImpl`'s specifications hold no stack resource and not the plain mode, so an implementation whose operation pushes a stack block is not an instance. A function that needs `k` bytes is stated at every depth of one thread under a budget (`∀ D, D + k ≤ S → FTotalTriple (cur t ⋆ sp t S D ⋆ P) …`) or in the plain mode (`⋆ plain`), and no assertion holds in both: `sp` does not exist where `noStack` is held and `plain` cannot be made under a budget. A contract that fixed one mode would have its clients proved for that mode only.
+
+Request: A room assertion of the library that both modes provide (a budget's `sp` and the plain mode), with the push rules of `fsym` over it, so that a contract (`QueueImpl`, `SeqImpl`, the allocator and sync contracts) declares its operations' stack need once and a client is proved for both modes.
+
+<a id="row-queue-length-fact-loop"></a>
+### #queue-length-fact-loop a length fact over a representation's list makes the arithmetic simp loop
+
+Status: **open**. Requester: queue-adt lane (tests/roadmap/queue-adt/QueueAdt/Ring.lean, observed 2026-11-24 at f75425bf1).
+
+Progress: Open; not re-checked after the merge of 2026-11-25. A representation that states both `len.toNat = xs.length` and `xs = window items head len.toNat` gives, once `xs` is substituted, the fact `len.toNat = (window items head len.toNat).length`, and the walk stops with "fsym: recursion depth limit in the rule @FTotalTriple.arr_store_zero on the command store 4 (buf.elem 4 x) v". Ring.lean states the length as a conditional `fsym_arith` rewrite (`length_window`) instead of a fact.
+
+Request: Facts whose two sides normalize into each other (a variable and a term that rewrites to it under a side condition) are oriented or dropped instead of looping, so that a representation may state its length as a fact.
+
+Workaround sites: `tests/roadmap/queue-adt/QueueAdt/Ring.lean`
+
+Deletion plan: Restate `ring` with the fact `xs.length = len.toNat` and delete the local `fsym_arith` attribute on `length_window` in Ring.lean.
+
+<a id="row-upd-precondition-user-def"></a>
+### #upd-precondition-user-def an update whose precondition names a user value definition is not planned
+
+Status: **open**. Requester: queue-adt lane (tests/roadmap/queue-adt/QueueAdt/Ring.lean, observed 2026-11-24 at f75425bf1).
+
+Progress: Open; not re-checked after the merge of 2026-11-25. `fsym [u]` with an update `u` whose precondition holds `pts q 8 (hdr buf cap head len)` (a definition that builds the header structure) is not matched against the state's struct literal ("no plan for its precondition"); Ring.lean's `pushed_upd` and `popped_upd` write the literal `{ items := { ptr := buf, len := cap }, head := head, len := len }`.
+
+Request: The planner unfolds a reducible value definition (or matches up to `whnfR` of the value) in an update's precondition atom.
+
+Workaround sites: `tests/roadmap/queue-adt/QueueAdt/Ring.lean`
+
+Deletion plan: Write the header of `pushed_upd`, `popped_upd` and `ring` with one value definition.

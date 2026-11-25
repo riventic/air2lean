@@ -102,11 +102,8 @@ theorem count_spec (q : Ptr) (C : Nat) (xs : List (BitVec 32)) :
   unfold Ring_count
   fsym
 
-/-- The generated ring buffer is a bounded FIFO queue. -/
-def ringQueue : QueueImpl Ptr (BitVec 32) Ring_push Ring_pop Ring_count where
-  Rep := ring
-  push_spec := push_spec
-  pop_spec := pop_spec
-  len_spec := count_spec
+/-- The generated ring buffer is a bounded FIFO queue whose operations run no step. -/
+def ringQueue : QueueImpl Ptr (BitVec 32) Ring_push Ring_pop Ring_count :=
+  QueueImpl.ofStepFree ring push_spec pop_spec count_spec
 
 end QueueAdt

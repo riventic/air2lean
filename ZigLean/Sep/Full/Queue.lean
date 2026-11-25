@@ -34,9 +34,12 @@ well.
 the same number of receipts out (`ZigLean/Sep/Full/Cost.lean`: `FTotalTriple.ticks_eq`,
 `not_fewer_credits`). So a client's cost bound that is stated against this contract is exact for
 every implementation: the client's own loop-body runs plus the declared counts of the calls it
-makes (`QueueImpl.pushAllSteps`: the calls of pushing a list in order). An operation that runs
-no step declares 0 (`QueueImpl.ofStepFree`, from statements without credits by
-`FTotalTriple.credits_zero_iff`). The count must be a function of `C`, `xs` and the item: an
+makes. An operation that runs no step declares 0 (`QueueImpl.ofStepFree`, from statements
+without credits by `FTotalTriple.credits_zero_iff`; back by `QueueImpl.push_spec_stepFree`). A
+client whose loop calls an operation of a nonzero count pays it from the credits that its loop
+invariant holds, which needs `fsym` to split a `credits` atom at the call (engine ledger #T1);
+until then such a loop is proved for the implementations whose operation runs no step. The count
+must be a function of `C`, `xs` and the item: an
 implementation whose count depends on state that `Rep` hides (an amortized bound) is not an
 instance.
 
@@ -132,44 +135,17 @@ def ofStepFree (Rep : H → Nat → List α → FAssn)
   pop_spec h C xs := FTotalTriple.credits_zero_iff.mpr (hpop h C xs)
   len_spec h C xs := FTotalTriple.credits_zero_iff.mpr (hlen h C xs)
 
-variable (S : QueueImpl H α push pop len) (C : Nat)
+/-- The `push` of `S` runs no step, on every queue and item. -/
+def PushStepFree (S : QueueImpl H α push pop len) : Prop :=
+  ∀ (C : Nat) (xs : List α) (v : α), S.pushSteps C xs v = 0
 
-/-- **The steps of pushing `ys` in order** to the queue `xs` of capacity `C`: the declared count
-of each `push`, on the queue that the earlier ones left. -/
-def pushAllSteps : List α → List α → Nat
-  | _, [] => 0
-  | xs, y :: ys => S.pushSteps C xs y + pushAllSteps (xs ++ [y]) ys
-
-theorem pushAllSteps_append (xs as bs : List α) :
-    S.pushAllSteps C xs (as ++ bs) = S.pushAllSteps C xs as + S.pushAllSteps C (xs ++ as) bs := by
-  induction as generalizing xs with
-  | nil => simp [pushAllSteps]
-  | cons a as ih =>
-    simp only [List.cons_append, pushAllSteps, ih, List.append_assoc, List.singleton_append,
-      Nat.add_assoc]
-
-/-- The pushes from the item `k` on: the push of `ys[k]`, then those from `k + 1` on. -/
-theorem pushAllSteps_drop (xs : List α) {ys : List α} {k : Nat} (hk : k < ys.length) :
-    S.pushAllSteps C (xs ++ ys.take k) (ys.drop k) =
-      S.pushSteps C (xs ++ ys.take k) ys[k] +
-        S.pushAllSteps C (xs ++ ys.take (k + 1)) (ys.drop (k + 1)) := by
-  rw [List.drop_eq_getElem_cons hk]
-  simp only [pushAllSteps]
-  rw [List.append_assoc, List.take_append_getElem hk]
-
-/-- The pushes of the first `k + 1` items: those of the first `k`, then the push of `ys[k]`. -/
-theorem pushAllSteps_take (xs : List α) {ys : List α} {k : Nat} (hk : k < ys.length) :
-    S.pushAllSteps C xs (ys.take (k + 1)) =
-      S.pushAllSteps C xs (ys.take k) + S.pushSteps C (xs ++ ys.take k) ys[k] := by
-  rw [← List.take_append_getElem hk, pushAllSteps_append]
-  simp only [pushAllSteps, Nat.add_zero]
-
-/-- Pushing to a queue whose `push` runs no step runs none. -/
-theorem pushAllSteps_eq_zero (h0 : ∀ (c : Nat) (xs : List α) (v : α), S.pushSteps c xs v = 0)
-    (xs ys : List α) : S.pushAllSteps C xs ys = 0 := by
-  induction ys generalizing xs with
-  | nil => simp only [pushAllSteps]
-  | cons y ys ih => simp only [pushAllSteps, h0, ih, Nat.add_zero]
+/-- **The `push` of a queue whose `push` runs no step**, as a statement without credits. -/
+theorem push_spec_stepFree (S : QueueImpl H α push pop len) (h0 : S.PushStepFree) (h : H)
+    (C : Nat) (xs : List α) (v : α) :
+    FTotalTriple (S.Rep h C xs) (push h v) (Pushed S.Rep h C xs v) := by
+  have hs := S.push_spec h C xs v
+  rw [h0] at hs
+  exact FTotalTriple.credits_zero_iff.mp hs
 
 end QueueImpl
 

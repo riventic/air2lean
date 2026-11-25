@@ -4,6 +4,17 @@ import ZigLean
 
 namespace QueueAdt
 
+structure Shift where
+  items : Zig.Slice
+  len : BitVec 64
+  deriving Repr, Inhabited, DecidableEq
+
+instance : Zig.Enc Shift where
+  size := 24
+  align := 8
+  encode v := Zig.Enc.fields 24 [(0, Zig.Enc.encode v.items), (16, Zig.Enc.encode v.len)]
+  decode bs := do pure { items := ← Zig.Enc.decodeAt bs 0, len := ← Zig.Enc.decodeAt bs 16 }
+
 structure Ring where
   items : Zig.Slice
   head : BitVec 64
@@ -192,6 +203,198 @@ def Ring_push (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (Except Zig.ErrName (Un
 
 attribute [zig_run] Ring_push
 
+structure Shift_countLocals where
+  deriving Inhabited
+
+inductive Shift_countExit where
+  | ret (v : BitVec 64)
+
+def Shift_count (p0 : Zig.Ptr) : Zig.MemM (BitVec 64) := do
+  let e ← ((do
+    let i1 ← Zig.callM (Zig.ptrProject p0 (·.add 16))
+    let i2 ← Zig.load (BitVec 64) 8 i1
+    pure (.ret i2)) : Zig.MM Shift_countLocals Shift_countExit).run' (default : Shift_countLocals)
+  match e with
+  | .ret v => pure v
+
+attribute [zig_run] Shift_count
+
+structure Shift_initLocals where
+  local1 : Shift
+  deriving Inhabited
+
+inductive Shift_initExit where
+  | ret (v : Shift)
+
+def Shift_init (p0 : Zig.Slice) : Zig.MemM (Shift) := do
+  let e ← ((do
+    modify (fun s => { s with local1 := { s.local1 with items := p0 } })
+    modify (fun s => { s with local1 := { s.local1 with len := (0 : BitVec 64) } })
+    pure (.ret (← get).local1)) : Zig.MM Shift_initLocals Shift_initExit).run' (default : Shift_initLocals)
+  match e with
+  | .ret v => pure v
+
+attribute [zig_run] Shift_init
+
+structure Shift_popLocals where
+  i : BitVec 64
+  deriving Inhabited
+
+inductive Shift_popExit where
+  | ret (v : Option (BitVec 16))
+  | br1
+  | br13
+  | br37
+  | br48
+  | br23
+  | br21
+  | rep22
+
+def Shift_pop.again22 : Shift_popExit → Bool
+  | .rep22 => true
+  | _ => false
+
+def Shift_pop.loop22 (p0 : Zig.Ptr) : Zig.MM Shift_popLocals Shift_popExit := do
+  Zig.callM Zig.tick
+  match ← ((do
+    let i24 ← pure ((← get).i)
+    let i25 ← Zig.callM (Zig.ptrProject p0 (·.add 16))
+    let i26 ← Zig.load (BitVec 64) 8 i25
+    let i27 ← pure (i24)
+    let i28 ← pure (i26)
+    let i29 ← pure (Zig.lt false i27 i28)
+    if i29 then (do
+      let i31 ← pure p0
+      let i32 ← pure ((← get).i)
+      let i33 ← Zig.sub false i32 (1 : BitVec 64)
+      let i34 ← Zig.load (Zig.Slice) 8 i31
+      let i35 ← pure i34.len
+      let i36 ← pure (Zig.lt false i33 i35)
+      match ← ((do
+        if i36 then (do
+          pure .br37)
+        else (do
+          throw .outOfBounds)) : Zig.MM Shift_popLocals Shift_popExit) with
+      | .br37 => (do
+        let i42 ← Zig.callM (Zig.checkIndex i34.len i33) >>= fun _ => Zig.callM (Zig.ptrProject i34.ptr (·.elem 2 i33))
+        let i43 ← pure p0
+        let i44 ← pure ((← get).i)
+        let i45 ← Zig.load (Zig.Slice) 8 i43
+        let i46 ← pure i45.len
+        let i47 ← pure (Zig.lt false i44 i46)
+        match ← ((do
+          if i47 then (do
+            pure .br48)
+          else (do
+            throw .outOfBounds)) : Zig.MM Shift_popLocals Shift_popExit) with
+        | .br48 => (do
+          let i53 ← Zig.callM (Zig.checkIndex i45.len i44 >>= fun _ => Zig.load (BitVec 16) 2 (i45.ptr.elem 2 i44))
+          Zig.store (α := BitVec 16) 2 i42 i53
+          let i55 ← pure ((← get).i)
+          let i56 ← Zig.add false i55 (1 : BitVec 64)
+          modify (fun s => { s with i := i56 })
+          pure .br23)
+        | e => pure e)
+      | e => pure e)
+    else (do
+      pure .br21)) : Zig.MM Shift_popLocals Shift_popExit) with
+  | .br23 => (do
+    pure .rep22)
+  | e => pure e
+
+def Shift_pop (p0 : Zig.Ptr) : Zig.MemM (Option (BitVec 16)) := do
+  let e ← ((do
+    match ← ((do
+      let i2 ← Zig.callM (Zig.ptrProject p0 (·.add 16))
+      let i3 ← Zig.load (BitVec 64) 8 i2
+      let i4 ← pure (i3)
+      let i5 ← pure (i4 == (0 : BitVec 64))
+      if i5 then (do
+        pure (.ret none))
+      else (do
+        pure .br1)) : Zig.MM Shift_popLocals Shift_popExit) with
+    | .br1 => (do
+      let i9 ← pure p0
+      let i10 ← Zig.load (Zig.Slice) 8 i9
+      let i11 ← pure i10.len
+      let i12 ← pure (Zig.lt false (0 : BitVec 64) i11)
+      match ← ((do
+        if i12 then (do
+          pure .br13)
+        else (do
+          throw .outOfBounds)) : Zig.MM Shift_popLocals Shift_popExit) with
+      | .br13 => (do
+        let i18 ← Zig.callM (Zig.checkIndex i10.len (0 : BitVec 64) >>= fun _ => Zig.load (BitVec 16) 2 (i10.ptr.elem 2 (0 : BitVec 64)))
+        modify (fun s => { s with i := (1 : BitVec 64) })
+        match ← ((do
+          Zig.loop (Shift_pop.loop22 p0) Shift_pop.again22) : Zig.MM Shift_popLocals Shift_popExit) with
+        | .br21 => (do
+          let i61 ← Zig.callM (Zig.ptrProject p0 (·.add 16))
+          let i62 ← Zig.load (BitVec 64) 8 i61
+          let i63 ← Zig.sub false i62 (1 : BitVec 64)
+          Zig.store (α := BitVec 64) 8 i61 i63
+          let i65 ← pure (some i18)
+          pure (.ret i65))
+        | e => pure e)
+      | e => pure e)
+    | e => pure e) : Zig.MM Shift_popLocals Shift_popExit).run' (default : Shift_popLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+attribute [zig_run] Shift_pop.loop22 Shift_pop
+
+structure Shift_pushLocals where
+  deriving Inhabited
+
+inductive Shift_pushExit where
+  | ret (v : Except Zig.ErrName (Unit))
+  | br2
+  | br20
+
+def Shift_push (p0 : Zig.Ptr) (p1 : BitVec 16) : Zig.MemM (Except Zig.ErrName (Unit)) := do
+  let e ← ((do
+    match ← ((do
+      let i3 ← Zig.callM (Zig.ptrProject p0 (·.add 16))
+      let i4 ← Zig.load (BitVec 64) 8 i3
+      let i5 ← pure p0
+      let i6 ← Zig.callM (Zig.ptrProject i5 (·.add 8))
+      let i7 ← Zig.load (BitVec 64) 8 i6
+      let i8 ← pure (i4)
+      let i9 ← pure (i7)
+      let i10 ← pure (i8 == i9)
+      if i10 then (do
+        pure (.ret (.error "Full" : Except Zig.ErrName (Unit))))
+      else (do
+        pure .br2)) : Zig.MM Shift_pushLocals Shift_pushExit) with
+    | .br2 => (do
+      let i14 ← pure p0
+      let i15 ← Zig.callM (Zig.ptrProject p0 (·.add 16))
+      let i16 ← Zig.load (BitVec 64) 8 i15
+      let i17 ← Zig.load (Zig.Slice) 8 i14
+      let i18 ← pure i17.len
+      let i19 ← pure (Zig.lt false i16 i18)
+      match ← ((do
+        if i19 then (do
+          pure .br20)
+        else (do
+          throw .outOfBounds)) : Zig.MM Shift_pushLocals Shift_pushExit) with
+      | .br20 => (do
+        let i25 ← Zig.callM (Zig.checkIndex i17.len i16) >>= fun _ => Zig.callM (Zig.ptrProject i17.ptr (·.elem 2 i16))
+        Zig.store (α := BitVec 16) 2 i25 p1
+        let i27 ← Zig.callM (Zig.ptrProject p0 (·.add 16))
+        let i28 ← Zig.load (BitVec 64) 8 i27
+        let i29 ← Zig.add false i28 (1 : BitVec 64)
+        Zig.store (α := BitVec 64) 8 i27 i29
+        pure (.ret (.ok () : Except Zig.ErrName (Unit))))
+      | e => pure e)
+    | e => pure e) : Zig.MM Shift_pushLocals Shift_pushExit).run' (default : Shift_pushLocals)
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+attribute [zig_run] Shift_push
+
 structure pushAllLocals where
   n : BitVec 64
   deriving Inhabited
@@ -300,5 +503,43 @@ def rotate (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
   | _ => throw .panic
 
 attribute [zig_run] rotate
+
+structure rotateShiftLocals where
+  deriving Inhabited
+
+inductive rotateShiftExit where
+  | ret
+  | br6
+  | br1
+
+def rotateShift (p0 : Zig.Ptr) : Zig.MemM (Unit) := do
+  let e ← ((do
+    match ← ((do
+      let i2 ← Zig.callM (Shift_pop p0)
+      let i3 ← pure ((i2).isSome)
+      if i3 then (do
+        let i5 ← Zig.optPayload i2
+        match ← ((do
+          let i7 ← Zig.callM (Shift_push p0 i5)
+          let i8 ← pure (Zig.isNonErr i7)
+          if i8 then (do
+            pure .br6)
+          else (do
+            let i11 ← Zig.callR (Zig.unwrapErr i7)
+            let _i12 ← pure (i11)
+            throw .panic)) : Zig.MM rotateShiftLocals rotateShiftExit) with
+        | .br6 => (do
+          pure .br1)
+        | e => pure e)
+      else (do
+        pure .br1)) : Zig.MM rotateShiftLocals rotateShiftExit) with
+    | .br1 => (do
+      pure .ret)
+    | e => pure e) : Zig.MM rotateShiftLocals rotateShiftExit).run' (default : rotateShiftLocals)
+  match e with
+  | .ret => pure ()
+  | _ => throw .panic
+
+attribute [zig_run] rotateShift
 
 end QueueAdt
