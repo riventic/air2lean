@@ -130,7 +130,7 @@ namespace Air2Lean.InvGen
 structure Loc where
   param : Nat
   item : Option Nat := none
-  deriving Inhabited, BEq, Repr
+  deriving Inhabited, BEq
 
 /-- A symbolic value of one iteration, over the values at its start. -/
 inductive Sym where
@@ -175,7 +175,7 @@ inductive Sym where
   /-- The value at offset `k` of the node that the optional pointer `c` points to, as the
   iteration read it (`Zig.load` through `c`'s payload). -/
   | nload (c : Sym) (k : Nat)
-  deriving Inhabited, BEq, Repr
+  deriving Inhabited, BEq
 
 /-- `s` as a base and a constant summand. -/
 partial def Sym.split : Sym → Sym × Int
@@ -190,8 +190,9 @@ partial def Sym.summands : Sym → Array Sym
 
 /-- The sums in `s` that contain the summand `leaf`: the partial sums of a value that adds terms to
 `leaf`. -/
-partial def Sym.partialSums (leaf : Sym) : Sym → Array Sym
-  | s@(.add a b) =>
+partial def Sym.partialSums (s leaf : Sym) : Array Sym :=
+  match s with
+  | .add a b =>
     (if s.summands.contains leaf then #[s] else #[]) ++ a.partialSums leaf ++ b.partialSums leaf
   | _ => #[]
 
@@ -682,7 +683,7 @@ def counted (ctx : Ctx) (again : Expr → MetaM Bool) (paths : Array Path) : Met
     let (base, k) := a.split
     unless (base == .local x && (k == 0 || k == step)) ||
         cells.any (fun (cell, _) => cell.stored && (cell.val.partialSums (.cell cell.loc)).contains a) do
-      throwError "an add or subtraction that the counter's and the cells' bounds do not cover: {(repr a).pretty 100000} cells {(c.st.cells.map fun cell => ((repr cell.loc).pretty 100000, (repr cell.val).pretty 100000, cell.stored, (cell.val.partialSums (.cell cell.loc)).size)).toList}"
+      throwError "an add or subtraction that the counter's and the cells' bounds do not cover"
   -- (an exit with a payload has no label: the post then states only that it exits)
   return { counter := x, rel, bound := b, down, cells, scratch, exits := exitLabels exits,
            plain := paths.any (·.st.tick) }
