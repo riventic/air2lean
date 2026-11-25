@@ -81,7 +81,7 @@ theorem moved_upd {buf : Ptr} {items : List (BitVec 16)} {i i' j j' : Nat}
   EUpd.of_imp fun _ hp => by
     subst hi' hj'
     obtain rfl : j = i' - 1 := by omega
-    rw [getElem_moved (by omega) hl, moved_step h1 h] at hp
+    rw [getElem_moved (by omega) (by omega) hl, moved_step h1 h] at hp
     exact hp
 
 /-- The exit: the loop's counter is the count of items. -/

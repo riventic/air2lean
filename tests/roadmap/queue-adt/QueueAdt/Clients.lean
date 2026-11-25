@@ -43,11 +43,38 @@ def Rotated (h : H) (C : Nat) : List α → FAssn
   | [] => S.Rep h C []
   | x :: xs => S.Rep h C (xs ++ [x])
 
-/-- The steps of a rotation, by the declared counts: the `pop`, and the `push` of the front
-item to the rest. -/
-def rotateSteps (C : Nat) : List α → Nat
-  | [] => S.popSteps C []
-  | x :: xs => S.popSteps C (x :: xs) + S.pushSteps C xs x
+/-- The steps of the `push` of a rotation: none for the empty queue, else the declared count of
+the `push` of the front item to the rest. -/
+def rotPushSteps (C : Nat) : List α → Nat
+  | [] => 0
+  | x :: xs => S.pushSteps C xs x
+
+/-- The steps of a rotation, by the declared counts: the `pop`, then the `push`. -/
+def rotateSteps (C : Nat) (xs : List α) : Nat :=
+  S.popSteps C xs + rotPushSteps S C xs
+
+/-- The queue after a rotation with the receipts of its `push`, as the walk leaves it: the `pop`
+decides the case, so the `push`'s receipts are in the case that pushes. -/
+def RotatedPaid (h : H) (C : Nat) : List α → FAssn
+  | [] => S.Rep h C []
+  | x :: xs => S.Rep h C (xs ++ [x]) ⋆ spent (S.pushSteps C xs x)
+
+/-- A rotation's statement with the `push`'s credits and receipts by case is the statement with
+`rotateSteps` credits and as many receipts. -/
+theorem rotated_of_paid {β : Type} {c : MemM β} (h : H) (C : Nat) (xs : List α)
+    (ht : FTotalTriple (S.Rep h C xs ⋆ (credits (S.popSteps C xs) ⋆ credits (rotPushSteps S C xs)))
+      c (fun _ => RotatedPaid S h C xs ⋆ spent (S.popSteps C xs))) :
+    FTotalTriple (S.Rep h C xs ⋆ credits (rotateSteps S C xs)) c
+      (fun _ => Rotated S h C xs ⋆ spent (rotateSteps S C xs)) := by
+  refine ht.conseq (fun _ hp => ?_) fun _ _ hq => ?_
+  · rwa [rotateSteps, credits_add] at hp
+  · cases xs with
+    | nil => simpa only [RotatedPaid, Rotated, rotateSteps, rotPushSteps, Nat.add_zero] using hq
+    | cons x xs =>
+      simp only [RotatedPaid, Rotated, rotateSteps, rotPushSteps, spent_add] at hq ⊢
+      rwa [show (S.Rep h C (xs ++ [x]) ⋆ (spent (S.popSteps C (x :: xs)) ⋆
+          spent (S.pushSteps C xs x))) = ((S.Rep h C (xs ++ [x]) ⋆ spent (S.pushSteps C xs x)) ⋆
+          spent (S.popSteps C (x :: xs))) by ac_rfl]
 
 end Rotate
 
@@ -58,20 +85,20 @@ generated operations, in exactly the steps of its `pop` and its `push` (`rotateS
 `push` cannot fail: the `pop` left room. -/
 theorem rotate_spec (q : Ptr) (C : Nat) (xs : List (BitVec 32)) :
     FTotalTriple (S.Rep q C xs ⋆ credits (rotateSteps S C xs)) (rotate q)
-      (fun _ => Rotated S q C xs ⋆ spent (rotateSteps S C xs)) := by
-  unfold rotate
-  cases xs <;> simp only [rotateSteps, Rotated, credits_add, spent_add] <;>
-    fsym [S.push_spec, S.pop_spec]
+      (fun _ => Rotated S q C xs ⋆ spent (rotateSteps S C xs)) :=
+  rotated_of_paid S q C xs (by
+    unfold rotate
+    fsym [S.push_spec, S.pop_spec])
 
 /-- **`rotateShift`**, the same program over the operations of `Shift`, for every queue
 implementation over them. -/
 theorem rotateShift_spec (S : QueueImpl Ptr (BitVec 16) Shift_push Shift_pop Shift_count)
     (q : Ptr) (C : Nat) (xs : List (BitVec 16)) :
     FTotalTriple (S.Rep q C xs ⋆ credits (rotateSteps S C xs)) (rotateShift q)
-      (fun _ => Rotated S q C xs ⋆ spent (rotateSteps S C xs)) := by
-  unfold rotateShift
-  cases xs <;> simp only [rotateSteps, Rotated, credits_add, spent_add] <;>
-    fsym [S.push_spec, S.pop_spec]
+      (fun _ => Rotated S q C xs ⋆ spent (rotateSteps S C xs)) :=
+  rotated_of_paid S q C xs (by
+    unfold rotateShift
+    fsym [S.push_spec, S.pop_spec])
 
 /-! ## Client 2: `pushAll`, with its step count -/
 

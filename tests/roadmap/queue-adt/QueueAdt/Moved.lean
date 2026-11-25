@@ -30,7 +30,7 @@ theorem moved_one (items : List α) : moved items 1 = items := by
   simp [moved]
 
 /-- The cells from `i - 1` on are the items there. -/
-theorem getElem_moved {items : List α} {i j : Nat} (hj : i - 1 ≤ j)
+theorem getElem_moved {items : List α} {i j : Nat} (hj : i - 1 ≤ j) (hi : i ≤ items.length)
     (hl : j < (moved items i).length) :
     (moved items i)[j] = items[j]'(by
       simp only [moved, List.length_append, List.length_take, List.length_drop] at hl; omega) := by
@@ -68,14 +68,18 @@ theorem take_moved {items : List α} {n : Nat} (h1 : 1 ≤ n) (h : n ≤ items.l
   have hl : ((items.drop 1).take (n - 1)).length = n - 1 := by
     simp only [List.length_take, List.length_drop]; omega
   simp only [moved]
-  rw [List.take_append_of_le_length (by omega), List.take_of_length_le (by omega),
-    List.tail_take]
+  rw [List.take_append_of_le_length (by omega), List.take_of_length_le (by omega)]
+  cases items with
+  | nil => simp
+  | cons a as =>
+    obtain ⟨m, rfl⟩ : ∃ m, n = m + 1 := ⟨n - 1, by omega⟩
+    simp
 
 /-- The items of a full prefix: the front and the rest. -/
 theorem take_eq_cons {items : List α} {n : Nat} (h1 : 1 ≤ n) (h : n ≤ items.length) :
     items.take n = items[0] :: (items.take n).tail := by
   cases items with
-  | nil => simp at h
+  | nil => simp at h; omega
   | cons a as =>
     cases n with
     | zero => omega
