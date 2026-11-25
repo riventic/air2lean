@@ -148,15 +148,11 @@ ReleaseSafe and Debug runs of x86_64-linux (arc, native; 87614 cases), aarch64-l
 0.17.1 translations (`check-tree.py create --host-goldens 0.17.1`): 0 mismatches, 0 `ub_excluded`.
 `examples/threadsync` is `version_excluded` (its `zig-versions` does not list 0.17.1). There is
 no ReleaseFast or ReleaseSmall record for 0.17.1: `layout.setNum` (171 cases, all three hosts)
-mismatches there, and it is a soundness finding against the premise above, not a model error
-([2026-11-25-build-modes-0171.md](architecture-audit/2026-11-25-build-modes-0171.md), BM-1). A
-bare union has a hidden safety tag only when runtime safety is on, so its layout, and `@sizeOf`
-of every type that contains it, differs between ReleaseSafe and ReleaseFast/ReleaseSmall on legal
-executions ([reproducer](../tests/roadmap/build-modes/reproducers/bare-union-safety-tag.zig)):
-`setNum`'s model writes the tag byte at offset 4, which the unchecked build's 4-byte `Num` does
-not have. The 0.16.0 runs show no mismatch only because the 0.16.0 model's tag byte has one
-defined bit, which the oracle renders as a wildcard (BM-3); the same counterexamples hold for
-0.16.0. The premise change that BM-1 needs is open. The other 0.17.1 mismatch, `floatops.op80`
+mismatches there: it is the open finding BM-1 above (the model writes `Num`'s hidden tag byte at
+offset 4, which the unchecked build's 4-byte `Num` does not have;
+[reproducer](../tests/roadmap/build-modes/reproducers/bare-union-safety-tag.zig)). The 0.16.0
+runs hide it only because the oracle renders the 0.16.0 tag byte as a wildcard (BM-3). The other
+0.17.1 mismatch, `floatops.op80`
 `@trunc` of the zero-extension f80 pseudo-denormal `0x00008000000000000000` (2 cases, ReleaseSmall
 on x86_64-linux), is fixed (BM-2): its result depends on the mode and target, so the model gives
 `.unspecified` there (docs/floats.md group I).
