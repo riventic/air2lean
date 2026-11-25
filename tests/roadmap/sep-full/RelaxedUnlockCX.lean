@@ -1,4 +1,4 @@
-import ZigLean.Mem.Reuse
+import ZigLean.Conc.RunInv
 import ZigLean.Sep.Full.Auto
 import ZigLean.Sep.Full.Init
 import ZigLean.Sep.Full.ThreadFacts
@@ -7,9 +7,37 @@ import ZigLean.Sep.Full.Mutex
 import ZigLean.Sep.Full.Local
 
 /-!
-# A relaxed `unlock` breaks the lock's invariant (engine ledger #mutex-impl-relaxed-witness)
+# A relaxed `unlock` fails the mutex contract (engine ledger #mutex-impl-relaxed-witness)
 
-WIP: part 1, the concrete run.
+The retired `Conc/Spec/MutexToy.relaxed_not_spec` showed that the legacy `MutexSpec` rejects a
+spin mutex whose `unlock` writes with `monotonic`. This is the same for the mutex contract of the
+full-state logic, `MutexImpl.unlock_wp` (`ZigLean/Sep/Full/Mutex.lean`).
+
+`relaxedUnlock` is `Io.Mutex.unlock` (`IoMutexCode.unlockOf`: `xchg(unlocked)`, then the futex
+wake at `contended`) with the swap `relaxed` (Zig's `monotonic`) instead of `release`.
+
+**The state** is reached by real code from the start memory, with no memory, ghost value or
+authority written by hand (so it holds for every shape of `Ghost`/`MemAuth`): thread 0 allocates
+the lock's word and an 8-byte resource and zeroes them (`setup`, one `fsym` walk), spawns thread 1
+(`FOwned.fork`), and starts the lock (`FLock.Inv.make`, `start_inv`): a protocol with the lock
+alone (`Fits.ofLockAll`) whose invariant holds there. Thread 0 takes the lock with `lock`'s first
+try (`FLock.wp_casOn`) and writes `7` to the resource in its critical section (`Fits.wp_hold`).
+Each rule's `WP` is read at the run the kernel computes (`ZigLean/Conc/RunInv.lean`). So the full
+`FLock.Inv` holds with thread 0 holding the lock after a write to the resource: the precondition
+of `unlock_wp` is not vacuous there.
+
+**The counterexample** (`relaxed_unlock_not_wp`): from that state `unlock_wp` for `relaxedUnlock`
+fails. After the relaxed swap the word is `0`, so the lock is free and its invariant needs every
+access to the free resource to have happened before every thread that has not ended, or before
+the release clock of the word's newest message (`LockWord.Owns`). Thread 0's write did neither:
+thread 1 (spawned before it, out of the lock's code) has not seen it, and the newest message, a
+relaxed RMW after an acquire RMW, has the empty release clock (`m3_write`). So no ghost value
+restores the invariant (`no_inv_after`), and no `MutexImpl` has this unlock
+(`no_relaxed_mutexImpl`): the next holder could read the resource without seeing the write.
+
+Kernel-checked; the expected axioms are `propext`, `Classical.choice`, `Quot.sound`. Run under
+build-guard after the changed module build:
+  lake env lean tests/roadmap/sep-full/RelaxedUnlockCX.lean
 -/
 
 namespace Zig.RelaxedUnlockCX
@@ -17,26 +45,6 @@ namespace Zig.RelaxedUnlockCX
 open Zig Zig.Conc Zig.Conc.Proto Zig.Full Zig.Full.FAssn
 
 /-! ## The run -/
-
-/-- The memory a run of `x` returns (the empty memory where it returns none). -/
-def resMem {α : Type} : Option (Except Error (α × Mem)) → Mem
-  | some (.ok (_, m)) => m
-  | _ => {}
-
-/-- A run whose value the kernel computed returns `resMem` of itself. -/
-theorem run_of_value {α : Type} {x : MemM α} {m : Mem} {a : α}
-    (h : runValue x m = some (.ok a)) : (x.run m).run = some (.ok (a, resMem (x.run m).run)) := by
-  unfold runValue at h
-  cases e : (x.run m).run with
-  | none => rw [e] at h; cases h
-  | some r =>
-    rw [e] at h
-    cases r with
-    | error => cases h
-    | ok p =>
-      obtain ⟨a', m'⟩ := p
-      simp only [Option.map_some, Except.map, Option.some.injEq, Except.ok.injEq] at h
-      subst h; rfl
 
 /-- The lock's word: 4 bytes at the start of block 0. -/
 def wordPtr : Ptr := ⟨some 0, 0⟩
@@ -112,57 +120,6 @@ theorem m3_write : m3.threads.size = 2 ∧ m3.footprint.any (fun e =>
     m3.atomics.all fun l => !(l.block == 0 && l.off == 0) ||
       !(VClock.le e.clock (l.msgs.back!).relClock)) = true := by
   decide +kernel
-
-/-! ## Weakest preconditions at a concrete run -/
-
-section Inv
-
-variable {Tgt γ α β σ : Type} {P : Proto Tgt γ} {t : ThreadId} {G : ThreadId → γ} {m : Mem}
-
-/-- A stop where the oracle picks: the thread stopped with some ghost value, and for every
-environment that keeps the invariant and every pick the rest holds. -/
-theorem wp_pick_inv {count : Mem → Nat} {f : Nat → ConcM Tgt β}
-    {Q : β → (ThreadId → γ) → Mem → Nat → Prop} {n : Nat}
-    (h : P.WP t (ConcM.sync (.pick count) >>= f) Q G m (n + 1)) :
-    ∃ g, P.inv (upd G t g) m ∧ ∀ G₁ m₁, G₁ t = g → P.inv G₁ m₁ → t < m₁.threads.size →
-      ∀ c, (c < count { m₁ with current := t } ∨ count { m₁ with current := t } = 0 ∧ c = 0) →
-        P.WP t (f c) Q G₁ { m₁ with current := t } n := by
-  obtain ⟨-, g, hi, -, hk⟩ := h
-  exact ⟨g, hi, fun G₁ m₁ hg hi₁ ht c hc => hk G₁ m₁ hg hi₁ ht c hc⟩
-
-/-- A step in `MemM` that returns: the rest from its memory. -/
-theorem wp_liftMem_bind_inv {x : MemM α} {f : α → ConcM Tgt β}
-    {Q : β → (ThreadId → γ) → Mem → Nat → Prop} {n : Nat} {a : α} {m' : Mem}
-    (h : P.WP t (ConcM.liftMem x >>= f) Q G m n) (hr : (x.run m).run = some (.ok (a, m')))
-    (hs : m'.threads.size = m.threads.size) : P.WP t (f a) Q G m' n := by
-  unfold WP at h ⊢
-  have e : (ConcM.liftMem x >>= f : ConcM Tgt β) n m = f a n m' := by
-    show CoN.bind (CoN.leaf (ExceptT.run (x.run m))) _ = _
-    rw [hr]; rfl
-  rw [e] at h; rw [hs]; exact h
-
-/-- A step in `MemM` that returns, as the whole run: the post at its memory. -/
-theorem wp_liftMem_inv {x : MemM α} {Q : α → (ThreadId → γ) → Mem → Nat → Prop} {n : Nat}
-    {a : α} {m' : Mem} (h : P.WP t (ConcM.liftMem x) Q G m n)
-    (hr : (x.run m).run = some (.ok (a, m'))) : Q a G m' n := by
-  unfold WP at h
-  have e : (ConcM.liftMem x : ConcM Tgt α) n m = CoN.leaf (some (.ok (a, m'))) := by
-    show CoN.leaf (ExceptT.run (x.run m)) = _
-    rw [hr]
-  rw [e] at h; simp only [Proto.Safe] at h; exact h.2
-
-theorem wp_pure_inv {a : α} {Q : α → (ThreadId → γ) → Mem → Nat → Prop} {n : Nat}
-    (h : P.WP t (pure a : ConcM Tgt α) Q G m n) : Q a G m n := by
-  change P.Safe t Q m.threads.size G (CoN.leaf (some (.ok (a, m)))) at h
-  simp only [Proto.Safe] at h; exact h.2
-
-/-- A pick and the `MemM` step it chooses (an atomic op, `cmpxchgAsC`), as `ConcM` binds. -/
-theorem pickCall_eq {count : Mem → Nat} {x : Nat → MemM α} {s : σ} :
-    ((do let c ← pickC count; callMC (x c)) : CM Tgt σ α).run s =
-      (ConcM.sync (.pick count) >>= fun c => ConcM.liftMem (x c) >>= fun a => pure (a, s)) := by
-  funext n m; cases n <;> rfl
-
-end Inv
 
 /-! ## The protocol: the lock alone -/
 
@@ -371,7 +328,7 @@ theorem no_inv_after (G : ThreadId → FLG × Unit) (g : FLG × Unit) (hg : g.1.
     simp only [Bool.and_eq_true, beq_iff_eq] at hpi
     rw [hm] at hpi
     rcases this with h | h
-    · simp only [Bool.not_eq_true', Bool.and_eq_false_iff, beq_eq_false_iff_ne] at h
+    · simp only [Bool.and_eq_false_iff, beq_eq_false_iff_ne] at h
       rcases h with h | h
       · exact h hpi.1
       · exact h hpi.2
@@ -393,10 +350,10 @@ theorem relaxed_unlock_not_wp : ¬ UnlockWp := by
       · rw [e] at hr; cases hr)
   unfold cmpxchgAsC at hcas
   rw [pickCall_eq] at hcas
-  obtain ⟨g1, hig1, hk1⟩ := wp_pick_inv hcas
+  obtain ⟨g1, hig1, hk1⟩ := WP.pick_inv hcas
   have hc1 := hk1 (upd (G0 rP) 0 g1) mF (upd_self _ _ _) hig1 (by decide +kernel) 0
     (.inl cas_count)
-  have hc1 := wp_pure_inv (wp_liftMem_bind_inv (f := fun a => pure (a, ())) hc1
+  have hc1 := WP.pure_inv (WP.liftMem_bind_inv (f := fun a => pure (a, ())) hc1
     (run_of_value cas_value) (by decide +kernel))
   obtain ⟨hcur1, rL1, hi1⟩ := hc1 rfl
   -- 2. thread 0 writes `7` to the resource
@@ -407,15 +364,15 @@ theorem relaxed_unlock_not_wp : ¬ UnlockWp := by
     hi1 hcur1 (by simp only [G', upd_self]; rfl) store_spec (fun _ h => h) (fun _ _ h => ⟨_, h⟩)
     (fun _ => ⟨rfl, by simp only [G', upd_self]; rfl, rfl⟩) (fun _ _ _ _ _ _ _ _ _ => trivial)
     (fun _ _ r hc _ _ hi => ⟨hc, r, hi⟩)
-  obtain ⟨hcur2, r2, hi2⟩ := wp_liftMem_inv hst (run_of_value store_value)
+  obtain ⟨hcur2, r2, hi2⟩ := WP.liftMem_inv hst (run_of_value store_value)
   -- 3. thread 0 runs the relaxed unlock (the hypothesis)
   have hu := H fits rfl L.ptr rfl rfl 0 (L.set (G0 rP 0) .holds r2) rfl trivial default G' m2
     (1 + 1) hi2 hcur2
   unfold relaxedUnlock at hu
-  obtain ⟨g3, hig3, hk3⟩ := wp_pick_inv hu
+  obtain ⟨g3, hig3, hk3⟩ := WP.pick_inv hu
   have hc3 := hk3 (upd G' 0 g3) m2 (upd_self _ _ _) hig3 (by decide +kernel) 0 (.inl xchg_count)
-  have hc3 := wp_liftMem_bind_inv hc3 (run_of_value xchg_value) (by decide +kernel)
-  obtain ⟨-, -, hi3⟩ := wp_pure_inv hc3
+  have hc3 := WP.liftMem_bind_inv hc3 (run_of_value xchg_value) (by decide +kernel)
+  obtain ⟨-, -, hi3⟩ := WP.pure_inv hc3
   refine no_inv_after _ _ rfl (fun u hu => ?_) ?_ hi3
   · simp only [G', upd, hu, ↓reduceIte]
     by_cases h1 : u = 1 <;> simp [G0, hu, h1] <;> rfl
