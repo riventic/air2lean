@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Semantic mutants of the retained translations (`mutants.py <work dir>`).
 
-Each mutant changes one rule of the emitted code, elaborates it as the module
-LangLongTail.<Ns> and runs Model<Ns>.lean against the committed native output of 0.16.0 (or of
-the version the mutant names, for a source that 0.16.0 rejects). A
+Each mutant changes one rule of the emitted code of a version (0.16.0, or the version the
+mutant names), elaborates it as the module LangLongTail.<Ns> and runs Model<Ns>.lean against
+that version's committed native output. A
 mutant is killed only by the model's mismatch report ("differs from the model"); an
 elaboration or tool failure is an error, never a kill. Run from the repository root with the
 translator's Lean libraries built (check.sh does).
@@ -66,7 +66,9 @@ def main():
     work = Path(sys.argv[1])
     for name, (ns, stem, pattern, replacement, *version) in MUTANTS.items():
         version = version[0] if version else "0.16.0"
-        source = (HERE / "LangLongTail" / f"{ns}.lean").read_text()
+        # The version's retained translation (check.sh's `retained_of`).
+        retained = HERE / "LangLongTail" / f"{ns}-{version}.lean"
+        source = (retained if retained.exists() else HERE / "LangLongTail" / f"{ns}.lean").read_text()
         mutated, count = re.subn(pattern, replacement, source)
         assert count == 1, f"{name}: the pattern matched {count} times"
         root = work / name
