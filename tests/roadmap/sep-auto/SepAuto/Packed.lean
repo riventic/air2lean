@@ -8,9 +8,11 @@ generates (`LawfulPacked`, derived by `lawfulPackedOf?` from the generated insta
 `fsym_arith` rewrite `packedRoundTrip`): packed structs of `bool`, integer and enum fields
 (exhaustive, signed, non-exhaustive), nested packed structs, a float field (whose bits the
 `mask` names), and a struct without fields. A store of `fromInt(b)` (`Packed.ofBits b`) to a word
-leaves the word `b` (the arena's `reset` storing a node's size). A packed union field has no
-round trip law here (fail closed). The types are written as the translator writes them
-(`tests/golden/0.17.1/layout/Gen.lean`).
+leaves the word `b` (the arena's `reset` storing a node's size). Arrays and vectors have each
+direction of their lanes' law, for every lane type and width (the generic instances). A packed
+union has the bits direction only (`PackedU.bitsOf_intBytes`); a struct with a union field gets
+no law derived yet (fail closed; ledger #packed-lawful-split). The types are written as the
+translator writes them (`tests/golden/0.17.1/layout/Gen.lean`).
 -/
 
 namespace SepAuto.Packed
@@ -216,9 +218,57 @@ theorem store_fromInt (p : Ptr) (v x : BitVec 64) :
     FTotalTriple (wpts p v) (store 8 p (Packed.ofBits x : Size)) (fun _ => wpts p x) := by
   fsym
 
+/-! ## Arrays and vectors: each direction of the lanes' law (one generic instance per direction) -/
+
+/-- A vector of integer lanes. -/
+theorem vec_bits (x : BitVec (3 * 4)) (h : Packed.valid (α := Vec (BitVec 4) 3) x = true) :
+    Packed.toBits (Packed.ofBits x : Vec (BitVec 4) 3) = x := by
+  fsym_arith
+
+theorem vec_val (v : Vec (BitVec 4) 3) (h : Packed.mask v = BitVec.allOnes (3 * 4)) :
+    (Packed.ofBits (Packed.toBits v) : Vec (BitVec 4) 3) = v := by
+  fsym_arith
+
+/-- An array of float lanes: only with every bit determined (a NaN lane has none). -/
+theorem floats_val (v : Vector (Float .f16) 2)
+    (h : Packed.mask v = BitVec.allOnes (2 * FloatFmt.f16.width)) :
+    (Packed.ofBits (Packed.toBits v) : Vector (Float .f16) 2) = v := by
+  fsym_arith
+
+/-- Lanes of any lawful type and width, any number of them, nested. -/
+theorem generic_lanes_bits {T : Type} {n k j : Nat} [Zig.Packed T n] [LawfulPacked T n]
+    (x : BitVec (j * (k * n))) (h : Packed.valid (α := Vector (Vec T k) j) x = true) :
+    Packed.toBits (Packed.ofBits x : Vector (Vec T k) j) = x := by
+  fsym_arith
+
+theorem generic_lanes_val {T : Type} {n k : Nat} [Zig.Packed T n] [LawfulPacked T n]
+    (v : Vec T k) (h : Packed.mask v = BitVec.allOnes (k * n)) :
+    (Packed.ofBits (Packed.toBits v) : Vec T k) = v := by
+  fsym_arith
+
+/-- One direction of the lanes' law gives that direction of the vector's. -/
+example {T : Type} {n k : Nat} [Zig.Packed T n] [LawfulPackedBits T n] :
+    LawfulPackedBits (Vec T k) (k * n) := inferInstance
+
+example {T : Type} {n k : Nat} [Zig.Packed T n] [LawfulPackedVal T n] :
+    LawfulPackedVal (Vector T k) (k * n) := inferInstance
+
+/-! ## Packed unions: the bits direction only -/
+
+/-- A packed union's bits direction, for every union (`PackedU.bitsOf_intBytes`). -/
+theorem reg_bits (x : BitVec 8) : Packed.toBits (Packed.ofBits x : Reg) = x :=
+  PackedU.bitsOf_intBytes x (by decide)
+
+/-- No value direction: a byte whose bits are all determined in a form other than `.int` (here
+`.mask 0xFF 0`, which `Byte.ofDefBits` never makes) reads back as `.int`. So do the padding bytes
+of a union wider than its bits: `ofBits` makes them undefined, whatever they held. -/
+theorem reg_no_val : ∃ u : Reg, Packed.mask u = BitVec.allOnes 8 ∧
+    (Packed.ofBits (Packed.toBits u) : Reg) ≠ u :=
+  ⟨⟨#v[.mask 0xFF 0]⟩, by decide, by decide +kernel⟩
+
 set_option linter.unusedVariables false in
-/-- A packed union field: no round trip law (fail closed; the law by direction, ledger
-#packed-lawful-split). -/
+/-- A struct with a packed union field: no round trip law derived (fail closed; the engine's
+derivation by direction, ledger #packed-lawful-split). -/
 example (x : BitVec 9) : True := by
   fail_if_success have : Packed.toBits (Packed.ofBits x : Wrap) = x := by fsym_arith
   trivial
