@@ -5580,9 +5580,9 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
           -- an `if` the facts decided (a rule's released bytes `relBytes … tl` of a growth, where
           -- `tl` is in the refuted branch): any value serves, as the rule holds for every one
           if ← m.isAssigned then continue
-          let used (e : Expr) : MetaM Bool := do
+          let mentions (e : Expr) : MetaM Bool := do
             return ((← instantiateMVars e).collectMVars {}).result.contains m
-          unless (← used T') || (← used Qf) do
+          unless (← mentions T') || (← mentions Qf) do
             if let some d ← observing? (mkDefault (← m.getType)) then
               trace[fsym] "plan: witness ?{m.name} not used: {d}"
               m.assign d
