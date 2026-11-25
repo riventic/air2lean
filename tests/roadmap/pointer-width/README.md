@@ -20,6 +20,13 @@ has 12 (wasm32) or 24 (x86_64) bytes, with `restLen` and `setFirst` reading the 
 and the pointer at their target offsets. `ZigLean/Mem/WidthLemmas.lean` proves the encodings
 of both widths round-trip and that every `.w64` definition is the 64-bit model.
 
+Zig 0.17.1 exports of `pointer_width.zig` (`air/0.17.1/pointer_width/<target>/`) and of
+`reject.zig` (`air/0.17.1/reject/wasm32-freestanding/`) are declared in `exports.json`.
+`PointerWidth/V0_17_1/<Wasm32|Wasi|X64>/Gen.lean` are their translations, and
+`PointerWidth/V0_17_1/Proofs.lean` is `PointerWidth/Proofs.lean` one namespace deeper
+(`scripts/fixtures.py instance … --subst PointerWidth=PointerWidth.V0_17_1`): the 0.16.0 file
+stays the written one because the T05 wasm-correspondence claims name its theorems.
+
 `names.zig` (`@tagName` of an exhaustive and a non-exhaustive enum, `@errorName`, a byte read
 through a name) is declared in `exports.json` for Zig 0.17.1 and 0.16.0 and the same three
 targets (`air/<version>/names/<target>/`, pinned by `exports.lock.json`). A name is a
@@ -33,7 +40,7 @@ instance`).
 `test_cli.py` checks the translations' runtime names, that an exported pointer layout of
 the other width is rejected (the model's sizes come from the profile), that
 `pointer_bits` must match the triple, that the name functions use the profile's slice type,
-and the rejections of atomics and `Allocator.dupe` on wasm32.
+and the rejections of atomics and `Allocator.dupe` on wasm32, for every exported version.
 
 Run under the serialized build queue:
 
@@ -42,7 +49,7 @@ lake build ZigLean Air2Lean air2lean ZigLean.Mem.WidthLemmas
 bash tests/roadmap/pointer-width/check.sh                 # translate, compare, prove, reject
 AIR2LEAN_ZIG_NATIVE=<stock zig 0.16.0 or 0.17.1> bash tests/roadmap/pointer-width/check.sh --native
 AIR2LEAN_ZIG_AIR=<patched zig 0.16.0> bash tests/roadmap/pointer-width/check.sh --export DIR
-python3 -B scripts/fixture-exports.py verify pointer-width   # names.zig, every version
+python3 -B scripts/fixture-exports.py verify pointer-width   # exports.json, every version
 ```
 
 `--native` runs each source's layout, `usize`-boundary and name tests on the host, evaluates the

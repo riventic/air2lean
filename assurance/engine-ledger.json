@@ -1915,9 +1915,9 @@
   {
    "id": "mutex-impl-relaxed-witness",
    "title": "No kernel-checked witness that `MutexImpl` rejects a relaxed `unlock`",
-   "status": "open",
+   "status": "closed",
    "requester": "L21 (retirement of ZigLean/Conc/Spec, PR677)",
-   "progress": "open",
+   "progress": "closed by tests/roadmap/sep-full/RelaxedUnlockCX.lean, checked in CI's full-state step: `relaxed_unlock_not_wp` refutes `MutexImpl.unlock_wp` (c = 2, `Io.Mutex`'s states) for `Io.Mutex.unlock` with a relaxed swap; `no_relaxed_mutexImpl`: no `MutexImpl` has that unlock. The state (thread 0 holds the lock after writing the resource, thread 1 live) is reached from the start memory by real code and proved rules (`FLock.Inv.make`, `FLock.wp_casOn`, `Fits.wp_hold`, `Fits.ofLockAll`), so it does not build `Mem` or ghost values by hand. The WP inversions it uses are library lemmas (`ZigLean/Conc/RunInv.lean`).",
    "request": "The retired `Conc/Spec/MutexToy.relaxed_not_spec` showed that `MutexSpec` rejects a spin mutex whose `unlock` writes with `monotonic` (the next holder misses the previous holder's write). No statement shows the same of `MutexImpl`. Needed: a test (`tests/roadmap/sep-full/*CX.lean` style) that refutes `unlock_wp` for a `monotonic` unlock: a concrete memory satisfying `FLock.Inv` with a holder that wrote the lock's resource, a protocol with `FLock.Fits` (e.g. via `Fits.ofLock`), and the step after which `LockWord.Owns` fails for a live thread.",
    "workaround_sites": [],
    "deletion_plan": "Closes when the witness is in tests and checked by its fixture's check script."
