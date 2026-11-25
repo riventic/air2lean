@@ -781,7 +781,8 @@ partial def exec (ctx : Ctx) (st : St) (e : Expr) : MetaM (Array Path) := do
       if let .param i := base then
         let some (sz, k) := elemProj? (callee.getArg! 1)
           | throwError "a pointer projection of a parameter that is not an item at a literal index"
-        unless ctx.arrays.contains (i, sz) do throwError "an array indexed at two item sizes"
+        unless ctx.arrays.contains (i, sz) do
+          throwError "an item of a parameter that the body does not index directly (`arraysOf`)"
         return #[{ st, res := .item i k }]
       -- else a field of a node (`(·.add k)` of an optional pointer's payload)
       let .payload _ := base | throwError "a pointer projection of a value that is not a parameter or a node"
@@ -1478,10 +1479,10 @@ def listCand (ns : Name) (name again binders tbinders args run triple loc exit :
       let rest := k.vars.filter fun (x, _, hyp) => hyp || !known.contains x
       let bindersOf (vs : Array (String × String × Bool)) :=
         String.join (vs.toList.map fun (x, ty, _) => s!"({x} : {ty}) ")
-      let frame := k.frame.map fun a => if a.contains ' ' then s!"({a})" else a
+      let frame := k.frame.map paren
       pure (T, bindersOf used, " ".intercalate (used.toList.map (·.1)), bindersOf rest, app "node" na,
         app "done" da, frame, pre)
-  let LT := if T.contains ' ' then s!"List ({T})" else s!"List {T}"
+  let LT := s!"List {paren T}"
   -- The nodes passed. A visit's are a segment to the cursor, which a node joins at its end (the
   -- update `listSeg_snoc_upd`: the node's atoms give the update the item and the next pointer).
   -- What a call leaves of a node need not name either, so the nodes that a call has taken are
@@ -1829,12 +1830,12 @@ SHA-256 of the rest of the file: with them, `scripts/gen-integrity.py invgen` fi
 hand-edited file without running the generator, except one made stale by a library change that
 changes the pruning (the library is not hashed; `scripts/invgen.py check` finds it). Each loop's
 entry in `loops` names its family and the facts Houdini pruned (`pruned`), or why it has no
-invariant (`none`). With `fingerprints` (`[definition, fingerprint]` of the translated functions,
-`docs/stable-generation.md`), it also names the function that runs the loop and its fingerprint
-(`function`, `fingerprint`), so that a stale file says which loops' functions changed. The
+invariant (`none`), and the function that runs the loop with its fingerprint (`function`,
+`fingerprint`, from `fingerprints`: `[definition, fingerprint]` of the translated functions,
+`docs/stable-generation.md`), so that a stale file says which loops' functions changed. The
 current environment must import `ZigLean.Sep.Full.AutoAll`: the pruning walks run `fsym`. -/
 def generate (module ns : Name) (generator inputs : Json) (specs contracts : Array Name := #[])
-    (fingerprints : Option (Array (String × String)) := none) :
+    (fingerprints : Array (String × String)) :
     MetaM (String × Array (String × String)) := do
   let rules ← contracts.mapM fun r => return (← contractOf r, r)
   let all ← loopsOf module ns
@@ -1869,15 +1870,12 @@ def generate (module ns : Name) (generator inputs : Json) (specs contracts : Arr
     let loop := relName ns b
     -- the function that runs the loop (the longest translated definition that names it, `F` of
     -- `F.loopN`) and its semantic fingerprint
-    let fn : List (String × Json) ← match fingerprints with
-      | none => pure []
-      | some fps =>
-        let owners := fps.filter fun (d, _) => loop.startsWith (d ++ ".")
-        let some (d, fp) := owners.foldl (init := (none : Option (String × String)))
-            fun best (d, fp) => if best.all (·.1.length < d.length) then some (d, fp) else best
-          | throwError "no fingerprint of the function that runs the loop {loop}"
-        pure [("function", Json.str d), ("fingerprint", Json.str fp)]
-    let head : List (String × Json) := [("loop", Json.str loop)] ++ fn
+    let owners := fingerprints.filter fun (d, _) => loop.startsWith (d ++ ".")
+    let some (d, fp) := owners.foldl (init := (none : Option (String × String)))
+        fun best (d, fp) => if best.all (·.1.length < d.length) then some (d, fp) else best
+      | throwError "no fingerprint of the function that runs the loop {loop}"
+    let head : List (String × Json) :=
+      [("loop", Json.str loop), ("function", Json.str d), ("fingerprint", Json.str fp)]
     match results[b]! with
     | .ok o =>
       loops := loops.push (Json.mkObj (head ++ [("family", Json.str o.family),

@@ -5,11 +5,11 @@ import Air2Lean.Revision
 The invariant generator as an executable (`lake build air2lean-invgen`):
 
     air2lean-invgen MODULE NAMESPACE --source FILE [--spec MODULE FILE]... [--contract NAME]...
-      [--fingerprints FILE] [-o FILE]
+      --fingerprints FILE [-o FILE]
 
 `--fingerprints FILE` (a JSON list of `[definition, fingerprint]`, `scripts/invgen.py`) gives the
-semantic fingerprints of the translated functions; the record then names, per loop, the function
-that runs it and its fingerprint.
+semantic fingerprints of the translated functions; the record names, per loop, the function that
+runs it and its fingerprint.
 
 It imports the translated `MODULE`, whose source is `--source FILE` (a path relative to the
 repository root), and the library `ZigLean.Sep.Full.AutoAll`, whose `fsym` prunes the candidate
@@ -37,7 +37,7 @@ structure CliOptions where
   specs : Array (String × String) := #[]
   /-- The contracts (`--contract NAME`). -/
   contracts : Array String := #[]
-  /-- The semantic fingerprints of the translated functions (`--fingerprints FILE`). -/
+  /-- The semantic fingerprints of the translated functions (`--fingerprints FILE`, required). -/
   fingerprints : Option String := none
   /-- The output (`-o FILE`). -/
   out : Option String := none
@@ -54,20 +54,14 @@ def options : List String → Option CliOptions
 unsafe def main (argv : List String) : IO UInt32 := do
   let usage : IO UInt32 := do
     IO.eprintln "usage: air2lean-invgen MODULE NAMESPACE --source FILE \
-      [--spec MODULE FILE]... [--contract NAME]... [--fingerprints FILE] [-o FILE]"
+      [--spec MODULE FILE]... [--contract NAME]... --fingerprints FILE [-o FILE]"
     return 2
   let module :: ns :: "--source" :: source :: rest := argv | usage
-  let some parsed := options rest | usage
-  let specs := parsed.specs
-  let contracts := parsed.contracts
-  let out := parsed.out
+  let some { specs, contracts, fingerprints := some fps, out } := options rest | usage
   try
     -- `[[definition, fingerprint], …]` of the translated functions
-    let fingerprints ← parsed.fingerprints.mapM fun f => do
-      let rows ← IO.ofExcept ((Json.parse (← IO.FS.readFile f)).bind (·.getArr?))
-      rows.mapM fun row => IO.ofExcept do
-        let #[d, fp] ← row.getArr? | throw s!"{f}: a row that is not a pair"
-        return ((← d.getStr?), (← fp.getStr?))
+    let fingerprints ← IO.ofExcept <|
+      (Json.parse (← IO.FS.readFile fps)).bind (fromJson? (α := Array (String × String)))
     let mut inputs : Array Json := #[]
     let files : Array String := #[source] ++ specs.map fun (spec : String × String) => spec.2
     for file in files do
