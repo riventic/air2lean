@@ -4,9 +4,10 @@ import ZigLean.Sep.Full.OsFutex
 /-!
 # Audit 2026-10-14, finding S5: the hand models' futex wake count is not the native one
 
-`Thread.Futex.wake` (0.14.1, 0.15.2) and `Io.futexWake` (0.16.0, 0.17.1) are hand models (STD-05,
-`Zig.threadFutexWakeC`, `Zig.futexWakeC`): the scheduler's `wake p n`, which wakes exactly
-`min n k` of the `k` threads queued at `p` (`Thread.wakePick_length`). Std's code calls the OS:
+`Io.futexWake` (0.16.0, 0.17.1) is a hand model (STD-05, `Zig.futexWakeC`), as
+`Thread.Futex.wake` (0.14.1, 0.15.2) was until audit S6 finding 4, step D: the scheduler's
+`wake p n`, which wakes exactly `min n k` of the `k` threads queued at `p`
+(`Thread.wakePick_length`). Std's code calls the OS:
 
 * macOS: `__ulock_wake` with `WAKE_ALL` when `max_waiters > 1`, which wakes every waiter;
 * Linux: `futex_3arg` with `@min(max_waiters, maxInt(i32))`; the kernel's `nr_wake` is an
@@ -14,7 +15,7 @@ import ZigLean.Sep.Full.OsFutex
 
 The OS models of these calls (OSF-02, `ZigLean/Os/Futex.lean`) have the native count. This file
 elaborates while a std wake is still bound to the hand model (the last `#guard`); deleting the
-rows (STD-05 steps D and E) makes it fail. `docs/architecture-audit/soundness-2026-10-14.md` §S5
+last row (`Io.futexWake`, STD-05 step E) makes it fail. `docs/architecture-audit/soundness-2026-10-14.md` §S5
 has the impact analysis.
 -/
 
@@ -71,7 +72,13 @@ theorem short_request_duplicate_ids :
 #print axioms Thread.mem_wakePick_of_length_le
 #print axioms Thread.mem_wakeSet_of_count
 
--- The binding is still there: a std wake selects the hand model.
-#guard Air2Lean.stdModels.any fun r => r.symbol == "Thread.Futex.wake" || r.symbol == "Io.futexWake"
+-- `Thread.Futex.wake` (0.14.1, 0.15.2) is translated down to the OS wake rows, which have the
+-- native count (audit S6 finding 4, step D): no hand row, and the rows it reaches are OSF-02.
+#guard (Air2Lean.stdModel? "Thread.Futex.wake").isNone
+#guard #["os.linux.futex_3arg", "os.linux.futex_wake", "extern:__ulock_wake"].all fun s =>
+  (Air2Lean.stdModel? s).bind (·.premise) == some "OSF-02"
+
+-- The `Io` binding is still there (step E): a std `Io.futexWake` selects the hand model.
+#guard Air2Lean.stdModels.any fun r => r.symbol == "Io.futexWake"
 
 end AuditS5

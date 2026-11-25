@@ -293,7 +293,7 @@ theorem inv_cur {G : ThreadId → Gh} {m : Mem} (t : ThreadId) (hi : proto.inv G
 /-- `main` spawned every thread. -/
 theorem spawners {Y : ThreadId → X} {m : Mem} (h : Shape Y m) : ∀ r ∈ m.threads, r.spawner = 0 :=
   spawners_of_getElem fun i hi => by
-    obtain ⟨h0, -, -, ⟨h1, -⟩ | ⟨h2, -, h1, -⟩ | ⟨h3, -, -, -, h1, h2⟩⟩ := h
+    obtain ⟨h0, -, -, ⟨h1, -⟩ | ⟨h2, -, h1, -⟩ | ⟨h3, -, -, -, h1, h2, -⟩⟩ := h
     · obtain rfl : i = 0 := by omega
       rw [Array.getElem?_eq_getElem hi] at h0; rw [Option.some.inj h0]
     · rcases (by omega : i = 0 ∨ i = 1) with rfl | rfl
