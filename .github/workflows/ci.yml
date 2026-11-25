@@ -1816,8 +1816,8 @@ jobs:
 
       # E03: selected environment-operation contract and its write-all client; the
       # documentation check requires an operation-to-premise row and the not-claimed list.
-      # check.sh also translates the committed std I/O AIR (0.15.2 fs.File/posix, 0.16.0
-      # posix.read/closeFd) with only os.linux.{read,write,close} bound (ENV-03) and checks the
+      # check.sh also translates the committed std I/O AIR (0.15.2 fs.File/posix, 0.16.0 and
+      # 0.17.1 posix.read/closeFd) with only os.linux.{read,write,close} bound (ENV-03) and checks the
       # proofs about the generated code. Fresh export: scripts/fixture-exports.py verify env-boundaries.
       - name: Environment-operation boundary
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && !matrix.mutate && matrix.zig == '0.16.0' }}

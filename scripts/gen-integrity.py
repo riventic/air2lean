@@ -284,9 +284,9 @@ FIXTURES = [
 ] + [
     # tests/roadmap/env-boundaries/translate.sh: the committed ENV-03 registry binds the OS primitives.
     (f"tests/roadmap/env-boundaries/expected/EnvStd{v}.lean", f"tests/roadmap/env-boundaries/air/{zv}",
-     ["--namespace", f"EnvStd{v}", "--prefix", f"std_io{v}.",
+     ["--namespace", f"EnvStd{v}", "--prefix", f"{src}.",
       "--model-registry", str(ROOT / f"tests/roadmap/env-boundaries/registry/std{v}.json")], "exact")
-    for v, zv in (("15", "0.15.2"), ("16", "0.16.0"))
+    for v, zv, src in (("15", "0.15.2", "std_io15"), ("16", "0.16.0", "std_io16"), ("17", "0.17.1", "std_io16"))
 ] + [
     (f"tests/roadmap/error-width/expected/ErrorWidth{bits}.lean", f"tests/roadmap/error-width/air/bits{bits}",
      ["--namespace", f"ErrorWidth{bits}", "--prefix", "error_width."], "exact")
