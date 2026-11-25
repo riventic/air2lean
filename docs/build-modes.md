@@ -105,14 +105,21 @@ triaged mismatches with a reproducer, and the examples left out. `scripts/build-
 runs the x86_64-linux pairs in the pinned linux/amd64 local-CI image (emulated on an arm64
 host; under Rosetta the harness is linked with `-z norelro`, see [rosetta.md](rosetta.md)).
 
-Zig 0.16.0 (stock), 86209 cases per aarch64-macos and aarch64-linux run (each host's own
-translations, `scripts/check-tree.py create --host-goldens 0.16.0`) and 87084 per x86_64-linux run (emulated). The
+Zig 0.16.0 (stock), 86410 cases per aarch64-macos and aarch64-linux run (each host's own
+translations, `scripts/check-tree.py create --host-goldens 0.16.0`) and 87614 per x86_64-linux run. The
 x86_64-linux Debug, ReleaseFast and ReleaseSmall LLVM records were re-recorded from the native CI
 run after batches 7-8 added examples (87409 cases), and again after the soundness batch (87413
 cases: four asm fault inputs; inexact float `@divExact`, MM-3 out-of-bounds pointers and the
 `@fieldParentPtr` cases are pinned illegal, so the 85 float `@divExact` mismatches are now
-`illegal_exclusion`); CI uploads those summaries (`build-mode-summaries-*`) and verifies the
-records on every run.
+`illegal_exclusion`), and again after the `lists` allocation-failure oracle added 200 cases
+(87614 per x86_64-linux run, 86410 per aarch64 run). The x86_64-linux LLVM records of all four
+modes were re-recorded from native runs on x86_64 Linux (stock Zig digest equal to the CI
+runner's), the aarch64-linux ones from a native `linux/arm64` container and the aarch64-macos
+ones on the Apple host; CI uploads the summaries (`build-mode-summaries-*`) and verifies the
+records on every run. Which `atomics.mpRelaxed` inputs count as `illegal_exclusion` varies from
+run to run (the harness prefers a schedule that matches the native result over a data race,
+`tests/diff/ScheduleSearch.lean`, and the native result of that deliberate race depends on thread
+timing); `record --verify` does not compare that count.
 
 | Target | Mode | Backend | Mismatches | `ub_excluded` |
 | --- | --- | --- | --- | --- |
@@ -130,13 +137,31 @@ No run counts a `host_difference`: each host tests its own translation, whose fl
 that target's (`docs/floats.md` §Targets).
 `examples/asm` is `host_excluded` on both aarch64 hosts.
 
+**Zig 0.17.1 runs.** `assurance/build-mode-runs/0.17.1--<target>--<mode>--llvm.json` holds the
+ReleaseSafe and Debug runs of x86_64-linux (arc, native; 87614 cases), aarch64-linux (native
+`linux/arm64` container; 86410) and aarch64-macos (Apple host; 86410), each against that host's
+0.17.1 translations (`check-tree.py create --host-goldens 0.17.1`): 0 mismatches, 0 `ub_excluded`.
+`examples/threadsync` is `version_excluded` (its `zig-versions` does not list 0.17.1). There is
+no ReleaseFast or ReleaseSmall record for 0.17.1: both modes show a mismatch that is not triaged
+(`layout.setNum`, 171 cases, on all three hosts; `floatops.op80`, 2 cases, ReleaseSmall on
+x86_64-linux). The 0.16.0 records show neither. Two `tests/diff/layout/inputs/setNum.jsonl` rows
+(1: `big=false`, 4: `big=true`) show the first. The model stores the hidden tag byte of the bare
+union `Num` at offset 4 (`NumTag.small`/`NumTag.int`, 1 and 0); an unchecked build has no tag and
+leaves the byte as it was (input 1: native buffer `a0b02a43002a5f8a`, the model's store gives tag
+byte `01`; input 4: native `a7c2e12901eec554`, model tag byte `00`). The 0.16.0 run compares equal
+on the same native bytes; the cause of that difference (the 0.17.1 `Gen.lean` encodes `NumTag`
+with `Zig.intEncExt`) is not established. The second: `@trunc` of the
+f80 pseudo-denormal `0x00008000000000000000` (rows 3647 and 3741) returns it unchanged in 0.17.1
+Debug, ReleaseSafe and ReleaseFast and in the model, and `+0` in ReleaseSmall (and in every 0.16.0
+mode).
+
 **aarch64-linux runs.** They were recorded from `scripts/diff.sh` in a native `linux/arm64`
 container (Ubuntu 24.04, stock Zig 0.16.0 `aarch64-linux`, the Lean toolchain from
 `lean-toolchain`) on an Apple-silicon Docker VM: an aarch64 Linux kernel and aarch64 code, no
 instruction emulation (`emulated: false`). The CI job `build-modes-aarch64-linux`
 (`ubuntu-24.04-arm`, hosted hardware) re-runs all four modes against the records and
 checks the case count, examples, mismatches and exclusions; its counts are the container's
-(86209 cases; 4922 `ub_excluded` in ReleaseFast and ReleaseSmall, none otherwise).
+(86410 cases; 4922 `ub_excluded` in ReleaseFast and ReleaseSmall, none otherwise).
 
 The aarch64-linux runs include `floatops` and `floatconv`: they test the committed
 aarch64-linux translations (`tests/golden/0.16.0/<ex>/Gen-linux-aarch64.lean`, whose float rules

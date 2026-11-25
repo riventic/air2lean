@@ -966,11 +966,14 @@ theorem sepN_rnil : ∀ n : Nat, sepN n (partOf fun _ => rnil) rnil
   | 0 => ⟨rfl, rfl, rfl⟩
   | n + 1 => ⟨rnil, rnil, FHeap.disjoint_empty _, (rsum_rnil rnil).symm, rfl, sepN_rnil n⟩
 
-/-- **The start of two locks** (`FLock.Inv.make` for a pair): thread `t`, whose clock is above
-every thread's, gives of its part both words (`rWA`, `rWB`: exactly the words' bytes, which hold
+/-- **The start of two locks** (`FLock.Inv.make` for a pair), at any point of a program: thread
+`t`, whose clock happened before every thread's that has not ended at one of the locks (`hall`),
+gives of its part both words (`rWA`, `rWB`: exactly the words' bytes, which hold
 `0`), both resources (`rLA`, `rLB`) and the protocol's own rest to the rest: its sync objects'
 words `rYw` (exactly the bytes `Wd`), which the rest then holds as the memory's cells, and the
-rest of it `rY`. Every thread is out of both locks' code (and alive) or gone. Then `A`'s invariant
+rest of it `rY`. Every thread is out of each lock's code or `away` (and alive), or gone; no atomic
+location overlaps either word (`hatA`, `hatB`); a thread that waits at a futex waits at neither
+word's key and is `away` from both locks (`hqA`, `hqB`). Then `A`'s invariant
 holds with `B`'s side in its rest, and `B` is kept, at the protocol's own rest: the cells at `Wd`,
 `rY` and the old rest `rO`. -/
 theorem start {own : ThreadId → Res} {rO rLA rWA rLB rWB rYw rY : Res} {t : ThreadId}
@@ -992,15 +995,20 @@ theorem start {own : ThreadId → Res} {rO rLA rWA rLB rWB rYw rY : Res} {t : Th
     (hWAg : rWA.gh = Ghost.unit)
     (hWB : ∀ l, rWB.heap l ≠ none ↔ B.In l) (hWBk : rWB.know = Know.none)
     (hWBg : rWB.gh = Ghost.unit)
-    (hphA : ∀ u, (A.ph (G u) = .out ∧ u < m.threads.size ∧ joinedB m u = false) ∨
-      A.ph (G u) = .gone)
-    (hphB : ∀ u, (B.ph (G u) = .out ∧ u < m.threads.size ∧ joinedB m u = false) ∨
-      B.ph (G u) = .gone)
+    (hphA : ∀ u, ((A.ph (G u) = .out ∨ A.ph (G u) = .away) ∧ u < m.threads.size ∧
+      joinedB m u = false) ∨ A.ph (G u) = .gone)
+    (hphB : ∀ u, ((B.ph (G u) = .out ∨ B.ph (G u) = .away) ∧ u < m.threads.size ∧
+      joinedB m u = false) ∨ B.ph (G u) = .gone)
     (hheldA : ∀ u, A.held (G u) = rnil) (hheldB : ∀ u, B.held (G u) = rnil)
     (hRA : A.R G rLA) (hRB : B.R G rLB)
     (hblkA : A.BlkOk m) (h0A : A.U32 m 0) (hblkB : B.BlkOk m) (h0B : B.U32 m 0)
-    (hat : ∀ l ∈ m.atomics, l.block ≠ A.b ∧ l.block ≠ B.b) (hq : m.waiters = #[])
-    (hall : AllLe m (m.clocks[t]!)) :
+    (hatA : ∀ l ∈ m.atomics, l.block = A.b →
+      A.o + 4 ≤ l.off ∨ (l.off < A.o ∧ l.off + l.len ≤ A.o))
+    (hatB : ∀ l ∈ m.atomics, l.block = B.b →
+      B.o + 4 ≤ l.off ∨ (l.off < B.o ∧ l.off + l.len ≤ B.o))
+    (hqA : ∀ w ∈ m.waiters, w.2 ≠ A.key m ∧ A.ph (G w.1) = .away)
+    (hqB : ∀ w ∈ m.waiters, w.2 ≠ B.key m ∧ B.ph (G w.1) = .away)
+    (hall : AllLeOn (fun u => A.ph (G u) ≠ .gone ∨ B.ph (G u) ≠ .gone) m (m.clocks[t]!)) :
     A.Inv G (rsum (side B m rLB rnil) (rsum (cellsAt Wd m) (rsum rY rO))) m ∧
       B.Keeps G m rLB rnil (rsum (cellsAt Wd m) (rsum rY rO)) := by
   -- the pieces of `t`'s part are apart from the old rest
@@ -1036,7 +1044,7 @@ theorem start {own : ThreadId → Res} {rO rLA rWA rLB rWB rYw rY : Res} {t : Th
     rw [hsplit, rsum_comm hdBY]; simp only [rsum_assoc]
   obtain ⟨hfreeB, hwB, hLBoff, hLBown⟩ :=
     FLock.make_word (L := B) (G := G) ho ht eB hdB hWB hphB hblkB h0B
-      (fun l hl => (hat l hl).2) hq hall
+      hatB hqB (hall.anti fun _ => .inr)
   have hfB : B.Facts G m rLB := ⟨hwB, hLBoff, fun _ => ⟨hRB, hLBown⟩, fun h => absurd hfreeB h,
     fun u => by rw [hheldB]; exact FHeap.disjoint_empty _, fun u _ => hheldB u,
     fun u hu => by
@@ -1069,7 +1077,7 @@ theorem start {own : ThreadId → Res} {rO rLA rWA rLB rWB rYw rY : Res} {t : Th
   have hi : A.Inv G (rsum (side B m rLB rnil) (rsum (cellsAt Wd m) (rsum rY rO))) m :=
     FLock.Inv.make (t := t) (rL := rLA) (rW := rWA) ho2 hjt ht
       (fun u hu => by rw [upd_ne _ _ hu]; exact hown u hu) (by rw [upd_self]) hdP'.1 hdA hWA
-      hWAk hWAg hphA hheldA hRA hblkA h0A (fun l hl => (hat l hl).1) hq hall
+      hWAk hWAg hphA hheldA hRA hblkA h0A hatA hqA (hall.anti fun _ => .inl)
   have hheld : B.heldOf G m = fun _ => rnil := funext fun u => by
     unfold FLock.heldOf; split
     · rfl

@@ -1,4 +1,4 @@
--- air2lean-profile: {"allocator_model":"translated","correspondence":"model","float_semantics":"ieee","profile":{"abi":"none","backend":"stage2_llvm","build_mode":"ReleaseSafe","cpu":"apple_m1","endian":"little","error_layout":"type-table","error_set_bits":16,"error_tracing":false,"export_stage":"analyzed-air","features":["aes","aggressive_fma","alternate_sextload_cvt_f32_pattern","altnzcv","am","arith_bcc_fusion","arith_cbz_fusion","ccdp","ccidx","ccpp","complxnum","contextidr_el2","crc","disable_latency_sched_heuristic","dit","dotprod","el2vmsa","el3","flagm","fp16fml","fp_armv8","fptoint","fullfp16","fuse_address","fuse_aes","fuse_arith_logic","fuse_crypto_eor","fuse_csel","fuse_literals","jsconv","lor","lse","lse2","mpam","neon","nv","pan","pan_rwv","pauth","perfmon","predres","ras","rcpc","rcpc_immo","rdm","sb","sel2","sha2","sha3","specrestrict","ssbs","store_pair_suppress","tlb_rmi","tracev8_4","uaops","v8_1a","v8_2a","v8_3a","v8_4a","v8a","vh","zcm_fpr64","zcm_gpr64","zcz","zcz_gp"],"float_mode":"per-instruction","name":"abi64-le-v1","pointer_bits":64,"schema":12,"target_triple":"aarch64-macos.13.0...15.6-none","zig_version":"0.16.0"}}
+-- air2lean-profile: {"allocator_model":"translated","correspondence":"model","float_semantics":"ieee","profile":{"abi":"none","backend":"stage2_llvm","build_mode":"ReleaseSafe","cpu":"apple_m1","endian":"little","error_layout":"type-table","error_set_bits":16,"error_tracing":false,"export_stage":"analyzed-air","features":["aes","aggressive_fma","alternate_sextload_cvt_f32_pattern","altnzcv","am","arith_bcc_fusion","arith_cbz_fusion","ccdp","ccidx","ccpp","complxnum","contextidr_el2","crc","disable_latency_sched_heuristic","dit","dotprod","el2vmsa","el3","flagm","fp16fml","fp_armv8","fptoint","fullfp16","fuse_address","fuse_arith_logic","fuse_crypto_eor","fuse_csel","fuse_literals","jsconv","lor","lse","lse2","max_interleave_factor_4","mpam","neon","no_zcz_fpr64","nv","pan","pan_rwv","pauth","perfmon","predres","ras","rcpc","rcpc_immo","rdm","sb","sel2","sha2","sha3","specrestrict","ssbs","store_pair_suppress","tlb_rmi","tracev8_4","uaops","v8_1a","v8_2a","v8_3a","v8_4a","v8a","vh","zcm_fpr128","zcm_gpr64","zcz_fpr128","zcz_gpr32","zcz_gpr64"],"float_mode":"per-instruction","name":"abi64-le-v1","pointer_bits":64,"schema":12,"target_triple":"aarch64-macos.15.0...27.0-none","zig_version":"0.17.1"}}
 import ZigLean
 
 
@@ -54,9 +54,9 @@ instance : Zig.Packed mem_Alignment 6 where
 instance : Zig.Enc mem_Alignment where
   size := 1
   align := 1
-  encode v := Zig.Enc.encode v.toBits
+  encode v := (Zig.intEncExt .little false 6).encode v.toBits
   decode bs := do
-    let b : BitVec 6 ← Zig.Enc.decode bs
+    let b : BitVec 6 ← (Zig.intEncExt .little false 6).decode bs
     pure ⟨b⟩
 
 structure heap_FixedBufferAllocator where
@@ -354,17 +354,17 @@ def heap_FixedBufferAllocator_alloc (p0 : Zig.Ptr) (p1 : BitVec 64) (p2 : mem_Al
 
 attribute [zig_run] heap_FixedBufferAllocator_alloc
 
-structure mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Locals where
+structure mem_Allocator_allocBytesAligned__anon_c9141768de1aLocals where
   deriving Inhabited
 
-inductive mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Exit where
+inductive mem_Allocator_allocBytesAligned__anon_c9141768de1aExit where
   | ret (v : Except Zig.ErrName (Zig.Ptr))
   | br3
   | br10 (v : Option (Zig.Ptr))
   | br9 (v : Zig.Ptr)
   | br30
 
-def mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279 (p0 : mem_Allocator) (p1 : BitVec 64) (p2 : BitVec 64) : Zig.MemM (Except Zig.ErrName (Zig.Ptr)) := do
+def mem_Allocator_allocBytesAligned__anon_c9141768de1a (p0 : mem_Allocator) (p1 : BitVec 64) (p2 : BitVec 64) : Zig.MemM (Except Zig.ErrName (Zig.Ptr)) := do
   let e ← ((do
     match ← ((do
       let i4 ← pure (p1)
@@ -372,7 +372,7 @@ def mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279 (p0 : mem_Allocator
       if i5 then (do
         pure (.ret (.ok (⟨none, 18446744073709551612⟩ : Zig.Ptr) : Except Zig.ErrName (Zig.Ptr))))
       else (do
-        pure .br3)) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Locals mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Exit) with
+        pure .br3)) : Zig.MM mem_Allocator_allocBytesAligned__anon_c9141768de1aLocals mem_Allocator_allocBytesAligned__anon_c9141768de1aExit) with
     | .br3 => (do
       match ← ((do
         match ← ((do
@@ -381,7 +381,7 @@ def mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279 (p0 : mem_Allocator
           let i13 ← Zig.load (Zig.Ptr) 8 i12
           let i14 ← pure ((p0).ptr)
           let i15 ← (if i13 == (⟨some 1, 0⟩ : Zig.Ptr) then Zig.callM (heap_FixedBufferAllocator_alloc i14 p1 mem_Alignment.«4» p2) else throw .illegal)
-          pure (.br10 i15)) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Locals mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Exit) with
+          pure (.br10 i15)) : Zig.MM mem_Allocator_allocBytesAligned__anon_c9141768de1aLocals mem_Allocator_allocBytesAligned__anon_c9141768de1aExit) with
         | .br10 v10 => (do
           let i17 ← pure ((v10).isSome)
           if i17 then (do
@@ -389,7 +389,7 @@ def mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279 (p0 : mem_Allocator
             pure (.br9 i19))
           else (do
             pure (.ret (.error "OutOfMemory" : Except Zig.ErrName (Zig.Ptr)))))
-        | e => pure e) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Locals mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Exit) with
+        | e => pure e) : Zig.MM mem_Allocator_allocBytesAligned__anon_c9141768de1aLocals mem_Allocator_allocBytesAligned__anon_c9141768de1aExit) with
       | .br9 v9 => (do
         let i22 ← pure v9
         let i23 ← Zig.sub false p1 (0 : BitVec 64) (safe := false)
@@ -403,41 +403,54 @@ def mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279 (p0 : mem_Allocator
           if i29 then (do
             pure .br30)
           else (do
-            throw .panic)) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Locals mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Exit) with
+            throw .panic)) : Zig.MM mem_Allocator_allocBytesAligned__anon_c9141768de1aLocals mem_Allocator_allocBytesAligned__anon_c9141768de1aExit) with
         | .br30 => (do
           let i35 ← Zig.callM (Zig.checkAlign 4 v9 >>= fun _ => pure v9)
           let i36 ← pure ((.ok i35) : Except Zig.ErrName (Zig.Ptr))
           pure (.ret i36))
         | e => pure e)
       | e => pure e)
-    | e => pure e) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Locals mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Exit).run' (default : mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279Locals)
+    | e => pure e) : Zig.MM mem_Allocator_allocBytesAligned__anon_c9141768de1aLocals mem_Allocator_allocBytesAligned__anon_c9141768de1aExit).run' (default : mem_Allocator_allocBytesAligned__anon_c9141768de1aLocals)
   match e with
   | .ret v => pure v
   | _ => throw .panic
 
-attribute [zig_run] mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279
+attribute [zig_run] mem_Allocator_allocBytesAligned__anon_c9141768de1a
 
 structure mem_Allocator_create__anon_8f6a81b88324Locals where
+  local11 : Zig.Ptr
   deriving Inhabited
 
 inductive mem_Allocator_create__anon_8f6a81b88324Exit where
   | ret (v : Except Zig.ErrName (Zig.Ptr))
+  | br2 (v : Except Zig.ErrName (Zig.Ptr))
 
 def mem_Allocator_create__anon_8f6a81b88324 (p0 : mem_Allocator) : Zig.MemM (Except Zig.ErrName (Zig.Ptr)) := do
+  let s11 ← Zig.allocStack 16 8
   let e ← ((do
     let i1 ← Zig.callM Zig.returnAddress
-    let i2 ← Zig.callM (mem_Allocator_allocBytesWithAlignment__anon_4247f1fc6279 p0 (4 : BitVec 64) i1)
-    match i2 with
-    | .error _ => (do
-      let i4 ← Zig.callR (Zig.unwrapErr i2)
-      let i5 ← pure ((.error i4) : Except Zig.ErrName (Zig.Ptr))
-      pure (.ret i5))
-    | .ok v3 => (do
-      let i7 ← pure (v3)
-      let i8 ← pure ((.ok i7) : Except Zig.ErrName (Zig.Ptr))
-      pure (.ret i8))) : Zig.MM mem_Allocator_create__anon_8f6a81b88324Locals mem_Allocator_create__anon_8f6a81b88324Exit).run' (default : mem_Allocator_create__anon_8f6a81b88324Locals)
+    match ← ((do
+      let i3 ← Zig.callM (mem_Allocator_allocBytesAligned__anon_c9141768de1a p0 (4 : BitVec 64) i1)
+      match i3 with
+      | .error _ => (do
+        let i5 ← Zig.callR (Zig.unwrapErr i3)
+        let i6 ← pure ((.error i5) : Except Zig.ErrName (Zig.Ptr))
+        pure (.br2 i6))
+      | .ok v4 => (do
+        let i8 ← pure (v4)
+        let i9 ← pure ((.ok i8) : Except Zig.ErrName (Zig.Ptr))
+        pure (.br2 i9))) : Zig.MM mem_Allocator_create__anon_8f6a81b88324Locals mem_Allocator_create__anon_8f6a81b88324Exit) with
+    | .br2 v2 => (do
+      let i11 ← pure (← get).local11
+      (letI : Zig.Enc (Except Zig.ErrName (Zig.Ptr)) := Zig.errorUnionEnc (⟨#["OutOfMemory"], by decide, by decide⟩ : Zig.ErrorDomain) ((inferInstance : Zig.Enc (Zig.Ptr))); Zig.store (α := Except Zig.ErrName (Zig.Ptr)) 8 i11 v2)
+      let i13 ← pure (i11)
+      let i14 ← (letI : Zig.Enc (Except Zig.ErrName (Zig.Ptr)) := Zig.errorUnionEnc (⟨#["OutOfMemory"], by decide, by decide⟩ : Zig.ErrorDomain) ((inferInstance : Zig.Enc (Zig.Ptr))); Zig.load (Except Zig.ErrName (Zig.Ptr)) 8 i13)
+      pure (.ret i14))
+    | e => pure e) : Zig.MM mem_Allocator_create__anon_8f6a81b88324Locals mem_Allocator_create__anon_8f6a81b88324Exit).run' { (default : mem_Allocator_create__anon_8f6a81b88324Locals) with local11 := s11 }
+  Zig.free s11
   match e with
   | .ret v => pure v
+  | _ => throw .panic
 
 attribute [zig_run] mem_Allocator_create__anon_8f6a81b88324
 
@@ -452,8 +465,9 @@ def mem_Alignment_fromByteUnits (p0 : BitVec 64) : Zig.Result (mem_Alignment) :=
     let i1 ← Zig.call (math_isPowerOfTwo__anon_38853e1fe316 p0)
     let _i2 ← Zig.call (debug_assert i1)
     let i3 ← pure (Zig.ctz 7 p0)
-    let i4 ← Zig.enumOf (mem_Alignment.ofInt? (Zig.val false i3))
-    pure (.ret i4)) : Zig.M mem_Alignment_fromByteUnitsLocals mem_Alignment_fromByteUnitsExit).run' (default : mem_Alignment_fromByteUnitsLocals)
+    let i4 ← Zig.intCast false false 6 i3
+    let i5 ← Zig.enumOf (mem_Alignment.ofInt? (Zig.val false i4))
+    pure (.ret i5)) : Zig.M mem_Alignment_fromByteUnitsLocals mem_Alignment_fromByteUnitsExit).run' (default : mem_Alignment_fromByteUnitsLocals)
   match e with
   | .ret v => pure v
 
@@ -686,16 +700,16 @@ def math_mul__anon_44faaf286c79 (p0 : BitVec 64) (p1 : BitVec 64) : Zig.Result (
 
 attribute [zig_run] math_mul__anon_44faaf286c79
 
-structure mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bLocals where
+structure mem_Allocator_allocBytesAligned__anon_0618802aa46aLocals where
   deriving Inhabited
 
-inductive mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bExit where
+inductive mem_Allocator_allocBytesAligned__anon_0618802aa46aExit where
   | ret (v : Except Zig.ErrName (Zig.Ptr))
   | br3
   | br10 (v : Option (Zig.Ptr))
   | br9 (v : Zig.Ptr)
 
-def mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8b (p0 : mem_Allocator) (p1 : BitVec 64) (p2 : BitVec 64) : Zig.MemM (Except Zig.ErrName (Zig.Ptr)) := do
+def mem_Allocator_allocBytesAligned__anon_0618802aa46a (p0 : mem_Allocator) (p1 : BitVec 64) (p2 : BitVec 64) : Zig.MemM (Except Zig.ErrName (Zig.Ptr)) := do
   let e ← ((do
     match ← ((do
       let i4 ← pure (p1)
@@ -703,7 +717,7 @@ def mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8b (p0 : mem_Allocator
       if i5 then (do
         pure (.ret (.ok (⟨none, 18446744073709551615⟩ : Zig.Ptr) : Except Zig.ErrName (Zig.Ptr))))
       else (do
-        pure .br3)) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bLocals mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bExit) with
+        pure .br3)) : Zig.MM mem_Allocator_allocBytesAligned__anon_0618802aa46aLocals mem_Allocator_allocBytesAligned__anon_0618802aa46aExit) with
     | .br3 => (do
       match ← ((do
         match ← ((do
@@ -712,7 +726,7 @@ def mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8b (p0 : mem_Allocator
           let i13 ← Zig.load (Zig.Ptr) 8 i12
           let i14 ← pure ((p0).ptr)
           let i15 ← (if i13 == (⟨some 1, 0⟩ : Zig.Ptr) then Zig.callM (heap_FixedBufferAllocator_alloc i14 p1 mem_Alignment.«1» p2) else throw .illegal)
-          pure (.br10 i15)) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bLocals mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bExit) with
+          pure (.br10 i15)) : Zig.MM mem_Allocator_allocBytesAligned__anon_0618802aa46aLocals mem_Allocator_allocBytesAligned__anon_0618802aa46aExit) with
         | .br10 v10 => (do
           let i17 ← pure ((v10).isSome)
           if i17 then (do
@@ -720,7 +734,7 @@ def mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8b (p0 : mem_Allocator
             pure (.br9 i19))
           else (do
             pure (.ret (.error "OutOfMemory" : Except Zig.ErrName (Zig.Ptr)))))
-        | e => pure e) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bLocals mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bExit) with
+        | e => pure e) : Zig.MM mem_Allocator_allocBytesAligned__anon_0618802aa46aLocals mem_Allocator_allocBytesAligned__anon_0618802aa46aExit) with
       | .br9 v9 => (do
         let i22 ← pure v9
         let i23 ← Zig.sub false p1 (0 : BitVec 64) (safe := false)
@@ -731,12 +745,12 @@ def mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8b (p0 : mem_Allocator
         let i28 ← pure ((.ok i27) : Except Zig.ErrName (Zig.Ptr))
         pure (.ret i28))
       | e => pure e)
-    | e => pure e) : Zig.MM mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bLocals mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bExit).run' (default : mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8bLocals)
+    | e => pure e) : Zig.MM mem_Allocator_allocBytesAligned__anon_0618802aa46aLocals mem_Allocator_allocBytesAligned__anon_0618802aa46aExit).run' (default : mem_Allocator_allocBytesAligned__anon_0618802aa46aLocals)
   match e with
   | .ret v => pure v
   | _ => throw .panic
 
-attribute [zig_run] mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8b
+attribute [zig_run] mem_Allocator_allocBytesAligned__anon_0618802aa46a
 
 structure mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43Locals where
   deriving Inhabited
@@ -757,7 +771,7 @@ def mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43 (p0 : mem_Allocat
         let _i9 ← Zig.callR (Zig.unwrapErr i4)
         pure (.ret (.error "OutOfMemory" : Except Zig.ErrName (Zig.Ptr))))) : Zig.MM mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43Locals mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43Exit) with
     | .br3 v3 => (do
-      let i11 ← Zig.callM (mem_Allocator_allocBytesWithAlignment__anon_1446b3d5ad8b p0 v3 p2)
+      let i11 ← Zig.callM (mem_Allocator_allocBytesAligned__anon_0618802aa46a p0 v3 p2)
       pure (.ret i11))
     | e => pure e) : Zig.MM mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43Locals mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43Exit).run' (default : mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43Locals)
   match e with
@@ -767,6 +781,7 @@ def mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43 (p0 : mem_Allocat
 attribute [zig_run] mem_Allocator_allocWithSizeAndAlignment__anon_0aadb2616c43
 
 structure mem_Allocator_alloc__anon_a8254a5f2b74Locals where
+  local14 : Zig.Ptr
   deriving Inhabited
 
 inductive mem_Allocator_alloc__anon_a8254a5f2b74Exit where
@@ -774,6 +789,7 @@ inductive mem_Allocator_alloc__anon_a8254a5f2b74Exit where
   | br3 (v : Except Zig.ErrName (Zig.Slice))
 
 def mem_Allocator_alloc__anon_a8254a5f2b74 (p0 : mem_Allocator) (p1 : BitVec 64) : Zig.MemM (Except Zig.ErrName (Zig.Slice)) := do
+  let s14 ← Zig.allocStack 24 8
   let e ← ((do
     let i2 ← Zig.callM Zig.returnAddress
     match ← ((do
@@ -790,9 +806,13 @@ def mem_Allocator_alloc__anon_a8254a5f2b74 (p0 : mem_Allocator) (p1 : BitVec 64)
         let i12 ← pure ((.ok i11) : Except Zig.ErrName (Zig.Slice))
         pure (.br3 i12))) : Zig.MM mem_Allocator_alloc__anon_a8254a5f2b74Locals mem_Allocator_alloc__anon_a8254a5f2b74Exit) with
     | .br3 v3 => (do
-      let i14 ← pure (v3)
-      pure (.ret i14))
-    | e => pure e) : Zig.MM mem_Allocator_alloc__anon_a8254a5f2b74Locals mem_Allocator_alloc__anon_a8254a5f2b74Exit).run' (default : mem_Allocator_alloc__anon_a8254a5f2b74Locals)
+      let i14 ← pure (← get).local14
+      (letI : Zig.Enc (Except Zig.ErrName (Zig.Slice)) := Zig.errorUnionEnc (⟨#["OutOfMemory"], by decide, by decide⟩ : Zig.ErrorDomain) ((inferInstance : Zig.Enc (Zig.Slice))); Zig.store (α := Except Zig.ErrName (Zig.Slice)) 8 i14 v3)
+      let i16 ← pure (i14)
+      let i17 ← (letI : Zig.Enc (Except Zig.ErrName (Zig.Slice)) := Zig.errorUnionEnc (⟨#["OutOfMemory"], by decide, by decide⟩ : Zig.ErrorDomain) ((inferInstance : Zig.Enc (Zig.Slice))); Zig.load (Except Zig.ErrName (Zig.Slice)) 8 i16)
+      pure (.ret i17))
+    | e => pure e) : Zig.MM mem_Allocator_alloc__anon_a8254a5f2b74Locals mem_Allocator_alloc__anon_a8254a5f2b74Exit).run' { (default : mem_Allocator_alloc__anon_a8254a5f2b74Locals) with local14 := s14 }
+  Zig.free s14
   match e with
   | .ret v => pure v
   | _ => throw .panic
