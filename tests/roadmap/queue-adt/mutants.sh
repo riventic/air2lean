@@ -92,4 +92,7 @@ cp "$here/QueueAdt/Gen.lean" "$here/QueueAdt/Moved.lean" "$work/steps/QueueAdt/"
 python3 -B scripts/fixtures.py mutant "shift-pop-steps-short" --src "$work/steps" \
   --fails QueueAdt.Shift
 echo "queue-adt mutant: shift-pop-steps-short rejected (the shifting array's pop is not paid by one credit fewer than its items)"
+python3 -B scripts/mutation_kill_log.py --check tests/roadmap/queue-adt/check.sh "$here/mutants.sh" \
+  ring-push-no-wrap ring-pop-no-wrap pushall-capacity-premise-dropped shift-pop-no-move \
+  shift-pop-steps-short
 echo "queue-adt mutants: ok"

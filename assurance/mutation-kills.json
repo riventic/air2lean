@@ -890,6 +890,41 @@
       },
       "block_sha256": "0715d5f3fa74172e6e6a4de4c1b034bf12242b1881419a8aed2c8de0c904079d"
     },
+    "tests/roadmap/queue-adt/mutants.sh#pushall-capacity-premise-dropped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/queue-adt/check.sh"
+      },
+      "block_sha256": "750ff1daa1907f7341e3c3e00a684fc697d1423910f787ec6b524e4a38a2351a"
+    },
+    "tests/roadmap/queue-adt/mutants.sh#ring-pop-no-wrap": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/queue-adt/check.sh"
+      },
+      "block_sha256": "750ff1daa1907f7341e3c3e00a684fc697d1423910f787ec6b524e4a38a2351a"
+    },
+    "tests/roadmap/queue-adt/mutants.sh#ring-push-no-wrap": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/queue-adt/check.sh"
+      },
+      "block_sha256": "750ff1daa1907f7341e3c3e00a684fc697d1423910f787ec6b524e4a38a2351a"
+    },
+    "tests/roadmap/queue-adt/mutants.sh#shift-pop-no-move": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/queue-adt/check.sh"
+      },
+      "block_sha256": "750ff1daa1907f7341e3c3e00a684fc697d1423910f787ec6b524e4a38a2351a"
+    },
+    "tests/roadmap/queue-adt/mutants.sh#shift-pop-steps-short": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/queue-adt/check.sh"
+      },
+      "block_sha256": "750ff1daa1907f7341e3c3e00a684fc697d1423910f787ec6b524e4a38a2351a"
+    },
     "tests/roadmap/resize-remap/mutations.py#copy-lost-prefix-and-defined-suffix": {
       "unrecorded": "mutations.py only writes patches of the retiring hand model ZigLean/Mem/Alloc.lean; no CI check applies them and runs Check.lean",
       "block_sha256": "c93cec4e6d0892a52c2894febf66de31e627b278f2a2da8d4f0005b2f4c36c89"
