@@ -104,7 +104,7 @@ theorem keep (h : MemAuth m c d) (hk : Keep m m') : MemAuth m' c d :=
     h.onlyCred, fun v hv => by rw [hk.current]; exact h.cur v hv,
     fun D hD => by rw [hk.dev]; exact h.dev D hD⟩
 
-/-- **Only the device cell matters for `dev`**: another counter cell with the same authority. -/
+/-- **Another device cell** that the memory authorizes (`dev`), beside the same counter cell. -/
 theorem withDev {d' : DCell} (h : MemAuth m c d) (hd : ∀ D, 0 < d' D → d' D = 1 ∧ m.dev = D) :
     MemAuth m c d' :=
   ⟨h.stack, h.tick, h.noStack, h.onlyCred, h.cur, hd⟩
