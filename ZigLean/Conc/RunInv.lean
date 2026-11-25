@@ -59,7 +59,7 @@ theorem WP.pick_inv {count : Mem → Nat} {f : Nat → ConcM Tgt β}
       ∀ c, (c < count { m₁ with current := t } ∨ count { m₁ with current := t } = 0 ∧ c = 0) →
         P.WP t (f c) Q G₁ { m₁ with current := t } n := by
   obtain ⟨-, g, hi, -, hk⟩ := h
-  exact ⟨g, hi, fun G₁ m₁ hg hi₁ ht c hc => hk G₁ m₁ hg hi₁ ht c hc⟩
+  exact ⟨g, hi, hk⟩
 
 /-- **A `MemM` step that returns**: the rest runs from its memory. -/
 theorem WP.liftMem_bind_inv {x : MemM α} {f : α → ConcM Tgt β}

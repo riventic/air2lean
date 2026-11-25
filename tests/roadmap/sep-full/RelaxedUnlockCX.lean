@@ -162,8 +162,8 @@ def st : LockWord.States (BitVec 32) where
   ne12 := by decide
 
 /-- **`Io.Mutex.unlock` with a relaxed release**: `IoMutexCode.unlockOf`'s `xchg(unlocked)`
-(`atomicRmwAsC`: the oracle's pick, then the RMW) with `relaxed` (monotonic) in place of `release`, then the
-futex wake if the word was `contended`, written out in `ConcM`. -/
+(`atomicRmwAsC`: the oracle's pick, then the RMW) with `relaxed` (monotonic) in place of
+`release`, then the futex wake if the word was `contended`, written out in `ConcM`. -/
 def relaxedUnlock (p : Ptr) (_io : Io) : ConcM Unit Unit := do
   let c ← ConcM.sync (.pick (rmwCount 32 .relaxed 4 p))
   let v ← ConcM.liftMem (atomicRmwAs (α := BitVec 32) c .xchg .relaxed 4 p 0)
