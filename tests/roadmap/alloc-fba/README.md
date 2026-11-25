@@ -14,7 +14,7 @@ is modelled by hand.
 | `AllocFba/Full.lean` | `FBA.fallocSpec : FAllocSpec FLogic.total impl ctx (FBA.finv ctx B γ e)` for every struct, buffer and epoch `e` of a reset ledger `γ` (`fsym` with the updates of the returns); `FBA.ledger` (the second `ResetLedger` instance), `FBA.freset_spec` (the whole epoch token for the next one), `FBA.fown_init` (a new ledger) |
 | `AllocFba/Client.lean` | `Client.client_spec`: `fba_client v` returns, without an error, `1`–`4` (out of memory) or `v + v + (v +% 1)`, an `FTotalTriple` walked by `fsym` from the contracts only: the initialized FBA invariant (`fallocator_init`), the wrappers' contracts over `FBA.fallocSpec` and the reset contract (`freset_spec`); `Client.client_start`: the same from the program's start memory `mem0` (the strength example) |
 | `AllocFba/Eval.lean` | `#guard`s: the translated functions evaluate to `expected.txt` from `mem0` |
-| `AllocFba/Wrappers.lean` | the generated `std.mem.Allocator` wrappers over `FAllocSpec`, for every allocator invariant (`fsym` walks their code; no `Wrap.*`) |
+| `AllocFba/Wrappers.lean` | the generated `std.mem.Allocator` wrappers over `FAllocSpec`, for every allocator invariant (`fsym` walks their code; no `Wrap.*`); a wrapper that may push a result slot owns the stack token and room for it, one bound for every Zig version (`stackCharge 24 8`, `create`: `stackCharge 16 8`) |
 | `mutant.sh` | an `alloc` that does not advance `end_index` fails the `FBA.fallocSpec` proof |
 | `native.zig`, `expected.txt` | the native run with a stock Zig 0.16.0 or 0.17.1 (the same output) |
 
@@ -34,10 +34,11 @@ To re-export: `python3 -B scripts/fixture-exports.py export alloc-fba`, then tra
 `client_spec` is stated for every state in which the client owns the `buffer` global's 16 bytes
 (any address `A₀` with `A₀ + 16 ≤ 2^64`), a share of its block's extent with an untagged claim on
 the allocator's 12 bytes, the vtable constant (`vtR`), and the running thread's stack token and
-room for the client's 24-byte stack frame (`cur 0 ⋆ sp 0 S D`, `D + stackCharge 24 8 ≤ S`): the
-stack room is an owned resource, not a premise. `Client.client_start` shows that this
-precondition is met at the program's real start: for every placement with room for a stack of `S`
-bytes (`stackCharge 24 8 ≤ S`), the client run from `mem0` returns a result that satisfies `Res`
+room for the client's 24-byte stack frame and, behind it, the slot of a wrapper it calls
+(`cur 0 ⋆ sp 0 S D`, `D + stackCharge 24 8 + stackCharge 24 8 ≤ S`): the stack room is an owned
+resource, not a premise. `Client.client_start` shows that this precondition is met at the
+program's real start: for every placement with room for a stack of `S` bytes
+(`stackCharge 24 8 + stackCharge 24 8 ≤ S`), the client run from `mem0` returns a result that satisfies `Res`
 (`FTotalTriple.run_init_stack_claims`). The `mem0` run is checked by `AllocFba/Eval.lean`.
 
 ## Zig 0.17.1
@@ -45,9 +46,11 @@ bytes (`stackCharge 24 8 ≤ S`), the client run from `mem0` returns a result th
 The allocator's entries (`heap_FixedBufferAllocator_*`) translate to the same code from Zig 0.16.0
 and 0.17.1, so `FBA.fallocSpec` and the creation theorems are one proof text for both:
 `check.sh` builds and audits them, and the `#guard`s, over the 0.17.1 translation. The
-`std.mem.Allocator` wrappers differ, and `Wrappers.lean` (so `Client.lean`) does not build over
-0.17.1: `fsym` sticks at 0.17.1's `intCast` in `mem.Alignment.fromByteUnits` (engine ledger row
-21a), and `alloc`, `reallocAdvanced`, `allocSentinel` and `create` keep their result in a stack
-slot, which the wrapper contracts (stated without stack room) do not cover (engine ledger row
-`fba-0171-wrapper-stack`, with the options). Until both are decided, the retained translation stays 0.16.0's; afterwards it becomes 0.17.1's,
-with the whole library checked over 0.16.0's in the check tree.
+`std.mem.Allocator` wrappers differ: 0.17.1's `alloc`, `reallocAdvanced`, `allocSentinel` and
+`create` keep their result in a stack slot. Their contracts own the stack room for it (one
+statement for both versions, engine ledger row `fba-0171-wrapper-stack`, option (a)), and with
+them every wrapper contract and `Client.lean` hold over 0.17.1 except `free_spec`,
+`freeSentinel_spec` and `destroy_spec`: `fsym` sticks at 0.17.1's `intCast` in
+`mem.Alignment.fromByteUnits` (engine ledger row 21a). Until 21a is closed, the retained
+translation stays 0.16.0's; afterwards it becomes 0.17.1's, with the whole library checked over
+0.16.0's in the check tree.

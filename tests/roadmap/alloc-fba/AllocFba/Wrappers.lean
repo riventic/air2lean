@@ -1,5 +1,5 @@
 import AllocFba.Full
-import ZigLean.Sep.Full.Wrappers
+import ZigLean.Sep.Full.AutoAll
 import ZigLean.Sep.Full.Dispatch
 
 /-!
