@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Unit tests of the C front-end harness's record logic (run.py): named gates, the headline
 outcome and the function references the export closure follows. No compiler or Lean."""
+import json
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -69,6 +71,12 @@ class Gates(unittest.TestCase):
                   zig_native={"status": "compile_error"})
         self.assertEqual(self.ids(e), [])
 
+    def test_an_undefined_symbol_is_a_compile_error_with_either_linker(self):
+        for log in ("error: undefined symbol: _entry",  # macOS ld64
+                    "error: ld.lld: undefined symbol: entry"):  # ELF targets
+            self.assertTrue(run.COMPILE_ERROR.search(log), log)
+        self.assertIsNone(run.COMPILE_ERROR.search("thread 1 panic: integer overflow"))
+
     def test_lean_ok_is_never_gated(self):
         checked = {"status": "checked"}
         e = entry(c_native=OK, translate_c=OK, zig_native=OK, air_export=OK, air2lean=checked, lean=OK)
@@ -87,7 +95,20 @@ class Closure(unittest.TestCase):
                "body": [{"tag": "call", "callee": {"func": "mem.zeroes__func_0"}, "args": [{"func": "c_f.cb"}]},
                         {"tag": "call", "callee": {"extern": "strlen"}}],
                "globals": [{"name": "c_f.table", "init": {"elems": [{"func": "c_f.other"}]}}]}
-        self.assertEqual(run.function_refs(doc), {"mem.zeroes__func_0", "c_f.cb", "c_f.other"})
+        self.assertEqual(run.function_refs(doc, {}), {"mem.zeroes__func_0", "c_f.cb", "c_f.other"})
+        # An extern symbol references the function of the compilation that defines it.
+        self.assertEqual(run.function_refs(doc, {"strlen": {"compiler_rt.strlen"}, "abs": {"c.stdlib.abs"}}),
+                         {"mem.zeroes__func_0", "c_f.cb", "c_f.other", "compiler_rt.strlen"})
+
+    def test_symbol_definitions_are_the_export_table_functions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            air = Path(tmp)
+            self.assertEqual(run.symbol_definitions(air), {})
+            (air / run.EXPORT_TABLE).write_text(json.dumps({"schema": 12, "zig_version": "0.17.1", "exports": [
+                {"name": "abs", "linkage": "weak", "visibility": "hidden",
+                 "function": {"module": "zigc", "name": "c.stdlib.abs", "cc": "x86_64_sysv"}},
+                {"name": "environ", "linkage": "weak", "visibility": "default", "function": None}]}))
+            self.assertEqual(run.symbol_definitions(air), {"abs": {"c.stdlib.abs"}})
 
     def test_module_name_is_not_a_std_file_name(self):
         self.assertEqual(run.module_name("enums"), "c_enums")
