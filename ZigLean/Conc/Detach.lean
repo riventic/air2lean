@@ -27,10 +27,9 @@ The model rules of `Thread.detach` and of an explicit handle transfer
   frame's stack blocks die at the frame's exit (`free`), and every access to a dead block, by any
   thread, throws `.illegal` (`access_dead_any`, `load_dead`, `store_dead`, `frame_exit_kills`): no
   access that a detached thread makes after the exit reads or writes stack data that is gone. The
-  `free` itself is a write of the whole block for the race check (`Mem.freeRaces`), and a detach
-  gives no join edge (`ThreadRec.released`), so an access before the exit that the exit does not
-  happen after is `.illegal` too (`tests/roadmap/detached-threads/Runtime.lean`,
-  `stack_read_before_exit`). The logic adds the static side: a region granted `owned` to another
+  `free` is a write of the whole block for the race check (`Mem.freeRaces`) and a detach gives no
+  join edge (`ThreadRec.released`), so an earlier access that the exit does not happen after is
+  `.illegal` too (`stack_read_before_exit`). The logic adds the static side: a region granted `owned` to another
   thread (C01, `FCapture.grant`, `ZigLean/Sep/Full/ThreadSpawn.lean`) is not in the parent's part
   (`FOwned`), so the parent cannot establish the precondition of its frame's `free` for it
   (`not_bytesAt_granted`), and a detached thread is never joined, so no join returns the region.
