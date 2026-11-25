@@ -272,6 +272,8 @@ theorem wake_wp (hcost : P.cost = none) {t : ThreadId} {p : Ptr} {c : BitVec 32}
       (wake_body (P := P) (t := t) (p := p) (all := Zig.gt false c (1 : BitVec 32))
         hword htick hpick hwake n),
     ul_bits, hc', h]
+  -- the loop's entry: the `UL` std builds is the request `wake_body` takes
+  all_goals exact ul_bits _
 
 end_when
 
