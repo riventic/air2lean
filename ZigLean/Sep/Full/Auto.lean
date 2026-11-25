@@ -7887,17 +7887,19 @@ partial def walkCore (g : MVarId) (user : Array Expr) (extra : Array Syntax) (fu
   -- `resize`'s `relBytes … n len …`, or the state's): its plan cannot take both cases with one
   -- frame, so the goal is split on the condition and each case plans the decided precondition
   -- (ledger #61): when no rule applies, or only one whose side goal is refuted, before the
-  -- command is inlined. With only a refuted rule, the facts of the state's undecided `if`'s
-  -- cases may refute the case that reaches the command (a subtraction whose bound holds in each
-  -- case of the released bytes' `if`, `resize`): split on it before the refuted side goal is left
+  -- command is inlined
   if partial?.isNone || lastResort then
     for cond in splits do
       if ← undecided cond then
         trace[fsym] "split on a condition of a rule's precondition {cond}"
         return ← splitWalk g cond
-  if lastResort then
+  -- a rule's side goal that the facts do not decide, with an assertion-level `if` of the state
+  -- that they do not decide either: the `if` first, as each case has its own atoms and their
+  -- facts may decide the side goal (`resize`'s `end_index -= len - n`: its bound follows from the
+  -- released bytes' claim, in the case `n < len` of their `if`)
+  if partial?.isSome then
     if let some cond ← stateIf? then
-      trace[fsym] "refuted side goal: split on the state's condition {cond}"
+      trace[fsym] "side goal left: split on the state's condition {cond}"
       return ← splitWalk g cond
   -- a side condition that the facts do not decide: split on it (the rules' cases)
   if let some (s, restoreChoiceArith, _, left) := partial? then
