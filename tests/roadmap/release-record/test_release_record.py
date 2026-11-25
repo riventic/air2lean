@@ -7,6 +7,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -251,7 +252,22 @@ jobs:
             with self.subTest(condition=condition):
                 job = {'runs-on': 'ubuntu-24.04', 'steps': [{'name': 'gate', 'if': condition}]}
                 self.assertEqual(rr.row_gates(job, FULL_ROW, {'gate'}, ''),
-                                 (['gate'], []) if expected else ([], ['gate']))
+                                 (['gate'], [], {}) if expected else ([], ['gate'], {}))
+
+    def test_event_conditions_are_evaluated_per_run_event(self):
+        for condition, expected in (
+            ("github.event_name == 'push' || github.event_name == 'merge_group'", (['gate'], [], {'gate': ['merge_group', 'push']})),
+            ("github.event_name != 'pull_request'", (['gate'], [], {'gate': ['merge_group', 'push', 'schedule', 'workflow_dispatch']})),
+            ("github.event_name == 'release'", ([], ['gate'], {})),
+            ("github.event_name == 'release' || matrix.full", (['gate'], [], {})),
+        ):
+            with self.subTest(condition=condition):
+                job = {'runs-on': 'ubuntu-24.04', 'steps': [{'name': 'gate', 'if': condition}]}
+                self.assertEqual(rr.row_gates(job, FULL_ROW, {'gate'}, ''), expected)
+        # Other `github` context fields stay outside the supported subset.
+        job = {'runs-on': 'ubuntu-24.04', 'steps': [{'name': 'gate', 'if': "github.ref == 'refs/heads/main'"}]}
+        with self.assertRaisesRegex(rr.ReleaseError, 'unsupported condition'):
+            rr.row_gates(job, FULL_ROW, {'gate'}, '')
 
     def test_unsupported_workflow_syntax_fails_closed(self):
         for bad in ('x: &anchor 1\n', 'x: >\n  folded\n', 'x: |++\n  kept\n', 'x: | # note\n  y\n', 'jobs:\n  test:\n    steps:\n    - name: a\n     run: b\n'):
@@ -401,6 +417,26 @@ class RecordTests(Repo):
             FULL: {'Unit': 'success', 'Full only': 'success', 'Mutation check': 'skipped'},
             MUTATE: {'Unit': 'success', 'Full only': 'skipped', 'Mutation check': 'success'}}, event='merge_group')])
         self.assertEqual(record['status'], 'complete')
+
+    def test_event_gate_takes_evidence_only_from_runs_of_its_events(self):
+        self.write('.github/workflows/ci.yml', WORKFLOW.replace(
+            'matrix.full && !matrix.mutate', "matrix.full && !matrix.mutate && github.event_name == 'push'"))
+        self.head = self.commit('push-only gate')
+        plan = rr.build_plan(self.repo, self.head)
+        self.assertEqual(next(j for j in plan['jobs'] if j['name'] == FULL)['gate_events'], {'Full only': ['push']})
+        self.assertEqual(self.record(github_runs=[self.passing_run()])['status'], 'complete')
+        dispatch = self.run_json({FULL: {'Unit': 'success', 'Full only': 'skipped', 'Mutation check': 'skipped'},
+                                  MUTATE: {'Unit': 'success', 'Full only': 'skipped', 'Mutation check': 'success'}},
+                                 event='workflow_dispatch')
+        record = self.record(github_runs=[dispatch])
+        self.assertEqual((self.gate(record, FULL, 'Unit')['status'], self.gate(record, FULL, 'Full only')['status']),
+                         ('passed', 'missing'))
+        self.assertEqual(self.record(github_runs=[dispatch, self.passing_run()])['status'], 'complete')
+        ran = self.run_json({FULL: {'Unit': 'success', 'Full only': 'success'}}, event='workflow_dispatch')
+        with self.assertRaisesRegex(rr.ReleaseError, "ran step 'Full only' whose condition is false for a workflow_dispatch run"):
+            self.record(github_runs=[ran])
+        with self.assertRaisesRegex(rr.ReleaseError, 'depend on the event: %s / Full only' % re.escape(FULL)):
+            self.record(local_runs=[self.local_dir([(FULL_ROW, 'Unit'), (FULL_ROW, 'Full only')])])
 
     def test_reused_job_is_no_evidence_and_never_hides_a_skip(self):
         # docs/ci.md: a reused part skips every gate after a passing decision step. That run

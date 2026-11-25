@@ -138,8 +138,9 @@ def source_modules(root: Path | None = None) -> dict[str, tuple[str, str]]:
 def source_roots(root: Path | None = None) -> dict[str, str]:
     """`source_modules` without Lake (the source scan runs where no Lean is installed): each
     configured module's repository source -> its library's source root, read from the lakefile's
-    `srcDir` and `globs` (else `roots`): `M` is M, `M.+` M and its submodules, `M.*` its
-    submodules. A file in two libraries (nested source roots) fails."""
+    `srcDir` and `globs` (else `roots`), read as Lake does (Lake/Config/Glob.lean): `M` is M,
+    `M.+` its submodules, `M.*` M and its submodules. A file in two libraries (nested source
+    roots) fails."""
     root = root or ROOT
     package = root / PACKAGE.relative_to(ROOT)
     if not (package / "lakefile.toml").is_file():
@@ -150,7 +151,7 @@ def source_roots(root: Path | None = None) -> dict[str, str]:
         for pattern in lib.get("globs") or lib.get("roots") or [lib["name"]]:
             base = pattern.removesuffix(".+").removesuffix(".*")
             directory = src / base.replace(".", "/")
-            paths = [] if pattern.endswith(".*") else [directory.with_suffix(".lean")]
+            paths = [] if pattern.endswith(".+") else [directory.with_suffix(".lean")]
             if pattern != base:
                 paths += sorted(directory.rglob("*.lean"))
             for path in filter(Path.is_file, paths):
