@@ -71,9 +71,10 @@ theorem Holds.unstack {m : Mem} {r rF : Res} (hh : Holds m r rF) (hr : r.gh = Gh
     Holds m.unstacked ⟨r.heap, r.know, Ghost.unit⟩ ⟨rF.heap, rF.know, { rF.gh with ac := ACell.unit }⟩ := by
   have hd := hh.ghost.2.2.2.dev
   rw [hr] at hd
-  refine hh.reAC rfl rfl ?_ ?_ ?_ (by simpa using ACell.valid_unit)
-    (by simpa using (MemAuth.unit (m := m.unstacked) (Mem.noStack_of_stacks rfl)).withDev
-      (d' := rF.gh.dev) fun D hD => by simpa [Ghost.ofAC] using hd D (by simpa [Ghost.ofAC] using hD))
+  have hM : MemAuth m.unstacked ACell.unit rF.gh.dev :=
+    (MemAuth.unit (Mem.noStack_of_stacks rfl)).withDev fun D hD => by
+      simpa using hd D (by simpa using hD)
+  refine hh.reAC rfl rfl ?_ ?_ ?_ (by simpa using ACell.valid_unit) (by simpa using hM)
     (by rw [hr]; funext _; simp [Ghost.ofAC])
   · rw [hr]; funext γ; simp [Ghost.add, Ghost.ofAC, Ghost.unit]
   · rw [hr]; funext b; simp [Ghost.add, Ghost.ofAC, Ghost.unit]
@@ -136,7 +137,10 @@ theorem FTotalTriple.allocStack_sp {t S D : Nat} (size align : Nat) (ha : 0 < al
       (by funext b x; simp [pushRes, Ghost.add, Ghost.ofAC, Ghost.unit, Ghost.exts])
       (by rw [ecell]; exact hv')
       (by
-        rw [ecell]
+        have edev : (((pushRes m.blocks.size nb).gh.add (Ghost.ofAC a')).add rF.gh).dev =
+            (r.gh.add rF.gh).dev := by
+          rw [hr]; simp [pushRes, Ghost.cur]
+        rw [ecell, edev]
         refine hM.restack hsa' rfl rfl (fun h => absurd (h t) (by rw [hS]; simp))
           (fun k => by simp [spCell, entCell]) (fun k n => by simp [spCell, entCell])
           (fun v => by simp [spCell, entCell]))

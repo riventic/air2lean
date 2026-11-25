@@ -123,6 +123,9 @@ def Ghost.atCl (b : BlockId) (C : Nat → ECell) : Ghost :=
 
 @[simp] theorem Ghost.atCl_ac (b : BlockId) (C : Nat → ECell) : (Ghost.atCl b C).ac = ACell.unit := rfl
 
+@[simp] theorem Ghost.atCl_dev (b : BlockId) (C : Nat → ECell) : (Ghost.atCl b C).dev = DCell.unit :=
+  rfl
+
 theorem Ghost.atCl_add (b : BlockId) (C C' : Nat → ECell) :
     (Ghost.atCl b C).add (Ghost.atCl b C') = Ghost.atCl b fun x => (C x).add (C' x) := by
   ext1

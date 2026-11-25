@@ -2140,6 +2140,8 @@ def Ghost.atExt (b : BlockId) (c : ECell) : Ghost :=
 
 @[simp] theorem Ghost.atExt_ac (b : BlockId) (c : ECell) : (Ghost.atExt b c).ac = ACell.unit := rfl
 
+@[simp] theorem Ghost.atExt_dev (b : BlockId) (c : ECell) : (Ghost.atExt b c).dev = DCell.unit := rfl
+
 theorem Ghost.atExt_add (b : BlockId) (c c' : ECell) :
     (Ghost.atExt b c).add (Ghost.atExt b c') = Ghost.atExt b (c.add c') := by
   ext1

@@ -924,7 +924,7 @@ theorem record_rest_of {m : Mem} {k : AccessKind} (hc : m.current < m.clocks.siz
     (hlive : ∀ l, W.In l → m.heap l ≠ none) :
     RestStep W.In m (m.recordAt W.b W.o nb k) := by
   refine RestStep.of_blocks (FStepIn.recordAt_of (hF := fun _ => none)
-    hc (fun _ _ _ => rfl) hb hk) rfl ⟨rfl, rfl, rfl⟩ hlive (fun _ _ _ => rfl) id ?_
+    hc (fun _ _ _ => rfl) hb hk) rfl ⟨rfl, rfl, rfl, rfl⟩ hlive (fun _ _ _ => rfl) id ?_
   intro e he
   simp only [Mem.recordAt, Array.mem_push] at he
   rcases he with he | rfl

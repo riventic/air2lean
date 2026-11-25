@@ -868,6 +868,8 @@ def Ghost.ofAC (c : KCell) : Ghost := { Ghost.unit with ac := c }
 
 @[simp] theorem Ghost.ofAC_ac (c : KCell) : (Ghost.ofAC c).ac = c := rfl
 
+@[simp] theorem Ghost.ofAC_dev (c : KCell) : (Ghost.ofAC c).dev = DCell.unit := rfl
+
 theorem Ghost.ofAC_add (a b : KCell) : (Ghost.ofAC a).add (Ghost.ofAC b) = Ghost.ofAC (a.add b) := by
   ext1 <;> (try funext x) <;> (try funext y) <;> simp [Ghost.ofAC, Ghost.add, Ghost.unit]
 

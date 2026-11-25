@@ -470,7 +470,7 @@ theorem FTotalTriple.munmapTail' (os : Os.Target) {p : Ptr} {b : BlockId} {A S S
       blocks := m.blocks.set! b (Os.Unmap.apply blk (.tail (lo + k))) }
   obtain ⟨hh', hpost, hld⟩ := Holds.trim (m' := m')
     (hi := lo + k) hh hpre hb hl hsz hK hpb hoff (by omega) (by omega) (by omega) rfl rfl
-    ⟨rfl, rfl, rfl⟩
+    ⟨rfl, rfl, rfl, rfl⟩
   have hs' : m'.FSeq := ⟨⟨singleThread_recordAt hs.1.single _ _ _ _⟩, hs.2.1, hld hs.2.2⟩
   exact ⟨(), _, _, hrun, hh'.retire hs'.2.1 _ _ _, hpost, Mem.FSeq.retire hs' _ _ _⟩
 
@@ -534,7 +534,7 @@ theorem FTotalTriple.munmapPrefix' (os : Os.Target) {p : Ptr} {b : BlockId} {A S
           exact ⟨by omega, by omega⟩
       · simp [hx])
     (MemAuth.Keep.shrink hb hl rfl rfl (Nat.le_refl _)
-      (by simp only [nb, hK, BlockKind.mappedLo_mapped]; omega) ⟨rfl, rfl, rfl⟩)
+      (by simp only [nb, hK, BlockKind.mappedLo_mapped]; omega) ⟨rfl, rfl, rfl, rfl⟩)
   have hpost := reblockRes_bext (m := m) (m' := m') (b := b) (nb := nb) fun o h' => by
     have := (hheap' o).mp h'; exact (hheap o).mpr ⟨by omega, this.2⟩
   rw [show nb.bytes.size = S from hsz] at hpost
@@ -631,7 +631,7 @@ theorem FTotalTriple.mremapGrow' (os : Os.Target) (hhas : os.hasMremap = true) {
       show nb.bytes.size ≤ blk.kind.mappedLo ∨ S = 0 ∨
         blk.addr + nb.bytes.size ≤ (m.stackOf t).base ∨
         (m.stackOf t).base + S ≤ blk.addr + blk.kind.mappedLo
-      rw [h3, hK, BlockKind.mappedLo_mapped]; omega) ⟨rfl, rfl, rfl⟩)
+      rw [h3, hK, BlockKind.mappedLo_mapped]; omega) ⟨rfl, rfl, rfl, rfl⟩)
   refine ⟨_, m₂, _, hrun, hh₂, sep_lift.mpr ⟨rfl, ⟨blk.addr, ?_⟩⟩,
     ⟨⟨Mem.SingleThread.forgetFrom (m := m₁) hs.1.single _ _⟩,
     hs.2.1, LDMono.grow (nb := nb) (lo := lo) (len := alignUp n os.pageSize) hb₁ hl rfl (by omega)
@@ -694,7 +694,7 @@ theorem FTotalTriple.mremapShrink' (os : Os.Target) (hhas : os.hasMremap = true)
     blocks := m.blocks.set! b { blk with bytes := blk.bytes.extract 0 (lo + newLen.toNat) } }
   obtain ⟨hh', hpost, hld⟩ := Holds.trim (m' := m')
     (hi := lo + newLen.toNat) hh hpre hb hl hsz hK rfl (by show ((lo + newLen.toNat : Nat) : Int).toNat = _; omega)
-    (by omega) hn hcut rfl rfl ⟨rfl, rfl, rfl⟩
+    (by omega) hn hcut rfl rfl ⟨rfl, rfl, rfl, rfl⟩
   have hs' : m'.FSeq := ⟨⟨singleThread_recordAt hs.1.single _ _ _ _⟩, hs.2.1, hld hs.2.2⟩
   exact ⟨_, _, _, hrun, hh'.retire hs'.2.1 _ _ _, sep_lift.mpr ⟨rfl, hpost⟩, Mem.FSeq.retire hs' _ _ _⟩
 
