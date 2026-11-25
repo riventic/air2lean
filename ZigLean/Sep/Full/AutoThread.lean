@@ -153,9 +153,7 @@ theorem returnAddress : ThreadLocal P Zig.returnAddress :=
         { m.noFp with arbitraryNext := m.noFp.arbitraryNext + 1 }) := rfl
     rw [hr] at e
     obtain ⟨-, rfl⟩ := Prod.mk.inj (Result.pure_inj e)
-    exact ⟨.of_stepIn ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl,
-        VClock.le_refl _, Nat.le_refl _, fun _ he => .inl he, fun _ he => .inl he⟩
-      (.of_blocks rfl) (fun _ _ h => h) (fun _ he hn => absurd he hn) (fun _ h => h), fun _ _ _ h => h⟩⟩
+    exact ⟨.of_same fun _ h => h, fun _ _ _ h => h⟩⟩
 
 /-- **`@ptrFromInt`'s check** is local: it reads no memory. -/
 theorem checkAddr (al : Nat) (nonNull : Bool) (n : Nat) : ThreadLocal P (Zig.checkAddr al nonNull n) := by

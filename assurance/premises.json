@@ -55,7 +55,8 @@
   "admissions": {
     "unqualified-build-mode": [],
     "no-libc": ["MTH-05"],
-    "asm-cpu-features": ["ASM-09"]
+    "asm-cpu-features": ["ASM-09"],
+    "weak-exports": ["EXT-07"]
   },
   "float_semantics": {
     "ieee": [],
@@ -382,7 +383,7 @@
     "ASM-05": ["ASM-04"],
     "ASM-06": ["ASM-03"],
     "EXT-04": ["EXT-01", "THR-01"],
-    "EXT-02": ["EXT-01"], "EXT-03": ["EXT-01"],
+    "EXT-02": ["EXT-01"], "EXT-03": ["EXT-01"], "EXT-07": ["EXT-03"],
     "SEM-02": ["SEM-01", "SEM-07"],
     "SEM-03": ["SEM-01"],
     "SEM-06": ["SEM-01", "SEM-02", "SEM-03"],

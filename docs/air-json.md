@@ -312,12 +312,23 @@ function name has. Before the whole-program checks it binds each extern call
    (`docs/external-models.md` §Extern functions), when the AIR set does not define the symbol
    (that combination is rejected). The call stays a model call. A registry entry
    for the Zig declaration's name does not bind the extern call.
-2. **Translated definition.** Else the one function of the AIR set whose `export.name` is the
-   symbol, with the declared `cc`. The call becomes a direct call of that definition, and its
-   argument and result types are checked against the definition's parameters and return type
-   like any direct call's. This is the static linker's rule for a program linked as one image
-   with that strong definition (for example musl translated through the same route). A call
-   to a symbol that several functions of the AIR set export is rejected.
+2. **Translated definition.** Else the one function of the program that defines the symbol,
+   with the declared `cc`. The definitions of a symbol are the `export` of each function's own
+   file (an `export fn`) and the records of the compilation's [export table](#export-table)
+   (the symbols that `@export` defines, and those of functions without AIR in the set). The
+   declared parameter and result types must be the definition's (exact modeled type and
+   layout): the call becomes a direct call of that definition, and no value is converted at
+   the boundary. A declaration that agrees with the definition only at the C ABI
+   (`[*c]const u8` for a `[*:0]const c_char` parameter, `?*anyopaque` for a `?[*]u8`) is not
+   bound: `CALLEE_EXTERN_UNBOUND`, naming the symbol, the definition and the first differing
+   position ([c-frontend.md](c-frontend.md#libc-boundary)). Binding a strong definition
+   is the static linker's rule for a program linked as one image (EXT-03). A **weak**
+   definition (`.linkage = .weak`: every symbol of Zig's `lib/c.zig` and `compiler_rt`) binds
+   only with `--assume-weak-exports`, which states that the image links no other definition
+   of the symbol ([EXT-07](premises.md#ext-07)); the generated header records the admission
+   `weak-exports`. Rejected, with or without the flag: a symbol with several definitions in
+   the program, weak or strong (`CALLEE_AMBIGUOUS`); a symbol the compilation defines as
+   something other than a function; a definition whose function has no AIR in the set.
 3. Otherwise the program is rejected with `CALLEE_EXTERN_UNBOUND`, naming the symbol (and its
    library). A variadic extern (`varargs: true`) and a call to a `noreturn` extern are
    outside the subset. Each call's argument count and result type must be the entry's.
@@ -379,6 +390,38 @@ numbering is per compilation: a fixture exports the compilation of its native pr
 
 `vector_store_elem` (0.14.1, 0.15.2): `args` are the vector pointer, the runtime lane index and
 the lane value (`v[i] = x`; 0.16.0 rejects a runtime vector index in Sema).
+
+## Export table
+
+`export-table.air2lean`, beside the function files (not a `.json` name: it describes no
+function). Zig 0.17.1 only. A function's own file carries the symbol of an `export fn`
+(`export`); a symbol that the `@export` builtin defines (another name for a function, a weak
+definition) is known only when analysis has ended. The patched compiler then writes this table
+(`dumpExportTable`, from the hook of the error table) if the compilation has such a symbol,
+and removes a table that an earlier compilation left otherwise. A table lists every export of
+the compilation that the linker sees (those of the analysis units still referenced, as
+`Zcu.PerThread.processExports` selects them), the `export fn` ones too, whatever
+`ZIG_AIR_JSON_FILTER` selects: a reader that finds it knows every definition of a symbol in the
+compilation.
+
+```json
+{"schema": 12, "zig_version": "0.17.1", "exports": [
+  {"name": "strcmp", "linkage": "weak", "visibility": "hidden",
+   "function": {"module": "zigc", "name": "c.string.strcmp", "cc": "x86_64_sysv"}}]}
+```
+
+| Field | Meaning |
+|---|---|
+| `name` | the linker symbol |
+| `linkage` | `strong` or `weak` (`std.lang.GlobalLinkage`) |
+| `visibility` | `default`, `hidden` or `protected`; not used by the translator |
+| `function` | the exported function's identity (`module`, `name`: those of its own file) and calling convention; `null` for an exported variable or constant and for an `@export` of an extern declaration |
+
+The translator reads the table beside the AIR files, requires its Zig version to be the
+files', and binds extern calls by it ([Extern calls](#extern-calls), rule 2). An older compiler
+writes no table: an extern call to a symbol that only `@export` defines stays unbound there
+(`CALLEE_EXTERN_UNBOUND`). The table is per compilation, like the error table: the AIR files
+of two compilations in one directory have the table of the last one only.
 
 ## Identity
 

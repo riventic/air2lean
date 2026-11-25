@@ -361,18 +361,16 @@ theorem Fits.ok_wt (hS : S.Fits P U ok) {g : γ} (hok : ok g) (hgx : C.ph g = .o
 /-! ## The invariant over the steps -/
 
 /-- **`S.Inv` stays** over a step that keeps every thread's places, the count, the holders at
-`pst`, the threads, the state's writes, and the takers' queue entries but for entries at the mutex
-(`hwq`: a new entry of a thread that is no taker, e.g. at another lock's futex, is admitted), grows
-the clocks and keeps `HB` (the holders, or a release, the newest release of the mutex's word). -/
-theorem Inv.monoTk {G G' : ThreadId → γ} {m m' : Mem} (hI : S.Inv G m)
+`pst`, the state's writes and the takers' queue entries but for entries at the mutex, grows the
+clocks, keeps `HB` (`hHB`: `FLock.HB.mono`, `FLock.HB.fork`, or a step that keeps as many threads)
+and loses no thread (the thread table is free: a spawn adds a thread, a join marks one joined). -/
+theorem Inv.keep {G G' : ThreadId → γ} {m m' : Mem} (hI : S.Inv G m)
     (hsph : ∀ u, S.ph (G' u) = S.ph (G u)) (hcph : ∀ u, C.ph (G' u) = C.ph (G u))
     (hpv : S.cnt G' = S.cnt G)
     (hpst : ∀ u, (S.ph (G u)).isPst → L.ph (G' u) = .holds)
-    (hhold : ∀ u, (L.ph (G u)).held = true → (L.ph (G' u)).held = true ∨
-      ∀ c, VClock.le c (m.clocks[u]!) = true → L.Before m' c)
+    (hHB : ∀ c, L.HB G m c → L.HB G' m' c)
     (hcl : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
-    (hbef : ∀ c, L.Before m c → L.Before m' c) (ht : m'.threads = m.threads)
-    (hgone : ∀ u, L.ph (G' u) ≠ .gone → L.ph (G u) ≠ .gone)
+    (ht : m.threads.size ≤ m'.threads.size)
     (hwq : ∀ w ∈ m'.waiters, S.Tk G' w.1 → w ∈ m.waiters ∨ w.2 = L.key m)
     (hkL : L.key m' = L.key m) (hS : C.S.hist m' = C.S.hist m) : S.Inv G' m' := by
   have hTk : ∀ v, S.Tk G' v ↔ S.Tk G v := fun v => by unfold Tk; rw [hsph, hcph]
@@ -383,7 +381,7 @@ theorem Inv.monoTk {G G' : ThreadId → γ} {m m' : Mem} (hI : S.Inv G m)
     fun u v hu hv => hI.cp u v (by rw [← hcph u]; exact hu) (by rw [← hsph v]; exact hv),
     fun w hw hk => ?_, fun p h0 hp => ?_, fun u h c hu => ?_, fun u h c hu p h0 hp => ?_,
     fun u h c hu p h0 hp => ?_, fun hc hpw => ?_⟩
-  · rw [ht]; exact hI.ex u (by rw [← hsph u]; exact hu)
+  · exact Nat.lt_of_lt_of_le (hI.ex u (by rw [← hsph u]; exact hu)) ht
   · rw [hkL]
     rcases hwq w hw hk with hw | hw
     · exact hI.tq w hw ((hTk _).mp hk)
@@ -391,7 +389,7 @@ theorem Inv.monoTk {G G' : ThreadId → γ} {m m' : Mem} (hI : S.Inv G m)
   · rw [hS] at hp ⊢
     rcases hI.hw p h0 hp with h | h | ⟨u, hu, hle⟩
     · exact .inl h
-    · exact .inr (.inl (h.mono hhold hcl hbef ht hgone))
+    · exact .inr (.inl (hHB _ h))
     · exact .inr (.inr ⟨u, (hTk u).mpr hu, VClock.le_trans hle (hcl u)⟩)
   · obtain ⟨⟨r, hr⟩, hc⟩ := hI.sp u h c (by rw [← hsph u]; exact hu)
     exact ⟨⟨r, by rw [hS]; exact hr⟩, VClock.le_trans hc (hcl u)⟩
@@ -408,6 +406,40 @@ theorem Inv.monoTk {G G' : ThreadId → γ} {m m' : Mem} (hI : S.Inv G m)
     · exact .inl h
     · exact .inr (.inl ⟨u, by rw [hsph]; exact hu⟩)
     · exact .inr (.inr ⟨v, (hTk v).mpr hv⟩)
+
+/-- **`S.Inv` stays** over a step that keeps every thread's places, the count, the holders at
+`pst`, the threads, the state's writes, and the takers' queue entries but for entries at the mutex
+(`hwq`: a new entry of a thread that is no taker, e.g. at another lock's futex, is admitted), grows
+the clocks and keeps `HB` (the holders, or a release, the newest release of the mutex's word):
+`Inv.keep` with `FLock.HB.mono`. -/
+theorem Inv.monoTk {G G' : ThreadId → γ} {m m' : Mem} (hI : S.Inv G m)
+    (hsph : ∀ u, S.ph (G' u) = S.ph (G u)) (hcph : ∀ u, C.ph (G' u) = C.ph (G u))
+    (hpv : S.cnt G' = S.cnt G)
+    (hpst : ∀ u, (S.ph (G u)).isPst → L.ph (G' u) = .holds)
+    (hhold : ∀ u, (L.ph (G u)).held = true → (L.ph (G' u)).held = true ∨
+      ∀ c, VClock.le c (m.clocks[u]!) = true → L.Before m' c)
+    (hcl : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
+    (hbef : ∀ c, L.Before m c → L.Before m' c) (ht : m'.threads = m.threads)
+    (hgone : ∀ u, L.ph (G' u) ≠ .gone → L.ph (G u) ≠ .gone)
+    (hwq : ∀ w ∈ m'.waiters, S.Tk G' w.1 → w ∈ m.waiters ∨ w.2 = L.key m)
+    (hkL : L.key m' = L.key m) (hS : C.S.hist m' = C.S.hist m) : S.Inv G' m' :=
+  hI.keep hsph hcph hpv hpst (fun _ h => h.mono hhold hcl hbef ht hgone) hcl
+    (Nat.le_of_eq (congrArg Array.size ht.symm)) hwq hkL hS
+
+/-- **The semaphore's invariant over a step that grows the threads** (a spawn; `Inv.keep` with
+every new queue entry at the mutex or an old one): every thread's places and the count stay, the
+holders at `pst` stay, `HB` is kept over the step (`FLock.HB.fork`), the clocks grow, and the
+state's writes stay. -/
+theorem Inv.grow {G G' : ThreadId → γ} {m m' : Mem} (hI : S.Inv G m)
+    (hsph : ∀ u, S.ph (G' u) = S.ph (G u)) (hcph : ∀ u, C.ph (G' u) = C.ph (G u))
+    (hpv : S.cnt G' = S.cnt G)
+    (hpst : ∀ u, (S.ph (G u)).isPst → L.ph (G' u) = .holds)
+    (hHB : ∀ c, L.HB G m c → L.HB G' m' c)
+    (hcl : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
+    (ht : m.threads.size ≤ m'.threads.size)
+    (hwq : ∀ w ∈ m'.waiters, w ∈ m.waiters ∨ w.2 = L.key m) (hkL : L.key m' = L.key m)
+    (hS : C.S.hist m' = C.S.hist m) : S.Inv G' m' :=
+  hI.keep hsph hcph hpv hpst hHB hcl ht (fun w hw _ => hwq w hw) hkL hS
 
 /-- **`S.Inv` stays** over a step that keeps the queue but for entries at the mutex
 (`Inv.monoTk`). -/

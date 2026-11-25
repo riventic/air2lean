@@ -568,11 +568,6 @@ theorem ThreadLocal.intro {α : Type} {P : FAssn} {c : MemM α}
 
 /-! ## New and ended blocks -/
 
-theorem _root_.Zig.StepIn.afterAlloc (m : Mem) (hF : Heap) (kind : BlockKind) (size align : Nat) :
-    StepIn hF m (m.afterAlloc kind size align) :=
-  ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, VClock.le_refl _,
-    by simp [Mem.afterAlloc], fun _ he => .inl he, fun _ he => .inl he⟩
-
 /-- A new block at the end leaves the old ones as they are. -/
 theorem _root_.Zig.FStepIn.afterAlloc (m : Mem) (hF : Heap) (kind : BlockKind) (size align : Nat) :
     FStepIn hF m (m.afterAlloc kind size align) where

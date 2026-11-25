@@ -24,12 +24,14 @@ values come from the C program compiled natively by `zig cc` with UBSan traps. S
   c_native     zig cc (host, -fsanitize=undefined trap): expected results per input
   translate_c  zig translate-c -target x86_64-linux-musl; warnings, demoted C functions
   zig_native   zig test of the translated Zig plus expectEqual against the C results
-  air_export   patched Zig build-obj (x86_64-linux, ReleaseSafe) with the AIR JSON filter
+  air_export   patched Zig build-obj (x86_64-linux-musl -lc with Zig's libc as the module
+               `zigc`, ReleaseSafe) with the AIR JSON filter
   air2lean     air2lean --diagnostics-json; checked or rejected with diagnostic codes
   lean         emit Gen.lean, append the Q01 #guard checks of `entry`, elaborate with Lean
 """
 import argparse
 import collections
+import functools
 import hashlib
 import json
 import os
@@ -51,10 +53,21 @@ from zig_gen import INPUTS, lean_checks  # noqa: E402  (Q01 inputs and #guard em
 
 SCHEMA = 1
 TC_TARGET = "x86_64-linux-musl"
-AIR_TARGET = ["-target", "x86_64-linux", "-mcpu=baseline"]
+# The AIR is that of the program as `zig build-exe -OReleaseSafe -target x86_64-linux-musl -lc`
+# compiles it. For a static musl target that compilation holds Zig's libc (`lib/c.zig`) as its
+# module `zigc` (`src/Compilation.zig`: `zigc_strat == .zcu`, with `stack_check`,
+# `stack_protector` and `no_builtin` set as below), so the libc functions that are Zig are
+# translated from the same compilation as the program (`zigc_module`).
+AIR_TARGET = ["-target", TC_TARGET, "-mcpu=baseline", "-lc"]
+ZIGC_MODULE = ["-fno-stack-check", "-fno-stack-protector", "-fno-builtin"]
 # std code that translate-c output calls is translated from its AIR like user code. The first
-# export asks for these prefixes; `stage_air_export` adds the other std callees by name.
+# export asks for these prefixes; `stage_air_export` adds the other std callees by name, and the
+# libc functions by the symbols the program calls (the compilation's export table).
 STD_FILTER = ["zig.c_translation."]
+EXPORT_TABLE = "export-table.air2lean"
+# The libc definitions are weak (`lib/c.zig` `symbol`): the translator binds them under premise
+# EXT-07 (the image links no other definition of the symbol), which the header records.
+LINK_PREMISES = ["--assume-weak-exports"]
 # The translator runs in the allocator model the project is moving to (docs/allocator-model.md):
 # translated C has no `std.mem.Allocator`, and only this mode admits the recovery of a typed
 # pointer from `void *` (`?*anyopaque`), which it checks to be free of error storage.
@@ -76,7 +89,9 @@ STAGES = ["c_native", "translate_c", "zig_native", "air_export", "air2lean", "le
 TIMEOUT = {"c": 300, "tc": 600, "zig": 900, "air": 900, "diag": 600, "emit": 900, "lean": 3600}
 WARNING = re.compile(r"// (?P<loc>[^\n]*?:\d+:\d+): warning: (?P<msg>.*)$", re.M)
 MISMATCH = re.compile(r"expected \d+, found \d+")
-COMPILE_ERROR = re.compile(r"(\.zig:\d+:\d+: error:|error: undefined symbol)")
+# A link failure is a compile error too: macOS ld64 reports `error: undefined symbol`, ELF
+# targets' ld.lld `error: ld.lld: undefined symbol`.
+COMPILE_ERROR = re.compile(r"(\.zig:\d+:\d+: error:|error: (?:ld\.lld: )?undefined symbol)")
 EXTERN_FN = re.compile(r"^pub extern fn (\w+)\(", re.M)
 BODY = re.compile(r"^(?:pub )?(?:export )?fn \w+\([^\n]*\{$.*?^\}$", re.M | re.S)  # translated bodies
 
@@ -98,6 +113,7 @@ CONSTRUCTS = {
     "initializers": ["designated/compound initializers"],
     "inline_static": ["static inline"],
     "int_promotion": ["integer promotions"],
+    "libc_ctype": ["libc ctype", "libc stdlib"],
     "libc_stdio": ["libc stdio", "variadic call"],
     "libc_stdlib": ["libc stdlib", "function pointers"],
     "libc_string": ["libc string"],
@@ -268,19 +284,46 @@ def stage_zig_native(zig, zig_file, expected, work):
     return {"status": status, "log": tail(out)}
 
 
-def function_refs(doc):
+def function_refs(doc, definitions):
     """Every function a function's AIR names: direct callees and function values, in the body
-    and in the initial values of its globals (`{"func": <fully qualified name>}`)."""
+    and in the initial values of its globals (`{"func": <fully qualified name>}`), and the
+    function that defines each extern symbol it names (`{"extern": <symbol>}`), if the
+    compilation has one (`definitions`, from its export table)."""
     refs, stack = set(), [doc.get("body", []), doc.get("globals", [])]
     while stack:
         node = stack.pop()
         if isinstance(node, dict):
             if isinstance(node.get("func"), str):
                 refs.add(node["func"])
+            if isinstance(node.get("extern"), str):
+                refs.update(definitions.get(node["extern"], ()))
             stack.extend(node.values())
         elif isinstance(node, list):
             stack.extend(node)
     return refs
+
+
+def symbol_definitions(air):
+    """The functions that define each linker symbol in the exported compilation (its export
+    table, docs/air-json.md §Export table), by symbol. Empty without a table. The translator
+    decides which of them binds; the harness only exports them."""
+    table = air / EXPORT_TABLE
+    definitions = collections.defaultdict(set)
+    if table.exists():
+        for record in json.loads(table.read_text())["exports"]:
+            if record["function"]:
+                definitions[record["name"]].add(record["function"]["name"])
+    return definitions
+
+
+@functools.cache
+def zigc_module(zig_air):
+    """The compiler's `lib/c.zig`: the root file of the module `zigc` (one `zig env` per run)."""
+    code, out = run([zig_air, "env"], 60)
+    found = re.search(r'\.lib_dir = "([^"]+)"', out)
+    if code != 0 or not found:
+        raise RuntimeError(f"zig env does not name lib_dir: {tail(out, 300)}")
+    return Path(found.group(1)) / "c.zig"
 
 
 def stage_air_export(zig_air, zig_file, module, work):
@@ -288,16 +331,19 @@ def stage_air_export(zig_air, zig_file, module, work):
     exporter's filter is a list of name prefixes, so each round adds the exact names of the
     referenced functions without AIR and exports again (the fixed point of
     docs/project-workflow.md §Dependency closure); afterwards every exported function that
-    the C module does not reach (another instance sharing a prefix) is removed. Panic
-    handlers are the translator's own boundary and are never exported."""
+    the C module does not reach (another instance sharing a prefix) is removed. An extern
+    symbol references the function of the compilation that defines it, so the libc functions
+    that are Zig (`AIR_TARGET`) join the closure like std callees. Panic handlers are the
+    translator's own boundary and are never exported."""
     air = work / "air"
     prefixes, log = [module + "."] + STD_FILTER, ""
+    command = [zig_air, "build-obj", "-fno-emit-bin", "-OReleaseSafe", "-fno-error-tracing", *AIR_TARGET,
+               "--dep", "zigc", f"-Mroot={zig_file}", *ZIGC_MODULE, f"-Mzigc={zigc_module(zig_air)}"]
     for _ in range(EXPORT_ROUNDS):
         shutil.rmtree(air, ignore_errors=True)
         air.mkdir()
         env = dict(os.environ, ZIG_AIR_JSON_DIR=str(air), ZIG_AIR_JSON_FILTER=",".join(prefixes))
-        code, out = run([zig_air, "build-obj", "-fno-emit-bin", "-OReleaseSafe", "-fno-error-tracing",
-                         *AIR_TARGET, str(zig_file)], TIMEOUT["air"], cwd=work, env=env)
+        code, out = run(command, TIMEOUT["air"], cwd=work, env=env)
         log += out
         (work / "air_export.log").write_text(log)
         files = sorted(air.glob("*.json"))
@@ -305,7 +351,8 @@ def stage_air_export(zig_air, zig_file, module, work):
         if code != 0 or incomplete or not files:
             return {"status": "failed", "files": len(files), "log": tail(out)}, None
         docs = {f: json.loads(f.read_text()) for f in files}
-        refs = {doc.get("name", f.stem): function_refs(doc) for f, doc in docs.items()}
+        definitions = symbol_definitions(air)
+        refs = {doc.get("name", f.stem): function_refs(doc, definitions) for f, doc in docs.items()}
         reached = {n for n in refs if n.startswith(module + ".")}
         pending = sorted(reached)
         while pending:
@@ -327,8 +374,8 @@ def stage_air_export(zig_air, zig_file, module, work):
 
 
 def stage_air2lean(binary, air):
-    code, out = run([binary, "--diagnostics-json", str(air), "--diagnostic-limit", "256", *ALLOCATOR_MODEL],
-                    TIMEOUT["diag"])
+    code, out = run([binary, "--diagnostics-json", str(air), "--diagnostic-limit", "256", *ALLOCATOR_MODEL,
+                     *LINK_PREMISES], TIMEOUT["diag"])
     try:
         doc = json.loads(out)
     except ValueError:
@@ -352,7 +399,7 @@ def stage_lean(binary, air, stem, expected, work, defer=False):
     on another host."""
     namespace = "CFront" + "".join(part.capitalize() for part in stem.split("_"))
     gen = work / "Gen.lean"
-    code, out = run([binary, *ALLOCATOR_MODEL, str(air), "-o", str(gen), "--namespace", namespace,
+    code, out = run([binary, *ALLOCATOR_MODEL, *LINK_PREMISES, str(air), "-o", str(gen), "--namespace", namespace,
                      "--prefix", module_name(stem) + "."],
                     TIMEOUT["emit"])
     if code != 0 or not gen.exists():
@@ -555,6 +602,7 @@ def cmd_heavy(args):
     record = {"schema": SCHEMA, "kind": "air2lean-c-frontend-coverage",
               "inputs": INPUTS, "translate_c_target": TC_TARGET, "air_target": " ".join(AIR_TARGET),
               "std_filter": STD_FILTER, "allocator_model": ALLOCATOR_MODEL[1],
+              "link_premises": LINK_PREMISES,
               "tools": {"zig_native": version(tools["native"]), "zig_air": version(tools["air"]),
                         "zig_native_0152": version(tools["native_0152"])},
               "files": files}

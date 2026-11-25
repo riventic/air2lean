@@ -159,8 +159,8 @@ again such a run. A stop of another kind (yield, futex, spawn, join, …) has no
     is the step's half of the `const` ruling (decision (a) below): no step of a thread records a
     write to a `const` global, so a reader of one races with nobody.
 
-  A `StepIn` that writes no `const` global and makes none is an `FStepIn` (`FStepIn.of_stepIn`);
-  the primitives' locality gives it directly (`FStepIn.recordAt`, `write`, `setBlock`,
+  A change of fields that `FStepIn` does not read is one (`FStepIn.of_same`; `StepIn` and
+  `FStepIn.of_stepIn` are deleted, 2026-11-25); the primitives' locality gives it directly (`FStepIn.recordAt`, `write`, `setBlock`,
   `afterAlloc`, `kill`). `ThreadLocal.loadBytes` takes a read kind (`hk`, decided by default): a
   `loadBytes` checks no `const` global. Ownership (`Mem.OwnsC.fstep`) and a lock's invariant
   (`LockWord.WInv.stepIn`, `Owns.stepIn`) only need the clock bounds of the entries, which a
