@@ -636,20 +636,20 @@ def cxOverflow (m0 : Mem) : ConcM Unit Ptr :=
   ConcM.liftMem (alloc .stack (m0.place.addrLimit + 1) 1)
 
 /-- **`m0.NoStack` does not exclude a stack overflow.** For every memory without stack budgets
-and with one thread, `cxOverflow m0` under `cxProto` meets every hypothesis of `returnsWithin`
-(the others as in `returnsWithin_bound_tight`), and every run of it, under every environment,
+(`hns` is `Mem.NoStack`, `Full/MemAuth`, unfolded: this module does not import the full-state
+logic), `cxOverflow m0` under `cxProto` meets `hmain` of `returnsWithin` (the others as in
+`returnsWithin_bound_tight`; `hsize` for an `m0` with one thread, as `{}`), and every run of it, under every environment,
 dispatch, fuel and oracle, ends in `.stackOverflow`. -/
-theorem noStack_overflows (m0 : Mem) (hns : m0.NoStack) :
+theorem noStack_overflows (m0 : Mem) (hns : ∀ t, (m0.stackOf t).budget = none) :
     (∀ n, cxProto.WP 0 (cxOverflow m0) (fun _ _ m _ => joinedAll 0 m) (fun _ => ())
       { m0 with current := 0 } n) ∧
     ∀ env (dispatch : Unit → ConcM Unit Unit) fuel o,
       (Sched.run env dispatch fuel o (cxOverflow m0) m0).run = some (.error .stackOverflow) := by
   have hb : (({ m0 with current := 0 } : Mem).stackOf
       ({ m0 with current := 0 } : Mem).current).budget = none := hns 0
-  have hl : ({ m0 with current := 0 } : Mem).place.addrLimit = m0.place.addrLimit := rfl
   have hroom : ({ m0 with current := 0 } : Mem).allocOk .stack (m0.place.addrLimit + 1) 1 =
       false := by
-    simp only [Mem.allocOk, Mem.stackBudget?, hb, hl, decide_eq_false_iff_not]
+    simp only [Mem.allocOk, Mem.stackBudget?, hb, decide_eq_false_iff_not]
     omega
   have h := alloc_run_noRoom _ hroom
   refine ⟨fun n => WP.liftMem' (fun e he => ?_) (fun a m' hm => ?_) (fun hn => ?_), ?_⟩
