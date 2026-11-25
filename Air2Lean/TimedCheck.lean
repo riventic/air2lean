@@ -97,6 +97,8 @@ def preflight (funcs : Array Func) (profiles : Array BuildProfile) : Except Stri
     require (byteLocals f).isEmpty s!"{f.name}: a local with undefined parts"
     -- The timed body has no `noalias` scope (`Zig.naEnter`/`naMark`, `Air2Lean/Noalias.lean`).
     require f.noalias.isEmpty s!"{f.name}: noalias parameters are outside the timed subset"
+    -- The timed body calls with the values unchanged: no C-ABI conversion (`Func.abiCalls`).
+    require f.abiCalls.isEmpty s!"{f.name}: a call with a C-ABI conversion is outside the timed subset"
     for i in f.allInsts do
       require (admitted i.op) s!"{f.name}: inst {i.id}: unsupported timed opcode/control flow"
       if let .structFieldVal value field := i.op then

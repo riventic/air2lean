@@ -325,20 +325,14 @@
      ]
     },
     "air2lean": {
-     "status": "rejected",
-     "codes": {
-      "INSTRUCTION_FAILURE": 1
-     },
-     "diagnostics": [
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "c_casts.entry",
-       "message": "c_casts.entry: near line 31: a bitcast between an optional pointer (`?*T`) and another type is outside the subset"
-      }
-     ],
-     "diagnostic_count": 1
+     "status": "checked",
+     "codes": {},
+     "diagnostics": [],
+     "diagnostic_count": 0
+    },
+    "lean": {
+     "status": "ok",
+     "gen_lines": 154
     }
    },
    "c_defined_functions": [
@@ -1355,7 +1349,7 @@
     },
     "zig_native": {
      "status": "runtime_error",
-     "log": "...ve...thread 430354 panic: integer overflow\n/tmp/x01-libc-full/work/libc_stdlib/c_libc_stdlib_native.zig:106:32: 0x10714ad in cmp (test)\n    return @intFromBool(a > b) - @intFromBool(a < b);\n                               ^\n./stdlib/qsort.c:222:8: 0x7f757864ad4c in msort_with_tmp (qsort.c)\n./stdlib/qsort.c:202:6: 0x7f757864ac20 in msort_with_tmp (qsort.c)\n./stdlib/qsort.c:202:6: 0x7f757864ac04 in msort_with_tmp (qsort.c)\n./stdlib/qsort.c:202:6: 0x7f757864b0c0 in msort_with_tmp (qsort.c)\n./stdlib/qsort.c:409:7: 0x7f757864b1bc in __qsort_r (qsort.c)\n/tmp/x01-libc-full/work/libc_stdlib/c_libc_stdlib_native.zig:124:10: 0x101ac87 in entry (test)\n    qsort(@ptrCast(@alignCast(v)), 6, @sizeOf(@TypeOf(v.*)), cmp);\n         ^\n/tmp/x01-libc-full/work/libc_stdlib/c_libc_stdlib_native.zig:555:57: 0x101ab2c in test.c_frontend_native (test)\n    try std.testing.expectEqual(@as(c_uint, 1150), entry(1, 2));\n                                                        ^\n$AIR2LEAN_ZIG_NATIVE/lib/compiler/test_runner.zig:295:25: 0x10724a7 in mainTerminal (test)\n        if (test_fn.func()) |_| {\n                        ^\n../sysdeps/nptl/libc_start_call_main.h:59:16: 0x7f757862a600 in __libc_start_call_main (../sysdeps/x86/libc-start.c)\n../csu/libc-start.c:360:3: 0x7f757862a717 in __libc_start_main_impl (../sysdeps/x86/libc-start.c)\n???:?:?: 0x101a684 in _start (???)\nerror: the following test command terminated with signal ABRT:\n$HOME/.cache/zig/o/a91e9f3faeba2e58fbfce023d43138e6/test --seed=0xb06e3789\n"
+     "log": "1/1 c_libc_stdlib_native.test.c_frontend_native...thread 91993985 panic: integer overflow\n/private/tmp/claude-501/-opt-dev-air2lean/26041896-5b67-4316-9be4-c9c01b7f0c6f/scratchpad/cf2/libc_stdlib/c_libc_stdlib_native.zig:106:32: 0x102ce6863 in cmp (test)\n    return @intFromBool(a > b) - @intFromBool(a < b);\n                               ^\n???:?:?: 0x18356207b in ??? (/usr/lib/system/libsystem_c.dylib)\n/private/tmp/claude-501/-opt-dev-air2lean/26041896-5b67-4316-9be4-c9c01b7f0c6f/scratchpad/cf2/libc_stdlib/c_libc_stdlib_native.zig:124:10: 0x102ca5a9b in entry (test)\n    qsort(@ptrCast(@alignCast(v)), 6, @sizeOf(@TypeOf(v.*)), cmp);\n         ^\n/private/tmp/claude-501/-opt-dev-air2lean/26041896-5b67-4316-9be4-c9c01b7f0c6f/scratchpad/cf2/libc_stdlib/c_libc_stdlib_native.zig:555:57: 0x102ca596b in test.c_frontend_native (test)\n    try std.testing.expectEqual(@as(c_uint, 1150), entry(1, 2));\n                                                        ^\n$AIR2LEAN_ZIG_NATIVE/lib/compiler/test_runner.zig:295:25: 0x102ce722f in mainTerminal (test)\n        if (test_fn.func()) |_| {\n                        ^\n???:?:?: 0x1832f7e7f in start (/usr/lib/dyld)\nerror: the following test command terminated with signal ABRT:\n$HOME/.cache/zig/o/ca406af0cc7eca52399b8e5bbfe263bb/test --seed=0x77be1c4b\n"
     },
     "air_export": {
      "status": "ok",
@@ -1502,13 +1496,12 @@
     "air2lean": {
      "status": "rejected",
      "codes": {
-      "CALLEE_BLOCKED": 6,
-      "CALLEE_EXTERN_UNBOUND": 10,
+      "CALLEE_BLOCKED": 4,
+      "CALLEE_EXTERN_UNBOUND": 7,
       "CONSTANT_FAILURE": 2,
-      "INSTRUCTION_FAILURE": 9,
-      "MODEL_FAILURE": 4,
+      "INSTRUCTION_FAILURE": 1,
       "PREREQUISITE_SKIPPED": 1,
-      "PROGRAM_FAILURE": 13,
+      "PROGRAM_FAILURE": 9,
       "STRUCTURE_FAILURE": 1
      },
      "diagnostics": [
@@ -1518,62 +1511,6 @@
        "category": "validation_failure",
        "function": "atomic.Mutex.unlock",
        "message": "atomic.Mutex.unlock: near line 2: an `unordered` load of a type other than an integer, a packed struct or a pointer is outside the subset"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "c_libc_stdlib.cmp",
-       "message": "c_libc_stdlib.cmp: near line 6: a bitcast between an optional pointer (`?*T`) and another type is outside the subset"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "c_libc_stdlib.cmp",
-       "message": "c_libc_stdlib.cmp: near line 8: a bitcast between an optional pointer (`?*T`) and another type is outside the subset"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "c_libc_stdlib.entry",
-       "message": "c_libc_stdlib.entry: near line 7: a bitcast between an optional pointer (`?*T`) and another type is outside the subset"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "c_libc_stdlib.entry",
-       "message": "c_libc_stdlib.entry: near line 22: a bitcast between an optional pointer (`?*T`) and another type is outside the subset"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "heap.PageAllocator.map",
-       "message": "heap.PageAllocator.map: near line 82: a bitcast between an optional pointer (`?*T`) and another type is outside the subset"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "heap.PageAllocator.map",
-       "message": "heap.PageAllocator.map: near line 81: a bitcast between an optional pointer (`?*T`) and another type is outside the subset"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "heap.SmpAllocator.alloc",
-       "message": "heap.SmpAllocator.alloc: near line 23: a bitcast between an optional pointer (`?*T`) and another type is outside the subset"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "heap.SmpAllocator.alloc",
-       "message": "heap.SmpAllocator.alloc: near line 31: a bitcast between an optional pointer (`?*T`) and another type is outside the subset"
       },
       {
        "code": "CONSTANT_FAILURE",
@@ -1615,28 +1552,7 @@
        "phase": "program",
        "category": "unsupported_semantics",
        "function": "c_libc_stdlib.entry",
-       "message": "c_libc_stdlib.entry: CALLEE_EXTERN_UNBOUND: extern function 'malloc' differs from its definition 'zigc:c.malloc.malloc' in its result type: the two may agree at the C ABI, but the binding converts no value (docs/c-frontend.md \u00a7libc boundary) (docs/air-json.md \u00a7Extern calls)"
-      },
-      {
-       "code": "CALLEE_EXTERN_UNBOUND",
-       "phase": "program",
-       "category": "unsupported_semantics",
-       "function": "c_libc_stdlib.entry",
        "message": "c_libc_stdlib.entry: CALLEE_EXTERN_UNBOUND: extern function 'qsort' is defined by 'zigc:c.stdlib.qsort', which has no AIR in the set (export it with the program) (docs/air-json.md \u00a7Extern calls)"
-      },
-      {
-       "code": "CALLEE_EXTERN_UNBOUND",
-       "phase": "program",
-       "category": "unsupported_semantics",
-       "function": "c_libc_stdlib.entry",
-       "message": "c_libc_stdlib.entry: CALLEE_EXTERN_UNBOUND: extern function 'free' differs from its definition 'zigc:c.malloc.free' in its parameter 0 type: the two may agree at the C ABI, but the binding converts no value (docs/c-frontend.md \u00a7libc boundary) (docs/air-json.md \u00a7Extern calls)"
-      },
-      {
-       "code": "CALLEE_EXTERN_UNBOUND",
-       "phase": "program",
-       "category": "unsupported_semantics",
-       "function": "c_libc_stdlib.entry",
-       "message": "c_libc_stdlib.entry: CALLEE_EXTERN_UNBOUND: extern function 'calloc' differs from its definition 'zigc:c.malloc.calloc' in its result type: the two may agree at the C ABI, but the binding converts no value (docs/c-frontend.md \u00a7libc boundary) (docs/air-json.md \u00a7Extern calls)"
       },
       {
        "code": "CALLEE_EXTERN_UNBOUND",
@@ -1674,34 +1590,6 @@
        "message": "zigc:c.malloc.nomem: CALLEE_EXTERN_UNBOUND: extern function '__errno_location' (library 'c') has no definition in the program (an `export fn __errno_location` in the AIR set, or an `@export` record of the export table) and no registry model 'extern:__errno_location' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
       },
       {
-       "code": "MODEL_FAILURE",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "heap.PageAllocator.map",
-       "message": "heap.PageAllocator.map: model callee 'posix.mmap' has an incompatible posix.mmap qualified Zig 0.16.0; no reviewed std source for Zig 0.17.1 signature"
-      },
-      {
-       "code": "MODEL_FAILURE",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "heap.PageAllocator.map",
-       "message": "heap.PageAllocator.map: model callee 'posix.munmap' has an incompatible posix.munmap qualified Zig 0.16.0; no reviewed std source for Zig 0.17.1 signature"
-      },
-      {
-       "code": "MODEL_FAILURE",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "heap.PageAllocator.map",
-       "message": "heap.PageAllocator.map: model callee 'posix.munmap' has an incompatible posix.munmap qualified Zig 0.16.0; no reviewed std source for Zig 0.17.1 signature"
-      },
-      {
-       "code": "MODEL_FAILURE",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "heap.PageAllocator.unmap",
-       "message": "heap.PageAllocator.unmap: model callee 'posix.munmap' has an incompatible posix.munmap qualified Zig 0.16.0; no reviewed std source for Zig 0.17.1 signature"
-      },
-      {
        "code": "CALLEE_BLOCKED",
        "phase": "program",
        "category": "validation_failure",
@@ -1713,20 +1601,6 @@
        "phase": "program",
        "category": "validation_failure",
        "function": "heap.SmpAllocator.Thread.unlock",
-       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
-      },
-      {
-       "code": "CALLEE_BLOCKED",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "heap.SmpAllocator.alloc",
-       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
-      },
-      {
-       "code": "CALLEE_BLOCKED",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "heap.SmpAllocator.alloc",
        "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
       },
       {
@@ -1769,31 +1643,45 @@
        "phase": "program",
        "category": "validation_failure",
        "function": "c_libc_stdlib.entry",
-       "message": "c_libc_stdlib.entry: CALLEE_EXTERN_UNBOUND: extern function 'malloc' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
-      },
-      {
-       "code": "PROGRAM_FAILURE",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "c_libc_stdlib.entry",
        "message": "c_libc_stdlib.entry: CALLEE_EXTERN_UNBOUND: extern function 'qsort' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
       },
       {
        "code": "PROGRAM_FAILURE",
        "phase": "program",
        "category": "validation_failure",
-       "function": "c_libc_stdlib.entry",
-       "message": "c_libc_stdlib.entry: CALLEE_EXTERN_UNBOUND: extern function 'free' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
+       "function": "posix.mmap",
+       "message": "posix.mmap: CALLEE_EXTERN_UNBOUND: extern function 'mmap' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
       },
       {
        "code": "PROGRAM_FAILURE",
        "phase": "program",
        "category": "validation_failure",
-       "function": "c_libc_stdlib.entry",
-       "message": "c_libc_stdlib.entry: CALLEE_EXTERN_UNBOUND: extern function 'calloc' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
+       "function": "posix.mmap",
+       "message": "posix.mmap: CALLEE_EXTERN_UNBOUND: extern function '__errno_location' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
+      },
+      {
+       "code": "PROGRAM_FAILURE",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "posix.munmap",
+       "message": "posix.munmap: CALLEE_EXTERN_UNBOUND: extern function 'munmap' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
+      },
+      {
+       "code": "PROGRAM_FAILURE",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "posix.sched_getaffinity",
+       "message": "posix.sched_getaffinity: CALLEE_EXTERN_UNBOUND: extern function 'sched_getaffinity' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
+      },
+      {
+       "code": "PROGRAM_FAILURE",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "zigc:c.malloc.nomem",
+       "message": "zigc:c.malloc.nomem: CALLEE_EXTERN_UNBOUND: extern function '__errno_location' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
       }
      ],
-     "diagnostic_count": 46
+     "diagnostic_count": 25
     }
    },
    "c_defined_functions": [
@@ -1906,10 +1794,10 @@
      "status": "rejected",
      "codes": {
       "CALLEE_BLOCKED": 2,
-      "CALLEE_EXTERN_UNBOUND": 6,
+      "CALLEE_EXTERN_UNBOUND": 4,
       "NORMALIZATION_FAILURE": 4,
       "PREREQUISITE_SKIPPED": 1,
-      "PROGRAM_FAILURE": 7
+      "PROGRAM_FAILURE": 5
      },
      "diagnostics": [
       {
@@ -1973,21 +1861,7 @@
        "phase": "program",
        "category": "unsupported_semantics",
        "function": "c_libc_string.entry",
-       "message": "c_libc_string.entry: CALLEE_EXTERN_UNBOUND: extern function 'strcmp' differs from its definition 'zigc:c.string.strcmp' in its parameter 0 type: the two may agree at the C ABI, but the binding converts no value (docs/c-frontend.md \u00a7libc boundary) (docs/air-json.md \u00a7Extern calls)"
-      },
-      {
-       "code": "CALLEE_EXTERN_UNBOUND",
-       "phase": "program",
-       "category": "unsupported_semantics",
-       "function": "c_libc_string.entry",
        "message": "c_libc_string.entry: CALLEE_EXTERN_UNBOUND: extern function 'memcmp' has no definition in the program (an `export fn memcmp` in the AIR set, or an `@export` record of the export table) and no registry model 'extern:memcmp' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
-      },
-      {
-       "code": "CALLEE_EXTERN_UNBOUND",
-       "phase": "program",
-       "category": "unsupported_semantics",
-       "function": "c_libc_string.entry",
-       "message": "c_libc_string.entry: CALLEE_EXTERN_UNBOUND: extern function 'strchr' differs from its definition 'zigc:c.string.strchr' in its result type: the two may agree at the C ABI, but the binding converts no value (docs/c-frontend.md \u00a7libc boundary) (docs/air-json.md \u00a7Extern calls)"
       },
       {
        "code": "CALLEE_BLOCKED",
@@ -2036,24 +1910,10 @@
        "phase": "program",
        "category": "validation_failure",
        "function": "c_libc_string.entry",
-       "message": "c_libc_string.entry: CALLEE_EXTERN_UNBOUND: extern function 'strcmp' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
-      },
-      {
-       "code": "PROGRAM_FAILURE",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "c_libc_string.entry",
        "message": "c_libc_string.entry: CALLEE_EXTERN_UNBOUND: extern function 'memcmp' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
-      },
-      {
-       "code": "PROGRAM_FAILURE",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "c_libc_string.entry",
-       "message": "c_libc_string.entry: CALLEE_EXTERN_UNBOUND: extern function 'strchr' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
       }
      ],
-     "diagnostic_count": 20
+     "diagnostic_count": 16
     }
    },
    "c_defined_functions": [
@@ -2400,12 +2260,11 @@
     "air2lean": {
      "status": "rejected",
      "codes": {
-      "CALLEE_BLOCKED": 8,
-      "CALLEE_EXTERN_UNBOUND": 10,
+      "CALLEE_BLOCKED": 5,
+      "CALLEE_EXTERN_UNBOUND": 8,
       "CONSTANT_FAILURE": 5,
-      "INSTRUCTION_FAILURE": 6,
-      "MODEL_FAILURE": 6,
-      "PROGRAM_FAILURE": 13
+      "INSTRUCTION_FAILURE": 1,
+      "PROGRAM_FAILURE": 11
      },
      "diagnostics": [
       {
@@ -2414,41 +2273,6 @@
        "category": "validation_failure",
        "function": "atomic.Mutex.unlock",
        "message": "atomic.Mutex.unlock: near line 2: an `unordered` load of a type other than an integer, a packed struct or a pointer is outside the subset"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "c_malloc_vec.vec_push",
-       "message": "c_malloc_vec.vec_push: near line 10: a bitcast between an optional pointer (`?*T`) and another type is outside the subset"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "heap.PageAllocator.map",
-       "message": "heap.PageAllocator.map: near line 82: a bitcast between an optional pointer (`?*T`) and another type is outside the subset"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "heap.PageAllocator.map",
-       "message": "heap.PageAllocator.map: near line 81: a bitcast between an optional pointer (`?*T`) and another type is outside the subset"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "heap.SmpAllocator.alloc",
-       "message": "heap.SmpAllocator.alloc: near line 23: a bitcast between an optional pointer (`?*T`) and another type is outside the subset"
-      },
-      {
-       "code": "INSTRUCTION_FAILURE",
-       "phase": "check",
-       "category": "validation_failure",
-       "function": "heap.SmpAllocator.alloc",
-       "message": "heap.SmpAllocator.alloc: near line 31: a bitcast between an optional pointer (`?*T`) and another type is outside the subset"
       },
       {
        "code": "CONSTANT_FAILURE",
@@ -2491,20 +2315,6 @@
        "category": "unsupported_semantics",
        "function": "c.errno__anon_9d61af0f3ff7",
        "message": "c.errno__anon_9d61af0f3ff7: CALLEE_EXTERN_UNBOUND: extern function '__errno_location' (library 'c') has no definition in the program (an `export fn __errno_location` in the AIR set, or an `@export` record of the export table) and no registry model 'extern:__errno_location' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
-      },
-      {
-       "code": "CALLEE_EXTERN_UNBOUND",
-       "phase": "program",
-       "category": "unsupported_semantics",
-       "function": "c_malloc_vec.entry",
-       "message": "c_malloc_vec.entry: CALLEE_EXTERN_UNBOUND: extern function 'free' differs from its definition 'zigc:c.malloc.free' in its parameter 0 type: the two may agree at the C ABI, but the binding converts no value (docs/c-frontend.md \u00a7libc boundary) (docs/air-json.md \u00a7Extern calls)"
-      },
-      {
-       "code": "CALLEE_EXTERN_UNBOUND",
-       "phase": "program",
-       "category": "unsupported_semantics",
-       "function": "c_malloc_vec.vec_push",
-       "message": "c_malloc_vec.vec_push: CALLEE_EXTERN_UNBOUND: extern function 'realloc' differs from its definition 'zigc:c.malloc.realloc' in its result type: the two may agree at the C ABI, but the binding converts no value (docs/c-frontend.md \u00a7libc boundary) (docs/air-json.md \u00a7Extern calls)"
       },
       {
        "code": "CALLEE_EXTERN_UNBOUND",
@@ -2556,55 +2366,6 @@
        "message": "zigc:c.malloc.nomem: CALLEE_EXTERN_UNBOUND: extern function '__errno_location' (library 'c') has no definition in the program (an `export fn __errno_location` in the AIR set, or an `@export` record of the export table) and no registry model 'extern:__errno_location' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
       },
       {
-       "code": "MODEL_FAILURE",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "heap.PageAllocator.map",
-       "message": "heap.PageAllocator.map: model callee 'posix.mmap' has an incompatible posix.mmap qualified Zig 0.16.0; no reviewed std source for Zig 0.17.1 signature"
-      },
-      {
-       "code": "MODEL_FAILURE",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "heap.PageAllocator.map",
-       "message": "heap.PageAllocator.map: model callee 'posix.munmap' has an incompatible posix.munmap qualified Zig 0.16.0; no reviewed std source for Zig 0.17.1 signature"
-      },
-      {
-       "code": "MODEL_FAILURE",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "heap.PageAllocator.map",
-       "message": "heap.PageAllocator.map: model callee 'posix.munmap' has an incompatible posix.munmap qualified Zig 0.16.0; no reviewed std source for Zig 0.17.1 signature"
-      },
-      {
-       "code": "MODEL_FAILURE",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "heap.PageAllocator.realloc",
-       "message": "heap.PageAllocator.realloc: model callee 'posix.mremap' has an incompatible posix.mremap qualified Zig 0.16.0; no reviewed std source for Zig 0.17.1 signature"
-      },
-      {
-       "code": "MODEL_FAILURE",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "heap.PageAllocator.realloc",
-       "message": "heap.PageAllocator.realloc: model callee 'posix.munmap' has an incompatible posix.munmap qualified Zig 0.16.0; no reviewed std source for Zig 0.17.1 signature"
-      },
-      {
-       "code": "MODEL_FAILURE",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "heap.PageAllocator.unmap",
-       "message": "heap.PageAllocator.unmap: model callee 'posix.munmap' has an incompatible posix.munmap qualified Zig 0.16.0; no reviewed std source for Zig 0.17.1 signature"
-      },
-      {
-       "code": "CALLEE_BLOCKED",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "c_malloc_vec.entry",
-       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
-      },
-      {
        "code": "CALLEE_BLOCKED",
        "phase": "program",
        "category": "validation_failure",
@@ -2616,20 +2377,6 @@
        "phase": "program",
        "category": "validation_failure",
        "function": "heap.SmpAllocator.Thread.unlock",
-       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
-      },
-      {
-       "code": "CALLEE_BLOCKED",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "heap.SmpAllocator.alloc",
-       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
-      },
-      {
-       "code": "CALLEE_BLOCKED",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "heap.SmpAllocator.alloc",
        "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
       },
       {
@@ -2685,11 +2432,53 @@
        "code": "PROGRAM_FAILURE",
        "phase": "program",
        "category": "validation_failure",
-       "function": "c_malloc_vec.entry",
-       "message": "c_malloc_vec.entry: CALLEE_EXTERN_UNBOUND: extern function 'free' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
+       "function": "posix.mmap",
+       "message": "posix.mmap: CALLEE_EXTERN_UNBOUND: extern function 'mmap' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
+      },
+      {
+       "code": "PROGRAM_FAILURE",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "posix.mmap",
+       "message": "posix.mmap: CALLEE_EXTERN_UNBOUND: extern function '__errno_location' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
+      },
+      {
+       "code": "PROGRAM_FAILURE",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "posix.mremap",
+       "message": "posix.mremap: CALLEE_EXTERN_UNBOUND: extern function 'mremap' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
+      },
+      {
+       "code": "PROGRAM_FAILURE",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "posix.mremap",
+       "message": "posix.mremap: CALLEE_EXTERN_UNBOUND: extern function '__errno_location' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
+      },
+      {
+       "code": "PROGRAM_FAILURE",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "posix.munmap",
+       "message": "posix.munmap: CALLEE_EXTERN_UNBOUND: extern function 'munmap' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
+      },
+      {
+       "code": "PROGRAM_FAILURE",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "posix.sched_getaffinity",
+       "message": "posix.sched_getaffinity: CALLEE_EXTERN_UNBOUND: extern function 'sched_getaffinity' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
+      },
+      {
+       "code": "PROGRAM_FAILURE",
+       "phase": "program",
+       "category": "validation_failure",
+       "function": "zigc:c.malloc.nomem",
+       "message": "zigc:c.malloc.nomem: CALLEE_EXTERN_UNBOUND: extern function '__errno_location' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
       }
      ],
-     "diagnostic_count": 48
+     "diagnostic_count": 30
     }
    },
    "c_defined_functions": [
@@ -3975,19 +3764,19 @@
     "ok": 39
    },
    "air2lean": {
-    "checked": 28,
-    "rejected": 11
+    "checked": 29,
+    "rejected": 10
    },
    "lean": {
     "guard_failed": 1,
-    "ok": 27
+    "ok": 28
    }
   },
   "headline": {
-   "air2lean": 3,
+   "air2lean": 2,
    "gated": 10,
    "lean": 1,
-   "lean_ok": 27
+   "lean_ok": 28
   },
   "gates": {
    "EXT-VARIADIC": [
@@ -4020,8 +3809,7 @@
    "CALLEE_BLOCKED": 4,
    "CALLEE_EXTERN_UNBOUND": 9,
    "CONSTANT_FAILURE": 2,
-   "INSTRUCTION_FAILURE": 5,
-   "MODEL_FAILURE": 2,
+   "INSTRUCTION_FAILURE": 4,
    "NORMALIZATION_FAILURE": 1,
    "PREREQUISITE_SKIPPED": 2,
    "PROGRAM_FAILURE": 9,
@@ -4054,7 +3842,7 @@
     "gated": 2
    },
    "integer casts": {
-    "air2lean": 1
+    "lean_ok": 1
    },
    "integer promotions": {
     "lean_ok": 1
@@ -4084,7 +3872,7 @@
     "lean_ok": 1
    },
    "object-representation casts": {
-    "air2lean": 1
+    "lean_ok": 1
    },
    "pointer arithmetic": {
     "lean": 1,

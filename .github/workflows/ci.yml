@@ -1538,6 +1538,8 @@ jobs:
           set -euo pipefail
           lake build ZigLean
           bash tests/roadmap/extern-calls/check.sh
+          # X01: translate-c declarations bound to Zig's libc through the C-ABI conversion.
+          bash tests/roadmap/extern-abi/check.sh
 
       # E02: function-pointer call sites bound to registry contracts (`&ext_visit` in a vtable
       # and as a callback, also from a spawned thread), proofs from the callback contract alone.

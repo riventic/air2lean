@@ -1,0 +1,337 @@
+{
+ "schema": 12,
+ "zig_version": "0.17.1",
+ "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...7.2-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.17.1",
+  "backend": "stage2_llvm",
+  "cpu": "x86_64",
+  "features": [
+   "64bit",
+   "cmov",
+   "cx8",
+   "fxsr",
+   "idivq_to_divl",
+   "macrofusion",
+   "mmx",
+   "nopl",
+   "slow_3ops_lea",
+   "slow_incdec",
+   "sse",
+   "sse2",
+   "vzeroupper",
+   "x87"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "math.order__func_768",
+ "module": "std",
+ "src": {
+  "file": "math.zig",
+  "module": "std",
+  "decl_line": 1605
+ },
+ "instance_key": "460c95054abc6edeb2df7622501c21bb63d780619c67a0bdba27fa7ed4d4398b",
+ "params": [
+  0
+ ],
+ "noalias": [],
+ "ret": 1,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2,
+   "column": 9
+  },
+  {
+   "id": 3,
+   "tag": "bit_cast",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "tag": "cmp_eq",
+   "ty": 4,
+   "args": [
+    {
+     "inst": 3
+    },
+    {
+     "ty": 3,
+     "val": "0"
+    }
+   ]
+  },
+  {
+   "id": 24,
+   "tag": "cond_br",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 4
+    }
+   ],
+   "then": [
+    {
+     "id": 5,
+     "tag": "dbg_stmt",
+     "ty": 2,
+     "line": 3,
+     "column": 9
+    },
+    {
+     "id": 6,
+     "tag": "ret_safe",
+     "ty": 5,
+     "args": [
+      {
+       "ty": 1,
+       "enum": "2"
+      }
+     ]
+    }
+   ],
+   "else": [
+    {
+     "id": 8,
+     "tag": "dbg_stmt",
+     "ty": 2,
+     "line": 4,
+     "column": 16
+    },
+    {
+     "id": 9,
+     "tag": "bit_cast",
+     "ty": 3,
+     "args": [
+      {
+       "inst": 0
+      }
+     ]
+    },
+    {
+     "id": 10,
+     "tag": "cmp_lt",
+     "ty": 4,
+     "args": [
+      {
+       "inst": 9
+      },
+      {
+       "ty": 3,
+       "val": "0"
+      }
+     ]
+    },
+    {
+     "id": 23,
+     "tag": "cond_br",
+     "ty": 5,
+     "args": [
+      {
+       "inst": 10
+      }
+     ],
+     "then": [
+      {
+       "id": 11,
+       "tag": "dbg_stmt",
+       "ty": 2,
+       "line": 5,
+       "column": 9
+      },
+      {
+       "id": 12,
+       "tag": "ret_safe",
+       "ty": 5,
+       "args": [
+        {
+         "ty": 1,
+         "enum": "1"
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 14,
+       "tag": "dbg_stmt",
+       "ty": 2,
+       "line": 6,
+       "column": 16
+      },
+      {
+       "id": 15,
+       "tag": "bit_cast",
+       "ty": 3,
+       "args": [
+        {
+         "inst": 0
+        }
+       ]
+      },
+      {
+       "id": 16,
+       "tag": "cmp_gt",
+       "ty": 4,
+       "args": [
+        {
+         "inst": 15
+        },
+        {
+         "ty": 3,
+         "val": "0"
+        }
+       ]
+      },
+      {
+       "id": 22,
+       "tag": "cond_br",
+       "ty": 5,
+       "args": [
+        {
+         "inst": 16
+        }
+       ],
+       "then": [
+        {
+         "id": 17,
+         "tag": "dbg_stmt",
+         "ty": 2,
+         "line": 7,
+         "column": 9
+        },
+        {
+         "id": 18,
+         "tag": "ret_safe",
+         "ty": 5,
+         "args": [
+          {
+           "ty": 1,
+           "enum": "0"
+          }
+         ]
+        }
+       ],
+       "else": [
+        {
+         "id": 19,
+         "tag": "dbg_stmt",
+         "ty": 2,
+         "line": 9,
+         "column": 9
+        },
+        {
+         "id": 20,
+         "tag": "call",
+         "ty": 5,
+         "callee": {
+          "ty": 6,
+          "func": "debug.FullPanic((function 'defaultPanic')).reachedUnreachable",
+          "module": "std",
+          "noreturn": true
+         },
+         "args": []
+        },
+        {
+         "id": 21,
+         "tag": "unreach",
+         "ty": 5
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": true,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "enum",
+   "name": "math.Order",
+   "module": "std",
+   "tag": 7,
+   "exhaustive": true,
+   "fields": [
+    {
+     "name": "gt",
+     "value": "0"
+    },
+    {
+     "name": "lt",
+     "value": "1"
+    },
+    {
+     "name": "eq",
+     "value": "2"
+    }
+   ],
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": true,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "other",
+   "name": "fn () noreturn"
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 2,
+   "abi_size": 1,
+   "abi_align": 1
+  }
+ ]
+}
