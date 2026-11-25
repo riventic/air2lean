@@ -525,7 +525,7 @@
        "ty": 2,
        "callee": {
         "ty": 17,
-        "func": "Io.futexWaitUncancelable__func_402",
+        "func": "Io.futexWaitUncancelable__func_401",
         "module": "std",
         "instance_key": "66142888cd0bcb681b884f462ac930ecedd7cc4309b7adbe358827892e3ace2f",
         "noreturn": false
@@ -866,7 +866,7 @@
            "ty": 2,
            "callee": {
             "ty": 17,
-            "func": "Io.futexWaitUncancelable__func_402",
+            "func": "Io.futexWaitUncancelable__func_401",
             "module": "std",
             "instance_key": "66142888cd0bcb681b884f462ac930ecedd7cc4309b7adbe358827892e3ace2f",
             "noreturn": false

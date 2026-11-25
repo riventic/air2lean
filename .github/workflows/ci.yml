@@ -1234,7 +1234,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/sep-full"
-          lake build ZigLean.Sep.Full.Res ZigLean.Sep.Full.Disjoint ZigLean.Sep.Full.Triple ZigLean.Sep.Full.Atomic ZigLean.Sep.Full.Block ZigLean.Sep.Full.Logic ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Seq ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.Extent ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Claims ZigLean.Sep.Full.Const ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.AutoAttr ZigLean.Sep.Full.AutoRules ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims ZigLean.Sep.Full.Thread ZigLean.Sep.Full.ThreadStep ZigLean.Sep.Full.ThreadOwned ZigLean.Sep.Full.ThreadCall ZigLean.Sep.Full.Local ZigLean.Sep.Full.ThreadFacts ZigLean.Sep.Full.ThreadSpawn ZigLean.Sep.Full.ThreadRest ZigLean.Sep.Full.LockWord ZigLean.Sep.Full.Lock ZigLean.Sep.Full.LockRules ZigLean.Sep.Full.Mutex ZigLean.Sep.Full.IoMutex ZigLean.Sep.Full.Word ZigLean.Sep.Full.WordRules ZigLean.Sep.Full.Event ZigLean.Sep.Full.Cond ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Init ZigLean.Sep.Full.Region ZigLean.Sep.Full.Wrappers ZigLean.Sep.Full.Typed ZigLean.Sep.Full.AutoWP Proofs.Iogroup.Gen ZigLean.Conc.Returns ZigLean.External 2>&1 | tee "$RUNNER_TEMP/sep-full/build.log"
+          lake build ZigLean.Sep.Full.Res ZigLean.Sep.Full.Disjoint ZigLean.Sep.Full.Triple ZigLean.Sep.Full.Atomic ZigLean.Sep.Full.Block ZigLean.Sep.Full.Logic ZigLean.Sep.Full.AllocSpec ZigLean.Sep.Full.Tame ZigLean.Sep.Full.AtomicPtr ZigLean.Sep.Full.Seq ZigLean.Sep.Full.Conc ZigLean.Sep.Full.AtomicRules ZigLean.Sep.Full.Ghost ZigLean.Sep.Full.Extent ZigLean.Sep.Full.Ops ZigLean.Sep.Full.Mmap ZigLean.Sep.Full.Claims ZigLean.Sep.Full.Const ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.AutoAttr ZigLean.Sep.Full.AutoRules ZigLean.Sep.Full.Auto ZigLean.Sep.Full.AutoClaims ZigLean.Sep.Full.Thread ZigLean.Sep.Full.ThreadStep ZigLean.Sep.Full.ThreadOwned ZigLean.Sep.Full.ThreadCall ZigLean.Sep.Full.Local ZigLean.Sep.Full.ThreadFacts ZigLean.Sep.Full.ThreadSpawn ZigLean.Sep.Full.ThreadRest ZigLean.Sep.Full.LockWord ZigLean.Sep.Full.Lock ZigLean.Sep.Full.LockRules ZigLean.Sep.Full.Mutex ZigLean.Sep.Full.IoMutex ZigLean.Sep.Full.Word ZigLean.Sep.Full.WordRules ZigLean.Sep.Full.Event ZigLean.Sep.Full.Cond ZigLean.Sep.Full.Loop ZigLean.Sep.Full.Init ZigLean.Sep.Full.Region ZigLean.Sep.Full.Wrappers ZigLean.Sep.Full.Typed ZigLean.Sep.Full.AutoWP Proofs.Iogroup.Gen ZigLean.Conc.Returns ZigLean.Conc.RunInv ZigLean.External 2>&1 | tee "$RUNNER_TEMP/sep-full/build.log"
           # The general symbolic executor fsym on library-only examples (its large user: alloc-fba).
           bash tests/roadmap/sep-auto/check.sh 2>&1 | tee "$RUNNER_TEMP/sep-full/sep-auto.log"
           # One proof logic (docs/proof-framework.md): strength harness, start memory, loops, blocks.
@@ -1371,6 +1371,15 @@ jobs:
           text = open(sys.argv[1]).read()
           used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
           assert ': error' not in text and text.count('depends on axioms') == 3, text
+          assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+          EOF
+          # A relaxed unlock fails MutexImpl.unlock_wp from a reached state with the full FLock.Inv.
+          lake env lean tests/roadmap/sep-full/RelaxedUnlockCX.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/relaxed-unlock-cx.log"
+          python3 - "$RUNNER_TEMP/sep-full/relaxed-unlock-cx.log" <<'EOF'
+          import re, sys
+          text = open(sys.argv[1]).read()
+          used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
+          assert ': error' not in text and text.count('depends on axioms') == 2, text
           assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
           EOF
           # MM-21: a mixed-size atomic access after memory reuse retires the old location by the
@@ -1796,6 +1805,11 @@ jobs:
           case '${{ matrix.zig }}' in
             0.17.1) bash tests/roadmap/big-endian/check.sh --native '${{ matrix.zig }}' ;;
           esac
+          # T02 pointer_width.zig and names.zig natively and under Node's WASI (0.16.0: the
+          # pointer-width step of the native part).
+          case '${{ matrix.zig }}' in
+            0.17.1) bash tests/roadmap/pointer-width/check.sh --native ;;
+          esac
 
       # Registry fixtures are version neutral; check their typed imported evidence and client
       # once, with generated files/logs isolated from the checkout. No additional upload.
@@ -1811,8 +1825,8 @@ jobs:
 
       # E03: selected environment-operation contract and its write-all client; the
       # documentation check requires an operation-to-premise row and the not-claimed list.
-      # check.sh also translates the committed std I/O AIR (0.15.2 fs.File/posix, 0.16.0
-      # posix.read/closeFd) with only os.linux.{read,write,close} bound (ENV-03) and checks the
+      # check.sh also translates the committed std I/O AIR (0.15.2 fs.File/posix, 0.16.0 and
+      # 0.17.1 posix.read/closeFd) with only os.linux.{read,write,close} bound (ENV-03) and checks the
       # proofs about the generated code. Fresh export: scripts/fixture-exports.py verify env-boundaries.
       - name: Environment-operation boundary
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && !matrix.mutate && matrix.zig == '0.16.0' }}
@@ -1878,6 +1892,12 @@ jobs:
           set -euo pipefail
           lake build ZigLean.Sep.Full.ThreadTls ZigLean.Sep.Full.ThreadFacts
           bash tests/roadmap/thread-locals/check.sh
+
+      # C14: std's condition broadcast of every supported version translates to the code that
+      # the condition contract's implementations prove (`CondImpl.broadcast_wp`).
+      - name: Condition broadcast exports (C14)
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && matrix.full && !matrix.mutate }}
+        run: bash tests/roadmap/cond-broadcast/check.sh
 
       # Translation and input/output hash checks; declared proof goals remain unverified.
       - name: Project manifest regressions and example translation
@@ -2319,6 +2339,8 @@ jobs:
           lake build ZigLean Air2Lean air2lean ZigLean.Mem.WidthLemmas
           bash tests/roadmap/pointer-width/check.sh
           bash tests/roadmap/pointer-width/check.sh --native
+          # A fresh names.zig export equals the committed AIR (exports.json).
+          python3 -B scripts/fixture-exports.py verify pointer-width --version ${{ matrix.zig }}
 
       # T05: re-observe the 0.16.0 x86_64-linux and wasm32-freestanding records (wasm32 under Node).
       - name: Native/WASM correspondence records (x86_64-linux, wasm32)

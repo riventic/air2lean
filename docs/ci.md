@@ -486,7 +486,10 @@ the merge is fixed forward at once. The admin merge bypasses the ruleset below, 
   (append-only); bypass only for the admin role. `generated.yml` only fast-forwards it, so the
   Actions token needs no bypass.
 - `scripts/release-record.py` accepts `push`, `merge_group`, `workflow_dispatch` and `schedule`
-  runs as evidence (each tested its `headSha` itself), never a `pull_request` run.
+  runs as evidence (each tested its `headSha` itself), never a `pull_request` run. A step whose
+  condition reads `github.event_name` is evaluated for each run event: a gate only some events
+  execute (the plan's `gate_events`) takes evidence only from a run of such an event, must be
+  skipped by a run of another event, and has no local-CI evidence.
 
 ### Merge queue flow (not in use)
 

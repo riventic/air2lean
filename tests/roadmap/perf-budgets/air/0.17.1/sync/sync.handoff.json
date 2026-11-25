@@ -283,7 +283,7 @@
    "ty": 21,
    "callee": {
     "ty": 22,
-    "func": "Thread.spawn__func_672",
+    "func": "Thread.spawn__func_671",
     "module": "std",
     "instance_key": "5b38a221113926d4639251295aa67b8df731801b689ac026ff39325b51582e64",
     "noreturn": false,

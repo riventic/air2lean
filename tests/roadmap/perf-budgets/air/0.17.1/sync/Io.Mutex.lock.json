@@ -528,7 +528,7 @@
        "ty": 2,
        "callee": {
         "ty": 18,
-        "func": "Io.futexWait__func_529",
+        "func": "Io.futexWait__func_528",
         "module": "std",
         "instance_key": "3b6f741ff2d12d94d5c7ee331f86d3fdd53c5984d7a2160d6dc482186e7e4302",
         "noreturn": false
@@ -918,7 +918,7 @@
            "ty": 2,
            "callee": {
             "ty": 18,
-            "func": "Io.futexWait__func_529",
+            "func": "Io.futexWait__func_528",
             "module": "std",
             "instance_key": "3b6f741ff2d12d94d5c7ee331f86d3fdd53c5984d7a2160d6dc482186e7e4302",
             "noreturn": false
