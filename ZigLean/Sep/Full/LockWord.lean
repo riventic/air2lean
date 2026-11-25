@@ -1049,26 +1049,40 @@ theorem WInv.join {P : ThreadId → LPh} {m m' : Mem} {t u : ThreadId} (hi : L.W
     · exact .inl (hall h)
     · exact .inr ⟨i, l, hl, hle⟩
 
-/-- The start of the lock: each thread is out of the lock's code (and alive) or gone, the word
-holds `0`, no atomic location is in its block, no thread waits at a futex, and each access to the
-word happened before every thread that has not ended. -/
+/-- An empty futex queue meets every waiter premise (`WInv.make`'s `hq` at a program's start). -/
+theorem waiters_empty {m : Mem} {Q : ThreadId × FutexKey → Prop} (h : m.waiters = #[]) :
+    ∀ w ∈ m.waiters, Q w := fun w hw => by rw [h] at hw; simp at hw
+
+/-- The start of the lock, at any point of a program: each thread is out of the lock's code or
+`away` (and alive), or gone; the word holds `0`; no atomic location overlaps the word (`hat`: one
+can be elsewhere in its block); no thread waits at the word's futex key, and a thread that waits
+at another key is `away` (`hq`); and each access to the word happened before every thread that
+has not ended. -/
 theorem WInv.make {P : ThreadId → LPh} {m : Mem}
     (hc : m.clocks.size = m.threads.size)
-    (hph : ∀ u, (P u = .out ∧ u < m.threads.size ∧ joinedB m u = false) ∨ P u = .gone)
-    (hblk : L.BlkOk m) (h0 : L.U32 m 0) (hat : ∀ l ∈ m.atomics, l.block ≠ L.b) (hq : m.waiters = #[])
+    (hph : ∀ u, ((P u = .out ∨ P u = .away) ∧ u < m.threads.size ∧ joinedB m u = false) ∨
+      P u = .gone)
+    (hblk : L.BlkOk m) (h0 : L.U32 m 0)
+    (hat : ∀ l ∈ m.atomics, l.block = L.b → L.o + 4 ≤ l.off ∨ (l.off < L.o ∧ l.off + l.len ≤ L.o))
+    (hq : ∀ w ∈ m.waiters, w.2 ≠ L.key m ∧ P w.1 = .away)
     (hwle : ∀ e ∈ m.footprint, L.Hits e → LiveLe P m e.clock) : L.WInv P m := by
-  have hfree : Free P := fun u => by rcases hph u with ⟨h, -⟩ | h <;> rw [h] <;> decide
+  have hfree : Free P := fun u => by
+    rcases hph u with ⟨h | h, -⟩ | h <;> rw [h] <;> decide
   have hnoloc : ∀ i l, ¬ L.Loc m i l := by
     rintro i l ⟨hf, -⟩
     obtain ⟨hi', hp, -⟩ := Array.findIdx?_eq_some_iff_getElem.mp hf
     simp only [Bool.and_eq_true, beq_iff_eq] at hp
-    exact hat _ (Array.getElem_mem hi') hp.1
+    have := hat _ (Array.getElem_mem hi') hp.1
+    omega
   exact ⟨hc, fun u hu => ((hph u).resolve_right hu).2, hblk,
     ⟨0, .inl rfl, h0, ⟨fun _ => hfree, fun _ => rfl⟩⟩, fun u _ hu => (hfree.not hu).elim,
-    ⟨fun l hl hb => absurd hb (hat l hl), fun i l hl => absurd hl (hnoloc i l),
+    ⟨fun l hl hb h1 h2 => by have := hat l hl hb; omega, fun i l hl => absurd hl (hnoloc i l),
       fun i l hl => absurd hl (hnoloc i l)⟩, fun e he hh => .inr (hwle e he hh),
     fun i l hl => absurd hl (hnoloc i l),
-    fun w hw => by rw [hq] at hw; simp at hw, fun hp => by rw [hq] at hp; simp [LockWord.Waits] at hp,
+    fun w hw => .inr (.inl (hq w hw)), fun hp => by
+      unfold LockWord.Waits at hp
+      obtain ⟨w, hw, he⟩ := Array.any_eq_true'.mp hp
+      exact absurd (beq_iff_eq.mp he) (hq w hw).1,
     fun u hu => (hfree.not hu).elim⟩
 
 /-! ## A step in the lock's code -/
