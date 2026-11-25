@@ -4,7 +4,7 @@
       "out": "air/{version}/s390x-linux",
       "source": "big_endian.zig",
       "filter": "big_endian.",
-      "versions": ["0.16.0"],
+      "versions": ["0.17.1", "0.16.0"],
       "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "s390x-linux"],
       "cwd": "repo"
     },
@@ -12,7 +12,7 @@
       "out": "air/{version}/mips64-linux",
       "source": "big_endian.zig",
       "filter": "big_endian.",
-      "versions": ["0.16.0"],
+      "versions": ["0.17.1", "0.16.0"],
       "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "mips64-linux"],
       "cwd": "repo"
     },
@@ -20,7 +20,7 @@
       "out": "air/{version}/x86_64-linux",
       "source": "big_endian.zig",
       "filter": "big_endian.",
-      "versions": ["0.16.0"],
+      "versions": ["0.17.1", "0.16.0"],
       "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
       "cwd": "repo"
     },
@@ -28,7 +28,7 @@
       "out": "air/{version}/s390x-reject",
       "source": "reject.zig",
       "filter": "reject.",
-      "versions": ["0.16.0"],
+      "versions": ["0.17.1", "0.16.0"],
       "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "s390x-linux"],
       "cwd": "repo"
     },

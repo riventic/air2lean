@@ -11,6 +11,7 @@ packed struct or union field holds, what a bit-pointer reads and writes, and wha
 have instances there or in the generated code; this file adds the rest of Zig's packable types,
 so one class serves packed fields and logical casts alike:
 
+* `void` has no bits;
 * a float is its IEEE bits; a NaN has no determined bits (`mask` 0: the model's canonical NaN
   stands for every NaN, `docs/floats.md` §NaN), so a NaN observed as bits is undefined, never
   the canonical pattern;
@@ -34,6 +35,14 @@ instance {fmt : FloatFmt} : Packed (Float fmt) fmt.width where
   toBits x := x.bits
   ofBits b := ⟨b⟩
   mask := Float.detMask
+
+/-! ## `void` -/
+
+/-- `void` has no bits (`@bitSizeOf(void) = 0`): Zig 0.17's `@bitCast` takes it, alone or as an
+array or vector element, to and from every other zero-bit type (`u0`, `[0]T`, `[n]void`). -/
+instance : Packed Unit 0 where
+  toBits _ := 0#0
+  ofBits _ := ()
 
 /-! ## Arrays and vectors -/
 

@@ -10,8 +10,8 @@
     "nested/air/nested.pairs.json": "d72a27edfe36e9aefc899508439836a37c9c2cfb4b55e0d32fd7e98f308746b3"
   },
   "compilers": {
-    "0.16.0": "413c774df80a4580621ae9b3cb7ff5299322a98cb051f9cc2cd4a9c91cad4ce7",
-    "0.17.1": "a4b56f33ac0b5fbafae85e023f692a3cdb85df8ce7028d7d3e725dfd3404ed52"
+    "0.16.0": "c35d1d0fd41d541243c0847224f1f9567baa82e2bc9fca8ea5e5cc6bfa4a8294",
+    "0.17.1": "84a8a3bdf2a5766e405d422289fdcea5eab58b4acca120b145ecbcac86b75e8f"
   },
   "manifest_sha256": "0e061a4ff56319ee0f85b24b61a7c0168850987db038ba8322b16fd95dcab1fe",
   "schema": 1,

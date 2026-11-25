@@ -200,7 +200,7 @@ def main():
             executable_log = run(tool + "-executable", ["lake", "env", "which", tool])
             executable = Path(executable_log.read_text().strip()).resolve()
             report["lean_toolchain_binaries"][tool] = {"path": str(executable), "sha256": digest(executable)}
-        run("build", ["lake", "build", "ZigLean", "ZigLean.Conc.WeakWord", "Air2Lean", "air2lean"])
+        run("build", ["lake", "build", "ZigLean", "ZigLean.Sep.Full.WordRules", "Air2Lean", "air2lean"])
         run("shipped-client-proofs", ["lake", "build", "Proofs"])
         translator = ROOT / ".lake/build/bin/air2lean"
         report["translator_binary"] = {"path": str(translator), "sha256": digest(translator)}

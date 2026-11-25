@@ -580,6 +580,11 @@
           "name": "f80_lane_stride",
           "path": "tests/roadmap/lang-long-tail/mutants.py",
           "category": "layout"
+        },
+        {
+          "name": "lane_constant_offset",
+          "path": "tests/roadmap/lang-long-tail/mutants.py",
+          "category": "layout"
         }
       ]
     },
@@ -1128,6 +1133,18 @@
           "anchor": "def test_concurrency_theorem_without_adequacy_premise_fails"
         },
         {
+          "path": "tests/roadmap/premises/test_premises.py",
+          "anchor": "def test_target_qualified_premise_needs_a_qualified_target"
+        },
+        {
+          "path": "tests/roadmap/premises/test_premises.py",
+          "anchor": "def test_compiled_concurrency_needs_a_qualified_target"
+        },
+        {
+          "path": "tests/roadmap/claims/test_claims.py",
+          "anchor": "def test_concurrency_claim_needs_a_qualified_target"
+        },
+        {
           "path": "Proofs/Atomics/Proofs.lean",
           "anchor": "theorem mp_sees_data"
         },
@@ -1147,6 +1164,16 @@
       "mutants": [
         {
           "name": "claims-memory-model-premise-dropped",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "claims-target-binding-dropped",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "premises-target-binding-dropped",
           "path": "tests/roadmap/mutation-map/mutants.py",
           "category": "other"
         },
@@ -1298,6 +1325,26 @@
         },
         {
           "name": "ignore-request-cap",
+          "path": "tests/roadmap/allocation-policy/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "ignore-failure-oracle",
+          "path": "tests/roadmap/allocation-policy/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "ignore-budget",
+          "path": "tests/roadmap/allocation-policy/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "budget-ignores-live-bytes",
+          "path": "tests/roadmap/allocation-policy/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "oracle-ignores-bytes-upper-bound",
           "path": "tests/roadmap/allocation-policy/mutations.py",
           "category": "other"
         },

@@ -98,7 +98,10 @@ FIXTURES = [
      ["--namespace", "PackedFieldsX86", "--prefix", "packed_fields.", "--allow-unqualified-build-mode"], "exact"),
     ("tests/roadmap/spawn-failure/SpawnFailure/Gen.lean", "tests/roadmap/spawn-failure/air/0.16.0",
      ["--namespace", "SpawnFailure", "--prefix", "spawn_failure.", "--spawn-policy", "fallible"], "exact"),
-    # Its check.sh compares with normalize-generated.py compare (body only); schema-11 AIR.
+    # Its check.sh compares with normalize-generated.py compare (body only): the 0.17.1 and
+    # 0.16.0 exports translate to the same body.
+    ("tests/roadmap/thread-tuples/ThreadTuples/Gen.lean", "tests/roadmap/thread-tuples/air/0.17.1",
+     ["--namespace", "ThreadTuples", "--prefix", "thread_tuples."], "body"),
     ("tests/roadmap/thread-tuples/ThreadTuples/Gen.lean", "tests/roadmap/thread-tuples/air/0.16.0",
      ["--namespace", "ThreadTuples", "--prefix", "thread_tuples."], "body"),
     ("tests/roadmap/try-pointers/TryPointers/Gen.lean", "tests/roadmap/try-pointers/air/0.16.0",
@@ -205,8 +208,11 @@ FIXTURES = [
     for d, module in (("arena-linux", "ArenaLinux"), ("arena-macos", "ArenaMacos"),
                       ("arena-fixed-linux", "ArenaFixedLinux"))
 ] + [
-    (f"tests/roadmap/big-endian/BigEndian/{ns}/Gen.lean", f"tests/roadmap/big-endian/air/0.16.0/{target}",
-     ["--namespace", f"BigEndian.{ns}", "--prefix", "big_endian."], "exact")
+    # T03 check.sh: big_endian.zig per Zig version and target.
+    (f"tests/roadmap/big-endian/BigEndian/V{v.replace('.', '_')}/{ns}/Gen.lean",
+     f"tests/roadmap/big-endian/air/{v}/{target}",
+     ["--namespace", f"BigEndian.V{v.replace('.', '_')}.{ns}", "--prefix", "big_endian."], "exact")
+    for v in ("0.16.0", "0.17.1")
     for ns, target in (("S390x", "s390x-linux"), ("Mips64", "mips64-linux"), ("X64", "x86_64-linux"))
 ] + [
     # T03 concurrency.sh: concurrency.zig per Zig version and target.
@@ -224,8 +230,17 @@ FIXTURES = [
         ("packed_casts", "PackedCasts", ("0.14.1", "0.15.2", "0.16.0", "0.17.1")),
         ("logical017", "Logical017", ("0.17.1",)),
         ("vector_fields", "VectorFields", ("0.14.1", "0.15.2")),
-        ("auto_items", "AutoItems", ("0.14.1", "0.15.2")))
+        ("auto_items", "AutoItems", ("0.14.1", "0.15.2")),
+        ("sentinel_arrays", "SentinelArrays", ("0.14.1", "0.15.2", "0.16.0")),
+        ("void_casts", "VoidCasts", ("0.14.1", "0.15.2", "0.16.0", "0.17.1")),
+        ("void017", "Void017", ("0.17.1",)))
     for v in versions
+] + [
+    # packed-casts/check.sh: the hand-written `bitcast` of zero-bit types (no compiler emits it).
+    (f"tests/roadmap/packed-casts/PackedCasts/V{v.replace('.', '_')}/VoidCast.lean",
+     f"tests/roadmap/packed-casts/air-handwritten/{v}/void_cast",
+     ["--namespace", f"PackedCasts.V{v.replace('.', '_')}.VoidCast", "--prefix", "void_cast."], "exact")
+    for v in ("0.16.0", "0.17.1")
 ] + [
     # nan-bits/check.sh (docs/architecture-audit/nan-bits.md): one translation per version.
     (f"tests/roadmap/nan-bits/NanBits/V{v.replace('.', '_')}/Gen.lean", f"tests/roadmap/nan-bits/air/{v}/nan_bits",
@@ -273,7 +288,8 @@ FIXTURES = [
         ("error_ints", "ErrorInts", "ErrorInts", "error_ints.", "0.16.0", ("0.16.0", "0.17.1", "0.15.2", "0.14.1")),
         ("error_ints_w8", "ErrorInts", "ErrorIntsW8", "error_ints.", "0.16.0", ("0.16.0", "0.17.1", "0.15.2")),
         ("runtime_lanes", "RuntimeLanes", "RuntimeLanes", "runtime_lanes.", "0.15.2", ("0.15.2",)),
-        ("float_lanes", "FloatLanes", "FloatLanes", "float_lanes.", "0.16.0", ("0.16.0", "0.15.2", "0.14.1")))
+        ("float_lanes", "FloatLanes", "FloatLanes", "float_lanes.", "0.16.0", ("0.16.0", "0.15.2", "0.14.1")),
+        ("lane_shapes", "LaneShapes", "LaneShapes", "lane_shapes.", "0.16.0", ("0.16.0", "0.15.2", "0.14.1")))
     for v in versions
 ]
 

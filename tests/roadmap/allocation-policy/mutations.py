@@ -11,6 +11,10 @@ MUTANTS = {
     'ignore-failure-trace': (' or std.mem.indexOfScalar(usize, self.failures, k) != null', ''),
     'ignore-request-cap': (' or len > self.request_cap', ''),
     'omit-live-removal': ('                _ = self.live.swapRemove(i);', '                _ = i;'),
+    'ignore-failure-oracle': ('self.oracleDenies(k, len) or ', ''),
+    'ignore-budget': (' or self.overBudget(len)', ''),
+    'budget-ignores-live-bytes': ('return self.liveBytes() +| len > budget;', 'return len > budget;'),
+    'oracle-ignores-bytes-upper-bound': (' and bytes <= r.bytes_max;', ';'),
 }
 
 def mutated(source, name):

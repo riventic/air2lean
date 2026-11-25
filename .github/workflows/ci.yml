@@ -1222,13 +1222,6 @@ jobs:
           lake env lean tests/roadmap/proof-tools/Reassemble.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Reassemble.log"
           lake env lean tests/roadmap/proof-tools/ArrayClients.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/ArrayClients.log"
 
-      - name: Concrete runs of programs with loops (unroll_sched)
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
-        run: |
-          set -euo pipefail
-          lake build ZigLean.Conc.Unroll ZigLean.Sep.Full.Conc Proofs.Threads.Gen 2>&1 | tee "$RUNNER_TEMP/proof-tools/unroll-build.log"
-          lake env lean tests/roadmap/proof-tools/Unroll.lean 2>&1 | tee "$RUNNER_TEMP/proof-tools/Unroll.log"
-
       - name: Allocator vocabulary (regions, ownership facts, normalization)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         run: |
@@ -1763,7 +1756,8 @@ jobs:
       # Batch D: this row's Zig version natively on x86_64-linux (s390x and mips64 under
       # qemu-user): packed casts and their compile errors, NaN bits through memory and
       # encode/decode exactness (aarch64 under qemu-user too), the packed-field tests, the
-      # pointer-try tests, and the big-endian concurrency program (0.15.2, 0.17.1).
+      # pointer-try tests, the big-endian concurrency program (0.15.2, 0.17.1) and big_endian.zig
+      # (0.17.1).
       - name: Packed casts, pointer try and big-endian concurrency, natively
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         env:
@@ -1782,6 +1776,10 @@ jobs:
           bash tests/roadmap/try-pointers/lifetimes/check.sh --native '${{ matrix.zig }}'
           case '${{ matrix.zig }}' in
             0.15.2|0.17.1) bash tests/roadmap/big-endian/concurrency.sh --native '${{ matrix.zig }}' ;;
+          esac
+          # big_endian.zig natively (0.16.0: the byte-order step of the native part).
+          case '${{ matrix.zig }}' in
+            0.17.1) bash tests/roadmap/big-endian/check.sh --native '${{ matrix.zig }}' ;;
           esac
 
       # Registry fixtures are version neutral; check their typed imported evidence and client
@@ -1999,20 +1997,26 @@ jobs:
           bash tests/roadmap/union-bases/check.sh
           bash tests/roadmap/union-bases/check.sh --native
 
-      # C01's checked source/export/proof fragment is qualified on 0.16.0.
-      # Fresh exports use the pinned patched compiler; native tests use stock Zig.
+      # C01's checked source/export/proof fragment is qualified on 0.17.1 and 0.16.0: the
+      # artifact check below covers both committed exports; the fresh export and native tests
+      # run once per qualified version (0.16.0 in `inputs`, 0.17.1 in `lean`) with that row's
+      # pinned patched compiler and stock Zig; the version-neutral tests and the artifact check
+      # run in `inputs` only.
       - name: Thread tuple source and ownership gate
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && !matrix.mutate && matrix.full && matrix.zig == '0.16.0' || !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate && matrix.full && matrix.zig == '0.17.1' }}
         env:
           AIR2LEAN_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
           AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
           AIR2LEAN_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
           AIR2LEAN_TUPLE_ZIG_VERSION: ${{ matrix.zig }}
+          AIR2LEAN_TUPLE_ONCE: ${{ matrix.part == 'inputs' && '1' || '' }}
         run: |
           set -euo pipefail
           lake build ZigLean.Sep.Full.ThreadSpawn
-          python3 tests/roadmap/thread-tuples/guard-tests.py
-          python3 tests/roadmap/thread-tuples/mutation-tests.py
+          if [ -n "$AIR2LEAN_TUPLE_ONCE" ]; then
+            python3 tests/roadmap/thread-tuples/guard-tests.py
+            python3 tests/roadmap/thread-tuples/mutation-tests.py
+          fi
           [ "$("$AIR2LEAN_ZIG_AIR" version)" = "$AIR2LEAN_TUPLE_ZIG_VERSION" ]
           [ "$("$AIR2LEAN_ZIG_NATIVE" version)" = "$AIR2LEAN_TUPLE_ZIG_VERSION" ]
           work=$(mktemp -d "$RUNNER_TEMP/thread-tuples.XXXXXX")
@@ -2023,7 +2027,9 @@ jobs:
           python3 scripts/normalize-generated.py compare tests/roadmap/thread-tuples/ThreadTuples/Gen.lean "$work/Gen.lean" "$work/generated-report.json"
           lake env lean -R "$work" "$work/Gen.lean"
           bash tests/roadmap/thread-tuples/check.sh --native
-          bash tests/roadmap/thread-tuples/check.sh --check-artifacts
+          if [ -n "$AIR2LEAN_TUPLE_ONCE" ]; then
+            bash tests/roadmap/thread-tuples/check.sh --check-artifacts
+          fi
           bash tests/roadmap/thread-tuples/check.sh --adapter-contract "$work/adapter-contract"
 
       - name: Fallible thread assignment and group fallback gate
@@ -2309,9 +2315,9 @@ jobs:
           python3 scripts/wasm-correspondence.py record --zig "$PWD/host-zig/zig" --target native --verify
           python3 scripts/wasm-correspondence.py record --zig "$PWD/host-zig/zig" --target wasm32 --verify
 
-      # T03: s390x and mips64 (big endian) and x86_64 translations of one source, both-order
-      # proofs, the big-endian rejections, and the native program on s390x and mips64 under
-      # qemu-user and on the host.
+      # T03: s390x and mips64 (big endian) and x86_64 translations of one source by every
+      # exported Zig version, both-order proofs, the big-endian rejections, and the native
+      # program of this row's version on s390x and mips64 under qemu-user and on the host.
       - name: Byte order (s390x and mips64 big endian, x86_64)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && !matrix.mutate && matrix.zig == '0.16.0' }}
         env:
@@ -2325,7 +2331,8 @@ jobs:
         run: |
           set -euo pipefail
           lake build ZigLean Air2Lean air2lean ZigLean.EndianLemmas
-          bash tests/roadmap/big-endian/check.sh --native
+          bash tests/roadmap/big-endian/check.sh
+          bash tests/roadmap/big-endian/check.sh --native ${{ matrix.zig }}
           # A fresh export equals the committed AIR, which check.sh translates to the retained
           # Gen.lean files byte for byte.
           python3 -B scripts/fixture-exports.py verify big-endian --version ${{ matrix.zig }}
@@ -2664,23 +2671,25 @@ jobs:
           # The strength log of its memory contracts (tests/roadmap/strength-log).
           LEAN_PATH="$RUNNER_TEMP/vcs${LEAN_PATH:+:$LEAN_PATH}" lake env lean tests/roadmap/strength-log/Vcs.lean
 
-      # Labelled switch loops share the same AIR contract in 0.14/0.15/0.16; 0.17.1 is not
-      # yet a qualified dispatch profile (tests/roadmap/dispatch/check.sh rejects it).
+      # Labelled switch loops share the same AIR contract in 0.14/0.15/0.16/0.17.1
+      # (tests/roadmap/dispatch/check.sh rejects any other profile). The version-independent
+      # synthetic part runs once, on the default.
       - name: Loop-switch dispatch regressions
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate && matrix.zig == '0.14.1' || !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate && matrix.zig == '0.15.2' || !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate && matrix.zig == '0.16.0' }}
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate && matrix.zig == '0.14.1' || !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate && matrix.zig == '0.15.2' || !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate && matrix.zig == '0.16.0' || !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate && matrix.zig == '0.17.1' }}
         env:
           LEAN_NUM_THREADS: "1"
           AIR2LEAN_DISPATCH_ZIG_VERSION: ${{ matrix.zig }}
           AIR2LEAN_DISPATCH_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
           AIR2LEAN_DISPATCH_ZIG_STOCK: zig
         run: |
-          if [ "$AIR2LEAN_DISPATCH_ZIG_VERSION" = "0.16.0" ]; then
+          if [ "$AIR2LEAN_DISPATCH_ZIG_VERSION" = "0.17.1" ]; then
             tests/roadmap/dispatch/check.sh
           else
             tests/roadmap/dispatch/check.sh --native-only
           fi
 
-      # Dispatch loops in the full-state logic; the generated tokenizer proof names 0.16.0 loop IDs.
+      # Dispatch loops in the full-state logic; the generated tokenizer proof names the renumbered
+      # loop of the 0.17.1 and 0.16.0 exports.
       - name: Dispatch-loop regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
         env:
@@ -2689,7 +2698,7 @@ jobs:
           AIR2LEAN_DISPATCH_ZIG_AIR: ${{ github.workspace }}/zig-air-${{ matrix.zig }}/bin/zig
           AIR2LEAN_DISPATCH_ZIG_STOCK: zig
         run: |
-          if [ "$AIR2LEAN_DISPATCH_ZIG_VERSION" = "0.16.0" ]; then
+          if [ "$AIR2LEAN_DISPATCH_ZIG_VERSION" = "0.17.1" ] || [ "$AIR2LEAN_DISPATCH_ZIG_VERSION" = "0.16.0" ]; then
             tests/roadmap/dispatch-templates/check.sh
           else
             tests/roadmap/dispatch-templates/check.sh --template-only

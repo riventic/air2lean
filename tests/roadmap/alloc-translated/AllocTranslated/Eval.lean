@@ -110,4 +110,75 @@ open AllocTranslated.PageMacos
 #guard [first (page_sum 0) dispatch (mem0 .fresh), first (page_sum 10000) dispatch (mem0 .fresh)] = ["ok 0", "ok 10000"]
 end PageMacos
 
+/-! ## M02: growth by `remap` and `realloc` against the native run
+
+`page.zig`'s `page_grow`, `page_grow_blocked` and `page_grow_stale` observe a growth as one word
+(the bits are in `page.zig`). `growLines` prints the model's results in the format of
+`native.zig`'s `page_grow` lines; `check.sh` compares them with `expected-linux.txt` and
+`expected.txt`, the files the native run is compared with. -/
+
+/-- The five growths of one `native.zig` row (`how`: `0` is `remap`, `1` is `realloc`), one after
+another in one run: in place after the pages behind the block were freed, within the page, a
+shrink, a length no address space holds, and one byte into a neighbouring live block's pages. -/
+def growRow {Tgt : Type}
+    (grow : BitVec 64 → BitVec 64 → BitVec 64 → BitVec 8 → Zig.ConcM Tgt (BitVec 64))
+    (blocked : BitVec 64 → BitVec 8 → Zig.ConcM Tgt (BitVec 64)) (how : BitVec 8) :
+    Zig.ConcM Tgt (List (BitVec 64)) := do
+  let a ← grow 81920 10 49152 how
+  let b ← grow 10 10 20 how
+  let c ← grow 49152 49152 10 how
+  let d ← grow 10 10 (2 ^ 47) how
+  let e ← blocked 10 how
+  return [a, b, c, d, e]
+
+/-- A run's result as `native.zig` prints it. A read that the model calls `.illegal` is the native
+run's fault (`SIGSEGV`/`SIGBUS` of the child process): `fault`. -/
+def nativeWord {Tgt α : Type} (fmt : α → String) (main : Zig.ConcM Tgt α)
+    (dispatch : Tgt → Zig.ConcM Tgt Unit) (m : Zig.Mem) : String :=
+  match (Zig.Sched.run ⟨.any, .available⟩ dispatch 10000 (fun _ => 0) main m).run with
+  | some (.ok (v, _)) => s!"ok {fmt v}"
+  | some (.error .illegal) => "fault"
+  | some (.error e) => s!"fail {repr e}"
+  | none => "diverge"
+
+def growLines {Tgt : Type} (dispatch : Tgt → Zig.ConcM Tgt Unit) (m : Zig.Mem)
+    (grow : BitVec 64 → BitVec 64 → BitVec 64 → BitVec 8 → Zig.ConcM Tgt (BitVec 64))
+    (blocked stale : BitVec 64 → BitVec 8 → Zig.ConcM Tgt (BitVec 64)) : List String :=
+  let row := fun how => nativeWord (fun vs => " ".intercalate (vs.map fun v => toString v.toNat))
+    (growRow grow blocked how) dispatch m
+  let old := fun how => nativeWord (fun v => toString v.toNat) (stale 10 how) dispatch m
+  [s!"page_grow remap {row 0} realloc {row 1}", s!"page_grow_stale remap {old 0} realloc {old 1}"]
+
+/-- The model's `page_grow` lines for x86_64-linux (`expected-linux.txt`). -/
+def growLinux : IO Unit :=
+  (growLines PageLinux.dispatch (PageLinux.mem0 .fresh) PageLinux.page_grow PageLinux.page_grow_blocked
+    PageLinux.page_grow_stale).forM IO.println *> pure ()
+
+/-- The model's `page_grow` lines for aarch64-macos (`expected.txt`). -/
+def growMacos : IO Unit :=
+  (growLines PageMacos.dispatch (PageMacos.mem0 .fresh) PageMacos.page_grow PageMacos.page_grow_blocked
+    PageMacos.page_grow_stale).forM IO.println *> pure ()
+
+section GrowLinux
+open AllocTranslated.PageLinux
+-- What the kernel decides is the model's oracle. With room behind the block the kernel grew it
+-- in place (13); `mremapMoves` is the other legal choice, a move (15): the bytes are kept either
+-- way. A denied growth (`fails`) is the failure path: the old block keeps its bytes (4).
+#guard first (page_grow 81920 10 49152 0) dispatch (mem0 .fresh) = "ok 13"
+#guard first (page_grow 81920 10 49152 0) dispatch
+  { (mem0 .fresh) with allocPolicy := { os := { mremapMoves := fun _ _ => true } } } = "ok 15"
+#guard first (page_grow 81920 10 49152 0) dispatch
+  { (mem0 .fresh) with allocPolicy := { fails := fun i _ => i == 1 } } = "ok 4"
+-- `realloc` after a denied `mremap` takes a new mapping, copies and frees the old one (15); with
+-- that mapping denied too it fails and the old block stays (4).
+#guard first (page_grow 81920 10 49152 1) dispatch
+  { (mem0 .fresh) with allocPolicy := { fails := fun i _ => i == 1 } } = "ok 15"
+#guard first (page_grow 81920 10 49152 1) dispatch
+  { (mem0 .fresh) with allocPolicy := { fails := fun i _ => i ≥ 1 } } = "ok 4"
+-- No run leaves a mapping behind: success in place, moved, and failure.
+#guard [0, 1].all fun how =>
+  firstWith (fun (_ : List (BitVec 64)) m => s!"{(m.blocks.filter fun b => b.live && b.kind matches .mapped _).size}")
+    (growRow page_grow page_grow_blocked how) dispatch (mem0 .fresh) = "ok 0"
+end GrowLinux
+
 end AllocTranslated.Eval
