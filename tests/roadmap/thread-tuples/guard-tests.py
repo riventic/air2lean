@@ -320,6 +320,9 @@ class ProofTrustScan(unittest.TestCase):
         # Isolate the source scan from unrelated AIR/provenance checks.
         (self.fixture / "check-artifacts.py").write_text("pass\n")
         self.proof = self.fixture / "ThreadTuples/Proofs.lean"
+        # The scan reads both proof files; the tests below vary one and keep the other clean.
+        self.witness = self.fixture / "ThreadTuples/Nonvacuity.lean"
+        self.witness.write_text("theorem clean : True := by trivial\n")
 
     def check(self, expected):
         result = subprocess.run(["bash", str(self.fixture / "check.sh"), "--check-artifacts"],
@@ -337,6 +340,16 @@ class ProofTrustScan(unittest.TestCase):
                 # The original scan also rejected forbidden words in comments.
                 self.proof.write_text(f"theorem clean : True := by trivial\n-- {word}\n")
                 self.check(f"proof contains an untrusted declaration: {self.proof.relative_to(self.root)}:2:")
+
+    def test_forbidden_word_in_the_nonvacuity_witness_rejected(self):
+        self.proof.write_text("theorem clean : True := by trivial\n")
+        self.witness.write_text("theorem clean : True := by trivial\n-- sorry\n")
+        self.check(f"proof contains an untrusted declaration: {self.witness.relative_to(self.root)}:2:")
+
+    def test_missing_nonvacuity_witness_rejected(self):
+        self.proof.write_text("theorem clean : True := by trivial\n")
+        self.witness.unlink()
+        self.check("proof scan failed:")
 
     def test_unreadable_sources_rejected(self):
         self.check("proof scan failed:")  # Missing file.
