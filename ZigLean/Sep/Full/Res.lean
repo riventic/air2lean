@@ -1333,18 +1333,20 @@ whole fraction of its cell (`ZigLean/Sep/Full/Claims.lean`), and **the authorita
 cell** (`ac`, §Authoritative counters: credits, step receipts, stack tokens, plain-mode facts;
 non-mintable, `MemAuth`), and **the read shares** of heap cells by location (`share`, §Read
 shares: a location with a share is no resource's exclusive cell; `Holds` matches the cell a share
-reads against the memory). -/
+reads against the memory), and **the device cell** (`dev`, §Device state: the exclusive fragment
+`devOwn D` of the memory's device state, `MemAuth.dev`). -/
 @[ext] structure Ghost where
   led : Nat → GCell
   extent : BlockId → ECell
   cl : BlockId → Nat → ECell
   ac : KCell
   share : Loc → SCell
+  dev : DCell
 
 namespace Ghost
 
 def unit : Ghost := ⟨fun _ => GCell.unit, fun _ => ECell.unit, fun _ _ => ECell.unit, ACell.unit,
-  fun _ => SCell.zero⟩
+  fun _ => SCell.zero, DCell.unit⟩
 
 @[simp] theorem unit_led (γ : Nat) : unit.led γ = GCell.unit := rfl
 
@@ -1353,7 +1355,8 @@ def unit : Ghost := ⟨fun _ => GCell.unit, fun _ => ECell.unit, fun _ _ => ECel
 @[simp] theorem unit_cl (b : BlockId) (x : Nat) : unit.cl b x = ECell.unit := rfl
 
 def add (g₁ g₂ : Ghost) : Ghost := ⟨fun γ => (g₁.led γ).add (g₂.led γ), fun b => (g₁.extent b).add (g₂.extent b),
-  fun b x => (g₁.cl b x).add (g₂.cl b x), g₁.ac.add g₂.ac, fun l => (g₁.share l).add (g₂.share l)⟩
+  fun b x => (g₁.cl b x).add (g₂.cl b x), g₁.ac.add g₂.ac, fun l => (g₁.share l).add (g₂.share l),
+  fun D => g₁.dev D + g₂.dev D⟩
 
 /-- The ledger statuses of `g`: ledger `γ`'s authority is at epoch `e` with parent tag `p`. -/
 def ls (g : Ghost) : LStat := fun γ e p => ∃ M, 0 < (g.led γ).auth (e, M, p)
@@ -1388,6 +1391,7 @@ theorem add_comm (g₁ g₂ : Ghost) : g₁.add g₂ = g₂.add g₁ := by
   · funext b x; exact ECell.add_comm _ _
   · exact ACell.add_comm _ _
   · funext l; exact SCell.add_comm _ _
+  · funext D; exact Nat.add_comm _ _
 
 theorem add_assoc (g₁ g₂ g₃ : Ghost) : (g₁.add g₂).add g₃ = g₁.add (g₂.add g₃) := by
   ext1
@@ -1396,6 +1400,7 @@ theorem add_assoc (g₁ g₂ g₃ : Ghost) : (g₁.add g₂).add g₃ = g₁.add
   · funext b x; exact ECell.add_assoc _ _ _
   · exact ACell.add_assoc _ _ _
   · funext l; exact SCell.add_assoc _ _ _
+  · funext D; exact Nat.add_assoc _ _ _
 
 @[simp] theorem add_unit (g : Ghost) : g.add unit = g := by
   ext1 <;> (try funext x) <;> (try funext y) <;> simp [add, unit]
@@ -1552,11 +1557,23 @@ theorem Ghost.CValid.congr {g g' : Ghost} (hcl : g'.cl = g.cl) (hls : g'.ls = g.
 
 @[simp] theorem Ghost.unit_ac : Ghost.unit.ac = ACell.unit := rfl
 
+@[simp] theorem Ghost.add_dev (a b : Ghost) (D : DevState) : (a.add b).dev D = a.dev D + b.dev D :=
+  rfl
+
+@[simp] theorem Ghost.unit_dev : Ghost.unit.dev = DCell.unit := rfl
+
 /-- The ghost states of a resource and its frame compose, their extent claims are true, they
-claim no byte of a block `m` has not created, and `m` authorizes their counter cell
-(`MemAuth`: the stack tokens, the step meter, the plain-mode facts). -/
+claim no byte of a block `m` has not created, and `m` authorizes their counter cell and their
+device cell (`MemAuth`: the stack tokens, the step meter, the plain-mode facts, the device
+state). -/
 def GOk (m : Mem) (g gF : Ghost) : Prop :=
-  Ghost.Ok g gF ∧ ExtTrue m (g.add gF) ∧ ClFresh m (g.add gF) ∧ MemAuth m (g.add gF).ac
+  Ghost.Ok g gF ∧ ExtTrue m (g.add gF) ∧ ClFresh m (g.add gF) ∧
+    MemAuth m (g.add gF).ac (g.add gF).dev
+
+/-- `MemAuth` reads a ghost state only through its counter cell and its device cell. -/
+theorem MemAuth.congrGh {m : Mem} {g g' : Ghost} (ha : g'.ac = g.ac) (hd : g'.dev = g.dev)
+    (h : MemAuth m g.ac g.dev) : MemAuth m g'.ac g'.dev := by
+  rw [ha, hd]; exact h
 
 theorem GOk.assoc {m : Mem} {a b c : Ghost} : GOk m (a.add b) c ↔ GOk m a (b.add c) := by
   unfold GOk; rw [Ghost.add_assoc, Ghost.Ok.assoc]
@@ -1582,23 +1599,26 @@ theorem GOk.mono {m : Mem} {a b c : Ghost} (h : GOk m (a.add b) c) (hb : b.Affin
   have := h.2.1; rw [e] at this
   have h3 := h.2.2.1; rw [e] at h3
   have h4 := h.2.2.2; rw [e] at h4
-  exact ⟨ExtTrue.of_add this, ClFresh.of_add h3, MemAuth.drop h4 hb.1⟩
+  exact ⟨ExtTrue.of_add this, ClFresh.of_add h3,
+    (MemAuth.drop h4 hb.1).dropDev fun D => by simp only [Ghost.add_dev]; omega⟩
 
 theorem GOk.keep {m m' : Mem} {g gF : Ghost} (h : GOk m g gF) (hk : KeepsExt m m')
     (hs : m.blocks.size ≤ m'.blocks.size) (hm : MemAuth.Keep m m') : GOk m' g gF :=
   ⟨h.1, h.2.1.keep hk, h.2.2.1.mono hs, h.2.2.2.keep hm⟩
 
-/-- A memory with the same blocks, stack states, address space, step count and current thread
-(another footprint, clock, thread record, placement proposal...). -/
+/-- A memory with the same blocks, stack states, address space, step count, current thread and
+device state (another footprint, clock, thread record, placement proposal...). -/
 theorem GOk.of_blocks {m m' : Mem} {g gF : Ghost} (h : GOk m g gF) (hb : m'.blocks = m.blocks)
     (hst : m'.stacks = m.stacks) (hl : m'.place.addrLimit = m.place.addrLimit)
-    (ht : m'.ticks = m.ticks) (hc : m'.current = m.current := by first | rfl | assumption | simp) :
-    GOk m' g gF :=
-  h.keep (KeepsExt.of_blocks hb) (by rw [hb]; exact Nat.le_refl _) (MemAuth.Keep.of_blocks hb hst hl ht hc)
+    (ht : m'.ticks = m.ticks) (hc : m'.current = m.current := by first | rfl | assumption | simp)
+    (hd : m'.dev = m.dev := by first | rfl | assumption | simp) : GOk m' g gF :=
+  h.keep (KeepsExt.of_blocks hb) (by rw [hb]; exact Nat.le_refl _)
+    (MemAuth.Keep.of_blocks hb hst hl ht hc hd)
 
 /-- A ghost state without extent claims composes in every memory where it composes in one. -/
 theorem GOk.of_unit {m : Mem} {gF : Ghost} (h : GOk m Ghost.unit gF) (m' : Mem)
-    (hF : ExtTrue m' gF) (hC : ClFresh m' gF) (hM : MemAuth m' gF.ac) : GOk m' Ghost.unit gF :=
+    (hF : ExtTrue m' gF) (hC : ClFresh m' gF) (hM : MemAuth m' gF.ac gF.dev) :
+    GOk m' Ghost.unit gF :=
   ⟨h.1, by simpa using hF, by simpa using hC, by simpa using hM⟩
 
 /-! ## The heap with the read shares (§Read shares) -/
@@ -2123,6 +2143,7 @@ theorem Ghost.atExt_add (b : BlockId) (c c' : ECell) :
   · funext b' x; simp [Ghost.add, Ghost.atExt, Ghost.unit]
   · simp [Ghost.add, Ghost.atExt]
   · funext l; simp [Ghost.add, Ghost.atExt, Ghost.unit]
+  · funext D; simp [Ghost.add, Ghost.atExt, Ghost.unit]
 
 /-- **The authority over block `b`'s extent with the fraction `q`**: `b` is live, `S` bytes,
 kind `K` (mapping start included); shares of `1 - q` are out. Owns no bytes. -/
@@ -2149,10 +2170,13 @@ def brcpt (b : BlockId) (q : Frac) (k γ e : Nat) : FAssn := fun r =>
 def Ghost.exts (E : BlockId → Option (Nat × BlockKind)) : Ghost :=
   ⟨fun _ => GCell.unit, fun b => match E b with
     | some (S, K) => ECell.auth1 S K Frac.one
-    | none => ECell.unit, fun _ _ => ECell.unit, ACell.unit, fun _ => SCell.zero⟩
+    | none => ECell.unit, fun _ _ => ECell.unit, ACell.unit, fun _ => SCell.zero, DCell.unit⟩
 
 @[simp] theorem Ghost.exts_ac (E : BlockId → Option (Nat × BlockKind)) :
     (Ghost.exts E).ac = ACell.unit := rfl
+
+@[simp] theorem Ghost.exts_dev (E : BlockId → Option (Nat × BlockKind)) :
+    (Ghost.exts E).dev = DCell.unit := rfl
 
 @[simp] theorem Ghost.exts_cl (E : BlockId → Option (Nat × BlockKind)) :
     (Ghost.exts E).cl = fun _ _ => ECell.unit := rfl

@@ -134,7 +134,7 @@ theorem Holds.reAC {m m' : Mem} {r rF : Res} {g gF : Ghost} (hh : Holds m r rF)
     (hb : m'.blocks = m.blocks) (ha : m'.atomics = m.atomics)
     (hl : (g.add gF).led = (r.gh.add rF.gh).led) (hx : (g.add gF).extent = (r.gh.add rF.gh).extent)
     (hc : (g.add gF).cl = (r.gh.add rF.gh).cl) (hv : (g.add gF).ac.Valid)
-    (hM : MemAuth m' (g.add gF).ac)
+    (hM : MemAuth m' (g.add gF).ac (g.add gF).dev)
     (hs : (g.add gF).share = (r.gh.add rF.gh).share := by
       funext _; simp +zetaDelta [Ghost.add_share, Ghost.ofAC, Ghost.cur]) :
     Holds m' ⟨r.heap, r.know, g⟩ ⟨rF.heap, rF.know, gF⟩ := by
@@ -912,6 +912,7 @@ theorem Ghost.exts_extOne (b : BlockId) (S : Nat) (K : BlockKind) :
   · funext x; simp only [Ghost.atExt, Ghost.exts, extOne]; split <;> simp_all
   · funext x y; simp [Ghost.atExt, Ghost.exts]
   · simp [Ghost.atExt, Ghost.exts]
+  · rfl
   · rfl
 
 end Full

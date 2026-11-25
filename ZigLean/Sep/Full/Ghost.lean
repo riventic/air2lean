@@ -135,6 +135,7 @@ theorem Ghost.at_add (γ : Nat) (c c' : GCell) : (Ghost.at γ c).add (Ghost.at �
   · funext b x; simp [Ghost.add, Ghost.at, Ghost.unit]
   · simp
   · funext l; simp [Ghost.add, Ghost.at, Ghost.unit]
+  · funext D; simp [Ghost.add, Ghost.at, Ghost.unit]
 
 @[simp] theorem Ghost.at_unit (γ : Nat) : Ghost.at γ GCell.unit = Ghost.unit := by
   ext1 <;> (try funext x) <;> (try funext y) <;> simp [Ghost.at, Ghost.unit]
@@ -467,14 +468,16 @@ theorem gauth_epTok_whole {γ e e' : Nat} {M : GMap} {p : STag} {q : Frac} {r : 
 /-! ## Frame-preserving updates -/
 
 /-- `P` can become `P'` by a ghost update: every resource of `P` is replaced, with the same bytes,
-knowledge, extent claims and counter cell, by one of `P'` that composes with every ghost frame the
-old one composed with, and under whose ledgers every extent claim that was true stays true. (The
-counter cell changes only with the memory's consent: `EUpd`.) -/
+knowledge, extent claims, counter cell and device cell, by one of `P'` that composes with every
+ghost frame the old one composed with, and under whose ledgers every extent claim that was true
+stays true. (The counter cell and the device cell change only with the memory's consent:
+`EUpd`.) -/
 def Upd (P P' : FAssn) : Prop :=
   ∀ r, P r → ∀ g, Ghost.Ok r.gh g →
     ∃ r', P' r' ∧ r'.heap = r.heap ∧ r'.know = r.know ∧ r'.gh.extent = r.gh.extent ∧
-      r'.gh.cl = r.gh.cl ∧ r'.gh.ac = r.gh.ac ∧ r'.gh.share = r.gh.share ∧ Ghost.Ok r'.gh g ∧
-        ∀ m, ExtTrue m (r.gh.add g) → ExtTrue m (r'.gh.add g)
+      r'.gh.cl = r.gh.cl ∧ r'.gh.ac = r.gh.ac ∧ r'.gh.share = r.gh.share ∧
+        r'.gh.dev = r.gh.dev ∧ Ghost.Ok r'.gh g ∧
+          ∀ m, ExtTrue m (r.gh.add g) → ExtTrue m (r'.gh.add g)
 
 /-- What an authority `●(e, M)` and a token `◯(e, i ↦ g)` say about a frame `d` they compose
 with: the map records the grant, and `d` holds no token for it. -/
@@ -504,22 +507,22 @@ namespace Upd
 variable {P P' P'' R : FAssn}
 
 theorem of_imp (h : ∀ r, P r → P' r) : Upd P P' := fun r hp _ hg =>
-  ⟨r, h r hp, rfl, rfl, rfl, rfl, rfl, rfl, hg, fun _ h => h⟩
+  ⟨r, h r hp, rfl, rfl, rfl, rfl, rfl, rfl, rfl, hg, fun _ h => h⟩
 
 theorem trans (h₁ : Upd P P') (h₂ : Upd P' P'') : Upd P P'' := fun r hp g hg => by
-  obtain ⟨r₁, h1, e1, k1, x1, c1, a1, s1, g1, t1⟩ := h₁ r hp g hg
-  obtain ⟨r₂, h2, e2, k2, x2, c2, a2, s2, g2, t2⟩ := h₂ r₁ h1 g g1
-  exact ⟨r₂, h2, e2.trans e1, k2.trans k1, x2.trans x1, c2.trans c1, a2.trans a1, s2.trans s1, g2,
-    fun m h => t2 m (t1 m h)⟩
+  obtain ⟨r₁, h1, e1, k1, x1, c1, a1, s1, d1, g1, t1⟩ := h₁ r hp g hg
+  obtain ⟨r₂, h2, e2, k2, x2, c2, a2, s2, d2, g2, t2⟩ := h₂ r₁ h1 g g1
+  exact ⟨r₂, h2, e2.trans e1, k2.trans k1, x2.trans x1, c2.trans c1, a2.trans a1, s2.trans s1,
+    d2.trans d1, g2, fun m h => t2 m (t1 m h)⟩
 
 /-- Updates frame. -/
 theorem frame (h : Upd P P') : Upd (P ⋆ R) (P' ⋆ R) := by
   rintro _ ⟨r₁, r₂, hd, rfl, hp, hr⟩ g hg
-  obtain ⟨r₁', hp', e, k, x, xc, xa, xs, hg', ht⟩ := h r₁ hp (r₂.gh.add g) (Ghost.Ok.assoc.mp hg)
+  obtain ⟨r₁', hp', e, k, x, xc, xa, xs, xd, hg', ht⟩ := h r₁ hp (r₂.gh.add g) (Ghost.Ok.assoc.mp hg)
   refine ⟨⟨r₁'.heap ∪ r₂.heap, r₁'.know.union r₂.know, r₁'.gh.add r₂.gh⟩,
     ⟨r₁', r₂, by rw [e]; exact hd, rfl, hp', hr⟩, by simp [e], by simp [k],
     by simp [Ghost.add, x], by simp [Ghost.add, xc], by simp [xa], by simp [Ghost.add, xs],
-    Ghost.Ok.assoc.mpr hg', fun m hm => ?_⟩
+    by simp [Ghost.add, xd], Ghost.Ok.assoc.mpr hg', fun m hm => ?_⟩
   simp only [Ghost.add_assoc] at hm ⊢
   exact ht m hm
 
@@ -536,7 +539,7 @@ theorem single {γ : Nat} {c c' : GCell} {P P' : FAssn}
   have e := hp r hr
   subst e
   obtain ⟨h1, h2⟩ := Ghost.Ok.update h hg
-  exact ⟨_, hp', rfl, rfl, rfl, rfl, rfl, rfl, h1, h2⟩
+  exact ⟨_, hp', rfl, rfl, rfl, rfl, rfl, rfl, rfl, h1, h2⟩
 
 /-- **A new ledger** with parent tag `p`, at a name no frame uses (no ledger, no tag, no parent
 link), with no grant, and its epoch's whole token (`epTok`). Its tags are lent from shares tagged
@@ -628,7 +631,7 @@ theorem alloc (p : STag) :
       exact ⟨⟨e', hee, (hq e').mp hl'⟩, (hq e).mp⟩)
   refine ⟨⟨FHeap.empty, Know.none, Ghost.at ν c'⟩, ⟨ν, gauth_epTok_intro⟩,
     h0.symm, k0.symm, by rw [g0]; funext b; simp [Ghost.at, Ghost.unit], by rw [g0]; rfl,
-    by rw [g0]; rfl, by rw [g0]; rfl,
+    by rw [g0]; rfl, by rw [g0]; rfl, by rw [g0]; rfl,
     ⟨hv', ν + 1, fun γ hγ => ⟨?_, ?_, fun γ' e' M e => ?_⟩⟩, fun m hm => ?_⟩
   · rw [hl γ (by omega)]; exact (hN γ (by omega)).1
   · rw [hx]; exact (hN γ (by omega)).2.1
@@ -777,7 +780,7 @@ theorem bump {γ e : Nat} {M : GMap} {p : STag} :
       · exact ⟨⟨x', hxx, (hoth γ' x' w hγ).mp hl'⟩, (hoth γ' x w hγ).mp⟩)
   refine ⟨⟨FHeap.empty, Know.none, Ghost.at γ c'⟩, gauth_epTok_intro,
     h0.symm, k0.symm, by rw [g0]; funext b; simp [Ghost.at, Ghost.unit], by rw [g0]; rfl,
-    by rw [g0]; rfl, by rw [g0]; rfl,
+    by rw [g0]; rfl, by rw [g0]; rfl, by rw [g0]; rfl,
     ⟨hv', N + γ + 1, fun γ' hγ => ⟨?_, ?_, fun γ'' x' M' x => ?_⟩⟩,
     fun m hm => by rw [g0] at hm; exact ht' m hm⟩
   · rw [hl γ' (by omega)]; exact (hN γ' (by omega)).1
@@ -817,11 +820,11 @@ variable {α : Type} {P P' : FAssn} {c : MemM α} {Q Q' : α → FAssn}
 /-- A ghost update of the precondition. -/
 theorem upd (hu : Upd P P') (ht : FTriple P' c Q) : FTriple P c Q := by
   intro m r rF hh hp hs
-  obtain ⟨r', hp', e, k, x, xc, xa, xs, hg, ht'⟩ := hu r hp rF.gh hh.ghost.1
+  obtain ⟨r', hp', e, k, x, xc, xa, xs, xd, hg, ht'⟩ := hu r hp rF.gh hh.ghost.1
   exact ht m r' rF ⟨by rw [e]; exact hh.disj,
     by rw [e]; exact hh.heap.reShare (Ghost.share_add₂ xs rfl), by rw [k]; exact hh.know,
     hh.knowF, ⟨hg, ht' m hh.ghost.2.1, hh.ghost.2.2.1.congr (by funext x y; simp [xc]),
-      by simpa [xa] using hh.ghost.2.2.2⟩⟩ hp' hs
+      MemAuth.congrGh (by simp [xa]) (by funext D; simp [xd]) hh.ghost.2.2.2⟩⟩ hp' hs
 
 /-- A ghost update of the postcondition. -/
 theorem upd_post (ht : FTriple P c Q) (hu : ∀ v, Upd (Q v) (Q' v)) : FTriple P c Q' := by
@@ -831,11 +834,11 @@ theorem upd_post (ht : FTriple P c Q) (hu : ∀ v, Upd (Q v) (Q' v)) : FTriple P
   · trivial
   · exact this
   · obtain ⟨r', hh', hq, hs'⟩ := this
-    obtain ⟨r'', hq', e, k, x, xc, xa, xs, hg, ht'⟩ := hu _ r' hq rF.gh hh'.ghost.1
+    obtain ⟨r'', hq', e, k, x, xc, xa, xs, xd, hg, ht'⟩ := hu _ r' hq rF.gh hh'.ghost.1
     exact ⟨r'', ⟨by rw [e]; exact hh'.disj,
       by rw [e]; exact hh'.heap.reShare (Ghost.share_add₂ xs rfl), by rw [k]; exact hh'.know,
       hh'.knowF, ⟨hg, ht' _ hh'.ghost.2.1, hh'.ghost.2.2.1.congr (by funext x y; simp [xc]),
-        by simpa [xa] using hh'.ghost.2.2.2⟩⟩, hq', hs'⟩
+        MemAuth.congrGh (by simp [xa]) (by funext D; simp [xd]) hh'.ghost.2.2.2⟩⟩, hq', hs'⟩
 
 /-- The fact `M i = some g` of a token of the current epoch, in a precondition. -/
 theorem mem {γ e i : Nat} {M : GMap} {p : STag} {g : GRegion} {R : FAssn}
@@ -964,7 +967,7 @@ theorem Holds.credits_le {m : Mem} {r rF : Res} {R R' : FAssn} {n N : Nat} (hh :
 theorem GOk.ac_change {m : Mem} {g gF g' gF' : Ghost} (h : GOk m g gF)
     (hl : (g'.add gF').led = (g.add gF).led) (hx : (g'.add gF').extent = (g.add gF).extent)
     (hc : (g'.add gF').cl = (g.add gF).cl) (hv : (g'.add gF').ac.Valid)
-    (hM : MemAuth m (g'.add gF').ac) : GOk m g' gF' := by
+    (hM : MemAuth m (g'.add gF').ac (g'.add gF').dev) : GOk m g' gF' := by
   obtain ⟨⟨hV, hF⟩, ht, hcf, -⟩ := h
   unfold GOk Ghost.Ok
   generalize g.add gF = G at hV hF ht hcf hl hx hc
@@ -978,7 +981,7 @@ states: a stack push or pop, a budget at program start). -/
 theorem GOk.reAC {m m' : Mem} {g gF g' gF' : Ghost} (h : GOk m g gF) (hb : m'.blocks = m.blocks)
     (hl : (g'.add gF').led = (g.add gF).led) (hx : (g'.add gF').extent = (g.add gF).extent)
     (hc : (g'.add gF').cl = (g.add gF).cl) (hv : (g'.add gF').ac.Valid)
-    (hM : MemAuth m' (g'.add gF').ac) : GOk m' g' gF' := by
+    (hM : MemAuth m' (g'.add gF').ac (g'.add gF').dev) : GOk m' g' gF' := by
   obtain ⟨⟨hV, hF⟩, ht, hcf, -⟩ := h
   replace ht := ht.keep (m' := m') (KeepsExt.of_blocks hb)
   replace hcf := hcf.mono (m' := m') (by rw [hb]; exact Nat.le_refl _)
@@ -1012,10 +1015,11 @@ theorem Holds.addCredits {m : Mem} {r rF : Res} (N : Nat) (hh : Holds m r rF)
   · funext b x; simp [Ghost.add, Ghost.cred, Ghost.credAuth, Ghost.ofAC, Ghost.unit]
   · rw [e]; exact ACell.Valid.addAuthLe (Nat.le_add_left _ _) hV hf ha
   · rw [e]
-    obtain ⟨hs, ⟨t1, t2, t3⟩, hn, ho, hcur⟩ := hM
+    obtain ⟨hs, ⟨t1, t2, t3⟩, hn, ho, hcur, hdev⟩ := hM
     refine ⟨hs.congr fun k v => by simp, ⟨fun L hL => ?_, by simpa using t2, fun hp => ?_⟩,
       fun hp => hn (by simpa using hp), fun k L hk => by simp [hk, ho k L hk],
-      fun v hv => hcur v (by simpa using hv)⟩
+      fun v hv => hcur v (by simpa using hv),
+      by simpa [Ghost.cred, Ghost.credAuth, Ghost.ofAC] using hdev⟩
     · have hL' : L = m.ticks + N := by
         refine Classical.byContradiction fun hne => ?_
         simp [ha, hne] at hL
@@ -1059,10 +1063,10 @@ theorem Holds.addPlain {m : Mem} {r rF : Res} (hh : Holds m r rF) (hns : m.NoSta
     · refine ⟨by simpa using h1, by simpa using h2, fun n hn => ?_, by simpa using h4, by simpa using h5⟩
       simp [ho k n hk] at hn
   · rw [e]
-    obtain ⟨hs, ⟨t1, t2, t3⟩, -, -, hcur⟩ := hM
+    obtain ⟨hs, ⟨t1, t2, t3⟩, -, -, hcur, hdev⟩ := hM
     exact ⟨hs.congr fun k v => by simp, ⟨fun L hL => by simp [ha] at hL, by simpa using t2,
       fun _ L => by simpa using ha L⟩, fun _ => hns, fun k L hk => by simp [ho k L hk],
-      fun v hv => hcur v (by simpa using hv)⟩
+      fun v hv => hcur v (by simpa using hv), by simpa [Ghost.plain, Ghost.ofAC] using hdev⟩
 
 /-- **`r` holds the plain mode**: both of its fragments (`noStack`, `unmetered`), whatever else
 it holds. A thread's part with them can split off a copy of `plain` (`Holds.splitPlain`). -/
@@ -1177,6 +1181,101 @@ theorem Holds.dropCurF {m : Mem} {r rF : Res} {t : ThreadId}
   · funext γ; simp [Ghost.add, Ghost.cur, Ghost.ofAC, Ghost.unit]
   · funext b; simp [Ghost.add, Ghost.cur, Ghost.ofAC, Ghost.unit]
   · funext b x; simp [Ghost.add, Ghost.cur, Ghost.ofAC, Ghost.unit]
+
+/-! ## The device state (`docs/sep-full-state.md` §Device state)
+
+The device state `Mem.dev` (oracles and trace, L13, `ZigLean/Mem/Device.lean`) is an exclusive
+ghost component (maintainer decision 2026-11-25), as the stack depth and the step ticks are:
+`devOwn D` holds the device cell's one fragment, and the memory admits at most one, of its own
+device state (`MemAuth.dev`). So `devOwn D` names the memory's device state (`Holds.dev`), two of
+them never compose (`Holds.devOwn_excl`), and no step but a device step changes `Mem.dev`
+(`MemAuth.Keep.dev`). A device step replaces both together (`Holds.setDev`). A frame-preserving
+ghost update keeps the device cell (`Upd`); only an adequacy theorem hands `devOwn m.dev` to a
+program (`Holds.addDev`). Without `devOwn` no triple of a device read exists
+(`tests/roadmap/volatile-effects/DeviceGhostCX.lean`). -/
+
+/-- The ghost state with the device fragment of `D` and nothing else. -/
+noncomputable def Ghost.devAt (D : DevState) : Ghost := { Ghost.unit with dev := DCell.one D }
+
+@[simp] theorem Ghost.devAt_dev (D : DevState) : (Ghost.devAt D).dev = DCell.one D := rfl
+
+@[simp] theorem Ghost.devAt_ac (D : DevState) : (Ghost.devAt D).ac = ACell.unit := rfl
+
+/-- **`devOwn D`**: the memory's device state is `D` (its oracles and its trace), and the resource
+holds it exclusively. Owns no bytes, no knowledge. -/
+def devOwn (D : DevState) : FAssn := fun r =>
+  r.heap = FHeap.empty ∧ r.know = Know.none ∧ r.gh = Ghost.devAt D
+
+theorem devOwn_intro (D : DevState) : devOwn D ⟨FHeap.empty, Know.none, Ghost.devAt D⟩ :=
+  ⟨rfl, rfl, rfl⟩
+
+/-- The device cell of a resource and its frame, with the fragment of `D` split off. -/
+theorem Ghost.devAt_add_dev (D : DevState) (g gF : Ghost) (X : DevState) :
+    (((Ghost.devAt D).add g).add gF).dev X = DCell.one D X + (g.dev X + gF.dev X) := by
+  simp [Nat.add_assoc]
+
+/-- **`devOwn D` names the memory's device state.** -/
+theorem Holds.dev {m : Mem} {r rF : Res} {R : FAssn} {D : DevState} (hh : Holds m r rF)
+    (h : (devOwn D ⋆ R) r) : m.dev = D := by
+  obtain ⟨r₁, r₂, -, rfl, ⟨-, -, g1⟩, -⟩ := h
+  exact (hh.ghost.2.2.2.dev_only (e := fun X => r₂.gh.dev X + rF.gh.dev X) fun X => by
+    simp only [Ghost.add_dev, g1, Ghost.devAt_dev]; omega).1
+
+/-- **Two `devOwn` never compose**: a held resource has at most one device fragment. -/
+theorem Holds.devOwn_excl {m : Mem} {r rF : Res} {R : FAssn} {D D' : DevState} (hh : Holds m r rF)
+    (h : (devOwn D ⋆ devOwn D' ⋆ R) r) : False := by
+  obtain ⟨r₁, r₂, -, rfl, ⟨-, -, g1⟩, ⟨r₃, r₄, -, rfl, ⟨-, -, g3⟩, -⟩⟩ := h
+  have h3 : (r₃.gh.add r₄.gh).dev D' + rF.gh.dev D' = 0 :=
+    (hh.ghost.2.2.2.dev_only (e := fun X => (r₃.gh.add r₄.gh).dev X + rF.gh.dev X) fun X => by
+      simp only [Ghost.add_dev, g1, Ghost.devAt_dev]; omega).2 D'
+  rw [Ghost.add_dev, g3, Ghost.devAt_dev, DCell.one_self] at h3
+  omega
+
+/-- A ghost state with the device fragment of `D` added differs only in its device cell. -/
+theorem Ghost.devAt_add_eq (D : DevState) (G : Ghost) :
+    (Ghost.devAt D).add G = { G with dev := fun X => DCell.one D X + G.dev X } := by
+  ext1 <;> (try funext x) <;> (try funext y) <;> simp [Ghost.add, Ghost.devAt, Ghost.unit]
+
+/-- **Only the device cell and the device state change**: the memory with the device state `D'`
+holds the resource with the ghost state `g'`, which differs from `r`'s only in the device cell
+(`he`), if it authorizes the new device cell. -/
+theorem Holds.devChange {m : Mem} {r rF : Res} {g' : Ghost} (D' : DevState) (hh : Holds m r rF)
+    (he : g'.add rF.gh = { r.gh.add rF.gh with dev := (g'.add rF.gh).dev })
+    (hM : MemAuth { m with dev := D' } (r.gh.add rF.gh).ac (g'.add rF.gh).dev) :
+    Holds { m with dev := D' } ⟨r.heap, r.know, g'⟩ rF := by
+  obtain ⟨hd, hm, hk, hkF, hok, ht, hcf, -⟩ := hh
+  refine ⟨hd, ?_, hk, hkF, ?_⟩
+  · show SMatch _ _ (g'.add rF.gh).share
+    rw [he]
+    exact hm.of_whole hm.whole fun _ => id
+  · show GOk _ g' rF.gh
+    unfold GOk Ghost.Ok
+    rw [he]
+    exact ⟨hok, ht, hcf, hM⟩
+
+/-- **A device step** (`ZigLean/Mem/Device.lean`: `vload`, `vstore`, `vasm`, `vasmEffect`):
+the memory with the device state `D'` holds the resource with `devOwn D'` in place of `devOwn D`.
+Nothing else of the memory, the resource or the frame changes. -/
+theorem Holds.setDev {m : Mem} {r rF : Res} {D : DevState} (D' : DevState)
+    (hh : Holds m ⟨r.heap, r.know, (Ghost.devAt D).add r.gh⟩ rF) :
+    Holds { m with dev := D' } ⟨r.heap, r.know, (Ghost.devAt D').add r.gh⟩ rF :=
+  hh.devChange D' (Ghost.ext rfl rfl rfl rfl rfl rfl)
+    (hh.ghost.2.2.2.setDev D' (Ghost.devAt_add_dev D r.gh rF.gh) (Ghost.devAt_add_dev D' r.gh rF.gh))
+
+/-- **The adequacy step of the device state**: a memory that holds `r` with frame `rF`, which
+hold no device fragment, holds `r` with `devOwn m.dev` added. Only an adequacy theorem uses it: no
+judgment can (the frame is fixed, and may hold the fragment). -/
+theorem Holds.addDev {m : Mem} {r rF : Res} (hh : Holds m r rF) (h0 : ∀ X, (r.gh.add rF.gh).dev X = 0) :
+    Holds m ⟨r.heap, r.know, (Ghost.devAt m.dev).add r.gh⟩ rF :=
+  hh.devChange (g' := (Ghost.devAt m.dev).add r.gh) m.dev
+    (by rw [Ghost.add_assoc, Ghost.devAt_add_eq])
+    (hh.ghost.2.2.2.addDev h0 fun X => by simp [Nat.add_assoc])
+
+/-- The resource with `devOwn D` added. -/
+theorem devOwn_sep_intro {R : FAssn} {r : Res} {D : DevState} (h : R r) :
+    (devOwn D ⋆ R) ⟨r.heap, r.know, (Ghost.devAt D).add r.gh⟩ :=
+  ⟨⟨FHeap.empty, Know.none, Ghost.devAt D⟩, r, FHeap.disjoint_empty _,
+    by simp [FHeap.empty_union, Know.none_union], devOwn_intro D, h⟩
 
 end Full
 end Zig

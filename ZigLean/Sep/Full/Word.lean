@@ -966,7 +966,7 @@ theorem prepare_rest {m m₁ : Mem} {li : Nat} {k : AccessKind} (hw : W.Ok m A)
     have hs := FStepIn.locIdx (m := mr) (hF := fun _ => none) (hR := Heap.empty) W.sz_pos
       (fun _ _ _ => rfl) (by obtain ⟨blk, hb, _, hsz, _⟩ := hw.blk; exact ⟨blk, hb, hsz⟩) h
     obtain ⟨rfl, rfl⟩ := locIdx_new hf (noOverlap_of_only hf hw.only) h
-    refine hr.trans (RestStep.of_blocks hs rfl ⟨rfl, rfl, rfl⟩
+    refine hr.trans (RestStep.of_blocks hs rfl ⟨rfl, rfl, rfl, rfl⟩
       (fun l hl => hw.cellIn hl) (fun b x hx => ?_) (fun hwf => ?_)
       (fun _ he => .inl he))
     · simp only [shapes, Array.toList_push, List.map_append, List.map_cons, List.map_nil,
@@ -1515,7 +1515,7 @@ theorem rmwM_rest {m : Mem} {li pos : Nat} {l : ALoc} {blk : Block}
   let M := rmwM m li pos ord rd new
   have h2 : m₂.atomics = m.atomics ∧ m₂.blocks = m.blocks ∧
       m₂.footprint = m.footprint ∧ m.Aux m₂ := by
-    simp only [m₂]; split <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+    simp only [m₂]; split <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   obtain ⟨ha₂, hb₂, hf₂, hx₂⟩ := h2
   have hMe : M = observeM {m₂ with
       atomics := m₂.atomics.set! li {l with msgs := l.msgs.push msg}, nextMsg := m₂.nextMsg + 1,
@@ -1527,7 +1527,7 @@ theorem rmwM_rest {m : Mem} {li pos : Nat} {l : ALoc} {blk : Block}
   have hMb : M.blocks = (m.write W.b blk W.o msg.bytes).blocks := by
     rw [hMe]; simp only [observeM, Mem.write, hb₂, hlb, hlo']
   have hMf : M.footprint = m.footprint := by rw [hMe]; exact hf₂
-  have hMx : m.Aux M := by rw [hMe]; exact hx₂.trans ⟨rfl, rfl, rfl⟩
+  have hMx : m.Aux M := by rw [hMe]; exact hx₂.trans ⟨rfl, rfl, rfl, rfl⟩
   have hsh : shapes M = shapes m := by
     rw [← keys_toList, keys_set (l' := {l with msgs := l.msgs.push msg}) hl.2 rfl hMa, keys_toList]
   exact write_rest (rmwM_fstep hl hlen hpos hc hrec ⟨blk, hb⟩

@@ -461,7 +461,7 @@ theorem FTTriple.cmpxchgPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α]
       unfold casPtrFinish at h5
       simp only [↓reduceIte] at h5
       have hblk₀ : m₀.blocks = m.blocks := by rw [hm₀]; try rfl
-      have hax₀ : m.Aux m₀ := by rw [hm₀]; exact ⟨rfl, rfl, rfl⟩
+      have hax₀ : m.Aux m₀ := by rw [hm₀]; exact ⟨rfl, rfl, rfl, rfl⟩
       obtain ⟨_, m₆, hc', h6⟩ := MemM.bind_ok h5
       rw [casMarkWrite_run (by rw [accessW_of_blocks hblk₀]; exact haccW8) (hnr₀ li m₀ hl)] at hc'
       simp only [pure, ExceptT.pure, ExceptT.mk, ExceptT.run, StateT.pure, Option.some.injEq,
@@ -489,14 +489,14 @@ theorem FTTriple.cmpxchgPtr {α : Type} [Enc α] [LawfulEnc α] [DecidableEq α]
       · simp only [Bool.false_eq_true, ↓reduceIte]
         refine (fun ⟨r', hh', hap, h3⟩ => ⟨r', hh', sep_lift.mpr ⟨by first | rfl | trivial, hap⟩, h3⟩)
           (key _ (by simp [Mem.recordAt]) (by simp [Mem.recordAt, hblk₀])
-            (by exact hax₀.trans ⟨rfl, rfl, rfl⟩) hs₃ _ ?_ ?_)
+            (by exact hax₀.trans ⟨rfl, rfl, rfl, rfl⟩) hs₃ _ ?_ ?_)
         · rfl
         · exact msgCovAt_recordAt (m := m₀) (hs₀.cur hc) (by decide) (fun _ he => he) hb ho
             (Mem.MsgCovAt.relClock_of_mem (last_mem hpos)) (.inl rfl) (rmw_relClock _ _ _)
       · simp only [↓reduceIte]
         refine (fun ⟨r', hh', hap, h3⟩ => ⟨r', hh', sep_lift.mpr ⟨by first | rfl | trivial, hap⟩, h3⟩)
           (key _ (by simp [acqM, Mem.recordAt]) (by simp [acqM, Mem.recordAt, hblk₀])
-            (by exact hax₀.trans ⟨rfl, rfl, rfl⟩)
+            (by exact hax₀.trans ⟨rfl, rfl, rfl, rfl⟩)
             (hs₃.trans (FStepIn.acq (hs₃.cur hc) _)) _ ?_ ?_)
         · rfl
         · exact msgCovAt_recordAt (m := m₀) (hs₀.cur hc) (by decide) (fun _ he => he) hb ho

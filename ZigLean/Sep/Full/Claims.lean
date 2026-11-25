@@ -131,6 +131,7 @@ theorem Ghost.atCl_add (b : BlockId) (C C' : Nat → ECell) :
   · funext x y; simp only [Ghost.add, Ghost.atCl]; split <;> simp
   · simp
   · funext l; simp [Ghost.add, Ghost.atCl, Ghost.unit]
+  · funext D; simp [Ghost.add, Ghost.atCl, Ghost.unit]
 
 /-- **An exclusive claim** on the bytes `[lo, hi)` of block `b` in world `t` (the root for
 `t = none`, a tag's world for `t = some (γ, e)`). Owns no bytes, no knowledge. -/

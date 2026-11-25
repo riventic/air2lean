@@ -472,11 +472,11 @@ variable {P P' P'' R : FAssn}
 
 /-- A ghost update (`Upd`) is an update in every memory: it keeps the extent claims. -/
 theorem of_upd (hu : Upd P P') : EUpd P P' := fun m r rF hh hp _ => by
-  obtain ⟨r', hp', e, k, x, xc, xa, xs, hg, ht⟩ := hu r hp rF.gh hh.ghost.1
+  obtain ⟨r', hp', e, k, x, xc, xa, xs, xd, hg, ht⟩ := hu r hp rF.gh hh.ghost.1
   exact ⟨r', ⟨by rw [e]; exact hh.disj, by rw [e]; exact hh.heap.reShare (Ghost.share_add₂ xs rfl),
     by rw [k]; exact hh.know,
     hh.knowF, ⟨hg, ht m hh.ghost.2.1, hh.ghost.2.2.1.congr (by funext x y; simp [xc]),
-      by simpa [xa] using hh.ghost.2.2.2⟩⟩, hp'⟩
+      MemAuth.congrGh (by simp [xa]) (by funext D; simp [xd]) hh.ghost.2.2.2⟩⟩, hp'⟩
 
 /-- Ghost resources (anything that owns no bytes, no knowledge and no stack token: extent claims,
 ledger tokens, epoch tokens, credits) can be dropped. -/
