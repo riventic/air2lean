@@ -5575,7 +5575,19 @@ where closeEntail' (g : MVarId) (sizes : Array (Expr × Expr)) : TacticM (List M
     if pf.hasExprMVar then
       for m in ← getMVars pf do
         unless left.contains m do
-          unless ← isProp (← m.getType) do throwError "fsym: undetermined witness ?{m.name}"
+          if ← isProp (← m.getType) then continue
+          -- a witness that neither the planned state nor the target mentions, only the proof of
+          -- an `if` the facts decided (a rule's released bytes `relBytes … tl` of a growth, where
+          -- `tl` is in the refuted branch): any value serves, as the rule holds for every one
+          if ← m.isAssigned then continue
+          let used (e : Expr) : MetaM Bool := do
+            return ((← instantiateMVars e).collectMVars {}).result.contains m
+          unless (← used T') || (← used Qf) do
+            if let some d ← observing? (mkDefault (← m.getType)) then
+              trace[fsym] "plan: witness ?{m.name} not used: {d}"
+              m.assign d
+              continue
+          throwError "fsym: undetermined witness ?{m.name}"
     g.assign (← mkAppM ``EUpd.trans #[st.pf, ← mkAppM ``EUpd.of_imp #[pf]])
     return left
   catch ex =>

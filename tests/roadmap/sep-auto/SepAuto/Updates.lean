@@ -444,6 +444,18 @@ theorem rule_if (c : MemM Nat) (P A : FAssn) (n len : Nat)
     FTotalTriple (A ⋆ P) (do let r ← c; pure r) (fun r => ⟪r = 0⟫ ⋆ P ⋆ A) := by
   fsym [h]
 
+/-- The `if` of released bytes `tl` that only its first case mentions (`relBytes … tl`). -/
+def relB (A : Array Byte → FAssn) (n len : Nat) (tl : Array Byte) : FAssn :=
+  if n < len then A tl else emp
+
+/-- The facts refute the case that mentions the rule's argument `tl`: no atom determines it, and
+any value serves (the refined `resize` of a growth). -/
+theorem rule_if_unused (c : MemM Nat) (P : FAssn) (A : Array Byte → FAssn) (n len : Nat)
+    (h : ∀ tl, FTotalTriple (P ⋆ relB A n len tl) c (fun r => ⟪r = 0⟫ ⋆ P ⋆ relB A n len tl))
+    (hn : ¬ n < len) :
+    FTotalTriple P (do let r ← c; pure r) (fun r => ⟪r = 0⟫ ⋆ P) := by
+  fsym [h]
+
 /-- A cell with some value. -/
 def Cell (p : Ptr) : FAssn := fun r => (FAssn.ex fun v => apts p v) r
 
