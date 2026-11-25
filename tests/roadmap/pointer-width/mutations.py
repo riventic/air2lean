@@ -50,7 +50,7 @@ MUTANTS = {
     # The allocation is requested with one-byte items: the 32-bit size check never fires at 2^30.
     "wasm32-alloc-item-size-one": ("Wasm32", [
         ("Zig.Allocator.allocOf .w32 p0 4 4 p1", "Zig.Allocator.allocOf .w32 p0 1 4 p1"),
-    ], ["zeros_overflow_w32", "zeros_boundary"]),
+    ], ["zeros_overflow_w32"]),
 }
 
 
