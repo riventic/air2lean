@@ -33,6 +33,23 @@
       "cwd": "repo"
     },
     {
+      "out": "air/{version}/opt_items",
+      "source": "opt_items.zig",
+      "filter": "opt_items.",
+      "versions": ["0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/opt_items_x64",
+      "source": "opt_items.zig",
+      "filter": "opt_items.",
+      "versions": ["0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-fno-llvm", "-fno-lld", "-target", "x86_64-linux-musl",
+               "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
       "out": "air/{version}/reject_lanes",
       "source": "reject_lanes.zig",
       "filter": "reject_lanes.",

@@ -1,5 +1,5 @@
 //! Prints each case of `packed_casts.zig` (and of `logical017.zig` on Zig 0.17, of
-//! `vector_fields.zig` and `auto_items.zig` on 0.14.1/0.15.2, of `sentinel_arrays.zig` up to
+//! `vector_fields.zig`, `auto_items.zig` and `opt_items.zig` on 0.14.1/0.15.2, of `sentinel_arrays.zig` up to
 //! 0.16, of `void_casts.zig`, and of `void017.zig` on 0.17) as one
 //! line `name: value` on stderr, values in hex; `Model.lean` prints the model's lines for the
 //! same cases.
@@ -13,6 +13,7 @@ const l17 = if (logical) @import("logical017.zig") else struct {};
 const vector_fields = builtin.zig_version.minor <= 15;
 const vf = if (vector_fields) @import("vector_fields.zig") else struct {};
 const ai = if (vector_fields) @import("auto_items.zig") else struct {};
+const oi = if (vector_fields) @import("opt_items.zig") else struct {};
 /// Sentinel arrays cast as memory up to 0.16; 0.17 is rejected (`reject_sentinel.zig`).
 const memory = builtin.zig_version.minor <= 16;
 const sa = if (memory) @import("sentinel_arrays.zig") else struct {};
@@ -31,7 +32,10 @@ fn Uint(comptime bits: u16) type {
         24 => u24,
         32 => u32,
         40 => u40,
+        48 => u48,
         64 => u64,
+        80 => u80,
+        128 => u128,
         else => @compileError("add the width"),
     };
 }
@@ -92,6 +96,39 @@ pub fn main() void {
         hex("structB1", ai.structB1(0x0004_0003_0002_0001));
         hex("unionPayload1", ai.unionPayload1(0x0000_BEEF_0001_1234));
         hex("unionsToInt", ai.unionsToInt(.{ .{ .a = 0x1234 }, .{ .b = 0x56 } }));
+        hex("opt_u8sToInt", oi.u8sToInt(.{ 0x12, 0x34 }));
+        hex("opt_nullToInt", oi.u8sToInt(.{ null, 0x34 }));
+        hex("opt_intToU8s", oi.intToU8s(0x0134_0012));
+        hex("opt_intToU8sNull", oi.intToU8s(0x0034_0112));
+        hex("opt_u16sToInt", oi.u16sToInt(.{ 0x1234, 0x5678 }));
+        hex("opt_intToU16s", oi.intToU16s(0xEE01_5678_FF01_1234));
+        hex("opt_zerosToInt", oi.zerosToInt(.{ 0, null, 0, 0 }));
+        hex("opt_intToZeros", oi.intToZeros(0x0100_0101));
+        hex("opt_intToU12s", oi.intToU12s(0xAA01_0ABC));
+        hex("opt_intToU24s", oi.intToU24s(0x0000_0001_7712_3456_0000_0000_0000_0000));
+        hex("opt_intToI8s", oi.intToI8s(0x0180_0000));
+        hex("opt_intToU64", oi.intToU64(0x1_0123_4567_89AB_CDEF));
+        hex("opt_intToU128", oi.intToU128((1 << 128) | 0x0123_4567_89AB_CDEF_FEDC_BA98_7654_3210));
+        hex("opt_boolsToInt", oi.boolsToInt(.{ true, false }));
+        hex("opt_intToBools", oi.intToBools(0x0100_0101));
+        hex("opt_intToF16", oi.intToF16(0x0001_3C00));
+        hex("opt_intToF32", oi.intToF32(0x1_3F80_0000));
+        hex("opt_intToF64", oi.intToF64((1 << 64) | 0x3FF0_0000_0000_0000));
+        hex("opt_intToF80", oi.intToF80((1 << 128) | 0x3FFF_8000_0000_0000_0000));
+        hex("opt_intToF128", oi.intToF128((1 << 128) | 0x3FFF_0000_0000_0000_0000_0000_0000_0000));
+        hex("opt_enumsToInt", oi.enumsToInt(.{ .c, .b }));
+        hex("opt_intToEnums", oi.intToEnums(0x0102_0000));
+        hex("opt_arraysToInt", oi.arraysToInt(.{ .{ 1, 2, 3 }, .{ 4, 5, 6 } }));
+        hex("opt_intToArrays", oi.intToArrays(0x0106_0504_0003_0201));
+        hex("opt_gridToInt", oi.gridToInt(.{ .{ 1, 2 }, .{ 3, 4 } }));
+        hex("opt_intToGrid", oi.intToGrid(0x0000_0109_0000_0000));
+        hex("opt_nestedToInt", oi.nestedToInt(.{ 0x11, 0x22 }));
+        hex("opt_intToNested", oi.intToNested(0x0101_2200_0000));
+        hex("opt_intToNestedInner", oi.intToNested(0x0100_AA00_0000));
+        hex("opt_intToExtern", oi.intToExtern(0x0134_1200_0000));
+        hex("opt_intToPacked", oi.intToPacked(0x0001_ABC5_0000_0000));
+        hex("opt_intToAuto", oi.intToAuto(0x0001_0005_0010_0000_0000_0000));
+        hex("opt_intToVector", oi.intToVector((1 << 128) | 0x4444_4444_3333_3333_2222_2222_1111_1111));
     }
     if (logical) {
         hex("nestedToInt", l17.nestedToInt(.{ .{ 1, 2, 3 }, .{ 4, 5, 6 } }));
