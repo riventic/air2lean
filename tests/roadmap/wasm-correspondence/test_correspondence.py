@@ -83,8 +83,7 @@ class Relation(unittest.TestCase):
 
     def unrelated(self, reason, text):
         """The pair is refused (a failure, not an error, when it is related), for `text`."""
-        self.assertIsNotNone(reason)
-        self.assertIn(text, reason)
+        self.assertIn(text, reason or '')
 
     def test_float_tolerance(self):
         f64 = {'class': 'tolerated', 'format': 'f64', 'ulp': 1}

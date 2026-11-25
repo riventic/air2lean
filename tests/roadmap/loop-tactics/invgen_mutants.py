@@ -97,13 +97,13 @@ def main():
         sys.exit(f"Proof.lean has no theorem {', '.join(missing)}")
     with ThreadPoolExecutor(max_workers=int(os.environ.get('AIR2LEAN_MUTANT_JOBS', '1'))) as pool:
         results = list(pool.map(lambda m: run(fixture, ns, work, m, theorems), mutants))
-    failed, rejected = [], []
+    failed = []
     for m, why in zip(mutants, results):
         if why:
             failed.append(f"mutant {m['name']}: {why}")
         else:
-            rejected.append(m['name'])
             print(f"mutant {m['name']} of the generated invariant rejected")
+    rejected = [m['name'] for m, why in zip(mutants, results) if not why]
     # Q02: each rejected mutant is a kill by the fixture's CI check (assurance/mutation-map.json, P09).
     rel = fixture.resolve().relative_to(ROOT).as_posix()
     log_kill(f'{rel}/mutants.json', rejected, f'{rel}/check.sh')
