@@ -22,7 +22,7 @@ the Conc CSL chain) is migrated and deleted.
 |---|---|---|---|
 | `legacy_users` | 97 at the arena landing (2026-10-14) | 41 | **0** |
 | tactic entries | 34 before #471 (2026-10-19) | 29 | **8** (`legacy-to-retire`: `when_defined`) |
-| judgments / registries | | | 64 / 14 |
+| judgments / registries | | | 62 / 14 (all `target`) |
 
 The legacy layer is deleted (stage D-d and the modules of D-e, [legacy-retirement](docs/legacy-retirement.md)):
 the legacy RwLock, Semaphore and Sync/Lock proofs, `Contracts.RwContract`, the Conc library chain
@@ -32,11 +32,12 @@ the goal, in order:
 1. **RwLock clients: done.** `rwLockRead` and `rwLockSnapshotPair` are clients of `RwLockImpl`
    (`Sync.ioRwLock` is its `Io.RwLock` instance, over `SemImpl` and `MutexImpl`) in
    `Proofs/Sync/RwLockFixture.lean`, statements unchanged.
-2. **The last `legacy-to-retire` entries.** 9 judgments (`Grows`, the `Conc/Total` and
-   `TimedBudget` judgments, the fixtures' `FWrapped`, `FTripleCell`, `FTripleExact`) and the
-   tactics below ([legacy-retirement](docs/legacy-retirement.md), section 5). Two test-fixture
-   entries are gone: asm-wrappers' `Spec` was a data structure (now `Insn`), and futures'
-   `CancelSpec` is written out as the protocol's result predicate.
+2. **The last `legacy-to-retire` entries: judgments done, one tactic left.** No judgment is
+   `legacy-to-retire` any more: `Grows`, the `Conc/Total` outcome predicates and the fixtures'
+   `FWrapped`, `FTripleCell`, `FTripleExact` are `target` (maintainer 2026-11-25), the two
+   `TimedBudget` entries are renamed postconditions, asm-wrappers' `Spec` is now `Insn` and
+   futures' `CancelSpec` is written out ([legacy-retirement](docs/legacy-retirement.md), section 5).
+   The tactic `when_defined` remains.
 3. **Stage D-e, final step.** The strength log (`tests/roadmap/strength-log/`, `Full/Strength`) is
    kept compiled until that final PR; it writes each legacy statement out and imports no legacy
    module.
@@ -48,7 +49,7 @@ the goal, in order:
    target tree for proofs, fixtures, docs and scripts (mechanical `git mv` PRs).
 
 The engine features these steps wait on are rows of the [engine ledger](docs/engine-ledger.md)
-(185 rows: 62 open, 123 closed).
+(187 rows: 63 open, 124 closed).
 
 **Open PRs** are the list on GitHub (`gh pr list`). On 2026-11-06: #637, #480 and #403 (Codex
 drafts); #443 (an infrastructure draft, superseded by the light merge gate); #602 (its measurement failed) and #581 (obsolete), to be closed.
