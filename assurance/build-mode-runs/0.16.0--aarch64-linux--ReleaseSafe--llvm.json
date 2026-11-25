@@ -209,7 +209,7 @@
     "asm": "host_excluded",
     "threadsync": "version_excluded"
   },
-  "sources_sha256": "84480cb6d49eae68eb073a686f02529c97f31c6bc2e7beef73be88025b44d8e4",
+  "sources_sha256": "4daed57a6886a073551ba5e637b5890e094e314153c0ba4720848b808847f79c",
   "stock_zig_sha256": "6e2989a7efbd4e81acbacb6c6378e34340d8e88bb023b10c4a941021be55cdcb",
   "target": "aarch64-linux",
   "triage": [],

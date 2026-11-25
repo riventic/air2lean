@@ -105,17 +105,21 @@ triaged mismatches with a reproducer, and the examples left out. `scripts/build-
 runs the x86_64-linux pairs in the pinned linux/amd64 local-CI image (emulated on an arm64
 host; under Rosetta the harness is linked with `-z norelro`, see [rosetta.md](rosetta.md)).
 
-Zig 0.16.0 (stock), 86209 cases per aarch64-macos and aarch64-linux run (each host's own
-translations, `scripts/check-tree.py create --host-goldens 0.16.0`) and 87084 per x86_64-linux run (emulated). The
+Zig 0.16.0 (stock), 86410 cases per aarch64-macos and aarch64-linux run (each host's own
+translations, `scripts/check-tree.py create --host-goldens 0.16.0`) and 87614 per x86_64-linux run. The
 x86_64-linux Debug, ReleaseFast and ReleaseSmall LLVM records were re-recorded from the native CI
 run after batches 7-8 added examples (87409 cases), and again after the soundness batch (87413
 cases: four asm fault inputs; inexact float `@divExact`, MM-3 out-of-bounds pointers and the
 `@fieldParentPtr` cases are pinned illegal, so the 85 float `@divExact` mismatches are now
 `illegal_exclusion`), and again after the `lists` allocation-failure oracle added 200 cases
-(87614 per x86_64-linux run, 86410 per aarch64-linux run; the CI-verified x86_64-linux and
-aarch64-linux records are the ones re-recorded this way, the other records keep their earlier
-counts until their host re-records them); CI uploads those summaries (`build-mode-summaries-*`)
-and verifies the records on every run.
+(87614 per x86_64-linux run, 86410 per aarch64 run). The x86_64-linux LLVM records of all four
+modes were re-recorded from native runs on x86_64 Linux (stock Zig digest equal to the CI
+runner's), the aarch64-linux ones from a native `linux/arm64` container and the aarch64-macos
+ones on the Apple host; CI uploads the summaries (`build-mode-summaries-*`) and verifies the
+records on every run. Which `atomics.mpRelaxed` inputs count as `illegal_exclusion` varies from
+run to run (the harness prefers a schedule that matches the native result over a data race,
+`tests/diff/ScheduleSearch.lean`, and the native result of that deliberate race depends on thread
+timing); `record --verify` does not compare that count.
 
 | Target | Mode | Backend | Mismatches | `ub_excluded` |
 | --- | --- | --- | --- | --- |

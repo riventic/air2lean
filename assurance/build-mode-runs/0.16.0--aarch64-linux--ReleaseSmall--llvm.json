@@ -3,10 +3,10 @@
   "cases": 86410,
   "counts": {
     "error_return_match": 1002,
-    "illegal_exclusion": 795,
+    "illegal_exclusion": 794,
     "ub_excluded": 4922,
     "unspecified_exclusion": 1669,
-    "value_match": 78022
+    "value_match": 78023
   },
   "emulated": false,
   "examples": {
@@ -30,12 +30,6 @@
   },
   "excluded_examples": [],
   "exclusions": [
-    {
-      "cases": 1,
-      "example": "atomics",
-      "function": "mpRelaxed",
-      "status": "illegal_exclusion"
-    },
     {
       "cases": 86,
       "example": "basic",
@@ -449,7 +443,7 @@
     "asm": "host_excluded",
     "threadsync": "version_excluded"
   },
-  "sources_sha256": "84480cb6d49eae68eb073a686f02529c97f31c6bc2e7beef73be88025b44d8e4",
+  "sources_sha256": "4daed57a6886a073551ba5e637b5890e094e314153c0ba4720848b808847f79c",
   "stock_zig_sha256": "6e2989a7efbd4e81acbacb6c6378e34340d8e88bb023b10c4a941021be55cdcb",
   "target": "aarch64-linux",
   "triage": [],
