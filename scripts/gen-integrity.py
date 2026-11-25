@@ -701,10 +701,11 @@ def compose(dirs, destination, version, *, require_profile=False, host=None):
         # A kept profile is the target the translation claims: it must be the golden host's
         # (docs/architecture-audit/golden-host.md).
         target = triple_target(generated_helpers()["profile_for_air"](docs[0])["target_triple"])
-        if target is None or host_target(host) != target:
+        expected = host_target(host)
+        if target is None or expected != target:
             raise ValueError(f"golden case {version} {host}: actual profile "
                              f"{docs[0]['profile'].get('target_triple')} does not match golden host "
-                             f"{host} ({'-'.join(host_target(host) or ('?', '?'))}); export it on that host")
+                             f"{host} ({'-'.join(expected or ('?', '?'))}); export it on that host")
         for entries in chosen.values():
             for name, doc in entries:
                 (destination / name).write_text(json.dumps(doc), encoding="utf-8")
@@ -901,9 +902,10 @@ def run_write(translator, cases, only):
             fresh = {}
             outs = [(case, translator.output(index, case)) for index, case in members]
             # The committed profile record, unless it is stale for a case (`header_error`): then
-            # that case's fresh one, for every case of the module.
-            record = next((out for case, out in outs if case.mode != "exact" and
-                           header_error(committed, out, owns_record(case, path))), committed)
+            # that case's fresh one (the owning case's first), for every case of the module.
+            record = next((out for case, out in sorted(outs, key=lambda item: not owns_record(item[0], path))
+                           if case.mode != "exact" and header_error(committed, out, owns_record(case, path))),
+                          committed)
             first, sep, _ = record.partition(b"\n")
             header = first + sep if first.startswith(PROFILE_PREFIX) else b""
             for case, out in outs:
