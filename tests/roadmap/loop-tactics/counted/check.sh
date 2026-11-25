@@ -4,7 +4,8 @@
 # counted/Proof.lean, whose bare `fsym` walks apply each loop's generated invariant, and its seeded
 # mutants (mutants.json: a wrong cell relation, a dropped bound under `!=`, a dropped `x ≤ b + 1`
 # of a `<=` counter, a measure that does not decrease, a dropped read-only cell, a too strong exit
-# post, a candidate Houdini pruned put back and one it kept dropped must each fail their
+# post, a candidate Houdini pruned put back and one it kept dropped, and of the credit-mode
+# invariants a wrong count, a dropped count and a kept plain mode, must each fail their
 # function's theorem), all through
 # ../invgen-fixture.sh. Needs a built translator (lake build air2lean); no Zig compiler.
 set -euo pipefail

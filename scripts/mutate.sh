@@ -123,8 +123,8 @@
 #     evidence, not a semantic detection.
 # (af) Lean-runtime mutation, threads: `Thread.join` (ZigLean/Mem/Thread.lean) does not merge the
 #     joined thread's clock, so the joiner does not happen after that thread's writes. Detected by
-#     the proof build: `join_eq` (ZigLean/Conc/Lemmas.lean) fails first; `Owned.join`
-#     (ZigLean/Conc/Csl.lean), which `disjoint_safe` (Proofs/Threads/Disjoint.lean) needs, uses the
+#     the proof build: `join_eq` (ZigLean/Conc/Lemmas.lean) fails first; `FOwned.join`
+#     (ZigLean/Sep/Full/ThreadOwned.lean), which `disjoint_safe` (Proofs/Threads/Disjoint.lean) needs, uses the
 #     merged clock too (`main`'s read of a flag would race with its kid's write).
 #
 # Usage: mutate.sh
@@ -1020,9 +1020,10 @@ if ! want_mutation ac; then
 elif ! has_example sync; then
   echo "mutation (ac): skipped (AIR2LEAN_EXAMPLES excludes sync)"
 else
-  sed -i.bak 's/^  let woke := wakeSet m.waiters p n cs$/  let woke : Array ThreadId := #[]/' "$thread_lean"
+  # Both wakes: `futexWake` (at a key) and `futexWakePtr` (at a pointer, the one the std code calls).
+  sed -i.bak 's/^\( *\)let woke := wakeSet m.waiters k n cs$/\1let woke : Array ThreadId := #[]/' "$thread_lean"
   rm -f "$thread_lean.bak"
-  grep -q '^  let woke : Array ThreadId := #\[\]$' "$thread_lean" || {
+  [ "$(grep -c '^ *let woke : Array ThreadId := #\[\]$' "$thread_lean")" -eq 2 ] || {
     echo "error: mutation (ac): sed did not change futexWake" >&2
     exit 1
   }

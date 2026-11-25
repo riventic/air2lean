@@ -386,31 +386,31 @@
     },
     {
       "name": "Sync.RwLockRead.rwLockRead_spec",
-      "module": "Proofs.Sync.RwLock",
+      "module": "Proofs.Sync.RwLockFixture",
       "example": "sync",
       "scope": "all-schedules",
       "domain": "`rwLockRead` with 0.16.0 `Io.RwLock` (its `Io.Mutex` and `Io.Semaphore`), for every `io`; the fixed client: main reader and one writer adding 1 twice: every completed run returns 2, 12 or 22; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
     {
       "name": "Sync.RwLockRead.rwLockRead_safe",
-      "module": "Proofs.Sync.RwLock",
+      "module": "Proofs.Sync.RwLockFixture",
       "example": "sync",
       "scope": "all-schedules",
       "domain": "`rwLockRead` with 0.16.0 `Io.RwLock` (its `Io.Mutex` and `Io.Semaphore`), for every `io`; the fixed client: main reader and one writer adding 1 twice: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
     {
       "name": "Sync.RwLockSnapshotPair.snapshotPair_spec",
-      "module": "Proofs.Sync.RwLockSnapshotPair",
+      "module": "Proofs.Sync.RwLockFixture",
       "example": "sync",
       "scope": "all-schedules",
-      "domain": "`snapshotPair` (`rwLockSnapshotPair`, C14) for every `io`; the restricted protocol of Proofs/Sync/RwLockContract.lean (main reader 0, writer 1, writer count ≤ 2, one shared hold over both loads, join before reclamation); not a reusable RwLock contract for arbitrary readers or resources: every completed run returns 0, 11 or 22; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+      "domain": "`snapshotPair` (`rwLockSnapshotPair`, C14) for every `io`; the fixed client, proved over the contract `RwLockImpl` in Proofs/Sync/RwLockFixture.lean (main reader, one writer, writer count ≤ 2, one shared hold over both loads, join before reclamation); not a reusable RwLock contract for arbitrary readers or resources: every completed run returns 0, 11 or 22; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
     {
       "name": "Sync.RwLockSnapshotPair.snapshotPair_safe",
-      "module": "Proofs.Sync.RwLockSnapshotPair",
+      "module": "Proofs.Sync.RwLockFixture",
       "example": "sync",
       "scope": "all-schedules",
-      "domain": "`snapshotPair` (`rwLockSnapshotPair`, C14) for every `io`; the restricted protocol of Proofs/Sync/RwLockContract.lean (main reader 0, writer 1, writer count ≤ 2, one shared hold over both loads, join before reclamation); not a reusable RwLock contract for arbitrary readers or resources: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+      "domain": "`snapshotPair` (`rwLockSnapshotPair`, C14) for every `io`; the fixed client, proved over the contract `RwLockImpl` in Proofs/Sync/RwLockFixture.lean (main reader, one writer, writer count ≤ 2, one shared hold over both loads, join before reclamation); not a reusable RwLock contract for arbitrary readers or resources: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
     {
       "name": "Atomics.MP.mpRelAcq_spec",
@@ -448,41 +448,6 @@
       "example": "atomics",
       "scope": "all-schedules",
       "domain": "`stackPush` (two `cmpxchgWeak` pushers): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
-    },
-    {
-      "name": "Sync.RwLockContract.held_pair_wp",
-      "module": "Proofs.Sync.RwLockContract",
-      "example": "sync",
-      "scope": "single-step",
-      "domain": "`WP` rule for the two protected loads of one shared hold, under the restricted RwLock protocol and the semaphore premise `E.Spec`; a step lemma composed into `snapshotPair_spec`, not a program theorem"
-    },
-    {
-      "name": "Sync.RwLockContract.acquire_shared",
-      "module": "Proofs.Sync.RwLockContract",
-      "example": "sync",
-      "scope": "single-step",
-      "domain": "`WP` rule: the shared acquire under the restricted protocol gives the protected counter facts (`ProtectedFacts`), premise `E.Spec`; one operation, not a program theorem"
-    },
-    {
-      "name": "Sync.RwLockSnapshotPair.result_of_same_snapshot",
-      "module": "Proofs.Sync.RwLockSnapshotPair",
-      "example": "sync",
-      "scope": "sequential",
-      "domain": "arithmetic: two equal observations `first ≤ 2` give 0, 11 or 22; equality is a premise, not derived from the lock"
-    },
-    {
-      "name": "Sync.MutexOps.lock_spec",
-      "module": "Proofs.Sync.Lock",
-      "example": "sync",
-      "scope": "single-step",
-      "domain": "`WP` of the translated 0.16.0 `Io.Mutex.lock` for every protocol with the lock (`Lock.Fits`): the thread takes the lock and its resource; one operation, not a program theorem"
-    },
-    {
-      "name": "Sync.MutexOps.unlock_spec",
-      "module": "Proofs.Sync.Lock",
-      "example": "sync",
-      "scope": "single-step",
-      "domain": "`WP` of the translated 0.16.0 `Io.Mutex.unlock` for every protocol with the lock: the resource goes back to the lock; one operation"
     },
     {
       "name": "Zig.noRace_of_atomic",

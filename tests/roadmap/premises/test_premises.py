@@ -1373,7 +1373,7 @@ class RepositoryTests(unittest.TestCase):
         direct_premises = {pid for pid, reasons in lock["via"].items()
                            if any("source runtime fallback" not in reason for reason in reasons)}
         self.assertNotIn("THR-06", direct_premises)
-        self.assertIn("PRF-02", self.premises_of("Proofs/Sync/RwLock.lean", "Sync.RwLockRead.rwLockRead_spec"))
+        self.assertIn("PRF-02", self.premises_of("Proofs/Sync/RwLockFixture.lean", "Sync.RwLockRead.rwLockRead_spec"))
         self.assertIn("ALC-04", self.premises_of("tests/roadmap/byte-sentinel/Check.lean", "example@L19"))
         self.assertIn("EXT-01", self.premises_of("tests/roadmap/models/Model.lean", "RegistryExample.evidence"))
         self.assertIn("TMR-02", {p for (f, _), e in self.entries.items()
@@ -1381,10 +1381,10 @@ class RepositoryTests(unittest.TestCase):
 
     def test_kernel_reviewed_gaps_are_indexed(self):
         """Premises that the compiled graph showed and the source index once missed."""
-        semaphore = "Proofs/Sync/Semaphore.lean"
-        # Field notation on `S : Sem X` / `hP : S.Fits P U` reaches Sem.R (pts) and the translation.
+        # Field notation on `hC : L.Fits (C.prim L) P U ok` (`hC.lph`, `L.ph_set`) reaches the lock
+        # contract and the translation.
         self.assertLessEqual({"PRF-02", "SEM-03", "ORD-01", "TRU-02"},
-                             set(self.premises_of(semaphore, "Sync.Sem.Fits.cur")))
+                             set(self.premises_of("Proofs/Sync/Cond.lean", "Sync.gR_lph")))
         # `Enc ThreadId` is an instance of ZigLean.Mem.Thread.
         self.assertIn("ORD-01", self.premises_of("Proofs/Threads/Counter.lean", "Threads.Counter.decode_tid"))
         # `.relaxed` is the unique AtomicOrder constructor; `throw .unspecified` is a Zig.Error.
@@ -1392,7 +1392,7 @@ class RepositoryTests(unittest.TestCase):
         self.assertIn("SEM-01", self.premises_of("Proofs/Floatconv/Proofs.lean", "Zig.Float.toInt_of_isNaN"))
         # The record update does not allocate. Its source estimate inherits ALC-03 from
         # runtime fallback and hence ALC-01 by implication; this is not a direct allocation.
-        step = self.entries[(semaphore, "Sync.Sem.Step.refl")]
+        step = self.entries[("Proofs/Threads/Counter.lean", "Threads.Counter.PreA.ticked")]
         self.assertTrue(all("source runtime fallback" in reason for reason in step["via"]["ALC-03"]))
         self.assertEqual(step["via"]["ALC-01"], ["implied by ALC-03"])
         self.assertNotIn("ALC-02", step["premises"])

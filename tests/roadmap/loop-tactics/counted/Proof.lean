@@ -1,6 +1,7 @@
 import Counted.Inv
 import ZigLean.Sep.Full.Auto
 import ZigLean.Sep.Full.Tick
+import ZigLean.Sep.Full.Cost
 
 /-!
 # Translated counted loops with generated invariants, in the full-state logic
@@ -64,6 +65,26 @@ theorem readBound_total (p q : Ptr) (lim : BitVec 32) (v : BitVec 64) (hfit : v.
     FTotalTriple (up (pts q 4 lim) ⋆ (up (pts p 8 v) ⋆ plain)) (readBound p q)
       (fun _ => up (pts q 4 lim) ⋆ (up (pts p 8 (BitVec.ofNat 64 (v.toNat + lim.toNat))) ⋆ plain)) := by
   unfold readBound
+  fsym
+
+/-! ## Exact step counts (the credit mode)
+
+A walk that pays its steps with credits takes the loop's generated credit-mode invariant
+(`F.loop5.credits.inv`: the plain-mode one without the plain mode, at the exact count of the body
+runs left, which is the measure) and the counted loop rule `FTotalTriple.loop_exact`. -/
+
+/-- `down` runs exactly `n + 1` steps (one per iteration and the final test). -/
+theorem down_exact (p : Ptr) (n : BitVec 32) (v : BitVec 64) (hfit : v.toNat + 3 * n.toNat < 2 ^ 64) :
+    FTotalTriple (up (pts p 8 v) ⋆ credits (n.toNat + 1)) (down p n)
+      (fun _ => up (pts p 8 (BitVec.ofNat 64 (v.toNat + 3 * n.toNat))) ⋆ spent (n.toNat + 1)) := by
+  unfold down
+  fsym
+
+/-- `upNe` runs exactly `n + 1` steps. -/
+theorem upNe_exact (p : Ptr) (n : BitVec 32) (v : BitVec 64) (hfit : v.toNat + n.toNat < 2 ^ 64) :
+    FTotalTriple (up (pts p 8 v) ⋆ credits (n.toNat + 1)) (upNe p n)
+      (fun _ => up (pts p 8 (BitVec.ofNat 64 (v.toNat + n.toNat))) ⋆ spent (n.toNat + 1)) := by
+  unfold upNe
   fsym
 
 end Counted.Proof

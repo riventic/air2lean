@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[3]
 TREES = ('scripts', 'Air2Lean', 'ZigLean', 'zig-patch', 'Proofs/Provenance', 'Proofs/ProvenanceGap',
          'assurance/provenance', 'assurance/provenance-gap')
 FILES = ('Air2Lean.lean', 'ZigLean.lean', 'lean-toolchain', 'lakefile.toml', 'lake-manifest.json')
-POLICY = ('assurance/policy.json', 'tools/Assurance.lean')
+POLICY = ('assurance/policy.json', 'tools/Assurance.lean', 'tools/AssuranceMain.lean', 'tools/AssuranceRun.lean')
 TEMPORARY = None
 TEMPLATE = None
 

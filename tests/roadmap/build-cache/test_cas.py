@@ -96,6 +96,12 @@ class CasTests(unittest.TestCase):
                                                          'hook = "0.16.0/hook.patch"\nextra = "x"'))
         self.assertNotEqual(cas.digest(cas.zig_patch_inputs(repo, '0.16.0')), base)
 
+    def test_compiler_build_guard_never_exceeds_the_enclosing_guard(self):
+        for outer, want in ((None, 16384), ('null', 16384), ('{', 16384), ('{"rss_mib": 9000.0}', 9000.0),
+                            ('{"rss_mib": 36000}', 16384), ('{"rss_mib": "x"}', 16384)):
+            with Env(AIR2LEAN_GUARD_ADMISSION=outer):
+                self.assertEqual(cas.zig_build_rss_mib(), want, outer)
+
     def store_with_compiler(self):
         store = cas.Store(self.tmp / 'store')
         staged = store.stage('zig', 'v-key')
@@ -240,7 +246,7 @@ class RegenTests(unittest.TestCase):
         self.assertEqual({n for n, scope in scopes.items() if scope == 'tree'}, set(regen.TREE_GROUPS))
         self.assertEqual(sorted(g for groups in regen.TREE_GROUPS.values() for g in groups),
                          sorted(g['name'] for g in regen.GENERATED.load(ROOT)['groups']))
-        for name in ('gen', 'ci-matrix', 'trust-report', 'inventory', 'support-matrix', 'claims'):
+        for name in ('gen', 'ci-matrix', 'trust-report', 'support-matrix', 'claims'):
             self.assertEqual(scopes[name], 'pr', name)
 
     def test_list_json(self):

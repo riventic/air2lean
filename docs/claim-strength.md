@@ -100,9 +100,7 @@ The companions of the shipped theorems are concrete: arguments, a memory that sa
 precondition (`Witness.mem1 bs`, one block holding `bs`, and `Witness.mem2`, in
 `ZigLean/Mem/Witness.lean`; for the full-state heads `FAdmit`/`FLive`, `CAdmit`/`CLive` and
 `FTTAdmit`/`FTTLive` in `ZigLean/Sep/Full/Witness.lean`, over `Mem.FSeq` memories such as
-`fseq_default` and `mem1_fseq`; the legacy thread-triple `TAdmit`/`TLive` in
-`ZigLean/Conc/Witness.lean` until its last users go, L7 in
-[legacy-retirement.md](legacy-retirement.md)), and for a
+`fseq_default` and `mem1_fseq`), and for a
 partial triple a run that the kernel evaluates (`ok_of_okb (by decide +kernel)`) or that a
 total triple of the same program gives (`FLive.of_total`, `FTTLive.of_total`). The reserved
 legacy heads (`Triple`, `TotalTriple`, `TTriple`, …) back no claim, so their library rules have

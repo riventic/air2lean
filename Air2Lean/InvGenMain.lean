@@ -8,8 +8,9 @@ The invariant generator as an executable (`lake build air2lean-invgen`):
 
 It imports the translated `MODULE`, whose source is `--source FILE` (a path relative to the
 repository root), and the library `ZigLean.Sep.Full.AutoAll`, whose `fsym` prunes the candidate
-invariants (both on the lookup path of `LEAN_PATH`: run it under `lake env` after
-`lake build ZigLean.Sep.Full.AutoAll`). `--spec MODULE FILE` imports a hand-written specification
+invariants, with `ZigLean.Sep.Full.Cost`, whose counted loop rule states the step of the credit
+mode (all on the lookup path of `LEAN_PATH`: run it under `lake env` after
+`lake build ZigLean.Sep.Full.AutoAll ZigLean.Sep.Full.Cost`). `--spec MODULE FILE` imports a hand-written specification
 module too (its source `FILE` is recorded as an input), and `--contract NAME` names a theorem of
 it: the contract of a function that a loop calls. With contracts, the output holds the loops that
 call by one of them (the others are in the module's file generated without contracts). It reads the module's loops, and writes the generated
@@ -56,10 +57,12 @@ unsafe def main (argv : List String) : IO UInt32 := do
     -- (`loadExts := true`) requires initializer execution, as in `lean` itself: the imported
     -- modules' initializers run here as they do when a proof imports the same module.
     enableInitializersExecution
-    -- With the library and `fsym`, for the pruning walks (`Air2Lean.InvGen.houdini`).
+    -- With the library and `fsym`, for the pruning walks (`Air2Lean.InvGen.houdini`), and the
+    -- counted loop rule's step (`ZigLean.Sep.Full.Cost`), for the check of the credit mode.
     let specNames : Array Name := specs.map fun (spec : String × String) => spec.1.toName
     let imports : Array Import :=
-      #[{ module := module.toName }, { module := `ZigLean.Sep.Full.AutoAll }] ++
+      #[{ module := module.toName }, { module := `ZigLean.Sep.Full.AutoAll },
+        { module := `ZigLean.Sep.Full.Cost }] ++
         specNames.map fun (m : Name) => ({ module := m } : Import)
     let env ← importModules imports {} (loadExts := true)
     -- The default heartbeat limit: a run is bounded and deterministic, never timed.

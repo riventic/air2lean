@@ -1,22 +1,27 @@
 {
   "source_sha256": "77ecd985ecaf82efa54412941189af7b1eaed6e5338a90b1bc4eb20363336a9d",
   "air": {
-    "zig_version": "0.16.0",
     "schema": 12,
     "target": "x86_64-linux",
     "cpu": "baseline",
     "optimization": "ReleaseSafe",
     "error_tracing": false
   },
+  "versions": [
+    "0.17.1",
+    "0.16.0"
+  ],
   "std_thread_sha256": {
     "0.14.1": "6cc77eb377153ac08394e7422984bbb684c1ba7b0118dee33c9be50b6184f12d",
     "0.15.2": "d5c5453d21967d531575ae2809aeda8848468a9d202aad4c4d2596e746a46f8a",
-    "0.16.0": "14260c03063b52821c5369fc09ec32456062b0366a8e1510c0f853a204ff7eeb"
+    "0.16.0": "14260c03063b52821c5369fc09ec32456062b0366a8e1510c0f853a204ff7eeb",
+    "0.17.1": "36dab581ad0a30b2ac9fc3321db6b071331c3893f3811f1ec6628d59020c7f87"
   },
   "qualification": {
     "0.14.1": "stdlib source inspected; live export/native pending",
     "0.15.2": "stdlib source inspected; live export/native pending",
-    "0.16.0": "groupMixed await fix (defer group.cancel): live schema-12 explicit x86_64-linux/baseline export of 12 roots and translation passed; generated kernel proofs, 16 runtime schedule samples, 256 fallible-policy groupMixed schedules, pipeline and tuple-order mutant passed; stock 0.16.0 arm64 macOS host native tests passed (3 tests); Linux CI pending"
+    "0.16.0": "groupMixed await fix (defer group.cancel): live schema-12 explicit x86_64-linux/baseline export of 12 roots and translation passed; generated kernel proofs, 16 runtime schedule samples, 256 fallible-policy groupMixed schedules, pipeline and tuple-order mutant passed; stock 0.16.0 arm64 macOS host native tests passed (3 tests); Linux CI pending",
+    "0.17.1": "stdlib source inspected (Thread.spawn copies Args and calls @call(.auto, f, args); Io.Group async/concurrent take std.meta.ArgsTuple, as 0.16); live schema-12 explicit x86_64-linux/baseline export of 12 roots; its translation has the 0.16.0 body (retained Gen.lean); check.sh runs the kernel proofs, runtime schedules, fallible-policy groupMixed schedules, pipeline and tuple-order mutant over it; stock 0.17.1 native tests (3 tests)"
   },
   "functions": [
     "atomicShared",
@@ -32,6 +37,21 @@
     "ZeroWorker(u8).run"
   ],
   "air_sha256": {
+   "0.17.1": {
+    "thread_tuples.atomicShared.json": "f35b123b87cb2e0d00ce9464cc4b3a464aaaffea0fc64b9d8e54bc65537599b1",
+    "thread_tuples.atomicWorker.json": "20dde5175967d58c36e5eabdf167d013c6737a84524f262064c64b86b36e810f",
+    "thread_tuples.copied.json": "249d6f9bd1d3a826e0089b44d2de8213c7e24eca71ab40ede696723bc13d0cb2",
+    "thread_tuples.copyWorker.json": "ee20b0127967cc7e819ffd2b864d8f01294fcfc8c5ea694e1c892788c3201c1b",
+    "thread_tuples.empty.json": "7b5c0d134b81eafca43d53ee87ebb3ae03eb93300b1284302899c641f873f864",
+    "thread_tuples.genericEmpty.json": "41fb0e40f91754b8455cf2e7eb46d342fd285d8cf913c6b19a5badb31f2a75db",
+    "thread_tuples.groupMixed.json": "56c02391fb34c6f1dd346bb6adfd7357a1e71901336235f10937655073c54f0b",
+    "thread_tuples.mixed.json": "a436c990e8b6a72931b507964ddaf6ae5ec6cd34a4c498926200fb291b9b6b80",
+    "thread_tuples.mixedWorker.json": "cdaf378dde5e42549fc200b3b15a606ff3b5a1b04aece1781a3ba02ea809158c",
+    "thread_tuples.zeroWorker.json": "789644322bfc2b9eb8d9390606ca696e4f8773571ce8b6dac59d344a6f79f698",
+    "~air2lean-sha256-6c62242d9dff071a471667f243ee8c3deaf800944a7bcc59bf7a803d59527717.json": "3385e07ffaab2cc5b5ae91ce860754e6e33cedc83a614a1c50e4aded80b49d71",
+    "~air2lean-sha256-bf7a0d9a01a2b2bec646ec04e7626b9fe32a795045095b38878d405496a237fa.json": "dccd910fe39337b5d19c444343ef4f4269585a00c8b0786500e24c9aca9d3a10"
+   },
+   "0.16.0": {
     "thread_tuples.atomicShared.json": "397071ac45ae64fb678aa95a34c1814f9e583d6297d609dc15b87077c99d7a0e",
     "thread_tuples.atomicWorker.json": "abbc2415c30e7eb34f6c09c74851ce578f4910efec88497698aae6e9dbb86774",
     "thread_tuples.copied.json": "3d6c8208f780a5b6b9f3b0448bfbd6fea9ae810b11a7d4b66b12b3a96f2b07c4",
@@ -44,6 +64,7 @@
     "thread_tuples.zeroWorker.json": "7edd6ab001b48b3bd9b273f2f17166729afae1e07b861e5d66511ed3be86adaa",
     "~air2lean-sha256-6c62242d9dff071a471667f243ee8c3deaf800944a7bcc59bf7a803d59527717.json": "6151dd1e276d2410ada4f2a73929ddc3c04da7630dba37c0964d8a4271d7c287",
     "~air2lean-sha256-bf7a0d9a01a2b2bec646ec04e7626b9fe32a795045095b38878d405496a237fa.json": "0c047e1a5f825ae270fa9702c7522513a8cb202e59bf775c9e6c99a204945842"
+   }
   },
   "stdlib_functions": [
     "atomic.Value(u32).init"

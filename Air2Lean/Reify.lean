@@ -71,12 +71,18 @@ deriving instance ToExpr for ModelBinding
 supplies constructors, applications and literals; any unexpected expression is rejected,
 not replaced by an inhabited value. Universe arguments are inferred from the explicit
 types and values supplied by `ToExpr`. An application spine stays in one parenthesized
-term so elaboration does not insert implicit arguments at an intermediate boundary. -/
+term so elaboration does not insert implicit arguments at an intermediate boundary.
+
+Each argument starts a line of its own (inside the parentheses the layout means nothing to the
+parser). On one line a function's term was up to 324 000 characters long, and Lean's `.ilean`
+writer, which Lake runs for every module, converts each identifier's position by scanning its
+line from the start: `Proofs/Iogroup/AirCert.lean` took 31 s to elaborate and 420 s with
+`-i` (2026-11-24, x86_64-linux), 34 s with the same term one argument per line. -/
 private def term (e : Expr) (inApp : Bool := false) : Except String String :=
   match e with
   | .const n _ => pure ("@_root_." ++ n.toString)
   | .app f a => do
-    let application := (← term f true) ++ " " ++ (← term a)
+    let application := (← term f true) ++ "\n" ++ (← term a)
     pure (if inApp then application else "(" ++ application ++ ")")
   | .lit (.natVal n) => pure s!"(nat_lit {n})"
   | .lit (.strVal s) => pure s.quote

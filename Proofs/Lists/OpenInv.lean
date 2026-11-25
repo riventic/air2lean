@@ -1,4 +1,4 @@
--- air2lean-invgen: {"generator":{"lean":"4.34.0","modules":[["Air2Lean.InvGen","66ad481953e23d9c7e0a71474061ba54f18979ff7c3c6e7baf6fd5b17d82a90b"],["Air2Lean.InvGenMain","de6d02b6f751b7c66c5408950f0a96f96cd237ec0d8a7c83c6038d79f12cdb33"],["Air2Lean.Revision","0abdb80bf11b8b7e1b0820755e2015f43cce91c00db65dd085b2a8afa6e65f8c"]],"revision":"1c874a6831b45b77f823ce4e8705a954d666a5039d1bb58e21ee6d753a0ea1fa"},"inputs":[["Proofs/Lists/Open.lean","971a0bc5bb0cfc84900ef981cb5ece2ac23abc3b1c0044b723dcc973ab6083c1"]],"loops":[{"loop":"evens.loop8","none":"a call: Zig.callMC do\n  Zig.checkIndex p1.len i9\n  Zig.load (BitVec 32) 4 (p1.ptr.elem 4 i9)"},{"loop":"freeAll.loop5","none":"a call: Zig.callC (Lists.Open.mem_Allocator_destroy__anon_a9add1f02861 p0 i10)"},{"family":"list-walk","loop":"reverse.loop6","pruned":[]},{"family":"list-walk","loop":"sum.loop6","pruned":[]}],"module":"Proofs.Lists.Open","namespace":"Lists.Open","output":"8f636f671160a68e0019f901863f1e6b20fb70a232686474eaf590900df3ef0f","version":2}
+-- air2lean-invgen: {"generator":{"lean":"4.34.0","modules":[["Air2Lean.InvGen","aa7ac33be1e25c5ed2a5f8716409e4c598f33a667313c1fc1cc85013230afd8a"],["Air2Lean.InvGenMain","6641279898d44a6114fa6c402e42cf6e23db77e655d112a4e8c74f5f25dc964f"],["Air2Lean.Revision","0abdb80bf11b8b7e1b0820755e2015f43cce91c00db65dd085b2a8afa6e65f8c"]],"revision":"c0851d35497ea3aa18117adc8a0a6d945fec0d8578db26de13a30557f41b0540"},"inputs":[["Proofs/Lists/Open.lean","971a0bc5bb0cfc84900ef981cb5ece2ac23abc3b1c0044b723dcc973ab6083c1"]],"loops":[{"loop":"evens.loop8","none":"a call: Zig.callMC do\n  Zig.checkIndex p1.len i9\n  Zig.load (BitVec 32) 4 (p1.ptr.elem 4 i9)"},{"loop":"freeAll.loop5","none":"a call: Zig.callC (Lists.Open.mem_Allocator_destroy__anon_a9add1f02861 p0 i10)"},{"credits":{"count":"zs.length"},"family":"list-walk","loop":"reverse.loop6","pruned":[]},{"credits":{"count":"zs.length"},"family":"list-walk","loop":"sum.loop6","pruned":[]}],"module":"Proofs.Lists.Open","namespace":"Lists.Open","output":"e8a4282ac558aae1ca99f3563151844d7d3e02b5c2069e35dc588413ed315e2d","version":2}
 import Proofs.Lists.Open
 import ZigLean.Sep.Full.Ghost
 import ZigLean.Sep.Full.AutoAttr
@@ -34,6 +34,20 @@ abbrev reverse.loop6.node (V : Type) (D : Zig.Ptr → V → FAssn) (p : Zig.Ptr)
     listSeg (Lists.Open.reverse.loop6.node V D) r.2.prev none xs.reverse ⋆
     plain
 
+/-- The credit-mode invariant of `reverse.loop6` (a walk that counts its steps, `loop_exact`): `reverse.loop6.inv` without the plain mode, at the exact count `n` of the body runs left before the last one.
+`s0` holds the locals at loop entry. -/
+@[fsym_inv] def reverse.loop6.credits.inv (V : Type) (D : Zig.Ptr → V → FAssn) (xs : List V) (s0 : reverseLocals) (s : reverseLocals) (n : Nat) : FAssn :=
+  FAssn.ex fun ys : List V => FAssn.ex fun zs : List V =>
+    ⟪xs = ys.reverse ++ zs ∧
+      zs.length = n⟫ ⋆
+    listSeg (Lists.Open.reverse.loop6.node V D) s.prev none ys ⋆
+    listSeg (Lists.Open.reverse.loop6.node V D) s.cur none zs
+
+/-- The exit post of `reverse.loop6.credits`: the loop exits with `r`, after all iterations. -/
+@[fsym_inv] def reverse.loop6.credits.post (V : Type) (D : Zig.Ptr → V → FAssn) (xs : List V) (s0 : reverseLocals) (r : reverseExit × reverseLocals) : FAssn :=
+  ⟪r.1 = reverseExit.br5⟫ ⋆
+    listSeg (Lists.Open.reverse.loop6.node V D) r.2.prev none xs.reverse
+
 /-- The node layout of `sum.loop6`: `next` at offset 0, the item, the rest. -/
 abbrev sum.loop6.node (X : Zig.Ptr → FAssn) (p : Zig.Ptr) (v : BitVec 32) (q : Option Zig.Ptr) : FAssn :=
   up (pts p 8 q) ⋆ up (pts (p.add 8) 4 v) ⋆ X p
@@ -56,5 +70,22 @@ abbrev sum.loop6.node (X : Zig.Ptr → FAssn) (p : Zig.Ptr) (v : BitVec 32) (q :
       r.2.s.toNat = s0.s.toNat + (xs.map BitVec.toNat).sum⟫ ⋆
     listSeg (Lists.Open.sum.loop6.node X) s0.p none xs ⋆
     plain
+
+/-- The credit-mode invariant of `sum.loop6` (a walk that counts its steps, `loop_exact`): `sum.loop6.inv` without the plain mode, at the exact count `n` of the body runs left before the last one.
+`s0` holds the locals at loop entry. -/
+@[fsym_inv] def sum.loop6.credits.inv (X : Zig.Ptr → FAssn) (xs : List (BitVec 32)) (s0 : sumLocals) (s : sumLocals) (n : Nat) : FAssn :=
+  FAssn.ex fun ys : List (BitVec 32) => FAssn.ex fun zs : List (BitVec 32) =>
+    ⟪xs = ys ++ zs ∧
+      zs.length = n ∧
+      s.s.toNat = s0.s.toNat + (ys.map BitVec.toNat).sum ∧
+      s0.s.toNat + (xs.map BitVec.toNat).sum < 2 ^ 64⟫ ⋆
+    listSeg (Lists.Open.sum.loop6.node X) s0.p s.p ys ⋆
+    listSeg (Lists.Open.sum.loop6.node X) s.p none zs
+
+/-- The exit post of `sum.loop6.credits`: the loop exits with `r`, after all iterations. -/
+@[fsym_inv] def sum.loop6.credits.post (X : Zig.Ptr → FAssn) (xs : List (BitVec 32)) (s0 : sumLocals) (r : sumExit × sumLocals) : FAssn :=
+  ⟪r.1 = sumExit.br5 ∧
+      r.2.s.toNat = s0.s.toNat + (xs.map BitVec.toNat).sum⟫ ⋆
+    listSeg (Lists.Open.sum.loop6.node X) s0.p none xs
 
 end Lists.Open
