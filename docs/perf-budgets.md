@@ -265,6 +265,14 @@ higher on every workload, by about the same amount whatever its size (translator
 +150 to +400 MiB, the `asm` elaboration included), which is the platform and import cost, not a
 workload.
 
+After merging main into the branch, three outputs changed again and were rebaselined alone
+(`baseline --workload`), each equal to its updated reference translation:
+
+| Change | Output change | Workloads |
+| --- | --- | --- |
+| #800 (A02: asm blocks as definitions over `ZigLean/Isa/X86`) | each `opaque airAsm_*` becomes a `def airIsa_*_block` with its `check` theorem and `airIsa_*` (and `_fault`) definitions, as in the updated `Proofs/Asm/Gen.lean` | asm, asm-0.17.1 |
+| #812 (golden host gate: layout goldens re-exported on x86_64-linux) | only the first-line profile record (target x86_64-linux instead of aarch64-macos); the body still equals `Proofs/Layout/Gen.lean` | layout |
+
 ## Measured hotspots and optimizations
 
 Measured on the reference platform (`record --per-module`, one serial lane, host shared
