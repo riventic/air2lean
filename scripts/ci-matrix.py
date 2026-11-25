@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The CI job matrices of .github/workflows/ci.yml, derived from compatibility.json.
+"""The CI job matrices of .github/workflows/ci.yml and ci-macos.yml, derived from compatibility.json.
 
   ci-matrix.py check [--root DIR]    fail when a generated matrix region is stale
   ci-matrix.py write [--root DIR]    rewrite the generated regions
@@ -9,7 +9,7 @@ job; the `zig.ci_once` version (not necessarily the default: its steps gate on t
 were qualified on, and the T06 build-mode records exist for it) also gets the parts that run
 once (`inputs`, `native`, `audit`, `receipt`, one row per T06 build mode) and one mutation row
 per line of scripts/mutation-shards.txt. A version in RESTRICTED runs the examples that
-scripts/example-selection.sh selects for it, without the diff harness. The `macos` job has one
+scripts/example-selection.sh selects for it, without the diff harness. The `macos` job (ci-macos.yml) has one
 row per version whose hosts include aarch64-macos, the `zig-air` job (the patched compiler of
 each x86_64-linux version, built once per run) one per x86_64-linux version. Every step of the test job names its part
 in its `if`; the rows only say which parts exist. Offline: no Zig, Lake or Lean process.
@@ -21,7 +21,6 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parent.parent
-WORKFLOW = '.github/workflows/ci.yml'
 # Its std cannot build the diff harness: translation and proofs only (README, support matrix).
 RESTRICTED = {'0.14.1'}
 ONCE = ('inputs', 'docs', 'native', 'audit', 'receipt', 'Debug', 'ReleaseFast', 'ReleaseSmall')
@@ -29,6 +28,10 @@ ONCE = ('inputs', 'docs', 'native', 'audit', 'receipt', 'Debug', 'ReleaseFast', 
 _spec = importlib.util.spec_from_file_location('air2lean_support_matrix', ROOT / 'scripts/support-matrix.py')
 MATRIX = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(MATRIX)
+_spec = importlib.util.spec_from_file_location('air2lean_target_matrix', ROOT / 'scripts/target-matrix.py')
+TM = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(TM)
+WORKFLOWS = TM.CI_WORKFLOWS
 
 
 def region(job):
@@ -60,14 +63,19 @@ def render(items):
                    for item in items for i, (key, value) in enumerate(item.items()))
 
 
-def regenerate(root, text):
+def regenerate(root, texts):
+    """{path: text} of the CI workflows with every job's region rewritten; each job's region is
+    in exactly one of them."""
+    texts = dict(texts)
     for job, items in rows(root).items():
         begin, end = region(job)
-        if text.count(begin) != 1 or text.count(end) != 1:
-            raise ValueError(f'{WORKFLOW}: the {job} job needs one generated matrix region')
+        found = [path for path, text in texts.items() if begin in text or end in text]
+        if len(found) != 1 or texts[found[0]].count(begin) != 1 or texts[found[0]].count(end) != 1:
+            raise ValueError(f'{" / ".join(texts)}: the {job} job needs one generated matrix region')
+        text = texts[found[0]]
         start, stop = text.index(begin) + len(begin), text.index(end)
-        text = text[:start] + render(items) + text[stop:]
-    return text
+        texts[found[0]] = text[:start] + render(items) + text[stop:]
+    return texts
 
 
 def main():
@@ -75,19 +83,19 @@ def main():
     parser.add_argument('mode', choices=('check', 'write'))
     parser.add_argument('--root', type=Path, default=ROOT)
     args = parser.parse_args()
-    path = args.root/WORKFLOW
-    text = path.read_text(encoding='utf-8')
+    texts = {path: (args.root/path).read_text(encoding='utf-8') for path in WORKFLOWS}
     try:
-        fresh = regenerate(args.root, text)
+        fresh = regenerate(args.root, texts)
     except ValueError as error:
         print(f'error: {error}', file=sys.stderr)
         return 2
+    stale = [path for path in WORKFLOWS if fresh[path] != texts[path]]
     if args.mode == 'write':
-        if fresh != text:
-            path.write_text(fresh, encoding='utf-8')
+        for path in stale:
+            (args.root/path).write_text(fresh[path], encoding='utf-8')
         return 0
-    if fresh != text:
-        print(f'error: {WORKFLOW} matrix rows are stale; run python3 scripts/ci-matrix.py write',
+    if stale:
+        print(f'error: {", ".join(stale)} matrix rows are stale; run python3 scripts/ci-matrix.py write',
               file=sys.stderr)
         return 1
     return 0

@@ -41,10 +41,11 @@ these dumps. `splat` keeps its name but may now produce an array.
   the vector length. The exporter now writes it as `vector_index` on the pointer type entry, for
   every version (`docs/air-json.md`); before, two lanes had identical entries that read as a
   bit-pointer at bit 0. A lane pointer carries the vector pointer's alignment for every lane
-  (`*align(16:0:4:1) u32`), where 0.16.0's element pointer had the alignment of its own offset;
-  `Canon.lean`'s `laneElemPtrs` restores the latter (`gcd(align, k * size)`). For every other
-  lane (`u9`, `u24`, `bool`, `f80`) it restores 0.16.0's `ptr_elem_ptr` with the lane pointer type
-  kept: the bit-pointer into the vector's integer (`docs/vector-proofs.md` §Lane pointers).
+  (`*align(16:0:4:1) u32`), where 0.16.0's element pointer had the alignment of its own offset.
+  Its value is the vector's address (`@intFromPtr(&v[1]) == @intFromPtr(v)`), and it does not
+  coerce to `*u32`. `Canon.lean`'s `laneElemPtrs` gives every lane 0.16.0's `ptr_elem_ptr` with
+  the lane pointer type kept, as 0.16.0 has for `u9`, `u24`, `bool` and `f80` lanes: the
+  bit-pointer into the vector's integer (`docs/vector-proofs.md` §Lane pointers).
 - An empty exhaustive enum is backed by `noreturn`: its type entry has `"tag"` pointing at a
   `noreturn` type.
 

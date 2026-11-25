@@ -121,25 +121,28 @@ binding, so no libc target is covered here.
 ## Translated std I/O
 
 `tests/roadmap/env-boundaries/` holds two sources and their committed AIR closures
-(`air/0.15.2`, `air/0.16.0`), declared in `exports.json` and pinned by `exports.lock.json`
+(`air/0.15.2`, `air/0.16.0`, `air/0.17.1`), declared in `exports.json` and pinned by `exports.lock.json`
 ([coverage.md](coverage.md#fixture-exports)). Each export keeps the call closure of its roots,
 cut (`stop`) at the three bound primitives, so the `syscallN` wrappers below them are not
 kept, and at the panic handlers, which the translator normalizes.
 `scripts/fixture-exports.py verify env-boundaries` re-exports the AIR with the patched
 compilers and compares it with the committed AIR (`export` rewrites it). `translate.sh` translates the closures with the filled registry and
 compares the output with `expected/` and `registry/`. `check.sh` then elaborates the output
-and checks `StdIo.lean`.
+and checks `StdIo.lean` and `ReadClose/`.
 
 - **Zig 0.15.2** (`std_io15.zig`): `writeAllClose` (`defer file.close(); try
   file.writeAll(bytes)`) and `readAllClose`. The translated std code is `fs.File.writeAll`,
   `write`, `close`, `readAll` and `read`, plus `posix.write`, `read`, `close`, `errno` and
   `unexpectedErrno`.
-- **Zig 0.16.0** (`std_io16.zig`): `readClose` (`defer std.Io.Threaded.closeFd(fd); return
-  posix.read(fd, buf)`). The translated std code is `posix.read`, `os.linux.errno`,
-  `Io.Threaded.closeFd` and `recoverableOsBugDetected`.
+- **Zig 0.16.0 and 0.17.1** (`std_io16.zig`): `readClose` (`defer std.Io.Threaded.closeFd(fd);
+  return posix.read(fd, buf)`). The translated std code is `posix.read`, `os.linux.errno`,
+  `Io.Threaded.closeFd` and `recoverableOsBugDetected` (`EnvStd16`, `EnvStd17`). Both versions'
+  `posix.read` and `closeFd` sources are the same; 0.17.1's `errno` is an anonymous instance
+  with an extra cast of the code.
 
-`StdIo.lean` proves these theorems on the generated code, from ENV-01 and the ENV-03 models
-only. No std function has a hand-written model.
+`StdIo.lean` (0.15.2) and `ReadClose/EnvStd17.lean` (0.17.1; `ReadClose/EnvStd16.lean` is the
+same file for 0.16.0, `scripts/fixtures.py instance`) prove these theorems on the generated
+code, from ENV-01 and the ENV-03 models only. No std function has a hand-written model.
 
 - `EnvStd15.Proofs.writeAllClose_spec`: on an open descriptor whose buffer bytes are in
   memory, in a single-threaded memory, the generated code never faults, and leaves memory
@@ -149,9 +152,10 @@ only. No std function has a hand-written model.
   unchanged. Partial writes are retried by the translated `fs.File.writeAll` loop. Each
   `write` offers at most `0x7ffff000` bytes (`posix.write`'s cap).
   `writeAllClose_spec_replay` restates it for any `Ops σ` through `Ops.replay`.
-- `EnvStd16.Proofs.readClose_spec`: on an open descriptor and a nonempty writable buffer, the
-  result is the received byte count, with those bytes now in the buffer, or the error's name
-  in 0.16.0 `posix.read`'s switch. The handle is closed exactly once and last.
+- `EnvStd17.Proofs.readClose_spec` and `EnvStd16.Proofs.readClose_spec`: on an open descriptor
+  and a nonempty writable buffer, the result is the received byte count, with those bytes now
+  in the buffer, or the error's name in `posix.read`'s switch. The handle is closed exactly
+  once and last.
 - Two `#guard` runs execute the generated `writeAllClose` against a scripted host. In the
   first, five bytes are accepted two at a time. In the second, a `brokenPipe` after the first
   write stops the loop, and the handle is still closed once.

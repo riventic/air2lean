@@ -5,8 +5,8 @@
 
 compatibility.json declares the supported Zig versions, their build hosts and the target
 profiles. Each version x host x native target x profile path it declares must have one entry
-in assurance/target-matrix.json naming a CI job of .github/workflows/ci.yml (and, for a matrix
-job, its exact `include` row) whose steps provide, on that host:
+in assurance/target-matrix.json naming a job of the CI workflows (CI_WORKFLOWS: ci.yml and
+ci-macos.yml; and, for a matrix job, its exact `include` row) whose steps provide, on that host:
 
   native_execution  a differential or native-only run of translated programs (check.sh with
                     the diff test, diff.sh, or a roadmap gate's `check.sh --native[-only]`);
@@ -38,6 +38,9 @@ ROOT = Path(__file__).resolve().parent.parent
 SCHEMA = 'air2lean-target-matrix/1'
 MAP = 'assurance/target-matrix.json'
 WORKFLOW = '.github/workflows/ci.yml'
+# The CI workflows (docs/ci.md#design-overview): ci.yml, and the macOS rows in a run of their own
+# (docs/ci.md#3-macos-rows). A job ID names one job across them.
+CI_WORKFLOWS = (WORKFLOW, '.github/workflows/ci-macos.yml')
 KINDS = ('native_execution', 'target_probe', 'proof_check')
 GAPPABLE = ('native_execution', 'target_probe')
 # `uname -s` in lower case, as scripts/check.sh names Gen-<os>.lean goldens.
@@ -396,8 +399,9 @@ def _scalar(text, where):
     return text
 
 
-def parse_workflow_yaml(text):
-    """Pure, fail-closed reader of the workflow's existing block YAML subset."""
+def parse_workflow_yaml(text, path=WORKFLOW):
+    """Pure, fail-closed reader of the workflow's existing block YAML subset (`path` names the
+    file in diagnostics)."""
     lines = text.split('\n')
     terminal_break = text.endswith('\n')
     if terminal_break:
@@ -405,12 +409,12 @@ def parse_workflow_yaml(text):
     pos = 0
     for line_number, line in enumerate(lines, 1):
         if '\u2028' in line or '\u2029' in line:
-            raise Unreadable('%s:%d: unsupported raw YAML Unicode line break' % (WORKFLOW, line_number))
+            raise Unreadable('%s:%d: unsupported raw YAML Unicode line break' % (path, line_number))
         if '\t' in line:
-            raise Unreadable('%s:%d: unsupported YAML tab' % (WORKFLOW, line_number))
+            raise Unreadable('%s:%d: unsupported YAML tab' % (path, line_number))
         if any(ord(char) < 32 and char != '\t' or 127 <= ord(char) <= 159
                or 0xD800 <= ord(char) <= 0xDFFF or ord(char) in (0xFFFE, 0xFFFF) for char in line):
-            raise Unreadable('%s:%d: unsupported YAML control character' % (WORKFLOW, line_number))
+            raise Unreadable('%s:%d: unsupported YAML control character' % (path, line_number))
 
     def indent(line):
         return len(line) - len(line.lstrip(' '))
@@ -423,7 +427,7 @@ def parse_workflow_yaml(text):
     def node(level):
         skip()
         if pos >= len(lines) or indent(lines[pos]) != level:
-            raise Unreadable('%s:%d: unexpected indentation' % (WORKFLOW, pos + 1))
+            raise Unreadable('%s:%d: unexpected indentation' % (path, pos + 1))
         body = lines[pos][level:]
         return sequence(level) if body == '-' or body.startswith('- ') else mapping(level)
 
@@ -436,7 +440,7 @@ def parse_workflow_yaml(text):
                 return items
             body = lines[pos][level:]
             if indent(lines[pos]) != level or not body.startswith('- '):
-                raise Unreadable('%s:%d: unsupported sequence entry' % (WORKFLOW, pos + 1))
+                raise Unreadable('%s:%d: unsupported sequence entry' % (path, pos + 1))
             lines[pos] = ' ' * (level + 2) + body[2:]
             items.append(node(level + 2))
 
@@ -447,7 +451,7 @@ def parse_workflow_yaml(text):
             skip()
             if pos >= len(lines) or indent(lines[pos]) < level:
                 return result
-            where = '%s:%d' % (WORKFLOW, pos + 1)
+            where = '%s:%d' % (path, pos + 1)
             match = re.fullmatch(r'([A-Za-z0-9_.-]+):(?:[ ]+(.*))?', lines[pos][level:])
             if indent(lines[pos]) != level or not match:
                 raise Unreadable('%s: unsupported mapping entry' % where)
@@ -480,7 +484,7 @@ def parse_workflow_yaml(text):
                            if header == '|+' and (index < len(lines) - 1 or terminal_break))
         for index in range(start, pos):
             if len(lines[index]) > width:
-                raise Unreadable('%s:%d: over-indented leading empty block line' % (WORKFLOW, index + 1))
+                raise Unreadable('%s:%d: over-indented leading empty block line' % (path, index + 1))
         pos = start
         content = []
         while pos < len(lines):
@@ -489,7 +493,7 @@ def parse_workflow_yaml(text):
                 if indent(line) <= level:
                     break
                 if indent(line) < width:
-                    raise Unreadable('%s:%d: under-indented block scalar' % (WORKFLOW, pos + 1))
+                    raise Unreadable('%s:%d: under-indented block scalar' % (path, pos + 1))
             # Spaces beyond content indentation are data, including all-space lines.
             content.append((line[width:], pos < len(lines) - 1 or terminal_break))
             pos += 1
@@ -502,12 +506,47 @@ def parse_workflow_yaml(text):
     result = node(0)
     skip()
     if pos != len(lines):
-        raise Unreadable('%s:%d: trailing content' % (WORKFLOW, pos + 1))
+        raise Unreadable('%s:%d: trailing content' % (path, pos + 1))
     if isinstance(result, dict) and isinstance(result.get('jobs'), dict):
         for name, job in result['jobs'].items():
             if isinstance(job, dict):
-                matrix_include(job, '%s: job %s' % (WORKFLOW, name))
+                matrix_include(job, '%s: job %s' % (path, name))
     return result
+
+
+def merge_workflows(workflows):
+    """Several parsed workflows ({path: workflow}) as one: {'jobs': every job by ID, 'files':
+    {job ID: its path}, 'workflows': {path: the file's fields other than `jobs`}}. A job ID
+    names one job across them; one defined twice is unreadable."""
+    merged = {'jobs': {}, 'files': {}, 'workflows': {}}
+    for path, workflow in workflows.items():
+        if not isinstance(workflow, dict) or not isinstance(workflow.get('jobs'), dict):
+            raise Unreadable(f'{path}: no top-level jobs')
+        merged['workflows'][path] = {key: value for key, value in workflow.items() if key != 'jobs'}
+        for name, job in workflow['jobs'].items():
+            if name in merged['jobs']:
+                raise Unreadable(f'{path}: job {name} is also a job of {merged["files"][name]}')
+            merged['jobs'][name] = job
+            merged['files'][name] = path
+    return merged
+
+
+def ci_workflows(read):
+    """{path: text} of the CI workflows (CI_WORKFLOWS) that exist: `read(path)` gives a file's
+    text or None when it does not exist (ci-macos.yml at a revision before it). ci.yml must."""
+    found = {}
+    for path in CI_WORKFLOWS:
+        text = read(path)
+        if text is None and path == WORKFLOW:
+            raise Unreadable(f'{path}: missing')
+        if text is not None:
+            found[path] = text
+    return found
+
+
+def ci_workflow(read):
+    """The CI workflows as one (merge_workflows), from `read` as in ci_workflows."""
+    return merge_workflows({path: parse_workflow_yaml(text, path) for path, text in ci_workflows(read).items()})
 
 
 def matrix_include(job, where):
@@ -530,14 +569,14 @@ def matrix_include(job, where):
     return rows
 
 
-def parse_workflow(text):
+def parse_workflow(text, path=WORKFLOW):
     """Target-checker shape projection; DATA decoding is exclusively parse_workflow_yaml."""
-    workflow = parse_workflow_yaml(text)
+    workflow = parse_workflow_yaml(text, path)
     if not isinstance(workflow, dict) or not isinstance(workflow.get('jobs'), dict):
-        raise Unreadable(f'{WORKFLOW}: no top-level jobs')
+        raise Unreadable(f'{path}: no top-level jobs')
     jobs = {}
     for name, job in workflow['jobs'].items():
-        where = '%s: job %s' % (WORKFLOW, name)
+        where = '%s: job %s' % (path, name)
         if not isinstance(job, dict):
             raise Unreadable('%s must be a mapping' % where)
 
@@ -657,7 +696,7 @@ def check_entry(entry, path, jobs):
     errors = []
     job = jobs.get(entry.get('job'))
     if job is None:
-        return [f'{pid}: CI job {entry.get("job")!r} not found in {WORKFLOW}'], []
+        return [f'{pid}: CI job {entry.get("job")!r} not found in {", ".join(CI_WORKFLOWS)}'], []
     label = job['runs-on']
     job_host = runner_host(label)
     if job_host != host:
@@ -724,7 +763,7 @@ def job_context(jobs, job_name, selector, host=None):
     """(job, {matrix, runner.os} context, errors) for one job (and matrix row), on `host` if given."""
     job = jobs.get(job_name)
     if job is None:
-        return None, None, [f'CI job {job_name!r} not found in {WORKFLOW}']
+        return None, None, [f'CI job {job_name!r} not found in {", ".join(CI_WORKFLOWS)}']
     label = job['runs-on']
     job_host = runner_host(label)
     if job_host is None or (host is not None and job_host != host):
@@ -836,10 +875,15 @@ def check(root, strict=False):
     root = Path(root)
     meta = load_json(root, 'compatibility.json')
     matrix = load_json(root, MAP)
-    try:
-        jobs = parse_workflow((root/WORKFLOW).read_text(encoding='utf-8'))
-    except OSError as error:
-        raise Unreadable(f'{WORKFLOW}: {error}')
+    def read(rel):
+        try:
+            return (root/rel).read_text(encoding='utf-8')
+        except FileNotFoundError:
+            return None
+        except OSError as error:
+            raise Unreadable(f'{rel}: {error}')
+    projected = {path: parse_workflow(text, path) for path, text in ci_workflows(read).items()}
+    jobs = merge_workflows({path: {'jobs': found} for path, found in projected.items()})['jobs']
     if matrix.get('schema') != SCHEMA:
         return [f'{MAP}: schema must be {SCHEMA!r}'], [], [], []
     paths, input_only, errors = declared(meta)

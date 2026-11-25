@@ -425,4 +425,82 @@ example (F : Array Byte → FAssn) (base fee R : FAssn) (c : MemM Unit)
     FTotalTriple (base ⋆ F bytes ⋆ R) c (fun _ => base ⋆ F bytes ⋆ R) := by
   fsym [rule]
 
+/-! ## Splits on a condition the facts do not decide
+
+The walk splits the goal on a condition (each case with it, or its negation, as a fact) where one
+case analysis inside a plan cannot serve: a rule's precondition with an `if` and a frame to infer
+(ledger #61), a return whose state has an `if` that the caller's updates need decided (#64), and
+a returned `Bool` that the postcondition matches on (#return-bool-split). -/
+
+namespace Split
+
+/-- The `if` behind a definition, as the allocators' `relBytes`. -/
+def rel (A : FAssn) (n len : Nat) : FAssn := if n < len then A else emp
+
+/-- The state holds `A`, the rule asks for `rel A n len`, the facts do not decide `n < len`: in
+one case the frame is `emp`, in the other `A`. -/
+theorem rule_if (c : MemM Nat) (P A : FAssn) (n len : Nat)
+    (h : FTotalTriple (P ⋆ rel A n len) c (fun r => ⟪r = 0⟫ ⋆ P ⋆ rel A n len)) :
+    FTotalTriple (A ⋆ P) (do let r ← c; pure r) (fun r => ⟪r = 0⟫ ⋆ P ⋆ A) := by
+  fsym [h]
+
+/-- The `if` of released bytes `tl` that only its first case mentions (`relBytes … tl`). -/
+def relB (A : Array Byte → FAssn) (n len : Nat) (tl : Array Byte) : FAssn :=
+  if n < len then A tl else emp
+
+/-- The facts refute the case that mentions the rule's argument `tl`: no atom determines it, and
+any value serves (the refined `resize` of a growth). -/
+theorem rule_if_unused (c : MemM Nat) (P : FAssn) (A : Array Byte → FAssn) (n len : Nat)
+    (h : ∀ tl, FTotalTriple (P ⋆ relB A n len tl) c (fun r => ⟪r = 0⟫ ⋆ P ⋆ relB A n len tl))
+    (hn : ¬ n < len) :
+    FTotalTriple P (do let r ← c; pure r) (fun r => ⟪r = 0⟫ ⋆ P) := by
+  fsym [h]
+
+/-- A cell with some value. -/
+def Cell (p : Ptr) : FAssn := fun r => (FAssn.ex fun v => apts p v) r
+
+theorem cell {p : Ptr} {v : BitVec 64} (_h : v.toNat < 10) : EUpd (apts p v) (Cell p) :=
+  EUpd.of_imp fun _ hr => ⟨v, hr⟩
+
+theorem cell_lt {p q : Ptr} {v w : BitVec 64} {n len : Nat} (_h : n < len) :
+    EUpd (apts p v ⋆ apts q w) (Cell p ⋆ Cell q) :=
+  EUpd.of_imp fun _ hr => by
+    obtain ⟨r₁, r₂, hd, rfl, h1, h2⟩ := hr
+    exact ⟨r₁, r₂, hd, rfl, ⟨v, h1⟩, ⟨w, h2⟩⟩
+
+theorem cell_ge {p : Ptr} {v : BitVec 64} {n len : Nat} (_h : ¬ n < len) :
+    EUpd (apts p v) (Cell p) :=
+  EUpd.of_imp fun _ hr => ⟨v, hr⟩
+
+/-- The state and the post have an undecided `if`; each case of the state's takes its update. -/
+theorem state_if (p q : Ptr) (v w : BitVec 64) (n len : Nat) :
+    FTotalTriple (apts p v ⋆ (if n < len then apts q w else emp)) (pure ())
+      (fun _ => Cell p ⋆ (if n < len then Cell q else emp)) := by
+  fsym [cell_lt (n := n) (len := len), cell_ge (n := n) (len := len)]
+
+/-- A post by cases of the returned `Bool`. -/
+def PostB (p : Ptr) (n len : Nat) : Bool → FAssn
+  | true => ⟪n ≤ len⟫ ⋆ Cell p
+  | false => ⟪len < n⟫ ⋆ Cell p
+
+/-- The result is `decide (n ≤ len)`, undecided; the post matches on it. -/
+theorem return_bool (p : Ptr) (v : BitVec 64) (n len : Nat) (hv : v.toNat < 10) :
+    FTotalTriple (apts p v) (pure (decide (n ≤ len)) : MemM Bool) (fun r => PostB p n len r) := by
+  fsym [cell (v := v) hv]
+
+/-- … and without an update. -/
+theorem return_bool_match (P : FAssn) (n len : Nat) :
+    FTotalTriple P (pure (decide (n ≤ len)) : MemM Bool)
+      (fun r => (match r with | true => ⟪n ≤ len⟫ | false => ⟪len < n⟫) ⋆ P) := by
+  fsym
+
+/-- A post that mentions the returned `Bool` without matching on it: no split, the goal
+`f a = g a` is left as it is (`Proofs/Recursion/Proofs.lean`, `parity_total`). -/
+theorem return_bool_mention (f g : Nat → Bool) (a : Nat) (h : f a = g a) :
+    FTotalTriple emp (pure (f a) : MemM Bool) (fun v => ⟪v = g a⟫) := by
+  fsym
+  all_goals exact h
+
+end Split
+
 end SepAuto.Updates

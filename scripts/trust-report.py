@@ -4,8 +4,8 @@
 `write` regenerates docs/trust-report.md. `check` exits 1 when the report is stale or the
 stage table is invalid: a required stage is missing, a class is unknown, a premise is not
 defined in docs/premises.md, a TRU-* premise is cited by no stage, a cited component,
-checker, test or evidence file is missing, a check's CI command is absent from
-.github/workflows/ci.yml, or a check's test is not run by CI (directly or through a script
+checker, test or evidence file is missing, a check's CI command is absent from the CI
+workflows (ci.yml, ci-macos.yml), or a check's test is not run by CI (directly or through a script
 that a CI command names). Runs no Zig, Lake or Lean.
 """
 import argparse
@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 STAGES = 'assurance/trust-stages.json'
 REPORT = 'docs/trust-report.md'
 PREMISES = 'docs/premises.md'
-CI = '.github/workflows/ci.yml'
+CI = ('.github/workflows/ci.yml', '.github/workflows/ci-macos.yml')  # target-matrix.py CI_WORKFLOWS
 CLASSES = {
     'kernel-checked': 'The Lean kernel checks the statement. Trusted base: the cited premises (TRU-01 at least).',
     'independently-checked-metadata': 'A checker that shares no code with the stage re-checks its output metadata '
@@ -40,7 +40,8 @@ def validate(data, root=ROOT):
     if data.get('format') != 1:
         return [f'{STAGES}: unsupported format {data.get("format")!r}']
     premises = defined_premises(root)
-    ci = (root / CI).read_text(encoding='utf-8')
+    # ci.yml must exist; ci-macos.yml is absent before it existed.
+    ci = '\n'.join((root / path).read_text(encoding='utf-8') for path in CI if path == CI[0] or (root / path).is_file())
     seen, cited = set(), set()
 
     def exists(where, rel):
@@ -91,7 +92,7 @@ def validate(data, root=ROOT):
                 problems.append(f'{here}: names no CI command')
             for command in commands:
                 if command not in ci:
-                    problems.append(f'{here}: CI command {command!r} is not in {CI}')
+                    problems.append(f'{here}: CI command {command!r} is not in {" or ".join(CI)}')
             if test_ok and not runs_in_ci(check['test'], ci, commands, root):
                 problems.append(f'{here}: test {check["test"]} is not run by CI')
     for sid in REQUIRED:

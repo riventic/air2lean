@@ -131,4 +131,7 @@ comptime {
     _ = &semaphoreCounter;
     _ = &rwLockRead;
     _ = &rwLockSnapshotPair;
+    // `Io.Condition.broadcast` for the condition contract (`CondImpl.broadcast_wp`,
+    // `Proofs/Sync/Cond.lean`); no client here calls it.
+    _ = &Io.Condition.broadcast;
 }
