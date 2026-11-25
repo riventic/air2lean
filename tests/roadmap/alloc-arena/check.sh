@@ -84,7 +84,7 @@ theorems+=(--declaration AllocArena.ArenaSpec.reset_free_all_frame --declaration
 specs=()
 for spec in ArenaSpec ArenaSpecMacos ArenaSpecFixed; do
   specs+=("$spec")
-  for part in Entries Retain Loop66C0 Loop66C1; do specs+=("$spec.$part"); done
+  for part in "$here/$spec"/*.lean; do part=${part##*/}; specs+=("$spec.${part%.lean}"); done
 done
 python3 -B scripts/fixtures.py audit ArenaObstruction HeaderTagCX HeaderMixCX AllocArena.Core \
   AllocArena.Reset "${specs[@]}" "${theorems[@]}"
