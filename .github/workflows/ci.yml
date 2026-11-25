@@ -2029,7 +2029,9 @@ jobs:
           python3 scripts/normalize-generated.py compare tests/roadmap/thread-tuples/ThreadTuples/Gen.lean "$work/Gen.lean" "$work/generated-report.json"
           lake env lean -R "$work" "$work/Gen.lean"
           bash tests/roadmap/thread-tuples/check.sh --native
-          [ -z "$AIR2LEAN_TUPLE_ONCE" ] || bash tests/roadmap/thread-tuples/check.sh --check-artifacts
+          if [ -n "$AIR2LEAN_TUPLE_ONCE" ]; then
+            bash tests/roadmap/thread-tuples/check.sh --check-artifacts
+          fi
           bash tests/roadmap/thread-tuples/check.sh --adapter-contract "$work/adapter-contract"
 
       - name: Fallible thread assignment and group fallback gate
