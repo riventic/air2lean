@@ -1,6 +1,7 @@
 [
  {
   "name": "relation",
+  "def": "pairs.loop14.inv",
   "old": "⟪v.toNat = v0.toNat + (s.j",
   "new": "⟪v.toNat = 1 + v0.toNat + (s.j",
   "in": [
@@ -9,6 +10,7 @@
  },
  {
   "name": "bound",
+  "def": "pairs.loop14.inv",
   "old": "s.j.toNat ≤ s.i.toNat ∧",
   "new": "True ∧",
   "in": [

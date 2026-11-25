@@ -1,6 +1,7 @@
 [
  {
   "name": "down-relation",
+  "def": "down.loop5.inv",
   "old": "3 * (s0.i.toNat - s.i.toNat)",
   "new": "3 * (s.i.toNat - s0.i.toNat)",
   "in": [
@@ -9,6 +10,7 @@
  },
  {
   "name": "ne-bound",
+  "def": "upNe.loop5.inv",
   "old": "s.i.toNat ≤ p1.toNat ∧",
   "new": "True ∧",
   "in": [
@@ -17,6 +19,7 @@
  },
  {
   "name": "le-range",
+  "def": "upLe.loop5.inv",
   "old": "s.i.toNat ≤ p1.toNat + 1 ∧",
   "new": "True ∧",
   "in": [
@@ -33,6 +36,7 @@
  },
  {
   "name": "read-cell",
+  "def": "readBound.loop5.inv",
   "old": "up (pts p1 4 v0) ⋆\n    (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v1.toNat + (s.i",
   "new": "(FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v1.toNat + (s.i",
   "in": [
@@ -41,6 +45,7 @@
  },
  {
   "name": "houdini-pruned-kept",
+  "def": "down.loop5.inv",
   "old": "⟪s.i.toNat ≤ s0.i.toNat ∧",
   "new": "⟪s.i.toNat ≤ s0.i.toNat ∧ s0.i.toNat ≤ s.i.toNat ∧",
   "in": [
@@ -49,6 +54,7 @@
  },
  {
   "name": "post-exit-counter",
+  "def": "down.loop5.post",
   "old": "r.2.i.toNat = 0⟫",
   "new": "r.2.i.toNat = 1⟫",
   "in": [
@@ -57,10 +63,38 @@
  },
  {
   "name": "houdini-kept-dropped",
+  "def": "down.loop5.inv",
   "old": "⟪s.i.toNat ≤ s0.i.toNat ∧\n      ",
   "new": "⟪",
   "in": [
    "down_total"
+  ]
+ },
+ {
+  "name": "credits-count-wrong",
+  "def": "down.loop5.credits.inv",
+  "old": "n = s.i.toNat - 0⟫",
+  "new": "n = 2 * (s.i.toNat - 0)⟫",
+  "in": [
+   "down_exact"
+  ]
+ },
+ {
+  "name": "credits-count-dropped",
+  "def": "down.loop5.credits.inv",
+  "old": "n = s.i.toNat - 0⟫",
+  "new": "True⟫",
+  "in": [
+   "down_exact"
+  ]
+ },
+ {
+  "name": "credits-plain-kept",
+  "def": "upNe.loop5.credits.inv",
+  "old": "up (pts p0 8 v))\n",
+  "new": "up (pts p0 8 v)) ⋆\n    plain\n",
+  "in": [
+   "upNe_exact"
   ]
  }
 ]

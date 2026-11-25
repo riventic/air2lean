@@ -86,6 +86,17 @@ MUTANTS = {
         'scripts/claims.py', "    return [model['premise']] if set(model['concurrency']) & set(reached) else []\n",
         "    return []\n", 'tests/roadmap/claims/test_claims.py', 'claims',
         ('ClassifyTests.test_concurrency_claim_lists_memory_model_premise',)),
+    # C12: a claim that rests on a target-qualified premise (ORD-06) needs a qualified target.
+    'claims-target-binding-dropped': (
+        'scripts/claims.py', "    if unqualified:\n", "    if False:\n",
+        'tests/roadmap/claims/test_claims.py', 'claims',
+        ('ClassifyTests.test_concurrency_claim_needs_a_qualified_target',)),
+    # C12: a theorem that carries a target-qualified premise over a translation for a target
+    # without a qualification entry fails the premise index.
+    'premises-target-binding-dropped': (
+        'scripts/premises.py', '            elif target not in record["targets"]:\n', '            elif False:\n',
+        PREMISES, 'premises', ('FixtureTests.test_target_qualified_premise_needs_a_qualified_target',
+                               'CompiledTests.test_compiled_concurrency_needs_a_qualified_target')),
     # T01: legacy (pre-12) AIR selects the named legacy profile, not schema-12 validation.
     'profile-legacy-schema-misrouted': (
         'scripts/normalize-generated.py', '    if schema < 12:\n', '    if schema < 11:\n',

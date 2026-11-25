@@ -128,11 +128,10 @@ def bitCastAutoItems : ZigVersion → Bool
   | v0_16_0 | v0_17_1 => false
 
 /-- Comptime lane pointers into bit-packed vectors have native evidence
-(`tests/roadmap/vector-layouts`), so `normalize` models them as bit-pointers; 0.17.1 has none
-yet. -/
+(`tests/roadmap/vector-layouts`: `probe.zig` and `lanes.zig` with the stock compiler of each
+version), so `normalize` models them as bit-pointers. A new version starts without it. -/
 def lanePtrEvidence : ZigVersion → Bool
-  | v0_14_1 | v0_15_2 | v0_16_0 => true
-  | v0_17_1 => false
+  | v0_14_1 | v0_15_2 | v0_16_0 | v0_17_1 => true
 
 /-- The versions with `lanePtrEvidence`, newest first. -/
 def lanePtrVersions : List ZigVersion := all.filter (·.lanePtrEvidence)

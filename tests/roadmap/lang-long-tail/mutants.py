@@ -50,6 +50,11 @@ MUTANTS = {
     "f80_lane_stride": ("FloatLanes", "float_lanes",
                         r"Zig\.loadLane \(Zig\.F80\) 20 16 80 i2",
                         "Zig.loadLane (Zig.F80) 20 16 64 i2"),
+    # L09: a constant lane pointer (`&g[2]`) that writes the neighbouring lane (bit 9, not 18),
+    # against the stock 0.17.1 probe (0.17.1's translation is the retained 0.16.0 text).
+    "lane_constant_offset": ("LaneShapes", "lane_shapes",
+                             r"Zig\.storeLane \(α := BitVec 9\) 5 2 18 \(⟨some 0, 0⟩ : Zig\.Ptr\) i3",
+                             "Zig.storeLane (α := BitVec 9) 5 2 9 (⟨some 0, 0⟩ : Zig.Ptr) i3", "0.17.1"),
 }
 
 
