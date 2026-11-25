@@ -1622,7 +1622,7 @@ def Thread_Condition_FutexImpl_wake__anon_2a7d9bbe22f6.loop9 (p0 : Zig.Ptr) : Zi
             | .br38 _v38 => (do
               let i42 ← Zig.callMC (Zig.ptrProject p0 (·.add 4))
               let i43 ← pure (i42)
-              let _i44 ← Zig.threadFutexWakeC i43 i17
+              let _i44 ← Zig.callC (Thread_Futex_wake i43 i17)
               pure .ret)
             | e => pure e))
         | e => pure e) : Zig.CM Tgt Thread_Condition_FutexImpl_wake__anon_2a7d9bbe22f6Locals Thread_Condition_FutexImpl_wake__anon_2a7d9bbe22f6Exit) with

@@ -281,6 +281,14 @@ theorem wakeLimit_pos (v : BitVec 32) : 1 ≤ wakeLimit v := by
     have h1 := BitVec.toInt_eq_toNat_cond v
     split at h1 <;> omega
 
+/-- Below `2^31` (a positive `int`), the kernel wakes up to `val` itself: every `k ≤ val` is
+within the wake. -/
+theorem le_wakeLimit {v : BitVec 32} {k : Nat} (hk : k ≤ v.toNat) (hv : v.toNat < 2 ^ 31) :
+    k ≤ wakeLimit v := by
+  unfold wakeLimit
+  have h1 := BitVec.toInt_eq_toNat_cond v
+  split <;> split at h1 <;> omega
+
 /-- `maxInt(i32)`, std's clamp, is the kernel's count. -/
 theorem wakeLimit_maxInt : wakeLimit (BitVec.ofNat 32 (2 ^ 31 - 1)) = 2 ^ 31 - 1 := by decide
 
