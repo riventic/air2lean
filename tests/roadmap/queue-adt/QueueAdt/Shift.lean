@@ -36,6 +36,8 @@ def shift (q : Ptr) (C : Nat) (xs : List (BitVec 16)) : FAssn :=
 
 attribute [local fsym_arith] List.length_take length_moved
 
+namespace Shift
+
 /-- The array after a `push`: the count `len' = len + 1` and `v` written to the cell `len`
 (`take_set_succ`). -/
 theorem pushed_upd {q buf : Ptr} {cap len len' : BitVec 64} {items : List (BitVec 16)}
@@ -172,14 +174,16 @@ theorem count_spec (q : Ptr) (C : Nat) (xs : List (BitVec 16)) :
   unfold Shift_count
   fsym
 
+end Shift
+
 /-- The generated shifting array is a bounded FIFO queue whose `pop` runs one step per item. -/
 def shiftQueue : QueueImpl Ptr (BitVec 16) Shift_push Shift_pop Shift_count where
   Rep := shift
   pushSteps _ _ _ := 0
   popSteps _ xs := xs.length
   lenSteps _ _ := 0
-  push_spec q C xs v := FTotalTriple.credits_zero_iff.mpr (push_spec q C xs v)
-  pop_spec := pop_spec
-  len_spec q C xs := FTotalTriple.credits_zero_iff.mpr (count_spec q C xs)
+  push_spec q C xs v := FTotalTriple.credits_zero_iff.mpr (Shift.push_spec q C xs v)
+  pop_spec := Shift.pop_spec
+  len_spec q C xs := FTotalTriple.credits_zero_iff.mpr (Shift.count_spec q C xs)
 
 end QueueAdt

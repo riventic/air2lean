@@ -30,7 +30,9 @@ python3 -B scripts/fixtures.py build QueueAdt ZigLean.Sep.Full.Queue
 # Named: the theorems, and `ringQueue`, a definition (a `QueueImpl` whose fields are proofs).
 named=()
 for name in push_spec pop_spec count_spec ringQueue rotate_spec pushAll_exact pushAll_total \
-    pushAll_steps pushAll_not_within ring_rotate ring_pushAll_exact ring_pushAll_not_within; do
+    pushAll_steps pushAll_not_within ring_rotate ring_pushAll_exact ring_pushAll_not_within \
+    Shift.push_spec Shift.pop_spec Shift.count_spec shiftQueue rotateShift_spec \
+    shift_rotateSteps shift_rotate; do
   named+=(--declaration "QueueAdt.$name")
 done
 python3 -B scripts/fixtures.py audit --library QueueAdt "${named[@]}"
