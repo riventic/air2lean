@@ -43,6 +43,9 @@ deriving instance ToExpr for Global
 deriving instance ToExpr for Identity.Record
 deriving instance ToExpr for ExternDecl
 deriving instance ToExpr for ExportDecl
+deriving instance ToExpr for AbiPtrForm
+deriving instance ToExpr for AbiPtrConv
+deriving instance ToExpr for AbiCall
 deriving instance ToExpr for Func
 deriving instance ToExpr for BuildProfile
 deriving instance ToExpr for ModelFootprint

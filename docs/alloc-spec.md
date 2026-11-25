@@ -241,7 +241,8 @@ free of the last allocation, reset, a fresh allocation) from these contracts onl
 * The M04 vtable contracts (the retired `ZigLean/Sep/RawAlloc.lean`, premise ALC-06) needed
   whole `.heap` blocks and specific remap policies; `AllocSpec` states the same four entries
   over byte ranges for any allocator, proved rather than assumed.
-* `.owned a` blocks and allocator identities (ALC-07) model arenas and fixed buffers by hand;
+* `.owned a` blocks and allocator identities (ALC-07) model arenas by hand (the hand-written
+  fixed buffer is deleted; the translated `FixedBufferAllocator` replaces it);
   with `AllocSpec` a foreign free is a missing token (a permission violation), and arena reset
   invalidation is a consequence of the translated arena's invariant.
 
