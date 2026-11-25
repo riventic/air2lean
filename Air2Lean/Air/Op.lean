@@ -787,8 +787,6 @@ type does not (`Zig.AbiPtrReq`). -/
 structure AbiPtrConv where
   src : AbiPtrForm
   dst : AbiPtrForm
-  /-- The target is `plain` and the source is not. -/
-  nonNull : Bool
   /-- The target's alignment where it is stricter than the source's, else 1. -/
   align : Nat
   /-- The target's sentinel byte where the source does not assert the same one. -/
@@ -804,6 +802,16 @@ structure AbiCall where
   params : Array (Option AbiPtrConv)
   ret : Option AbiPtrConv
   deriving Repr, Inhabited, BEq
+
+/-- The conversion asserts non-null: the target is `plain` and the source is not. -/
+def AbiPtrConv.nonNull (c : AbiPtrConv) : Bool := c.dst == .plain && c.src != .plain
+
+/-- The conversion of argument `k`, if any. -/
+def AbiCall.param? (c : AbiCall) (k : Nat) : Option AbiPtrConv := c.params[k]?.join
+
+/-- The C-ABI conversions of the direct calls of `callee` among `calls`, if any. -/
+def AbiCall.of? (calls : Array AbiCall) (callee : String) : Option AbiCall :=
+  calls.find? (·.callee == callee)
 
 /-- The linker symbol an `export fn` defines, and its calling convention. -/
 structure ExportDecl where

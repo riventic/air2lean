@@ -2410,7 +2410,7 @@ source's form as a `Zig.Ptr` (`Zig.ptrOfOptional` of an optional), the check of 
 assertions, and the target's form (`Zig.abiPtrOpt` to an optional). The same form without
 assertions is the value itself. -/
 def abiConvExpr (c : AbiPtrConv) (v : String) : String :=
-  if c.src == c.dst && !c.nonNull && c.align == 1 && c.sentinel.isNone then s!"pure {v}" else
+  if c.src == c.dst && c.align == 1 && c.sentinel.isNone then s!"pure {v}" else
   let p := if c.src == .optional then s!"(Zig.ptrOfOptional {v})" else v
   let sentinel := match c.sentinel with
     | some b => s!"some ({b} : BitVec 8)"
@@ -2455,10 +2455,10 @@ def FCtx.lowerCall (fc : FCtx) (env : Array (InstId × String)) (inst : Inst)
     -- A bound extern call with C-ABI conversions (`Func.abiCalls`): each converted argument
     -- before the call, the result after it (`abiConvExpr`).
     let abi := match callee with
-      | .func name .. => fc.abiCalls.find? (fun (c : AbiCall) => c.callee == name)
+      | .func name .. => AbiCall.of? fc.abiCalls name
       | _ => none
     let arg (k : Nat) (a : Val) : String :=
-      match abi.bind (·.params[k]?.join) with
+      match abi.bind (·.param? k) with
       | some c => s!"(← {fc.callMName} ({abiConvExpr c (fc.callArg env memCallee a)}))"
       | none => fc.callArg env memCallee a
     let term := s!"{cexpr} {String.intercalate " " (args.zipIdx.map fun (a, k) => arg k a).toList}"

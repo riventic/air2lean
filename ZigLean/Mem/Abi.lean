@@ -1,4 +1,5 @@
 import ZigLean.Mem.Null
+import ZigLean.Mem.Lemmas
 
 /-!
 # The C-ABI conversion of a pointer at a bound extern call (X01)
@@ -8,7 +9,7 @@ differently where the C ABI agrees: `zig translate-c` declares `strcmp` with `[*
 and `free` with `?*anyopaque`, and Zig's libc defines them with `[*:0]const c_char` and
 `?[*]align(16) u8` (`docs/c-frontend.md` §libc boundary). Natively the value crosses the call
 unchanged: a pointer is an address in a register. The model converts it once at the call
-(`Air2Lean/Check.lean`'s `externAbiConv?` chooses the forms and the requirements, `Emit.lean`
+(`Air2Lean/Check.lean`'s `externAbiCall` chooses the forms and the requirements, `Emit.lean`
 applies them): the source's form becomes a `Ptr` (`ptrOfOptional` for `?*T`, the pointer
 itself for `*T`, `[*]T` and a C/allowzero pointer), `abiPtrCheck` checks what the target type
 asserts about the value, and the target's form is made from it (`ptrToOptional` for `?*T`, the
@@ -141,19 +142,6 @@ theorem sentinelFrom_of_at {m : Mem} {p : Ptr} {b : BlockId} {blk : Block} {s : 
   simpa using hk
 
 /-! ## Agreement with the cast rules -/
-
-private theorem ptrAddr_run_addrIn (m : Mem) (p : Ptr) :
-    (ptrAddr p).run m = match addrIn m.blocks p with
-      | some a => pure (a, m)
-      | none => throw .illegal := by
-  obtain ⟨pb, po⟩ := p
-  cases pb with
-  | none => rfl
-  | some b =>
-    cases hb : m.blocks[b]? <;>
-      simp [ptrAddr, addrIn, hb, StateT.run, bind, StateT.bind, get, getThe,
-        MonadStateOf.get, StateT.get, pure, StateT.pure, ExceptT.pure, ExceptT.mk, ExceptT.bind,
-        ExceptT.bindCont, throw, throwThe, MonadExceptOf.throw] <;> rfl
 
 private theorem ptrIsNull_run (m : Mem) (p : Ptr) :
     (ptrIsNull p).run m = match addrIn m.blocks p with

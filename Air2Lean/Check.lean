@@ -3282,10 +3282,11 @@ private structure AbiPtrSide where
   align : Nat
   sentinel : Option Nat
 
-/-- The pointee `t` of `f` holds no symbolic error storage: `anyopaque`, or a type graph without
-an error set or error union (`hasErrorCapability`, a pointer cast's test). -/
+/-- The pointee `t` of `f` holds no symbolic error storage: `anyopaque`, or what a pointer cast's
+test admits (`castErrorCapability`). -/
 private def abiErrorFree (f : Func) (t : TyId) : Bool :=
-  f.types[t]? == some (.other "anyopaque") || hasErrorCapability f.types t (cycles := true) == some false
+  f.types[t]? == some (.other "anyopaque") ||
+    castErrorCapability f.allocatorModel f.types t == some false
 
 /-- The type `t` of `f` as one side of a C-ABI pointer conversion, or why it is none. -/
 private def abiPtrSide (f : Func) (t : TyId) : Except String AbiPtrSide := do
@@ -3303,7 +3304,7 @@ private def abiPtrSide (f : Func) (t : TyId) : Except String AbiPtrSide := do
     throw "is a function pointer (its signature is not converted at an indirect call)"
   if isVectorTy f.types child then throw "points to a vector (no defined byte layout)"
   let some align := l.ptrAlign | throw "has no exported alignment"
-  let nullable := kind == "c" || l.allowzero
+  let nullable := nullablePtrTy f.types f.layouts pid
   if optional && nullable then throw "is an optional C/allowzero pointer"
   let sentinel ← if !l.sentinel then pure none else
     match l.sentinelByte, c with
@@ -3321,7 +3322,6 @@ def abiPtrConv (f g : Func) (x y : TyId) : Except String AbiPtrConv := do
       (abiErrorFree f a.pointee && abiErrorFree g b.pointee) do
     throw "the pointees differ and one may hold symbolic error storage or has no known storage"
   pure { src := a.form, dst := b.form,
-         nonNull := b.form == .plain && a.form != .plain,
          align := if b.align > a.align then b.align else 1,
          sentinel := if b.sentinel != a.sentinel then b.sentinel else none }
 
@@ -3349,37 +3349,35 @@ private def checkCallSignatureWith (f target : Func) (i : Inst) (args : Array Va
     Except String Unit := do
   unless args.size == target.params.size do
     throw s!"{f.name}: inst {i.id}: callee '{target.name}' has {args.size} arguments, expected {target.params.size}"
-  -- A position with a C-ABI conversion (`Func.abiCalls`) agrees if the rule still gives it.
-  let converted (conv : Option AbiPtrConv) (f g : Func) (x y : TyId) : Bool :=
+  -- The types agree, or a position with a C-ABI conversion (`Func.abiCalls`) gets it from the rule.
+  let agreesBy (conv : Option AbiPtrConv) (f g : Func) (x y : TyId) (same : Bool) : Bool :=
     match conv with
-    | some c => match abiPtrConv f g x y with | .ok c' => c' == c | .error _ => false
-    | none => false
-  let retConv := abi.bind (·.ret)
-  unless (retConv.isNone && sameType i.ty target.ret) || converted retConv target f target.ret i.ty do
+    | some c => (abiPtrConv f g x y).toOption == some c
+    | none => same
+  unless agreesBy (abi.bind (·.ret)) target f target.ret i.ty (sameType i.ty target.ret) do
     throw s!"{f.name}: inst {i.id}: callee '{target.name}' has an incompatible result type ({i.ty} versus {target.ret})"
   for (arg, k) in args.zipIdx do
     if let .func .. := arg then
       throw s!"{f.name}: inst {i.id}: callee '{target.name}' argument {k}: function values lack a structured signature in this AIR schema"
-    let conv := abi.bind (·.params[k]?.join)
+    let conv := abi.bind (·.param? k)
     let agrees : Bool := match arg with
       | .bool _ => conv.isNone && target.types[target.params[k]!]? == some .bool
       | .void => conv.isNone && target.types[target.params[k]!]? == some .void
       | v => ((index.valTy? v).map fun t =>
-          if conv.isSome then converted conv f target t target.params[k]!
-          else sameType t target.params[k]!).getD false
+          agreesBy conv f target t target.params[k]! (sameType t target.params[k]!)).getD false
     unless agrees do
       throw s!"{f.name}: inst {i.id}: callee '{target.name}' has an incompatible argument {k} type (expected local type {target.params[k]!})"
 
 /-- The C-ABI conversions of `f`'s direct calls of `callee` (`Func.abiCalls`), if any. -/
-def Func.abiCallOf? (f : Func) (callee : String) : Option AbiCall :=
-  f.abiCalls.find? (·.callee == callee)
+def Func.abiCallOf? (f : Func) (callee : String) (direct : Bool := true) : Option AbiCall :=
+  if direct then AbiCall.of? f.abiCalls callee else none
 
 /-- Validate a direct call (or one possible indirect target) against its exported signature.
 `direct`: the call names `target`, so its C-ABI conversions (`Func.abiCalls`) apply. -/
 def checkCallSignature (f target : Func) (i : Inst) (args : Array Val)
     (index : OperandTypes := f.operandTypes) (direct : Bool := false) : Except String Unit :=
   checkCallSignatureWith f target i args index (compatibleType f target)
-    (if direct then f.abiCallOf? target.name else none)
+    (f.abiCallOf? target.name direct)
 
 private abbrev SignaturePairs := Std.HashSet ((Nat × Nat) × (TyId × TyId))
 
@@ -3392,7 +3390,7 @@ private def checkCallSignatureCached (f target : Func) (sourceIndex targetIndex 
     (direct : Bool := false) : Except String SignaturePairs := do
   let key (x y : TyId) := ((sourceIndex, targetIndex), (x, y))
   let sameType (x y : TyId) := completed.contains (key x y) || compatibleType f target x y
-  let abi := if direct then f.abiCallOf? target.name else none
+  let abi := f.abiCallOf? target.name direct
   checkCallSignatureWith f target i args index sameType abi
   -- A converted position's types are not equal: it publishes no pair.
   let mut completed := if (abi.bind (·.ret)).isSome then completed
@@ -3402,7 +3400,7 @@ private def checkCallSignatureCached (f target : Func) (sourceIndex targetIndex 
     | .bool _ | .void => pure ()
     | _ =>
       if let some ty := index.valTy? arg then
-        if (abi.bind (·.params[k]?.join)).isNone then
+        if (abi.bind (·.param? k)).isNone then
           completed := completed.insert (key ty target.params[k]!)
   return completed
 
@@ -4455,8 +4453,11 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
     -- Each extern callee once: its direct calls (each checked against the declaration), then
     -- the addresses taken (`codeRefs`), which have a declaration only if a call has one.
     let mut callees : Array (String × String × Option String) := #[]
+    -- Every direct callee name (`.func`), for the C-ABI conversion's check below.
+    let mut directNames : Std.HashSet String := {}
     for i in f.allInsts do
       let .call (.func callee ..) args := i.op | continue
+      directNames := directNames.insert callee
       let some symbol := externSymbol? callee | continue
       let some e := f.externs.find? (·.name == symbol)
         | throw s!"{f.name}: inst {i.id}: extern callee '{symbol}' has no 'externs' entry"
@@ -4468,8 +4469,8 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
       unless callees.any (·.1 == callee) do
         callees := callees.push (callee, symbol, some "(its address is taken) ")
     let mut renames : Std.HashMap String String := {}
-    -- The bindings through a C-ABI conversion: (extern callee, conversions).
-    let mut converted : Array (String × AbiCall) := #[]
+    -- The bindings through a C-ABI conversion: (extern callee, declaration, conversions).
+    let mut converted : Array (String × ExternDecl × AbiCall) := #[]
     for (callee, symbol, note) in callees do
       -- The AIR global of an address records no library or convention: only a declared
       -- `externs` entry fixes them.
@@ -4526,13 +4527,18 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
               unbound := reject s!"differs from its definition '{name}' in its {position}, and \
                 its address is taken: a call through the pointer converts no value \
                 (docs/c-frontend.md §libc boundary)"
-            else match externAbiCall f (declared.getD e) definition with
+            else if modelledStdFn name f.allocatorModel then
+              -- A modelled callee is lowered to its model (`FCtx.lowerCall`), which takes the
+              -- values as they are: the conversion would not be applied.
+              unbound := reject s!"differs from its definition '{name}' in its {position}, \
+                which is a modelled std function: its model takes no converted value"
+            else match externAbiCall f e definition with
               | .error why =>
                 unbound := reject s!"differs from its definition '{name}' in its {why} \
                   (docs/c-frontend.md §libc boundary)"
               | .ok call =>
                 renames := renames.insert callee name
-                converted := converted.push (callee, call)
+                converted := converted.push (callee, e, call)
           else renames := renames.insert callee name
       else
         unbound := reject s!"has no definition in the program (an `export fn {symbol}` in the AIR set, or an \
@@ -4542,15 +4548,10 @@ def resolveExternsCollect (funcs : Array Func) (models : Array ModelBinding := #
     -- declaration's: not a direct call of the definition by its own name, and not a call
     -- through another declaration bound to it.
     let mut abiCalls : Array AbiCall := #[]
-    for (callee, call) in converted do
-      let named := f.allInsts.any fun i => match i.op with
-        | .call (.func n ..) _ => n == call.callee
-        | _ => false
+    for (callee, e, call) in converted do
       let shared := renames.fold (init := false) fun acc c n => acc || (c != callee && n == call.callee)
-      if named || shared then
+      if directNames.contains call.callee || shared then
         renames := renames.erase callee
-        let e := (f.externs.find? (some ·.name == externSymbol? callee)).getD
-          { name := callee, library := none, cc := "", params := #[], ret := 0, varargs := false }
         unbound := unbound.push (f.name, externUnbound f.name e s!"is bound through a C-ABI \
           conversion to '{call.callee}', which this function also calls without it \
           (CALLEE_AMBIGUOUS)")
