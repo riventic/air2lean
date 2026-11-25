@@ -613,7 +613,7 @@ theorem roundRat_toRat_of_classify {fmt : FloatFmt} {x : Float fmt} {s : Bool} {
 /-- A signed zero classifies as a zero mantissa at the subnormal exponent. -/
 @[simp] theorem classify_zero {fmt : FloatFmt} (s : Bool) :
     (Float.zero s : Float fmt).classify = .finite s 0 (fmt.emin - fmt.fracBits) := by
-  cases fmt <;> cases s <;> decide
+  cases fmt <;> cases s <;> rfl
 
 /-- A zero mantissa denotes the `Rat` zero. -/
 @[simp] theorem finiteToRat_zero (s : Bool) (e : Int) : finiteToRat s 0 e = 0 := by
@@ -1141,7 +1141,7 @@ theorem sqrtF128ViaF64_eq_sqrt_of_special {x : Float .f128}
   have hnan : ∀ {f : FloatFmt}, (Float.nan : Float f).classify = .nan := by
     intro f; cases f <;> decide
   have hinf : ∀ {f : FloatFmt} (s : Bool), (Float.inf s : Float f).classify = .inf s := by
-    intro f s; cases f <;> cases s <;> decide
+    intro f s; cases f <;> cases s <;> rfl
   unfold Float.sqrtF128ViaF64 Float.sqrt Float.sqrt.sqrtCore Float.conv
   generalize hc : x.classify = c at h
   rcases c with _ | s | ⟨s, m, e⟩
