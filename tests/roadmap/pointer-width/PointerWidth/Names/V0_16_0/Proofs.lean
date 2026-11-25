@@ -6,8 +6,9 @@ import ZigLean.Mem.WidthLemmas
 /-!
 # T02: `@tagName` and `@errorName` under the wasm32 and the x86_64 profile
 
-`names.zig` translated from its Zig 0.17.1 wasm32-freestanding, wasm32-wasi and x86_64-linux
-exports (`check.sh`; the 0.16.0 instance is this file renamed, `scripts/fixtures.py instance`).
+`names.zig` translated from its wasm32-freestanding, wasm32-wasi and x86_64-linux exports by one
+Zig version (`check.sh`). The file of the 0.17.1 translations is written; the file of the 0.16.0
+ones is it with that version's names (`scripts/fixtures.py instance`).
 A name is a `[:0]const u8` into a static block of `mem0`: a `Zig.Slice32` (32-bit `usize`
 length) on wasm32, a `Zig.Slice` on x86_64. The same statements hold for both widths: the
 returned length is the name's byte count, the bytes read through the slice are the name, the

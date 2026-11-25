@@ -41,7 +41,8 @@ case "${1:---check}" in
     trap 'rm -rf "$wasm_dir"' EXIT
     for s in "$src" "$case_dir/names.zig"; do
       "$AIR2LEAN_ZIG_NATIVE" test -OReleaseSafe "$s"
-      # The comptime layout asserts are evaluated by the compiler for each target's ABI.
+      # Compiled for wasm32-freestanding: pointer_width.zig's comptime layout asserts are
+      # evaluated for that target's ABI.
       "$AIR2LEAN_ZIG_NATIVE" build-obj -OReleaseSafe -target wasm32-freestanding -fno-emit-bin "$s"
       # The wasm32-wasi test binary runs under Node's WASI (32-bit usize boundaries).
       "$AIR2LEAN_ZIG_NATIVE" test -OReleaseSafe -target wasm32-wasi --test-no-exec \

@@ -9,6 +9,7 @@ or runs a compiler.
 """
 import copy
 import json
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -107,7 +108,7 @@ def main():
                          f"def errorNameOf (e : Zig.ErrName) : Zig.Result {slice_ty} :="):
                 assert term in text, (version, target, term)
             if wasm:
-                assert "Zig.Slice " not in text and "Zig.Slice)" not in text, (version, target)
+                assert not re.search(r"\bZig\.Slice\b", text), (version, target)
             checks += 1
 
     # Real wasm32 exports of operations that stay 64-bit only (`reject.zig`).

@@ -4399,8 +4399,8 @@ def errorNames (funcs : Array Func) : Array String :=
 compilation's numbering (`numbered`), the blocks are in code order and the name is found by the
 error's position in `errorTable`, as the compiler's name table is indexed by the code. The name
 is a slice of the profile's pointer width (`ptrBits`, `sliceTyName`): its length is a `usize`. -/
-def emitErrorNameOf (names : Array String) (first : Nat) (numbered : Bool := false)
-    (ptrBits : Nat := 64) : String :=
+def emitErrorNameOf (names : Array String) (first : Nat) (numbered : Bool) (ptrBits : Nat) :
+    String :=
   let head := s!"def errorNameOf (e : Zig.ErrName) : Zig.Result {sliceTyName ptrBits} :="
   if numbered then
     String.intercalate "\n" [head,
@@ -4478,7 +4478,7 @@ def emitMem0 (gs : Array ProgGlobal) (translated : Bool := false) : String :=
 /-- `<E>.tagName`: the name of each tag of `E` (`@tagName`), in the blocks from `first` on, as a
 slice of the profile's pointer width (`ptrBits`). -/
 def emitTagName (lean : String) (fields : Array (String × Int)) (exhaustive : Bool) (bits : Nat)
-    (first : Nat) (reserved : Array String := #[]) (ptrBits : Nat := 64) : String :=
+    (first : Nat) (reserved : Array String) (ptrBits : Nat) : String :=
   let ty := Ty.enum "" 0 exhaustive fields
   let fm := memberLookup ty reserved
   let hn := helperLookup ty reserved
@@ -4859,9 +4859,10 @@ def emitModel (m : ModelBinding) (index : Nat) (site : ModelRegistry.CallSite)
     s!"def {base} {" ".intercalate binders.toList} : Zig.MemM ({result}) := {claims}_root_.{m.implementation} {tuple}"] ++
     runAttribute #[base] ++ footprintDef ++ [evidence])
 
-/-- The program's pointer width in bits: 32 if a function has a 32-bit profile, else 64. -/
+/-- The program's pointer width in bits (`FCtx.ptrBits`): every function of one export has the
+same profile (`Air2Lean/Air/Profile.lean`). -/
 def programPtrBits (funcs : Array Func) : Nat :=
-  if funcs.any (fun f => ptrBytesOf f.layouts == 4) then 32 else 64
+  8 * ((funcs[0]?.map (ptrBytesOf ·.layouts)).getD 8)
 
 /-- A 32-bit profile opens the 4-byte `Enc` instances of `Ptr`, `?*T` and `std.mem.Allocator`
 (`ZigLean/Mem/Width.lean`); a 64-bit program keeps the global ones. -/
