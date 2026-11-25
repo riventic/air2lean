@@ -1,8 +1,8 @@
--- air2lean-profile: {"correspondence":"model","float_semantics":"ieee","profile":{"abi":"muslabi64","backend":"stage2_llvm","build_mode":"ReleaseSafe","cpu":"mips64r2","endian":"big","error_layout":"type-table","error_set_bits":16,"error_tracing":false,"export_stage":"analyzed-air","features":["fp64","gp64","mips1","mips2","mips3","mips32","mips32r2","mips3_32","mips3_32r2","mips4","mips4_32","mips4_32r2","mips5","mips5_32r2","mips64","mips64r2"],"float_mode":"per-instruction","name":"abi64-be-v1","pointer_bits":64,"schema":12,"target_triple":"mips64-linux.5.10...6.19-muslabi64","zig_version":"0.16.0"}}
+-- air2lean-profile: {"correspondence":"model","float_semantics":"ieee","profile":{"abi":"musl","backend":"stage2_llvm","build_mode":"ReleaseSafe","cpu":"arch8","endian":"big","error_layout":"type-table","error_set_bits":16,"error_tracing":false,"export_stage":"analyzed-air","features":[],"float_mode":"per-instruction","name":"abi64-be-v1","pointer_bits":64,"schema":12,"target_triple":"s390x-linux.5.10...6.19-musl","zig_version":"0.16.0"}}
 import ZigLean
 
 
-namespace BigEndian.Mips64
+namespace BigEndian.V0_16_0.S390x
 
 open scoped Zig.BigEndian
 
@@ -439,4 +439,4 @@ def unionHalf (p0 : BitVec 32) : Zig.MemM (BitVec 16) := do
 
 attribute [zig_run] unionHalf
 
-end BigEndian.Mips64
+end BigEndian.V0_16_0.S390x

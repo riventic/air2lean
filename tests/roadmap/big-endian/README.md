@@ -1,28 +1,31 @@
 # Byte order: a big-endian profile (T03)
 
-One source, `big_endian.zig`, exported with the repository's patched Zig 0.16.0 for
+One source, `big_endian.zig`, exported with the repository's patched Zig 0.17.1 and 0.16.0 for
 `s390x-linux` and `mips64-linux` (big endian; MIPS64 n64, `mips64r2` baseline) and
-`x86_64-linux -mcpu=baseline` (little endian) (`air/0.16.0/<target>/`). The three exports are
-the same AIR except for their profile, and the two big-endian translations are the same text
-apart from the profile header and namespace. Every
-function observes byte order: `@bitCast` of integers, floats, packed structs and `extern`
-structs to and from byte arrays, byte views of integers and floats in memory, an
-`extern union` read through another field, and bit-pointer loads and stores into a packed
-struct whose bytes are read or written one by one. `reject.zig` holds s390x operations
-outside the qualified big-endian model (`air/0.16.0/s390x-reject/`), and the two byte views
-of a vector in memory (`vecByte`, `vecLane0FromBytes`): a `@ptrCast` between a vector and an
-array is illegal behaviour (langref §Vectors, `docs/illegal-behavior.md`), rejected for every
-profile.
+`x86_64-linux -mcpu=baseline` (little endian) (`air/<version>/<target>/`). The three exports of
+one version are the same AIR except for their profile, and the two big-endian translations are
+the same text apart from the profile header and namespace. Every function observes byte order
+on 0.16.0: `@bitCast` of integers, floats, packed structs and `extern` structs to and from byte
+arrays, byte views of integers and floats in memory, an `extern union` read through another
+field, and bit-pointer loads and stores into a packed struct whose bytes are read or written one
+by one. From 0.17 on, `@bitCast` is the logical bit order (`docs/bitcast-semantics.md`): those
+casts give the same bytes on both targets, natively and in the model, and the byte order shows
+through memory only. 0.17 has no `@bitCast` of an `extern struct`, so `externToBytes` reads its
+bytes through a pointer there (one source line, selected by `zig_version`). `reject.zig` holds
+s390x operations outside the qualified big-endian model (`air/<version>/s390x-reject/`), and
+the two byte views of a vector in memory (`vecByte`, `vecLane0FromBytes`): a `@ptrCast`
+between a vector and an array is illegal behaviour (langref §Vectors,
+`docs/illegal-behavior.md`), rejected for every profile.
 
 | File | Role |
 |---|---|
-| `BigEndian/S390x/Gen.lean`, `BigEndian/Mips64/Gen.lean`, `BigEndian/X64/Gen.lean` | Retained translations (profiles `abi64-be-v1`, `abi64-le-v1`) |
-| `expected-gen.diff` | Their only differences: header, namespace, `open scoped Zig.BigEndian`, the `.big` bit-pointer accesses |
-| `BigEndian/Proofs.lean` | Kernel-evaluated byte-level facts of both translations |
-| `Diff.lean` | The model of either translation on `native.zig`'s inputs, in its output format |
+| `BigEndian/<version>/<target>/Gen.lean` | Retained translations (`<version>` as a name: `V0_17_1`, `V0_16_0`; `<target>` `S390x`, `Mips64`, `X64`; profiles `abi64-be-v1`, `abi64-le-v1`) |
+| `expected-gen.diff` | Their only differences, on each version: header, namespace, `open scoped Zig.BigEndian`, the `.big` bit-pointer accesses |
+| `BigEndian/Proofs.lean` | Kernel-evaluated byte-level facts of the translations of both versions |
+| `BigEndian/Lines.lean`, `BigEndian/<version>/<target>/Diff.lean` | The model of one translation on `native.zig`'s inputs, in its output format. Written for 0.17.1 x86_64-linux; the other modules are that one with the version and target renamed (`scripts/fixtures.py instance ... --write` after an edit) |
 | `native.zig` | The native program: the same 115 cases |
-| `observed/<arch>-linux-musl-ReleaseSafe.txt` | Its output with stock Zig 0.16.0: s390x under qemu (Docker `--platform linux/s390x`), mips64 (`mips64-linux-muslabi64`) under the Docker VM's qemu-mips64 binfmt handler, x86_64 under Docker `linux/amd64`. The s390x and mips64 outputs are identical |
-| `test_cli.py` | Profile acceptance, mixed/contradictory endian metadata and the fail-closed rejections |
+| `observed/<version>-<arch>-linux-musl-ReleaseSafe.txt` | Its output with stock Zig `<version>`: s390x under qemu (Docker `--platform linux/s390x`), mips64 (`mips64-linux-muslabi64`) under the Docker VM's qemu-mips64 binfmt handler, x86_64 under Docker `linux/amd64`. The s390x and mips64 outputs are identical |
+| `test_cli.py` | Profile acceptance, mixed/contradictory endian metadata and the fail-closed rejections, on each version's exports |
 
 `ZigLean/Endian.lean` parameterizes the byte order; `ZigLean/EndianLemmas.lean` (proof-only)
 proves the integer, float, slice, optional-slice and vector round trips at both orders and the
@@ -33,21 +36,23 @@ Run under the serialized build queue:
 ```sh
 lake build ZigLean Air2Lean air2lean ZigLean.EndianLemmas
 bash tests/roadmap/big-endian/check.sh          # translate, compare, prove, model = observed, reject
-AIR2LEAN_ZIG_NATIVE=<stock zig 0.16.0> bash tests/roadmap/big-endian/check.sh --native
-AIR2LEAN_ZIG_AIR=<patched zig> python3 scripts/fixture-exports.py verify big-endian
+AIR2LEAN_ZIG_NATIVE=<stock zig V> bash tests/roadmap/big-endian/check.sh --native V
+python3 scripts/fixture-exports.py verify big-endian
 ```
 
 The AIR is declared in `exports.json` and pinned by `exports.lock.json`; every `check.sh` and
 `concurrency.sh` run checks the lock, and `verify` re-exports with the patched compiler and
 compares byte for byte.
 
-`--native` builds `native.zig` for the three targets, runs it (Docker by default; set
-`AIR2LEAN_S390X_RUN=qemu-s390x-static`, `AIR2LEAN_MIPS64_RUN=qemu-mips64-static` or
-`AIR2LEAN_X86_64_RUN=` for a direct runner; `elf-abiversion.py` clears the mips64 executable's
-EI_ABIVERSION byte, which the binfmt handler's magic does not match), and
-requires its output to equal the model's lines and the retained observations. 88 of the 125
-lines differ between the two byte orders. These are bounded observations of one target,
-backend (`stage2_llvm`) and mode (`ReleaseSafe`); they do not establish binary correspondence.
+`check.sh` requires the model's lines of each version and target to equal the retained
+observation. `--native V` builds `native.zig` with stock Zig `V` for the three targets, runs it
+(Docker by default; set `AIR2LEAN_S390X_RUN=qemu-s390x-static`,
+`AIR2LEAN_MIPS64_RUN=qemu-mips64-static` or `AIR2LEAN_X86_64_RUN=` for a direct runner;
+`elf-abiversion.py` clears the mips64 executable's EI_ABIVERSION byte, which the binfmt
+handler's magic does not match), and requires its output to equal the retained observation. Of
+the 115 lines, 82 differ between the two byte orders on 0.16.0 and 56 on 0.17.1. These are
+bounded observations of one target, backend (`stage2_llvm`) and mode (`ReleaseSafe`); they do
+not establish binary correspondence.
 
 ## Concurrency and allocator models (`concurrency.zig`)
 

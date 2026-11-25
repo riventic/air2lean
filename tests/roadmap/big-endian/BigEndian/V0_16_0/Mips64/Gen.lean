@@ -1,8 +1,10 @@
--- air2lean-profile: {"correspondence":"model","float_semantics":"ieee","profile":{"abi":"musl","backend":"stage2_llvm","build_mode":"ReleaseSafe","cpu":"x86_64","endian":"little","error_layout":"type-table","error_set_bits":16,"error_tracing":false,"export_stage":"analyzed-air","features":["64bit","cmov","cx8","fxsr","idivq_to_divl","macrofusion","mmx","nopl","slow_3ops_lea","slow_incdec","sse","sse2","vzeroupper","x87"],"float_mode":"per-instruction","name":"abi64-le-v1","pointer_bits":64,"schema":12,"target_triple":"x86_64-linux.5.10...6.19-musl","zig_version":"0.16.0"}}
+-- air2lean-profile: {"correspondence":"model","float_semantics":"ieee","profile":{"abi":"muslabi64","backend":"stage2_llvm","build_mode":"ReleaseSafe","cpu":"mips64r2","endian":"big","error_layout":"type-table","error_set_bits":16,"error_tracing":false,"export_stage":"analyzed-air","features":["fp64","gp64","mips1","mips2","mips3","mips32","mips32r2","mips3_32","mips3_32r2","mips4","mips4_32","mips4_32r2","mips5","mips5_32r2","mips64","mips64r2"],"float_mode":"per-instruction","name":"abi64-be-v1","pointer_bits":64,"schema":12,"target_triple":"mips64-linux.5.10...6.19-muslabi64","zig_version":"0.16.0"}}
 import ZigLean
 
 
-namespace BigEndian.X64
+namespace BigEndian.V0_16_0.Mips64
+
+open scoped Zig.BigEndian
 
 structure U where
   bytes : Vector Zig.Byte 4
@@ -245,7 +247,7 @@ def fieldFromBytes (p0 : BitVec 8) (p1 : BitVec 8) (p2 : BitVec 8) (p3 : BitVec 
     Zig.store (α := BitVec 8) 1 i13 p3
     let i15 ← pure i4
     let i16 ← pure (i15)
-    let i17 ← Zig.loadBits (BitVec 12) 4 4 4 i16
+    let i17 ← Zig.loadBitsOf .big (BitVec 12) 4 4 4 i16
     pure (.ret i17)) : Zig.MM fieldFromBytesLocals fieldFromBytesExit).run' { (default : fieldFromBytesLocals) with p := s4 }
   Zig.free s4
   match e with
@@ -317,7 +319,7 @@ def setFieldBytes (p0 : BitVec 32) (p1 : BitVec 12) : Zig.MemM (Vector (BitVec 8
     let i3 ← Zig.Packed.ofBits? (α := P) p0
     Zig.store (α := P) 4 i2 i3
     let i5 ← pure i2
-    Zig.storeBits (α := BitVec 12) 4 4 4 i5 p1
+    Zig.storeBitsOf .big (α := BitVec 12) 4 4 4 i5 p1
     let i7 ← pure (i2)
     let i8 ← Zig.load (Vector (BitVec 8) 4) 1 i7
     pure (.ret i8)) : Zig.MM setFieldBytesLocals setFieldBytesExit).run' { (default : setFieldBytesLocals) with p := s2 }
@@ -437,4 +439,4 @@ def unionHalf (p0 : BitVec 32) : Zig.MemM (BitVec 16) := do
 
 attribute [zig_run] unionHalf
 
-end BigEndian.X64
+end BigEndian.V0_16_0.Mips64

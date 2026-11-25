@@ -15,11 +15,23 @@ import sys
 import tempfile
 
 HERE = Path(__file__).resolve().parent
-AIR = HERE / "air" / "0.16.0"
 
 
-def load(target):
-    return {p.name: json.loads(p.read_text()) for p in sorted((AIR / target).glob("*.json"))}
+def exported_versions():
+    """Every Zig version `exports.json` exports `big_endian.zig` and `reject.zig` for (one set)."""
+    entries = json.loads((HERE / "exports.json").read_text())["exports"]
+    sets = {tuple(e["versions"]) for e in entries if e["source"] in ("big_endian.zig", "reject.zig")}
+    if len(sets) != 1:
+        raise SystemExit(f"exports.json: big_endian.zig and reject.zig differ in their versions: {sets}")
+    return sets.pop()
+
+
+VERSIONS = exported_versions()
+
+
+def load(version, target):
+    air = HERE / "air" / version / target
+    return {p.name: json.loads(p.read_text()) for p in sorted(air.glob("*.json"))}
 
 
 def run(binary, documents, error=None, prefix="big_endian.", extra=()):
@@ -49,8 +61,14 @@ def one(docs, name):
 
 def main():
     binary = Path(sys.argv[1]).resolve(strict=True)
+    for version in VERSIONS:
+        checks = check_version(binary, version)
+        print(f"big-endian CLI checks passed on {version} ({checks})")
+
+
+def check_version(binary, version):
     checks = 0
-    big, little = load("s390x-linux"), load("x86_64-linux")
+    big, little = load(version, "s390x-linux"), load(version, "x86_64-linux")
     text = run(binary, big, extra=("--profile", "abi64-be-v1"))
     header = json.loads(text.splitlines()[0].removeprefix("-- air2lean-profile: "))
     assert header["profile"]["name"] == "abi64-be-v1" and header["profile"]["endian"] == "big"
@@ -98,7 +116,7 @@ def main():
     run(binary, bad, error="outside the little-endian memory model")
     checks += 1
     # Real s390x exports outside the qualified big-endian model (`reject.zig`).
-    rejects = load("s390x-reject")
+    rejects = load(version, "s390x-reject")
     for name, error in [
         ("reject.atomicU12.json", "an atomic op on a 12-bit integer representation"),
         ("reject.packedUnion.json", "a `packed union` is outside the qualified big-endian model"),
@@ -112,7 +130,7 @@ def main():
     ]:
         run(binary, one(rejects, name), error=error, prefix="reject.")
         checks += 1
-    print(f"big-endian CLI checks passed ({checks})")
+    return checks
 
 
 if __name__ == "__main__":

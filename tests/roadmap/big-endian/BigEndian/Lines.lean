@@ -1,18 +1,17 @@
-import BigEndian.S390x.Gen
-import BigEndian.Mips64.Gen
-import BigEndian.X64.Gen
+import ZigLean
 
-/-! T03: the generated model of `big_endian.zig` on `native.zig`'s inputs, one line per case in
-`native.zig`'s format. `check.sh` prints both profiles' lines and compares them with the native
-observations: `s390x` and `mips64` (big endian, under emulation) and `x86_64` (little endian).
-
-    lake env lean --run tests/roadmap/big-endian/Diff.lean s390x|mips64|x86_64
-
-(with the compiled `BigEndian.<S390x|Mips64|X64>.Gen` on `LEAN_PATH`). -/
+/-! T03: the lines of `native.zig` from one translation of `big_endian.zig`, in its format (one
+line per case). `BigEndian.<V>.<T>.Diff` gives the translation of each Zig version `V`
+(`V0_17_1`, `V0_16_0`) and target `T` (`S390x`, `Mips64`, `X64`); `check.sh` compares its `main`
+with `observed/<version>-<arch>-linux-musl-ReleaseSafe.txt`. -/
 
 open Zig
 
-/-- The translated functions of one profile. The two translations have the same signatures. -/
+namespace BigEndian.Lines
+
+/-- The translated functions of one export. A function the translation runs without memory
+(`Result`) enters through the `MemM` lift: `externToBytes` is a value cast up to Zig 0.16 and a
+byte view through memory from 0.17 on. -/
 structure Impl where
   mem0 : Mem
   u32ToBytes : BitVec 32 → Result (Vector (BitVec 8) 4)
@@ -29,69 +28,9 @@ structure Impl where
   byteOfU32 : BitVec 32 → BitVec 64 → MemM (BitVec 8)
   u16FromStoredBytes : BitVec 8 → BitVec 8 → MemM (BitVec 16)
   byteOfF64 : F64 → BitVec 64 → MemM (BitVec 8)
-  externToBytes : BitVec 16 → BitVec 16 → BitVec 32 → Result (Vector (BitVec 8) 8)
+  externToBytes : BitVec 16 → BitVec 16 → BitVec 32 → MemM (Vector (BitVec 8) 8)
   unionHalf : BitVec 32 → MemM (BitVec 16)
   unionByte : BitVec 32 → BitVec 64 → MemM (BitVec 8)
-
-def s390x : Impl where
-  mem0 := BigEndian.S390x.mem0 .fresh
-  u32ToBytes := BigEndian.S390x.u32ToBytes
-  bytesToU32 := BigEndian.S390x.bytesToU32
-  i16ToBytes := BigEndian.S390x.i16ToBytes
-  u64ToHalves := BigEndian.S390x.u64ToHalves
-  f32ToBytes := BigEndian.S390x.f32ToBytes
-  bytesToF64Bits := BigEndian.S390x.bytesToF64Bits
-  f16ToBytes := BigEndian.S390x.f16ToBytes
-  packedToBytes := BigEndian.S390x.packedToBytes
-  packed16ToBytes := BigEndian.S390x.packed16ToBytes
-  setFieldBytes := BigEndian.S390x.setFieldBytes
-  fieldFromBytes := BigEndian.S390x.fieldFromBytes
-  byteOfU32 := BigEndian.S390x.byteOfU32
-  u16FromStoredBytes := BigEndian.S390x.u16FromStoredBytes
-  byteOfF64 := BigEndian.S390x.byteOfF64
-  externToBytes := BigEndian.S390x.externToBytes
-  unionHalf := BigEndian.S390x.unionHalf
-  unionByte := BigEndian.S390x.unionByte
-
-def mips64 : Impl where
-  mem0 := BigEndian.Mips64.mem0 .fresh
-  u32ToBytes := BigEndian.Mips64.u32ToBytes
-  bytesToU32 := BigEndian.Mips64.bytesToU32
-  i16ToBytes := BigEndian.Mips64.i16ToBytes
-  u64ToHalves := BigEndian.Mips64.u64ToHalves
-  f32ToBytes := BigEndian.Mips64.f32ToBytes
-  bytesToF64Bits := BigEndian.Mips64.bytesToF64Bits
-  f16ToBytes := BigEndian.Mips64.f16ToBytes
-  packedToBytes := BigEndian.Mips64.packedToBytes
-  packed16ToBytes := BigEndian.Mips64.packed16ToBytes
-  setFieldBytes := BigEndian.Mips64.setFieldBytes
-  fieldFromBytes := BigEndian.Mips64.fieldFromBytes
-  byteOfU32 := BigEndian.Mips64.byteOfU32
-  u16FromStoredBytes := BigEndian.Mips64.u16FromStoredBytes
-  byteOfF64 := BigEndian.Mips64.byteOfF64
-  externToBytes := BigEndian.Mips64.externToBytes
-  unionHalf := BigEndian.Mips64.unionHalf
-  unionByte := BigEndian.Mips64.unionByte
-
-def x86_64 : Impl where
-  mem0 := BigEndian.X64.mem0 .fresh
-  u32ToBytes := BigEndian.X64.u32ToBytes
-  bytesToU32 := BigEndian.X64.bytesToU32
-  i16ToBytes := BigEndian.X64.i16ToBytes
-  u64ToHalves := BigEndian.X64.u64ToHalves
-  f32ToBytes := BigEndian.X64.f32ToBytes
-  bytesToF64Bits := BigEndian.X64.bytesToF64Bits
-  f16ToBytes := BigEndian.X64.f16ToBytes
-  packedToBytes := BigEndian.X64.packedToBytes
-  packed16ToBytes := BigEndian.X64.packed16ToBytes
-  setFieldBytes := BigEndian.X64.setFieldBytes
-  fieldFromBytes := BigEndian.X64.fieldFromBytes
-  byteOfU32 := BigEndian.X64.byteOfU32
-  u16FromStoredBytes := BigEndian.X64.u16FromStoredBytes
-  byteOfF64 := BigEndian.X64.byteOfF64
-  externToBytes := BigEndian.X64.externToBytes
-  unionHalf := BigEndian.X64.unionHalf
-  unionByte := BigEndian.X64.unionByte
 
 /-- A printable result: an integer, or the items of an array. -/
 class Out (α : Type) where
@@ -153,17 +92,10 @@ def lines (f : Impl) : List String := Id.run do
         (run (f.byteOfF64 ⟨BitVec.ofNat 64 bits⟩ (BitVec.ofNat 64 i))))
   for (a, b) in [(0x0102, 0x0304), (0xffff, 0)] do
     out := out.push (line "externToBytes" [toString a, toString b, toString 0xa1b2c3d4]
-      (f.externToBytes (BitVec.ofNat 16 a) (BitVec.ofNat 16 b) 0xa1b2c3d4))
+      (run (f.externToBytes (BitVec.ofNat 16 a) (BitVec.ofNat 16 b) 0xa1b2c3d4)))
   for (lo, hi) in [(0xabc, 0xd), (0, 0xf), (0xfff, 0)] do
     out := out.push (line "packed16ToBytes" [toString lo, toString hi]
       (f.packed16ToBytes (BitVec.ofNat 12 lo) (BitVec.ofNat 4 hi)))
   return out.toList
 
-def main (args : List String) : IO UInt32 := do
-  let impl ← match args with
-    | ["s390x"] => pure s390x
-    | ["mips64"] => pure mips64
-    | ["x86_64"] => pure x86_64
-    | _ => throw (IO.userError "usage: Diff.lean s390x|mips64|x86_64")
-  for l in lines impl do IO.println l
-  return 0
+end BigEndian.Lines

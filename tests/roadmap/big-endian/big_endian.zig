@@ -91,7 +91,7 @@ pub fn byteOfF64(x: f64, i: usize) u8 {
 
 pub fn externToBytes(a: u16, b: u16, c: u32) [8]u8 {
     const s: S = .{ .a = a, .b = b, .c = c };
-    return @bitCast(s);
+    return if (@import("builtin").zig_version.minor < 17) @bitCast(s) else @as(*const [8]u8, @ptrCast(&s)).*; // 0.17: no extern struct @bitCast
 }
 
 /// The first `u16` of an `extern union` written as a `u32`.
