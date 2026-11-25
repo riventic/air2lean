@@ -1,18 +1,19 @@
 /-!
 # Test-only runner: generated asm wrappers against Zig source semantics (A03)
 
-`harness.py` appends this after `Interp.lean`, the rebound wrappers (`AsmHarness.Wrappers`),
-the opaque bindings (`AsmHarness.Bound`) and the sampled inputs (`AsmHarness.Inputs`).
+`harness.py` appends this after `Interp.lean`, the generated module (`AsmHarness.Wrappers`), the
+interpreted counterparts (`AsmHarness.Cross`) and the sampled inputs (`AsmHarness.Inputs`).
 
-Two checks per input:
+Two checks:
 
 * wrapper: the real generated wrapper (`AsmHarness.Wrappers.<fn>`, the unchanged text of
-  `Proofs/Asm/Gen.lean`) returns `Oracle.<fn>`, the function `examples/asm/asm.zig` defines. For
-  `divmod` the remainder reaches the result only through the wrapper's store to the local `rem`,
-  so this also checks the wrapper's memory plumbing.
-* hypothesis: the interpreted opaque satisfies the ASM-02 hypothesis that
-  `Proofs/Asm/Proofs.lean` states about it. This is evidence for the hypothesis under the
-  interpretation, not a premise of the theorem.
+  `Proofs/Asm/Gen.lean`, with its `airIsa_<hash>` definitions over the instruction model) returns
+  `Oracle.<fn>`, the function `examples/asm/asm.zig` defines. For `divmod` the remainder reaches
+  the result only through the wrapper's store to the local `rem`, so this also checks the
+  wrapper's memory plumbing.
+* model: each `airIsa_<hash>` returns what the interpretation of its template text returns
+  (`Cross.failures`). This is evidence for premise ASM-07 from a second implementation, not a
+  premise of any theorem.
 
 Every failure prints `MISMATCH <check> <fn> <input>`; the program exits 1 on any failure.
 -/
@@ -71,16 +72,8 @@ def failures : List String :=
   wrapper "lzcnt64" Inputs.lzcnt64 (Wrappers.lzcnt64 ∘ b64) (Oracle.lzcnt64 ∘ b64) ++
   wrapper "divmod" Inputs.divmod (fun (a, b) => Wrappers.divmod (b32 a) (b32 b))
     (fun (a, b) => Oracle.divmod (b32 a) (b32 b)) ++
-  -- ASM-02 hypotheses of `Proofs/Asm/Proofs.lean`, evaluated under the interpretation.
-  check "hypothesis" "bswap32_involutive" Inputs.bswap32 toString
-    (fun x => Bound.bswap32 (Bound.bswap32 (b32 x)) == b32 x) (fun _ => "not an involution") ++
-  check "hypothesis" "popcnt64_le_width" Inputs.popcnt64 toString
-    (fun x => (Bound.popcnt64 (b64 x)).toNat ≤ 64) (fun _ => "exceeds 64") ++
-  check "hypothesis" "lzcnt64_allOnes" [()] (fun _ => "-1")
-    (fun _ => Bound.lzcnt64 (-1#64) == 0#64) (fun _ => "nonzero") ++
-  check "hypothesis" "divmod_spec" Inputs.divmod toString
-    (fun (a, b) => Bound.divmod (b32 a) (b32 b) == (b32 a / b32 b, b32 a % b32 b))
-    (fun _ => "not (a / b, a % b)")
+  -- Each `airIsa_<hash>` against the interpretation of its template text.
+  Cross.failures
 
 def main : IO UInt32 := do
   let counts := [("bswap32", Inputs.bswap32.length), ("popcnt64", Inputs.popcnt64.length),

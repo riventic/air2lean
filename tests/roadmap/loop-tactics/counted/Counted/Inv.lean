@@ -1,4 +1,4 @@
--- air2lean-invgen: {"generator":{"lean":"4.34.0","modules":[["Air2Lean.InvGen","66ad481953e23d9c7e0a71474061ba54f18979ff7c3c6e7baf6fd5b17d82a90b"],["Air2Lean.InvGenMain","de6d02b6f751b7c66c5408950f0a96f96cd237ec0d8a7c83c6038d79f12cdb33"],["Air2Lean.Revision","0abdb80bf11b8b7e1b0820755e2015f43cce91c00db65dd085b2a8afa6e65f8c"]],"revision":"1c874a6831b45b77f823ce4e8705a954d666a5039d1bb58e21ee6d753a0ea1fa"},"inputs":[["tests/roadmap/loop-tactics/counted/Counted/Gen.lean","6b5336d59d16c32dc7bfc75e0c59a1279667ba8cd632087aae8d8b803e0778e4"]],"loops":[{"family":"counted","loop":"down.loop5","pruned":[{"fact":"s0.i.toNat ≤ s.i.toNat","residual":"cand0 p0 s0 v0 { i := x }","walk":1},{"fact":"v.toNat = v0.toNat + 3 * (s.i.toNat - s0.i.toNat)","residual":"cand4 p0 s0 v0 { i := x } x✝³","walk":1}]},{"family":"counted","loop":"lenCount.loop5","pruned":[{"fact":"s.i.toNat ≤ s0.i.toNat","residual":"cand1 p0 p1 s0 v0 { i := x }","walk":1},{"fact":"v.toNat = v0.toNat + (s0.i.toNat - s.i.toNat)","residual":"cand5 p0 p1 s0 v0 { i := x } x✝³","walk":1}]},{"loop":"pairAt.loop5","none":"a pointer projection (a cell at an offset)"},{"family":"counted","loop":"readBound.loop5","pruned":[{"fact":"s.i.toNat ≤ s0.i.toNat","residual":"cand1 p0 p1 s0 x✝⁵ v1 { i := x }","walk":1},{"fact":"v.toNat = v1.toNat + (s0.i.toNat - s.i.toNat)","residual":"cand5 p0 p1 s0 x✝⁵ v1 { i := x } x✝³","walk":1}]},{"loop":"tri.loop5","none":"a cell that does not go up by a constant (its increment depends on a value)"},{"family":"counted","loop":"upLe.loop5","pruned":[{"fact":"s.i.toNat ≤ s0.i.toNat","residual":"cand1 p0 p1 s0 v0 { i := x }","walk":1},{"fact":"v.toNat = v0.toNat + (s0.i.toNat - s.i.toNat)","residual":"cand6 p0 p1 s0 v0 { i := x } x✝³","walk":1}]},{"family":"counted","loop":"upNe.loop5","pruned":[{"fact":"s.i.toNat ≤ s0.i.toNat","residual":"cand1 p0 p1 s0 v0 { i := x }","walk":1},{"fact":"v.toNat = v0.toNat + (s0.i.toNat - s.i.toNat)","residual":"cand5 p0 p1 s0 v0 { i := x } x✝³","walk":1}]}],"module":"Counted.Gen","namespace":"Counted","output":"a0bfc75a86d778e33ebedb8792f267e6751e68b754589d753ac0be45ba0ae23c","version":2}
+-- air2lean-invgen: {"generator":{"lean":"4.34.0","modules":[["Air2Lean.InvGen","aa7ac33be1e25c5ed2a5f8716409e4c598f33a667313c1fc1cc85013230afd8a"],["Air2Lean.InvGenMain","6641279898d44a6114fa6c402e42cf6e23db77e655d112a4e8c74f5f25dc964f"],["Air2Lean.Revision","0abdb80bf11b8b7e1b0820755e2015f43cce91c00db65dd085b2a8afa6e65f8c"]],"revision":"c0851d35497ea3aa18117adc8a0a6d945fec0d8578db26de13a30557f41b0540"},"inputs":[["tests/roadmap/loop-tactics/counted/Counted/Gen.lean","6b5336d59d16c32dc7bfc75e0c59a1279667ba8cd632087aae8d8b803e0778e4"]],"loops":[{"credits":{"count":"s.i.toNat - 0"},"family":"counted","loop":"down.loop5","pruned":[{"fact":"s0.i.toNat ≤ s.i.toNat","residual":"cand0 p0 s0 v0 { i := x }","walk":1},{"fact":"v.toNat = v0.toNat + 3 * (s.i.toNat - s0.i.toNat)","residual":"cand4 p0 s0 v0 { i := x } x✝³","walk":1}]},{"credits":{"count":"p1.len.toNat - s.i.toNat"},"family":"counted","loop":"lenCount.loop5","pruned":[{"fact":"s.i.toNat ≤ s0.i.toNat","residual":"cand1 p0 p1 s0 v0 { i := x }","walk":1},{"fact":"v.toNat = v0.toNat + (s0.i.toNat - s.i.toNat)","residual":"cand5 p0 p1 s0 v0 { i := x } x✝³","walk":1}]},{"loop":"pairAt.loop5","none":"a pointer projection (a cell at an offset)"},{"credits":{"count":"v0.toNat - s.i.toNat"},"family":"counted","loop":"readBound.loop5","pruned":[{"fact":"s.i.toNat ≤ s0.i.toNat","residual":"cand1 p0 p1 s0 x✝⁵ v1 { i := x }","walk":1},{"fact":"v.toNat = v1.toNat + (s0.i.toNat - s.i.toNat)","residual":"cand5 p0 p1 s0 x✝⁵ v1 { i := x } x✝³","walk":1}]},{"loop":"tri.loop5","none":"a cell that does not go up by a constant (its increment depends on a value)"},{"credits":{"count":"p1.toNat + 1 - s.i.toNat"},"family":"counted","loop":"upLe.loop5","pruned":[{"fact":"s.i.toNat ≤ s0.i.toNat","residual":"cand1 p0 p1 s0 v0 { i := x }","walk":1},{"fact":"v.toNat = v0.toNat + (s0.i.toNat - s.i.toNat)","residual":"cand6 p0 p1 s0 v0 { i := x } x✝³","walk":1}]},{"credits":{"count":"p1.toNat - s.i.toNat"},"family":"counted","loop":"upNe.loop5","pruned":[{"fact":"s.i.toNat ≤ s0.i.toNat","residual":"cand1 p0 p1 s0 v0 { i := x }","walk":1},{"fact":"v.toNat = v0.toNat + (s0.i.toNat - s.i.toNat)","residual":"cand5 p0 p1 s0 v0 { i := x } x✝³","walk":1}]}],"module":"Counted.Gen","namespace":"Counted","output":"bb4c1bb9089baec8411bd253067962b3260cefecb07b21f6e6a9d04b0ff7424a","version":2}
 import Counted.Gen
 import ZigLean.Sep.Full.Ghost
 import ZigLean.Sep.Full.AutoAttr
@@ -35,6 +35,21 @@ open Zig Zig.Full Zig.Full.FAssn
     (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + 3 * (s0.i.toNat - 0)⟫ ⋆ up (pts p0 8 v)) ⋆
     plain
 
+/-- The credit-mode invariant of `down.loop5` (a walk that counts its steps, `loop_exact`): `down.loop5.inv` without the plain mode, at the exact count `n` of the body runs left before the last one.
+`s0` holds the locals at loop entry. -/
+@[fsym_inv] def down.loop5.credits.inv (p0 : Zig.Ptr) (s0 : downLocals) (v0 : BitVec 64) (s : downLocals) (n : Nat) : FAssn :=
+  ⟪s.i.toNat ≤ s0.i.toNat ∧
+      0 ≤ s.i.toNat ∧
+      v0.toNat + 3 * (s0.i.toNat - 0) < 2 ^ 64 ∧
+      n = s.i.toNat - 0⟫ ⋆
+    (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + 3 * (s0.i.toNat - s.i.toNat)⟫ ⋆ up (pts p0 8 v))
+
+/-- The exit post of `down.loop5.credits`: the loop exits with `r`, after all iterations. -/
+@[fsym_inv] def down.loop5.credits.post (p0 : Zig.Ptr) (s0 : downLocals) (v0 : BitVec 64) (r : downExit × downLocals) : FAssn :=
+  ⟪r.1 = downExit.br4 ∧
+      r.2.i.toNat = 0⟫ ⋆
+    (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + 3 * (s0.i.toNat - 0)⟫ ⋆ up (pts p0 8 v))
+
 /-- The invariant of `lenCount.loop5`, a counted loop: `i` goes up by 1 while `i < p1.len`.
 `s0` holds the locals at loop entry.
 `v0` is `*p0` there, which goes up by 1 per iteration. -/
@@ -55,6 +70,21 @@ open Zig Zig.Full Zig.Full.FAssn
       r.2.i.toNat = p1.len.toNat⟫ ⋆
     (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + (p1.len.toNat - s0.i.toNat)⟫ ⋆ up (pts p0 8 v)) ⋆
     plain
+
+/-- The credit-mode invariant of `lenCount.loop5` (a walk that counts its steps, `loop_exact`): `lenCount.loop5.inv` without the plain mode, at the exact count `n` of the body runs left before the last one.
+`s0` holds the locals at loop entry. -/
+@[fsym_inv] def lenCount.loop5.credits.inv (p0 : Zig.Ptr) (p1 : Zig.Slice) (s0 : lenCountLocals) (v0 : BitVec 64) (s : lenCountLocals) (n : Nat) : FAssn :=
+  ⟪s0.i.toNat ≤ s.i.toNat ∧
+      s.i.toNat ≤ p1.len.toNat ∧
+      v0.toNat + (p1.len.toNat - s0.i.toNat) < 2 ^ 64 ∧
+      n = p1.len.toNat - s.i.toNat⟫ ⋆
+    (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + (s.i.toNat - s0.i.toNat)⟫ ⋆ up (pts p0 8 v))
+
+/-- The exit post of `lenCount.loop5.credits`: the loop exits with `r`, after all iterations. -/
+@[fsym_inv] def lenCount.loop5.credits.post (p0 : Zig.Ptr) (p1 : Zig.Slice) (s0 : lenCountLocals) (v0 : BitVec 64) (r : lenCountExit × lenCountLocals) : FAssn :=
+  ⟪r.1 = lenCountExit.br4 ∧
+      r.2.i.toNat = p1.len.toNat⟫ ⋆
+    (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + (p1.len.toNat - s0.i.toNat)⟫ ⋆ up (pts p0 8 v))
 
 /-- The invariant of `readBound.loop5`, a counted loop: `i` goes up by 1 while `i < *p1`.
 `s0` holds the locals at loop entry.
@@ -80,6 +110,23 @@ open Zig Zig.Full Zig.Full.FAssn
     (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v1.toNat + (v0.toNat - s0.i.toNat)⟫ ⋆ up (pts p0 8 v)) ⋆
     plain
 
+/-- The credit-mode invariant of `readBound.loop5` (a walk that counts its steps, `loop_exact`): `readBound.loop5.inv` without the plain mode, at the exact count `n` of the body runs left before the last one.
+`s0` holds the locals at loop entry. -/
+@[fsym_inv] def readBound.loop5.credits.inv (p0 : Zig.Ptr) (p1 : Zig.Ptr) (s0 : readBoundLocals) (v0 : BitVec 32) (v1 : BitVec 64) (s : readBoundLocals) (n : Nat) : FAssn :=
+  ⟪s0.i.toNat ≤ s.i.toNat ∧
+      s.i.toNat ≤ v0.toNat ∧
+      v1.toNat + (v0.toNat - s0.i.toNat) < 2 ^ 64 ∧
+      n = v0.toNat - s.i.toNat⟫ ⋆
+    up (pts p1 4 v0) ⋆
+    (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v1.toNat + (s.i.toNat - s0.i.toNat)⟫ ⋆ up (pts p0 8 v))
+
+/-- The exit post of `readBound.loop5.credits`: the loop exits with `r`, after all iterations. -/
+@[fsym_inv] def readBound.loop5.credits.post (p0 : Zig.Ptr) (p1 : Zig.Ptr) (s0 : readBoundLocals) (v0 : BitVec 32) (v1 : BitVec 64) (r : readBoundExit × readBoundLocals) : FAssn :=
+  ⟪r.1 = readBoundExit.br4 ∧
+      r.2.i.toNat = v0.toNat⟫ ⋆
+    up (pts p1 4 v0) ⋆
+    (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v1.toNat + (v0.toNat - s0.i.toNat)⟫ ⋆ up (pts p0 8 v))
+
 /-- The invariant of `upLe.loop5`, a counted loop: `i` goes up by 1 while `i <= p1`.
 `s0` holds the locals at loop entry.
 `v0` is `*p0` there, which goes up by 1 per iteration. -/
@@ -102,6 +149,22 @@ open Zig Zig.Full Zig.Full.FAssn
     (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + (p1.toNat + 1 - s0.i.toNat)⟫ ⋆ up (pts p0 8 v)) ⋆
     plain
 
+/-- The credit-mode invariant of `upLe.loop5` (a walk that counts its steps, `loop_exact`): `upLe.loop5.inv` without the plain mode, at the exact count `n` of the body runs left before the last one.
+`s0` holds the locals at loop entry. -/
+@[fsym_inv] def upLe.loop5.credits.inv (p0 : Zig.Ptr) (p1 : BitVec 32) (s0 : upLeLocals) (v0 : BitVec 64) (s : upLeLocals) (n : Nat) : FAssn :=
+  ⟪s0.i.toNat ≤ s.i.toNat ∧
+      s.i.toNat ≤ p1.toNat + 1 ∧
+      p1.toNat + 1 < 2 ^ 32 ∧
+      v0.toNat + (p1.toNat + 1 - s0.i.toNat) < 2 ^ 64 ∧
+      n = p1.toNat + 1 - s.i.toNat⟫ ⋆
+    (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + (s.i.toNat - s0.i.toNat)⟫ ⋆ up (pts p0 8 v))
+
+/-- The exit post of `upLe.loop5.credits`: the loop exits with `r`, after all iterations. -/
+@[fsym_inv] def upLe.loop5.credits.post (p0 : Zig.Ptr) (p1 : BitVec 32) (s0 : upLeLocals) (v0 : BitVec 64) (r : upLeExit × upLeLocals) : FAssn :=
+  ⟪r.1 = upLeExit.br4 ∧
+      r.2.i.toNat = p1.toNat + 1⟫ ⋆
+    (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + (p1.toNat + 1 - s0.i.toNat)⟫ ⋆ up (pts p0 8 v))
+
 /-- The invariant of `upNe.loop5`, a counted loop: `i` goes up by 1 while `i != p1`.
 `s0` holds the locals at loop entry.
 `v0` is `*p0` there, which goes up by 1 per iteration. -/
@@ -122,5 +185,20 @@ open Zig Zig.Full Zig.Full.FAssn
       r.2.i.toNat = p1.toNat⟫ ⋆
     (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + (p1.toNat - s0.i.toNat)⟫ ⋆ up (pts p0 8 v)) ⋆
     plain
+
+/-- The credit-mode invariant of `upNe.loop5` (a walk that counts its steps, `loop_exact`): `upNe.loop5.inv` without the plain mode, at the exact count `n` of the body runs left before the last one.
+`s0` holds the locals at loop entry. -/
+@[fsym_inv] def upNe.loop5.credits.inv (p0 : Zig.Ptr) (p1 : BitVec 32) (s0 : upNeLocals) (v0 : BitVec 64) (s : upNeLocals) (n : Nat) : FAssn :=
+  ⟪s0.i.toNat ≤ s.i.toNat ∧
+      s.i.toNat ≤ p1.toNat ∧
+      v0.toNat + (p1.toNat - s0.i.toNat) < 2 ^ 64 ∧
+      n = p1.toNat - s.i.toNat⟫ ⋆
+    (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + (s.i.toNat - s0.i.toNat)⟫ ⋆ up (pts p0 8 v))
+
+/-- The exit post of `upNe.loop5.credits`: the loop exits with `r`, after all iterations. -/
+@[fsym_inv] def upNe.loop5.credits.post (p0 : Zig.Ptr) (p1 : BitVec 32) (s0 : upNeLocals) (v0 : BitVec 64) (r : upNeExit × upNeLocals) : FAssn :=
+  ⟪r.1 = upNeExit.br4 ∧
+      r.2.i.toNat = p1.toNat⟫ ⋆
+    (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + (p1.toNat - s0.i.toNat)⟫ ⋆ up (pts p0 8 v))
 
 end Counted

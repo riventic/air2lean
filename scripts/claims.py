@@ -70,26 +70,36 @@ def premises_of(theorem: dict, claims) -> list[str] | None:
     """Premises a theorem's claims rest on that its type does not show (S7): ASM-01 for an asm
     opaque in its closure, and ASM-04 too if it claims no-panic or guaranteed-return over one;
     the premises of the generated axioms and opaques it reaches (`declaration_premises`);
-    the memory-model adequacy premise (ORD-06) for a concurrency claim (C12). None if the report
-    lacks the closure (`opaque_dependencies`, `runtime_modules`)."""
+    the instruction-model premise (ASM-07) for a closure that reaches the model, so a defined asm
+    block (A02); the memory-model adequacy premise (ORD-06) for a concurrency claim (C12). None
+    if the report lacks the closure (`opaque_dependencies`, `runtime_modules`)."""
     opaques = theorem.get('opaque_dependencies')
     memory = memory_model_premises(theorem)
     if not isinstance(opaques, list) or memory is None:
         return None
+    memory = instruction_model_premises(theorem) + memory
     found = []
     for name in opaques:
         for regex, premises in generated_opaques():
             if isinstance(name, str) and regex.search(name):
                 found += [p for p in premises if p not in found]
-    # An absence claim over an opaque whose premises imply ASM-04 (asm entries: ASM-01, ASM-03)
-    # carries the entry's fault condition.
+    # An absence claim over an opaque whose premises imply ASM-04 (an asm opaque: ASM-01) carries
+    # the entry's fault condition. A defined block's fault set is the instruction model's (ASM-07).
     if ABSENCE_CLAIMS & set(claims) and FAULT_PREMISE not in found \
             and FAULT_PREMISE in PREMISES.close(premise_config(), {p: [] for p in found}):
         found.append(FAULT_PREMISE)
     # The premises of the generated axioms and opaques it reaches (scripts/assumptions.py
     # `declaration_premises`: assumed model evidence, extern bindings, asm effect contracts).
     declared = [p for p in theorem.get('declaration_premises') or () if isinstance(p, str) and p not in found]
-    return found + declared + memory
+    return found + declared + [p for p in memory if p not in found and p not in declared]
+
+
+def instruction_model_premises(theorem: dict) -> list[str]:
+    """[ASM-07] when the theorem's closure reaches a runtime module of the instruction model
+    (assurance/premises.json `instruction_model.modules`): the value and the fault set of a
+    defined asm block are the model's, which no hypothesis in the theorem's type shows."""
+    record = premise_config()['instruction_model']
+    return [record['premise']] if set(record['modules']) & set(theorem.get('runtime_modules') or ()) else []
 
 
 def memory_model_premises(theorem: dict) -> list[str] | None:
@@ -568,9 +578,11 @@ def unreached(found: dict) -> str | None:
 
 def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None, *, definition: str,
                heads: dict | None = None, generated=(), allowed=(), nodes=None, obligations=None,
-               reserved=None) -> dict:
+               reserved=None, targets=()) -> dict:
     """`theorems` are the audit's theorem entries by name; `definition` is the root's generated
-    definition, which the theorem's conclusion must be about."""
+    definition, which the theorem's conclusion must be about. `targets` are the targets of the
+    root's translation (`root_targets`): a goal that rests on a target-qualified premise
+    (ORD-06) is rejected when one of them has no qualification entry (C12)."""
     result = {'theorem': goal['theorem'], 'declared_strength': goal['strength'],
               'derived_strength': None, 'claim_class': None, 'bound': None, 'domain': goal['domain'],
               'cost_bound_status': cost_bound_status(None),
@@ -596,6 +608,9 @@ def check_goal(goal: dict, theorems: dict, outcome_counts: dict | None = None, *
         return {**result, 'status': 'rejected',
                 'reason': 'assurance report lacks the dependency closure (opaque_dependencies, runtime_modules); '
                           'regenerate it'}
+    unqualified = PREMISES.target_binding_problems(premise_config(), premises, targets)
+    if unqualified:
+        return {**result, 'status': 'rejected', 'reason': 'the claim ' + '; '.join(unqualified)}
     declared = goal['strength']
     if declared not in ORDERED:
         return {**result, 'status': 'rejected', 'reason': f'{declared} is not derivable from a theorem type'}
@@ -700,6 +715,16 @@ def root_definition(root: dict) -> str:
     return root['namespace'] + '.' + root['function'].removeprefix(root['prefix'])
 
 
+def root_targets(module: str | None, root: Path | None = None) -> set:
+    """The target of the root's generated module, from its profile header
+    (`PREMISES.profile_target`); None in the set when the module records none or is not a file
+    of the tree. Empty when the root definition is not in the audit."""
+    if not module:
+        return set()
+    path = PREMISES.generated_path(root or REPO, module)
+    return {PREMISES.profile_target(PREMISES.profile_header(path.read_text())) if path.is_file() else None}
+
+
 def check(manifest_path: Path, report: dict, diffs=()) -> dict:
     project = _sibling('project')
     manifest = project.load_manifest(manifest_path)[0]
@@ -716,10 +741,11 @@ def check(manifest_path: Path, report: dict, diffs=()) -> dict:
         definition = root_definition(root)
         module = nodes.get(definition, {}).get('module')
         generated = generated_definitions(nodes, {module}) if module else set()
+        targets = root_targets(module)
         roots.append({'id': root['id'], 'outcomes': counts,
                       'goals': [check_goal(goal, theorems, counts, definition=definition, heads=heads,
                                            generated=generated, allowed=root['assumptions'], nodes=nodes,
-                                           obligations=obligations)
+                                           obligations=obligations, targets=targets)
                                 for goal in root['goals']]})
     rejected = any(g['status'] != 'accepted' for root in roots for g in root['goals'])
     return {'schema_version': 1, 'status': 'fail' if rejected else 'pass', 'roots': roots,
@@ -733,7 +759,9 @@ def check(manifest_path: Path, report: dict, diffs=()) -> dict:
                      'holds: the caller passes the model one. premises lists what an accepted goal rests on '
                      'beyond its type: an inline-asm opaque in the closure carries ASM-01, and ASM-04 (allowlist '
                      'fault conditions) for a no-panic or guaranteed-return claim; a closure that reaches the '
-                     'scheduler or the atomics model carries ORD-06 (memory-model adequacy). Differential outcomes (when supplied) can only '
+                     'instruction model (a defined asm block) carries ASM-07; a closure that reaches the '
+                     'scheduler or the atomics model carries ORD-06 (memory-model adequacy), and is rejected when '
+                     'the target its translation records has no qualification entry for that premise. Differential outcomes (when supplied) can only '
                      'refuse absence claims: capped, fuel-bounded, unsupported, unsupported-timer or unspecified '
                      'outcomes and observed failures reject a goal; error returns do not. Summaries must be bound to '
                      'the current tree (source/runner fingerprints and case hash) or the check fails. outcomes is '

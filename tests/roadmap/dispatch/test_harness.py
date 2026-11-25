@@ -226,10 +226,11 @@ printf '// mocked translation\n' > "$2"
             script, env = self.setup_repo(directory)
             exports = []
             for version, args, synthetic, native_run in [
-                    ("0.16.0", [], True, True),
+                    ("0.17.1", [], True, True),
+                    ("0.16.0", ["--native-only"], False, True),
                     ("0.15.2", ["--native-only"], False, True),
                     ("0.14.1", ["--native-only"], False, True),
-                    ("0.16.0", ["--synthetic-only"], True, False)]:
+                    ("0.17.1", ["--synthetic-only"], True, False)]:
                 log = Path(env["DISPATCH_MOCK_LOG"])
                 log.write_text("")
                 result = subprocess.run(["bash", str(script), *args],
@@ -250,8 +251,8 @@ printf '// mocked translation\n' > "$2"
                     self.assertEqual(any(line.startswith(marker) for line in lines), native_run)
                 self.assertEqual(any("/native.lean" in line and line.startswith("lake env lean -R") for line in lines), native_run)
                 exports.extend(line for line in lines if line.startswith("export-dir "))
-            self.assertEqual(len(exports), 3)
-            self.assertEqual(len(set(exports)), 3, "every native profile needs a fresh AIR directory")
+            self.assertEqual(len(exports), 4)
+            self.assertEqual(len(set(exports)), 4, "every native profile needs a fresh AIR directory")
 
     def test_invalid_and_excess_arguments_rejected_before_tools(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -831,7 +831,13 @@ thread (2026-11-03), and the guard's whole-tree sample could not name the file.
 A fourth phase builds the **proof-fixture package** and runs the **proof-fixture checks**. The
 package (`tests/roadmap/lakefile.toml`, one library per converted fixture directory,
 [build-cache.md](build-cache.md#proof-fixtures)) is built first by `scripts/fixture-checks.py`
-itself, before any unit and in its guard, every library in one `scripts/fixtures.py build`. The
+itself, before any unit and in its guard, every library in one `scripts/fixtures.py build`. In an
+elastic admission Lake runs up to `--build-lean-threads` Lean processes of that build at once (the
+full build's `--lean-threads`; default min(8, cores)), each a sub-admission charged its module's
+measured peak; the units' own Lake keeps `--lean-threads` (1). Until 2026-11-24 the package was
+built with the units' one thread, one module at a time. The units' compilers are resolved
+(`fixture-checks.py --prepare`) before the full build takes its admission: a patched-compiler miss
+builds under a guard of its own, which cannot run inside the build's elastic base. The
 checks run in parallel, and Lake has no build lock, so they must find their modules built rather
 than build the same module at once. A run in which a unit changed a compiled module of the root
 or the fixture package fails, naming the modules: every audit binds the compiled modules on its
@@ -847,7 +853,7 @@ the Lean files that import a fixture's own generated modules are elaborated only
 and before this phase only CI ran those (#342 and the strength logs, 984ab3533 and
 dispatch-templates, #372 and alloc-fba/lists-fba were each found after the merge). The checks are
 derived from `.github/workflows/ci.yml`, not listed: every step that runs a `tests/**/check.sh`
-whose directory holds tracked `.lean` files, for every job row its `if:` may run for
+or `tests/**/check-NAME.sh` (`volatile-effects/check-device.sh`) whose directory holds tracked `.lean` files, for every job row its `if:` may run for
 (`ci-reuse.py`'s `may_run`), rendered for that row and run once per distinct rendering, the whole
 `run:` script with its `env:` (prerequisites, sibling gates and mode switches as in CI).
 `--list` prints the units, their checks and the toolchains they name. The CI layout comes from

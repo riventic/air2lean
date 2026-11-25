@@ -6,7 +6,9 @@ committed index is stale, a premise ID is undefined or unused, a runtime module 
 has no premise mapping, or the catalogue is malformed. `write` regenerates the index.
 `explain` prints the derivation of one theorem. `compiled` applies the same tables to the
 kernel dependency graph written by scripts/assumptions.py. Both fail when a concurrency theorem
-or report omits the memory-model adequacy premise (`memory_model`, C12). See docs/premises.md.
+or report omits the memory-model adequacy premise (`memory_model`, C12), or a theorem carries a
+target-qualified premise (`target_qualified`) over a translation whose target has no
+qualification entry. See docs/premises.md.
 """
 from __future__ import annotations
 
@@ -140,6 +142,15 @@ def load_config(path: Path) -> dict:
             or not isinstance(model.get("concurrency"), list) or not model["concurrency"]
             or not isinstance(model.get("targets"), dict) or not isinstance(model.get("unqualified"), dict)):
         raise ValueError("memory_model needs a premise, concurrency premises, targets and unqualified targets")
+    qualified = config.get("target_qualified")
+    if not isinstance(qualified, list) or "memory_model" not in qualified:
+        raise ValueError("target_qualified must list the target-qualified records, memory_model among them")
+    for key in qualified:
+        record = config.get(key)
+        if (not isinstance(record, dict) or not isinstance(record.get("premise"), str)
+                or not isinstance(record.get("targets"), dict) or not isinstance(record.get("unqualified"), dict)
+                or not isinstance(record.get("unrecorded", ""), str)):
+            raise ValueError(f"target-qualified record {key} needs a premise, targets and unqualified targets")
     for rule in config["rules"]:
         if set(rule) != {"premise", "scope", "pattern"} or rule["scope"] not in {"closure", "statement"}:
             raise ValueError(f"invalid premise rule: {rule}")
@@ -160,7 +171,7 @@ def config_ids(config: dict) -> list[tuple[str, str]]:
     found += [(f"rules[{i}]", r["premise"]) for i, r in enumerate(config["rules"])]
     found += [(f"implies.{k}", p) for k, ps in config["implies"].items() for p in [k, *ps]]
     model = config["memory_model"]
-    found += [("memory_model.premise", model["premise"])]
+    found += [(f"{key}.premise", config[key]["premise"]) for key in config["target_qualified"]]
     found += [("memory_model.concurrency", p) for p in model["concurrency"]]
     return found
 
@@ -174,18 +185,76 @@ def memory_model_errors(config: dict, entries, where) -> list[str]:
             if set(model["concurrency"]) & set(e["premises"]) and model["premise"] not in e["premises"]]
 
 
+def profile_target(header: str) -> str | None:
+    """`<arch>-<os>` of the target triple a generated module's profile header records
+    (`s390x-linux.5.10...7.2-musl` is `s390x-linux`). None when it records no target: no
+    header, the legacy profile (`unverified`), a gate-time module."""
+    if not header:
+        return None
+    triple = json.loads(header[len(PROFILE_MARKER):]).get("profile", {}).get("target_triple")
+    parts = triple.split("-") if isinstance(triple, str) else []
+    if len(parts) < 2 or not parts[0] or not parts[1].split(".")[0]:
+        return None
+    return f"{parts[0]}-{parts[1].split('.')[0]}"
+
+
+def target_binding_problems(config: dict, premises, targets) -> list[str]:
+    """The target binding of every target-qualified premise (`target_qualified`): a theorem or
+    claim that carries such a premise and is about translations of `targets` (`<arch>-<os>`, or
+    None for a module that records no target) has each of them in the premise's qualification
+    record. A target outside `targets` is not covered by the record's argument and evidence, so
+    the premise cannot be claimed for it. A module without a recorded target is admitted only
+    when the record says what the premise then means (`unrecorded`)."""
+    problems = []
+    for key in config["target_qualified"]:
+        record = config[key]
+        if record["premise"] not in premises:
+            continue
+        for target in sorted(set(targets), key=lambda t: t or ""):
+            if target is None:
+                if not record.get("unrecorded"):
+                    problems.append(f"carries {record['premise']} over a translation that records no target, "
+                                    f"and {key} admits none")
+            elif target not in record["targets"]:
+                reason = record["unqualified"].get(target)
+                problems.append(f"carries {record['premise']} for target {target}, which has no qualification "
+                                f"entry in {key}.targets" + (f" (unqualified: {reason})" if reason else ""))
+    return problems
+
+
+def target_binding_errors(config: dict, entries, where) -> list[str]:
+    """`target_binding_problems` of every entry's `binding` (`premises`, `targets`), named by
+    `where`."""
+    return [f"{where(e)} {problem}" for e in entries
+            for problem in target_binding_problems(config, e["binding"]["premises"], e["binding"]["targets"])]
+
+
+def target_record_errors(config: dict, root: Path) -> list[str]:
+    """Every target-qualified record names existing evidence for each qualified target, and no
+    target is both qualified and unqualified."""
+    errors = []
+    for key in config["target_qualified"]:
+        record = config[key]
+        for target, entry in sorted(record["targets"].items()):
+            if not isinstance(entry, dict) or not entry.get("evidence"):
+                errors.append(f"{key}.targets.{target} needs evidence")
+                continue
+            for path in entry["evidence"]:
+                if not (root / path).exists():
+                    errors.append(f"{key}.targets.{target}: evidence {path} does not exist")
+        for target in sorted(set(record["targets"]) & set(record["unqualified"])):
+            errors.append(f"{key}: {target} is both qualified and unqualified")
+    return errors
+
+
 def memory_model_record_errors(config: dict, reports: dict, root: Path) -> list[str]:
-    """The adequacy qualification record names its evidence, and every concurrency report of
-    docs/premises.md lists the premise itself (not only through `implies`)."""
+    """The adequacy qualification record names its hardware model and argument, and every
+    concurrency report of docs/premises.md lists the premise itself (not only through
+    `implies`)."""
     model, errors = config["memory_model"], []
     for target, entry in sorted(model["targets"].items()):
         if not entry.get("hardware") or not entry.get("argument") or not entry.get("evidence"):
             errors.append(f"memory_model.targets.{target} needs hardware, argument and evidence")
-        for path in entry.get("evidence", ()):
-            if not (root / path).exists():
-                errors.append(f"memory_model.targets.{target}: evidence {path} does not exist")
-    for target in sorted(set(model["targets"]) & set(model["unqualified"])):
-        errors.append(f"memory_model: {target} is both qualified and unqualified")
     for name, ids in sorted(reports.items()):
         reached = close(config, {p: [] for p in ids})
         if set(model["concurrency"]) & set(reached) and model["premise"] not in ids:
@@ -697,6 +766,9 @@ def profile_premises(config: dict, lean: LeanFile) -> tuple[list[str], str]:
     premises = [config["profiles"][name], *config["float_semantics"][semantics],
                 *admission_premises(config, lean, admissions)]
     why = f"profile {name}, float {semantics}" + (f", admission {','.join(admissions)}" if admissions else "")
+    # ASM-09 is about named CPU features (`--assume-asm-cpu-features <f,...>`).
+    if "asm_cpu_features" in record:
+        why += f" (CPU features {','.join(record['asm_cpu_features'])})"
     return premises, why
 
 
@@ -746,7 +818,14 @@ def binding_premises(repo: Repository, rel: str, tokens) -> list[tuple[str, str]
     return found
 
 
-def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
+def derive(repo: Repository, theorem: Decl, binding: dict | None = None) -> dict[str, list[str]]:
+    """The premises of `theorem`, each with its reasons. `binding`, when given, receives what the
+    target binding needs (`target_binding_problems`): `targets`, the target of every generated
+    module the closure reaches (`profile_target`; None for a module that records none), and
+    `premises`, the premises the closure itself gives (closed under `implies`). The source
+    fallbacks are left out of `premises`: they add what a whole runtime module and its imports
+    could bring in through constants the source does not show, an upper bound that says nothing
+    about what this theorem's translation does. `compiled` binds every kernel-derived premise."""
     config = repo.config
     via: dict[str, list[str]] = {p: ["universal"] for p in config["universal"]}
     seen, pending, tokens = set(), [], set()
@@ -792,6 +871,7 @@ def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
     for token in sorted(tokens):
         runtime.update(config.get("tactic_modules", {}).get(token.rsplit(".", 1)[-1], ()))
     fallback_via: dict[str, list[str]] = {}
+    import_via: dict[str, list[str]] = {}
     for module in sorted(runtime):
         lean = repo.files.get(module.replace(".", "/") + ".lean")
         imported = {repo.files[r].module for r in repo.visible(lean) if repo.files[r].runtime} if lean else {module}
@@ -805,24 +885,30 @@ def derive(repo: Repository, theorem: Decl) -> dict[str, list[str]]:
                         fallback_via[premise] = [f"{reason} (source runtime fallback {dependency})"
                                                  for reason in reasons]
             for premise in config["runtime_modules"].get(dependency, ()):
-                reason = f"runtime module {dependency}"
-                if dependency != module:
-                    reason += f" (source import fallback for {module})"
-                via.setdefault(premise, []).append(reason)
+                if dependency == module:
+                    via.setdefault(premise, []).append(f"runtime module {dependency}")
+                else:
+                    import_via.setdefault(premise, []).append(
+                        f"runtime module {dependency} (source import fallback for {module})")
     apply_rules(config, via, tokens, "closure")
-    for premise, reasons in fallback_via.items():
-        via.setdefault(premise, []).extend(reasons)
     apply_rules(config, via, name_tokens(theorem.statement), "statement")
     gate = any(repo.files[rel].gate_generated for rel in repo.visible(theorem.file))
     for rel in sorted(generated):
         profile, reason = profile_premises(config, repo.files[rel])
         for premise in [*config["generated_premises"], *profile]:
             via.setdefault(premise, []).append(f"generated {rel} ({reason})")
-        for premise, binding in binding_premises(repo, rel, tokens):
-            via.setdefault(premise, []).append(f"generated {rel} (extern model binding {binding})")
+        for premise, model in binding_premises(repo, rel, tokens):
+            via.setdefault(premise, []).append(f"generated {rel} (extern model binding {model})")
     if gate:
         for premise in [*config["generated_premises"], config["profiles"]["gate-time"]]:
             via.setdefault(premise, []).append("gate-time generated import")
+    if binding is not None:
+        binding["targets"] = ({profile_target(repo.files[rel].header) for rel in generated}
+                              | ({None} if gate else set()))
+        binding["premises"] = set(close(config, {p: [] for p in via}))
+    for extra in (import_via, fallback_via):
+        for premise, reasons in extra.items():
+            via.setdefault(premise, []).extend(reasons)
     return close(config, via)
 
 
@@ -863,15 +949,16 @@ def build_index(repo: Repository) -> tuple[list[dict], list[str]]:
             if theorem.name in names:
                 errors.append(f"{rel}:{theorem.line}: duplicate theorem {theorem.name}")
             names.add(theorem.name)
+            binding: dict = {}
             try:
-                via = derive(repo, theorem)
+                via = derive(repo, theorem, binding)
             except ValueError as error:
                 errors.append(str(error))
                 continue
             if not via:
                 errors.append(f"{rel}:{theorem.line}: theorem {theorem.name} lacks a premise mapping")
             entries.append({"file": rel, "theorem": theorem.name, "line": theorem.line,
-                            "premises": sorted(via, key=premise_key), "via": via})
+                            "premises": sorted(via, key=premise_key), "via": via, "binding": binding})
     return entries, errors
 
 
@@ -934,6 +1021,8 @@ def check(root: Path = ROOT, write: bool = False, *, repo: Repository | None = N
     entries, index_errors = build_index(repo)
     errors += index_errors
     errors += memory_model_errors(config, entries, lambda e: f"{e['file']}: {e['theorem']}")
+    errors += target_binding_errors(config, entries, lambda e: f"{e['file']}: {e['theorem']}")
+    errors += target_record_errors(config, root)
     errors += memory_model_record_errors(config, reports, root)
     for entry in entries:
         for pid in entry["premises"]:
@@ -1011,6 +1100,8 @@ def compiled_graph(report: dict, root: Path, config: dict, *,
     nodes = {n["name"]: n for n in report["nodes"]}
     errors, theorems, skipped = [], [], 0
     profiles: dict[str, tuple[list[str], str]] = {}
+    targets: dict[str, str | None] = {}
+    bound = []  # each theorem's name and target binding (premises, targets)
     markers = GeneratedMarkers(root, source_files=source_files)
     # Kernel names of private declarations carry a `_private.<module>.0.` prefix; rules use the
     # user-facing name so module paths cannot trigger token rules.
@@ -1080,8 +1171,10 @@ def compiled_graph(report: dict, root: Path, config: dict, *,
                     header = profile_header(path.read_text())
                     profiles[module] = profile_premises(
                         config, LeanFile(path, path.relative_to(root).as_posix(), module, [], header))
+                    targets[module] = profile_target(header)
                 else:
                     profiles[module] = ([config["profiles"]["gate-time"]], "generated module not in repository")
+                    targets[module] = None
             profile, reason = profiles[module]
             for premise in [*config["generated_premises"], *profile]:
                 via.setdefault(premise, []).append(f"generated {module} ({reason})")
@@ -1090,8 +1183,11 @@ def compiled_graph(report: dict, root: Path, config: dict, *,
                  "premises": sorted(via, key=premise_key)}
         reasons[theorem["name"]] = via
         theorems.append(entry)
+        bound.append({"name": entry["name"], "binding": {
+            "premises": entry["premises"], "targets": {targets[module] for module in generated}}})
     errors += markers.errors
     errors += memory_model_errors(config, theorems, lambda t: t["name"])
+    errors += target_binding_errors(config, bound, lambda t: t["name"])
     return {"schema_version": 1, "status": "fail" if errors else "pass",
             "theorem_count": len(theorems), "runtime_theorems_skipped": skipped,
             "source_gap_count": 0, "errors": errors, "theorems": theorems}, reasons, edges

@@ -79,28 +79,54 @@ def main():
     assert text == GEN.read_text(), "fresh translation differs from AsmEffects/Gen.lean"
     for needle in [
         # `+m`: old value loaded, passed after the inputs, new value stored to the same place.
-        "    let a1o0 ← Zig.load (BitVec 32) 4 p0\n    let a1 := airAsmFx_2840265087 a1o0\n"
+        "    let a1o0 ← Zig.load (BitVec 32) 4 p0\n    let a1 := airIsaFx_2840265087 a1o0\n"
         "    Zig.store (α := BitVec 32) 4 p0 a1\n",
         # `=m`: no read, one store.
-        "    let a2 := airAsmFx_2229968081 p1\n    Zig.store (α := BitVec 64) 8 p0 a2\n",
+        "    let a2 := airIsaFx_2229968081 p1\n    Zig.store (α := BitVec 64) 8 p0 a2\n",
         # Two memory operands: the alias guard first, then reads, call, stores in output order.
         "    Zig.Asm.guard [(p0, 4), (p1, 4)]\n    let a2o0 ← Zig.load (BitVec 32) 4 p0\n"
-        "    let a2o1 ← Zig.load (BitVec 32) 4 p1\n    let a2 := airAsmFx_3102165980 a2o0 a2o1\n"
+        "    let a2o1 ← Zig.load (BitVec 32) 4 p1\n    let a2 := airIsaFx_3102165980 a2o0 a2o1\n"
         "    Zig.store (α := BitVec 32) 4 p0 a2.1\n    Zig.store (α := BitVec 32) 4 p1 a2.2\n",
         # `+r` on a local: the input, then the old value.
-        "    let a4o0 ← pure ((← get).local2)\n    let a4 := airAsmFx_2072205809 p1 a4o0\n",
-        "opaque airAsmFx_1655126372 : Unit\n",
+        "    let a4o0 ← pure ((← get).local2)\n    let a4 := airIsaFx_2072205809 p1 a4o0\n",
+        # A02: every block of this fixture is a defined function over the instruction model,
+        # with its kernel-checked footprint theorem.
+        "def airIsaFx_3102165980_block : Zig.Isa.X86.Block where\n"
+        "  instrs := [.bin .mov .w32 (.loc (.mem 0)) (.reg 0), .xchg .w32 (.reg 0) (.mem 1), "
+        ".bin .mov .w32 (.loc (.reg 0)) (.mem 0)]\n",
+        "theorem airIsaFx_3102165980_wf : airIsaFx_3102165980_block.check = none := by decide\n",
+        "def airIsaFx_1655126372 : Unit :=\n  ()\n",
     ]:
         assert needle in text, needle
-    assert "opaque airAsm_" not in text, "an effect-form op kept the register-only name"
+    assert "def airIsa_" not in text, "an effect-form op kept the register-only name"
+    assert "opaque" not in text and "airAsm" not in text, "a covered block stayed uninterpreted"
     checks += 1
+
+    # A02 (premise ASM-07): an allowlisted template whose instructions do not fit this op's
+    # operand widths is rejected with the instruction and the location.
+    def wide_incl(i, d):  # `incl` on a 64-bit memory operand
+        d["types"][4] = dict(d["types"][4], child=1)
+    checks += reject(binary, only("incm", wide_incl),
+                     "instruction 0 ('incl %[x]') accesses operand 0 (memory) at another size")
+
+    def narrow_addq(i, d):  # `addq` on 32-bit register operands: the whole function at u32
+        narrow = {1: 0, 5: 4}  # u64 -> u32, *u64 -> *u32
+        for inst in d["body"]:
+            inst["ty"] = narrow.get(inst["ty"], inst["ty"])
+        d["params"] = [narrow.get(t, t) for t in d["params"]]
+        d["ret"] = narrow.get(d["ret"], d["ret"])
+    checks += reject(binary, only("addr", narrow_addq), "(A02, premise ASM-07)")
+
+    def narrow_movq(i, d):  # `movq` to a 32-bit memory operand
+        d["types"][5] = dict(d["types"][5], child=0)
+    checks += reject(binary, only("setm", narrow_movq), "(A02, premise ASM-07)")
 
     # The register-only goldens keep their exact translation (A03 pins Proofs/Asm/Gen.lean).
     with tempfile.TemporaryDirectory(prefix="air2lean-asm-effects-") as d:
         out = Path(d) / "Gen.lean"
         result = subprocess.run([str(binary), str(ROOT / "tests/golden/asm/air"), "-o", str(out),
                                  "--namespace", "Asm", "--prefix", "asm.", "--profile", "legacy-abi64-le",
-                                 "--assume-asm-cpu-features"], text=True,
+                                 "--assume-asm-cpu-features", "lzcnt,popcnt"], text=True,
                                 capture_output=True, check=False, timeout=60)
         assert result.returncode == 0, result.stderr
         # check.sh may have rewritten Proofs/Asm/Gen.lean with this host's profile header first
@@ -111,16 +137,16 @@ def main():
         assert fresh == body((ROOT / "Proofs/Asm/Gen.lean").read_text()), "register-only asm changed"
     checks += 1
 
-    # The same template without the clobber is a register-only op of the same hash: both opaques
-    # are emitted (the identity key omits clobbers).
+    # The same template without the clobber is a register-only op of the same hash: both
+    # definitions are emitted (the identity key omits clobbers).
     documents = fixtures()
     plain = copy.deepcopy(documents["asm_effects.barrier.json"])
     plain["name"] = "asm_effects.plain"
     asm_inst(plain)["clobbers"] = []
     documents["asm_effects.plain.json"] = plain
     text = accept(binary, documents)
-    assert "opaque airAsmFx_1655126372 : Unit\n" in text and "opaque airAsm_1655126372 : Unit\n" in text
-    assert "pure (airAsm_1655126372)" in text and "pure (airAsmFx_1655126372)" in text
+    assert "def airIsaFx_1655126372 : Unit :=\n" in text and "def airIsa_1655126372 : Unit :=\n" in text
+    assert "pure (airIsa_1655126372)" in text and "pure (airIsaFx_1655126372)" in text
     checks += 1
 
     # "memory" clobber: only the reviewed registry block (empty template, no operands).

@@ -40,12 +40,10 @@
 # (h) Lean-runtime mutation, lists: `Zig.rawAlloc` (ZigLean/Mem/Alloc.lean) never fails at
 #     `Mem.failAt`. Every lists function then returns a value where Zig returns
 #     `error.OutOfMemory`.
-# (i) Diff-test-archive mutation, asm: `tests/diff/asm/asm.zig`'s `air2lean_asm_bswap32` returns
-#     `x` unchanged instead of `@byteSwap(x)`. This archive (docs/generated-code.md §Inline asm)
-#     is the diff test's own stand-in for `Asm.airAsm_*`'s opaque behaviour (M21: no defining
-#     equation exists to mutate on the Lean side, unlike (b)/(d)/(f)/(g)/(h) above) -- mutating
-#     it and comparing against `examples/asm/asm.zig`'s real inline asm checks that the
-#     comparison is live, not vacuous. x86_64 only, same as `asm` itself.
+# (i) Lean-runtime mutation, asm: the x86_64 instruction model's `bswap` (`UnOp.eval`,
+#     ZigLean/Isa/X86.lean) returns its operand unchanged. `Asm.bswap32` is a defined function
+#     over that model (A02, premise ASM-07), so the differential test of `examples/asm/asm.zig`'s
+#     real inline asm must see the wrong bytes. x86_64 only, same as `asm` itself.
 # (j) Lean-runtime mutation, vectors: `Vec.reduce` (ZigLean/Vec.lean) folds only lanes
 #     `1..n-1`, dropping the last lane. `maxLane`'s `@reduce(.Max)` then ignores the vector's
 #     last lane, so an input whose max is in that lane disagrees with Zig.
@@ -125,8 +123,8 @@
 #     evidence, not a semantic detection.
 # (af) Lean-runtime mutation, threads: `Thread.join` (ZigLean/Mem/Thread.lean) does not merge the
 #     joined thread's clock, so the joiner does not happen after that thread's writes. Detected by
-#     the proof build: `join_eq` (ZigLean/Conc/Lemmas.lean) fails first; `Owned.join`
-#     (ZigLean/Conc/Csl.lean), which `disjoint_safe` (Proofs/Threads/Disjoint.lean) needs, uses the
+#     the proof build: `join_eq` (ZigLean/Conc/Lemmas.lean) fails first; `FOwned.join`
+#     (ZigLean/Sep/Full/ThreadOwned.lean), which `disjoint_safe` (Proofs/Threads/Disjoint.lean) needs, uses the
 #     merged clock too (`main`'s read of a flag would race with its kid's write).
 #
 # Usage: mutate.sh
@@ -235,7 +233,7 @@ diff_baseline_for threads k l v
 diff_baseline_for layout m n o p t u
 diff_baseline_for iogroup ae
 if [ -n "$diff_baselines" ]; then
-  # Batch the examples so their shared libm/asm archives and Lean executable build once.
+  # Batch the examples so their shared libm archive and Lean executable build once.
   echo "== unmutated differential baseline:$diff_baselines ==" >&2
   AIR2LEAN_EXAMPLES="$diff_baselines" bash scripts/diff.sh || {
     echo "error: unmutated differential baseline failed:$diff_baselines" >&2
@@ -282,7 +280,7 @@ round_lean="ZigLean/Float/Round.lean"
 mem_lean="ZigLean/Mem/Basic.lean"
 enc_lean="ZigLean/Mem/Enc.lean"
 alloc_lean="ZigLean/Mem/Alloc.lean"
-asm_zig="tests/diff/asm/asm.zig"
+asm_zig="ZigLean/Isa/X86.lean"
 vec_lean="ZigLean/Vec.lean"
 thread_lean="ZigLean/Mem/Thread.lean"
 sched_lean="ZigLean/Conc/Sched.lean"
@@ -655,16 +653,16 @@ else
   cp "$alloc_backup" "$alloc_lean"
 fi
 
-echo "== mutation (i): air2lean_asm_bswap32 returns x unchanged (diff-test archive) ==" >&2
+echo "== mutation (i): the instruction model's bswap returns its operand unchanged (Lean runtime) ==" >&2
 if ! want_mutation i; then
   echo "mutation (i): skipped (not in this shard)"
 elif ! has_example asm; then
   echo "mutation (i): skipped (AIR2LEAN_EXAMPLES excludes asm)"
 else
-  sed -i.bak 's/return @byteSwap(x);/return x;/' "$asm_zig"
+  sed -i.bak 's/^  | \.bswap, a => Zig\.byteSwap a$/  | .bswap, a => a/' "$asm_zig"
   rm -f "$asm_zig.bak"
-  grep -q 'return x;' "$asm_zig" || {
-    echo "error: mutation (i): sed did not change air2lean_asm_bswap32" >&2
+  grep -q '^  | \.bswap, a => a$' "$asm_zig" || {
+    echo "error: mutation (i): sed did not change UnOp.eval's bswap" >&2
     exit 1
   }
 
@@ -1022,9 +1020,10 @@ if ! want_mutation ac; then
 elif ! has_example sync; then
   echo "mutation (ac): skipped (AIR2LEAN_EXAMPLES excludes sync)"
 else
-  sed -i.bak 's/^  let woke := wakeSet m.waiters p n cs$/  let woke : Array ThreadId := #[]/' "$thread_lean"
+  # Both wakes: `futexWake` (at a key) and `futexWakePtr` (at a pointer, the one the std code calls).
+  sed -i.bak 's/^\( *\)let woke := wakeSet m.waiters k n cs$/\1let woke : Array ThreadId := #[]/' "$thread_lean"
   rm -f "$thread_lean.bak"
-  grep -q '^  let woke : Array ThreadId := #\[\]$' "$thread_lean" || {
+  [ "$(grep -c '^ *let woke : Array ThreadId := #\[\]$' "$thread_lean")" -eq 2 ] || {
     echo "error: mutation (ac): sed did not change futexWake" >&2
     exit 1
   }

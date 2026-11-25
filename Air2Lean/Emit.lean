@@ -1270,7 +1270,7 @@ result checks the tag (`Zig.enumOf`): `invalidEnumValue` for 0.17's `bit_cast_sa
 `.illegal` for the unchecked `bit_cast`. -/
 def FCtx.logicalBitCastExpr? (fc : FCtx) (safe : Bool) (a : Val) (dst : TyId) (av : String) :
     Option String := do
-  let src ← fc.valTyId? a
+  let src ← fc.valTyId? a <|> voidConstTy? fc.types a
   unless logicalBitCastApplies fc.dialect.bitCast fc.types src dst do none
   let (s, d) ← (logicalBitCastShapes fc.types src dst).toOption
   -- An enum and exactly its tag type (`@intFromEnum`, `@enumFromInt`-style): the ≤0.16 text
@@ -1800,6 +1800,9 @@ def FCtx.osCall (fc : FCtx) (env : Array (InstId × String)) (fn : OsFn) (args :
   | .ulockWait2 =>
     s!"Zig.callC (Zig.Os.Darwin.__ulock_wait2 {bits 0} {arg 1} {arg 2} {arg 3} {arg 4})"
   | .ulockWait => s!"Zig.callC (Zig.Os.Darwin.__ulock_wait {bits 0} {arg 1} {arg 2} {arg 3})"
+  | .futex3 => s!"Zig.callC (Zig.Os.Linux.futex_3arg {arg 0} {bits 1} {arg 2})"
+  | .futexWakeRaw => s!"Zig.callC (Zig.Os.Linux.futex_3arg {arg 0} {arg 1} {arg 2})"
+  | .ulockWake => s!"Zig.callC (Zig.Os.Darwin.__ulock_wake {bits 0} {arg 1} {arg 2})"
 
 /-- A call to the allocator model (`ZigLean/Mem/Alloc.lean`), a `Zig.MemM` term. `ret`: the
 call's result type. `args[0]` is the allocator. -/
@@ -2220,7 +2223,9 @@ structure AsmDef where
   values) and writes (one `Array Zig.Byte` result each, after the outputs): A01, ASM-06. -/
   readRegions : Nat := 0
   writeRegions : Nat := 0
-  deriving BEq
+  /-- The decoded block of an `isa` allowlist entry (A02): the op is a defined function over
+  `Zig.Isa.X86` (`airIsa_<hash>`), not an `opaque`. -/
+  isa : Option Zig.Isa.X86.Block := none
 
 /-- The identity of an asm op: the source template, the ordered constraint list and the operand
 widths. One output or none keeps the text of an `Option` width, so the names of those ops do not
@@ -2248,8 +2253,27 @@ def asmDefName (key : String) : String := s!"airAsm_{asmHash key}"
 /-- The opaque's name for an op with these clobbers and outputs: `airAsmFx_<hash>` for an op under
 the effect contract (`asmIsEffect`: a read-write or memory output, or a registry-approved
 `"memory"` clobber; premise ASM-03), else `airAsm_<hash>` (register-only, ASM-01). Same hash. -/
-def asmOpName (clobbers : Array String) (outputs : Array AsmOperand) (key : String) : String :=
-  if asmIsEffect clobbers outputs then s!"airAsmFx_{asmHash key}" else asmDefName key
+def asmOpName (clobbers : Array String) (outputs : Array AsmOperand) (key : String)
+    (isa : Bool := false) : String :=
+  -- A defined block (A02, premise ASM-07) has its own names, `airIsa_<hash>` and
+  -- `airIsaFx_<hash>`: the premise rules and the opaque policy go by name.
+  let stem := if isa then "airIsa" else "airAsm"
+  if asmIsEffect clobbers outputs then s!"{stem}Fx_{asmHash key}" else s!"{stem}_{asmHash key}"
+
+/-- The decoded block of an asm op under an `isa` allowlist entry (`Air2Lean/AsmIsa.lean`);
+`none` for any other op, and for an `isa` op that does not decode or fails the footprint check
+(the checker rejects that program, `checkOp`). -/
+def asmIsaOf (arch : String) (entry? : Option AsmAllowEntry) (source : String)
+    (clobbers : Array String) (outputs inputs : Array AsmOperand) (outputWidths inputWidths : Array Nat) :
+    Option Zig.Isa.X86.Block :=
+  entry?.bind fun e =>
+    if e.semantics == .isa then
+      (asmIsaBlock arch source outputs inputs outputWidths inputWidths clobbers e.regions).toOption
+    else none
+
+/-- The name that an `isa` op without a block gets: no declaration has it, so a generated
+module with one does not build (the checker rejects the program before). -/
+def asmIsaUndecoded : String := "air2lean_asm_isa_undecoded"
 
 /-- The widths of the read-write integer outputs, in output order (`AsmDef.rwWidths`); a
 pointer output (`isPtr`) passes no old value to the opaque. -/
@@ -2311,12 +2335,17 @@ def collectAsmOps (funcs : Array Func) : Array AsmDef := Id.run do
         let key := asmKey source constraints inputWidths outputWidths
         -- The key omits clobbers, so one key can name both forms (`asm volatile ("")` and the
         -- registry's `"memory"` barrier): deduplicate by name and key.
-        let name := asmOpName clobbers outputs key
+        let entry? := i.op.asmAllowEntry? f.dialect.arch
+        let isa := asmIsaOf f.dialect.arch entry? source clobbers outputs inputs outputWidths
+          inputWidths
+        -- An `isa` op that does not decode has no declaration (`asmIsaUndecoded`).
+        if entry?.any (·.semantics == .isa) && isa.isNone then continue
+        let name := asmOpName clobbers outputs key isa.isSome
         let isPtr := asmPtrOperands f.types tyOf outputs inputs
-        let regions := ((i.op.asmAllowEntry? f.dialect.arch).map (·.regions)).getD []
+        let regions := (entry?.map (·.regions)).getD []
         if !seen.contains (name ++ "\u0002" ++ key) then
           seen := seen.push (name ++ "\u0002" ++ key)
-          defs := defs.push { name, outputWidths,
+          defs := defs.push { name, outputWidths, isa,
                               inputWidths := (inputWidths.zipIdx.filter fun (_, j) =>
                                 !isPtr[outputs.size + j]?.getD false).map (·.1),
                               rwWidths := asmRwWidths outputs outputWidths isPtr,
@@ -2334,7 +2363,37 @@ def emitAsmDef (d : AsmDef) : String :=
   let results := d.outputWidths.toList.map (s!"BitVec {·}") ++
     List.replicate d.writeRegions "Array Zig.Byte"
   let ret := if results.isEmpty then "Unit" else " × ".intercalate results
-  s!"opaque {d.name}{params.foldl (init := "") fun acc p => s!"{acc} {p}"} : {ret}"
+  let binders := params.foldl (init := "") fun acc p => s!"{acc} {p}"
+  match d.isa with
+  | none => s!"opaque {d.name}{binders} : {ret}"
+  | some block =>
+    -- A02 (premise ASM-07): the decoded block, the footprint check as a kernel-checked fact,
+    -- the block's outputs as a function of the inputs and, if an instruction can fault, the
+    -- block's fault. All are in `zig_unfold`: `simp [zig_unfold]` runs the block.
+    let vals := "[" ++ ", ".intercalate ((List.range (d.inputWidths.size + d.rwWidths.size)).map
+      (s!"i{·}.setWidth 64")) ++ "]"
+    let outs := d.outputWidths.toList.zipIdx.map fun (w, k) =>
+      s!"({d.name}_block.out {vals} {k}).setWidth {w}"
+    let body := match outs with
+      | [] => "()"
+      | [o] => o
+      | os => "(" ++ ", ".intercalate os ++ ")"
+    let faults := block.mayFault
+    let faultDef := if faults then
+        [s!"def {d.name}_fault{binders} : Option Zig.Isa.X86.Fault :=\n  {d.name}_block.fault {vals}"]
+      else []
+    "\n\n".intercalate ([
+      s!"def {d.name}_block : Zig.Isa.X86.Block where\n{"\n".intercalate (asmIsaRenderBlock block)}",
+      s!"theorem {d.name}_wf : {d.name}_block.check = none := by decide",
+      s!"def {d.name}{binders} : {ret} :=\n  {body}"] ++ faultDef ++
+      [s!"attribute [zig_unfold] {d.name}_block {d.name}{if faults then s!" {d.name}_fault" else ""}"])
+
+/-- The declarations that `emitAsmDef` makes for `d`. -/
+def AsmDef.declNames (d : AsmDef) : Array String :=
+  match d.isa with
+  | none => #[d.name]
+  | some block => #[d.name, s!"{d.name}_block", s!"{d.name}_wf"] ++
+      (if block.mayFault then #[s!"{d.name}_fault"] else #[])
 
 /-- AIR can compute a value that nothing reads (`catch 0` still unwraps the error code). The
 effect stays; the `_` prefix stops Lean's unused-variable warning. -/
@@ -3290,7 +3349,11 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let inputWidths := inputs.map fun i => match fc.valTy i.ref.get! with | .int _ b => b | _ => 0
     let outputWidths := asmOutputWidths fc.types fc.valTyId? inst.ty outputs
     let constraints := outputs.map (·.constraint) ++ inputs.map (·.constraint)
-    let name := asmOpName clobbers outputs (asmKey source constraints inputWidths outputWidths)
+    -- A02: an `isa` entry's op is the defined block function (`airIsa_<hash>`).
+    let isa? := asmIsaOf fc.targetArch entry? source clobbers outputs inputs outputWidths inputWidths
+    let name := if entry?.any (·.semantics == .isa) && isa?.isNone then asmIsaUndecoded else
+      asmOpName clobbers outputs (asmKey source constraints inputWidths outputWidths) isa?.isSome
+    let isaFaults := isa?.any (·.mayFault)
     let isPtr := asmPtrOperands fc.types fc.valTyId? outputs inputs
     let ptrAt (k : Nat) : Bool := isPtr[k]?.getD false
     let regions := (entry?.map (·.regions)).getD []
@@ -3331,15 +3394,20 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     -- (`Zig.asmTrap`, `Zig.Error.trap`); an entry that never faults keeps `pure`. The checker
     -- admits no other asm here (`Op.isDeviceAsm`), so a missing entry or input index is an
     -- unknown identifier: the generated module does not build.
-    let cond? : Option (Option String) := entry?.bind fun e =>
+    -- A defined block (A02) faults on its instructions' own condition: `airIsa_<hash>_fault`
+    -- on the same arguments (`Zig.Asm.isaFault`), not on the entry's `AsmFault`.
+    let cond? : Option (Option String) := if isa?.isSome then some none else entry?.bind fun e =>
       match e.fault with
       | .never => some none
       | f => (f.condition? args).map some
+    let isaGuarded :=
+      s!"Zig.Asm.isaFault ({name}_fault{args.foldl (init := "") fun acc a => s!"{acc} {a}"}) ({call})"
     -- ASM-05: an environment read draws each output from the oracle, in output order.
     let envDraws := outputWidths.toList.zipIdx.foldr (init := s!"pure ({", ".intercalate
         ((List.range outputs.size).map (s!"e{·}"))})")
       fun (w, k) acc => s!"Zig.Asm.envWord {w} >>= fun e{k} => {acc}"
-    let guarded := if envRead then s!"{fc.callMName} ({envDraws})" else match cond? with
+    let guarded := if envRead then s!"{fc.callMName} ({envDraws})" else if isaFaults then isaGuarded
+      else match cond? with
       | some none => s!"pure ({call})"
       | some (some c) => s!"Zig.asmTrap ({c}) ({call})"
       | none => "air2lean_asm_fault_unknown"
@@ -3357,7 +3425,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let proj (k : Nat) : String :=
         t ++ tupleProjection n k
       let first := match cond? with
-        | some none => if envRead then s!"let {t} ← {guarded}" else s!"let {t} := {call}"
+        | some none =>
+          if envRead || isaFaults then s!"let {t} ← {guarded}" else s!"let {t} := {call}"
         | _ => s!"let {t} ← {guarded}"
       let regionWrites := writes.zipIdx.map fun (rg, k) =>
         s!"{fc.callMName} (Zig.Asm.writeRegion {operand rg.base} ({regionLen rg}) {proj (outputs.size + k)})"
@@ -4877,7 +4946,7 @@ def emitProgramParts (program : Program) (prefix_ : String)
     (if openTys.isEmpty then #[] else #["Ext"]) ++
     (if extendedCapture then #["spawnInit", "captures"] else #[]) ++
     (if hasErrorName then #["errorNameOf"] else #[]) ++
-    (if errorTable.isSome then #["errorTable"] else #[]) ++ asmDefs.map (·.name) ++
+    (if errorTable.isSome then #["errorTable"] else #[]) ++ asmDefs.flatMap (·.declNames) ++
     (if device.isSome then #[deviceDefName] else #[])
   let (structs, ownFuncNames) := allocateDeclNames (collectNamed funcs prefix_) funcs prefix_ fixed
     (targets ++ futures.map fun (nm, f, fields, _) => (nm, f, fields)) extendedCapture

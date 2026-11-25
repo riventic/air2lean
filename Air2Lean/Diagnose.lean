@@ -28,6 +28,9 @@ structure CheckArgs where
   assumeNoLb : Bool := false
   /-- `--assume-weak-exports`: bind extern calls to weak definitions (premise EXT-07). -/
   assumeWeakExports : Bool := false
+  /-- `--assume-asm-cpu-features <f,...>`: the CPU features admitted for inline asm (premise
+  ASM-09), as in translation. -/
+  asmCpuFeatures : Option (List String) := none
 
 private partial def parseOptions (args : List String) (out : CheckArgs)
     (spawnPolicySeen : Bool := false) : Except String CheckArgs := do
@@ -67,7 +70,12 @@ private partial def parseOptions (args : List String) (out : CheckArgs)
   | "--assume-weak-exports" :: rest =>
     if out.assumeWeakExports then throw "duplicate --assume-weak-exports"
     parseOptions rest { out with assumeWeakExports := true } spawnPolicySeen
-  | _ => throw "check-only mode accepts only <air-dir>, --profile, --allow-unqualified-build-mode, --diagnostic-limit, --unit-diagnostic-limit, --spawn-policy, --assume-no-lb, --assume-weak-exports, --device-contract and --allocator-model; emission flags are incompatible"
+  | "--assume-asm-cpu-features" :: value :: rest =>
+    if out.asmCpuFeatures.isSome then throw "duplicate --assume-asm-cpu-features"
+    let features ← parseAsmCpuFeatures value
+    parseOptions rest { out with asmCpuFeatures := some features } spawnPolicySeen
+  | ["--assume-asm-cpu-features"] => throw "missing value for --assume-asm-cpu-features"
+  | _ => throw "check-only mode accepts only <air-dir>, --profile, --allow-unqualified-build-mode, --diagnostic-limit, --unit-diagnostic-limit, --spawn-policy, --assume-no-lb, --assume-weak-exports, --assume-asm-cpu-features, --device-contract and --allocator-model; emission flags are incompatible"
 
 def parseCheckArgs (args : List String) : Except String CheckArgs := do
   match args with
@@ -75,7 +83,7 @@ def parseCheckArgs (args : List String) : Except String CheckArgs := do
     if directory.startsWith "-" then throw "missing <air-dir>"
     if directory.length > 1024 then throw "AIR directory path exceeds 1024 characters"
     parseOptions (splitAllocatorModelFlag options) { directory := directory }
-  | _ => throw "usage: air2lean --diagnostics-json <air-dir> [--profile <name>] [--allow-unqualified-build-mode] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--assume-no-lb] [--assume-weak-exports] [--device-contract <json>] [--allocator-model std|translated]"
+  | _ => throw "usage: air2lean --diagnostics-json <air-dir> [--profile <name>] [--allow-unqualified-build-mode] [--diagnostic-limit 1..4096] [--unit-diagnostic-limit 1..4096] [--spawn-policy available|fallible] [--assume-no-lb] [--assume-weak-exports] [--assume-asm-cpu-features <f,...>] [--device-contract <json>] [--allocator-model std|translated]"
 
 structure FileResult where
   file : String
@@ -332,7 +340,8 @@ def inspect (file contents : String) (initial : Log) (device : Option DeviceCont
 
 def collectProgram (units : Array FileResult) (initial : Log)
     (spawnPolicy : SpawnSemantics := .available) (assumeNoLb : Bool := false)
-    (mode : AllocatorModel := .std) (exportTable : Option Raw.ExportTableFile := none)
+    (mode : AllocatorModel := .std) (profile : Option BuildProfile := none)
+    (asmCpuFeatures : List String := []) (exportTable : Option Raw.ExportTableFile := none)
     (assumeWeakExports : Bool := false) : Log := Id.run do
   let mut log := initial
   -- Bind extern calls first (`docs/air-json.md` §Extern calls): a bound call is a direct call
@@ -456,6 +465,18 @@ def collectProgram (units : Array FileResult) (initial : Log)
         category := .unsupportedSemantics
         message := ""
         prerequisites := #["validated_selected_program"] } (checkLoadBuffering funcs)
+    -- The CPU features of inline asm against the program's profile, as in translation
+    -- (`checkAsmCpuFeatures`, premise ASM-09). Like the CLI, only for a program whose every
+    -- function passed its own check: an asm that no rule accepts is already reported.
+    if let some profile := profile then
+      if !log.failed && units.all (·.localPassed) then
+        log := log.record {
+          code := .modelFailure
+          phase := .program
+          category := .unsupportedSemantics
+          message := ""
+          prerequisites := #["validated_selected_program"] }
+          (checkAsmCpuFeatures funcs profile asmCpuFeatures)
     -- The CLI's emission gate (`emitWithNamesChecked`), so that both modes agree. Like the
     -- CLI, it runs only once every check has passed. Diagnostics mode takes no emission flags,
     -- so this is the default emission (IEEE floats, no std models, no proof API); the namespace
@@ -579,8 +600,8 @@ private def scan (a : CheckArgs) : IO (Array FileResult × Log) := do
     units := units.push { result.1 with decodedProfile := none }
   units := units.qsort (fun x y => decide (x.file < y.file))
   let exportTable ← readExportTable a.directory
-  return (units, collectProgram units log a.spawnPolicy a.assumeNoLb a.allocatorModel exportTable
-    a.assumeWeakExports)
+  return (units, collectProgram units log a.spawnPolicy a.assumeNoLb a.allocatorModel firstProfile
+    (a.asmCpuFeatures.getD []) exportTable a.assumeWeakExports)
 
 def runCheck (args : List String) : IO UInt32 := do
   let result ← match parseCheckArgs args with

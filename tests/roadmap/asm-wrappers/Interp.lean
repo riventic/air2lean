@@ -2,9 +2,11 @@
 # Test-only executable interpretation of register-only inline asm (A03)
 
 Never imported by `ZigLean`, `Proofs` or `Air2Lean`; it is not a module of any Lake library.
-`harness.py` pastes this file into a standalone `lake env lean --run` program after the real
-generated wrappers' opaques have been rebound to it. Nothing here is a proof premise: ASM-01/02
-keep every `airAsm_<hash>` opaque in the proof environment (`audit.py` checks this).
+`harness.py` pastes this file into a standalone `lake env lean --run` program next to the
+unchanged generated module, and cross-checks each `airIsa_<hash>` definition over the instruction
+model (A02, premise ASM-07) against this interpretation of the same template text. It shares no
+code with the model or the translator's decoder. Nothing here is a proof premise (`audit.py`
+checks that the proofs never reach it).
 
 The interpretation is a small x86_64 register machine. One `Spec` is one AIR `assembly`
 instruction (source template, constraints, operand widths). `exec`:
@@ -19,7 +21,7 @@ instruction (source template, constraints, operand widths). `exec`:
    each output from the low `width` bits of its register.
 
 A01 operands: a read-write output (`+r`, `+{reg}`, `+m`) starts with its old value, which the
-caller passes after the inputs (the opaque's trailing parameters). A memory output (`=m`, `+m`)
+caller passes after the inputs (the function's trailing parameters). A memory output (`=m`, `+m`)
 is a memory slot (machine index `16 + k` for output `k`), written `@<index>/<width>` in the
 expanded template; an `=m` slot starts with junk that differs between the three allocations, so
 a template that reads it before writing it is rejected as allocation-dependent. A slot is

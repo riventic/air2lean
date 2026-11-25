@@ -333,15 +333,29 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(claims.claims_of({'conclusion': {'head': 'Eq'}}, HEADS), frozenset())
 
     def test_asm_effect_opaque_carries_fault_premise(self):
-        """airAsmFx_ is classified by the same policy rule table as airAsm_ and, over an absence
-        claim, carries ASM-04 too (ASM-03 implies ASM-01 implies ASM-04)."""
+        """airAsmFx_ is classified by the same policy rule table as airAsm_ (an opaque, ASM-01,
+        with an effect contract, ASM-03) and, over an absence claim, carries ASM-04 too (ASM-01
+        implies ASM-04)."""
         report = copy.deepcopy(FIXTURE)
         for theorem in report['theorems']:
             if theorem['name'] in ('ClaimFixture.ret_run', 'ClaimFixture.panic_pure'):
                 theorem['opaque_dependencies'] = ['Asm.airAsmFx_3653072158']
         theorems = classified(report)
-        self.assertEqual(theorems['ClaimFixture.ret_run']['premises'], ['ASM-03', 'ASM-04'])
-        self.assertEqual(theorems['ClaimFixture.panic_pure']['premises'], ['ASM-03'])
+        self.assertEqual(theorems['ClaimFixture.ret_run']['premises'], ['ASM-01', 'ASM-03', 'ASM-04'])
+        self.assertEqual(theorems['ClaimFixture.panic_pure']['premises'], ['ASM-01', 'ASM-03'])
+
+    def test_defined_asm_block_carries_instruction_model_premise(self):
+        """A02: a closure that reaches the instruction model (a defined `airIsa_<n>` block) carries
+        ASM-07 and no opaque premise; its fault set is the model's, so an absence claim adds no
+        ASM-04."""
+        report = copy.deepcopy(FIXTURE)
+        for theorem in report['theorems']:
+            if theorem['name'] in ('ClaimFixture.ret_run', 'ClaimFixture.panic_pure'):
+                theorem['runtime_modules'] = theorem['runtime_modules'] + ['ZigLean.Isa.X86']
+        theorems = classified(report)
+        self.assertEqual(theorems['ClaimFixture.ret_run']['premises'], ['ASM-07'])
+        self.assertEqual(theorems['ClaimFixture.panic_pure']['premises'], ['ASM-07'])
+        self.assertEqual(theorems['ClaimFixture.ret_some']['premises'], [])
 
     def test_asm_closure_carries_fault_premise(self):
         """S7: a no-panic or guaranteed-return claim over an inline-asm opaque carries ASM-04
@@ -374,7 +388,7 @@ class ClassifyTests(unittest.TestCase):
         report = copy.deepcopy(FIXTURE)
         for theorem in report['theorems']:
             if theorem['name'] == 'ClaimFixture.ret_run':
-                theorem['runtime_modules'] = theorem['runtime_modules'] + ['ZigLean.Conc.Word']
+                theorem['runtime_modules'] = theorem['runtime_modules'] + ['ZigLean.Conc.Base.Word']
         goal = claims.check_goal({'theorem': 'ClaimFixture.ret_run', 'strength': 'total_correctness',
                                   'domain': 'all'}, theorems_of(report), definition='ClaimFixture.ret')
         self.assertEqual((goal['status'], goal['premises']), ('accepted', ['ORD-06']))
@@ -385,6 +399,39 @@ class ClassifyTests(unittest.TestCase):
                                      audited, definition='ClaimFixture.ret')
             self.assertEqual(goal['status'], 'rejected')
             self.assertIn('runtime_modules', goal['reason'])
+
+    def test_concurrency_claim_needs_a_qualified_target(self):
+        """C12 target binding: a claim that rests on ORD-06 is rejected when its root's translation
+        records a target without a memory-model qualification entry (s390x-linux, mips64-linux:
+        the translator accepts their atomics and threads); a sequential claim is not bound."""
+        report = copy.deepcopy(FIXTURE)
+        for theorem in report['theorems']:
+            if theorem['name'] == 'ClaimFixture.ret_run':
+                theorem['runtime_modules'] = theorem['runtime_modules'] + ['ZigLean.Conc.Base.Word']
+        goal = {'theorem': 'ClaimFixture.ret_run', 'strength': 'total_correctness', 'domain': 'all'}
+
+        def status(source, targets):
+            found = claims.check_goal(goal, theorems_of(source), definition='ClaimFixture.ret', targets=targets)
+            return found['status'], found['reason']
+
+        for qualified in ('x86_64-linux', 'aarch64-macos', 'aarch64-linux', None):
+            self.assertEqual(status(report, {qualified}), ('accepted', None))
+        for target in ('s390x-linux', 'mips64-linux', 'wasm32-wasi', 'riscv64-linux'):
+            found, reason = status(report, {target})
+            self.assertEqual(found, 'rejected')
+            self.assertIn(f'the claim carries ORD-06 for target {target}, which has no qualification entry in '
+                          'memory_model.targets', reason)
+            self.assertEqual(status(FIXTURE, {target}), ('accepted', None))
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / 'Conc').mkdir()
+            (root / 'Conc/Gen.lean').write_text(
+                '-- air2lean-profile: {"profile":{"name":"abi64-be-v1","target_triple":"s390x-linux.5.10...7.2-musl"}}\n')
+            (root / 'Conc/Plain.lean').write_text('namespace Conc\n')
+            self.assertEqual(claims.root_targets('Conc.Gen', root), {'s390x-linux'})
+            self.assertEqual(claims.root_targets('Conc.Plain', root), {None})
+            self.assertEqual(claims.root_targets('Conc.Gone', root), {None})
+            self.assertEqual(claims.root_targets(None, root), set())
 
     def test_old_or_failed_reports_are_rejected(self):
         for field in ('conclusion', 'statement'):

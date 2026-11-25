@@ -1,4 +1,4 @@
--- air2lean-invgen: {"generator":{"lean":"4.34.0","modules":[["Air2Lean.InvGen","66ad481953e23d9c7e0a71474061ba54f18979ff7c3c6e7baf6fd5b17d82a90b"],["Air2Lean.InvGenMain","de6d02b6f751b7c66c5408950f0a96f96cd237ec0d8a7c83c6038d79f12cdb33"],["Air2Lean.Revision","0abdb80bf11b8b7e1b0820755e2015f43cce91c00db65dd085b2a8afa6e65f8c"]],"revision":"1c874a6831b45b77f823ce4e8705a954d666a5039d1bb58e21ee6d753a0ea1fa"},"inputs":[["tests/roadmap/loop-tactics/nested/Nested/Gen.lean","897e4f877a7ea682858b8f501e6efdd5595f922c1c5a43aa9e10cb3e09baff66"]],"loops":[{"family":"counted","loop":"pairs.loop14","pruned":[{"fact":"s.j.toNat ≤ s0.j.toNat","residual":"cand2 p0 s0 v0 { i := s.i, j := x }","walk":1},{"fact":"v.toNat = v0.toNat + (s0.j.toNat - s.j.toNat)","residual":"cand6 p0 s0 v0 { i := s.i, j := x } x✝³","walk":1}]},{"loop":"pairs.loop5","none":"a nested loop"}],"module":"Nested.Gen","namespace":"Nested","output":"015603bf7669467f05566aab0528e9648e5de1bb6194f36960bf7b64ea37c78c","version":2}
+-- air2lean-invgen: {"generator":{"lean":"4.34.0","modules":[["Air2Lean.InvGen","aa7ac33be1e25c5ed2a5f8716409e4c598f33a667313c1fc1cc85013230afd8a"],["Air2Lean.InvGenMain","6641279898d44a6114fa6c402e42cf6e23db77e655d112a4e8c74f5f25dc964f"],["Air2Lean.Revision","0abdb80bf11b8b7e1b0820755e2015f43cce91c00db65dd085b2a8afa6e65f8c"]],"revision":"c0851d35497ea3aa18117adc8a0a6d945fec0d8578db26de13a30557f41b0540"},"inputs":[["tests/roadmap/loop-tactics/nested/Nested/Gen.lean","897e4f877a7ea682858b8f501e6efdd5595f922c1c5a43aa9e10cb3e09baff66"]],"loops":[{"credits":{"count":"s.i.toNat - s.j.toNat"},"family":"counted","loop":"pairs.loop14","pruned":[{"fact":"s.j.toNat ≤ s0.j.toNat","residual":"cand2 p0 s0 v0 { i := s.i, j := x }","walk":1},{"fact":"v.toNat = v0.toNat + (s0.j.toNat - s.j.toNat)","residual":"cand6 p0 s0 v0 { i := s.i, j := x } x✝³","walk":1}]},{"loop":"pairs.loop5","none":"a nested loop"}],"module":"Nested.Gen","namespace":"Nested","output":"938004479f9fcf34a3ec9a1f3c5e74bdeccdbd23d077866d6482550ce84b93ff","version":2}
 import Nested.Gen
 import ZigLean.Sep.Full.Ghost
 import ZigLean.Sep.Full.AutoAttr
@@ -36,5 +36,22 @@ open Zig Zig.Full Zig.Full.FAssn
       r.2.j.toNat = r.2.i.toNat⟫ ⋆
     (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + (r.2.i.toNat - s0.j.toNat)⟫ ⋆ up (pts p0 8 v)) ⋆
     plain
+
+/-- The credit-mode invariant of `pairs.loop14` (a walk that counts its steps, `loop_exact`): `pairs.loop14.inv` without the plain mode, at the exact count `n` of the body runs left before the last one.
+`s0` holds the locals at loop entry. -/
+@[fsym_inv] def pairs.loop14.credits.inv (p0 : Zig.Ptr) (s0 : pairsLocals) (v0 : BitVec 64) (s : pairsLocals) (n : Nat) : FAssn :=
+  ⟪s.i = s0.i ∧
+      s0.j.toNat ≤ s.j.toNat ∧
+      s.j.toNat ≤ s.i.toNat ∧
+      v0.toNat + (s.i.toNat - s0.j.toNat) < 2 ^ 64 ∧
+      n = s.i.toNat - s.j.toNat⟫ ⋆
+    (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + (s.j.toNat - s0.j.toNat)⟫ ⋆ up (pts p0 8 v))
+
+/-- The exit post of `pairs.loop14.credits`: the loop exits with `r`, after all iterations. -/
+@[fsym_inv] def pairs.loop14.credits.post (p0 : Zig.Ptr) (s0 : pairsLocals) (v0 : BitVec 64) (r : pairsExit × pairsLocals) : FAssn :=
+  ⟪r.1 = pairsExit.br13 ∧
+      r.2.i = s0.i ∧
+      r.2.j.toNat = r.2.i.toNat⟫ ⋆
+    (FAssn.ex fun v : BitVec 64 => ⟪v.toNat = v0.toNat + (r.2.i.toNat - s0.j.toNat)⟫ ⋆ up (pts p0 8 v))
 
 end Nested

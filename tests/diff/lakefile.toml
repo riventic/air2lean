@@ -14,24 +14,20 @@ name = "Outcome"
 [[lean_lib]]
 name = "ScheduleSearch"
 
-# Static libm (tests/diff/libm/libm.zig) and asm (tests/diff/asm/asm.zig) archives, built by
-# scripts/diff.sh before `lake build difftest`. They are input files linked through
-# `moreLinkObjs`, so their content is part of each executable's trace and of its key in Lake's
-# artifact cache (scripts/cas.py run). Never link them through `moreLinkArgs`: a path there is not
+# The static libm archive (tests/diff/libm/libm.zig), built by
+# scripts/diff.sh before `lake build difftest`. It is an input file linked through
+# `moreLinkObjs`, so its content is part of each executable's trace and of its key in Lake's
+# artifact cache (scripts/cas.py run). Never link it through `moreLinkArgs`: a path there is not
 # a build input, and a cached executable linked against another Zig's archive is restored for the
 # same Lean sources (docs/architecture-audit/float-selection.md).
 [[input_file]]
 name = "libm"
 path = "out/libm/air2lean_libm.a"
 
-[[input_file]]
-name = "asm"
-path = "out/asm/air2lean_asm.a"
-
 [[lean_exe]]
 name = "difftest"
 root = "Diff"
-moreLinkObjs = ["libm", "asm"]
+moreLinkObjs = ["libm"]
 
 [[lean_lib]]
 name = "Concurrent"

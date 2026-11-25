@@ -1,5 +1,6 @@
 //! Prints each case of `packed_casts.zig` (and of `logical017.zig` on Zig 0.17, of
-//! `vector_fields.zig` and `auto_items.zig` on 0.14.1/0.15.2) as one
+//! `vector_fields.zig` and `auto_items.zig` on 0.14.1/0.15.2, of `sentinel_arrays.zig` up to
+//! 0.16, of `void_casts.zig`, and of `void017.zig` on 0.17) as one
 //! line `name: value` on stderr, values in hex; `Model.lean` prints the model's lines for the
 //! same cases.
 //! A float is printed as its bits. Run by `check.sh --native`.
@@ -12,6 +13,11 @@ const l17 = if (logical) @import("logical017.zig") else struct {};
 const vector_fields = builtin.zig_version.minor <= 15;
 const vf = if (vector_fields) @import("vector_fields.zig") else struct {};
 const ai = if (vector_fields) @import("auto_items.zig") else struct {};
+/// Sentinel arrays cast as memory up to 0.16; 0.17 is rejected (`reject_sentinel.zig`).
+const memory = builtin.zig_version.minor <= 16;
+const sa = if (memory) @import("sentinel_arrays.zig") else struct {};
+const vc = @import("void_casts.zig");
+const v17 = if (logical) @import("void017.zig") else struct {};
 
 /// `uN` of `bits` bits, for the widths here (`std.meta.Int` is gone in 0.17).
 fn Uint(comptime bits: u16) type {
@@ -105,5 +111,26 @@ pub fn main() void {
         hexs("floatsToNested0", fl[0]);
         hexs("floatsToNested1", fl[1]);
         hexs("fhToBytes", l17.fhToBytes(.{ .lo = -2.0, .hi = 0x1234 }));
+    }
+    if (memory) {
+        hex("sentToInt", sa.sentToInt(.{ 0x11, 2, 3 }));
+        hex("wideToInt", sa.wideToInt(.{ 0x77, 2, 3 }));
+        hex("nestedToInt", sa.nestedToInt(.{ .{ 0x11, 2, 3 }, .{ 4, 5, 6 } }));
+        hex("sentItem3", sa.sentItem3(.{ 0x11, 2, 3 }));
+        hex("intToSentAt0", sa.intToSentAt(0xAABB_CCDD, 0));
+        hex("intToSentAt3", sa.intToSentAt(0xAABB_CCDD, 3));
+        hex("roundTrip", sa.roundTrip(0xAABB_CCDD));
+        hex("sentInit", sa.sentInit(0x11));
+    }
+    hex("voidsToInt", vc.voidsToInt(.{ {}, {}, {}, {} }));
+    hex("intToVoids", vc.intToVoids(0));
+    hex("emptyToInt", vc.emptyToInt(.{}));
+    if (logical) {
+        hex("voidToInt", v17.voidToInt({}));
+        v17.intToVoid(0);
+        line("intToVoid", "void", .{});
+        v17.emptyToVoid(.{});
+        line("emptyToVoid", "void", .{});
+        hex("voidToVoids", v17.voidToVoids({}));
     }
 }

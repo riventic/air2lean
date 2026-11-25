@@ -73,6 +73,12 @@ mkdir -p "$logs"
 # a guard that is not elastic, the build is one plain admission of at most 11000 MiB instead, with
 # one Lean process at a time (`build-guard.py --elastic-plan`).
 if [ -z "${AIR2LEAN_FULL_BUILD_INNER:-}" ]; then
+  # The fixture units' compilers, before the build's admission: a patched-compiler miss builds
+  # under a guard of its own (16384 MiB), which cannot run inside the elastic base. Resolved only
+  # inside it (scripts/fixture-checks.sh), every unit of a version the cache lacked failed after
+  # the whole build ("inheritance_refused", a host with a new cache, 2026-11-24). A compiler that
+  # cannot be provided fails its units in the run, naming it, as before.
+  [ "$fixtures" = 0 ] || python3 -B scripts/fixture-checks.py --prepare
   read -r mode rss < <(python3 -B scripts/build-guard.py --elastic-plan "$rss")
   cores=$(python3 -c 'import os; print(os.cpu_count() or 1)')
   [ -n "$threads" ] || { [ "$mode" = elastic ] && threads=$((cores < 8 ? cores : 8)) || threads=1; }
@@ -153,6 +159,9 @@ jobs=2 guarded canon "$PWD" --lean-threads 1 -- \
 if [ "$fixtures" = 1 ]; then
   # Within this build's elastic admission: the package's Lean processes and the units take
   # sub-admissions, each unit charged its measured peak (scripts/fixture-checks.py `schedule`).
+  # The package is built by up to $threads Lean processes at once, like the phases above; a
+  # unit's own Lake keeps one.
   scripts/fixture-checks.sh --logs "$logs/fixtures" --rss-mib "$rss" --jobs 8 --lean-threads 1 \
+    --build-lean-threads "$threads" \
     || { echo 'full-build: fixtures failed' >&2; exit 1; }
 fi

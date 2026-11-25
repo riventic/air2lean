@@ -7,8 +7,8 @@
   },
   "project_axioms": {},
   "generated_declarations": [
-    {"kind": "opaque", "name": "airAsm_<n>", "premises": ["ASM-01"], "reason": "Register-only inline asm op of a generated module (Air2Lean/Emit.lean emitAsmDef): an uninterpreted function of its inputs; instruction behavior is an explicit theorem hypothesis (ASM-02)."},
-    {"kind": "opaque", "name": "airAsmFx_<n>", "premises": ["ASM-03"], "reason": "Effect-contract inline asm op of a generated module (Air2Lean/Emit.lean emitAsmDef): the generated wrapper holds every memory effect; instruction behavior is an explicit theorem hypothesis (ASM-02)."},
+    {"kind": "opaque", "name": "airAsm_<n>", "premises": ["ASM-01"], "reason": "Register-only inline asm op of a generated module that the instruction model does not cover (Air2Lean/Emit.lean emitAsmDef): an uninterpreted function of its inputs; instruction behavior is an explicit theorem hypothesis (ASM-02). A covered block is a definition (airIsa_<n>, ASM-07), not an opaque."},
+    {"kind": "opaque", "name": "airAsmFx_<n>", "premises": ["ASM-01", "ASM-03"], "reason": "Effect-contract inline asm op of a generated module that the instruction model does not cover (Air2Lean/Emit.lean emitAsmDef): an uninterpreted function whose generated wrapper holds every memory effect; instruction behavior is an explicit theorem hypothesis (ASM-02). A covered block is a definition (airIsaFx_<n>, ASM-07), not an opaque."},
     {"kind": "axiom", "name": "air2lean_model_<binding>_evidence", "trust": "assumed", "premises": ["EXT-02"], "reason": "Evidence of a `trust: \"assumed\"` model binding of a generated module (Air2Lean/Emit.lean emitModel): the binding's contract holds for its implementation; listed under assumptions by scripts/external-contracts.py. An extern binding adds its own premise (EXT-03)."},
     {"kind": "opaque", "name": "<implementation>", "premises": ["EXT-01"], "reason": "The implementation a model binding of a generated module names (`implementation` of its air2lean-models record), for example an unknown foreign callback; theorems rely only on the binding's contract. An extern binding adds its own premise (EXT-03)."}
   ],

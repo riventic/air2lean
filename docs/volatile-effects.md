@@ -147,7 +147,8 @@ translations are identical except for the profile header, and the 0.16.0 one is 
 * `putc_trace`: for every memory and every oracle satisfying the polling contract `Answers`
   (busy answers `vs`, then a ready answer `r`), `putc uart c` returns and the final memory is the
   initial one with exactly the trace `putcSpec vs r c` appended: one status read per poll, in
-  order, then one data write of `c`. `putc_eventually`: every oracle that reports ready within
+  order, then one data write of `c`, and with its step count (`Mem.ticks`) raised by exactly one
+  per poll (`vs.length + 1`). `putc_eventually`: every oracle that reports ready within
   finitely many polls satisfies such a contract.
 * `statusTwice_trace`, `statusTwice_not_merged`: two read events; under a counting device the
   result is `0 ^^^ 1 = 1`, which a merged read (`a ^^^ a = 0`) can never give.
@@ -174,13 +175,8 @@ two counter reads are equal. The checker now accepts inline asm only in these tw
    the single reviewed data file: template, ordered constraints (outputs, then inputs), clobbers
    and target architecture. A legacy profile without a target is the x86_64 reference model
    (PRF-01). Each entry records its reason and a reviewer note naming the fixture that needs it.
-   An entry also names the CPU `features` it needs beyond the baseline (`lzcnt`, `popcnt`,
-   `rdrnd`). The translator derives support from `profile.features` and rejects a block whose
-   feature the profile lacks (on a CPU without LZCNT the `lzcnt` encoding runs as `bsr`).
-   `--assume-asm-cpu-features` admits it: the running CPU has the feature (premise ASM-09, the
-   admission `asm-cpu-features` in the header). The legacy profile lists no features, so
-   `examples/asm` (schema-11 goldens) passes the flag in its `translate.args`; `asm_env` is
-   exported with `-mcpu=x86_64+rdrnd`.
+   The CPU features that an entry's instructions need are checked against the profile
+   ([CPU features](#cpu-features) below).
 
    | Template | Constraints | Clobbers | Target | Semantics | Faults | Fixture |
    | --- | --- | --- | --- | --- | --- | --- |
@@ -219,7 +215,11 @@ two counter reads are equal. The checker now accepts inline asm only in these tw
    the quotient always fits: the zero divisor is its only fault. Premise
    [ASM-04](premises.md#asm-04) states that each condition is the instruction's whole fault
    set; `scripts/claims.py` lists it for every no-panic or guaranteed-return goal over an asm
-   opaque. The differential test runs `divmod` on zero divisors too: native SIGFPE against the
+   opaque. A block that the x86_64 instruction model covers (A02, premise
+   [ASM-07](premises.md#asm-07)) is a definition instead, and the wrapper guards it with the
+   block's own fault function (`Zig.Asm.isaFault (airIsa_N_fault …) (airIsa_N …)`, `div`'s #DE);
+   the translator rejects an entry whose `AsmFault` disagrees with the model on whether the
+   block can fault. The differential test runs `divmod` on zero divisors too: native SIGFPE against the
    model's `trap` is a `trap_match` ([outcome-taxonomy.md](outcome-taxonomy.md)).
 
 2. **Declared device event.** With `--device-contract`, an `asm` entry
@@ -242,6 +242,56 @@ Every other asm is `ASM_VOLATILE_EFFECT` (phase `check`, category `unsupported_s
 guidance). This covers `cpuid`, port I/O, fences, output-less asm, every `memory` clobber other
 than A01's empty barrier and its memory-region entries, an allowlisted template with other
 constraints or clobbers, and non-volatile asm off the list.
+
+### CPU features
+
+An instruction's encoding on a CPU without its feature is another instruction or a fault. The
+documented case: `lzcnt` is `F3 0F BD`, and a CPU without LZCNT ignores the `F3` prefix and
+executes `bsr` (Intel SDM vol. 2A, LZCNT; AMD APM vol. 3, LZCNT). `lzcnt(1)` is 63 and
+`bsr(1)` is 0 (`tests/roadmap/asm-semantics/expected_x86_64.txt` records both instructions on
+a CPU with LZCNT; no CPU without it was available for a run, so the difference on such a CPU
+is the manuals' statement). A theorem that uses 63 for the opaque `lzcnt64 1` would be false
+there. `tzcnt` without BMI1 executes as `bsf`; `popcnt` and `rdrand` are #UD (SIGILL), where
+the model returns a value.
+
+So every asm block that the checker accepts, by the allowlist or as a device event, is checked
+against the profile it is translated for (`checkAsmCpuFeatures`, maintainer decision
+2026-11-24, A02 D1):
+
+* `Air2Lean/AsmFeatures.lean` is the one table from a mnemonic to the CPU features it needs,
+  for x86_64 (AT&T syntax, with operand-size suffixes and the `rep`/`lock` prefixes) and
+  aarch64, under the names of `profile.features` (Zig's `std.Target` feature names, which are
+  LLVM's). Its x86_64 rows are the feature column of the Zig compiler's encoding table
+  (`src/codegen/x86_64/encodings.zon`), without the x86-64 base that every 64-bit CPU has
+  (CMOV, CX8, MMX, SSE, SSE2, TSC: psABI level x86-64-v1) and with `cmpxchg16b` needing `cx16`.
+  `air2lean --print-asm-feature-table` prints it with the instructions of every allowlist
+  entry, and `tests/roadmap/asm-semantics/check-feature-table.sh` compares it with the pinned
+  Zig 0.17.1 sources.
+* `profile.features` are the features of the CPU the compiler targeted (the exporter writes
+  `target.cpu.features`): the baseline `x86_64` has none of `lzcnt`, `popcnt`, `rdrnd`, and
+  `-mcpu=x86_64+rdrnd` or `-mcpu=x86_64_v3` adds them. The legacy profile lists no feature.
+* A block with an instruction whose feature the profile lacks is rejected, with the
+  instruction and the feature in the message. A block with an instruction that is not in the
+  table (a vector or system instruction, `rdtscp`, a directive, a label) is rejected too: an
+  unknown instruction is never taken as needing no feature. So is a template that could hide or
+  change an instruction: statements end at a newline, a carriage return or `;`; a mnemonic
+  followed by `:` or `=` is a label or an assignment (`nop : popcnt …`); a prefix stands only
+  before the instructions it is defined for (`rep bsf` would be `tzcnt` on a CPU with BMI1) and
+  never ends a template (it would prefix the compiler's next instruction); an aarch64 template
+  with `%%` is rejected (a statement separator on Apple targets). A device contract does not
+  exempt a block: it states what the instruction does, not that the CPU has it.
+* `--assume-asm-cpu-features lzcnt,popcnt` admits exactly the named features: the CPU that
+  runs the program has them although the profile does not list them (premise
+  [ASM-09](premises.md#asm-09)). The header records `"admission":"asm-cpu-features"` and
+  `"asm_cpu_features":["lzcnt","popcnt"]`, and `scripts/claims.py` lists ASM-09 for every
+  theorem over the module. A name outside the table is a usage error. Check-only mode
+  (`--diagnostics-json`) takes the same flag and reports the same rejection (`MODEL_FAILURE`).
+
+Committed fixtures: `examples/asm` (schema-11 goldens on the legacy profile) passes
+`--assume-asm-cpu-features lzcnt,popcnt` in its `translate.args`; `asm_env` is exported with
+`-mcpu=x86_64+rdrnd`, so `rdrand` needs no admission there; `device_asm.random` (`rdrand` at the
+baseline CPU) passes its function check and is rejected by this check when translated. Every
+other committed asm fixture uses base instructions only.
 
 **Non-volatile asm.** Before L13, non-volatile asm with outputs was also a repeatable opaque. Zig
 lowers it to an LLVM `call asm` without `sideeffect` and without memory attributes
