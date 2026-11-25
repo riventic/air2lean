@@ -354,12 +354,15 @@ def mutant(name: str, src: Path, fails: list[str], expect: list[str]) -> int:
     return 0
 
 
+IDENT = r"[A-Za-z_][A-Za-z0-9_]*"
+
+
 def token(name: str) -> re.Pattern:
     """`name` as a whole identifier component (not part of a longer identifier)."""
     return re.compile(r"(?<![A-Za-z0-9_'])" + re.escape(name) + r"(?![A-Za-z0-9_'])")
 
 
-def instance(primary: Path, substs: list[str], write: bool, renames: list[str] = []) -> int:
+def instance(primary: Path, substs: list[str], write: bool, renames: tuple[str, ...] | list[str] = ()) -> int:
     """`primary` with each OLD replaced by its NEW (all at once, so substitutions never chain).
     A primary that already names a NEW (the 0.17.1 model importing the 0.16.0 translation) would
     make the instance agree while checking the wrong version, so it is refused. A `renames`
@@ -369,8 +372,7 @@ def instance(primary: Path, substs: list[str], write: bool, renames: list[str] =
     mapping = {}
     for subst, in_path in [(s, True) for s in substs] + [(s, False) for s in renames]:
         old, sep, new = subst.partition("=")
-        ident = r"[A-Za-z_][A-Za-z0-9_]*"
-        if not (sep and re.fullmatch(ident, old) and re.fullmatch(rf"{ident}(\.{ident})*", new)):
+        if not (sep and re.fullmatch(IDENT, old) and re.fullmatch(rf"{IDENT}(\.{IDENT})*", new)):
             raise SystemExit(f"fixtures instance: --subst/--rename needs OLD=NEW identifiers, not {subst!r}")
         if mapping.setdefault(old, new) != new:
             raise SystemExit(f"fixtures instance: {old} is substituted twice")

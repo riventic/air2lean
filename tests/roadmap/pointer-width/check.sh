@@ -2,8 +2,9 @@
 # T02 pointer-width fixtures. `--export DIR` writes fresh AIR of pointer_width.zig and
 # reject.zig (Zig 0.16.0) for every profile with a patched compiler; names.zig (0.17.1, 0.16.0)
 # and the 0.17.1 exports of pointer_width.zig and reject.zig are declared in exports.json and
-# pinned by exports.lock.json (scripts/fixture-exports.py verify|export pointer-width). `--native` runs the sources' layout/boundary/name tests on the
-# host and under wasm32-wasi (Node WASI). The default re-translates the retained AIR, compares
+# pinned by exports.lock.json (scripts/fixture-exports.py verify|export pointer-width).
+# `--native` runs the sources' layout/boundary/name tests on the host and under wasm32-wasi
+# (Node WASI). The default re-translates the retained AIR, compares
 # it with the retained Gen.lean files byte for byte and checks the proofs and rejections.
 # Needs `lake build ZigLean Air2Lean air2lean ZigLean.Mem.WidthLemmas`. All tool invocations
 # must run in the root's serialized build queue.
