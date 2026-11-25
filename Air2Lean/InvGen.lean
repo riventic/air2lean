@@ -36,6 +36,23 @@ Families (layer 2 of the design: numeric facts and measures over the variables o
   holds at entry only for a counter that starts on the repeating side of its exit value (or at
   it): a client proves that, and a loop entered past it is not an instance.
 
+  Widened (S2c′): a cell may be **an item of an array parameter** (`p` itself and
+  `Zig.ptrProject p (·.elem size k)` with a literal `k`): the invariant owns the array as
+  `up (arr p (x₀ :: … :: xₘ :: tₚ))`, its items up to the last one the body reaches (each a
+  written item's value `wₖ` with its facts, or an item it only reads at its entry value `vₖ`) and
+  the rest `tₚ` of any length. In a loop that counts up, a cell may go up by **a value `g u` of
+  the counter's value `u`** at the iteration's start (and of the parameters, the locals the body
+  does not write and the cells it only reads), not only a constant: with the library sum `tsum`,
+  the cell plus the increments still to come stays at its entry value plus all of them,
+  `v + (tsum e g - tsum x g) = vₖ + (tsum e g - tsum x₀ g)` (`e` the counter's exit value), with
+  the no-overflow fact `vₖ + (tsum e g - tsum x₀ g) < 2 ^ w`. And the body may run **an inner
+  counted loop** (`execInner`): it is read as its exit post (the inner counter at its exit value,
+  each cell it writes up by its constant increment times the inner iterations), so a cell that
+  the inner loop moves by a distance that depends on the outer counter is such a sum; the inner
+  loop's counter is a **scratch local** (the body sets it before it reads it), which the
+  invariant does not state. The walks of the outer step apply the inner loop's generated
+  definitions, so the inner loop is generated first.
+
 * **List walk** (`listWalk`, `listCand`; ledger #list-walk-step). One iteration tests an
   optional node pointer, the cursor (`cur.isSome`, a `while (cur) |n|` over `?*Node`): at `null`
   it exits and changes nothing; at a node it reads the node's `next` into the cursor and repeats.
@@ -81,9 +98,11 @@ in, one receipt out, the count lowered by exactly one or zero at the exit); if t
 anything, the loop gets no credit-mode definitions, and the record says why.
 
 Outside the families (each one recorded with its reason): a cell at an offset of a parameter
-(`Zig.ptrProject`), an increment that depends on the counter, a bound of another width
-(`@intCast`), a `>= 0` or `<= maxInt` test (it holds until the step wraps), a nested loop, a call
-without a contract.
+that is not an array item at a literal index, an increment that is not a constant in a loop that
+counts down, an increment that depends on something the body writes, a bound of another width
+(`@intCast`), a `>= 0` or `<= maxInt` test (it holds until the step wraps), an inner loop that is
+not counted, whose increments are not constants or that runs a loop itself, a call without a
+contract.
 
 The body is read by a symbolic run over its monadic term (`bind`, `pure`, `get`, `modify`, `ite`,
 the lifted `Zig.load`/`Zig.store`/`Zig.add`/`Zig.sub`/`Zig.intCast`, the unsigned comparisons
@@ -105,12 +124,24 @@ open Lean Meta
 
 namespace Air2Lean.InvGen
 
+/-- A cell that a loop body reads or writes through a loop parameter: the word `*p` at parameter
+`param`, or item `k` of the array at it (`item := some k`: `p` itself for `k = 0`, else
+`Zig.ptrProject p (·.elem size k)`). -/
+structure Loc where
+  param : Nat
+  item : Option Nat := none
+  deriving Inhabited, BEq
+
 /-- A symbolic value of one iteration, over the values at its start. -/
 inductive Sym where
   /-- The local `f` at the start of the iteration. -/
   | local (f : Name)
-  /-- The cell at loop parameter `i` at the start of the iteration. -/
-  | cell (i : Nat)
+  /-- The cell `l` at the start of the iteration. -/
+  | cell (l : Loc)
+  /-- The pointer to item `k` of the array at loop parameter `i`. -/
+  | item (i k : Nat)
+  /-- `k * a`: a cell's change over a whole inner loop (its summary), not a step of the body. -/
+  | scale (k : Nat) (a : Sym)
   /-- Loop parameter `i`. -/
   | param (i : Nat)
   /-- A literal. -/
@@ -152,10 +183,29 @@ partial def Sym.split : Sym → Sym × Int
   | .sub a (.lit n) => let (b, k) := a.split; (b, k - n)
   | s => (s, 0)
 
-/-- One cell the body accesses: its loop parameter, value type, width and alignment, its current
+/-- The summands of `s` (the operands of its sums). -/
+partial def Sym.summands : Sym → Array Sym
+  | .add a b => a.summands ++ b.summands
+  | s => #[s]
+
+/-- The sums in `s` that contain the summand `leaf`: the partial sums of a value that adds terms to
+`leaf`. -/
+partial def Sym.partialSums (leaf : Sym) : Sym → Array Sym
+  | s@(.add a b) =>
+    (if s.summands.contains leaf then #[s] else #[]) ++ a.partialSums leaf ++ b.partialSums leaf
+  | _ => #[]
+
+/-- Whether `s` reads the start value of the local `f`. -/
+partial def Sym.mentions (f : Name) : Sym → Bool
+  | .local g => g == f
+  | .add a b | .sub a b | .lt a b | .le a b | .ne a b => a.mentions f || b.mentions f
+  | .widen a | .isSome a | .some a | .payload a | .addr a _ | .nload a _ | .scale _ a => a.mentions f
+  | _ => false
+
+/-- One cell the body accesses: where it is, its value type, width and alignment, its current
 value, and whether the path stored to it. -/
 structure Cell where
-  param : Nat
+  loc : Loc
   ty : Expr
   width : Nat
   align : Nat
@@ -246,6 +296,9 @@ structure Ctx where
   env : Std.HashMap FVarId Sym := {}
   /-- The contracts given to the generator: the function a rule is about, and the rule. -/
   contracts : Array (Name × Name) := #[]
+  /-- The loop parameters that the body indexes as arrays (`Zig.ptrProject p (·.elem size k)`),
+  with their item size: every access through one is an item (`p` itself is item `0`). -/
+  arrays : Array (Nat × Nat) := #[]
 
 /-- `e` on one line. -/
 def ppLine (e : Expr) : MetaM String :=
@@ -352,18 +405,38 @@ partial def evalPure (ctx : Ctx) (st : St) (e : Expr) : MetaM Sym := do
   if !e.hasFVar && !e.hasLooseBVars then return .val e
   throwError "an unsupported term: {e}"
 
-/-- Access the cell at parameter `i` with value type `ty` and alignment `align` (the same at every
-access; a new cell holds its entry value): its index in `st.cells`. -/
-def St.access (st : St) (i : Nat) (ty : Expr) (align : Nat) : MetaM (St × Nat) := do
-  match st.cells.findIdx? (·.param == i) with
+/-- Access the cell `l` with value type `ty` and alignment `align` (the same at every access; a new
+cell holds its entry value): its index in `st.cells`. -/
+def St.access (st : St) (l : Loc) (ty : Expr) (align : Nat) : MetaM (St × Nat) := do
+  match st.cells.findIdx? (·.loc == l) with
   | some k =>
     let c := st.cells[k]!
     unless c.ty == ty && c.align == align do throwError "a cell accessed at two types or alignments"
     return (st, k)
   | none =>
     let some width := bitVecWidth? ty | throwError "a cell that is not an unsigned word: {ty}"
-    return ({ st with cells := st.cells.push { param := i, ty, width, align, val := .cell i } },
+    return ({ st with cells := st.cells.push { loc := l, ty, width, align, val := .cell l } },
       st.cells.size)
+
+/-- The item size and the index of a projection `(·.elem size k)` with literal `size` and `k`. -/
+def elemProj? (f : Expr) : Option (Nat × Nat) :=
+  match f.consumeMData with
+  | .lam _ _ b _ =>
+    if b.isAppOfArity `Zig.Ptr.elem 3 && (b.getArg! 0).consumeMData == .bvar 0 then
+      match natLit? (b.getArg! 1), natLit? (b.getArg! 2) with
+      | some sz, some k => some (sz, k)
+      | _, _ => none
+    else none
+  | _ => none
+
+/-- The cell that the pointer `p` addresses: a loop parameter (item `0` of an array parameter) or
+an item of an array parameter (`Sym.item`). -/
+def locOf? (ctx : Ctx) (st : St) (p : Expr) : MetaM (Option Loc) := do
+  if let some i := paramIdx? ctx p then
+    return some { param := i, item := if ctx.arrays.any (·.1 == i) then some 0 else none }
+  match ← (try some <$> evalPure ctx st p catch _ => pure none) with
+  | some (.item i k) => return some { param := i, item := some k }
+  | _ => return none
 
 /-- The contract `rule` at the call `call` (its function applied to the call's arguments), or why
 it does not fit. The call fixes some of the rule's variables: one is the node's pointer (an
@@ -459,6 +532,194 @@ def readContract (ctx : Ctx) (st : St) (rule : Name) (call : Expr) : MetaM Contr
       nodeUses := ← uses nodeAtoms, frameUses := ← uses frame, afterUses := ← uses after,
       use := s!"(fun {binders}=> @{rule}{args})" }
 
+/-- The relation `x R b` under which a counted loop repeats, `x` the counter. -/
+inductive Rel where
+  | lt | le | gt | ge | ne
+  deriving BEq
+
+/-- `R` as Zig writes it. -/
+def Rel.text : Rel → String
+  | .lt => "<" | .le => "<=" | .gt => ">" | .ge => ">=" | .ne => "!="
+
+/-- `¬ x R b` as `x R' b`; none for `!=` (its negation is a `==`). -/
+def Rel.neg? : Rel → Option Rel
+  | .lt => some .ge | .le => some .gt | .gt => some .le | .ge => some .lt | .ne => none
+
+/-- The test `c` with the outcome `o` as `x R b`, for the counter `x`: `none` if `c` is not a
+comparison of `x` with something else, or the outcome is a `==`. -/
+def relOf (x : Name) (c : Sym) (o : Bool) : Option (Rel × Sym) := do
+  -- `a R b` with the counter on either side (`R'` the relation with the sides swapped).
+  let side (r r' : Rel) (a b : Sym) : Option (Rel × Sym) :=
+    if a == .local x then some (r, b) else if b == .local x then some (r', a) else none
+  let (r, b) ← match c with
+    | .lt a b => side .lt .gt a b
+    | .le a b => side .le .ge a b
+    | .ne a b => side .ne .ne a b
+    | _ => none
+  if o then pure (r, b) else return (← r.neg?, b)
+
+/-- The exits' labels: the constructors that the exiting paths return (`none`: an exit with a
+payload). -/
+def exitLabels (exits : Array Path) : Option (Array Name) :=
+  exits.foldl (init := some #[]) fun ls? p => do
+    let l ← match p.res with | .val e => e.constName? | _ => none
+    let ls ← ls?
+    return if ls.contains l then ls else ls.push l
+
+/-- What an iteration of a counted loop adds to a cell it writes: the constant `k` and the values
+`terms`, each over the counter's value at the iteration's start, the loop's parameters, the locals
+the body does not write and the cells it only reads. -/
+structure Inc where
+  k : Nat := 0
+  terms : Array Sym := #[]
+  deriving Inhabited
+
+/-- `s` is built by sums, differences, widenings and summaries from the leaves that `ok` accepts. -/
+partial def Sym.over (ok : Sym → Bool) : Sym → Bool
+  | .add a b | .sub a b => a.over ok && b.over ok
+  | .widen a | .scale _ a => a.over ok
+  | s => ok s
+
+/-- A recognized counted loop. -/
+structure Counted where
+  /-- The counter, a local. -/
+  counter : Name
+  /-- The test under which the loop repeats: `counter R bound`. -/
+  rel : Rel
+  /-- The bound: another local, a loop parameter, a literal, the length of a slice parameter or a
+  cell the body only reads. -/
+  bound : Sym
+  /-- The counter goes down by 1 (else up by 1). -/
+  down : Bool
+  /-- The cells the body accesses, in order, with their increments (none for a cell it only
+  reads). -/
+  cells : Array (Cell × Inc)
+  /-- The locals that the body writes but whose values at an iteration's start no path reads (an
+  inner loop's counter, set before the inner loop runs): the invariant says nothing about them. -/
+  scratch : Array Name
+  /-- The exits' labels: the constructors of the exit type that an exiting iteration returns
+  (`none`: an exit that returns a constructor with a payload). -/
+  exits : Option (Array Name)
+  plain : Bool
+
+/-- `R` includes the bound: the counter passes it by one before the loop exits. -/
+def Counted.incl (c : Counted) : Bool := c.rel == .le || c.rel == .ge
+
+/-- The one repeating path of an iteration and its exiting paths (each family's first test). -/
+def splitPaths (again : Expr → MetaM Bool) (paths : Array Path) : MetaM (Path × Array Path) := do
+  let mut cont := #[]
+  let mut exits := #[]
+  for p in paths do
+    let .val e := p.res | throwError "an iteration whose exit is not a constructor"
+    if ← again e then cont := cont.push p else exits := exits.push p
+  let #[c] := cont | throwError "{cont.size} repeating paths, not one"
+  if exits.isEmpty then throwError "no exit"
+  return (c, exits)
+
+/-- Classify the paths of one iteration as a counted loop, or say why not. -/
+def counted (ctx : Ctx) (again : Expr → MetaM Bool) (paths : Array Path) : MetaM Counted := do
+  let (c, exits) ← splitPaths again paths
+  -- A local that a path reads: its start value occurs in a value of the path (not counting the
+  -- local itself left unchanged).
+  let reads (f : Name) : Bool := paths.any fun p =>
+    (p.st.locals.zip ctx.fields).any (fun (v, g) => v.mentions f && !(g == f && v == .local f)) ||
+      p.st.cells.any (·.val.mentions f) || p.st.checked.any (·.mentions f) ||
+      p.st.cond.any (·.1.mentions f) || p.res.mentions f
+  let changed := (c.st.locals.zip ctx.fields).filter fun (v, f) => v != .local f
+  let scratch := (changed.filter fun (_, f) => !reads f).map (·.2)
+  -- The counter: the one local the iteration changes and reads, by 1 up or down.
+  let counters := changed.filter fun (_, f) => !scratch.contains f
+  let #[(v, x)] := counters | throwError "the body writes {counters.size} locals that it reads, not one counter"
+  let (base, step) := v.split
+  unless base == .local x && step.natAbs == 1 do throwError "the counter `{x}` does not step by 1"
+  let down := step == -1
+  let some (cnd, o) := c.st.cond | throwError "the repeating path is not guarded by a test"
+  let some (rel, b) := relOf x cnd o | throwError "the repeating path is not guarded by a test of `{x}`"
+  unless (if down then rel != .lt && rel != .le else rel != .gt && rel != .ge) do
+    throwError "the counter `{x}` steps away from its bound (`{x} {rel.text} …`)"
+  let unchanged (f : Name) : Bool :=
+    (c.st.locals.zip ctx.fields).any fun (v, g) => g == f && v == .local f
+  let readOnly (l : Loc) : Bool := c.st.cells.any fun cell => cell.loc == l && !cell.stored
+  -- what a cell may go up by besides a constant: values over the counter, the parameters, the
+  -- locals the body does not write and the cells it only reads
+  let leafOk (s : Sym) : Bool := match s with
+    | .local f => f == x || unchanged f
+    | .param _ | .slen _ | .lit _ => true
+    | .cell l => readOnly l
+    | _ => false
+  let mut cells := #[]
+  for cell in c.st.cells do
+    if !cell.stored then cells := cells.push (cell, {}); continue
+    let leaves := cell.val.summands
+    unless (leaves.filter (· == .cell cell.loc)).size == 1 do
+      throwError "a cell that does not go up from its value (the body overwrites it)"
+    let mut inc : Inc := {}
+    for t in leaves do
+      if t == .cell cell.loc then continue
+      if let .lit n := t then inc := { inc with k := inc.k + n }; continue
+      unless t.over leafOk do throwError "a cell that goes up by a value of something the body writes"
+      inc := { inc with terms := inc.terms.push t }
+    if down && !inc.terms.isEmpty then
+      throwError "a cell that goes up by a value that is not a constant, in a loop that counts down"
+    cells := cells.push (cell, inc)
+  match b with
+  | .local y => if y == x then throwError "a bound that is the counter"
+    else unless unchanged y do throwError "a bound in a local the body writes"
+  | .param _ | .lit _ | .slen _ => pure ()
+  | .cell l => unless readOnly l do throwError "a bound in a cell the body writes"
+  | _ => throwError "a bound that is not a local, a parameter, a literal, a slice length or a cell"
+  for p in exits do
+    unless p.st.cond == some (cnd, !o) do throwError "an exit guarded by another test"
+    unless p.st.checked.isEmpty && (p.st.locals.zip ctx.fields).all (fun (v, f) => v == .local f) do
+      throwError "an exit that adds, subtracts or changes a local"
+    for cell in p.st.cells do
+      unless !cell.stored && cells.any (fun (k, _) => k.loc == cell.loc && k.ty == cell.ty && k.align == cell.align) do
+        throwError "an exit that writes memory or reads a cell the repeating path does not"
+  -- Every add and subtraction of the repeating path is a step of the counter or a partial sum of a
+  -- cell's new value, so the counter's bounds and the no-overflow facts cover it.
+  for a in c.st.checked do
+    let (base, k) := a.split
+    unless (base == .local x && (k == 0 || k == step)) ||
+        cells.any (fun (cell, _) => cell.stored && (cell.val.partialSums (.cell cell.loc)).contains a) do
+      throwError "an add or subtraction that the counter's and the cells' bounds do not cover"
+  -- (an exit with a payload has no label: the post then states only that it exits)
+  return { counter := x, rel, bound := b, down, cells, scratch, exits := exitLabels exits,
+           plain := paths.any (·.st.tick) }
+
+/-- A definition's value with its leading instance binders named (`inst0`, by position): the
+generated definitions take them as explicit parameters. -/
+partial def nameInsts (i : Nat) : Expr → Expr
+  | .lam n ty b bi =>
+    .lam (if bi.isInstImplicit then Name.mkSimple s!"inst{i}" else n) ty (nameInsts (i + 1) b) bi
+  | e => e
+
+/-- The loop parameters (`params`) that the body `code` indexes as arrays, with their item size
+(`Zig.ptrProject p (·.elem size k)`). -/
+def arraysOf (params : Array Expr) (code : Expr) : MetaM (Array (Nat × Nat)) := do
+  let out ← IO.mkRef (#[] : Array (Nat × Nat))
+  code.forEachWhere (·.isAppOfArity `Zig.ptrProject 2) fun e => do
+    let some i := params.idxOf? (e.getArg! 0).consumeMData | return
+    let some (sz, _) := elemProj? (e.getArg! 1) | return
+    let arrs ← out.get
+    if arrs.any (fun (j, s) => j == i && s != sz) then throwError "an array indexed at two item sizes"
+    unless arrs.contains (i, sz) do out.set (arrs.push (i, sz))
+  out.get
+
+/-- `s` with each leaf (a value that is not a sum, difference, widening or summary) replaced by
+`leaf`. -/
+partial def Sym.substM (leaf : Sym → MetaM Sym) : Sym → MetaM Sym
+  | .add a b => return .add (← a.substM leaf) (← b.substM leaf)
+  | .sub a b => return .sub (← a.substM leaf) (← b.substM leaf)
+  | .widen a => return .widen (← a.substM leaf)
+  | .scale k a => return .scale k (← a.substM leaf)
+  | s => leaf s
+
+/-- `d` times `k`. -/
+def scaleBy (k : Nat) (d : Sym) : Sym := if k == 1 then d else .scale k d
+
+/-- `a - b`, `a` itself for `b = 0`. -/
+def subSym (a b : Sym) : Sym := if b == .lit 0 then a else .sub a b
+
 mutual
 
 /-- The paths of the monadic term `e` from `st`. -/
@@ -510,9 +771,14 @@ partial def exec (ctx : Ctx) (st : St) (e : Expr) : MetaM (Array Path) := do
       throwError "a call that no given contract fits: {"; ".intercalate why.toList}"
     if callee.isAppOfArity `Zig.ptrProject 2 then
       let base ← evalPure ctx st (callee.getArg! 0)
-      -- a field of a node (`(·.add k)` of an optional pointer's payload), not a cell at an
-      -- offset of a parameter, which the counted family does not read
-      let .payload _ := base | throwError "a pointer projection (a cell at an offset)"
+      -- an item of an array parameter (`(·.elem size k)`, `k` a literal)
+      if let .param i := base then
+        let some (sz, k) := elemProj? (callee.getArg! 1)
+          | throwError "a pointer projection of a parameter that is not an item at a literal index"
+        unless ctx.arrays.contains (i, sz) do throwError "an array indexed at two item sizes"
+        return #[{ st, res := .item i k }]
+      -- else a field of a node (`(·.add k)` of an optional pointer's payload)
+      let .payload _ := base | throwError "a pointer projection of a value that is not a parameter or a node"
       let k? : Option Nat := match (callee.getArg! 1).consumeMData with
         | .lam _ _ b _ =>
           if b.isAppOfArity `Zig.Ptr.add 2 && (b.getArg! 0).consumeMData == .bvar 0 then
@@ -534,7 +800,9 @@ partial def exec (ctx : Ctx) (st : St) (e : Expr) : MetaM (Array Path) := do
   | some n =>
     if (n == ``liftM || n == ``MonadLiftT.monadLift) && args.size == 5 then
       return #[← execLift ctx st args[4]!]
-    if n == `Zig.loop then throwError "a nested loop"
+    if n == `Zig.loop then
+      unless args.size == 7 do throwError "a partial nested loop: {e}"
+      return #[← execInner ctx st args[5]! args[6]!]
     match ← reduceMatcher? e with
     | .reduced e' => exec ctx st e'
     | .stuck e' => throwError "a match on an unknown value: {e'}"
@@ -558,8 +826,8 @@ partial def execLift (ctx : Ctx) (st : St) (x : Expr) : MetaM Path := do
         if o.node == c && o.off == off then o.store? else none
       let op := { node := c, off, ty := args[0]!, align := al }
       return { st := { st with nodeOps := st.nodeOps.push op }, res := last.getD (.nload c off) }
-    let some i := paramIdx? ctx args[3]! | throwError "a load through a pointer that is not a loop parameter"
-    let (st, k) ← st.access i args[0]! al
+    let some l ← locOf? ctx st args[3]! | throwError "a load through a pointer that is not a loop parameter"
+    let (st, k) ← st.access l args[0]! al
     return { st, res := st.cells[k]!.val }
   if x.isAppOfArity `Zig.store 5 then
     let some al := natLit? args[2]! | throwError "a store with an unknown alignment"
@@ -567,8 +835,8 @@ partial def execLift (ctx : Ctx) (st : St) (x : Expr) : MetaM Path := do
     if let some (c, off) ← nodeLoc? args[3]! then
       let op := { node := c, off, ty := args[0]!, align := al, store? := some v }
       return { st := { st with nodeOps := st.nodeOps.push op }, res := unitV }
-    let some i := paramIdx? ctx args[3]! | throwError "a store through a pointer that is not a loop parameter"
-    let (st, k) ← st.access i args[0]! al
+    let some l ← locOf? ctx st args[3]! | throwError "a store through a pointer that is not a loop parameter"
+    let (st, k) ← st.access l args[0]! al
     return { st := { st with cells := st.cells.modify k ({ · with val := v, stored := true }) },
              res := unitV }
   if x.isAppOfArity `Zig.optPayload 2 then
@@ -595,119 +863,78 @@ partial def apply (ctx : Ctx) (st : St) (f : Expr) (v : Sym) : MetaM (Array Path
       exec { ctx with env := ctx.env.insert x.fvarId! v } st (body.instantiate1 x)
   | _ => throwError "a continuation that is not a function: {f}"
 
+/-- An inner loop `Zig.loop body again` that the body runs, read as its summary: the inner body is
+read as a counted loop (over the same locals), and the path continues after its exit. The inner
+counter is at its exit value (the bound, or one past it for `<=`/`>=`), each cell it writes has
+gone up by its constant increment times the iterations (the distance from the counter's value at
+the inner loop's entry to its exit value), and the result is the inner loop's one exit. This is
+the inner loop's generated exit post (`B.post`, which `fsym` applies at the inner loop) read as
+values: the outer loop's candidates come from it, and the walks of the outer step, which run the
+inner loop by its registered invariant, decide. An inner loop with no counted reading, with an
+increment that is not a constant, with another loop inside or with several exits is outside. -/
+partial def execInner (ctx : Ctx) (st : St) (body again : Expr) : MetaM Path := do
+  let some bodyName := body.getAppFn.constName? | throwError "a nested loop whose body is not a definition"
+  let some againName := again.consumeMData.constName? | throwError "a nested loop whose test is not a definition"
+  let some (.defnInfo d) := (← getEnv).find? bodyName | throwError "a nested loop whose body is not a definition"
+  let bargs := body.getAppArgs
+  lambdaTelescope (nameInsts 0 d.value) fun ys code => do
+    unless ys.size == bargs.size do throwError "a nested loop whose body is applied in part"
+    let ty ← inferType code
+    unless ty.isAppOfArity `Zig.MM 2 && (ty.getArg! 0).isConstOf ctx.structName do
+      throwError "a nested loop that is not a body of `Zig.MM` over the same locals"
+    let ictx : Ctx := { structName := ctx.structName, fields := ctx.fields,
+                        params := ys.map (·.fvarId!), arrays := ← arraysOf ys code }
+    let paths ← exec ictx { locals := ctx.fields.map .local } code
+    let isAgain (e : Expr) : MetaM Bool := do
+      return (← whnf (mkApp (.const againName []) e)).isConstOf ``Bool.true
+    let c ← try counted ictx isAgain paths
+      catch ex => throwError "a nested loop outside the counted family: {ex.toMessageData}"
+    unless c.scratch.isEmpty do throwError "a nested loop that runs a nested loop"
+    let some #[label] := c.exits | throwError "a nested loop without exactly one exit label"
+    -- the inner loop's parameters, at the outer loop's values
+    let argSyms ← bargs.mapM (evalPure ctx st)
+    let idx (f : Name) : Nat := (ctx.fields.idxOf? f).getD 0
+    -- the cell `l` of the inner loop, as the outer loop reaches it
+    let outerLoc (l : Loc) : MetaM Loc := do
+      let some (.param j) := argSyms[l.param]? | throwError "a nested loop that accesses a cell through a value that is not a parameter"
+      unless (ctx.arrays.any (·.1 == j)) == l.item.isSome do
+        throwError "a nested loop that indexes a parameter as an array differently"
+      return { param := j, item := l.item }
+    -- (the cells that the substitution reads are accessed first, so `subst` is pure)
+    let mut st := st
+    for (cell, _) in c.cells do
+      st := (← st.access (← outerLoc cell.loc) cell.ty cell.align).1
+    let st0 := st
+    let cellVal (l : Loc) : MetaM Sym := do
+      let l' ← outerLoc l
+      let some cell := st0.cells.find? (·.loc == l') | throwError "a nested loop's cell"
+      return cell.val
+    -- an inner value at the inner loop's entry, over the outer iteration's start
+    let subst := Sym.substM fun s => match s with
+      | .local f => return st0.locals[idx f]!
+      | .param i => return argSyms[i]!
+      | .slen i => match argSyms[i]! with
+        | .param j => return .slen j
+        | _ => throwError "a nested loop's bound of a slice that is not a parameter"
+      | .cell l => cellVal l
+      | .lit n => return .lit n
+      | _ => throwError "a nested loop's value that the summary does not read"
+    let b ← subst c.bound
+    let x0 := st0.locals[idx c.counter]!
+    let exitV := if c.down then (if c.incl then .sub b (.lit 1) else b)
+      else if c.incl then .add b (.lit 1) else b
+    let dist := if c.down then subSym x0 exitV else subSym exitV x0
+    for (cell, inc) in c.cells do
+      if !cell.stored then continue
+      unless inc.terms.isEmpty do throwError "a nested loop whose cell goes up by a value that is not a constant"
+      let (st', k) ← st.access (← outerLoc cell.loc) cell.ty cell.align
+      let v := Sym.add st'.cells[k]!.val (scaleBy inc.k dist)
+      st := { st' with cells := st'.cells.modify k ({ · with val := v, stored := true }),
+                       checked := st'.checked.push v }
+    return { st := { st with locals := st.locals.set! (idx c.counter) exitV, tick := st.tick || c.plain },
+             res := .val (.const label []) }
+
 end
-
-/-- The relation `x R b` under which a counted loop repeats, `x` the counter. -/
-inductive Rel where
-  | lt | le | gt | ge | ne
-  deriving BEq
-
-/-- `R` as Zig writes it. -/
-def Rel.text : Rel → String
-  | .lt => "<" | .le => "<=" | .gt => ">" | .ge => ">=" | .ne => "!="
-
-/-- `¬ x R b` as `x R' b`; none for `!=` (its negation is a `==`). -/
-def Rel.neg? : Rel → Option Rel
-  | .lt => some .ge | .le => some .gt | .gt => some .le | .ge => some .lt | .ne => none
-
-/-- The test `c` with the outcome `o` as `x R b`, for the counter `x`: `none` if `c` is not a
-comparison of `x` with something else, or the outcome is a `==`. -/
-def relOf (x : Name) (c : Sym) (o : Bool) : Option (Rel × Sym) := do
-  -- `a R b` with the counter on either side (`R'` the relation with the sides swapped).
-  let side (r r' : Rel) (a b : Sym) : Option (Rel × Sym) :=
-    if a == .local x then some (r, b) else if b == .local x then some (r', a) else none
-  let (r, b) ← match c with
-    | .lt a b => side .lt .gt a b
-    | .le a b => side .le .ge a b
-    | .ne a b => side .ne .ne a b
-    | _ => none
-  if o then pure (r, b) else return (← r.neg?, b)
-
-/-- The exits' labels: the constructors that the exiting paths return (`none`: an exit with a
-payload). -/
-def exitLabels (exits : Array Path) : Option (Array Name) :=
-  exits.foldl (init := some #[]) fun ls? p => do
-    let l ← match p.res with | .val e => e.constName? | _ => none
-    let ls ← ls?
-    return if ls.contains l then ls else ls.push l
-
-/-- A recognized counted loop. -/
-structure Counted where
-  /-- The counter, a local. -/
-  counter : Name
-  /-- The test under which the loop repeats: `counter R bound`. -/
-  rel : Rel
-  /-- The bound: another local, a loop parameter, a literal, the length of a slice parameter or a
-  cell the body only reads. -/
-  bound : Sym
-  /-- The counter goes down by 1 (else up by 1). -/
-  down : Bool
-  /-- The cells the body accesses, in order, with their increments (`0` for a cell it only
-  reads). -/
-  cells : Array (Cell × Nat)
-  /-- The exits' labels: the constructors of the exit type that an exiting iteration returns
-  (`none`: an exit that returns a constructor with a payload). -/
-  exits : Option (Array Name)
-  plain : Bool
-
-/-- `R` includes the bound: the counter passes it by one before the loop exits. -/
-def Counted.incl (c : Counted) : Bool := c.rel == .le || c.rel == .ge
-
-/-- The one repeating path of an iteration and its exiting paths (each family's first test). -/
-def splitPaths (again : Expr → MetaM Bool) (paths : Array Path) : MetaM (Path × Array Path) := do
-  let mut cont := #[]
-  let mut exits := #[]
-  for p in paths do
-    let .val e := p.res | throwError "an iteration whose exit is not a constructor"
-    if ← again e then cont := cont.push p else exits := exits.push p
-  let #[c] := cont | throwError "{cont.size} repeating paths, not one"
-  if exits.isEmpty then throwError "no exit"
-  return (c, exits)
-
-/-- Classify the paths of one iteration as a counted loop, or say why not. -/
-def counted (ctx : Ctx) (again : Expr → MetaM Bool) (paths : Array Path) : MetaM Counted := do
-  let (c, exits) ← splitPaths again paths
-  -- The counter: the one local the iteration changes, by 1 up or down.
-  let changed := (c.st.locals.zip ctx.fields).filter fun (v, f) => v != .local f
-  let #[(v, x)] := changed | throwError "the body writes {changed.size} locals, not one counter"
-  let (base, step) := v.split
-  unless base == .local x && step.natAbs == 1 do throwError "the counter `{x}` does not step by 1"
-  let down := step == -1
-  let some (cnd, o) := c.st.cond | throwError "the repeating path is not guarded by a test"
-  let some (rel, b) := relOf x cnd o | throwError "the repeating path is not guarded by a test of `{x}`"
-  unless (if down then rel != .lt && rel != .le else rel != .gt && rel != .ge) do
-    throwError "the counter `{x}` steps away from its bound (`{x} {rel.text} …`)"
-  let mut cells := #[]
-  for cell in c.st.cells do
-    if !cell.stored then cells := cells.push (cell, 0); continue
-    let (base, k) := cell.val.split
-    unless base == .cell cell.param && 0 ≤ k do
-      throwError "a cell that does not go up by a constant (its increment depends on a value)"
-    cells := cells.push (cell, k.toNat)
-  match b with
-  | .local y => if y == x then throwError "a bound that is the counter"
-  | .param _ | .lit _ | .slen _ => pure ()
-  | .cell i =>
-    unless cells.any (fun (cell, _) => cell.param == i && !cell.stored) do
-      throwError "a bound in a cell the body writes"
-  | _ => throwError "a bound that is not a local, a parameter, a literal, a slice length or a cell"
-  for p in exits do
-    unless p.st.cond == some (cnd, !o) do throwError "an exit guarded by another test"
-    unless p.st.checked.isEmpty && (p.st.locals.zip ctx.fields).all (fun (v, f) => v == .local f) do
-      throwError "an exit that adds, subtracts or changes a local"
-    for cell in p.st.cells do
-      unless !cell.stored && cells.any (fun (k, _) => k.param == cell.param && k.ty == cell.ty && k.align == cell.align) do
-        throwError "an exit that writes memory or reads a cell the repeating path does not"
-  -- Every add and subtraction of the repeating path is a partial step of the counter or a partial
-  -- sum of a cell's increment, so the counter's bounds and the no-overflow facts cover it.
-  for a in c.st.checked do
-    let (base, k) := a.split
-    unless (base == .local x && (k == 0 || k == step)) ||
-        cells.any (fun (cell, n) => cell.stored && base == .cell cell.param && 0 ≤ k && k ≤ n) do
-      throwError "an add or subtraction that the counter's and the cells' bounds do not cover"
-  -- (an exit with a payload has no label: the post then states only that it exits)
-  return { counter := x, rel, bound := b, down, cells, exits := exitLabels exits,
-           plain := paths.any (·.st.tick) }
 
 /-- What an accumulator of a list walk adds per node: the item, or a constant. -/
 inductive Acc where
@@ -838,18 +1065,39 @@ def relName (ns n : Name) : String :=
 check of `walk`). -/
 def reserved (n : Name) : Bool :=
   match n with
-  | .str .anonymous s => ["s", "s0", "v", "r", "n", "xs", "ys", "zs", "X", "D", "V", "up", "pts",
-      "plain", "listSeg", "FAssn", "Zig", "BitVec"].contains s ||
-      (s.startsWith "v" && s.length > 1 && (s.toList.drop 1).all Char.isDigit)
+  | .str .anonymous s => ["s", "s0", "v", "r", "n", "u", "xs", "ys", "zs", "X", "D", "V", "up", "pts",
+      "arr", "tsum", "plain", "listSeg", "FAssn", "Zig", "BitVec", "List"].contains s ||
+      -- (the cells' entry values `vₖ`, an array's items `wₖ` and its rest `tᵢ`)
+      (["v", "w", "t"].any s.startsWith && s.length > 1 && (s.toList.drop 1).all Char.isDigit)
   | _ => false
+
+/-- `s` in parentheses if it has a space. -/
+def paren (s : String) : String := if s.contains ' ' then s!"({s})" else s
+
+/-- The cell `l` as Zig writes it, `p` its parameter's name: `*p` or `p[k]`. -/
+def cellName (p : String) (l : Loc) : String :=
+  match l.item with
+  | some k => s!"{p}[{k}]"
+  | none => s!"*{p}"
+
+/-- The value `s` as `Nat` source text, with its leaves written by `leaf` (a difference does not
+wrap: each one in a body is checked, and a summary's is the distance its counter goes). -/
+partial def Sym.natText (leaf : Sym → MetaM String) : Sym → MetaM String
+  | .add a b => return s!"({← a.natText leaf} + {← b.natText leaf})"
+  | .sub a b => return s!"({← a.natText leaf} - {← b.natText leaf})"
+  | .widen a => a.natText leaf
+  | .scale k a => return s!"{k} * {← a.natText leaf}"
+  | .lit n => return toString n
+  | s => leaf s
 
 /-- A candidate fact of a loop invariant, as source text over the loop's parameters, the entry
 locals `s0`, the cells' entry values `vₖ` and the locals `s`. -/
 structure Fact where
   text : String
-  /-- The written cell `k` (with its value type) whose current value `v` the fact states: the fact
-  stands inside that cell's existential. -/
+  /-- The written cell `k` (with its value type) whose current value the fact states: the fact
+  stands inside that cell's existential, whose variable is `var`. -/
   cell? : Option (Nat × String) := none
+  var : String := "v"
   deriving Inhabited
 
 /-- A resource of the invariant, in order. -/
@@ -860,6 +1108,9 @@ inductive Owned where
   | written (k : Nat) (ty atom : String)
   /-- Another atom (a list walk's lists). -/
   | atom (text : String)
+  /-- The array at `p`: its items `0, 1, …` as the cells `k` (a written one at a value `wₖ : ty`
+  that its facts state, one the loop only reads at its entry value `vₖ`), then the rest `tail`. -/
+  | arr (p : String) (items : Array (Nat × Option String)) (tail : String)
   | plain
 
 /-- The candidate invariant `name.inv` of a loop, its measure `name.meas` and its exit post
@@ -906,6 +1157,9 @@ structure Cand where
   triple : String := "FTotalTriple"
   /-- The contracts that the candidate uses. -/
   rules : Array Name := #[]
+  /-- The generated definitions of the inner loops that the body runs, which the walks of its step
+  apply (not part of the output: they are the inner loops' own). -/
+  deps : String := ""
 
 /-- An assertion over the resources `owned`: the facts `top`, and each written cell `k` at a
 value `v` with the facts `cell k`. -/
@@ -921,6 +1175,13 @@ def Cand.assn (c : Cand) (top : List String) (cell : Nat → List String) (owned
       let fs := cell k
       atoms := atoms.push <| if fs.isEmpty then s!"(FAssn.ex fun v : {ty} => {atom})"
         else s!"(FAssn.ex fun v : {ty} => ⟪{" ∧ ".intercalate fs}⟫ ⋆ {atom})"
+    | .arr p items tail =>
+      let fs := items.toList.flatMap fun (k, ty?) => if ty?.isSome then cell k else []
+      let list := String.join (items.toList.map fun (k, ty?) => if ty?.isSome then s!"w{k} :: " else s!"v{k} :: ")
+      let atom := s!"up (arr {p} ({list}{tail}))"
+      let exs := String.join (items.toList.filterMap fun (k, ty?) => ty?.map (s!"FAssn.ex fun w{k} : {·} => "))
+      atoms := atoms.push <| if fs.isEmpty then s!"({exs}{atom})"
+        else s!"({exs}⟪{" ∧ ".intercalate fs}⟫ ⋆ {atom})"
   return if atoms.isEmpty then "⟪True⟫" else " ⋆\n    ".intercalate atoms.toList
 
 /-- The invariant's body with the kept facts (`keep`), each written by `fact`. -/
@@ -1019,13 +1280,13 @@ def Cand.check (ns : Name) (c : Cand) (keep : Array Bool) (final := false) : Str
   let exA := String.join (c.exs.toList.map (s!" {·.1}")) ++ if c.ghost then " n" else ""
   for h : i in [0:c.facts.size] do
     if !keep[i]! then continue
-    let v := match c.facts[i].cell? with | some (_, ty) => s!"(v : {ty}) " | none => ""
+    let v := match c.facts[i].cell? with | some (_, ty) => s!"({c.facts[i].var} : {ty}) " | none => ""
     defs := defs ++ s!"def {c.name}.cand{i} {c.binders}(s0 : {c.loc}) {c.entry}(s : {c.loc}) {exB}{v}: Prop :=\n  \
       {c.facts[i].text}\n\n"
   -- The uses are qualified from the root: under the parameters' binders, a parameter named like
   -- the body's first component (`p0.loop5 (p0 : …)`) would capture a relative name.
   let q (n : String) := s!"_root_.{ns}.{n}"
-  let use (i : Nat) := s!"{q c.name}.cand{i} {c.args}s0 {c.vargs}s{exA}" ++ if c.facts[i]!.cell?.isSome then " v" else ""
+  let use (i : Nat) := s!"{q c.name}.cand{i} {c.args}s0 {c.vargs}s{exA}" ++ if c.facts[i]!.cell?.isSome then s!" {c.facts[i]!.var}" else ""
   let inv (s : String) := s!"{q c.name}.inv {c.args}s0 {c.vargs}{s}"
   let meas (s : String) := s!"{q c.name}.meas {c.args}{c.measArgs}{s}"
   -- A list walk (ghost measure): the step of `loop_ghost_ex`, which ends in the exit post at an
@@ -1072,7 +1333,7 @@ def walk (ns : Name) (c : Cand) (keep : Array Bool) (final := false)
     | some out => c.creditCheck ns out
     | none => c.check ns keep final
   let text := s!"namespace {ns}\n{opens}\n\
-    set_option linter.unusedVariables false\n\n{check}\nend {ns}\n"
+    set_option linter.unusedVariables false\n\n{c.deps}{check}\nend {ns}\n"
   let opts := ({} : Options).setBool `Elab.async false
   let (_, msgs) ← Lean.Elab.process text (← getEnv) opts (some "<air2lean-invgen check>")
   let mut reports := #[]
@@ -1256,13 +1517,6 @@ def listCand (ns : Name) (name again binders tbinders args run triple loc exit :
     doc := s!"/-- The invariant of `{name}`, a list walk that {kind} `xs` at `{cur}` \
       (`{name}.node`): `zs` are the `n` nodes left.\n`s0` holds the locals at loop entry. -/\n" }
 
-/-- A definition's value with its leading instance binders named (`inst0`, by position): the
-generated definitions take them as explicit parameters. -/
-partial def nameInsts (i : Nat) : Expr → Expr
-  | .lam n ty b bi =>
-    .lam (if bi.isInstImplicit then Name.mkSimple s!"inst{i}" else n) ty (nameInsts (i + 1) b) bi
-  | e => e
-
 /-- The candidate invariant, measure and exit post of the loop `body` (the definition run by
 `Zig.loop`) with exit test `again`, with the contracts `contracts` (the function, the rule) for
 its calls; throws why there are none. -/
@@ -1284,7 +1538,8 @@ def candLoop (ns body again : Name) (contracts : Array (Name × Name) := #[]) : 
         let n := (← x.fvarId!.getDecl).userName
         if n.hasMacroScopes || reserved n then throwError "a parameter named {n}"
       let fields := getStructureFields (← getEnv) structName
-      let ctx : Ctx := { structName, fields, params := xs.map (·.fvarId!), contracts }
+      let ctx : Ctx := { structName, fields, params := xs.map (·.fvarId!), contracts,
+                         arrays := ← arraysOf xs code }
       let st : St := { locals := fields.map .local }
       let paths ← exec ctx st code
       let isAgain (e : Expr) : MetaM Bool := do
@@ -1317,12 +1572,30 @@ def candLoop (ns body again : Name) (contracts : Array (Name × Name) := #[]) : 
       let c ← counted ctx isAgain paths
       let pname (i : Nat) : MetaM String := return (← xs[i]!.fvarId!.getDecl).userName.toString
       let x := c.counter
-      -- Each cell's type, and its entry value `vₖ` as a binder (the measure binds the bound's).
-      let tys ← c.cells.mapM fun (cell, _) => return toString (← ppExpr cell.ty)
+      -- The cells: each one the body accesses, and each item of an array up to the last one it
+      -- accesses (an item it does not access is one it only reads).
+      let mut cells := c.cells
+      for (j, sz) in ctx.arrays do
+        let items := cells.filter (·.1.loc.param == j)
+        let some (first, _) := items[0]? | continue
+        unless items.all (fun (cell, _) => cell.ty == first.ty && cell.align == first.align) do
+          throwError "an array whose items are accessed at two types or alignments"
+        unless first.width == 8 * sz do throwError "an array whose item size is not its word's"
+        let last := items.foldl (fun m (cell, _) => max m (cell.loc.item.getD 0)) 0
+        for i in [0:last + 1] do
+          unless items.any (·.1.loc.item == some i) do
+            let loc : Loc := { param := j, item := some i }
+            cells := cells.push ({ first with loc, val := .cell loc, stored := false }, {})
+      -- Each cell's type, and its entry value `vₖ` as a binder (the measure binds the bound's);
+      -- then the rest `tⱼ` of each array `j` after the items the body reaches.
+      let tys ← cells.mapM fun (cell, _) => return toString (← ppExpr cell.ty)
       let binder (k : Nat) := s!"(v{k} : {tys[k]!}) "
-      let entry := String.join ((List.range tys.size).map binder)
-      let vargs := String.join ((List.range tys.size).map (s!"v{·} "))
-      let boundCell? := c.cells.findIdx? fun (cell, _) => c.bound == .cell cell.param
+      let arrs := (ctx.arrays.filterMap fun (j, _) => (cells.findIdx? (·.1.loc.param == j)).map (j, ·))
+      let entry := String.join ((List.range tys.size).map binder) ++
+        String.join (arrs.toList.map fun (j, k) => s!"(t{j} : List {paren tys[k]!}) ")
+      let vargs := String.join ((List.range tys.size).map (s!"v{·} ")) ++
+        String.join (arrs.toList.map (s!"t{·.1} "))
+      let boundCell? := cells.findIdx? fun (cell, _) => c.bound == .cell cell.loc
       let measEntry := (boundCell?.map binder).getD ""
       let measArgs := (boundCell?.map (s!"v{·} ")).getD ""
       let (bound, boundName) ← match c.bound with
@@ -1336,9 +1609,9 @@ def candLoop (ns body again : Name) (contracts : Array (Name × Name) := #[]) : 
           unless (← inferType xs[i]!).isConstOf `Zig.Slice do throwError "a length of a value that is not a slice"
           let p ← pname i
           pure (s!"{p}.len.toNat", s!"{p}.len")
-        | .cell i => do
+        | .cell l => do
           let some k := boundCell? | throwError "a bound cell"
-          pure (s!"v{k}.toNat", s!"*{← pname i}")
+          pure (s!"v{k}.toNat", cellName (← pname l.param) l)
         | _ => throwError "a bound"
       -- the bound at the locals `sv` (`bound` is at `s`)
       let boundAt (sv : String) := match c.bound with
@@ -1349,7 +1622,9 @@ def candLoop (ns body again : Name) (contracts : Array (Name × Name) := #[]) : 
       let X := s!"s.{x}.toNat"
       let X0 := s!"s0.{x}.toNat"
       -- the other locals at their entry values, at the locals `sv`
-      let pinned (sv : String) := (fields.filter (· != x)).map fun f => s!"{sv}.{f} = s0.{f}"
+      -- (not the scratch locals: the body sets them before it reads them)
+      let pinned (sv : String) := (fields.filter fun f => f != x && !c.scratch.contains f).map
+        fun f => s!"{sv}.{f} = s0.{f}"
       let mut facts : Array Fact := (pinned "s").map ({ text := · })
       -- The counter runs from `X0` to the value it exits at: the bound, or one past it for
       -- `<=`/`>=` (`one`), where the counter's last step must not wrap (`noWrap`; a literal bound
@@ -1388,26 +1663,65 @@ def candLoop (ns body again : Name) (contracts : Array (Name × Name) := #[]) : 
       let mut owned := #[]
       let mut postCells : Array (Nat × String) := #[]
       let mut doc := #[]
-      for h : k in [0:c.cells.size] do
-        let (cell, inc) := c.cells[k]
-        let p ← pname cell.param
+      -- a value over the counter's value `u` at an iteration's start, as `Nat` text
+      let leaf (s : Sym) : MetaM String := match s with
+        | .local f => return if f == x then "u" else s!"s0.{f}.toNat"
+        | .param i => return s!"{← pname i}.toNat"
+        | .slen i => return s!"{← pname i}.len.toNat"
+        | .cell l => match cells.findIdx? (·.1.loc == l) with
+          | some k => return s!"v{k}.toNat"
+          | none => throwError "an increment that reads a cell"
+        | _ => throwError "an increment that is not a value of the counter"
+      for h : k in [0:cells.size] do
+        let (cell, inc) := cells[k]
+        let p ← pname cell.loc.param
         let ty := tys[k]!
+        let name := cellName p cell.loc
+        -- an array: one resource, at its first cell, with its items in order
+        if cell.loc.item.isSome && !(cells.extract 0 k).any (·.1.loc.param == cell.loc.param) then
+          let items := ((List.range cells.size).filterMap fun k' =>
+            let c' := cells[k']!.1
+            if c'.loc.param == cell.loc.param then some (c'.loc.item.getD 0, k', c'.stored) else none).toArray
+          let items := items.qsort (·.1 < ·.1)
+          owned := owned.push (.arr p (items.map fun (_, k', w) => (k', if w then some (paren tys[k']!) else none))
+            s!"t{cell.loc.param}")
         if !cell.stored then
-          owned := owned.push (.read s!"up (pts {p} {cell.align} v{k})")
-          doc := doc.push s!"\n`v{k}` is `*{p}`, which the loop only reads."
+          if cell.loc.item.isNone then owned := owned.push (.read s!"up (pts {p} {cell.align} v{k})")
+          doc := doc.push s!"\n`v{k}` is `{name}`, which the loop only reads."
           continue
-        facts := facts.push { text := s!"v{k}.toNat + {scaled inc total} < 2 ^ {cell.width}" }
-        -- The cell's value after the iterations so far, counted up or down from `X0`: both are
-        -- candidates (true at entry), Houdini keeps the one of the counter's direction (a cell
-        -- that goes up by 0 keeps both, so it gets the one of the reading's direction only).
-        let up := s!"{X} - {X0}"
-        let down := s!"{X0} - {X}"
-        for d in (if inc != 0 then #[up, down] else if c.down then #[down] else #[up]) do
-          facts := facts.push { text := s!"v.toNat = v{k}.toNat + {scaled inc d}", cell? := some (k, ty) }
-        owned := owned.push (.written k ty s!"up (pts {p} {cell.align} v)")
-        postCells := postCells.push (k, s!"v.toNat = v{k}.toNat + {scaled inc totalPost}")
-        doc := doc.push s!"\n`v{k}` is `*{p}` there, which goes up by {inc} per iteration."
+        -- (the existential's variable of a written cell: `v` for `*p`, `wₖ` for an item)
+        let var := if cell.loc.item.isSome then s!"w{k}" else "v"
+        if inc.terms.isEmpty then
+          let n := inc.k
+          facts := facts.push { text := s!"v{k}.toNat + {scaled n total} < 2 ^ {cell.width}" }
+          -- The cell's value after the iterations so far, counted up or down from `X0`: both are
+          -- candidates (true at entry), Houdini keeps the one of the counter's direction (a cell
+          -- that goes up by 0 keeps both, so it gets the one of the reading's direction only).
+          let up := s!"{X} - {X0}"
+          let down := s!"{X0} - {X}"
+          for d in (if n != 0 then #[up, down] else if c.down then #[down] else #[up]) do
+            facts := facts.push { text := s!"{var}.toNat = v{k}.toNat + {scaled n d}", cell? := some (k, ty), var }
+          postCells := postCells.push (k, s!"{var}.toNat = v{k}.toNat + {scaled n totalPost}")
+          doc := doc.push s!"\n`v{k}` is `{name}` there, which goes up by {n} per iteration."
+        else
+          -- An increment `g u` over the counter's value `u` (a loop that counts up, `counted`):
+          -- with the library sum `tsum` (`ZigLean/Sep/Full/TSum.lean`), the increments still to
+          -- come are `tsum e g - tsum x g` (`e` the counter's exit value), and the cell plus
+          -- them stays at its entry value plus all of them: a linear fact for `fsym_arith`.
+          let ts ← inc.terms.mapM (·.natText leaf)
+          let g := s!"(fun u => {" + ".intercalate (ts.toList ++ if inc.k == 0 then [] else [toString inc.k])})"
+          let rest (e y : String) := s!"(tsum {paren e} {g} - tsum {paren y} {g})"
+          let e := s!"{bound}{one}"
+          let ePost := s!"{boundAt "r.2"}{one}"
+          facts := facts.push { text := s!"v{k}.toNat + {rest e X0} < 2 ^ {cell.width}" }
+          facts := facts.push { text := s!"{var}.toNat + {rest e X} = v{k}.toNat + {rest e X0}",
+                                cell? := some (k, ty), var }
+          postCells := postCells.push (k, s!"{var}.toNat = v{k}.toNat + {rest ePost X0}")
+          doc := doc.push s!"\n`v{k}` is `{name}` there, which goes up by `{g} {x}` per iteration."
+        if cell.loc.item.isNone then owned := owned.push (.written k ty s!"up (pts {p} {cell.align} {var})")
       if c.plain then owned := owned.push .plain
+      for f in c.scratch do
+        doc := doc.push s!"\n`{f}` is not stated: the body sets it before it reads it."
       let name := relName ns body
       return {
         name, again := relName ns again, binders, tbinders, args, run, triple, loc, entry,
@@ -1437,13 +1751,13 @@ with exit test `again` (`candLoop`, pruned by `houdini`, the output walked once 
 post) as source text with the pruning decisions, or why there are none; then its credit-mode
 definitions `body.credits.inv` and `body.credits.post` with the record's entry for them
 (`creditOf`). Each loop has its own heartbeat budget: the walks of the loops before it do not
-count. -/
-def genLoop (ns body again : Name) (contracts : Array (Name × Name) := #[]) :
+count. `deps`: the generated definitions of the inner loops that the body runs (`Cand.deps`). -/
+def genLoop (ns body again : Name) (contracts : Array (Name × Name) := #[]) (deps := "") :
     MetaM (Except String (String × String × Array Json × Json)) :=
   -- (a heartbeat or recursion limit, too, only costs this loop its invariant)
   withCurrHeartbeats <| tryCatchRuntimeEx
     (do
-      let c ← candLoop ns body again contracts
+      let c := { ← candLoop ns body again contracts with deps }
       -- a file generated with contracts holds the loops that call by them; the others are in
       -- the module's file generated without contracts
       if !contracts.isEmpty && c.rules.isEmpty then
@@ -1492,13 +1806,36 @@ invariant (`none`). The current environment
 must import `ZigLean.Sep.Full.AutoAll`: the pruning walks run `fsym`. -/
 def generate (module ns : Name) (generator inputs : Json) (specs contracts : Array Name := #[]) :
     MetaM (String × Array (String × String)) := do
+  let rules ← contracts.mapM fun r => return (← contractOf r, r)
+  let all ← loopsOf module ns
+  -- The inner loops that each body runs. A loop is generated after them: the walks of its step
+  -- apply their generated definitions (`Cand.deps`), and without them it gets none.
+  let inner ← all.mapM fun (b, _) => do
+    let some (.defnInfo d) := (← getEnv).find? b | return #[]
+    return (← loopApps d.value).map (·.1)
+  let mut results : Std.HashMap Name (Except String (String × String × Array Json × Json)) := {}
+  let mut pending := (List.range all.size).toArray
+  while !pending.isEmpty do
+    let (ready, wait) := pending.partition fun i => inner[i]!.all results.contains
+    if ready.isEmpty then throwError "loops that run each other: {pending.map fun i => all[i]!.1}"
+    for i in ready do
+      let (b, a) := all[i]!
+      let deps := inner[i]!.filterMap fun ib => match results[ib]? with
+        | some (.ok (_, t, _, _)) => some t
+        | _ => none
+      let r ← if deps.size < inner[i]!.size then
+          pure (.error s!"a nested loop without generated definitions: \
+            {(inner[i]!.filter fun ib => !(results[ib]?.any (· matches .ok _))).map (relName ns ·)}")
+        else genLoop ns b a rules (String.join deps.toList)
+      results := results.insert b r
+    pending := wait
+  -- (in the order of `loopsOf`)
   let mut loops := #[]
   let mut defs := #[]
   let mut skipped := #[]
-  let rules ← contracts.mapM fun r => return (← contractOf r, r)
-  for (b, a) in ← loopsOf module ns do
+  for (b, _) in all do
     let loop := relName ns b
-    match ← genLoop ns b a rules with
+    match results[b]! with
     | .ok (family, t, pruned, credits) =>
       loops := loops.push (Json.mkObj [("loop", loop), ("family", family),
         ("pruned", Json.arr pruned), ("credits", credits)])
