@@ -522,11 +522,11 @@ theorem wait_fails_closed {cr : γ → Nat} (hcost : P.cost = some cr) {t : Thre
 /-- **Termination within the summed credits.** A strict protocol proof of `main` (as for
 `Proto.run_safe`) whose protocol counts turns (`P.cost = some cr`), where `main` starts with
 `B = cr (G0 0) ≥ 1` credits: under every oracle, every run with at least `B` turns gives a
-result, and that result is `main`'s value with `QM`, or a stack overflow (premise STK-01; a run
-whose memory has no stack budget has none). The new threads' credits come out of their
-spawners' (`ChargeOk`), so `B` bounds the turns of all threads together. Neither `B - 1` turns
-(`returnsWithin_bound_tight`) nor `m0.NoStack` (`noStack_overflows`) excludes the other outcomes,
-so the conclusion is not `Total.ReturnsWithin`. -/
+result, and that result is `main`'s value with `QM`, or a stack overflow (premise STK-01: an
+exhausted stack budget, or a block without room in the address space). The new threads'
+credits come out of their spawners' (`ChargeOk`), so `B` bounds the turns of all threads
+together. Neither `B - 1` turns (`returnsWithin_sharp_false`) nor `m0.NoStack`
+(`returnsWithin_noStack_false`) suffices to conclude `Total.ReturnsWithin`. -/
 theorem returnsWithin {α : Type} (env : Env) (henv : env.spawn = .fallible → P.spawnFails = true)
     (dispatch : Tgt → ConcM Tgt Unit) {main : ConcM Tgt α} {m0 : Mem}
     {QM : α → (ThreadId → γ) → Mem → Nat → Prop} (G0 : ThreadId → γ) {cr : γ → Nat}
@@ -591,16 +591,17 @@ theorem returnsWithin {α : Type} (env : Env) (henv : env.spawn = .fallible → 
 `returnsWithin`'s conclusion is not `Total.ReturnsWithin (cr (G0 0) - 1)` for two reasons, each
 with a kernel-checked counterexample that meets every hypothesis of `returnsWithin`:
 
-* **`cr (G0 0) - 1` turns are not enough** (`returnsWithin_bound_tight`). A thread with `c`
+* **`cr (G0 0) - 1` turns are not enough** (`returnsWithin_sharp_false`). A thread with `c`
   credits makes at most `c - 1` stops, but it needs depth `c`, not `c - 1`: the segment after its
   last stop must run at a depth of at least one, where `Safe` (strict, with a cost) forbids "no
   result". `main` runs at depth `fuel`, so `fuel = c - 1` leaves that segment at depth `0`, where a
   `ConcM` may have no result (`ConcM` is any function of the depth). A program whose depth is
   only spent by its stops (`countdown`) needs one turn less, but nothing in `Proto.WP` says so.
-* **`m0.NoStack` does not exclude `.stackOverflow`** (`noStack_overflows`). Without a stack budget
-  `enterFrame` changes nothing, but `alloc` still throws `.stackOverflow` when the address space
-  has no room (`Mem.allocOk`, premise STK-01), and `Safe`'s error leaf admits `.stackOverflow` in
-  every mode. So no scheduler lemma derives "no `.stackOverflow`" from `m0.NoStack`.
+* **`m0.NoStack` does not exclude `.stackOverflow`** (`returnsWithin_noStack_false`). Without a
+  stack budget `enterFrame` changes nothing, but `alloc` still throws `.stackOverflow` when the
+  address space has no room (`Mem.allocOk`, premise STK-01), and `Safe`'s error leaf admits
+  `.stackOverflow` in every mode. So no scheduler lemma derives "no `.stackOverflow`" from
+  `m0.NoStack`.
 -/
 
 /-- The protocol of the counterexamples: strict, every stop charged, one credit per thread, no
@@ -617,29 +618,38 @@ def cxProto : Proto Unit Unit where
 def cxShallow : ConcM Unit Unit := fun n m =>
   if n = 0 then .leaf none else .leaf (some (.ok ((), m)))
 
-/-- **`cr (G0 0) - 1` turns do not suffice.** `cxShallow` under `cxProto` meets every hypothesis
-of `returnsWithin` (`hcost`, `hstr`, `henv`, `hdisp` vacuously, `hQM`, `hsize`, `hmain`, and
-`hB` with `cr (G0 0) = 1`), yet its run with `cr (G0 0) - 1 = 0` turns has no result under every
-oracle. -/
-theorem returnsWithin_bound_tight :
-    cxProto.cost = some (fun _ => 1) ∧ cxProto.strict = true ∧
-    (∀ env : Env, env.spawn = .fallible → cxProto.spawnFails = true) ∧
-    (∀ tgt g, ¬ cxProto.init tgt g) ∧ ({} : Mem).threads.size = 1 ∧
-    (∀ n, cxProto.WP 0 cxShallow (fun _ _ m _ => joinedAll 0 m) (fun _ => ())
-      { ({} : Mem) with current := 0 } n) ∧
-    ∀ env o, (Sched.run env (fun _ => pure ()) 0 o cxShallow ({} : Mem)).run = none := by
-  refine ⟨rfl, rfl, fun _ _ => rfl, fun _ _ h => h, rfl, fun n => ?_, fun _ _ => rfl⟩
+/-- `cxShallow` keeps `cxProto` at every depth. -/
+theorem cxShallow_wp (n : Nat) : cxProto.WP 0 cxShallow (fun _ _ m _ => joinedAll 0 m)
+    (fun _ => ()) { ({} : Mem) with current := 0 } n := by
   cases n <;> simp [WP, cxShallow, Safe, joinedAll]
+
+/-- **`cr (G0 0) - 1` turns do not suffice** (kernel-checked): the sharper `returnsWithin`, with
+`cr (G0 0) - 1 ≤ fuel` and only "some result" as its conclusion, is false. `cxShallow` under
+`cxProto` (one credit) meets every hypothesis, and its run with `0` turns has no result. -/
+theorem returnsWithin_sharp_false : ¬ ∀ {α : Type} (P : Proto Unit Unit) (env : Env)
+    (dispatch : Unit → ConcM Unit Unit) (main : ConcM Unit α) (m0 : Mem)
+    (QM : α → (ThreadId → Unit) → Mem → Nat → Prop) (G0 : ThreadId → Unit) (cr : Unit → Nat),
+    (env.spawn = .fallible → P.spawnFails = true) → P.cost = some cr → P.strict = true →
+    (∀ tgt g, P.init tgt g → ∀ u G m n, 0 < u → G u = g → P.inv G m →
+      P.WP u (dispatch tgt) (P.QKid u) G { m with current := u } n) →
+    (∀ v G m d, QM v G m d → joinedAll 0 m) → m0.threads.size = 1 →
+    (∀ n, P.WP 0 main QM G0 { m0 with current := 0 } n) → 1 ≤ cr (G0 0) →
+    ∀ o fuel, cr (G0 0) - 1 ≤ fuel →
+      ∃ r, (Sched.run env dispatch fuel o main m0).run = some r := by
+  intro h
+  obtain ⟨r, hr⟩ := h cxProto ⟨.any, .available⟩ (fun _ => pure ()) cxShallow {}
+    (fun _ _ m _ => joinedAll 0 m) (fun _ => ()) (fun _ => 1) (fun _ => rfl) rfl rfl
+    (fun _ _ hi => (hi : False).elim) (fun _ _ _ _ hq => hq) rfl cxShallow_wp (Nat.le_refl 1)
+    (fun _ => 0) 0 (Nat.le_refl 0)
+  cases hr
 
 /-- A `main` that makes a stack block larger than `m0`'s address space. -/
 def cxOverflow (m0 : Mem) : ConcM Unit Ptr :=
   ConcM.liftMem (alloc .stack (m0.place.addrLimit + 1) 1)
 
-/-- **`m0.NoStack` does not exclude a stack overflow.** For every memory without stack budgets
-(`hns` is `Mem.NoStack`, `Full/MemAuth`, unfolded: this module does not import the full-state
-logic), `cxOverflow m0` under `cxProto` meets `hmain` of `returnsWithin` (the others as in
-`returnsWithin_bound_tight`; `hsize` for an `m0` with one thread, as `{}`), and every run of it, under every environment,
-dispatch, fuel and oracle, ends in `.stackOverflow`. -/
+/-- Every run of `cxOverflow m0` from a memory without stack budgets (`hns` is `Mem.NoStack`,
+`Full/MemAuth`, unfolded: this module does not import the full-state logic) keeps `cxProto`
+and, under every environment, dispatch, fuel and oracle, ends in `.stackOverflow`. -/
 theorem noStack_overflows (m0 : Mem) (hns : ∀ t, (m0.stackOf t).budget = none) :
     (∀ n, cxProto.WP 0 (cxOverflow m0) (fun _ _ m _ => joinedAll 0 m) (fun _ => ())
       { m0 with current := 0 } n) ∧
@@ -662,6 +672,31 @@ theorem noStack_overflows (m0 : Mem) (hns : ∀ t, (m0.stackOf t).budget = none)
     show (Sched.runTrace env dispatch fuel o (cxOverflow m0) m0).1 = _
     simp only [Sched.runTrace, cxOverflow, ConcM.liftMem, h', ExceptT.mk, Sched.settle,
       Sched.outOf]
+
+/-- **`m0.NoStack` does not exclude a stack overflow** (kernel-checked): `returnsWithin` with a
+memory without stack budgets and the outcome `.stackOverflow` excluded is false, for every bound.
+`cxOverflow {}` under `cxProto` meets every hypothesis, and every run of it overflows. -/
+theorem returnsWithin_noStack_false : ¬ ∀ {α : Type} (P : Proto Unit Unit) (env : Env)
+    (dispatch : Unit → ConcM Unit Unit) (main : ConcM Unit α) (m0 : Mem)
+    (QM : α → (ThreadId → Unit) → Mem → Nat → Prop) (G0 : ThreadId → Unit) (cr : Unit → Nat),
+    (∀ t, (m0.stackOf t).budget = none) →
+    (env.spawn = .fallible → P.spawnFails = true) → P.cost = some cr → P.strict = true →
+    (∀ tgt g, P.init tgt g → ∀ u G m n, 0 < u → G u = g → P.inv G m →
+      P.WP u (dispatch tgt) (P.QKid u) G { m with current := u } n) →
+    (∀ v G m d, QM v G m d → joinedAll 0 m) → m0.threads.size = 1 →
+    (∀ n, P.WP 0 main QM G0 { m0 with current := 0 } n) → 1 ≤ cr (G0 0) →
+    ∀ o fuel, cr (G0 0) ≤ fuel →
+      ∃ r, (Sched.run env dispatch fuel o main m0).run = some r ∧ r ≠ .error .stackOverflow := by
+  intro h
+  have hns : ∀ t, (({} : Mem).stackOf t).budget = none := fun t => by
+    simp [Mem.stackOf] <;> rfl
+  obtain ⟨r, hr, hne⟩ := h cxProto ⟨.any, .available⟩ (fun _ => pure ()) (cxOverflow {}) {}
+    (fun _ _ m _ => joinedAll 0 m) (fun _ => ()) (fun _ => 1) hns (fun _ => rfl) rfl rfl
+    (fun _ _ hi => (hi : False).elim) (fun _ _ _ _ hq => hq) rfl (noStack_overflows {} hns).1
+    (Nat.le_refl 1) (fun _ => 0) 1 (Nat.le_refl 1)
+  rw [(noStack_overflows {} hns).2] at hr
+  cases hr
+  exact hne rfl
 
 end Proto
 end Conc
