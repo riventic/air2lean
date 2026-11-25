@@ -130,8 +130,8 @@ is not the first node's last one only shrinks (the released bytes become junk); 
 `end_index` (shrink, or growth into the tail when it fits: the client gets the new bytes, its part
 of the share is re-lent at the new end). A successful resize re-points the grant at the new
 length (`Upd.reassign`). The updates take the released bytes' length, labels and bytes from the
-statement. The workaround for engine ledger rows #64 and #return-bool-split: `n` against `len` is split before
-the walk (the released bytes' `if`, and the returned `n <= len`). -/
+statement. `n` against `len` is split by the walk where a return needs it: the released bytes'
+`if` before the updates, and the returned `n <= len` that the postcondition matches on. -/
 theorem resize_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (n ra : BitVec 64)
     (A S : Nat) (K : BlockKind) (q q' φ : Frac) (tl : Array Byte) (hpos : 0 < s.len.toNat)
     (hn : 0 < n.toNat) (hq : q'.val ≤ q.val) :
@@ -140,7 +140,6 @@ theorem resize_ct (CI : Child) (γ e : Nat) (ctx s : _) (k : Nat) (n ra : BitVec
       (heap_ArenaAllocator_resize ctx s ⟨BitVec.ofNat 6 k⟩ n ra)
       ((inv CI γ e ctx).rresizePost s.ptr k s.len.toNat n.toNat A S K q q' φ tl) := by
   unfold heap_ArenaAllocator_resize
-  rcases Nat.lt_trichotomy n.toNat s.len.toNat with hc | hc | hc <;>
   fsym [resize_other_upd (S := S) (k := k) (n := n.toNat) (tl := tl),
     resize_shrink_upd (S := S) (k := k) (n := n.toNat) (tl := tl),
     resize_grow_upd (S := S) (k := k) (n := n.toNat) (tl := tl),
@@ -341,7 +340,7 @@ end Deinit
 the last one, which the arena keeps (`Last`, `AllocArena/Reset.lean`), resized to the list's share
 of the limit (`std.mem.alignBackward(24 + limit, 2)` bytes): given back if that is just the header,
 kept as it is if it has that size, else shrunk or grown in place by the child
-(`CAllocSpec.resize_shrink`, `CAllocSpec.resize_grow`), else replaced by a new node of that size
+(`CAllocSpec.resize_upTo`, the walk splitting on its released bytes' `if`), else replaced by a new node of that size
 (`CAllocSpec.alloc_upTo`, the old one given back; the new node's header words are stored over the
 granted bytes: `region_storePacked_wpts`, `region_store_wpts`, `region_storeAll`), else kept as
 it is (the result `ok` false). Each kept node is a whole node with `end_index` `0` and no next node
@@ -441,7 +440,7 @@ theorem loop66_c0 (hfit : CI.FitsUpTo (2 ^ 63) 3) (pu pf : Ptr) (xu xf : Option 
   unfold heap_ArenaAllocator_reset.loop66
   by_cases hsm : v0.toNat < 2 <;>
     fsym [loop78_ct CI h ctx Ac Sc Kc, CAllocSpec.free' h, CAllocSpec.alloc_upTo h hfit,
-      CAllocSpec.resize_shrink h hfit, CAllocSpec.resize_grow h hfit, Child.cown_refund,
+      CAllocSpec.resize_upTo h hfit, Child.cown_refund,
       FTotalTriple.region_storePacked_wpts, FTotalTriple.region_store_wpts,
       FTotalTriple.region_storeAll]
 
@@ -458,7 +457,7 @@ theorem loop66_c1 (hfit : CI.FitsUpTo (2 ^ 63) 3) (pu pf : Ptr) (xu xf : Option 
   unfold heap_ArenaAllocator_reset.loop66
   by_cases hsm : v1.toNat < 2 <;>
     fsym [loop78_ct CI h ctx Ac Sc Kc, CAllocSpec.free' h, CAllocSpec.alloc_upTo h hfit,
-      CAllocSpec.resize_shrink h hfit, CAllocSpec.resize_grow h hfit, Child.cown_refund,
+      CAllocSpec.resize_upTo h hfit, Child.cown_refund,
       FTotalTriple.region_storePacked_wpts, FTotalTriple.region_store_wpts,
       FTotalTriple.region_storeAll]
 
