@@ -1347,6 +1347,29 @@ judgment of their own:
 
 Kernel-checked in `TicksCX.lean`: `two_steps_exact`, `two_steps_tight` and `two_steps_plain`.
 
+### Device state
+
+The device state `Mem.dev` (the oracles and the trace of L13's volatile accesses,
+`ZigLean/Mem/Device.lean`, `docs/volatile-effects.md`) is an exclusive ghost component of the
+full-state logic (maintainer decision 2026-11-25), as the stack depth and the step ticks are:
+
+* `Ghost.dev : DCell` counts the exclusive fragments by device state (`ZigLean/Sep/Full/MemAuth.lean`);
+  composition adds the counts.
+* `MemAuth.dev`: every fragment of a resource and its frame names the memory's device state, and
+  there is at most one. So two fragments never compose (`Holds.devOwn_excl`).
+* `MemAuth.Keep.dev`: every step but a device step leaves `Mem.dev` (`Mem.Aux` carries it, and the
+  `Keep` constructors take it, by `rfl` for a step that does not touch the device).
+* `devOwn D` (`ZigLean/Sep/Full/Ghost.lean`) holds the fragment of `D`: the memory's device state
+  is `D` (`Holds.dev`). A device step changes both together (`Holds.setDev`). A frame-preserving
+  ghost update keeps the device cell (`Upd`); only an adequacy theorem adds `devOwn m.dev`
+  (`Holds.addDev`), as with the running thread's token.
+
+Without `devOwn` a memory with silent oracles holds the same resources, so a device read has no
+triple (`tests/roadmap/sep-full/DeviceCX.lean`: `vload_no_triple`, `vasm_no_triple`); with it the
+read's answer and the step are fixed (`vload_run_of_devOwn`, `vload_step_holds`). The `@[fsym]`
+rules of the device operations build on this (engine-ledger row `device-read-rules`). The run
+equations of `ZigLean/Mem/Device.lean` stay as run-level lemmas beside them.
+
 ## Ghost state: epoch ledgers (revocable allocator tokens)
 
 ### The problem

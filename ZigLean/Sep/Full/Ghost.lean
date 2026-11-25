@@ -1192,7 +1192,7 @@ them never compose (`Holds.devOwn_excl`), and no step but a device step changes 
 (`MemAuth.Keep.dev`). A device step replaces both together (`Holds.setDev`). A frame-preserving
 ghost update keeps the device cell (`Upd`); only an adequacy theorem hands `devOwn m.dev` to a
 program (`Holds.addDev`). Without `devOwn` no triple of a device read exists
-(`tests/roadmap/volatile-effects/DeviceGhostCX.lean`). -/
+(`tests/roadmap/sep-full/DeviceCX.lean`). -/
 
 /-- The ghost state with the device fragment of `D` and nothing else. -/
 noncomputable def Ghost.devAt (D : DevState) : Ghost := { Ghost.unit with dev := DCell.one D }
