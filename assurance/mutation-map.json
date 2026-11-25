@@ -2090,8 +2090,38 @@
     },
     "P04": {
       "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/queue-adt/mutants.sh",
+          "anchor": "ring-push-no-wrap rejected (the ring's push_spec fails for a push that does not wrap)"
+        },
+        {
+          "path": "tests/roadmap/queue-adt/mutants.sh",
+          "anchor": "ring-pop-no-wrap rejected (the ring's pop_spec fails for a pop that does not wrap)"
+        },
+        {
+          "path": "tests/roadmap/queue-adt/mutants.sh",
+          "anchor": "shift-pop-no-move rejected (the shifting array's pop_spec fails for a pop that moves no cell)"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "ring-push-no-wrap",
+          "path": "tests/roadmap/queue-adt/mutants.sh",
+          "category": "other"
+        },
+        {
+          "name": "ring-pop-no-wrap",
+          "path": "tests/roadmap/queue-adt/mutants.sh",
+          "category": "other"
+        },
+        {
+          "name": "shift-pop-no-move",
+          "path": "tests/roadmap/queue-adt/mutants.sh",
+          "category": "other"
+        }
+      ],
+      "note": "The ring buffer's proof of the queue contract (Zig.Full.QueueImpl) fails for a push or a pop of the translation that does not wrap around the end of the buffer; the shifting array's fails for a pop that moves no cell."
     },
     "P05": {
       "categories": [],
@@ -2189,8 +2219,29 @@
     },
     "P06": {
       "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/queue-adt/QueueAdt/Clients.lean",
+          "anchor": "theorem pushAll_not_within"
+        },
+        {
+          "path": "tests/roadmap/sep-full/TicksCX.lean",
+          "anchor": "tick_without_credit"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "pushall-capacity-premise-dropped",
+          "path": "tests/roadmap/queue-adt/mutants.sh",
+          "category": "other"
+        },
+        {
+          "name": "shift-pop-steps-short",
+          "path": "tests/roadmap/queue-adt/mutants.sh",
+          "category": "other"
+        }
+      ],
+      "note": "pushAll's step count ys.length + 1 is tight (one credit fewer does not pay it) and is not provable when the capacity premise is weakened to xs.length <= C; the shifting array's pop is not paid by one credit fewer than its declared count xs.length."
     },
     "P07": {
       "categories": [],
