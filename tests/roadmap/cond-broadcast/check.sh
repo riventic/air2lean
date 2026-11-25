@@ -19,7 +19,17 @@ translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-cond-broadcast.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 python3 -B scripts/fixture-exports.py check cond-broadcast
-for pair in 0.14.1:Proofs/Threadsync/Gen.lean 0.15.2:Proofs/Threadsync/Gen.lean \
+# 0.14.1: `Thread.Futex.LinuxImpl.wake` calls `math.cast`, unlike 0.15.2's proved wake; the
+# export holds no `math.cast`, so the translator must reject it (no contract for 0.14.1).
+if "$translator" "$here/air/0.14.1" -o "$work/Gen-0.14.1.lean" --namespace CondBroadcast \
+    --prefix cond_broadcast. > "$work/0.14.1.log" 2>&1; then
+  echo '0.14.1: the translation was expected to be rejected (math.cast in Thread.Futex.wake)' >&2
+  exit 1
+fi
+grep -q "Thread.Futex.LinuxImpl.wake: the callee 'math.cast" "$work/0.14.1.log" || {
+  cat "$work/0.14.1.log" >&2; echo '0.14.1: rejected for another reason' >&2; exit 1; }
+echo 'cond-broadcast 0.14.1: rejected (Thread.Futex.LinuxImpl.wake calls math.cast; not the proved wake)'
+for pair in 0.15.2:Proofs/Threadsync/Gen.lean \
     0.16.0:Proofs/Sync/Gen.lean 0.17.1:tests/golden/0.17.1/sync/Gen.lean; do
   version=${pair%%:*} proved=${pair#*:}
   "$translator" "$here/air/$version" -o "$work/Gen-$version.lean" --namespace CondBroadcast \
@@ -61,4 +71,4 @@ for name in names:
 print(f'cond-broadcast {version}: {", ".join(names)} equal {proved}')
 PY
 done
-echo 'condition broadcast gate passed: 4 versions translate to the proved broadcast'
+echo 'condition broadcast gate passed: 0.15.2, 0.16.0 and 0.17.1 translate to the proved broadcast; 0.14.1 is rejected'
