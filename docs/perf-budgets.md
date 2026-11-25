@@ -1,6 +1,7 @@
 # Translation and proof performance budgets
 
-Status: **recorded** (Darwin arm64 reference platform, 18 workloads). The gate has three
+Status: **recorded** (Linux x86_64 reference platform, the `neo` build host, 36 workloads:
+18 on 0.15.2/0.16.0 and 18 on 0.17.1; see Rebaseline 2026-11-25). The gate has three
 modes: the strict reference-platform limits, a portable mode with generous limits that CI runs
 on any runner, and a normalized mode that also gates proof time on any machine (see Gate).
 
@@ -227,6 +228,41 @@ gate's `output-changed` check), or carry separate preservation evidence. For
 example, `scripts/check.sh` golden/committed-translation comparison and proof
 builds on the changed output. Rebaseline a changed output with
 `baseline --workload ID` only in the same commit as that evidence.
+
+### Rebaseline 2026-11-25 (reference platform Linux x86_64)
+
+The 18 recorded workloads failed `output-changed` (CI, test/0.16.0/lean) against the October
+baseline (revision `fce33b590`). Their AIR inputs are unchanged since then; the outputs changed
+with two merged translator changes, and each new output equals its committed reference
+translation (`matches_reference`, `timing_cli.py`; `sync` by `Proofs/Sync/Gen.lean`), which
+`scripts/check.sh` and `scripts/gen-integrity.py check` (all generated modules, run on the
+measured revision) compare and the example's proofs build on:
+
+| Change | What it adds to the output | Workloads |
+| --- | --- | --- |
+| #562 (L8 step ticks) | `Zig.tick` / `Zig.callM Zig.tick` / `Zig.callMC Zig.tick` at each memory-mode loop-body run and recursive entry; `recursion`'s `isEven`/`isOdd` mutual block in the new SCC order (same definitions, moved) | slices, threadsync, atomics, iogroup, pointers, recursion, sync, threads |
+| #690 (`zig_run` simp set) | one `attribute [zig_run] …` line after each declaration group (and `….eq_def` for recursive ones) | all 18 |
+
+A line-level diff of each reference translation from `fce33b590` to the measured revision has no
+other change. The measurement also found a translator regression from #562/#626, which is fixed,
+not absorbed: the call-graph walks (`Air2Lean/Program.lean`) were compiled into functions that
+rebuilt the whole successor table, calling `calleesOf` on every function, at each lookup;
+`emit` of threadsync went from 0.02 s to 0.45 s (sync 0.02 to 0.17 s; bisected to #562 with
+#626). The table is now built once per graph (output byte-identical: `gen-integrity.py check`,
+`timing_cli.py`, `tests/review/emitter.sh`): threadsync `emit` 0.045 s, sync 0.031 s. A first
+record also showed that the cold proof builds restored their outputs from Lake's artifact cache
+(0.14 s each); `record` now turns that cache off and fails a cold build that did not rebuild.
+
+The whole suite was then recorded once on the new reference platform (`record --per-module`,
+exclusive guard, calibration 7.47 s) and rebaselined. Against the October Darwin baseline, 13
+of the 18 workloads take fewer calibration units in both Lean phases (`elaborate`,
+`proof.cold`); more take `threadsync` `elaborate` (0.36 to 0.60 units: the generated module grew
+by the tick and `zig_run` lines), `layout` and `floatops` `elaborate` (0.34 to 0.41, 0.11 to
+0.15) and `variants` (`elaborate` 0.10 to 0.13, `proof.cold` 0.26 to 0.34), all within their
+old normalized limits; peak RSS is
+higher on every workload, by about the same amount whatever its size (translator +30%, Lean
++150 to +400 MiB, the `asm` elaboration included), which is the platform and import cost, not a
+workload.
 
 ## Measured hotspots and optimizations
 
