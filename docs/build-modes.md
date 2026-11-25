@@ -73,10 +73,11 @@ re-recorded runs of all three targets record it as `illegal_exclusion`, with no 
 union: its hidden safety tag exists only with runtime safety, so its layout and `@sizeOf` differ
 in ReleaseFast and ReleaseSmall, and a no-throw proof can transfer a wrong value or miss an
 out-of-bounds index ([2026-11-25-build-modes-0171.md](architecture-audit/2026-11-25-build-modes-0171.md)).
-The premise change it needs is a maintainer decision. The classification of every
+The maintainer chose option A (fail closed per type) on 2026-11-25. The classification of every
 mode-dependent layout (BM-4) shows the same for std types that branch on the mode at comptime:
 `std.debug.SafetyLock` makes the hash maps (every version) and `std.ArrayList` (0.17) 8 bytes
-smaller in ReleaseFast and ReleaseSmall, and the safe AIR does not mark them.
+smaller in ReleaseFast and ReleaseSmall, and the safe AIR does not mark them, so the mechanism
+that detects them is a second maintainer decision.
 
 **Fixed.** Address observation (MM-1, MM-2): every block's address is the environment's
 placement (`Mem.place`, premise SEM-07), and generated theorems hold for every placement, so a

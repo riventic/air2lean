@@ -28,7 +28,6 @@ const Bare = union { int: u32, small: u8 };
 const Tagged = union(enum) { int: u32, small: u8 };
 const Ext = extern union { int: u32, small: u8 };
 const Pck = packed union { int: u32, small: u32 };
-const InBare = struct { n: Bare, tail: u8 };
 // A user type selected by a comptime branch on the mode: invisible in the safe AIR.
 const ModeInt = if (std.debug.runtime_safety) u64 else u32;
 
@@ -46,8 +45,7 @@ pub fn main() void {
     std.debug.print("mode {s}\n", .{@tagName(builtin.mode)});
     // Language constructs.
     row("bare union", Bare);
-    row("struct containing a bare union", InBare);
-    std.debug.print("{s:<44} @offsetOf(tail) {d:>5}\n", .{ "struct containing a bare union", @offsetOf(InBare, "tail") });
+    after("bare union", Bare);
     row("bare union, @setRuntimeSafety(false) scope", unsafeScopeUnion());
     row("bare union, @setRuntimeSafety(true) scope", safeScopeUnion());
     row("tagged union", Tagged);
