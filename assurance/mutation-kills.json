@@ -265,77 +265,77 @@
         "kind": "check",
         "target": "tests/roadmap/asm-effects/check.sh"
       },
-      "block_sha256": "39654e2d7b83790b4c3eb01a6ef2c1bae78a4e3b9e1274f859fbfb46a9ab4fee"
+      "block_sha256": "7624f4770ac41eee82a63ad42b8daebdd13282c13c5c9e36e3514c1e1735b78a"
     },
     "tests/roadmap/asm-effects/harness.py#local_store_dropped": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/asm-effects/check.sh"
       },
-      "block_sha256": "39654e2d7b83790b4c3eb01a6ef2c1bae78a4e3b9e1274f859fbfb46a9ab4fee"
+      "block_sha256": "7624f4770ac41eee82a63ad42b8daebdd13282c13c5c9e36e3514c1e1735b78a"
     },
     "tests/roadmap/asm-effects/harness.py#rw_order": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/asm-effects/check.sh"
       },
-      "block_sha256": "39654e2d7b83790b4c3eb01a6ef2c1bae78a4e3b9e1274f859fbfb46a9ab4fee"
+      "block_sha256": "7624f4770ac41eee82a63ad42b8daebdd13282c13c5c9e36e3514c1e1735b78a"
     },
     "tests/roadmap/asm-effects/harness.py#rw_read_dropped": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/asm-effects/check.sh"
       },
-      "block_sha256": "39654e2d7b83790b4c3eb01a6ef2c1bae78a4e3b9e1274f859fbfb46a9ab4fee"
+      "block_sha256": "7624f4770ac41eee82a63ad42b8daebdd13282c13c5c9e36e3514c1e1735b78a"
     },
     "tests/roadmap/asm-effects/harness.py#store_wrong_location": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/asm-effects/check.sh"
       },
-      "block_sha256": "39654e2d7b83790b4c3eb01a6ef2c1bae78a4e3b9e1274f859fbfb46a9ab4fee"
+      "block_sha256": "7624f4770ac41eee82a63ad42b8daebdd13282c13c5c9e36e3514c1e1735b78a"
     },
     "tests/roadmap/asm-effects/harness.py#swap_targets": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/asm-effects/check.sh"
       },
-      "block_sha256": "39654e2d7b83790b4c3eb01a6ef2c1bae78a4e3b9e1274f859fbfb46a9ab4fee"
+      "block_sha256": "7624f4770ac41eee82a63ad42b8daebdd13282c13c5c9e36e3514c1e1735b78a"
     },
     "tests/roadmap/asm-wrappers/harness.py#operand_order": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/asm-wrappers/harness.py"
       },
-      "block_sha256": "4913a27f04cdd63bf08e62fd2ecdb769383e669cf9c35bddbd128f2d471ef9ae"
+      "block_sha256": "d427b93d462e7c586e9f128bbb10f73b3cfa5644b320c00ed98a0b17df4ed0d3"
     },
     "tests/roadmap/asm-wrappers/harness.py#result_placement": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/asm-wrappers/harness.py"
       },
-      "block_sha256": "4913a27f04cdd63bf08e62fd2ecdb769383e669cf9c35bddbd128f2d471ef9ae"
+      "block_sha256": "d427b93d462e7c586e9f128bbb10f73b3cfa5644b320c00ed98a0b17df4ed0d3"
     },
     "tests/roadmap/asm-wrappers/harness.py#single_result_placement": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/asm-wrappers/harness.py"
       },
-      "block_sha256": "4913a27f04cdd63bf08e62fd2ecdb769383e669cf9c35bddbd128f2d471ef9ae"
+      "block_sha256": "d427b93d462e7c586e9f128bbb10f73b3cfa5644b320c00ed98a0b17df4ed0d3"
     },
     "tests/roadmap/asm-wrappers/harness.py#store_dropped": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/asm-wrappers/harness.py"
       },
-      "block_sha256": "4913a27f04cdd63bf08e62fd2ecdb769383e669cf9c35bddbd128f2d471ef9ae"
+      "block_sha256": "d427b93d462e7c586e9f128bbb10f73b3cfa5644b320c00ed98a0b17df4ed0d3"
     },
     "tests/roadmap/asm-wrappers/harness.py#store_misplaced": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/asm-wrappers/harness.py"
       },
-      "block_sha256": "4913a27f04cdd63bf08e62fd2ecdb769383e669cf9c35bddbd128f2d471ef9ae"
+      "block_sha256": "d427b93d462e7c586e9f128bbb10f73b3cfa5644b320c00ed98a0b17df4ed0d3"
     },
     "tests/roadmap/big-endian/mutations.py#big-endian-instances-dropped": {
       "killed_by": {
@@ -1055,7 +1055,7 @@
         "kind": "check",
         "target": "scripts/weak-cas.sh"
       },
-      "block_sha256": "ac2c6d77f737480e22ea3eeff5e12d13ad8dff71360e43f7f2d1090d53012542"
+      "block_sha256": "c51c92afe2c684b0c77bb2879c478b54958fd1d6fbbb6334610aea8fea57b9f0"
     },
     "u": {
       "killed_by": {
