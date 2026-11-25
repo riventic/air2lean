@@ -946,7 +946,7 @@ where
   let s ← saveState
   -- `omega` may exhaust the recursion depth on a false goal with many case splits: a failure
   tryCatchRuntimeEx (do
-    let prove : MetaM Expr := do
+    let prove (facts : Array Expr) : MetaM Expr := do
       let m ← mkFreshExprMVar ty
       let before := (← getLCtx).lastDecl.map (·.fvarId)
       if let some g ← m.mvarId!.falseOrByContra then
@@ -959,11 +959,24 @@ where
             (fun c => { c with maxRecDepth := Nat.max c.maxRecDepth 20000 }) do
             Lean.Elab.Tactic.Omega.omega (neg ++ facts).toList g
       instantiateMVars m
+    -- The facts that are not locals enter `omega` as locals and their proofs are substituted
+    -- back (the term `omega` gives on the facts themselves): `omega`'s own term operations,
+    -- `mkLambdaFVars` at each case split and `instantiateMVars`, then walk the certificate only,
+    -- not the facts' proofs, which contain locals and earlier certificates
+    let proveAbs : MetaM Expr := do
+      let idx := (List.range facts.size).toArray.filter fun i => !facts[i]!.isFVar
+      if idx.isEmpty then return ← prove facts
+      let decls ← idx.mapM fun i => do
+        return (Name.mkSimple s!"fact{i}", ← instantiateMVars (← inferType facts[i]!))
+      withLocalDeclsDND decls fun hs => do
+        let mut fs := facts
+        for i in idx, h in hs do fs := fs.set! i h
+        return (← prove fs).replaceFVars hs (idx.map (facts[·]!))
     -- Without unknowns, one depth deeper: `omega`'s goals (the unshared certificate) and
     -- postponed constraints are dropped with the depth; a proof needing one is no proof
     let proveClosed : MetaM (Option Expr) := do
       let some pf ← withNewMCtxDepth do
-          let pf ← prove
+          let pf ← proveAbs
           return if (← getPostponed).isEmpty then some pf else none
         | return none
       let mctx ← getMCtx
@@ -973,7 +986,7 @@ where
     let isClosed (t : Expr) : MetaM Bool := return !(← instantiateMVars t).hasMVar
     let closed ← isClosed ty <&&> facts.allM fun f => do isClosed (← inferType f)
     -- with unknowns, at the context's depth, where `omega` may assign them
-    let some pf ← if closed then proveClosed else some <$> prove | s.restore; return none
+    let some pf ← if closed then proveClosed else some <$> prove facts | s.restore; return none
     return some (← internTerms (← caches).omegaTerms pf))
     fun _ => do s.restore; return none
 
@@ -1811,8 +1824,21 @@ partial def arithGoals (g : MVarId) (quick := false) (cases := true) : TacticM (
   if !t.hasFVar && !t.hasMVar then
     if ← closeWith g (← `(tactic| decide)) then return []
     -- (a closed fact whose instance the elaborator's reduction does not evaluate, the size of a
-    -- structure's encoding `(Enc.encode v).size`: the kernel evaluates it)
-    if ← closeWith g (← `(tactic| decide +kernel)) then return []
+    -- structure's encoding `(Enc.encode v).size`: the kernel evaluates it). Over imported
+    -- constants, the kernel evaluates its instance in the imports' environment (`importEnvFor?`)
+    -- and the proof is `decide`'s, `of_decide_eq_true inst rfl`, which the kernel evaluates again
+    -- when it checks the theorem: `decide +kernel`'s auxiliary lemma would wait for every earlier
+    -- theorem of the file. Else, or if that reduction is stuck, `decide +kernel`.
+    let mut kernelDecide := true
+    if let some pf ← observing? (mkDecideProof t) then
+      let inst := pf.appFn!.appArg!
+      if let some env ← importEnvFor? inst then
+        if let .ok v := Kernel.whnf env {} inst then
+          if v.isAppOf ``Decidable.isTrue then g.assign pf; return []
+          -- (decided false: `decide +kernel` fails as well)
+          kernelDecide := !v.isAppOf ``Decidable.isFalse
+    if kernelDecide then
+      if ← closeWith g (← `(tactic| decide +kernel)) then return []
   if let some (ty, x, y) := t.eq? then
     -- an unknown ghost list that the equation fixes (a loop's parameter at its entry,
     -- `?xs = [].reverse ++ xs`): its value in the normal form of lists (`xs`)

@@ -372,6 +372,17 @@ def whnfDCached (e : Expr) : MetaM Expr := do
   fsymEvalCache.modify (·.insert (id, e) v)
   return v
 
+open Meta in
+/-- The imports' environment, for a kernel reduction (`Kernel.whnf`) of a term `e` without locals
+that uses only imported constants: there it reduces as in the current environment. The kernel
+reads an environment only once it is checked (`Environment.toKernelEnv` waits for `checked`), and
+the current one is checked only when every earlier theorem of the file is (`Elab.async`): a kernel
+reduction in a proof would wait for all of them, and the file's theorems would run one after the
+other (the pattern of `Lean.Meta.evalExprCore`). `none`: reduce in the current environment. -/
+def importEnvFor? (e : Expr) : MetaM (Option Environment) := do
+  let env ← getEnv
+  return if !e.hasFVar && e.getUsedConstants.all env.isImportedConst then env.importEnv? else none
+
 end Zig.Full.Auto
 
 register_simp_attr fsym_norm
