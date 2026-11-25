@@ -100,6 +100,7 @@ recorded in the file named.
 | 2026-11-24 | D4 (L08): pointer fields in packed structs on 0.14.1/0.15.2 are a permanent named rejection; they and the never-emitted nested-bit-pointer export leave L08's remaining list. | `assurance/register/L08.md` |
 | 2026-11-24 | D5: I07 closes with its limits stated in TRU-05 (no release key in CI, since a key there lets a compromised workflow sign any manifest; no revocation, timestamp or log; native link is identity only; replay scope). | docs/premises.md TRU-05, `assurance/register/I07.md` |
 | 2026-11-24 | Audit S6 finding 4: std's untimed futex calls leave the hand rows. Approved end state: `Thread.Futex` (0.14.1, 0.15.2) is translated down to the OS rows (STD-05 step D); `Io.futexWait*`/`futexWake` (0.16.0, 0.17.1) become a contract that `Io.Threaded`'s translated code proves (step E); `os_unfair_lock` is an OS row (OSL-01). Rejected: proving the hand rows a refinement of the OS rows. | soundness-2026-10-14 §S6 finding 4, docs/std-models.md §Retiring the hand models, engine-ledger row s6-futex-hand-rows |
+| 2026-11-25 | S6 finding 4, slice D2, option (ii'): a setter that is `gone` for the lock and ticks in the translated macOS wake loop needs that it was not joined; `EventImpl.set_wp_resource` takes it as an explicit hypothesis, premise THR-12, which each client discharges (WaitGroup from its `Shape`). Rejected: widening `FLock.PartTick` to every gone thread. | docs/premises.md#thr-12, engine-ledger row s6-futex-hand-rows |
 
 ### Open for the maintainer
 
