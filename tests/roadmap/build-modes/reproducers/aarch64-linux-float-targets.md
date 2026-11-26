@@ -17,7 +17,7 @@ three modes agree on every line.
 
 | Case | Result | Model rule |
 |---|---|---|
-| `f16` `@mulAdd(0x3e00, 0x3c01, 0x8001)` | `0x3e02` everywhere (one `f32` `fmadd`, then rounded to `f16`); a fused `f16` `fmadd` gives `0x3e01` | the `generic` baseline has no `fullfp16`: `FloatRules.aarch64 (fusedF16 := false)`, `Float.fma`'s `f16` rule |
+| `f16` `@mulAdd(0x3e00, 0x3c01, 0x8001)` | `0x3e02` everywhere on these three versions (one `f32` `fmadd`, then rounded to `f16`); a fused `f16` `fmadd` gives `0x3e01`, and so does Zig 0.17.1 (an `f64` `fmadd`, then rounded to `f16`: `docs/aarch64-abi.md` §`@mulAdd` and other CPUs) | the `generic` baseline has no `fullfp16`: `Dialect.f16MulAdd` is `.viaF32` up to 0.16.0, `Float.fma`'s `f16` rule |
 | `f128` `@sqrt(2)` | `…bcd000000000000000` (`f64` precision) on 0.14.1/0.15.2 except musl with `-lc`; correctly rounded on 0.16.0 and on musl with `-lc` | `long double` is `f128`: LLVM calls `sqrtl`; compiler_rt's unless a static libc defines it |
 | `f128` `@mulAdd(0.25, 0.25, 2^16383)` | NaN (compiler_rt `fmaq`) everywhere except musl with `-lc` (`2^16383`, musl `fmal`) | the same libcall routing (`fmal`) |
 | `f128` `@sin(1)`, `@exp(1)` | compiler_rt (`f64` precision before 0.16.0) except musl with `-lc` | opaque (`docs/floats.md` §Transcendental functions) |

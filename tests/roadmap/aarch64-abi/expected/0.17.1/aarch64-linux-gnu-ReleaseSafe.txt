@@ -80,6 +80,12 @@ fop f128 of(f64.tiny) 3bcd0000000000000000000000000000
 fop f128 of(u128.max) 407f0000000000000000000000000000
 fop f128 u64(1e19) 8ac7230489e80000
 fop f128 isnan(0/0) true
+fma f16 c290 c47c 0ffe 4b5b
+fma f16 bf80 74e8 154e f899
+fma f16 ee40 b848 0643 6ab1
+fma f16 3e00 3c01 8001 3e01
+fma f32 3f800001 3f7fffff 28000001 3f800001
+fma f64 3ff0000000000001 3fefffffffffffff bff0000000000000 3c9ffffffffffffe
 atomic u8 1 1 pad00 fe true ff ff 01 5a 5a
 atomic u8 1 1 padff fe true ff ff 01 5a 5a
 atomic u16 2 2 pad00 fffe true ffff ffff 0001 005a 005a
@@ -369,3 +375,10 @@ f80atomic rmw_Max llvm Broken_module_found,_compilation_aborted!
 f80atomic rmw_Min llvm Broken_module_found,_compilation_aborted!
 f80atomic cmpxchg_strong zig expected_bool,_integer,_enum,_packed_struct,_or_pointer_type;_found_'f80'
 f80atomic cmpxchg_weak zig expected_bool,_integer,_enum,_packed_struct,_or_pointer_type;_found_'f80'
+cpu generic+fullfp16 feature fullfp16 1
+cpu generic+fullfp16 same 303 of 304
+cpu generic+lse+rcpc feature lse 1
+cpu generic+lse+rcpc feature rcpc 1
+cpu generic+lse+rcpc same 302 of 304
+cpu generic+outline_atomics feature outline_atomics 1
+cpu generic+outline_atomics same 303 of 304

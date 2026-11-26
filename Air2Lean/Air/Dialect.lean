@@ -92,6 +92,13 @@ def compilerRt : ZigVersion → CompilerRt
   | v0_16_0 => .v016
   | v0_17_1 => .v017
 
+/-- LLVM widens an `f16` `@mulAdd` that has no `f16` instruction to an `f64` `fma` and rounds
+that to `f16` (0.17.1); the LLVM of the earlier versions widens it to `f32` (`docs/floats.md`
+§Targets, `F16MulAdd`). -/
+def f16MulAddThroughF64 : ZigVersion → Bool
+  | v0_14_1 | v0_15_2 | v0_16_0 => false
+  | v0_17_1 => true
+
 /-- The AIR tag spelling (`Air2Lean/Air/Canon.lean`'s `versionTags`): 0.17.0 renamed and split
 tags, which are read back in the 0.16.0 spelling. -/
 inductive AirTags where
@@ -174,17 +181,32 @@ def Endian.ofString? : String → Option Endian
   | _ => none
 
 /-- How a target lowers the float ops whose lowering differs between targets (`docs/floats.md`
-§Targets), at its baseline CPU (`-mcpu=baseline`, the CPU of the native differential test). -/
+§Targets). An `f16` `@mulAdd` also depends on the Zig version and on the CPU (`F16MulAdd`). -/
 inductive FloatRules where
   /-- The reference (x86_64-linux): `f80` on the x87 and `@mulAdd` through compiler_rt (no FMA
   instruction). The targets without rules of their own (s390x, mips64, wasm32) keep it. -/
   | reference
   /-- aarch64 (premise MTH-04): soft-float `f80` (`Zig.Float.softF80Chk`; `__divxf3`; before
-  0.16.0, `@sqrt` through `f64`) and the fused `fmadd` for `@mulAdd` on `f32`/`f64`. With
-  `fusedF16` (`fullfp16` in the baseline CPU: aarch64-macos `apple_m1`) also on `f16`; without
-  it (aarch64-linux `generic`) LLVM promotes an `f16` `@mulAdd` to an `f32` `fmadd` and rounds
-  back, the reference rule. -/
-  | aarch64 (fusedF16 : Bool)
+  0.16.0, `@sqrt` through `f64`) and the fused `fmadd` for `@mulAdd` on `f32`/`f64`. They need
+  the float instructions (`fp_armv8`, `Target.requiredFeatures`). -/
+  | aarch64
+  deriving DecidableEq, Repr, Inhabited
+
+/-- How the backend computes an `f16` `@mulAdd` (`Dialect.f16MulAdd`, `docs/floats.md` §Targets;
+native rows: `tests/roadmap/aarch64-abi`, `docs/aarch64-abi.md` §`@mulAdd`). -/
+inductive F16MulAdd where
+  /-- The `f16` `fmadd` instruction (aarch64 with `fullfp16`): one rounding to `f16`. -/
+  | fused
+  /-- An `f32` multiply-add of the extended operands, rounded to `f16`: LLVM's widening up to
+  0.16.0, and compiler_rt's `__fmah`. -/
+  | viaF32
+  /-- An `f64` multiply-add of the extended operands, rounded to `f16`: LLVM's widening from
+  0.17.1. `libcall`: the `f64` multiply-add is the `fma` routine (compiler_rt's in `compiler-rt`
+  mode), not an instruction. -/
+  | viaF64 (libcall : Bool)
+  /-- As `viaF64`, with an `f64` multiplication (exact: 11 + 11 bits) and an `f64` addition in
+  place of the multiply-add (wasm32, which has no such instruction). -/
+  | viaF64MulAdd
   deriving DecidableEq, Repr, Inhabited
 
 /-- A target that the memory model admits: the architecture and OS components of the Zig
@@ -200,6 +222,14 @@ structure Target where
   /-- `c_longdouble` (Zig's `cTypeBitSize(.longdouble)`). -/
   longDoubleBits : Nat
   floatRules : FloatRules := .reference
+  /-- An `f16` `@mulAdd` from Zig 0.17.1 (`ZigVersion.f16MulAddThroughF64`) on a CPU without an
+  `f16` multiply-add: LLVM's `f64` `fma`, a routine on x86_64 and an instruction on aarch64
+  (`fmadd`) and s390x (`wfmadb`); wasm32 multiplies and adds in `f64`, and mips64 calls `__fmah`. -/
+  f16MulAdd017 : F16MulAdd := .viaF64 (libcall := true)
+  /-- The CPU features that the row's rules need: a profile without one is rejected
+  (`BuildProfile.collect`). aarch64: `fp_armv8`, the float instructions of `FloatRules.aarch64`
+  (without them every float op is a compiler_rt call, which those rules do not state). -/
+  requiredFeatures : List String := []
   /-- The widest atomic integer in bits (Zig's `max_atomic_bits` at the baseline CPU: x86_64
   has no `cx16`). The checker rejects a wider one. -/
   atomicBits : Nat
@@ -227,21 +257,23 @@ def Target.qualified : List Target := [
   { arch := "x86_64", os := "linux", pointerBits := 64, endian := .little, longDoubleBits := 80,
     atomicBits := 64, lanePtrProbe := true },
   { arch := "aarch64", os := "macos", pointerBits := 64, endian := .little, longDoubleBits := 64,
-    floatRules := .aarch64 (fusedF16 := true), atomicBits := 128, versions := Target.aarch64Probed,
+    floatRules := .aarch64, f16MulAdd017 := .viaF64 (libcall := false),
+    requiredFeatures := ["fp_armv8"], atomicBits := 128, versions := Target.aarch64Probed,
     lanePtrProbe := true },
   { arch := "aarch64", os := "linux", pointerBits := 64, endian := .little, longDoubleBits := 128,
-    floatRules := .aarch64 (fusedF16 := false), atomicBits := 128,
+    floatRules := .aarch64, f16MulAdd017 := .viaF64 (libcall := false),
+    requiredFeatures := ["fp_armv8"], atomicBits := 128,
     versions := Target.aarch64Probed, abis := ["gnu"], lanePtrProbe := true },
   { arch := "s390x", os := "linux", pointerBits := 64, endian := .big, longDoubleBits := 128,
-    atomicBits := 64 },
+    f16MulAdd017 := .viaF64 (libcall := false), atomicBits := 64 },
   -- MIPS64 n64 (`mips64-linux-muslabi64`, `mips64r2` baseline): `long double` is `f128` and
   -- `@mulAdd` goes through compiler_rt as on the reference (no fused multiply-add at r2).
   { arch := "mips64", os := "linux", pointerBits := 64, endian := .big, longDoubleBits := 128,
-    atomicBits := 64 },
+    f16MulAdd017 := .viaF32, atomicBits := 64 },
   { arch := "wasm32", os := "freestanding", pointerBits := 32, endian := .little,
-    longDoubleBits := 128, atomicBits := 32 },
+    longDoubleBits := 128, f16MulAdd017 := .viaF64MulAdd, atomicBits := 32 },
   { arch := "wasm32", os := "wasi", pointerBits := 32, endian := .little, longDoubleBits := 128,
-    atomicBits := 32 }]
+    f16MulAdd017 := .viaF64MulAdd, atomicBits := 32 }]
 
 /-- The qualified target of an architecture and OS name, if any. -/
 def Target.find? (arch os : String) : Option Target :=
@@ -280,6 +312,9 @@ structure Dialect where
   The AIR profile records no `link_libc` fact; without this opt-in the checker rejects the `f128`
   ops that call them (`docs/floats.md` §Targets). -/
   noLibc : Bool := false
+  /-- The profile's CPU features (`profile.features`); none for a legacy profile. A rule that
+  depends on the CPU reads its feature here (`f16MulAdd`: `fullfp16`). -/
+  features : Array String := #[]
   deriving Repr, Inhabited, BEq
 
 namespace Dialect
@@ -325,6 +360,16 @@ def target? (d : Dialect) : Option Target := Target.find? d.arch d.os
 
 /-- The target's float rules; the reference for a legacy profile. -/
 def floatRules (d : Dialect) : FloatRules := (d.target?.map (·.floatRules)).getD .reference
+
+/-- How an `f16` `@mulAdd` is computed: by the `f16` instruction on an aarch64 CPU with
+`fullfp16` (aarch64-macos's baseline `apple_m1` has it, aarch64-linux's `generic` does not),
+else through `f32` up to 0.16.0 and as the target's row says from 0.17.1 (a legacy profile:
+x86_64's). The self-hosted x86_64 backend calls `__fmah` at every version. -/
+def f16MulAdd (d : Dialect) : F16MulAdd :=
+  if d.floatRules == .aarch64 && d.features.contains "fullfp16" then .fused
+  else if d.version.f16MulAddThroughF64 && d.backend != "stage2_x86_64" then
+    (d.target?.map (·.f16MulAdd017)).getD (.viaF64 (libcall := true))
+  else .viaF32
 
 /-- The backend bit-packs vector lanes in memory (`ZigLean/Vec.lean`'s `Vec.packedEnc`,
 `tests/roadmap/vector-layouts`); other backends lay lanes out differently. -/

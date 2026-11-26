@@ -1,6 +1,7 @@
 import ZigLean.VecMem
 import ZigLean.Float.Allowed
 import ZigLean.Mem.Thread
+import Air2Lean.Air.Dialect
 
 /-! T04: the model's side of the two aarch64 profiles' recorded probe results
 (`tests/roadmap/aarch64-abi/expected/<zig>/<triple>-<mode>.txt`, `docs/aarch64-abi.md`).
@@ -25,7 +26,12 @@ import ZigLean.Mem.Thread
   so none is a claim of the model; each is printed as rejected, never counted as a match
   (`f80AtomicRow?`).
 * `futex` rows (`futex.zig`): `Futex.lean` checks each one against the outcomes of the OS rows
-  (`ZigLean/Os/Futex.lean`); this file only requires that the profile's rows are recorded. -/
+  (`ZigLean/Os/Futex.lean`); this file only requires that the profile's rows are recorded.
+* `fma` rows: each `@mulAdd` is the result of the translator's rule for the file's target, Zig
+  version and CPU (`Air2Lean.Dialect.f16MulAdd`; `f32`/`f64`: the fused instruction).
+* `cpu` rows: the probe at the profile's other CPUs (`cpus`), as its differences from the
+  baseline. Only the CPU's name, its features and the `fma` rows may differ, and every `fma` row
+  must be the rule's result for that CPU's features (`cpuRows`). -/
 
 open Zig
 
@@ -305,6 +311,44 @@ def fmtOf? : String → Option FloatFmt
   | "f16" => some .f16 | "f32" => some .f32 | "f64" => some .f64
   | "f80" => some .f80 | "f128" => some .f128 | _ => none
 
+/-! ## `@mulAdd` and the CPU (run time) -/
+
+/-- The value of the term that the translator emits for an `f16` `@mulAdd` under `rule` on
+aarch64 (`FCtx.mulAddExpr` in `Air2Lean/Emit.lean`; `test_mul_add.py` checks the emitted terms). -/
+def f16MulAdd (rule : Air2Lean.F16MulAdd) (a b c : Float .f16) : Float .f16 :=
+  let wide (x : Float .f16) : Float .f64 := Zig.Float.conv .f64 x
+  match rule with
+  | .fused => Zig.Float.fmaFused a b c
+  | .viaF32 => Zig.Float.fma a b c
+  | .viaF64 _ => Zig.Float.conv .f16 (Zig.Float.fmaFused (wide a) (wide b) (wide c))
+  | .viaF64MulAdd => Zig.Float.conv .f16 (Zig.Float.add (Zig.Float.mul (wide a) (wide b)) (wide c))
+
+/-- The translator's `f16` `@mulAdd` rule for the profile `os` (aarch64, the LLVM backend), a Zig
+version and a CPU with or without `fullfp16`. -/
+def f16Rule (os : String) (version : Air2Lean.ZigVersion) (fullfp16 : Bool) : Air2Lean.F16MulAdd :=
+  ({ version, arch := "aarch64", os, backend := Air2Lean.Target.llvmBackend,
+     features := if fullfp16 then #["fp_armv8", "fullfp16"] else #["fp_armv8"] } :
+    Air2Lean.Dialect).f16MulAdd
+
+/-- An `fma <type> <a> <b> <c> <result>` row is the model's `@mulAdd`: the `f16` rule, and the
+fused instruction on `f32` and `f64`. -/
+def fmaCase (rule : Air2Lean.F16MulAdd) (ty a b c r : String) : Bool :=
+  match fmtOf? ty, hexNat? a, hexNat? b, hexNat? c with
+  | some fmt, some a, some b, some c =>
+    let out : Option Out := match fmt with
+      | .f16 => some (.float .f16 (f16MulAdd rule (bitsF .f16 a) (bitsF .f16 b) (bitsF .f16 c)))
+      | .f32 | .f64 => some (.float fmt (Zig.Float.fmaFused (bitsF fmt a) (bitsF fmt b) (bitsF fmt c)))
+      | _ => none
+    out.any (·.allows r)
+  | _, _, _, _ => false
+
+/-- The other CPUs of a profile whose probe output is recorded (`CPUS` in
+`scripts/aarch64-abi.py`). -/
+def cpus : String → List String
+  | "aarch64-linux-gnu" => ["generic+fullfp16", "generic+lse+rcpc", "generic+outline_atomics"]
+  | "aarch64-macos-none" => ["generic", "generic+lse", "apple_m1-fullfp16", "apple_m1+outline_atomics"]
+  | _ => []
+
 /-- The layout table that the file's lines record, in `Recorded`'s shape (the vector shapes and
 the `c_longdouble` format, which the lines do not carry, are taken from `ref`). -/
 def parseLayouts (ref : Recorded) (lines : List (List String)) : Except String Recorded := do
@@ -361,6 +405,55 @@ def rejectedByTranslator : List String → Bool
   | ["rmw", ty, op, _, _, _, _] => padded ty && (op == "Max" || op == "Min")
   | _ => false
 
+/-- The value of a `feature <name> <0|1>` row. -/
+def feature (rows : List (List String)) (name : String) : Option Bool :=
+  rows.findSome? fun l => match l with
+    | ["feature", n, v] => if n == name then some (v == "1") else none
+    | _ => none
+
+/-- The `cpu <name> …` rows of one CPU against the baseline rows `base` (whose `fullfp16` is
+`baseFp16`). A row that differs
+from the baseline must be the CPU's name, a feature, an `fma` row, or a row of an operation
+that the translator rejects (`rejectedByTranslator`, never a match); the count of unchanged
+rows must be the rest; and every `fma` row, changed or not, must be the rule's result with the
+CPU's `fullfp16`. Returns the number of `fma` rows checked and the rejected rows, or what is
+wrong. -/
+def cpuRows (os : String) (version : Air2Lean.ZigVersion) (baseFp16 : Bool) (cpu : String)
+    (base rows : List (List String)) : Except String (Nat × List String) := do
+  let changed := rows.filter (·.head? != some "same")
+  let [["same", same, "of", total]] := rows.filter (·.head? == some "same")
+    | throw s!"cpu {cpu}: no single `same <k> of <n>` row"
+  unless same.toNat?.isSome && total.toNat? == same.toNat?.map (· + changed.length) do
+    throw s!"cpu {cpu}: `same {same} of {total}` with {changed.length} changed rows"
+  -- The rows of `probe.zig` (the other baseline rows are those of the vector probe, the limit
+  -- programs and the `f80` atomics, which run at the baseline CPU only).
+  let probe := base.filter fun l =>
+    !(l.head?.any (["vector", "lane", "load", "pad", "limit", "f80atomic"].contains ·))
+  unless total.toNat? == some probe.length do
+    throw s!"cpu {cpu}: `same {same} of {total}`, but the baseline has {probe.length} probe rows"
+  let mut rejected : List String := []
+  for l in changed do
+    match l with
+    | ["meta", "cpu", _] | ["feature", _, _] | ["fma", _, _, _, _, _] => pure ()
+    | _ =>
+      if rejectedByTranslator l then rejected := rejected ++ [s!"cpu {cpu} {" ".intercalate (l.take 5)}"]
+      else throw s!"cpu {cpu}: `{" ".intercalate l}` depends on the CPU, which the model does not state"
+  let rule := f16Rule os version ((feature changed "fullfp16").getD baseFp16)
+  let fmas := base.filter (·.head? == some "fma")
+  for l in fmas do
+    let ["fma", ty, a, b, c, r] := l | throw s!"malformed {" ".intercalate l}"
+    -- The CPU's row: the changed one with these operands, else the baseline's.
+    let r := (changed.findSome? fun l' => match l' with
+      | ["fma", ty', a', b', c', r'] => if [ty', a', b', c'] == [ty, a, b, c] then some r' else none
+      | _ => none).getD r
+    unless fmaCase rule ty a b c r do
+      throw s!"cpu {cpu}: fma {ty} {a} {b} {c} = {r} is not the model's result"
+  for l in changed do
+    if let ["fma", ty, a, b, c, _] := l then
+      unless fmas.any (·.take 5 == ["fma", ty, a, b, c]) do
+        throw s!"cpu {cpu}: fma {ty} {a} {b} {c} is not a baseline row"
+  return (fmas.length, rejected)
+
 /-- The atomic ops on an `f80` cell that the probe builds (`F80_OPS` in `scripts/aarch64-abi.py`). -/
 def f80AtomicOps : List String :=
   ["load_monotonic", "load_acquire", "load_seq_cst", "store_monotonic", "store_release",
@@ -396,8 +489,17 @@ def main (args : List String) : IO UInt32 := do
     (·.splitOn " " |>.filter (!·.isEmpty))
   let version := lines.findSome? fun l => match l with | ["meta", "zig", v] => some v | _ => none
   let some version := version | IO.eprintln s!"aarch64-abi: {path}: no `meta zig` line"; return 1
+  let some zig := Air2Lean.ZigVersion.ofString? version
+    | IO.eprintln s!"aarch64-abi: {path}: Zig {version} is not a version of the translator"; return 1
+  let os := if triple == "aarch64-linux-gnu" then "linux" else "macos"
+  -- The baseline CPU's rows, and each other CPU's.
+  let cpuLines := lines.filterMap fun l => match l with | "cpu" :: cpu :: row => some (cpu, row) | _ => none
+  let lines := lines.filter (·.head? != some "cpu")
+  let some fullfp16 := feature lines "fullfp16"
+    | IO.eprintln s!"aarch64-abi: {path}: no `feature fullfp16` line"; return 1
+  let rule := f16Rule os zig fullfp16
   -- Every synchronization row the probe prints must be present (a missing row is not a pass).
-  let required : List (String × Nat) := [("rmw", 110), ("order", 4), ("atomic_ext", 5),
+  let required : List (String × Nat) := [("fma", 6), ("rmw", 110), ("order", 4), ("atomic_ext", 5),
     ("litmus", 3), ("limit", 1 + limitMessages.length), ("f80atomic", f80AtomicOps.length),
     -- Checked row by row against the OS rows by `Futex.lean`; here only that they are recorded.
     ("futex", if triple == "aarch64-linux-gnu" then 79 else 35)]
@@ -425,6 +527,7 @@ def main (args : List String) : IO UInt32 := do
         let some fmt := fmtOf? ty | pure (s!"fop {ty} {name}", false)
         let some out := floatCase fmt name | pure (s!"fop {ty} {name}", false)
         pure (s!"fop {ty} {name}", out.allows obs)
+      | ["fma", ty, a, b, c, r] => pure (s!"fma {ty} {a} {b} {c}", fmaCase rule ty a b c r)
       | ["atomic", name, _, _, pad, _, won, lost, added, swapped, loaded, _] =>
         let some bits := intBits? name | pure (s!"atomic {name} {pad}", false)
         pure (s!"atomic {name} {pad}", atomicCase bits won lost added swapped loaded)
@@ -439,7 +542,8 @@ def main (args : List String) : IO UInt32 := do
       | "litmus" :: rest => pure (s!"litmus {rest.headD ""}", litmusCase rest)
       | ["limit", "atomic_u256", _] => pure ("", true)
       | ["limit", name, msg] => pure (s!"limit {name}", limitMessages.lookup name == some msg)
-      | "fop" :: rest | "atomic" :: rest | "rmw" :: rest | "limit" :: rest => pure (s!"malformed {" ".intercalate rest}", false)
+      | "fop" :: rest | "fma" :: rest | "atomic" :: rest | "rmw" :: rest | "limit" :: rest =>
+        pure (s!"malformed {" ".intercalate rest}", false)
       | _ => pure ("", true)
     if key.isEmpty then continue
     match (divergencesIn version).lookup key, ok with
@@ -465,6 +569,14 @@ def main (args : List String) : IO UInt32 := do
   -- With the row count, every op present means each one exactly once.
   for op in f80AtomicOps do
     unless f80Rows.any (·[1]? == some op) do bad := bad ++ [s!"f80atomic {op}: not in the file"]
+  -- The other CPUs: exactly the profile's, each with only the rows the model states.
+  let mut cpuFmas := 0
+  unless (cpuLines.map (·.1)).eraseDups == cpus triple do
+    bad := bad ++ [s!"`cpu` rows of {(cpuLines.map (·.1)).eraseDups}, expected {cpus triple}"]
+  for cpu in cpus triple do
+    match cpuRows os zig fullfp16 cpu lines (cpuLines.filterMap fun (c, row) => if c == cpu then some row else none) with
+    | .ok (n, rows) => cpuFmas := cpuFmas + n; rejected := rejected ++ rows
+    | .error e => bad := bad ++ [e]
   for d in diverged do IO.println s!"divergence (not a match) {d}"
   for k in rejected do
     IO.println s!"rejected by the translator (PADDED_ATOMIC, not a match) {k}: a padded-width \
@@ -476,7 +588,8 @@ def main (args : List String) : IO UInt32 := do
   IO.println s!"aarch64-abi: {triple} (Zig {version}): {r.ints.length + r.floats.length + r.vectors.length + r.atomics.length} \
     layout rows equal the kernel-checked table; {matched} float, atomic and synchronization results allowed by the model; \
     {diverged.length} declared divergences, {rejected.length} padded-width results and \
-    {floatAtomics.length} f80 atomic ops the translator rejects (none counted as matches)"
+    {floatAtomics.length} f80 atomic ops the translator rejects (none counted as matches); \
+    {cpuFmas} @mulAdd results at {(cpus triple).length} other CPUs, whose other rows are the baseline's"
   return 0
 
 end T04

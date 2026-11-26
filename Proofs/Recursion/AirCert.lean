@@ -44,7 +44,11 @@ def source_0 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "recursion.fact"
 (@_root_.List.toArray
 @_root_.Nat
@@ -780,7 +784,11 @@ def source_1 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "recursion.gcd"
 (@_root_.List.toArray
 @_root_.Nat
@@ -1682,7 +1690,11 @@ def source_2 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "recursion.isEven"
 (@_root_.List.toArray
 @_root_.Nat
@@ -2362,7 +2374,11 @@ def source_3 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "recursion.isOdd"
 (@_root_.List.toArray
 @_root_.Nat

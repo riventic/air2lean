@@ -21,6 +21,7 @@ import ZigLean.External
 import ZigLean.VersionGate
 import ZigLean.External.Callback
 import ZigLean.Isa.X86
+import ZigLean.Isa.X86Placement
 import ZigLean.Asm
 import ZigLean.Os.Mmap
 import ZigLean.Os

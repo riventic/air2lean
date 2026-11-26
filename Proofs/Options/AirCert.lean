@@ -44,7 +44,11 @@ def source_0 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "options.find"
 (@_root_.List.toArray
 @_root_.Nat
@@ -1414,7 +1418,11 @@ def source_1 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "options.findOr"
 (@_root_.List.toArray
 @_root_.Nat
@@ -2306,7 +2314,11 @@ def source_2 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "options.firstIndexPlusOne"
 (@_root_.List.toArray
 @_root_.Nat
