@@ -89,7 +89,7 @@ private partial def errorCapabilityScan (types : Array Ty) (id fuel : Nat)
     | .ptr _ _ c => (types[c]?.map isFnTy).getD false
     | _ => false
   let count ← match ty with
-    | .other _ | .errorSet none => none
+    | .opaque _ | .other _ | .errorSet none => none
     | .ptr .. => some (if fnPointer then 0 else 1)
     | .array .. | .vector .. | .optional .. | .enum .. => some 1
     | .errorUnion .. => some 2
@@ -126,7 +126,7 @@ private def closedErrorFreeAliasGraph (types : Array Ty) (root child : TyId)
       let some ty := types[id]? | return false
       match ty with
       | .other _ => unless isFnTy ty do return false
-      | .errorSet _ | .errorUnion .. => return false
+      | .opaque _ | .errorSet _ | .errorUnion .. => return false
       | _ => pure ()
       let count := match ty with
         | .ptr .. | .array .. | .vector .. | .optional .. | .enum .. => 1
@@ -137,19 +137,20 @@ private def closedErrorFreeAliasGraph (types : Array Ty) (root child : TyId)
       let remaining := 1023 - step
       if count > remaining || rest.length + count > remaining then return false
       visited := visited.insert id
-      -- `opaquePtrs`: a `*anyopaque` edge is not followed (`castErrorCapability`).
+      -- `opaquePtrs`: a pointer-to-opaque edge is not followed (`castErrorCapability`).
       let opaqueEdge := opaquePtrs && match ty with
-        | .ptr _ _ c => types[c]? == some (.other "anyopaque")
+        | .ptr _ _ c => opaqueTy types c
         | _ => false
       pending := (if opaqueEdge then [] else (childTys ty).toList) ++ rest
   return pending.isEmpty
 
 /-- The error capability of a pointer cast's pointee: reachability of error storage, so a
 cycle (a list node's `?*Node`) adds nothing (`errorCapabilityScan`'s `cycles`). Under
-`--allocator-model translated`, where that traversal does not finish (a `*anyopaque` field such
-as `Allocator.ptr`), `some false` for a closed error-free type graph whose `*anyopaque` edges
-are not followed: an opaque pointee is no typed storage, and every recovery of a typed pointer
-from it is itself a checked cast (`fromOpaque`). -/
+`--allocator-model translated`, where that traversal does not finish (a pointer-to-opaque field
+such as `Allocator.ptr: *anyopaque`), `some false` for a closed error-free type graph whose
+pointer-to-opaque edges are not followed: an opaque pointee (`anyopaque`, a declared
+`opaque {}`) is no typed storage, and every recovery of a typed pointer from it is itself a
+checked cast (`fromOpaque`). -/
 private def castErrorCapability (model : AllocatorModel) (types : Array Ty) (id : TyId) :
     Option Bool :=
   hasErrorCapability types id (cycles := true) <|>
@@ -198,6 +199,12 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
   | .other name =>
     throw s!"{fnName}: near line {line}: type '{name}' is outside the subset (otherwise \
       unsupported)"
+  -- Reached only where the opaque type is used other than as the pointee of a single-item
+  -- pointer (the `.ptr` arm does not recur into it): Zig gives it no size, alignment or values.
+  | .opaque name =>
+    throw s!"{fnName}: near line {line}: opaque type '{name}' has no size, alignment or values: \
+      only a single-item pointer to it is a value (a by-value use, and a many-item, slice or C \
+      pointer to it, are outside the subset)"
   | .float bits =>
     if supportedFloatWidth bits then pure ()
     else
@@ -229,10 +236,11 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
         throw s!"{fnName}: near line {line}: a bit-pointer field extends beyond its host integer"
     let _ := isConst
     match size with
-    -- A function pointer: an indirect call dispatches on it (`Emit.lean`, M20). A `*anyopaque`
-    -- (`Io.Group`'s `token`) is a value only: Zig cannot load through it (it has no size).
+    -- A function pointer: an indirect call dispatches on it (`Emit.lean`, M20). A pointer to an
+    -- opaque type (`*anyopaque`, `Io.Group`'s `token`; `*T` of a declared `opaque {}`) is a
+    -- value only: Zig cannot load through it (it has no size).
     | "one" =>
-      if (types[child]?.map isFnTy).getD false || types[child]? == some (.other "anyopaque") then
+      if (types[child]?.map isFnTy).getD false || opaqueTy types child then
         pure ()
       else recur child
     | "many" | "slice" | "c" => recur child
@@ -1461,19 +1469,23 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       let capability := castErrorCapability cx.allocatorModel cx.types
       let castCapability (t : TyId) : Option Bool :=
         if (cx.types[t]?.map isFnTy).getD false then some false else capability t
-      -- `--allocator-model translated`: `*anyopaque` → `*T` (an allocator's `ctx`) carries no
-      -- typed storage, like an integer: the target must be provably error-free.
-      let fromOpaque := cx.allocatorModel == .translated &&
-        ((ptrOrOptChild cx.types aty).bind (cx.types[·]?)) == some (.other "anyopaque")
-      -- Erasing an error-free pointer to `*anyopaque` (an allocator's `ctx`, a futex address
-      -- for the OS) in every allocator model: the bytes carry no symbolic error. A recovery
-      -- passes `fromOpaque`, which only the translated allocator model has; elsewhere it fails
-      -- closed below.
-      let toOpaque :=
-        ((ptrOrOptChild cx.types ty).bind (cx.types[·]?)) == some (.other "anyopaque") &&
-        ((ptrOrOptChild cx.types aty).bind capability) == some false
-      -- A qualifier-only or optional-wrap cast of `*anyopaque` keeps its pointee: no recovery.
-      if fromOpaque && !qualifierOnly && !optionalWrapOnly then
+      -- `--allocator-model translated`: a pointer to an opaque type → `*T` (an allocator's
+      -- `ctx: *anyopaque`, a handle `*H` of a declared `opaque {}`) carries no typed storage,
+      -- like an integer: the target must be provably error-free.
+      let opaquePointee (t : TyId) : Bool := ((ptrOrOptChild cx.types t).map (opaqueTy cx.types)).getD false
+      let fromOpaque := cx.allocatorModel == .translated && opaquePointee aty
+      -- Erasing an error-free pointer to a pointer to an opaque type (an allocator's `ctx`, a
+      -- futex address for the OS, a handle) in every allocator model: the bytes carry no
+      -- symbolic error. A recovery passes `fromOpaque`, which only the translated allocator
+      -- model has; elsewhere it fails closed below.
+      -- Between two opaque pointees (`*anyopaque` ↔ `*H`, `*H` → `*G`) nothing is erased or
+      -- recovered: the pointee stays untyped, and the checks at the erasure before and at any
+      -- recovery after are unchanged.
+      let betweenOpaque := opaquePointee aty && opaquePointee ty
+      let toOpaque := opaquePointee ty &&
+        (betweenOpaque || ((ptrOrOptChild cx.types aty).bind capability) == some false)
+      -- A qualifier-only or optional-wrap cast of an opaque pointer keeps its pointee: no recovery.
+      if fromOpaque && !betweenOpaque && !qualifierOnly && !optionalWrapOnly then
         if let some target := ptrOrOptChild cx.types ty then
           unless capability target == some false do
             cx.fail line "recovering a symbolic error pointer from an integer or opaque value needs unsupported storage provenance"
@@ -3281,10 +3293,10 @@ private structure AbiPtrSide where
   align : Nat
   sentinel : Option Nat
 
-/-- The pointee `t` of `f` holds no symbolic error storage: `anyopaque`, or what a pointer cast's
-test admits (`castErrorCapability`). -/
+/-- The pointee `t` of `f` holds no symbolic error storage: an opaque type, or what a pointer
+cast's test admits (`castErrorCapability`). -/
 private def abiErrorFree (f : Func) (t : TyId) : Bool :=
-  f.types[t]? == some (.other "anyopaque") ||
+  opaqueTy f.types t ||
     castErrorCapability f.allocatorModel f.types t == some false
 
 /-- The type `t` of `f` as one side of a C-ABI pointer conversion, or why it is none. -/
@@ -3850,7 +3862,7 @@ def checkOsCall (f : Func) (callee : String) (fn : OsFn) (args : Array Val) (ret
     | some (.struct name "extern" fs) =>
       stdNamed name && fs.size == 2 && fs.all (f.types[·.2]? == some (.int true 64))
     | _ => false
-  let anyopaque (t : TyId) : Bool := f.types[t]? == some (.other "anyopaque")
+  let anyopaque (t : TyId) : Bool := f.types[t]? == some Ty.anyopaque
   -- A plain single-item pointer (no volatile, `allowzero` or packed-field metadata) to `child`.
   let plainPtr (id : Option TyId) (isConst : Bool) (child : TyId → Bool) : Bool := match id with
     | some t => match f.types[t]?, f.layouts[t]? with

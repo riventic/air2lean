@@ -69,8 +69,23 @@ inductive Ty where
   /-- `std.Io.Future(T)` (0.16.0): the model's `Zig.Future` (`ZigLean/Conc/Future.lean`) of the
   result type `result`. Its `any_future` field (`?*Io.AnyFuture`) is the model's runtime record. -/
   | future (result : TyId)
+  /-- An opaque type: the primitive `anyopaque` (`Ty.anyopaque`) or a declared `opaque {}`
+  (`name` is its qualified name). It has no size, alignment or values: only a single-item
+  pointer to it is a value (`Check.lean`'s `checkTy`), and nothing is loaded or stored through
+  one. -/
+  | opaque (name : String)
   | other (name : String)
   deriving Repr, Inhabited, BEq
+
+/-- The primitive `anyopaque`. A declared `opaque {}` has a qualified name (`mod.Name`), never
+this one (`Json.lean`'s `parseTy`). -/
+def Ty.anyopaque : Ty := .opaque "anyopaque"
+
+/-- Type `id` is an opaque type; an unknown id is not. -/
+def opaqueTy (types : Array Ty) (id : TyId) : Bool :=
+  match types[id]? with
+  | some (.opaque _) => true
+  | _ => false
 
 /-- Float widths supported by parsing and the checked model. -/
 def supportedFloatWidth (bits : Nat) : Bool :=

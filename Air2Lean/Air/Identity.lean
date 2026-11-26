@@ -183,7 +183,8 @@ def rewrite (j : Json) : Except String (Json × Array Record) := do
     let mut j := j.setObjVal! "name" (.str own)
     j ← mapArray j "types" fun t =>
       match (t.getObjValAs? String "k").toOption with
-      | some "struct" | some "enum" | some "union" => qualify legacy "type" t "name" "module"
+      | some "struct" | some "enum" | some "union" | some "opaque" =>
+        qualify legacy "type" t "name" "module"
       | _ => pure t
     j ← mapArray j "globals" fun g => do refs legacy (← qualify legacy "global" g "name" "module")
     mapArray j "body" (refs legacy)

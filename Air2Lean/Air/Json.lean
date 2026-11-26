@@ -276,9 +276,16 @@ def parseTy (j : Json) (allocatorModel : AllocatorModel := .std) : Except String
       let fty ← (← fj.getObjVal? "ty").getNat?
       return (fname, fty)
     return .union name layout tag fields
+  -- A declared `opaque {}` (exporters that mark it; an older export writes it as `other`,
+  -- which stays outside the subset). The primitive has only its `other` entry.
+  | "opaque" =>
+    let name ← (← j.getObjVal? "name").getStr?
+    if Ty.opaque name == Ty.anyopaque then
+      throw "a declared opaque type cannot have the primitive's name 'anyopaque'"
+    opaqueEntry name
   | "other" =>
     let name ← (← j.getObjVal? "name").getStr?
-    return .other name
+    if Ty.opaque name == Ty.anyopaque then opaqueEntry name else return .other name
   | "error_union" =>
     let set ← (← j.getObjVal? "error").getNat?
     let payload ← (← j.getObjVal? "payload").getNat?
@@ -293,6 +300,12 @@ def parseTy (j : Json) (allocatorModel : AllocatorModel := .std) : Except String
       let errs ← errsJ.mapM Json.getStr?
       return .errorSet (some errs)
   | other => throw s!"unknown type kind: {other}"
+where
+  /-- An opaque type has no layout: an entry that states one is not an export of it. -/
+  opaqueEntry (name : String) : Except String Ty := do
+    if (optField j "abi_size").isSome || (optField j "abi_align").isSome then
+      throw s!"opaque type '{name}' has no size, alignment or values: its entry cannot state a layout"
+    return .opaque name
 
 /-- The memory facts of a type entry (schema 6): `abi_size`, `abi_align`, the fields' `offset`,
 `sentinel`, and a pointer's `ptr_align`, `volatile`, `allowzero`, `host_size`, `bit_offset`,
