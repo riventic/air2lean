@@ -1,0 +1,14 @@
+copy 1 same 1 0 constSame 1
+isNull 1 0 wrap 1 unwrap 1
+orElse 1 1 optSame 1 0 1
+slotSwap 1 1
+cell 1 1 3 1 1
+pair 1 1 item 1 1
+casts 1 1 1 1 1 1
+align 1
+typed 1 0 1
+viaApply 1
+extern 1 1 0
+model alignUp misaligned panic
+value 41 roundTrip 42 42
+model recover misaligned panic

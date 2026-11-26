@@ -8,7 +8,8 @@
 # 0.17.1 translations are the retained ones byte for byte, and the proofs over them
 # (Interfaces/*Spec.lean) check; the list proofs (Proofs/Lists, with M03's Policy) build over the
 # 0.17.1, 0.16.0 and 0.15.2 lists translations, and those that take no allocator over the 0.14.1
-# one; test_cli.py covers the rejections and the closed default.
+# one; test_cli.py covers the rejections and the closed default. `grow` (growth of a sentinel
+# slice itself) has no 0.16.0 export and is proved over 0.17.1 only.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
@@ -50,6 +51,7 @@ programs=(
   "sentinel|Sentinel|Interfaces.Sentinel|$here/Interfaces/Sentinel.lean|source.|$here/air/{v}/sentinel|$here/registry-alloc.json|--allocator-model translated"
   "wide|Wide|Interfaces.Wide|$here/Interfaces/Wide.lean|wide.|$here/air/{v}/wide|$here/registry-alloc.json|--allocator-model translated"
   "kinds|Kinds|Interfaces.Kinds|$here/Interfaces/Kinds.lean|kinds.|$here/air/{v}/kinds|$here/registry-alloc.json|--allocator-model translated"
+  "grow|Grow|Interfaces.Grow|$here/Interfaces/Grow.lean|grow.|$here/air/{v}/grow|$here/registry-alloc.json|--allocator-model translated"
 )
 translate() {  # translate VERSION ENTRY OUT
   local name module namespace retained prefix air registry extra
@@ -61,6 +63,9 @@ translate() {  # translate VERSION ENTRY OUT
 for version in 0.16.0 0.15.2 0.14.1 0.17.1; do
   for entry in "${programs[@]}"; do
     module=$(cut -d'|' -f2 <<< "$entry")
+    # Zig 0.16.0 rejects `realloc`, `remap` and `resize` of a sentinel slice at compile time:
+    # grow.zig has no 0.16.0 export (exports.json).
+    if [ "$version:$module" = 0.16.0:Grow ]; then continue; fi
     translate "$version" "$entry" "$work/Interfaces/$module.lean"
     "${lean_cmd[@]}" -R "$work" -o "$work/Interfaces/$module.olean" "$work/Interfaces/$module.lean"
     if [ "$module" = Lists ]; then cp "$work/Interfaces/Lists.lean" "$work/lists-$version.lean"; fi
@@ -72,6 +77,22 @@ for version in 0.16.0 0.15.2 0.14.1 0.17.1; do
       "${lean_cmd[@]}" -R "$work" "$here/Interfaces/$spec.lean" > "$work/$spec-$version.txt" 2>&1 || {
         cat "$work/$spec-$version.txt" >&2; exit 1; }
     done
+  fi
+  # Growth of the sentinel slice itself is proved over 0.17.1 (the axioms loop below). The std of
+  # Zig 0.15.2 and 0.14.1 hands the vtable `len * sz` bytes of the `(len + 1) * sz`-byte grant
+  # (`mem.sliceAsBytes`), which is outside `CAllocSpec`: the proofs must stop there, at the
+  # contract's length precondition (GrowSpec.lean, "Versions"). A regression pin, so a change of
+  # either translation is noticed.
+  if [ "$version" = 0.15.2 ] || [ "$version" = 0.14.1 ]; then
+    if "${lean_cmd[@]}" -R "$work" "$here/Interfaces/GrowSpec.lean" > "$work/GrowSpec-$version.txt" 2>&1; then
+      echo "interfaces: GrowSpec holds over the $version translation: review GrowSpec.lean's versions" >&2
+      exit 1
+    fi
+    # The six theorems that reach `remap` or `resize` (`realloc*_spec`, `move*_grant`,
+    # `fit*_grant`) fail, each with that goal; nothing else does.
+    [ "$(grep -c 'GrowSpec\.lean:[0-9]*:[0-9]*: error' "$work/GrowSpec-$version.txt")" = 6 ] &&
+      [ "$(grep -c '\.len\.toNat = bs\.size$' "$work/GrowSpec-$version.txt")" = 6 ] || {
+      cat "$work/GrowSpec-$version.txt" >&2; exit 1; }
   fi
 done
 # The retained translations are the fresh 0.17.1 ones (the last loop round).
@@ -110,7 +131,7 @@ lists_tree 0.14.1 "${lists_proofs_no_allocator[@]}"
 # The proofs over the 0.17.1 translations (docs/interfaces.md, proof side), kernel-checked with
 # only the standard axioms; ClosureCX (after MixSpec, which it imports) is the counterexample to
 # using the environment's contract for a vtable of the program.
-for spec in MixSpec ClosureCX RndSpec CallbacksSpec SentinelSpec WideSpec KindsSpec; do
+for spec in MixSpec ClosureCX RndSpec CallbacksSpec SentinelSpec WideSpec KindsSpec GrowSpec; do
   { cat "$here/Interfaces/$spec.lean"; echo
     grep -o '^theorem [^ :({\[]*' "$here/Interfaces/$spec.lean" | while read -r _ t; do
       echo "#print axioms Interfaces.$spec.$t"; done; } > "$work/Interfaces/$spec.lean"
@@ -127,8 +148,9 @@ assert used <= {"propext", "Classical.choice", "Quot.sound"}, text
 PY
 done
 # M04: semantic mutants of the translated std allocator sentinel path (the retained 0.17.1
-# Interfaces/Sentinel.lean and, for item types wider than a byte, Interfaces/Wide.lean): the
-# unchanged SentinelSpec and WideSpec proofs must reject each one.
+# Interfaces/Sentinel.lean, for item types wider than a byte Interfaces/Wide.lean, and for growth
+# of the sentinel slice itself Interfaces/Grow.lean): the unchanged SentinelSpec, WideSpec and
+# GrowSpec proofs must reject each one.
 python3 -B tests/roadmap/callbacks/mutants.py generate sentinel "$work/mutants" | while IFS=: read -r name module proofs; do
   mroot="$work/mutants/$name"
   "${lean_cmd[@]}" -R "$mroot" -o "$mroot/${module%.lean}.olean" "$mroot/$module"

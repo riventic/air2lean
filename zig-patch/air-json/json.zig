@@ -2141,7 +2141,7 @@ const W = struct {
         return gop.value_ptr.*;
     }
 
-    /// The `name` and `module` of a struct, enum or union type entry: an identity of this
+    /// The `name` and `module` of a struct, enum, union or opaque type entry: an identity of this
     /// type only.
     fn writeTypeName(w: *W, ty: Type) Error!void {
         const zcu = w.pt.zcu;
@@ -2188,8 +2188,11 @@ const W = struct {
                 try w.writeTypeRef(ty.childType(zcu));
                 const info = ty.ptrInfo(zcu);
                 // The `align(N)` of the pointer type. The natural alignment needs the child's
-                // layout (`ptrAlignment` asserts it).
-                if (info.flags.alignment != .none or Compat.hasLayout(zcu, ty.childType(zcu))) {
+                // layout (`ptrAlignment` asserts it); an opaque child has none to resolve and
+                // its pointers have alignment 1 (`Type.abiAlignment`), like `*anyopaque`.
+                if (info.flags.alignment != .none or Compat.hasLayout(zcu, ty.childType(zcu)) or
+                    ty.childType(zcu).zigTypeTag(zcu) == .@"opaque")
+                {
                     try w.field("ptr_align");
                     try w.j.write(ty.ptrAlignment(zcu).toByteUnits() orelse 0);
                 }
@@ -2391,6 +2394,17 @@ const W = struct {
                     try w.j.endObject();
                 }
                 try w.j.endArray();
+            },
+            // A declared `opaque {}` type: a named container like a struct, without a layout. A
+            // value of it exists only behind a pointer. `anyopaque` is the primitive of this
+            // kind and has no declaration; it keeps its name-only entry below.
+            .@"opaque" => if (ty.toIntern() == .anyopaque_type) {
+                try w.j.write("other");
+                try w.field("name");
+                try w.writeFmt(Compat.fmtType(w.pt, ty));
+            } else {
+                try w.j.write("opaque");
+                try w.writeTypeName(ty);
             },
             else => {
                 try w.j.write("other");

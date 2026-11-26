@@ -69,8 +69,31 @@ inductive Ty where
   /-- `std.Io.Future(T)` (0.16.0): the model's `Zig.Future` (`ZigLean/Conc/Future.lean`) of the
   result type `result`. Its `any_future` field (`?*Io.AnyFuture`) is the model's runtime record. -/
   | future (result : TyId)
+  /-- An opaque type: the primitive `anyopaque` (`Ty.anyopaque`) or a declared `opaque {}`
+  (`name` is its qualified name). It has no size, alignment or values: only a single-item
+  pointer to it is a value (`Check.lean`'s `checkTy`), and nothing is loaded or stored through
+  one. `std`: the standard library declares it (`Identity.stdDeclared`). A pointer to such a
+  type can be a handle of a hand-written std model (`Io.AnyFuture`, the record of
+  `Zig.Future`), whose bytes are the model's and not the native ones, so it is no value of the
+  subset (`opaqueTy`); the type may still stand in a type table, as the field of a modelled
+  std type. -/
+  | opaque (name : String) (std : Bool := false)
   | other (name : String)
   deriving Repr, Inhabited, BEq
+
+/-- The name of the primitive opaque type. A declared `opaque {}` has a qualified name
+(`mod.Name`), never this one (`Json.lean`'s `parseTy`). -/
+def Ty.anyopaqueName : String := "anyopaque"
+
+/-- The primitive `anyopaque`. -/
+def Ty.anyopaque : Ty := .opaque Ty.anyopaqueName
+
+/-- Type `id` is an opaque type whose single-item pointers are values of the subset: the
+primitive, or one declared outside the standard library. An unknown id is not. -/
+def opaqueTy (types : Array Ty) (id : TyId) : Bool :=
+  match types[id]? with
+  | some (.opaque _ std) => !std
+  | _ => false
 
 /-- Float widths supported by parsing and the checked model. -/
 def supportedFloatWidth (bits : Nat) : Bool :=

@@ -176,6 +176,10 @@ FIXTURES = [
      ["--namespace", "Interfaces.Kinds", "--prefix", "kinds.", "--profile", "abi64-le-v1",
       "--model-registry", "tests/roadmap/interfaces/registry-alloc.json",
       "--allocator-model", "translated"], "exact"),
+    ("tests/roadmap/interfaces/Interfaces/Grow.lean", "tests/roadmap/interfaces/air/0.17.1/grow",
+     ["--namespace", "Interfaces.Grow", "--prefix", "grow.", "--profile", "abi64-le-v1",
+      "--model-registry", "tests/roadmap/interfaces/registry-alloc.json",
+      "--allocator-model", "translated"], "exact"),
     ("tests/roadmap/interfaces/Interfaces/Rnd.lean", "tests/roadmap/interfaces/air/0.17.1/rnd",
      ["--namespace", "Interfaces.Rnd", "--prefix", "rnd.", "--profile", "abi64-le-v1",
       "--model-registry", "tests/roadmap/interfaces/registry-random.json"], "exact"),
@@ -291,10 +295,12 @@ FIXTURES = [
     for src, out, ns in (("enc_exactness", "Gen", ""), ("opaque_bytes", "Opaque", ".Opaque"))
     for v in ("0.14.1", "0.15.2", "0.16.0", "0.17.1")
 ] + [
-    # L04 try-pointers/lifetimes/check.sh.
-    (f"tests/roadmap/try-pointers/lifetimes/TryLifetimes/V{v.replace('.', '_')}/Gen.lean",
-     f"tests/roadmap/try-pointers/lifetimes/air/{v}",
-     ["--namespace", f"TryLifetimes.V{v.replace('.', '_')}", "--prefix", "try_lifetimes."], "exact")
+    # L04 try-pointers/lifetimes/check.sh: two sources per version.
+    (f"tests/roadmap/try-pointers/lifetimes/TryLifetimes/V{v.replace('.', '_')}/{out}.lean",
+     f"tests/roadmap/try-pointers/lifetimes/{air}/{v}",
+     ["--namespace", f"TryLifetimes.V{v.replace('.', '_')}{ns}", "--prefix", f"{src}."], "exact")
+    for src, out, air, ns in (("try_lifetimes", "Gen", "air", ""),
+                              ("try_payloads", "PayloadsGen", "air-payloads", ".Payloads"))
     for v in ("0.14.1", "0.15.2", "0.16.0", "0.17.1")
 ] + [
     (f"tests/roadmap/pointer-width/PointerWidth/{ns}/Gen.lean", f"tests/roadmap/pointer-width/air/0.16.0/{target}",

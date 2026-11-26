@@ -671,91 +671,98 @@
         "kind": "check",
         "target": "tests/roadmap/callbacks/check.sh"
       },
-      "block_sha256": "1c5631a45e65f69e2136de32fb93d76c8ffb205e75c02037c2d000eb25f17b49"
+      "block_sha256": "7eedb679d05a3a6df433a31a14b3f5bb6dc63ac8849ad04c649f1f1c078a19a2"
     },
     "tests/roadmap/callbacks/mutants.py#env_read_constant": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/asm-effects/check.sh"
       },
-      "block_sha256": "1c5631a45e65f69e2136de32fb93d76c8ffb205e75c02037c2d000eb25f17b49"
+      "block_sha256": "7eedb679d05a3a6df433a31a14b3f5bb6dc63ac8849ad04c649f1f1c078a19a2"
+    },
+    "tests/roadmap/callbacks/mutants.py#grow-absorb-omits-sentinel": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/interfaces/check.sh"
+      },
+      "block_sha256": "7eedb679d05a3a6df433a31a14b3f5bb6dc63ac8849ad04c649f1f1c078a19a2"
     },
     "tests/roadmap/callbacks/mutants.py#model_arm_dropped": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/callbacks/check.sh"
       },
-      "block_sha256": "1c5631a45e65f69e2136de32fb93d76c8ffb205e75c02037c2d000eb25f17b49"
+      "block_sha256": "7eedb679d05a3a6df433a31a14b3f5bb6dc63ac8849ad04c649f1f1c078a19a2"
     },
     "tests/roadmap/callbacks/mutants.py#region_guard_dropped": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/asm-effects/check.sh"
       },
-      "block_sha256": "1c5631a45e65f69e2136de32fb93d76c8ffb205e75c02037c2d000eb25f17b49"
+      "block_sha256": "7eedb679d05a3a6df433a31a14b3f5bb6dc63ac8849ad04c649f1f1c078a19a2"
     },
     "tests/roadmap/callbacks/mutants.py#region_write_dropped": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/asm-effects/check.sh"
       },
-      "block_sha256": "1c5631a45e65f69e2136de32fb93d76c8ffb205e75c02037c2d000eb25f17b49"
+      "block_sha256": "7eedb679d05a3a6df433a31a14b3f5bb6dc63ac8849ad04c649f1f1c078a19a2"
     },
     "tests/roadmap/callbacks/mutants.py#sentinel-alloc-omits-extra-byte": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/interfaces/check.sh"
       },
-      "block_sha256": "1c5631a45e65f69e2136de32fb93d76c8ffb205e75c02037c2d000eb25f17b49"
+      "block_sha256": "7eedb679d05a3a6df433a31a14b3f5bb6dc63ac8849ad04c649f1f1c078a19a2"
     },
     "tests/roadmap/callbacks/mutants.py#sentinel-stored-at-item-0": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/interfaces/check.sh"
       },
-      "block_sha256": "1c5631a45e65f69e2136de32fb93d76c8ffb205e75c02037c2d000eb25f17b49"
+      "block_sha256": "7eedb679d05a3a6df433a31a14b3f5bb6dc63ac8849ad04c649f1f1c078a19a2"
     },
     "tests/roadmap/callbacks/mutants.py#unknown_admitted": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/callbacks/check.sh"
       },
-      "block_sha256": "1c5631a45e65f69e2136de32fb93d76c8ffb205e75c02037c2d000eb25f17b49"
+      "block_sha256": "7eedb679d05a3a6df433a31a14b3f5bb6dc63ac8849ad04c649f1f1c078a19a2"
     },
     "tests/roadmap/callbacks/mutants.py#wide-alloc-alignment-is-one": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/interfaces/check.sh"
       },
-      "block_sha256": "1c5631a45e65f69e2136de32fb93d76c8ffb205e75c02037c2d000eb25f17b49"
+      "block_sha256": "7eedb679d05a3a6df433a31a14b3f5bb6dc63ac8849ad04c649f1f1c078a19a2"
     },
     "tests/roadmap/callbacks/mutants.py#wide-alloc-bytes-are-item-count": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/interfaces/check.sh"
       },
-      "block_sha256": "1c5631a45e65f69e2136de32fb93d76c8ffb205e75c02037c2d000eb25f17b49"
+      "block_sha256": "7eedb679d05a3a6df433a31a14b3f5bb6dc63ac8849ad04c649f1f1c078a19a2"
     },
     "tests/roadmap/callbacks/mutants.py#wide-free-bytes-are-item-count": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/interfaces/check.sh"
       },
-      "block_sha256": "1c5631a45e65f69e2136de32fb93d76c8ffb205e75c02037c2d000eb25f17b49"
+      "block_sha256": "7eedb679d05a3a6df433a31a14b3f5bb6dc63ac8849ad04c649f1f1c078a19a2"
     },
     "tests/roadmap/callbacks/mutants.py#wide-realloc-bytes-are-item-count": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/interfaces/check.sh"
       },
-      "block_sha256": "1c5631a45e65f69e2136de32fb93d76c8ffb205e75c02037c2d000eb25f17b49"
+      "block_sha256": "7eedb679d05a3a6df433a31a14b3f5bb6dc63ac8849ad04c649f1f1c078a19a2"
     },
     "tests/roadmap/callbacks/mutants.py#wide-sentinel-at-byte-n": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/interfaces/check.sh"
       },
-      "block_sha256": "1c5631a45e65f69e2136de32fb93d76c8ffb205e75c02037c2d000eb25f17b49"
+      "block_sha256": "7eedb679d05a3a6df433a31a14b3f5bb6dc63ac8849ad04c649f1f1c078a19a2"
     },
     "tests/roadmap/cancellation/Runtime.lean#cancel-is-await": {
       "killed_by": {

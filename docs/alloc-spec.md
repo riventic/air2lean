@@ -221,8 +221,9 @@ free of the last allocation, reset, a fresh allocation) from these contracts onl
   (`FBA.fallocSpec`, `tests/roadmap/alloc-fba/AllocFba/Full.lean`: the invariant holds a share of
   the buffer block's extent, so no pin byte; it is a reset ledger, `FBA.ledger`, with the fee a
   part of the epoch token and `FBA.freset_spec` taking the whole token). The page allocator's `free`, `resize` and `remap`
-  are proved against it, and its `alloc` for alignments up to a page
-  (`PageAlloc.fallocSpec`, [alloc-page.md](alloc-page.md)).
+  are proved against it, and its `alloc` for alignments up to a page, as partial correctness
+  (`PageAlloc.fallocSpec` on x86_64-linux, `PageAllocMacos.fallocSpec` on aarch64-macos,
+  [alloc-page.md](alloc-page.md)).
   The full-state wrapper contracts (`FAllocSpec.toLegacy`, `LegacyTokens`,
   `ZigLean/Sep/Full/Wrappers.lean`) were removed with block extents (they went through
   `FLogic.legacy`, which is unsound there, `tests/roadmap/sep-full/BlockExtentsCX.lean`); the

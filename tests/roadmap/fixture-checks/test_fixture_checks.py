@@ -457,6 +457,37 @@ class RunInputs(unittest.TestCase):
                 with mock.patch.object(fc.assumptions, "lake_env", lambda name: ""), self.assertRaises(fc.Unkeyable):
                     key()
 
+    def test_a_check_scripts_output_roots_are_no_input_but_every_other_file_is(self):
+        # What a check writes into the worktree while it runs (check trees, claim reports) is no
+        # input, at the start of a run and at its end alike; an edit anywhere else still is one.
+        with tempfile.TemporaryDirectory() as directory:
+            root, toolchain = Path(directory) / "wt", Path(directory) / "toolchain"
+            for d in (root, toolchain / "lib"):
+                d.mkdir(parents=True)
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            (root / "src").write_text("1")
+            (toolchain / "zig").write_text("zig")
+            with mock.patch.object(fc, "ROOT", root), \
+                    mock.patch.object(fc.assumptions, "lake_env", lambda name: str(toolchain)), \
+                    mock.patch.object(fc, "resolve", lambda kind, version: toolchain / "zig"):
+                unit = {"name": "u", "zig": "0.16.0", "toolchains": {"patched": [], "stock": []}}
+                key = lambda: fc.CAS.digest(fc.run_inputs([unit]))
+                first = key()
+                for number, output in enumerate(fc.OUTPUT_ROOTS):
+                    for name in ("a/b.json", "c"):
+                        (root / output / name).parent.mkdir(parents=True, exist_ok=True)
+                        (root / output / name).write_text(str(number))
+                    self.assertEqual(key(), first, output)
+                    (root / output / "c").write_text("again")  # rewritten by the next run
+                    self.assertEqual(key(), first, output)
+                # Not output roots: a sibling, a path that merely starts like a root, a tracked source.
+                for other in (".lake/architecture-audit/other.json", ".lake/check-tree-x/f", ".lake/build/M.olean",
+                              "check-tree/f", "src"):
+                    before = key()
+                    (root / other).parent.mkdir(parents=True, exist_ok=True)
+                    (root / other).write_text("edited")
+                    self.assertNotEqual(key(), before, other)
+
 
 if __name__ == "__main__":
     unittest.main()

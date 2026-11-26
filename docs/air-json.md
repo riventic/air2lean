@@ -102,6 +102,7 @@ contract in prose.
 | `error_set` | — | `errors`, `any: true`, `inferred: true` |
 | `struct` / `union` | `name`, `layout` (`auto`, `extern`, `packed`) | `module`¹, `no_fields: true`, `fields`; `union`: `tag`, `safety_tag` |
 | `tuple` / `enum` | `fields` / `name`, `tag`, `exhaustive`, `fields` | `enum`: `module`¹ |
+| `opaque` | `name` | `module`¹ |
 | `other` | `name` | — |
 | struct or tuple field | `ty` | `name`, `offset`, `comptime: true` |
 | union / enum field | `name`, `ty` / `name`, `value` | — |
@@ -172,7 +173,8 @@ Every type is an object with `"k"`. Child types are type IDs (integers), never n
 | `enum` | `name: string`, `module: string`, `tag: id` (the integer tag type), `exhaustive: bool` (`false` for `enum(T) { …, _ }`), `fields: [{name, value: string}]` (the tag value in decimal) |
 | `union` | `name: string`, `module: string`, `layout: "auto"\|"extern"\|"packed"`, `tag: id` (the tag enum; missing for a union without a tag), `safety_tag: id` (the hidden tag enum of a bare union in a safe build; schema 11), `fields: [{name, ty: id}]` in the order of the tag enum's fields |
 | `struct`, `union` without known fields | `name`, `layout`, `no_fields: true` in place of the fields (schema 7). 0.16.0 knows the fields of a container only when its layout is wanted. The 0.16.0 exporter resolves the layout of each struct, union and enum type it writes (`Compat.ensureLayout`), so a container that a function has only behind a pointer (`heap.ArenaAllocator.Node`, `mem.Allocator.VTable`) has its fields too; `no_fields` remains only if that resolution is impossible at that point (the layout is already under analysis). Older 0.16.0 exports have it for such containers. The reader makes it `other`. |
-| `other` | `name: string` (printed type; not in the subset). A function type (`fn (u32) u32`) is `other`; a pointer to it is a function pointer (M20). `anyopaque` is `other`; a pointer to it is a value only (Zig cannot load through it), so it is in the subset. |
+| `opaque` | `name: string`, `module: string`: a declared `opaque {}` type, an identity like a struct's. It has no size, alignment or values, so the entry has no layout facts. A single-item pointer to it (`*T`, `?*T`) is a value only (Zig cannot load or store through it) and is in the subset, under the rules of `*anyopaque` ([opaque pointers](../tests/roadmap/opaque-pointers/README.md)); the type by value and a many-item, slice or C pointer to it are rejected. An opaque type whose `module` is `std` is rejected in every use, also behind a single-item pointer ([std models](std-models.md#opaque-std-handles)). Its pointers have `ptr_align` 1. Written by the exporters of all four Zig versions since this kind exists; an older export writes such a type as `other`, which stays rejected. In a golden comparison, `scripts/normalize-air.py` treats the entry like the `other` entry of a golden that predates the kind and drops the `ptr_align` 1 of a pointer to it (a std opaque type that is only in the type table, e.g. macOS's `c.pthread_t__opaque_N`). |
+| `other` | `name: string` (printed type; not in the subset). A function type (`fn (u32) u32`) is `other`; a pointer to it is a function pointer (M20). `anyopaque` (the primitive opaque type, no declaration and no module) is `other` with exactly this name; the reader makes it the same opaque type as an `opaque` entry (which may not have this name), and a pointer to it is a value only (Zig cannot load through it), so it is in the subset. |
 
 Schema 5: a type that can be in memory (`int`, `bool`, `void`, `float`, `ptr`, `array`, `vector`, `optional`, `error_union`, `error_set`, `struct`, `enum`, `union`) also has `abi_size: int` and `abi_align: int`, in bytes, if its layout is known when the file is written. A vector's ABI size and alignment round up to a power of 2 (`n * @sizeOf(child)`, then `ceilPow2`); no special-casing in the exporter, which reads `ty.abiSize`/`ty.abiAlignment` for every in-memory type the same way. 0.16.0 resolves a container layout only when some code needs it (`want_layout`); 0.14.1 and 0.15.2 keep a status per container type (`Compat.hasLayout`). A type that a function body loads, stores or takes a field pointer of always has its layout.
 
@@ -434,7 +436,7 @@ type or a global (tests/roadmap/module-identity). The identity is the pair (modu
 
 **Module.** The exporter writes the module next to every identity: the function's top-level
 `module`, a function reference's `module` and `comptime_fn_module`, and the `module` of a
-struct, enum or union type and of a named global. It is `root` for the compilation's main
+struct, enum, union or opaque type and of a named global. It is `root` for the compilation's main
 module and `std` for the standard library, whatever the compiler calls them (0.16.0 names the
 main module of `zig build-obj x.zig` `x`), and the module's `fully_qualified_name` otherwise
 (the `-M<name>` of `zig build-obj`, the import name of `zig build`). The fields are additive:
@@ -443,7 +445,7 @@ older exports omit them, and `scripts/normalize-air.py` drops them from golden c
 
 **Fail closed in the exporter.** One compilation never writes two different declarations under
 one identity (`zig-patch/air-json/identity.zig`). The first declaration that writes an identity
-claims it: a module name, an output file, a (module, name) of a struct, enum or union, or of a
+claims it: a module name, an output file, a (module, name) of a struct, enum, union or opaque type, or of a
 named global. If a different declaration writes it later, the exporter reports
 `two different declarations export the <kind> identity '<name>'` and the compiler exits with
 status 1. Re-analysis of the same declaration may write its identity again. A function of the
