@@ -22,15 +22,23 @@ frame:
   the thread rules hand it to a thread's step and take it back (`docs/sep-full-state.md` §Stack
   depth, the current thread).
 
+`MemAuth m c d` also reads **the device cell** `d` (`Ghost.dev`, `DCell`; `docs/sep-full-state.md`
+§Device state; maintainer decision 2026-11-25): an exclusive fragment `devOwn D` holds the whole
+device state `Mem.dev` (oracles and trace, L13). `dev`: every fragment the cell holds names
+`m.dev`, and there is at most one. So two `devOwn` never compose, and a resource with `devOwn D`
+knows the memory's device state: a device step (`vload`, `vasm`, …) changes `m.dev` together
+with the fragment, and no other step changes either.
+
 `MemAuth.Keep m m'` is the per-primitive obligation: a step from `m` to `m'` keeps every stack
-authority, leaves `Mem.ticks`, keeps `noStack` and the current thread. Every primitive but
-`Zig.tick` and the stack pushes and pops proves it once (`MemAuth.Keep.of_blocks`,
-`MemAuth.Keep.shape`, the `alloc` and `free` instances); the rules that re-establish `GOk` take
-it. A scheduler stop changes the current thread: it keeps `MemAuth` only where no `cur` token is
-held (`MemAuth.stop`).
+authority, leaves `Mem.ticks` and `Mem.dev`, keeps `noStack` and the current thread. Every
+primitive but `Zig.tick`, the stack pushes and pops and the device steps proves it once
+(`MemAuth.Keep.of_blocks`, `MemAuth.Keep.shape`, the `alloc` and `free` instances); the rules that
+re-establish `GOk` take it. A scheduler stop changes the current thread: it keeps `MemAuth` only
+where no `cur` token is held (`MemAuth.stop`).
 
 The ghost parts that hold exclusive stack tokens are linear: `StackAuth` demands each of them.
-Every other part of the cell can be dropped (`MemAuth.drop`).
+Every other part of the cell can be dropped (`MemAuth.drop`), and so can a device fragment
+(`MemAuth.dropDev`).
 -/
 
 namespace Zig
@@ -50,13 +58,40 @@ structure TickAuth (m : Mem) (c : KCell) : Prop where
   spent : c.frag .spent ≤ m.ticks
   plain : 0 < c.frag .unmetered → ∀ L, c.auth .cred L = 0
 
-/-- **The memory's authority over the counter cell** (module doc). -/
-structure MemAuth (m : Mem) (c : KCell) : Prop where
+/-- **The device cell** (`docs/sep-full-state.md` §Device state): how many exclusive fragments
+`devOwn D` hold each device state `D`. Composition adds the counts; the memory admits at most one
+fragment, of its own device state (`MemAuth.dev`). -/
+abbrev DCell := DevState → Nat
+
+/-- The empty device cell. -/
+def DCell.unit : DCell := fun _ => 0
+
+@[simp] theorem DCell.unit_apply (D : DevState) : DCell.unit D = 0 := rfl
+
+open Classical in
+/-- The device cell of `devOwn D`: one fragment of `D`. -/
+noncomputable def DCell.one (D : DevState) : DCell := fun D' => if D' = D then 1 else 0
+
+@[simp] theorem DCell.one_self (D : DevState) : DCell.one D D = 1 := by simp [DCell.one]
+
+theorem DCell.one_ne {D X : DevState} (h : X ≠ D) : DCell.one D X = 0 := by simp [DCell.one, h]
+
+/-- The single fragment of `D` is authorized where the device state is `D` (`MemAuth.dev`). -/
+theorem DCell.one_auth (D : DevState) :
+    ∀ X, 0 < DCell.one D X → DCell.one D X = 1 ∧ D = X := fun X hX => by
+  by_cases hXD : X = D
+  · subst hXD; exact ⟨DCell.one_self X, rfl⟩
+  · rw [DCell.one_ne hXD] at hX; exact absurd hX (Nat.lt_irrefl 0)
+
+/-- **The memory's authority over the counter cell and the device cell** (module doc). -/
+structure MemAuth (m : Mem) (c : KCell) (d : DCell) : Prop where
   stack : StackAuth m c
   tick : TickAuth m c
   noStack : 0 < c.frag .noStack → m.NoStack
   onlyCred : ∀ k L, k ≠ .cred → c.auth k L = 0
   cur : ∀ v, 0 < c.ex .cur v → v.1 = m.current
+  /-- The device fragments: at most one, of the memory's device state. -/
+  dev : ∀ D, 0 < d D → d D = 1 ∧ m.dev = D
 
 /-- **A step keeps the memory's authority** (module doc): the per-primitive obligation. -/
 structure MemAuth.Keep (m m' : Mem) : Prop where
@@ -64,34 +99,87 @@ structure MemAuth.Keep (m m' : Mem) : Prop where
   ticks : m'.ticks = m.ticks
   noStack : m.NoStack → m'.NoStack
   current : m'.current = m.current
+  dev : m'.dev = m.dev
 
 namespace MemAuth
 
-variable {m m' m'' : Mem} {c : KCell}
+variable {m m' m'' : Mem} {c : KCell} {d : DCell}
 
-theorem keep (h : MemAuth m c) (hk : Keep m m') : MemAuth m' c :=
+theorem keep (h : MemAuth m c d) (hk : Keep m m') : MemAuth m' c d :=
   ⟨hk.stack c h.stack, ⟨fun L hL => by rw [hk.ticks]; exact h.tick.meter L hL,
     by rw [hk.ticks]; exact h.tick.spent, h.tick.plain⟩, fun hp => hk.noStack (h.noStack hp),
-    h.onlyCred, fun v hv => by rw [hk.current]; exact h.cur v hv⟩
+    h.onlyCred, fun v hv => by rw [hk.current]; exact h.cur v hv,
+    fun D hD => by rw [hk.dev]; exact h.dev D hD⟩
 
-theorem Keep.refl (m : Mem) : Keep m m := ⟨fun _ h => h, rfl, id, rfl⟩
+/-- **Another device cell** that the memory authorizes (`dev`), beside the same counter cell. -/
+theorem withDev {d' : DCell} (h : MemAuth m c d) (hd : ∀ D, 0 < d' D → d' D = 1 ∧ m.dev = D) :
+    MemAuth m c d' :=
+  ⟨h.stack, h.tick, h.noStack, h.onlyCred, h.cur, hd⟩
+
+/-- **A device fragment can be dropped**: fewer fragments are still at most one, of `m.dev`. -/
+theorem dropDev {d' : DCell} (h : MemAuth m c d) (hle : ∀ D, d' D ≤ d D) : MemAuth m c d' :=
+  h.withDev fun D hD => by
+    obtain ⟨h1, h2⟩ := h.dev D (Nat.lt_of_lt_of_le hD (hle D))
+    exact ⟨by have := hle D; omega, h2⟩
+
+/-- The empty device cell is authorized in every memory. -/
+theorem dev_unit (m : Mem) : ∀ D, 0 < DCell.unit D → DCell.unit D = 1 ∧ m.dev = D :=
+  fun _ h => absurd h (Nat.lt_irrefl 0)
+
+/-- **A device fragment is the only one**: next to the fragment of `D`, the rest `e` of an
+authorized device cell holds no fragment, and `D` is the memory's device state. -/
+theorem dev_only {d e : DCell} {D : DevState} (h : MemAuth m c d) (hd : ∀ X, d X = DCell.one D X + e X) :
+    m.dev = D ∧ ∀ X, e X = 0 := by
+  have hD := h.dev D (by rw [hd, DCell.one_self]; omega)
+  refine ⟨hD.2, fun X => ?_⟩
+  by_cases hX : X = D
+  · subst hX; have := hD.1; rw [hd, DCell.one_self] at this; omega
+  · refine Nat.eq_zero_of_not_pos fun hp => hX ?_
+    exact (h.dev X (by rw [hd]; omega)).2.symm.trans hD.2
+
+/-- **Another device state**: the memory with the device state `D'` authorizes the same counter
+cell and every device cell that `D'` authorizes. -/
+theorem withDevState {d' : DCell} (D' : DevState) (h : MemAuth m c d)
+    (hd : ∀ X, 0 < d' X → d' X = 1 ∧ D' = X) : MemAuth { m with dev := D' } c d' :=
+  ⟨h.stack.keep_shape rfl rfl rfl fun _ blk' hb' => ⟨blk', hb', rfl, rfl, rfl, rfl⟩,
+    ⟨h.tick.meter, h.tick.spent, h.tick.plain⟩, h.noStack, h.onlyCred, h.cur, hd⟩
+
+/-- **A device step's authority**: the memory with the device state `D'` in place of `D`
+authorizes the device cell with the fragment of `D'` in place of the fragment of `D`. -/
+theorem setDev {d d' e : DCell} {D : DevState} (D' : DevState) (h : MemAuth m c d)
+    (hd : ∀ X, d X = DCell.one D X + e X) (hd' : ∀ X, d' X = DCell.one D' X + e X) :
+    MemAuth { m with dev := D' } c d' :=
+  h.withDevState D' fun X hX => by
+    rw [hd', (h.dev_only hd).2 X, Nat.add_zero] at hX ⊢
+    exact DCell.one_auth D' X hX
+
+/-- **The device fragment of the memory's state can be added** next to a device cell without
+fragments. -/
+theorem addDev {d d' : DCell} (h : MemAuth m c d) (h0 : ∀ X, d X = 0)
+    (hd' : ∀ X, d' X = DCell.one m.dev X + d X) : MemAuth m c d' :=
+  h.withDev fun X hX => by
+    rw [hd', h0 X, Nat.add_zero] at hX ⊢
+    exact DCell.one_auth m.dev X hX
+
+theorem Keep.refl (m : Mem) : Keep m m := ⟨fun _ h => h, rfl, id, rfl, rfl⟩
 
 theorem Keep.trans (h₁ : Keep m m') (h₂ : Keep m' m'') : Keep m m'' :=
   ⟨fun c h => h₂.stack c (h₁.stack c h), h₂.ticks.trans h₁.ticks, fun h => h₂.noStack (h₁.noStack h),
-    h₂.current.trans h₁.current⟩
+    h₂.current.trans h₁.current, h₂.dev.trans h₁.dev⟩
 
-/-- A step that keeps the stack states, the blocks, the address space, the step count and the
-current thread. -/
+/-- A step that keeps the stack states, the blocks, the address space, the step count, the
+current thread and the device state. -/
 theorem Keep.of_blocks (hb : m'.blocks = m.blocks) (hst : m'.stacks = m.stacks)
     (hlim : m'.place.addrLimit = m.place.addrLimit) (ht : m'.ticks = m.ticks)
-    (hc : m'.current = m.current := by first | rfl | assumption | simp) : Keep m m' :=
+    (hc : m'.current = m.current := by first | rfl | assumption | simp)
+    (hd : m'.dev = m.dev := by first | rfl | assumption | simp) : Keep m m' :=
   ⟨fun _ h => h.keep_shape hst hlim (by rw [hb]) fun b blk' hb' =>
       ⟨blk', by rw [← hb]; exact hb', rfl, rfl, rfl, rfl⟩,
-    ht, fun h t => by simp only [Mem.stackOf, hst]; exact h t, hc⟩
+    ht, fun h t => by simp only [Mem.stackOf, hst]; exact h t, hc, hd⟩
 
 theorem Keep.of_aux (hb : m'.blocks = m.blocks) (h : m.Aux m')
     (hc : m'.current = m.current := by first | rfl | assumption | simp) : Keep m m' :=
-  Keep.of_blocks hb h.1 (by rw [h.2.1]) h.2.2 hc
+  Keep.of_blocks hb h.1 (by rw [h.2.1]) h.ticks hc h.dev
 
 /-- A step that keeps the stack states, the address space, the step count, and every block's
 liveness, address, size and kind (stores, loads, recorded accesses). -/
@@ -100,19 +188,20 @@ theorem Keep.shape (hst : m'.stacks = m.stacks) (hlim : m'.place.addrLimit = m.p
     (hb : ∀ (b : Nat) (blk' : Block), m'.blocks[b]? = some blk' → ∃ blk, m.blocks[b]? = some blk ∧
       blk'.live = blk.live ∧ blk'.addr = blk.addr ∧ blk'.bytes.size = blk.bytes.size ∧
         blk'.kind = blk.kind)
-    (ht : m'.ticks = m.ticks) (hc : m'.current = m.current := by first | rfl | assumption | simp) :
-    Keep m m' :=
+    (ht : m'.ticks = m.ticks) (hc : m'.current = m.current := by first | rfl | assumption | simp)
+    (hd : m'.dev = m.dev := by first | rfl | assumption | simp) : Keep m m' :=
   ⟨fun _ h => h.keep_shape hst hlim hsz hb, ht, fun h t => by simp only [Mem.stackOf, hst]; exact h t,
-    hc⟩
+    hc, hd⟩
 
 /-- Replacing block `b` by one with the same liveness, address, size and kind (a store). -/
 theorem Keep.set {b : BlockId} {blk nb : Block} (hb : m.blocks[b]? = some blk)
     (h : m'.blocks = m.blocks.set! b nb) (hl : nb.live = blk.live) (ha : nb.addr = blk.addr)
     (hs : nb.bytes.size = blk.bytes.size) (hk : nb.kind = blk.kind) (hst : m'.stacks = m.stacks)
     (hlim : m'.place.addrLimit = m.place.addrLimit) (ht : m'.ticks = m.ticks)
-    (hc : m'.current = m.current := by first | rfl | assumption | simp) : Keep m m' := by
+    (hc : m'.current = m.current := by first | rfl | assumption | simp)
+    (hd : m'.dev = m.dev := by first | rfl | assumption | simp) : Keep m m' := by
   have hlt : b < m.blocks.size := (Array.getElem?_eq_some_iff.mp hb).1
-  refine Keep.shape hst hlim (by rw [h]; simp [Array.set!_eq_setIfInBounds]) (fun b' blk' hb' => ?_) ht hc
+  refine Keep.shape hst hlim (by rw [h]; simp [Array.set!_eq_setIfInBounds]) (fun b' blk' hb' => ?_) ht hc hd
   rw [h, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds] at hb'
   by_cases e : b = b'
   · subst e
@@ -134,19 +223,19 @@ theorem Keep.of_stackKeep (hst : m'.stacks = m.stacks)
             blk.kind.mappedLo ≤ blk'.kind.mappedLo)))
     (hnew : ∀ (b : Nat) (blk' : Block), m'.blocks[b]? = some blk' → m.blocks.size ≤ b →
       ∀ t S, (m.stackOf t).budget = some S → blk'.clearOf (m.stackOf t).base S = true)
-    (ht : m'.ticks = m.ticks) (hcur : m'.current = m.current := by first | rfl | assumption | simp) :
-    Keep m m' :=
+    (ht : m'.ticks = m.ticks) (hcur : m'.current = m.current := by first | rfl | assumption | simp)
+    (hd : m'.dev = m.dev := by first | rfl | assumption | simp) : Keep m m' :=
   ⟨fun _ h => h.keep hst hlim hsz hold hnew, ht, fun h t => by simp only [Mem.stackOf, hst]; exact h t,
-    hcur⟩
+    hcur, hd⟩
 
 /-- Pushing a block clear of every reserve (a new mapping, a moved one). -/
 theorem Keep.push {nb : Block} (h : m'.blocks = m.blocks.push nb) (hst : m'.stacks = m.stacks)
     (hlim : m'.place.addrLimit = m.place.addrLimit) (ht : m'.ticks = m.ticks)
     (hc : ∀ t S, (m.stackOf t).budget = some S → nb.clearOf (m.stackOf t).base S = true)
-    (hcur : m'.current = m.current := by first | rfl | assumption | simp) :
-    Keep m m' := by
+    (hcur : m'.current = m.current := by first | rfl | assumption | simp)
+    (hd : m'.dev = m.dev := by first | rfl | assumption | simp) : Keep m m' := by
   refine Keep.of_stackKeep hst (by omega) (by rw [h]; simp) (fun b blk' hb' hl hbs => ?_)
-    (fun b blk' hb' hbs t S hS => ?_) ht hcur
+    (fun b blk' hb' hbs t S hS => ?_) ht hcur hd
   · rw [h, Array.getElem?_push, if_neg (Nat.ne_of_lt hbs)] at hb'
     exact ⟨blk', hb', hl, .inr ⟨rfl, Nat.le_refl _, Nat.le_refl _⟩⟩
   · have hlt := (Array.getElem?_eq_some_iff.mp hb').1
@@ -168,12 +257,13 @@ theorem _root_.Zig.Mem.newAddr_reservesClear {nb : Block} {N align : Nat} (ha : 
 /-- In a memory without stack budgets, a step that keeps the step count and gives no thread a
 budget keeps the authority: there are no stack tokens to keep. -/
 theorem Keep.of_noStack (hm : m.NoStack) (hm' : m'.NoStack) (ht : m'.ticks = m.ticks)
-    (hc : m'.current = m.current := by first | rfl | assumption | simp) : Keep m m' :=
+    (hc : m'.current = m.current := by first | rfl | assumption | simp)
+    (hd : m'.dev = m.dev := by first | rfl | assumption | simp) : Keep m m' :=
   ⟨fun c h => by
     refine ⟨fun t => ?_, fun t _ S _ _ h' => by rw [hm' t] at h'; cases h'⟩
     have := h.thread t
     unfold ThreadOk at this ⊢
-    rw [hm t] at this; rw [hm' t]; exact this, ht, fun _ => hm', hc⟩
+    rw [hm t] at this; rw [hm' t]; exact this, ht, fun _ => hm', hc, hd⟩
 
 /-- `alloc` of a block that no stack budget charges. -/
 theorem Keep.allocOther {kind : BlockKind} {size align : Nat} (hk : m.stackBudget? kind = none) :
@@ -181,7 +271,7 @@ theorem Keep.allocOther {kind : BlockKind} {size align : Nat} (hk : m.stackBudge
   ⟨fun _ h => h.allocOther hk, rfl, fun h t => by
     have hst : (m.afterAlloc kind size align).stacks = m.stacks := by
       simp [Mem.afterAlloc, Mem.stacksAfterAlloc, hk]
-    simp only [Mem.stackOf, hst]; exact h t, rfl⟩
+    simp only [Mem.stackOf, hst]; exact h t, rfl, rfl⟩
 
 /-- A live block replaced in place by one that is clear of every reserve or occupies no more
 than it did (`StackAuth.keep`'s condition on an old block). -/
@@ -195,7 +285,7 @@ theorem Keep.setLive {b : BlockId} {blk nb : Block} (hb : m.blocks[b]? = some bl
   refine Keep.of_stackKeep hax.1 (by rw [hax.2.1]; exact Nat.le_refl _) (by rw [h]; simp)
     (fun b' blk' hb' hl' _ => ?_)
     (fun b' blk' hb' hbs => absurd (Array.getElem?_eq_some_iff.mp hb').1 (by rw [h]; simp; omega))
-    hax.2.2 hc
+    hax.ticks hc hax.dev
   rw [h, Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds] at hb'
   by_cases e : b = b'
   · subst e
@@ -243,9 +333,11 @@ theorem _root_.Zig.Mem.reservesFree_apart {A n : Nat} (h : m.reservesFree A n = 
 theorem Keep.kill {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk)
     (h : m'.blocks = m.blocks.set! b { blk with live := false }) (hst : m'.stacks = m.stacks)
     (hlim : m'.place.addrLimit = m.place.addrLimit) (ht : m'.ticks = m.ticks)
-    (hc : m'.current = m.current := by first | rfl | assumption | simp) : Keep m m' := by
+    (hc : m'.current = m.current := by first | rfl | assumption | simp)
+    (hd : m'.dev = m.dev := by first | rfl | assumption | simp) : Keep m m' := by
   refine Keep.of_stackKeep hst (by omega) (by rw [h]; simp) (fun b' blk' hb' hl _ => ?_)
     (fun b' blk' hb' hbs => absurd (Array.getElem?_eq_some_iff.mp hb').1 (by rw [h]; simp; omega)) ht hc
+    hd
   rw [h] at hb'
   rcases getElem?_set!_dead hb hb' with ⟨-, hd⟩ | ⟨-, hb''⟩
   · rw [hd] at hl; cases hl
@@ -255,7 +347,7 @@ theorem Keep.kill {b : BlockId} {blk : Block} (hb : m.blocks[b]? = some blk)
 theorem Keep.free {p : Ptr} {x : Unit} (hrun : ((Zig.free p).run m).run = some (.ok (x, m'))) :
     Keep m m' := by
   obtain ⟨b, blk, -, -, -, rfl⟩ := free_ok_live hrun
-  exact ⟨fun _ h => h.free hrun, rfl, id, rfl⟩
+  exact ⟨fun _ h => h.free hrun, rfl, id, rfl, rfl⟩
 
 /-- **`StackAuth` reads only the exclusive fragments of the threads' keys** (`sp`, `blk`, `frm`). -/
 theorem _root_.Zig.Full.StackAuth.congrTid {c c' : KCell} (h : StackAuth m c)
@@ -272,10 +364,11 @@ theorem _root_.Zig.Full.StackAuth.congr {c c' : KCell} (h : StackAuth m c)
 
 /-- **Dropping a part without exclusive fragments keeps the authority** (credits, receipts,
 the plain-mode facts, a credit authority: everything but the stack tokens and `cur`). -/
-theorem drop {a b : KCell} (h : MemAuth m (a.add b)) (hb : ∀ k v, b.ex k v = 0) : MemAuth m a := by
-  obtain ⟨hs, ⟨h1, h2, h3⟩, h4, h5, h6⟩ := h
+theorem drop {a b : KCell} (h : MemAuth m (a.add b) d) (hb : ∀ k v, b.ex k v = 0) :
+    MemAuth m a d := by
+  obtain ⟨hs, ⟨h1, h2, h3⟩, h4, h5, h6, h7⟩ := h
   refine ⟨hs.congr fun k v => by simp [hb], ⟨fun L hL => ?_, ?_, fun hp L => ?_⟩, fun hp => h4 ?_,
-    fun k L hk => ?_, fun v hv => h6 v (by simp; omega)⟩
+    fun k L hk => ?_, fun v hv => h6 v (by simp; omega), h7⟩
   · have := h1 L (by simp; omega); simp at this; omega
   · have := h2; simp at this; omega
   · have := h3 (by simp; omega) L; simp at this; omega
@@ -284,11 +377,11 @@ theorem drop {a b : KCell} (h : MemAuth m (a.add b)) (hb : ∀ k v, b.ex k v = 0
 
 /-- **The running thread's token**: next to a cell without a `cur` token, the memory authorizes
 `cur m.current`. -/
-theorem addCur (h : MemAuth m c) : MemAuth m ((curCell m.current).add c) := by
-  obtain ⟨hs, ⟨h1, h2, h3⟩, h4, h5, h6⟩ := h
+theorem addCur (h : MemAuth m c d) : MemAuth m ((curCell m.current).add c) d := by
+  obtain ⟨hs, ⟨h1, h2, h3⟩, h4, h5, h6, h7⟩ := h
   refine ⟨hs.congrTid fun k v t hk => ?_, ⟨fun L hL => ?_, by simpa [curCell] using h2,
     fun hp L => ?_⟩, fun hp => h4 (by simpa [curCell] using hp), fun k L hk => by simp [curCell, h5 k L hk],
-    fun v hv => ?_⟩
+    fun v hv => ?_, h7⟩
   · have : k ≠ .cur := by rintro rfl; cases hk
     simp [curCell, this]
   · have := h1 L (by simpa [curCell] using hL); simpa [curCell] using this
@@ -298,11 +391,11 @@ theorem addCur (h : MemAuth m c) : MemAuth m ((curCell m.current).add c) := by
     · exact h6 v (by simpa [curCell, e] using hv)
 
 /-- **A `cur` token can be dropped**: the memory demands none. -/
-theorem dropCur {t : ThreadId} (h : MemAuth m ((curCell t).add c)) : MemAuth m c := by
-  obtain ⟨hs, ⟨h1, h2, h3⟩, h4, h5, h6⟩ := h
+theorem dropCur {t : ThreadId} (h : MemAuth m ((curCell t).add c) d) : MemAuth m c d := by
+  obtain ⟨hs, ⟨h1, h2, h3⟩, h4, h5, h6, h7⟩ := h
   refine ⟨hs.congrTid fun k v t' hk => ?_, ⟨fun L hL => ?_, by simpa [curCell] using h2,
     fun hp L => ?_⟩, fun hp => h4 (by simpa [curCell] using hp), fun k L hk => by
-      simpa [curCell] using h5 k L hk, fun v hv => h6 v (by simp; omega)⟩
+      simpa [curCell] using h5 k L hk, fun v hv => h6 v (by simp; omega), h7⟩
   · have : k ≠ .cur := by rintro rfl; cases hk
     simp [curCell, this]
   · have := h1 L (by simpa [curCell] using hL); simpa [curCell] using this
@@ -311,28 +404,30 @@ theorem dropCur {t : ThreadId} (h : MemAuth m ((curCell t).add c)) : MemAuth m c
 /-- **Only the stack tokens change** (a stack push or pop): a cell with the same counted
 fragments, authorities and `cur` token, whose stack tokens the new memory authorizes, in a
 memory with the same step count and current thread. -/
-theorem restack {c' : KCell} (h : MemAuth m c) (hs : StackAuth m' c') (ht : m'.ticks = m.ticks)
+theorem restack {c' : KCell} (h : MemAuth m c d) (hs : StackAuth m' c') (ht : m'.ticks = m.ticks)
     (hc : m'.current = m.current) (hns : m.NoStack → m'.NoStack) (hf : ∀ k, c'.frag k = c.frag k)
-    (ha : ∀ k n, c'.auth k n = c.auth k n) (hx : ∀ v, c'.ex .cur v = c.ex .cur v) : MemAuth m' c' :=
+    (ha : ∀ k n, c'.auth k n = c.auth k n) (hx : ∀ v, c'.ex .cur v = c.ex .cur v)
+    (hd : m'.dev = m.dev := by first | rfl | assumption | simp) : MemAuth m' c' d :=
   ⟨hs, ⟨fun L hL => by rw [ht, hf]; exact h.tick.meter L (by rw [← ha]; exact hL),
     by rw [ht, hf]; exact h.tick.spent, fun hp L => by
       rw [ha]; exact h.tick.plain (by rw [← hf]; exact hp) L⟩,
     fun hp => hns (h.noStack (by rw [← hf]; exact hp)), fun k L hk => by rw [ha]; exact h.onlyCred k L hk,
-    fun v hv => by rw [hc]; exact h.cur v (by rw [← hx]; exact hv)⟩
+    fun v hv => by rw [hc]; exact h.cur v (by rw [← hx]; exact hv),
+    fun D hD => by rw [hd]; exact h.dev D hD⟩
 
 /-- **A scheduler stop**: a memory with another current thread authorizes a cell without a `cur`
 token (a thread holds `cur` only while it runs). -/
-theorem stop (h : MemAuth m c) (hc : ∀ v, c.ex .cur v = 0) (t : ThreadId) :
-    MemAuth { m with current := t } c :=
+theorem stop (h : MemAuth m c d) (hc : ∀ v, c.ex .cur v = 0) (t : ThreadId) :
+    MemAuth { m with current := t } c d :=
   ⟨h.stack.keep_shape rfl rfl rfl fun _ blk' hb' => ⟨blk', hb', rfl, rfl, rfl, rfl⟩,
     ⟨h.tick.meter, h.tick.spent, h.tick.plain⟩, h.noStack, h.onlyCred,
-    fun v hv => absurd (hc v) (by omega)⟩
+    fun v hv => absurd (hc v) (by omega), h.dev⟩
 
-/-- **The start**: in a memory without stack budgets the empty cell is authorized. -/
-theorem unit (hm : m.NoStack) : MemAuth m ACell.unit :=
+/-- **The start**: in a memory without stack budgets the empty cells are authorized. -/
+theorem unit (hm : m.NoStack) : MemAuth m ACell.unit DCell.unit :=
   ⟨StackAuth.of_noBudget hm fun _ _ _ => rfl, ⟨fun _ h => absurd h (by simp), by simp,
     fun h => absurd h (by simp)⟩, fun h => absurd h (by simp), fun _ _ _ => rfl,
-    fun _ h => absurd h (by simp)⟩
+    fun _ h => absurd h (by simp), dev_unit m⟩
 
 end MemAuth
 
