@@ -88,9 +88,9 @@ report_dir=${AIR2LEAN_CHECK_REPORT_DIR:-.lake/check-reports/$zig_version}
 namespace_of() { printf '%s%s' "$(printf '%s' "${1:0:1}" | tr '[:lower:]' '[:upper:]')" "${1:1}"; }
 host_os=$(uname -s | tr '[:upper:]' '[:lower:]')
 host_arch=$(uname -m)
-# aarch64-linux AIR is exported for the baseline CPU (`generic`): the translator rejects a profile
-# with `fullfp16`, whose `f16` `@mulAdd` is fused (docs/floats.md §Targets), and the native
-# harness is built for the baseline CPU too. The other hosts keep the native CPU of their goldens.
+# aarch64-linux AIR is exported for the baseline CPU (`generic`), the CPU of the committed goldens:
+# an `f16` `@mulAdd` depends on `fullfp16` (docs/floats.md §Targets), so the native harness is
+# built for the baseline CPU too. The other hosts keep the native CPU of their goldens.
 mcpu=''
 if [ "$host_os-$host_arch" = linux-aarch64 ]; then mcpu=-mcpu=baseline; fi
 
