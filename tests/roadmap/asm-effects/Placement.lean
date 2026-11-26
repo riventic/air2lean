@@ -22,6 +22,13 @@ The mutants (`assurance/mutation-map.json`, A02):
   is whatever the caller left.
 - `"undeclared-write-unchecked"`: a write to a register that is neither an output nor a clobber.
   The compiler may hold an input there.
+- `"mem-width-unchecked"`: a 64-bit read of a 32-bit memory operand. The bytes after the operand
+  are not the operand's.
+- `"output-undefined-unchecked"`: an output that no instruction writes. Its register holds what
+  the caller left.
+
+The two other violations are not about placement: `declaration` (inconsistent operands) and
+`noEncoding` (the instruction does not exist in this form).
 
 The last example is the positive case: a block that passes the check under a placement that
 shares one register between its input and its output.
@@ -141,6 +148,56 @@ theorem undeclaredWrite_entry : apart.Entry undeclaredWrite [5] (only 1 5) := by
 
 theorem undeclaredWrite_differs :
     undeclaredWrite.out [5] 0 = 5 ∧ machine apart undeclaredWrite (only 1 5) 0 = some 0 := by
+  constructor <;> rfl
+
+/-! ## `"mem-width-unchecked"` -/
+
+/-- The machine state with `v` in the memory operand `k` and 0 elsewhere. -/
+def onlyMem (k : Nat) (v : BitVec 64) : State := fun l => if l = .mem k then v else 0
+
+/-- `movq %[x], %[ret]` with a 32-bit `[x] "m"`: the instruction reads 8 bytes at the operand. -/
+def memWidth : Block where
+  instrs := [.bin .mov .w64 (.loc (.mem 1)) (.vreg 0)]
+  inputs := [(.mem 1, .w32)]
+  outputs := [(.vreg 0, .w64)]
+
+theorem memWidth_rejected : memWidth.check = some (.memWidth 0 (.mem 1)) := by decide
+
+theorem memWidth_admissible : apart.Admissible memWidth := by
+  refine ⟨?_, ?_, ?_⟩ <;>
+    simp [memWidth, apart, Block.operandLocs, Block.inputLocs, Block.outputLocs, Placement.loc]
+
+/-- The operand's 4 bytes hold 5; the bytes after them are not the operand's. -/
+theorem memWidth_entry : apart.Entry memWidth [5] (onlyMem 1 0xdead00000005#64) := by
+  simp [Placement.Entry, memWidth, apart, Placement.loc, onlyMem, initState, State.get]
+  decide
+
+theorem memWidth_differs :
+    memWidth.out [5] 0 = 5 ∧
+      machine apart memWidth (onlyMem 1 0xdead00000005#64) 0 = some 0xdead00000005#64 := by
+  constructor <;> rfl
+
+/-! ## `"output-undefined-unchecked"` -/
+
+/-- An empty template with `[ret] "=r"`: nothing writes the output. -/
+def outputUndefined : Block where
+  instrs := []
+  inputs := []
+  outputs := [(.vreg 0, .w64)]
+
+theorem outputUndefined_rejected : outputUndefined.check = some (.outputUndefined 0) := by decide
+
+theorem outputUndefined_admissible : apart.Admissible outputUndefined := by
+  refine ⟨?_, ?_, ?_⟩ <;>
+    simp [outputUndefined, apart, Block.operandLocs, Block.inputLocs, Block.outputLocs,
+      Placement.loc]
+
+theorem outputUndefined_entry : apart.Entry outputUndefined [] (only 0 9) := by
+  simp [Placement.Entry, outputUndefined]
+
+/-- The model's output is 0; the machine's is what `rax` held. -/
+theorem outputUndefined_differs :
+    outputUndefined.out [] 0 = 0 ∧ machine apart outputUndefined (only 0 9) 0 = some 9 := by
   constructor <;> rfl
 
 /-! ## A checked block under a sharing placement -/

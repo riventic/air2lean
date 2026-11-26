@@ -875,7 +875,9 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
      placement, whatever the registers held besides the inputs, and that it accesses each
      memory operand only while the registers of its address hold their entry values. The
      rules of the check are needed for that: `tests/roadmap/asm-effects/Placement.lean` has,
-     for each rule, a rejected block that computes another value on the machine.
+     for each of the six rules on reads, writes and outputs, a block that only this rule
+     rejects and that computes another value on the machine. Two memory operands are two
+     locations here; that they do not overlap is ASM-03.
   5. *Flags.* The model has no flag state. No modelled instruction reads a flag, and Zig's LLVM
      backend declares the flags clobbered for every x86 asm block, so a block needs no `cc`
      clobber for the flags it writes.

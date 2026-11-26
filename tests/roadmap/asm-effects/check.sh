@@ -26,7 +26,8 @@ cmp "$work/AsmEffects/Gen.lean" tests/roadmap/asm-effects/AsmEffects/Gen.lean
 "${lean_cmd[@]}" tests/roadmap/asm-effects/Placement.lean
 python3 -B scripts/mutation_kill_log.py --check tests/roadmap/asm-effects/check.sh \
   tests/roadmap/asm-effects/Placement.lean \
-  stale-read-unchecked stale-address-unchecked undefined-read-unchecked undeclared-write-unchecked
+  stale-read-unchecked stale-address-unchecked undefined-read-unchecked undeclared-write-unchecked \
+  mem-width-unchecked output-undefined-unchecked
 PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/asm-effects/test_cli.py "$translator"
 PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/asm-effects/harness.py
 # A01 environment reads, memory inputs and memory-region contracts on fresh 0.17.1/0.16.0/0.15.2
