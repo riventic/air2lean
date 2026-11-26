@@ -133,11 +133,6 @@
 # (ah) Lean-runtime mutation, floats: `Float.MinAllowed`/`MaxAllowed` admit only `+0` for
 #     `@min`/`@max` of `+0` and `−0` (group D). Detected by the proof build: `min_zero_varies`
 #     (Proofs/Floats/AllowedNeg.lean).
-# (ai) Lean-runtime mutation, lists: the default of `AllocPolicy.maxBytes` (ZigLean/Mem/Basic.lean)
-#     is the old fixed cap `maxAllocBytes` (1 MiB) again, not `unboundedAllocBytes`. The five
-#     `sumRange` lines with `"max_bytes": null` (the model default) that allocate a buffer of
-#     1 MiB + 4 bytes up to 4 MiB then return `error.OutOfMemory` where Zig returns the sum (the
-#     sixth such line fails on both sides: its byte count overflows).
 #
 # Usage: mutate.sh
 # Env:
@@ -146,7 +141,7 @@
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
 #                         (basic for (a)/(b), options for (c), floatops for (d), variants for (e),
 #                         pointers (f), slices (g), lists (h), asm (i), vectors (j),
-#                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q), slices (r), lists (s), layout (t)/(u), threads (v), atomics (w)/(x), sync (y)/(z), threads (aa)/(ab), floats (ag)/(ah), lists (ai))
+#                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q), slices (r), lists (s), layout (t)/(u), threads (v), atomics (w)/(x), sync (y)/(z), threads (aa)/(ab), floats (ag)/(ah))
 #                         is in the list.
 #                         Default: every dir in examples/.
 #   AIR2LEAN_MUTATION_SHARD   Run only the mutations of line N (from 1) of
@@ -238,7 +233,7 @@ diff_baseline_for floatops d
 diff_baseline_for variants e
 diff_baseline_for pointers f
 diff_baseline_for slices g r
-diff_baseline_for lists h s ai
+diff_baseline_for lists h s
 diff_baseline_for asm i
 diff_baseline_for vectors j q
 diff_baseline_for threads k l v
@@ -297,7 +292,6 @@ asm_zig="ZigLean/Isa/X86.lean"
 vec_lean="ZigLean/Vec.lean"
 thread_lean="ZigLean/Mem/Thread.lean"
 sched_lean="ZigLean/Conc/Sched.lean"
-conc_lean="ZigLean/Conc.lean"
 allowed_lean="ZigLean/Float/Allowed.lean"
 gen_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-gen.XXXXXX")
 options_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-options-gen.XXXXXX")
@@ -314,7 +308,6 @@ asm_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-asm.XXXXXX")
 vec_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-vec.XXXXXX")
 thread_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-thread.XXXXXX")
 sched_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-sched.XXXXXX")
-conc_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-conc.XXXXXX")
 allowed_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-allowed.XXXXXX")
 cp "$gen_file" "$gen_backup"
 cp "$options_gen" "$options_backup"
@@ -331,7 +324,6 @@ cp "$asm_zig" "$asm_backup"
 cp "$vec_lean" "$vec_backup"
 cp "$thread_lean" "$thread_backup"
 cp "$sched_lean" "$sched_backup"
-cp "$conc_lean" "$conc_backup"
 cp "$allowed_lean" "$allowed_backup"
 
 mutate_tmp=""
@@ -356,10 +348,9 @@ cleanup() {
   cp "$vec_backup" "$vec_lean"
   cp "$thread_backup" "$thread_lean"
   cp "$sched_backup" "$sched_lean"
-  cp "$conc_backup" "$conc_lean"
   cp "$allowed_backup" "$allowed_lean"
   rm -f "$gen_backup" "$options_backup" "$variants_backup" "$layout_backup" "$slices_backup" "$basic_backup" "$lemmas_backup" "$round_backup" \
-    "$mem_backup" "$enc_backup" "$alloc_backup" "$asm_backup" "$vec_backup" "$thread_backup" "$sched_backup" "$conc_backup" "$allowed_backup"
+    "$mem_backup" "$enc_backup" "$alloc_backup" "$asm_backup" "$vec_backup" "$thread_backup" "$sched_backup" "$allowed_backup"
   [ -n "$mutate_tmp" ] && rm -rf "$mutate_tmp"
   [ -n "$air_dir" ] && rm -rf "$air_dir"
   [ -n "$mutation_outcome_tmp" ] && rm -rf "$mutation_outcome_tmp"
@@ -408,7 +399,7 @@ require_mutated() {
       "$layout_gen:$layout_backup" "$slices_gen:$slices_backup" "$basic_lean:$basic_backup" \
       "$lemmas_lean:$lemmas_backup" "$round_lean:$round_backup" "$mem_lean:$mem_backup" \
       "$enc_lean:$enc_backup" "$alloc_lean:$alloc_backup" "$asm_zig:$asm_backup" "$vec_lean:$vec_backup" \
-      "$thread_lean:$thread_backup" "$sched_lean:$sched_backup" "$conc_lean:$conc_backup" "$allowed_lean:$allowed_backup"; do
+      "$thread_lean:$thread_backup" "$sched_lean:$sched_backup" "$allowed_lean:$allowed_backup"; do
     cmp -s "${pair%%:*}" "${pair#*:}" || return 0
   done
   echo "error: $1: the mutation changed no source file (its pattern no longer matches?)" >&2
@@ -467,19 +458,11 @@ run_and_report() {
     mutation_outcome_tmp=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-mutate-outcomes.XXXXXX")
     report_dir=$mutation_outcome_tmp
   fi
-  # Generated runtime code needs Call's weak wrappers, not WeakCas's proof interfaces.
-  # Correct Mem lemmas deliberately fail under differential mutants (e.g. k/n).
-  # Exclude only this new proof import for the differential window; baselines and
-  # proof_report retain it. The EXIT/signal trap also restores it on interrupted runs.
-  [ "$(grep -Fxc 'import ZigLean.Conc.WeakCas' "$conc_lean" || true)" -eq 1 ] || {
-    echo "error: $label: expected exactly one WeakCas proof import" >&2
-    exit 1
-  }
-  sed -i.bak '/^import ZigLean\.Conc\.WeakCas$/d' "$conc_lean"
-  rm -f "$conc_lean.bak"
+  # The runtime root (`import ZigLean`) reaches no proof-only module (assurance/runtime-root.json;
+  # preflight runs `lean-deps.py --runtime-root check`), so the differential build does not
+  # elaborate the Mem/Conc lemmas that Lean-runtime mutants (e.g. k/n) correctly break.
   AIR2LEAN_DIFF_REPORT="$report_dir/summary.json" AIR2LEAN_EXAMPLES=$ex \
     bash scripts/diff.sh >"$out" 2>&1 || status=$?
-  cp "$conc_backup" "$conc_lean"
   local total_line
   total_line=$(grep '^TOTAL:' "$out" || true)
   if [ -z "$total_line" ]; then
@@ -1140,24 +1123,6 @@ else
   proof_report "mutation (ah)" Proofs.Floats.AllowedNeg
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$allowed_backup" "$allowed_lean"
-fi
-
-echo "== mutation (ai): the default allocation policy has the fixed 1 MiB cap again (Lean runtime) ==" >&2
-if ! want_mutation ai; then
-  echo "mutation (ai): skipped (not in this shard)"
-elif ! has_example lists; then
-  echo "mutation (ai): skipped (AIR2LEAN_EXAMPLES excludes lists)"
-else
-  sed -i.bak 's/^  maxBytes : Nat := unboundedAllocBytes$/  maxBytes : Nat := maxAllocBytes/' "$mem_lean"
-  rm -f "$mem_lean.bak"
-  grep -q '^  maxBytes : Nat := maxAllocBytes$' "$mem_lean" || {
-    echo "error: mutation (ai): sed did not change the default of AllocPolicy.maxBytes" >&2
-    exit 1
-  }
-
-  run_and_report "mutation (ai)" lists
-  [ "$detected" -eq 1 ] || all_detected=0
-  cp "$mem_backup" "$mem_lean"
 fi
 
 [ "$mutations_run" -gt 0 ] || { echo "error: selection ran no mutations" >&2; exit 1; }

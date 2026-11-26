@@ -35,6 +35,24 @@
       "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
       "cwd": "repo",
       "closure": ["source.make", "source.append", "source.resize", "source.release"]
+    },
+    {
+      "out": "air/{version}/wide",
+      "source": "wide.zig",
+      "filter": "wide.,mem.,math.,debug.assert",
+      "versions": ["0.17.1", "0.16.0", "0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo",
+      "closure": ["wide.*"]
+    },
+    {
+      "out": "air/{version}/kinds",
+      "source": "kinds.zig",
+      "filter": "kinds.,mem.,math.,debug.assert",
+      "versions": ["0.17.1", "0.16.0", "0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo",
+      "closure": ["kinds.*"]
     }
   ]
 }

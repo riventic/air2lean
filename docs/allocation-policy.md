@@ -133,6 +133,17 @@ x86_64-linux (ReleaseSafe), Zig 0.16.0, 0.17.1 and 0.15.2 each: 1,710 lists case
 matches (the six large lines among them), 0 mismatches, the pinned `allocatorWord` exclusion;
 each whole run, the build of the Lean side included, took under two minutes.
 
+**Large requests through the translated allocator.** The lines above run the `std` allocator
+model. `tests/roadmap/alloc-translated`
+([README](../tests/roadmap/alloc-translated/README.md#requests-above-1-mib-against-the-native-run-m03))
+sends requests of 1 MiB + 1 byte and 4 MiB through the translated `PageAllocator`
+(`page_sum`, down to `Zig.Os.mmap`; the failure decision there is `Mem.mapDenied`, the same policy)
+under the default policy and compares the results with the native run, for the Zig 0.17.1 and
+0.16.0 translations on x86_64-linux and aarch64-macos. The model's side is a compiled executable:
+Lean's interpreter keeps a frame per iteration of a loop in the concurrent monad and does not run
+loops of that length. Under the harness policy (the old cap) the same run is denied, which the
+check requires.
+
 **Standalone fixture.** `tests/roadmap/allocation-policy` compares twenty exact cases of
 `rawAlloc` against `TestAllocator`. Ten cover the failure index, the list and the cap: legacy
 success/failure, several failures, combined legacy/trace failure, duplicate indices, all
@@ -170,13 +181,7 @@ removal, ignore the failure oracle, ignore the budget, count only the request ag
 budget, or drop a rule's upper bound on the request. Each must compile, then fail an explicit fixture outcome/ownership assertion.
 Compiler errors, unexpected panics, missing tools and killed processes do not count as
 mutation detection. Temporary copies preserve the original source. Existing mutation (h)
-continues to remove only legacy `failAt`, retaining the configured policy. Mutation (ai) of
-`scripts/mutate.sh` puts the fixed 1 MiB cap back into the model's default policy (the default
-of `AllocPolicy.maxBytes` becomes `maxAllocBytes`); the lists differential kills it, because
-`"max_bytes": null` takes the cap from the default policy itself: the five large `sumRange`
-lines that allocate then return `OutOfMemory` in the model where Zig returns the sum (5
-mismatches; run of 2026-11-26, x86_64-linux, Zig 0.16.0, recorded in
-`assurance/mutation-kills.json`).
+continues to remove only legacy `failAt`, retaining the configured policy.
 
 [The qualification record](allocation-policy-report.json) preserves the earlier historical
 results and appends the coordinator's complete post-cleanup recheck at revision

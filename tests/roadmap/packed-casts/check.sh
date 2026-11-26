@@ -4,6 +4,9 @@
 #   logical017.zig     0.17.1                        (PackedCasts/<version>/Logical017.lean, ModelLogical.lean)
 #   vector_fields.zig  0.14.1 0.15.2                 (PackedCasts/<version>/VectorFields.lean, ModelVector.lean)
 #   auto_items.zig     0.14.1 0.15.2                 (PackedCasts/<version>/AutoItems.lean, ModelAuto.lean)
+#   opt_items.zig      0.14.1 0.15.2                 (PackedCasts/<version>/OptItems.lean, ModelOpt.lean;
+#                                                    air/<version>/opt_items_x64, the self-hosted
+#                                                    x86_64 backend: OptItemsX64.lean, ModelOptX64.lean)
 #   sentinel_arrays.zig 0.14.1 0.15.2 0.16.0         (PackedCasts/<version>/SentinelArrays.lean, ModelSentinel.lean)
 #   void_casts.zig     0.14.1 0.15.2 0.16.0 0.17.1   (PackedCasts/<version>/VoidCasts.lean, ModelVoid.lean)
 #   void017.zig        0.17.1                        (PackedCasts/<version>/Void017.lean, ModelVoid017.lean)
@@ -49,6 +52,7 @@ sources=(
   "logical017:Logical017:ModelLogical:0.17.1"
   "vector_fields:VectorFields:ModelVector:0.15.2 0.14.1"
   "auto_items:AutoItems:ModelAuto:0.15.2 0.14.1"
+  "opt_items:OptItems:ModelOpt:0.15.2 0.14.1"
   "sentinel_arrays:SentinelArrays:ModelSentinel:0.16.0 0.15.2 0.14.1"
   "void_casts:VoidCasts:ModelVoid:0.17.1 0.16.0 0.15.2 0.14.1"
   "void017:Void017:ModelVoid017:0.17.1"
@@ -165,11 +169,24 @@ for v in 0.16.0 0.17.1; do
   models+=("PackedCasts.$t.ModelVoidCast")
   theorems+=(--declaration "PackedCasts.$t.ModelVoidCast.voidsToInt_ok")
 done
+# `opt_items.zig` for the self-hosted x86_64 backend (an opt-in build mode): the profile's
+# storage encoding of a padded payload. The 0.15.2 model is written, the 0.14.1 one renamed.
+for v in 0.15.2 0.14.1; do
+  t="V${v//./_}"
+  "$translator" "$dir/air/$v/opt_items_x64" -o "$work/$t-OptItemsX64.lean" \
+    --namespace "PackedCasts.$t.OptItemsX64" --prefix opt_items. --allow-unqualified-build-mode
+  cmp "$work/$t-OptItemsX64.lean" "$dir/PackedCasts/$t/OptItemsX64.lean"
+  [ "$t" = V0_15_2 ] ||
+    python3 -B scripts/fixtures.py instance "$dir/PackedCasts/V0_15_2/ModelOptX64.lean" --subst "V0_15_2=$t"
+  models+=("PackedCasts.$t.ModelOptX64")
+  theorems+=(--declaration "PackedCasts.$t.ModelOptX64.intToU24s_padding")
+done
 for t in V0_14_1 V0_15_2 V0_16_0 V0_17_1; do
   theorems+=(--declaration "PackedCasts.$t.Model.setUnion_ok" --declaration "PackedCasts.$t.Model.floatField_nan")
 done
 for t in V0_14_1 V0_15_2; do
-  theorems+=(--declaration "PackedCasts.$t.ModelVector.laneSum_ok" --declaration "PackedCasts.$t.ModelAuto.unionsToInt_padding")
+  theorems+=(--declaration "PackedCasts.$t.ModelVector.laneSum_ok" --declaration "PackedCasts.$t.ModelAuto.unionsToInt_padding"
+    --declaration "PackedCasts.$t.ModelOpt.intToU24s_padding" --declaration "PackedCasts.$t.ModelOpt.intToU8s_badFlag")
 done
 theorems+=(--declaration PackedCasts.V0_17_1.ModelLogical.intToModes_unnamed)
 for t in V0_14_1 V0_15_2 V0_16_0; do
@@ -223,7 +240,13 @@ if out=$("$translator" "$dir/air-handwritten/0.16.0/reject_void" -o "$work/rejec
   echo 'a Zig 0.16.0 `bitcast` of `void` translated' >&2; exit 1
 fi
 grep -qF 'a `@bitCast` to or from `void` is outside the subset' <<<"$out" || { echo "$out" >&2; exit 1; }
-echo "$((rejected + 1)) rejected casts fail with their diagnostics"
+# A padded payload (`[2]?u24`) on a profile that names no backend (opt_items.intToU24s without
+# its profile): which bytes a load reads is the backend's.
+if out=$("$translator" "$dir/air-handwritten/0.15.2/reject_padded" -o "$work/reject.lean" --namespace Reject --prefix opt_items. 2>&1); then
+  echo 'a representation cast of a padded integer translated on a legacy profile' >&2; exit 1
+fi
+grep -qF 'representation `@bitCast` of an integer with padding bits' <<<"$out" || { echo "$out" >&2; exit 1; }
+echo "$((rejected + 2)) rejected casts fail with their diagnostics"
 # Lane pointers into a vector field of a packed struct are rejected (0.14.1, 0.15.2).
 for v in 0.14.1 0.15.2; do
   if out=$("$translator" "$dir/air/$v/reject_lanes" -o "$work/reject.lean" --namespace Reject 2>&1); then

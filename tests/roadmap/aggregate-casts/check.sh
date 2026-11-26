@@ -28,9 +28,27 @@ for version in 0.15.2 0.14.1; do
     --namespace AggregateCasts --prefix aggregate_casts.
   cmp <(tail -n +2 "$work/Gen-$version.lean") <(tail -n +2 "$here/AggregateCasts/Gen.lean")
 done
-# The earlier hand-written AIR (no safety checks) still translates.
+# The earlier hand-written AIR (no safety checks) still translates, all 12 functions.
 "$translator" "$here/air-handwritten/0.16.0" --profile legacy-abi64-le -o "$work/Gen-handwritten.lean" \
   --namespace AggregateCasts --prefix aggregate_casts.
+[ "$(ls "$here/air-handwritten/0.16.0" | wc -l)" -eq 12 ] &&
+  [ "$(grep -c '^attribute \[zig_run\]' "$work/Gen-handwritten.lean")" -eq 12 ] ||
+  { echo 'air-handwritten/0.16.0: not 12 translated functions' >&2; exit 1; }
+# Its two casts of `[2]u24` are rejected, each alone: the legacy profile names no backend, and
+# how a load reads a `u24`'s padding byte is the backend's (the exports above keep them, on the
+# LLVM profile, with their theorems in Proofs.lean).
+for f in u24x2ToU56 u56ToU24x2; do
+  mkdir "$work/reject-$f"
+  cp "$here/air-handwritten/reject-padded/aggregate_casts.$f.json" "$work/reject-$f/"
+  if out=$("$translator" "$work/reject-$f" --profile legacy-abi64-le -o "$work/reject-$f.lean" \
+      --namespace Reject --prefix aggregate_casts. 2>&1); then
+    echo "the hand-written $f translated on a profile without a backend" >&2; exit 1
+  fi
+  [ ! -e "$work/reject-$f.lean" ] || { echo "the rejected $f wrote a translation" >&2; exit 1; }
+  grep -qF "aggregate_casts.$f: near line 0: a Zig ≤0.16 representation \`@bitCast\` of an integer with padding bits" <<<"$out" &&
+    grep -qF "is outside the subset for backend 'unverified'" <<<"$out" || { echo "$out" >&2; exit 1; }
+done
+echo 'hand-written AIR: 12 functions translate, the 2 padded casts are rejected'
 "${lean_cmd[@]}" -R "$work" -o "$work/AggregateCasts/Gen.olean" "$work/AggregateCasts/Gen.lean"
 "${lean_cmd[@]}" -R "$here" "$here/AggregateCasts/Proofs.lean"
 "${lean_cmd[@]}" --run "$here/Model.lean" "$here/aarch64-macos-ReleaseSafe.txt"

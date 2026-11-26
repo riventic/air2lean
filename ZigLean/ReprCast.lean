@@ -17,6 +17,8 @@ not part of the `ZigLean` umbrella.
   (padding-derived) byte throws `.unspecified`.
 * `lawfulEnc_bitVec`, `lawfulEnc_vector`: integers of every width and arrays of lawful items
   read back as stored, so `reprCast_roundtrip` applies to arrays.
+* `Float.size_encode`, `Float.decode_encode_eq`, `Float.decidableReadsBack`: a float's bytes have
+  its format's size, and it reads back exactly when it is not a NaN (no `LawfulEnc` instance).
 * Concrete cases (by kernel evaluation): `[4]u8 ↔ u32` round-trips; `[2]u24 → u56` reads the
   padding byte of item 0 and throws; `u56 → [2]u24` loses byte 3, so casting back throws.
 -/
@@ -126,6 +128,59 @@ theorem lawfulEnc_bitVec (n : Nat) : LawfulEnc (BitVec n) where
     apply intOfBytes_of_extract
     simp [padTo, Array.extract_append, intBytes_size]
 
+/-! ## Floats
+
+A float type has no `LawfulEnc` instance: a NaN's bytes are undefined (`Float.detMask`), so a load
+of them is `.unspecified`. Its encoding has the format's size for every value, and a value reads
+back exactly when it is not a NaN. -/
+
+/-- A float's encoding has its format's size: the NaN's too (undefined bytes). -/
+@[fsym_arith] theorem Float.size_encode {fmt : FloatFmt} (x : Float fmt) :
+    (Enc.encode x).size = Enc.size (Float fmt) := by
+  have h := intBytes_le_intSize fmt.width
+  show (padTo (intSize fmt.width) (maskedBytes x.bits x.detMask)).size = intSize fmt.width
+  simp only [padTo, Array.size_append, Array.size_replicate, maskedBytes, Array.size_map,
+    Array.size_range]
+  omega
+
+/-- A float that is not a NaN reads back from its bytes. -/
+theorem Float.decode_encode {fmt : FloatFmt} {x : Float fmt} (h : x.isNaN = false) :
+    Enc.decode (Enc.encode x) = pure x := by
+  show (do pure ⟨← intOfBytes fmt.width
+    (padTo (intSize fmt.width) (maskedBytes x.bits x.detMask))⟩ : Result (Float fmt)) = pure x
+  rw [Float.maskedBytes_of_not_isNaN h, intOfBytes_of_extract x.bits (by
+    rw [padTo, Array.extract_append]
+    simp [intBytes_size, Array.extract_eq_self_of_le])]
+  rfl
+
+/-- A float reads back from its bytes exactly when it is not a NaN: a NaN's bits are undefined in
+memory (`docs/floats.md` §NaN in memory), so its load is `.unspecified`. -/
+theorem Float.decode_encode_eq {fmt : FloatFmt} (x : Float fmt) :
+    (Enc.decode (Enc.encode x) = pure x) = (x.isNaN = false) := by
+  refine propext ⟨fun h => ?_, Float.decode_encode⟩
+  cases hn : x.isNaN with
+  | false => rfl
+  | true =>
+    exfalso
+    have hw : 0 < (fmt.width + 7) / 8 := by cases fmt <;> decide
+    have e : intOfBytes fmt.width
+        (padTo (intSize fmt.width) (maskedBytes x.bits x.detMask)) = throw .unspecified :=
+      intOfBytes_undef false (i := 0) hw (by
+        rw [Float.maskedBytes_of_isNaN hn, padTo, Array.getElem?_append_left (by simpa using hw)]
+        simp [hw])
+    have h' : (do pure ⟨← intOfBytes fmt.width
+        (padTo (intSize fmt.width) (maskedBytes x.bits x.detMask))⟩ : Result (Float fmt)) =
+        pure x := h
+    rw [e] at h'
+    cases h'
+
+/-- Whether a float reads back is its NaN check: for a float constant it evaluates (`decide`), so
+a read-back premise of a float constant (a `[:0]f32`'s sentinel, `FTotalTriple.regionLoadEnc`) is
+a closed fact. -/
+instance Float.decidableReadsBack {fmt : FloatFmt} (x : Float fmt) :
+    Decidable (Enc.decode (Enc.encode x) = pure x) :=
+  decidable_of_iff (x.isNaN = false) (by rw [Float.decode_encode_eq])
+
 private theorem list_chunk {s : Nat} : ∀ (l : List (List Byte)) (i : Nat), (∀ a ∈ l, a.length = s) →
     (hi : i < l.length) → ((l.flatten.drop (i * s)).take s) = l[i]
   | [], _, _, hi => by simp at hi
@@ -156,41 +211,72 @@ theorem list_mapM_pure_of {α β : Type} {f : α → Result β} {g : α → β} 
     rw [List.mapM_cons, h x (by simp), list_mapM_pure_of t (fun y hy => h y (by simp [hy]))]
     simp
 
+private theorem flatten_length_of {s : Nat} :
+    ∀ l : List (List Byte), (∀ a ∈ l, a.length = s) → l.flatten.length = l.length * s
+  | [], _ => by simp
+  | a :: t, h => by
+    have ih := flatten_length_of t fun b hb => h b (by simp [hb])
+    simp only [List.flatten_cons, List.length_append, List.length_cons, h a (by simp), ih,
+      Nat.succ_mul]
+    omega
+
+/-- The image of `[n]T` has `n * Enc.size α` bytes when each item's image has the item size. -/
+theorem vector_size_encode_of {α : Type} [Enc α] {n : Nat} (v : Vector α n)
+    (hs : ∀ x ∈ v.toArray, (Enc.encode x).size = Enc.size α) :
+    (Enc.encode v).size = n * Enc.size α := by
+  show ((v.toArray.map Enc.encode).flatten).size = n * Enc.size α
+  rw [← Array.length_toList, Array.toList_flatten,
+    flatten_length_of (s := Enc.size α) _ (by
+      intro a ha
+      simp only [Array.toList_map, List.map_map, List.mem_map, Array.mem_toList_iff] at ha
+      obtain ⟨x, hx, rfl⟩ := ha
+      simpa using hs x hx)]
+  simp
+
+/-- `[n]T` reads back as stored when each of its items does (an array of floats without a NaN
+item; `lawfulEnc_vector` for lawful items). -/
+theorem vector_decode_encode_of {α : Type} [Enc α] {n : Nat} (v : Vector α n)
+    (hs : ∀ x ∈ v.toArray, (Enc.encode x).size = Enc.size α)
+    (hd : ∀ x ∈ v.toArray, (Enc.decode (Enc.encode x) : Result α) = pure x) :
+    (Enc.decode (Enc.encode v) : Result (Vector α n)) = pure v := by
+  show (do
+    let xs ← (Array.range n).mapM fun i =>
+      (Enc.decode (((v.toArray.map Enc.encode).flatten).extract (i * Enc.size α) ((i + 1) * Enc.size α)) : Result α)
+    if h : xs.size = n then pure ⟨xs, h⟩ else (throw Error.unspecified : Result (Vector α n))) = pure v
+  rcases Nat.eq_zero_or_pos n with rfl | hn
+  · have : v = #v[] := by ext i hi; omega
+    subst this
+    rw [show Array.range 0 = #[] from rfl, Array.mapM_empty]
+    rfl
+  haveI : Inhabited α := ⟨v[0]⟩
+  have hm : (Array.range n).mapM (fun i =>
+      (Enc.decode (((v.toArray.map Enc.encode).flatten).extract (i * Enc.size α) ((i + 1) * Enc.size α)) : Result α))
+      = pure v.toArray := by
+    have hv : ((List.range n).map fun i => v.toArray[i]!).toArray = v.toArray := by
+      apply Array.ext
+      · simp
+      · intro i h1 h2
+        have : i < n := by simpa using h1
+        simp [this]
+    rw [Array.mapM_eq_mapM_toList, list_mapM_pure_of (g := fun i => v.toArray[i]!)]
+    · simp only [Array.toList_range, map_pure, hv]
+    · intro i hi
+      have hi : i < n := by simpa using hi
+      rw [flatten_chunk _ i (by
+        intro a ha
+        obtain ⟨x, hx, rfl⟩ := Array.mem_map.1 ha
+        exact hs x hx) (by simpa using hi)]
+      have hx : v.toArray[i]! = v[i] := by simp [hi]
+      rw [hx]
+      simpa using hd v[i] (by simp)
+  rw [hm]
+  simp [bind, ExceptT.bind, pure, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+
 /-- `[n]T` of lawful items reads back as stored. -/
 theorem lawfulEnc_vector {α : Type} [Enc α] [LawfulEnc α] (n : Nat) : LawfulEnc (Vector α n) where
-  size_encode v := by
-    show ((v.toArray.map Enc.encode).flatten).size = n * Enc.size α
-    rw [← Array.length_toList, Array.toList_flatten]
-    simp [List.length_flatten, Function.comp_def, LawfulEnc.size_encode, List.map_const',
-      List.sum_replicate_nat]
-  decode_encode v := by
-    show (do
-      let xs ← (Array.range n).mapM fun i =>
-        (Enc.decode (((v.toArray.map Enc.encode).flatten).extract (i * Enc.size α) ((i + 1) * Enc.size α)) : Result α)
-      if h : xs.size = n then pure ⟨xs, h⟩ else (throw Error.unspecified : Result (Vector α n))) = pure v
-    rcases Nat.eq_zero_or_pos n with rfl | hn
-    · have : v = #v[] := by ext i hi; omega
-      subst this
-      rw [show Array.range 0 = #[] from rfl, Array.mapM_empty]
-      rfl
-    haveI : Inhabited α := ⟨v[0]⟩
-    have hm : (Array.range n).mapM (fun i =>
-        (Enc.decode (((v.toArray.map Enc.encode).flatten).extract (i * Enc.size α) ((i + 1) * Enc.size α)) : Result α))
-        = pure v.toArray := by
-      have hv : ((List.range n).map fun i => v.toArray[i]!).toArray = v.toArray := by
-        apply Array.ext
-        · simp
-        · intro i h1 h2
-          have : i < n := by simpa using h1
-          simp [this]
-      rw [Array.mapM_eq_mapM_toList, list_mapM_pure_of (g := fun i => v.toArray[i]!)]
-      · simp only [Array.toList_range, map_pure, hv]
-      · intro i hi
-        have hi : i < n := by simpa using hi
-        rw [flatten_chunk _ i (by simp [LawfulEnc.size_encode]) (by simpa using hi)]
-        simp [LawfulEnc.decode_encode, hi]
-    rw [hm]
-    simp [bind, ExceptT.bind, pure, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+  size_encode v := vector_size_encode_of v fun x _ => LawfulEnc.size_encode x
+  decode_encode v := vector_decode_encode_of v (fun x _ => LawfulEnc.size_encode x)
+    fun x _ => LawfulEnc.decode_encode x
 
 /-! ## Padding: concrete cases -/
 

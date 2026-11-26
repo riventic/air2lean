@@ -4604,7 +4604,43 @@
       ],
       "correspondence": "model"
     },
+    "ZigLean.VecStride::Zig.Vec.stridedEnc_float_decode_encode": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
     "ZigLean.Sep.Full.Try::Zig.Float.prefixDecode": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "ZigLean.ReprCast::Zig.Float.size_encode": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "ZigLean.ReprCast::Zig.Float.decode_encode": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "ZigLean.ReprCast::Zig.Float.decode_encode_eq": {
       "semantics": "abstract-spec",
       "targets": [
         "aarch64-linux",
@@ -4680,6 +4716,12 @@
     "tests/roadmap/sep-auto/SepAuto/Packed.lean": {
       "labels": [
         "abstract-spec"
+      ],
+      "correspondence": "model"
+    },
+    "tests/roadmap/interfaces/Interfaces/KindsSpec.lean": {
+      "labels": [
+        "ieee"
       ],
       "correspondence": "model"
     }

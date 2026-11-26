@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -14,7 +15,7 @@ SOURCE_PATHS = re.findall(r'^[a-z_]+="((?:ZigLean|Proofs|tests)/[^"$]+)"$', SCRI
 
 
 class MutationHarnessTests(unittest.TestCase):
-    def run_fixture(self, shard, mode="detected", duplicate_import=False):
+    def run_fixture(self, shard, mode="detected"):
         with tempfile.TemporaryDirectory(prefix="weak-cas-mutation-mock-") as temporary:
             work = Path(temporary) / "repo"
             work.mkdir()
@@ -27,9 +28,6 @@ class MutationHarnessTests(unittest.TestCase):
                 dest = work / path.relative_to(ROOT)
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(path, dest)
-            conc = work / "ZigLean/Conc.lean"
-            if duplicate_import:
-                conc.write_text(conc.read_text() + "import ZigLean.Conc.WeakCas\n")
             originals = {relative: (work / relative).read_bytes() for relative in SOURCE_PATHS}
             baseline = Path(temporary) / "baseline"
             shutil.copytree(work / "ZigLean", baseline / "ZigLean")
@@ -51,7 +49,6 @@ if [ "$1" = exe ]; then
   { echo '/- mock translation'; cat "$air/source.zig"; echo '-/'; } > "$out"
   exit 0
 fi
-grep -Fxq 'import ZigLean.Conc.WeakCas' ZigLean/Conc.lean || exit 91
 printf 'full-import:%s\n' "$*" >> "$MOCK_EVENTS"
 if [ "$1" = build ] && ! diff -qr "$MOCK_BASELINE/ZigLean" ZigLean >/dev/null; then
   echo 'error: Fixture.lean:1:1: expected mock proof rejection'
@@ -61,7 +58,7 @@ exit 0
 ''')
             (work / "scripts/diff.sh").write_text('''#!/usr/bin/env bash
 set -euo pipefail
-if grep -Fxq 'import ZigLean.Conc.WeakCas' ZigLean/Conc.lean; then
+if ! grep -qx baseline "$MOCK_EVENTS" 2>/dev/null; then  # the first run is the unmutated baseline
   echo baseline >> "$MOCK_EVENTS"
   echo 'TOTAL: mismatch=0'
   exit 0
@@ -118,34 +115,16 @@ esac
         self.assertEqual(result.returncode, 143)
         self.assertIn("mutation interrupted by TERM", result.stderr)
 
-    def test_exact_import_guard_restores_duplicate_input(self):
-        result, _ = self.run_fixture(1, duplicate_import=True)
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("expected exactly one WeakCas proof import", result.stderr)
+    def test_mutate_does_not_edit_the_runtime_root(self):
+        # The differential window builds the runtime root as committed: no import is cut out of
+        # it (the proof-only modules are kept out by assurance/runtime-root.json instead).
+        self.assertNotIn("ZigLean/Conc.lean", SCRIPT)
+        self.assertNotIn("WeakCas", SCRIPT)
 
-    def test_only_new_proof_edge_is_omitted(self):
-        modules = {"ZigLean": ROOT / "ZigLean.lean"}
-        modules.update({".".join(p.relative_to(ROOT).with_suffix("").parts): p
-                        for p in (ROOT / "ZigLean").rglob("*.lean")})
-        def closure(omit):
-            pending, seen = ["ZigLean"], set()
-            while pending:
-                name = pending.pop()
-                if name in seen or name not in modules:
-                    continue
-                seen.add(name)
-                for imported in re.findall(r'^import\s+(\S+)', modules[name].read_text(), re.M):
-                    if omit and name == "ZigLean.Conc" and imported == "ZigLean.Conc.WeakCas":
-                        continue
-                    pending.append(imported)
-            return seen
-        full, runtime = closure(False), closure(True)
-        self.assertIn("ZigLean.Mem.Lemmas", full)
-        self.assertNotIn("ZigLean.Mem.Lemmas", runtime)
-        self.assertIn("ZigLean.Conc.Call", runtime)
-        self.assertIn("ZigLean.Mem.Thread", runtime)
-        self.assertIn("ZigLean.Conc.WeakCas", full)
-        self.assertIn("def cmpxchgWeakC", (ROOT / "ZigLean/Conc/Call.lean").read_text())
+    def test_runtime_root_reaches_no_proof_only_module(self):
+        result = subprocess.run([sys.executable, "-B", "scripts/lean-deps.py", "--runtime-root", "check"],
+                                cwd=ROOT, capture_output=True, text=True, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":
