@@ -1413,7 +1413,8 @@ library list family `listSeg` (`ZigLean/Sep/Full/ListSeg.lean`) with a ghost mea
 nodes left (`loop_ghost_ex`). The node layout `name.node` is read off the body: `next` at its
 offset, the item's field if the body reads one (the item then is that field's value and the rest
 of a node `X p`), else an abstract rest `D p v` of an item type `V` (the walk holds for every
-node that has the `next` field). The lists are `xs = ys ++ zs` for a visit (the visited segment
+node that has the `next` field); a layout with no field at offset 0 also states `0 ≤ p.off`,
+which a field at 0 would give. The lists are `xs = ys ++ zs` for a visit (the visited segment
 `ys` from the cursor's entry value, the nodes left `zs` at the cursor) or `xs = ys.reverse ++ zs`
 for a reversal (the prefix `ys` reversed at the prefix's local); each accumulator is its entry
 value plus the sum of the visited items (or `k` per node), with the no-overflow fact over all of
@@ -1437,9 +1438,14 @@ def listCand (ns : Name) (name again binders tbinders args run triple loc exit :
         | none => pure ("V", "(V : Type) (D : Zig.Ptr → V → FAssn) ", "V D", "D p v")
       -- (qualified: a parameter named like the body's first component would capture it)
       let N := s!"({ns}.{name}.node {layoutArgs})"
+      -- A field at offset 0 says that the node's pointer is at or after its block's start. A
+      -- layout that owns no such field (`next` further on and no item there: an `extern struct`,
+      -- permuted fields) states it, for the body's projections to the fields it does own.
+      let based := nextOff == 0 || w.item?.any (·.1 == 0)
+      let base := if based then "" else "⟪0 ≤ p.off⟫ ⋆ "
       let pre := s!"/-- The node layout of `{name}`: `next` at offset {nextOff}{if w.item?.isSome then ", the item" else ""}, \
         the rest. -/\nabbrev {name}.node {layout}(p : Zig.Ptr) (v : {T}) (q : Option Zig.Ptr) : FAssn :=\n  \
-        up (pts {ptr nextOff} {nextAl} q) ⋆ {rest}\n\n"
+        {base}up (pts {ptr nextOff} {nextAl} q) ⋆ {rest}\n\n"
       pure (T, layout, layoutArgs, "", N, N, (#[] : Array String), pre)
     | some k => do
       -- the node's variables: the pointer, `next`'s value and the item (the other value field)

@@ -8,11 +8,43 @@
       "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"]
     },
     {
+      "out": "counted/variants/{version}/air",
+      "source": "counted/counted.zig",
+      "filter": "counted.",
+      "versions": ["0.16.0", "0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"]
+    },
+    {
       "out": "nested/air",
       "source": "nested/nested.zig",
       "filter": "nested.",
       "versions": ["0.16.0"],
       "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"]
+    },
+    {
+      "out": "nested/variants/{version}/air",
+      "source": "nested/nested.zig",
+      "filter": "nested.",
+      "versions": ["0.17.1", "0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"]
+    },
+    {
+      "out": "lists/variants/permuted/air",
+      "source": "lists/permuted/lists.zig",
+      "filter": "lists.,mem.,math.,array_list.,debug.assert,debug.SafetyLock",
+      "versions": ["0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo",
+      "closure": ["lists.push", "lists.reverse", "lists.freeAll", "lists.sum", "lists.evens"]
+    },
+    {
+      "out": "lists/variants/layout/air",
+      "source": "lists/layout/lists.zig",
+      "filter": "lists.,mem.,math.,array_list.,debug.assert,debug.SafetyLock",
+      "versions": ["0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo",
+      "closure": ["lists.push", "lists.reverse", "lists.freeAll", "lists.sum", "lists.evens"]
     }
   ]
 }

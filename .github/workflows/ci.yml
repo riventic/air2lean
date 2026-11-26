@@ -1450,6 +1450,16 @@ jobs:
           # Retained AIR of one loop per counted shape, with generated invariants (P09).
           bash tests/roadmap/loop-tactics/counted/check.sh 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Counted.log"
 
+      # P09 retranslation: the clients of the generated loop invariants, translated by the other
+      # Zig versions and with permuted struct fields, need a regeneration and no hand edit.
+      - name: Retranslated loop-invariant clients
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/loop-tactics"
+          lake build air2lean
+          bash tests/roadmap/loop-tactics/check-variants.sh 2>&1 | tee "$RUNNER_TEMP/loop-tactics/Variants.log"
+
       # The proofs migrated to the full-state logic, and their strength logs (legacy statements on
       # every Mem.FSeqPlain memory; deleted with the legacy logic): every file of tests/roadmap/strength-log.
       - name: Migrated full-state proofs and their strength logs

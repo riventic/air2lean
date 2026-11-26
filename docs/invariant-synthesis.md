@@ -876,6 +876,72 @@ Clients (instances, not special cases): `Proofs/Lists/OpenInv.lean` (`sum.loop6`
 `sumInv`, `sumPost`, `sum_step`, `freeInvExact`, `freePost`, `freeAll_step_nil_exact`,
 `freeAll_step_cons_exact`, `freeAll_step_exact` and `freeAll_loop_exact` are deleted.
 
+### Implemented: retranslation needs a regeneration only
+
+The acceptance sentence "retranslation for another Zig version or with permuted struct fields
+needs regeneration only" is checked mechanically for every client of the generator
+(`tests/roadmap/loop-tactics/check-variants.sh`, CI step "Retranslated loop-invariant clients").
+
+A **variant** of a client is a fixture root that holds another translation of the same program
+under the module names of the first one, and the `Inv.lean` files generated from it
+(`scripts/invgen.py` `VARIANTS`; the translations are rows of `scripts/gen-integrity.py`
+`FIXTURES`, the invariants targets of `scripts/invgen.py`, so `scripts/regen.sh` regenerates both
+and preflight checks their records like the first translation's). The hand-written files, the
+specifications and the proofs, exist once. For each variant `invgen_variants.py`
+
+1. checks that the translation is the translator's output for the variant's committed AIR and
+   that each `Inv.lean` is the generator's output for that translation: the two regenerations;
+2. elaborates the client's hand-written files against the variant, unchanged
+   (`scripts/lean_overlay.py`: the variant's modules replace the first translation's, each
+   module that imports a replaced one is compiled again, and Lean's search path has the
+   replacements in front of the Lake package's own library);
+3. applies each seeded mutant of the client's `mutants.json` to the variant's generated
+   invariants and requires the proof to fail inside the mutant's theorems.
+
+| Client | First translation | Variants |
+|---|---|---|
+| `tests/roadmap/loop-tactics/counted` (`Proof.lean`, 14 mutants) | Zig 0.17.1 | 0.16.0, 0.15.2, 0.14.1 |
+| `tests/roadmap/loop-tactics/nested` (`Proof.lean`) | Zig 0.16.0 | 0.17.1, 0.15.2, 0.14.1 |
+| the linked list of `Proofs/Lists` (`Linked.lean`, `AllocNode.lean`, `Alloc.lean`, `Bounded.lean`, `loop-tactics/Queue.lean`; mutants `loop-tactics/lists/mutants.json`) | Zig 0.17.1 | 0.16.0, 0.15.2, 0.14.1 (the AIR of `tests/roadmap/interfaces`), `permuted`, `layout` |
+
+The list's `permuted` variant is `examples/lists/lists.zig` with the fields of `Node` in the other
+order (`tests/roadmap/loop-tactics/lists/permuted/lists.zig`; the check requires that the two
+sources differ in nothing else).
+
+What was measured (2026-11-26):
+
+* **Other Zig versions.** The translations of `counted.zig` and `nested.zig` by Zig 0.14.1,
+  0.15.2, 0.16.0 and 0.17.1 are the same text after the profile record. The list's translations
+  differ in the std code (`Allocator.create`/`destroy` and what they call), not in the names of
+  the loops, their exits or the std instances the proofs name. In all of them the regenerated
+  invariants are those of the first translation, the hand-written files check unchanged and the
+  mutants are rejected.
+* **Permuted fields, same layout.** Zig lays the fields of a plain `struct` out by alignment, so
+  the permuted `Node` keeps `next` at offset 0 and `val` at 8: the translation changes only in
+  the order of the fields of the generated structure `Node` and of its `Enc` instance, and
+  regeneration is enough.
+* **Permuted layout** (`layout`: `Node` an `extern struct`, `val` at offset 0, `next` at 8).
+  The generator follows the layout: `sum.loop6.node` is `up (pts (p.add 8) 8 q) ⋆ up (pts p 8 v)
+  ⋆ X p`. A node layout that owns no field at offset 0 (`reverse`'s: `next` at 8 and an abstract
+  rest) now states `⟪0 ≤ p.off⟫`, which the projection to `next` needs; before, `reverse.loop6`
+  got no invariant there (residual `0 ≤ p.off`). **Regeneration is not enough for this variant,
+  and must not be**: `Proofs/Lists/Linked.lean` states the node's layout by hand (`node`: `next`
+  at 0, `val` at 8), as do `AllocNode.nodeRest` (the padding at offset 12) and `Alloc.nodeBytes`.
+  Those statements are false of the `layout` translation, and the check requires that
+  `reverse_thread` and `sum_total` are rejected against it (a pinned negative control;
+  `scripts/invgen.py` `PARTIAL`: the variant has no `AllocInv.lean`, whose contract module is
+  among the rejected files). A specification that survives a change of layout has to state a
+  node through the translated type (`pts p 8 (n : Node)`, with the `Enc` instance the translator
+  writes) and the generated layout has to be the pieces of that (`StructLayout.split`/`join`,
+  `ZigLean/Sep/Full/Struct.lean`): the struct atoms of S3.
+* **Names from the translation in hand-written statements.** `sum_loop_exact` (and
+  `Bounded.lean`) name `sum.loop6`, `sum.again6` and `.br5`; `freeAll_done` names
+  `freeAll.loop5.done`; a mutant names its definition (`down.loop5.inv`). The numbers are AIR
+  instruction indices. They were equal in every variant here, but an edit that moves the loop in
+  its function's AIR (a statement in front of it) renames them, and then these statements and
+  mutants need a hand edit. Loop names that do not depend on the instruction index are a
+  translator decision (not made here).
+
 What the slices do not have yet (next slices, sizes S < M < L):
 
 | Next | Content | Size |

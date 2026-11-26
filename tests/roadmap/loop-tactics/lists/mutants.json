@@ -1,0 +1,41 @@
+[
+ {
+  "name": "reverse-order",
+  "def": "reverse.loop6.inv",
+  "old": "xs = ys.reverse ++ zs",
+  "new": "xs = ys ++ zs",
+  "in": [
+   "reverse_thread"
+  ]
+ },
+ {
+  "name": "sum-of-nodes-left",
+  "def": "sum.loop6.inv",
+  "old": "s.s.toNat = s0.s.toNat + (ys.map BitVec.toNat).sum",
+  "new": "s.s.toNat = s0.s.toNat + (zs.map BitVec.toNat).sum",
+  "in": [
+   "sum_total"
+  ]
+ },
+ {
+  "name": "sum-credits-count",
+  "def": "sum.loop6.credits.inv",
+  "old": "zs.length = n",
+  "new": "zs.length = n + 1",
+  "in": [
+   "sum_loop_exact",
+   "sum_exact"
+  ]
+ },
+ {
+  "name": "free-own-dropped",
+  "inv": "Proofs/Lists/AllocInv.lean",
+  "proof": "Proofs/Lists/Alloc.lean",
+  "def": "freeAll.loop5.inv",
+  "old": "    I.own ⋆\n",
+  "new": "",
+  "in": [
+   "freeAll_done"
+  ]
+ }
+]
