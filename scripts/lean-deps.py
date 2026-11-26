@@ -6,6 +6,7 @@
     python3 -B scripts/lean-deps.py --files
     python3 -B scripts/lean-deps.py --elaborate [--jobs N] [--mem-mib M]
     python3 -B scripts/lean-deps.py --precompiled check|write
+    python3 -B scripts/lean-deps.py --runtime-root check
     python3 -B scripts/lean-deps.py --prune-orphans
     python3 -B scripts/lean-deps.py --lean [LEAN-OPTION...] FILE.lean [ARG...]
 
@@ -32,6 +33,11 @@ A file with imports of a fixture's own modules is elaborated by the check of tha
 `--precompiled check|write` checks (or writes) the `globs` of each library `<P>Deps` of
 `lakefile.toml`: the modules that the precompiled library P's modules import, transitively
 (`precompiled_deps`; docs/build-cache.md#precompiled-fsym).
+
+`--runtime-root check` reads `assurance/runtime-root.json`: the runtime root (the module generated
+code imports) and the theory floor. A module is proof-only when its import closure contains a floor
+module; the check fails, with the import chain, when the root's closure reaches one. The mutation
+script builds its differential runs from the root as it is (docs/ci.md#runtime-root).
 
 `--prune-orphans` deletes, in every tracked Lake package (`lakefile.toml`), the compiled outputs of
 modules that have no source there any more (`orphan_outputs`), and prints them;
@@ -306,6 +312,49 @@ def library_closure(f: str, memo: dict[str, bytes]) -> set[str]:
     return seen
 
 
+def runtime_root_violations(declaration: dict) -> list[str]:
+    """One message per module of the runtime root's import closure that is proof-only (its own
+    closure holds a theory-floor module), with the import chain from the root; a malformed
+    declaration is a message too. Library modules only (`lib_roots`)."""
+    root, floor = declaration.get("root"), declaration.get("theory_floor")
+    if not isinstance(root, str) or not isinstance(floor, list) or not floor \
+            or not all(isinstance(m, str) for m in floor):
+        return ["assurance/runtime-root.json: needs a `root` module and a non-empty `theory_floor` list"]
+    roots = lib_roots()
+    errors = [f"assurance/runtime-root.json: module {m} has no source file"
+              for m in [root, *floor] if not module_file(m).is_file()]
+    if errors:
+        return errors
+    # Breadth-first from the root: `parent` is the shortest import chain to each module. A module
+    # is proof-only when its closure holds a floor module, and its closure lies inside the
+    # root's, so the root reaches a proof-only module exactly when it reaches a floor module.
+    parent: dict[str, str | None] = {root: None}
+    queue = [root]
+    for m in queue:
+        for i in sorted(imports(module_file(m))):
+            if i.split(".")[0] in roots and module_file(i).is_file() and i not in parent:
+                parent[i] = m
+                queue.append(i)
+    errors = []
+    for m in sorted(floor):
+        if m in parent:
+            chain, n = [], m
+            while n is not None:
+                chain.append(n)
+                n = parent[n]
+            errors.append(f"proof-only module {m} is reachable from the runtime root: "
+                          + " <- ".join(chain))
+    return errors
+
+
+def runtime_root_check() -> int:
+    path = ROOT / "assurance" / "runtime-root.json"
+    errors = runtime_root_violations(json.loads(path.read_text(encoding="utf-8")))
+    for e in errors:
+        print(f"lean-deps: {e}", file=sys.stderr)
+    return 1 if errors else 0
+
+
 def input_key(f: str, toolchain: bytes, memo: dict[str, bytes]) -> str:
     """Hash of everything that decides whether `lake env lean f` checks: the file, the sources of
     the library modules it imports (transitively), the lakefile and the toolchain."""
@@ -431,6 +480,11 @@ def main(argv: list[str]) -> int:
             print("usage: lean-deps.py --precompiled check|write", file=sys.stderr)
             return 2
         return precompiled(argv[1] == "write")
+    if argv[:1] == ["--runtime-root"]:
+        if argv[1:] != ["check"]:
+            print("usage: lean-deps.py --runtime-root check", file=sys.stderr)
+            return 2
+        return runtime_root_check()
     if argv == ["--prune-orphans"]:
         tracked = subprocess.run(["git", "ls-files", "-z", "--", "lakefile.toml", "*/lakefile.toml"],
                                  cwd=ROOT, check=True, capture_output=True, text=True).stdout
