@@ -332,9 +332,35 @@ def errCodeLayout (layouts : Array Layout) (id : TyId) (errBits : Nat) : Bool :=
   (layouts[id]?.map fun l => l.size == some (Zig.errCodeSize errBits) &&
     l.align == some (Zig.errCodeAlign errBits)).getD false
 
+/-- What keeps the exporter's layout of an `extern` struct from being a C layout, if anything.
+`fields`: the offset and the size of each field in declaration order; `size`, `align`: the
+struct's. In a C layout the fields are in declaration order, each at its predecessor's end
+rounded up to the field's alignment, and the size is the last end rounded up to the struct's
+alignment, which is the largest field alignment. A field's alignment is its type's or an
+explicit `align(N)`, which the AIR file does not state, so the offset must be the round-up to
+*some* power of two not above the struct's alignment. -/
+def externLayoutError? (fields : Array (Nat × Nat)) (size align : Nat) : Option String := Id.run do
+  unless align != 0 && align &&& (align - 1) == 0 do
+    return some s!"its alignment {align} is not a power of two"
+  -- The powers of two up to `align`.
+  let aligns := (List.range (align.log2 + 1)).map (2 ^ ·)
+  let mut stop := 0
+  for (off, fieldSize) in fields do
+    unless aligns.any (Zig.alignUp stop · == off) do
+      return some s!"a field at offset {off} follows the end {stop} of the field before it; in a \
+        C layout it is at that end rounded up to a power-of-two field alignment of at most the \
+        struct's {align}"
+    stop := off + fieldSize
+  unless size == Zig.alignUp stop align do
+    return some s!"its size {size} is not the end {stop} of its last field rounded up to its \
+      alignment {align}"
+  return none
+
 /-- The size and alignment that the memory model (`ZigLean/Mem/Enc.lean`) gives the type `id`,
 or an error naming what the model cannot encode yet. A struct and an enum take the exporter's
-values: their encodings are generated from the exporter's offsets. -/
+values: their encodings are generated from the exporter's offsets. A field of a struct or of an
+untagged union must then have the layout the model gives its type, and an `extern` struct or
+union the C layout (`externLayoutError?`). -/
 partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId)
     (errBits : Nat := 16) : Except String (Nat × Nat) := do
   let exported : Except String (Nat × Nat) :=
@@ -343,6 +369,19 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId)
     | _ => throw s!"type {id} has no layout in the AIR file"
   -- The pointer size of the profile (`Layout.ptrBytes`, `Zig.PtrWidth.bytes`).
   let pb := (layouts[id]?.map (·.ptrBytes)).getD 8
+  -- The layout of a field of the container `owner`: the model's, which must be the exporter's
+  -- layout of the field's type. The container's encoding is generated from the exporter's
+  -- offsets and holds each field's *model* encoding there, and no access compares a field type
+  -- that the program never loads on its own (`checkMemTy` compares the accessed type only).
+  let field (owner : String) (t : TyId) : Except String (Nat × Nat) := do
+    let (s, a) ← modelLayout types layouts t errBits
+    match layouts[t]? with
+    | some { size := some s', align := some a', .. } =>
+      unless s == s' && a == a' do
+        throw s!"the memory model gives type {t}, a field of {owner}, size {s} and alignment \
+          {a}, the compiler {s'} and {a'}"
+      pure (s, a)
+    | _ => throw s!"type {t}, a field of {owner}, has no layout in the AIR file"
   match types[id]? with
   | some (.int _ bits) => pure (Zig.intSize bits, Zig.intAlign bits)
   | some .bool => pure (1, 1)
@@ -412,11 +451,16 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId)
         than an integer, a `bool`, a float, an enum, a packed struct, a packed union or a vector \
         of these"
       return (Zig.intSize bits, Zig.intAlign bits)
-    for (_, fty) in fields do
-      let _ ← modelLayout types layouts fty errBits
-    if (layouts[id]?.map (·.offsets.size)).getD 0 != fields.size then
+    let fieldLayouts ← fields.mapM fun (_, fty) => field s!"struct '{name}'" fty
+    let offsets := (layouts[id]?.map (·.offsets)).getD #[]
+    if offsets.size != fields.size then
       throw s!"struct '{name}' has no field offsets in the AIR file"
-    exported
+    let (size, align) ← exported
+    -- An `extern` struct has the C layout; an `auto` one is the compiler's choice.
+    if layout == "extern" then
+      if let some e := externLayoutError? (offsets.zip (fieldLayouts.map (·.1))) size align then
+        throw s!"the compiler's layout of `extern` struct '{name}' is not a C layout: {e}"
+    pure (size, align)
   | some (.errorUnion set payload) =>
     -- `Zig.errUnionOffsetsW`: the error code is the profile's `error_set_bits` integer.
     unless errCodeLayout layouts set errBits do
@@ -458,9 +502,15 @@ partial def modelLayout (types : Array Ty) (layouts : Array Layout) (id : TyId)
   | some (.union name layout none fields) =>
     unless layout == "extern" || layout == "packed" do
       throw s!"union '{name}' ({layout}) without a tag"
-    for (_, fty) in fields do
-      let _ ← modelLayout types layouts fty errBits
-    exported
+    let fieldLayouts ← fields.mapM fun (_, fty) => field s!"union '{name}'" fty
+    let (size, align) ← exported
+    -- An `extern` union is its largest field rounded up to its alignment (a struct of one
+    -- field at offset 0, for each field).
+    if layout == "extern" then
+      let largest := fieldLayouts.foldl (Nat.max · ·.1) 0
+      if let some e := externLayoutError? #[(0, largest)] size align then
+        throw s!"the compiler's layout of `extern` union '{name}' is not a C layout: {e}"
+    pure (size, align)
   | some t => throw s!"{repr t}"
   | none => throw s!"unknown type id {id}"
 

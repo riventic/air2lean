@@ -111,6 +111,17 @@ for source in names:Names c_ints:CInts; do
     "${lean_cmd[@]}" -R "$case_dir" "$case_dir/PointerWidth/$dir/$V/Proofs.lean"
   done
 done
+# Container layouts: the checker controls (LayoutChecker.lean), and layouts.zig (`extern`
+# structs and unions with natural, under- and over-aligned, zero-sized and nested fields) per
+# exported Zig version and target: each translation passes the C layout rule and compiles.
+# test_cli.py has the rejections on changed type tables.
+"${lean_cmd[@]}" --run "$case_dir/LayoutChecker.lean"
+for dir in "$case_dir"/air/*/layouts/*; do
+  t=$(basename "$dir")
+  v=$(basename "$(dirname "$(dirname "$dir")")")
+  "$translator" "$dir" -o "$work/Layouts-$v-$t.lean" --namespace Layouts --prefix layouts.
+  "${lean_cmd[@]}" "$work/Layouts-$v-$t.lean"
+done
 # Layout, overflow and bounds mutants of the retained translations (mutations.py): each builds,
 # and its proofs (PointerWidth.Proofs or PointerWidth.CInts.V0_17_1.Proofs) fail in the theorems
 # of the changed fact.
