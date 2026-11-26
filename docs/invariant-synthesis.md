@@ -914,8 +914,13 @@ What was measured (2026-11-26):
   0.15.2, 0.16.0 and 0.17.1 are the same text after the profile record. The list's translations
   differ in the std code (`Allocator.create`/`destroy` and what they call), not in the names of
   the loops, their exits or the std instances the proofs name. In all of them the regenerated
-  invariants are those of the first translation, the hand-written files check unchanged and the
-  mutants are rejected.
+  invariants are those of the first translation, the theorems over them check unchanged and the
+  mutants are rejected. One exception outside the generated invariants: for the list's Zig 0.14.1
+  translation, `Proofs/Lists/Alloc.lean`'s `create_spec`, `push_grant` and `push_spec` (walks of
+  the translated `Allocator.create`, no loop) stop with "maximum recursion depth has been
+  reached"; the file sets its budgets for the 0.15.2 to 0.17.1 translations. The check pins
+  exactly these three (`over_budget`) and requires every other theorem of the file, `freeAll`'s
+  among them, to check. A walk budget that does not depend on the translation is open.
 * **Permuted fields, same layout.** Zig lays the fields of a plain `struct` out by alignment, so
   the permuted `Node` keeps `next` at offset 0 and `val` at 8: the translation changes only in
   the order of the fields of the generated structure `Node` and of its `Enc` instance, and

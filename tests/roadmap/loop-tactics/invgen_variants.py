@@ -58,6 +58,9 @@ CLIENTS = {
               'files': ['Proofs/Lists/Linked.lean', 'Proofs/Lists/Alloc.lean', 'Proofs/Lists/Bounded.lean',
                         f'{LOOPS}/Queue.lean'],
               'source': ('examples/lists/lists.zig', r'pub const Node = (?:extern )?struct \{.*?\n\};\n'),
+              # Zig 0.14.1's `Allocator.create`: the walks of `create` and `push` (no loop, no
+              # generated invariant) reach Lean's recursion limit; the loop theorems check.
+              'over_budget': {'0.14.1': {'Proofs/Lists/Alloc.lean': ['create_spec', 'push_grant', 'push_spec']}},
               # `Node` as an `extern struct`: `val` at offset 0, `next` at 8. The generator follows
               # (scripts/invgen.py PARTIAL); `Linked.node` states `next` at 0 and `val` at 8.
               'rejected': {'layout': {'file': 'Proofs/Lists/Linked.lean', 'in': ['reverse_thread', 'sum_total'],
@@ -137,6 +140,32 @@ def rejected(name, expected, overlay, vroot, root):
     return []
 
 
+def over_budget(name, overlay, vroot, root, file, theorems):
+    """Why `file` is not rejected for the variant in exactly `theorems`, each time because Lean's
+    recursion limit is reached, or None. A recorded finding (docs/invariant-synthesis.md,
+    "Retranslation"): these are walks of translated std code, not of a loop, whose budget the
+    hand-written file sets for the other translations; every other theorem of the file, the
+    ones over the generated invariants among them, must check."""
+    result = overlay.elaborate(file, root)
+    spans = invgen_mutants.spans(ROOT / file)
+    starts = sorted((a, t) for t, (a, _) in spans.items())
+    errors = re.findall(re.escape(Path(file).name) + r':(\d+):\d+: error: (.*)', result.stdout)
+
+    def owner(line):
+        """The theorem the line is in, else the next one (its `set_option … in`, its comment)."""
+        inside = [t for t, (a, b) in spans.items() if a <= line < b]
+        return inside[0] if inside else next((t for a, t in starts if a > line), None)
+    hit = {owner(int(line)) for line, _ in errors}
+    other = [message for _, message in errors if 'maximum recursion depth' not in message]
+    if hit != set(theorems) or other:
+        return (f"{vroot}: {file} is expected to exceed Lean's recursion limit in {', '.join(theorems)} and to "
+                f"check elsewhere; errors in {', '.join(sorted(map(str, hit))) or 'no theorem'}: "
+                f"{result.stdout[-2000:]}")
+    print(f"{name}/{Path(vroot).name}: {file} checked against the retranslation, unchanged, except "
+          f"{', '.join(theorems)} (recursion limit: a recorded finding)", flush=True)
+    return None
+
+
 def check(name, client, vroot, work):
     """The errors of the variant at `vroot`."""
     variant = Path(vroot).name
@@ -156,8 +185,14 @@ def check(name, client, vroot, work):
                                    work / 'olean')
     if variant in client.get('rejected', {}):
         return rejected(name, client['rejected'][variant], overlay, vroot, client['root'])
+    budget = client.get('over_budget', {}).get(variant, {})
     try:
         for file in client['files']:
+            if file in budget:
+                error = over_budget(name, overlay, vroot, client['root'], file, budget[file])
+                if error:
+                    return [error]
+                continue
             overlay.check(file, client['root'])
             print(f'{name}/{variant}: {file} checked against the retranslation, unchanged', flush=True)
     except lean_overlay.Failed as error:
