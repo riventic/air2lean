@@ -27,7 +27,7 @@
  "src": {
   "file": "reject.zig",
   "module": "reject",
-  "decl_line": 45
+  "decl_line": 57
  },
  "params": [
   0,

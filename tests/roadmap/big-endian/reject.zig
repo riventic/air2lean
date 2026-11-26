@@ -4,19 +4,31 @@ const std = @import("std");
 
 /// Byte `i` of a vector in memory: a pointer cast between a vector and another pointee is
 /// illegal behaviour (a vector has no defined byte layout; docs/illegal-behavior.md), rejected
-/// for every profile.
-pub fn vecByte(a: u16, b: u16, i: usize) u8 {
-    var v: @Vector(2, u16) = .{ a, b };
+/// for every profile. The vector is stored whole, so that the cast is the first rejection
+/// (`vecLanes`).
+pub fn vecByte(x: @Vector(2, u16), i: usize) u8 {
+    var v = x;
     const bytes: *const [4]u8 = @ptrCast(&v);
     return bytes[i];
 }
 
-/// Lane 0 of a vector whose memory bytes were stored as an array: the same illegal cast.
-pub fn vecLane0FromBytes(b: [8]u8) u32 {
-    var v: @Vector(2, u32) = .{ 0, 0 };
+/// A vector whose memory bytes were stored as an array: the same illegal cast.
+pub fn vecFromBytes(x: @Vector(2, u32), b: [8]u8) u32 {
+    var v = x;
     const bytes: *[8]u8 = @ptrCast(&v);
     bytes.* = b;
-    return v[0];
+    return @reduce(.Add, v);
+}
+
+/// A vector initialized lane by lane from runtime values, and a lane read from memory. Zig
+/// 0.17.1 accesses each lane through a lane pointer (`&v[i]`, `vector_index`), which is
+/// modelled only for the targets of the lane probe (docs/vector-proofs.md, Scope: no big-endian
+/// one): rejected. Zig 0.16.0 accesses a whole-byte lane through a plain element pointer:
+/// translated (`test_cli.py` checks both).
+pub fn vecLanes(a: u16, b: u16) u16 {
+    var v: @Vector(2, u16) = .{ a, b };
+    _ = &v;
+    return v[1];
 }
 
 /// A big-endian atomic op on a representation that is neither at most one byte nor a whole
@@ -59,7 +71,8 @@ pub fn u128Bytes(x: u128) [16]u8 {
 comptime {
     _ = &atomicU12;
     _ = &vecByte;
-    _ = &vecLane0FromBytes;
+    _ = &vecFromBytes;
+    _ = &vecLanes;
     _ = &packedUnion;
     _ = &f80Add;
     _ = &boolLanes;
