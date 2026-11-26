@@ -24,17 +24,18 @@ and the OS mapping model only (premise OSM-01). No model of the allocator is use
   itself (`PageObstruction.vt`) is not a `FAllocSpec` entry: it starts thread `0` from any
   memory and ends it (`checkJoinedByChild`), which an `FSeq` memory with another current thread
   or an unjoined child fails, whatever the allocator does.
-* **Alignments up to a page** (`ainv.fits`: `k ≤ 12`, obstruction O5). For a larger alignment,
-  `map` asks for extra pages and `std.mem.alignPointer` adds `alignment - 1` to the mapping's
-  address with an overflow check. A placement proposal keeps the mapping below `2 ^ 64`
-  (`Mem.placeOk`), but the fallback address after every block (`Mem.top`) is unbounded, so the
-  check can fail and `map` panics: `alloc_high` (kernel-checked) is such a run from a memory
-  whose last block ends high. Natively the kernel never maps that high. The fix is a bound on
-  the fallback (a request whose block would end above the address space fails); with it, larger
-  alignments need the prefix and tail `munmap`s, which `TotalTriple.munmapPrefix`/`munmapTail`
-  already cover.
-* **Partial correctness.** The atomic rules are partial (`FTriple`); `free`, `resize` and
-  `remap` are total (`PageSpec.lean`).
+* **Alignments up to a page** (`ainv.fits`: `k ≤ 12`). For a larger alignment, `map` asks for
+  extra pages, `std.mem.alignPointer` adds `alignment - 1` to the mapping's address with an
+  overflow check, and `map` unmaps the pages before the aligned address and behind the granted
+  ones. The OS model bounds the address space (O5, `docs/alloc-page.md`), so the check passes;
+  `alloc_high`, `alloc_top` and `alloc_edge` are kernel-checked runs of these paths. The proof
+  for `k > 12` is open: `fsym` has no step rule for the prefix `munmap` over a region
+  (`FTotalTriple.munmapPrefix'` is stated over `bytesAt`) and its arithmetic does not decide the
+  offsets of the tail's `ptrProject` for a symbolic `2 ^ k` (`docs/alloc-page.md`).
+* **Partial correctness.** `alloc` is a `CTriple`, which is partial correctness, and the atomic
+  rules are partial (`FTriple`); `free`, `resize` and `remap` are total (`PageSpec.lean`).
+* **aarch64-macos**: `PageAllocMacos.lean`, the same statements over the same state
+  (`PageTok.hown`) at 16 KiB pages.
 -/
 
 namespace AllocTranslated.PageAlloc
@@ -43,17 +44,12 @@ open Zig Zig.Region AllocTranslated.PageLinux AllocTranslated.PageSpec Zig.Full 
 
 /-! ## The allocator state: the hint word -/
 
-/-- `PageAllocator`'s hint word `addr_hint` (global block 0). -/
-abbrev hint : Ptr := ⟨some 0, 0⟩
+/-- `PageAllocator`'s hint word `addr_hint` (`PageTok.hint`: global block 0). -/
+abbrev hint : Ptr := PageTok.hint
 
-/-- What the allocator knows of the hinted mapping: its block's address, page-aligned. -/
-def HintKn : Option Ptr → FAssn
-  | none => FAssn.emp
-  | some h => FAssn.ex fun b => FAssn.ex fun A : Nat =>
-      ⟪h.block = some b ∧ 0 ≤ h.off ∧ ((A : Int) + h.off) % 4096 = 0⟫ ⋆ known b A
-
-/-- The allocator state: the hint word with its atomic layout, and the knowledge of its target. -/
-def own : FAssn := FAssn.ex fun h : Option Ptr => aptsE hint h ⋆ HintKn h
+/-- The allocator state: the hint word with its atomic layout, and the knowledge of its target
+(`PageTok.hown`, the state of both targets, at this target's page size). -/
+def own : FAssn := PageTok.hown P
 
 /-- The page allocator's invariant for every entry: alignments up to a page. -/
 def ainv : FAllocInv := { inv own with fits := fun n k => n + 2 ^ k + P ≤ 2 ^ 64 ∧ k ≤ 12 }

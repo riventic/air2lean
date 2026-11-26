@@ -1,12 +1,13 @@
 import ZigLean.Sep.Full.Mmap
 import ZigLean.Sep.Full.Const
+import ZigLean.Sep.Full.AtomicPtr
 
 /-!
 # The page allocator's invariant over full-state resources (both targets)
 
 The token and the invariant of the translated `std.heap.PageAllocator` (`PageSpec.lean` for
-x86_64-linux, `PageSpecMacos.lean` for aarch64-macos, `PageAlloc.lean` with `alloc`), for a page
-size `P`. Only definitions: the proofs are the general symbolic executor `fsym`
+x86_64-linux, `PageSpecMacos.lean` for aarch64-macos; `PageAlloc.lean` and `PageAllocMacos.lean`
+with `alloc`, whose allocator state is the hint word, `hown`), for a page size `P`. Only definitions: the proofs are the general symbolic executor `fsym`
 (`docs/proof-automation.md`), which walks the generated code down to the OS mapping primitives
 (`ZigLean/Sep/Full/Mmap.lean`, premise OSM-01).
 
@@ -59,5 +60,22 @@ overflow (`FAllocInv.FitsUpTo`; the arena's child at `n = 2 ^ 63`, `k = 3`). -/
 theorem pinv_fitsUpTo {P : Nat} {own : FAssn} {n k : Nat} (h : n + 2 ^ k + P ≤ 2 ^ 64) :
     (pinv P own).FitsUpTo n k :=
   fun m hm => show m + 2 ^ k + P ≤ 2 ^ 64 by omega
+
+/-! ## The allocator state of `alloc`: the hint word (both targets) -/
+
+/-- `PageAllocator`'s hint word `addr_hint` (global block 0 of both targets' translations). -/
+abbrev hint : Ptr := ⟨some 0, 0⟩
+
+/-- What the allocator knows of the hinted mapping, for page size `P`: its block's address, with
+the hinted address page-aligned. -/
+def HintKn (P : Nat) : Option Ptr → FAssn
+  | none => FAssn.emp
+  | some h => FAssn.ex fun b => FAssn.ex fun A : Nat =>
+      ⟪h.block = some b ∧ 0 ≤ h.off ∧ (A + h.off.toNat) % P = 0⟫ ⋆ known b A
+
+/-- The allocator state for page size `P`: the hint word with its atomic layout (`aptsE`, O3),
+and the knowledge of its target (`known`, O1: the hinted mapping may be unmapped).
+`docs/alloc-page.md`. -/
+def hown (P : Nat) : FAssn := FAssn.ex fun h : Option Ptr => aptsE hint h ⋆ HintKn P h
 
 end AllocTranslated.PageTok
