@@ -291,7 +291,12 @@ theorem OwnsPtr.errPayload {x : Except ErrName T} :
     OwnsPtr (up (Zig.pts p a x)) (errPayloadPtr T p) (Enc.size T) :=
   OwnsPtr.pts_add (errUnion_bounds _ _).2.1
 
-attribute [fsym_provider] OwnsPtr.region_in OwnsPtr.errPayload
+/-- The error code of an error union at `p` (inside it by the layout). -/
+theorem OwnsPtr.errCode {x : Except ErrName T} :
+    OwnsPtr (up (Zig.pts p a x)) (p.add (errUnionOffsets (Enc.size T) (Enc.align T)).1) 2 :=
+  OwnsPtr.pts_add (errUnion_bounds _ _).1
+
+attribute [fsym_provider] OwnsPtr.region_in OwnsPtr.errPayload OwnsPtr.errCode
 
 end Thread
 
