@@ -71,7 +71,11 @@ class Passes(unittest.TestCase):
                      "env": {"HIDDEN_DIR": str(self.hidden), "RUNS": str(self.runs)}, "runner": fc.HOST,
                      "skipped": [], "error": None, "toolchains": {"patched": [], "stock": []}}
         # The hidden file stands for a file of the checkout: an input of every unit.
-        inputs = lambda tree: {"checkout": (self.hidden / "input").read_text()}
+        # (a source, and a build output below a package's `.lake`)
+        def inputs(tree):
+            out = self.hidden / "out"
+            return {"worktree": ["/w", [["src/input", (self.hidden / "input").read_text()],
+                                        [".lake/out", out.read_text() if out.exists() else None]], "g"]}
         for patch in (mock.patch.object(fc, "discover", lambda tree: [dict(self.unit)]),
                       mock.patch.object(fc, "resolve", no_toolchain),
                       mock.patch.object(fc, "run_inputs", inputs),
@@ -140,11 +144,48 @@ class Passes(unittest.TestCase):
         self.unit["run"] = 'echo run >> "$RUNS"\nprintf "ok\\n\\n" > "$HIDDEN_DIR/input"\n'
         status, out, _ = self.run_checks()
         self.assertEqual(status, 0)
-        self.assertIn("the inputs changed during the run: no pass is recorded", out)
+        self.assertIn("the inputs changed during the run: no pass is recorded: src/input", out)
         (self.hidden / "input").write_text("ok\n")
         self.run_checks()
         self.assertEqual(self.runs_of_unit(), 2)
         self.assertFalse((self.temp / "passes").exists())
+
+    def test_the_shared_build_writing_an_input_does_not_prevent_the_pass(self):
+        # The proof-fixture package and the extractor are built into the worktree before the units:
+        # their outputs are inputs the units start from, not a change during the run.
+        (self.hidden / "input").write_text("ok\n")
+        build = ["sh", "-c", 'printf "built\\n" > "$1"', "sh", str(self.hidden / "out")]
+        with mock.patch.object(fc, "FIXTURE_BUILD", build):
+            status, out, err = self.run_checks()
+            self.assertEqual(status, 0, out + err)
+            self.assertNotIn("inputs changed", out)
+            self.assertEqual(len(list((self.temp / "passes").iterdir())), 1)
+            self.assertEqual(self.run_checks()[0], 0)
+        self.assertEqual(self.runs_of_unit(), 1)  # the second run reused the pass
+
+    def test_a_source_edited_during_the_shared_build_records_no_pass(self):
+        # The build may have compiled the old text: its outputs are not of the edited source.
+        (self.hidden / "input").write_text("ok\n")
+        build = ["sh", "-c", 'printf "ok\\n\\n" > "$1"; printf "built\\n" > "$2"', "sh",
+                 str(self.hidden / "input"), str(self.hidden / "out")]
+        with mock.patch.object(fc, "FIXTURE_BUILD", build):
+            status, out, err = self.run_checks()
+        self.assertEqual(status, 0, out + err)
+        self.assertIn("changed during the shared build: no pass is recorded: src/input", out)
+        self.assertNotIn(".lake/out", out)
+        self.assertFalse((self.temp / "passes").exists())
+
+    def test_a_changed_worktree_path_is_named(self):
+        def snapshot(*records, git="g"):
+            return {"worktree": ["/w", [list(r) for r in records], git], "lean": ["s", "x"]}
+        before = snapshot(("a", "1"), ("b", "1"), ("c", "1"))
+        after = snapshot(("a", "1"), ("b", "2"), ("d", "1"), git="h")
+        self.assertEqual(fc.changed_inputs(before, after), ["b", "c", "d", "git state"])
+        self.assertEqual(fc.changed_inputs(before, {**before, "lean": ["s", "y"]}), ["lean"])
+        self.assertEqual(fc.changed_inputs(before, before), [])
+        many = snapshot(*[("p%02d" % i, "1") for i in range(30)])
+        named = fc.changed_inputs(snapshot(), many)
+        self.assertEqual((len(named), named[-1]), (11, "... (30 paths in all)"))
 
     def test_a_rerun_of_the_staged_command_starts_from_a_fresh_temp(self):
         # build-guard reruns a unit stopped at its charge with the same argv and env; the first
