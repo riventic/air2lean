@@ -22,6 +22,7 @@ DIR/examples gets the accepted examples (space-separated). Exit 0 unless an expo
 accepted translation differs.
 """
 import argparse
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -44,12 +45,10 @@ def namespace(ex):
 
 
 def filters(ex, version):
-    out = [f'{ex}.']
-    for name in ('filter', f'filter-{version}'):
-        path = ROOT / 'examples' / ex / name
-        if path.is_file():
-            out += [line for line in path.read_text(encoding='utf-8').splitlines() if line]
-    return ','.join(out)
+    spec = importlib.util.spec_from_file_location('fixture_exports', ROOT / 'scripts/fixture-exports.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.example_filter(ex, version)
 
 
 def committed_gen(ex, version):
