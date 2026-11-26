@@ -3770,7 +3770,8 @@ def source_0 : _root_.Air2Lean.Func :=
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
 (@_root_.Air2Lean.Ty.opaque
-"anyopaque")
+"anyopaque"
+@_root_.Bool.false)
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
 (@_root_.Air2Lean.Ty.ptr
@@ -20949,7 +20950,8 @@ def source_1 : _root_.Air2Lean.Func :=
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
 (@_root_.Air2Lean.Ty.opaque
-"anyopaque")
+"anyopaque"
+@_root_.Bool.false)
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
 (@_root_.Air2Lean.Ty.ptr
@@ -39039,7 +39041,8 @@ def source_3 : _root_.Air2Lean.Func :=
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
 (@_root_.Air2Lean.Ty.opaque
-"anyopaque")
+"anyopaque"
+@_root_.Bool.false)
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
 (@_root_.Air2Lean.Ty.ptr
@@ -55327,7 +55330,8 @@ def source_5 : _root_.Air2Lean.Func :=
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
 (@_root_.Air2Lean.Ty.opaque
-"anyopaque")
+"anyopaque"
+@_root_.Bool.false)
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
 (@_root_.Air2Lean.Ty.ptr
@@ -71685,7 +71689,8 @@ def source_6 : _root_.Air2Lean.Func :=
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
 (@_root_.Air2Lean.Ty.opaque
-"anyopaque")
+"anyopaque"
+@_root_.Bool.false)
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
 (@_root_.Air2Lean.Ty.ptr
@@ -88611,7 +88616,8 @@ def source_7 : _root_.Air2Lean.Func :=
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
 (@_root_.Air2Lean.Ty.opaque
-"anyopaque")
+"anyopaque"
+@_root_.Bool.false)
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
 (@_root_.Air2Lean.Ty.ptr

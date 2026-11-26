@@ -189,7 +189,7 @@
    "ty": 9,
    "callee": {
     "ty": 10,
-    "func": "Thread.spawn__anon_800",
+    "func": "Thread.spawn__anon_819",
     "module": "std",
     "instance_key": "42028ac1f054b40a55a99ed7068d181206ebebdb474e8f2b5e8ad3029fd57541",
     "noreturn": false,
@@ -738,6 +738,7 @@
    "size": "one",
    "const": false,
    "child": 29,
+   "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
    "address_space": "generic",
@@ -775,8 +776,9 @@
    ]
   },
   {
-   "k": "other",
-   "name": "c.pthread_t__opaque_728"
+   "k": "opaque",
+   "name": "c.pthread_t__opaque_749",
+   "module": "std"
   },
   {
    "k": "ptr",

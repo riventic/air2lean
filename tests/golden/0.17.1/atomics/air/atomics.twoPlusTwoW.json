@@ -46,7 +46,6 @@
    "fullfp16",
    "fuse_address",
    "fuse_adrp_add",
-   "fuse_aes",
    "fuse_arith_logic",
    "fuse_crypto_eor",
    "fuse_csel",
@@ -1564,6 +1563,7 @@
    "size": "one",
    "const": false,
    "child": 35,
+   "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
    "address_space": "generic",
@@ -1607,8 +1607,9 @@
    "abi_align": 8
   },
   {
-   "k": "other",
-   "name": "c.pthread_t__opaque_0"
+   "k": "opaque",
+   "name": "c.pthread_t__opaque_0",
+   "module": "std"
   },
   {
    "k": "ptr",

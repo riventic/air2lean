@@ -84,6 +84,25 @@ types (`mem.Allocator`, `Thread`, `Io`) only std types: the translator looks the
 module-qualified key ([AIR JSON §Identity](air-json.md#identity)). A user `Thread.zig` with a
 `spawn` is user code (`root:Thread.spawn`), never the `Thread.spawn` model.
 
+### Opaque std handles
+
+A hand-written model keeps its own record behind the handle that the std type shows:
+`Io.Future(T).any_future: ?*Io.AnyFuture` is the record of `Zig.Future`
+(`ZigLean/Conc/Future.lean`), and `Thread`'s `pthread_t` is not translated at all. A program
+that used such a handle outside the model's own operations (`f.any_future != null`, a cast of it
+to `*u64` and a load) would observe the model's bytes, not the native ones.
+
+So an opaque type that the standard library declares is outside the subset in every use, also
+behind a single-item pointer: the entry's `module` is `std` (`Identity.stdDeclared`,
+`Ty.opaque`'s `std`; `opaqueTy` in `Air2Lean/Air/Op.lean`). No list of names decides it. The
+primitive `anyopaque` and an opaque type declared in any other module are admitted
+([opaque pointers](../tests/roadmap/opaque-pointers/README.md)). The type may stand in a type
+table, as the field of a modelled std type; only a use of it is rejected.
+
+This is a conservative boundary: it also rejects a std opaque type that no model uses as a
+handle. It goes when the hand models go (§Retiring the hand models): a translated `Io.Future`
+has the native record behind its handle.
+
 ## Version qualification
 
 Every modelled row of `stdModels` lists the Zig versions it is qualified for, each with the
