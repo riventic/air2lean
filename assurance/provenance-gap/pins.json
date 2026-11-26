@@ -1,5 +1,5 @@
 {
-  "manifest_sha256": "fb3301d5d5c1608b886e07ef8c735282f6e332106d23a1c64c4d3a841d590b97",
+  "manifest_sha256": "8be6c497d8599d5c1d76b0e28e3c8637211d15a01b3a0b76dec4e2750a1726bf",
   "native_binary_sha256": "fb0b69e77d0aa3880ec7118ddca9ce2aa76e530d6538dd2ee2b410f395f206ca",
   "native_sha256": "f3f4f5a11056780c0ff95da7c44b0d0ac996e767b49e34a2583fc68199deccb5",
   "note": "Reviewer pins for assurance/provenance-gap/manifest.json (scripts/provenance-evidence.py). Update only with a regenerated, reviewed manifest.",
