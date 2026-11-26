@@ -1715,7 +1715,23 @@
           "tests/roadmap/zig017/divceil/air/0.17.1/divceil.divCeilU64.json",
           "tests/roadmap/zig017/divceil/air/0.17.1/divceil.divCeilU8.json",
           "tests/roadmap/zig017/overflow/air/0.17.1/overflow.mulOverflowI16.json",
-          "tests/roadmap/zig017/overflow/air/0.17.1/overflow.mulOverflowU32.json"
+          "tests/roadmap/zig017/overflow/air/0.17.1/overflow.mulOverflowU32.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecBool.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecF128.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecF16.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecF32.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecF64.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecF80.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecI128.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecI16.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecI32.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecI7.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecU1.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecU24.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecU64.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecU8.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecZ16.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecZ8.json"
         ]
       },
       "proofs": {
@@ -16905,7 +16921,23 @@
           "tests/roadmap/zig017/divceil/air/0.17.1/divceil.divCeilU64.json",
           "tests/roadmap/zig017/divceil/air/0.17.1/divceil.divCeilU8.json",
           "tests/roadmap/zig017/overflow/air/0.17.1/overflow.mulOverflowI16.json",
-          "tests/roadmap/zig017/overflow/air/0.17.1/overflow.mulOverflowU32.json"
+          "tests/roadmap/zig017/overflow/air/0.17.1/overflow.mulOverflowU32.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecBool.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecF128.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecF16.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecF32.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecF64.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecF80.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecI128.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecI16.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecI32.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecI7.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecU1.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecU24.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecU64.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecU8.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecZ16.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecZ8.json"
         ]
       },
       "proofs": {
@@ -21528,7 +21560,23 @@
           "tests/roadmap/zig017/divceil/air/0.17.1/divceil.divCeilU64.json",
           "tests/roadmap/zig017/divceil/air/0.17.1/divceil.divCeilU8.json",
           "tests/roadmap/zig017/overflow/air/0.17.1/overflow.mulOverflowI16.json",
-          "tests/roadmap/zig017/overflow/air/0.17.1/overflow.mulOverflowU32.json"
+          "tests/roadmap/zig017/overflow/air/0.17.1/overflow.mulOverflowU32.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecBool.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecF128.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecF16.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecF32.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecF64.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecF80.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecI128.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecI16.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecI32.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecI7.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecU1.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecU24.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecU64.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecU8.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecZ16.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecZ8.json"
         ]
       },
       "proofs": {
@@ -27619,14 +27667,16 @@
     },
     {
       "tag": "array_to_vector",
-      "disposition": "rejected-compiler-state-or-effect",
+      "disposition": "emitted-unqualified",
       "exporter": {
         "status": "fallback-named-decoder",
         "reason": "Version-selected fallback branch names the tag (directly or via a Compat.is* helper) and decodes it."
       },
       "normalization": {
-        "status": "explicit-source-rejection",
-        "constructors": []
+        "status": "explicit-source-branch",
+        "constructors": [
+          "arrayToVector"
+        ]
       },
       "parser": {
         "status": "generic-schema-source-only",
@@ -27643,29 +27693,48 @@
         ]
       },
       "semantics": {
-        "status": "not-decoded",
-        "paths": [],
-        "reasons": []
+        "status": "outside-fragment",
+        "paths": [
+          "Air2Lean/Sem.lean"
+        ],
+        "reasons": [
+          "arrayToVector: vectors (stage 5)"
+        ]
       },
       "emission": {
-        "status": "not-reached",
-        "paths": []
+        "status": "dispatch-arm",
+        "paths": [
+          "Air2Lean/Emit.lean"
+        ]
       },
       "tests": {
         "status": "compiler-fixture-presence-only",
-        "paths": []
+        "paths": [
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecBool.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecF128.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecF16.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecF32.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecF64.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecF80.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecI128.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecI16.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecI32.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecI7.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecU1.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecU24.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecU64.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecU8.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecZ16.json",
+          "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecZ8.json"
+        ]
       },
       "proofs": {
         "status": "symbol-index-only-not-proof-coverage",
         "paths": []
       },
-      "rejection": {
-        "reason": "Zig 0.17.1's array-to-vector coercion is outside the subset; the vector model has no array conversion",
-        "source": "Air2Lean/Air/Normalize.lean",
-        "definition": "runtimeTagReason?"
-      },
+      "rejection": null,
       "fixture_request": null,
-      "guidance": "Zig 0.17.1's array-to-vector coercion is outside the subset; the vector model has no array conversion; source-only rejection classification, no compiler fixture or support qualification",
+      "guidance": "Exporter decodes the tag for this version, normalizeOp builds an Op, an Emit.lean dispatch arm emits it and a selected compiler-generated fixture contains it; no semantics, proof or contract qualification. Qualification needs a compiler fixture, rejection/differential tests and a checked contract.",
       "derivation": {
         "method": "mechanical"
       }
@@ -31972,11 +32041,11 @@
       "Air2Lean/Air/Canon.lean": "2f705493cfa6b06c2dbaf0ac99bba83e9fbdea7db91ff2a2ac2a741d5368d6fe",
       "Air2Lean/Air/Compat.lean": "cf6b09aebd7f8b0baa6aaf078c0ac384075341cb2ac3b57154370496fdac55f7",
       "Air2Lean/Air/Dialect.lean": "48adbe79d59288fc47809c75b8fd2550bde604e62d74e2351db3135a591f3883",
-      "Air2Lean/Air/Effects.lean": "c4b0acf2c4490e59e8fe930f7e5d4d480cf1b539ac07157e262ecac3f78f73d7",
+      "Air2Lean/Air/Effects.lean": "dce9c45d0d286bab399b6f7b9223d235172b553b0e76d28e8f8938e6db919356",
       "Air2Lean/Air/Identity.lean": "b9acd36de195736835074ea9da14b9a660d050bd194147fcd7b37d2664e03d99",
       "Air2Lean/Air/Json.lean": "5b6fd840b49fa72547e224f87c92a5b1fb5d0cbd062eee009f090362f98dfa6f",
-      "Air2Lean/Air/Normalize.lean": "47337e7dcbad16f40b399d638a34363199eda32ae95bea93165c9366794ee316",
-      "Air2Lean/Air/Op.lean": "27e907aaca9357d91c34b0be46daa775529978ac0458d8d20edeed0fdaaa42ce",
+      "Air2Lean/Air/Normalize.lean": "a38b9d4aeedc0b9ee5f3011b7f34a9769da2ce22b7b0c0a9fedb0731fb63c156",
+      "Air2Lean/Air/Op.lean": "b3c16db967cc7aba3b8e412b4072f5bd13c16768b023fe101ad60e6cca55a4bc",
       "Air2Lean/Air/Profile.lean": "3887c7bbfc13a4159506392e754dec287279e6a315e6617f99afc969044b2384",
       "Air2Lean/Air/Schema.lean": "65086142d7c1782da2990ca61a807a5d94e6c50e4f5fd1952eb2d417961c2f61",
       "Air2Lean/Air/StrictJson.lean": "07d2196f6e0896e9b21ba7786bcbff3e3d92b393b27546bcc4a4e3c013673616",
@@ -31988,11 +32057,11 @@
       "Air2Lean/CanonCertificate.lean": "509e268d25470ae66eb256cae9108367a580e95ac15940dd2c5cee583b59d92b",
       "Air2Lean/CanonSem.lean": "1934b61e7f210f3326dc79576108755a647d13077dbf8216478a7d39e6f1edc2",
       "Air2Lean/Certificate.lean": "d2ab287f551a73aacc31b67a61dbe1a4faa173721b1a365d6c683e4a1f8f926c",
-      "Air2Lean/Check.lean": "f161fe815d5dbc96edf6cce0635056134e7c5fff23e642e335a0bbf85236dfcf",
+      "Air2Lean/Check.lean": "ea0642f3aa007b4cb7473846e8f2608d69ff9e78e98b7ad05d4e5dcde5744191",
       "Air2Lean/Device.lean": "7e48f76d70f8f4b86b105fafa2fef56f6af37651ece3954c31deb7bb5f870aca",
       "Air2Lean/Diagnose.lean": "ccf03ea5178393957366f139b37e233ac6f589965904a8e91d665bfe1c9ea592",
       "Air2Lean/Diagnostic.lean": "b4eb8936309c08e347eb46efda85024aff252bca7814fbc06c1bad1a95d974c1",
-      "Air2Lean/Emit.lean": "d58c025dcb7e05c6e684bf2eeec452714bbb6dfb31a2c7f3de3c04f22e2f1773",
+      "Air2Lean/Emit.lean": "b954d7640d5293da84a13dd893915750205e40c825fa022f8c488c9569886b0f",
       "Air2Lean/InvGen.lean": "e150e822f60c9665e6f579faa1228824dc14cc7f3bcadace35297fb22dcad67d",
       "Air2Lean/InvGenMain.lean": "e061d338c83da8533f907187b602421b117875acffd7516867ba5ac7d821fb6e",
       "Air2Lean/Main.lean": "18205b3f22a753a9b02c5cb1b4d6afd49866adff806732ff4c5c2e212b0db4eb",
@@ -32004,10 +32073,10 @@
       "Air2Lean/Program.lean": "06698b66de04617b199bee371fb306978be7d0dd3262cc13bfc8b69921bb89af",
       "Air2Lean/ProofApi.lean": "2931e739cd23e8931bcfe4f7ab5f3c946b5ec3555cf2a7d8777e29f9c1efdb6d",
       "Air2Lean/Reify.lean": "75072a1edac8f8c9de6f91ddc89423e9b0636484a43e0534c855c5bba420b7a1",
-      "Air2Lean/Renumber.lean": "4aaf4c0347692269c9368fbc8742db2544b59f431bb2db75470872f6fb5cc2c7",
+      "Air2Lean/Renumber.lean": "03c3621caf4aa533d34988212210f3c3d37a4d0ce2e01c7cd60efd941b59a3ff",
       "Air2Lean/RenumberProgram.lean": "be460bb146f328c6e635cfaaf83fdb0305e8c1204283543ac0575c1c61810ad9",
       "Air2Lean/Revision.lean": "0abdb80bf11b8b7e1b0820755e2015f43cce91c00db65dd085b2a8afa6e65f8c",
-      "Air2Lean/Sem.lean": "274747f675712eef86d33ba06c3131324f1852dda062e0ae26fdf844ed2f7211",
+      "Air2Lean/Sem.lean": "0ba5d9a2da54cc636b07bab84aa37dc2731567ff94d129a2edc0809360a74996",
       "Air2Lean/SemAttr.lean": "5f1d6deca7e3e4c90ac401e729ac88f53a46408bc8d1f61cadba213492b372d8",
       "Air2Lean/SemRewrite.lean": "dc1edafdee3704c8d0845643bc3451ca6b959ea7e93147b798770437dc238ee5",
       "Air2Lean/SemView.lean": "66c88981e4ec60608b90911db9bd7d910a1de88994216194e85848e81da11e73",
@@ -32018,7 +32087,7 @@
       "zig-patch/air-json/identity.zig": "bf781b343e8df56e1fd198df0a2c463513ecec9ec232d157b35d26379449626d",
       "zig-patch/air-json/json.zig": "cce04da04e5eed4c47e6381e509059bdc05da1e1a0053c37084d064b9bc9c44e",
       "zig-patch/air-json/pointer-offset.zig": "426b60f70a5d49e402e97d1a6334e683715e5e4a3eac04b5bddddf38b427e01a",
-      "coverage/op-table/op-table.json": "445110a7f52010e72a83c6db985cd5d98551e97dbe061ffd9fdb629e603ce95f"
+      "coverage/op-table/op-table.json": "edbc8a1d8cc7ed52498107e3fa22683a0731e897082746f951d50addbfb2cf28"
     },
     "runtime-models": {
       "ZigLean/Asm.lean": "d5894da01f1616fabe811167bdeab985e1e8d90ee6051b306cb7c95df782ecd6",
@@ -37341,6 +37410,22 @@
       "tests/roadmap/zig017/divceil/air/0.17.1/divceil.divCeilU32.json": "23b0f71a65054bfeb8d8b8b9136810a61dfcdaea80017f42f96a45e7e1cd94dc",
       "tests/roadmap/zig017/divceil/air/0.17.1/divceil.divCeilU64.json": "eb3add66be540e4b6e29f0c54e80a874504f84b9c5a32874d5621c92e6dd067f",
       "tests/roadmap/zig017/divceil/air/0.17.1/divceil.divCeilU8.json": "fb560a2be51dd2a41a821d9b30d380c00b4473bc515a226d22072570284951cf",
+      "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecBool.json": "2f0be0b0ef3df7db766be96d6ba61e8c689823c4d65e1a496a3a45a7d33daf70",
+      "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecF128.json": "a9c64ff40d016356be92f875b39fcaa8ab7220dd64e79029e3d593cec05419b7",
+      "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecF16.json": "8933b68147d16ed5dcd6cd7c44d25ae5a8b1d11f68bc9e11c3535d38d9523d86",
+      "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecF32.json": "f6858673caa8ed8f9a7c1b741ffa235bd6db23109b20428d7bb54f824e80cfed",
+      "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecF64.json": "8a17a4ad980c63bb448db7e3b2af947045941207c8d0b566561311e3b8f13d1f",
+      "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecF80.json": "4c67a8e3e1df43633e8b1f9a6f3ccb92d6dbf37fd5a3714651b18dfa136755f5",
+      "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecI128.json": "bcfb0ebf540971735e85f2483f2e4b756139faf21b742e388061ab2c3a7452e6",
+      "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecI16.json": "54f9493dd010f5a6e4c3425b7f7224934cccdcc517494f4083a0cb2f21798fb3",
+      "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecI32.json": "be1254b06db05c7e7322ce56b47f486c9ef6687f721c75cf6872761f28fa50bc",
+      "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecI7.json": "28e5d51d53c52ae9e9e84b5e7b705b14720281eb742dcc02ac7417b53b405dfc",
+      "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecU1.json": "d19c42399be6097bec2f3b2a9ef8046532c0e15b198dd1bbf3c37a32cde1f390",
+      "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecU24.json": "fc46747995c05d9705cc90971aa0d15b124a509f3038298467f082a0ff109899",
+      "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecU64.json": "b321f93908a06182926559313fc71e6afe6aadffa811035307aaafbfeafcf7e3",
+      "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecU8.json": "ba5e55b709f7fb77e8e6b3f5f8c060cab2c5b98ccc664063d065d3144787decf",
+      "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecZ16.json": "dfb48d9da4a95e384efdee52f02c75090b8e86897f70200fad518375d9a803db",
+      "tests/roadmap/zig017/tovec/air/0.17.1/tovec.toVecZ8.json": "297b9f8f8757440b0168fb4aeb273fcb4dd810b0768aa241ad6eb45dd719a7a9",
       "tests/roadmap/zig017/overflow/air/0.17.1/overflow.mulOverflowI16.json": "ab15957c06304d3d92831f5f28aa51fc6ce19e437fae39e48e891179eaa95b0c",
       "tests/roadmap/zig017/overflow/air/0.17.1/overflow.mulOverflowU32.json": "a592e988f8836c769df60578a44a4fc205abb6deeed91940943b6380efbfb984"
     },
@@ -37351,9 +37436,9 @@
     }
   },
   "summary": {
-    "emitted-unqualified": 169,
+    "emitted-unqualified": 170,
     "rejected-fast-math": 20,
-    "rejected-compiler-state-or-effect": 9,
+    "rejected-compiler-state-or-effect": 8,
     "rejected-exporter-unsupported": 15,
     "erased-at-emission": 5,
     "unreachable-at-export": 3,
