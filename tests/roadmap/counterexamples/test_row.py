@@ -160,6 +160,68 @@ class Fakes(unittest.TestCase):
         REPORT.atomic_json(bundle, again)
         self.assertEqual(CX.replay_bundle(self.root, bundle, None, 60, self.zig, self.difftest), 1)
 
+    def test_from_case_decides_a_stated_postcondition_on_the_row(self):
+        """`from-case --spec`: the postcondition is decided on the row by the model and on the native outcome."""
+        REPORT = CX.REPORT
+        line = '{"ok":{"a":2,"b":1}}'
+        gen = ('import ZigLean\nnamespace Demo\nstructure Pair where\n  a : BitVec 8\n  b : BitVec 8\n  deriving DecidableEq\n\n'
+               'def pair (p0 : Pair) (p1 : Option (BitVec 8)) : Zig.Result (Pair) := do\n  pure ⟨p0.b, p0.a⟩\nend Demo\n')
+        u8 = dict(k='int', signed=False, bits=8)
+        air = dict(name='demo.pair', params=[1, 2], ret=1, types=[
+            u8, dict(k='struct', name='demo.Pair', layout='auto', fields=[dict(name='a', ty=0), dict(name='b', ty=0)]), dict(k='optional', child=0)])
+        raw = '[{"a":1,"b":2},null]\n'
+        for path, text in [('Proofs/Demo/Gen.lean', gen), ('tests/golden/demo/air/demo.pair.json', json.dumps(air)),
+                           ('tests/diff/demo/inputs/pair.jsonl', raw), ('examples/demo/demo.zig', 'pub fn pair() void {}\n'),
+                           ('tests/diff/out/zig/demo/pair.jsonl', line + '\n'), ('tests/diff/out/lean/demo/pair.jsonl', line + '\n')]:
+            p = self.root/path; p.parent.mkdir(parents=True, exist_ok=True); p.write_text(text)
+        digest = lambda text: hashlib.sha256(text.encode()).hexdigest()
+        summary = self.root/'report.json'
+        rows = [dict(schema=1, example='demo', function=function, input_index=1, input_sha256=digest(text), native_kind='value',
+                     model_kind='value', native_sha256=digest(line + '\n'), model_sha256=digest(line + '\n'), status='value_match',
+                     legacy_bucket='ok') for function, text in (('pair', raw), ('f', '{"bufs":[[1,2]],"args":[]}\n'))]
+        Path(str(summary) + '.jsonl').write_text(''.join(json.dumps(row) + '\n' for row in rows))
+        summary.write_text(json.dumps(dict(schema=1, complete=True, qualified=False, runner_runtime_sources=REPORT.source_hashes(self.root))))
+        for side in ('zig', 'lean'):
+            (self.root/'tests/diff/out'/side/'demo/f.jsonl').write_text(line + '\n')
+        self.lines['zig'] = line; self.write_tools()
+
+        def lean(violated, native_violated=None, sleep=0):
+            """A stand-in Lean process: the model evaluation, and the decision on the recorded native outcome."""
+            out = lambda v: f'O\t0\t{line}' + (f'\nV\t0\t{line}' if v else '')
+            body = (f'import sys,time;time.sleep({sleep});'
+                    f'print({out(violated if native_violated is None else native_violated)!r} '
+                    f'if "some given" in open(sys.argv[1]).read() else {out(violated)!r})')
+            return (sys.executable, '-c', body)
+
+        def case(function='pair', spec='r = .ok p0', **kw):
+            return CX.case_bundle(self.root, summary, 'demo', function, 1, zig=self.zig, difftest=self.difftest, spec=spec,
+                                  zig_source=self.root/'examples/demo/demo.zig' if function == 'pair' else None, **kw)
+
+        data = case(replay=True, runner=lean(True))
+        self.assertEqual((data['classification'], data['reason'], data['contract']), ('counterexample', 'replayed_failure',
+                         dict(id='postcondition', statement='r = .ok p0')))
+        self.assertEqual((data['source']['status'], data['source']['postcondition']), ('value_match', 'violated'))   # the outcomes agree
+        native = data['replay']['zig_native']
+        self.assertEqual((data['replay']['kind'], native['status'], native['postcondition']['status']), ('lean_sequential', 'verified', 'violated'))
+        self.assertEqual(data['replay']['request']['args'], [{'a': 1, 'b': 2}, None])
+        # Unreplayed it is only a candidate; a postcondition that holds leaves the differential verdict.
+        self.assertEqual(case(runner=lean(True))['classification'], 'candidate')
+        held = case(replay=True, runner=lean(False))
+        self.assertEqual((held['classification'], held['reason'], held['contract'], held['source']['postcondition']),
+                         ('no_failure', 'value_match', None, 'holds'))
+        self.assertEqual((held['replay']['status'], held['replay']['zig_native']['postcondition']['status']), ('verified', 'holds'))
+        # The native outcome satisfies the postcondition the model violates: unsolved, never a program bug.
+        split = case(replay=True, runner=lean(True, native_violated=False))
+        self.assertEqual((split['classification'], split['reason']), ('unsolved', 'replay_not_reproduced'))
+        self.assertEqual(split['replay']['zig_native']['postcondition']['status'], 'holds')
+        self.assertFalse(split['is_program_bug_evidence'])
+        timed = case(replay=True, runner=lean(True, sleep=30), timeout=1)
+        self.assertEqual((timed['classification'], timed['reason'], timed['is_program_bug_evidence']), ('unsolved', 'timeout', False))
+        # Outside the value kinds (a buffer function) a postcondition is refused with the reason, not guessed.
+        with self.assertRaises(CX.Invalid) as caught: case(function='f', runner=lean(True))
+        self.assertIn('--spec:', str(caught.exception)); self.assertIn('not a generated function', str(caught.exception))
+        self.assertEqual(CX.case_bundle(self.root, summary, 'demo', 'f', 1, zig=self.zig, difftest=self.difftest)['replay']['kind'], 'diff_row')
+
     def test_verdicts(self):
         self.assertEqual(CX.verdict(status='mismatch', replay='verified')[:2], ('counterexample', 'replayed_failure'))
         self.assertEqual(CX.verdict(status='mismatch', replay='not_reproduced')[:2], ('unsolved', 'replay_not_reproduced'))
@@ -214,6 +276,40 @@ class Real(unittest.TestCase):
         self.eligible('basic')
         native, model = self.check('basic', 'absDiff', 3)
         self.assertEqual(CX.native_matches(native, model), True)
+
+
+@unittest.skipUnless(shutil.which(ZIG) and (ROOT/'.lake/build/lib/lean/ZigLean.olean').is_file(), 'needs a stock zig and a built ZigLean')
+class RealPostcondition(unittest.TestCase):
+    """Rows of committed examples, one per value kind, with a stated postcondition: the generated Lean decides
+    it on the row, the native program is run on the same values, and it is decided again on the native outcome."""
+    ROWS = [   # example, function, row (the differential input format), a postcondition that holds, one that is violated
+        ('basic', 'weightedTardiness', [{'duration': 5, 'due': 3, 'weight': 2}, 10], 'r = .ok 24#32', 'r = .ok 12#32'),          # struct
+        ('variants', 'area', [{'rect': {'w': 3, 'h': 4}}], 'r = .ok 12#64', 'r = .ok 13#64'),                               # union
+        ('variants', 'next', [2], 'r = .ok .yellow', 'r = .ok p0'),                                                              # enum
+        ('variants', 'isUrgent', [-1], 'r = .ok false', 'r = .ok (p0 == Prio.low)'),                                             # signed tags
+        ('options', 'find', [[5, 6], 6], 'r = .ok (some 1#64)', 'r = .ok none'),                                                 # slice, optional
+        ('errors', 'parseDigit', [47], 'r = .ok (.error "NotDigit")', '(match r with | .ok (.ok _) => true | _ => false) = true'),   # error union
+    ]
+
+    def test_the_postcondition_is_decided_on_the_model_and_on_the_native_outcome(self):
+        version = subprocess.run([ZIG, 'version'], capture_output=True, text=True).stdout.strip()
+        for example, function, row, holds, violated in self.ROWS:
+            listed = ROOT/'examples'/example/'zig-versions'
+            if listed.is_file() and version not in listed.read_text().split(): continue
+            model = CX.lean_evaluate(ROOT, CX.lean_request(ROOT, example, function, row, ''), 600)['observed']['line']
+            for spec, expected in ((holds, False), (violated, True)):
+                with self.subTest(function=function, spec=spec):
+                    request = CX.lean_request(ROOT, example, function, row, model, spec=spec)
+                    request['expected']['violation'] = expected
+                    info = CX.with_native(ROOT, CX.lean_block(request), ROOT/'examples'/example/f'{example}.zig', function)
+                    outcome = CX.confirm(ROOT, info, 600, ZIG)
+                    native = outcome['zig_native']
+                    self.assertEqual((outcome['status'], native['status'], native['postcondition']['status']),
+                                     ('verified', 'verified', 'violated' if expected else 'holds'), outcome)
+                    self.assertTrue(CX.native_matches(native['observed']['line'], model))
+                    # The same request with the other expectation does not reproduce: the postcondition decides.
+                    request['expected']['violation'] = not expected
+                    self.assertEqual(CX.confirm(ROOT, info, 600, ZIG)['status'], 'not_reproduced')
 
 
 if __name__ == '__main__':

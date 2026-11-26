@@ -146,6 +146,7 @@ def taskW (sf : Zig.Ptr → Zig.ConcM Tgt Unit) (p0 : Zig.Ptr) : Zig.ConcM Tgt (
 
 def dispatchW (sf : Zig.Ptr → Zig.ConcM Tgt Unit) : Tgt → Zig.ConcM Tgt Unit
   | .producer a => discard (producer a)
+  | .producerAll a => discard (producerAll a)
   | .work a => discard (work a)
   | .task a => discard (taskW sf a)
 

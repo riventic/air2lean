@@ -837,6 +837,41 @@ def CheckCtx.fieldKnown (cx : CheckCtx) (c : TyId) (idx : Nat) : Bool :=
   | some (.tuple fs) => idx < fs.size && offset
   | _ => offset
 
+/-- The number of fields that the model's *value* of the type `c` has: a struct, a union and a
+tuple are their fields (`Emit.lean`'s `structFieldName`, `unionField?` and record literals).
+Every other type has none. In particular a handle of a hand-written std model (`Ty.allocator`,
+`Ty.thread`, `Ty.io`, `Ty.future`) is one whole value there (`Zig.Allocator`, `Zig.Io`, …,
+without the native fields), so `a.ptr`, `io.vtable`, `f.result` and a literal
+`Allocator{ .ptr = …, .vtable = … }` have no translation: the projection or record that the
+emitter would write does not type in Lean. A field *pointer* into memory is an address and is
+not concerned (`fieldKnown`); what a load through it reads is the decoder's business
+(`docs/model-handle-bytes.md`). -/
+def valueFields? (types : Array Ty) (c : TyId) : Option Nat :=
+  match types[c]? with
+  | some (.struct _ _ fs) | some (.union _ _ _ fs) => some fs.size
+  | some (.tuple fs) => some fs.size
+  | _ => none
+
+/-- `op` (a `struct_field_val`, a `struct_field_ptr` into a local held as a Lean value, an
+`aggregate_init`) uses field `idx` of a value of type `c?`: the value must have that field
+(`valueFields?`). -/
+def CheckCtx.valueField (cx : CheckCtx) (line : Nat) (op : String) (c? : Option TyId)
+    (idx : Nat) : Except String Unit := do
+  let some c := c? | cx.fail line s!"`{op}` of a value without a known type"
+  match valueFields? cx.types c with
+  | some n => unless idx < n do cx.fail line s!"`{op}` field index {idx} is out of range"
+  | none =>
+    let handle := match cx.types[c]? with
+      | some .allocator => " (`std.mem.Allocator`)"
+      | some .thread => " (`std.Thread`)"
+      | some .io => " (`std.Io`)"
+      | some (.future _) => " (`std.Io.Future`)"
+      | _ => ""
+    cx.fail line s!"`{op}` of a value of type {c}{handle}, which has no fields in the model: \
+      only a struct, a union or a tuple has; a handle of a hand-written std model is one whole \
+      value without the native fields (docs/std-models.md §Opaque std handles), so reading, \
+      addressing or building it by field is outside the subset"
+
 /-- The lane count and lane type of a vector-typed value. -/
 def CheckCtx.vectorOf? (cx : CheckCtx) (v : Val) : Option (Nat × TyId) :=
   match (cx.valTy? v).bind (cx.types[·]?) with
@@ -1514,6 +1549,19 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       checkErrorTable cx.fnName cx.errorTable cx.errBits "an integer/error cast"
       return line
     if let some aty := sourceTy then
+      -- A slice is a pointer and a length (`Zig.Slice`), every other value is not: a cast with a
+      -- slice (or an optional slice) on one side only would be emitted as the operand itself at
+      -- another Lean type. Zig has no such cast (`@ptrCast` of a slice casts its `.ptr`:
+      -- `slice_ptr`, then the cast), so only hand-made AIR has it.
+      let sliceLike (t : TyId) : Bool :=
+        let isSlice (t : TyId) : Bool := cx.types[t]? matches some (.ptr "slice" ..)
+        isSlice t || match cx.types[t]? with
+          | some (.optional c) => isSlice c
+          | _ => false
+      if sliceLike aty != sliceLike ty then
+        cx.fail line "a cast between a slice (a pointer and a length) and a type that is not a \
+          slice is outside the subset: Zig has no such cast (`@ptrCast` of a slice casts its \
+          `.ptr`), and the two sides are different values in the model"
       let bothErrors := isError (cx.types[aty]?) && isError (cx.types[ty]?)
       -- Duplicate finite error-union IDs preserve the same symbolic decoder only
       -- when ordered declared names, payload identity and all representation metadata agree.
@@ -1825,7 +1873,10 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   | .cmpxchg _ ptr _ _ _ _ => cx.memAccess line ptr; cx.atomicChild line ptr; pure line
   | .fieldPtr base idx =>
     if let .inst b := base then
-      if cx.places.contains b then return line
+      if cx.places.contains b then
+        -- A local held as a Lean value: the field is a projection of that value.
+        cx.valueField line "struct_field_ptr" ((cx.valTy? base).bind (ptrChild cx.types)) idx
+        return line
     -- A field pointer into memory needs the field offsets.
     let pty ← cx.memPtrTy line base
     let c := (ptrChild cx.types pty).get!
@@ -2208,6 +2259,16 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   | .unionInit idx _ =>
     let some (.union _ _ _ fields) := cx.types[ty]? | cx.fail line "`union_init` result is not a union"
     unless idx < fields.size do cx.fail line "`union_init` field index is out of range"
+    pure line
+  | .structFieldVal s idx => cx.valueField line "struct_field_val" (cx.valTy? s) idx; pure line
+  | .aggregateInit elems =>
+    -- An array or vector is its items; every other result is a record of its fields.
+    unless cx.types[ty]? matches some (.array ..) | some (.vector ..) do
+      match valueFields? cx.types ty with
+      | some n =>
+        unless n == elems.size do
+          cx.fail line s!"`aggregate_init` has {elems.size} operands for the {n} fields of its type"
+      | none => cx.valueField line "aggregate_init" (some ty) 0
     pure line
   -- Pure values, locals, jumps, returns and debug info: `checkTy` of the result and the
   -- whole-function operand checks (`check`) are their rules. Fail closed on any other op: one

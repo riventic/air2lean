@@ -7,6 +7,12 @@ claims the primitive's name, an entry outside the schema, and pointer kinds that
 of the opaque type. Zig rejects the last ones at compile time; the translator must not rely on
 that.
 
+The cast cases change one side of a committed pointer cast into a slice (`erase`:
+`*u32 → *Handle`; `recover`: `*Handle → *u32`, admitted under `--allocator-model translated`).
+Zig has no cast between a slice and a pointer that is not a slice (`@ptrCast` of a slice casts
+its `.ptr`); the model's slice is a pointer and a length, so the translation of such a cast
+would not type in Lean.
+
 usage: negatives.py TRANSLATOR
 """
 import json
@@ -70,18 +76,39 @@ def by_value(types):
         t.update(entry)
 
 
+def typed_pointer_to_slice(types):
+    # The `*u32` of the cast becomes `[]u32`: the other side stays `*Handle`.
+    found = [t for t in types if t['k'] == 'ptr' and types[t['child']]['k'] == 'int']
+    if len(found) != 1:
+        raise SystemExit(f'expected one pointer to an integer in the export, found {len(found)}')
+    found[0].update(size='slice', abi_size=16)
+
+
+ONE_SLICE = 'a cast between a slice (a pointer and a length) and a type that is not a slice'
+COPY = ('air', 'opaque_ptrs.copy.json', ())
+# name: (the committed export: directory, file, translator arguments; the change; the diagnostic)
 CASES = {
     'an export that does not mark the opaque type (kind other)':
-        (unmarked, "type 'opaque_ptrs.Handle' is outside the subset (otherwise unsupported)"),
+        (COPY, unmarked, "type 'opaque_ptrs.Handle' is outside the subset (otherwise unsupported)"),
     'an opaque entry named anyopaque':
-        (primitive_name, "a declared opaque type cannot have the primitive's name 'anyopaque'"),
-    'an opaque entry without its module': (no_module, "missing 'module'"),
-    'an opaque entry with fields': (with_fields, "unknown key 'fields'"),
-    'an opaque entry with a size': (with_size, 'its entry cannot state a layout'),
-    'a many-item pointer to the opaque type': (pointer_size('many'), NO_SIZE),
-    'a slice of the opaque type': (pointer_size('slice'), NO_SIZE),
-    'a C pointer to the opaque type': (pointer_size('c'), NO_SIZE),
-    'the opaque type by value': (by_value, NO_SIZE),
+        (COPY, primitive_name, "a declared opaque type cannot have the primitive's name 'anyopaque'"),
+    'an opaque entry without its module': (COPY, no_module, "missing 'module'"),
+    'an opaque entry with fields': (COPY, with_fields, "unknown key 'fields'"),
+    'an opaque entry with a size': (COPY, with_size, 'its entry cannot state a layout'),
+    'a many-item pointer to the opaque type': (COPY, pointer_size('many'), NO_SIZE),
+    'a slice of the opaque type': (COPY, pointer_size('slice'), NO_SIZE),
+    'a C pointer to the opaque type': (COPY, pointer_size('c'), NO_SIZE),
+    'the opaque type by value': (COPY, by_value, NO_SIZE),
+    'a cast of a slice to an opaque pointer':
+        (('air', 'opaque_ptrs.erase.json', ()), typed_pointer_to_slice, ONE_SLICE),
+    'a cast of a slice to an opaque pointer (translated allocator model)':
+        (('air', 'opaque_ptrs.erase.json', ('--allocator-model', 'translated')),
+         typed_pointer_to_slice, ONE_SLICE),
+    'a cast of an opaque pointer to a slice':
+        (('air-recover', 'opaque_ptrs.recover.json', ('--allocator-model', 'translated')),
+         typed_pointer_to_slice, ONE_SLICE),
+    'a cast of an opaque pointer to a slice (default allocator model)':
+        (('air-recover', 'opaque_ptrs.recover.json', ()), typed_pointer_to_slice, ONE_SLICE),
 }
 
 
@@ -89,18 +116,17 @@ def main():
     if len(sys.argv) != 2:
         raise SystemExit(__doc__)
     for version in VERSIONS:
-        source = (HERE / 'air' / version / 'opaque_ptrs.copy.json').read_text()
-        for name, (change, message) in CASES.items():
-            doc = json.loads(source)
+        for name, ((directory, file, args), change, message) in CASES.items():
+            doc = json.loads((HERE / directory / version / file).read_text())
             change(doc['types'])
             with tempfile.TemporaryDirectory(prefix='air2lean-opaque-pointers-') as temp:
                 air = Path(temp) / 'air'
                 air.mkdir()
-                (air / 'opaque_ptrs.copy.json').write_text(json.dumps(doc))
+                (air / file).write_text(json.dumps(doc))
                 out = Path(temp) / 'Gen.lean'
                 result = subprocess.run(
                     [sys.argv[1], str(air), '-o', str(out), '--namespace', 'Rejected',
-                     '--profile', 'abi64-le-v1'], capture_output=True, text=True, check=False)
+                     '--profile', 'abi64-le-v1', *args], capture_output=True, text=True, check=False)
                 log = result.stdout + result.stderr
                 if result.returncode == 0 or out.exists():
                     raise SystemExit(f'{version}: {name}: accepted')
