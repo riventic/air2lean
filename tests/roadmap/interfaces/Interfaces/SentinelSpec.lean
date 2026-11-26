@@ -1,6 +1,6 @@
 import Interfaces.Sentinel
 import ZigLean.Mem.WidthLemmas
-import ZigLean.Sep.Full.Wrappers
+import ZigLean.Sep.Full.SentinelBuf
 import ZigLean.Sep.Full.Dispatch
 import ZigLean.Sep.Full.Auto
 import ZigLean.Sep.Full.Block
@@ -22,11 +22,14 @@ contract `CAllocSpec` of the environment's allocator at the vtable `fns` (`CVTab
 invariant `I`, and hold for every allocator that meets it. The generated code (the client and the
 `std.mem.Allocator` wrappers) is walked by `fsym`.
 
-A sentinel buffer of `len` items is a grant of `I`'s allocator for the fee `φ` of `len + 1` bytes,
-the sentinel byte counted:
+This is the instance `sz = 1`, `k = 0`, sentinel `0` of the generic statements and theorems
+(`ZigLean/Sep/Full/SentinelBuf.lean`: `made`, `appended`, `resized`; `append_grant`,
+`resize_grant`); `Interfaces/WideSpec.lean` has the instances of wider items. A sentinel buffer
+of `len` items is a grant of `I`'s allocator for the fee `φ` of `len + 1` bytes, the sentinel
+byte counted:
 
-* `make_spec`: `n` undefined items and the sentinel `0` after them (`sentinelBytes`), or
-  `error.OutOfMemory` and the fee back;
+* `make_spec`: `n` undefined items and the sentinel `0` after them, or `error.OutOfMemory` and
+  the fee back;
 * `append_grant`: `len + 1` items: the old payload, `c` at `len`, the sentinel at `len + 1`
   (`Appended`), and the second fee back; on `error.OutOfMemory` the old grant unchanged;
 * `resize_grant`: `n` items: every old byte below `min n (len + 1)` (on growth the old sentinel
@@ -46,67 +49,6 @@ open Zig Zig.Full Zig.Full.FAssn Interfaces.Sentinel
 /-- The alignment argument of the generated entries, from its log2. -/
 def al (k : Nat) : mem_Alignment := ⟨BitVec.ofNat 6 k⟩
 
-/-! ## The bytes -/
-
-/-- The bytes of `append`'s grant: `len + 2` bytes, the old payload `bs[0, len)`, then `c`, then
-the sentinel `0`. -/
-def Appended (bs bs' : Array Byte) (len : Nat) (c : BitVec 8) : Prop :=
-  bs'.size = len + 2 ∧ bs'.extract 0 len = bs.extract 0 len ∧
-    bs'.extract len (len + 1) = Enc.encode c ∧ bs'.extract (len + 1) (len + 2) = Enc.encode (0 : BitVec 8)
-
-/-- The bytes of `resize`'s grant to `n` items: `n + 1` bytes, the old bytes below
-`min n (len + 1)`, the sentinel `0` at `n`. -/
-def Resized (bs bs' : Array Byte) (len n : Nat) : Prop :=
-  bs'.size = n + 1 ∧ bs'.extract 0 (min n (len + 1)) = bs.extract 0 (min n (len + 1)) ∧
-    bs'.extract n (n + 1) = Enc.encode (0 : BitVec 8)
-
-/-- The bytes of a new sentinel buffer of `n` items: undefined, then the sentinel `0`. -/
-abbrev sentinelBytes (n : Nat) : Array Byte :=
-  writeBytes (Array.replicate (n + 1) .undef) n (Enc.encode (0 : BitVec 8))
-
-section Bytes
-
-variable {a : Array Byte} {len n o o1 o2 : Nat}
-
-private theorem enc8 (v : BitVec 8) : (Enc.encode v).size = 1 := by
-  simpa [Enc.size, intSize, intAlign, alignUp] using LawfulEnc.size_encode v
-
-private theorem written_size (c : BitVec 8) (hs : a.size = len + 2) :
-    (writeBytes a len (Enc.encode c)).size = len + 2 := by
-  rw [writeBytes_size _ _ _ (by rw [enc8]; omega)]; exact hs
-
-/-- `append` stores `c` at the old length. -/
-theorem appended_byte (c : BitVec 8) (hs : a.size = len + 2) (h1 : o1 = len) (h2 : o2 = len + 1) :
-    (writeBytes (writeBytes a o1 (Enc.encode c)) o2 (Enc.encode (0 : BitVec 8))).extract len
-      (len + 1) = Enc.encode c := by
-  rw [h1, h2]
-  have hw := written_size c hs
-  rw [extract_writeBytes_disjoint _ _ _ len 1 (by rw [enc8, hw]; omega) (by omega) (by right; omega)]
-  have e := extract_writeBytes a len (Enc.encode c) (by rw [enc8]; omega)
-  rwa [enc8] at e
-
-/-- `append` stores the sentinel after it. -/
-theorem appended_sentinel (c : BitVec 8) (hs : a.size = len + 2) (h1 : o1 = len)
-    (h2 : o2 = len + 1) :
-    (writeBytes (writeBytes a o1 (Enc.encode c)) o2 (Enc.encode (0 : BitVec 8))).extract (len + 1)
-      (len + 2) = Enc.encode (0 : BitVec 8) := by
-  rw [h1, h2]
-  have hw := written_size c hs
-  have e := extract_writeBytes (writeBytes a len (Enc.encode c)) (len + 1)
-    (Enc.encode (0 : BitVec 8)) (by rw [enc8, hw]; omega)
-  rwa [enc8] at e
-
-/-- `resize` stores the sentinel at the new length. -/
-theorem resized_sentinel (hs : a.size = n + 1) (ho : o = n) :
-    (writeBytes a o (Enc.encode (0 : BitVec 8))).extract n (n + 1) = Enc.encode (0 : BitVec 8) := by
-  rw [ho]
-  have e := extract_writeBytes a n (Enc.encode (0 : BitVec 8)) (by rw [enc8]; omega)
-  rwa [enc8] at e
-
-end Bytes
-
-/-! ## The allocator -/
-
 variable [Ext]
 
 /-- The environment's allocator entries: `Ext.call0` (`alloc`), `Ext.call1` (`remap`) and
@@ -119,13 +61,6 @@ def env (e : AllocEnv Tgt) : AllocEnv Tgt :=
 
 variable (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt) (φ : Frac)
 
-/-- The vtable's `free` of a slice that a `free` wrapper has made undefined: the fee back. -/
-theorem free_entry (h : CAllocSpec (CVTable.env (env e) fns) ctx I) (s : Slice) (ra : BitVec 64)
-    (hs : 0 < s.len.toNat) :
-    CTriple (I.own ⋆ I.granted s.ptr 0 φ (Array.replicate s.len.toNat .undef))
-      ((CVTable.env (env e) fns).free ctx s 0 ra) (fun _ => I.own ⋆ I.fee φ) :=
-  CAllocSpec.free' h s 0 ra φ _ (by decide) (by simp) (by simpa using hs)
-
 /-- `a.free(s)` of a `[]u8`: the grant goes back. -/
 theorem free_spec (s : Slice) (bs : Array Byte) (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size)
     (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
@@ -133,7 +68,7 @@ theorem free_spec (s : Slice) (bs : Array Byte) (hlen : s.len.toNat = bs.size) (
       (mem_Allocator_free__anon_1e60e7ef40f5 ⟨ctx, vtp⟩ s)
       (fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) := by
   unfold mem_Allocator_free__anon_1e60e7ef40f5
-  fsym [free_entry ctx fns I e φ h]
+  fsym [SentinelBuf.free_undef h]
 
 /-- `a.realloc(s, n)` of a nonempty granted `[]u8` (`reallocAdvanced`: `remap`, else `alloc`,
 copy, `free`; `n = 0` frees). Its result slot is a stack local, so it runs in the plain mode. -/
@@ -145,28 +80,15 @@ theorem realloc_spec (s : Slice) (n : BitVec 64) (bs : Array Byte)
       (fun r => I.own ⋆ (I.reallocResult 0 φ s.ptr bs n n.toNat r ⋆ vtR vtp fns.toList) ⋆ plain) := by
   unfold mem_Allocator_realloc__anon_af0c43114565 mem_Allocator_reallocAdvanced__anon_0df1ef68623e
   fsym [CAllocSpec.alloc h, CAllocSpec.remap h, Norm.mulWithOverflow_one,
-    free_spec ctx vtp fns I e φ (h := h), free_entry ctx fns I e φ h]
-
-/-! ## The client -/
-
-/-- What `make` returns: `n` items and the sentinel, or `error.OutOfMemory` and the fee back. -/
-def made (n : BitVec 64) : Except ErrName Slice → FAssn
-  | .ok r => ⟪r.len = n⟫ ⋆ I.granted r.ptr 0 φ (sentinelBytes n.toNat)
-  | .error e => ⟪e = "OutOfMemory"⟫ ⋆ I.fee φ
+    free_spec ctx vtp fns I e φ (h := h), SentinelBuf.free_undef h]
 
 /-- **`make`** (`allocSentinel(u8, n, 0)`) for every allocator. -/
 theorem make_spec (n : BitVec 64) (hn : n.toNat + 1 < 2 ^ 64) (hfit : I.fits (n.toNat + 1) 0)
     (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
     CTriple (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain) (make ⟨ctx, vtp⟩ n)
-      (fun r => I.own ⋆ (made I φ n r ⋆ vtR vtp fns.toList) ⋆ plain) := by
+      (fun r => I.own ⋆ (SentinelBuf.made I φ 0 1 (Enc.encode (0 : BitVec 8)) n r ⋆
+        vtR vtp fns.toList) ⋆ plain) := by
   fsym [CAllocSpec.alloc h, Norm.mulWithOverflow_one]
-
-/-- What `append` of `c` to a buffer of `len` items (the grant `bs` at `old`) returns. -/
-def appended (old : Ptr) (bs : Array Byte) (len : Nat) (c : BitVec 8) :
-    Except ErrName Slice → FAssn
-  | .ok r => ⟪r.len.toNat = len + 1⟫ ⋆ ((FAssn.ex fun bs' => ⟪Appended bs bs' len c⟫ ⋆
-      I.granted r.ptr 0 φ bs') ⋆ I.fee φ)
-  | .error e => ⟪e = "OutOfMemory"⟫ ⋆ (I.granted old 0 φ bs ⋆ I.fee φ)
 
 /-- **`append`** for every allocator: one more item `c`, the sentinel after it; or the old buffer. -/
 theorem append_grant (s : Slice) (c : BitVec 8) (bs : Array Byte)
@@ -174,17 +96,10 @@ theorem append_grant (s : Slice) (c : BitVec 8) (bs : Array Byte)
     (hfit : I.fits (s.len.toNat + 2) 0) (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
     CTriple (I.own ⋆ (I.granted s.ptr 0 φ bs ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) ⋆ plain)
       (append ⟨ctx, vtp⟩ s c)
-      (fun r => I.own ⋆ (appended I φ s.ptr bs s.len.toNat c r ⋆ vtR vtp fns.toList) ⋆ plain) := by
-  fsym [realloc_spec ctx vtp fns I e φ (h := h)]
-  · exact appended_byte c (by fsym_arith) (by fsym_arith) (by fsym_arith)
-  · exact appended_sentinel c (by fsym_arith) (by fsym_arith) (by fsym_arith)
-
-/-- What `resize` of a buffer of `len` items (the grant `bs` at `old`) to `n` items returns. -/
-def resized (old : Ptr) (bs : Array Byte) (len : Nat) (n : BitVec 64) :
-    Except ErrName Slice → FAssn
-  | .ok r => ⟪r.len = n⟫ ⋆ ((FAssn.ex fun bs' => ⟪Resized bs bs' len n.toNat⟫ ⋆
-      I.granted r.ptr 0 φ bs') ⋆ I.fee φ)
-  | .error e => ⟪e = "OutOfMemory"⟫ ⋆ (I.granted old 0 φ bs ⋆ I.fee φ)
+      (fun r => I.own ⋆ (SentinelBuf.appended I φ 0 1 (Enc.encode (0 : BitVec 8)) (Enc.encode c)
+        s.ptr bs s.len.toNat r ⋆ vtR vtp fns.toList) ⋆ plain) :=
+  SentinelBuf.append_grant (by fsym_arith) (by fsym_arith) (by omega) (by
+    fsym [realloc_spec ctx vtp fns I e φ (h := h)])
 
 /-- **`resize`** for every allocator: `n` items, the retained bytes, the sentinel at `n`; or the
 old buffer. -/
@@ -193,9 +108,10 @@ theorem resize_grant (s : Slice) (n : BitVec 64) (bs : Array Byte)
     (hfit : I.fits (n.toNat + 1) 0) (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
     CTriple (I.own ⋆ (I.granted s.ptr 0 φ bs ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) ⋆ plain)
       (resize ⟨ctx, vtp⟩ s n)
-      (fun r => I.own ⋆ (resized I φ s.ptr bs s.len.toNat n r ⋆ vtR vtp fns.toList) ⋆ plain) := by
-  fsym [realloc_spec ctx vtp fns I e φ (h := h)]
-  · exact resized_sentinel (by fsym_arith) (by fsym_arith)
+      (fun r => I.own ⋆ (SentinelBuf.resized I φ 0 1 (Enc.encode (0 : BitVec 8)) s.ptr bs
+        s.len.toNat n r ⋆ vtR vtp fns.toList) ⋆ plain) :=
+  SentinelBuf.resize_grant (by fsym_arith) (by omega) (by
+    fsym [realloc_spec ctx vtp fns I e φ (h := h)])
 
 /-- **`release`** (`free` of a `[:0]u8`) for every allocator: the grant of `len + 1` bytes, the
 sentinel included, goes back. -/
@@ -204,6 +120,6 @@ theorem release_spec (s : Slice) (bs : Array Byte) (hlen : s.len.toNat + 1 = bs.
     CTriple (I.own ⋆ (I.granted s.ptr 0 φ bs ⋆ vtR vtp fns.toList)) (release ⟨ctx, vtp⟩ s)
       (fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) := by
   unfold release mem_Allocator_free__anon_0ba161b45e0a
-  fsym [free_entry ctx fns I e φ h]
+  fsym [SentinelBuf.free_undef h]
 
 end Interfaces.SentinelSpec
