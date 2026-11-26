@@ -217,6 +217,41 @@ atomic_ext f64 8 8 3ff8000000000000 400e000000000000 bff0000000000000 bff8000000
 litmus mp_release_acquire violations 0 rounds 100000
 litmus sb_seq_cst both_zero 0 unset 0 rounds 100000
 litmus counters u8 64 u24 200000 u128 200000 cas_u64 200000 per_thread 50000
+futex wait2_mismatch 0
+futex wait2_mismatch_timed 0
+futex wait2_timeout -60
+futex wait2_null -22
+futex wait2_null_timed -22
+futex wait2_unaligned -22
+futex wait2_unaligned2 -22
+futex wait2_unmapped -14
+futex wait_mismatch 0
+futex wait_mismatch_timed 0
+futex wait_timeout -60
+futex wait_null -22
+futex wait_null_timed -22
+futex wait_unaligned -22
+futex wait_unaligned2 -22
+futex wait_unmapped -14
+futex wake_one_none -2
+futex wake_one_null -22
+futex wake_one_unaligned -2
+futex wake_one_unmapped -2
+futex wake_all_none -2
+futex wake_all_null -22
+futex wake_all_unaligned -2
+futex wake_all_unmapped -2
+futex wake1_one_wait2 0/0
+futex wake1_all_wait2 0/0
+futex wake1_one_wait 0/0
+futex wake1_all_wait 0/0
+futex wake1_one_wait2_timed 0/0
+futex wake1_all_wait2_timed 0/0
+futex wake1_one_wait_timed 0/0
+futex wake1_all_wait_timed 0/0
+futex wake3_one 0,0,0/n,n,n
+futex wake3_all 0/n,n,n
+futex mutex 4x20000=80000
 vector u9x4 8 8 ff 01 fc 0f 00 -- -- --
 lane u9x4 2 ff 01 a8 0a 00 -- -- --
 load u9x4 3 1

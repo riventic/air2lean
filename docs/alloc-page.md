@@ -101,13 +101,23 @@ The native x86_64-linux run is on a Linux 6.6 kernel, not under Rosetta: Rosetta
 | `resize` within the page, a shrink (tail `munmap`), a growth past the page that fails | `PageSpec.resize_spec`, `PageSpecMacos.resize_spec` | both targets (`page_resize`) |
 | `remap` grows in place (x86_64-linux: `mremap` with the pages behind free) | `PageSpec.remap_spec` (`FTotalTriple.mremapMove'`) | x86_64-linux: `page_grow`, in place, old bytes kept |
 | `remap` moves (x86_64-linux: `mremap` under `MAYMOVE`, no room in place) | `PageSpec.remap_spec` | x86_64-linux: `page_grow_blocked`, moved, old bytes kept, the neighbour unchanged; the old address faults (`page_grow_stale`) |
-| `remap` fails, the old block unchanged | `PageSpec.remap_spec`, `PageSpecMacos.remap_spec` | x86_64-linux: a `2^47`-byte growth; aarch64-macos: every growth past the page |
+| `remap` fails, the old block unchanged | `PageSpec.remap_spec`, `PageSpecMacos.remap_spec` | x86_64-linux: a `2^47`-byte growth, and a growth the kernel fails for lack of memory (`page_grow_enomem`, below); aarch64-macos: every growth past the page |
 | `remap` shrinks | `PageSpec.remap_spec` (`mremapShrinkR`), `PageSpecMacos.remap_spec` (`munmapTailR`) | both targets |
 | `realloc` (the `mem.Allocator` wrapper: `remap`, else a new block, copy, free) | the wrapper for every allocator that meets the contract: `realloc_spec`, `reallocAdvanced_spec` (`AllocFba/Wrappers.lean`, `Interfaces/SentinelSpec.lean`, [alloc-spec.md](alloc-spec.md)); the instance of the wrapper in `page.zig`'s translation has no theorem of its own | both targets; the copying path natively on aarch64-macos only (on x86_64-linux `mremap` moves instead; the model runs that path with a denied `mremap`) |
 
-Not compared natively: a kernel that moves a mapping although there is room in place and a
-`mremap` that fails for lack of memory (the model's oracles `mremapMoves` and the failure
-decision; no native run forces them) and alignments above a page. The model's lines are run
+A `mremap` that fails for lack of memory (`ENOMEM`) is forced natively on Linux
+(`native.zig`'s `enomem`): a child process reads its mapped page count from `/proc/self/statm`,
+sets `RLIMIT_AS` to one page more and calls `page_grow(10, 10, 49152, how)`. The block's own
+mapping takes the page; the growth to twelve pages by `mremap`, and the new mapping `realloc`
+then asks for, fail. Both calls return 4: no block, the old one live with its bytes. The model's
+line (`Eval.enomemLine`, printed by `growLinux`) is the same run under the failure oracle
+`fails := fun i _ => i ≥ 1` (attempt 0 is the block's `mmap`), and both are compared with the
+`page_grow_enomem` line of `expected-linux.txt`. The line is Linux-only: macOS has no `mremap`
+and does not enforce `RLIMIT_AS`.
+
+Not compared natively: a kernel that moves a mapping although there is room in place (the
+model's oracle `mremapMoves`; nothing in user space forces that choice) and alignments above a
+page. The model's lines are run
 with an 8 MiB main-thread stack reserve (`Eval.stackBytes`, premise STK-02): with the fresh
 placement alone, a stack block of 0.17.1's `realloc` wrapper lies right behind the mapping, and
 the model's `mremap` moves the block where the kernel, whose stack is elsewhere, grows it in place.

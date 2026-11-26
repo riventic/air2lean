@@ -21,6 +21,11 @@
 # expected.txt (16 KiB pages, recorded on aarch64-macos) or expected-linux.txt (4 KiB pages,
 # recorded on x86_64-linux): the output depends on the page size only, not on the OS. So the
 # model and the native run of one target are compared with the same file.
+# M03: with AIR2LEAN_NATIVE_ZIG also the requests above 1 MiB (`page_large`): the model's lines
+# come from the compiled runner `alloc-translated-large` (AllocTranslated/Large.lean; Lean's
+# interpreter does not run them), which links the float library's archive that the stock Zig
+# builds (scripts/diff.sh --build-only). It is built and run in check trees, one per Zig version
+# (the checkout gets no archive and no executable), and compared with the same two files.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
@@ -113,5 +118,25 @@ if [ -n "${AIR2LEAN_NATIVE_ZIG:-}" ]; then
     *) echo "alloc-translated: no native expectation for $page_size-byte pages" >&2; exit 1 ;;
   esac
   diff "$expected" "$work/native.txt"
+  # M03: the model's `page_large` lines. The archive is the one tests/diff's executables link
+  # (the harness of one example is built with it and not used).
+  AIR2LEAN_ZIG="$AIR2LEAN_NATIVE_ZIG" AIR2LEAN_EXAMPLES=basic bash scripts/diff.sh --build-only "$work/diff-native"
+  large() {  # large TREE: the compiled runner over TREE's translations against the expected files
+    local runner=$1/tests/roadmap/.lake/build/bin/alloc-translated-large os file
+    mkdir -p "$1/tests/diff/out/libm"
+    cp "$work/diff-native/air2lean_libm.a" "$1/tests/diff/out/libm/air2lean_libm.a"
+    (cd "$1" && python3 -B scripts/fixtures.py build alloc-translated-large)
+    for os in linux macos; do
+      case "$os" in linux) file=$here/expected-linux.txt ;; macos) file=$here/expected.txt ;; esac
+      diff <(grep '^page_large' "$file") <("$runner" "$os")
+      # Under the old fixed cap (the differential harness's policy) every request is denied: the
+      # line above depends on the default policy having no cap.
+      [ "$("$runner" "$os" capped)" = 'page_large ok 0 0' ]
+    done
+  }
+  tree_retained=$repo_root/.lake/check-tree/alloc-translated-0.17.1
+  python3 -B scripts/check-tree.py create "$tree_retained"
+  large "$tree_retained"
+  large "$tree"
 fi
 echo "alloc-translated: ok"

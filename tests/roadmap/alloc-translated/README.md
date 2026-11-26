@@ -14,6 +14,7 @@ calls (indirect calls), `FixedBufferAllocator` and `PageAllocator`. Only `posix.
 | `exports.json`, `exports.lock.json` | how the AIR is exported, and its pin (`scripts/fixture-exports.py`; the exporter is this repository's `zig-patch`) |
 | `AllocTranslated/{Page,Fba}{Linux,Macos}.lean` | the retained translations (Zig 0.17.1's); `check.sh` requires the fresh ones to be byte-identical, and builds, audits and runs the same library over the 0.16.0 translations in a check tree (`scripts/check-tree.py`) |
 | `AllocTranslated/Eval.lean` | `#guard`s: the `FixedBufferAllocator` clients evaluate to the native results on both targets, also with other `@returnAddress` values; the page clients (`page_sum`, `page_create`, `page_resize`) evaluate through the page-mapping model to the native results of their target's page size (on the schedule of the oracle `fun _ => 0`), a zero-length allocation returns without a mapping, and a failing mapping takes the `OutOfMemory` path; the page allocator under allocation policies (M03: failure lists, index and size oracles, a cap, a list policy and its oracle form), with several failures in one run; the growths by `remap` and `realloc` (M02, below) |
+| `AllocTranslated/Large.lean` | the compiled runner of the requests above 1 MiB (M03, below) |
 | `native.zig`, `expected.txt`, `expected-linux.txt` | the native run of the same functions with a stock Zig 0.16.0 or 0.17.1 on aarch64-macos (16 KiB pages) and on x86_64-linux (4 KiB pages: `page_resize(10, 5000)` is `false`, `resize` never calls `mremap` on a stack-grows-down target); `check.sh` picks the file by the host's page size |
 | `PageTok.lean` | the page allocator's token and invariant for a page size `P` (`ptok`, `pinv`), and the allocator state of `alloc`, the hint word with the knowledge of its target (`hown P`): one text for both targets |
 | `PageSpec.lean`, `PageSpecMacos.lean` | `free`, `resize` and `remap` against `FAllocSpec`, total, on x86_64-linux and aarch64-macos |
@@ -58,6 +59,7 @@ with the same file.
 | `page_grow(10, 10, 2^47)`: more than the address space | 4, 4: `mremap` (and `realloc`'s `mmap`) fail, old block unchanged | 4, 4 |
 | `page_grow_blocked(10)`: one byte into a live neighbour's pages | 31, 31: moved, neighbour unchanged | `remap` 20: fails; `realloc` 31 |
 | `page_grow_stale(10)`: the old address read after the move | fault, fault | `remap` 0 (no move); `realloc` fault |
+| `page_grow_enomem`: `page_grow(10, 10, 49152)` with no memory left after the block's mapping | 4, 4: `mremap` and `realloc`'s `mmap` fail with `ENOMEM`, old block unchanged | no line (no `mremap`, no enforced `RLIMIT_AS`) |
 
 The native runs: stock Zig 0.16.0 and 0.17.1 `ReleaseSafe` (the same output), x86_64-linux
 natively (Linux 6.6, 4 KiB pages) and aarch64-macos (16 KiB pages). The model's lines are those of
@@ -65,10 +67,14 @@ both versions' translations (`check.sh` runs them over the 0.16.0 ones in its ch
 run with an 8 MiB main-thread stack reserve (`Eval.stackBytes`): natively no mapping meets the
 stack, and without the reserve a stack block of 0.17.1's `realloc` wrapper lies right behind the
 block, so the model's `mremap` would move it where the kernel grows it in place. A native fault (`SIGSEGV`/`SIGBUS` of the child process that
-reads the stale address) is the model's `.illegal`. Where the kernel has a choice the model has
+reads the stale address) is the model's `.illegal`. A growth that fails for lack of memory is
+forced natively on Linux: a child process of `native.zig` limits its address space to what it has
+plus one page (`RLIMIT_AS`, from `/proc/self/statm`) and calls `page_grow`; the model's line
+(`Eval.enomemLine`) denies every attempt after the block's own mapping. Where the kernel has a
+choice the model has
 an oracle, and `Eval.lean` also runs the choices the kernel did not take: a move with room in
-place (`mremapMoves`, 15), a denied `mremap` (4), and on x86_64-linux `realloc`'s copying path
-after a denied `mremap` (15). The comparison is of these calls only; the claim for every call is
+place (`mremapMoves`, 15; no native run forces it), and on x86_64-linux `realloc`'s copying path
+after a denied `mremap` whose new mapping succeeds (15). The comparison is of these calls only; the claim for every call is
 the proof (`PageSpec.remap_spec`, `resize_spec`; the `realloc` wrapper's contract is proved for
 every allocator that meets `FAllocSpec` in `alloc-fba` and `interfaces`, not for this program's
 instance of it). Under Rosetta the native run is refused: Rosetta aborts on the `2^47`-byte
@@ -95,3 +101,27 @@ compares it with both files; the line is the same on every target (no page size 
 Native: stock Zig 0.16.0 and 0.17.1 `ReleaseSafe` on aarch64-macos and x86_64-linux (the same
 line). The model's line is that of both versions' translations, each run from the program's start
 memory, the five calls one after another as natively.
+
+## Requests above 1 MiB against the native run (M03)
+
+`page_sum(1048577)` and `page_sum(4194304)`: one byte above the model's old fixed request cap of
+1 MiB, and 4 MiB, each block set, read byte by byte and freed. `native.zig` prints the native
+results as the line `page_large`. The model's line comes from `AllocTranslated/Large.lean` under
+the default policy (`{}`: no cap), over the translated `PageAllocator` down to
+`Zig.Os.mmap`/`munmap`, and both are compared with the same line of `expected-linux.txt` and
+`expected.txt` (`page_large ok 1048577 4194304` on both targets).
+
+`Large.lean` is the root of the executable `alloc-translated-large`
+(`tests/roadmap/lakefile.toml`), because Lean's interpreter (`#eval`, `fixtures.py run`) does not
+run these sizes: it keeps a frame for every iteration of a `Zig.loop` in the concurrent monad
+("deep recursion was detected" for 1 MiB, where 100,000 bytes still run; with a larger thread
+stack more than 12 GB of memory). Compiled, the loop's next round is a tail call: the two requests
+run in about 8 s and 1.5 GB on the dev Mac, also in a 512 KiB stack. No model definition differs
+between the two; only the runner does.
+
+An executable that imports `ZigLean` links the float library's archive, which a stock Zig
+builds (`scripts/diff.sh --build-only`). So `check.sh` runs the compiled lines only with
+`AIR2LEAN_NATIVE_ZIG`, in check trees (the 0.17.1 and the 0.16.0 translations; the checkout gets
+neither the archive nor the executable). It also runs the same requests under the differential
+harness's policy, the old cap (`alloc-translated-large OS capped`), and requires the line
+`page_large ok 0 0`: with a cap in the default policy the fixture would fail.

@@ -185,10 +185,21 @@ STK-02) that no mapping meets. Without one (`mem0 .fresh` alone) a stack block o
 outcomes the proofs cover, but not the native layout. -/
 def stackBytes : Nat := 8 * 1024 * 1024
 
+/-- The model's `page_grow_enomem` line: a growth from one page to twelve when the kernel has no
+memory left after the block's own mapping. The failure decision is the model's oracle (attempt 0
+is the block's `mmap`; every later attempt, the `mremap` and the `mmap` that `realloc` falls back
+to, is denied); natively `native.zig` forces it with `RLIMIT_AS` in a child process. -/
+def enomemLine {Tgt : Type} (dispatch : Tgt → Zig.ConcM Tgt Unit) (m : Zig.Mem)
+    (grow : BitVec 64 → BitVec 64 → BitVec 64 → BitVec 8 → Zig.ConcM Tgt (BitVec 64)) : String :=
+  let word := fun how => nativeWord (fun v => toString v.toNat) (grow 10 10 49152 how) dispatch
+    { m with allocPolicy := { fails := fun i _ => i ≥ 1 } }
+  s!"page_grow_enomem remap {word 0} realloc {word 1}"
+
 /-- The model's `page_grow` lines for x86_64-linux (`expected-linux.txt`). -/
 def growLinux : IO Unit :=
-  (growLines PageLinux.dispatch ((PageLinux.mem0 .fresh).withStack stackBytes) PageLinux.page_grow
-    PageLinux.page_grow_blocked PageLinux.page_grow_stale).forM IO.println *> pure ()
+  let m := (PageLinux.mem0 .fresh).withStack stackBytes
+  (growLines PageLinux.dispatch m PageLinux.page_grow PageLinux.page_grow_blocked PageLinux.page_grow_stale ++
+    [enomemLine PageLinux.dispatch m PageLinux.page_grow]).forM IO.println *> pure ()
 
 /-- The model's `page_grow` lines for aarch64-macos (`expected.txt`). -/
 def growMacos : IO Unit :=

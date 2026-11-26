@@ -32,6 +32,23 @@ srcDir = "alloc-translated"
 globs = ["AllocTranslated.+", "KernelBytes", "ListsPage", "PageAlloc", "PageAllocMacos", "PageCreation",
          "PageObstruction", "PageSpec", "PageSpecMacos", "PageThread", "PageTok"]
 
+# M03: the compiled runner of the translated PageAllocator's requests above 1 MiB
+# (alloc-translated/AllocTranslated/Large.lean, built and run by alloc-translated/check.sh in a
+# check tree). Lean's interpreter (`fixtures.py run`, `#eval`) does not run them: it keeps a frame
+# per iteration of a `Zig.loop` in the concurrent monad, where compiled code makes a tail call.
+# Every executable that imports ZigLean links the float library's archive (as tests/diff/lakefile.toml:
+# an input file, so its content is part of the executable's trace); `scripts/diff.sh --build-only`
+# builds it with a stock Zig, and no library of this package needs it.
+[[input_file]]
+name = "libm"
+path = "../diff/out/libm/air2lean_libm.a"
+
+[[lean_exe]]
+name = "alloc-translated-large"
+srcDir = "alloc-translated"
+root = "AllocTranslated.Large"
+moreLinkObjs = ["libm"]
+
 [[lean_lib]]
 name = "ListsFba"
 srcDir = "lists-fba"
