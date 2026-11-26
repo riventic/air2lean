@@ -23,33 +23,57 @@ import re
 import shutil
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / 'scripts'))
+from mutation_kill_log import killed as log_kill  # noqa: E402
 
-MUTATIONS = [
-    ('Basic', '(.arith .mul .checked (.inst 0) (.inst 2))', '(.arith .mul .wrap (.inst 0) (.inst 2))', 'scale_step', 'def'),
-    ('Basic', '(.cmp .gt (.inst 0) (.inst 1))', '(.cmp .lt (.inst 0) (.inst 1))', 'absDiff_step', 'def'),
-    ('Basic', '(.arith .add .sat (.inst 0) (.inst 1))', '(.arith .sub .sat (.inst 0) (.inst 1))', 'clampAdd_step', 'def'),
-    ('Recursion', '(.div .rem (.inst 0) (.inst 1))', '(.div .divTrunc (.inst 0) (.inst 1))', 'gcd_step', 'def'),
-    ('Recursion', '(.ret (.bool true))', '(.ret (.bool false))', 'isEven_step', 'def'),
+# This file and the fixture of the rejected bindings, as the kill ledger names them (Q02).
+SELF = 'tests/roadmap/air-semantics/test_lean.py'
+BINDING = 'tests/roadmap/air-semantics/CanonBinding.lean'
+
+# name -> (example, AIR text, mutated text, the theorem that must break, scope). The names are the
+# designated mutants of assurance/mutation-map.json (V01; `sum-view-key` V02).
+MUTATIONS = {
+    'scale-mul-wrapping': ('Basic', '(.arith .mul .checked (.inst 0) (.inst 2))', '(.arith .mul .wrap (.inst 0) (.inst 2))', 'scale_step', 'def'),
+    'absdiff-gt-as-lt': ('Basic', '(.cmp .gt (.inst 0) (.inst 1))', '(.cmp .lt (.inst 0) (.inst 1))', 'absDiff_step', 'def'),
+    'clampadd-add-as-sub': ('Basic', '(.arith .add .sat (.inst 0) (.inst 1))', '(.arith .sub .sat (.inst 0) (.inst 1))', 'clampAdd_step', 'def'),
+    'gcd-rem-as-divtrunc': ('Recursion', '(.div .rem (.inst 0) (.inst 1))', '(.div .divTrunc (.inst 0) (.inst 1))', 'gcd_step', 'def'),
+    'iseven-ret-false': ('Recursion', '(.ret (.bool true))', '(.ret (.bool false))', 'isEven_step', 'def'),
     # Memory: a field offset, a store's value, a pointer comparison, a load's address.
-    ('Pointers', '(.fieldPtr (.inst 0) 1)', '(.fieldPtr (.inst 0) 2)', 'dueOf_step', 'def'),
-    ('Pointers', '(.store (.inst 0) (.inst 3))', '(.store (.inst 0) (.inst 2))', 'swap_step', 'def'),
-    ('Pointers', '(.cmp .eq (.inst 0) (.inst 1))', '(.cmp .ne (.inst 0) (.inst 1))', 'same_step', 'def'),
-    ('Threads', '(.fieldPtr (.inst 0) 1)', '(.fieldPtr (.inst 0) 0)', 'writeFlag_step', 'def'),
+    'dueof-field-offset': ('Pointers', '(.fieldPtr (.inst 0) 1)', '(.fieldPtr (.inst 0) 2)', 'dueOf_step', 'def'),
+    'swap-store-wrong-value': ('Pointers', '(.store (.inst 0) (.inst 3))', '(.store (.inst 0) (.inst 2))', 'swap_step', 'def'),
+    'same-eq-as-ne': ('Pointers', '(.cmp .eq (.inst 0) (.inst 1))', '(.cmp .ne (.inst 0) (.inst 1))', 'same_step', 'def'),
+    'writeflag-field-offset': ('Threads', '(.fieldPtr (.inst 0) 1)', '(.fieldPtr (.inst 0) 0)', 'writeFlag_step', 'def'),
     # A loop: the checked increment of the loop counter made wrapping. The loop's AIR also appears
     # in its field and loop lemmas, so the mutation goes everywhere: the iteration lemma breaks.
-    ('Pointers', '(.arith .add .checked (.inst 13) (.int 0 (1 : Int)))',
-     '(.arith .add .wrap (.inst 13) (.int 0 (1 : Int)))', 'sumTo_loop6_body', 'all'),
+    'sumto-counter-wrapping': ('Pointers', '(.arith .add .checked (.inst 13) (.int 0 (1 : Int)))',
+                               '(.arith .add .wrap (.inst 13) (.int 0 (1 : Int)))', 'sumTo_loop6_body', 'all'),
     # A pure function with a slice parameter (a view): its loop's sum, and the view's wiring.
-    ('Basic', '(.arith .add .checked (.inst 15) (.inst 16))', '(.arith .sub .checked (.inst 15) (.inst 16))',
-     'sum_loop7_body', 'all'),
-    ('Basic', 'if k = 0 then some', 'if k = 1 then some', 'sum_loop7_body', 'once'),
+    'sum-add-as-sub': ('Basic', '(.arith .add .checked (.inst 15) (.inst 16))', '(.arith .sub .checked (.inst 15) (.inst 16))',
+                       'sum_loop7_body', 'all'),
+    'sum-view-key': ('Basic', 'if k = 0 then some', 'if k = 1 then some', 'sum_loop7_body', 'once'),
     # Error unions: the test, and the error a function returns.
-    ('Errors', '(.isNonErr (.inst 2))', '(.isErr (.inst 2))', 'digitOrZero_step', 'def'),
-    ('Errors', '(.errUnionErr 1 "NotDigit")', '(.errUnionErr 1 "Other")', 'parseDigit_step', 'def'),
-]
+    'digitorzero-nonerr-as-err': ('Errors', '(.isNonErr (.inst 2))', '(.isErr (.inst 2))', 'digitOrZero_step', 'def'),
+    'parsedigit-wrong-error': ('Errors', '(.errUnionErr 1 "NotDigit")', '(.errUnionErr 1 "Other")', 'parseDigit_step', 'def'),
+}
+
+# CanonBinding.lean's wrong canonical functions, which the native binding must reject (V02's
+# designated mutants): ledger name -> the line the fixture prints for the rejection.
+BINDING_MUTANTS = {
+    'debug-wrong-live-id': 'native-debug-binding: wrong live ID rejected',
+    'debug-wrong-nested-body': 'native-debug-binding: wrong nested body rejected',
+    'debug-wrong-layout': 'native-debug-binding: wrong layout rejected',
+    'debug-wrong-function-metadata': 'native-debug-binding: wrong function metadata rejected',
+    'debug-wrong-offset': 'native-debug-binding: wrong offset rejected',
+    'debug-wrong-global-initializer': 'native-debug-binding: wrong global initializer rejected',
+    'debug-one-bad-item': 'native-debug-binding: one bad item rejected',
+    'renumber-collapsed-ids': 'native-renumber-binding: collapsed IDs rejected',
+    'renumber-wrong-operand': 'native-renumber-binding: wrong operand rejected',
+    'renumber-wrong-function-metadata': 'native-renumber-binding: wrong function metadata rejected',
+}
 
 # The certificate embeds each function's AIR once, as a `source_<i>` term printed with explicit
 # names (`@_root_.Air2Lean.Op.arith …`); loop lemmas restate a body in the short form above.
@@ -134,16 +158,14 @@ def check_native_binding():
     assert result.returncode == 0, result.stdout + result.stderr
     lines = result.stdout.splitlines()
     assert lines[0] == 'native-debug-binding: 17 complete snapshots checked', result.stdout
-    for label in ('wrong live ID', 'wrong nested body', 'wrong layout', 'wrong function metadata',
-                  'wrong offset', 'wrong global initializer', 'one bad item'):
-        assert lines.count(f'native-debug-binding: {label} rejected') == 1, result.stdout
-    # `renumber`: an injective renaming binds; a collapsed ID, a changed operand or changed
-    # metadata keeps it trusted (fail closed).
+    # A wrong debug-ID snapshot is rejected. `renumber`: an injective renaming binds; a collapsed
+    # ID, a changed operand or changed metadata keeps it trusted (fail closed).
     assert lines.count('native-renumber-binding: injective renaming bound') == 1, result.stdout
-    for label in ('collapsed IDs', 'wrong operand', 'wrong function metadata'):
-        assert lines.count(f'native-renumber-binding: {label} rejected') == 1, result.stdout
+    for line in BINDING_MUTANTS.values():
+        assert lines.count(line) == 1, result.stdout
     assert json.loads(lines[-1]) == dict(kind='canon-debug-native-binding', version=1,
                                       functions=17, changed=True), result.stdout
+    log_kill(BINDING, list(BINDING_MUTANTS), SELF)
     print(result.stdout, end='')
 
 
@@ -252,6 +274,7 @@ def check_clique_order(binary, tmp):
     errors = [int(line.split(':')[1]) for line in output.splitlines()
               if line.startswith(str(mutant) + ':') and ': error' in line]
     assert result.returncode != 0 and errors and errors[0] in changed, output
+    log_kill(SELF, 'clique-guessed-motive-order', SELF)
     print(f'clique: rendered {rendered}, compiler {actual}; guessed motive order rejected')
 
 
@@ -305,7 +328,7 @@ def main():
     print(result.stdout, end='')
     with tempfile.TemporaryDirectory() as tmp:
         check_native_binding()
-        for index, (ex, old, new, theorem, scope) in enumerate(MUTATIONS):
+        for index, (name, (ex, old, new, theorem, scope)) in enumerate(MUTATIONS.items()):
             source = (ROOT / 'Proofs' / ex / 'AirCert.lean').read_text()
             if scope == 'once':
                 # A text that occurs once in the certificate (a view's key).
@@ -335,7 +358,8 @@ def main():
             errors = [int(l.split(':')[1]) for l in output.splitlines()
                       if l.startswith(str(mutant)) and ': error' in l]
             assert errors and all(start < n <= end + 1 for n in errors[:1]), (theorem, errors, output[:2000])
-            print(f'mutant {index}: {theorem} rejected')
+            log_kill(SELF, name, SELF)
+            print(f'mutant {index} ({name}): {theorem} rejected')
         check_caller(args.binary, Path(tmp))
         check_slices(args.binary, Path(tmp))
         check_clique_order(args.binary, Path(tmp))

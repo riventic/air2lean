@@ -73,9 +73,10 @@ PY
 
 # Negative control (`wrong_models_rejected MODEL NATIVE`, MODEL a scratch file): every wrong
 # result of expected/wrong.txt (`name: value`, `#` comments) that has a line in MODEL, put in
-# place of that line, must make `compare` fail against NATIVE.
+# place of that line, must make `compare` fail against NATIVE. The names are unique in wrong.txt:
+# they are the designated mutants of assurance/mutation-map.json (L07).
 wrong_models_rejected() {
-  local wrong name count=0
+  local wrong name count=0 killed=()
   while IFS= read -r wrong; do
     wrong=${wrong%%#*}
     wrong=${wrong%"${wrong##*[![:space:]]}"}
@@ -86,8 +87,11 @@ wrong_models_rejected() {
       echo "the wrong model '$wrong' matches $2" >&2; return 1
     fi
     count=$((count + 1))
+    killed+=("$name")
   done < "$dir/expected/wrong.txt"
   [ "$count" -gt 0 ] || { echo "no wrong model of expected/wrong.txt applies to $2" >&2; return 1; }
+  # Q02: each rejected wrong model is a killed designated mutant (keyed by the model line's name).
+  python3 -B scripts/mutation_kill_log.py --check "$dir/check.sh" "$dir/expected/wrong.txt" "${killed[@]}"
   echo "$count wrong models rejected by the comparison with $(basename "$2")"
 }
 
