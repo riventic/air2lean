@@ -29,10 +29,7 @@ and the OS mapping model only (premise OSM-01). No model of the allocator is use
   overflow check, and `map` unmaps the pages before the aligned address and behind the granted
   ones. The OS model bounds the address space (O5, `docs/alloc-page.md`), so the check passes;
   `alloc_high`, `alloc_top` and `alloc_edge` are kernel-checked runs of these paths. The proof
-  for `k > 12` is open: `fsym`'s arithmetic does not decide the offsets of the tail's
-  `ptrProject` and `munmap` for a symbolic `2 ^ k`, and the prefix `munmap` has no step rule over
-  a region (`FTotalTriple.munmapPrefix'` is stated over `bytesAt`); `docs/alloc-page.md`, engine
-  ledger row `page-alloc-large-align`.
+  for `k > 12` is open (`docs/alloc-page.md`, engine ledger row `page-alloc-large-align`).
 * **Partial correctness.** `alloc` is a `CTriple`, which is partial correctness, and the atomic
   rules are partial (`FTriple`); `free`, `resize` and `remap` are total (`PageSpec.lean`).
 * **aarch64-macos**: `PageAllocMacos.lean`, the same statements over the same state

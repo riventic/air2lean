@@ -7,7 +7,8 @@ import ZigLean.Sep.Full.AtomicPtr
 
 The token and the invariant of the translated `std.heap.PageAllocator` (`PageSpec.lean` for
 x86_64-linux, `PageSpecMacos.lean` for aarch64-macos; `PageAlloc.lean` and `PageAllocMacos.lean`
-with `alloc`, whose allocator state is the hint word, `hown`), for a page size `P`. Only definitions: the proofs are the general symbolic executor `fsym`
+with `alloc`), for a page size `P`. Only definitions: the proofs are the general symbolic
+executor `fsym`
 (`docs/proof-automation.md`), which walks the generated code down to the OS mapping primitives
 (`ZigLean/Sep/Full/Mmap.lean`, premise OSM-01).
 
