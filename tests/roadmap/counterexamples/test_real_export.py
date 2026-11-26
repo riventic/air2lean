@@ -136,7 +136,7 @@ class CommittedExample(unittest.TestCase):
                                    ([3, 4], '{"ok":13}', 'not_reproduced')]:
             with self.subTest(args=args):
                 request = CX.lean_request(ROOT, 'basic', 'scale', args, line)
-                info = CX.with_native(ROOT, CX.lean_block(request), zig_source, 'basic', 'scale', args)
+                info = CX.with_native(ROOT, CX.lean_block(request), zig_source, 'scale')
                 outcome = CX.confirm(ROOT, info, 600, ZIG_NATIVE)
                 self.assertEqual(outcome['status'], status, outcome)
                 if status == 'verified': self.assertEqual(outcome['zig_native']['status'], 'verified', outcome)

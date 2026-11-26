@@ -79,6 +79,20 @@ def combine(lists, rng, cap=64):
 
 
 class Kind:
+    # Every kind states these three itself: a kind that did not would be guessed about.
+    def weight(self, v):
+        """The size of a value, for the smallest-first order: the magnitude of a number, the items of a slice."""
+        raise NotImplementedError
+
+    def ints(self):
+        """The integer kinds the rendered value contains (the harness quotes all of them or none)."""
+        raise NotImplementedError
+
+    def renders(self, what):
+        """Whether a value can be rendered as `null` (`what='null'`) or as an object with the key `err`
+        (`what='err'`): under an optional or an error union that rendering would not say which case it is."""
+        raise NotImplementedError
+
     def extern(self):
         raise Unsupported(f'{self.lean} cannot cross an `export fn` boundary; declare the function `pub`')
 
@@ -112,6 +126,9 @@ class Int(Kind):
         sign = 1 if v > 0 else -1
         return sorted({0} | {v - sign * 2 ** k for k in range(self.bits) if 2 ** k <= abs(v)} - {v}, key=abs)
 
+    def weight(self, v): return abs(v)
+    def ints(self): return [self]
+    def renders(self, what): return False
     def flat(self, v): return [v % self.size()]
     def decoder(self, emit): return emit.define(('dec', self), f'| a :: l => some (BitVec.ofNat {self.bits} a, l)\n  | [] => none')
 
@@ -137,6 +154,9 @@ class Bool(Kind):
         raise Mismatch(f'{j!r} is not a Bool')
 
     def shrinks(self, v): return [False] if v else []
+    def weight(self, v): return int(v)
+    def ints(self): return []
+    def renders(self, what): return False
     def flat(self, v): return [int(v)]
     def decoder(self, emit): return emit.define(('dec', self), '| a :: l => some (a != 0, l)\n  | [] => none')
     def renderer(self, emit, wide): return emit.define(('ren', self), 'fun v => if v then "1" else "0"')
@@ -157,6 +177,9 @@ class Unit(Kind):
         return None
 
     def shrinks(self, v): return []
+    def weight(self, v): return 0
+    def ints(self): return []
+    def renders(self, what): return what == 'null'
     def flat(self, v): return []
     def decoder(self, emit): return emit.define(('dec', self), 'fun l => some ((), l)')
     def renderer(self, emit, wide): return emit.define(('ren', self), 'fun _ => "null"')
@@ -187,6 +210,9 @@ class Enum(Kind):
         return v
 
     def shrinks(self, v): return [n for _, n in self.named if n != v] if self.exhaustive else self.tag.shrinks(v)
+    def weight(self, v): return abs(v)
+    def ints(self): return []                      # a tag value is never quoted
+    def renders(self, what): return False
     def flat(self, v): return self.tag.flat(v)
 
     def bits(self, text):
@@ -226,6 +252,9 @@ class Struct(Kind):
         return {name: t.parse(j[name], wide) for name, _, t in self.fields}
 
     def shrinks(self, v): return [{**v, name: s} for name, _, t in self.fields for s in t.shrinks(v[name])]
+    def weight(self, v): return sum(t.weight(v[name]) for name, _, t in self.fields)
+    def ints(self): return [i for _, _, t in self.fields for i in t.ints()]
+    def renders(self, what): return what == 'err' and any(name == 'err' for name, _, _ in self.fields)
     def flat(self, v): return [a for name, _, t in self.fields for a in t.flat(v[name])]
 
     def decoder(self, emit):
@@ -245,7 +274,8 @@ class Struct(Kind):
 class Union(Kind):
     """A tagged union: `{"<active field>": payload}`. `undef` are the Lean constructors of a payload left undefined."""
     lean: str
-    fields: tuple           # ((field name, payload kind), ...)
+    fields: tuple           # ((Zig field name, payload kind), ...)
+    ctors: tuple            # the Lean constructor of each field
     undef: tuple            # Lean constructor names that are no Zig value
 
     def size(self):
@@ -276,22 +306,30 @@ class Union(Kind):
         k, t, payload = self.active(v)
         return [{self.fields[k][0]: s} for s in t.shrinks(payload)]
 
+    def weight(self, v):
+        _, t, payload = self.active(v)
+        return t.weight(payload)
+
+    def ints(self): return [i for _, t in self.fields for i in t.ints()]
+    def renders(self, what): return what == 'err' and any(name == 'err' for name, _ in self.fields)
+
     def flat(self, v):
         k, t, payload = self.active(v)
         return [k] + t.flat(payload)
 
-    def ctor(self, name, t, value):
-        return f'{self.lean}.{name}' if isinstance(t, Unit) else f'({self.lean}.{name} {value})'
+    def ctor(self, k, value):
+        """The Lean constructor application of field `k` (a field without payload has no argument)."""
+        return f'{self.lean}.{self.ctors[k]}' + ('' if isinstance(self.fields[k][1], Unit) else f' {value}')
 
     def decoder(self, emit):
-        arms = ''.join(f'    | {k} => ({t.decoder(emit)} l).map fun (v, l) => ({self.ctor(name, t, "v")}, l)\n'
-                       for k, (name, t) in enumerate(self.fields))
+        arms = ''.join(f'    | {k} => ({t.decoder(emit)} l).map fun (v, l) => (({self.ctor(k, "v")}), l)\n'
+                       for k, (_, t) in enumerate(self.fields))
         return emit.define(('dec', self), f'| k :: l =>\n    match k with\n{arms}    | _ => none\n  | [] => none')
 
     def renderer(self, emit, wide):
-        arms = ''.join(f'  | {self.ctor(name, t, "v").strip("()")} => ' + lean_str('{' + json.dumps(name) + ':')
+        arms = ''.join(f'  | {self.ctor(k, "v")} => ' + lean_str('{' + json.dumps(name) + ':')
                        + (' ++ "null}"\n' if isinstance(t, Unit) else f' ++ {t.renderer(emit, wide)} v ++ "}}"\n')
-                       for name, t in self.fields)
+                       for k, (name, t) in enumerate(self.fields))
         # A payload that a retag left undefined is no Zig value: it never equals a native result.
         if self.undef: arms += '  | ' + ' | '.join(f'{self.lean}.{c} ..' for c in self.undef) + ' => "{\\"undefined_payload\\":null}"\n'
         return emit.define(('ren', self, wide), 'fun\n' + arms.rstrip('\n'))
@@ -313,6 +351,9 @@ class Opt(Kind):
     def random(self, rng): return None if rng.random() < 0.25 else self.child.random(rng)
     def parse(self, j, wide=False): return None if j is None else self.child.parse(j, wide)
     def shrinks(self, v): return [] if v is None else [None] + self.child.shrinks(v)
+    def weight(self, v): return 0 if v is None else self.child.weight(v)
+    def ints(self): return self.child.ints()
+    def renders(self, what): return what == 'null' or self.child.renders(what)
     def flat(self, v): return [0] if v is None else [1] + self.child.flat(v)
 
     def decoder(self, emit):
@@ -349,6 +390,10 @@ class ErrUnion(Kind):
     def shrinks(self, v):
         return self.payload.shrinks(v) if self.error(v) is None else [{'err': e} for e in self.errors if e != v['err']]
 
+    def weight(self, v): return self.payload.weight(v) if self.error(v) is None else 1
+    def ints(self): return self.payload.ints()
+    def renders(self, what): return what == 'err' or self.payload.renders(what)
+
     def flat(self, v):
         name = self.error(v)
         return [0] + self.payload.flat(v) if name is None else [1 + self.errors.index(name)]
@@ -382,7 +427,8 @@ class Slice(Kind):
         out = [[]] + [[a] for a in items[:8]] + [[a, b] for a in items[:3] for b in items[:3]]
         return out + [self.random(rng) for _ in range(4)]
 
-    def random(self, rng): return [self.child.random(rng) for _ in range(rng.randrange(self.MAX_LEN + 1))]
+    def random(self, rng):
+        return [] if self.child.size() == 0 else [self.child.random(rng) for _ in range(rng.randrange(self.MAX_LEN + 1))]
 
     def parse(self, j, wide=False):
         if not isinstance(j, list): raise Mismatch(f'{j!r} is not a slice')
@@ -392,6 +438,9 @@ class Slice(Kind):
         """Without one item, or with one item shrunk."""
         return [v[:k] + v[k + 1:] for k in range(len(v))] + [v[:k] + [s] + v[k + 1:] for k in range(len(v)) for s in self.child.shrinks(v[k])]
 
+    def weight(self, v): return len(v) + sum(self.child.weight(item) for item in v)
+    def ints(self): return self.child.ints()
+    def renders(self, what): return False
     def flat(self, v): return [len(v)] + [a for item in v for a in self.child.flat(item)]
     def decoder(self, emit): return emit.define(('dec', self), f'| n :: l => A2LEval.many {self.child.decoder(emit)} n l\n  | [] => none')
     def renderer(self, emit, wide): raise Unsupported('a slice result is a place in memory, not a value')
@@ -491,7 +540,7 @@ class Types:
         head, _, rest = text.partition(' ')
         if head == 'Option':
             child = self.resolve(rest, self.air_type(tid, 'optional', text).get('child'))
-            if isinstance(child, (Opt, Unit)): raise Unsupported(f'{text}: `null` would be ambiguous in the rendered value')
+            if child.renders('null'): raise Unsupported(f'{text}: `null` would be ambiguous in the rendered value')
             return Opt(child)
         if head == 'Except' and rest.startswith('Zig.ErrName '):
             t = self.air_type(tid, 'error_union', text)
@@ -499,8 +548,7 @@ class Types:
             if not isinstance(errors, list) or not all(isinstance(e, str) for e in errors):
                 raise Unsupported(f'{text}: the error set is not a list of names')
             payload = self.resolve(rest[len('Zig.ErrName '):], t.get('payload'))
-            names = [name for name, *_ in getattr(payload, 'fields', ())]
-            if isinstance(payload, ErrUnion) or 'err' in names: raise Unsupported(f'{text}: `{{"err":…}}` would be ambiguous in the rendered value')
+            if payload.renders('err'): raise Unsupported(f'{text}: `{{"err":…}}` would be ambiguous in the rendered value')
             return ErrUnion(tuple(errors), payload)
         if head == 'Array':
             t = self.air_type(tid, 'ptr', text)
@@ -544,8 +592,8 @@ class Types:
                 if len(args) > 1: raise mismatch
                 payload = self.resolve(args[0], f.get('ty')) if args else self.resolve('Unit', f.get('ty'))
                 if isinstance(payload, Unit) and args: raise mismatch
-                out.append((ctor, payload))
-            return Union(lean, tuple(out), tuple(c for c, _ in items if c.startswith('undef_')))
+                out.append((f['name'], payload))
+            return Union(lean, tuple(out), tuple(c for c, _ in ctors), tuple(c for c, _ in items if c.startswith('undef_')))
         raise mismatch
 
     def resolve_tag(self, tid, name):
@@ -568,12 +616,7 @@ class Signature:
     @property
     def wide(self):
         """The harness's `quote_wide`: integers are rendered as strings when the result has one of 64 bits or more."""
-        def leaves(t):
-            if isinstance(t, Int): yield t
-            for child in (getattr(t, 'child', None), getattr(t, 'payload', None)):
-                if child is not None: yield from leaves(child)
-            for field in getattr(t, 'fields', ()): yield from leaves(field[-1])
-        return any(leaf.bits >= 64 for leaf in leaves(self.ret))
+        return any(i.bits >= 64 for i in self.ret.ints())
 
     def parse_args(self, raw):
         """The values of a JSON argument row, or Mismatch."""
@@ -616,17 +659,9 @@ def signature(gen_text, function, air=None):
 # --- Candidate inputs ---------------------------------------------------------------------
 
 
-def weight(value):
-    """The size of a value: the magnitude of a number, the items and length of a slice, the fields of a struct."""
-    if isinstance(value, (bool, int)): return abs(int(value))
-    if isinstance(value, dict): return sum(weight(v) for v in value.values())
-    if isinstance(value, list): return len(value) + sum(weight(v) for v in value)
-    return 0 if value is None else 1                      # an error name
-
-
 def row_key(types, row):
-    """Rows are ordered smallest first: by the size of the values (`weight`), then by the row encoding."""
-    return sum(weight(v) for v in row), [a for t, v in zip(types, row) for a in t.flat(v)]
+    """Rows are ordered smallest first: by the size of the values (each kind's `weight`), then by the row encoding."""
+    return sum(t.weight(v) for t, v in zip(types, row)), [a for t, v in zip(types, row) for a in t.flat(v)]
 
 
 def shrinks(types, row):
@@ -683,7 +718,7 @@ def driver(namespace, sig, rows, *, spec=None, pre=None, print_all=False, max_vi
     run (the native program) returned."""
     emit = Emit()
     decoders = [t.decoder(emit) for t in sig.types]
-    render, ret_decoder = sig.ret.renderer(emit, sig.wide), sig.ret.decoder(emit)
+    render = sig.ret.renderer(emit, sig.wide)
     result = f'Except Zig.Error ({sig.ret.lean})'
     flat = lambda row: [a for t, v in zip(sig.types, row) for a in t.flat(v)]
     def outcome(o):
@@ -699,19 +734,19 @@ def driver(namespace, sig, rows, *, spec=None, pre=None, print_all=False, max_vi
         run = f'((({call}).run ({namespace}.mem0 .fresh)).run).map (·.map (·.1))'
     else:
         run = f'({call}).run'
-    errors = '[' + ', '.join(f'Zig.Error.{e}' for e in ERRORS) + ']'
+    recorded = '' if given is None else f'''
+def A2LEval.outcome : List Nat → Option (({result}) × List Nat)
+  | 0 :: l => ({sig.ret.decoder(emit)} l).map fun (v, l) => (.ok v, l)
+  | k :: l => (([{', '.join(f'Zig.Error.{e}' for e in ERRORS)}] : List Zig.Error)[k - 1]?).map fun e => (.error e, l)
+  | [] => none
+'''
     return PRELUDE + '\n\n'.join(emit.text) + f'''
 
 def A2LEval.obs (r : {result}) : String :=
   match r with
   | .ok v => "{{\\"ok\\":" ++ {render} v ++ "}}"
   | .error e => "{{\\"fail\\":\\"" ++ reprStr e ++ "\\"}}"
-
-def A2LEval.outcome : List Nat → Option (({result}) × List Nat)
-  | 0 :: l => ({ret_decoder} l).map fun (v, l) => (.ok v, l)
-  | k :: l => (({errors} : List Zig.Error)[k - 1]?).map fun e => (.error e, l)
-  | [] => none
-
+{recorded}
 def A2LEval.rows : List (List Nat) :=
   ("{data}".splitOn ";").filterMap fun row =>
     if row.isEmpty then none else some (row.splitOn "," |>.map String.toNat!)
