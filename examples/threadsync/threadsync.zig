@@ -63,6 +63,30 @@ pub fn handoff() !u32 {
     return v;
 }
 
+fn producerAll(b: *Box) void {
+    b.m.lock();
+    b.v = 7;
+    b.ready = true;
+    b.m.unlock();
+    b.c.broadcast();
+    b.done.set();
+}
+
+/// The hand-off with `Thread.Condition.broadcast` (`wake(.all)`) in place of `signal`: the
+/// producer wakes every waiter, here the main thread. Always 7.
+pub fn handoffAll() !u32 {
+    var b: Box = .{};
+    const bp = &b;
+    const t = try Thread.spawn(.{}, producerAll, .{bp});
+    bp.m.lock();
+    while (!bp.ready) bp.c.wait(&bp.m);
+    const v = bp.v;
+    bp.m.unlock();
+    bp.done.wait();
+    t.join();
+    return v;
+}
+
 const Tally = struct {
     wg: Thread.WaitGroup = .{},
     m: Thread.Mutex = .{},
@@ -93,8 +117,6 @@ pub fn waitGroup() !u32 {
 comptime {
     _ = &mutexCounter;
     _ = &handoff;
+    _ = &handoffAll;
     _ = &waitGroup;
-    // `Thread.Condition.broadcast` (`wake(.all)`) for the condition contract
-    // (`CondImpl.broadcast_wp`, `Proofs/Threadsync/Cond.lean`); no client here calls it.
-    _ = &Thread.Condition.broadcast;
 }
