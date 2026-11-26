@@ -131,14 +131,6 @@ def env (e : AllocEnv Tgt) : AllocEnv Tgt :=
 
 variable (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt) (φ : Frac)
 
-/-- The vtable's `free`, at any alignment `2 ^ k`, of a slice that a `free` wrapper has made
-undefined: the fee back. -/
-theorem free_entry (h : CAllocSpec (CVTable.env (env e) fns) ctx I) (k : Nat) (hk : k < 64)
-    (s : Slice) (ra : BitVec 64) (hs : 0 < s.len.toNat) :
-    CTriple (I.own ⋆ I.granted s.ptr k φ (Array.replicate s.len.toNat .undef))
-      ((CVTable.env (env e) fns).free ctx s k ra) (fun _ => I.own ⋆ I.fee φ) :=
-  CAllocSpec.free' h s k ra φ _ hk (by simp) (by simpa using hs)
-
 /-! ## What the clients return, for every item size and alignment -/
 
 /-- What `make` returns: `n` items and the sentinel, or `error.OutOfMemory` and the fee back. -/
@@ -169,7 +161,7 @@ theorem free16_spec (s : Slice) (bs : Array Byte) (hlen : s.len.toNat * 2 = bs.s
       (mem_Allocator_free__anon_906bba868805 ⟨ctx, vtp⟩ s)
       (fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) := by
   unfold mem_Allocator_free__anon_906bba868805
-  fsym [free_entry ctx fns I e φ h 1 (by decide)]
+  fsym [CAllocSpec.free' h]
 
 /-- `a.realloc(s, n)` of a nonempty granted `[]u16` (`reallocAdvanced`: `remap`, else `alloc`,
 copy, `free`; `n = 0` frees): `n * 2` bytes. -/
@@ -182,7 +174,7 @@ theorem realloc16_spec (s : Slice) (n : BitVec 64) (bs : Array Byte)
         plain) := by
   unfold mem_Allocator_realloc__anon_0848537da7a2 mem_Allocator_reallocAdvanced__anon_37f73f8446a2
   fsym [CAllocSpec.alloc h, CAllocSpec.remap h, free16_spec ctx vtp fns I e φ (h := h),
-    free_entry ctx fns I e φ h 1 (by decide)]
+    CAllocSpec.free' h]
 
 /-- **`make`** (`allocSentinel(u16, n, 0)`) for every allocator. -/
 theorem make16_spec (n : BitVec 64) (hn : n.toNat + 1 < 2 ^ 64)
@@ -225,7 +217,7 @@ theorem release16_spec (s : Slice) (bs : Array Byte) (hlen : (s.len.toNat + 1) *
     CTriple (I.own ⋆ (I.granted s.ptr 1 φ bs ⋆ vtR vtp fns.toList)) (Buf_u16_release ⟨ctx, vtp⟩ s)
       (fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) := by
   unfold Buf_u16_release mem_Allocator_free__anon_ef346418a252
-  fsym [free_entry ctx fns I e φ h 1 (by decide)]
+  fsym [CAllocSpec.free' h]
 
 /-! ## `u32`: 4 bytes at alignment `2 ^ 2` -/
 
@@ -236,7 +228,7 @@ theorem free32_spec (s : Slice) (bs : Array Byte) (hlen : s.len.toNat * 4 = bs.s
       (mem_Allocator_free__anon_10fd68fdc68d ⟨ctx, vtp⟩ s)
       (fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) := by
   unfold mem_Allocator_free__anon_10fd68fdc68d
-  fsym [free_entry ctx fns I e φ h 2 (by decide)]
+  fsym [CAllocSpec.free' h]
 
 /-- `a.realloc(s, n)` of a nonempty granted `[]u32` (`reallocAdvanced`: `remap`, else `alloc`,
 copy, `free`; `n = 0` frees): `n * 4` bytes. -/
@@ -249,7 +241,7 @@ theorem realloc32_spec (s : Slice) (n : BitVec 64) (bs : Array Byte)
         plain) := by
   unfold mem_Allocator_realloc__anon_c895a53644a2 mem_Allocator_reallocAdvanced__anon_f9642f2d8f58
   fsym [CAllocSpec.alloc h, CAllocSpec.remap h, free32_spec ctx vtp fns I e φ (h := h),
-    free_entry ctx fns I e φ h 2 (by decide)]
+    CAllocSpec.free' h]
 
 /-- **`make`** (`allocSentinel(u32, n, 0)`) for every allocator. -/
 theorem make32_spec (n : BitVec 64) (hn : n.toNat + 1 < 2 ^ 64)
@@ -292,7 +284,7 @@ theorem release32_spec (s : Slice) (bs : Array Byte) (hlen : (s.len.toNat + 1) *
     CTriple (I.own ⋆ (I.granted s.ptr 2 φ bs ⋆ vtR vtp fns.toList)) (Buf_u32_release ⟨ctx, vtp⟩ s)
       (fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) := by
   unfold Buf_u32_release mem_Allocator_free__anon_85944fd5a0eb
-  fsym [free_entry ctx fns I e φ h 2 (by decide)]
+  fsym [CAllocSpec.free' h]
 
 /-! ## `u64`: 8 bytes at alignment `2 ^ 3` -/
 
@@ -303,7 +295,7 @@ theorem free64_spec (s : Slice) (bs : Array Byte) (hlen : s.len.toNat * 8 = bs.s
       (mem_Allocator_free__anon_f1de31ec7442 ⟨ctx, vtp⟩ s)
       (fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) := by
   unfold mem_Allocator_free__anon_f1de31ec7442
-  fsym [free_entry ctx fns I e φ h 3 (by decide)]
+  fsym [CAllocSpec.free' h]
 
 /-- `a.realloc(s, n)` of a nonempty granted `[]u64` (`reallocAdvanced`: `remap`, else `alloc`,
 copy, `free`; `n = 0` frees): `n * 8` bytes. -/
@@ -316,7 +308,7 @@ theorem realloc64_spec (s : Slice) (n : BitVec 64) (bs : Array Byte)
         plain) := by
   unfold mem_Allocator_realloc__anon_db3a5630f4fc mem_Allocator_reallocAdvanced__anon_1b00930347b4
   fsym [CAllocSpec.alloc h, CAllocSpec.remap h, free64_spec ctx vtp fns I e φ (h := h),
-    free_entry ctx fns I e φ h 3 (by decide)]
+    CAllocSpec.free' h]
 
 /-- **`make`** (`allocSentinel(u64, n, 0)`) for every allocator. -/
 theorem make64_spec (n : BitVec 64) (hn : n.toNat + 1 < 2 ^ 64)
@@ -359,6 +351,6 @@ theorem release64_spec (s : Slice) (bs : Array Byte) (hlen : (s.len.toNat + 1) *
     CTriple (I.own ⋆ (I.granted s.ptr 3 φ bs ⋆ vtR vtp fns.toList)) (Buf_u64_release ⟨ctx, vtp⟩ s)
       (fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) := by
   unfold Buf_u64_release mem_Allocator_free__anon_dddca57af15b
-  fsym [free_entry ctx fns I e φ h 3 (by decide)]
+  fsym [CAllocSpec.free' h]
 
 end Interfaces.WideSpec
