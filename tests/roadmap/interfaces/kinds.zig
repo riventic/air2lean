@@ -9,7 +9,9 @@ const builtin = @import("builtin");
 /// `A` is the slice's alignment in bytes: `@alignOf(T)`, or more.
 fn Buf(comptime T: type, comptime A: comptime_int, comptime z: T) type {
     return struct {
-        const S = [:z]align(A) T;
+        // The plain slice type at the natural alignment: Zig before 0.16 names `[:z]align(1) u8`
+        // and `[:z]u8` differently in the generated wrappers' names.
+        const S = if (A == @alignOf(T)) [:z]T else [:z]align(A) T;
         fn make(a: std.mem.Allocator, n: usize) !S {
             if (A == @alignOf(T)) return a.allocSentinel(T, n, z);
             // `allocWithOptions` takes a `?mem.Alignment` since Zig 0.15, a `?u29` before.

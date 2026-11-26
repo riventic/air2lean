@@ -44,7 +44,7 @@
   "module": "std",
   "decl_line": 468
  },
- "instance_key": "fe989e6b0260e4c82903ce6ea57817c640a293236bf11b295f303a64c2ccde99",
+ "instance_key": "ec26f105dbd98ab382a45cd318ad04ea0d51c0948cb913140aa8daffbd7a5d18",
  "params": [
   0,
   1
@@ -114,7 +114,7 @@
     "ty": 6,
     "func": "mem.absorbSentinel__func_725",
     "module": "std",
-    "instance_key": "cd37df708c8e874de66d386702391b3ddd98ce1de47d6cd62ea597871f39006e",
+    "instance_key": "e92a0aa65bdc8535077b5d2ccd127c8d0fe524b4bc34a0cef5b6f1472e1cc739",
     "noreturn": false
    },
    "args": [
@@ -133,7 +133,7 @@
   {
    "id": 14,
    "tag": "ptr_cast",
-   "ty": 7,
+   "ty": 5,
    "args": [
     {
      "inst": 12
@@ -143,7 +143,7 @@
   {
    "id": 15,
    "tag": "alloc",
-   "ty": 8
+   "ty": 7
   },
   {
    "id": 16,
@@ -161,7 +161,7 @@
   {
    "id": 17,
    "tag": "ptr_cast",
-   "ty": 9,
+   "ty": 8,
    "args": [
     {
      "inst": 15
@@ -201,7 +201,7 @@
     {
      "id": 22,
      "tag": "ptr_slice_len_ptr",
-     "ty": 10,
+     "ty": 9,
      "args": [
       {
        "inst": 17
@@ -211,7 +211,7 @@
     {
      "id": 23,
      "tag": "load",
-     "ty": 11,
+     "ty": 10,
      "args": [
       {
        "inst": 22
@@ -221,7 +221,7 @@
     {
      "id": 24,
      "tag": "bit_cast",
-     "ty": 12,
+     "ty": 11,
      "args": [
       {
        "inst": 23
@@ -231,13 +231,13 @@
     {
      "id": 25,
      "tag": "cmp_eq",
-     "ty": 13,
+     "ty": 12,
      "args": [
       {
        "inst": 24
       },
       {
-       "ty": 12,
+       "ty": 11,
        "val": "0"
       }
      ]
@@ -245,7 +245,7 @@
     {
      "id": 29,
      "tag": "cond_br",
-     "ty": 14,
+     "ty": 13,
      "args": [
       {
        "inst": 25
@@ -262,7 +262,7 @@
       {
        "id": 27,
        "tag": "ret_safe",
-       "ty": 14,
+       "ty": 13,
        "args": [
         {
          "ty": 2,
@@ -275,7 +275,7 @@
       {
        "id": 28,
        "tag": "br",
-       "ty": 14,
+       "ty": 13,
        "target": 20,
        "args": [
         {
@@ -298,7 +298,7 @@
   {
    "id": 31,
    "tag": "slice_len",
-   "ty": 11,
+   "ty": 10,
    "args": [
     {
      "inst": 14
@@ -314,7 +314,7 @@
      "inst": 14
     },
     {
-     "ty": 15,
+     "ty": 14,
      "undef": true
     }
    ]
@@ -353,16 +353,16 @@
   {
    "id": 39,
    "tag": "call",
-   "ty": 16,
+   "ty": 15,
    "callee": {
-    "ty": 17,
+    "ty": 16,
     "func": "mem.Alignment.fromByteUnits",
     "module": "std",
     "noreturn": false
    },
    "args": [
     {
-     "ty": 11,
+     "ty": 10,
      "val": "1"
     }
    ]
@@ -370,7 +370,7 @@
   {
    "id": 40,
    "tag": "ret_addr",
-   "ty": 11
+   "ty": 10
   },
   {
    "id": 41,
@@ -471,7 +471,7 @@
     {
      "id": 51,
      "tag": "struct_field_ptr_index_1",
-     "ty": 18,
+     "ty": 17,
      "args": [
       {
        "inst": 49
@@ -488,7 +488,7 @@
     {
      "id": 53,
      "tag": "load",
-     "ty": 19,
+     "ty": 18,
      "args": [
       {
        "inst": 51
@@ -498,7 +498,7 @@
     {
      "id": 54,
      "tag": "struct_field_ptr_index_3",
-     "ty": 20,
+     "ty": 19,
      "args": [
       {
        "inst": 53
@@ -508,7 +508,7 @@
     {
      "id": 55,
      "tag": "load",
-     "ty": 21,
+     "ty": 20,
      "args": [
       {
        "inst": 54
@@ -525,7 +525,7 @@
     {
      "id": 57,
      "tag": "struct_field_ptr_index_0",
-     "ty": 22,
+     "ty": 21,
      "args": [
       {
        "inst": 49
@@ -535,7 +535,7 @@
     {
      "id": 58,
      "tag": "load",
-     "ty": 23,
+     "ty": 22,
      "args": [
       {
        "inst": 57
@@ -581,7 +581,7 @@
     {
      "id": 62,
      "tag": "br",
-     "ty": 14,
+     "ty": 13,
      "target": 42,
      "args": [
       {
@@ -595,7 +595,7 @@
   {
    "id": 63,
    "tag": "ret_safe",
-   "ty": 14,
+   "ty": 13,
    "args": [
     {
      "ty": 2,
@@ -613,12 +613,12 @@
    "fields": [
     {
      "name": "ptr",
-     "ty": 23,
+     "ty": 22,
      "offset": 0
     },
     {
      "name": "vtable",
-     "ty": 19,
+     "ty": 18,
      "offset": 8
     }
    ],
@@ -629,7 +629,7 @@
    "k": "ptr",
    "size": "slice",
    "const": false,
-   "child": 15,
+   "child": 14,
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
@@ -677,7 +677,7 @@
    "k": "ptr",
    "size": "slice",
    "const": false,
-   "child": 15,
+   "child": 14,
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
@@ -689,27 +689,13 @@
   },
   {
    "k": "other",
-   "name": "fn ([:255]align(1) u8) []align(1) u8"
-  },
-  {
-   "k": "ptr",
-   "size": "slice",
-   "const": false,
-   "child": 15,
-   "ptr_align": 1,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 16,
-   "abi_align": 8
+   "name": "fn ([:255]u8) []u8"
   },
   {
    "k": "ptr",
    "size": "one",
    "const": false,
-   "child": 7,
+   "child": 5,
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
@@ -723,7 +709,7 @@
    "k": "ptr",
    "size": "one",
    "const": true,
-   "child": 7,
+   "child": 5,
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
@@ -737,7 +723,7 @@
    "k": "ptr",
    "size": "one",
    "const": true,
-   "child": 11,
+   "child": 10,
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
@@ -780,7 +766,7 @@
    "k": "enum",
    "name": "mem.Alignment",
    "module": "std",
-   "tag": 24,
+   "tag": 23,
    "exhaustive": false,
    "fields": [
     {
@@ -823,7 +809,35 @@
    "k": "ptr",
    "size": "one",
    "const": true,
-   "child": 19,
+   "child": 18,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 24,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 20,
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
@@ -838,7 +852,6 @@
    "size": "one",
    "const": true,
    "child": 25,
-   "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
    "address_space": "generic",
@@ -851,34 +864,7 @@
    "k": "ptr",
    "size": "one",
    "const": true,
-   "child": 21,
-   "ptr_align": 8,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 26,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 23,
+   "child": 22,
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
@@ -892,7 +878,7 @@
    "k": "ptr",
    "size": "one",
    "const": false,
-   "child": 27,
+   "child": 26,
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
@@ -917,22 +903,22 @@
    "fields": [
     {
      "name": "alloc",
-     "ty": 28,
+     "ty": 27,
      "offset": 0
     },
     {
      "name": "resize",
-     "ty": 29,
+     "ty": 28,
      "offset": 8
     },
     {
      "name": "remap",
-     "ty": 30,
+     "ty": 29,
      "offset": 16
     },
     {
      "name": "free",
-     "ty": 21,
+     "ty": 20,
      "offset": 24
     }
    ],
@@ -946,6 +932,19 @@
   {
    "k": "other",
    "name": "anyopaque"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 30,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
   },
   {
    "k": "ptr",
@@ -965,19 +964,6 @@
    "size": "one",
    "const": true,
    "child": 32,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 33,
    "volatile": false,
    "allowzero": false,
    "address_space": "generic",

@@ -42,7 +42,7 @@
  "src": {
   "file": "kinds.zig",
   "module": "kinds",
-  "decl_line": 31
+  "decl_line": 33
  },
  "params": [
   0,
@@ -121,7 +121,7 @@
    "ty": 2,
    "callee": {
     "ty": 5,
-    "func": "mem.Allocator.free__anon_818",
+    "func": "mem.Allocator.free__anon_816",
     "module": "std",
     "instance_key": "ec26f105dbd98ab382a45cd318ad04ea0d51c0948cb913140aa8daffbd7a5d18",
     "noreturn": false

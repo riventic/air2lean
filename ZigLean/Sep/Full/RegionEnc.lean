@@ -1,94 +1,28 @@
 import ZigLean.Sep.Full.Region
-import ZigLean.VecMem
 import ZigLean.ReprCast
-import ZigLean.Float.Ops
 
 /-!
 # Items of any encoding in a byte region
 
 `Region.lean`'s item rules (`regionStore`, `regionLoadWritten`) ask for `LawfulEnc T`: every
-value of `T` reads back from its bytes. A float type has no such instance: a NaN's bytes are
-undefined (`Float.detMask`), so a load of them is `.unspecified`. The rules here ask for what
-one step needs, as facts about the one value:
+value of `T` reads back from its bytes. Not every item type has that instance: a float's NaN has
+undefined bytes (`Float.detMask`), so a load of them is `.unspecified`. The rules here are stated
+for every `Enc T` and ask for what one step needs, as facts about the one value:
 
 * a **store** needs the size of the value's bytes (`regionStoreEnc`): the region holds the bytes
   afterwards, whatever they are (as `Auto.Bytes.storeEnc_region` at a region's start);
 * a **load** of bytes a store wrote needs that this value reads back (`regionLoadEnc`).
 
-Both hold for every `LawfulEnc` type, so the rules cover `Region.lean`'s. A proof whose items have
-no `LawfulEnc` instance names them: `fsym [regionStoreEnc, regionLoadEnc]`.
-
-For a float of every format: its bytes have the format's size (`Float.size_encode`), and it reads
-back exactly when it is not a NaN (`Float.decode_encode_eq`; decidable so,
-`Float.decidableReadsBack`: a float constant's read-back is its NaN check, which evaluates); the
-float with the bits `0` is not a NaN
-(`Float.isNaN_ofBits_zero`), and a float that is not a NaN equals itself (`Float.eq_self`).
+Both facts hold for every value of a `LawfulEnc` type, so the rules cover `Region.lean`'s. A proof
+whose items have no `LawfulEnc` instance names them: `fsym [regionStoreEnc, regionLoadEnc]`. For
+a float the two facts are `Float.size_encode` and the decidable read-back
+`Float.decidableReadsBack` (`ZigLean/ReprCast.lean`): a float constant's is its NaN check.
 
 An optional pointer item's `==` (`optPtrEqAddr`, a `[:null]?*T`'s sentinel check) is normalized by
 the shape of its operands (`optPtrEqAddr_none_none` and its three siblings).
 -/
 
 namespace Zig
-
-/-! ## A float's bytes -/
-
-/-- A float's encoding has its format's size: the NaN's too (undefined bytes). -/
-@[fsym_arith] theorem Float.size_encode {fmt : FloatFmt} (x : Float fmt) :
-    (Enc.encode x).size = Enc.size (Float fmt) := by
-  have h := intBytes_le_intSize fmt.width
-  show (padTo (intSize fmt.width) (maskedBytes x.bits x.detMask)).size = intSize fmt.width
-  simp only [padTo, Array.size_append, Array.size_replicate, maskedBytes, Array.size_map,
-    Array.size_range]
-  omega
-
-/-- A float that is not a NaN reads back from its bytes. -/
-theorem Float.decode_encode {fmt : FloatFmt} {x : Float fmt} (h : x.isNaN = false) :
-    Enc.decode (Enc.encode x) = pure x := by
-  show (do pure ⟨← intOfBytes fmt.width
-    (padTo (intSize fmt.width) (maskedBytes x.bits x.detMask))⟩ : Result (Float fmt)) = pure x
-  rw [Float.maskedBytes_of_not_isNaN h, intOfBytes_of_extract x.bits (by
-    rw [padTo, Array.extract_append]
-    simp [intBytes_size, Array.extract_eq_self_of_le])]
-  rfl
-
-/-- A float reads back from its bytes exactly when it is not a NaN: a NaN's bits are undefined in
-memory (`docs/floats.md` §NaN in memory), so its load is `.unspecified`. -/
-theorem Float.decode_encode_eq {fmt : FloatFmt} (x : Float fmt) :
-    (Enc.decode (Enc.encode x) = pure x) = (x.isNaN = false) := by
-  refine propext ⟨fun h => ?_, Float.decode_encode⟩
-  cases hn : x.isNaN with
-  | false => rfl
-  | true =>
-    exfalso
-    have hw : 0 < (fmt.width + 7) / 8 := by cases fmt <;> decide
-    have e : intOfBytes fmt.width
-        (padTo (intSize fmt.width) (maskedBytes x.bits x.detMask)) = throw .unspecified :=
-      intOfBytes_undef false (i := 0) hw (by
-        rw [Float.maskedBytes_of_isNaN hn, padTo, Array.getElem?_append_left (by simpa using hw)]
-        simp [hw])
-    have h' : (do pure ⟨← intOfBytes fmt.width
-        (padTo (intSize fmt.width) (maskedBytes x.bits x.detMask))⟩ : Result (Float fmt)) =
-        pure x := h
-    rw [e] at h'
-    cases h'
-
-/-- Whether a float reads back is its NaN check: for a float constant it evaluates (`decide`), so
-`regionLoadEnc`'s read-back premise of a float sentinel is a closed fact. -/
-instance Float.decidableReadsBack {fmt : FloatFmt} (x : Float fmt) :
-    Decidable (Enc.decode (Enc.encode x) = pure x) :=
-  decidable_of_iff (x.isNaN = false) (by rw [Float.decode_encode_eq])
-
-/-- The float with the bits `0` (`+0.0`) is not a NaN, in every format. -/
-@[simp, fsym_arith] theorem Float.isNaN_ofBits_zero {fmt : FloatFmt} :
-    (Float.ofBits (0 : BitVec fmt.width)).isNaN = false := by
-  cases fmt <;> decide
-
-/-- A float that is not a NaN equals itself (the sentinel check of a `[:z]fN`). -/
-@[fsym_arith] theorem Float.eq_self {fmt : FloatFmt} {x : Float fmt} (h : x.isNaN = false) :
-    Float.eq x x = true := by
-  unfold Float.isNaN at h
-  unfold Float.eq
-  cases hc : x.classify <;> simp_all
 
 /-! ## `==` on optional pointers
 

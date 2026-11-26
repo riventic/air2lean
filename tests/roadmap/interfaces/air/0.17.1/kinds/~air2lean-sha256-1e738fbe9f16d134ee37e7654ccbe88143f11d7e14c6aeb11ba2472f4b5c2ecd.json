@@ -42,7 +42,7 @@
  "src": {
   "file": "kinds.zig",
   "module": "kinds",
-  "decl_line": 31
+  "decl_line": 33
  },
  "params": [
   0,
@@ -123,7 +123,7 @@
     "ty": 5,
     "func": "mem.Allocator.free__func_681",
     "module": "std",
-    "instance_key": "af4b77de30f433687e2ad132bb3d2780a2427be3477d38c061e4a0ef3db3f2fd",
+    "instance_key": "0f60a910cb1e0042bbd3a0930549cae9d32b488a282d9d5df053b46c5df16d05",
     "noreturn": false
    },
    "args": [
@@ -217,7 +217,7 @@
   },
   {
    "k": "other",
-   "name": "fn (mem.Allocator, [:0]align(4) f32) void"
+   "name": "fn (mem.Allocator, [:0]f32) void"
   },
   {
    "k": "noreturn"

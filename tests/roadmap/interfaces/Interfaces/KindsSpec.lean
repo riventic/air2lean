@@ -58,9 +58,9 @@ variable (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt) (�
 theorem freeFf_spec (s : Slice) (bs : Array Byte) (hlen : s.len.toNat = bs.size)
     (hpos : 0 < bs.size) (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
     CTriple (I.own ⋆ (I.granted s.ptr 0 φ bs ⋆ vtR vtp fns.toList))
-      (mem_Allocator_free__anon_bb76a5a4c9e4 ⟨ctx, vtp⟩ s)
+      (mem_Allocator_free__anon_1e60e7ef40f5 ⟨ctx, vtp⟩ s)
       (fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) := by
-  unfold mem_Allocator_free__anon_bb76a5a4c9e4
+  unfold mem_Allocator_free__anon_1e60e7ef40f5
   fsym [free_undef h]
 
 /-- `a.realloc(s, n)` of a nonempty granted `[]u8`. -/
@@ -68,9 +68,9 @@ theorem reallocFf_spec (s : Slice) (n : BitVec 64) (bs : Array Byte)
     (hlen : s.len.toNat = bs.size) (hpos : 0 < bs.size) (hfit : I.fits n.toNat 0)
     (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
     CTriple (I.own ⋆ (I.granted s.ptr 0 φ bs ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) ⋆ plain)
-      (mem_Allocator_realloc__anon_5031d4b18b8e ⟨ctx, vtp⟩ s n)
+      (mem_Allocator_realloc__anon_af0c43114565 ⟨ctx, vtp⟩ s n)
       (fun r => I.own ⋆ (I.reallocResult 0 φ s.ptr bs n n.toNat r ⋆ vtR vtp fns.toList) ⋆ plain) := by
-  unfold mem_Allocator_realloc__anon_5031d4b18b8e mem_Allocator_reallocAdvanced__anon_32dbc0401d86
+  unfold mem_Allocator_realloc__anon_af0c43114565 mem_Allocator_reallocAdvanced__anon_0df1ef68623e
   fsym [CAllocSpec.alloc h, CAllocSpec.remap h, Norm.mulWithOverflow_one,
     freeFf_spec ctx vtp fns I e φ (h := h), free_undef h]
 
@@ -110,7 +110,7 @@ theorem releaseFf_spec (s : Slice) (bs : Array Byte) (hlen : s.len.toNat + 1 = b
     CTriple (I.own ⋆ (I.granted s.ptr 0 φ bs ⋆ vtR vtp fns.toList))
       (Buf_u8_1_255_release ⟨ctx, vtp⟩ s)
       (fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) := by
-  unfold Buf_u8_1_255_release mem_Allocator_free__anon_fe989e6b0260
+  unfold Buf_u8_1_255_release mem_Allocator_free__anon_ec26f105dbd9
   fsym [free_undef h]
 
 /-! ## `Opt`: `[:null]?*u8`, 8 bytes at alignment `2 ^ 3`, sentinel `null` -/
@@ -119,9 +119,9 @@ theorem releaseFf_spec (s : Slice) (bs : Array Byte) (hlen : s.len.toNat + 1 = b
 theorem freeOpt_spec (s : Slice) (bs : Array Byte) (hlen : s.len.toNat * 8 = bs.size)
     (hs : bs.size < 2 ^ 64) (hpos : 0 < bs.size) (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
     CTriple (I.own ⋆ (I.granted s.ptr 3 φ bs ⋆ vtR vtp fns.toList))
-      (mem_Allocator_free__anon_61cb689082fa ⟨ctx, vtp⟩ s)
+      (mem_Allocator_free__anon_f3a890f4b1d1 ⟨ctx, vtp⟩ s)
       (fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) := by
-  unfold mem_Allocator_free__anon_61cb689082fa
+  unfold mem_Allocator_free__anon_f3a890f4b1d1
   fsym [CAllocSpec.free' h]
 
 /-- `a.realloc(s, n)` of a nonempty granted `[]?*u8`: `n * 8` bytes. -/
@@ -129,10 +129,10 @@ theorem reallocOpt_spec (s : Slice) (n : BitVec 64) (bs : Array Byte)
     (hlen : s.len.toNat * 8 = bs.size) (hs : bs.size < 2 ^ 64) (hpos : 0 < bs.size)
     (hfit : I.fits (n.toNat * 8) 3) (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
     CTriple (I.own ⋆ (I.granted s.ptr 3 φ bs ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) ⋆ plain)
-      (mem_Allocator_realloc__anon_f17c619ddbc3 ⟨ctx, vtp⟩ s n)
+      (mem_Allocator_realloc__anon_a4f13023a362 ⟨ctx, vtp⟩ s n)
       (fun r => I.own ⋆ (I.reallocResult 3 φ s.ptr bs n (n.toNat * 8) r ⋆ vtR vtp fns.toList) ⋆
         plain) := by
-  unfold mem_Allocator_realloc__anon_f17c619ddbc3 mem_Allocator_reallocAdvanced__anon_c61a2607b47f
+  unfold mem_Allocator_realloc__anon_a4f13023a362 mem_Allocator_reallocAdvanced__anon_8367c9b39ce8
   fsym [CAllocSpec.alloc h, CAllocSpec.remap h, freeOpt_spec ctx vtp fns I e φ (h := h),
     CAllocSpec.free' h]
 
@@ -173,7 +173,7 @@ theorem releaseOpt_spec (s : Slice) (bs : Array Byte) (hlen : (s.len.toNat + 1) 
     CTriple (I.own ⋆ (I.granted s.ptr 3 φ bs ⋆ vtR vtp fns.toList))
       (Buf___u8_8_null_release ⟨ctx, vtp⟩ s)
       (fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) := by
-  unfold Buf___u8_8_null_release mem_Allocator_free__anon_030fe58d1647
+  unfold Buf___u8_8_null_release mem_Allocator_free__anon_79b5404fb5ec
   fsym [CAllocSpec.free' h]
 
 /-! ## `Flt`: `[:0]f32`, 4 bytes at alignment `2 ^ 2`, sentinel `0.0` -/
@@ -185,9 +185,9 @@ abbrev zeroF32 : Zig.F32 := Zig.Float.ofBits (0 : BitVec 32)
 theorem freeFlt_spec (s : Slice) (bs : Array Byte) (hlen : s.len.toNat * 4 = bs.size)
     (hs : bs.size < 2 ^ 64) (hpos : 0 < bs.size) (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
     CTriple (I.own ⋆ (I.granted s.ptr 2 φ bs ⋆ vtR vtp fns.toList))
-      (mem_Allocator_free__anon_1a7ab5e46014 ⟨ctx, vtp⟩ s)
+      (mem_Allocator_free__anon_370a618e6221 ⟨ctx, vtp⟩ s)
       (fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) := by
-  unfold mem_Allocator_free__anon_1a7ab5e46014
+  unfold mem_Allocator_free__anon_370a618e6221
   fsym [CAllocSpec.free' h]
 
 /-- `a.realloc(s, n)` of a nonempty granted `[]f32`: `n * 4` bytes. -/
@@ -195,10 +195,10 @@ theorem reallocFlt_spec (s : Slice) (n : BitVec 64) (bs : Array Byte)
     (hlen : s.len.toNat * 4 = bs.size) (hs : bs.size < 2 ^ 64) (hpos : 0 < bs.size)
     (hfit : I.fits (n.toNat * 4) 2) (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
     CTriple (I.own ⋆ (I.granted s.ptr 2 φ bs ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) ⋆ plain)
-      (mem_Allocator_realloc__anon_49e4e5fd8358 ⟨ctx, vtp⟩ s n)
+      (mem_Allocator_realloc__anon_b0aac85a3215 ⟨ctx, vtp⟩ s n)
       (fun r => I.own ⋆ (I.reallocResult 2 φ s.ptr bs n (n.toNat * 4) r ⋆ vtR vtp fns.toList) ⋆
         plain) := by
-  unfold mem_Allocator_realloc__anon_49e4e5fd8358 mem_Allocator_reallocAdvanced__anon_928a37eaea4c
+  unfold mem_Allocator_realloc__anon_b0aac85a3215 mem_Allocator_reallocAdvanced__anon_49dee7edffe7
   fsym [CAllocSpec.alloc h, CAllocSpec.remap h, freeFlt_spec ctx vtp fns I e φ (h := h),
     CAllocSpec.free' h]
 
@@ -241,7 +241,7 @@ theorem releaseFlt_spec (s : Slice) (bs : Array Byte) (hlen : (s.len.toNat + 1) 
     CTriple (I.own ⋆ (I.granted s.ptr 2 φ bs ⋆ vtR vtp fns.toList))
       (Buf_f32_4_0_release ⟨ctx, vtp⟩ s)
       (fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) := by
-  unfold Buf_f32_4_0_release mem_Allocator_free__anon_af4b77de30f4
+  unfold Buf_f32_4_0_release mem_Allocator_free__anon_0f60a910cb1e
   fsym [CAllocSpec.free' h]
 
 /-! ## `Over`: `[:0]align(16) u16`, 2 bytes at alignment `2 ^ 4` -/
@@ -320,10 +320,9 @@ theorem copy_spec (s : Slice) {A Sz : Nat} {K : BlockKind} {a : Nat} (bs : Array
     (hfit : I.fits (s.len.toNat + 1) 0) (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
     CTriple (I.own ⋆ (I.fee φ ⋆ (up (regionIn s.ptr A Sz K a bs) ⋆ vtR vtp fns.toList)) ⋆ plain)
       (copy ⟨ctx, vtp⟩ s)
-      (fun r => I.own ⋆ (I.bytesResult 0 φ s.len
-        (writeBytes (writeBytes (Array.replicate (s.len.toNat + 1) .undef) 0 bs) s.len.toNat
-          (Enc.encode (0 : BitVec 8))) r ⋆
-        (up (regionIn s.ptr A Sz K a bs) ⋆ vtR vtp fns.toList)) ⋆ plain) := by
-  fsym [CAllocSpec.alloc h, Norm.mulWithOverflow_one]
+      (fun r => I.own ⋆ (I.bytesResult 0 φ s.len (bs ++ Enc.encode (0 : BitVec 8)) r ⋆
+        (up (regionIn s.ptr A Sz K a bs) ⋆ vtR vtp fns.toList)) ⋆ plain) :=
+  copy_grant (m := s.len.toNat + 1) hlen (by fsym_arith) (by
+    fsym [CAllocSpec.alloc h, Norm.mulWithOverflow_one])
 
 end Interfaces.KindsSpec

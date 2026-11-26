@@ -42,7 +42,7 @@
  "src": {
   "file": "kinds.zig",
   "module": "kinds",
-  "decl_line": 26
+  "decl_line": 28
  },
  "params": [
   0,
@@ -434,7 +434,7 @@
    "ty": 15,
    "callee": {
     "ty": 16,
-    "func": "mem.Allocator.realloc__anon_809",
+    "func": "mem.Allocator.realloc__anon_807",
     "module": "std",
     "instance_key": "af0c43114565d1f44736f723b95f3df9ab3a301ddc492c1832d27d0b92f4b22d",
     "noreturn": false
@@ -1041,7 +1041,7 @@
        "ty": 12,
        "callee": {
         "ty": 24,
-        "func": "debug.FullPanic((function 'defaultPanic')).sentinelMismatch__anon_813",
+        "func": "debug.FullPanic((function 'defaultPanic')).sentinelMismatch__anon_811",
         "module": "std",
         "instance_key": "1459dd027f9da3b39ee94bd2218d5a090eaba2b99f58f03696bdd91af2d96a1e",
         "noreturn": true

@@ -42,7 +42,7 @@
  "src": {
   "file": "kinds.zig",
   "module": "kinds",
-  "decl_line": 26
+  "decl_line": 28
  },
  "params": [
   0,
@@ -300,9 +300,9 @@
    "ty": 13,
    "callee": {
     "ty": 14,
-    "func": "mem.Allocator.realloc__anon_30388",
+    "func": "mem.Allocator.realloc__anon_30396",
     "module": "std",
-    "instance_key": "5031d4b18b8ea7575cdbfbfe39b45d741a8c1c9fd6f8b40199585c36b6b7426f",
+    "instance_key": "af0c43114565d1f44736f723b95f3df9ab3a301ddc492c1832d27d0b92f4b22d",
     "noreturn": false
    },
    "args": [
@@ -763,7 +763,7 @@
        "ty": 17,
        "callee": {
         "ty": 25,
-        "func": "debug.FullPanic((function 'defaultPanic')).sentinelMismatch__anon_866",
+        "func": "debug.FullPanic((function 'defaultPanic')).sentinelMismatch__anon_864",
         "module": "std",
         "instance_key": "1459dd027f9da3b39ee94bd2218d5a090eaba2b99f58f03696bdd91af2d96a1e",
         "noreturn": true
@@ -992,7 +992,7 @@
   },
   {
    "k": "other",
-   "name": "fn (mem.Allocator, []align(1) u8, usize) error{OutOfMemory}![]align(1) u8"
+   "name": "fn (mem.Allocator, []u8, usize) error{OutOfMemory}![]u8"
   },
   {
    "k": "error_set",

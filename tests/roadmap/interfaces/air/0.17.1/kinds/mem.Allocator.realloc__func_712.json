@@ -44,7 +44,7 @@
   "module": "std",
   "decl_line": 422
  },
- "instance_key": "f17c619ddbc34142788b43805fbdc656611f7efd13653e92975b18bf56df5919",
+ "instance_key": "a4f13023a362f2eff8303a5fe43c97de3c2c08fd7e2ddd7e2965c69527b4f648",
  "params": [
   0,
   1,
@@ -136,7 +136,7 @@
     "ty": 7,
     "func": "mem.Allocator.reallocAdvanced__func_717",
     "module": "std",
-    "instance_key": "c61a2607b47fd5cf91e980ccd24bd9f4b05cd895f595059972e81412c105a598",
+    "instance_key": "8367c9b39ce8b172760ab0d8e06168b9e1a43d95734970c020912a54bd62323a",
     "noreturn": false
    },
    "args": [
@@ -256,7 +256,7 @@
   },
   {
    "k": "other",
-   "name": "fn (mem.Allocator, []align(8) ?*u8, usize, usize) error{OutOfMemory}![]align(8) ?*u8"
+   "name": "fn (mem.Allocator, []?*u8, usize, usize) error{OutOfMemory}![]?*u8"
   },
   {
    "k": "noreturn"

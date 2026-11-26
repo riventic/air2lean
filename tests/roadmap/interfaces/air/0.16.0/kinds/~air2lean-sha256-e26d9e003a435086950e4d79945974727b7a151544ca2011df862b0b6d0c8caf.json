@@ -42,7 +42,7 @@
  "src": {
   "file": "kinds.zig",
   "module": "kinds",
-  "decl_line": 13
+  "decl_line": 15
  },
  "params": [
   0,
@@ -128,7 +128,7 @@
    "ty": 6,
    "callee": {
     "ty": 7,
-    "func": "mem.Allocator.allocSentinel__anon_26957",
+    "func": "mem.Allocator.allocSentinel__anon_26959",
     "module": "std",
     "instance_key": "39ca3fb2a5a419963b79a27ec7675135a53af1aedb852e6b036252e8d6483824",
     "noreturn": false
@@ -241,7 +241,7 @@
   {
    "k": "error_union",
    "error": 13,
-   "payload": 14,
+   "payload": 12,
    "abi_size": 24,
    "abi_align": 8
   },
@@ -256,7 +256,7 @@
    "k": "ptr",
    "size": "one",
    "const": false,
-   "child": 15,
+   "child": 14,
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
@@ -270,7 +270,7 @@
    "k": "ptr",
    "size": "one",
    "const": true,
-   "child": 16,
+   "child": 15,
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
@@ -292,7 +292,7 @@
    "k": "ptr",
    "size": "slice",
    "const": false,
-   "child": 17,
+   "child": 16,
    "ptr_align": 4,
    "volatile": false,
    "allowzero": false,
@@ -311,20 +311,6 @@
    "abi_align": 2
   },
   {
-   "k": "ptr",
-   "size": "slice",
-   "const": false,
-   "child": 17,
-   "ptr_align": 4,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": true,
-   "host_size": 0,
-   "abi_size": 16,
-   "abi_align": 8
-  },
-  {
    "k": "other",
    "name": "anyopaque"
   },
@@ -336,22 +322,22 @@
    "fields": [
     {
      "name": "alloc",
-     "ty": 18,
+     "ty": 17,
      "offset": 0
     },
     {
      "name": "resize",
-     "ty": 19,
+     "ty": 18,
      "offset": 8
     },
     {
      "name": "remap",
-     "ty": 20,
+     "ty": 19,
      "offset": 16
     },
     {
      "name": "free",
-     "ty": 21,
+     "ty": 20,
      "offset": 24
     }
    ],
@@ -363,6 +349,19 @@
    "bits": 32,
    "abi_size": 4,
    "abi_align": 4
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 21,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
   },
   {
    "k": "ptr",
@@ -395,19 +394,6 @@
    "size": "one",
    "const": true,
    "child": 24,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 25,
    "volatile": false,
    "allowzero": false,
    "address_space": "generic",

@@ -42,7 +42,7 @@
  "src": {
   "file": "kinds.zig",
   "module": "kinds",
-  "decl_line": 13
+  "decl_line": 15
  },
  "params": [
   0,
@@ -151,49 +151,21 @@
   },
   {
    "id": 14,
-   "tag": "alloc",
-   "ty": 8
-  },
-  {
-   "id": 15,
-   "tag": "store_safe",
-   "ty": 4,
+   "tag": "error_cast",
+   "ty": 2,
    "args": [
-    {
-     "inst": 14
-    },
     {
      "inst": 12
     }
    ]
   },
   {
-   "id": 16,
-   "tag": "ptr_cast",
-   "ty": 9,
+   "id": 15,
+   "tag": "ret_safe",
+   "ty": 8,
    "args": [
     {
      "inst": 14
-    }
-   ]
-  },
-  {
-   "id": 17,
-   "tag": "load",
-   "ty": 2,
-   "args": [
-    {
-     "inst": 16
-    }
-   ]
-  },
-  {
-   "id": 18,
-   "tag": "ret_safe",
-   "ty": 10,
-   "args": [
-    {
-     "inst": 17
     }
    ]
   }
@@ -207,12 +179,12 @@
    "fields": [
     {
      "name": "ptr",
-     "ty": 11,
+     "ty": 9,
      "offset": 0
     },
     {
      "name": "vtable",
-     "ty": 12,
+     "ty": 10,
      "offset": 8
     }
    ],
@@ -228,8 +200,8 @@
   },
   {
    "k": "error_union",
-   "error": 13,
-   "payload": 14,
+   "error": 11,
+   "payload": 12,
    "abi_size": 24,
    "abi_align": 8
   },
@@ -268,8 +240,8 @@
   },
   {
    "k": "error_union",
-   "error": 15,
-   "payload": 16,
+   "error": 13,
+   "payload": 12,
    "abi_size": 24,
    "abi_align": 8
   },
@@ -278,41 +250,13 @@
    "name": "fn (mem.Allocator, usize) error{OutOfMemory}![:null]?*u8"
   },
   {
-   "k": "ptr",
-   "size": "one",
-   "const": false,
-   "child": 6,
-   "ptr_align": 8,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": false,
-   "child": 2,
-   "ptr_align": 8,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
    "k": "noreturn"
   },
   {
    "k": "ptr",
    "size": "one",
    "const": false,
-   "child": 17,
+   "child": 14,
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
@@ -326,7 +270,7 @@
    "k": "ptr",
    "size": "one",
    "const": true,
-   "child": 18,
+   "child": 15,
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
@@ -348,7 +292,7 @@
    "k": "ptr",
    "size": "slice",
    "const": false,
-   "child": 19,
+   "child": 16,
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
@@ -367,20 +311,6 @@
    "abi_align": 2
   },
   {
-   "k": "ptr",
-   "size": "slice",
-   "const": false,
-   "child": 19,
-   "ptr_align": 8,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": true,
-   "host_size": 0,
-   "abi_size": 16,
-   "abi_align": 8
-  },
-  {
    "k": "other",
    "name": "anyopaque"
   },
@@ -392,22 +322,22 @@
    "fields": [
     {
      "name": "alloc",
-     "ty": 20,
+     "ty": 17,
      "offset": 0
     },
     {
      "name": "resize",
-     "ty": 21,
+     "ty": 18,
      "offset": 8
     },
     {
      "name": "remap",
-     "ty": 22,
+     "ty": 19,
      "offset": 16
     },
     {
      "name": "free",
-     "ty": 23,
+     "ty": 20,
      "offset": 24
     }
    ],
@@ -416,7 +346,46 @@
   },
   {
    "k": "optional",
+   "child": 21,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 22,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 23,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
    "child": 24,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
    "abi_size": 8,
    "abi_align": 8
   },
@@ -436,47 +405,8 @@
   {
    "k": "ptr",
    "size": "one",
-   "const": true,
-   "child": 26,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 27,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 28,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
    "const": false,
-   "child": 29,
+   "child": 26,
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,

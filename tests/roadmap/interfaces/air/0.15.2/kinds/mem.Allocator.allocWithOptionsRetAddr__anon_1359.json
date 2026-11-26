@@ -1229,7 +1229,7 @@
        "ty": 14,
        "callee": {
         "ty": 25,
-        "func": "debug.FullPanic((function 'defaultPanic')).sentinelMismatch__anon_836",
+        "func": "debug.FullPanic((function 'defaultPanic')).sentinelMismatch__anon_835",
         "module": "std",
         "instance_key": "14d62af15f1f26b245917ad4876cc23ddbb5209b62f92f517e1035b0c26686ed",
         "noreturn": true

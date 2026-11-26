@@ -970,7 +970,7 @@
      "ty": 29,
      "callee": {
       "ty": 30,
-      "func": "math.mul__anon_944",
+      "func": "math.mul__anon_942",
       "module": "std",
       "instance_key": "44faaf286c79cc3d92955867affd656f14fe69f5be85c3de3b0331d3f52141e6",
       "noreturn": false

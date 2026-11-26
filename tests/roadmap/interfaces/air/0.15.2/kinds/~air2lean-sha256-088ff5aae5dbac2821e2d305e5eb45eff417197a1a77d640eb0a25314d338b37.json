@@ -42,7 +42,7 @@
  "src": {
   "file": "kinds.zig",
   "module": "kinds",
-  "decl_line": 13
+  "decl_line": 15
  },
  "params": [
   0,
@@ -128,7 +128,7 @@
    "ty": 6,
    "callee": {
     "ty": 7,
-    "func": "mem.Allocator.allocSentinel__anon_821",
+    "func": "mem.Allocator.allocSentinel__anon_819",
     "module": "std",
     "instance_key": "131423843e7923006f40ce62400f8199b0f450870be6fa067824b9c0be6354d7",
     "noreturn": false

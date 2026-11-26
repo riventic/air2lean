@@ -42,7 +42,7 @@
  "src": {
   "file": "kinds.zig",
   "module": "kinds",
-  "decl_line": 43
+  "decl_line": 45
  },
  "params": [
   0,
@@ -128,7 +128,7 @@
    "ty": 6,
    "callee": {
     "ty": 7,
-    "func": "mem.Allocator.dupeSentinel__anon_384",
+    "func": "mem.Allocator.dupeSentinel__anon_380",
     "module": "std",
     "instance_key": "294b7c9823bd7a920bd4318aabd9bece440acf1ac48a33be7063bcd50f025fa4",
     "noreturn": false

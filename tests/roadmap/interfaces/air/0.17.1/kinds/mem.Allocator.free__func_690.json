@@ -44,7 +44,7 @@
   "module": "std",
   "decl_line": 468
  },
- "instance_key": "1a7ab5e460141995396d7f4769858f05b375ccdee9a5883fe99429a60670e4b3",
+ "instance_key": "370a618e6221cfd6b3cc4ce024e3bc91eec7eb87895954e8ec5c31c616fcf414",
  "params": [
   0,
   1
@@ -114,7 +114,7 @@
     "ty": 5,
     "func": "mem.absorbSentinel__func_691",
     "module": "std",
-    "instance_key": "5bbe05701efefecd4b12a2d93298e6f0876fb8ed222fde290e750b4c78e2411c",
+    "instance_key": "8278c29c5446ccd2699ce76a8955c1033716b160afbde3473a320844a38e0abb",
     "noreturn": false
    },
    "args": [
@@ -721,7 +721,7 @@
   },
   {
    "k": "other",
-   "name": "fn ([]align(4) f32) []align(4) f32"
+   "name": "fn ([]f32) []f32"
   },
   {
    "k": "ptr",

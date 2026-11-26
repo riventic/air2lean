@@ -44,7 +44,7 @@
   "module": "std",
   "decl_line": 426
  },
- "instance_key": "32dbc0401d86dab4dc98bab8334cddfe12e68c65e2b74a6dbbdea4f51231185b",
+ "instance_key": "0df1ef68623eb8cc2b55624588742de616305f11bc0e7fd1f9d3f2a9583135d3",
  "params": [
   0,
   1,
@@ -205,7 +205,7 @@
      ]
     },
     {
-     "id": 64,
+     "id": 67,
      "tag": "cond_br",
      "ty": 12,
      "args": [
@@ -232,16 +232,16 @@
        ]
       },
       {
-       "id": 23,
+       "id": 22,
        "tag": "dbg_stmt",
        "ty": 5,
        "line": 13,
        "column": 45
       },
       {
-       "id": 24,
+       "id": 23,
        "tag": "dbg_inline_block",
-       "ty": 3,
+       "ty": 13,
        "src": {
         "file": "mem/Allocator.zig",
         "module": "std",
@@ -249,7 +249,7 @@
        },
        "body": [
         {
-         "id": 25,
+         "id": 24,
          "tag": "dbg_arg_inline",
          "ty": 5,
          "args": [
@@ -260,22 +260,19 @@
          "name": "self"
         },
         {
-         "id": 26,
+         "id": 25,
          "tag": "dbg_arg_inline",
          "ty": 5,
          "args": [
           {
-           "ty": 13,
-           "some": {
-            "ty": 14,
-            "enum": "0"
-           }
+           "ty": 14,
+           "null": true
           }
          ],
          "name": "alignment"
         },
         {
-         "id": 27,
+         "id": 26,
          "tag": "dbg_arg_inline",
          "ty": 5,
          "args": [
@@ -286,7 +283,7 @@
          "name": "n"
         },
         {
-         "id": 28,
+         "id": 27,
          "tag": "dbg_arg_inline",
          "ty": 5,
          "args": [
@@ -297,17 +294,17 @@
          "name": "return_address"
         },
         {
-         "id": 29,
+         "id": 28,
          "tag": "alloc",
          "ty": 4
         },
         {
-         "id": 30,
+         "id": 29,
          "tag": "store_safe",
          "ty": 5,
          "args": [
           {
-           "inst": 29
+           "inst": 28
           },
           {
            "inst": 21
@@ -315,64 +312,64 @@
          ]
         },
         {
-         "id": 31,
+         "id": 30,
          "tag": "ptr_cast",
          "ty": 6,
          "args": [
           {
-           "inst": 29
+           "inst": 28
           }
          ]
         },
         {
-         "id": 32,
+         "id": 31,
          "tag": "dbg_stmt",
          "ty": 5,
          "line": 9,
          "column": 5
         },
         {
-         "id": 35,
+         "id": 34,
          "tag": "dbg_var_val",
          "ty": 5,
          "args": [
           {
-           "ty": 14,
+           "ty": 15,
            "enum": "0"
           }
          ],
          "name": "a"
         },
         {
-         "id": 36,
+         "id": 35,
          "tag": "dbg_stmt",
          "ty": 5,
          "line": 10,
          "column": 89
         },
         {
-         "id": 37,
+         "id": 36,
          "tag": "load",
          "ty": 0,
          "args": [
           {
-           "inst": 31
+           "inst": 30
           }
          ]
         },
         {
-         "id": 41,
+         "id": 40,
          "tag": "dbg_stmt",
          "ty": 5,
          "line": 10,
          "column": 89
         },
         {
-         "id": 42,
+         "id": 41,
          "tag": "call",
-         "ty": 15,
+         "ty": 16,
          "callee": {
-          "ty": 16,
+          "ty": 17,
           "func": "mem.Allocator.allocWithSizeAndAlignment__func_5",
           "module": "std",
           "instance_key": "0aadb2616c4397b4959dfd917c053409d8fde795af19b98f0482fa6122137459",
@@ -380,7 +377,7 @@
          },
          "args": [
           {
-           "inst": 37
+           "inst": 36
           },
           {
            "inst": 2
@@ -391,19 +388,36 @@
          ]
         },
         {
-         "id": 47,
+         "id": 46,
          "tag": "try",
-         "ty": 17,
+         "ty": 18,
          "args": [
           {
-           "inst": 42
+           "inst": 41
           }
          ],
          "body": [
           {
-           "id": 43,
+           "id": 42,
            "tag": "unwrap_errunion_err",
-           "ty": 18,
+           "ty": 19,
+           "args": [
+            {
+             "inst": 41
+            }
+           ]
+          },
+          {
+           "id": 43,
+           "tag": "dbg_stmt",
+           "ty": 5,
+           "line": 10,
+           "column": 55
+          },
+          {
+           "id": 44,
+           "tag": "wrap_errunion_err",
+           "ty": 13,
            "args": [
             {
              "inst": 42
@@ -411,105 +425,88 @@
            ]
           },
           {
-           "id": 44,
-           "tag": "dbg_stmt",
-           "ty": 5,
-           "line": 10,
-           "column": 55
-          },
-          {
            "id": 45,
-           "tag": "wrap_errunion_err",
-           "ty": 3,
-           "args": [
-            {
-             "inst": 43
-            }
-           ]
-          },
-          {
-           "id": 46,
            "tag": "br",
            "ty": 12,
-           "target": 24,
+           "target": 23,
            "args": [
             {
-             "inst": 45
+             "inst": 44
             }
            ]
           }
          ]
         },
         {
-         "id": 48,
+         "id": 47,
          "tag": "dbg_stmt",
          "ty": 5,
          "line": 10,
          "column": 46
         },
         {
-         "id": 49,
+         "id": 48,
          "tag": "alloc",
-         "ty": 19
+         "ty": 20
         },
         {
-         "id": 50,
+         "id": 49,
          "tag": "store_safe",
          "ty": 5,
          "args": [
           {
-           "inst": 49
+           "inst": 48
           },
           {
-           "inst": 47
+           "inst": 46
+          }
+         ]
+        },
+        {
+         "id": 50,
+         "tag": "ptr_cast",
+         "ty": 21,
+         "args": [
+          {
+           "inst": 48
           }
          ]
         },
         {
          "id": 51,
-         "tag": "ptr_cast",
-         "ty": 20,
-         "args": [
-          {
-           "inst": 49
-          }
-         ]
-        },
-        {
-         "id": 52,
          "tag": "dbg_var_val",
          "ty": 5,
          "args": [
           {
-           "inst": 47
+           "inst": 46
           }
          ],
          "name": "ptr"
         },
         {
-         "id": 53,
+         "id": 52,
          "tag": "dbg_stmt",
          "ty": 5,
          "line": 11,
          "column": 15
         },
         {
-         "id": 54,
+         "id": 53,
          "tag": "load",
-         "ty": 17,
+         "ty": 18,
          "args": [
           {
-           "inst": 51
+           "inst": 50
           }
          ]
         },
         {
-         "id": 55,
+         "id": 54,
          "tag": "ptr_add",
-         "ty": 17,
+         "ty": 18,
          "args": [
           {
-           "inst": 54
+           "inst": 53
           },
           {
            "ty": 2,
@@ -518,7 +515,7 @@
          ]
         },
         {
-         "id": 56,
+         "id": 55,
          "tag": "sub",
          "ty": 2,
          "args": [
@@ -532,69 +529,107 @@
          ]
         },
         {
-         "id": 57,
+         "id": 56,
          "tag": "slice",
-         "ty": 1,
+         "ty": 22,
          "args": [
           {
-           "inst": 55
+           "inst": 54
           },
           {
-           "inst": 56
+           "inst": 55
           }
          ]
         },
         {
-         "id": 58,
+         "id": 57,
          "tag": "dbg_stmt",
          "ty": 5,
          "line": 11,
          "column": 5
         },
         {
-         "id": 59,
+         "id": 58,
          "tag": "wrap_errunion_payload",
-         "ty": 3,
+         "ty": 13,
          "args": [
           {
-           "inst": 57
+           "inst": 56
           }
          ]
         },
         {
-         "id": 60,
+         "id": 59,
          "tag": "br",
          "ty": 12,
-         "target": 24,
+         "target": 23,
          "args": [
           {
-           "inst": 59
+           "inst": 58
           }
          ]
         }
        ]
       },
       {
-       "id": 61,
+       "id": 60,
        "tag": "dbg_stmt",
        "ty": 5,
        "line": 13,
        "column": 9
       },
       {
+       "id": 61,
+       "tag": "alloc",
+       "ty": 23
+      },
+      {
        "id": 62,
+       "tag": "store_safe",
+       "ty": 5,
+       "args": [
+        {
+         "inst": 61
+        },
+        {
+         "inst": 23
+        }
+       ]
+      },
+      {
+       "id": 63,
+       "tag": "ptr_cast",
+       "ty": 24,
+       "args": [
+        {
+         "inst": 61
+        }
+       ]
+      },
+      {
+       "id": 64,
+       "tag": "load",
+       "ty": 3,
+       "args": [
+        {
+         "inst": 63
+        }
+       ]
+      },
+      {
+       "id": 65,
        "tag": "ret_safe",
        "ty": 12,
        "args": [
         {
-         "inst": 24
+         "inst": 64
         }
        ]
       }
      ],
      "else": [
       {
-       "id": 63,
+       "id": 66,
        "tag": "br",
        "ty": 12,
        "target": 14,
@@ -610,19 +645,19 @@
    ]
   },
   {
-   "id": 65,
+   "id": 68,
    "tag": "dbg_stmt",
    "ty": 5,
    "line": 15,
    "column": 9
   },
   {
-   "id": 66,
+   "id": 69,
    "tag": "block",
    "ty": 5,
    "body": [
     {
-     "id": 67,
+     "id": 70,
      "tag": "bit_cast",
      "ty": 10,
      "args": [
@@ -632,12 +667,12 @@
      ]
     },
     {
-     "id": 68,
+     "id": 71,
      "tag": "cmp_eq",
      "ty": 11,
      "args": [
       {
-       "inst": 67
+       "inst": 70
       },
       {
        "ty": 10,
@@ -646,24 +681,24 @@
      ]
     },
     {
-     "id": 89,
+     "id": 90,
      "tag": "cond_br",
      "ty": 12,
      "args": [
       {
-       "inst": 68
+       "inst": 71
       }
      ],
      "then": [
       {
-       "id": 69,
+       "id": 72,
        "tag": "dbg_stmt",
        "ty": 5,
        "line": 16,
        "column": 18
       },
       {
-       "id": 70,
+       "id": 73,
        "tag": "load",
        "ty": 0,
        "args": [
@@ -673,26 +708,26 @@
        ]
       },
       {
-       "id": 73,
+       "id": 76,
        "tag": "dbg_stmt",
        "ty": 5,
        "line": 16,
        "column": 18
       },
       {
-       "id": 74,
+       "id": 77,
        "tag": "call",
        "ty": 5,
        "callee": {
-        "ty": 21,
+        "ty": 25,
         "func": "mem.Allocator.free__func_728",
         "module": "std",
-        "instance_key": "bb76a5a4c9e42d3d3726f7f2ad579450d18edcaddb199ccbe4e86a64473252ed",
+        "instance_key": "1e60e7ef40f59acd6795fd81f42091e44c787acf2cbfbffc765022fefac09670",
         "noreturn": false
        },
        "args": [
         {
-         "inst": 70
+         "inst": 73
         },
         {
          "inst": 1
@@ -700,30 +735,11 @@
        ]
       },
       {
-       "id": 75,
+       "id": 78,
        "tag": "dbg_stmt",
        "ty": 5,
        "line": 17,
        "column": 9
-      },
-      {
-       "id": 77,
-       "tag": "dbg_stmt",
-       "ty": 5,
-       "line": 17,
-       "column": 43
-      },
-      {
-       "id": 79,
-       "tag": "dbg_var_val",
-       "ty": 5,
-       "args": [
-        {
-         "ty": 2,
-         "val": "1"
-        }
-       ],
-       "name": "alignment"
       },
       {
        "id": 80,
@@ -733,7 +749,7 @@
        "column": 9
       },
       {
-       "id": 83,
+       "id": 84,
        "tag": "dbg_var_val",
        "ty": 5,
        "args": [
@@ -745,19 +761,19 @@
        "name": "addr"
       },
       {
-       "id": 84,
+       "id": 85,
        "tag": "dbg_stmt",
        "ty": 5,
        "line": 19,
        "column": 45
       },
       {
-       "id": 85,
+       "id": 86,
        "tag": "dbg_var_val",
        "ty": 5,
        "args": [
         {
-         "ty": 22,
+         "ty": 26,
          "ptr": {
           "unsupported": "int",
           "off": 18446744073709551615
@@ -767,14 +783,14 @@
        "name": "ptr"
       },
       {
-       "id": 86,
+       "id": 87,
        "tag": "dbg_stmt",
        "ty": 5,
        "line": 20,
        "column": 9
       },
       {
-       "id": 87,
+       "id": 88,
        "tag": "ret_safe",
        "ty": 12,
        "args": [
@@ -783,7 +799,7 @@
          "payload": {
           "ty": 1,
           "slice_ptr": {
-           "ty": 17,
+           "ty": 27,
            "ptr": {
             "unsupported": "int",
             "off": 18446744073709551615
@@ -800,10 +816,10 @@
      ],
      "else": [
       {
-       "id": 88,
+       "id": 89,
        "tag": "br",
        "ty": 12,
-       "target": 66,
+       "target": 69,
        "args": [
         {
          "ty": 5,
@@ -816,21 +832,21 @@
    ]
   },
   {
-   "id": 90,
+   "id": 91,
    "tag": "dbg_stmt",
    "ty": 5,
    "line": 23,
    "column": 72
   },
   {
-   "id": 92,
+   "id": 93,
    "tag": "call",
    "ty": 1,
    "callee": {
-    "ty": 23,
+    "ty": 28,
     "func": "mem.absorbSentinel__func_729",
     "module": "std",
-    "instance_key": "8ef8ffcd60ecca10455ba823e65cdf017c0c3de6ed42ead736576fa4d4f22f99",
+    "instance_key": "7342b53a30ed5047ec91039edea814cdc01d94e10127775cd607a33832861686",
     "noreturn": false
    },
    "args": [
@@ -840,45 +856,35 @@
    ]
   },
   {
-   "id": 93,
+   "id": 94,
    "tag": "dbg_stmt",
    "ty": 5,
    "line": 23,
    "column": 34
   },
   {
-   "id": 94,
+   "id": 95,
    "tag": "ptr_cast",
-   "ty": 24,
+   "ty": 1,
    "args": [
     {
-     "inst": 92
+     "inst": 93
     }
    ]
   },
   {
-   "id": 95,
+   "id": 96,
    "tag": "alloc",
-   "ty": 25
+   "ty": 7
   },
   {
-   "id": 96,
+   "id": 97,
    "tag": "store_safe",
    "ty": 5,
    "args": [
     {
-     "inst": 95
+     "inst": 96
     },
-    {
-     "inst": 94
-    }
-   ]
-  },
-  {
-   "id": 97,
-   "tag": "ptr_cast",
-   "ty": 26,
-   "args": [
     {
      "inst": 95
     }
@@ -886,40 +892,50 @@
   },
   {
    "id": 98,
+   "tag": "ptr_cast",
+   "ty": 8,
+   "args": [
+    {
+     "inst": 96
+    }
+   ]
+  },
+  {
+   "id": 99,
    "tag": "dbg_var_val",
    "ty": 5,
    "args": [
     {
-     "inst": 94
+     "inst": 95
     }
    ],
    "name": "old_byte_slice"
   },
   {
-   "id": 99,
+   "id": 100,
    "tag": "dbg_stmt",
    "ty": 5,
    "line": 24,
    "column": 5
   },
   {
-   "id": 100,
+   "id": 101,
    "tag": "block",
    "ty": 2,
    "body": [
     {
-     "id": 101,
+     "id": 102,
      "tag": "dbg_stmt",
      "ty": 5,
      "line": 24,
      "column": 32
     },
     {
-     "id": 104,
+     "id": 105,
      "tag": "call",
-     "ty": 27,
+     "ty": 29,
      "callee": {
-      "ty": 28,
+      "ty": 30,
       "func": "math.mul__func_7",
       "module": "std",
       "instance_key": "44faaf286c79cc3d92955867affd656f14fe69f5be85c3de3b0331d3f52141e6",
@@ -936,67 +952,67 @@
      ]
     },
     {
-     "id": 105,
+     "id": 106,
      "tag": "is_non_err",
      "ty": 11,
      "args": [
       {
-       "inst": 104
+       "inst": 105
       }
      ]
     },
     {
-     "id": 111,
+     "id": 112,
      "tag": "cond_br",
      "ty": 12,
      "args": [
       {
-       "inst": 105
+       "inst": 106
       }
      ],
      "then": [
       {
-       "id": 106,
+       "id": 107,
        "tag": "unwrap_errunion_payload",
        "ty": 2,
        "args": [
         {
-         "inst": 104
+         "inst": 105
         }
        ]
       },
       {
-       "id": 107,
+       "id": 108,
        "tag": "br",
        "ty": 12,
-       "target": 100,
+       "target": 101,
        "args": [
         {
-         "inst": 106
+         "inst": 107
         }
        ]
       }
      ],
      "else": [
       {
-       "id": 108,
+       "id": 109,
        "tag": "unwrap_errunion_err",
-       "ty": 29,
+       "ty": 31,
        "args": [
         {
-         "inst": 104
+         "inst": 105
         }
        ]
       },
       {
-       "id": 109,
+       "id": 110,
        "tag": "dbg_stmt",
        "ty": 5,
        "line": 24,
        "column": 65
       },
       {
-       "id": 110,
+       "id": 111,
        "tag": "ret_safe",
        "ty": 12,
        "args": [
@@ -1011,37 +1027,37 @@
    ]
   },
   {
-   "id": 112,
+   "id": 113,
    "tag": "dbg_var_val",
    "ty": 5,
    "args": [
     {
-     "inst": 100
+     "inst": 101
     }
    ],
    "name": "byte_count"
   },
   {
-   "id": 113,
+   "id": 114,
    "tag": "dbg_stmt",
    "ty": 5,
    "line": 26,
    "column": 9
   },
   {
-   "id": 114,
+   "id": 115,
    "tag": "block",
    "ty": 5,
    "body": [
     {
-     "id": 115,
+     "id": 116,
      "tag": "dbg_stmt",
      "ty": 5,
      "line": 26,
      "column": 22
     },
     {
-     "id": 116,
+     "id": 117,
      "tag": "load",
      "ty": 0,
      "args": [
@@ -1051,25 +1067,25 @@
      ]
     },
     {
-     "id": 117,
+     "id": 118,
      "tag": "dbg_stmt",
      "ty": 5,
      "line": 26,
      "column": 53
     },
     {
-     "id": 119,
+     "id": 120,
      "tag": "dbg_stmt",
      "ty": 5,
      "line": 26,
      "column": 53
     },
     {
-     "id": 121,
+     "id": 122,
      "tag": "call",
-     "ty": 14,
+     "ty": 15,
      "callee": {
-      "ty": 30,
+      "ty": 32,
       "func": "mem.Alignment.fromByteUnits",
       "module": "std",
       "noreturn": false
@@ -1082,16 +1098,16 @@
      ]
     },
     {
-     "id": 122,
+     "id": 123,
      "tag": "dbg_stmt",
      "ty": 5,
      "line": 26,
      "column": 22
     },
     {
-     "id": 123,
+     "id": 124,
      "tag": "dbg_inline_block",
-     "ty": 31,
+     "ty": 33,
      "src": {
       "file": "mem/Allocator.zig",
       "module": "std",
@@ -1099,26 +1115,15 @@
      },
      "body": [
       {
-       "id": 124,
-       "tag": "dbg_arg_inline",
-       "ty": 5,
-       "args": [
-        {
-         "inst": 116
-        }
-       ],
-       "name": "a"
-      },
-      {
        "id": 125,
        "tag": "dbg_arg_inline",
        "ty": 5,
        "args": [
         {
-         "inst": 94
+         "inst": 117
         }
        ],
-       "name": "memory"
+       "name": "a"
       },
       {
        "id": 126,
@@ -1126,10 +1131,10 @@
        "ty": 5,
        "args": [
         {
-         "inst": 121
+         "inst": 95
         }
        ],
-       "name": "alignment"
+       "name": "memory"
       },
       {
        "id": 127,
@@ -1137,13 +1142,24 @@
        "ty": 5,
        "args": [
         {
-         "inst": 100
+         "inst": 122
+        }
+       ],
+       "name": "alignment"
+      },
+      {
+       "id": 128,
+       "tag": "dbg_arg_inline",
+       "ty": 5,
+       "args": [
+        {
+         "inst": 101
         }
        ],
        "name": "new_len"
       },
       {
-       "id": 128,
+       "id": 129,
        "tag": "dbg_arg_inline",
        "ty": 5,
        "args": [
@@ -1154,81 +1170,71 @@
        "name": "ret_addr"
       },
       {
-       "id": 129,
+       "id": 130,
        "tag": "alloc",
        "ty": 4
       },
       {
-       "id": 130,
+       "id": 131,
        "tag": "store_safe",
        "ty": 5,
        "args": [
         {
-         "inst": 129
+         "inst": 130
         },
         {
-         "inst": 116
-        }
-       ]
-      },
-      {
-       "id": 131,
-       "tag": "ptr_cast",
-       "ty": 6,
-       "args": [
-        {
-         "inst": 129
+         "inst": 117
         }
        ]
       },
       {
        "id": 132,
+       "tag": "ptr_cast",
+       "ty": 6,
+       "args": [
+        {
+         "inst": 130
+        }
+       ]
+      },
+      {
+       "id": 133,
        "tag": "dbg_stmt",
        "ty": 5,
        "line": 2,
        "column": 13
       },
       {
-       "id": 133,
+       "id": 134,
        "tag": "struct_field_ptr_index_1",
-       "ty": 32,
+       "ty": 34,
        "args": [
         {
-         "inst": 131
+         "inst": 132
         }
        ]
       },
       {
-       "id": 134,
+       "id": 135,
        "tag": "dbg_stmt",
        "ty": 5,
        "line": 2,
        "column": 26
       },
       {
-       "id": 135,
-       "tag": "load",
-       "ty": 33,
-       "args": [
-        {
-         "inst": 133
-        }
-       ]
-      },
-      {
        "id": 136,
-       "tag": "struct_field_ptr_index_2",
-       "ty": 34,
+       "tag": "load",
+       "ty": 35,
        "args": [
         {
-         "inst": 135
+         "inst": 134
         }
        ]
       },
       {
        "id": 137,
-       "tag": "load",
-       "ty": 35,
+       "tag": "struct_field_ptr_index_2",
+       "ty": 36,
        "args": [
         {
          "inst": 136
@@ -1237,57 +1243,67 @@
       },
       {
        "id": 138,
+       "tag": "load",
+       "ty": 37,
+       "args": [
+        {
+         "inst": 137
+        }
+       ]
+      },
+      {
+       "id": 139,
        "tag": "dbg_stmt",
        "ty": 5,
        "line": 2,
        "column": 28
       },
       {
-       "id": 139,
-       "tag": "struct_field_ptr_index_0",
-       "ty": 36,
-       "args": [
-        {
-         "inst": 131
-        }
-       ]
-      },
-      {
        "id": 140,
-       "tag": "load",
-       "ty": 37,
+       "tag": "struct_field_ptr_index_0",
+       "ty": 38,
        "args": [
         {
-         "inst": 139
+         "inst": 132
         }
        ]
       },
       {
        "id": 141,
+       "tag": "load",
+       "ty": 39,
+       "args": [
+        {
+         "inst": 140
+        }
+       ]
+      },
+      {
+       "id": 142,
        "tag": "dbg_stmt",
        "ty": 5,
        "line": 2,
        "column": 26
       },
       {
-       "id": 142,
+       "id": 143,
        "tag": "call",
-       "ty": 31,
+       "ty": 33,
        "callee": {
-        "inst": 137
+        "inst": 138
        },
        "args": [
         {
-         "inst": 140
+         "inst": 141
         },
         {
-         "inst": 94
+         "inst": 95
         },
         {
-         "inst": 121
+         "inst": 122
         },
         {
-         "inst": 100
+         "inst": 101
         },
         {
          "inst": 3
@@ -1295,78 +1311,68 @@
        ]
       },
       {
-       "id": 143,
+       "id": 144,
        "tag": "dbg_stmt",
        "ty": 5,
        "line": 2,
        "column": 5
       },
       {
-       "id": 144,
+       "id": 145,
        "tag": "br",
        "ty": 12,
-       "target": 123,
+       "target": 124,
        "args": [
         {
-         "inst": 142
+         "inst": 143
         }
        ]
       }
      ]
     },
     {
-     "id": 145,
+     "id": 146,
      "tag": "is_non_null",
      "ty": 11,
      "args": [
       {
-       "inst": 123
+       "inst": 124
       }
      ]
     },
     {
-     "id": 162,
+     "id": 163,
      "tag": "cond_br",
      "ty": 12,
      "args": [
       {
-       "inst": 145
+       "inst": 146
       }
      ],
      "then": [
       {
-       "id": 146,
+       "id": 147,
        "tag": "optional_payload",
-       "ty": 38,
+       "ty": 27,
        "args": [
         {
-         "inst": 123
+         "inst": 124
         }
        ]
       },
       {
-       "id": 147,
+       "id": 148,
        "tag": "alloc",
-       "ty": 39
+       "ty": 40
       },
       {
-       "id": 148,
+       "id": 149,
        "tag": "store_safe",
        "ty": 5,
        "args": [
         {
-         "inst": 147
+         "inst": 148
         },
-        {
-         "inst": 146
-        }
-       ]
-      },
-      {
-       "id": 149,
-       "tag": "ptr_cast",
-       "ty": 40,
-       "args": [
         {
          "inst": 147
         }
@@ -1374,53 +1380,49 @@
       },
       {
        "id": 150,
+       "tag": "ptr_cast",
+       "ty": 41,
+       "args": [
+        {
+         "inst": 148
+        }
+       ]
+      },
+      {
+       "id": 151,
        "tag": "dbg_var_val",
        "ty": 5,
        "args": [
         {
-         "inst": 146
+         "inst": 147
         }
        ],
        "name": "p"
       },
       {
-       "id": 151,
+       "id": 152,
        "tag": "dbg_stmt",
        "ty": 5,
        "line": 27,
        "column": 37
       },
       {
-       "id": 152,
-       "tag": "load",
-       "ty": 38,
-       "args": [
-        {
-         "inst": 149
-        }
-       ]
-      },
-      {
        "id": 153,
-       "tag": "ptr_add",
-       "ty": 38,
+       "tag": "load",
+       "ty": 27,
        "args": [
         {
-         "inst": 152
-        },
-        {
-         "ty": 2,
-         "val": "0"
+         "inst": 150
         }
        ]
       },
       {
        "id": 154,
-       "tag": "sub",
-       "ty": 2,
+       "tag": "ptr_add",
+       "ty": 27,
        "args": [
         {
-         "inst": 100
+         "inst": 153
         },
         {
          "ty": 2,
@@ -1430,68 +1432,82 @@
       },
       {
        "id": 155,
-       "tag": "slice",
-       "ty": 24,
+       "tag": "sub",
+       "ty": 2,
        "args": [
         {
-         "inst": 153
+         "inst": 101
         },
         {
-         "inst": 154
+         "ty": 2,
+         "val": "0"
         }
        ]
       },
       {
        "id": 156,
-       "tag": "dbg_stmt",
-       "ty": 5,
-       "line": 27,
-       "column": 16
-      },
-      {
-       "id": 157,
-       "tag": "ptr_cast",
+       "tag": "slice",
        "ty": 1,
        "args": [
+        {
+         "inst": 154
+        },
         {
          "inst": 155
         }
        ]
       },
       {
+       "id": 157,
+       "tag": "dbg_stmt",
+       "ty": 5,
+       "line": 27,
+       "column": 16
+      },
+      {
        "id": 158,
+       "tag": "ptr_cast",
+       "ty": 1,
+       "args": [
+        {
+         "inst": 156
+        }
+       ]
+      },
+      {
+       "id": 159,
        "tag": "dbg_stmt",
        "ty": 5,
        "line": 27,
        "column": 9
       },
       {
-       "id": 159,
+       "id": 160,
        "tag": "wrap_errunion_payload",
        "ty": 3,
        "args": [
         {
-         "inst": 157
+         "inst": 158
         }
        ]
       },
       {
-       "id": 160,
+       "id": 161,
        "tag": "ret_safe",
        "ty": 12,
        "args": [
         {
-         "inst": 159
+         "inst": 160
         }
        ]
       }
      ],
      "else": [
       {
-       "id": 161,
+       "id": 162,
        "tag": "br",
        "ty": 12,
-       "target": 114,
+       "target": 115,
        "args": [
         {
          "ty": 5,
@@ -1504,26 +1520,26 @@
    ]
   },
   {
-   "id": 163,
+   "id": 164,
    "tag": "dbg_stmt",
    "ty": 5,
    "line": 30,
    "column": 5
   },
   {
-   "id": 164,
+   "id": 165,
    "tag": "block",
-   "ty": 38,
+   "ty": 27,
    "body": [
     {
-     "id": 165,
+     "id": 166,
      "tag": "dbg_stmt",
      "ty": 5,
      "line": 30,
      "column": 34
     },
     {
-     "id": 166,
+     "id": 167,
      "tag": "load",
      "ty": 0,
      "args": [
@@ -1533,25 +1549,25 @@
      ]
     },
     {
-     "id": 167,
+     "id": 168,
      "tag": "dbg_stmt",
      "ty": 5,
      "line": 30,
      "column": 61
     },
     {
-     "id": 169,
+     "id": 170,
      "tag": "dbg_stmt",
      "ty": 5,
      "line": 30,
      "column": 61
     },
     {
-     "id": 171,
+     "id": 172,
      "tag": "call",
-     "ty": 14,
+     "ty": 15,
      "callee": {
-      "ty": 30,
+      "ty": 32,
       "func": "mem.Alignment.fromByteUnits",
       "module": "std",
       "noreturn": false
@@ -1564,16 +1580,16 @@
      ]
     },
     {
-     "id": 172,
+     "id": 173,
      "tag": "dbg_stmt",
      "ty": 5,
      "line": 30,
      "column": 34
     },
     {
-     "id": 173,
+     "id": 174,
      "tag": "dbg_inline_block",
-     "ty": 31,
+     "ty": 33,
      "src": {
       "file": "mem/Allocator.zig",
       "module": "std",
@@ -1581,26 +1597,15 @@
      },
      "body": [
       {
-       "id": 174,
-       "tag": "dbg_arg_inline",
-       "ty": 5,
-       "args": [
-        {
-         "inst": 166
-        }
-       ],
-       "name": "a"
-      },
-      {
        "id": 175,
        "tag": "dbg_arg_inline",
        "ty": 5,
        "args": [
         {
-         "inst": 100
+         "inst": 167
         }
        ],
-       "name": "len"
+       "name": "a"
       },
       {
        "id": 176,
@@ -1608,13 +1613,24 @@
        "ty": 5,
        "args": [
         {
-         "inst": 171
+         "inst": 101
+        }
+       ],
+       "name": "len"
+      },
+      {
+       "id": 177,
+       "tag": "dbg_arg_inline",
+       "ty": 5,
+       "args": [
+        {
+         "inst": 172
         }
        ],
        "name": "alignment"
       },
       {
-       "id": 177,
+       "id": 178,
        "tag": "dbg_arg_inline",
        "ty": 5,
        "args": [
@@ -1625,80 +1641,70 @@
        "name": "ret_addr"
       },
       {
-       "id": 178,
+       "id": 179,
        "tag": "alloc",
        "ty": 4
       },
       {
-       "id": 179,
+       "id": 180,
        "tag": "store_safe",
        "ty": 5,
        "args": [
         {
-         "inst": 178
+         "inst": 179
         },
         {
-         "inst": 166
-        }
-       ]
-      },
-      {
-       "id": 180,
-       "tag": "ptr_cast",
-       "ty": 6,
-       "args": [
-        {
-         "inst": 178
+         "inst": 167
         }
        ]
       },
       {
        "id": 181,
+       "tag": "ptr_cast",
+       "ty": 6,
+       "args": [
+        {
+         "inst": 179
+        }
+       ]
+      },
+      {
+       "id": 182,
        "tag": "dbg_stmt",
        "ty": 5,
        "line": 2,
        "column": 13
       },
       {
-       "id": 182,
+       "id": 183,
        "tag": "struct_field_ptr_index_1",
-       "ty": 32,
+       "ty": 34,
        "args": [
         {
-         "inst": 180
+         "inst": 181
         }
        ]
       },
       {
-       "id": 183,
+       "id": 184,
        "tag": "dbg_stmt",
        "ty": 5,
        "line": 2,
        "column": 26
       },
       {
-       "id": 184,
-       "tag": "load",
-       "ty": 33,
-       "args": [
-        {
-         "inst": 182
-        }
-       ]
-      },
-      {
        "id": 185,
-       "tag": "struct_field_ptr_index_0",
-       "ty": 41,
+       "tag": "load",
+       "ty": 35,
        "args": [
         {
-         "inst": 184
+         "inst": 183
         }
        ]
       },
       {
        "id": 186,
-       "tag": "load",
+       "tag": "struct_field_ptr_index_0",
        "ty": 42,
        "args": [
         {
@@ -1708,54 +1714,64 @@
       },
       {
        "id": 187,
+       "tag": "load",
+       "ty": 43,
+       "args": [
+        {
+         "inst": 186
+        }
+       ]
+      },
+      {
+       "id": 188,
        "tag": "dbg_stmt",
        "ty": 5,
        "line": 2,
        "column": 28
       },
       {
-       "id": 188,
-       "tag": "struct_field_ptr_index_0",
-       "ty": 36,
-       "args": [
-        {
-         "inst": 180
-        }
-       ]
-      },
-      {
        "id": 189,
-       "tag": "load",
-       "ty": 37,
+       "tag": "struct_field_ptr_index_0",
+       "ty": 38,
        "args": [
         {
-         "inst": 188
+         "inst": 181
         }
        ]
       },
       {
        "id": 190,
+       "tag": "load",
+       "ty": 39,
+       "args": [
+        {
+         "inst": 189
+        }
+       ]
+      },
+      {
+       "id": 191,
        "tag": "dbg_stmt",
        "ty": 5,
        "line": 2,
        "column": 26
       },
       {
-       "id": 191,
+       "id": 192,
        "tag": "call",
-       "ty": 31,
+       "ty": 33,
        "callee": {
-        "inst": 186
+        "inst": 187
        },
        "args": [
         {
-         "inst": 189
+         "inst": 190
         },
         {
-         "inst": 100
+         "inst": 101
         },
         {
-         "inst": 171
+         "inst": 172
         },
         {
          "inst": 3
@@ -1763,77 +1779,77 @@
        ]
       },
       {
-       "id": 192,
+       "id": 193,
        "tag": "dbg_stmt",
        "ty": 5,
        "line": 2,
        "column": 5
       },
       {
-       "id": 193,
+       "id": 194,
        "tag": "br",
        "ty": 12,
-       "target": 173,
+       "target": 174,
        "args": [
         {
-         "inst": 191
+         "inst": 192
         }
        ]
       }
      ]
     },
     {
-     "id": 194,
+     "id": 195,
      "tag": "is_non_null",
      "ty": 11,
      "args": [
       {
-       "inst": 173
+       "inst": 174
       }
      ]
     },
     {
-     "id": 199,
+     "id": 200,
      "tag": "cond_br",
      "ty": 12,
      "args": [
       {
-       "inst": 194
+       "inst": 195
       }
      ],
      "then": [
       {
-       "id": 195,
+       "id": 196,
        "tag": "optional_payload",
-       "ty": 38,
+       "ty": 27,
        "args": [
         {
-         "inst": 173
+         "inst": 174
         }
        ]
       },
       {
-       "id": 196,
+       "id": 197,
        "tag": "br",
        "ty": 12,
-       "target": 164,
+       "target": 165,
        "args": [
         {
-         "inst": 195
+         "inst": 196
         }
        ]
       }
      ],
      "else": [
       {
-       "id": 197,
+       "id": 198,
        "tag": "dbg_stmt",
        "ty": 5,
        "line": 31,
        "column": 9
       },
       {
-       "id": 198,
+       "id": 199,
        "tag": "ret_safe",
        "ty": 12,
        "args": [
@@ -1848,78 +1864,68 @@
    ]
   },
   {
-   "id": 200,
+   "id": 201,
    "tag": "alloc",
-   "ty": 39
+   "ty": 40
   },
   {
-   "id": 201,
+   "id": 202,
    "tag": "store_safe",
    "ty": 5,
    "args": [
     {
-     "inst": 200
+     "inst": 201
     },
     {
-     "inst": 164
-    }
-   ]
-  },
-  {
-   "id": 202,
-   "tag": "ptr_cast",
-   "ty": 40,
-   "args": [
-    {
-     "inst": 200
+     "inst": 165
     }
    ]
   },
   {
    "id": 203,
+   "tag": "ptr_cast",
+   "ty": 41,
+   "args": [
+    {
+     "inst": 201
+    }
+   ]
+  },
+  {
+   "id": 204,
    "tag": "dbg_var_val",
    "ty": 5,
    "args": [
     {
-     "inst": 164
+     "inst": 165
     }
    ],
    "name": "new_mem"
   },
   {
-   "id": 204,
+   "id": 205,
    "tag": "dbg_stmt",
    "ty": 5,
    "line": 32,
    "column": 53
   },
   {
-   "id": 205,
+   "id": 206,
    "tag": "ptr_slice_len_ptr",
    "ty": 9,
    "args": [
     {
-     "inst": 97
-    }
-   ]
-  },
-  {
-   "id": 206,
-   "tag": "load",
-   "ty": 2,
-   "args": [
-    {
-     "inst": 205
+     "inst": 98
     }
    ]
   },
   {
    "id": 207,
-   "tag": "bit_cast",
-   "ty": 10,
+   "tag": "load",
+   "ty": 2,
    "args": [
     {
-     "inst": 100
+     "inst": 206
     }
    ]
   },
@@ -1929,82 +1935,68 @@
    "ty": 10,
    "args": [
     {
-     "inst": 206
+     "inst": 101
     }
    ]
   },
   {
    "id": 209,
-   "tag": "min",
+   "tag": "bit_cast",
    "ty": 10,
    "args": [
     {
      "inst": 207
-    },
-    {
-     "inst": 208
     }
    ]
   },
   {
    "id": 210,
+   "tag": "min",
+   "ty": 10,
+   "args": [
+    {
+     "inst": 208
+    },
+    {
+     "inst": 209
+    }
+   ]
+  },
+  {
+   "id": 211,
    "tag": "dbg_var_val",
    "ty": 5,
    "args": [
     {
-     "inst": 209
+     "inst": 210
     }
    ],
    "name": "copy_len"
   },
   {
-   "id": 211,
+   "id": 212,
    "tag": "dbg_stmt",
    "ty": 5,
    "line": 33,
    "column": 20
   },
   {
-   "id": 212,
-   "tag": "load",
-   "ty": 38,
-   "args": [
-    {
-     "inst": 202
-    }
-   ]
-  },
-  {
    "id": 213,
-   "tag": "ptr_add",
-   "ty": 38,
+   "tag": "load",
+   "ty": 27,
    "args": [
     {
-     "inst": 212
-    },
-    {
-     "ty": 2,
-     "val": "0"
+     "inst": 203
     }
    ]
   },
   {
    "id": 214,
-   "tag": "bit_cast",
-   "ty": 2,
+   "tag": "ptr_add",
+   "ty": 27,
    "args": [
     {
-     "inst": 209
-    }
-   ]
-  },
-  {
-   "id": 215,
-   "tag": "sub",
-   "ty": 2,
-   "args": [
-    {
-     "inst": 214
+     "inst": 213
     },
     {
      "ty": 2,
@@ -2013,76 +2005,76 @@
    ]
   },
   {
-   "id": 216,
-   "tag": "slice",
-   "ty": 24,
+   "id": 215,
+   "tag": "bit_cast",
+   "ty": 2,
    "args": [
     {
-     "inst": 213
-    },
+     "inst": 210
+    }
+   ]
+  },
+  {
+   "id": 216,
+   "tag": "sub",
+   "ty": 2,
+   "args": [
     {
      "inst": 215
+    },
+    {
+     "ty": 2,
+     "val": "0"
     }
    ]
   },
   {
    "id": 217,
+   "tag": "slice",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 214
+    },
+    {
+     "inst": 216
+    }
+   ]
+  },
+  {
+   "id": 218,
    "tag": "dbg_stmt",
    "ty": 5,
    "line": 33,
    "column": 49
   },
   {
-   "id": 218,
-   "tag": "load",
-   "ty": 24,
-   "args": [
-    {
-     "inst": 97
-    }
-   ]
-  },
-  {
    "id": 219,
-   "tag": "slice_ptr",
-   "ty": 38,
+   "tag": "load",
+   "ty": 1,
    "args": [
     {
-     "inst": 218
+     "inst": 98
     }
    ]
   },
   {
    "id": 220,
-   "tag": "ptr_add",
-   "ty": 38,
+   "tag": "slice_ptr",
+   "ty": 27,
    "args": [
     {
      "inst": 219
-    },
-    {
-     "ty": 2,
-     "val": "0"
     }
    ]
   },
   {
    "id": 221,
-   "tag": "bit_cast",
-   "ty": 2,
+   "tag": "ptr_add",
+   "ty": 27,
    "args": [
     {
-     "inst": 209
-    }
-   ]
-  },
-  {
-   "id": 222,
-   "tag": "sub",
-   "ty": 2,
-   "args": [
-    {
-     "inst": 221
+     "inst": 220
     },
     {
      "ty": 2,
@@ -2091,19 +2083,113 @@
    ]
   },
   {
-   "id": 223,
-   "tag": "slice_len",
+   "id": 222,
+   "tag": "bit_cast",
    "ty": 2,
    "args": [
     {
-     "inst": 218
+     "inst": 210
+    }
+   ]
+  },
+  {
+   "id": 223,
+   "tag": "sub",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 222
+    },
+    {
+     "ty": 2,
+     "val": "0"
     }
    ]
   },
   {
    "id": 224,
+   "tag": "slice_len",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 219
+    }
+   ]
+  },
+  {
+   "id": 225,
    "tag": "cmp_lte",
    "ty": 11,
+   "args": [
+    {
+     "inst": 222
+    },
+    {
+     "inst": 224
+    }
+   ]
+  },
+  {
+   "id": 228,
+   "tag": "block",
+   "ty": 5,
+   "body": [
+    {
+     "id": 229,
+     "tag": "cond_br",
+     "ty": 12,
+     "args": [
+      {
+       "inst": 225
+      }
+     ],
+     "then": [
+      {
+       "id": 230,
+       "tag": "br",
+       "ty": 12,
+       "target": 228,
+       "args": [
+        {
+         "ty": 5,
+         "val": "{}"
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 226,
+       "tag": "call",
+       "ty": 12,
+       "callee": {
+        "ty": 44,
+        "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+        "module": "std",
+        "noreturn": true
+       },
+       "args": [
+        {
+         "inst": 222
+        },
+        {
+         "inst": 224
+        }
+       ]
+      },
+      {
+       "id": 227,
+       "tag": "unreach",
+       "ty": 12
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 231,
+   "tag": "slice",
+   "ty": 1,
    "args": [
     {
      "inst": 221
@@ -2114,128 +2200,58 @@
    ]
   },
   {
-   "id": 227,
-   "tag": "block",
-   "ty": 5,
-   "body": [
-    {
-     "id": 228,
-     "tag": "cond_br",
-     "ty": 12,
-     "args": [
-      {
-       "inst": 224
-      }
-     ],
-     "then": [
-      {
-       "id": 229,
-       "tag": "br",
-       "ty": 12,
-       "target": 227,
-       "args": [
-        {
-         "ty": 5,
-         "val": "{}"
-        }
-       ]
-      }
-     ],
-     "else": [
-      {
-       "id": 225,
-       "tag": "call",
-       "ty": 12,
-       "callee": {
-        "ty": 43,
-        "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
-        "module": "std",
-        "noreturn": true
-       },
-       "args": [
-        {
-         "inst": 221
-        },
-        {
-         "inst": 223
-        }
-       ]
-      },
-      {
-       "id": 226,
-       "tag": "unreach",
-       "ty": 12
-      }
-     ]
-    }
-   ]
-  },
-  {
-   "id": 230,
-   "tag": "slice",
-   "ty": 24,
-   "args": [
-    {
-     "inst": 220
-    },
-    {
-     "inst": 222
-    }
-   ]
-  },
-  {
-   "id": 231,
-   "tag": "slice_len",
-   "ty": 2,
-   "args": [
-    {
-     "inst": 216
-    }
-   ]
-  },
-  {
    "id": 232,
    "tag": "slice_len",
    "ty": 2,
    "args": [
     {
-     "inst": 230
+     "inst": 217
     }
    ]
   },
   {
    "id": 233,
-   "tag": "cmp_eq",
-   "ty": 11,
+   "tag": "slice_len",
+   "ty": 2,
    "args": [
     {
      "inst": 231
-    },
-    {
-     "inst": 232
     }
    ]
   },
   {
-   "id": 236,
+   "id": 234,
+   "tag": "cmp_eq",
+   "ty": 11,
+   "args": [
+    {
+     "inst": 232
+    },
+    {
+     "inst": 233
+    }
+   ]
+  },
+  {
+   "id": 237,
    "tag": "block",
    "ty": 5,
    "body": [
     {
-     "id": 237,
+     "id": 238,
      "tag": "cond_br",
      "ty": 12,
      "args": [
       {
-       "inst": 233
+       "inst": 234
       }
      ],
      "then": [
       {
-       "id": 238,
+       "id": 239,
        "tag": "br",
        "ty": 12,
-       "target": 236,
+       "target": 237,
        "args": [
         {
          "ty": 5,
@@ -2246,11 +2262,11 @@
      ],
      "else": [
       {
-       "id": 234,
+       "id": 235,
        "tag": "call",
        "ty": 12,
        "callee": {
-        "ty": 44,
+        "ty": 45,
         "func": "debug.FullPanic((function 'defaultPanic')).copyLenMismatch",
         "module": "std",
         "noreturn": true
@@ -2258,7 +2274,7 @@
        "args": []
       },
       {
-       "id": 235,
+       "id": 236,
        "tag": "unreach",
        "ty": 12
       }
@@ -2267,61 +2283,48 @@
    ]
   },
   {
-   "id": 239,
-   "tag": "slice_ptr",
-   "ty": 38,
-   "args": [
-    {
-     "inst": 230
-    }
-   ]
-  },
-  {
    "id": 240,
    "tag": "slice_ptr",
-   "ty": 38,
+   "ty": 27,
    "args": [
     {
-     "inst": 216
+     "inst": 231
     }
    ]
   },
   {
    "id": 241,
-   "tag": "ptr_add",
-   "ty": 38,
+   "tag": "slice_ptr",
+   "ty": 27,
    "args": [
     {
-     "inst": 239
-    },
-    {
-     "inst": 231
+     "inst": 217
     }
    ]
   },
   {
    "id": 242,
    "tag": "ptr_add",
-   "ty": 38,
+   "ty": 27,
    "args": [
     {
      "inst": 240
     },
     {
-     "inst": 231
+     "inst": 232
     }
    ]
   },
   {
    "id": 243,
-   "tag": "cmp_gte",
-   "ty": 11,
+   "tag": "ptr_add",
+   "ty": 27,
    "args": [
     {
-     "inst": 240
+     "inst": 241
     },
     {
-     "inst": 241
+     "inst": 232
     }
    ]
   },
@@ -2331,7 +2334,7 @@
    "ty": 11,
    "args": [
     {
-     "inst": 239
+     "inst": 241
     },
     {
      "inst": 242
@@ -2340,37 +2343,50 @@
   },
   {
    "id": 245,
-   "tag": "bit_or",
+   "tag": "cmp_gte",
    "ty": 11,
    "args": [
     {
-     "inst": 243
+     "inst": 240
     },
     {
-     "inst": 244
+     "inst": 243
     }
    ]
   },
   {
-   "id": 248,
+   "id": 246,
+   "tag": "bit_or",
+   "ty": 11,
+   "args": [
+    {
+     "inst": 244
+    },
+    {
+     "inst": 245
+    }
+   ]
+  },
+  {
+   "id": 249,
    "tag": "block",
    "ty": 5,
    "body": [
     {
-     "id": 249,
+     "id": 250,
      "tag": "cond_br",
      "ty": 12,
      "args": [
       {
-       "inst": 245
+       "inst": 246
       }
      ],
      "then": [
       {
-       "id": 250,
+       "id": 251,
        "tag": "br",
        "ty": 12,
-       "target": 248,
+       "target": 249,
        "args": [
         {
          "ty": 5,
@@ -2381,11 +2397,11 @@
      ],
      "else": [
       {
-       "id": 246,
+       "id": 247,
        "tag": "call",
        "ty": 12,
        "callee": {
-        "ty": 44,
+        "ty": 45,
         "func": "debug.FullPanic((function 'defaultPanic')).memcpyAlias",
         "module": "std",
         "noreturn": true
@@ -2393,7 +2409,7 @@
        "args": []
       },
       {
-       "id": 247,
+       "id": 248,
        "tag": "unreach",
        "ty": 12
       }
@@ -2402,58 +2418,58 @@
    ]
   },
   {
-   "id": 251,
+   "id": 252,
    "tag": "memcpy",
    "ty": 5,
    "args": [
     {
-     "inst": 216
+     "inst": 217
     },
     {
-     "inst": 239
+     "inst": 240
     }
    ]
   },
   {
-   "id": 252,
+   "id": 253,
    "tag": "dbg_stmt",
    "ty": 5,
    "line": 34,
    "column": 5
   },
   {
-   "id": 253,
+   "id": 254,
    "tag": "slice_len",
    "ty": 2,
    "args": [
     {
-     "inst": 94
-    }
-   ]
-  },
-  {
-   "id": 254,
-   "tag": "memset_safe",
-   "ty": 5,
-   "args": [
-    {
-     "inst": 94
-    },
-    {
-     "ty": 45,
-     "undef": true
+     "inst": 95
     }
    ]
   },
   {
    "id": 255,
+   "tag": "memset_safe",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 95
+    },
+    {
+     "ty": 46,
+     "undef": true
+    }
+   ]
+  },
+  {
+   "id": 256,
    "tag": "dbg_stmt",
    "ty": 5,
    "line": 35,
    "column": 17
   },
   {
-   "id": 256,
+   "id": 257,
    "tag": "load",
    "ty": 0,
    "args": [
@@ -2463,25 +2479,25 @@
    ]
   },
   {
-   "id": 257,
+   "id": 258,
    "tag": "dbg_stmt",
    "ty": 5,
    "line": 35,
    "column": 48
   },
   {
-   "id": 259,
+   "id": 260,
    "tag": "dbg_stmt",
    "ty": 5,
    "line": 35,
    "column": 48
   },
   {
-   "id": 261,
+   "id": 262,
    "tag": "call",
-   "ty": 14,
+   "ty": 15,
    "callee": {
-    "ty": 30,
+    "ty": 32,
     "func": "mem.Alignment.fromByteUnits",
     "module": "std",
     "noreturn": false
@@ -2494,14 +2510,14 @@
    ]
   },
   {
-   "id": 262,
+   "id": 263,
    "tag": "dbg_stmt",
    "ty": 5,
    "line": 35,
    "column": 17
   },
   {
-   "id": 263,
+   "id": 264,
    "tag": "dbg_inline_block",
    "ty": 5,
    "src": {
@@ -2511,26 +2527,15 @@
    },
    "body": [
     {
-     "id": 264,
-     "tag": "dbg_arg_inline",
-     "ty": 5,
-     "args": [
-      {
-       "inst": 256
-      }
-     ],
-     "name": "a"
-    },
-    {
      "id": 265,
      "tag": "dbg_arg_inline",
      "ty": 5,
      "args": [
       {
-       "inst": 94
+       "inst": 257
       }
      ],
-     "name": "memory"
+     "name": "a"
     },
     {
      "id": 266,
@@ -2538,13 +2543,24 @@
      "ty": 5,
      "args": [
       {
-       "inst": 261
+       "inst": 95
+      }
+     ],
+     "name": "memory"
+    },
+    {
+     "id": 267,
+     "tag": "dbg_arg_inline",
+     "ty": 5,
+     "args": [
+      {
+       "inst": 262
       }
      ],
      "name": "alignment"
     },
     {
-     "id": 267,
+     "id": 268,
      "tag": "dbg_arg_inline",
      "ty": 5,
      "args": [
@@ -2555,80 +2571,70 @@
      "name": "ret_addr"
     },
     {
-     "id": 268,
+     "id": 269,
      "tag": "alloc",
      "ty": 4
     },
     {
-     "id": 269,
+     "id": 270,
      "tag": "store_safe",
      "ty": 5,
      "args": [
       {
-       "inst": 268
+       "inst": 269
       },
       {
-       "inst": 256
-      }
-     ]
-    },
-    {
-     "id": 270,
-     "tag": "ptr_cast",
-     "ty": 6,
-     "args": [
-      {
-       "inst": 268
+       "inst": 257
       }
      ]
     },
     {
      "id": 271,
+     "tag": "ptr_cast",
+     "ty": 6,
+     "args": [
+      {
+       "inst": 269
+      }
+     ]
+    },
+    {
+     "id": 272,
      "tag": "dbg_stmt",
      "ty": 5,
      "line": 2,
      "column": 13
     },
     {
-     "id": 272,
+     "id": 273,
      "tag": "struct_field_ptr_index_1",
-     "ty": 32,
+     "ty": 34,
      "args": [
       {
-       "inst": 270
+       "inst": 271
       }
      ]
     },
     {
-     "id": 273,
+     "id": 274,
      "tag": "dbg_stmt",
      "ty": 5,
      "line": 2,
      "column": 25
     },
     {
-     "id": 274,
-     "tag": "load",
-     "ty": 33,
-     "args": [
-      {
-       "inst": 272
-      }
-     ]
-    },
-    {
      "id": 275,
-     "tag": "struct_field_ptr_index_3",
-     "ty": 46,
+     "tag": "load",
+     "ty": 35,
      "args": [
       {
-       "inst": 274
+       "inst": 273
       }
      ]
     },
     {
      "id": 276,
-     "tag": "load",
+     "tag": "struct_field_ptr_index_3",
      "ty": 47,
      "args": [
       {
@@ -2638,54 +2644,64 @@
     },
     {
      "id": 277,
+     "tag": "load",
+     "ty": 48,
+     "args": [
+      {
+       "inst": 276
+      }
+     ]
+    },
+    {
+     "id": 278,
      "tag": "dbg_stmt",
      "ty": 5,
      "line": 2,
      "column": 27
     },
     {
-     "id": 278,
-     "tag": "struct_field_ptr_index_0",
-     "ty": 36,
-     "args": [
-      {
-       "inst": 270
-      }
-     ]
-    },
-    {
      "id": 279,
-     "tag": "load",
-     "ty": 37,
+     "tag": "struct_field_ptr_index_0",
+     "ty": 38,
      "args": [
       {
-       "inst": 278
+       "inst": 271
       }
      ]
     },
     {
      "id": 280,
+     "tag": "load",
+     "ty": 39,
+     "args": [
+      {
+       "inst": 279
+      }
+     ]
+    },
+    {
+     "id": 281,
      "tag": "dbg_stmt",
      "ty": 5,
      "line": 2,
      "column": 25
     },
     {
-     "id": 281,
+     "id": 282,
      "tag": "call",
      "ty": 5,
      "callee": {
-      "inst": 276
+      "inst": 277
      },
      "args": [
       {
-       "inst": 279
+       "inst": 280
       },
       {
-       "inst": 94
+       "inst": 95
       },
       {
-       "inst": 261
+       "inst": 262
       },
       {
        "inst": 3
@@ -2693,17 +2709,17 @@
      ]
     },
     {
-     "id": 282,
+     "id": 283,
      "tag": "dbg_stmt",
      "ty": 5,
      "line": 2,
      "column": 5
     },
     {
-     "id": 283,
+     "id": 284,
      "tag": "br",
      "ty": 12,
-     "target": 263,
+     "target": 264,
      "args": [
       {
        "ty": 5,
@@ -2714,43 +2730,29 @@
    ]
   },
   {
-   "id": 284,
+   "id": 285,
    "tag": "dbg_stmt",
    "ty": 5,
    "line": 37,
    "column": 39
   },
   {
-   "id": 285,
-   "tag": "load",
-   "ty": 38,
-   "args": [
-    {
-     "inst": 202
-    }
-   ]
-  },
-  {
    "id": 286,
-   "tag": "ptr_add",
-   "ty": 38,
+   "tag": "load",
+   "ty": 27,
    "args": [
     {
-     "inst": 285
-    },
-    {
-     "ty": 2,
-     "val": "0"
+     "inst": 203
     }
    ]
   },
   {
    "id": 287,
-   "tag": "sub",
-   "ty": 2,
+   "tag": "ptr_add",
+   "ty": 27,
    "args": [
     {
-     "inst": 100
+     "inst": 286
     },
     {
      "ty": 2,
@@ -2760,58 +2762,72 @@
   },
   {
    "id": 288,
-   "tag": "slice",
-   "ty": 24,
+   "tag": "sub",
+   "ty": 2,
    "args": [
     {
-     "inst": 286
+     "inst": 101
     },
     {
-     "inst": 287
+     "ty": 2,
+     "val": "0"
     }
    ]
   },
   {
    "id": 289,
-   "tag": "dbg_stmt",
-   "ty": 5,
-   "line": 37,
-   "column": 12
-  },
-  {
-   "id": 290,
-   "tag": "ptr_cast",
+   "tag": "slice",
    "ty": 1,
    "args": [
+    {
+     "inst": 287
+    },
     {
      "inst": 288
     }
    ]
   },
   {
+   "id": 290,
+   "tag": "dbg_stmt",
+   "ty": 5,
+   "line": 37,
+   "column": 12
+  },
+  {
    "id": 291,
+   "tag": "ptr_cast",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 289
+    }
+   ]
+  },
+  {
+   "id": 292,
    "tag": "dbg_stmt",
    "ty": 5,
    "line": 37,
    "column": 5
   },
   {
-   "id": 292,
+   "id": 293,
    "tag": "wrap_errunion_payload",
    "ty": 3,
    "args": [
     {
-     "inst": 290
+     "inst": 291
     }
    ]
   },
   {
-   "id": 293,
+   "id": 294,
    "tag": "ret_safe",
    "ty": 12,
    "args": [
     {
-     "inst": 292
+     "inst": 293
     }
    ]
   }
@@ -2825,12 +2841,12 @@
    "fields": [
     {
      "name": "ptr",
-     "ty": 37,
+     "ty": 39,
      "offset": 0
     },
     {
      "name": "vtable",
-     "ty": 33,
+     "ty": 35,
      "offset": 8
     }
    ],
@@ -2841,7 +2857,7 @@
    "k": "ptr",
    "size": "slice",
    "const": false,
-   "child": 45,
+   "child": 46,
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
@@ -2860,7 +2876,7 @@
   },
   {
    "k": "error_union",
-   "error": 18,
+   "error": 19,
    "payload": 1,
    "abi_size": 24,
    "abi_align": 8
@@ -2956,8 +2972,15 @@
    "k": "noreturn"
   },
   {
+   "k": "error_union",
+   "error": 19,
+   "payload": 22,
+   "abi_size": 24,
+   "abi_align": 8
+  },
+  {
    "k": "optional",
-   "child": 14,
+   "child": 15,
    "abi_size": 2,
    "abi_align": 1
   },
@@ -2965,7 +2988,7 @@
    "k": "enum",
    "name": "mem.Alignment",
    "module": "std",
-   "tag": 48,
+   "tag": 49,
    "exhaustive": false,
    "fields": [
     {
@@ -3002,8 +3025,8 @@
   },
   {
    "k": "error_union",
-   "error": 18,
-   "payload": 17,
+   "error": 19,
+   "payload": 18,
    "abi_size": 16,
    "abi_align": 8
   },
@@ -3015,7 +3038,7 @@
    "k": "ptr",
    "size": "many",
    "const": false,
-   "child": 45,
+   "child": 46,
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
@@ -3037,7 +3060,7 @@
    "k": "ptr",
    "size": "one",
    "const": false,
-   "child": 17,
+   "child": 18,
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
@@ -3051,7 +3074,7 @@
    "k": "ptr",
    "size": "one",
    "const": true,
-   "child": 17,
+   "child": 18,
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
@@ -3062,32 +3085,10 @@
    "abi_align": 8
   },
   {
-   "k": "other",
-   "name": "fn (mem.Allocator, []align(1) u8) void"
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": false,
-   "child": 49,
-   "ptr_align": 1,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "other",
-   "name": "fn ([]align(1) u8) []align(1) u8"
-  },
-  {
    "k": "ptr",
    "size": "slice",
    "const": false,
-   "child": 45,
+   "child": 46,
    "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
@@ -3101,7 +3102,7 @@
    "k": "ptr",
    "size": "one",
    "const": false,
-   "child": 24,
+   "child": 13,
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
@@ -3114,8 +3115,8 @@
   {
    "k": "ptr",
    "size": "one",
-   "const": true,
-   "child": 24,
+   "const": false,
+   "child": 3,
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
@@ -3126,8 +3127,44 @@
    "abi_align": 8
   },
   {
+   "k": "other",
+   "name": "fn (mem.Allocator, []u8) void"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 50,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "many",
+   "const": false,
+   "child": 46,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn ([]u8) []u8"
+  },
+  {
    "k": "error_union",
-   "error": 29,
+   "error": 31,
    "payload": 2,
    "abi_size": 16,
    "abi_align": 8
@@ -3150,35 +3187,7 @@
   },
   {
    "k": "optional",
-   "child": 38,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 33,
-   "ptr_align": 8,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 50,
-   "ptr_align": 8,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
+   "child": 27,
    "abi_size": 8,
    "abi_align": 8
   },
@@ -3201,6 +3210,7 @@
    "size": "one",
    "const": true,
    "child": 51,
+   "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
    "address_space": "generic",
@@ -3226,9 +3236,8 @@
   {
    "k": "ptr",
    "size": "one",
-   "const": false,
+   "const": true,
    "child": 52,
-   "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
    "address_space": "generic",
@@ -3239,65 +3248,79 @@
   },
   {
    "k": "ptr",
-   "size": "many",
+   "size": "one",
+   "const": true,
+   "child": 39,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
    "const": false,
-   "child": 45,
-   "ptr_align": 1,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": false,
-   "child": 38,
-   "ptr_align": 8,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 38,
-   "ptr_align": 8,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 42,
-   "ptr_align": 8,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
    "child": 53,
+   "ptr_align": 1,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 27,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 27,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 43,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 54,
    "volatile": false,
    "allowzero": false,
    "address_space": "generic",
@@ -3325,7 +3348,7 @@
    "k": "ptr",
    "size": "one",
    "const": true,
-   "child": 47,
+   "child": 48,
    "ptr_align": 8,
    "volatile": false,
    "allowzero": false,
@@ -3339,7 +3362,7 @@
    "k": "ptr",
    "size": "one",
    "const": true,
-   "child": 54,
+   "child": 55,
    "volatile": false,
    "allowzero": false,
    "address_space": "generic",
@@ -3358,7 +3381,7 @@
   {
    "k": "array",
    "len": 0,
-   "child": 45,
+   "child": 46,
    "sentinel": false,
    "abi_size": 0,
    "abi_align": 1
@@ -3371,22 +3394,22 @@
    "fields": [
     {
      "name": "alloc",
-     "ty": 42,
+     "ty": 43,
      "offset": 0
     },
     {
      "name": "resize",
-     "ty": 55,
+     "ty": 56,
      "offset": 8
     },
     {
      "name": "remap",
-     "ty": 35,
+     "ty": 37,
      "offset": 16
     },
     {
      "name": "free",
-     "ty": 47,
+     "ty": 48,
      "offset": 24
     }
    ],
@@ -3413,7 +3436,7 @@
    "k": "ptr",
    "size": "one",
    "const": true,
-   "child": 56,
+   "child": 57,
    "volatile": false,
    "allowzero": false,
    "address_space": "generic",

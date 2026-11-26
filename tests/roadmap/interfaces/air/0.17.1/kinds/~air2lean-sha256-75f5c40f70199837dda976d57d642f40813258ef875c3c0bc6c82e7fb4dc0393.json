@@ -42,7 +42,7 @@
  "src": {
   "file": "kinds.zig",
   "module": "kinds",
-  "decl_line": 20
+  "decl_line": 22
  },
  "params": [
   0,
@@ -329,7 +329,7 @@
     "ty": 15,
     "func": "mem.Allocator.realloc__func_684",
     "module": "std",
-    "instance_key": "49e4e5fd8358d1e40e61629ff1b096a8ad00485d52848b96930ff3b08d088fd6",
+    "instance_key": "b0aac85a32159d61779131d9b1f3cf2622fd640f28944a4bfc082d978b5e6e6b",
     "noreturn": false
    },
    "args": [
@@ -1269,7 +1269,7 @@
   },
   {
    "k": "other",
-   "name": "fn (mem.Allocator, []align(4) f32, usize) error{OutOfMemory}![]align(4) f32"
+   "name": "fn (mem.Allocator, []f32, usize) error{OutOfMemory}![]f32"
   },
   {
    "k": "error_set",

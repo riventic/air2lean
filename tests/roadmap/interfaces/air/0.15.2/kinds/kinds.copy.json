@@ -42,7 +42,7 @@
  "src": {
   "file": "kinds.zig",
   "module": "kinds",
-  "decl_line": 43
+  "decl_line": 45
  },
  "params": [
   0,

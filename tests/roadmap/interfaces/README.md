@@ -15,7 +15,11 @@ Calls through an interface value that the caller passes in (docs/interfaces.md).
 - `sentinel`: M04's `tests/roadmap/sentinel-realloc/source.zig` (`make`, `append`, `resize`,
   `release` of a `[:0]u8`), whose `std.mem.Allocator` parameter can be any allocator;
 - `wide` (`wide.zig`): the same four operations on a `[:0]T` of an item type wider than a byte
-  (`Buf(T)` at `u16`, `u32` and `u64`): `(len + 1) * @sizeOf(T)` bytes at `@alignOf(T)`.
+  (`Buf(T)` at `u16`, `u32` and `u64`): `(len + 1) * @sizeOf(T)` bytes at `@alignOf(T)`;
+- `kinds` (`kinds.zig`): the same four operations for other item kinds, `Buf(T, A, z)` at a
+  non-zero sentinel (`[:0xff]u8`), an optional pointer item (`[:null]?*u8`), a float item
+  (`[:0]f32`) and an over-aligned slice (`[:0]align(16) u16`, made by `allocWithOptions`), and
+  `copy`, a sentinel copy of a slice (`dupeSentinel`, `dupeZ` before Zig 0.17).
 
 `registry-alloc.json` opens `mem.Allocator.VTable` and `registry-random.json` opens `Random`
 (the `interfaces` array of docs/external-models.md, premise EXT-05). `air/<version>/<program>`
@@ -26,7 +30,8 @@ sources, the exporter and every file (`scripts/fixture-exports.py`,
 
 `check.sh` translates every program on every version, elaborates each translation, keeps the
 0.17.1 translations byte for byte (`lists` as `Proofs/Lists/Open.lean`, the program of the
-list proofs; the others as `Interfaces/{Mix,Rnd,Callbacks,Sentinel,Wide}.lean`), and runs `test_cli.py`:
+list proofs; the others as `Interfaces/{Mix,Rnd,Callbacks,Sentinel,Wide,Kinds}.lean`), and runs
+`test_cli.py`:
 an unused entry, a type opened twice, a struct without function-pointer fields, a non-EXT-05
 premise and `--proof-api` are rejected; without the registry every call keeps the closed
 `.illegal` arm. It then checks the proofs over the 0.17.1 translations (`fsym`, only the
@@ -56,7 +61,13 @@ standard axioms):
   of `len` items is a grant of `len + 1` bytes with the sentinel last, on success and on
   `error.OutOfMemory` (M04). It is also checked over the 0.16.0, 0.15.2 and 0.14.1 translations;
 - `WideSpec.lean`: the same for `wide` (`make16_spec` … `release64_spec`). Also checked over the
-  0.16.0, 0.15.2 and 0.14.1 translations.
+  0.16.0, 0.15.2 and 0.14.1 translations;
+- `KindsSpec.lean`: the same for the four item kinds of `kinds` (`makeFf_spec` …
+  `releaseOver_spec`: the sentinels `0xff`, `null` and `+0.0`, and the grant at alignment 16),
+  and `copy_spec`: the copy's grant holds the source's bytes and the sentinel after them. Also
+  checked over the 0.16.0, 0.15.2 and 0.14.1 translations. A float has no `LawfulEnc` instance
+  (a NaN's bytes are undefined), so its walk names the value-wise region rules of
+  `ZigLean/Sep/Full/RegionEnc.lean`; the sentinel `+0.0` reads back because it is not a NaN.
 
 The sentinel statements are generic (`ZigLean/Sep/Full/SentinelBuf.lean`): `made`, `appended`
 and `resized` are stated once for every item size `sz`, log2 alignment `k` and sentinel bytes (a
@@ -64,8 +75,10 @@ buffer of `len` items is a grant of `(len + 1) * sz` bytes at alignment `2 ^ k`,
 item last), and `append_grant` and `resize_grant` are proved once from the shape of an instance's
 code (`appendedAt`, `resizedAt`: the reallocated grant with the item and the sentinel written at
 their byte offsets) and the size of its encoding. `SentinelSpec` is the instance `sz = 1`,
-`k = 0`; `WideSpec` has `u16`, `u32` and `u64`. An instance supplies the walk of its own copy of
-the generated code and the size of its encoding, nothing else.
+`k = 0`; `WideSpec` has `u16`, `u32` and `u64`; `KindsSpec` has `sz = 1, k = 0` with the sentinel
+`0xff`, `sz = 8, k = 3` (`?*u8`, `null`), `sz = 4, k = 2` (`f32`) and `sz = 2, k = 4`
+(`align(16) u16`). An instance supplies the walk of its own copy of the generated code and the
+size of its encoding, nothing else. `copy_grant` is the same for a sentinel copy.
 
 `check.sh` also runs the designated mutants of the translated allocator wrappers
 (`tests/roadmap/callbacks/mutants.py`, root `sentinel`): the unchanged `SentinelSpec` and
