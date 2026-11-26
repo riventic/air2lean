@@ -669,6 +669,24 @@ def run_inputs(units):
         raise Unkeyable(str(error)) from error
 
 
+def changed_inputs(before, after, top=10):
+    """What differs between two `run_inputs` snapshots (AFTER None: it could not be read): each
+    differing component, and for the worktree its first TOP changed, added or removed paths."""
+    if after is None:
+        return ['the inputs could not be read again']
+    changed = []
+    for component in sorted(before.keys() | after.keys()):
+        if component == 'worktree' and component in before and component in after:
+            old, new = ({r[0]: r for r in side[component][1]} for side in (before, after))
+            paths = sorted(p for p in old.keys() | new.keys() if old.get(p) != new.get(p))
+            changed += paths[:top] + ['... (%d paths in all)' % len(paths)] * (len(paths) > top)
+            if before[component][0] != after[component][0] or before[component][2] != after[component][2]:
+                changed.append('git state')
+        elif before.get(component) != after.get(component):
+            changed.append(component)
+    return changed
+
+
 def unit_key(unit, run_digest):
     """The key of UNIT's pass: the run's inputs (`run_inputs`, as RUN_DIGEST) and the CI step it
     is (its rendered script, environment and the native runs it leaves out on this host)."""
@@ -734,7 +752,8 @@ def main(argv=None):
         try:
             if len({u['name'] for u in units}) != len(units):
                 raise Unkeyable('two units have one name')
-            inputs = CAS.digest(run_inputs(selected))
+            snapshot = run_inputs(selected)
+            inputs = CAS.digest(snapshot)
             keys = {u['name']: unit_key(u, inputs) for u in units}
         except Unkeyable as error:  # every unit runs, and no pass is recorded
             print('fixture-checks: no pass is reused or recorded: %s' % error, file=sys.stderr)
@@ -781,6 +800,16 @@ def main(argv=None):
                         failed.append(error)
                     else:
                         before = shared_outputs()
+                        if inputs is not None:
+                            # The shared build writes the worktree's build outputs: the units start
+                            # from, and their pass is keyed on, the inputs as it left them.
+                            try:
+                                snapshot = run_inputs(selected)
+                                inputs = CAS.digest(snapshot)
+                                keys = {u['name']: unit_key(u, inputs) for u in units}
+                            except Unkeyable as error:
+                                print('fixture-checks: no pass is recorded: %s' % error, file=sys.stderr)
+                                inputs = None
                         for job in jobs:
                             if job.env is not None:
                                 job.env[assumptions.RUNTIME_RUN] = os.environ[assumptions.RUNTIME_RUN]
@@ -805,16 +834,18 @@ def main(argv=None):
             # the toolchain runtime, the scheduler). inputs None: in CI, or the inputs were unkeyable.
             elif statuses is not None and not failed and inputs is not None:
                 try:
-                    after = CAS.digest(run_inputs(selected))
+                    after_snapshot = run_inputs(selected)
+                    after = CAS.digest(after_snapshot)
                 except Unkeyable:
-                    after = None
+                    after_snapshot = after = None
                 if after == inputs:
                     head = assumptions.git_revision(ROOT)['head']
                     for u, status, s in zip(units, statuses, stats):  # stats: one per job, in order
                         if status == 0:
                             record(keys[u['name']], u, (s or {}).get('elapsed_s'), head)
                 else:
-                    print('fixture-checks: the inputs changed during the run: no pass is recorded')
+                    print('fixture-checks: the inputs changed during the run: no pass is recorded: %s'
+                          % ', '.join(changed_inputs(snapshot, after_snapshot)))
         finally:
             shutil.rmtree(scratch, ignore_errors=True)
         for u, status in zip(units, statuses or []):  # none: the run did not start

@@ -140,11 +140,36 @@ class Passes(unittest.TestCase):
         self.unit["run"] = 'echo run >> "$RUNS"\nprintf "ok\\n\\n" > "$HIDDEN_DIR/input"\n'
         status, out, _ = self.run_checks()
         self.assertEqual(status, 0)
-        self.assertIn("the inputs changed during the run: no pass is recorded", out)
+        self.assertIn("the inputs changed during the run: no pass is recorded: checkout", out)
         (self.hidden / "input").write_text("ok\n")
         self.run_checks()
         self.assertEqual(self.runs_of_unit(), 2)
         self.assertFalse((self.temp / "passes").exists())
+
+    def test_the_shared_build_writing_an_input_does_not_prevent_the_pass(self):
+        # The proof-fixture package and the extractor are built into the worktree before the units:
+        # their outputs are inputs the units start from, not a change during the run.
+        (self.hidden / "input").write_text("stale\n")
+        build = ["sh", "-c", 'printf "ok\\n" > "$1"', "sh", str(self.hidden / "input")]
+        with mock.patch.object(fc, "FIXTURE_BUILD", build):
+            status, out, err = self.run_checks()
+            self.assertEqual(status, 0, out + err)
+            self.assertNotIn("inputs changed", out)
+            self.assertEqual(len(list((self.temp / "passes").iterdir())), 1)
+            self.assertEqual(self.run_checks()[0], 0)
+        self.assertEqual(self.runs_of_unit(), 1)  # the second run reused the pass
+
+    def test_a_changed_worktree_path_is_named(self):
+        def snapshot(*records, git="g"):
+            return {"worktree": ["/w", [list(r) for r in records], git], "lean": ["s", "x"]}
+        before = snapshot(("a", "1"), ("b", "1"), ("c", "1"))
+        after = snapshot(("a", "1"), ("b", "2"), ("d", "1"), git="h")
+        self.assertEqual(fc.changed_inputs(before, after), ["b", "c", "d", "git state"])
+        self.assertEqual(fc.changed_inputs(before, {**before, "lean": ["s", "y"]}), ["lean"])
+        self.assertEqual(fc.changed_inputs(before, before), [])
+        many = snapshot(*[("p%02d" % i, "1") for i in range(30)])
+        named = fc.changed_inputs(snapshot(), many)
+        self.assertEqual((len(named), named[-1]), (11, "... (30 paths in all)"))
 
     def test_a_rerun_of_the_staged_command_starts_from_a_fresh_temp(self):
         # build-guard reruns a unit stopped at its charge with the same argv and env; the first
