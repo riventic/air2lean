@@ -5,27 +5,27 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-6242 theorems in 411 files.
+6251 theorems in 415 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
 | [PRF-01](premises.md#prf-01) | 714 | Legacy 64-bit little-endian reference model |
 | [PRF-02](premises.md#prf-02) | 737 | Recorded `abi64-le-v1` schema-12 profile |
-| [PRF-03](premises.md#prf-03) | 68 | Gate-time generated module |
+| [PRF-03](premises.md#prf-03) | 65 | Gate-time generated module |
 | [PRF-04](premises.md#prf-04) | 794 | Parameterized pointer width |
 | [PRF-05](premises.md#prf-05) | 14 | Recorded `abi64-be-v1` big-endian profile |
-| [ALC-01](premises.md#alc-01) | 4565 | Single modelled allocator |
+| [ALC-01](premises.md#alc-01) | 4572 | Single modelled allocator |
 | [ALC-02](premises.md#alc-02) | 2748 | Allocation failure and request-cap policy |
-| [ALC-03](premises.md#alc-03) | 4565 | Byte remap policy |
+| [ALC-03](premises.md#alc-03) | 4572 | Byte remap policy |
 | [ALC-04](premises.md#alc-04) | 2880 | Byte sentinel allocation |
 | [ALC-05](premises.md#alc-05) | 2880 | Byte realloc and sentinel reallocation |
 | [ALC-06](premises.md#alc-06) | 2700 | Raw allocator interface contracts |
 | [ALC-07](premises.md#alc-07) | 0 | Allocator identity and the arena policy |
-| [ALC-08](premises.md#alc-08) | 4504 | Address reuse and provenance recovery |
+| [ALC-08](premises.md#alc-08) | 4511 | Address reuse and provenance recovery |
 | [ALC-09](premises.md#alc-09) | 19 | Caller-supplied `Allocator` behaves as the std model |
 | [ALC-10](premises.md#alc-10) | 3008 | Thread-safe allocator in concurrent code |
 | [IOM-01](premises.md#iom-01) | 164 | Caller-supplied `Io` behaves as the std model |
-| [THR-01](premises.md#thr-01) | 3445 | Interleaving scheduler and partial-correctness meaning |
+| [THR-01](premises.md#thr-01) | 3452 | Interleaving scheduler and partial-correctness meaning |
 | [THR-02](premises.md#thr-02) | 3165 | Thread spawn/join with the `available` policy |
 | [THR-03](premises.md#thr-03) | 3065 | Fallible thread assignment policy |
 | [THR-04](premises.md#thr-04) | 3032 | `Io.Group` tasks are model threads |
@@ -37,14 +37,14 @@ premise was derived. This index covers the committed generated modules.
 | [THR-10](premises.md#thr-10) | 3165 | Detached threads and explicit handle transfer |
 | [THR-11](premises.md#thr-11) | 26 | `Io.Future` tasks and cancelation (0.16.0) |
 | [THR-12](premises.md#thr-12) | 506 | A gone event setter is not joined while it sets |
-| [ORD-01](premises.md#ord-01) | 4613 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 4613 | No load buffering in compiled code |
-| [ORD-03](premises.md#ord-03) | 4613 | `seq_cst` treated as `acq_rel` |
+| [ORD-01](premises.md#ord-01) | 4620 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 4620 | No load buffering in compiled code |
+| [ORD-03](premises.md#ord-03) | 4620 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 3165 | Weak CAS spurious failure |
 | [ORD-05](premises.md#ord-05) | 2353 | Pointer atomics keep provenance and compare identities |
-| [ORD-06](premises.md#ord-06) | 4623 | Memory-model adequacy of the compiled code |
+| [ORD-06](premises.md#ord-06) | 4630 | Memory-model adequacy of the compiled code |
 | [TMR-02](premises.md#tmr-02) | 30 | Opt-in awake clock and timed scheduler |
-| [MTH-01](premises.md#mth-01) | 4368 | Executable IEEE-754 float model |
+| [MTH-01](premises.md#mth-01) | 4375 | Executable IEEE-754 float model |
 | [MTH-02](premises.md#mth-02) | 246 | Opaque libm transcendentals |
 | [MTH-03](premises.md#mth-03) | 31 | Version-specific compiler-rt float semantics |
 | [MTH-04](premises.md#mth-04) | 124 | aarch64 float lowering |
@@ -57,32 +57,32 @@ premise was derived. This index covers the committed generated modules.
 | [ASM-06](premises.md#asm-06) | 18 | Memory-region asm accesses only its declared regions |
 | [ASM-07](premises.md#asm-07) | 43 | The x86_64 instruction model matches the CPU and the compiled block |
 | [ASM-09](premises.md#asm-09) | 17 | The running CPU has the asm features that the profile lacks |
-| [SEM-01](premises.md#sem-01) | 5042 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 4588 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 4991 | Loops and triples are partial correctness |
+| [SEM-01](premises.md#sem-01) | 5050 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 4595 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 4999 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 2410 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 2536 | Model step and allocation counts are not time or memory measurements |
 | [SEM-06](premises.md#sem-06) | 121 | Canonical AIR fragment semantics |
-| [SEM-07](premises.md#sem-07) | 4588 | Block addresses are the environment's placement |
-| [STK-01](premises.md#stk-01) | 4986 | The native stack holds every call chain |
-| [STK-02](premises.md#stk-02) | 4504 | Stack reserves lie in address space the native run never maps |
-| [EXT-01](premises.md#ext-01) | 1404 | User external model contracts |
+| [SEM-07](premises.md#sem-07) | 4595 | Block addresses are the environment's placement |
+| [STK-01](premises.md#stk-01) | 4994 | The native stack holds every call chain |
+| [STK-02](premises.md#stk-02) | 4511 | Stack reserves lie in address space the native run never maps |
+| [EXT-01](premises.md#ext-01) | 1411 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 11 | Assumed contracts and project axioms |
 | [EXT-03](premises.md#ext-03) | 11 | Extern functions at their linker identity |
-| [EXT-04](premises.md#ext-04) | 1404 | Registry models in concurrent programs |
+| [EXT-04](premises.md#ext-04) | 1411 | Registry models in concurrent programs |
 | [EXT-05](premises.md#ext-05) | 3032 | Environment implementations of open interfaces |
-| [EXT-06](premises.md#ext-06) | 4504 | External static storage is not written during the run |
+| [EXT-06](premises.md#ext-06) | 4511 | External static storage is not written during the run |
 | [EXT-07](premises.md#ext-07) | 0 | A weak definition is the symbol's definition in the image |
-| [TRU-01](premises.md#tru-01) | 6242 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1519 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1519 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 6251 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1516 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1516 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 252 | Reviewed opaque, extern and runtime-redirection policy |
 | [TRU-05](premises.md#tru-05) | 0 | Artifact signing key |
 | [TRU-06](premises.md#tru-06) | 0 | Filesystem publication atomicity |
-| [DEV-01](premises.md#dev-01) | 4504 | Declared device: trace and read oracle |
-| [ENV-01](premises.md#env-01) | 26 | Selected handle read/write/close contract |
-| [ENV-02](premises.md#env-02) | 4517 | Distinct monotonic and wall clock observations |
-| [ENV-03](premises.md#env-03) | 19 | Linux raw read/write/close are the bound models |
+| [DEV-01](premises.md#dev-01) | 4511 | Declared device: trace and read oracle |
+| [ENV-01](premises.md#env-01) | 33 | Selected handle read/write/close contract |
+| [ENV-02](premises.md#env-02) | 4524 | Distinct monotonic and wall clock observations |
+| [ENV-03](premises.md#env-03) | 26 | Linux raw read/write/close are the bound models |
 | [OSF-01](premises.md#osf-01) | 1767 | Futex wait (`futex_4arg` WAIT, `__ulock_wait2`, `__ulock_wait`) |
 | [OSF-02](premises.md#osf-02) | 1767 | Futex wake (`futex_3arg` WAKE, `__ulock_wake`) |
 | [OSG-01](premises.md#osg-01) | 1747 | Interrupting signal (`tgkill`, `pthread_kill` of `SIG.IO`) |
@@ -95,7 +95,7 @@ premise was derived. This index covers the committed generated modules.
 | [OST-02](premises.md#ost-02) | 1747 | Thread exit, join and detach |
 | [OST-03](premises.md#ost-03) | 1768 | Thread ids, process id and CPU count |
 | [OSY-01](premises.md#osy-01) | 1747 | Yield |
-| [STD-01](premises.md#std-01) | 4565 | Hand model of the `std.mem.Allocator` wrappers |
+| [STD-01](premises.md#std-01) | 4572 | Hand model of the `std.mem.Allocator` wrappers |
 | [STD-02](premises.md#std-02) | 3165 | Hand model of `Thread.spawn` and `Thread.join` |
 | [STD-03](premises.md#std-03) | 3165 | Hand model of `Thread.detach` |
 | [STD-05](premises.md#std-05) | 3358 | Hand model of the std futex interface |
@@ -4137,22 +4137,57 @@ File premises: PRF-02, PRF-04, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, A
 | `EncExactness.V0_17_1.Model.boolByte_true` | PRF-02, PRF-04, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, STD-01 |
 | `EncExactness.V0_17_1.Model.allocatorWord_unspecified` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-09, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
 
+## `tests/roadmap/env-boundaries/EnvStdIo.lean`
+
+File premises: ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-01, ENV-02, STD-01
+
+| Theorem | Premises |
+|---|---|
+| `EnvStdIo.intCast31` | SEM-01, SEM-03, STK-01, TRU-01 |
+| `EnvStdIo.setWidth31` | TRU-01 |
+| `EnvStdIo.intCast64of31` | SEM-01, SEM-03, STK-01, TRU-01 |
+| `EnvStdIo.intCast64` | SEM-01, SEM-03, STK-01, TRU-01 |
+| `EnvStdIo.min_cap` | SEM-01, SEM-03, STK-01, TRU-01 |
+| `EnvStdIo.add_ofNat` | SEM-01, SEM-03, STK-01, TRU-01 |
+| `EnvStdIo.tick_apply` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `EnvStdIo.OnlyWrites.append` | SEM-01, SEM-02, SEM-07, TRU-01, ENV-02 |
+| `EnvStdIo.written_append` | SEM-01, SEM-02, SEM-07, TRU-01, ENV-01, ENV-02 |
+| `EnvStdIo.OnlyWrites.not_closed` | SEM-01, SEM-02, SEM-07, TRU-01, ENV-02 |
+
+## `tests/roadmap/env-boundaries/ReadClose/EnvStd16.lean`
+
+File premises: PRF-03, ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-01, ENV-02, ENV-03, STD-01
+
+| Theorem | Premises |
+|---|---|
+| `EnvStd16.Proofs.errno_err` | PRF-03, ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-01, ENV-02, ENV-03, STD-01 |
+| `EnvStd16.Proofs.errno_ok` | PRF-03, SEM-01, SEM-03, STK-01, TRU-01, TRU-02, TRU-03 |
+| `EnvStd16.Proofs.closeErrno` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `EnvStd16.Proofs.read_loop_body` | PRF-03, ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-01, ENV-02, ENV-03, STD-01 |
+| `EnvStd16.Proofs.posix_read_run` | PRF-03, ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-01, ENV-02, ENV-03, STD-01 |
+| `EnvStd16.Proofs.closeFd_run` | PRF-03, ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-01, ENV-02, ENV-03, STD-01 |
+| `EnvStd16.Proofs.readClose_spec` | PRF-03, ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-01, ENV-02, ENV-03, STD-01 |
+
+## `tests/roadmap/env-boundaries/ReadClose/EnvStd17.lean`
+
+File premises: PRF-03, ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-01, ENV-02, ENV-03, STD-01
+
+| Theorem | Premises |
+|---|---|
+| `EnvStd17.Proofs.errno_err` | PRF-03, ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-01, ENV-02, ENV-03, STD-01 |
+| `EnvStd17.Proofs.errno_ok` | PRF-03, SEM-01, SEM-03, STK-01, TRU-01, TRU-02, TRU-03 |
+| `EnvStd17.Proofs.closeErrno` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
+| `EnvStd17.Proofs.read_loop_body` | PRF-03, ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-01, ENV-02, ENV-03, STD-01 |
+| `EnvStd17.Proofs.posix_read_run` | PRF-03, ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-01, ENV-02, ENV-03, STD-01 |
+| `EnvStd17.Proofs.closeFd_run` | PRF-03, ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-01, ENV-02, ENV-03, STD-01 |
+| `EnvStd17.Proofs.readClose_spec` | PRF-03, ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-01, ENV-02, ENV-03, STD-01 |
+
 ## `tests/roadmap/env-boundaries/StdIo.lean`
 
 File premises: PRF-03, ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-01, ENV-02, ENV-03, STD-01
 
 | Theorem | Premises |
 |---|---|
-| `EnvStdIo.intCast31` | PRF-03, SEM-01, SEM-03, STK-01, TRU-01, TRU-02, TRU-03 |
-| `EnvStdIo.setWidth31` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `EnvStdIo.intCast64of31` | PRF-03, SEM-01, SEM-03, STK-01, TRU-01, TRU-02, TRU-03 |
-| `EnvStdIo.intCast64` | PRF-03, SEM-01, SEM-03, STK-01, TRU-01, TRU-02, TRU-03 |
-| `EnvStdIo.min_cap` | PRF-03, SEM-01, SEM-03, STK-01, TRU-01, TRU-02, TRU-03 |
-| `EnvStdIo.add_ofNat` | PRF-03, SEM-01, SEM-03, STK-01, TRU-01, TRU-02, TRU-03 |
-| `EnvStdIo.tick_apply` | PRF-03, ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, STD-01 |
-| `EnvStdIo.OnlyWrites.append` | PRF-03, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, ENV-02 |
-| `EnvStdIo.written_append` | PRF-03, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, ENV-01, ENV-02 |
-| `EnvStdIo.OnlyWrites.not_closed` | PRF-03, SEM-01, SEM-02, SEM-07, TRU-01, TRU-02, TRU-03, ENV-02 |
 | `EnvStd15.Proofs.errno_err` | PRF-03, ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-01, ENV-02, ENV-03, STD-01 |
 | `EnvStd15.Proofs.errno_ok` | PRF-03, SEM-01, SEM-03, STK-01, TRU-01, TRU-02, TRU-03 |
 | `EnvStd15.Proofs.closeErrno` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
@@ -4167,13 +4202,6 @@ File premises: PRF-03, ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, O
 | `EnvStd15.Proofs.writeAll_run` | PRF-03, ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-01, ENV-02, ENV-03, STD-01 |
 | `EnvStd15.Proofs.fs_File_close_run` | PRF-03, ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-01, ENV-02, ENV-03, STD-01 |
 | `EnvStd15.Proofs.writeAllClose_spec` | PRF-03, ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-01, ENV-02, ENV-03, STD-01 |
-| `EnvStd16.Proofs.errno_err` | PRF-03, ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-01, ENV-02, ENV-03, STD-01 |
-| `EnvStd16.Proofs.errno_ok` | PRF-03, SEM-01, SEM-03, STK-01, TRU-01, TRU-02, TRU-03 |
-| `EnvStd16.Proofs.closeErrno` | PRF-03, SEM-01, TRU-01, TRU-02, TRU-03 |
-| `EnvStd16.Proofs.read_loop_body` | PRF-03, ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-01, ENV-02, ENV-03, STD-01 |
-| `EnvStd16.Proofs.posix_read_run` | PRF-03, ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-01, ENV-02, ENV-03, STD-01 |
-| `EnvStd16.Proofs.closeFd_run` | PRF-03, ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-01, ENV-02, ENV-03, STD-01 |
-| `EnvStd16.Proofs.readClose_spec` | PRF-03, ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-01, ENV-02, ENV-03, STD-01 |
 | `EnvStd15.Proofs.writeAllClose_spec_replay` | PRF-03, ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-01, ENV-02, ENV-03, STD-01 |
 
 ## `tests/roadmap/env-boundaries/WriteAll.lean`
@@ -4211,6 +4239,15 @@ File premises: ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, M
 |---|---|
 | `EnvStd16.air2lean_model_0_evidence` | ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-06, TRU-01, DEV-01, ENV-01, ENV-02, ENV-03, STD-01 |
 | `EnvStd16.air2lean_model_1_evidence` | ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-06, TRU-01, DEV-01, ENV-01, ENV-02, ENV-03, STD-01 |
+
+## `tests/roadmap/env-boundaries/expected/EnvStd17.lean`
+
+File premises: ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-06, TRU-01, DEV-01, ENV-01, ENV-02, ENV-03, STD-01
+
+| Theorem | Premises |
+|---|---|
+| `EnvStd17.air2lean_model_0_evidence` | ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-06, TRU-01, DEV-01, ENV-01, ENV-02, ENV-03, STD-01 |
+| `EnvStd17.air2lean_model_1_evidence` | ALC-01, ALC-03, ALC-08, THR-01, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-06, TRU-01, DEV-01, ENV-01, ENV-02, ENV-03, STD-01 |
 
 ## `tests/roadmap/error-storage/Runtime.lean`
 
