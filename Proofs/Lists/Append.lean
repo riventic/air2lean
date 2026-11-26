@@ -40,12 +40,6 @@ namespace Lists.Append
 
 open Zig Zig.Full Zig.Full.FAssn Lists.Open Lists.Alloc
 
-theorem fromByteUnits_4 : mem_Alignment_fromByteUnits 4 = pure mem_Alignment.«4» := by
-  have h : (4 : BitVec 64).ctz = 2 := Zig.ctz_twoPow (k := 2) (by decide)
-  unfold mem_Alignment_fromByteUnits math_isPowerOfTwo__anon_38853e1fe316 debug_assert
-  simp only [Zig.ctz, h]
-  rfl
-
 /-! ## Items -/
 
 /-- Item `i` of the bytes `bs` is `xs[i]`. -/
@@ -113,9 +107,7 @@ theorem remap_spec (s : Slice) (n : BitVec 64) (bs : Array Byte) (hlen : 4 * s.l
     CTriple (I.own ⋆ (I.granted s.ptr 2 φ bs ⋆ vtR vtp fns.toList))
       (mem_Allocator_remap__anon_fdce5ddbfdcf ⟨ctx, vtp⟩ s n)
       (fun r => I.own ⋆ (remapped I φ s.ptr bs n r ⋆ vtR vtp fns.toList)) := by
-  -- fsym does not evaluate the pure helper on its literal (fsym-engine ledger)
   unfold mem_Allocator_remap__anon_fdce5ddbfdcf
-  simp only [fromByteUnits_4]
   fsym [CAllocSpec.remap h]
 
 /-- What `alignedAlloc(u32, n)` returns. -/
@@ -137,7 +129,6 @@ theorem free_spec (s : Slice) (bs : Array Byte) (hlen : 4 * s.len.toNat = bs.siz
       (mem_Allocator_free__anon_10fd68fdc68d ⟨ctx, vtp⟩ s)
       (fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) := by
   unfold mem_Allocator_free__anon_10fd68fdc68d
-  simp only [fromByteUnits_4]
   -- the freed bytes: `@memset` to `undefined` of the bytes of the items (`sliceAsBytes` before 0.16.0)
   fsym [fun (s : Slice) ra (bs : Array Byte) (h2 : s.len.toNat = bs.size) (h3 : 0 < bs.size) =>
     CAllocSpec.free' h s 2 ra φ bs (by decide) h2 h3]

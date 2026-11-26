@@ -67,8 +67,9 @@ and a dropped asm fault-condition premise (`scripts/claims.py`), the perf-budget
 (`scripts/perf-budgets.py`), safe publication (`scripts/safe-output.py`), upgrade qualification records
 (`scripts/qualify-upgrade.py`), schedule-cap accounting (`scripts/diff-report.py`), the AIR validator
 and trust report (`scripts/validate-air.py`, `scripts/trust-report.py`), the ABI probe
-(`scripts/abi-probe.py`) and the Q01 generator's type checker and evaluator
-(`tests/roadmap/fuzz/zig_gen.py`). Each one replaces one exact anchor, compiles the result under the
+(`scripts/abi-probe.py`), the Q01 generator's type checker and evaluator
+(`tests/roadmap/fuzz/zig_gen.py`), the native/wasm32 relation (`scripts/wasm-correspondence.py`)
+and the C front-end record (`tests/roadmap/c-frontend/run.py`). Each one replaces one exact anchor, compiles the result under the
 script's own path, swaps it into the loaded regression test module and runs only the named
 killing tests. The control (unmutated) must pass those tests. The mutant is killed only by an
 assertion failure. A test error such as a crash does not count.
@@ -92,6 +93,9 @@ holds the shared steps: `edit` (each anchor occurs exactly once), `build_gen` (a
 run) and `reject`, which accepts a kill only when Lean fails, every error lies in the checked file and each
 declaration the mutant must break contains an error; a runtime mutant is killed only by the named `require`
 message. A mutant that passes or fails for another reason aborts the check: a survivor is a finding.
+The seeded mutants of the generated loop invariants (`tests/roadmap/loop-tactics/<fixture>/mutants.json`,
+P09) follow the same rule in `tests/roadmap/loop-tactics/invgen_mutants.py`: the mutated `Inv.lean`
+must elaborate and the proof must fail inside the mutant's named theorems.
 
 ## Kill evidence
 

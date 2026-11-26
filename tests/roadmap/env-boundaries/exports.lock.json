@@ -17,13 +17,20 @@
     "air/0.16.0/os.linux.errno.json": "97652d62816d312e671760a49c58d513f1cebc83678dcfd2e96557b234ee6dd4",
     "air/0.16.0/posix.read.json": "4642cc09b252410ce165a684eee31511348d727d7c09129a63914effd2b070e1",
     "air/0.16.0/posix.unexpectedErrno.json": "ab33d2bddf0a77e30b407f172d8d60992fce5b87eec7bfea9b10488d823da8a8",
-    "air/0.16.0/std_io16.readClose.json": "5c35aae072363844a1a6ad1faf2266fea0d1ef36d34bd190183908faa3f83fd6"
+    "air/0.16.0/std_io16.readClose.json": "5c35aae072363844a1a6ad1faf2266fea0d1ef36d34bd190183908faa3f83fd6",
+    "air/0.17.1/Io.Threaded.closeFd.json": "edadba53ae9fe9b2cc48818b453c3484361e76cfa05a681d45a88b23f766bb94",
+    "air/0.17.1/Io.Threaded.recoverableOsBugDetected.json": "d750e358434e5a7aaf732c08ea0cd45c4c0a8ce2e04d880e8006818397e970e3",
+    "air/0.17.1/os.linux.errno__func_1.json": "faa6b22bb9935116609a906a9a9d0eaebebc54495b432a6848626631d76ccafd",
+    "air/0.17.1/posix.read.json": "0605f96fb755462d17063b416114784a6b04f70a18596f455896397fda97fa08",
+    "air/0.17.1/posix.unexpectedErrno.json": "c29cf41397f9f2e877b373ea6c7a391d2179d36cbad4b80d584cfdb9070156db",
+    "air/0.17.1/std_io16.readClose.json": "1737fa7c4f6d742bdb7c10aa8ecf41493e5f739c3f0ceefab8dd3c2e790c5d58"
   },
   "compilers": {
     "0.15.2": "9c78e1cdffeed237007105764dd1403ca2faadb3bd681e4c1d9af94de7360eec",
-    "0.16.0": "c7f33f99339241f401922ab14c913587f82ac814841847869f6b82050c76a815"
+    "0.16.0": "c7f33f99339241f401922ab14c913587f82ac814841847869f6b82050c76a815",
+    "0.17.1": "1953662bf1225a88b6c93545ccccf804f3eec5601df436181a1ba5b9ef1ab7c8"
   },
-  "manifest_sha256": "cbae34cfcb4d20302302b39ad106edf6e37d081b17a956993056e3a2e47b2168",
+  "manifest_sha256": "880239c6d68445df7a6ab8da538ac750ded45f0810b9427c60b0506be9a30203",
   "schema": 1,
   "sources_sha256": {
     "std_io15.zig": "bc40cceaea83ae18a811b57129f44a919eef375de90dc1d662cafecea953fb77",

@@ -2165,12 +2165,15 @@ theorem Inv.bump {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {q n : Nat} {
     rw [hph u hut] at h; exact VClock.le_trans (hI.snapC u sh' c h) (hclk u)
 
 /-- **The signaller's wake at the epoch** by `t` at `wk n`, now out: a futex wake of up to `c`
-waiters with `n ≤ c` (signal: `wake(1)` after one signal; broadcast: `wake(w - s)` after `w - s`).
-The queue at the epoch holds each thread once (`qnd`), so the wake takes `min c` of the queued
-waiters off it; they are woken, so claims (`cnt_wake`). -/
+waiters with `min n k ≤ c` for the `k` threads queued at the epoch (signal: `wake(1)` after one
+signal; broadcast: `wake(w - s)` after `w - s`; an OS wake of `min (w - s) k`, `Os.futexWake`,
+since `w - s` counts registered waiters that are not queued yet). The queue at the epoch holds
+each thread once (`qnd`), so the wake takes `min c k ≥ min n k` of the queued waiters off it; they
+are woken, so claims (`cnt_wake`). -/
 theorem Inv.wake {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n q c : Nat} {cs : List Nat}
     {sh : Array Word.Entry}
-    {g' : γ} (hI : C.Inv L G m) (ht : C.ph (G t) = .wk n q sh) (hg' : C.ph g' = .out) (hn : n ≤ c)
+    {g' : γ} (hI : C.Inv L G m) (ht : C.ph (G t) = .wk n q sh) (hg' : C.ph g' = .out)
+    (hn : Min.min n (Thread.waitersAt m.waiters (C.Ep.key m)) ≤ c)
     (h : ((Thread.futexWake (C.Ep.key m) c cs).run { m with current := t }).run = some (.ok ((), m'))) :
     C.Inv L (upd G t g') m' := by
   have hm' := Proto.modify_ok h
@@ -2192,6 +2195,8 @@ theorem Inv.wake {G : ThreadId → γ} {m m' : Mem} {t : ThreadId} {n q c : Nat}
   obtain ⟨l, hl⟩ : ∃ l, l = (m.waiters.filter (·.2 == C.Ep.key m)).toList.map (·.1) := ⟨_, rfl⟩
   obtain ⟨wl, hwl⟩ : ∃ wl, wl = Thread.wakePick c l cs := ⟨_, rfl⟩
   have hlnd : l.Nodup := by rw [hl]; exact hI.qnd
+  have hlk : l.length = Thread.waitersAt m.waiters (C.Ep.key m) := by
+    simp only [hl, List.length_map, Array.length_toList, Thread.waitersAt]
   have hwnd : wl.Nodup := by rw [hwl]; exact Thread.wakePick_nodup hlnd
   have hws : Thread.wakeSet m.waiters (C.Ep.key m) c cs = wl.toArray := by
     unfold Thread.wakeSet; rw [← hl, ← hwl]

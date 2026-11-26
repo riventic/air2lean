@@ -962,12 +962,14 @@ inductive laneSetExit where
 
 def laneSet (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
   let e ← ((do
-    let i2 ← Zig.callM (Zig.ptrProject p0 (·.elem 4 (2 : BitVec 64)))
-    Zig.store (α := BitVec 32) 4 i2 p1
-    let i4 ← Zig.callM (Zig.load (BitVec 32) 4 (p0.elem 4 (1 : BitVec 64)))
-    let i5 ← Zig.callM (Zig.load (BitVec 32) 4 (p0.elem 4 (2 : BitVec 64)))
-    let i6 ← pure (Zig.addWrap i4 i5)
-    pure (.ret i6)) : Zig.MM laneSetLocals laneSetExit).run' (default : laneSetLocals)
+    let i2 ← pure p0
+    Zig.storeLane (α := BitVec 32) 16 4 64 i2 p1
+    let i4 ← pure p0
+    let i5 ← Zig.loadLane (BitVec 32) 16 4 32 i4
+    let i6 ← pure p0
+    let i7 ← Zig.loadLane (BitVec 32) 16 4 64 i6
+    let i8 ← pure (Zig.addWrap i5 i7)
+    pure (.ret i8)) : Zig.MM laneSetLocals laneSetExit).run' (default : laneSetLocals)
   match e with
   | .ret v => pure v
 
@@ -1025,18 +1027,18 @@ def maskStore (p0 : Zig.Ptr) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do
     let i2 ← pure (← get).local2
     let i3 ← pure i2
     let i4 ← pure (p1 &&& (255 : BitVec 32))
-    Zig.store (α := BitVec 32) 4 i3 i4
-    let i6 ← Zig.callM (Zig.ptrProject i2 (·.elem 4 (1 : BitVec 64)))
+    Zig.storeLane (α := BitVec 32) 16 4 0 i3 i4
+    let i6 ← pure i2
     let i7 ← pure (Zig.shr false p1 (8 : BitVec 5))
     let i8 ← pure (i7 &&& (255 : BitVec 32))
-    Zig.store (α := BitVec 32) 4 i6 i8
-    let i10 ← Zig.callM (Zig.ptrProject i2 (·.elem 4 (2 : BitVec 64)))
+    Zig.storeLane (α := BitVec 32) 16 4 32 i6 i8
+    let i10 ← pure i2
     let i11 ← pure (Zig.shr false p1 (16 : BitVec 5))
     let i12 ← pure (i11 &&& (255 : BitVec 32))
-    Zig.store (α := BitVec 32) 4 i10 i12
-    let i14 ← Zig.callM (Zig.ptrProject i2 (·.elem 4 (3 : BitVec 64)))
+    Zig.storeLane (α := BitVec 32) 16 4 64 i10 i12
+    let i14 ← pure i2
     let i15 ← pure (Zig.shr false p1 (24 : BitVec 5))
-    Zig.store (α := BitVec 32) 4 i14 i15
+    Zig.storeLane (α := BitVec 32) 16 4 96 i14 i15
     let i17 ← pure (i2)
     let i18 ← Zig.load (Zig.Vec (BitVec 32) 4) 16 i17
     let i19 ← Zig.Vec.map2M (fun x0 x1 => pure (Zig.gt false x0 x1)) i18 ((⟨#v[(127 : BitVec 32), (127 : BitVec 32), (127 : BitVec 32), (127 : BitVec 32)]⟩) : Zig.Vec (BitVec 32) 4)

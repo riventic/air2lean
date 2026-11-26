@@ -224,6 +224,97 @@ inductive Tgt where
   | writer (a : Zig.Ptr)
   | semWork (a : Zig.Ptr)
 
+structure Io_Condition_broadcastLocals where
+  prev_state : Io_Condition_State
+  deriving Inhabited
+
+inductive Io_Condition_broadcastExit where
+  | ret
+  | br5 (v : Io_Condition_State)
+  | br27 (v : Option (Io_Condition_State))
+  | br19 (v : Io_Condition_State)
+  | br36 (v : BitVec 32)
+  | br12
+  | br10
+  | rep11
+
+def Io_Condition_broadcast.again11 : Io_Condition_broadcastExit → Bool
+  | .rep11 => true
+  | _ => false
+
+def Io_Condition_broadcast.loop11 (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.CM Tgt Io_Condition_broadcastLocals Io_Condition_broadcastExit := do
+  Zig.callMC Zig.tick
+  match ← ((do
+    let i14 ← pure (((← get).prev_state).waiters)
+    let i16 ← pure (((← get).prev_state).signals)
+    let i17 ← pure (Zig.gt false i14 i16)
+    if i17 then (do
+      match ← ((do
+        let i20 ← pure p0
+        let i21 ← pure ((← get).prev_state)
+        let i23 ← pure (((← get).prev_state).waiters)
+        let i25 ← pure (((← get).prev_state).waiters)
+        let i26 ← pure { waiters := i23, signals := i25 : Io_Condition_State }
+        match ← ((do
+          let i28 ← pure i20
+          let i29 ← Zig.cmpxchgWeakAsC Zig.AtomicOrder.release Zig.AtomicOrder.relaxed 4 i28 i21 i26
+          pure (.br27 i29)) : Zig.CM Tgt Io_Condition_broadcastLocals Io_Condition_broadcastExit) with
+        | .br27 v27 => (do
+          let i31 ← pure ((v27).isSome)
+          if i31 then (do
+            let i33 ← Zig.optPayload v27
+            pure (.br19 i33))
+          else (do
+            let i35 ← Zig.callMC (Zig.ptrProject p0 (·.add 4))
+            match ← ((do
+              let i37 ← pure i35
+              let i38 ← Zig.atomicRmwC Zig.RmwOp.add false Zig.AtomicOrder.release 4 i37 (1 : BitVec 32)
+              pure (.br36 i38)) : Zig.CM Tgt Io_Condition_broadcastLocals Io_Condition_broadcastExit) with
+            | .br36 _v36 => (do
+              let i40 ← Zig.callMC (Zig.ptrProject p0 (·.add 4))
+              let i41 ← pure i40
+              let i42 ← pure (i41)
+              let i44 ← pure (((← get).prev_state).waiters)
+              let i46 ← pure (((← get).prev_state).signals)
+              let i47 ← Zig.sub false i44 i46
+              let i48 ← Zig.intCast false false 32 i47 (safe := false)
+              let _i49 ← Zig.futexWakeC p1 i42 i48
+              pure .ret)
+            | e => pure e))
+        | e => pure e) : Zig.CM Tgt Io_Condition_broadcastLocals Io_Condition_broadcastExit) with
+      | .br19 v19 => (do
+        modify (fun s => { s with prev_state := v19 })
+        pure .br12)
+      | e => pure e)
+    else (do
+      pure .br10)) : Zig.CM Tgt Io_Condition_broadcastLocals Io_Condition_broadcastExit) with
+  | .br12 => (do
+    pure .rep11)
+  | e => pure e
+
+-- air2lean-premises: {"IOM-01":[1]}
+def Io_Condition_broadcast (p0 : Zig.Ptr) (p1 : Zig.Io) : Zig.ConcM Tgt (Unit) := do
+  let e ← ((do
+    let i3 ← pure p0
+    let i4 ← pure (i3)
+    match ← ((do
+      let i6 ← pure i4
+      let i7 ← Zig.atomicLoadAsC (Io_Condition_State) Zig.AtomicOrder.relaxed 4 i6
+      pure (.br5 i7)) : Zig.CM Tgt Io_Condition_broadcastLocals Io_Condition_broadcastExit) with
+    | .br5 v5 => (do
+      modify (fun s => { s with prev_state := v5 })
+      match ← ((do
+        Zig.loop (Io_Condition_broadcast.loop11 p0 p1) Io_Condition_broadcast.again11) : Zig.CM Tgt Io_Condition_broadcastLocals Io_Condition_broadcastExit) with
+      | .br10 => (do
+        pure .ret)
+      | e => pure e)
+    | e => pure e) : Zig.CM Tgt Io_Condition_broadcastLocals Io_Condition_broadcastExit).run' (default : Io_Condition_broadcastLocals)
+  match e with
+  | .ret => pure ()
+  | _ => throw .panic
+
+attribute [zig_run] Io_Condition_broadcast.loop11 Io_Condition_broadcast
+
 structure Io_Condition_signalLocals where
   prev_state : Io_Condition_State
   deriving Inhabited
