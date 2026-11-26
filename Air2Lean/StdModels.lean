@@ -426,10 +426,7 @@ legacy export, `module = none`) the namespace is matched against `Identity.stdNa
 which also refuses such a user module (fail closed). -/
 def projectStdBinding? (symbol : String) (module : Option String := none) : Option String :=
   let base := stdModelBase symbol
-  let std := match module with
-    | some m => m == "std"
-    | none => Identity.stdNamespaces.contains (Identity.namespaceOf base)
-  if std && !osPrimitiveBindings.contains base then
+  if Identity.stdDeclared module base && !osPrimitiveBindings.contains base then
     some s!"model '{symbol}' hand-models std code: a project registry may bind only the OS primitives {", ".intercalate osPrimitiveBindings.toList} in a std namespace; translate the std function instead"
   else none
 
