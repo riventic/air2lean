@@ -4207,8 +4207,9 @@ partial def proveEqGoal (g : MVarId) (depth : Nat := 2) (fuel : Nat := 12) : Tac
   if ty.isAppOfArity ``BitVec 1 then
     if ← closeWith g (← `(tactic| (apply BitVec.eq_of_toNat_eq; fsym_arith))) then return true
   -- a ghost list (a list family's items, `(ys.reverse ++ []).reverse` against `ys`): equal in the
-  -- normal form of lists (`List.append_nil`, `List.reverse_cons`, … are `fsym_arith`)
-  if ty.isAppOfArity ``List 1 then
+  -- normal form of lists (`List.append_nil`, `List.reverse_cons`, … are `fsym_arith`); and bytes
+  -- (an undefined memset's `memsetBytes n none` against `Array.replicate … .undef`)
+  if ty.isAppOfArity ``List 1 || ty.isAppOfArity ``Array 1 then
     if ← closeWith g (← `(tactic| simp only [fsym_arith])) then return true
   let (fx, fy) := (x.getAppFn, y.getAppFn)
   -- (a constant's applications, or a local function's: a caller's `tok : Ptr → … → FAssn`)
