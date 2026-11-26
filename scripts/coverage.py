@@ -420,6 +420,10 @@ NON_COMPILER_AIR = {
         'wasm32 compiler export of rejected forms (reject.zig, README), not this inventory',
     'tests/roadmap/pointer-width/air/{version}/reject/wasm32-freestanding':
         'wasm32 compiler export of rejected forms (reject.zig, README), not this inventory',
+    'tests/roadmap/wasm-correspondence/air/{version}/wasm32-freestanding':
+        'wasm32 compiler export: evidence for the T05 contracts of the 32-bit profile only (check.sh), not this inventory',
+    'tests/roadmap/wasm-correspondence/air/{version}/wasm32-wasi':
+        'wasm32 compiler export: evidence for the T05 contracts of the 32-bit profile only (check.sh), not this inventory',
     'tests/roadmap/noreturn-variants/air-reject': 'compiler AIR for layout rejections (test_cli.py, provenance.json); not tag evidence',
     'tests/roadmap/union-bases/air-reject': 'compiler AIR of rejected union-member bases (test_cli.py, exports.json); not tag evidence',
     'tests/roadmap/opaque-pointers/air-reject': 'compiler AIR of rejected opaque-type uses (check.sh, exports.json); not tag evidence',

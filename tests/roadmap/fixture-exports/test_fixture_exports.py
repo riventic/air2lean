@@ -175,6 +175,23 @@ class Synthetic(unittest.TestCase):
         self.assertEqual(sorted(fx.sources('demo', fx.manifest('demo'))),
                          ['../shared/dep.zig', '../shared/lib.zig', 'demo.zig'])
 
+    def test_a_named_module_is_passed_and_pinned(self):
+        shared = self.root / 'shared'
+        shared.mkdir()
+        (shared / 'dep.zig').write_text('pub const x = 1;\n')
+        self.write_manifest([dict(self.entry, modules={'dep': '../shared/dep.zig'})])
+        self.assertEqual(sorted(fx.sources('demo', fx.manifest('demo'))), ['../shared/dep.zig', 'demo.zig'])
+        # The lock made without the module's source is stale: a module's change is a source change.
+        self.assertTrue(any('a source changed' in p for p in fx.check('demo')))
+        self.assertEqual(fx.module_args('demo.zig', {}), ['demo.zig'])
+        self.assertEqual(fx.module_args('demo.zig', {'dep': '../shared/dep.zig', 'b': 'b.zig'}),
+                         ['--dep', 'dep', '--dep', 'b', '-Mroot=demo.zig', '-Mdep=../shared/dep.zig', '-Mb=b.zig'])
+        for modules in ({}, {'root': 'demo.zig'}, {'dep': 'missing.zig'}, {'a b': 'demo.zig'}, ['demo.zig']):
+            with self.subTest(modules=modules):
+                self.write_manifest([dict(self.entry, modules=modules)])
+                with self.assertRaises(fx.Error):
+                    fx.manifest('demo')
+
 
 class Committed(unittest.TestCase):
     def test_every_manifest_checks(self):

@@ -13,7 +13,8 @@ check_proofs() {
     1) ;;
     *) echo "proof scan failed (exit $status)" >&2; exit 1 ;;
   esac
-  lake build ZigLean
+  # The proofs import the width-generic closed forms (proof-only, outside ZigLean.lean).
+  lake build ZigLean ZigLean.Mem.WidthLemmas
   lake env lean -R "$proof_work" -o "$proof_work/FlowTime/Gen.olean" "$proof_work/FlowTime/Gen.lean"
   LEAN_PATH="$proof_work${LEAN_PATH:+:$LEAN_PATH}" lake env lean -R case-studies/flow-time case-studies/flow-time/FlowTime/Proofs.lean
 }

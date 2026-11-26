@@ -245,6 +245,14 @@ FIXTURES = [
     for v in ("0.16.0", "0.17.1")
     for ns, target in (("S390x", "s390x-linux"), ("Mips64", "mips64-linux"), ("X64", "x86_64-linux"))
 ] + [
+    # T05 wasm-correspondence/check.sh: kernels.zig per Zig version and target.
+    (f"tests/roadmap/wasm-correspondence/WasmCorrespondence/V{v.replace('.', '_')}/{ns}/Gen.lean",
+     f"tests/roadmap/wasm-correspondence/air/{v}/{target}",
+     ["--namespace", f"WasmCorrespondence.V{v.replace('.', '_')}.{ns}", "--prefix", "kernels."], "exact")
+    for v in ("0.16.0", "0.17.1")
+    for ns, target in (("X64", "x86_64-linux"), ("A64", "aarch64-macos"), ("Wasm32", "wasm32-freestanding"),
+                       ("Wasi", "wasm32-wasi"))
+] + [
     # T03 concurrency.sh: concurrency.zig per Zig version and target.
     (f"tests/roadmap/big-endian/BigEndian/Conc/V{v.replace('.', '_')}/{ns}/Gen.lean",
      f"tests/roadmap/big-endian/air/{v}/concurrency/{target}",
