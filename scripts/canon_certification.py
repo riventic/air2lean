@@ -28,6 +28,10 @@ GENERIC_ROOTS = {
         "execFunc_prog", "tickPolicy_map", "run_map", "runOn_map")),
     "Air2Lean.RenumberProgram": frozenset(f"Air2Lean.Renumber.{name}" for name in (
         "tickPolicy_renumber", "run_renumber", "runOn_renumber")),
+    # Dropping instructions (`SemDrop`): the equality for debug information and the refinement
+    # for instructions without behaviour.
+    "Air2Lean.SemDrop": frozenset(f"Air2Lean.Drop.{name}" for name in (
+        "execFunc_dropDebug", "execFunc_drop_le", "execFunc_drop_eq")),
 }
 MODULES = tuple(GENERIC_ROOTS)
 

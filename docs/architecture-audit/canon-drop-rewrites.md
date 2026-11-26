@@ -1,14 +1,14 @@
-# Canon's dropping rewrites against `Sem`: three boundaries
+# Canon's dropping rewrites against `Sem`: four boundaries
 
 Class: SOUNDNESS of the certificate chain (V02), found while proving the preservation theorems
-of the Canon rewrites that drop instructions (`Air2Lean/SemDrop.lean`). Status: open (findings 2
-and 3 need a decision; finding 1 is a limit of the statement, documented). Severity: latent (see
-"Reachability").
+of the Canon rewrites that drop instructions (`Air2Lean/SemDrop.lean`). Status: finding 3 fixed
+(the rewrite's condition); findings 2 and 4 open (they need a decision); finding 1 is a limit of
+the statement, documented. Severity: latent (see "Reachability").
 
-All three are kernel-checked in `tests/roadmap/air-semantics/CanonDrop.lean`, for every program,
-call oracle and start memory. They are statements about the formal AIR semantics `Sem`
-(`Air2Lean/Sem.lean`). None is a native miscompilation: the translator's output for the
-canonical function is what the compiler's code does.
+All four are kernel-checked in `tests/roadmap/air-semantics/CanonDrop.lean`, for every program
+and call oracle (1 to 3 for every start memory, 4 on one memory). They are statements about the
+formal AIR semantics `Sem` (`Air2Lean/Sem.lean`). None is a native miscompilation: the
+translator's output for the canonical function is what the compiler's code does.
 
 ## 1. `dropDeadAllocPlaceholders`: no equality (the function before is stuck)
 
@@ -52,7 +52,7 @@ Options:
   docs/research/V01-V02.md stage 1 (`Zig.ptrProject` total, illegal on use). An unread pointer
   then has no behaviour to lose, and the drop is an equality.
 
-## 3. `itemReads`: the fold moves the index check (not preserved as implemented)
+## 3. `itemReads`: a fold away from the pointer moves the index check (fixed)
 
 ```
 %0 = arg(*[4]u8, 0)
@@ -62,22 +62,51 @@ Options:
 cond_br(%2) { %5 = load(%3); ret %5 } else { ret 0 }
 ```
 
-`Raw.itemReads` folds `%3` and its only reader `%5` into `%5 = ptr_elem_val(%0, %1)` at the load
-(`CanonDrop.lean`'s `main` checks that this is the rewrite's output). With `%1 = 9` and
-`%2 = false`, `Sem` is `.illegal` at `%3` before the rewrite and returns `0` after it
-(`CanonDrop.itemReads_not_preserved`). The `ptr_elem_ptr`/`load` and `slice_elem_ptr`/`load`
-patterns accept a `load` anywhere after the pointer; only the `load`/`array_elem_val` pattern
-requires the second instruction directly after the first (`nextNonDebug`).
+`Raw.itemReads` used to fold `%3` and its only reader `%5` into `%5 = ptr_elem_val(%0, %1)` at
+the load. With `%1 = 9` and `%2 = false`, `Sem` is `.illegal` at `%3` before that fold and
+returns `0` after it (`CanonDrop.itemReads_not_preserved`). The `ptr_elem_ptr`/`load` and
+`slice_elem_ptr`/`load` patterns accepted a `load` anywhere after the pointer; only the
+`load`/`array_elem_val` pattern required the second instruction directly after the first
+(`nextNonDebug`).
 
-By the same argument (not kernel-checked) the gap exists without a branch: a call between `%3`
-and `%5` that panics or does not return runs before the check after the rewrite, and after it
+By the same argument (not kernel-checked) the gap existed without a branch: a call between `%3`
+and `%5` that panics or does not return ran before the check after the fold, and after it
 before.
 
-Fix (not in this PR, it changes `Canon.lean` and possibly goldens): require
-`next[x.id]? == some u.id` for these two patterns too, as for the third. With the pair adjacent
-the check stays where it was. The preservation theorem is then still to be proved; it is
-expected to need one lemma over `Zig.ptrProject`/`Zig.load` and a side condition on the
-alignment of the item pointer's type against `Sem.itemLayout`'s (not checked yet).
+Fix: the two patterns now require `next[x.id]? == some u.id` too, so the check stays where it
+was. `CanonDrop.lean`'s `main` checks that the rewrite leaves the function above alone. No
+committed generated module changed: `scripts/gen-integrity.py check` passes for all 262 cases
+with the condition in place, without a change to a golden or a `Gen.lean`.
+
+## 4. `itemReads` on an adjacent pair: still no equality (the base may be out of its block)
+
+```
+%0 = arg(*[4]u8, 0)
+%1 = arg(usize, 1)
+%2 = ptr_elem_ptr(%0, %1)
+%3 = load(%2)
+ret %3
+```
+
+`Raw.itemReads` folds this to `%3 = ptr_elem_val(%0, %1)` (`main` checks it). Before the fold,
+`%2` is `Zig.ptrProject`: illegal behaviour unless the base and the result are both inside the
+base's block (`getelementptr inbounds`, MM-3). After it, `Sem` loads from the item's address
+and forms no pointer from the base. With `%0` one byte before a live block and `%1 = 1`, the
+function before the fold is `.illegal` and the function after it returns byte 0 of the block
+(`CanonDrop.itemReads_adjacent_not_preserved`). So `itemReads` has no equality theorem over
+today's `Sem`, and it stays on the `trusted-Canon` lines.
+
+Two more differences are expected by reading the two arms of `Sem.evalMem`, and are not
+kernel-checked: the load before the fold uses the alignment of the item pointer's type, the
+load after it the smaller of the base pointer's alignment and the item's ABI alignment
+(`Sem.itemLayout`); and a `ptr_elem_ptr` of a slice operand has a meaning in `Sem`, while a
+`ptr_elem_val` of one is stuck.
+
+Options: the refinement that admits `.illegal` before (as for 2); the lazy pointer check of
+stage 1, with which the out-of-block base is illegal only when used, here by the load on both
+sides; or a meaning of `ptr_elem_val` in `Sem` that forms the item pointer first
+(`Zig.ptrProject`, then the load), which is a change of what SEM-06 trusts and of the generated
+code it must agree with.
 
 ## Reachability
 
@@ -90,3 +119,8 @@ anyway (checked in safe modes).
 both functions. In `ReleaseFast` the function before the rewrite forms an out-of-bounds item
 pointer that it may never read: illegal behaviour in the model, poison that is never used in
 LLVM. A proof of the canonical function does not show its absence.
+
+4: `Zig.ptrProject` never returns a pointer outside its block, so such a base reaches the pair
+only as an argument or a loaded value. The generated code for
+`ptr_elem_val` is what the canonical function means; the difference is only that the function
+before the fold has more illegal behaviour in `Sem` than the canonical one.

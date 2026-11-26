@@ -286,7 +286,7 @@ ranking are decoding, not rewriting) and `≈` is:
 | 6 `renumber`, live IDs and operands | equality, for every injective renaming, argument list and full memory, under every call oracle that keeps `Oracle.CellFree` (the program's own `run` and `runOn` do) | one generic kernel theorem (`Renumber.execFunc_rename`) plus native per-function binding evidence (`CanonCertificate.renumberBound`, [below](#generic-renaming-theorem-and-native-binding)); an arbitrary oracle can manufacture a caller's register-cell ID, so the contract is needed ([audit regression](../tests/roadmap/air-semantics/RenumberOracle.lean)) |
 | final debug-definition IDs within 6 `renumber` | equality, for every oracle, argument list and full memory | one generic kernel theorem plus native per-item binding evidence; live IDs, operands and targets remain unchanged |
 | 3 `dropTrueChecks` | equality | needs the dropped condition's truth (`x ≤ x + y` after a checked add): a lemma per pattern, used by the normalization |
-| 2 `itemReads` | not preserved as implemented: it folds a `load` anywhere after its item pointer, which moves the pointer's index check past whatever runs between; equality is the expected statement (not proved) once the rewrite requires the `load` directly after the pointer ([kernel-checked counterexample](../tests/roadmap/air-semantics/CanonDrop.lean), [audit](architecture-audit/canon-drop-rewrites.md)) | `ptr_elem_ptr` + `load` vs `ptr_elem_val`: one lemma over `Zig.ptrProject`/`Zig.load` |
+| 2 `itemReads` | no equality: the rewrite folds only a `load` directly after its item pointer (a fold further away moved the pointer's index check), and even then the function before forms the item pointer (`Zig.ptrProject`: `.illegal` for a base outside its block) where the folded `ptr_elem_val` does not ([kernel-checked counterexamples](../tests/roadmap/air-semantics/CanonDrop.lean), [audit](architecture-audit/canon-drop-rewrites.md)) | open; needs a decision on the relation or on the meaning of `ptr_elem_val`; the rewrite stays trusted |
 | the debug instructions that a dropping rewrite removes | equality, for every oracle, argument list and full memory | one generic kernel theorem (`Drop.execFunc_dropDebug`) plus the native obligation `Drop.dropOk true` ([below](#generic-drop-theorems-and-native-binding)) |
 | 5 `dropDeadAllocPlaceholders` | refinement: the function after has every behaviour of the function before (`⊑`). No equality: `Sem` gives the address-0 placeholder no meaning, so the function before is stuck where it runs one ([kernel-checked](../tests/roadmap/air-semantics/CanonDrop.lean)) | one generic kernel theorem (`Drop.execFunc_drop_le`) plus the native obligation `Drop.dropOk false`; the rewrite stays trusted until the placeholder has a meaning ([below](#generic-drop-theorems-and-native-binding)) |
 | `dropDeadRuntimeLanePtrs` | neither: `Sem` checks an item pointer's index where the pointer is formed, so the function before is `.illegal` for an index past the vector's count and the function after is not ([kernel-checked](../tests/roadmap/air-semantics/CanonDrop.lean)) | open; needs a decision on the relation ([audit](architecture-audit/canon-drop-rewrites.md)) |
@@ -518,9 +518,12 @@ rewrite off the `trusted-Canon` line.
 `dropDeadRuntimeLanePtrs` is not covered. The dropped `ptr_elem_ptr` reads a live vector
 pointer, and `Sem` checks its index against the vector's count where the pointer is formed
 (`Sem.checkCount`): for an index past the count the function before the drop is `.illegal` and
-the function after returns (`CanonDrop.lanePtr_not_refined`). The same eager check makes
-`itemReads` change `Sem.execFunc` when the `load` is not directly after its item pointer
-(`CanonDrop.itemReads_not_preserved`). Both are in
+the function after returns (`CanonDrop.lanePtr_not_refined`). The same eager check made
+`itemReads` change `Sem.execFunc` when the `load` was not directly after its item pointer
+(`CanonDrop.itemReads_not_preserved`); the rewrite now folds only such an adjacent pair. On an
+adjacent pair it is still no equality: the function before forms the item pointer from its base
+(`Zig.ptrProject`, illegal behaviour for a base outside its block), and the folded
+`ptr_elem_val` does not (`CanonDrop.itemReads_adjacent_not_preserved`). All are in
 [the audit report](architecture-audit/canon-drop-rewrites.md).
 
 ### How SEM-06 shrinks
@@ -597,10 +600,12 @@ in `test_lean.py`.
   collapsed ID, a changed operand or changed metadata does not).
 * `tests/roadmap/air-semantics/CanonDrop.lean` (`lake env lean --run`): the kernel-checked
   boundaries of the drop theorems (no equality for the dead placeholder, no refinement for the
-  dead runtime lane pointer, `itemReads` with a `load` in a branch) and the causal controls of
+  dead runtime lane pointer, `itemReads` with a `load` in a branch, which the rewrite now leaves
+  alone, and on an adjacent pair with a base outside its block) and the causal controls of
   `dropBound`.
 * `scripts/canon_certification.py` (gen-integrity, full build): a fresh Assurance audit and
-  kernel replay of the generic modules `CanonSem` and `Renumber` with their theorem roots.
+  kernel replay of the generic modules `CanonSem`, `Renumber`, `SemRewrite`, `RenumberProgram`
+  and `SemDrop` with their theorem roots.
 * `lake build Proofs/<Ex>/AirCert` for every committed certificate.
 * `tests/roadmap/air-semantics/test_lean.py`: the round trip (`RoundTrip.lean`: every
   embedded `Func` is the decoded golden AIR); ten one-operator mutations (arithmetic, a
