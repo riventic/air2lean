@@ -32,6 +32,20 @@ of `x`'s encoding are undefined. -/
 def reprCast (β : Type) {α : Type} [Enc α] [Enc β] (x : α) : Result β :=
   Enc.decode (padTo (Enc.size β) (Enc.encode x))
 
+/-- `?T` (`T` not a pointer) as an array item of a representation cast: `Enc (Option α)` over the
+payload dictionary `enc`, except that a flag byte other than 0 or 1 is `.unspecified`, not
+`.illegal`. A cast makes the flag from arbitrary integer bits, native code reads any nonzero
+flag as non-null and goes on, and nothing in Zig makes that illegal behaviour, so even a
+partial-correctness proof must exclude it (`Error.nativeStops`;
+`docs/architecture-audit/2026-11-26-optional-flag-illegal.md`). -/
+def Enc.optionRepr {α : Type} (enc : Enc α) : Enc (Option α) :=
+  letI : Enc α := enc
+  { (inferInstance : Enc (Option α)) with
+    decode := fun bs =>
+      match (bs[Enc.size α]? : Option Byte) with
+      | some (.int 0) | some (.int 1) => (inferInstance : Enc (Option α)).decode bs
+      | _ => throw .unspecified }
+
 /-- `*T` → `?*T`: the pointer itself. Its bytes are the pointer's bytes (`optPtr_encode_wrap`). -/
 def optPtrWrap (p : Ptr) : Option Ptr := some p
 

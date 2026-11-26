@@ -1,4 +1,5 @@
 import LangLongTail.ExternStorage
+import ZigLean.Mem.Lemmas
 
 /-!
 # L12: pointer-bearing `extern` storage, on the retained translation

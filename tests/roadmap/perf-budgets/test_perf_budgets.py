@@ -98,16 +98,24 @@ class CommittedBudgets(unittest.TestCase):
 
     def test_fixture_exports_follow_the_examples(self):
         # The 0.17.1 workloads translate the perf-budgets fixture's exports (exports.json,
-        # scripts/fixture-exports.py); each export's filter is the one scripts/check.sh uses.
+        # scripts/fixture-exports.py); no export declares a filter of its own: it is the example's,
+        # as scripts/check.sh builds it from examples/<x>/filter[-<version>].
         manifest = json.loads((ROOT / "tests/roadmap/perf-budgets/exports.json").read_text())
+        spec = importlib.util.spec_from_file_location("fixture_exports", ROOT / "scripts/fixture-exports.py")
+        fixture_exports = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(fixture_exports)
+        fixture_exports.manifest("perf-budgets")  # every entry is an example without a filter
         for entry in manifest["exports"]:
+            self.assertNotIn("filter", entry, entry["out"])
             example = Path(entry["source"]).stem
-            prefixes = [example + "."]
-            for name in ("filter", *("filter-" + version for version in entry["versions"])):
-                path = ROOT / "examples" / example / name
-                if path.is_file():
-                    prefixes += [line.strip() for line in path.read_text().splitlines() if line.strip()]
-            self.assertEqual(entry["filter"], ",".join(prefixes), example)
+            for version in entry["versions"]:
+                derived = fixture_exports.entry_filter("perf-budgets", entry, version)
+                self.assertTrue(derived.startswith(example + "."))
+                extra = ROOT / "examples" / example
+                for name in ("filter", "filter-" + version):
+                    if (extra / name).is_file():
+                        for line in (extra / name).read_text().splitlines():
+                            self.assertIn(line.strip(), derived, (example, name))
         outs = {"tests/roadmap/perf-budgets/" + entry["out"].format(version=version)
                 for entry in manifest["exports"] for version in entry["versions"]}
         data = perf.load_json(perf.BUDGETS)
