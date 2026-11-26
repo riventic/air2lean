@@ -12,7 +12,8 @@ four and eight bytes, for a struct payload (its `LawfulEnc` is derived by `fsym`
 whose error set is `anyerror` (the operations without a declared domain):
 
 * `writeAlias*`: both pointer-try results address the same payload; the value written through the
-  first is read through the second and left in the union. An error writes nothing.
+  first is read through the second and left in the union. An error writes nothing. In
+  `writeAliasSigned` the first is cast to an element type of the same size.
 * `cleanup*`: the result is read before the cleanup runs; success runs only the `defer`, an error
   runs the `errdefer` and the `defer` and leaves the union unchanged. With one counter for both
   cleanup pointers an error increments it twice.
@@ -250,41 +251,52 @@ private def reset {α : Type} [Enc α] (a : Nat) (f : Ptr → α → MemM (Excep
   let r ← f c y
   pure (r.map (· == errPayloadPtr α c), ← load (Except ErrName α) a c)
 
-/-- One payload shape: the three functions on a success and on an error. -/
-private def shape {α : Type} [Enc α] [DecidableEq α] (name : String) (a : Nat) (x y : α)
-    (alias : Option (Ptr → α → MemM (Except ErrName α)))
-    (cleanup : Ptr → Ptr → Ptr → MemM (Except ErrName α))
-    (resetOn : Option (Ptr → α → MemM (Except ErrName Ptr))) : IO Unit := do
-  if let some f := alias then
-    require (value (aliased a f (.ok x) y) == some (.ok (.ok y, .ok y))) s!"{name}: alias write"
-    require (value (aliased a f (.error "Other") y) == some (.ok (.error "Other", .error "Other")))
-      s!"{name}: alias error"
-  require (value (cleaned a cleanup (.ok x) false) == some (.ok (.ok x, .ok x, 1, 0)))
+/-- `writeAlias*` on a union holding `x`, and on one holding an error. -/
+private def aliasCase {α : Type} [Enc α] [DecidableEq α] (name : String) (a : Nat) (x y : α)
+    (f : Ptr → α → MemM (Except ErrName α)) : IO Unit := do
+  require (value (aliased a f (.ok x) y) == some (.ok (.ok y, .ok y))) s!"{name}: alias write"
+  require (value (aliased a f (.error "Other") y) == some (.ok (.error "Other", .error "Other")))
+    s!"{name}: alias error"
+
+/-- `cleanup*` with distinct counters and with one counter, on a payload and on an error. -/
+private def cleanupCase {α : Type} [Enc α] [DecidableEq α] (name : String) (a : Nat) (x : α)
+    (f : Ptr → Ptr → Ptr → MemM (Except ErrName α)) : IO Unit := do
+  require (value (cleaned a f (.ok x) false) == some (.ok (.ok x, .ok x, 1, 0)))
     s!"{name}: cleanup success"
-  require (value (cleaned a cleanup (.error "Bad") false)
+  require (value (cleaned a f (.error "Bad") false)
     == some (.ok (.error "Bad", .error "Bad", 1, 1))) s!"{name}: cleanup error"
-  require (value (cleaned a cleanup (.ok x) true) == some (.ok (.ok x, .ok x, 1, 1)))
+  require (value (cleaned a f (.ok x) true) == some (.ok (.ok x, .ok x, 1, 1)))
     s!"{name}: shared cleanup success"
-  require (value (cleaned a cleanup (.error "Bad") true)
+  require (value (cleaned a f (.error "Bad") true)
     == some (.ok (.error "Bad", .error "Bad", 2, 2))) s!"{name}: shared cleanup error"
-  if let some f := resetOn then
-    require (value (reset a f (.ok x) y) == some (.ok (.ok true, .ok x))) s!"{name}: reset success"
-    require (value (reset a f (.error "Bad") y) == some (.ok (.error "Bad", .ok y)))
-      s!"{name}: reset error"
+
+/-- `resetOnError*` on a union holding `x`, and on one holding an error. -/
+private def resetCase {α : Type} [Enc α] [DecidableEq α] (name : String) (a : Nat) (x y : α)
+    (f : Ptr → α → MemM (Except ErrName Ptr)) : IO Unit := do
+  require (value (reset a f (.ok x) y) == some (.ok (.ok true, .ok x))) s!"{name}: reset success"
+  require (value (reset a f (.error "Bad") y) == some (.ok (.error "Bad", .ok y)))
+    s!"{name}: reset error"
 
 def main : IO Unit := do
-  shape "u16" 2 (0x0102 : BitVec 16) 0xa1b2 (some writeAlias16) cleanup16 (some resetOnError16)
-  shape "u32" 4 (0x01020304 : BitVec 32) 0xa1b2c3d4 (some writeAlias32) cleanup32
-    (some resetOnError32)
-  shape "u64" 8 (0x0102030405060708 : BitVec 64) 0xa1b2c3d4e5f60718 (some writeAlias64) cleanup64
-    (some resetOnError64)
-  shape "Pair" 4 ({ a := 0x01020304, b := 0x0506 } : Pair) { a := 0xa1b2c3d4, b := 0xe5f6 }
-    (some writeAliasPair) cleanupPair (some resetOnErrorPair)
-  shape "anyerror!u32" 4 (0x01020304 : BitVec 32) 0xa1b2c3d4 (some writeAliasAny) cleanupAny none
-  require (value (aliased 2 writeAliasSigned (.ok 0x0102) (-2)) == some (.ok (.ok 0xfffe, .ok 0xfffe)))
-    "i16 alias write"
-  require (value (aliased 2 writeAliasSigned (.error "Other") (-2))
-    == some (.ok (.error "Other", .error "Other"))) "i16 alias error"
+  let (x16, y16) : BitVec 16 × BitVec 16 := (0x0102, 0xa1b2)
+  let (x32, y32) : BitVec 32 × BitVec 32 := (0x01020304, 0xa1b2c3d4)
+  let (x64, y64) : BitVec 64 × BitVec 64 := (0x0102030405060708, 0xa1b2c3d4e5f60718)
+  let (xp, yp) : Pair × Pair := ({ a := 0x01020304, b := 0x0506 }, { a := 0xa1b2c3d4, b := 0xe5f6 })
+  aliasCase "u16" 2 x16 y16 writeAlias16
+  aliasCase "u32" 4 x32 y32 writeAlias32
+  aliasCase "u64" 8 x64 y64 writeAlias64
+  aliasCase "Pair" 4 xp yp writeAliasPair
+  aliasCase "anyerror!u32" 4 x32 y32 writeAliasAny
+  aliasCase "i16 alias" 2 x16 (-2) writeAliasSigned
+  cleanupCase "u16" 2 x16 cleanup16
+  cleanupCase "u32" 4 x32 cleanup32
+  cleanupCase "u64" 8 x64 cleanup64
+  cleanupCase "Pair" 4 xp cleanupPair
+  cleanupCase "anyerror!u32" 4 x32 cleanupAny
+  resetCase "u16" 2 x16 y16 resetOnError16
+  resetCase "u32" 4 x32 y32 resetOnError32
+  resetCase "u64" 8 x64 y64 resetOnError64
+  resetCase "Pair" 4 xp yp resetOnErrorPair
   IO.println "pointer-try payload-shape theorems and runtime cases passed"
 
 end TryLifetimes.V0_15_2.PayloadRules

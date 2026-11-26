@@ -10,8 +10,8 @@
 #                               oracles; the payload-shape runtime cases)
 #   check.sh --native VERSION   with a stock Zig VERSION (AIR2LEAN_ZIG_NATIVE): the tests of
 #                               try_pointers.zig, try_aliases.zig, try_lifetimes.zig and
-#                               try_payloads.zig for
-#                               x86_64-linux-musl, ReleaseSafe and Debug, in Docker linux/amd64
+#                               try_payloads.zig for x86_64-linux-musl, ReleaseSafe and Debug, in
+#                               Docker linux/amd64
 #                               (AIR2LEAN_X86_64_RUN overrides the runner; empty: the host)
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../.." && pwd)

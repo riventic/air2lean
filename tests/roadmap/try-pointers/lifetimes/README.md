@@ -22,7 +22,8 @@
 - **Payloads.** `u16`, `u32`, `u64` and the struct `Pair` (`extern struct { a: u32, b: u16 }`).
 - **Error sets.** The declared set `Failure` (the finite-domain operations) and `anyerror` (the
   operations without a domain; `writeAliasAny`, `cleanupAny`).
-- **Functions.** `writeAlias*` (two pointer-try results of one union), `cleanup*` (`defer` and
+- **Functions.** `writeAlias*` (two pointer-try results of one union; in `writeAliasSigned` the
+  first is cast to `*i16`), `cleanup*` (`defer` and
   `errdefer`, with distinct counters and with one counter for both) and `resetOnError*` (the
   `errdefer` overwrites the whole union).
 
@@ -44,7 +45,8 @@ in Docker `linux/amd64`. They pass with stock 0.14.1, 0.15.2, 0.16.0 and 0.17.1.
 ## What is not covered
 
 - **A payload read or written at another element type.** A cast of the payload pointer that
-  keeps the element size (`*u8` to `*i8`) is the same typed access and is covered. An access at
+  keeps the element size (`*u16` to `*i16`, `writeAliasSigned`) is the same typed access and is
+  covered. An access at
   another type (`*u32` as `*[4]u8` or `*[2]u16`) translates, but `fsym` has no rule for it: the
   union is owned as one typed value (`pts p a (.ok x)`) and no view exposes its payload as a
   cell of its own.

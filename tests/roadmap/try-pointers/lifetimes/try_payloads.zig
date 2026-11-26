@@ -130,8 +130,8 @@ comptime {
     _ = &resetOnErrorPair;
 }
 
-fn expectAlias(comptime T: type, comptime f: anytype, first: T, second: T) !void {
-    var a: Failure!T = first;
+fn expectAlias(comptime T: type, comptime E: type, comptime f: anytype, first: T, second: T) !void {
+    var a: E!T = first;
     try std.testing.expectEqual(second, try f(&a, second));
     try std.testing.expectEqual(second, try a);
     a = error.Other;
@@ -139,20 +139,12 @@ fn expectAlias(comptime T: type, comptime f: anytype, first: T, second: T) !void
     try std.testing.expectError(error.Other, a);
 }
 
-test "two captures alias for every payload width" {
-    try expectAlias(u16, writeAlias16, 0x0102, 0xa1b2);
-    try expectAlias(u32, writeAlias32, 0x01020304, 0xa1b2c3d4);
-    try expectAlias(u64, writeAlias64, 0x0102030405060708, 0xa1b2c3d4e5f60718);
-    try expectAlias(Pair, writeAliasPair, .{ .a = 0x01020304, .b = 0x0506 }, .{ .a = 0xa1b2c3d4, .b = 0xe5f6 });
-}
-
-test "two captures alias under anyerror" {
-    var a: anyerror!u32 = 0x01020304;
-    try std.testing.expectEqual(@as(u32, 0xa1b2c3d4), try writeAliasAny(&a, 0xa1b2c3d4));
-    try std.testing.expectEqual(@as(u32, 0xa1b2c3d4), try a);
-    a = error.Other;
-    try std.testing.expectError(error.Other, writeAliasAny(&a, 5));
-    try std.testing.expectError(error.Other, a);
+test "two captures alias for every payload width and error set" {
+    try expectAlias(u16, Failure, writeAlias16, 0x0102, 0xa1b2);
+    try expectAlias(u32, Failure, writeAlias32, 0x01020304, 0xa1b2c3d4);
+    try expectAlias(u64, Failure, writeAlias64, 0x0102030405060708, 0xa1b2c3d4e5f60718);
+    try expectAlias(Pair, Failure, writeAliasPair, .{ .a = 0x01020304, .b = 0x0506 }, .{ .a = 0xa1b2c3d4, .b = 0xe5f6 });
+    try expectAlias(u32, anyerror, writeAliasAny, 0x01020304, 0xa1b2c3d4);
 }
 
 test "an alias cast to a signed element type" {
