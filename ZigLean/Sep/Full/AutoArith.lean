@@ -256,6 +256,10 @@ attribute [fsym_arith] List.append_nil List.nil_append List.cons_append List.app
   List.length_append List.length_reverse List.map_nil List.map_cons List.map_append List.sum_nil
   List.sum_cons List.sum_append
 
+-- An alignment divides itself (a rule's `al ∣ a` at an abstract type's own alignment, which
+-- `omega` reads as a product of two variables).
+attribute [fsym_arith] Nat.dvd_refl
+
 -- The fixed recursive frame charge is a numeral in stack-room arithmetic.
 attribute [fsym_arith] Zig.frameBase
 
