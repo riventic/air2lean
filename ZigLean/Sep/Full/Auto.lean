@@ -2550,6 +2550,12 @@ def isPackedLaw (ty : Expr) : Bool :=
   ty.getAppNumArgs == 3 &&
     #[``LawfulPacked, ``LawfulPackedBits, ``LawfulPackedVal].contains ty.getAppFn.constName
 
+/-- The operands of `x₀ ||| x₁ ||| …` (`|||` associates to the left). -/
+partial def orOperands (e : Expr) : Array Expr :=
+  match_expr e with
+  | HOr.hOr _ _ _ _ a b => (orOperands a).push b
+  | _ => #[e]
+
 -- the steps name their hypotheses across tactics
 set_option hygiene false in
 /-- An instance of `ty = C T n inst`, `C` the law (`LawfulPacked`) or one of its directions
@@ -2619,6 +2625,14 @@ where
     withLocalDeclD `h (← inferType hα) fun h => do
       let some i ← trySynth? ty | return none
       return some ((← mkLambdaFVars #[h] i).beta #[hα])
+  /-- A fact of every value of a field's type `U` (its bits' validity, its determined bits): by
+  definition, or an array's (`lanes`) or a vector's (`vec`) from its lanes', in any depth. -/
+  laneFact (lanes vec : Name) (U : Expr) : TacticM Term := do
+    let U ← whnfR U
+    let some l := if U.isAppOfArity ``Vector 2 then some lanes
+        else if U.isAppOfArity ``Zig.Vec 2 then some vec else none
+      | `(rfl)
+    `($(mkIdent l) (fun _ => $(← laneFact lanes vec (U.getArg! 0))) _)
   goal (m : Expr) : MetaM MVarId := do
     m.mvarId!.replaceTargetDefEq (← Core.betaReduce (← instantiateMVars (← m.mvarId!.getType)))
   /-- The instance's `ofBits b`, unfolded. -/
@@ -2684,34 +2698,44 @@ where
     let mk := mkAppN (mkConst ``PackedLayout.mk) #[T, n, inst, fields, slots]
     let (ms, _, _) ← forallMetaTelescope (← inferType mk)
     unless ms.size == 7 do return none
-    -- `PAll` of a fact by definition for each field
-    let eachOf (x : Term) : TacticM Term := do
-      if sh.isEmpty then return ← `(trivial)
-      let xs : Array Term := (Array.replicate sh.size x).push (← `(trivial))
-      `(⟨$xs,*⟩)
-    let each ← eachOf (← `(rfl))
-    -- the same with an array or vector field's validity or determined bits from its lanes'
-    let byLanes (lanes vec : Name) : TacticM Term := do
-      let (l, v) := (mkIdent lanes, mkIdent vec)
-      eachOf (← `((by first | rfl | exact $l (fun _ => rfl) _ | exact $v (fun _ => rfl) _)))
-    let eachValid ← byLanes ``Zig.Packed.valid_lanes_of ``Zig.Packed.valid_vec_of
-    let eachFull ← byLanes ``Zig.Packed.mask_lanes_of ``Zig.Packed.mask_vec_of
+    -- `PAll` of a fact for each field
+    let all (xs : Array Term) : TacticM Term := do
+      if xs.isEmpty then return ← `(trivial)
+      `(⟨$(xs.push (← `(trivial))),*⟩)
+    let each ← all (Array.replicate sh.size (← `(rfl)))
+    -- each field's validity and determined bits, where every value of its type has them
+    let valids ← sh.mapM fun (U, _) =>
+      laneFact ``Zig.Packed.valid_lanes_of ``Zig.Packed.valid_vec_of U
+    let fulls ← sh.mapM fun (U, _) =>
+      laneFact ``Zig.Packed.mask_lanes_of ``Zig.Packed.mask_vec_of U
+    -- the offsets of the fields whose bits the instance's `mask` writes as all ones (in a
+    -- struct with a float or packed-union field, the fields without one)
+    let ones ← withLocalDeclD `v T fun v => do
+      let some mv ← unfoldProjInst? (mkApp4 (mkConst ``Packed.mask) T n inst v) | return #[]
+      (orOperands mv.headBeta).filterMapM fun x => do
+        let_expr HShiftLeft.hShiftLeft _ _ _ _ m o := x | return none
+        let_expr BitVec.setWidth _ _ a := m | return none
+        if a.isAppOf ``BitVec.allOnes then natVal? o else return none
+    let onesLit : Array Term := ones.map fun o => quote o
+    let fullOrMask ← all (← (sh.zip fulls).mapM fun ((_, _, _, off), h) =>
+      if ones.contains off then `(Or.inr $h) else `(Or.inl rfl))
     let steps : Array (String × Syntax) := #[
       ("slots", ← `(tactic| exact fun _ => rfl)),
       ("tiles", ← `(tactic| exact rfl)),
       ("toBits", ← `(tactic| exact fun _ => rfl)),
       ("ofBits", ← `(tactic| exact fun _ => $each)),
-      -- valid: every field's (no enum field; an array field's from its lanes'), or the
-      -- instance's conjunction of the enum fields'
+      -- valid: every field's (no enum field), or the instance's conjunction of the enum
+      -- fields', the others' (an array's by its lanes') holding for all bits
       ("valid", ← `(tactic| first
-        | exact fun _ => ⟨fun _ => $eachValid, fun _ => rfl⟩
+        | exact fun _ => ⟨fun _ => $(← all valids), fun _ => rfl⟩
         | (intro b; simp only [Zig.PAll, Zig.PField.Valid, Zig.Packed.valid, Zig.Packed.validAt,
-            Bool.and_eq_true, and_true, true_and, and_assoc]))),
-      -- mask: every bit determined (an array field's from its lanes'), or the instance's
-      -- fields' masks at their offsets
+            Vector.all_eq_true, implies_true, Bool.and_eq_true, and_true, true_and, and_assoc]))),
+      -- mask: every bit determined, or the instance's fields' masks at their offsets, all ones
+      -- for the fields `ones`
       ("mask", ← `(tactic| first
-        | exact fun _ _ => $eachFull
-        | exact Zig.PackedLayout.mask_full_of (fun _ => rfl) (fun _ => rfl))),
+        | exact fun _ _ => $(← all fulls)
+        | exact Zig.PackedLayout.mask_full_of [$onesLit,*] (fun _ => rfl) (fun _ => rfl)
+            (fun _ => $fullOrMask))),
       ("ext", ← `(tactic| (intro v v' h; cases v; cases v'; first | rfl | (simp only
         [List.cons.injEq, Zig.PField.mk.injEq, heq_eq_eq, true_and, and_true] at h; simp only [h]))))]
     for (m, (what, tac)) in ms.zip steps do
@@ -2727,8 +2751,8 @@ where
       let some l ← lawfulPackedOf? (mkApp3 (mkConst cls) U w iU) (fuel - 1)
         | trace[fsym] "{cls} of {T}: {U} not lawful"; return none
       ls := ls.push l
-    let hl ← withLocalDeclD `v T fun v => do
-      let some (_, xs) := (← whnfR (mkApp fields v)).listLit? | throwError "fsym: fields"
+    let hl? ← withLocalDeclD `v T fun v => do
+      let some (_, xs) := (← whnfR (mkApp fields v)).listLit? | return none
       let P := mkConst fieldLaw
       let allT (ys : List Expr) : MetaM Expr := do
         return mkApp3 (mkConst ``PAll) pfield P (← mkListLit pfield ys)
@@ -2738,7 +2762,8 @@ where
         let tl := xs.drop (i + 1)
         acc ← mkExpectedTypeHint (mkApp4 (mkConst ``And.intro) (mkApp P xs[i]!) (← allT tl) ls[i]! acc)
           (← allT (xs[i]! :: tl))
-      mkLambdaFVars #[v] acc
+      return some (← mkLambdaFVars #[v] acc)
+    let some hl := hl? | return none
     return some (← mkAppM layoutLaw #[mkAppN mk ms, hl])
 
 open Simp in

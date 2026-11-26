@@ -11,7 +11,7 @@ lawful by the instances here (a float's `ofBits_toBits` asks for determined bits
 so the law says nothing of it). An exhaustive enum is lawful by its tags (`EnumTags.lawful`); a
 non-exhaustive one, whose value is its bits, by definition. An array or vector has each direction
 its lanes have (one instance per direction, every lane type and width). A packed union has the
-bits direction only (`PackedU.bitsOf_intBytes`; ledger #packed-lawful-split).
+bits direction only (`PackedU.bitsOf_intBytes`).
 
 **`PackedLayout α n`** describes a packed struct as the translator generates it, once for all
 packed structs: its fields (`PField`: the type's representation, the bit offset and the value),
@@ -21,8 +21,10 @@ exactly when each field's are (`valid_iff`), every bit is determined only if eac
 (`mask_full`), and a value is its fields (`ext`). `PackedLayout.lawfulBits`/`lawfulVal` prove
 each direction once for every layout whose fields all have it, `PackedLayout.lawful` both. The
 per-type obligations (the layout's fields) are discharged by `fsym` from the generated instance
-(`lawfulPackedOf?`, `Auto.lean`), which derives the whole law (`LawfulPacked`). A type without
-it gets no instance, and the rules that need one do not apply (fail closed).
+(`lawfulPackedOf?`, `Auto.lean`), which derives each direction on its own (ledger
+#packed-lawful-split, closed): a struct with a packed-union field has the bits direction, a
+struct with an array or vector field each direction its lanes have. A type without a direction
+gets no instance of it, and the rules that need one do not apply (fail closed).
 -/
 
 namespace Zig
@@ -362,19 +364,31 @@ theorem ofBits_toBits (L : PackedLayout α n) (hl : ∀ v, PAll PField.LawfulVal
   obtain ⟨he, hv⟩ := read_eq (Packed.toBits v) _ _ hs hf (L.ofBits_read _)
   exact ⟨(L.valid_iff _).mpr hv, L.ext _ _ he⟩
 
-/-- `mask_full` of fields that tile the backing integer and whose determined bits at their offsets
-are the value's (`mask` as the translator writes it for a struct with a float or packed-union
-field). -/
-theorem mask_full_of {fields : α → List PField}
+/-- `mask_full` of fields that tile the backing integer, for `mask` as the translator writes it
+for a struct with a float or packed-union field: each field's determined bits at its offset, and
+all ones for the fields at the offsets `full`, every bit of which is determined (`hf`: an
+integer, a vector of integers, any field kind next to any other). -/
+theorem mask_full_of {fields : α → List PField} (full : List Nat)
     (ht : ∀ v, PTiles n 0 ((fields v).map fun f => (f.off, f.w)) = true)
-    (hm : ∀ v, Packed.mask v = orAll ((fields v).map (PField.maskBits n))) :
+    (hm : ∀ v, Packed.mask v = orAll ((fields v).map fun f =>
+      (bif full.contains f.off then BitVec.allOnes f.w else f.mask).setWidth n <<< f.off))
+    (hf : ∀ v, PAll (fun f => full.contains f.off = false ∨ f.Full) (fields v)) :
     ∀ v, Packed.mask v = BitVec.allOnes n → PAll PField.Full (fields v) := by
   intro v hv
+  -- the value's determined bits are its fields' at their offsets
+  have hm' : Packed.mask v = orAll ((fields v).map (PField.maskBits n)) := by
+    rw [hm v]
+    congr 1
+    refine List.map_congr_left fun f hmem => ?_
+    rcases (hf v).mem f hmem with h | h
+    · rw [h]; rfl
+    · unfold PField.maskBits
+      rw [show f.mask = BitVec.allOnes f.w from h, Bool.cond_self]
   refine PAll.of_mem fun f hf => ?_
   have e := PTiles.extract PField.mask (ht v) f hf
   have hb := PTiles.mem (ht v) f hf
   have e' : (fields v).map (fun f => f.mask.setWidth n <<< f.off) = (fields v).map (PField.maskBits n) := rfl
-  rw [e', ← hm v, hv] at e
+  rw [e', ← hm', hv] at e
   unfold PField.Full
   rw [← e]
   apply BitVec.eq_of_getLsbD_eq

@@ -12,7 +12,8 @@ leaves the word `b` (the arena's `reset` storing a node's size). Arrays and vect
 direction of their lanes' law, for every lane type and width (the generic instances). A packed
 union has the bits direction only (`PackedU.bitsOf_intBytes`), and so has a struct with a union
 field (its value direction fails closed; ledger #packed-lawful-split); a struct with a vector
-field and a vector of enum lanes get their laws derived too. The types are written as the
+field, next to fields of any other kind (a union, a float, an enum), and a vector of enum lanes
+get their laws derived too. The types are written as the
 translator writes them (`tests/golden/0.17.1/layout/Gen.lean`).
 -/
 
@@ -312,6 +313,125 @@ theorem vec_enum_bits (x : BitVec (2 * 2)) (h : Packed.valid (α := Vector Mode 
 theorem vec_enum_val (v : Vec Mode 2) (h : Packed.mask v = BitVec.allOnes (2 * 2)) :
     (Packed.ofBits (Packed.toBits v) : Vec Mode 2) = v := by
   fsym_arith
+
+/-! A vector field next to a field of any other kind: the instance's `mask` then names every
+field (all ones for the vector's, `PackedLayout.mask_full_of`), and its `valid` the enum fields
+only (the vector's bits are all valid, by its lanes'). -/
+
+/-- Next to a packed union (Zig 0.14.1/0.15.2 `packed struct { r: Reg, v: @Vector(3, u4) }`):
+the bits direction... -/
+structure VR where
+  r : Reg
+  v : Zig.Vec (BitVec 4) 3
+  deriving Repr, Inhabited, DecidableEq
+
+instance : Zig.Packed VR 20 where
+  toBits v := ((Zig.Packed.toBits v.r).setWidth 20 <<< 0) ||| ((Zig.Packed.toBits v.v).setWidth 20 <<< 8)
+  ofBits b := { r := Zig.Packed.get b 0, v := Zig.Packed.get b 8 }
+  mask v := ((Zig.Packed.mask v.r).setWidth 20 <<< 0) ||| ((BitVec.allOnes 12).setWidth 20 <<< 8)
+
+theorem vr_bits (x : BitVec 20) : Packed.toBits (Packed.ofBits x : VR) = x := by
+  fsym_arith
+
+set_option linter.unusedVariables false in
+/-- ... and not the value direction (fail closed: the union has none). -/
+example (v : VR) (h : Packed.mask v = BitVec.allOnes 20) : True := by
+  fail_if_success have : (Packed.ofBits (Packed.toBits v) : VR) = v := by fsym_arith
+  trivial
+
+/-- Next to a float (`packed struct { f: f32, v: @Vector(3, u4) }`). -/
+structure FV where
+  f : Float .f32
+  v : Zig.Vec (BitVec 4) 3
+  deriving Inhabited
+
+instance : Zig.Packed FV 44 where
+  toBits v := ((Zig.Packed.toBits v.f).setWidth 44 <<< 0) ||| ((Zig.Packed.toBits v.v).setWidth 44 <<< 32)
+  ofBits b := { f := Zig.Packed.get b 0, v := Zig.Packed.get b 32 }
+  mask v := ((Zig.Packed.mask v.f).setWidth 44 <<< 0) ||| ((BitVec.allOnes 12).setWidth 44 <<< 32)
+
+theorem fv_bits (x : BitVec 44) : Packed.toBits (Packed.ofBits x : FV) = x := by
+  fsym_arith
+
+theorem fv_val (v : FV) (h : Packed.mask v = BitVec.allOnes 44) :
+    (Packed.ofBits (Packed.toBits v) : FV) = v := by
+  fsym_arith
+
+/-- Next to an exhaustive enum (`packed struct { m: Mode, v: @Vector(3, u4) }`). -/
+structure MV where
+  m : Mode
+  v : Zig.Vec (BitVec 4) 3
+  deriving Repr, Inhabited, DecidableEq
+
+instance : Zig.Packed MV 14 where
+  toBits v := ((Zig.Packed.toBits v.m).setWidth 14 <<< 0) ||| ((Zig.Packed.toBits v.v).setWidth 14 <<< 2)
+  ofBits b := { m := Zig.Packed.get b 0, v := Zig.Packed.get b 2 }
+  valid b := Zig.Packed.validAt (Mode) b 0
+
+theorem mv_bits (x : BitVec 14) (h : Packed.valid (α := MV) x = true) :
+    Packed.toBits (Packed.ofBits x : MV) = x := by
+  fsym_arith
+
+theorem mv_val (v : MV) : (Packed.ofBits (Packed.toBits v) : MV) = v := by
+  fsym_arith
+
+/-- Every kind at once: an enum, a vector of integers, a float, a vector of floats (its `mask`
+its lanes'), lanes of an enum (their validity in `valid`) and a `bool`. -/
+structure Mix where
+  m : Mode
+  v : Zig.Vec (BitVec 4) 3
+  f : Float .f32
+  w : Zig.Vec (Float .f16) 2
+  e : Vector Mode 2
+  on : Bool
+  deriving Inhabited
+
+instance : Zig.Packed Mix 83 where
+  toBits v := ((Zig.Packed.toBits v.m).setWidth 83 <<< 0) ||| ((Zig.Packed.toBits v.v).setWidth 83 <<< 2) ||| ((Zig.Packed.toBits v.f).setWidth 83 <<< 14) ||| ((Zig.Packed.toBits v.w).setWidth 83 <<< 46) ||| ((Zig.Packed.toBits v.e).setWidth 83 <<< 78) ||| ((Zig.Packed.toBits v.on).setWidth 83 <<< 82)
+  ofBits b := { m := Zig.Packed.get b 0, v := Zig.Packed.get b 2, f := Zig.Packed.get b 14, w := Zig.Packed.get b 46, e := Zig.Packed.get b 78, on := Zig.Packed.get b 82 }
+  valid b := Zig.Packed.validAt (Mode) b 0 && Zig.Packed.validAt (Vector Mode 2) b 78
+  mask v := ((BitVec.allOnes 2).setWidth 83 <<< 0) ||| ((BitVec.allOnes 12).setWidth 83 <<< 2) ||| ((Zig.Packed.mask v.f).setWidth 83 <<< 14) ||| ((Zig.Packed.mask v.w).setWidth 83 <<< 46) ||| ((BitVec.allOnes 4).setWidth 83 <<< 78) ||| ((BitVec.allOnes 1).setWidth 83 <<< 82)
+
+theorem mix_bits (x : BitVec 83) (h : Packed.valid (α := Mix) x = true) :
+    Packed.toBits (Packed.ofBits x : Mix) = x := by
+  fsym_arith
+
+theorem mix_val (v : Mix) (h : Packed.mask v = BitVec.allOnes 83) :
+    (Packed.ofBits (Packed.toBits v) : Mix) = v := by
+  fsym_arith
+
+/-- Lanes of lanes: the field's facts from its lanes', in any depth. -/
+structure VN where
+  t : BitVec 4
+  a : Vector (Zig.Vec (BitVec 4) 3) 2
+  deriving Repr, Inhabited, DecidableEq
+
+instance : Zig.Packed VN 28 where
+  toBits v := ((Zig.Packed.toBits v.t).setWidth 28 <<< 0) ||| ((Zig.Packed.toBits v.a).setWidth 28 <<< 4)
+  ofBits b := { t := Zig.Packed.get b 0, a := Zig.Packed.get b 4 }
+
+theorem vn_bits (x : BitVec 28) : Packed.toBits (Packed.ofBits x : VN) = x := by
+  fsym_arith
+
+theorem vn_val (v : VN) : (Packed.ofBits (Packed.toBits v) : VN) = v := by
+  fsym_arith
+
+/-- A `mask` that writes all ones for a float field (a NaN's bits are not determined): no law
+(fail closed, `PackedLayout.mask_full_of`'s `hf`). -/
+structure BadMask where
+  f : Float .f32
+  on : Bool
+  deriving Inhabited
+
+instance : Zig.Packed BadMask 33 where
+  toBits v := ((Zig.Packed.toBits v.f).setWidth 33 <<< 0) ||| ((Zig.Packed.toBits v.on).setWidth 33 <<< 32)
+  ofBits b := { f := Zig.Packed.get b 0, on := Zig.Packed.get b 32 }
+  mask _ := ((BitVec.allOnes 32).setWidth 33 <<< 0) ||| ((BitVec.allOnes 1).setWidth 33 <<< 32)
+
+set_option linter.unusedVariables false in
+example (x : BitVec 33) : True := by
+  fail_if_success have : Packed.toBits (Packed.ofBits x : BadMask) = x := by fsym_arith
+  trivial
 
 /-! ## Generic clients and the nesting budget -/
 
