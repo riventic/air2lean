@@ -143,6 +143,16 @@ MUTANTS = {
     'inventory-stale-override-applied': (
         'scripts/coverage.py', "    elif override['replaces'] == row['disposition']:\n", '    elif True:\n',
         INVENTORY, 'coverage', ('InventoryTests.test_stale_override_is_forbidden',)),
+    # F03: a `*_optimized` tag is supported by no semantics, so its inventory row must carry the
+    # translator's current rejection (deleting the rejection is not support).
+    'fast-math-rejection-unchecked': (
+        'scripts/coverage.py', "            if not rejection.get('reason') or rejection['reason'] != current:\n",
+        "            if disposition != 'rejected-fast-math' and (not rejection.get('reason') or rejection['reason'] != current):\n",
+        INVENTORY, 'coverage', ('InventoryTests.test_l14_gate_fails_closed',)),
+    # F03: a tested source that sets the optimized float mode cannot support a build-mode record.
+    'fast-math-tested-source-accepted': (
+        'scripts/build-modes.py', '        for source in float_mode_sources(root):\n', '        for source in ():\n',
+        'tests/roadmap/build-modes/test_build_modes.py', 'bm', ('RunControls.test_fast_math_in_tested_sources',)),
     # E04: a rejected row of the std model table must not be inventoried as a recognized model.
     'std-model-rejected-row-recognized': (
         'scripts/coverage.py',
@@ -254,8 +264,8 @@ MUTANTS = {
         PREMISES, 'markers', ('CompiledTests.test_caller_obligations_reach_users_transitively',)),
     # Q08: a pull_request run tests a merge commit, not the recorded revision.
     'release-record-pull-request-run-accepted': (
-        'scripts/release-record.py', "    if data['event'] not in ('push', 'workflow_dispatch', 'merge_group', 'schedule'):\n",
-        "    if data['event'] not in ('push', 'workflow_dispatch', 'merge_group', 'schedule', 'pull_request'):\n",
+        'scripts/release-record.py', "    if data['event'] not in EVIDENCE_EVENTS:\n",
+        "    if data['event'] not in (*EVIDENCE_EVENTS, 'pull_request'):\n",
         RELEASE, 'rr',
         ('RecordTests.test_evidence_for_another_revision_is_refused',)),
     # Q08: a failed step must never be published as passed when other evidence passes.

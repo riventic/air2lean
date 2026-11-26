@@ -16,17 +16,19 @@ oracle `fun _ => 0` picks its results equal the native ones too.
 
 namespace AllocTranslated.Eval
 
-def word (r : Zig.MemM (BitVec 64)) (m : Zig.Mem) : String :=
+/-- A run's result from the memory `m`, its value printed by `fmt`. -/
+def shown {α : Type} (fmt : α → String) (r : Zig.MemM α) (m : Zig.Mem) : String :=
   match (r.run m).run with
-  | some (.ok (v, _)) => s!"ok {v.toNat}"
+  | some (.ok (v, _)) => s!"ok {fmt v}"
   | some (.error e) => s!"fail {repr e}"
   | none => "diverge"
 
-def flag (r : Zig.MemM Bool) (m : Zig.Mem) : String :=
-  match (r.run m).run with
-  | some (.ok (v, _)) => s!"ok {if v then 1 else 0}"
-  | some (.error e) => s!"fail {repr e}"
-  | none => "diverge"
+/-- Words as `native.zig` prints a row: decimal, separated by spaces. -/
+def words (vs : List (BitVec 64)) : String := " ".intercalate (vs.map fun v => toString v.toNat)
+
+def word : Zig.MemM (BitVec 64) → Zig.Mem → String := shown fun v => toString v.toNat
+
+def flag : Zig.MemM Bool → Zig.Mem → String := shown fun v => if v then "1" else "0"
 
 section Linux
 open AllocTranslated.FbaLinux
@@ -48,6 +50,33 @@ open AllocTranslated.FbaMacos
 #guard [flag (fba_resize 10 20) (mem0 .fresh), flag (fba_resize 10 300) (mem0 .fresh)] = ["ok 1", "ok 0"]
 #guard [word (fba_reset 100) (mem0 .fresh), word (fba_reset 200) (mem0 .fresh)] = ["ok 200", "ok 400"]
 end Macos
+
+/-! ## M02: the fixed buffer's growth by `remap` and `realloc` against the native run
+
+`fba.zig`'s `fba_grow` observes a growth as one word (its bits and the buffer's end index are in
+`fba.zig`). `fbaGrowLine` prints the model's results in the format of `native.zig`'s `fba_grow`
+line; `check.sh` compares it with `expected-linux.txt` and `expected.txt`, the files the native
+run is compared with. -/
+
+/-- The five growths of one `native.zig` row (`how`: `0` is `remap`, `1` is `realloc`), one after
+another in one run as natively: in place as the last allocation, a shrink, behind another block,
+past the buffer, and behind another block past the buffer. -/
+def fbaGrowRow (grow : BitVec 64 → BitVec 64 → BitVec 8 → Bool → Zig.MemM (BitVec 64))
+    (how : BitVec 8) : Zig.MemM (List (BitVec 64)) :=
+  [(10, 20, false), (100, 10, false), (10, 20, true), (10, 300, false), (10, 250, true)].mapM
+    fun (n, m, behind) => grow n m how behind
+
+/-- The model's `fba_grow` line. -/
+def fbaGrowLine (grow : BitVec 64 → BitVec 64 → BitVec 8 → Bool → Zig.MemM (BitVec 64))
+    (m : Zig.Mem) : String :=
+  let row := fun how => shown words (fbaGrowRow grow how) m
+  s!"fba_grow remap {row 0} realloc {row 1}"
+
+/-- The model's `fba_grow` line for x86_64-linux (`expected-linux.txt`). -/
+def fbaGrowLinux : IO Unit := IO.println (fbaGrowLine FbaLinux.fba_grow (FbaLinux.mem0 .fresh))
+
+/-- The model's `fba_grow` line for aarch64-macos (`expected.txt`). -/
+def fbaGrowMacos : IO Unit := IO.println (fbaGrowLine FbaMacos.fba_grow (FbaMacos.mem0 .fresh))
 
 /-- The first schedule's result of a concurrent page-allocator client, printed by `fmt` from
 the value and the final memory. -/
@@ -144,8 +173,7 @@ def nativeWord {Tgt α : Type} (fmt : α → String) (main : Zig.ConcM Tgt α)
 def growLines {Tgt : Type} (dispatch : Tgt → Zig.ConcM Tgt Unit) (m : Zig.Mem)
     (grow : BitVec 64 → BitVec 64 → BitVec 64 → BitVec 8 → Zig.ConcM Tgt (BitVec 64))
     (blocked stale : BitVec 64 → BitVec 8 → Zig.ConcM Tgt (BitVec 64)) : List String :=
-  let row := fun how => nativeWord (fun vs => " ".intercalate (vs.map fun v => toString v.toNat))
-    (growRow grow blocked how) dispatch m
+  let row := fun how => nativeWord words (growRow grow blocked how) dispatch m
   let old := fun how => nativeWord (fun v => toString v.toNat) (stale 10 how) dispatch m
   [s!"page_grow remap {row 0} realloc {row 1}", s!"page_grow_stale remap {old 0} realloc {old 1}"]
 
