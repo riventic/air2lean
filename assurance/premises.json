@@ -93,6 +93,7 @@
     "ZigLean.Asm": ["ASM-03"],
     "ZigLean.Isa.X86": ["ASM-07"],
     "ZigLean.Isa.X86Vectors": ["ASM-07"],
+    "ZigLean.Isa.X86Placement": ["ASM-07"],
     "ZigLean.Time": ["TMR-02"],
     "ZigLean.Env": ["ENV-01"],
     "ZigLean.Env.Host": ["SEM-02"],

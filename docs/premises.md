@@ -865,18 +865,22 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
      is the assembler's. The statements come from the one template scanner
      (`asmTemplateStmts`), which also feeds the CPU-feature table (ASM-09). A template with
      anything else (a prefix, an address, a symbol, a modifier) is not covered.
-  4. *Operand placement.* The compiler places operands as their constraints say: a pinned
-     operand in its register, an `r` operand in some general register that is not `rsp`, not a
-     clobber and not another operand's, except that an input may share the register of an
-     output that is not early-clobber (`=&`). The footprint check `Block.check` (kernel-checked
-     for every emitted block, `airIsa_<hash>_wf`) rejects a block that reads bits that neither
-     an input nor an earlier instruction defines, that writes a register or memory operand that
-     is neither an output nor a clobber, that reads an input after a write to an output it may
-     share a register with, that accesses a memory operand after a write to a register output
-     without `&` (which may take the register of the operand's address), or that leaves an
-     output undefined at its type's width. That the
-     value of a checked block is the same under every such placement, and independent of the
-     registers' other contents, is the intent of the check; it is not yet a Lean theorem.
+  4. *Operand placement.* The compiler places operands as their constraints say
+     (`Placement.Admissible`, `ZigLean/Isa/X86Placement.lean`): a pinned operand is in its
+     register; no operand and no register of a memory operand's address is a clobbered
+     register; every output has a register of its own, except that an input which is not an
+     output too may share the register of an output that is not early-clobber (`=&`), and the
+     address of a memory operand may be held in such an output's register. On entry each
+     input's place holds the input at the width of its type (`Placement.Entry`). Nothing else
+     is assumed: `Block.check_placement` proves, once for all blocks, that a block which
+     passes the footprint check `Block.check` (kernel-checked for every emitted block,
+     `airIsa_<hash>_wf`) has the outputs and the fault of its definition under every such
+     placement, whatever the registers held besides the inputs, and that it accesses each
+     memory operand only while the registers of its address hold their entry values. The
+     rules of the check are needed for that: `tests/roadmap/asm-effects/Placement.lean` has,
+     for each of the six rules on reads, writes and outputs, a block that only this rule
+     rejects and that computes another value on the machine. Two memory operands are two
+     locations here; that they do not overlap is ASM-03.
   5. *Flags.* The model has no flag state. No modelled instruction reads a flag, and Zig's LLVM
      backend declares the flags clobbered for every x86 asm block, so a block needs no `cc`
      clobber for the flags it writes.
@@ -896,7 +900,8 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   records another target fails `scripts/premises.py`, and `scripts/claims.py` rejects such a
   goal. A module that records no target (PRF-01) carries it for x86_64 code only.
 - Sources: [generated-code.md](generated-code.md#inline-asm), [research/A02.md](research/A02.md),
-  `ZigLean/Isa/X86.lean`, `Air2Lean/AsmIsa.lean`, `Proofs/Asm/Proofs.lean`.
+  `ZigLean/Isa/X86.lean`, `ZigLean/Isa/X86Placement.lean`, `Air2Lean/AsmIsa.lean`,
+  `Proofs/Asm/Proofs.lean`.
 
 <a id="asm-09"></a>
 ### ASM-09 — The running CPU has the asm features that the profile lacks
