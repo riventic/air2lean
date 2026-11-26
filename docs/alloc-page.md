@@ -113,6 +113,13 @@ placement alone, a stack block of 0.17.1's `realloc` wrapper lies right behind t
 the model's `mremap` moves the block where the kernel, whose stack is elsewhere, grows it in place.
 Both are outcomes the proofs cover; the reserve gives the native layout.
 
+The fixed buffer's growths are compared the same way (`fba.zig`'s `fba_grow`, `Eval.lean`'s
+`fbaGrowLinux`, `fbaGrowMacos`; [the README](../tests/roadmap/alloc-translated/README.md#the-fixed-buffer)):
+`remap` and `realloc` grow the last allocation in place, a shrink moves the end back, behind
+another block `remap` fails and `realloc` moves, and past the buffer both fail with the old block
+unchanged; every word includes the buffer's end index. Its proof is `FBA.fallocSpec`
+(`tests/roadmap/alloc-fba`, Zig 0.16.0 and 0.17.1), the `realloc` wrapper's is the one above.
+
 ## Status with the full-state logic (`codex/alloc-p4b-page`)
 
 The full-state separation logic (`ZigLean/Sep/Full`, [sep-full-state.md](sep-full-state.md))
