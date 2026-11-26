@@ -23,6 +23,7 @@ name = "FsymDeps"
 roots = ["ZigLean.Sep.Full.Auto"]
 globs = [
   "ZigLean.Basic",
+  "ZigLean.Bit",
   "ZigLean.BitCast",
   "ZigLean.Conc.AtomicWord",
   "ZigLean.Conc.Base.Heap",

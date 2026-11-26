@@ -115,13 +115,6 @@ variable (ctx vtp : Ptr) (fns : VTableFns) (I : FAllocInv) (e : AllocEnv Tgt) (�
 
 /-! ## `destroy` -/
 
-omit [Ext] in
-theorem fromByteUnits_8 : mem_Alignment_fromByteUnits 8 = pure mem_Alignment.«8» := by
-  have h : (8 : BitVec 64).ctz = 3 := Zig.ctz_twoPow (k := 3) (by decide)
-  unfold mem_Alignment_fromByteUnits math_isPowerOfTwo__anon_38853e1fe316 debug_assert
-  simp only [Zig.ctz, h]
-  rfl
-
 set_option maxRecDepth 20000 in
 /-- `destroy` of a grant: its fee back, and what the allocator tells about the freed pointer
 (`FAllocInv.freed`). -/
@@ -130,9 +123,7 @@ theorem destroy_grant (p : Ptr) (bs : Array Byte) (hbs : bs.size = 16)
     CTriple (I.own ⋆ (I.granted p 3 φ bs ⋆ vtR vtp fns.toList))
       (mem_Allocator_destroy__anon_a9add1f02861 ⟨ctx, vtp⟩ p)
       (fun _ => I.own ⋆ (I.fee φ ⋆ (vtR vtp fns.toList ⋆ I.freed p))) := by
-  -- fsym does not evaluate the pure helper on its literal (fsym-engine ledger)
   unfold mem_Allocator_destroy__anon_a9add1f02861
-  simp only [fromByteUnits_8]
   fsym [CAllocSpec.free h]
 
 set_option maxRecDepth 20000 in
