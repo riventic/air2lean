@@ -177,7 +177,9 @@ wake is no access). A thread out of it does not access the word, so a plain acce
 read of the struct the event is in) need not be below that thread. A client step that puts a
 thread in the set (gives it a role, or moves a setter from `sd` back to `out`: `Inv.toOut`) has
 its rest show the word for the larger set (the plain accesses are below that thread). A thread
-without a role does not access the word (`wp_peek` takes one). -/
+without a role does not access the word (`wp_peek` takes one). A thread out of the event's code
+leaves the set by giving its roles up (`Inv.leave`, `Inv.leaveTo`; the word is fine for the
+smaller set, `Live.ok_upd`), so a plain access after its last access need not be below it. -/
 def Live (g : γ) : Prop := (E.wx g ∨ E.sx g) ∧ ¬ (E.ph g).Setting
 
 /-- A step preserving the event's history preserves its set state. -/
@@ -1202,6 +1204,20 @@ theorem Inv.leave {G : ThreadId → γ} {m : Mem} {t : ThreadId} {g : γ} (hI : 
     · rw [upd_ne _ _ eu] at hu ⊢; exact hI.sx u hu
   · have eu := hne hu (by decide) (by decide)
     rw [upd_ne _ _ eu] at hu; exact hI.swex u hu
+
+/-- **`Inv.leave` when each thread that may wait is below one that may wait after the step**
+(`hle`; a thread that joined `t` and may wait covers `t`, which gives its role up): the witness
+of each `waiting` write (`Inv.wby`) moves along `hle`. -/
+theorem Inv.leaveTo {G : ThreadId → γ} {m : Mem} {t : ThreadId} {g : γ} (hI : E.Inv L G m)
+    (ht : E.ph (G t) = .out ∨ E.ph (G t) = .sd) (hg : E.ph g = .out ∨ E.ph g = .sd)
+    (hgo : E.ph g = .sd → L.ph g = .out ∨ L.ph g = .gone) (hsx : E.ph g = .sd → E.sx g)
+    (hle : ∀ v, E.wx (G v) →
+      ∃ u, E.wx (upd G t g u) ∧ VClock.le (m.clocks[v]!) (m.clocks[u]!) = true) :
+    E.Inv L (upd G t g) m :=
+  hI.leave ht hg hgo hsx fun j hj hv =>
+    let ⟨v, hv', hc⟩ := hI.wby j hj hv
+    let ⟨u, hu, hl⟩ := hle v hv'
+    ⟨u, hu, VClock.le_trans hc hl⟩
 
 /-- **A thread out of the event's code or done (`out`, `sd`) gets a ghost value there** (`g`, at
 `out` or `sd`; a client's own ghost step, e.g. a setter's end after its `set`, before it sets or
