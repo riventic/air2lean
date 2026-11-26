@@ -131,11 +131,12 @@ active). A provider kind `K` is a constant with a lemma `K.of_within : K … X �
   so the first live offset comes from owned bytes and the bound from any part (a node's share).
 
 A provider lemma about a command (`ThreadLocal P (c …)`, §Threads) is a candidate only for the
-goals about `c` (`cmdHeads`, `providerLemmas`): the goal's command is compared by its head
-constant, read in weak head normal form when it is not an application of a constant as written (a
-definition that the search unfolded: a `let`, an applied `fun`), and a command without a head
-constant (a variable applied) gets only the lemmas about any command. No lemma is unified with
-another command, which would unfold both at default transparency. Regression:
+goals about `c` (`normCmds`, `cmdHeads`, `providerLemmas`): the goal's command is compared by its
+head constant. A command that is not an application of a constant as written (a definition that
+the search unfolded: a `let`, an applied `fun`) is first put in weak head normal form, so its
+head is read, unified and unfolded as any other; a command without a head constant (a variable
+applied) gets only the lemmas about any command. No lemma is unified with another command, which
+would unfold both at default transparency. Regression:
 `tests/roadmap/sep-auto/SepAuto/Threads.lean` §Providers by the command's head.
 
 The candidates are tried in order, with backtracking over the rule's later side goals; the goals a

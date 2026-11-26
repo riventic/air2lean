@@ -2879,28 +2879,40 @@ def assnIdx (t : Expr) : MetaM Nat := do
   return args.size - 1
 
 /-- The commands among a provider goal's arguments (of type `MemM _`, also unfolded: a
-`StateT.lift` of a `Result`): their positions and heads. A command that is not an application of
-a constant as written (a `let`, an applied `fun`: a definition unfolded by the provider search)
-is read in weak head normal form without unfolding a definition; its head is `none` if that is
-no constant either (a variable applied, a `fun`). An unknown command has no entry. A provider
-lemma about another command does not apply (`providerLemmas`). -/
-def cmdHeads (t : Expr) : MetaM (Array (Nat × Option Name)) := do
-  let args := t.getAppArgs
+`StateT.lift` of a `Result`): their positions. -/
+def cmdArgs (t : Expr) : MetaM (Array Nat) :=
+  (Array.range t.getAppNumArgs).filterM fun i => do
+    return (← whnfR (← inferType (t.getArg! i))).isAppOf ``StateT
+
+/-- A provider goal with each command that is not an application of a constant as written (a
+`let`, an applied `fun`: a definition unfolded by the provider search) in weak head normal form,
+no definition unfolded: the same goal by definition, with the command's head to read
+(`cmdHeads`), to unify and to unfold. -/
+def normCmds (t : Expr) : MetaM Expr := do
+  let t ← instantiateMVars t
+  let mut args := t.getAppArgs
+  for i in ← cmdArgs t do
+    unless args[i]!.getAppFn.isConst do args := args.set! i (← whnfCore args[i]!)
+  return mkAppN t.getAppFn args
+
+/-- The heads of a provider goal's commands (`cmdArgs`; the goal from `normCmds`), by position:
+the head constant, `.anonymous` for a command without one (a variable applied, a `fun`); an
+unknown command has no entry. A provider lemma about another command does not apply
+(`providerLemmas`). -/
+def cmdHeads (t : Expr) : MetaM (Array (Nat × Name)) := do
   let mut out := #[]
-  for i in [0:args.size] do
-    unless (← whnfR (← inferType args[i]!)).isAppOf ``StateT do continue
-    let mut hd := args[i]!.getAppFn
-    unless hd.isConst do hd := (← whnfCore (← instantiateMVars args[i]!)).getAppFn
-    unless hd.isMVar do out := out.push (i, hd.constName?)
+  for i in ← cmdArgs t do
+    let hd := (t.getArg! i).getAppFn
+    unless hd.isMVar do out := out.push (i, hd.constName?.getD .anonymous)
   return out
 
 /-- The provider lemmas (`@[fsym_provider]`) of the kind `k`, for a goal whose assertion is
 argument `ip` and whose commands have the heads `cmds`: those about an atom (the conclusion's
 assertion is an application; with its `headKey`), and those about the whole precondition (a
-variable). A lemma whose command is an application of a constant is one for the goals whose
-command has that head (`cmdHeads`): it is not unified with another command, nor with a command
-without a head, where unification at default transparency would unfold the lemma's command. -/
-def providerLemmas (k : Name) (ip : Nat) (cmds : Array (Nat × Option Name)) :
+variable). A lemma about a command with a head constant is one for the goals whose command has
+that head: it is not unified with another command, nor with one without a head constant (at
+default transparency that unfolds the lemma's command). -/
+def providerLemmas (k : Name) (ip : Nat) (cmds : Array (Nat × Name)) :
     MetaM (Array (Name × Name) × Array Name) := do
   let mut atomL := #[]
   let mut wholeL := #[]
@@ -2911,7 +2923,7 @@ def providerLemmas (k : Name) (ip : Nat) (cmds : Array (Nat × Option Name)) :
     let some a := bargs[ip]? | continue
     -- a command of another head
     if cmds.any (fun (i, c) => match (bargs[i]?.map (·.getAppFn) : Option Expr) with
-        | some (Expr.const c' _) => c != some c'
+        | some (Expr.const c' _) => c' != c
         | _ => false) then continue
     if a.isBVar then wholeL := wholeL.push n else atomL := atomL.push (n, headKey a)
   return (atomL, wholeL)
@@ -2926,6 +2938,8 @@ def providerCands (t : Expr) (depth : Nat) : TacticM (Array (TacticM (Expr × Li
   if t.isAppOfArity ``Within 2 then
     return (← withinCands t.appFn!.appArg! t.appArg!).map fun (c : MetaM Expr) => return (← c, [])
   let some k ← providerKind? t | return #[]
+  -- (the candidates prove the goal with its commands in normal form: the same goal by definition)
+  let t ← normCmds t
   let ip ← assnIdx t
   let targs := t.getAppArgs
   let P := targs[ip]!
@@ -5926,9 +5940,10 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) (keepPre := false) (recCmd :
     let local? := if (L.thr || L.conc) && kind != ``CTriple && !isThreadKind kind then
       some (mkAppN (mkConst ``ThreadLocal) #[β, P₀, tx]) else none
     if let some t := local? then
+      let t ← normCmds t
       let (atomL, wholeL) ← providerLemmas ``ThreadLocal (← assnIdx t) (← cmdHeads t)
       -- (or its definition, unfolded by the provider search: `providerCands`)
-      if atomL.isEmpty && wholeL.isEmpty && (← unfold1 tx).isNone then rollback; return none
+      if atomL.isEmpty && wholeL.isEmpty && (← unfold1 t.appArg!).isNone then rollback; return none
     let local? ← local?.mapM (mkFreshExprMVar ·)
     if kind == ``CTriple then
       -- the projections of an interface's tables and argument tuples (`(env e).alloc f (c, n, …)`)

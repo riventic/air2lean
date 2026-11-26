@@ -512,7 +512,10 @@ written (a definition unfolded by the provider search: a `let`, an applied `fun`
 head normal form; a lemma about another command is not unified with it. Unifying it would unfold
 the lemma's command at default transparency (the pointer-`try` providers over the whole
 precondition against the unfolded `atomicLoadPtrAt` ran the arena's proofs out of heartbeats).
-Here that unfolding evaluates `slowNat 64 0`, which no heartbeat limit allows. -/
+Here that unfolding evaluates `slowNat 64 0`, which no limit allows (before, the search stopped
+with `recursion depth limit in the rule hr`). The rejected walk at the end of the section is the
+case that tells the two apart: a search that succeeds finds `ThreadLocal.ite` before it tries
+`ThreadLocal.slowCheck`, a search that fails tried every lemma. -/
 
 section Heads
 
@@ -524,8 +527,9 @@ def slowNat : Nat → Nat → Nat
 /-- A command whose definition compares an expensive number. -/
 def slowCheck (k : Nat) : MemM Unit := if slowNat 64 0 = k then pure () else throw .panic
 
-/-- A locality lemma over the whole precondition, about `slowCheck`. -/
-theorem ThreadLocal.slowCheck {P : FAssn} {k : Nat} (_h : P = P) : ThreadLocal P (slowCheck k) :=
+/-- A locality lemma over the whole precondition, about `slowCheck` (registered in this module
+only: the library's providers are stated per atom). -/
+theorem ThreadLocal.slowCheck {P : FAssn} {k : Nat} : ThreadLocal P (slowCheck k) :=
   ThreadLocal.ite (fun _ => ThreadLocal.pure _) fun _ => ThreadLocal.throw _
 
 attribute [fsym_provider] ThreadLocal.slowCheck
@@ -560,6 +564,16 @@ theorem funCheck_thread (h : i.toNat = len.toNat) :
     FTTotalTriple P (funCheck len i) (fun _ => P) := by
   fsym [funCheck_seq h]
 
+/-- A `let` around a command that has no locality lemma of its own (`checkIndex`). -/
+def letIndex (len i : BitVec 64) : MemM Unit :=
+  let j := i
+  checkIndex len j
+
+/-- Local by two definitions: `letIndex`'s, whose `let` is read through, then `checkIndex`'s. -/
+theorem letIndex_thread (hr : FTotalTriple P (letIndex len i) (fun _ => P)) :
+    FTTotalTriple P (letIndex len i) (fun _ => P) := by
+  fsym [hr]
+
 /-- The lemma still applies to its own command. -/
 theorem slowCheck_thread (k : Nat) (hr : FTotalTriple P (slowCheck k) (fun _ => P)) :
     FTTotalTriple P (slowCheck k) (fun _ => P) := by
@@ -573,7 +587,7 @@ def letStore (p : Ptr) (w : BitVec 8) : MemM Unit :=
 set_option linter.unusedVariables false in
 /-- Rejected: a store of bytes the precondition does not own is not local. The search ends
 after the lemmas about a store; before, it went on to every lemma over the whole precondition
-(`ThreadLocal.slowCheck` too: a timeout, which `fail_if_success` does not catch). -/
+(`ThreadLocal.slowCheck` too: a recursion depth error, which `fail_if_success` does not catch). -/
 example (p : Ptr) (w : BitVec 8) (hr : FTotalTriple emp (letStore p w) (fun _ => emp)) : True := by
   fail_if_success
     have : FTTotalTriple emp (letStore p w) (fun _ => emp) := by
