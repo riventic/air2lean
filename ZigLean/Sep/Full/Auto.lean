@@ -2878,21 +2878,46 @@ def assnIdx (t : Expr) : MetaM Nat := do
     if ← withReducible (isDefEq (← inferType args[i]!) (mkConst ``Zig.Full.FAssn)) then return i
   return args.size - 1
 
-/-- The commands among a provider goal's arguments (of type `MemM _`, also unfolded: a
-`StateT.lift` of a `Result`): their positions and heads. A provider lemma about another command
-does not apply (`providerLemmas`). -/
-def cmdHeads (t : Expr) : MetaM (Array (Nat × Name)) := do
-  let args := t.getAppArgs
+/-- The commands among a provider goal's arguments: the positions of the kind's parameters of
+type `MemM _`. By the kind's signature, not the argument's own type: a command unfolded through
+its monad (`bind`'s instance, a `fun s => …`) has the type of a function. -/
+def cmdArgs (t : Expr) : MetaM (Array Nat) := do
+  let mut ty ← inferType t.getAppFn
   let mut out := #[]
-  for i in [0:args.size] do
-    unless (← whnfR (← inferType args[i]!)).isAppOf ``StateT do continue
-    if let .const c _ := args[i]!.getAppFn then out := out.push (i, c)
+  for a in t.getAppArgs, i in [0:t.getAppNumArgs] do
+    let .forallE _ d b _ ← whnf ty | break
+    if (← whnfR d).isAppOf ``StateT then out := out.push i
+    ty := b.instantiate1 a
+  return out
+
+/-- A provider goal with each command that is not an application of a constant as written (a
+`let`, an applied `fun`: a definition unfolded by the provider search) in weak head normal form,
+no definition unfolded: the same goal by definition, with the command's head to read
+(`cmdHeads`), to unify and to unfold. -/
+def normCmds (t : Expr) : MetaM Expr := do
+  let t ← instantiateMVars t
+  let mut args := t.getAppArgs
+  for i in ← cmdArgs t do
+    unless args[i]!.getAppFn.isConst do args := args.set! i (← whnfCore args[i]!)
+  return mkAppN t.getAppFn args
+
+/-- The heads of a provider goal's commands (`cmdArgs`; the goal from `normCmds`), by position:
+the head constant, `.anonymous` for a command without one (a variable applied, a `fun`); an
+unknown command has no entry. A provider lemma about another command does not apply
+(`providerLemmas`). -/
+def cmdHeads (t : Expr) : MetaM (Array (Nat × Name)) := do
+  let mut out := #[]
+  for i in ← cmdArgs t do
+    let hd := (t.getArg! i).getAppFn
+    unless hd.isMVar do out := out.push (i, hd.constName?.getD .anonymous)
   return out
 
 /-- The provider lemmas (`@[fsym_provider]`) of the kind `k`, for a goal whose assertion is
 argument `ip` and whose commands have the heads `cmds`: those about an atom (the conclusion's
 assertion is an application; with its `headKey`), and those about the whole precondition (a
-variable). -/
+variable). A lemma about a command with a head constant is one for the goals whose command has
+that head: it is not unified with another command, nor with one without a head constant (at
+default transparency that unfolds the lemma's command). -/
 def providerLemmas (k : Name) (ip : Nat) (cmds : Array (Nat × Name)) :
     MetaM (Array (Name × Name) × Array Name) := do
   let mut atomL := #[]
@@ -2919,6 +2944,8 @@ def providerCands (t : Expr) (depth : Nat) : TacticM (Array (TacticM (Expr × Li
   if t.isAppOfArity ``Within 2 then
     return (← withinCands t.appFn!.appArg! t.appArg!).map fun (c : MetaM Expr) => return (← c, [])
   let some k ← providerKind? t | return #[]
+  -- (the candidates prove the goal with its commands in normal form: the same goal by definition)
+  let t ← normCmds t
   let ip ← assnIdx t
   let targs := t.getAppArgs
   let P := targs[ip]!
@@ -5919,9 +5946,10 @@ def tryRule (g : MVarId) (rule : Expr) (x f : Expr) (keepPre := false) (recCmd :
     let local? := if (L.thr || L.conc) && kind != ``CTriple && !isThreadKind kind then
       some (mkAppN (mkConst ``ThreadLocal) #[β, P₀, tx]) else none
     if let some t := local? then
+      let t ← normCmds t
       let (atomL, wholeL) ← providerLemmas ``ThreadLocal (← assnIdx t) (← cmdHeads t)
       -- (or its definition, unfolded by the provider search: `providerCands`)
-      if atomL.isEmpty && wholeL.isEmpty && (← unfold1 tx).isNone then rollback; return none
+      if atomL.isEmpty && wholeL.isEmpty && (← unfold1 t.appArg!).isNone then rollback; return none
     let local? ← local?.mapM (mkFreshExprMVar ·)
     if kind == ``CTriple then
       -- the projections of an interface's tables and argument tuples (`(env e).alloc f (c, n, …)`)
