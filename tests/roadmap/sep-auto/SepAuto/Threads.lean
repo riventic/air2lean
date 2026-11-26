@@ -4,6 +4,7 @@ import ZigLean.Sep.Full.Mmap
 import ZigLean.Sep.Full.Share
 import ZigLean.Sep.Full.ThreadLoop
 import ZigLean.Sep.Full.Tick
+import ZigLean.Sep.Full.AutoAll
 
 /-!
 # `fsym` in a thread (`ZigLean/Sep/Full/AutoThread.lean`)
@@ -716,5 +717,24 @@ example (p : Ptr) (x : BitVec 32) (w : BitVec 64) : True := by
     have : FTTotalTriple (up (pts p 4 x)) (Zig.store 4 p w) (fun _ => up (pts p 4 x)) := by
       fsym
   trivial
+
+/-! ## A command unfolded through its monad
+
+`atomicLoadPtrAt` has no locality lemma, so the search for the sequential rule's locality unfolds
+it: to a `bind`, then through `bind`'s instance to a `fun s => …`, whose own type is a function's,
+not `MemM _`. The goal's commands are found by the kind's signature (`cmdArgs`), so that command
+too has no head constant and no lemma about another command is unified with it. With the
+pointer-`try` lemmas over the whole precondition registered (here only; the library states them
+per atom) that unification ran `fsym` out of heartbeats in the rule `FTriple.atomicLoadPtr`
+(`ArenaSpec.Entries`). The thread's own rule then applies. -/
+
+attribute [fsym_provider] ThreadLocal.loadDiscardBytes ThreadLocal.tryPayloadPtr
+  ThreadLocal.finiteTryPayloadPtr ThreadLocal.errCodeAt ThreadLocal.finiteErrCodeAt
+  ThreadLocal.errIsErrAt ThreadLocal.finiteErrIsErrAt
+
+theorem atomicLoadPtr_thread (p : Ptr) (v : Option Ptr) :
+    FTTriple (aptsE p v) (atomicLoadPtrAt (Option Ptr) 0 AtomicOrder.acquire 8 p)
+      (fun w => ⟪w = v⟫ ⋆ aptsE p v) := by
+  fsym
 
 end SepAuto.Threads

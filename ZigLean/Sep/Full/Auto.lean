@@ -2878,11 +2878,17 @@ def assnIdx (t : Expr) : MetaM Nat := do
     if ← withReducible (isDefEq (← inferType args[i]!) (mkConst ``Zig.Full.FAssn)) then return i
   return args.size - 1
 
-/-- The commands among a provider goal's arguments (of type `MemM _`, also unfolded: a
-`StateT.lift` of a `Result`): their positions. -/
-def cmdArgs (t : Expr) : MetaM (Array Nat) :=
-  (Array.range t.getAppNumArgs).filterM fun i => do
-    return (← whnfR (← inferType (t.getArg! i))).isAppOf ``StateT
+/-- The commands among a provider goal's arguments: the positions of the kind's parameters of
+type `MemM _`. By the kind's signature, not the argument's own type: a command unfolded through
+its monad (`bind`'s instance, a `fun s => …`) has the type of a function. -/
+def cmdArgs (t : Expr) : MetaM (Array Nat) := do
+  let mut ty ← inferType t.getAppFn
+  let mut out := #[]
+  for a in t.getAppArgs, i in [0:t.getAppNumArgs] do
+    let .forallE _ d b _ ← whnf ty | break
+    if (← whnfR d).isAppOf ``StateT then out := out.push i
+    ty := b.instantiate1 a
+  return out
 
 /-- A provider goal with each command that is not an application of a constant as written (a
 `let`, an applied `fun`: a definition unfolded by the provider search) in weak head normal form,
