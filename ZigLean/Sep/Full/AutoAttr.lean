@@ -372,6 +372,28 @@ def whnfDCached (e : Expr) : MetaM Expr := do
   fsymEvalCache.modify (·.insert (id, e) v)
   return v
 
+open Meta in
+/-- The imports' environment, for the kernel's work on a term `e` without locals that uses only
+imported constants (a reduction `Kernel.whnf`, a check): there the kernel does what it does in the
+current environment. The kernel reads an environment only once it is checked
+(`Environment.toKernelEnv` waits for `checked`), and the current one is checked only when every
+earlier theorem of the file is (`Elab.async`): the kernel's work in a proof would wait for all of
+them, and the file's theorems would run one after the other (the pattern of
+`Lean.Meta.evalExprCore`). `none`: the current environment. -/
+def importEnvFor? (e : Expr) : MetaM (Option Environment) := do
+  let env ← getEnv
+  if e.hasFVar || (e.find? fun c => c.isConst && !env.isImportedConst c.constName!).isSome then
+    return none
+  return env.importEnv?
+
+/-- Whether the kernel finds `decide p` (`decP`) to be `true` in `env`: the check `decide +kernel`
+makes of its proof `of_decide_eq_true inst rfl` (`Kernel.isDefEq`); `none` where the kernel fails
+(it runs without the heartbeat limit, as `Kernel.whnf` in `reduceClosedSize`). -/
+def kernelDecides? (env : Environment) (decP : Expr) : Option Bool :=
+  match Kernel.isDefEq env {} decP (mkConst ``Bool.true) with
+  | .ok b => some b
+  | .error _ => none
+
 end Zig.Full.Auto
 
 register_simp_attr fsym_norm

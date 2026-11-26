@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Semantic mutants of the retained E02 translations (`Callbacks/Gen.lean`, `Callbacks/Async.lean`),
-of A01's `asm-effects/AsmEnv/Gen.lean` and of M04's `interfaces/Interfaces/Sentinel.lean`.
+of A01's `asm-effects/AsmEnv/Gen.lean` and of M04's `interfaces/Interfaces/{Sentinel,Wide}.lean`.
 
 `generate ROOT OUT` writes, per mutant of the fixture ROOT (`callbacks`, `asm-env`, `sentinel`), a mutated
 copy of its module under `OUT/<name>/<Module path>` and prints `name:<Module path>:<Proofs path>`.
@@ -58,6 +58,33 @@ MUTANTS = {
             [("def mem_Allocator_allocWithOptionsRetAddr__", "Zig.ptrProject v15.ptr (·.elem 1 p1))",
               "Zig.ptrProject v15.ptr (·.elem 1 0))")],
             {"make_spec"}, set()),
+        # The same path for item types wider than a byte (`Interfaces/Wide.lean`: one copy of the
+        # wrappers per item type) under `WideSpec`, where bytes and items differ.
+        # `allocWithSizeAndAlignment` of `u32` asks for one byte per item instead of four.
+        "wide-alloc-bytes-are-item-count": ("Interfaces/Wide.lean", "Interfaces/WideSpec.lean",
+            [("def mem_Allocator_allocWithSizeAndAlignment__anon_7f4b76fbd810",
+              "math_mul__anon_44faaf286c79 (4 : BitVec 64) p1", "math_mul__anon_44faaf286c79 (1 : BitVec 64) p1")],
+            {"make32_spec"}, {"realloc32_spec"}),
+        # `allocBytesAligned` of `u32` asks the allocator for alignment 1 instead of 4.
+        "wide-alloc-alignment-is-one": ("Interfaces/Wide.lean", "Interfaces/WideSpec.lean",
+            [("def mem_Allocator_allocBytesAligned__anon_c9141768de1a",
+              "mem_Alignment.«4» p2", "mem_Alignment.«1» p2")],
+            {"make32_spec"}, {"realloc32_spec"}),
+        # The `u32` sentinel is stored at byte `n` instead of item `n` (byte `4 * n`).
+        "wide-sentinel-at-byte-n": ("Interfaces/Wide.lean", "Interfaces/WideSpec.lean",
+            [("def mem_Allocator_allocWithOptionsRetAddr__anon_e27387733d94",
+              "Zig.ptrProject v16.ptr (·.elem 4 p1))", "Zig.ptrProject v16.ptr (·.elem 1 p1))")],
+            {"make32_spec"}, set()),
+        # `free` of a `[:0]u64` gives back `len + 1` bytes instead of `(len + 1) * 8`.
+        "wide-free-bytes-are-item-count": ("Interfaces/Wide.lean", "Interfaces/WideSpec.lean",
+            [("def mem_Allocator_free__anon_dddca57af15b",
+              "let i5 ← Zig.mul false i4 (8 : BitVec 64) (safe := false)", "let i5 ← pure i4")],
+            {"release64_spec"}, set()),
+        # `reallocAdvanced` of `u16` asks for one byte per item instead of two.
+        "wide-realloc-bytes-are-item-count": ("Interfaces/Wide.lean", "Interfaces/WideSpec.lean",
+            [("def mem_Allocator_reallocAdvanced__anon_37f73f8446a2",
+              "math_mul__anon_44faaf286c79 (2 : BitVec 64) p2", "math_mul__anon_44faaf286c79 (1 : BitVec 64) p2")],
+            {"realloc16_spec"}, set()),
     },
 }
 ROOTS = {"callbacks": ROADMAP / "callbacks", "asm-env": ROADMAP / "asm-effects", "sentinel": ROADMAP / "interfaces"}
