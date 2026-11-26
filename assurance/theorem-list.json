@@ -357,6 +357,20 @@
       "domain": "`handoff` with 0.15.2 `Thread.Mutex`, `Thread.Condition` and `Thread.ResetEvent`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
     {
+      "name": "Threadsync.HO.handoffAll_spec",
+      "module": "Proofs.Threadsync.Handoff",
+      "example": "threadsync",
+      "scope": "all-schedules",
+      "domain": "`handoffAll` (the producer calls `Thread.Condition.broadcast`) with 0.15.2 `Thread.Mutex`, `Thread.Condition` and `Thread.ResetEvent`: every completed run returns 7; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness; one waiter (the main thread)"
+    },
+    {
+      "name": "Threadsync.HO.handoffAll_safe",
+      "module": "Proofs.Threadsync.Handoff",
+      "example": "threadsync",
+      "scope": "all-schedules",
+      "domain": "`handoffAll` (the producer calls `Thread.Condition.broadcast`) with 0.15.2 `Thread.Mutex`, `Thread.Condition` and `Thread.ResetEvent`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness; one waiter (the main thread)"
+    },
+    {
       "name": "Sync.Handoff.handoff_spec",
       "module": "Proofs.Sync.Handoff",
       "example": "sync",

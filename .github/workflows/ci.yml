@@ -1934,7 +1934,9 @@ jobs:
           bash tests/roadmap/thread-locals/check.sh
 
       # C14: std's condition broadcast of every supported version translates to the code that
-      # the condition contract's implementations prove (`CondImpl.broadcast_wp`).
+      # the condition contract's implementations prove (`CondImpl.broadcast_wp`). The broadcast
+      # client (`threadsync.handoffAll`) is built with Lake, and its two mutants, each in a check
+      # tree, must fail in the client's proof.
       - name: Condition broadcast exports (C14)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && matrix.full && !matrix.mutate }}
         run: bash tests/roadmap/cond-broadcast/check.sh

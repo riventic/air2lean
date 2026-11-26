@@ -236,7 +236,7 @@
    "ty": 16,
    "callee": {
     "ty": 17,
-    "func": "Thread.spawn__anon_1514",
+    "func": "Thread.spawn__anon_1520",
     "module": "std",
     "instance_key": "9381d0180f29f5ad679f01eb287c196b6fb257365ec1b1664c11306ea17d46a0",
     "noreturn": false,
@@ -1415,7 +1415,7 @@
   },
   {
    "k": "struct",
-   "name": "atomic.Value(Thread.Completion__enum_752)",
+   "name": "atomic.Value(Thread.Completion__enum_758)",
    "module": "std",
    "layout": "extern",
    "fields": [
@@ -1476,7 +1476,7 @@
   },
   {
    "k": "enum",
-   "name": "Thread.Completion__enum_752",
+   "name": "Thread.Completion__enum_758",
    "module": "std",
    "tag": 57,
    "exhaustive": true,

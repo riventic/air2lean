@@ -1497,6 +1497,10 @@
         {
           "path": "Proofs/Sync/Mutex.lean",
           "anchor": "theorem mutexCounter_safe"
+        },
+        {
+          "path": "tests/roadmap/cond-broadcast/check.sh",
+          "anchor": "0.14.1: the translation was expected to be rejected"
         }
       ],
       "mutants": [
@@ -1509,6 +1513,16 @@
           "name": "ac",
           "path": "scripts/mutate.sh",
           "category": "invariant-transfer"
+        },
+        {
+          "name": "broadcast-is-signal",
+          "path": "tests/roadmap/cond-broadcast/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "broadcast-dropped",
+          "path": "tests/roadmap/cond-broadcast/mutations.py",
+          "category": "other"
         }
       ]
     },
@@ -2588,6 +2602,38 @@
         {
           "path": "tests/roadmap/counterexamples/test_goal.py",
           "anchor": "def test_correct_loop_has_no_counterexample"
+        },
+        {
+          "path": "tests/roadmap/counterexamples/test_goal.py",
+          "anchor": "def test_unsupported_types_are_rejected_with_the_reason"
+        },
+        {
+          "path": "tests/roadmap/counterexamples/test_goal.py",
+          "anchor": "def test_values_rows_literals_and_native_results_follow_the_kind"
+        },
+        {
+          "path": "tests/roadmap/counterexamples/test_goal.py",
+          "anchor": "def test_domains_are_exhaustive_only_when_finite"
+        },
+        {
+          "path": "tests/roadmap/counterexamples/test_goal.py",
+          "anchor": "def test_the_postcondition_is_decided_on_the_native_outcome"
+        },
+        {
+          "path": "tests/roadmap/counterexamples/test_goal.py",
+          "anchor": "def test_no_correct_twin_is_reported"
+        },
+        {
+          "path": "tests/roadmap/counterexamples/test_goal.py",
+          "anchor": "def test_native_program_without_the_bug_never_confirms_the_violation"
+        },
+        {
+          "path": "tests/roadmap/counterexamples/test_goal.py",
+          "anchor": "def test_a_slice_the_function_writes_is_rejected_with_the_reason"
+        },
+        {
+          "path": "tests/roadmap/counterexamples/test_row.py",
+          "anchor": "def test_from_case_decides_a_stated_postcondition_on_the_row"
         }
       ],
       "mutants": [
