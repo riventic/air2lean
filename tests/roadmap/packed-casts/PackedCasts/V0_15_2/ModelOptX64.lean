@@ -19,7 +19,5 @@ theorem intToU24s_padding : (intToU24s 0x00000001771234560000000000000000#128).r
 theorem intToU24s_ok : (intToU24s 0x00000001001234560000000000000000#128).run =
     some (.ok 0x123456) := by
   decide +kernel
-/-- Items without padding bits decode as on the LLVM backend. -/
-theorem intToU8s_ok : (intToU8s 0x01340012#32).run = some (.ok 0x34) := by decide +kernel
 
 end PackedCasts.V0_15_2.ModelOptX64

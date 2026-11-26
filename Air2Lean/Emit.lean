@@ -2746,13 +2746,12 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
         else s!"pure ({rv a} : {fc.emitValTy a}).lanes"
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else
-    if (fc.valTyId? a).any (reprCastApplies fc.dialect.bitCast fc.types · inst.ty) then
+    if let some s := (fc.valTyId? a).filter (reprCastApplies fc.dialect.bitCast fc.types · inst.ty) then
       -- Zig ≤0.16 `@bitCast` of an array, `extern` struct or `extern` union: the memory bytes
       -- reinterpreted (`Zig.reprCast`, padding bytes undefined; `docs/aggregate-casts.md`),
       -- with the profile's storage encodings of both sides (`FCtx.storageExpr`).
-      let cast := fc.storageExpr inst.ty s!"Zig.reprCast ({fc.emitTyOf inst.ty}) ({rv a} : {fc.emitValTy a})"
-      let (env, l) := bindLet fc env inst.id
-        (match fc.valTyId? a with | some s => fc.storageExpr s cast | none => cast)
+      let (env, l) := bindLet fc env inst.id <| fc.storageExpr s <| fc.storageExpr inst.ty
+        s!"Zig.reprCast ({fc.emitTyOf inst.ty}) ({rv a} : {fc.emitValTy a})"
       (env, some l)
     else
     if isEnumTy (fc.valTy a) || isEnumTy (fc.tyOfId inst.ty) then

@@ -174,15 +174,14 @@ for v in 0.15.2 0.14.1; do
   [ "$t" = V0_15_2 ] ||
     python3 -B scripts/fixtures.py instance "$dir/PackedCasts/V0_15_2/ModelOptX64.lean" --subst "V0_15_2=$t"
   models+=("PackedCasts.$t.ModelOptX64")
-  theorems+=(--declaration "PackedCasts.$t.ModelOptX64.intToU24s_padding"
-    --declaration "PackedCasts.$t.ModelOpt.intToU24s_padding"
-    --declaration "PackedCasts.$t.ModelOpt.intToU8s_badFlag")
+  theorems+=(--declaration "PackedCasts.$t.ModelOptX64.intToU24s_padding")
 done
 for t in V0_14_1 V0_15_2 V0_16_0 V0_17_1; do
   theorems+=(--declaration "PackedCasts.$t.Model.setUnion_ok" --declaration "PackedCasts.$t.Model.floatField_nan")
 done
 for t in V0_14_1 V0_15_2; do
-  theorems+=(--declaration "PackedCasts.$t.ModelVector.laneSum_ok" --declaration "PackedCasts.$t.ModelAuto.unionsToInt_padding")
+  theorems+=(--declaration "PackedCasts.$t.ModelVector.laneSum_ok" --declaration "PackedCasts.$t.ModelAuto.unionsToInt_padding"
+    --declaration "PackedCasts.$t.ModelOpt.intToU24s_padding" --declaration "PackedCasts.$t.ModelOpt.intToU8s_badFlag")
 done
 theorems+=(--declaration PackedCasts.V0_17_1.ModelLogical.intToModes_unnamed)
 for t in V0_14_1 V0_15_2 V0_16_0; do

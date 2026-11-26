@@ -590,10 +590,10 @@ partial def reprBitSize (types : Array Ty) (layouts : Array Layout) (id : TyId)
       -- size, padding to its alignment (`Enc (Option α)`); `Type.bitSize` is the ABI size.
       -- The flag's offset is pinned by the exporter's payload and optional layouts.
       let _ ← item child
-      let exported (t : TyId) := layouts[t]?.map fun l => (l.size, l.align)
-      let (ps, pa) ← modelLayout types layouts child
-      unless exported child == some (some ps, some pa) &&
-          exported id == some (some (Zig.alignUp (ps + 1) pa), some pa) do
+      let agrees (t : TyId) : Except String Bool := do
+        let (s, a) ← modelLayout types layouts t
+        pure (layouts[t]?.map (fun l => (l.size, l.align)) == some (some s, some a))
+      unless (← agrees child) && (← agrees id) do
         throw s!"an optional (type {id}) whose layout in the AIR file is not its payload's, \
           a flag byte and padding"
       (8 * ·) <$> sizeOf id
