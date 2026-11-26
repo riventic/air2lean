@@ -51,6 +51,10 @@
         {
           "path": "tests/roadmap/pointer-width/test_cli.py",
           "anchor": "run(binary, bad, error=\"pointer width\")"
+        },
+        {
+          "path": "tests/roadmap/pointer-width/test_cli.py",
+          "anchor": "A `long long` loaded with the i386 System V alignment (4) is rejected"
         }
       ],
       "mutants": [
@@ -59,7 +63,12 @@
         {"name": "wasm32-usize-add-wraps", "path": "tests/roadmap/pointer-width/mutations.py", "category": "other"},
         {"name": "x64-byte-count-overflow-flag-inverted", "path": "tests/roadmap/pointer-width/mutations.py", "category": "other"},
         {"name": "wasm32-bounds-check-allows-length", "path": "tests/roadmap/pointer-width/mutations.py", "category": "other"},
-        {"name": "wasm32-alloc-item-size-one", "path": "tests/roadmap/pointer-width/mutations.py", "category": "other"}
+        {"name": "wasm32-alloc-item-size-one", "path": "tests/roadmap/pointer-width/mutations.py", "category": "other"},
+        {"name": "wasm32-c-long-add-unsigned", "path": "tests/roadmap/pointer-width/mutations.py", "category": "other"},
+        {"name": "x64-c-long-narrowing-unchecked", "path": "tests/roadmap/pointer-width/mutations.py", "category": "other"},
+        {"name": "x64-c-int-widening-zero-extends", "path": "tests/roadmap/pointer-width/mutations.py", "category": "other"},
+        {"name": "wasm32-long-long-at-offset-4", "path": "tests/roadmap/pointer-width/mutations.py", "category": "layout"},
+        {"name": "wasm32-c-ulong-at-lp64-offset", "path": "tests/roadmap/pointer-width/mutations.py", "category": "layout"}
       ],
       "note": "mutations.py mutates the retained wasm32/x86_64 translations; check.sh elaborates PointerWidth.Proofs against each and requires errors in the theorems of the changed fact."
     },
