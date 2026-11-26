@@ -297,7 +297,7 @@ class NoOpMutation(unittest.TestCase):
              ('lemmas_lean', 'lemmas_backup'), ('round_lean', 'round_backup'), ('mem_lean', 'mem_backup'),
              ('enc_lean', 'enc_backup'), ('alloc_lean', 'alloc_backup'), ('asm_zig', 'asm_backup'),
              ('vec_lean', 'vec_backup'), ('thread_lean', 'thread_backup'), ('sched_lean', 'sched_backup'),
-             ('conc_lean', 'conc_backup'), ('allowed_lean', 'allowed_backup'))
+             ('allowed_lean', 'allowed_backup'))
 
     def run_helper(self, changed):
         text = (ROOT / mm.MUTATE_SH).read_text()

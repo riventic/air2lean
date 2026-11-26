@@ -1706,9 +1706,14 @@
           "name": "wide-realloc-bytes-are-item-count",
           "path": "tests/roadmap/callbacks/mutants.py",
           "category": "layout"
+        },
+        {
+          "name": "grow-absorb-omits-sentinel",
+          "path": "tests/roadmap/callbacks/mutants.py",
+          "category": "layout"
         }
       ],
-      "note": "byte-sentinel and mutate.sh s mutate the retiring hand model (ZigLean/Mem/Alloc.lean); the sentinel-* mutants mutate the translated std allocator path (interfaces/Interfaces/Sentinel.lean), killed by the unchanged Interfaces.SentinelSpec in interfaces/check.sh; the wide-* mutants mutate the same path for item types wider than a byte (interfaces/Interfaces/Wide.lean: u16, u32, u64), killed by the unchanged Interfaces.WideSpec there."
+      "note": "byte-sentinel and mutate.sh s mutate the retiring hand model (ZigLean/Mem/Alloc.lean); the sentinel-* mutants mutate the translated std allocator path (interfaces/Interfaces/Sentinel.lean), killed by the unchanged Interfaces.SentinelSpec in interfaces/check.sh; the wide-* mutants mutate the same path for item types wider than a byte (interfaces/Interfaces/Wide.lean: u16, u32, u64), killed by the unchanged Interfaces.WideSpec there; grow-absorb-omits-sentinel mutates std's sentinel accounting in realloc/remap/resize/free of a sentinel slice itself (mem.absorbSentinel in interfaces/Interfaces/Grow.lean), killed by the unchanged Interfaces.GrowSpec there."
     },
     "M05": {
       "categories": [
