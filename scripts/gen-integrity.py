@@ -282,6 +282,12 @@ FIXTURES = [
      ["--namespace", f"PointerWidth.{ns}", "--prefix", "pointer_width."], "exact")
     for ns, target in (("Wasm32", "wasm32-freestanding"), ("Wasi", "wasm32-wasi"), ("X64", "x86_64-linux"))
 ] + [
+    # T02 check.sh: pointer_width.zig exported by Zig 0.17.1.
+    (f"tests/roadmap/pointer-width/PointerWidth/V0_17_1/{ns}/Gen.lean",
+     f"tests/roadmap/pointer-width/air/0.17.1/pointer_width/{target}",
+     ["--namespace", f"PointerWidth.V0_17_1.{ns}", "--prefix", "pointer_width."], "exact")
+    for ns, target in (("Wasm32", "wasm32-freestanding"), ("Wasi", "wasm32-wasi"), ("X64", "x86_64-linux"))
+] + [
     # T02 check.sh: names.zig (`@tagName`, `@errorName`) per Zig version and target.
     (f"tests/roadmap/pointer-width/PointerWidth/Names/V{v.replace('.', '_')}/{ns}/Gen.lean",
      f"tests/roadmap/pointer-width/air/{v}/names/{target}",
