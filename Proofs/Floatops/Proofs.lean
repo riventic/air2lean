@@ -185,19 +185,25 @@ inductive FmaRt where
 /-- `@mulAdd` in `compiler-rt` mode on a target, with the translation's `fma.zig`: x86_64 calls
 compiler_rt for every format (group B, `Zig.Float.fmaRtChk`/`fmaRt017Chk`); aarch64 has a fused
 instruction for `f16`/`f32`/`f64` and calls compiler_rt for `f80`/`f128`
-(`Zig.Float.fmaRtFused`/`fmaRt017Fused`). Without `fullfp16` an `f16` `@mulAdd` is an `f32`
-`fmadd` rounded back, x86_64's `f16` rule. -/
+(`Zig.Float.fmaRtFused`/`fmaRt017Fused`). Without `fullfp16` (and on x86_64) an `f16` `@mulAdd`
+is done in a wider format and rounded back: up to 0.16.0 in `f32` (`Float.fmaRt`'s `f16` rule),
+from 0.17.1 in `f64` on the extended operands (the translator's `F16MulAdd.viaF64`). The version
+of the `fma.zig` stands for that of the compiler. -/
 def FloatTarget.fmaRt {fmt : Zig.FloatFmt} : FloatTarget → FmaRt →
     Zig.Float fmt → Zig.Float fmt → Zig.Float fmt → Zig.Result (Zig.Float fmt)
   | .x86_64, .legacy, a, b, c => Zig.Float.fmaRtChk a b c
-  | .x86_64, .v017, a, b, c => Zig.Float.fmaRt017Chk a b c
+  | .x86_64, .v017, a, b, c => match fmt with
+    | .f16 => Zig.Float.conv .f16 <$> Zig.Float.fmaRt017Chk (Zig.Float.conv .f64 a)
+        (Zig.Float.conv .f64 b) (Zig.Float.conv .f64 c)
+    | _ => Zig.Float.fmaRt017Chk a b c
   | .aarch64, .legacy, a, b, c => pure (Zig.Float.fmaRtFused a b c)
   | .aarch64, .v017, a, b, c => pure (Zig.Float.fmaRt017Fused a b c)
   | .aarch64Generic, .legacy, a, b, c => match fmt with
     | .f16 => Zig.Float.fmaRtChk a b c
     | _ => pure (Zig.Float.fmaRtFused a b c)
   | .aarch64Generic, .v017, a, b, c => match fmt with
-    | .f16 => Zig.Float.fmaRt017Chk a b c
+    | .f16 => pure (Zig.Float.conv .f16 (Zig.Float.fmaRt017Fused (Zig.Float.conv .f64 a)
+        (Zig.Float.conv .f64 b) (Zig.Float.conv .f64 c)))
     | _ => pure (Zig.Float.fmaRt017Fused a b c)
 
 /-- The target of the translation in `Gen.lean`: an alternative elaborates only when `op80`'s
@@ -332,7 +338,7 @@ theorem op16_spec (sel : BitVec 8) (a b c : Zig.Float .f16) :
     | 0, _ | 1, _ | 2, _ | 3, _ | 5, _ | 6, _ | 9, _ | 14, _ | 15, _ | 18, _ | 19, _ | 20, _ | 21, _ | 22, _ | 23, _ | 24, _ | 25, _ => rfl
     | 4, _ | 7, _ | 8, _ | 10, _ | 11, _ | 12, _ | 13, _ | 16, _ | 17, _ =>
       simp only [op16, opSpec, floatopsTarget, fmaProfile, FloatTarget.fmaRt,
-        BitVec.reduceBEq, BitVec.reduceToNat, Bool.false_eq_true, ↓reduceIte,
+        BitVec.reduceBEq, BitVec.reduceToNat, Bool.false_eq_true, ↓reduceIte, map_eq_pure_bind,
         StateT.run'_eq, StateT.run_bind, StateT.run_pure, StateT.run_lift, StateT.run_monadLift,
         monadLift_self, bind_assoc, pure_bind, map_bind, map_pure, bind_pure]
     | n + 26, h => omega

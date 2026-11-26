@@ -27,6 +27,15 @@ lake env lean --run "$here/Runtime.lean"
 lake env lean -R "$work" -o "$work/Gen.olean" "$work/Gen.lean"
 LEAN_PATH="$work:$(lake env printenv LEAN_PATH)" lake env lean -R "$work" --run "$here/Cases.lean"
 
+# `@alignCast` with runtime safety off (aligncast.zig, row 20), every supported version: each
+# translation gives `.illegal` for a misaligned operand in every cast shape (AlignCases.lean).
+for version in 0.17.1 0.16.0 0.15.2 0.14.1; do
+  lake exe air2lean "$here/align-air/$version" -o "$work/Align-$version.lean" --namespace AlignCast \
+    --prefix aligncast.
+  cat "$here/AlignCases.lean" >> "$work/Align-$version.lean"
+  lake env lean --run "$work/Align-$version.lean"
+done
+
 python3 -B "$here/mutations.py" "$work/Gen.lean" "$work/mutants"
 # Each mutant in its own directory, in parallel (scripts/par.py, AIR2LEAN_JOBS).
 lean_path=$(lake env printenv LEAN_PATH)

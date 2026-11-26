@@ -1142,6 +1142,9 @@ jobs:
           python3 -I -B tests/roadmap/air-semantics/test_cli.py "$PWD/.lake/build/bin/air2lean"
           lake build $(ls Proofs/*/AirCert.lean | sed 's#/#.#g; s#\.lean$##') Air2Lean.Main
           python3 -I -B tests/roadmap/air-semantics/test_lean.py "$PWD/.lake/build/bin/air2lean"
+          # The drop theorems' kernel-checked boundaries and the controls of their native binding
+          # (it fails on a wrong outcome).
+          lake env lean --run tests/roadmap/air-semantics/CanonDrop.lean
 
       # Q02 (docs/mutation-map.md): the mutants of the interpreter's arms (Air2Lean/Sem.lean) and of
       # the Canon rewrites without a preservation theorem, each applied in a check tree and killed
@@ -1658,6 +1661,13 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/aarch64-abi/test_float_atomics.py "$PWD/.lake/build/bin/air2lean"
 
+      # T04: the term emitted for a `@mulAdd` on every qualified target, recorded Zig version,
+      # `fullfp16` setting and float mode (the native `fma` and `cpu` rows: docs/aarch64-abi.md),
+      # and the rejection of an aarch64 profile without the float instructions.
+      - name: "`@mulAdd` per target, version and CPU"
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/aarch64-abi/test_mul_add.py "$PWD/.lake/build/bin/air2lean"
+
       # T06: the stage2_x86_64 rules (`CheckCtx.checkStage2Backend`) on the patched compilers'
       # self-hosted exports of the divergence reproducers: rejected there, accepted on LLVM.
       - name: Reject stage2_x86_64 backend divergences
@@ -1931,7 +1941,9 @@ jobs:
           bash tests/roadmap/thread-locals/check.sh
 
       # C14: std's condition broadcast of every supported version translates to the code that
-      # the condition contract's implementations prove (`CondImpl.broadcast_wp`).
+      # the condition contract's implementations prove (`CondImpl.broadcast_wp`). The broadcast
+      # client (`threadsync.handoffAll`) is built with Lake, and its two mutants, each in a check
+      # tree, must fail in the client's proof.
       - name: Condition broadcast exports (C14)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && matrix.full && !matrix.mutate }}
         run: bash tests/roadmap/cond-broadcast/check.sh
@@ -2247,7 +2259,7 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean.VecMem ZigLean.Float.Allowed ZigLean.Mem.Thread ZigLean.Os ZigLean.Conc.Sched
+          lake build ZigLean.VecMem ZigLean.Float.Allowed ZigLean.Mem.Thread ZigLean.Os ZigLean.Conc.Sched Air2Lean.Air.Dialect
           python3 -m unittest discover -s tests/roadmap/aarch64-abi -p 'test_*.py' -v
 
       # The recorded `futex` rows of every version and profile (FUTEX_WAIT/WAKE, __ulock_*)
@@ -2464,6 +2476,21 @@ jobs:
           AIR2LEAN_OUT_DIR: ${{ runner.temp }}/air-out
           AIR2LEAN_DIFF_ZIG_CACHE: ${{ runner.temp }}/zig-diff-cache
         run: scripts/check.sh
+
+      # V01 stage 7 (docs/air-semantics.md §Conformance): the AIR interpreter (`Air2Lean.Sem`) on
+      # the AIR that the step above exported, for every corpus function inside its coverage and
+      # every corpus input; each outcome must agree with the native outcome and with the
+      # generated model's outcome of that step. The functions outside the coverage are counted by
+      # reason, and the set that runs is pinned (tests/roadmap/air-semantics/conformance/).
+      - name: AIR interpreter conformance on the differential corpus
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && matrix.full && !matrix.mutate && matrix.zig == '0.17.1' || !env.AIR2LEAN_REUSED && matrix.part == 'golden' && matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
+        run: |
+          set -euo pipefail
+          python3 -I -B tests/roadmap/air-semantics/test_conformance.py
+          python3 -I -B tests/roadmap/air-semantics/conformance.py --zig-version '${{ matrix.zig }}' \
+            --air-dir "$RUNNER_TEMP/air-out" \
+            --diff-out "$(cat '.lake/check-reports/${{ matrix.zig }}/build-tree')/tests/diff/out" \
+            --diff-report tests/diff/out/report.json
 
       # T06: correspondence beyond the committed inputs (docs/build-modes.md §Fresh inputs): the
       # generated inputs again from a seed derived from the commit, in a check tree; any value,

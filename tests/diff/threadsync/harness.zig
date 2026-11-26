@@ -32,5 +32,6 @@ pub fn main() !void {
 
     try run(gpa, "mutexCounter", threadsync.mutexCounter);
     try run(gpa, "handoff", threadsync.handoff);
+    try run(gpa, "handoffAll", threadsync.handoffAll);
     try run(gpa, "waitGroup", threadsync.waitGroup);
 }

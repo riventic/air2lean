@@ -80,6 +80,9 @@ def float_edges(width, tokens, context):
 
 
 TIE_ROWS = 5
+# `writeMulAddRows`: the `@mulAdd` (selector 4) operands whose result depends on the format of
+# the multiply-add.
+MUL_ADD_ROWS = {16: 4, 32: 1, 64: 1, 80: 0, 128: 0}
 
 
 def check_floats():
@@ -87,10 +90,14 @@ def check_floats():
     for width in (16, 32, 64, 80, 128):
         data = rows("floatops", f"op{width}")
         # 300 rows per selector, then the deterministic round-half-even tie rows
-        # (`writeTieRows` in tests/diff/gen_inputs.zig) on selectors 0 and 1.
+        # (`writeTieRows` in tests/diff/gen_inputs.zig) on selectors 0 and 1, then the
+        # `@mulAdd` rows.
         rows_per_op = 26 * 300
-        ties = data[rows_per_op:]
+        ties = data[rows_per_op:rows_per_op + TIE_ROWS]
         assert len(ties) == TIE_ROWS and {row[0] for row in ties} <= {0, 1}, f"op{width}: tie rows"
+        mul_adds = data[rows_per_op + TIE_ROWS:]
+        assert len(mul_adds) == MUL_ADD_ROWS[width] and {row[0] for row in mul_adds} <= {4}, \
+            f"op{width}: @mulAdd rows"
         data = data[:rows_per_op]
         for selector in range(26):
             selected = [row for row in data if row[0] == selector]
@@ -155,7 +162,7 @@ def main():
         rows(example, function)
     assert rows("threads", "disjoint") == rows("threads", "race")
     for example, functions in {
-        "threadsync": ("mutexCounter", "handoff", "waitGroup"),
+        "threadsync": ("mutexCounter", "handoff", "handoffAll", "waitGroup"),
         "iogroup": ("groupCounter", "groupConcurrent"),
         "sync": ("semaphoreCounter", "rwLockRead"),
     }.items():

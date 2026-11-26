@@ -49,6 +49,15 @@ srcDir = "alloc-translated"
 root = "AllocTranslated.Large"
 moreLinkObjs = ["libm"]
 
+# V01 stage 7: the compiled runner of the AIR interpreter (`Air2Lean.Sem`) on the differential
+# corpus (air-semantics/Conformance.lean, built and run by air-semantics/conformance.py). It
+# imports the translator's decoder and the interpreter only, as the `air2lean` executable does, so
+# it links without the float archive.
+[[lean_exe]]
+name = "air-semantics-conformance"
+srcDir = "air-semantics"
+root = "Conformance"
+
 [[lean_lib]]
 name = "ListsFba"
 srcDir = "lists-fba"

@@ -12,6 +12,7 @@ safety check before it.
 | `mutations.py` | emitter-output mutants that drop one op's check; `Cases.lean` must reject each |
 | `probe.zig`, `probe-air/`, `expected.json`, `probes.py` | IB the translator rejects, and the documented gaps, each translated alone |
 | `forlen.zig`, `for-air/<version>/` | `for` over a slice and a range or an array without safety, exported by every supported version: each translation has the patched Sema's length check (`.illegal`), and an export without `unchecked_ib` is rejected (`expected.json`) |
+| `aligncast.zig`, `align-air/<version>/`, `AlignCases.lean` | `@alignCast` without safety in every pointer cast shape (`*T`, `?*T`, `[*c]T`, `*allowzero T`, slices; unwrap, wrap, null conversion), exported by every supported version: each translation checks the operand's address itself (`Zig.checkAlign`), `.illegal` for a misaligned operand, and null passes |
 | `native.zig`, `native/` | what ReleaseSafe and ReleaseFast builds return for the same input classes |
 
 ```sh

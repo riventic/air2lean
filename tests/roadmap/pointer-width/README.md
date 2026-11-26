@@ -62,6 +62,15 @@ the other width is rejected (the model's sizes come from the profile), that
 `pointer_bits` must match the triple, that the name functions use the profile's slice type,
 and the rejections of atomics and `Allocator.dupe` on wasm32, for every exported version.
 
+`layouts.zig` has `extern` structs and unions whose offsets depend on the target and on explicit
+field alignments (natural, `align(1)`, `align(16)`, a zero-sized field, nested structs and
+arrays). It is exported for wasm32-freestanding (0.17.1, 0.16.0) and x86_64-linux (0.17.1,
+0.16.0, 0.15.2, 0.14.1); every export passes the checker's C layout rule and its translation
+compiles (`check.sh`). `LayoutChecker.lean` has the rule's unit cases, and `test_cli.py` the
+rejections on changed type tables of each export: fields out of declaration order, a size that
+is not the rounded-up end, an alignment that is no power of two, and a field type whose layout
+is not the model's although the function never loads that field.
+
 Run under the serialized build queue:
 
 ```sh

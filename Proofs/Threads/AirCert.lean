@@ -60,7 +60,11 @@ def source_0 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "atomic.Value(threads.Phase).init"
 (@_root_.List.toArray
 @_root_.Nat
@@ -806,7 +810,11 @@ def source_1 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "atomic.Value(u32).init"
 (@_root_.List.toArray
 @_root_.Nat
@@ -1434,7 +1442,11 @@ def source_2 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "threads.bump"
 (@_root_.List.toArray
 @_root_.Nat
@@ -3516,7 +3528,11 @@ def source_3 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "threads.claim"
 (@_root_.List.toArray
 @_root_.Nat
@@ -6147,7 +6163,11 @@ def source_4 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "threads.claimOnce"
 (@_root_.List.toArray
 @_root_.Nat
@@ -11826,7 +11846,11 @@ def source_5 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "threads.disjoint"
 (@_root_.List.toArray
 @_root_.Nat
@@ -15850,7 +15874,11 @@ def source_6 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "threads.parallelCounter"
 (@_root_.List.toArray
 @_root_.Nat
@@ -23327,7 +23355,11 @@ def source_7 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "threads.race"
 (@_root_.List.toArray
 @_root_.Nat
@@ -27214,7 +27246,11 @@ def source_8 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "threads.swapFlag"
 (@_root_.List.toArray
 @_root_.Nat
@@ -28781,7 +28817,11 @@ def source_9 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "threads.writeFlag"
 (@_root_.List.toArray
 @_root_.Nat
@@ -29676,7 +29716,11 @@ def source_10 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "threads.xchgRace"
 (@_root_.List.toArray
 @_root_.Nat
