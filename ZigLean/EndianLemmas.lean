@@ -70,6 +70,32 @@ theorem intEncExt_decode_encode (o : ByteOrder) (signed : Bool) {n : Nat} (v : B
   rw [hd]
   simp [hv]
 
+/-- An integer's ABI size is that of the integer that fills it. -/
+theorem intSize_eight_mul_intSize (n : Nat) : intSize (8 * intSize n) = intSize n := by
+  have h : ∀ k, intSize (8 * k) = alignUp k (intAlign (8 * k)) := fun k => by
+    unfold intSize; congr 1; omega
+  rw [h]
+  generalize hk : intSize n = k
+  have hk' : k = 1 ∨ k = 2 ∨ k = 4 ∨ k = 8 ∨ k = 0 ∨ 16 ∣ k := by
+    subst hk
+    unfold intSize intAlign alignUp
+    simp only []
+    repeat' split
+    all_goals omega
+  unfold intAlign alignUp
+  simp only []
+  repeat' split
+  all_goals omega
+
+/-- `intEncExt` is lawful: its image is the whole ABI integer, and reads back as stored. -/
+theorem intEncExt_lawful (o : ByteOrder) (signed : Bool) (n : Nat) :
+    @LawfulEnc (BitVec n) (intEncExt o signed n) := by
+  letI := intEncExt o signed n
+  refine ⟨fun v => ?_, fun v => intEncExt_decode_encode o signed v⟩
+  show ((intEncOf o (8 * intSize n)).encode _).size = intSize n
+  rw [(intEncOf_lawful o (8 * intSize n)).size_encode]
+  exact intSize_eight_mul_intSize n
+
 /-- A padding bit that is not the extension of the value is `.unspecified` (`trunc nuw`/`trunc nsw`
 poison): the bytes of the `u16` `0x0200` are no `i10` (native 0.17.1 ReleaseSafe reads 512, no
 `i10` at all), and those of the `u32` `0x01000005` no `u24`. -/
