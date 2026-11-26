@@ -16,7 +16,7 @@ const compat = @import("compat");
 const Out = struct {
     buffer: [32768]u8 = undefined,
     len: usize = 0,
-    fn print(self: *Out, comptime format: []const u8, args: anytype) !void {
+    pub fn print(self: *Out, comptime format: []const u8, args: anytype) !void {
         self.len += (try std.fmt.bufPrint(self.buffer[self.len..], format, args)).len;
     }
     fn flush(self: *Out) !void {
@@ -416,5 +416,6 @@ pub fn main() !void {
     try orders(out);
     try atomicExt(out);
     try litmus(out);
+    try @import("futex.zig").rows(out);
     try out.flush();
 }
