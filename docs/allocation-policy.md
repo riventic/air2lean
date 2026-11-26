@@ -170,7 +170,13 @@ removal, ignore the failure oracle, ignore the budget, count only the request ag
 budget, or drop a rule's upper bound on the request. Each must compile, then fail an explicit fixture outcome/ownership assertion.
 Compiler errors, unexpected panics, missing tools and killed processes do not count as
 mutation detection. Temporary copies preserve the original source. Existing mutation (h)
-continues to remove only legacy `failAt`, retaining the configured policy.
+continues to remove only legacy `failAt`, retaining the configured policy. Mutation (ai) of
+`scripts/mutate.sh` puts the fixed 1 MiB cap back into the model's default policy (the default
+of `AllocPolicy.maxBytes` becomes `maxAllocBytes`); the lists differential kills it, because
+`"max_bytes": null` takes the cap from the default policy itself: the five large `sumRange`
+lines that allocate then return `OutOfMemory` in the model where Zig returns the sum (5
+mismatches; run of 2026-11-26, x86_64-linux, Zig 0.16.0, recorded in
+`assurance/mutation-kills.json`).
 
 [The qualification record](allocation-policy-report.json) preserves the earlier historical
 results and appends the coordinator's complete post-cleanup recheck at revision
