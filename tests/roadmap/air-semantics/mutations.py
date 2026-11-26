@@ -424,6 +424,7 @@ def kill(tree, work, name):
         for compiled in COMPILED:
             shutil.copy(ROOT / compiled, tree / compiled)
             shutil.copy(Path(work) / f'{tree.name}-{Path(compiled).stem}.olean', tree / olean(compiled))
+    # This file both defines the mutant and is the CI check that kills it.
     log_kill(SELF, name, SELF)
     print(f'{name}: killed by {killers}', flush=True)
 
