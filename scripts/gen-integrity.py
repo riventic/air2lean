@@ -288,10 +288,12 @@ FIXTURES = [
      ["--namespace", f"PointerWidth.V0_17_1.{ns}", "--prefix", "pointer_width."], "exact")
     for ns, target in (("Wasm32", "wasm32-freestanding"), ("Wasi", "wasm32-wasi"), ("X64", "x86_64-linux"))
 ] + [
-    # T02 check.sh: names.zig (`@tagName`, `@errorName`) per Zig version and target.
-    (f"tests/roadmap/pointer-width/PointerWidth/Names/V{v.replace('.', '_')}/{ns}/Gen.lean",
-     f"tests/roadmap/pointer-width/air/{v}/names/{target}",
-     ["--namespace", f"PointerWidth.Names.V{v.replace('.', '_')}.{ns}", "--prefix", "names."], "exact")
+    # T02 check.sh: names.zig (`@tagName`, `@errorName`) and c_ints.zig (the C integer types,
+    # `isize`, extern structs) per Zig version and target.
+    (f"tests/roadmap/pointer-width/PointerWidth/{d}/V{v.replace('.', '_')}/{ns}/Gen.lean",
+     f"tests/roadmap/pointer-width/air/{v}/{stem}/{target}",
+     ["--namespace", f"PointerWidth.{d}.V{v.replace('.', '_')}.{ns}", "--prefix", f"{stem}."], "exact")
+    for stem, d in (("names", "Names"), ("c_ints", "CInts"))
     for v in ("0.16.0", "0.17.1")
     for ns, target in (("Wasm32", "wasm32-freestanding"), ("Wasi", "wasm32-wasi"), ("X64", "x86_64-linux"))
 ] + [

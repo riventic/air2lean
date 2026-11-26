@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""T02 mutants of the retained pointer-width translations (`PointerWidth/{Wasm32,X64}/Gen.lean`).
+"""T02 mutants of the retained pointer-width translations (`PointerWidth/{Wasm32,X64}/Gen.lean`
+and `PointerWidth/CInts/V0_17_1/{Wasm32,X64}/Gen.lean`).
 
-`run WORK` takes the directory `check.sh` built the clean `PointerWidth/*/Gen.olean` files in
+`run WORK` takes the directory `check.sh` built the clean `PointerWidth/**/Gen.olean` files in
 (LEAN_PATH must reach the Lake libraries), builds one mutated Gen.lean per mutant below it and
-elaborates `PointerWidth/Proofs.lean` against it. Each mutant is well-typed Lean that changes one
-width-dependent fact of one translation (the in-memory layout of a pointer and a slice, the
-`usize` overflow of an addition, a bounds check or an allocation size); it is killed only when the
+elaborates the translation's proofs (`PointerWidth/Proofs.lean` or
+`PointerWidth/CInts/V0_17_1/Proofs.lean`) against it. Each mutant is well-typed Lean that changes
+one width-dependent fact of one translation (the in-memory layout of a pointer, a slice or an
+extern struct of C integers, the overflow of an addition, a C integer conversion, a bounds check
+or an allocation size); it is killed only when the
 proofs fail in exactly the theorems that state the fact (`broken`), never by an import or a type
 error. Only then it reports the kill (`kill`). `--self-test` checks every anchor.
 """
@@ -19,7 +22,6 @@ sys.path.insert(0, str(HERE.parents[2] / "scripts"))
 from lean_mutant import build_gen, edit, reject, run as run_lean  # noqa: E402
 from mutation_kill_log import killed as log_kill  # noqa: E402
 
-PROOFS = HERE / "PointerWidth/Proofs.lean"
 
 # name -> (namespace, edits, theorems of Proofs.lean that must fail). Each `old` occurs exactly once.
 MUTANTS = {
@@ -51,7 +53,38 @@ MUTANTS = {
     "wasm32-alloc-item-size-one": ("Wasm32", [
         ("Zig.Allocator.allocOf .w32 p0 4 4 p1", "Zig.Allocator.allocOf .w32 p0 1 4 p1"),
     ], ["zeros_overflow_w32"]),
+    # c_ints.zig (`PointerWidth/CInts/V0_17_1/Proofs.lean`).
+    # `c_long` incremented as unsigned: the signed 32-bit overflow point moves.
+    "wasm32-c-long-add-unsigned": ("CInts/V0_17_1/Wasm32", [
+        ("def longSucc (p0 : BitVec 32) : Zig.Result (BitVec 32) := do\n  let e ← ((do\n"
+         "    let i1 ← Zig.add true p0 (1 : BitVec 32)",
+         "def longSucc (p0 : BitVec 32) : Zig.Result (BitVec 32) := do\n  let e ← ((do\n"
+         "    let i1 ← Zig.add false p0 (1 : BitVec 32)"),
+    ], ["longSucc_w32", "succ_boundary"]),
+    # `c_long` → `c_int` truncates without the range check.
+    "x64-c-long-narrowing-unchecked": ("CInts/V0_17_1/X64", [
+        ("let i1 ← Zig.intCast true true 32 p0", "let i1 ← pure (Zig.trunc 32 p0)"),
+    ], ["longToInt_x64", "longToInt_boundary"]),
+    # `c_int` → `c_long` zero-extends instead of sign-extending.
+    "x64-c-int-widening-zero-extends": ("CInts/V0_17_1/X64", [
+        ("Zig.intCast true true 64 p0 (safe := false)", "Zig.intCast false true 64 p0 (safe := false)"),
+    ], ["intToLong_x64", "intToLong_boundary"]),
+    # `long long` with the i386 System V offset 4 in `{ char, long long, … }`.
+    "wasm32-long-long-at-offset-4": ("CInts/V0_17_1/Wasm32", [
+        ("(8, Zig.Enc.encode v.ll)", "(4, Zig.Enc.encode v.ll)"),
+    ], ["mixed_w32"]),
+    # `unsigned long` stored at the LP64 offset in the ILP32 struct.
+    "wasm32-c-ulong-at-lp64-offset": ("CInts/V0_17_1/Wasm32", [
+        ("Zig.Enc.fields 24 [(0, Zig.Enc.encode v.c), (8, Zig.Enc.encode v.ll), (16, Zig.Enc.encode v.us), (20, Zig.Enc.encode v.ul)]",
+         "Zig.Enc.fields 28 [(0, Zig.Enc.encode v.c), (8, Zig.Enc.encode v.ll), (16, Zig.Enc.encode v.us), (24, Zig.Enc.encode v.ul)]"),
+    ], ["layout_sizes", "mixed_w32", "setMixedUs_w32"]),
 }
+
+
+def proofs(namespace):
+    """The proofs of a translation: `PointerWidth/Proofs.lean`, or the `Proofs.lean` next to a
+    nested translation (`CInts/V0_17_1/Wasm32` → `PointerWidth/CInts/V0_17_1/Proofs.lean`)."""
+    return HERE / "PointerWidth" / namespace.rpartition("/")[0] / "Proofs.lean"
 
 
 def build(name, work):
@@ -68,8 +101,9 @@ def build(name, work):
 def run(work):
     for name in MUTANTS:
         target, broken = build(name, work)
-        rc, out = run_lean(["-R", HERE, PROOFS], target, work)
-        reject(name, rc, out, PROOFS, broken)
+        source = proofs(MUTANTS[name][0])
+        rc, out = run_lean(["-R", HERE, source], target, work)
+        reject(name, rc, out, source, broken)
         log_kill("tests/roadmap/pointer-width/mutations.py", name, "tests/roadmap/pointer-width/check.sh")
 
 
