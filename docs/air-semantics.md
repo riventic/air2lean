@@ -286,14 +286,19 @@ ranking are decoding, not rewriting) and `≈` is:
 | 6 `renumber`, live IDs and operands | equality, for every injective renaming, argument list and full memory, under every call oracle that keeps `Oracle.CellFree` (the program's own `run` and `runOn` do) | one generic kernel theorem (`Renumber.execFunc_rename`) plus native per-function binding evidence (`CanonCertificate.renumberBound`, [below](#generic-renaming-theorem-and-native-binding)); an arbitrary oracle can manufacture a caller's register-cell ID, so the contract is needed ([audit regression](../tests/roadmap/air-semantics/RenumberOracle.lean)) |
 | final debug-definition IDs within 6 `renumber` | equality, for every oracle, argument list and full memory | one generic kernel theorem plus native per-item binding evidence; live IDs, operands and targets remain unchanged |
 | 3 `dropTrueChecks` | equality | needs the dropped condition's truth (`x ≤ x + y` after a checked add): a lemma per pattern, used by the normalization |
-| 2 `itemReads` | equality | `ptr_elem_ptr` + `load` vs `ptr_elem_val`: one lemma over `Zig.ptrProject`/`Zig.load` (needs pointer arithmetic in the semantics) |
-| 5 `dropDeadAllocPlaceholders` | equality | an `alloc` without uses is a register local ([§Locals](#locals)): no block on either side |
+| 2 `itemReads` | equality, once the rewrite requires the `load` directly after its item pointer: today it folds a `load` anywhere, which moves the pointer's index check past whatever runs between ([kernel-checked counterexample](../tests/roadmap/air-semantics/CanonDrop.lean), [audit](architecture-audit/canon-drop-rewrites.md)) | `ptr_elem_ptr` + `load` vs `ptr_elem_val`: one lemma over `Zig.ptrProject`/`Zig.load` |
+| the debug instructions that a dropping rewrite removes | equality, for every oracle, argument list and full memory | one generic kernel theorem (`Drop.execFunc_dropDebug`) plus the native obligation `Drop.dropOk true` ([below](#generic-drop-theorems-and-native-binding)) |
+| 5 `dropDeadAllocPlaceholders` | refinement: the function after has every behaviour of the function before (`⊑`). No equality: `Sem` gives the address-0 placeholder no meaning, so the function before is stuck where it runs one ([kernel-checked](../tests/roadmap/air-semantics/CanonDrop.lean)) | one generic kernel theorem (`Drop.execFunc_drop_le`) plus the native obligation `Drop.dropOk false`; the rewrite stays trusted until the placeholder has a meaning ([below](#generic-drop-theorems-and-native-binding)) |
+| `dropDeadRuntimeLanePtrs` | neither: `Sem` checks an item pointer's index where the pointer is formed, so the function before is `.illegal` for an index past the vector's count and the function after is not ([kernel-checked](../tests/roadmap/air-semantics/CanonDrop.lean)) | open; needs a decision on the relation ([audit](architecture-audit/canon-drop-rewrites.md)) |
 | 1 `forwardReadOnlyCopies` | memory extension up to placement | the raw function's copy is an extra block. A memory extension is not preserved by later allocations under ZigLean's placement ([§Locals](#locals)); this needs a "for every `σ` there is a `σ'`" statement with a prophecy placement, and stays future work |
 
 Certifying the remaining rewrites would let a certificate embed the decoded **raw** AIR and
 compare it with `decode` of the golden JSON, removing those rewrites from the trusted base for
 that function. Today the certificates cover `renumber` (live IDs and debug-definition IDs);
-the other rewrites stay trusted.
+the other rewrites stay trusted. The drop theorems
+([below](#generic-drop-theorems-and-native-binding)) are proved and their native binding exists
+(`CanonCertificate.dropBound`), but no certificate report uses it yet: no rewrite leaves a
+`trusted-Canon` line by them.
 
 Each certificate's report names, for every function of the program, the rewrites that fired on
 it, as a line ``* `<fn>` trusted-Canon: <passes>`` (or `none`), in pipeline order. `Raw.canonicalizeTraced`
@@ -405,8 +410,10 @@ nor that a function is inside the semantic fragment. The historical 2,421-functi
 cohort is not such a coverage count; the narrower emission-certificate fragment is not a
 classifier for all of Sem, and no unsupported count is inferred.
 
-This debug-ID mapping and the renaming below are the kernel-checked parts of Canon. All other
-canonicalization passes, normalization and actual Raw/snapshot binding retain TRU-02;
+This debug-ID mapping and the renaming below are the kernel-checked parts of Canon that a
+certificate report uses (the drop theorems further below are proved but not yet bound in a
+report). All other canonicalization passes, normalization and actual Raw/snapshot binding retain
+TRU-02;
 the interpreter retains SEM-06 and the existing memory-model premises. V01/V02 remain open.
 
 #### Generic renaming theorem and native binding
@@ -463,6 +470,58 @@ lemma per named instruction test (`Inst.usesPlaceOf`, `Inst.leavesBody`,
 `Inst.overwritesLocal`, `byteLocalUseOk`, `Func.usesMemoryAt`, ...). So `run_renumber` has no
 hypothesis beyond the injective renaming, and only the native binding of `renumber` stays under
 TRU-02.
+
+#### Generic drop theorems and native binding
+
+Five rewrites drop instructions: the two dead-code passes, `forwardReadOnlyCopies`, `itemReads`
+and `dropTrueChecks`, each with the debug instructions that name a dropped one.
+`Air2Lean/SemDrop.lean` states once what dropping does to `Sem.execFunc`, for every function `f`,
+every set `D` of instruction IDs, every argument list, the full memory and every oracle.
+`Drop.dropFunc D f` is `f` without the instructions whose ID is in `D`, nested bodies included.
+
+* `Drop.execFunc_dropDebug`: if `D` names only debug instructions (`line`, `dbg`), then
+  `execFunc p o (dropFunc D f) args = execFunc p o f args`.
+* `Drop.execFunc_drop_le`: if `D` names, besides those, only instructions that are stuck in
+  every environment that binds no ID of `D` (`Drop.stuckIn`: a `bitcast` of an integer constant
+  to a type that is no integer, which is Sema's placeholder; a pointer `bitcast`, field pointer
+  or item pointer of an instruction in `D`; a pointer to a slice's field), then
+  `execFunc p o f args ⊑ execFunc p o (dropFunc D f) args` in `Zig.Result`'s order, whose bottom
+  is `Sem.stuck`: wherever the function before the drop has a behaviour, the function after has
+  the same (`Drop.execFunc_drop_eq`).
+
+Both are one simulation (`Drop.execBody_drop`): the two runs have the same environment and
+frame, and a dropped instruction either continues (debug) or is stuck before the drop. The
+per-function obligation is the decidable `Drop.dropOk strict D f`: every instruction with an ID
+in `D` is of the admitted kind, and every kept `alloc` is a register local
+([§Locals](#locals)) after the drop exactly when it was one before. The second part is needed:
+`Sem.regAlloc` reads the whole body, so a dropped item pointer that takes a kept `alloc` as its
+index would turn that `alloc` from a block into a register local.
+
+The refinement is not an equality and cannot be one. `Sem` gives the placeholder no meaning (an
+integer is no pointer operand), so a function is stuck where it runs one, and the function after
+the drop is not (`CanonDrop.placeholder_not_equal`, for every program, oracle and memory). In
+practice the function before `dropDeadAllocPlaceholders` is stuck on every path through a
+placeholder, where the refinement says nothing. So the theorem shows that the rewrite changes
+nothing else, and the placeholder's own meaning (no code: Liveness marks it unused) stays
+trusted. `dropDeadAllocPlaceholders` therefore stays on the `trusted-Canon` lines.
+
+`CanonCertificate.dropBound strict pre post` is the native binding (evidence under TRU-02, like
+`renumberBound`): `D` is the IDs that `pre` has and `post` lacks, `Drop.dropOk strict D pre`
+holds, and `dropFunc D pre` is structurally equal to `post` (`sameFunction`, every field).
+`tests/roadmap/air-semantics/CanonDrop.lean` runs it on the actual output of
+`Raw.dropDeadAllocPlaceholders` (bound to the refinement, not to the equality) and has the
+causal controls (a changed operand, changed metadata, a dropped live instruction, a changed
+register classification). The certificate path does not call it yet: that needs the snapshots
+around each rewrite in `Raw.canonicalizeTraced`, and the decision whether a refinement takes a
+rewrite off the `trusted-Canon` line.
+
+`dropDeadRuntimeLanePtrs` is not covered. The dropped `ptr_elem_ptr` reads a live vector
+pointer, and `Sem` checks its index against the vector's count where the pointer is formed
+(`Sem.checkCount`): for an index past the count the function before the drop is `.illegal` and
+the function after returns (`CanonDrop.lanePtr_not_refined`). The same eager check makes
+`itemReads` change `Sem.execFunc` when the `load` is not directly after its item pointer
+(`CanonDrop.itemReads_not_preserved`). Both are in
+[the audit report](architecture-audit/canon-drop-rewrites.md).
 
 ### How SEM-06 shrinks
 
@@ -536,6 +595,10 @@ in `test_lean.py`.
 * `tests/roadmap/air-semantics/CanonBinding.lean` (run by `test_lean.py`): the native bindings'
   causal controls, for the debug-ID map and for `renumberBound` (an injective renaming binds; a
   collapsed ID, a changed operand or changed metadata does not).
+* `tests/roadmap/air-semantics/CanonDrop.lean` (run by `test_lean.py`): the kernel-checked
+  boundaries of the drop theorems (no equality for the dead placeholder, no refinement for the
+  dead runtime lane pointer, `itemReads` with a `load` in a branch) and the causal controls of
+  `dropBound`.
 * `scripts/canon_certification.py` (gen-integrity, full build): a fresh Assurance audit and
   kernel replay of the generic modules `CanonSem` and `Renumber` with their theorem roots.
 * `lake build Proofs/<Ex>/AirCert` for every committed certificate.

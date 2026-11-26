@@ -169,6 +169,32 @@ def check_native_binding():
     print(result.stdout, end='')
 
 
+DROP_BINDING = [
+    'dead placeholder bound to the refinement',
+    'dead placeholder not bound to the equality',
+    'debug line bound to the equality',
+    'changed operand rejected',
+    'changed function metadata rejected',
+    'dropped live instruction rejected',
+    'changed register classification rejected',
+    'dead runtime lane pointer stays unbound',
+    "itemReads counterexample is the rewrite's input and output",
+]
+
+
+def check_drop_binding():
+    """CanonDrop.lean: the kernel-checked boundaries of the drop theorems (SemDrop) elaborate, and
+    the native binding `dropBound` holds for the actual dead-placeholder rewrite and for nothing
+    else (V02)."""
+    fixture = ROOT / 'tests/roadmap/air-semantics/CanonDrop.lean'
+    result = subprocess.run(['lake', 'env', 'lean', '--run', str(fixture)],
+                            cwd=ROOT, capture_output=True, text=True, timeout=1800)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.splitlines() == [f'native-drop-binding: {line}' for line in DROP_BINDING], \
+        result.stdout
+    print(result.stdout, end='')
+
+
 SLICES_CERTIFIED = ['slices.at', 'slices.bumpAt', 'slices.prevItem', 'slices.second', 'slices.sumSlice',
                     'slices.sumZ']
 
@@ -328,6 +354,7 @@ def main():
     print(result.stdout, end='')
     with tempfile.TemporaryDirectory() as tmp:
         check_native_binding()
+        check_drop_binding()
         for index, (name, (ex, old, new, theorem, scope)) in enumerate(MUTATIONS.items()):
             source = (ROOT / 'Proofs' / ex / 'AirCert.lean').read_text()
             if scope == 'once':

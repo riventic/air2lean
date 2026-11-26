@@ -29,14 +29,15 @@ open Air2Lean Air2Lean.Sem
 
 def types : Array Ty := #[
   .void, .noreturn, .int false 8, .ptr "one" false 2, .int false 64, .bool, .vector 4 5,
-  .ptr "one" false 6, .ptr "one" false 5]
+  .ptr "one" false 6, .ptr "one" false 5, .array 4 2 false, .ptr "one" false 9]
 
 def ptrLayout : Layout := { size := some 8, align := some 8, ptrAlign := some 1 }
 
 def layouts : Array Layout := #[
   { size := some 0, align := some 1 }, {}, { size := some 1, align := some 1 }, ptrLayout,
   { size := some 8, align := some 8 }, { size := some 1, align := some 1 },
-  { size := some 1, align := some 1 }, ptrLayout, { ptrLayout with runtimeLane := true }]
+  { size := some 1, align := some 1 }, ptrLayout, { ptrLayout with runtimeLane := true },
+  { size := some 4, align := some 1 }, ptrLayout]
 
 def fn (params : Array TyId) (body : Array Inst) : Func :=
   { dialect := .ofVersion .v0_15_2, name := "canon.f", params, ret := 0, body, types, layouts,
@@ -109,6 +110,47 @@ theorem lanePtr_not_refined (prog : Prog) (o : Oracle) (m : Zig.Mem) (p : Zig.Pt
   rw [heq, hm'] at hb
   cases hb
 
+/-! ## `itemReads` moves an item pointer's check (open finding)
+
+`Raw.itemReads` folds `ptr_elem_ptr` and the `load` that is its only reader into one
+`ptr_elem_val` at the load, wherever the load is. `Sem` checks the index where the pointer is
+formed, so with the load in a branch that does not run, the function before the rewrite is
+`.illegal` for an index past the count and the function after it returns
+(docs/architecture-audit/canon-drop-rewrites.md). -/
+
+/-- `%3 = ptr_elem_ptr(%0, %1)` of a `*[4]u8`, read only in the `then` branch of `%2`. -/
+def itemBefore : Func :=
+  fn #[10, 4, 5] #[⟨0, 10, .arg 0⟩, ⟨1, 4, .arg 1⟩, ⟨2, 5, .arg 2⟩, ⟨3, 3, .elemPtr (.inst 0) (.inst 1)⟩,
+    ⟨4, 1, .condBr (.inst 2) #[⟨5, 2, .load (.inst 3)⟩, ⟨6, 1, .ret (.inst 5)⟩]
+      #[⟨7, 1, .ret (.int 2 0)⟩]⟩]
+
+/-- `itemBefore` after `Raw.itemReads` (`main` checks that it is). -/
+def itemAfter : Func :=
+  fn #[10, 4, 5] #[⟨0, 10, .arg 0⟩, ⟨1, 4, .arg 1⟩, ⟨2, 5, .arg 2⟩,
+    ⟨4, 1, .condBr (.inst 2) #[⟨5, 2, .ptrElemVal (.inst 0) (.inst 1)⟩, ⟨6, 1, .ret (.inst 5)⟩]
+      #[⟨7, 1, .ret (.int 2 0)⟩]⟩]
+
+def itemArgs (p : Zig.Ptr) : List Value := [.ptr p, .int false 64 9, .bool false]
+
+theorem itemReads_before (prog : Prog) (o : Oracle) (m : Zig.Mem) (p : Zig.Ptr) :
+    ((execFunc prog o itemBefore (itemArgs p)).run m).run = some (.error .illegal) := by
+  cases ht : prog.entryTicked "canon.f" <;>
+    simp only [execFunc, itemBefore, itemArgs, fn, argsOk, ht, air_sem] <;> simp <;> rfl
+
+theorem itemReads_after (prog : Prog) (o : Oracle) (m : Zig.Mem) (p : Zig.Ptr) :
+    ∃ m', ((execFunc prog o itemAfter (itemArgs p)).run m).run =
+      some (.ok (.int false 8 0, m')) := by
+  cases ht : prog.entryTicked "canon.f" <;>
+    simp only [execFunc, itemAfter, itemArgs, fn, argsOk, ht, air_sem] <;> simp <;> exact ⟨_, rfl⟩
+
+/-- `itemReads` does not preserve `Sem.execFunc` on this function. -/
+theorem itemReads_not_preserved (prog : Prog) (o : Oracle) (m : Zig.Mem) (p : Zig.Ptr) :
+    (execFunc prog o itemBefore (itemArgs p)).run m ≠ (execFunc prog o itemAfter (itemArgs p)).run m := by
+  intro h
+  obtain ⟨m', hm'⟩ := itemReads_after prog o m p
+  rw [← h, itemReads_before prog o m p] at hm'
+  cases hm'
+
 /-! ## The native binding -/
 
 open Air2Lean.Raw
@@ -135,6 +177,14 @@ def rawPlaceholder : RawFunc :=
 def rawLanePtr : RawFunc :=
   rawFn #[7, 4] #[{ inst 0 "arg" 7 with param := some 0 }, { inst 1 "arg" 4 with param := some 1 },
     inst 2 "ptr_elem_ptr" 8 #[.inst 0, .inst 1], inst 3 "ret" 1 #[.void]]
+
+/-- `itemBefore` as raw AIR. -/
+def rawItem : RawFunc :=
+  rawFn #[10, 4, 5] #[{ inst 0 "arg" 10 with param := some 0 }, { inst 1 "arg" 4 with param := some 1 },
+    { inst 2 "arg" 5 with param := some 2 }, inst 3 "ptr_elem_ptr" 3 #[.inst 0, .inst 1],
+    { inst 4 "cond_br" 1 #[.inst 2] with
+      thenBody := #[inst 5 "load" 2 #[.inst 3], inst 6 "ret" 1 #[.inst 5]],
+      elseBody := #[inst 7 "ret" 1 #[.int 2 0]] }]
 
 def decoded (rewrite : RawFunc → RawFunc) (raw : RawFunc) : Except String (Func × Func) := do
   let pre ← normalizeCanonical raw
@@ -171,3 +221,8 @@ def main : IO Unit := do
       { escaping with body := escaping.body.filter fun i => i.id == 0 || i.id == 3 })
   let (pre, post) ← IO.ofExcept (decoded Raw.dropDeadRuntimeLanePtrs rawLanePtr)
   expect "dead runtime lane pointer stays unbound" false (CanonCertificate.dropBound false pre post)
+  -- The open `itemReads` finding is about the actual rewrite: the kernel-checked pair
+  -- (`itemReads_not_preserved`) is its input and its output.
+  let (pre, post) ← IO.ofExcept (decoded Raw.itemReads rawItem)
+  expect "itemReads counterexample is the rewrite's input and output" true
+    (CanonCertificate.sameFunction pre itemBefore && CanonCertificate.sameFunction post itemAfter)
