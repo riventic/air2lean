@@ -71,14 +71,14 @@ def mutate(doc):
     return doc
 
 
-def translate(binary, air, work, label, ex, *flags, source_map=True):
+def translate(binary, air, work, label, ex, *flags, source_map=True, profile='legacy-abi64-le'):
     out = work / f'{label}.lean'
-    # The committed golden AIR is schema 11: its translation needs the explicit legacy profile.
+    # The shared golden AIR is schema 11: its translation needs the explicit legacy profile.
     # The example's own admissions (examples/<ex>/translate.args, as scripts/check.sh) apply too.
     args = ROOT / 'examples' / ex / 'translate.args'
     admissions = args.read_text().split() if args.is_file() else []
     command = [str(binary), str(air), '-o', str(out), '--namespace', ex.capitalize(),
-               '--prefix', ex + '.', '--profile', 'legacy-abi64-le', *admissions, *flags]
+               '--prefix', ex + '.', '--profile', profile, *admissions, *flags]
     sidecar = work / f'{label}.source-map.json'
     if source_map: command += ['--source-map-json', str(sidecar)]
     result = subprocess.run(command, capture_output=True, timeout=300)
@@ -101,18 +101,44 @@ def cli_compare(old, new, old_gen, new_gen):
     return result.returncode, json.loads(result.stdout) if result.stdout else None, result.stderr
 
 
-def check_example(binary, ex, work):
-    golden = ROOT / 'tests/golden' / ex / 'air'
-    docs = [json.loads(p.read_text()) for p in sorted(golden.glob('*.json'))]
+def version_golden(ex, version, work):
+    """The example's golden set for `version` (the shared files replaced by
+    tests/golden/<version>/<ex>/air, as scripts/check.sh merges them) as (directory, documents), or
+    None unless every function in it is an export of `version`. A shared file that a differently
+    numbered instance should replace stays, so the set is not one version's and is skipped."""
+    merged = {}
+    for directory in (ROOT / 'tests/golden' / ex / 'air', ROOT / 'tests/golden' / version / ex / 'air'):
+        merged.update({p.name: p for p in directory.glob('*.json')})
+    docs = [json.loads(merged[name].read_text()) for name in sorted(merged)]
+    if not docs or any(doc.get('zig_version') != version for doc in docs):
+        return None
+    write_air(work / f'{ex}-{version}-golden', docs)
+    return work / f'{ex}-{version}-golden', docs
+
+
+def check_example(binary, ex, work, version=None):
+    """(a) and (b) on the shared golden AIR, or with `version` (Zig 0.17.1) on that version's golden
+    set: schema 12, its own profile, and the compiler's `__func_<n>` instance names, which the
+    translator renames to the same stable `__anon_<k>` (Air2Lean/Air/Anon.lean). Returns whether
+    the example was checked."""
+    if version is None:
+        golden, profile, label, marker = ROOT / 'tests/golden' / ex / 'air', 'legacy-abi64-le', ex, '__anon_'
+        docs = [json.loads(p.read_text()) for p in sorted(golden.glob('*.json'))]
+    else:
+        found = version_golden(ex, version, work)
+        if found is None:
+            return False
+        (golden, docs), profile, label, marker = found, 'abi64-le-v1', f'{ex}-{version}', '__func_'
     names = sorted(doc['name'] for doc in docs)
 
-    plain, _ = translate(binary, golden, work, f'{ex}-plain', ex, source_map=False)
-    mapped, _ = translate(binary, golden, work, f'{ex}-mapped', ex)
-    assert plain.read_bytes() == mapped.read_bytes(), f'{ex}: --source-map-json changed generated Lean'
-    committed = ROOT / 'Proofs' / ex.capitalize() / 'Gen.lean'
-    assert mapped.read_bytes().split(b'\n', 1)[1] == committed.read_bytes(), f'{ex}: golden body changed'
+    plain, _ = translate(binary, golden, work, f'{label}-plain', ex, source_map=False, profile=profile)
+    mapped, _ = translate(binary, golden, work, f'{label}-mapped', ex, profile=profile)
+    assert plain.read_bytes() == mapped.read_bytes(), f'{label}: --source-map-json changed generated Lean'
+    if version is None:
+        committed = ROOT / 'Proofs' / ex.capitalize() / 'Gen.lean'
+        assert mapped.read_bytes().split(b'\n', 1)[1] == committed.read_bytes(), f'{ex}: golden body changed'
 
-    base_gen, base_map = translate(binary, golden, work, f'{ex}-base', ex, '--proof-api')
+    base_gen, base_map = translate(binary, golden, work, f'{label}-base', ex, '--proof-api', profile=profile)
     base = fp.load_sidecar(base_map, base_gen)
     assert sorted(r['source'] for r in base['functions']) == names
     for record in base['functions']:
@@ -120,9 +146,10 @@ def check_example(binary, ex, work):
 
     # (a) harmless: renumbered IDs, shifted lines, hashed storage keys, unrelated instance.
     rng = random.Random(ex)
-    extra = copy.deepcopy(docs[0]); extra['name'] = f'{ex}.unrelatedGeneric__anon_424242'
-    write_air(work / f'{ex}-harmless', [renumber(doc, rng) for doc in docs] + [extra], hashed=True)
-    harmless_gen, harmless_map = translate(binary, work / f'{ex}-harmless', work, f'{ex}-harmless-out', ex, '--proof-api')
+    extra = copy.deepcopy(docs[0]); extra['name'] = f'{ex}.unrelatedGeneric{marker}424242'
+    write_air(work / f'{label}-harmless', [renumber(doc, rng) for doc in docs] + [extra], hashed=True)
+    harmless_gen, harmless_map = translate(binary, work / f'{label}-harmless', work, f'{label}-harmless-out', ex,
+                                           '--proof-api', profile=profile)
     status, report, stderr = cli_compare(base_map, harmless_map, base_gen, harmless_gen)
     assert status == 0, (ex, stderr, report)
     assert report['unaffected'] == names and report['added'] == [f'{ex}.unrelatedGeneric__anon_1'], report
@@ -131,14 +158,16 @@ def check_example(binary, ex, work):
     # (b) semantic change: exactly the function, its cycle and its callers.
     target, expected = SEMANTIC[ex]
     if target is None:
-        return
-    write_air(work / f'{ex}-changed', [mutate(doc) if doc['name'] == target else doc for doc in docs])
-    changed_gen, changed_map = translate(binary, work / f'{ex}-changed', work, f'{ex}-changed-out', ex, '--proof-api')
+        return True
+    write_air(work / f'{label}-changed', [mutate(doc) if doc['name'] == target else doc for doc in docs])
+    changed_gen, changed_map = translate(binary, work / f'{label}-changed', work, f'{label}-changed-out', ex,
+                                         '--proof-api', profile=profile)
     status, report, stderr = cli_compare(base_map, changed_map, base_gen, changed_gen)
-    assert status == 1, (ex, stderr)
-    assert report['invalidated'] == expected, (ex, report)
-    assert report['unaffected'] == sorted(set(names) - set(expected)), (ex, report)
+    assert status == 1, (label, stderr)
+    assert report['invalidated'] == expected, (label, report)
+    assert report['unaffected'] == sorted(set(names) - set(expected)), (label, report)
     assert not (report['renamed'] or report['added'] or report['removed']), report
+    return True
 
 
 def with_callee(doc, name, callee):
@@ -194,6 +223,11 @@ def main():
         work = Path(temporary)
         for ex in SEMANTIC:
             check_example(binary, ex, work)
+        # Zig 0.17.1 first: the same checks on every example whose 0.17.1 golden set is complete.
+        # The list is exact: an example whose goldens become (or stop being) complete must be
+        # added (or removed) here, never pass or drop out silently.
+        checked = [ex for ex in SEMANTIC if check_example(binary, ex, work, '0.17.1')]
+        assert checked == ['basic'], checked
         check_generic_instance(binary, work)
         # The translator revision describes this checkout's translator sources.
         translator = fp.load_sidecar(work / 'recursion-base.source-map.json')['translator']
