@@ -202,7 +202,8 @@ FIXTURES = [
      "tests/roadmap/volatile-effects/air-asm/0.16.0/device_asm.elapsed.json",
      ["--namespace", "DeviceAsm", "--prefix", "device_asm.",
       "--device-contract", str(ROOT / "tests/roadmap/volatile-effects/tsc.json")], "exact"),
-    ("tests/roadmap/alloc-fba/AllocFba/Gen.lean", "tests/roadmap/alloc-fba/air/0.16.0/client-linux",
+    # tests/roadmap/alloc-fba/check.sh: the Zig 0.17.1 translation (0.16.0's is checked in a check tree).
+    ("tests/roadmap/alloc-fba/AllocFba/Gen.lean", "tests/roadmap/alloc-fba/air/0.17.1/client-linux",
      ["--namespace", "AllocFba.Gen", "--prefix", "client.", "--allocator-model", "translated"], "exact"),
 ] + [
     # tests/roadmap/alloc-translated/check.sh: the Zig 0.17.1 translations (0.16.0's are checked in
