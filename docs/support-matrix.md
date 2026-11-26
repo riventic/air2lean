@@ -78,14 +78,14 @@ Counts from `coverage/<version>.json` (`scripts/coverage.py`). This is a source 
 
 | Zig | AIR tags | `emitted-unqualified` | `erased-at-emission` | `rejected-compiler-state-or-effect` | `rejected-exporter-unsupported` | `rejected-fast-math` | `resolved-in-canon` | `unreachable-at-export` | Type tags | Intern keys | Pointer bases | Model boundaries | Rejected model calls |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| 0.17.1 | 224 | 169 | 5 | 9 | 15 | 20 | 3 | 3 | 25 | 34 | 9 | 27 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
+| 0.17.1 | 224 | 170 | 5 | 8 | 15 | 20 | 3 | 3 | 25 | 34 | 9 | 27 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
 | 0.16.0 | 214 | 163 | 5 | 6 | 15 | 19 | 3 | 3 | 24 | 33 | 9 | 27 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
 | 0.15.2 | 212 | 164 | 5 | 3 | 15 | 19 | 3 | 3 | 24 | 34 | 9 | 27 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
 | 0.14.1 | 207 | 160 | 5 | 2 | 15 | 19 | 3 | 3 | 24 | 34 | 9 | 27 | `Io.Batch.awaitAsync`, `Io.Batch.awaitConcurrent`, `Io.Batch.cancel`, `Io.Select.async`, `Io.Select.await`, `Io.Select.cancel`, `Io.Select.cancelDiscard`, `Io.Select.concurrent`, `Io.concurrent`, `Io.futexWaitTimeout`, `Io.operate`, `Io.operateTimeout`, `Io.recancel`, `Io.sleep`, `Io.swapCancelProtection`, `Thread.spinLoopHint` |
 
 ## Requirement register
 
-From [ROADMAP.md](../ROADMAP.md): 90 requirements, 55 complete, 26 partial, 2 open, 7 research. Only `complete` rows are finished; every other ID is current open work (acceptance in [remaining-acceptance.md](../remaining-acceptance.md)). A bounded merged slice does not complete a requirement.
+From [ROADMAP.md](../ROADMAP.md): 90 requirements, 57 complete, 24 partial, 2 open, 7 research. Only `complete` rows are finished; every other ID is current open work (acceptance in [remaining-acceptance.md](../remaining-acceptance.md)). A bounded merged slice does not complete a requirement.
 
 | Area | Complete | Partial | Open | Research |
 |---|---|---|---|---|
@@ -93,10 +93,10 @@ From [ROADMAP.md](../ROADMAP.md): 90 requirements, 55 complete, 26 partial, 2 op
 | L: Language and representation | L01, L02, L03, L05, L06, L10, L11, L12, L13, L14 | L04, L07, L08, L09 | — | — |
 | C: Concurrency | C01, C02, C03, C04, C05, C06, C09, C11, C12 | C07, C08, C14 | — | C10, C13 |
 | M: Memory and allocation | M05, M06 | M01, M02, M03, M04 | — | — |
-| F: Floats | F01, F05, F06 | F04 | — | F02, F03 |
+| F: Floats | F01, F04, F05, F06 | — | — | F02, F03 |
 | A: Inline assembly | A01, A03 | A02 | — | — |
 | E: External boundaries | E01, E02, E04 | E03 | — | — |
-| P: Proof support | P01, P02, P05 | P03, P04, P06, P07, P08 | P09 | — |
+| P: Proof support | P01, P02, P05, P07 | P03, P04, P06, P08 | P09 | — |
 | I: Integration and tooling | I01, I02, I03, I04, I05, I06, I07, I08, I09 | — | — | — |
 | V: Validation and trust | V03, V04, V05, V06 | — | — | V01, V02 |
 | Q: Quality and testing | Q03, Q04, Q05, Q07, Q08 | Q01, Q02, Q06 | — | — |

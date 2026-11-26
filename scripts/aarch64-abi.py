@@ -39,6 +39,16 @@ PROFILES = {'aarch64-linux-gnu': ('Linux', ('aarch64', 'arm64'), 'baseline'),
 MODES = ('ReleaseSafe',)
 # The first compile error of a probe that must be rejected: `<file>.zig:<line>:<col>: error: <message>`.
 LIMIT_ERROR = re.compile(r'\.zig:\d+:\d+: error: (.+)$', re.M)
+# An LLVM backend failure without a source location (`LLVM ERROR: Broken module found, ...` after
+# an abort, or `error: Invalid cast (Producer: 'zig <v>' Reader: 'LLVM <v>')`), without the
+# parenthesized versions, so that the line is the same for every Zig version with the same failure.
+# LLVM prints its error right after the last line of the verifier's IR dump, without a newline.
+LLVM_ERROR = re.compile(r'(?:LLVM ERROR|^error): (.+?)(?: \(.*\))?$', re.M)
+F80_PROBE = f'{DIR}/atomic_f80.zig'
+# Every atomic op that Sema might accept on a float cell, each built on its own (`atomic_f80.zig`).
+F80_OPS = ('load_monotonic', 'load_acquire', 'load_seq_cst', 'store_monotonic', 'store_release',
+           'store_seq_cst', 'rmw_Xchg', 'rmw_Add', 'rmw_Sub', 'rmw_Max', 'rmw_Min', 'cmpxchg_strong',
+           'cmpxchg_weak')
 EXCLUDED, MISMATCH = 3, 1
 
 
@@ -50,12 +60,40 @@ def expected_path(version, triple, mode):
     return ROOT / DIR / 'expected' / version / f'{triple}-{mode}.txt'
 
 
-def build(zig, target, mode, root, out, compat=True):
+def build(zig, target, mode, root, out, deps=()):
+    """`zig build-exe` of `root` with the modules `deps` (name, path) imported by name."""
     command = [zig, 'build-exe', '-fllvm', '-O' + mode, '-target', target, '-mcpu=baseline',
                '-femit-bin=' + str(out)]
-    command += ['--dep', 'compat', '-Mroot=' + str(ROOT / root), '-Mcompat=' + str(ROOT / COMPAT)] \
-        if compat else [str(ROOT / root)]
+    for name, _ in deps:
+        command += ['--dep', name]
+    command.append('-Mroot=' + str(ROOT / root))
+    command += [f'-M{name}={path}' for name, path in deps]
     return subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=600)
+
+
+def f80_atomic(zig, target, mode, tmp, op):
+    """The `f80atomic` row of `op` (`F80_OPS`): `zig <error>` if Sema rejects it, `llvm <error>` if
+    the LLVM backend fails on it, else `runs cell=<model|other> result=<model|other>` (the exit
+    code of `atomic_f80.zig`)."""
+    module = tmp / 'op.zig'
+    module.write_text(f'pub const name: []const u8 = "{op}";\n', encoding='utf-8')
+    built = build(zig, target, mode, F80_PROBE, tmp / 'f80', deps=(('op', module),))
+    if built.returncode:
+        stderr = built.stderr.decode(errors='replace')
+        found = LIMIT_ERROR.search(stderr)
+        if found:
+            return f'f80atomic {op} zig ' + found.group(1).replace(' ', '_')
+        found = LLVM_ERROR.search(stderr)
+        if not found:
+            raise ValueError(f'{F80_PROBE} ({op}) failed without a compile error:\n' + stderr[:4096])
+        return f'f80atomic {op} llvm ' + found.group(1).replace(' ', '_')
+    code = subprocess.run([str(tmp / 'f80')], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          timeout=60).returncode
+    if code not in range(4):
+        raise ValueError(f'{F80_PROBE} ({op}) exited with {code}')
+    cell = 'model' if code & 1 else 'other'
+    result = 'model' if code & 2 else 'other'
+    return f'f80atomic {op} runs cell={cell} result={result}'
 
 
 def run(binary, stream):
@@ -75,21 +113,23 @@ def observe(zig, target, mode):
     lines = []
     with tempfile.TemporaryDirectory(prefix='air2lean-t04-') as tmp:
         tmp = Path(tmp)
-        for root, binary, stream, compat in ((PROBE, tmp / 'probe', 'stdout', True),
-                                             (VECTORS, tmp / 'vectors', 'stderr', False)):
-            built = build(zig, target, mode, root, binary, compat)
+        for root, binary, stream, deps in ((PROBE, tmp / 'probe', 'stdout', (('compat', ROOT / COMPAT),)),
+                                           (VECTORS, tmp / 'vectors', 'stderr', ())):
+            built = build(zig, target, mode, root, binary, deps)
             if built.returncode:
                 raise ValueError(f'{root} failed to compile:\n' + built.stderr.decode()[:4096])
             lines += run(binary, stream).splitlines()
         # Synchronization boundaries the compiler must reject (widest atomic integer, orderings,
         # operand types): one line each with the first compile error.
         for source in sorted((ROOT / LIMITS).glob('*.zig')):
-            limit = build(zig, target, mode, f'{LIMITS}/{source.name}', tmp / 'limit', compat=False)
+            limit = build(zig, target, mode, f'{LIMITS}/{source.name}', tmp / 'limit')
             found = LIMIT_ERROR.search(limit.stderr.decode())
             if limit.returncode == 0 or not found:
                 raise ValueError(f'{source.name} must fail to compile with an error; got exit '
                                  f'{limit.returncode}:\n' + limit.stderr.decode()[:4096])
             lines.append(f'limit {source.stem} ' + found.group(1).replace(' ', '_'))
+        # Atomic `f80`: whether each op compiles, and if it runs, whether it does the op.
+        lines += [f80_atomic(zig, target, mode, tmp, op) for op in F80_OPS]
     return version, '\n'.join(lines) + '\n'
 
 

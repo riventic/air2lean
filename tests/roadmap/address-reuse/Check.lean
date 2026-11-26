@@ -1,4 +1,4 @@
-import ZigLean.Mem.Owned
+import ZigLean.Mem.Alloc
 import ZigLean.Mem.Null
 
 /-! Executable regressions of the address-reuse policy and provenance recovery (M05,
@@ -70,16 +70,6 @@ def main : IO Unit := do
     (reuseMem fun b => if b = 1 then some (2 ^ 64 - 8) else none)) "ok (4096, 4112)"
   -- Stack blocks and globals are placed the same way (MM-1).
   expect "stack reuse" (outcome (twoAddrs .stack .stack) (reuseMem at4096)) "ok (4096, 4096)"
-  -- An arena reuses a reset block's address under the policy (owned blocks).
-  let arenaReset : MemM (Int × Int × Bool) := do
-    let a ← Arena.init
-    let s₁ ← match ← (AllocRef.owned a).alloc 1 8 8 with
-      | .ok s => pure s | .error _ => throw .panic
-    Owned.reset a
-    let s₂ ← match ← (AllocRef.owned a).alloc 1 8 8 with
-      | .ok s => pure s | .error _ => throw .panic
-    pure (← addr s₁.ptr, ← addr s₂.ptr, s₁.ptr.block = s₂.ptr.block)
-  expect "arena reset reuse" (outcome arenaReset (reuseMem at4096)) "ok (4096, (4096, false))"
   -- std.mem.Allocator: create, destroy, create again at the same address; the stale pointer
   -- is still dead (use after free, double free).
   let stdReuse (stale : Ptr → Ptr → MemM Unit) : MemM (Int × Int) := do

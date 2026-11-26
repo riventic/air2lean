@@ -342,6 +342,7 @@ big-endian subset, the translator rejects (fails closed):
 | A packed struct with a float field | Its memory image with undetermined bits (`Zig.Packed.encodeOf`) is little endian only |
 | `packed union` | Its fields sit at the low bits, the end of its bytes, at big endian |
 | Vectors of `bool`, pointer or non-byte-multiple lanes | Bit-packed lane order is unqualified at big endian |
+| A lane pointer (`vector_index`): from Zig 0.17.1 on every `&v[i]`, so a single lane of a vector in memory that is read, written or initialized (`v[i]`, `v[i] = x`, `.{ a, b }` of runtime values) | Not a byte-order rule: lane pointers are admitted for the lane probe's targets only, none of them big-endian ([vector-proofs.md](vector-proofs.md), Scope) |
 | `f80` | Software format on s390x, unqualified |
 | `error_set_bits` other than 16 | No big-endian error-width evidence |
 | Inline assembly | Unqualified |

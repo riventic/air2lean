@@ -116,6 +116,39 @@ def main():
                 assert not re.search(r"\bZig\.Slice\b", text), (version, target)
             checks += 1
 
+    # The C integer types (c_ints.zig, every exported version): `c_long`, `c_ulong` and `isize`
+    # take the profile's pointer width, the fixed-width C types keep theirs on every target, and
+    # `long double` is `f128` on wasm32 and `f80` on x86_64.
+    for version in sorted(p.name for p in (HERE / "air").iterdir() if (p / "c_ints").is_dir()):
+        for target in TARGETS:
+            wasm = target.startswith("wasm32")
+            bits = 32 if wasm else 64
+            docs = load(f"c_ints/{target}", version)
+            text = run(binary, docs, prefix="c_ints.")
+            for term in (f"def longSucc (p0 : BitVec {bits}) : Zig.Result (BitVec {bits})",
+                         f"def ulongSucc (p0 : BitVec {bits}) : Zig.Result (BitVec {bits})",
+                         f"def isizeSucc (p0 : BitVec {bits}) : Zig.Result (BitVec {bits})",
+                         f"def longToInt (p0 : BitVec {bits}) : Zig.Result (BitVec 32)",
+                         "def charSucc (p0 : BitVec 8) : Zig.Result (BitVec 8)",
+                         "def ushortSucc (p0 : BitVec 16) : Zig.Result (BitVec 16)",
+                         "def uintSucc (p0 : BitVec 32) : Zig.Result (BitVec 32)",
+                         "def longlongSucc (p0 : BitVec 64) : Zig.Result (BitVec 64)",
+                         "  ll : BitVec 64\n",
+                         f"  size := {24 if wasm else 32}\n  align := 8\n",
+                         f"  v : Zig.{'F128' if wasm else 'F80'}\n",
+                         "Zig.Enc.fields 32 [(0, Zig.Enc.encode v.tag), (16, Zig.Enc.encode v.v)]"):
+                assert term in text, (version, target, term)
+            checks += 1
+
+            # A `long long` loaded with the i386 System V alignment (4) is rejected: the model's
+            # 64-bit integers are 8-aligned on every profile, wasm32 included.
+            bad = one(docs, "c_ints.mixedLl.json")
+            for ty in bad["c_ints.mixedLl.json"]["types"]:
+                if ty.get("k") == "int" and ty["bits"] == 64:
+                    ty["abi_align"] = 4
+            run(binary, bad, error="the memory model gives type", prefix="c_ints.")
+            checks += 1
+
     # Real wasm32 exports of operations that stay 64-bit only (`reject.zig`), every version.
     for version, directory in REJECT.items():
         rejects = load(directory, version)

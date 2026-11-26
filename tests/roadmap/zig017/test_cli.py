@@ -8,7 +8,8 @@ Usage: test_cli.py BINARY [--elaborate]
    semantic examples (`@divCeil`, `@fromBackingInt`'s enum check, ...).
 2. `reject/`: each file fails with exit status 1 and the stable diagnostic in `expect.json`, and
    leaves the output file untouched.
-3. Upgrade: the committed 0.16.0 golden AIR of every example, rewritten to 0.17.1 spelling (tag
+3. Upgrade: the committed 0.16.0 golden AIR of every example (of its newest version for an
+   example not selected for 0.16.0, which must then be rejected), rewritten to 0.17.1 spelling (tag
    renames, the `bitcast` split, `bool_and`/`bool_or` as `bit_and`/`bit_or`, the `safe` build
    mode), translates to the same Lean as the 0.16.0 AIR, apart from the profile's version and the
    intended 0.17.1 semantic changes (integers with padding bits stored extended, the f80
@@ -54,6 +55,9 @@ example : both false true = pure true := by rfl
 example : field { a := 1#16, b := 7#32 } = pure 7#32 := by rfl
 example : twice 21#32 = pure 42#32 := by rfl
 example : fill 7#16 = pure #v[7#16, 7#16, 7#16] := by rfl
+example : toVec #v[1#8, 2#8, 3#8, 4#8] = pure ⟨#v[1#8, 2#8, 3#8, 4#8]⟩ := by rfl
+-- The sentinel, the array's last item, is not a lane.
+example : toVecSentinel #v[1#8, 2#8, 3#8, 0#8] = pure ⟨#v[1#8, 2#8, 3#8]⟩ := by rfl
 end
 """
 
@@ -86,6 +90,9 @@ def positive(binary, elaborate):
                        "Zig.loadLane (BitVec 32) 16 4 32 i4",
                        # A runtime `@splat` to an array is the array of copies of its operand.
                        "(Vector.replicate 3 p0 : Vector (BitVec 16) 3)",
+                       # `array_to_vector`: lane `i` is item `i`; a sentinel is dropped.
+                       "(⟨p0⟩ : Zig.Vec (BitVec 8) 4)",
+                       "(⟨(p0 : Vector (BitVec 8) 4).pop⟩ : Zig.Vec (BitVec 8) 3)",
                        # A `__func_<n>` generic instance gets the stable `__anon_<k>` name.
                        "def double__anon_1"):
             assert needle in text, f"missing {needle!r}"
@@ -176,11 +183,32 @@ def upgraded(doc):
     return doc
 
 
+# A compiler identity in a golden file name (`scripts/normalize-air.py`'s IDENTITY_MARKER).
+IDENTITY = re.compile(r"__(anon|func|enum|opaque|union|struct)_[0-9]+")
+
+
+def golden_version(example):
+    """The version whose committed golden set stands in for `example`'s 0.16.0 AIR: 0.16.0, or
+    for an example not selected for 0.16.0 (threadsync) the newest version it is selected for."""
+    if selectable(example, "0.16.0"):
+        return "0.16.0"
+    versions = (ROOT / "examples" / example / "zig-versions").read_text().split()
+    return max(versions, key=lambda v: tuple(map(int, v.split("."))))
+
+
 def golden_set(example):
+    """`scripts/check.sh`'s golden set of `example` on the x86_64-linux reference host: the
+    shared `air/`, then the version's `air/` and `air-linux/`. A later directory replaces every
+    earlier file of a name up to compiler identities (`wake__anon_9723` by `wake__anon_11486`),
+    as `scripts/normalize-air.py`'s overlay does."""
     files = {}
-    for directory in (ROOT / "tests/golden" / example / "air", ROOT / "tests/golden/0.16.0" / example / "air",
-                      ROOT / "tests/golden/0.16.0" / example / "air-linux"):
-        for path in sorted(directory.glob("*.json")) if directory.is_dir() else ():
+    version = golden_version(example)
+    for directory in (ROOT / "tests/golden" / example / "air", ROOT / "tests/golden" / version / example / "air",
+                      ROOT / "tests/golden" / version / example / "air-linux"):
+        paths = sorted(directory.glob("*.json")) if directory.is_dir() else []
+        replaced = {IDENTITY.sub("", p.name) for p in paths}
+        files = {name: doc for name, doc in files.items() if IDENTITY.sub("", name) not in replaced}
+        for path in paths:
             files[path.name] = json.loads(path.read_text())
     if len({"profile" in doc for doc in files.values()}) > 1:
         # A golden set that mixes schema-12 and legacy files: compare it on the legacy profile.
@@ -241,11 +269,10 @@ def selectable(example, version):
 
 
 def upgrades(binary):
-    compared = skipped = 0
+    compared = 0
     for example in sorted(p.name for p in (ROOT / "examples").iterdir() if p.is_dir()):
         files = golden_set(example)
-        if not files:
-            continue
+        assert files, f"{example}: no committed golden AIR"
         args_file = ROOT / "examples" / example / "translate.args"
         extra = args_file.read_text().split() if args_file.exists() else []
         namespace = example[0].upper() + example[1:]
@@ -264,16 +291,16 @@ def upgrades(binary):
                                     (directory / f"{version}.lean").read_text() if result.returncode == 0 else "")
             (old_rc, old_err, old), (new_rc, new_err, new) = outputs["0.16.0"], outputs["0.17.1"]
             if old_rc != 0:
-                # The relabelled set is outside the translator's 0.16.0 scope; 0.17.1 must agree.
+                # The relabelled set is outside the translator's 0.16.0 scope only for an example
+                # not selected for 0.16.0 whose std models were reviewed only for older versions
+                # (threadsync: 0.15.2's Thread.Futex); 0.17.1 must agree. Anything else is a
+                # translator regression.
+                assert not selectable(example, "0.16.0") and "qualified Zig" in old_err, (example, old_err)
                 assert new_rc == old_rc, (example, old_err, new_err)
-                # A std model reviewed only for older versions (threadsync: 0.15.2's
-                # Thread.Futex) is not qualified for the relabelled version, as intended.
-                skipped += "qualified Zig" in old_err
                 continue
             if new_rc != 0 and not selectable(example, "0.17.1") and "qualified Zig" in new_err:
                 # A 0.17.1-unselected example whose std models are not qualified for 0.17.1
                 # (threadsync: 0.15.2's Thread.Futex): the version table rejects it, as intended.
-                skipped += 1
                 continue
             assert new_rc == 0, (example, new_err)
             old_head, _, old_body = old.partition("\n")
@@ -293,7 +320,6 @@ def upgrades(binary):
                 new_body = new_body.replace("Zig.Float.fmaRt017", "Zig.Float.fmaRt")
             assert new_body == old_body, f"{example}: 0.17.1 spelling changed the translation"
             compared += 1
-    assert compared + skipped >= 19 and compared >= 18, f"only {compared} examples translated"
     return compared
 
 

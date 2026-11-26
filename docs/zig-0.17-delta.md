@@ -21,7 +21,7 @@ Universe: 214 → 224 tags (16 added, 6 removed). Renames appear as remove + add
 | `bitcast` (`@intFromPtr`, pointer compares) | `int_from_ptr` (314) | Result always `usize`. Also emitted by Sema for `==` on slices/pointers (Sema.zig 15110). | exporter, translator | Z1, Z3 |
 | `bitcast` (error sets) | `error_cast` (319), `error_from_int` (324), `int_from_error` (329) | Split out of `bitcast`. | exporter; translator (`Check` error-storage rules keyed on `.bitcast`) | Z1, Z3 |
 | `bitcast` (enum → tagged union) | `union_from_enum` (334) | Enum → tagged union with only void payloads. Was already outside the subset as an aggregate bitcast. | exporter (stays rejected) | Z1, Z3 |
-| (array → vector coercion) | `array_to_vector` (760) | New explicit tag. Vector bitcasts were already rejected. | exporter (stays rejected) | Z1, Z3 |
+| (array → vector coercion) | `array_to_vector` (760) | New explicit tag: `[n]T` (sentinel or not) → `@Vector(n, T)`, lane `i` = item `i`, the sentinel dropped. | exporter, translator (`Op.arrayToVector`; `tests/roadmap/zig017/tovec`, native differential) | Z1, Z3 |
 | `intcast` (598), `intcast_safe` (604) | `int_cast` (644), `int_cast_safe` (650) | Rename only, same `ty_op` and safety checks. `@enumFromInt` still lowers here (Sema.zig 7974/7976). | exporter, translator (Normalize string) | Z1, Z3 |
 | `struct_field_val` (657) | `agg_field_val` (702) | Rename only, same `ty_pl` + `StructField` payload. | exporter (explicit arm), translator (Normalize; `Canon` maps field-ptr loads to `"struct_field_val"`) | Z1, Z3 |
 | `bool_and` (543), `bool_or` (546) | removed | Sema safety conditions now use `bit_and`/`bit_or` on `bool` operands (Sema.zig 4181, 14472, 14485, 21681). | translator: `.bit .and/.or` must type-check and emit on `bool`; `.boolAnd/.boolOr` stay for ≤0.16 | Z3 |
@@ -217,7 +217,8 @@ Diffed `lib/std/{mem/Allocator,Thread,Io,Io/RwLock,Io/Semaphore,atomic,time,arra
   - New `div_ceil` op.
   - `bit_and`/`bit_or` on `bool`.
   - `Canon.forwardReadOnlyCopies` keyed on `ptr_cast`.
-  - Array `splat` (sentinel arrays rejected); reject `union_from_enum`, `array_to_vector`, `noreturn`-tagged enums.
+  - Array `splat` (sentinel arrays rejected); `array_to_vector` (lane-wise, a sentinel dropped);
+    reject `union_from_enum`, `noreturn`-tagged enums.
   - Panic policy for `loadUninstantiableType`/`unexpectedErrorCode`.
 - **Z4 bitcast semantics:**
   - Version-gated logical bitcast: LSB-first concatenation, dense, endian-agnostic, for

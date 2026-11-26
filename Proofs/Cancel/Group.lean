@@ -186,7 +186,7 @@ keeps the groups. -/
 theorem inv_keep {G : ThreadId → Gh} {m m' : Mem} (hi : Inv G m)
     (hb : m'.blocks = m.blocks) (ha : m'.atomics = m.atomics) (ht : m'.threads = m.threads)
     (hc : m'.clocks = m.clocks) (hf : m'.footprint = m.footprint) (hg : m'.groups = m.groups)
-    (hx : m.Aux m' := by exact ⟨rfl, rfl, rfl⟩) :
+    (hx : m.Aux m' := by exact ⟨rfl, rfl, rfl, rfl⟩) :
     Inv G m' := by
   have hown : ownOf G m' = ownOf G m := by funext u; simp only [ownOf, joinedB_congr ht]
   refine ⟨hown ▸ hi.own.keep hb ha ht hc hf hx, hi.task, ?_, ?_⟩
@@ -487,7 +487,7 @@ theorem inv_main {G : ThreadId → Gh} {m m' : Mem} {ph ph' : MPh} {r : Res} {W 
     {g : Ptr} (hi : Inv G m) (hg : G 0 = .main ph r W g) (hb : m'.blocks = m.blocks)
     (ha : m'.atomics = m.atomics) (ht : m'.threads = m.threads) (hc : m'.clocks = m.clocks)
     (hf : m'.footprint = m.footprint) (hs : Shape W g (upd G 0 (.main ph' r W g)) m' ph')
-    (hx : m.Aux m' := by exact ⟨rfl, rfl, rfl⟩) :
+    (hx : m.Aux m' := by exact ⟨rfl, rfl, rfl, rfl⟩) :
     Inv (upd G 0 (.main ph' r W g)) m' := by
   have hown : ownOf (upd G 0 (.main ph' r W g)) m' = ownOf G m := by
     funext u
