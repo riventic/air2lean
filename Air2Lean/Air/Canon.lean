@@ -525,26 +525,28 @@ def itemReads (f : RawFunc) : RawFunc := Id.run do
   for i in all do
     for u in i.uses do
       users := users.insert u ((users.getD u #[]).push i)
-  let only (x : InstId) : Option RawInst :=
-    match (users.getD x #[]).filter (!isDbgTag ·.tag) with
-    | #[u] => some u
-    | _ => none
   -- The non-debug instruction after each one in the same body.
   let next := nextNonDebug f.body
+  -- The only non-debug user of `x`, when it comes directly after `x` and takes it as operand 0.
+  -- So nothing runs between the two: no write between a `load` and its `array_elem_val`, and an
+  -- item pointer's bounds check (`Sem.itemBase`) stays where it was, with nothing between that
+  -- could end the run first.
+  let only (x : InstId) : Option RawInst :=
+    match (users.getD x #[]).filter (!isDbgTag ·.tag) with
+    | #[u] => if next[x]? == some u.id && u.args[0]? == some (.inst x) then some u else none
+    | _ => none
   -- The item read that replaces each instruction, and the instructions that go.
   let mut repl : Std.HashMap InstId (String × Val × Val) := {}
   let mut gone : Std.HashSet InstId := {}
   for x in all do
     match x.tag, x.args[0]?, x.args[1]?, only x.id with
     | "slice_elem_ptr", some s, some idx, some u =>
-      -- The `load` comes directly after its item pointer: the pointer's bounds check
-      -- (`Sem.itemBase`) stays where it was, with nothing between that could end the run first.
-      if u.tag == "load" && u.args[0]? == some (.inst x.id) && next[x.id]? == some u.id then
+      if u.tag == "load" then
         repl := repl.insert u.id ("slice_elem_val", s, idx); gone := gone.insert x.id
     | "ptr_elem_ptr", some p, some i, some u =>
       -- A lane pointer (`&v[i]` of a bit-packed vector) is a bit-pointer, not an item.
       let lane := ((x.ty.bind (f.layouts[·]?)).map (·.isLanePtr)).getD false
-      if !lane && u.tag == "load" && u.args[0]? == some (.inst x.id) && next[x.id]? == some u.id then
+      if !lane && u.tag == "load" then
         repl := repl.insert u.id ("ptr_elem_val", p, i); gone := gone.insert x.id
     | "load", some p, _, some u =>
       -- A lane of a bit-packed vector (`bool`, `u3`, `u24`, `f80`) is not an item at a byte
@@ -554,8 +556,9 @@ def itemReads (f : RawFunc) : RawFunc := Id.run do
           | some (.int _ bits) | some (.float bits) => bits < 8 || bits &&& (bits - 1) != 0
           | _ => true
         | _ => false
-      if !packed && u.tag == "array_elem_val" && u.args[0]? == some (.inst x.id) &&
-          next[x.id]? == some u.id then
+      -- A `load` that is itself folded with its item pointer (`repl`) stays as that item read:
+      -- folding it again would name the pointer that goes.
+      if !packed && u.tag == "array_elem_val" && !repl.contains x.id then
         if let some i := u.args[1]? then
           repl := repl.insert u.id ("ptr_elem_val", p, i); gone := gone.insert x.id
     | _, _, _, _ => pure ()

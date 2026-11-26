@@ -290,3 +290,12 @@ def main : IO Unit := do
   let (pre, post) ← IO.ofExcept (decoded Raw.itemReads rawAdj)
   expect "itemReads adjacent counterexample is the rewrite's input and output" true
     (CanonCertificate.sameFunction pre adjBefore && CanonCertificate.sameFunction post adjAfter)
+  -- A `load` between its item pointer and an `array_elem_val` of it is folded once, with the
+  -- pointer: no operand names an instruction that is gone.
+  let head := rawAdj.body.extract 0 2
+  let chain := rawFn #[10, 4] (head ++ #[inst 2 "ptr_elem_ptr" 3 #[.inst 0, .inst 1],
+    inst 3 "load" 2 #[.inst 2], inst 5 "array_elem_val" 2 #[.inst 3, .inst 1],
+    inst 4 "ret" 1 #[.inst 5]])
+  expect "itemReads folds a load with its item pointer only" true
+    ((Raw.itemReads chain).body == head ++ #[inst 3 "ptr_elem_val" 2 #[.inst 0, .inst 1],
+      inst 5 "array_elem_val" 2 #[.inst 3, .inst 1], inst 4 "ret" 1 #[.inst 5]])
