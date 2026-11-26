@@ -134,9 +134,10 @@
 #     `@min`/`@max` of `+0` and `−0` (group D). Detected by the proof build: `min_zero_varies`
 #     (Proofs/Floats/AllowedNeg.lean).
 # (ai) Lean-runtime mutation, lists: the default of `AllocPolicy.maxBytes` (ZigLean/Mem/Basic.lean)
-#     is the old fixed cap `maxAllocBytes` (1 MiB) again, not `unboundedAllocBytes`. The six
-#     `sumRange` lines with `"max_bytes": null` (the model default; buffers of 1 MiB + 4 bytes up
-#     to 4 MiB) then return `error.OutOfMemory` where Zig returns the sum.
+#     is the old fixed cap `maxAllocBytes` (1 MiB) again, not `unboundedAllocBytes`. The five
+#     `sumRange` lines with `"max_bytes": null` (the model default) that allocate a buffer of
+#     1 MiB + 4 bytes up to 4 MiB then return `error.OutOfMemory` where Zig returns the sum (the
+#     sixth such line fails on both sides: its byte count overflows).
 #
 # Usage: mutate.sh
 # Env:
