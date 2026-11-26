@@ -108,15 +108,6 @@ theorem resized_sentinel (hz : z.size = sz) (hs : a.size = (n + 1) * sz) (ho : o
 
 end Bytes
 
-private theorem enc16 (v : BitVec 16) : (Enc.encode v).size = 2 := by
-  simpa [Enc.size, intSize, intAlign, alignUp] using LawfulEnc.size_encode v
-
-private theorem enc32 (v : BitVec 32) : (Enc.encode v).size = 4 := by
-  simpa [Enc.size, intSize, intAlign, alignUp] using LawfulEnc.size_encode v
-
-private theorem enc64 (v : BitVec 64) : (Enc.encode v).size = 8 := by
-  simpa [Enc.size, intSize, intAlign, alignUp] using LawfulEnc.size_encode v
-
 /-! ## The allocator -/
 
 variable [Ext]
@@ -188,15 +179,15 @@ theorem make16_spec (n : BitVec 64) (hn : n.toNat + 1 < 2 ^ 64)
 old buffer. -/
 theorem append16_grant (s : Slice) (c : BitVec 16) (bs : Array Byte)
     (hlen : (s.len.toNat + 1) * 2 = bs.size) (hs : bs.size < 2 ^ 64)
-    (hn : s.len.toNat + 2 < 2 ^ 64) (hfit : I.fits ((s.len.toNat + 2) * 2) 1)
+    (hfit : I.fits ((s.len.toNat + 2) * 2) 1)
     (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
     CTriple (I.own ⋆ (I.granted s.ptr 1 φ bs ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) ⋆ plain)
       (Buf_u16_append ⟨ctx, vtp⟩ s c)
       (fun r => I.own ⋆ (appended I φ 1 2 (Enc.encode (0 : BitVec 16)) (Enc.encode c) s.ptr bs
         s.len.toNat r ⋆ vtR vtp fns.toList) ⋆ plain) := by
   fsym [realloc16_spec ctx vtp fns I e φ (h := h)]
-  · exact appended_item (enc16 c) (enc16 0) (by fsym_arith) (by fsym_arith) (by fsym_arith)
-  · exact appended_sentinel (enc16 c) (enc16 0) (by fsym_arith) (by fsym_arith) (by fsym_arith)
+  · exact appended_item (by fsym_arith) (by fsym_arith) (by fsym_arith) (by fsym_arith) (by fsym_arith)
+  · exact appended_sentinel (by fsym_arith) (by fsym_arith) (by fsym_arith) (by fsym_arith) (by fsym_arith)
 
 /-- **`resize`** of a `[:0]u16` for every allocator: `n` items, the retained items, the sentinel
 at item `n`; or the old buffer. -/
@@ -208,7 +199,7 @@ theorem resize16_grant (s : Slice) (n : BitVec 64) (bs : Array Byte)
       (fun r => I.own ⋆ (resized I φ 1 2 (Enc.encode (0 : BitVec 16)) s.ptr bs s.len.toNat n r ⋆
         vtR vtp fns.toList) ⋆ plain) := by
   fsym [realloc16_spec ctx vtp fns I e φ (h := h)]
-  · exact resized_sentinel (enc16 0) (by fsym_arith) (by fsym_arith)
+  · exact resized_sentinel (by fsym_arith) (by fsym_arith) (by fsym_arith)
 
 /-- **`release`** (`free` of a `[:0]u16`) for every allocator: the grant of `(len + 1) * 2` bytes,
 the sentinel included, goes back. -/
@@ -255,15 +246,15 @@ theorem make32_spec (n : BitVec 64) (hn : n.toNat + 1 < 2 ^ 64)
 old buffer. -/
 theorem append32_grant (s : Slice) (c : BitVec 32) (bs : Array Byte)
     (hlen : (s.len.toNat + 1) * 4 = bs.size) (hs : bs.size < 2 ^ 64)
-    (hn : s.len.toNat + 2 < 2 ^ 64) (hfit : I.fits ((s.len.toNat + 2) * 4) 2)
+    (hfit : I.fits ((s.len.toNat + 2) * 4) 2)
     (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
     CTriple (I.own ⋆ (I.granted s.ptr 2 φ bs ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) ⋆ plain)
       (Buf_u32_append ⟨ctx, vtp⟩ s c)
       (fun r => I.own ⋆ (appended I φ 2 4 (Enc.encode (0 : BitVec 32)) (Enc.encode c) s.ptr bs
         s.len.toNat r ⋆ vtR vtp fns.toList) ⋆ plain) := by
   fsym [realloc32_spec ctx vtp fns I e φ (h := h)]
-  · exact appended_item (enc32 c) (enc32 0) (by fsym_arith) (by fsym_arith) (by fsym_arith)
-  · exact appended_sentinel (enc32 c) (enc32 0) (by fsym_arith) (by fsym_arith) (by fsym_arith)
+  · exact appended_item (by fsym_arith) (by fsym_arith) (by fsym_arith) (by fsym_arith) (by fsym_arith)
+  · exact appended_sentinel (by fsym_arith) (by fsym_arith) (by fsym_arith) (by fsym_arith) (by fsym_arith)
 
 /-- **`resize`** of a `[:0]u32` for every allocator: `n` items, the retained items, the sentinel
 at item `n`; or the old buffer. -/
@@ -275,7 +266,7 @@ theorem resize32_grant (s : Slice) (n : BitVec 64) (bs : Array Byte)
       (fun r => I.own ⋆ (resized I φ 2 4 (Enc.encode (0 : BitVec 32)) s.ptr bs s.len.toNat n r ⋆
         vtR vtp fns.toList) ⋆ plain) := by
   fsym [realloc32_spec ctx vtp fns I e φ (h := h)]
-  · exact resized_sentinel (enc32 0) (by fsym_arith) (by fsym_arith)
+  · exact resized_sentinel (by fsym_arith) (by fsym_arith) (by fsym_arith)
 
 /-- **`release`** (`free` of a `[:0]u32`) for every allocator: the grant of `(len + 1) * 4` bytes,
 the sentinel included, goes back. -/
@@ -322,15 +313,15 @@ theorem make64_spec (n : BitVec 64) (hn : n.toNat + 1 < 2 ^ 64)
 old buffer. -/
 theorem append64_grant (s : Slice) (c : BitVec 64) (bs : Array Byte)
     (hlen : (s.len.toNat + 1) * 8 = bs.size) (hs : bs.size < 2 ^ 64)
-    (hn : s.len.toNat + 2 < 2 ^ 64) (hfit : I.fits ((s.len.toNat + 2) * 8) 3)
+    (hfit : I.fits ((s.len.toNat + 2) * 8) 3)
     (h : CAllocSpec (CVTable.env (env e) fns) ctx I) :
     CTriple (I.own ⋆ (I.granted s.ptr 3 φ bs ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) ⋆ plain)
       (Buf_u64_append ⟨ctx, vtp⟩ s c)
       (fun r => I.own ⋆ (appended I φ 3 8 (Enc.encode (0 : BitVec 64)) (Enc.encode c) s.ptr bs
         s.len.toNat r ⋆ vtR vtp fns.toList) ⋆ plain) := by
   fsym [realloc64_spec ctx vtp fns I e φ (h := h)]
-  · exact appended_item (enc64 c) (enc64 0) (by fsym_arith) (by fsym_arith) (by fsym_arith)
-  · exact appended_sentinel (enc64 c) (enc64 0) (by fsym_arith) (by fsym_arith) (by fsym_arith)
+  · exact appended_item (by fsym_arith) (by fsym_arith) (by fsym_arith) (by fsym_arith) (by fsym_arith)
+  · exact appended_sentinel (by fsym_arith) (by fsym_arith) (by fsym_arith) (by fsym_arith) (by fsym_arith)
 
 /-- **`resize`** of a `[:0]u64` for every allocator: `n` items, the retained items, the sentinel
 at item `n`; or the old buffer. -/
@@ -342,7 +333,7 @@ theorem resize64_grant (s : Slice) (n : BitVec 64) (bs : Array Byte)
       (fun r => I.own ⋆ (resized I φ 3 8 (Enc.encode (0 : BitVec 64)) s.ptr bs s.len.toNat n r ⋆
         vtR vtp fns.toList) ⋆ plain) := by
   fsym [realloc64_spec ctx vtp fns I e φ (h := h)]
-  · exact resized_sentinel (enc64 0) (by fsym_arith) (by fsym_arith)
+  · exact resized_sentinel (by fsym_arith) (by fsym_arith) (by fsym_arith)
 
 /-- **`release`** (`free` of a `[:0]u64`) for every allocator: the grant of `(len + 1) * 8` bytes,
 the sentinel included, goes back. -/

@@ -61,7 +61,7 @@ standard axioms):
   generated wrappers and clients each prove them (`make16_spec` … `release64_spec`). Also
   checked over the 0.16.0, 0.15.2 and 0.14.1 translations.
 
-`check.sh` last runs the designated mutants of the translated allocator wrappers
+`check.sh` also runs the designated mutants of the translated allocator wrappers
 (`tests/roadmap/callbacks/mutants.py`, root `sentinel`): the unchanged `SentinelSpec` and
 `WideSpec` reject each one.
 
