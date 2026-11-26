@@ -38,7 +38,7 @@ for w in 16 32 64; do
 done
 theorems=()
 for name in ListsFba.env_runs ListsFba.start_admissible_at ListsFba.start_admissible ListsFba.fba_spec \
-    ListsFba.make_admissible ListsFba.granted_admissible ListsFba.granted_admissible' \
+    ListsFba.make_admissible ListsFba.granted_admissible "ListsFba.granted_admissible'" \
     Lists.Append.append_spec.nonvacuous \
     Lists.Alloc.push_spec.nonvacuous Lists.Alloc.freeAll_spec.nonvacuous \
     Lists.Alloc.freeAll_freed.nonvacuous ListsFba.NotDead.free_not_dead \
