@@ -24,13 +24,15 @@ python3 scripts/aarch64-abi.py check --zig /path/to/zig --target aarch64-linux-g
 python3 scripts/aarch64-abi.py check --zig /path/to/zig --target aarch64-macos-none
 # Any host:
 python3 scripts/aarch64-abi.py compare --target aarch64-linux-gnu OBSERVED.txt
-lake build ZigLean.VecMem ZigLean.Float.Allowed ZigLean.Mem.Thread ZigLean.Os ZigLean.Conc.Sched
+lake build ZigLean.VecMem ZigLean.Float.Allowed ZigLean.Mem.Thread ZigLean.Os ZigLean.Conc.Sched \
+  Air2Lean.Air.Dialect
 lake env lean --run tests/roadmap/aarch64-abi/Model.lean aarch64-linux-gnu \
   tests/roadmap/aarch64-abi/expected/0.16.0/aarch64-linux-gnu-ReleaseSafe.txt
 lake env lean --run tests/roadmap/aarch64-abi/Futex.lean aarch64-linux-gnu \
   tests/roadmap/aarch64-abi/expected/0.16.0/aarch64-linux-gnu-ReleaseSafe.txt
 python3 -m unittest discover -s tests/roadmap/aarch64-abi -p 'test_*.py'
 python3 tests/roadmap/aarch64-abi/test_float_atomics.py .lake/build/bin/air2lean
+python3 tests/roadmap/aarch64-abi/test_mul_add.py .lake/build/bin/air2lean
 ```
 
 ## Probes
@@ -47,6 +49,8 @@ python3 tests/roadmap/aarch64-abi/test_float_atomics.py .lake/build/bin/air2lean
     subnormal rounding (`tiny*0.5`, `tiny*1.5`, `min_normal*0.5`, `min_normal-tiny`),
     overflow, `@mulAdd`, conversions to and from f64, u128 and u64;
   - the f80 invalid encodings: unnormal, pseudo-infinity, pseudo-NaN and pseudo-denormal;
+  - `@mulAdd` on `f16`, `f32` and `f64` operands whose result depends on the format the
+    multiply-add is computed in (`fma` rows, §`@mulAdd` and other CPUs);
   - atomic cells `u8`…`u128`, including `u24` and `u40`, each with padding `00` and `ff`:
     size, alignment, raw cell bytes, then cmpxchg, fetch-add, xchg and load results;
   - `std.atomic.cache_line`;
@@ -293,6 +297,66 @@ these types in memory on 0.17.1: `checkMemTy` compares the exporter's alignment 
 The padded `cmpxchg` and `.Max`/`.Min` stay rejected on every version. Only the two soft-float
 `f80` rows remain result divergences in 0.17.0.
 
+## `@mulAdd` and other CPUs
+
+An `f16` `@mulAdd` is the one result of the probe that depends on a CPU feature and on the Zig
+version. The `fma` rows record four `f16` operand triples on which the three possible
+computations differ, and one `f32` and one `f64` triple on which a fused result differs from an
+unfused one:
+
+| `f16` operands (bits) | `f16` instruction, or `f64` then `f16` | `f32` then `f16` |
+| --- | --- | --- |
+| `c290 c47c 0ffe` | `4b5b` | `4b5c` |
+| `bf80 74e8 154e` | `f899` | `f89a` |
+| `ee40 b848 0643` | `6ab1` | `6ab0` |
+| `3e00 3c01 8001` | `3e01` | `3e02` |
+
+On these rows the `f64` computation gives the `f16` instruction's result. The model does not
+state that the two agree on every operand; it has one term for each (`Float.fmaFused` on `f16`,
+and `Float.conv .f16` of the `f64` one).
+
+`observe` also builds and runs `probe.zig` at other CPUs (`CPUS` in `scripts/aarch64-abi.py`)
+and records, per CPU, the rows that differ from the baseline (`cpu <cpu> <row>`) and the number
+that do not (`cpu <cpu> same <k> of <n>`):
+
+| Profile | CPUs |
+| --- | --- |
+| aarch64-linux-gnu | `generic+fullfp16`, `generic+lse+rcpc`, `generic+outline_atomics` |
+| aarch64-macos-none | `generic`, `generic+lse`, `apple_m1-fullfp16`, `apple_m1+outline_atomics` |
+
+Recorded natively, on both profiles and all four versions:
+
+| CPU has `fullfp16` | Zig version | `f16` `@mulAdd` |
+| --- | --- | --- |
+| yes | all | the `f16` instruction (`fmadd h`) |
+| no | 0.14.1, 0.15.2, 0.16.0 | through `f32` (`fcvt s; fmadd s; fcvt h`) |
+| no | 0.17.1 | through `f64` (`fcvt d; fmadd d; fcvt h`): the `f16` result |
+
+So at 0.17.1 no `f16` row depends on the CPU, and before it the four rows differ exactly where
+`fullfp16` does. The translator's rule is `Dialect.f16MulAdd` (`Air2Lean/Air/Dialect.lean`): a
+function of the profile's `fullfp16` feature, its Zig version, its backend and its target row.
+Until this probe the model rounded an `f16` `@mulAdd` through `f32` at 0.17.1 too
+(aarch64-linux-gnu and x86_64-linux: native `4b5b`, model `4b5c` on the first row), and fused
+it on an aarch64-macos profile without `fullfp16`.
+
+`Model.lean` checks the rows (`fmaCase`, `cpuRows`): each `fma` result is the model's for the
+file's version and `fullfp16` row; the CPUs are exactly the profile's list; a row that differs
+at a CPU is a `meta cpu` or `feature` row, an `f16` `fma` row whose value is the model's for
+that CPU's `fullfp16`, or an operation the translator rejects (below); and the counts add up.
+Every other row, so every layout, float, atomic, ordering and litmus row, is the same at each
+CPU. `tests/roadmap/aarch64-abi/test_mul_add.py` runs the translator on a profile of each
+target, version, `fullfp16` setting, backend and float mode and compares the emitted term.
+
+One CPU row is not a match. Zig 0.14.1 and 0.15.2 on aarch64-linux with `outline_atomics`
+order a padded `u40`/`i40` `@atomicRmw` `.Max`/`.Min` with the other signedness (for example
+`rmw u40 Max 7890abcdef 8987654321` leaves `7890abcdef`). These are the padded operations the
+translator rejects on every version and CPU (`PADDED_ATOMIC`; §Declared divergences), and
+`Model.lean` prints them as rejected.
+
+An aarch64 profile must have the `fp_armv8` feature (`Target.requiredFeatures`): without it
+every float operation is a soft-float call, which the aarch64 rules do not describe, and the
+translator rejects the profile.
+
 ## Per-profile observations (every recorded Zig version, ReleaseSafe)
 
 The two expected files differ only in these lines:
@@ -301,6 +365,8 @@ The two expected files differ only in these lines:
 | --- | --- | --- |
 | CPU | `generic` | `apple_m1` |
 | `lse`, `lse2`, `rcpc`, `fullfp16` | 0 (LL/SC loops; `outline_atomics` 0) | 1 |
+| `f16` `@mulAdd` (`fma` rows) | through `f32` up to 0.16.0; the `f16` result from 0.17.1 | the `f16` result |
+| `cpu` rows | 3 CPUs | 4 CPUs |
 | `c_longdouble` | f128: size 16, align 16, 128 bits | f64: size 8, align 8, 64 bits |
 
 Both profiles share the rest:
@@ -320,8 +386,8 @@ Each profile's facts are a row of `Target.qualified`: 64-bit little-endian point
 integer and float layouts of `Zig.intSize`/`Zig.intAlign` (the layout tables above),
 `c_longdouble` (`f128` on aarch64-linux-gnu, `f64` on aarch64-macos-none), the float rules
 (`FloatRules.aarch64`, premise MTH-04, [floats.md](floats.md#targets)) and 128-bit atomics. The
-two rows differ in `c_longdouble` and in `f16` `@mulAdd`: `apple_m1` has `fullfp16` and fuses it,
-the aarch64-linux `generic` CPU rounds it through `f32`. Both differ from x86_64 in `f80` (soft
+two rows differ in `c_longdouble`. An `f16` `@mulAdd` follows the profile's `fullfp16` feature
+and Zig version (§`@mulAdd` and other CPUs), not the row. Both differ from x86_64 in `f80` (soft
 float) and in `f32`/`f64` `@mulAdd` (fused). The declared divergences above stay outside every
 translation: a noncanonical `f80` operand is `.unspecified`, the pre-0.16.0 `@sqrt` is the
 `f64`-precision helper, and a padded `cmpxchg` or `.Max`/`.Min` is rejected.
@@ -342,7 +408,9 @@ Not covered:
   semantics is in `ZigLean/Conc/WeakCas.lean` (`docs/weak-cas.md`);
 - instruction-level ordering strength (LDAR/STLR vs LL/SC);
 - the futex cases listed as not probed in §Futex;
-- the `-mcpu` features other than `baseline`;
+- the `-mcpu` features other than those of the profile's `CPUS` (§`@mulAdd` and other CPUs).
+  A profile with another feature set is translated by the same rules, without a native
+  observation of that set;
 - other Zig versions. A new version needs its own `expected/<version>/` files; without them
   `compare` reports `excluded`, and the translator rejects its aarch64 AIR;
 - programs linked with libc on aarch64-linux: `f128` `long double` libcalls then resolve to

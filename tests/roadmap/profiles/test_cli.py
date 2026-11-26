@@ -50,11 +50,12 @@ def main():
     mac["profile"]["target_triple"] = "aarch64-macos.13.0...15.0-none"
     mac["profile"]["abi"] = "none"
     mac["profile"]["cpu"] = "apple_m1"
-    mac["profile"]["features"] = ["neon"]
+    mac["profile"]["features"] = ["fp_armv8", "fullfp16", "neon"]
     run(binary, [mac])
     # aarch64-linux (T04): gnu only (every supported Zig version has a native probe record).
     arm = copy.deepcopy(CURRENT)
-    arm["profile"].update(target_triple="aarch64-linux.6.8...6.8-gnu.2.39", cpu="generic", features=["neon"])
+    arm["profile"].update(target_triple="aarch64-linux.6.8...6.8-gnu.2.39", cpu="generic",
+                          features=["fp_armv8", "neon"])
     run(binary, [arm])
     arm17 = copy.deepcopy(arm)
     arm17["zig_version"] = arm17["profile"]["zig_version"] = "0.17.1"
@@ -63,10 +64,16 @@ def main():
     musl = copy.deepcopy(arm)
     musl["profile"].update(target_triple="aarch64-linux-musl", abi="musl")
     run(binary, [musl], error="qualified for the gnu ABI only")
-    # The float rules are generic's: a CPU with fullfp16 fuses an f16 @mulAdd.
-    fp16 = copy.deepcopy(arm)
-    fp16["profile"]["features"] = ["fullfp16", "neon"]
-    run(binary, [fp16], error="fullfp16 is outside the aarch64-linux float rules")
+    # The f16 @mulAdd rule follows the CPU's fullfp16 on both aarch64 targets
+    # (tests/roadmap/aarch64-abi/test_mul_add.py); the float rules need the float instructions.
+    for base in (arm, mac):
+        other = copy.deepcopy(base)
+        fs = other["profile"]["features"]
+        other["profile"]["features"] = sorted(set(fs) ^ {"fullfp16"})
+        run(binary, [other])
+        soft = copy.deepcopy(base)
+        soft["profile"]["features"] = [f for f in fs if f != "fp_armv8"]
+        run(binary, [soft], error="needs the CPU feature fp_armv8")
     run(binary, [CURRENT], ["--profile", "abi64-le-v1", "--float-semantics", "compiler-rt"], mode="compiler-rt")
     for field in CURRENT["profile"]:
         malformed = copy.deepcopy(CURRENT)

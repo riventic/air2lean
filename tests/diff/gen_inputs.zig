@@ -141,7 +141,7 @@ pub fn main() !void {
     try genClaim();
     try genAtomics();
     try genSync();
-    try genNoArgs("tests/diff/threadsync/inputs", .{ "mutexCounter", "handoff", "waitGroup" });
+    try genNoArgs("tests/diff/threadsync/inputs", .{ "mutexCounter", "handoff", "handoffAll", "waitGroup" });
     try genNoArgs("tests/diff/iogroup/inputs", .{ "groupCounter", "groupConcurrent" });
     // The fitness generator runs last, so every earlier input stays the same.
     try genFitness(rng);
@@ -833,6 +833,28 @@ fn genFloatOp(rng: std.Random, comptime T: type, comptime name: []const u8) !voi
         }
     }
     try writeTieRows(writer, T);
+    try writeMulAddRows(writer, T);
+}
+
+/// `@mulAdd` operands whose result depends on where the rounding happens, appended like the tie
+/// rows (no random draw). `f16`: an `f16` multiply-add and one done in `f32` and rounded to `f16`
+/// differ by an ulp, which is how the targets and Zig versions differ (docs/floats.md §Targets;
+/// the `fma` rows of tests/roadmap/aarch64-abi). `f32` and `f64`: a multiply-add differs from the
+/// rounded product plus the addend. Random operands and the edge pairs never hit these.
+fn writeMulAddRows(writer: anytype, comptime T: type) !void {
+    const B = compat.Bits(T);
+    const rows: []const [3]B = switch (T) {
+        f16 => &.{
+            .{ 0xc290, 0xc47c, 0x0ffe }, .{ 0xbf80, 0x74e8, 0x154e },
+            .{ 0xee40, 0xb848, 0x0643 }, .{ 0x3e00, 0x3c01, 0x8001 },
+        },
+        f32 => &.{.{ 0x3f800001, 0x3f7fffff, 0x28000001 }},
+        f64 => &.{.{ 0x3ff0000000000001, 0x3fefffffffffffff, 0xbff0000000000000 }},
+        else => &.{},
+    };
+    for (rows) |r| {
+        try writeFloatOpLine(writer, T, 4, @bitCast(r[0]), @bitCast(r[1]), @bitCast(r[2]));
+    }
 }
 
 /// Exact round-half-even ties, appended after the 7,800 rows (no random draw, so every other

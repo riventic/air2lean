@@ -57,7 +57,11 @@ def source_0 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "pointers.addDown"
 (@_root_.List.toArray
 @_root_.Nat
@@ -1007,7 +1011,11 @@ def source_1 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "pointers.addTo"
 (@_root_.List.toArray
 @_root_.Nat
@@ -1586,7 +1594,11 @@ def source_2 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "pointers.bumpOpt"
 (@_root_.List.toArray
 @_root_.Nat
@@ -2416,7 +2428,11 @@ def source_3 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "pointers.copyJob"
 (@_root_.List.toArray
 @_root_.Nat
@@ -3128,7 +3144,11 @@ def source_4 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "pointers.delay"
 (@_root_.List.toArray
 @_root_.Nat
@@ -4046,7 +4066,11 @@ def source_5 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "pointers.dueOf"
 (@_root_.List.toArray
 @_root_.Nat
@@ -4869,7 +4893,11 @@ def source_6 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "pointers.maxPtr"
 (@_root_.List.toArray
 @_root_.Nat
@@ -6005,7 +6033,11 @@ def source_7 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "pointers.same"
 (@_root_.List.toArray
 @_root_.Nat
@@ -6515,7 +6547,11 @@ def source_8 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "pointers.setOpt"
 (@_root_.List.toArray
 @_root_.Nat
@@ -7005,7 +7041,11 @@ def source_9 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "pointers.setOptJob"
 (@_root_.List.toArray
 @_root_.Nat
@@ -8049,7 +8089,11 @@ def source_10 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "pointers.sumTo"
 (@_root_.List.toArray
 @_root_.Nat
@@ -9345,7 +9389,11 @@ def source_11 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "pointers.swap"
 (@_root_.List.toArray
 @_root_.Nat

@@ -963,6 +963,16 @@ theorem bind_keep {c : MemM α} {f : α → MemM β} (hc : ThreadLocal P c)
     obtain rfl := hk m v m₁ e
     exact ⟨r, hh, hp, hs⟩) hf
 
+/-- **Sequencing by the step's sequential triple**: a local step with the triple `P c Q`, then a
+step local for `Q` (`bind`, whose premise about the successful runs is the triple's). -/
+theorem bind_of {Q : α → FAssn} {c : MemM α} {f : α → MemM β} (hc : ThreadLocal P c)
+    (ht : FTriple P c Q) (hf : ∀ v, ThreadLocal (Q v) (f v)) : ThreadLocal P (c >>= f) :=
+  bind hc (fun m r rF hh hp hs v m₁ e => by
+    have h := ht m r rF hh hp hs
+    have e' : (c.run m).run = some (.ok (v, m₁)) := e
+    rw [e'] at h
+    exact h) hf
+
 /-- **A read of the blocks**, then a local step. -/
 theorem readBind {g : Mem → Result γ} {f : γ → MemM α} (hg : ∀ m F, g (m.withFp F) = g m)
     (hf : ∀ v, ThreadLocal P (f v)) :

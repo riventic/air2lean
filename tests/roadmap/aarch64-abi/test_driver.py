@@ -79,13 +79,26 @@ class Driver(unittest.TestCase):
         self.assertIsNone(abi.LLVM_ERROR.search('x.zig:1:2: error: expected type'))
 
     def test_older_versions_differ_from_0_16_0_only_in_soft_float_sqrt(self):
+        def split(lines):
+            return ([l for l in lines if not l.startswith('cpu ')], [l for l in lines if l.startswith('cpu ')])
+
         for triple in ('aarch64-linux-gnu', 'aarch64-macos-none'):
-            new = (EXPECTED / f'{triple}-ReleaseSafe.txt').read_text().splitlines()
+            new, new_cpus = split((EXPECTED / f'{triple}-ReleaseSafe.txt').read_text().splitlines())
             for version in ('0.15.2', '0.14.1'):
-                old = (EXPECTED.parent / version / f'{triple}-ReleaseSafe.txt').read_text().splitlines()
+                old, old_cpus = split((EXPECTED.parent / version / f'{triple}-ReleaseSafe.txt').read_text().splitlines())
                 self.assertEqual(len(old), len(new))
                 changed = [a.split(' sqrt(2)')[0] for a, b in zip(old, new) if a != b]
                 self.assertEqual(changed, ['meta zig ' + version, 'fop f80', 'fop f128'], (version, triple))
+                # The other CPUs: the same rows, and on aarch64-linux with `outline_atomics` four
+                # padded `u40`/`i40` `.Max`/`.Min` results more (test_cpu.py).
+                more = [l for l in old_cpus if l not in new_cpus]
+                if triple == 'aarch64-macos-none':
+                    self.assertEqual(old_cpus, new_cpus, version)
+                else:
+                    self.assertEqual([l.split()[:5] for l in more],
+                                     [['cpu', 'generic+outline_atomics', 'rmw', ty, op]
+                                      for ty, op in (('u40', 'Max'), ('u40', 'Min'), ('i40', 'Max'), ('i40', 'Max'))] +
+                                     [['cpu', 'generic+outline_atomics', 'same', '299', 'of']], version)
 
     def test_exact_file_matches(self):
         code, output = main('compare', '--target', 'aarch64-linux-gnu',

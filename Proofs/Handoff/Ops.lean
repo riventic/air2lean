@@ -277,6 +277,23 @@ theorem wp_signal {p : Ptr} (hp : p = Lo.WS.ptr) (io : Io) {G : ThreadId → Gh}
     (ci.signal_wp fitsC rfl hp 1 (gO rp { ph := .sg, sz := some (Lo.WS.hist m).size }) rfl
       (.inl rfl) rfl io G m d hpl.unmetered (inv_snap hi))
 
+/-- **The producer's `broadcast`** at `sg`, in place of its `signal`: the contract's broadcast
+(`CondImpl.broadcast_wp`, for every implementation) returns the history post with `all = true`,
+which gives the signal's (`FCond.SigPost.mono`), so a registered `main` is signalled
+(`signal_sig`); to the event's `set`. -/
+theorem wp_broadcast {p : Ptr} (hp : p = Lo.WS.ptr) (io : Io) {G : ThreadId → Gh} {m : Mem}
+    {d : Nat} {rp : Res} (hpl : rp.Plain)
+    (hi : (proto Lo prodOf).inv (upd G 1 (gO rp { ph := .sg })) m) :
+    (proto Lo prodOf).WP 1 (ci.broadcast p io) (fun _ G' m' d' => d' < d ∧ m'.current = 1 ∧
+      (proto Lo prodOf).inv (upd G' 1 (gO rp { ph := .st })) m') G m d := by
+  obtain ⟨_, -, hu⟩ := id hi
+  exact WP.mono (fun _ _ _ _ ⟨hd, hc, hi', hs⟩ => ⟨hd, hc, inv_st hi' fun hr => by
+      obtain ⟨_, -, hu'⟩ := id hi'
+      exact signal_sig hu (by rw [upd_self]; rfl) hu' (by rw [upd_self]; rfl) hs.mono
+        (by rw [upd1_0]; exact hr)⟩)
+    (ci.broadcast_wp fitsC rfl hp 1 (gO rp { ph := .sg, sz := some (Lo.WS.hist m).size }) rfl
+      (.inl rfl) rfl io G m d hpl.unmetered (inv_snap hi))
+
 /-- **The producer's `set`** at `st`: the event is set; the producer's end. -/
 theorem wp_set {p : Ptr} (hp : p = Lo.WV.ptr) (io : Io) {G : ThreadId → Gh} {m : Mem} {d : Nat}
     {rp : Res} (hpl : rp.Plain)

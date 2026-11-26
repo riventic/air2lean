@@ -587,7 +587,7 @@
   },
   {
    "k": "enum",
-   "name": "os.linux.E__enum_1920",
+   "name": "os.linux.E__enum_1929",
    "module": "std",
    "tag": 21,
    "exhaustive": false,
@@ -1198,7 +1198,7 @@
   },
   {
    "k": "other",
-   "name": "fn (usize) os.linux.E__enum_1920"
+   "name": "fn (usize) os.linux.E__enum_1929"
   },
   {
    "k": "noreturn"

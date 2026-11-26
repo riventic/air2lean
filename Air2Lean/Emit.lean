@@ -1077,18 +1077,39 @@ def FCtx.fmaRtSuffix (fc : FCtx) : String :=
 
 /-- The profile targets aarch64 (`Dialect.floatRules`, `docs/floats.md` §Targets): `f80` is
 soft-float (`Zig.Float.softF80Chk`, and in `compiler-rt` mode `__divxf3`), and `@mulAdd` on
-`f32`/`f64` (`f16` with `fullfp16`: `fusedMulAdd`) is the fused instruction. A legacy profile and
-the other targets keep the reference x86_64 rules. -/
-def FCtx.aarch64Floats (fc : FCtx) : Bool := fc.dialect.floatRules matches .aarch64 _
+`f32`/`f64` is the fused instruction (`mulAddExpr`). A legacy profile and the other targets keep
+the reference x86_64 rules. -/
+def FCtx.aarch64Floats (fc : FCtx) : Bool := fc.dialect.floatRules == .aarch64
 
-/-- `@mulAdd` on a `fmt`-bit float is the fused instruction: aarch64 `f32`/`f64`, and `f16` when
-the baseline CPU has `fullfp16` (aarch64-macos). aarch64-linux's `generic` CPU promotes an `f16`
-`@mulAdd` to `f32` like x86_64, so the reference rule applies (`Float.fma`'s `f16` case). `f80` and
-`f128` are compiler_rt on every target; `fmaFused` and `fmaRtFused` delegate them. -/
-def FCtx.fusedMulAdd (fc : FCtx) (fmt : Nat) : Bool :=
-  match fc.dialect.floatRules with
-  | .aarch64 fusedF16 => fmt != 16 || fusedF16
-  | .reference => false
+/-- `@mulAdd` on `fmt`-bit floats `a`, `b`, `c` (terms), as a `Result` term (`docs/floats.md`
+§Targets):
+
+* aarch64 `f32`/`f64`, and `f16` on a CPU with `fullfp16`: the fused instruction
+  (`fmaFused`/`fmaRtFused`, which delegate `f80`/`f128` to compiler_rt as on every target);
+* the reference rule (`fmaChk`/`fmaRtChk`, whose `f16` case rounds through `f32`): the other
+  targets, and an `f16` whose multiply-add is done in `f32` (`F16MulAdd.viaF32`);
+* an `f16` done in `f64` (`F16MulAdd.viaF64`, `viaF64MulAdd`; Zig 0.17.1): the `f64` op of the
+  target on the extended operands (exact), rounded to `f16`.
+
+Group C's guard (`…Chk`) applies in both modes; on aarch64 the `f80` operands are guarded by
+`softF80Chk` instead. -/
+def FCtx.mulAddExpr (fc : FCtx) (fmt : Nat) (a b c : String) : String :=
+  let aarch64 := fc.aarch64Floats
+  let fused := s!"pure (Zig.Float.fma{fc.fmaRtSuffix}Fused {a} {b} {c})"
+  let reference := s!"Zig.Float.fma{fc.fmaRtSuffix}Chk {a} {b} {c}"
+  let wide (x : String) := s!"(Zig.Float.conv .f64 {x})"
+  if fmt != 16 then (if aarch64 then fused else reference) else
+  match fc.dialect.f16MulAdd with
+  | .fused => fused
+  | .viaF32 => reference
+  | .viaF64 libcall =>
+    if aarch64 then
+      s!"pure (Zig.Float.conv .f16 (Zig.Float.fma{fc.fmaRtSuffix}Fused {wide a} {wide b} {wide c}))"
+    else
+      let rt := if libcall then fc.fmaRtSuffix else ""
+      s!"Zig.Float.conv .f16 <$> Zig.Float.fma{rt}Chk {wide a} {wide b} {wide c}"
+  | .viaF64MulAdd =>
+    s!"pure (Zig.Float.conv .f16 (Zig.Float.add (Zig.Float.mul {wide a} {wide b}) {wide c}))"
 
 /-- Is `v` an `f80` or a vector of `f80`? -/
 def FCtx.isF80Val (fc : FCtx) (v : Val) : Bool :=
@@ -2820,6 +2841,33 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let srcPtr := fc.isPtr a
     let dstPtr := fc.isPtrTy inst.ty
     let isInt (t : Ty) : Bool := match t with | .int .. => true | _ => false
+    -- `@alignCast`: a cast between pointer types (optional or not, slices too) to a stricter
+    -- alignment checks the operand's address itself (`Zig.checkAlign`), whatever else the cast
+    -- does (unwrap, wrap, null conversion); null passes, as in Zig. In a safe build the AIR
+    -- tests the address before the cast, so this check then never fails. A place has no
+    -- address in the model.
+    let alignCheck? : Option String :=
+      -- A pointer type or an optional pointer type: (optional, slice).
+      let ptrLike (t : Ty) : Option (Bool × Bool) := match t with
+        | .ptr size .. => some (false, size == "slice")
+        | .optional c => match fc.tyOfId c with
+          | .ptr size .. => some (true, size == "slice")
+          | _ => none
+        | _ => none
+      let align := fc.ptrAlignOf inst.ty
+      match ptrLike (fc.valTy a), ptrLike (fc.tyOfId inst.ty) with
+      | some (optional, slice), some _ =>
+        if fc.isPlace a || fc.isBytePlace a ||
+            align ≤ ((fc.valTyId? a).map fc.ptrAlignOf).getD 1 then none
+        else
+          let item := if slice then ".ptr" else ""
+          some (if optional then s!"({rv a}).forM (fun p => Zig.checkAlign {align} p{item})"
+            else s!"Zig.checkAlign {align} {rv a}{item}")
+      | _, _ => none
+    -- `conv` after the alignment check, if the cast has one.
+    let aligned (conv : String) : String := match alignCheck? with
+      | some check => s!"(do {fc.callMName} ({check}); {conv})"
+      | none => conv
     if srcPtr && isInt (fc.tyOfId inst.ty) then
       -- `@intFromPtr`.
       let expr := if fc.ptrBits == 64 || fc.tyBits inst.ty != fc.ptrBits then
@@ -2835,17 +2883,17 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else if srcPtr && fc.nullableVal a && fc.isOptScalarPtr (fc.tyOfId inst.ty) then
       -- A C/allowzero pointer to `?*T`: address zero is the explicit `none`.
-      let (env, l) := bindLet fc env inst.id s!"{fc.callMName} (Zig.ptrToOptional {rv a})"
+      let (env, l) := bindLet fc env inst.id (aligned s!"{fc.callMName} (Zig.ptrToOptional {rv a})")
       (env, some l)
     else if dstPtr && nullablePtrTy fc.types fc.layouts inst.ty && fc.isOptScalarPtr (fc.valTy a) then
       -- `?*T` to a C/allowzero pointer: `none` is address zero.
-      let (env, l) := bindLet fc env inst.id s!"pure (Zig.ptrOfOptional {rv a})"
+      let (env, l) := bindLet fc env inst.id (aligned s!"pure (Zig.ptrOfOptional {rv a})")
       (env, some l)
     else
     let srcOptPtr := (fc.valTyId? a).any (optSinglePtrTy fc.types fc.layouts)
     if srcOptPtr && dstPtr then
       -- `?*T` → `*U`: unwrap, null throws (`ZigLean/Mem/Repr.lean`).
-      let (env, l) := bindLet fc env inst.id s!"Zig.optPtrUnwrap {rv a}"
+      let (env, l) := bindLet fc env inst.id (aligned s!"Zig.optPtrUnwrap {rv a}")
       (env, some l)
     else if srcOptPtr && isInt (fc.tyOfId inst.ty) then
       -- `@intFromPtr` of `?*T`: null is 0.
@@ -2857,7 +2905,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else if srcPtr && dstPtr && fc.nullableVal a &&
         !(nullablePtrTy fc.types fc.layouts inst.ty) then
-      let (env, l) := bindLet fc env inst.id s!"{fc.callMName} (Zig.ptrRequireNonNull {rv a})"
+      let (env, l) := bindLet fc env inst.id (aligned s!"{fc.callMName} (Zig.ptrRequireNonNull {rv a})")
       (env, some l)
     else
     -- `@errorCast` to a set that lacks some source error checks its error itself.
@@ -2873,12 +2921,10 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let expr :=
       if srcFloat && !dstFloat then s!"Zig.Float.toBits? {rv a}"
       else if !srcFloat && dstFloat then s!"pure ((Zig.Float.ofBits {rv a}) : {fc.emitTyOf inst.ty})"
-      else if srcPtr && dstPtr && fc.isMemPtr a && fc.ptrAlignOf inst.ty > fc.ptrAlign a then
-        -- `@alignCast` to a stricter alignment checks its pointer itself (`Zig.checkAlign`); a
-        -- slice checks its item pointer.
-        let p := if fc.isSlice a then s!"{rv a}.ptr" else rv a
-        s!"{fc.callMName} (Zig.checkAlign {fc.ptrAlignOf inst.ty} {p} >>= fun _ => pure {rv a})"
-      else s!"pure ({rv a})"
+      else match alignCheck? with
+        -- The cast is the operand itself (`*T` → `*U`, `?*T` → `?*U`, slices, `*T` → `?*U`).
+        | some check => s!"{fc.callMName} ({check} >>= fun _ => pure {rv a})"
+        | none => s!"pure ({rv a})"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .floatRound op a =>
     -- Only f80's legacy extension changes rounding; vector lanes carry their scalar type here.
@@ -2905,12 +2951,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | .exp2 => ".exp2" | .log => ".log" | .log2 => ".log2" | .log10 => ".log10"
     let (env, l) := bindLet fc env inst.id s!"pure (Zig.Float.libm {opName} {rv a})"; (env, some l)
   | .mulAdd a b c =>
-    -- Group C's guard applies in both modes; group B's dispatch picks `fma` vs `fmaRt` under it.
-    -- aarch64: a fused instruction; its f80 operands are guarded by `softF80Chk` instead.
     let fmt := match fc.valTy a with | .float n => n | _ => 0
-    let expr := if fc.fusedMulAdd fmt then s!"pure (Zig.Float.fma{fc.fmaRtSuffix}Fused {rv a} {rv b} {rv c})"
-      else s!"Zig.Float.fma{fc.fmaRtSuffix}Chk {rv a} {rv b} {rv c}"
-    let (env, l) := bindLet fc env inst.id expr; (env, some l)
+    let (env, l) := bindLet fc env inst.id (fc.mulAddExpr fmt (rv a) (rv b) (rv c)); (env, some l)
   | .floatConv a =>
     let fmt := fc.floatFmtTerm inst.ty
     let (env, l) := bindLet fc env inst.id s!"Zig.Float.conv{fc.rtSuffix}Chk {fmt} {rv a}"

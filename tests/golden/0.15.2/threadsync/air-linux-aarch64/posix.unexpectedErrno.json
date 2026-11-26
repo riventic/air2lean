@@ -72,7 +72,7 @@
  "types": [
   {
    "k": "enum",
-   "name": "os.linux.E__enum_1967",
+   "name": "os.linux.E__enum_1976",
    "module": "std",
    "tag": 4,
    "exhaustive": false,

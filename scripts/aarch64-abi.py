@@ -8,8 +8,9 @@
 TRIPLE is aarch64-linux-gnu or aarch64-macos-none; MODE is ReleaseSafe (default). `observe`
 builds and runs, with the stock compiler ZIG, tests/roadmap/aarch64-abi/probe.zig, L09's
 tests/roadmap/vector-layouts/probe.zig, and the limit probes (tests/roadmap/aarch64-abi/limits/)
-that must fail to compile, one result line each; it runs only on the profile's own host (no
-emulator, no cross execution). `compare` compares an observation file line by line with
+that must fail to compile, one result line each, and then probe.zig again at each other CPU of
+the profile (`CPUS`), as `cpu` rows; it runs only on the profile's own host (no emulator, no
+cross execution). `compare` compares an observation file line by line with
 tests/roadmap/aarch64-abi/expected/<zig>/<triple>-<mode>.txt. `check` is observe + compare.
 
 Every command prints one JSON status line. Exit 0: `match`; 1: `mismatch` (or an error);
@@ -36,6 +37,13 @@ COMPAT = 'tests/diff/compat.zig'
 # triple -> (platform.system(), platform.machine() values, Zig -mcpu)
 PROFILES = {'aarch64-linux-gnu': ('Linux', ('aarch64', 'arm64'), 'baseline'),
             'aarch64-macos-none': ('Darwin', ('arm64',), 'baseline')}
+# triple -> the other `-mcpu` values at which `probe.zig` is observed (`cpu` rows): the profile's
+# baseline with the features that decide how floats and atomics lower switched (`fullfp16`: an
+# `f16` multiply-add; `lse`, `lse2`, `rcpc`, `outline_atomics`: atomic instructions or helper
+# calls). Each needs only features of ARMv8.2 hosts.
+CPUS = {'aarch64-linux-gnu': ('generic+fullfp16', 'generic+lse+rcpc', 'generic+outline_atomics'),
+        'aarch64-macos-none': ('generic', 'generic+lse', 'apple_m1-fullfp16',
+                               'apple_m1+outline_atomics')}
 MODES = ('ReleaseSafe',)
 # The first compile error of a probe that must be rejected: `<file>.zig:<line>:<col>: error: <message>`.
 LIMIT_ERROR = re.compile(r'\.zig:\d+:\d+: error: (.+)$', re.M)
@@ -60,9 +68,9 @@ def expected_path(version, triple, mode):
     return ROOT / DIR / 'expected' / version / f'{triple}-{mode}.txt'
 
 
-def build(zig, target, mode, root, out, deps=()):
+def build(zig, target, mode, root, out, deps=(), cpu='baseline'):
     """`zig build-exe` of `root` with the modules `deps` (name, path) imported by name."""
-    command = [zig, 'build-exe', '-fllvm', '-O' + mode, '-target', target, '-mcpu=baseline',
+    command = [zig, 'build-exe', '-fllvm', '-O' + mode, '-target', target, '-mcpu=' + cpu,
                '-femit-bin=' + str(out)]
     for name, _ in deps:
         command += ['--dep', name]
@@ -96,6 +104,17 @@ def f80_atomic(zig, target, mode, tmp, op):
     return f'f80atomic {op} runs cell={cell} result={result}'
 
 
+def cpu_rows(cpu, baseline, observed):
+    """The `cpu` rows of `probe.zig` at `-mcpu=<cpu>`: each line that differs from the baseline's
+    line at its place, and how many lines are the same."""
+    if len(observed) != len(baseline):
+        raise ValueError(f'{PROBE} prints {len(observed)} lines at -mcpu={cpu}, {len(baseline)} at '
+                         'the baseline')
+    changed = [new for old, new in zip(baseline, observed) if old != new]
+    return [f'cpu {cpu} {line}' for line in changed] + \
+        [f'cpu {cpu} same {len(baseline) - len(changed)} of {len(baseline)}']
+
+
 def run(binary, stream):
     done = subprocess.run([str(binary)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60,
                           check=True)
@@ -113,12 +132,17 @@ def observe(zig, target, mode):
     lines = []
     with tempfile.TemporaryDirectory(prefix='air2lean-t04-') as tmp:
         tmp = Path(tmp)
-        for root, binary, stream, deps in ((PROBE, tmp / 'probe', 'stdout', (('compat', ROOT / COMPAT),)),
-                                           (VECTORS, tmp / 'vectors', 'stderr', ())):
-            built = build(zig, target, mode, root, binary, deps)
+
+        def output(root, stream, deps=(), cpu='baseline'):
+            built = build(zig, target, mode, root, tmp / 'probe', deps, cpu)
             if built.returncode:
-                raise ValueError(f'{root} failed to compile:\n' + built.stderr.decode()[:4096])
-            lines += run(binary, stream).splitlines()
+                raise ValueError(f'{root} failed to compile at -mcpu={cpu}:\n' +
+                                 built.stderr.decode()[:4096])
+            return run(tmp / 'probe', stream).splitlines()
+
+        compat = (('compat', ROOT / COMPAT),)
+        baseline = output(PROBE, 'stdout', compat)
+        lines += baseline + output(VECTORS, 'stderr')
         # Synchronization boundaries the compiler must reject (widest atomic integer, orderings,
         # operand types): one line each with the first compile error.
         for source in sorted((ROOT / LIMITS).glob('*.zig')):
@@ -130,6 +154,9 @@ def observe(zig, target, mode):
             lines.append(f'limit {source.stem} ' + found.group(1).replace(' ', '_'))
         # Atomic `f80`: whether each op compiles, and if it runs, whether it does the op.
         lines += [f80_atomic(zig, target, mode, tmp, op) for op in F80_OPS]
+        # The other CPUs: the whole probe again, as its differences from the baseline.
+        for cpu in CPUS[target]:
+            lines += cpu_rows(cpu, baseline, output(PROBE, 'stdout', compat, cpu))
     return version, '\n'.join(lines) + '\n'
 
 

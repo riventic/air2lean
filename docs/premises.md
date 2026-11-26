@@ -710,10 +710,13 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 - Statement: The translation targets aarch64-macos or aarch64-linux, whose float lowering
   differs from x86_64's: `f80` is soft float (a noncanonical operand is unspecified; `__divxf3`
   division; before 0.16.0 `@sqrt` through `f64`) and `@mulAdd` on `f32`/`f64` is a fused
-  instruction, on `f16` too where the baseline CPU has `fullfp16` (aarch64-macos `apple_m1`; not
-  aarch64-linux `generic`, which rounds through `f32` like x86_64). The rules are those of the
-  baseline CPU (`Target.floatRules`); they are read from the Zig 0.16.0 LLVM backend and
-  compiler_rt sources and checked by each host's differential test. On aarch64-linux the
+  instruction, on `f16` too where the profile's CPU has `fullfp16` (the aarch64-macos baseline
+  `apple_m1`; not the aarch64-linux baseline `generic`). Without `fullfp16` an `f16` `@mulAdd`
+  is the fused instruction of a wider format rounded to `f16`: `f32` up to Zig 0.16.0, `f64`
+  from 0.17.1 (`Dialect.f16MulAdd`). The rules (`Target.floatRules`) are read from the Zig LLVM
+  backend and compiler_rt sources and checked by each host's differential test and by the
+  native `fma` and `cpu` rows of [aarch64-abi.md](aarch64-abi.md#muladd-and-other-cpus); the
+  profile must have `fp_armv8`. On aarch64-linux the
   `f128` `long double` libcalls (`sqrtl`, `fmal`, …) are compiler_rt's: the checker rejects the
   `f128` ops that call them unless `--assume-no-libc` (recorded in the header, premise MTH-05)
   states that the program links no libc.

@@ -54,7 +54,11 @@ def source_0 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "Io.Mutex.lock"
 (@_root_.List.toArray
 @_root_.Nat
@@ -17478,7 +17482,11 @@ def source_1 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "Io.Mutex.lockUncancelable"
 (@_root_.List.toArray
 @_root_.Nat
@@ -34554,7 +34562,11 @@ def source_2 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "Io.Mutex.tryLock"
 (@_root_.List.toArray
 @_root_.Nat
@@ -36357,7 +36369,11 @@ def source_3 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "Io.Mutex.unlock"
 (@_root_.List.toArray
 @_root_.Nat
@@ -52592,7 +52608,11 @@ def source_4 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "debug.assert"
 (@_root_.List.toArray
 @_root_.Nat
@@ -53094,7 +53114,11 @@ def source_5 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "iogroup.add"
 (@_root_.List.toArray
 @_root_.Nat
@@ -68571,7 +68595,11 @@ def source_6 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "iogroup.groupConcurrent"
 (@_root_.List.toArray
 @_root_.Nat
@@ -85556,7 +85584,11 @@ def source_7 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "iogroup.groupCounter"
 (@_root_.List.toArray
 @_root_.Nat
