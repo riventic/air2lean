@@ -211,6 +211,20 @@
       },
       "block_sha256": "e278547cdd0d0752a00408531d1f2f475cc9b29442bea30edbfc17476343f9fa"
     },
+    "tests/roadmap/alloc-fba/mutant.sh#fba-alloc-end-index-kept": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/alloc-fba/check.sh"
+      },
+      "block_sha256": "403df14b28353ecac5974e306d11c0b98509d6fffcb8cb64903e57d013d02306"
+    },
+    "tests/roadmap/alloc-translated/mutant.sh#page-shrink-tail-kept-mapped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/alloc-translated/check.sh"
+      },
+      "block_sha256": "0bf8012638babaaeb532e7716def13148b84fecaa45a278402ea13290c6dd4aa"
+    },
     "tests/roadmap/allocation-policy/mutations.py#budget-ignores-live-bytes": {
       "killed_by": {
         "kind": "check",
@@ -987,6 +1001,139 @@
         "target": "tests/roadmap/loop-tactics/Queue.lean"
       },
       "block_sha256": "d8e87e125b8222452c2541c79b3d215d5bf8cfbf72d13d29065ae0766f9fb9c2"
+    },
+    "tests/roadmap/loop-tactics/counted/mutants.json#array-item-relation": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/loop-tactics/counted/check.sh"
+      },
+      "block_sha256": "576306c58fa413443b80b29fbcf207fb072c7b1378f402d39eeafff25c82fa60"
+    },
+    "tests/roadmap/loop-tactics/counted/mutants.json#array-items-swapped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/loop-tactics/counted/check.sh"
+      },
+      "block_sha256": "576306c58fa413443b80b29fbcf207fb072c7b1378f402d39eeafff25c82fa60"
+    },
+    "tests/roadmap/loop-tactics/counted/mutants.json#credits-count-dropped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/loop-tactics/counted/check.sh"
+      },
+      "block_sha256": "576306c58fa413443b80b29fbcf207fb072c7b1378f402d39eeafff25c82fa60"
+    },
+    "tests/roadmap/loop-tactics/counted/mutants.json#credits-count-wrong": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/loop-tactics/counted/check.sh"
+      },
+      "block_sha256": "576306c58fa413443b80b29fbcf207fb072c7b1378f402d39eeafff25c82fa60"
+    },
+    "tests/roadmap/loop-tactics/counted/mutants.json#credits-plain-kept": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/loop-tactics/counted/check.sh"
+      },
+      "block_sha256": "576306c58fa413443b80b29fbcf207fb072c7b1378f402d39eeafff25c82fa60"
+    },
+    "tests/roadmap/loop-tactics/counted/mutants.json#down-relation": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/loop-tactics/counted/check.sh"
+      },
+      "block_sha256": "576306c58fa413443b80b29fbcf207fb072c7b1378f402d39eeafff25c82fa60"
+    },
+    "tests/roadmap/loop-tactics/counted/mutants.json#houdini-kept-dropped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/loop-tactics/counted/check.sh"
+      },
+      "block_sha256": "576306c58fa413443b80b29fbcf207fb072c7b1378f402d39eeafff25c82fa60"
+    },
+    "tests/roadmap/loop-tactics/counted/mutants.json#houdini-pruned-kept": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/loop-tactics/counted/check.sh"
+      },
+      "block_sha256": "576306c58fa413443b80b29fbcf207fb072c7b1378f402d39eeafff25c82fa60"
+    },
+    "tests/roadmap/loop-tactics/counted/mutants.json#le-range": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/loop-tactics/counted/check.sh"
+      },
+      "block_sha256": "576306c58fa413443b80b29fbcf207fb072c7b1378f402d39eeafff25c82fa60"
+    },
+    "tests/roadmap/loop-tactics/counted/mutants.json#len-measure": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/loop-tactics/counted/check.sh"
+      },
+      "block_sha256": "576306c58fa413443b80b29fbcf207fb072c7b1378f402d39eeafff25c82fa60"
+    },
+    "tests/roadmap/loop-tactics/counted/mutants.json#ne-bound": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/loop-tactics/counted/check.sh"
+      },
+      "block_sha256": "576306c58fa413443b80b29fbcf207fb072c7b1378f402d39eeafff25c82fa60"
+    },
+    "tests/roadmap/loop-tactics/counted/mutants.json#post-exit-counter": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/loop-tactics/counted/check.sh"
+      },
+      "block_sha256": "576306c58fa413443b80b29fbcf207fb072c7b1378f402d39eeafff25c82fa60"
+    },
+    "tests/roadmap/loop-tactics/counted/mutants.json#read-cell": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/loop-tactics/counted/check.sh"
+      },
+      "block_sha256": "576306c58fa413443b80b29fbcf207fb072c7b1378f402d39eeafff25c82fa60"
+    },
+    "tests/roadmap/loop-tactics/counted/mutants.json#sum-wrong-term": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/loop-tactics/counted/check.sh"
+      },
+      "block_sha256": "576306c58fa413443b80b29fbcf207fb072c7b1378f402d39eeafff25c82fa60"
+    },
+    "tests/roadmap/loop-tactics/nested/mutants.json#bound": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/loop-tactics/nested/check.sh"
+      },
+      "block_sha256": "149e7d08431e7462863544f64592d0aa69bbcbd6f30fe548f97adc64dcddb716"
+    },
+    "tests/roadmap/loop-tactics/nested/mutants.json#measure": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/loop-tactics/nested/check.sh"
+      },
+      "block_sha256": "149e7d08431e7462863544f64592d0aa69bbcbd6f30fe548f97adc64dcddb716"
+    },
+    "tests/roadmap/loop-tactics/nested/mutants.json#outer-bound": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/loop-tactics/nested/check.sh"
+      },
+      "block_sha256": "149e7d08431e7462863544f64592d0aa69bbcbd6f30fe548f97adc64dcddb716"
+    },
+    "tests/roadmap/loop-tactics/nested/mutants.json#outer-sum": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/loop-tactics/nested/check.sh"
+      },
+      "block_sha256": "149e7d08431e7462863544f64592d0aa69bbcbd6f30fe548f97adc64dcddb716"
+    },
+    "tests/roadmap/loop-tactics/nested/mutants.json#relation": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/loop-tactics/nested/check.sh"
+      },
+      "block_sha256": "149e7d08431e7462863544f64592d0aa69bbcbd6f30fe548f97adc64dcddb716"
     },
     "tests/roadmap/null-pointers/classify_mutant.py#ptrIsNull-inverted": {
       "killed_by": {
