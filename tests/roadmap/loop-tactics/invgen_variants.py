@@ -196,7 +196,7 @@ def main(argv):
             errors += check(name, client, f'{directory}/{variant}', Path(work))
     if errors:
         sys.exit('\n'.join(errors))
-    print(f"{name}: {len(argv[1:] or names)} retranslation(s) needed a regeneration only")
+    print(f"{name}: {len(argv[1:] or names)} retranslation(s) checked")
 
 
 if __name__ == '__main__':

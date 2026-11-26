@@ -89,9 +89,30 @@ class Overlay:
         for module in imports:
             self.compile(module)
 
+    def link(self):
+        """Lean takes every module of a top-level name from the first directory of its path that
+        has that name. So for each top-level name this layer has compiled a module of, the
+        modules of that name that the layer does not compile are linked into its directory from
+        the layers below and from Lake's library (the first that has each). Called before each
+        run of Lean in the layer; a program that imports through `lean_path` calls it first."""
+        if not self.out.is_dir():
+            return
+        lower = [layer.out for layer in self.layers()[1:]] + [ROOT / '.lake/build/lib/lean']
+        for top in [p for p in self.out.iterdir() if p.is_dir() and p.name != 'files']:
+            for directory in lower:
+                for file in (directory / top.name).rglob('*.olean*'):
+                    rel = file.relative_to(directory)
+                    module = '.'.join(rel.with_name(rel.name.split('.')[0]).parts)
+                    if not (self.out / rel).exists() and not self.dirty(module):
+                        (self.out / rel).parent.mkdir(parents=True, exist_ok=True)
+                        (self.out / rel).symlink_to(file.resolve())
+
     def _lean(self, path, root, olean):
         native = self.deps.native_options(str(path), {}, self.deps.precompiled_modules())
         olean.parent.mkdir(parents=True, exist_ok=True)
+        if olean.is_symlink():  # (never write through a link into a lower layer)
+            olean.unlink()
+        self.link()
         return in_front(self.lean_path(), [os.environ.get('LEAN') or 'lean', *native, '-R', str(ROOT / root),
                                            '-o', str(olean), str(path)])
 

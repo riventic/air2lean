@@ -194,6 +194,7 @@ def generate(root, module, namespace, work, spec=None, contracts=()):
         options += ['--spec', spec, spec_source(spec)]
         for contract in contracts:
             options += ['--contract', contract]
+    overlay.link()
     result = lean_overlay.in_front(overlay.lean_path(), [
         str(ROOT / '.lake/build/bin/air2lean-invgen'), module, namespace, '--source', src, *options,
         '--fingerprints', str(work / 'fingerprints.json'), '-o', str(out)])
