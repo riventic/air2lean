@@ -1159,7 +1159,9 @@ bytes apply to a share, which stays (`FTotalTriple.spts_read`): `tryPayloadPtr_s
 In a thread every pointer-try command is local where its bytes are read (`ReadsPtr`: owned bytes,
 `ReadsPtr.of_owns`, or a share, `ReadsPtr.spts_add`): `ThreadLocal.tryPayloadPtr` & co., with
 their providers per view (`…_pts`, `…_spts`), so `fsym` applies the sequential rules of this
-module, owned or shared, in a thread (`FTTotalTriple.ofSeq`). `errSetOk` writes the error code and has no thread rule yet. -/
+module, owned or shared, in a thread (`FTTotalTriple.ofSeq`). `errSetOk` writes the error code:
+it is local where the code is owned (`ThreadLocal.errSetOk`, the provider `errSetOk_pts`), and a
+share does not make it local. -/
 
 section Shared
 
@@ -1361,9 +1363,22 @@ theorem ThreadLocal.finiteErrIsErrAt
     Pure.pure x.isSome)
   exact ThreadLocal.loadBytes_bind h fun _ => ThreadLocal.liftR_bind fun _ => ThreadLocal.pure _
 
+/-- **`errSetOk`** (`errunion_payload_ptr_set`) is local where the error code is owned: it writes
+the error code (`ht`: the write's sequential triple on `P`, with any post) and then forms the
+payload pointer, which is local for every precondition. -/
+theorem ThreadLocal.errSetOk {Q : Unit → FAssn}
+    (h : OwnsPtr P (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2)
+    (ht : FTriple P (Zig.storeBytes (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1)
+      (Nat.min al 2) (errBytes none)) Q) :
+    ThreadLocal P (Zig.errSetOk α al q) := by
+  show ThreadLocal P (Zig.storeBytes (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1)
+    (Nat.min al 2) (errBytes none) >>= fun _ => Zig.ptrProject q (errPayloadPtr α))
+  exact ThreadLocal.bind_of (ThreadLocal.storeBytes h) ht fun _ => ThreadLocal.ptrProject _ _
+
 /-! #### The providers, per view
 
-The rules above hold for any precondition that reads the bytes (`ReadsPtr`). `fsym` gets them
+The rules above hold for any precondition that reads the bytes (`ReadsPtr`; `errSetOk`: that
+owns the error code). `fsym` gets them
 per view of the union, as atom providers: an owned union (`up (pts …)`, `OwnsPtr.errCode`) and a
 shared one (`spts`, `ReadsPtr.errCode_spts`). A provider about the whole precondition would be
 unified with every command that has no head constant (a `let`, an applied continuation) in each
@@ -1428,6 +1443,28 @@ variable {x : Except ErrName α} {T : Type} [Enc T] {s : T} {n : Nat}
 @[fsym_provider] theorem ThreadLocal.finiteErrIsErrAt_spts :
     ThreadLocal (spts q a φ x) (Zig.finiteErrIsErrAt d α al q) :=
   ThreadLocal.finiteErrIsErrAt ReadsPtr.errCode_spts
+
+/-- `errSetOk` on an owned error union, under the side conditions of its rule
+(`FTotalTriple.errSetOk`). A share gives no write, so there is no `spts` provider. -/
+@[fsym_provider] theorem ThreadLocal.errSetOk_pts (hal : Nat.min al 2 ∣ a)
+    (heo : Nat.min al 2 ∣ (errUnionOffsets (Enc.size α) (Enc.align α)).1) :
+    ThreadLocal (up (Zig.pts q a x)) (Zig.errSetOk α al q) :=
+  ThreadLocal.errSetOk (Q := fun _ _ => True) OwnsPtr.errCode
+    (FTotalTriple.pts_bytes fun _ hs _ =>
+      (FTotalTriple.region_storeBytes (by decide) hal heo (errCode_fit hs)).post
+        fun _ _ _ => trivial).toPartial
+
+/-- **The payload write after `errSetOk`** (`FTotalTriple.errOkSlot_store`) is local: the slot
+owns the payload's bytes. -/
+@[fsym_provider] theorem ThreadLocal.errOkSlot_store [LawfulEnc α] {b : Nat} {y : α} :
+    ThreadLocal (errOkSlot α q a) (Zig.store b (errPayloadPtr α q) y) :=
+  ThreadLocal.ex fun bs => ThreadLocal.lift fun ⟨hs, _⟩ =>
+    ThreadLocal.store_lawful (OwnsPtr.region_in rfl
+      (by simp only [errPayloadPtr, Ptr.add]; omega)
+      (by
+        have h := (errUnion_bounds (Enc.size α) (Enc.align α)).2.1
+        have hs' : bs.size = errUnionSize (Enc.size α) (Enc.align α) := hs
+        simp only [errPayloadPtr, Ptr.add]; omega))
 
 end Shared
 

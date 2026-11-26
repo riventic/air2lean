@@ -93,6 +93,25 @@ MUTANTS = {
             [("def mem_absorbSentinel__anon_2445b0d558b2",
               "    let i7 ← Zig.add false i6 (1 : BitVec 64)\n", "    let i7 ← pure i6\n")],
             {"free8_spec", "realloc8_spec", "move8_grant", "fit8_grant"}, set()),
+        # The failure path of the `u8` `realloc` (`Interfaces/Sentinel.lean`): when the new
+        # allocation fails, the old buffer is made undefined before `error.OutOfMemory` returns
+        # (std: "memory shouldn't be modified on realloc failure").
+        "sentinel-realloc-failure-clobbers-old": ("Interfaces/Sentinel.lean", "Interfaces/SentinelSpec.lean",
+            [("def mem_Allocator_reallocAdvanced__anon_0df1ef68623e",
+              "                  pure (.ret (.error \"OutOfMemory\" : Except Zig.ErrName (Zig.Slice)))))\n",
+              "                  Zig.callMC (Zig.memset (α := BitVec 8) 1 i34.ptr i34.len none)\n"
+              "                  pure (.ret (.error \"OutOfMemory\" : Except Zig.ErrName (Zig.Slice)))))\n")],
+            {"realloc_spec"}, set()),
+        # The `u8` `realloc` path: a moved buffer is not copied (`@memcpy` dropped).
+        "sentinel-realloc-move-omits-copy": ("Interfaces/Sentinel.lean", "Interfaces/SentinelSpec.lean",
+            [("def mem_Allocator_reallocAdvanced__anon_0df1ef68623e",
+              "                    Zig.callMC (Zig.memcpy 1 1 1 i83.ptr i104 i83.len i95.len)\n", "")],
+            {"realloc_spec"}, set()),
+        # The raw entry points (`Interfaces/Raw.lean`) under `RawSpec`: `rawFree` is called at
+        # alignment 1 for a grant at alignment 4, outside the contract's precondition.
+        "raw-free-alignment-is-one": ("Interfaces/Raw.lean", "Interfaces/RawSpec.lean",
+            [("def give ", "p1 mem_Alignment.«4» i2", "p1 mem_Alignment.«1» i2")],
+            {"give_spec"}, set()),
     },
 }
 ROOTS = {"callbacks": ROADMAP / "callbacks", "asm-env": ROADMAP / "asm-effects", "sentinel": ROADMAP / "interfaces"}

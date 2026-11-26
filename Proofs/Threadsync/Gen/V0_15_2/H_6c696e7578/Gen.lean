@@ -453,6 +453,7 @@ def mem0 (σ : Zig.Placement) : Zig.Mem := Zig.Mem.ofGlobals σ []
 /-- The spawn targets of the program. -/
 inductive Tgt where
   | producer (a : Zig.Ptr)
+  | producerAll (a : Zig.Ptr)
   | work (a : Zig.Ptr)
   | task (a : Zig.Ptr)
 
@@ -2370,6 +2371,99 @@ def handoff [Zig.Os.HasEnv]  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) :=
 
 attribute [zig_run] handoff.loop12 handoff
 
+structure producerAllLocals where
+  deriving Inhabited
+
+inductive producerAllExit where
+  | ret
+
+def producerAll (p0 : Zig.Ptr) : Zig.ConcM Tgt (Unit) := do
+  let e ← ((do
+    let i1 ← pure p0
+    let _i2 ← Zig.callC (Thread_Mutex_lock i1)
+    let i3 ← Zig.callMC (Zig.ptrProject p0 (·.add 16))
+    Zig.store (α := BitVec 32) 4 i3 (7 : BitVec 32)
+    let i5 ← Zig.callMC (Zig.ptrProject p0 (·.add 20))
+    Zig.store (α := Bool) 1 i5 true
+    let i7 ← pure p0
+    let _i8 ← Zig.callC (Thread_Mutex_unlock i7)
+    let i9 ← Zig.callMC (Zig.ptrProject p0 (·.add 4))
+    let _i10 ← Zig.callC (Thread_Condition_broadcast i9)
+    let i11 ← Zig.callMC (Zig.ptrProject p0 (·.add 12))
+    let _i12 ← Zig.callC (Thread_ResetEvent_set i11)
+    pure .ret) : Zig.CM Tgt producerAllLocals producerAllExit).run' (default : producerAllLocals)
+  match e with
+  | .ret => pure ()
+
+attribute [zig_run] producerAll
+
+structure handoffAllLocals where
+  b : Zig.Ptr
+  deriving Inhabited
+
+inductive handoffAllExit where
+  | ret (v : Except Zig.ErrName (BitVec 32))
+  | br13
+  | br11
+  | rep12
+
+def handoffAll.again12 : handoffAllExit → Bool
+  | .rep12 => true
+  | _ => false
+
+def handoffAll.loop12 [Zig.Os.HasEnv] (i0 : Zig.Ptr) : Zig.CM Tgt handoffAllLocals handoffAllExit := do
+  Zig.callMC Zig.tick
+  match ← ((do
+    let i14 ← Zig.callMC (Zig.ptrProject i0 (·.add 20))
+    let i15 ← Zig.load (Bool) 1 i14
+    let i16 ← pure (!i15)
+    if i16 then (do
+      let i18 ← Zig.callMC (Zig.ptrProject i0 (·.add 4))
+      let i19 ← pure i0
+      let _i20 ← Zig.callC (Thread_Condition_wait i18 i19)
+      pure .br13)
+    else (do
+      pure .br11)) : Zig.CM Tgt handoffAllLocals handoffAllExit) with
+  | .br13 => (do
+    pure .rep12)
+  | e => pure e
+
+def handoffAll [Zig.Os.HasEnv]  : Zig.ConcM Tgt (Except Zig.ErrName (BitVec 32)) := do
+  let s0 ← Zig.allocStack 24 4
+  let e ← ((do
+    let i0 ← pure (← get).b
+    Zig.store (α := Box) 4 i0 ({ m := ({ impl := ({ state := ({ raw := (0 : BitVec 32) } : atomic_Value_u32) } : Thread_Mutex_FutexImpl) } : Thread_Mutex), c := ({ impl := ({ state := ({ raw := (0 : BitVec 32) } : atomic_Value_u32), epoch := ({ raw := (0 : BitVec 32) } : atomic_Value_u32) } : Thread_Condition_FutexImpl) } : Thread_Condition), ready := false, done := ({ impl := ({ state := ({ raw := (0 : BitVec 32) } : atomic_Value_u32) } : Thread_ResetEvent_FutexImpl) } : Thread_ResetEvent), v := (0 : BitVec 32) } : Box)
+    let i2 ← pure (i0)
+    let i3 ← Zig.spawnC (Tgt.producerAll i2)
+    match i3 with
+    | .error _ => (do
+      let i5 ← Zig.callRC (Zig.unwrapErr i3)
+      let i6 ← pure (i5)
+      let i7 ← pure ((.error i6) : Except Zig.ErrName (BitVec 32))
+      pure (.ret i7))
+    | .ok v4 => (do
+      let i9 ← pure i0
+      let _i10 ← Zig.callC (Thread_Mutex_lock i9)
+      match ← ((do
+        Zig.loop (handoffAll.loop12 i0) handoffAll.again12) : Zig.CM Tgt handoffAllLocals handoffAllExit) with
+      | .br11 => (do
+        let i24 ← Zig.callMC (Zig.ptrProject i0 (·.add 16))
+        let i25 ← Zig.load (BitVec 32) 4 i24
+        let i26 ← pure i0
+        let _i27 ← Zig.callC (Thread_Mutex_unlock i26)
+        let i28 ← Zig.callMC (Zig.ptrProject i0 (·.add 12))
+        let _i29 ← Zig.callC (Thread_ResetEvent_wait i28)
+        let _i30 ← Zig.joinC v4
+        let i31 ← pure ((.ok i25) : Except Zig.ErrName (BitVec 32))
+        pure (.ret i31))
+      | e => pure e)) : Zig.CM Tgt handoffAllLocals handoffAllExit).run' { (default : handoffAllLocals) with b := s0 }
+  Zig.free s0
+  match e with
+  | .ret v => pure v
+  | _ => throw .panic
+
+attribute [zig_run] handoffAll.loop12 handoffAll
+
 structure workLocals where
   local1 : BitVec 64
   deriving Inhabited
@@ -2529,6 +2623,7 @@ attribute [zig_run] waitGroup
 /-- Runs a spawn target (`Zig.Sched.run`). -/
 def dispatch : Tgt → Zig.ConcM Tgt Unit
   | .producer a => discard (producer a)
+  | .producerAll a => discard (producerAll a)
   | .work a => discard (work a)
   | .task a => discard (task a)
 

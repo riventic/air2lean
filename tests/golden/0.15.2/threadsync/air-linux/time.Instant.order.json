@@ -160,7 +160,7 @@
    "ty": 1,
    "callee": {
     "ty": 6,
-    "func": "math.order__anon_15463",
+    "func": "math.order__anon_15496",
     "module": "std",
     "instance_key": "2e4ff451439d4d685abd630681c95a2177d4f13ca457b63c09c2206744d144e0",
     "noreturn": false
@@ -329,7 +329,7 @@
        "ty": 1,
        "callee": {
         "ty": 6,
-        "func": "math.order__anon_15463",
+        "func": "math.order__anon_15496",
         "module": "std",
         "instance_key": "2e4ff451439d4d685abd630681c95a2177d4f13ca457b63c09c2206744d144e0",
         "noreturn": false
@@ -481,7 +481,7 @@
   },
   {
    "k": "struct",
-   "name": "os.linux.timespec__struct_2627",
+   "name": "os.linux.timespec__struct_2653",
    "module": "std",
    "layout": "extern",
    "fields": [
