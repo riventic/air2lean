@@ -60,6 +60,24 @@ class Driver(unittest.TestCase):
                 self.assertIn('litmus mp_release_acquire violations 0 ', text)
                 self.assertIn('litmus sb_seq_cst both_zero 0 unset 0 ', text)
 
+    def test_every_version_records_every_f80_atomic_op_once(self):
+        for version in ('0.17.1', '0.16.0', '0.15.2', '0.14.1'):
+            for triple in ('aarch64-linux-gnu', 'aarch64-macos-none'):
+                text = (ROOT / f'tests/roadmap/aarch64-abi/expected/{version}/{triple}-ReleaseSafe.txt').read_text()
+                rows = [l.split() for l in text.splitlines() if l.startswith('f80atomic ')]
+                self.assertEqual([r[1] for r in rows], list(abi.F80_OPS), (version, triple))
+                # Only 0.17.1's `@atomicStore` compiles, and it does not store the operand.
+                stores = ['store_monotonic', 'store_release', 'store_seq_cst'] if version == '0.17.1' else []
+                self.assertEqual([r[1:4] for r in rows if r[2] == 'runs'],
+                                 [[op, 'runs', 'cell=other'] for op in stores], (version, triple))
+
+    def test_llvm_error_drops_the_version_suffix(self):
+        found = abi.LLVM_ERROR.search("error: Invalid cast (Producer: 'zig 0.17.1' Reader: 'LLVM 22.1.8')")
+        self.assertEqual(found.group(1), 'Invalid cast')
+        found = abi.LLVM_ERROR.search('  %3 = atomicrmw fadd ptr %1\n ptrLLVM ERROR: Broken module found, compilation aborted!\n')
+        self.assertEqual(found.group(1), 'Broken module found, compilation aborted!')
+        self.assertIsNone(abi.LLVM_ERROR.search('x.zig:1:2: error: expected type'))
+
     def test_older_versions_differ_from_0_16_0_only_in_soft_float_sqrt(self):
         for triple in ('aarch64-linux-gnu', 'aarch64-macos-none'):
             new = (EXPECTED / f'{triple}-ReleaseSafe.txt').read_text().splitlines()
