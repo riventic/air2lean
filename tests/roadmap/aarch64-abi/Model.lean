@@ -19,7 +19,11 @@ import ZigLean.Mem.Thread
   same for every ordering the compiler accepts; the `litmus` rows are the sequentially forced
   counts and zero forbidden outcomes; the `limit` rows are the rejected-program messages. The
   `atomic_ext` rows (bool, enum, pointer and float cells) are native observations only: the
-  model has no such atomics. -/
+  model has no such atomics.
+* `f80atomic` rows: each atomic op on an `f80` cell (`atomic_f80.zig`), with the compiler's
+  rejection or, if it runs, whether it does the op. The translator rejects every float atomic,
+  so none is a claim of the model; each is printed as rejected, never counted as a match
+  (`f80AtomicRow?`). -/
 
 open Zig
 
@@ -355,6 +359,31 @@ def rejectedByTranslator : List String → Bool
   | ["rmw", ty, op, _, _, _, _] => padded ty && (op == "Max" || op == "Min")
   | _ => false
 
+/-- The atomic ops on an `f80` cell that the probe builds (`F80_OPS` in `scripts/aarch64-abi.py`). -/
+def f80AtomicOps : List String :=
+  ["load_monotonic", "load_acquire", "load_seq_cst", "store_monotonic", "store_release",
+    "store_seq_cst", "rmw_Xchg", "rmw_Add", "rmw_Sub", "rmw_Max", "rmw_Min", "cmpxchg_strong",
+    "cmpxchg_weak"]
+
+/-- The native outcome of a well-formed `f80atomic` row, or `none`: Sema rejects the op (`zig`),
+the LLVM backend fails on it (`llvm`), or the program runs and records whether the cell and the
+returned value are those of the op without atomics. The translator rejects every float atomic
+whatever the row records (`CheckCtx.atomicChild`, "a float atomic is outside the subset";
+`tests/roadmap/aarch64-abi/test_float_atomics.py`), so no such row is a claim of the model. On
+Zig 0.17.1 an `@atomicStore` runs and leaves another value in the cell
+(`docs/upstream/f80-atomic-store.md`). -/
+def f80AtomicRow? : List String → Option String
+  | "f80atomic" :: op :: outcome =>
+    let flag (name s : String) := s == s!"{name}=model" || s == s!"{name}=other"
+    let what := match outcome with
+      | ["zig", msg] => some s!"Sema rejects it ({msg})"
+      | ["llvm", msg] => some s!"LLVM fails on it ({msg})"
+      | ["runs", cell, result] =>
+        if flag "cell" cell && flag "result" result then some s!"runs, {cell} {result}" else none
+      | _ => none
+    if f80AtomicOps.contains op then what.map (s!"{op}: " ++ ·) else none
+  | _ => none
+
 def main (args : List String) : IO UInt32 := do
   let [triple, path] := args
     | IO.eprintln "usage: Model.lean aarch64-linux-gnu|aarch64-macos-none FILE"; return 2
@@ -367,7 +396,7 @@ def main (args : List String) : IO UInt32 := do
   let some version := version | IO.eprintln s!"aarch64-abi: {path}: no `meta zig` line"; return 1
   -- Every synchronization row the probe prints must be present (a missing row is not a pass).
   let required : List (String × Nat) := [("rmw", 110), ("order", 4), ("atomic_ext", 5),
-    ("litmus", 3), ("limit", 1 + limitMessages.length)]
+    ("litmus", 3), ("limit", 1 + limitMessages.length), ("f80atomic", f80AtomicOps.length)]
   for (kind, n) in required do
     let count := (lines.filter (·.headD "" == kind)).length
     unless count == n do
@@ -423,16 +452,27 @@ def main (args : List String) : IO UInt32 := do
     | _ => none
   for (key, _) in divergencesIn version do
     unless keys.contains key do bad := bad ++ [s!"{key}: declared divergence is not in the file"]
+  let f80Rows := lines.filter (·.headD "" == "f80atomic")
+  let mut floatAtomics : List String := []
+  for l in f80Rows do
+    match f80AtomicRow? l with
+    | some d => floatAtomics := floatAtomics ++ [d]
+    | none => bad := bad ++ [s!"malformed {" ".intercalate l}"]
+  -- With the row count, every op present means each one exactly once.
+  for op in f80AtomicOps do
+    unless f80Rows.any (·[1]? == some op) do bad := bad ++ [s!"f80atomic {op}: not in the file"]
   for d in diverged do IO.println s!"divergence (not a match) {d}"
   for k in rejected do
     IO.println s!"rejected by the translator (PADDED_ATOMIC, not a match) {k}: a padded-width \
       cmpxchg or .Max/.Min"
+  for d in floatAtomics do
+    IO.println s!"rejected by the translator (float atomic, not a match) f80atomic {d}"
   for b in bad do IO.eprintln s!"aarch64-abi: {b}"
   unless bad.isEmpty do return 1
   IO.println s!"aarch64-abi: {triple} (Zig {version}): {r.ints.length + r.floats.length + r.vectors.length + r.atomics.length} \
     layout rows equal the kernel-checked table; {matched} float, atomic and synchronization results allowed by the model; \
-    {diverged.length} declared divergences and {rejected.length} padded-width results the translator \
-    rejects (neither counted as matches)"
+    {diverged.length} declared divergences, {rejected.length} padded-width results and \
+    {floatAtomics.length} f80 atomic ops the translator rejects (none counted as matches)"
   return 0
 
 end T04
