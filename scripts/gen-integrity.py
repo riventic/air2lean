@@ -201,6 +201,23 @@ FIXTURES = [
      ["--namespace", "Nested", "--prefix", "nested."], "exact"),
     ("tests/roadmap/loop-tactics/counted/Counted/Gen.lean", "tests/roadmap/loop-tactics/counted/air",
      ["--namespace", "Counted", "--prefix", "counted."], "exact"),
+    # P09 retranslations (docs/invariant-synthesis.md, "Retranslation"): the same sources by other
+    # Zig versions, and the lists with permuted `Node` fields, each under its own root with the
+    # module names of the first translation (tests/roadmap/loop-tactics/variants.sh).
+    *[(f"tests/roadmap/loop-tactics/{name}/variants/{version}/{namespace}/Gen.lean",
+       f"tests/roadmap/loop-tactics/{name}/variants/{version}/air",
+       ["--namespace", namespace, "--prefix", name + "."], "exact")
+      for name, namespace, versions in [("counted", "Counted", ["0.16.0", "0.15.2", "0.14.1"]),
+                                        ("nested", "Nested", ["0.17.1", "0.15.2", "0.14.1"])]
+      for version in versions],
+    *[(f"tests/roadmap/loop-tactics/lists/variants/{variant}/Proofs/Lists/Open.lean", air,
+       ["--namespace", "Lists.Open", "--prefix", "lists.", "--profile", "abi64-le-v1",
+        "--model-registry", "tests/roadmap/interfaces/registry-alloc.json",
+        "--allocator-model", "translated"], "exact")
+      for variant, air in [(version, f"tests/roadmap/interfaces/air/{version}/lists")
+                           for version in ["0.16.0", "0.15.2", "0.14.1"]] +
+                          [(variant, f"tests/roadmap/loop-tactics/lists/variants/{variant}/air")
+                           for variant in ["permuted", "layout"]]],
     # P04/P06: the ring-buffer queue (0.17.1).
     ("tests/roadmap/queue-adt/QueueAdt/Gen.lean", "tests/roadmap/queue-adt/air",
      ["--namespace", "QueueAdt", "--prefix", "queue."], "exact"),
@@ -435,7 +452,7 @@ def invgen_errors(targets=None, contracts=None):
     for path, root, module, namespace in targets:
         # (a target generated with contracts also reads the module that states them)
         spec, contracts = contracts_of.get(path, (None, []))
-        sources = [invgen["source"](root, m) for m in [module] + ([spec] if spec else [])]
+        sources = [invgen["source"](root, module)] + ([invgen["spec_source"](spec)] if spec else [])
         try:
             record, body = invgen_record(path)
             generator, inputs = record["generator"], [(name, digest) for name, digest in record["inputs"]]
