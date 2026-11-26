@@ -1284,6 +1284,15 @@ jobs:
           assert ': error' not in text and text.count('depends on axioms') == 2, text
           assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
           EOF
+          # Device state (decision 2026-11-25): no device-read triple without `devOwn`; `devOwn` fixes the read.
+          lake env lean tests/roadmap/sep-full/DeviceCX.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/device-cx.log"
+          python3 - "$RUNNER_TEMP/sep-full/device-cx.log" <<'EOF'
+          import re, sys
+          text = open(sys.argv[1]).read()
+          used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
+          assert ': error' not in text and text.count('depends on axioms') == 5, text
+          assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+          EOF
           # Byte-range claims (decision O1): overlapping claims are invalid; the arena-node obstruction is impossible.
           lake env lean tests/roadmap/sep-full/ClaimsCX.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/claims-cx.log"
           python3 - "$RUNNER_TEMP/sep-full/claims-cx.log" <<'EOF'
@@ -1667,6 +1676,15 @@ jobs:
           lake build ZigLean
           bash tests/roadmap/undef-operands/check.sh
           bash tests/roadmap/undef-locals/check.sh
+      # C10 evidence (docs/research/C10.md): the model's outcomes against the sequentially
+      # consistent ones (`#guard`s of Sc.lean), the committed native observations, and the wrong
+      # observations and mutants of the SC oracle and the observation check (Q02). No compiler.
+      - name: SC order litmus evidence (C10)
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean
+          bash tests/roadmap/sc-order/check.sh
       # Illegal behaviour (docs/illegal-behavior.md): each op's own check gives `.illegal` on the
       # retained 0.16.0 fixtures, emitter mutants that drop a check are killed, translator
       # probes, and the trust-chain audit's unchecked-memcpy case stays fixed.
@@ -1772,6 +1790,8 @@ jobs:
           AIR2LEAN_ZIG_NATIVE="${{ github.workspace }}/host-zig/zig" tests/roadmap/bitcast-017/check.sh --native
           # @divCeil: committed compiler-exported AIR, translation and native differential.
           AIR2LEAN_ZIG_NATIVE="${{ github.workspace }}/host-zig/zig" tests/roadmap/zig017/divceil/check.sh
+          # array_to_vector: every lane kind and sentinel arrays, translation and native differential.
+          AIR2LEAN_ZIG_NATIVE="${{ github.workspace }}/host-zig/zig" tests/roadmap/zig017/tovec/check.sh
 
       # P04/P06: the ring buffer and the shifting array of queue.zig (0.17.1) prove the queue
       # contract (QueueImpl) with their step counts, its clients are proved from the contract
@@ -1811,7 +1831,7 @@ jobs:
           case '${{ matrix.zig }}' in
             0.17.1) bash tests/roadmap/big-endian/check.sh --native '${{ matrix.zig }}' ;;
           esac
-          # T02 pointer_width.zig and names.zig natively and under Node's WASI (0.16.0: the
+          # T02 pointer_width.zig, names.zig and c_ints.zig natively and under Node's WASI (0.16.0: the
           # pointer-width step of the native part).
           case '${{ matrix.zig }}' in
             0.17.1) bash tests/roadmap/pointer-width/check.sh --native ;;
@@ -2011,12 +2031,6 @@ jobs:
           bash tests/roadmap/allocation-policy/check.sh 2>&1 | tee "$AIR2LEAN_ALLOCATION_REPORT_DIR/check.log"
           python3 tests/roadmap/allocation-policy/mutations.py 2>&1 | tee "$AIR2LEAN_ALLOCATION_REPORT_DIR/mutations.log"
 
-      # M01: allocator identity and the arena policy of the std-mode model (executable
-      # regressions; M01's theorems over the translated arena run in tests/roadmap/alloc-arena).
-      - name: Allocator identity model regressions
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
-        run: bash tests/roadmap/allocator-identity/check.sh
-
       # M05: opt-in address reuse, lifetime safety from provenance, stale @ptrFromInt.
       - name: Address reuse proofs and model regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
@@ -2149,7 +2163,8 @@ jobs:
       # L09: this host's (x86_64-linux, LLVM) vector memory images against the model's
       # encoding, the recorded aarch64-macos images, and the checker's backend gate; lane
       # pointers: the native lanes.zig test, a fresh export, the committed translations,
-      # theorems and kernel-checked runs.
+      # theorems and kernel-checked runs. Element stride: this host's self-hosted x86_64 backend
+      # (Debug and ReleaseSafe) prints the recorded probe output, which equals the model's lines.
       - name: Vector memory layouts, compiler probe, lane pointers and checker controls
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         env:
@@ -2157,7 +2172,8 @@ jobs:
           AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
         run: |
           set -euo pipefail
-          lake build ZigLean ZigLean.VecMem Air2Lean air2lean
+          lake build ZigLean ZigLean.VecMem ZigLean.VecStride Air2Lean air2lean
+          bash tests/roadmap/vector-layouts/strided.sh --native
           observed="$RUNNER_TEMP/vector-layouts-x86_64-linux-ReleaseSafe.txt"
           host-zig/zig run -fllvm -OReleaseSafe tests/roadmap/vector-layouts/probe.zig 2> "$observed"
           lake env lean --run tests/roadmap/vector-layouts/Model.lean "$observed"

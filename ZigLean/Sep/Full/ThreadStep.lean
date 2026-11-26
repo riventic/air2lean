@@ -750,6 +750,28 @@ theorem bytesAt {A S : Nat} {K : BlockKind} {bs : Array Byte} :
 
 end OwnsPtr
 
+/-- The `n` bytes at `p` are bytes that every resource of `P` holds or reads by a share
+(`Res.owned`, §Read shares): what a local read needs (`ThreadLocal.loadOwned`,
+`ThreadLocal.loadBytesOwned`). A provider kind of `fsym` (`ReadsPtr.of_within`). -/
+def ReadsPtr (P : FAssn) (p : Ptr) (n : Nat) : Prop :=
+  ∀ b, p.block = some b → ∀ r, P r → ∀ x, p.off.toNat ≤ x → x < p.off.toNat + n →
+    r.owned (b, x) ≠ none
+
+namespace ReadsPtr
+
+variable {P X : FAssn} {p : Ptr} {n : Nat}
+
+/-- Owned bytes are read. -/
+theorem of_owns (h : OwnsPtr P p n) : ReadsPtr P p n :=
+  fun b hb r hp x h1 h2 => Res.owned_of_erase (h b hb r hp x h1 h2)
+
+theorem of_within (h : ReadsPtr X p n) (hw : Within X P) : ReadsPtr P p n :=
+  fun b hb r hp x h1 h2 => by
+    obtain ⟨R, r₁, r₂, -, rfl, hx, -⟩ := hw r hp
+    exact (Res.owned_sep rfl rfl).mpr (.inl (h b hb r₁ hx x h1 h2))
+
+end ReadsPtr
+
 namespace ThreadLocal
 
 variable {P : FAssn} {p : Ptr} {n a : Nat} {k : AccessKind} {b : BlockId}
@@ -762,27 +784,11 @@ theorem noRace_owned {m : Mem} {r : Res} {o : Nat} (hc : m.FConc)
   refine ⟨noRace_of_singleThread hc.noFp.1.single _ _ _ _, ?_⟩
   rw [Mem.noFp_withFp]; exact ho.cells.noRace fun x h1 h2 => hin x h1 h2
 
-/-- **An owned read of bytes** (`loadBytes`) is local. Its access is a read (`hk`): `loadBytes`
-checks no `const` global, so a recorded write kind would be a write to one. -/
-theorem loadBytes (hown : OwnsPtr P p n) (hk : k.isWrite = false := by decide) :
-    ThreadLocal P (Zig.loadBytes p n a k) := by
-  refine intro fun m r rF hh hp hc ho => ⟨?_, fun v m₀ e => ?_⟩
-  · refine RunFp.loadBytes fun b blk o h => ?_
-    obtain ⟨hpb, rfl, -⟩ := access_at h
-    exact noRace_owned hc ho (hown b hpb r hp)
-  · obtain ⟨b, blk, o, h, -, -, rfl⟩ := Proto.loadBytes_ok (m := m.noFp) e
-    obtain ⟨hpb, rfl, -, hb⟩ := access_at h
-    exact ⟨FStepIn.readAt hc.1 (hh.erase_disj_owned) (hown b hpb r hp) hb
-        (fun hw => absurd hw (by simp [hk])),
-      fun _ _ _ h => by rwa [Mem.heap_readAt] at h⟩
-
 /-- **A typed load of bytes the resource holds or reads** (a cell or a share: `Res.owned`, §Read
 shares) is local: the thread's read ownership orders every write to them before it
 (`Mem.OwnsRes.ownsR`, `Mem.OwnsR.noRace`), and the frame holds at most read shares of them
 (`Holds.frame_shared`), which the step may read (`FStepIn.readAt_reads`). -/
-theorem loadOwned {T : Type} [Enc T]
-    (hin : ∀ b, p.block = some b → ∀ r, P r → ∀ x, p.off.toNat ≤ x →
-      x < p.off.toNat + Enc.size T → r.owned (b, x) ≠ none) :
+theorem loadOwned {T : Type} [Enc T] (hin : ReadsPtr P p (Enc.size T)) :
     ThreadLocal P (Zig.load T a p) := by
   refine intro fun m r rF hh hp hc ho => ⟨?_, fun v m₀ e => ?_⟩
   · refine RunFp.load (T := T) fun b blk o h => ?_
@@ -796,10 +802,32 @@ theorem loadOwned {T : Type} [Enc T]
           hh.swap.frame_shared hF (hin b hpb r hp x h1 h2)⟩) hb,
       fun _ _ _ h => by rwa [Mem.heap_readAt] at h⟩
 
+/-- **A read of bytes the resource holds or reads** (`ReadsPtr`) is local, as a typed one
+(`loadOwned`): several holders of a share may read one byte at once. Its access is a read
+(`hk`): `loadBytes` checks no `const` global, so a recorded write kind would be a write to one. -/
+theorem loadBytesOwned (hin : ReadsPtr P p n) (hk : k.isWrite = false := by decide) :
+    ThreadLocal P (Zig.loadBytes p n a k) := by
+  refine intro fun m r rF hh hp hc ho => ⟨?_, fun v m₀ e => ?_⟩
+  · refine RunFp.loadBytes fun b blk o h => ?_
+    obtain ⟨hpb, rfl, -⟩ := access_at h
+    refine ⟨noRace_of_singleThread hc.noFp.1.single _ _ _ _, ?_⟩
+    rw [Mem.noFp_withFp]; exact ho.ownsR.noRace hk (hin b hpb r hp)
+  · obtain ⟨b, blk, o, h, -, -, rfl⟩ := Proto.loadBytes_ok (m := m.noFp) e
+    obtain ⟨hpb, rfl, -, hb⟩ := access_at h
+    exact ⟨FStepIn.readAt_reads hc.1 hk
+        (fun x h1 h2 hF => Heap.inter_ne.mpr ⟨hh.frame_shared (hin b hpb r hp x h1 h2) hF,
+          hh.swap.frame_shared hF (hin b hpb r hp x h1 h2)⟩) hb,
+      fun _ _ _ h => by rwa [Mem.heap_readAt] at h⟩
+
+/-- **An owned read of bytes** (`loadBytes`) is local (`loadBytesOwned`). -/
+theorem loadBytes (hown : OwnsPtr P p n) (hk : k.isWrite = false := by decide) :
+    ThreadLocal P (Zig.loadBytes p n a k) :=
+  loadBytesOwned (ReadsPtr.of_owns hown) hk
+
 /-- **An owned typed load** is local (`loadOwned`: a cell is a byte the resource holds). -/
 theorem load {T : Type} [Enc T] (hown : OwnsPtr P p (Enc.size T)) :
     ThreadLocal P (Zig.load T a p) :=
-  loadOwned fun b hpb r hp x h1 h2 => Res.owned_of_erase (hown b hpb r hp x h1 h2)
+  loadOwned (ReadsPtr.of_owns hown)
 
 /-- **An owned write of bytes** (`storeBytes`) is local. -/
 theorem storeBytes {bs : Array Byte} (hown : OwnsPtr P p bs.size) :
@@ -926,6 +954,15 @@ theorem bind {Q : α → FAssn} {c : MemM α} {f : α → MemM β} (hc : ThreadL
     obtain ⟨hst2, hrev2⟩ := h2 w m₂' e2
     exact ⟨hst.trans hst2, hrev.trans hst hrev2 hst2⟩
 
+/-- **Sequencing after a step that keeps the memory** (a lift of a `Result`, pointer formation):
+`P` stays for the rest. -/
+theorem bind_keep {c : MemM α} {f : α → MemM β} (hc : ThreadLocal P c)
+    (hk : ∀ m v m₁, c.run m = Pure.pure (v, m₁) → m₁ = m) (hf : ∀ v, ThreadLocal P (f v)) :
+    ThreadLocal P (c >>= f) :=
+  bind (Q := fun _ => P) hc (fun m r rF hh hp hs v m₁ e => by
+    obtain rfl := hk m v m₁ e
+    exact ⟨r, hh, hp, hs⟩) hf
+
 /-- **A read of the blocks**, then a local step. -/
 theorem readBind {g : Mem → Result γ} {f : γ → MemM α} (hg : ∀ m F, g (m.withFp F) = g m)
     (hf : ∀ v, ThreadLocal P (f v)) :
@@ -966,6 +1003,11 @@ theorem loadBytes_post {p : Ptr} {n a : Nat} {k : AccessKind} :
   obtain ⟨-, -, -, h0, hsz, -, rfl⟩ := access_eq ha
   refine ⟨r, hh.readAt _ _ _ _ _, sep_lift.mpr ⟨?_, hp⟩, hs.readAt _ _ _ _ _⟩
   simp only [Array.size_extract]; omega
+
+/-- **A read of bytes `P` reads** (`ReadsPtr`), then a step local for `P`. -/
+theorem loadBytes_bind {p : Ptr} {n a : Nat} {f : Array Byte → MemM α} (h : ReadsPtr P p n)
+    (hf : ∀ bs, ThreadLocal P (f bs)) : ThreadLocal P (Zig.loadBytes p n a >>= f) :=
+  bind (loadBytesOwned h) loadBytes_post fun bs => lift fun _ => hf bs
 
 /-- **`@memmove`** of `n` items of `size` bytes between owned bytes. -/
 theorem memmove {size da sa : Nat} {d s : Ptr} {n : BitVec 64}

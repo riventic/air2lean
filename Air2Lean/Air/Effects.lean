@@ -203,7 +203,7 @@ def Op.effectsIn (mode : AllocatorModel) (op : Op) : Effects :=
   | .floatRound _ a | .sqrt a | .libm _ a | .floatConv a | .floatFromInt a | .intFromFloat _ a
   | .isNull a | .isNonNull a | .optPayload a | .isErr a | .isNonErr a | .errPayload a
   | .errCode a | .wrapErrPayload a | .wrapErr a | .isNamedEnum a | .unionTag a | .unionInit _ a
-  | .splat a | .reduce _ a | .sliceLen a | .structFieldVal a _ => .pure #[a]
+  | .splat a | .reduce _ a | .arrayToVector a | .sliceLen a | .structFieldVal a _ => .pure #[a]
   | .mulAdd a b c => .pure #[a, b, c]
   | .select pred a b => .pure #[pred, a, b]
   | .shuffle a b mask =>
@@ -358,7 +358,8 @@ def Op.ctorName : Op → String
   | .minMax .. => "minMax" | .withOverflow .. => "withOverflow"
   | .shlWithOverflow .. => "shlWithOverflow" | .countBits .. => "countBits"
   | .permuteBits .. => "permuteBits" | .splat .. => "splat" | .select .. => "select"
-  | .reduce .. => "reduce" | .shuffle .. => "shuffle" | .bit .. => "bit" | .not .. => "not"
+  | .reduce .. => "reduce" | .shuffle .. => "shuffle" | .arrayToVector .. => "arrayToVector"
+  | .bit .. => "bit" | .not .. => "not"
   | .neg .. => "neg" | .abs .. => "abs" | .shift .. => "shift" | .cmp .. => "cmp"
   | .boolAnd .. => "boolAnd" | .boolOr .. => "boolOr" | .intCast .. => "intCast"
   | .trunc .. => "trunc" | .bitcast .. => "bitcast" | .floatRound .. => "floatRound"

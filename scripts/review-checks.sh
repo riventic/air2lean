@@ -358,10 +358,7 @@ after = Path('ZigLean/Mem/Alloc.lean').read_text()
 old = 'poisonFree s.ptr (size * (s.len.toNat + 1))'
 new = 'poisonFree s.ptr (size * s.len.toNat)'
 assert before.count(old) == 1 and after == before.replace(old, new), 'mutation changed more than sentinel byte count'
-proof_import = 'import ZigLean.Conc.WeakCas\n'
-before_conc = Path('original-conc.lean').read_text()
-assert before_conc.count(proof_import) == 1
-assert Path('ZigLean/Conc.lean').read_text() == before_conc.replace(proof_import, ''), 'wrong proof import window'
+assert Path('ZigLean/Conc.lean').read_text() == Path('original-conc.lean').read_text(), 'the runtime root was edited'
 PYTEST
 if [ "$DIFF_MODE" = undetected ]; then echo 'TOTAL: mismatch=0'; exit 0; fi
 echo 'TOTAL: mismatch=1'

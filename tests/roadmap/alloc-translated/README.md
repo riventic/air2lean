@@ -70,3 +70,25 @@ the proof (`PageSpec.remap_spec`, `resize_spec`; the `realloc` wrapper's contrac
 every allocator that meets `FAllocSpec` in `alloc-fba` and `interfaces`, not for this program's
 instance of it). Under Rosetta the native run is refused: Rosetta aborts on the `2^47`-byte
 growth where a kernel returns `ENOMEM`.
+
+### The fixed buffer
+
+`fba.zig`'s `fba_grow(n, m, how, behind)` grows a block of `n` bytes of a 256-byte
+`FixedBufferAllocator` to `m` bytes the same two ways, with an 8-byte block allocated behind it
+when `behind` holds. Its word has the bits above (16: the block behind kept its bytes) plus the
+buffer's `end_index` afterwards from bit 8 on, so the capacity a growth uses up is compared too.
+The word is 32 alone when one of the two first allocations fails (no compared call does).
+`Eval.lean`'s `fbaGrowLinux` and `fbaGrowMacos` print the model's `fba_grow` line, `check.sh`
+compares it with both files; the line is the same on every target (no page size enters).
+
+| Call `fba_grow(n, m, behind)` | `remap` | `realloc` |
+|---|---|---|
+| `(10, 20, false)`: the last allocation | 13, end 20: grown in place | 13, end 20 |
+| `(100, 10, false)`: a shrink | 13, end 10: the end moves back | 13, end 10 |
+| `(10, 20, true)`: a block behind it | 20, end 18: fails, old block and the one behind unchanged | 31, end 38: moved (new block at 18, copy), the old one freed but not reclaimed |
+| `(10, 300, false)`: past the buffer | 4, end 10: fails | 4, end 10: `OutOfMemory`, old block unchanged |
+| `(10, 250, true)`: behind another block, past the buffer | 20, end 18 | 20, end 18 |
+
+Native: stock Zig 0.16.0 and 0.17.1 `ReleaseSafe` on aarch64-macos and x86_64-linux (the same
+line). The model's line is that of both versions' translations, each run from the program's start
+memory, the five calls one after another as natively.

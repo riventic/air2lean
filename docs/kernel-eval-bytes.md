@@ -126,3 +126,28 @@ fixture independently proved the admissible start memory and translated
 `push` success at default limits in 1.51 s, 1491536 KiB. These historical
 memory-model measurements are separate from the array-splice equality and
 microbenchmarks; current acceptance comes from the retained regression files.
+
+## Compiled execution: stores in place (M03)
+
+The native array splice above still costs the whole block on every store, and so did
+`storeBytes`: it keeps the block `blk` that the access check returned and sets
+`{ blk with bytes := writeBytes blk.bytes o bs }` into the memory, so the block's bytes are
+shared when `writeBytes` runs and are copied. A loop that stores the items of one block one by
+one was quadratic in the block's size: `sumRange(16000)` (a 64 KB buffer) took 3.7 s in the
+differential's model, and a 1 MiB buffer about a quarter of an hour, which made large fixtures
+impractical to run although the default policy has no cap ([allocation-policy.md](allocation-policy.md)).
+
+Two checked `@[csimp]` equalities (`ZigLean/Mem/Basic.lean`) change only the compiled code:
+
+- `writeBytes = writeBytesImpl`: a write that fits sets its bytes one by one (`set!`, in place
+  when the array is unshared; `writeBytesLoop_getElem?`), any other write keeps the splice;
+- `storeBytes = storeBytesImpl`: the same access check and race record, then the block is
+  changed where the memory holds it (`Array.modify`), so its bytes are unshared. The proof uses
+  that the checked block is the memory's block `b` and that recording the access leaves the
+  blocks unchanged.
+
+Definitions, kernel reduction and every proof keep `storeBytes` and `writeBytes` as they are.
+A store now costs its own bytes: 262,145 four-byte stores into a 1 MiB block run in 2.4 s in
+Lean's interpreter (16,000 took 4.8 s before). Typed stores, `@memset` and `@memcpy` go through
+`storeBytes`; the atomic message writes of `ZigLean/Conc` update their block themselves and still
+copy it.

@@ -523,16 +523,23 @@ theorem Mem.readAt_cases {m : Mem} {blk : Block} {block : BlockId} {off len : Na
     {kind : AccessKind} : (m.readAt blk block off len kind).host = m.host :=
   Mem.readAt_cases (P := fun x => x.host = m.host) rfl rfl
 
-/-- `m'` has `m`'s stack states, placement and step count: a step that only records accesses,
-reads, writes bytes, or changes clocks, threads' views or atomic locations. (The stack tokens
-and the step meter of the full-state logic read only these and the blocks:
-`ZigLean/Sep/Full/MemAuth.lean`.) -/
-def Mem.Aux (m m' : Mem) : Prop := m'.stacks = m.stacks ∧ m'.place = m.place ∧ m'.ticks = m.ticks
+/-- `m'` has `m`'s stack states, placement, step count and device state: a step that only
+records accesses, reads, writes bytes, or changes clocks, threads' views or atomic locations.
+(The stack tokens, the step meter and the device state of the full-state logic read only these
+and the blocks: `ZigLean/Sep/Full/MemAuth.lean`.) -/
+def Mem.Aux (m m' : Mem) : Prop :=
+  m'.stacks = m.stacks ∧ m'.place = m.place ∧ m'.ticks = m.ticks ∧ m'.dev = m.dev
 
-theorem Mem.Aux.refl (m : Mem) : m.Aux m := ⟨rfl, rfl, rfl⟩
+theorem Mem.Aux.refl (m : Mem) : m.Aux m := ⟨rfl, rfl, rfl, rfl⟩
 
 theorem Mem.Aux.trans {m₁ m₂ m₃ : Mem} (h₁ : m₁.Aux m₂) (h₂ : m₂.Aux m₃) : m₁.Aux m₃ :=
-  ⟨h₂.1.trans h₁.1, h₂.2.1.trans h₁.2.1, h₂.2.2.trans h₁.2.2⟩
+  ⟨h₂.1.trans h₁.1, h₂.2.1.trans h₁.2.1, h₂.2.2.1.trans h₁.2.2.1, h₂.2.2.2.trans h₁.2.2.2⟩
+
+/-- The step count of an `Aux` step. -/
+theorem Mem.Aux.ticks {m m' : Mem} (h : m.Aux m') : m'.ticks = m.ticks := h.2.2.1
+
+/-- The device state of an `Aux` step. -/
+theorem Mem.Aux.dev {m m' : Mem} (h : m.Aux m') : m'.dev = m.dev := h.2.2.2
 
 @[simp] theorem Mem.readAt_stacks {m : Mem} {blk : Block} {block : BlockId} {off len : Nat}
     {kind : AccessKind} : (m.readAt blk block off len kind).stacks = m.stacks :=
@@ -545,6 +552,10 @@ theorem Mem.Aux.trans {m₁ m₂ m₃ : Mem} (h₁ : m₁.Aux m₂) (h₂ : m₂
 @[simp] theorem Mem.readAt_ticks {m : Mem} {blk : Block} {block : BlockId} {off len : Nat}
     {kind : AccessKind} : (m.readAt blk block off len kind).ticks = m.ticks :=
   Mem.readAt_cases (P := fun x => x.ticks = m.ticks) rfl rfl
+
+@[simp] theorem Mem.readAt_dev {m : Mem} {blk : Block} {block : BlockId} {off len : Nat}
+    {kind : AccessKind} : (m.readAt blk block off len kind).dev = m.dev :=
+  Mem.readAt_cases (P := fun x => x.dev = m.dev) rfl rfl
 
 /-- `recordAccessIn` of a block that is not a `const` global is `recordAccess`. -/
 theorem recordAccessIn_of_ne {b : BlockId} {blk : Block} {o n : Nat} {kind : AccessKind}
@@ -1647,17 +1658,14 @@ variable (m : Mem) (n a : Nat)
 @[simp] theorem Mem.allocOk_heap : m.allocOk .heap n a = m.roomFor n a := rfl
 @[simp] theorem Mem.allocOk_global : m.allocOk .global n a = m.roomFor n a := rfl
 @[simp] theorem Mem.allocOk_constGlobal : m.allocOk .constGlobal n a = m.roomFor n a := rfl
-@[simp] theorem Mem.allocOk_owned (i : AllocId) : m.allocOk (.owned i) n a = m.roomFor n a := rfl
 @[simp] theorem Mem.allocOk_mapped (lo : Nat) : m.allocOk (.mapped lo) n a = m.roomFor n a := rfl
 @[simp] theorem Mem.allocAddr_heap : m.allocAddr .heap n a = m.newAddr n a := rfl
 @[simp] theorem Mem.allocAddr_global : m.allocAddr .global n a = m.newAddr n a := rfl
 @[simp] theorem Mem.allocAddr_constGlobal : m.allocAddr .constGlobal n a = m.newAddr n a := rfl
-@[simp] theorem Mem.allocAddr_owned (i : AllocId) : m.allocAddr (.owned i) n a = m.newAddr n a := rfl
 @[simp] theorem Mem.allocAddr_mapped (lo : Nat) : m.allocAddr (.mapped lo) n a = m.newAddr n a := rfl
 @[simp] theorem Mem.stacksAfterAlloc_heap : m.stacksAfterAlloc .heap n a = m.stacks := rfl
 @[simp] theorem Mem.stacksAfterAlloc_global : m.stacksAfterAlloc .global n a = m.stacks := rfl
 @[simp] theorem Mem.stacksAfterAlloc_constGlobal : m.stacksAfterAlloc .constGlobal n a = m.stacks := rfl
-@[simp] theorem Mem.stacksAfterAlloc_owned (i : AllocId) : m.stacksAfterAlloc (.owned i) n a = m.stacks := rfl
 @[simp] theorem Mem.stacksAfterAlloc_mapped (lo : Nat) : m.stacksAfterAlloc (.mapped lo) n a = m.stacks := rfl
 end
 
@@ -1950,10 +1958,6 @@ theorem Mem.ofGlobals_eq (σ : Placement) (gs : List (Array Byte × Nat × Block
 
 @[simp] theorem Mem.ofGlobals_groups (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
     (Mem.ofGlobals σ gs).groups = #[] := by
-  rw [Mem.ofGlobals_eq]
-
-@[simp] theorem Mem.ofGlobals_allocators (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
-    (Mem.ofGlobals σ gs).allocators = #[] := by
   rw [Mem.ofGlobals_eq]
 
 theorem Mem.ofGlobals_size (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :

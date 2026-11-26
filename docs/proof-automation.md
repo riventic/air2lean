@@ -658,7 +658,13 @@ A thread's own stack block (`main` before its spawn: the allocation, field point
 byte offsets of the block's bytes, `FTotalTriple.storeBytesAt`) is walked segment by segment;
 the size of a closed array (a struct's encoding whose `Enc` is not `LawfulEnc`) is a literal for
 the arithmetic (`reduceClosedSize`, evaluated by the kernel), and a closed side goal that `decide`
-does not evaluate is `decide +kernel`.
+does not evaluate is `decide +kernel`. Over imported constants only, the kernel makes that check
+in the imports' environment (`importEnvFor?`, `kernelDecides?`), which does not wait for the
+file's earlier theorems, and the goal takes `decide`'s proof `of_decide_eq_true inst rfl` itself;
+the kernel checks it again with the theorem, so a wrong answer there can only fail the theorem.
+These two kernel calls (`Kernel.isDefEq`, `Kernel.whnf`) run without the heartbeat limit and
+without the cancel token: a closed fact whose evaluation is very long is given up only when the
+kernel returns, where `decide +kernel` stopped at `maxHeartbeats`.
 
 The protocol's start at the spawn is walked too, so a `main` is one `fsym` call from its start
 facts (`FOwned.start0_facts`: the parts, the plain mode, one thread, no atomic location, no

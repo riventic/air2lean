@@ -122,6 +122,8 @@ FIXTURES = [
      ["--namespace", "BitCastReal", "--prefix", "bitcast017."], "exact"),
     ("tests/roadmap/zig017/divceil/DivCeil/Gen.lean", "tests/roadmap/zig017/divceil/air/0.17.1",
      ["--namespace", "DivCeil", "--prefix", "divceil."], "body"),  # committed without the host header
+    ("tests/roadmap/zig017/tovec/ToVec/Gen.lean", "tests/roadmap/zig017/tovec/air/0.17.1",
+     ["--namespace", "ToVec", "--prefix", "tovec."], "body"),  # committed without the host header
     ("tests/roadmap/noreturn-variants/NoreturnVariants/Gen.lean", "tests/roadmap/noreturn-variants/air/0.16.0",
      ["--namespace", "NoreturnVariants", "--prefix", "noreturn_variants."], "exact"),
     ("Proofs/Provenance/Gen.lean", "assurance/provenance/air",
@@ -166,6 +168,10 @@ FIXTURES = [
      ["--namespace", "Interfaces.Sentinel", "--prefix", "source.", "--profile", "abi64-le-v1",
       "--model-registry", "tests/roadmap/interfaces/registry-alloc.json",
       "--allocator-model", "translated"], "exact"),
+    ("tests/roadmap/interfaces/Interfaces/Wide.lean", "tests/roadmap/interfaces/air/0.17.1/wide",
+     ["--namespace", "Interfaces.Wide", "--prefix", "wide.", "--profile", "abi64-le-v1",
+      "--model-registry", "tests/roadmap/interfaces/registry-alloc.json",
+      "--allocator-model", "translated"], "exact"),
     ("tests/roadmap/interfaces/Interfaces/Rnd.lean", "tests/roadmap/interfaces/air/0.17.1/rnd",
      ["--namespace", "Interfaces.Rnd", "--prefix", "rnd.", "--profile", "abi64-le-v1",
       "--model-registry", "tests/roadmap/interfaces/registry-random.json"], "exact"),
@@ -202,7 +208,8 @@ FIXTURES = [
      "tests/roadmap/volatile-effects/air-asm/0.16.0/device_asm.elapsed.json",
      ["--namespace", "DeviceAsm", "--prefix", "device_asm.",
       "--device-contract", str(ROOT / "tests/roadmap/volatile-effects/tsc.json")], "exact"),
-    ("tests/roadmap/alloc-fba/AllocFba/Gen.lean", "tests/roadmap/alloc-fba/air/0.16.0/client-linux",
+    # tests/roadmap/alloc-fba/check.sh: the Zig 0.17.1 translation (0.16.0's is checked in a check tree).
+    ("tests/roadmap/alloc-fba/AllocFba/Gen.lean", "tests/roadmap/alloc-fba/air/0.17.1/client-linux",
      ["--namespace", "AllocFba.Gen", "--prefix", "client.", "--allocator-model", "translated"], "exact"),
 ] + [
     # tests/roadmap/alloc-translated/check.sh: the Zig 0.17.1 translations (0.16.0's are checked in
@@ -249,6 +256,7 @@ FIXTURES = [
         ("logical017", "Logical017", ("0.17.1",)),
         ("vector_fields", "VectorFields", ("0.14.1", "0.15.2")),
         ("auto_items", "AutoItems", ("0.14.1", "0.15.2")),
+        ("opt_items", "OptItems", ("0.14.1", "0.15.2")),
         ("sentinel_arrays", "SentinelArrays", ("0.14.1", "0.15.2", "0.16.0")),
         ("void_casts", "VoidCasts", ("0.14.1", "0.15.2", "0.16.0", "0.17.1")),
         ("void017", "Void017", ("0.17.1",)))
@@ -259,6 +267,13 @@ FIXTURES = [
      f"tests/roadmap/packed-casts/air-handwritten/{v}/void_cast",
      ["--namespace", f"PackedCasts.V{v.replace('.', '_')}.VoidCast", "--prefix", "void_cast."], "exact")
     for v in ("0.16.0", "0.17.1")
+] + [
+    # packed-casts/check.sh: opt_items.zig for the self-hosted x86_64 backend (opt-in mode).
+    (f"tests/roadmap/packed-casts/PackedCasts/V{v.replace('.', '_')}/OptItemsX64.lean",
+     f"tests/roadmap/packed-casts/air/{v}/opt_items_x64",
+     ["--namespace", f"PackedCasts.V{v.replace('.', '_')}.OptItemsX64", "--prefix", "opt_items.",
+      "--allow-unqualified-build-mode"], "exact")
+    for v in ("0.14.1", "0.15.2")
 ] + [
     # nan-bits/check.sh (docs/architecture-audit/nan-bits.md): one translation per version.
     (f"tests/roadmap/nan-bits/NanBits/V{v.replace('.', '_')}/Gen.lean", f"tests/roadmap/nan-bits/air/{v}/nan_bits",
@@ -288,10 +303,12 @@ FIXTURES = [
      ["--namespace", f"PointerWidth.V0_17_1.{ns}", "--prefix", "pointer_width."], "exact")
     for ns, target in (("Wasm32", "wasm32-freestanding"), ("Wasi", "wasm32-wasi"), ("X64", "x86_64-linux"))
 ] + [
-    # T02 check.sh: names.zig (`@tagName`, `@errorName`) per Zig version and target.
-    (f"tests/roadmap/pointer-width/PointerWidth/Names/V{v.replace('.', '_')}/{ns}/Gen.lean",
-     f"tests/roadmap/pointer-width/air/{v}/names/{target}",
-     ["--namespace", f"PointerWidth.Names.V{v.replace('.', '_')}.{ns}", "--prefix", "names."], "exact")
+    # T02 check.sh: names.zig (`@tagName`, `@errorName`) and c_ints.zig (the C integer types,
+    # `isize`, extern structs) per Zig version and target.
+    (f"tests/roadmap/pointer-width/PointerWidth/{d}/V{v.replace('.', '_')}/{ns}/Gen.lean",
+     f"tests/roadmap/pointer-width/air/{v}/{stem}/{target}",
+     ["--namespace", f"PointerWidth.{d}.V{v.replace('.', '_')}.{ns}", "--prefix", f"{stem}."], "exact")
+    for stem, d in (("names", "Names"), ("c_ints", "CInts"))
     for v in ("0.16.0", "0.17.1")
     for ns, target in (("Wasm32", "wasm32-freestanding"), ("Wasi", "wasm32-wasi"), ("X64", "x86_64-linux"))
 ] + [

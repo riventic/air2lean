@@ -253,13 +253,18 @@ error width every error union also gets an explicit dictionary, since the regist
 `Enc (Except ErrName α)` instance is the 16-bit one. A C/allowzero pointer (`layouts` gives
 allowzero) is stored with `Zig.nullablePtrEnc`: null is eight zero bytes; a nullable slice
 (`[]allowzero T`) with `Zig.nullableSliceEnc`. An optional of either has a flag after the
-payload (`Zig.Enc.optionWith`), never the scalar `Enc (Option Zig.Ptr)`. -/
+payload (`Zig.Enc.optionWith`), never the scalar `Enc (Option Zig.Ptr)`.
+
+`reprOpt` (the operands of a Zig ≤0.16 representation cast): an optional array item, or such an
+item's optional payload, is `Zig.Enc.optionRepr`, whose flag byte other than 0 or 1 is
+`.unspecified` (`reprBitSize` admits an optional nowhere else in such a cast). -/
 partial def emitStorageEnc (structNames : Array (String × String)) (types : Array Ty)
     (errBits : Nat) (id : TyId) (layouts : Array Layout := #[]) (ptrBits : Nat := 64)
-    (intExt : Option String := none) : Option String :=
+    (intExt : Option String := none) (reprOpt : Bool := false) : Option String :=
   let emitStorageEnc (structNames : Array (String × String)) (types : Array Ty) (errBits : Nat)
       (id : TyId) (layouts : Array Layout) :=
     emitStorageEnc structNames types errBits id layouts (ptrBits := ptrBits) (intExt := intExt)
+      (reprOpt := reprOpt)
   match types[id]? with
   | some (.int signed bits) => intExtEnc intExt signed bits
   | some (.ptr size ..) =>
@@ -269,7 +274,12 @@ partial def emitStorageEnc (structNames : Array (String × String)) (types : Arr
   | some (.optional c) =>
     match types[c]? with
     | some (.errorSet (some names)) => some s!"{errOp errBits "optionalErrorEnc"} {emitErrorDomain names}"
-    | _ => (emitStorageEnc structNames types errBits c layouts).map fun enc => s!"Zig.Enc.optionWith ({enc})"
+    | _ =>
+      let payloadEnc := emitStorageEnc structNames types errBits c layouts
+      if reprOpt && !(types[c]? matches some (.ptr ..)) then
+        some s!"Zig.Enc.optionRepr ({payloadEnc.getD
+          s!"(inferInstance : Zig.Enc ({emitTy structNames types types[c]! (ptrBits := ptrBits)}))"})"
+      else payloadEnc.map fun enc => s!"Zig.Enc.optionWith ({enc})"
   | some (.array n c sentinel) =>
     (emitStorageEnc structNames types errBits c layouts).map fun enc =>
       s!"Zig.Enc.vectorWith {n + if sentinel then 1 else 0} ({enc})"
@@ -291,8 +301,9 @@ partial def emitStorageEnc (structNames : Array (String × String)) (types : Arr
 public semantic types (`ErrName`, `Option ErrName`, `Except ErrName`) and pure APIs. -/
 def withStorageEnc (structNames : Array (String × String)) (types : Array Ty) (errBits : Nat)
     (id : TyId) (expr : String) (layouts : Array Layout := #[]) (ptrBits : Nat := 64)
-    (intExt : Option String := none) : String :=
-  match emitStorageEnc structNames types errBits id layouts (ptrBits := ptrBits) (intExt := intExt) with
+    (intExt : Option String := none) (reprOpt : Bool := false) : String :=
+  match emitStorageEnc structNames types errBits id layouts (ptrBits := ptrBits) (intExt := intExt)
+      (reprOpt := reprOpt) with
   | none => expr
   | some enc =>
     s!"(letI : Zig.Enc ({emitTy structNames types types[id]! (ptrBits := ptrBits)}) := {enc}; {expr})"
@@ -987,9 +998,9 @@ def FCtx.ptrWidthTerm (fc : FCtx) : String := if fc.ptrBits == 64 then ".w64" el
 def FCtx.tyOfId (fc : FCtx) (tid : TyId) : Ty := fc.types[tid]!
 def FCtx.emitTyOf (fc : FCtx) (tid : TyId) : String :=
   emitTy (ptrBits := fc.ptrBits) fc.structNames fc.types (fc.tyOfId tid) (pureSlice := !fc.mem)
-def FCtx.storageExpr (fc : FCtx) (tid : TyId) (expr : String) : String :=
+def FCtx.storageExpr (fc : FCtx) (tid : TyId) (expr : String) (reprOpt : Bool := false) : String :=
   withStorageEnc (ptrBits := fc.ptrBits) (intExt := fc.dialect.intExtOrder?) fc.structNames fc.types
-    fc.errBits tid expr fc.layouts
+    fc.errBits tid expr fc.layouts (reprOpt := reprOpt)
 
 /-- The bytes `enc` of the constant `v` with the exact bits of each NaN constant in it written
 over its undefined bits (`nanConstParts`, `docs/floats.md` §NaN in memory); `none` if `v` has no
@@ -2020,6 +2031,15 @@ def emitExitInductive (structNames : Array (String × String)) (types : Array Ty
   String.intercalate "\n" ([s!"inductive {exitName} where", retLine] ++ brLines ++ repLines ++
     (dispatches.map fun (id, ty) => s!"  | dispatch{id} (v : {emitTy structNames types ty (pureSlice := !mem)})").toList)
 
+/-- The vector `ty` of the array `a` (emitted as `ra`), lane `i` = item `i`: Zig 0.17.1's
+`array_to_vector` and the ≤0.16 lane-wise `@bitCast` (`vectorLaneCast?`). A sentinel, the
+array's last item (`Ty.array`), is not a lane. -/
+def FCtx.vecOfArray (fc : FCtx) (a : Val) (ra : String) (ty : TyId) : String :=
+  let items := match fc.valTy a with
+    | .array _ _ true => s!"({ra} : {fc.emitValTy a}).pop"
+    | _ => ra
+  s!"pure (⟨{items}⟩ : {fc.emitTyOf ty})"
+
 /-! ## Loop-body capture analysis
 
 Every `loop` body becomes its own top-level def (`docs/generated-code.md` §Loops), so it needs
@@ -2056,7 +2076,7 @@ def FCtx.directVals (fc : FCtx) (op : Op) : Array Val :=
   | .sqrt a => #[a]
   | .libm _ a => #[a]
   | .mulAdd a b c => #[a, b, c]
-  | .splat a | .reduce _ a => #[a]
+  | .splat a | .reduce _ a | .arrayToVector a => #[a]
   | .select pred a b => #[pred, a, b]
   | .shuffle a b mask =>
     #[a] ++ (match b with | some v => #[v] | none => #[]) ++
@@ -2597,6 +2617,8 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       | .array len _ _ => s!"(Vector.replicate {len} {rv a} : {fc.emitTyOf inst.ty})"
       | _ => s!"Zig.Vec.splat {rv a}"
     let (env, l) := bindLet fc env inst.id s!"pure ({term})"; (env, some l)
+  | .arrayToVector a =>
+    let (env, l) := bindLet fc env inst.id (fc.vecOfArray a (rv a) inst.ty); (env, some l)
   | .select pred a b =>
     let (env, l) := bindLet fc env inst.id s!"pure (Zig.Vec.select {rv pred} {rv a} {rv b})"
     (env, some l)
@@ -2742,15 +2764,18 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     else
     if let some fromArray := (fc.valTyId? a).bind (vectorLaneCast? fc.types · inst.ty) then
       -- Zig ≤0.16 `[n]T` ↔ `@Vector(n, T)`: lane `i` is item `i` (`Check.lean`, L09).
-      let expr := if fromArray then s!"pure (⟨{rv a}⟩ : {fc.emitTyOf inst.ty})"
+      let expr := if fromArray then fc.vecOfArray a (rv a) inst.ty
         else s!"pure ({rv a} : {fc.emitValTy a}).lanes"
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else
-    if (fc.valTyId? a).any (reprCastApplies fc.dialect.bitCast fc.types · inst.ty) then
+    if let some s := (fc.valTyId? a).filter (reprCastApplies fc.dialect.bitCast fc.types · inst.ty) then
       -- Zig ≤0.16 `@bitCast` of an array, `extern` struct or `extern` union: the memory bytes
-      -- reinterpreted (`Zig.reprCast`, padding bytes undefined; `docs/aggregate-casts.md`).
-      let (env, l) := bindLet fc env inst.id
-        s!"Zig.reprCast ({fc.emitTyOf inst.ty}) ({rv a} : {fc.emitValTy a})"
+      -- reinterpreted (`Zig.reprCast`, padding bytes undefined; `docs/aggregate-casts.md`),
+      -- with the profile's storage encodings of both sides (`FCtx.storageExpr`); an optional
+      -- item's flag byte other than 0 or 1 is `.unspecified` (`Zig.Enc.optionRepr`).
+      let cast := s!"Zig.reprCast ({fc.emitTyOf inst.ty}) ({rv a} : {fc.emitValTy a})"
+      let (env, l) := bindLet fc env inst.id <|
+        fc.storageExpr s (reprOpt := true) <| fc.storageExpr inst.ty cast (reprOpt := true)
       (env, some l)
     else
     if isEnumTy (fc.valTy a) || isEnumTy (fc.tyOfId inst.ty) then

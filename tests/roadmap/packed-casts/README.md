@@ -34,16 +34,18 @@ instances of `ZigLean/PackedRepr.lean` for floats, packed unions, arrays and vec
 | `sentinel_arrays.zig` | A sentinel-terminated array in a memory cast (0.14.1, 0.15.2, 0.16.0): `@bitSizeOf` counts the sentinel, which is one more item of the source's bytes and of the result. `sentInit`: 0.14.1 does not store the sentinel of an array initialized at run time, so its byte is undefined there |
 | `void_casts.zig`, `void017.zig` | Zero-bit casts: `[4]void`, `[0]u8` and `u0` in every version; `void` itself in 0.17. Sema folds them, so their exports hold no `bitcast` |
 | `air-handwritten/<version>/void_cast/` | The `bitcast` of zero-bit types as an instruction (0.16.0 memory cast, 0.17.1 logical cast), written by hand because no compiler emits it; retained translations `PackedCasts/<version>/VoidCast.lean`, results in `ModelVoidCast.lean` |
+| `air-handwritten/0.15.2/reject_padded/` | `opt_items.intToU24s` as a legacy (schema 11) export without its profile: a representation cast of a padded integer on a profile that names no backend is rejected |
 | `reject_lanes.zig` | Rejected: a lane pointer into a vector field of a packed struct, which 0.14.1 and 0.15.2 miscompile ([upstream draft](../../../docs/upstream/packed-vector-lane-ptr.md)) |
 | `reject_sentinel.zig` | Rejected on 0.17.1: a sentinel-terminated array in a logical cast. Comptime evaluation, the LLVM backend and the self-hosted x86_64 backend give three different results ([upstream draft](../../../docs/upstream/bitcast-sentinel-array.md)) |
-| `reject_items.zig` | Rejected on 0.14.1 and 0.15.2 (compile errors from 0.16.0): arrays of tuples, of error sets or error unions, and of optionals in a cast |
+| `opt_items.zig` | 0.14.1 and 0.15.2: an array of non-pointer optionals is a memory reinterpretation too. Each item is its payload, a flag byte at the payload's size, then padding (`Enc (Option α)`). Payloads covered: integers (`u0`, `u12`, `u24`, `i8`, `u8`, `u16`, `u64`, `u128`), `bool`, every float width, an enum, arrays, optionals, `extern`, packed and `auto` structs and a vector. Exported for the LLVM backend (`air/<version>/opt_items`) and for the self-hosted x86_64 backend (`opt_items_x64`) |
+| `reject_items.zig` | Rejected on 0.14.1 and 0.15.2 (compile errors from 0.16.0): arrays of tuples, of error sets or error unions, and of optionals of these or of pointers in a cast |
 | `reject_ptrfield.zig` | Rejected on 0.14.1 and 0.15.2 (a compile error from 0.16.0): a pointer field in a packed struct, which has no bits in the model (Scope) |
 | `reject/expected.txt` | Every function of the rejected sources with the text its diagnostic must contain; each is translated alone |
-| `expected/wrong.txt` | Results of wrong models (the sentinel left out of the bits, the sentinel forced to the type's, `void` with bits, bytes swapped). The comparison with the model's lines and with the native output must reject each one |
+| `expected/wrong.txt` | Results of wrong models (the sentinel left out of the bits, the sentinel forced to the type's, `void` with bits, bytes swapped, an optional item's flag byte elsewhere). The comparison with the model's lines and with the native output must reject each one |
 | `compile-errors/` | Casts that Sema rejects, with `expected.txt` per version. An `auto` struct, tuple or tagged union fails on every version. Arrays of `auto` structs and tagged unions fail from 0.16.0, and an `extern` struct from 0.17.0 |
 | `air/<version>/<source>/` | Patched-compiler exports (x86_64-linux, baseline, ReleaseSafe), declared in `exports.json` and pinned by `exports.lock.json` (`scripts/fixture-exports.py`) |
-| `PackedCasts/<version>/<Source>.lean` | Their retained translations (`<version>` as a name: `V0_17_1`; `<Source>` one of `PackedCasts`, `Logical017`, `VectorFields`, `AutoItems`, `SentinelArrays`, `VoidCasts`, `Void017`) |
-| `PackedCasts/<version>/{Model,ModelLogical,ModelVector,ModelAuto,ModelSentinel,ModelVoid,ModelVoid017}.lean` | Kernel-checked results (`decide +kernel`) of the translations, then `main` prints `native.zig`'s lines. Each is written for the newest version of its source; the older versions' modules are that one with the version renamed (`scripts/fixtures.py instance ... --write` after an edit) |
+| `PackedCasts/<version>/<Source>.lean` | Their retained translations (`<version>` as a name: `V0_17_1`; `<Source>` one of `PackedCasts`, `Logical017`, `VectorFields`, `AutoItems`, `OptItems`, `OptItemsX64`, `SentinelArrays`, `VoidCasts`, `Void017`) |
+| `PackedCasts/<version>/{Model,ModelLogical,ModelVector,ModelAuto,ModelOpt,ModelSentinel,ModelVoid,ModelVoid017}.lean` | Kernel-checked results (`decide +kernel`) of the translations, then `main` prints `native.zig`'s lines (`ModelOptX64.lean`: theorems only). Each is written for the newest version of its source; the older versions' modules are that one with the version renamed (`scripts/fixtures.py instance ... --write` after an edit) |
 | `PackedCasts/Show.lean` | The models' formatting of results as `native.zig` prints them |
 | `native.zig`, `expected/<version>.txt` | The native program and its output (stock Zig, x86_64-linux-musl ReleaseSafe and Debug print the same) |
 
@@ -75,8 +77,20 @@ wrong model of `expected/wrong.txt` must fail the comparison.
   so the model could not check it.
 - **Rejected by name** (`reject/expected.txt`): a sentinel-terminated array in a 0.17 cast
   (upstream bug); an array of tuples (the memory model has no tuple layout), of error sets or
-  error unions (symbolic error storage) or of optionals in a 0.14.1 or 0.15.2 cast; a sentinel
+  error unions (symbolic error storage) or of optionals of these or of pointers in a 0.14.1 or
+  0.15.2 cast; a representation cast of an integer with padding bits on a profile that names
+  neither the LLVM nor the self-hosted x86_64 backend; a sentinel
   array and a vector in a ≤0.16 cast; a pointer field in a 0.14.1 or 0.15.2 packed struct.
+- **Optional items (0.14.1, 0.15.2).** A flag byte other than 0 or 1 is `.unspecified` in the
+  model (`Zig.Enc.optionRepr`, the cast's own dictionary; `opt_intToU8sBadFlag`,
+  `intToU8s_badFlag`). Native code reads any nonzero flag as non-null and goes on with a value,
+  which the model does not choose; it is not illegal behaviour, so a proof has to exclude it.
+  An optional field of an `auto` struct item is rejected. A null item's payload bytes and the
+  padding are undefined, so a cast of them to an integer is `.unspecified`. A payload with
+  padding bits (`u24`) is read with the profile's storage encoding. LLVM ignores the padding
+  byte. The self-hosted x86_64 backend reads it as part of the value: a `?u24` made from the
+  bytes `56 34 12 77` compares unequal to `0x123456` in a 0.15.2 Debug x86_64 build. The model
+  of its export (`opt_items_x64`, `Zig.intEncExt`) says `.unspecified` there.
 - **Not modelled.** Big-endian packed structs with a float field (fail closed).
 - **NaN bits through memory.** Up to 0.16, a NaN's bits stored to memory and read as an integer
   are the model's canonical bits, the same as for any float in memory. This is pre-existing
