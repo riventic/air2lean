@@ -341,3 +341,9 @@
 {"bufs":[],"args":[{"oracle":[],"budget":263},13]}
 {"bufs":[],"args":[{"oracle":[{"attempt_mod":2,"attempt_rem":0}],"failures":[0]},3]}
 {"bufs":[],"args":[{"oracle":[],"budget":245,"failures":[0]},9]}
+{"bufs":[],"args":[{"max_bytes":null},262145]}
+{"bufs":[],"args":[{"max_bytes":null},541765]}
+{"bufs":[],"args":[{"max_bytes":null},394293]}
+{"bufs":[],"args":[{"max_bytes":null},522274]}
+{"bufs":[],"args":[{"max_bytes":null},834190]}
+{"bufs":[],"args":[{"max_bytes":null},4611686018427387904]}

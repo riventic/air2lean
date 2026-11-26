@@ -78,6 +78,17 @@ class PolicyChecks(unittest.TestCase):
                 for rule in policy.get('oracle', []):
                     self.assertLessEqual(set(rule), rule_fields, name)
 
+    def test_differential_runs_large_requests_uncapped(self):
+        """sumRange runs requests above the harness's 1 MiB cap under the model's default
+        policy (`"max_bytes": null` on both sides), and one `4 * n` overflow (M03)."""
+        rows = [json.loads(line)['args']
+                for line in (ROOT / 'tests/diff/lists/inputs/sumRange.jsonl').read_text().splitlines()]
+        large = [n for policy, n in rows if policy == {'max_bytes': None}]
+        self.assertIn((1 << 18) + 1, large)
+        self.assertIn(1 << 62, large)
+        self.assertGreaterEqual(sum(1 << 18 < n <= 1 << 20 for n in large), 4)
+        self.assertTrue(all(n <= 1 << 20 or 4 * n >= 1 << 64 for n in large))
+
     def test_lean_fixture_uses_json_serializer(self):
         fixture = (HERE / 'Check.lean').read_text()
         self.assertIn('Lean.Json.mkObj', fixture)
