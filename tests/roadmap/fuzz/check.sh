@@ -27,7 +27,7 @@ first_failure() {
     # ext: illegal behaviour is an expected outcome, so a harness runs every input and prints one
     # outcome line each (a panic's safety check by name); `verify` compares them with the reference.
     native_ext "$dir" >"$dir/native.log" 2>&1 || { echo native; return; }
-    while IFS= read -r arg; do extra+=("$arg"); done < <(python3 -c \
+    while IFS= read -r arg; do [ -z "$arg" ] || extra+=("$arg"); done < <(python3 -c \
       'import json, sys; print("\n".join(json.load(open(sys.argv[1]))["translate_args"]))' "$dir/expected.json")
   elif ! "$AIR2LEAN_ZIG_NATIVE" test "$zig" -OReleaseSafe >"$dir/native.log" 2>&1; then
     echo native; return

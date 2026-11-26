@@ -207,8 +207,11 @@ class Gen:
         for g in self.globals:
             self.scope["muts"][g["name"]] = g["ty"]
         self.err = err
+        # ext: an error is an outcome of its own (`catch unreachable`, `try`), so half the error
+        # functions start with a conditional failure over their parameters.
+        guard = [["if", self.expr("bool", 1), [["fail"]], []]] if self.ext and err and self.rng.random() < 0.5 else []
         # The final return sits in the body's scope, so it may read the body's locals.
-        body = self.block(depth=0, loop=False, allow_exit=False, keep_scope=True)
+        body = guard + self.block(depth=0, loop=False, allow_exit=False, keep_scope=True)
         return {"name": name, "params": params, "err": err, "body": body,
                 "ret": self.expr("u32", 2)}
 
@@ -226,7 +229,8 @@ class Gen:
             if loop:
                 choices.append(["break"])
             if self.err:
-                choices.append(["fail"])
+                # ext: an error is an outcome of its own (`catch unreachable`, `try`), so it is likelier.
+                choices += [["fail"]] * (3 if self.ext else 1)
             stmts.append(self.rng.choice(choices))
         if saved is not None:
             self.scope = saved
@@ -554,7 +558,7 @@ class Gen:
             if ty[0] == "u" and any(softfloat.width(f) == bits(ty) for f in self.floats):
                 kinds += ["fbits", "fbits"]
             if ty == "u32" and self.callable(True):
-                kinds.append("cunreach")
+                kinds += ["cunreach"] * 3
                 if self.err and not self.in_defer:
                     kinds.append("try")
         if not kinds:
@@ -731,7 +735,7 @@ def _block_exits(block):
 
 
 RESERVED = {"U", "P", "FuzzError", "std", "bump", "bumpP", "swap", "entry", "r", "a", "b", "t", "p", "d",
-            "fuzz_buf", "fuzz_fba", "gsel", "gmix", "gany", "grep", "gscale", "GPair", "T"}
+            "fuzz_buf", "fuzz_fba", "fuzz_base","gsel", "gmix", "gany", "grep", "gscale", "GPair", "T"}
 PURE_TAGS = {"lit", "var", "bin", "shr", "mod", "cast"}
 EXT_STMT_TAGS = {"unreach_if", "with_alloc", "with_create"}
 EXT_EXPR_TAGS = {"div", "shift", "arith", "neg", "conv", "uindex", "usindex", "unwrap", "cunreach", "try", "gcall",
@@ -1957,7 +1961,6 @@ def _refs(node, out):
         _refs(child, out)
 
 
-ZTY = {ty: ty for ty in SCALARS + ("bool",)}
 
 
 class Renderer:
@@ -2295,9 +2298,13 @@ class Renderer:
         for g in program["globals"]:
             lines.append(f"var {g['name']}: {g['ty']} = {g['init']};")
         if self.heap:
-            # A buffer aligned for every type, so allocation offsets do not depend on its address.
-            lines += [f"var fuzz_buf: [{FBA_BYTES}]u8 align(16) = undefined;",
-                      "var fuzz_fba: std.heap.FixedBufferAllocator = .{ .end_index = 0, .buffer = &fuzz_buf };"]
+            # A buffer aligned for every type, so allocation offsets do not depend on its address. The
+            # alignment must be the type's own: the AIR export does not record a declared `align(N)`,
+            # so the model places `[N]u8 align(16)` at any address (`collectGlobals`, Air2Lean/Emit.lean),
+            # and a pointer constant of a less aligned type (`&fuzz_buf` as bytes) caps it. `entry`
+            # therefore casts the pointer at run time.
+            lines += [f"var fuzz_buf: [{FBA_BYTES // 16}]u128 = undefined;",
+                      "var fuzz_fba: std.heap.FixedBufferAllocator = .{ .end_index = 0, .buffer = &.{} };"]
         lines += ["", "fn bump(p: *u32, d: u32) void {", "    p.* +%= d;", "}", "",
                   "fn swap(a: *u32, b: *u32) void {", "    const t = a.*;", "    a.* = b.*;",
                   "    b.* = t;", "}", ""]
@@ -2333,7 +2340,9 @@ class Renderer:
         program = self.program
         lines = ["pub fn entry(a: u32, b: u32) u32 {"]
         if self.heap:
-            lines.append("    fuzz_fba.end_index = 0;")
+            lines += [f"    var fuzz_base: *[{FBA_BYTES // 16}]u128 = &fuzz_buf;", "    _ = &fuzz_base;",
+                      "    fuzz_fba = .{ .end_index = 0, .buffer = @as([*]u8, @ptrCast(fuzz_base))"
+                      f"[0..{FBA_BYTES}] }};"]
         for g in program["globals"]:
             lines.append(f"    {g['name']} = {g['init']};")
         if program["globals"]:

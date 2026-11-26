@@ -5,8 +5,12 @@ Synthetic oracles stand in for the translator and compilers; nothing here runs a
 """
 import hashlib
 import json
+import math
 from pathlib import Path
+import random
+import struct
 import sys
+import tempfile
 import unittest
 from unittest import mock
 
@@ -14,6 +18,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import air_fuzz  # noqa: E402
 import shrink  # noqa: E402
+import softfloat  # noqa: E402
 import zig_gen  # noqa: E402
 
 
@@ -185,6 +190,12 @@ def _program(body, ret=("lit", "u32", 0), funcs=(), globals_=(), profile=None):
 
 
 LIT = lambda ty, v: ["lit", ty, v]  # noqa: E731
+EXT_TYPES = {"ints": ["i7", "u9", "i33"], "floats": ["f32"], "elem": "i7", "len": 3, "fields": {"x": "i7", "y": "u9"},
+             "opt": "u9"}
+
+
+def _ext(body, ret=("lit", "u32", 0), funcs=(), globals_=(), types=EXT_TYPES):
+    return {**_program(body, ret, funcs, globals_, "ext"), "types": json.loads(json.dumps(types))}
 
 
 class ZigGenerator(unittest.TestCase):
@@ -429,6 +440,351 @@ class ZigGenerator(unittest.TestCase):
             casts = [e for e in _subexpressions(statement) if e[:2] == ["cast", "u2i"]]
             self.assertEqual(len(casts), 1)
             self.assertIn(casts[0][2][0], ("lit", "var"))
+
+    # --- ext profile -----------------------------------------------------------------------
+
+    def test_ext_profile_is_deterministic_well_typed_and_covers_its_features(self):
+        seen, kinds = set(), set()
+        for seed in range(300):
+            program = zig_gen.generate(seed, "ext")
+            self.assertEqual(program["profile"], "ext")
+            self.assertIsNone(zig_gen.typecheck_error(program), seed)
+            self.assertEqual(program, zig_gen.generate(seed, "ext"))
+            seen |= zig_gen.features(program)
+            if seed < 40:
+                self.assertEqual(zig_gen.render(program), zig_gen.render(json.loads(json.dumps(program))))
+            if seed < 100:
+                kinds |= {outcome.get("panic", "ok") for outcome in zig_gen.evaluate(program)}
+        self.assertEqual(seen, set(zig_gen.EXT_FEATURES))
+        # Every safety check of the families is reached, and so are inputs without illegal behaviour.
+        self.assertEqual(kinds, {"ok", "divideByZero", "exactDivisionRemainder", "integerOverflow", "shiftRhsTooBig",
+                                 "shlOverflow", "integerOutOfBounds", "integerPartOutOfBounds", "outOfBounds",
+                                 "unwrapNull", "unwrapError", "reachedUnreachable"})
+        self.assertLessEqual(kinds - {"ok"}, set(zig_gen.panic_policy()))
+
+    def test_ext_types_cover_every_width_and_signedness(self):
+        seen = set()
+        for seed in range(2000):
+            seen |= set(zig_gen.Gen(seed, "ext").shape["ints"])
+        # u32, i32, u64 and i64 are in every program, so they are not drawn again.
+        self.assertEqual({zig_gen.bits(t) for t in seen} | {32, 64}, set(range(1, 129)))
+        self.assertEqual({t[0] for t in seen}, {"u", "i"})
+        self.assertEqual([zig_gen.shift_type(t) for t in ("u1", "i7", "u8", "u9", "i128")], ["u0", "u3", "u3", "u4", "u7"])
+        self.assertEqual([zig_gen.byte_size(t) for t in ("u1", "u8", "i9", "u24", "i33", "u65", "i128")],
+                         [1, 1, 2, 4, 8, 16, 16])
+
+    def test_ext_constructs_are_rejected_outside_the_ext_profile(self):
+        div = ["let", "x1", "u32", ["div", "/", "u32", LIT("u32", 1), ["var", "p0"], False]]
+        self.assertTrue(zig_gen.typecheck(_ext([div])))
+        self.assertFalse(zig_gen.typecheck(_program([div], profile="wide")))
+        self.assertFalse(zig_gen.typecheck(_program([div])))
+        self.assertFalse(zig_gen.typecheck(_program([["let", "x1", "u7", LIT("u7", 1)]], profile="wide")))
+        self.assertFalse(zig_gen.typecheck(_program([["unreach_if", LIT("bool", False)]], profile="wide")))
+        # A program's own types belong to the ext profile only, and an ext program must have them.
+        self.assertFalse(zig_gen.typecheck({**_program([], profile="wide"), "types": EXT_TYPES}))
+        self.assertFalse(zig_gen.typecheck(_program([], profile="ext")))
+
+    def test_typecheck_rejects_invalid_ext_programs(self):
+        fallible = {"name": "f0", "params": [], "err": True, "body": [], "ret": LIT("u32", 0)}
+        heap = lambda body, mode="defer": ["with_alloc", "hp1", 2, LIT("i7", 1), mode, 0, body]  # noqa: E731
+        bad = [
+            [["let", "x1", "i7", ["div", "/", "i7", LIT("i7", 1), LIT("i7", 1), True]]],        # no `/` for signed
+            [["let", "x1", "u9", ["shift", "shrExact", "u9", LIT("u9", 1), LIT("u32", 1), False]]],  # unchecked IB
+            [["let", "x1", "u9", ["shift", "<<", "u9", LIT("u9", 1), LIT("u9", 1), True]]],     # the count is a u32
+            [["let", "x1", "u32", ["try", "f0", []]]],                                          # work returns no error
+            [["let", "x1", "u9", ["conv", "widen", "i7", "u9", LIT("i7", 1)]]],                 # i7 does not fit u9
+            [["let", "x1", "u9", ["conv", "trunc", "u32", "i7", LIT("u32", 1)]]],               # result type
+            [["let", "x1", "i7", ["conv", "trunc", "u32", "i7", LIT("u32", 1)]]],               # @truncate keeps the sign
+            [["let", "x1", "u9", ["neg", "u9", LIT("u9", 1)]]],                                 # no unsigned negation
+            [["let", "x1", "f64", LIT("f64", 0)]],                                              # not one of its floats
+            [["let", "x1", "f32", LIT("f32", 0x7FC00000)]],                                     # a NaN literal
+            [["let", "x1", "f32", LIT("f32", 0)], ["set", "x1", "+%=", LIT("f32", 0)]],         # no wrapping floats
+            [["let", "x1", "u32", ["fbits", "f16", LIT("f16", 0)]]],                            # f16 has 16 bits
+            [["let", "x1", "u9", ["gscale", "u9", 512, LIT("u9", 1)]]],                         # 512 is no u9
+            [["let", "x1", "u9", ["grep", "u9", 4, LIT("u9", 1)]]],                             # at most 3 rounds
+            [["defer", [heap([])]]],                                                            # allocation in a defer
+            [heap([["return", LIT("u32", 1)]]), ["let", "x2", "u32", LIT("u32", 0)]],           # unreachable code
+            [heap([]), ["sstore", "hp1", LIT("u32", 0), "=", LIT("i7", 1)]],                    # out of its scope
+            [["with_alloc", "hp1", 9, LIT("i7", 1), "defer", 0, []]],                           # length
+            [["with_alloc", "hp1", 2, LIT("i7", 1), "later", 0, []]],                           # free mode
+            [["let", "x1", "i7", ["uindex", "nope", LIT("u32", 0)]]],                           # unbound
+        ]
+        for body in bad:
+            self.assertFalse(zig_gen.typecheck(_ext(body, funcs=[fallible])), body)
+        # `try` belongs to an error function, outside its defers.
+        inner = lambda body: _ext([], funcs=[fallible, {"name": "f1", "params": [], "err": True, "body": body,  # noqa: E731
+                                                       "ret": LIT("u32", 0)}])
+        self.assertTrue(zig_gen.typecheck(inner([["let", "x1", "u32", ["try", "f0", []]]])))
+        self.assertFalse(zig_gen.typecheck(inner([["defer", [["let", "x1", "u32", ["try", "f0", []]]]]])))
+
+    def test_ext_integer_semantics(self):
+        def run(expr, ty="i7"):
+            program = _ext([["let", "x1", ty, expr]], ret=("lit", "u32", 5))
+            self.assertIsNone(zig_gen.typecheck_error(program), expr)
+            return zig_gen.evaluate(program)[0]
+
+        def value(expr, ty="i7"):
+            program = _ext([], ret=("conv", "bitcast", "i32", "u32", ["conv", "widen", ty, "i32", expr]))
+            self.assertIsNone(zig_gen.typecheck_error(program), expr)
+            return zig_gen.wrap("i32", zig_gen.evaluate(program)[0]["ok"])
+
+        div = lambda op, a, b, guarded=False, ty="i7": ["div", op, ty, LIT(ty, a), LIT(ty, b), guarded]  # noqa: E731
+        # Division by zero, minInt / -1 and an inexact @divExact: a panic, or the dividend when guarded.
+        for op in ("divTrunc", "divFloor", "divExact", "rem", "mod"):
+            self.assertEqual(run(div(op, 5, 0)), {"panic": "divideByZero"})
+            self.assertEqual(value(div(op, 5, 0, True)), 5)
+        for op in ("divTrunc", "divFloor", "divExact"):
+            self.assertEqual(run(div(op, -64, -1)), {"panic": "integerOverflow"})
+            self.assertEqual(value(div(op, -64, -1, True)), -64)
+        self.assertEqual(run(div("divExact", 7, 2)), {"panic": "exactDivisionRemainder"})
+        self.assertEqual(value(div("divExact", 7, 2, True)), 7)
+        self.assertEqual(run(div("/", 5, 0, ty="u9"), "u9"), {"panic": "divideByZero"})
+        # Rounding: truncation, floor; @rem takes the dividend's sign, @mod the divisor's; by -1 they are 0.
+        self.assertEqual([value(div(op, -7, 2)) for op in ("divTrunc", "divFloor", "rem", "mod")], [-3, -4, -1, 1])
+        self.assertEqual([value(div(op, 7, -2)) for op in ("divTrunc", "divFloor", "rem", "mod")], [-3, -4, 1, -1])
+        self.assertEqual([value(div(op, -64, -1)) for op in ("rem", "mod")], [0, 0])
+        self.assertEqual(value(div("divExact", -6, 3)), -2)
+        # Shifts: the count is truncated to Log2Int (u3 for i7), so 7 is too big and 8 is 0; a guard reduces it.
+        shift = lambda op, a, n, guarded=False, ty="i7": ["shift", op, ty, LIT(ty, a), LIT("u32", n), guarded]  # noqa: E731
+        self.assertEqual(run(shift("<<", 1, 7)), {"panic": "shiftRhsTooBig"})
+        self.assertEqual(value(shift("<<", 1, 8)), 1)
+        self.assertEqual(value(shift("<<", 1, 7, True)), 1)
+        self.assertEqual(value(shift("<<", 1, 6)), -64)             # `<<` discards bits without a check
+        self.assertEqual(value(shift(">>", -64, 2)), -16)           # arithmetic for a signed operand
+        self.assertEqual(run(shift("shlExact", 1, 6)), {"panic": "shlOverflow"})
+        self.assertEqual(value(shift("shlExact", -1, 6)), -64)
+        self.assertEqual(value(shift("shlExact", 3, 6, True)), 3)
+        self.assertEqual(value(shift("shrExact", 7, 1, True)), 3)
+        self.assertEqual(value(shift("<<", 1, 5, ty="u1"), "u1"), 1)  # a u0 count is always 0
+        # Checked arithmetic, negation and @intCast.
+        self.assertEqual(run(["arith", "+", "i7", LIT("i7", 63), LIT("i7", 1)]), {"panic": "integerOverflow"})
+        self.assertEqual(value(["arith", "*", "i7", LIT("i7", -8), LIT("i7", 8)]), -64)
+        self.assertEqual(run(["neg", "i7", LIT("i7", -64)]), {"panic": "integerOverflow"})
+        self.assertEqual(run(["conv", "intcast", "u32", "i7", LIT("u32", 64)]), {"panic": "integerOutOfBounds"})
+        self.assertEqual(value(["conv", "intcast", "u32", "i7", LIT("u32", 63)]), 63)
+        self.assertEqual(value(["conv", "bitcast", "u7", "i7", LIT("u7", 127)]), -1)
+        self.assertEqual(value(["conv", "trunc", "i33", "i7", LIT("i33", 65)]), -63)
+        # Generic functions are instantiated at the operand type.
+        self.assertEqual(value(["gcall", "gmix", "i7", [LIT("i7", 9), LIT("i7", 9)]]), zig_gen.wrap("i7", 90))
+        self.assertEqual(value(["gcall", "gsel", "i7", [LIT("bool", False), LIT("i7", 1), LIT("i7", 2)]]), 2)
+        self.assertEqual(value(["gpair", "i7", "second", LIT("i7", 1), LIT("i7", 2)]), 2)
+        self.assertEqual(value(["grep", "i7", 2, LIT("i7", 3)]), zig_gen.wrap("i7", (3 * 3 + 3) * 3 + 3))
+        self.assertEqual(value(["gscale", "i7", 5, LIT("i7", 30)]), zig_gen.wrap("i7", 150))
+
+    def test_ext_aggregate_and_error_semantics(self):
+        fallible = {"name": "f0", "params": [["p2", "u32"]], "err": True,
+                    "body": [["if", ["cmp", "==", ["var", "p2"], LIT("u32", 0)], [["fail"]], []]], "ret": ["var", "p2"]}
+        array = ["let_array", "ar1", [LIT("i7", n) for n in (1, 2, 3)]]
+        run = lambda body, ret: zig_gen.evaluate(_ext(body, ret=ret, funcs=[fallible]))  # noqa: E731
+        widen = lambda e: ("conv", "intcast", "i7", "u32", e)  # noqa: E731
+        # An unguarded index panics past the length; the first two inputs are p0 = 0 and 1.
+        outcomes = run([array], widen(["uindex", "ar1", ["bin", "+%", ["var", "p0"], LIT("u32", 2)]]))
+        self.assertEqual(outcomes[:2], [{"ok": 3}, {"panic": "outOfBounds"}])
+        outcomes = run([array, ["let_slice", "sl2", "ar1", 1, 3]], widen(["usindex", "sl2", LIT("u32", 2)]))
+        self.assertEqual(outcomes[0], {"panic": "outOfBounds"})
+        # `.?` of null, `catch unreachable` of an error and a true `unreachable` condition.
+        body = [["let_opt", "op1", ["cmp", "!=", ["var", "p0"], LIT("u32", 0)], LIT("u9", 9)]]
+        outcomes = run(body, ("conv", "widen", "u9", "u32", ["unwrap", "op1"]))
+        self.assertEqual(outcomes[:2], [{"panic": "unwrapNull"}, {"ok": 9}])
+        self.assertEqual(run([], ("cunreach", "f0", [["var", "p0"]]))[:2], [{"panic": "unwrapError"}, {"ok": 1}])
+        outcomes = run([["unreach_if", ["cmp", "==", ["var", "p0"], LIT("u32", 1)]]], ("lit", "u32", 4))
+        self.assertEqual(outcomes[:2], [{"ok": 4}, {"panic": "reachedUnreachable"}])
+        # `try` returns the callee's error: the caller's errdefer runs, and its own caller catches it.
+        globals_ = [{"name": "g0", "ty": "u32", "init": 0}]
+        caller = {"name": "f1", "params": [["p3", "u32"]], "err": True,
+                  "body": [["errdefer", [["set", "g0", "=", LIT("u32", 100)]]]], "ret": ["try", "f0", [["var", "p3"]]]}
+        program = _ext([], ret=("catch", "f1", [["var", "p0"]], LIT("u32", 7)), funcs=[fallible, caller], globals_=globals_)
+        self.assertIsNone(zig_gen.typecheck_error(program))
+        self.assertEqual(zig_gen.evaluate(program)[:2], [{"ok": 7 ^ 100}, {"ok": 1}])
+
+    def test_ext_float_semantics(self):
+        f32 = lambda x: struct.unpack("<I", struct.pack("<f", x))[0]  # noqa: E731
+        f64 = lambda x: struct.unpack("<Q", struct.pack("<d", x))[0]  # noqa: E731
+        types = {**EXT_TYPES, "floats": ["f32", "f64"]}
+        bits = lambda fmt, e: zig_gen.evaluate(_ext([], ret=("conv", "trunc", f"u{softfloat.width(fmt)}", "u32",  # noqa: E731
+                                                              ["fbits", fmt, e]), types=types))[0]
+        # One rounding of the exact result: 0.1 + 0.2 in f64, and the same sum in f32.
+        self.assertEqual(bits("f64", ["fbin", "+", LIT("f64", f64(0.1)), LIT("f64", f64(0.2))])["ok"],
+                         f64(0.1 + 0.2) & 0xFFFFFFFF)
+        self.assertEqual(bits("f32", ["fbin", "+", LIT("f32", f32(0.1)), LIT("f32", f32(0.2))])["ok"],
+                         f32(struct.unpack("<f", struct.pack("<f", 0.1))[0] + struct.unpack("<f", struct.pack("<f", 0.2))[0]))
+        self.assertEqual(bits("f32", ["fun", "sqrt", LIT("f32", f32(2.0))])["ok"], f32(math.sqrt(2.0)))
+        self.assertEqual(bits("f32", ["fconv", "f64", "f32", LIT("f64", f64(1e300))])["ok"], softfloat.inf("f32"))
+        self.assertEqual(bits("f32", ["i2f", "u32", "f32", LIT("u32", 16777217)])["ok"], f32(16777216.0))  # ties to even
+        self.assertEqual(bits("f32", ["fun", "neg", LIT("f32", 0)])["ok"], 0x80000000)                  # -0.0
+        # A NaN is only ever seen as the canonical quiet NaN, and the input is marked.
+        nan = bits("f32", ["fbin", "/", LIT("f32", 0), LIT("f32", 0)])
+        self.assertEqual(nan, {"ok": softfloat.qnan("f32"), "nan": True})
+        # @intFromFloat truncates; outside the type it panics (0 when guarded); a NaN is always 0.
+        to_int = lambda x, guarded=False: zig_gen.evaluate(_ext(  # noqa: E731
+            [], ret=("conv", "bitcast", "i32", "u32", ["conv", "widen", "i7", "i32", ["f2i", "f32", "i7", x, guarded]]),
+            types=types))[0]
+        self.assertEqual(to_int(LIT("f32", f32(-64.9))), {"ok": zig_gen.wrap("u32", -64)})
+        self.assertEqual(to_int(LIT("f32", f32(64.0))), {"panic": "integerPartOutOfBounds"})
+        self.assertEqual(to_int(LIT("f32", f32(64.0)), True), {"ok": 0})
+        self.assertEqual(to_int(LIT("f32", softfloat.inf("f32", 1))), {"panic": "integerPartOutOfBounds"})
+        self.assertEqual(to_int(["fun", "sqrt", LIT("f32", f32(-1.0))]), {"ok": 0, "nan": True})
+        # Comparisons are IEEE: a NaN is unordered and -0 equals +0.
+        cmp = lambda op, a, b: zig_gen.evaluate(_ext(  # noqa: E731
+            [["let", "x1", "bool", ["cmp", op, a, b]]],
+            ret=("gcall", "gsel", "u32", [["var", "x1"], LIT("u32", 1), LIT("u32", 0)]), types=types))[0]["ok"]
+        quiet = ["fbin", "/", LIT("f32", 0), LIT("f32", 0)]
+        self.assertEqual([cmp(op, quiet, quiet) for op in ("<", "==", "!=", ">=")], [0, 0, 1, 0])
+        self.assertEqual(cmp("==", LIT("f32", 0), LIT("f32", 0x80000000)), 1)
+
+    def test_softfloat_rounds_like_the_host(self):
+        rng = random.Random(7)
+        for fmt, code, word in (("f64", "<d", "<Q"), ("f32", "<f", "<I"), ("f16", "<e", "<H")):
+            exp_bits, frac_bits = softfloat.FORMATS[fmt]
+            to_float = lambda b: struct.unpack(code, struct.pack(word, b))[0]  # noqa: E731
+
+            def to_bits(x):
+                try:
+                    return struct.unpack(word, struct.pack(code, x))[0]
+                except OverflowError:  # struct refuses to round a finite double to an infinity
+                    return softfloat.inf(fmt, x < 0)
+            for _ in range(3000):
+                bias = (1 << (exp_bits - 1)) - 1
+                a, b = ((rng.getrandbits(1) << (exp_bits + frac_bits)) | ((bias + rng.randint(-9, 9)) << frac_bits)
+                        | rng.getrandbits(frac_bits) for _ in range(2))
+                x, y = to_float(a), to_float(b)
+                # The host computes in f64: one more rounding to a narrower format is exact for these.
+                self.assertEqual(softfloat.add(fmt, a, b), to_bits(x + y))
+                self.assertEqual(softfloat.sub(fmt, a, b), to_bits(x - y))
+                self.assertEqual(softfloat.mul(fmt, a, b), to_bits(x * y))
+                self.assertEqual(softfloat.div(fmt, a, b), to_bits(x / y))
+                self.assertEqual(softfloat.sqrt(fmt, softfloat.fabs(fmt, a)), to_bits(math.sqrt(abs(x))))
+                self.assertEqual(softfloat.to_int(fmt, a), int(x))
+                self.assertEqual(softfloat.compare(fmt, "<", a, b), x < y)
+                self.assertEqual(softfloat.convert(fmt, "f16", a), softfloat.convert("f64", "f16", softfloat.convert(fmt, "f64", a)))
+        # Specials: signed zeros, infinities and the invalid operations.
+        one, zero, minus_zero, inf = softfloat.from_int("f32", 1), 0, 0x80000000, softfloat.inf("f32")
+        self.assertEqual(softfloat.add("f32", minus_zero, minus_zero), minus_zero)
+        self.assertEqual(softfloat.add("f32", minus_zero, zero), zero)
+        self.assertEqual(softfloat.sub("f32", one, one), zero)
+        self.assertEqual(softfloat.div("f32", one, minus_zero), softfloat.inf("f32", 1))
+        self.assertEqual(softfloat.sqrt("f32", minus_zero), minus_zero)
+        self.assertEqual(softfloat.ceil("f32", softfloat.neg("f32", softfloat.power_of_two("f32", -1))), minus_zero)
+        self.assertEqual(softfloat.round_("f32", softfloat.power_of_two("f32", -1)), one)   # ties away from zero
+        for invalid in (softfloat.sub("f32", inf, inf), softfloat.mul("f32", inf, zero), softfloat.div("f32", zero, zero),
+                        softfloat.sqrt("f32", softfloat.neg("f32", one))):
+            self.assertEqual(invalid, softfloat.qnan("f32"))
+        self.assertEqual(softfloat.encode("f32", 0, softfloat.decode("f32", 1)[2] / 2), 0)  # half the least subnormal
+
+    def test_ext_allocation_follows_the_fixed_buffer_allocator(self):
+        heap = lambda name, count, mode, body, fail=77: ["with_alloc", name, count, LIT("i7", 1), mode, fail, body]  # noqa: E731
+        types = {**EXT_TYPES, "elem": "u64"}
+        heap64 = lambda name, count, mode, body, fail=77: ["with_alloc", name, count, LIT("u64", 1), mode, fail, body]  # noqa: E731
+        run = lambda body, ret=("lit", "u32", 0), types=EXT_TYPES: zig_gen.evaluate(_ext(body, ret=ret, types=types))[0]  # noqa: E731
+        # 64 bytes: eight u64 fit, nine do not (two allocations).
+        self.assertEqual(run([heap64("hp1", 8, "defer", [])], types=types), {"ok": 0})
+        self.assertEqual(run([heap64("hp1", 5, "leak", []), heap64("hp2", 4, "defer", [])], types=types), {"ok": 77})
+        # A freed last allocation gives its bytes back; a leak, or a free that is not the last one, does not.
+        self.assertEqual(run([heap64("hp1", 5, "end", []), heap64("hp2", 5, "defer", [])], types=types), {"ok": 0})
+        self.assertEqual(run([heap64("hp1", 5, "defer", []), heap64("hp2", 5, "defer", [])], types=types), {"ok": 0})
+        inner_leak = [heap64("hp1", 3, "end", [heap64("hp2", 2, "leak", [])]), heap64("hp3", 4, "defer", [])]
+        self.assertEqual(run(inner_leak, types=types), {"ok": 77})
+        # Alignment: one i7 byte, then a u64 at offset 8.
+        mixed = [heap("hp1", 1, "leak", []), ["with_create", "hq2", "u64", LIT("u64", 3), "leak", 5, []],
+                 heap("hp3", 5, "leak", []), ["with_create", "hq4", "u64", LIT("u64", 3), "leak", 6,
+                                              [["with_create", "hq5", "u64", LIT("u64", 3), "leak", 8, []]]]]
+        machine = zig_gen.Machine(_ext(mixed))
+        self.assertEqual([machine.fba_alloc(1, 1), machine.fba_alloc(8, 8), machine.fba_alloc(5, 1), machine.fba_alloc(8, 8)],
+                         [0, 8, 16, 24])
+        # The slice is initialized, writable and read through for loops; a `defer` free runs on return.
+        body = [heap("hp1", 3, "defer", [["sstore", "hp1", LIT("u32", 4), "+%=", LIT("i7", 5)],
+                                         ["for_slice", "hp1", "e2", [["set", "x0", "+%=", ["var", "e2"]]]],
+                                         ["if", ["cmp", "==", ["var", "p0"], LIT("u32", 1)], [["return", LIT("u32", 9)]], []]]),
+                heap("hp3", 5, "defer", [])]
+        program = _ext([["let", "x0", "i7", LIT("i7", 0)]] + body, ret=("conv", "intcast", "i7", "u32", ["var", "x0"]))
+        self.assertIsNone(zig_gen.typecheck_error(program))
+        self.assertEqual(zig_gen.evaluate(program)[:2], [{"ok": 8}, {"ok": 9}])
+
+    def test_ext_renderer_and_case_files(self):
+        body = [["let", "x1", "i7", ["div", "divTrunc", "i7", ["conv", "intcast", "u32", "i7", ["var", "p0"]], LIT("i7", 0), True]],
+                ["let", "x2", "f32", ["i2f", "i7", "f32", ["var", "x1"]]],
+                ["let", "x3", "u32", ["f2i", "f32", "u32", ["var", "x2"], True]],
+                ["with_alloc", "hp4", 2, ["var", "x1"], "end", 7,
+                 [["if", ["cmp", "==", ["var", "p0"], LIT("u32", 1)], [["return", ["var", "x3"]]], []]]]]
+        program = _ext(body)
+        self.assertIsNone(zig_gen.typecheck_error(program))
+        source = zig_gen.render(program)
+        # Operands of an operation with illegal behaviour are runtime values, whatever they are in the source.
+        self.assertIn("var tb2: i7 = @as(i7, 0); _ = &tb2;", source)
+        self.assertIn("if (tb2 == 0 or (ta2 == -64 and tb2 == -1)) ta2 else @divTrunc(ta2, tb2)", source)
+        self.assertIn("if (ta3 != ta3 or !(@trunc(ta3) >= ", source)
+        self.assertIn("var fuzz_fba: std.heap.FixedBufferAllocator", source)
+        self.assertIn("const hp4 = fuzz_fba.allocator().alloc(i7, 2) catch return @as(u32, 7);", source)
+        # The buffer's alignment is its type's, and `entry` gives the allocator its bytes at run time.
+        self.assertIn("var fuzz_buf: [4]u128 = undefined;", source)
+        self.assertIn("fuzz_fba = .{ .end_index = 0, .buffer = @as([*]u8, @ptrCast(fuzz_base))[0..64] };", source)
+        self.assertNotIn("align(", source)
+        self.assertIn("        fuzz_fba.allocator().free(hp4);\n    }\n    return @as(u32, 0);", source)
+        self.assertNotIn('test "', source)                # the harness, not a test, runs an ext program
+        self.assertIn("fn GPair(comptime T: type) type", source)
+        self.assertIn("const P = struct { x: i7, y: u9 };", source)
+        with tempfile.TemporaryDirectory() as tmp:
+            zig_gen.write_case(program, tmp)
+            case = json.loads((Path(tmp) / "expected.json").read_text())
+            driver = (Path(tmp) / "driver.zig").read_text()
+        self.assertEqual(case["inputs"], [list(pair) for pair in zig_gen.EXT_INPUTS])
+        self.assertEqual(case["translate_args"][-2:], ["--allocator-model", "translated"])
+        self.assertIn("--closure", case["translate_args"])
+        self.assertIn('const fuzz = @import("fuzz_e0.zig");', driver)
+        for member in zig_gen.panic_policy():
+            if member not in ("doubleFree", "panic", "SIGFPE"):   # not `std.builtin.panic` members
+                self.assertIn(f"pub fn {member}(", driver)
+        # A program without an allocation needs no allocator code and no translated allocator.
+        plain = _ext(body[:3])
+        self.assertNotIn("fuzz_fba", zig_gen.render(plain))
+        with tempfile.TemporaryDirectory() as tmp:
+            zig_gen.write_case(plain, tmp)
+            self.assertEqual(json.loads((Path(tmp) / "expected.json").read_text())["translate_args"], [])
+
+    def test_ext_outcomes_are_compared_by_kind(self):
+        expected = [{"ok": 5}, {"panic": "divideByZero"}, {"panic": "shiftRhsTooBig"}, {"ok": 1, "nan": True}]
+        native = "noise\nFUZZ 0 ok 5\nFUZZ 1 panic divideByZero\nFUZZ 2 panic shiftRhsTooBig\nFUZZ 3 ok 1\n"
+        self.assertEqual(zig_gen.verify(expected, native, "native"), [])
+        lean = "FUZZ 0 ok 5\nFUZZ 1 fail Zig.Error.divByZero\nFUZZ 2 fail Zig.Error.overflow\nFUZZ 3 fail Zig.Error.unspecified\n"
+        self.assertEqual(zig_gen.verify(expected, lean, "lean"), [])
+        # Another value, another check, a value where a panic is due, a missing line: all mismatches.
+        wrong = "FUZZ 0 ok 6\nFUZZ 1 fail Zig.Error.overflow\nFUZZ 2 ok 0\n"
+        errors = zig_gen.verify(expected, wrong, "lean")
+        self.assertEqual(len(errors), 4)
+        self.assertIn("input 1: expected fail Zig.Error.divByZero, got fail Zig.Error.overflow", errors[1])
+        self.assertIn("no outcome line", errors[3])
+        # `.unspecified` stands in only for an input that made a NaN; natively a panic's check must be the same one.
+        self.assertEqual(len(zig_gen.verify(expected, lean.replace("ok 5", "fail Zig.Error.unspecified"), "lean")), 1)
+        self.assertEqual(len(zig_gen.verify(expected, native.replace("shiftRhsTooBig", "shlOverflow"), "native")), 1)
+        text = zig_gen.lean_checks("def entry (p0 : BitVec 32) (p1 : BitVec 32) : Zig.MemM (BitVec 32) := do",
+                                   "Fuzze1", expected)
+        self.assertIn('#eval IO.println s!"FUZZ 3 {outcome ((Fuzze1.entry 305419896#32 2863311530#32).run\' '
+                      '(Fuzze1.mem0 .fresh))}"', text)
+        self.assertNotIn("#guard", text)
+
+    def test_ext_shrinker_is_minimal_for_synthetic_oracle(self):
+        def panics_on_division(program):
+            return any(outcome.get("panic") == "divideByZero" for outcome in zig_gen.evaluate(program))
+
+        seeds = [s for s in range(200) if panics_on_division(zig_gen.generate(s, "ext"))][:3]
+        self.assertTrue(seeds)
+        for seed in seeds:
+            reduced = zig_gen.shrink(zig_gen.generate(seed, "ext"), panics_on_division)
+            self.assertTrue(zig_gen.typecheck(reduced))
+            self.assertTrue(panics_on_division(reduced))
+            for candidate in zig_gen.candidates(reduced):
+                if zig_gen.typecheck(candidate) and zig_gen.size(candidate) < zig_gen.size(reduced):
+                    self.assertFalse(panics_on_division(candidate))
+            # One unguarded division is left, and nothing around it.
+            self.assertEqual([f["name"] for f in reduced["funcs"]], ["work"])
+            work = reduced["funcs"][0]
+            divisions = [e for e in _subexpressions([work["body"], work["ret"]]) if e[0] == "div"]
+            self.assertEqual([e[5] for e in divisions], [False])
+            self.assertLess(zig_gen.size(reduced)[0], 460)
+        # Guarding an operation is a reduction step of its own.
+        program = _ext([["let", "x1", "i7", ["div", "rem", "i7", LIT("i7", 1), LIT("i7", 0), False]]])
+        self.assertIn(True, [c["funcs"][-1]["body"][0][3][5] for c in zig_gen.candidates(program)
+                             if c["funcs"][-1]["body"] and c["funcs"][-1]["body"][0][3][0] == "div"])
 
     def test_lean_checks_follow_the_translated_signature(self):
         pure = "def entry (p0 : BitVec 32) (p1 : BitVec 32) : Zig.Result (BitVec 32) := do"
