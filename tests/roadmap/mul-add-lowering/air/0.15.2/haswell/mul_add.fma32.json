@@ -1,0 +1,163 @@
+{
+ "schema": 12,
+ "zig_version": "0.15.2",
+ "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "x86_64-linux.5.10...6.16-musl",
+  "pointer_bits": 64,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.15.2",
+  "backend": "stage2_llvm",
+  "cpu": "haswell",
+  "features": [
+   "64bit",
+   "allow_light_256_bit",
+   "avx",
+   "avx2",
+   "bmi",
+   "bmi2",
+   "cmov",
+   "crc32",
+   "cx16",
+   "cx8",
+   "ermsb",
+   "f16c",
+   "false_deps_lzcnt_tzcnt",
+   "false_deps_popcnt",
+   "fast_15bytenop",
+   "fast_scalar_fsqrt",
+   "fast_shld_rotate",
+   "fast_variable_crosslane_shuffle",
+   "fast_variable_perlane_shuffle",
+   "fma",
+   "fsgsbase",
+   "fxsr",
+   "idivq_to_divl",
+   "invpcid",
+   "lzcnt",
+   "macrofusion",
+   "mmx",
+   "movbe",
+   "no_bypass_delay_mov",
+   "no_bypass_delay_shuffle",
+   "nopl",
+   "pclmul",
+   "popcnt",
+   "rdrnd",
+   "sahf",
+   "slow_3ops_lea",
+   "smep",
+   "sse",
+   "sse2",
+   "sse3",
+   "sse4_1",
+   "sse4_2",
+   "ssse3",
+   "vzeroupper",
+   "x87",
+   "xsave",
+   "xsaveopt"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "mul_add.fma32",
+ "module": "root",
+ "src": {
+  "file": "mul_add.zig",
+  "module": "mul_add",
+  "decl_line": 9
+ },
+ "params": [
+  0,
+  0,
+  0
+ ],
+ "noalias": [],
+ "ret": 0,
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 0,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "arg",
+   "ty": 0,
+   "param": 2
+  },
+  {
+   "id": 3,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 4,
+   "tag": "mul_add",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "inst": 1
+    },
+    {
+     "inst": 2
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 6,
+   "tag": "ret_safe",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 4
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "float",
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  }
+ ]
+}
