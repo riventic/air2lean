@@ -442,7 +442,7 @@ def mem_Allocator_remap__anon_fdce5ddbfdcf [Ext] (p0 : mem_Allocator) (p1 : Zig.
                   throw .panic)) : Zig.CM Tgt mem_Allocator_remap__anon_fdce5ddbfdcfLocals mem_Allocator_remap__anon_fdce5ddbfdcfExit) with
               | .br69 => (do
                 let i74 ← Zig.divExact false i56 (4 : BitVec 64)
-                let i75 ← pure (i55)
+                let i75 ← Zig.callMC (Zig.checkAlign 4 i55 >>= fun _ => pure i55)
                 let i76 ← pure (⟨i75, i74⟩ : Zig.Slice)
                 pure (.ret i76))
               | e => pure e)
