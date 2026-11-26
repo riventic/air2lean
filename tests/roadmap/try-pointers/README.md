@@ -190,10 +190,11 @@ hand-written-AIR translation. `aliases/TryAliases/Proofs.lean` proves:
 `aliases/TryAliases/Runtime.lean` checks these cases and the corresponding retained-AIR cases.
 These are a caller-held payload pointer, a shared cleanup counter (the native call sequence
 ends at 3), `writeAlias` errors, `coldPayload` success and cleanup overflow.
-`try_aliases.zig` has the matching native tests. The cases are finite. Remaining exclusions:
-concurrent aliases (the rules need `Mem.FSeq`), overlapping
-but unequal union objects, aliases through casts or different element types, cleanup that frees
-the union, and payloads wider than one byte in the generated cleanup rules.
+`try_aliases.zig` has the matching native tests. The cases are finite. These functions have a one-byte payload;
+`lifetimes/try_payloads.zig` repeats them for two, four and eight bytes, a struct and `anyerror`,
+with the same rules (`lifetimes/README.md`, which also lists what is not covered: a payload
+accessed at another element type, overlapping unequal unions, and general rules for the freed
+union and for spawn and join).
 
 ```sh
 lake build ZigLean.Sep.Full.Try ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Strength

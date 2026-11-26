@@ -63,8 +63,10 @@ original rejection.
 - **An `undefined` single/many-item pointer operand** (`std.heap.page_allocator` is
   `.{ .ptr = undefined, .vtable = … }`) is `Zig.undefPtr`: a pointer without a block at an
   arbitrary address from the same oracle. Other `undefined` operands stay rejected.
-- **`*anyopaque` casts.** Erasing a pointer to `*anyopaque` is admitted; recovering `*T` from
-  `*anyopaque` (an allocator's `ctx`) requires `T` to be provably free of error storage, as
+- **Opaque pointer casts** (`*anyopaque`, and `*H` of a declared `opaque {}`:
+  [opaque pointers](../tests/roadmap/opaque-pointers/README.md)). Erasing a pointer to an
+  opaque one is admitted, and so is a cast between two opaque pointees; recovering `*T` from an
+  opaque pointer (an allocator's `ctx`) requires `T` to be provably free of error storage, as
   for a pointer recovered from an integer.
 - **`unordered` atomic loads** of integers, packed structs and pointers (`ZigLean/Conc/AtomicWord.lean`): the
   load reads any message not older than the newest one that happened before it. It neither
