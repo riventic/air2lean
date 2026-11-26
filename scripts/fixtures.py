@@ -42,7 +42,9 @@ Every Lean file of a converted fixture is elaborated by Lake, in one mode:
 - `instance`: a module stated once for several Zig versions or targets (one module per
   translation, as Lake needs distinct module names). PRIMARY is the hand-written instance;
   another instance is PRIMARY with each OLD identifier token (`V0_17_1`, a whole name component)
-  replaced by NEW, in its text and its path. Fails unless the instance file equals that text
+  replaced by NEW, in its text and its path. A dotted NEW (`PointerWidth.V0_17_1`) nests the
+  instance one namespace and one directory deeper (a primary that predates the versioned
+  layout). Fails unless the instance file equals that text
   byte for byte (`--write`: writes it). Every OLD must occur in both text and path. A `--rename`
   OLD (a generated name that differs between the versions' translations) need occur only in the
   text.
@@ -140,8 +142,9 @@ def source_modules(root: Path | None = None) -> dict[str, tuple[str, str]]:
 def source_roots(root: Path | None = None) -> dict[str, str]:
     """`source_modules` without Lake (the source scan runs where no Lean is installed): each
     configured module's repository source -> its library's source root, read from the lakefile's
-    `srcDir` and `globs` (else `roots`): `M` is M, `M.+` M and its submodules, `M.*` its
-    submodules. A file in two libraries (nested source roots) fails."""
+    `srcDir` and `globs` (else `roots`), read as Lake does (Lake/Config/Glob.lean): `M` is M,
+    `M.+` its submodules, `M.*` M and its submodules. A file in two libraries (nested source
+    roots) fails."""
     root = root or ROOT
     package = root / PACKAGE.relative_to(ROOT)
     if not (package / "lakefile.toml").is_file():
@@ -152,7 +155,7 @@ def source_roots(root: Path | None = None) -> dict[str, str]:
         for pattern in lib.get("globs") or lib.get("roots") or [lib["name"]]:
             base = pattern.removesuffix(".+").removesuffix(".*")
             directory = src / base.replace(".", "/")
-            paths = [] if pattern.endswith(".*") else [directory.with_suffix(".lean")]
+            paths = [] if pattern.endswith(".+") else [directory.with_suffix(".lean")]
             if pattern != base:
                 paths += sorted(directory.rglob("*.lean"))
             for path in filter(Path.is_file, paths):
@@ -352,12 +355,15 @@ def mutant(name: str, src: Path, fails: list[str], expect: list[str]) -> int:
     return 0
 
 
+IDENT = r"[A-Za-z_][A-Za-z0-9_]*"
+
+
 def token(name: str) -> re.Pattern:
     """`name` as a whole identifier component (not part of a longer identifier)."""
     return re.compile(r"(?<![A-Za-z0-9_'])" + re.escape(name) + r"(?![A-Za-z0-9_'])")
 
 
-def instance(primary: Path, substs: list[str], write: bool, renames: list[str]) -> int:
+def instance(primary: Path, substs: list[str], write: bool, renames: tuple[str, ...] | list[str] = ()) -> int:
     """`primary` with each OLD replaced by its NEW (all at once, so substitutions never chain).
     A primary that already names a NEW (the 0.17.1 model importing the 0.16.0 translation) would
     make the instance agree while checking the wrong version, so it is refused. A `renames`
@@ -367,7 +373,7 @@ def instance(primary: Path, substs: list[str], write: bool, renames: list[str]) 
     mapping = {}
     for subst, in_path in [(s, True) for s in substs] + [(s, False) for s in renames]:
         old, sep, new = subst.partition("=")
-        if not (sep and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", old) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", new)):
+        if not (sep and re.fullmatch(IDENT, old) and re.fullmatch(rf"{IDENT}(\.{IDENT})*", new)):
             raise SystemExit(f"fixtures instance: --subst/--rename needs OLD=NEW identifiers, not {subst!r}")
         if mapping.setdefault(old, new) != new:
             raise SystemExit(f"fixtures instance: {old} is substituted twice")
@@ -380,7 +386,8 @@ def instance(primary: Path, substs: list[str], write: bool, renames: list[str]) 
     if all(old == new for old, new in mapping.items()):
         raise SystemExit(f"fixtures instance: {' '.join(substs)} leaves {primary} unchanged")
     combined = re.compile("|".join(token(old).pattern for old in sorted(mapping, key=len, reverse=True)))
-    text, path = (combined.sub(lambda m: mapping[m.group(0)], s) for s in (text, path))
+    text = combined.sub(lambda m: mapping[m.group(0)], text)
+    path = combined.sub(lambda m: mapping[m.group(0)].replace(".", "/"), path)
     target = Path(path)
     if write:
         target.parent.mkdir(parents=True, exist_ok=True)

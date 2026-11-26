@@ -408,7 +408,13 @@ NON_COMPILER_AIR = {
         'wasm32 compiler export: evidence for the T02 32-bit profile only (README), not this inventory',
     'tests/roadmap/pointer-width/air/{version}/names/wasm32-wasi':
         'wasm32 compiler export: evidence for the T02 32-bit profile only (README), not this inventory',
+    'tests/roadmap/pointer-width/air/{version}/pointer_width/wasm32-freestanding':
+        'wasm32 compiler export: evidence for the T02 32-bit profile only (README), not this inventory',
+    'tests/roadmap/pointer-width/air/{version}/pointer_width/wasm32-wasi':
+        'wasm32 compiler export: evidence for the T02 32-bit profile only (README), not this inventory',
     'tests/roadmap/pointer-width/air/{version}/wasm32-reject':
+        'wasm32 compiler export of rejected forms (reject.zig, README), not this inventory',
+    'tests/roadmap/pointer-width/air/{version}/reject/wasm32-freestanding':
         'wasm32 compiler export of rejected forms (reject.zig, README), not this inventory',
     'tests/roadmap/noreturn-variants/air-reject': 'compiler AIR for layout rejections (test_cli.py, provenance.json); not tag evidence',
     'tests/roadmap/union-bases/air-reject': 'compiler AIR of rejected union-member bases (test_cli.py, exports.json); not tag evidence',

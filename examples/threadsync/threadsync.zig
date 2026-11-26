@@ -94,4 +94,7 @@ comptime {
     _ = &mutexCounter;
     _ = &handoff;
     _ = &waitGroup;
+    // `Thread.Condition.broadcast` (`wake(.all)`) for the condition contract
+    // (`CondImpl.broadcast_wp`, `Proofs/Threadsync/Cond.lean`); no client here calls it.
+    _ = &Thread.Condition.broadcast;
 }

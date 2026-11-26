@@ -152,18 +152,25 @@ are rejected there by the layout comparison of `checkMemTy`:
 `lang-long-tail/float_lanes_aarch64.reject`). 0.17.1 writes `&v[i]` as a `ptr_cast` of the vector
 pointer to the lane pointer type, for every lane type; `Canon.laneElemPtrs` gives it 0.16.0's form,
 `ptr_elem_ptr` with the lane index, so one rule (`CheckCtx.lanePtr`, `Zig.loadLane`/`Zig.storeLane`)
-serves every version. The predicate `wholeByteLane` splits the two models: a lane of a whole
-power-of-two number of bytes (`u8`, `u32`, `f64`) is the element pointer that 0.16.0 made, and
-every other lane is the bit-pointer. A 0.17.1 value of a lane pointer *type* with a whole-byte lane
-(a parameter, a result, a stored `&v[i]`) is the vector's address, which the element pointer is
-not: the type is rejected (`lang-long-tail/lane_values.zig`).
+serves every version. The pointer type decides the model, whatever the lane: a lane pointer type
+(`vector_index`) is the vector's address with the lane in the type, the bit-pointer into the
+vector's integer; a plain `*T` is the element's address. Up to 0.16.0 `&v[i]` of a lane of a whole
+power-of-two number of bytes (`u8`, `u32`, `f64`) is a plain `*T`; 0.17.1 gives it the lane
+pointer type too, which does not coerce to `*T` ("pointer host size '4' cannot cast into pointer
+host size '0'"), and `@intFromPtr(&v[1])` is the vector's address there
+(`lang-long-tail/lane_values.zig`: `u8`, `i16`, `u32`, `u64`, `u128`, `f32` and `f64` lane
+pointers as a parameter, a result, a struct field, a `const` lane and a constant, and the address
+offset, 0.14.1–0.17.1, native probes of the four stock compilers equal to the model). A store
+through a lane pointer of any lane is `Zig.storeLane`, which reads and writes the vector's whole
+host bytes, so two threads that write different lanes of one vector through lane pointers race in
+the model (`.illegal`): a conservative over-approximation where the backend stores only the lane.
 
 Scope. The lane layout is LLVM's (LangRef: a vector of non-byte lanes is laid out as its
 bit-cast integer, lane 0 in the low bits on little-endian targets); the translator admits it
 only where the probe runs natively (`Target.lanePtrProbe`): an LLVM-backend profile on x86_64-linux,
 aarch64-macos or aarch64-linux (the `load`/`pad` rows of its T04 files, [aarch64-abi.md](aarch64-abi.md)).
 Other LLVM targets, the self-hosted x86_64 and C backends, legacy schema-11 files, runtime lane
-pointers that are read (0.14.1/0.15.2) and Zig 0.17.1 values of a whole-byte lane pointer type stay rejected. An `undefined` store through a lane pointer is rejected (a packed field takes `Zig.storeUndefBits`; a lane has no such store).
+pointers that are read (0.14.1/0.15.2) stay rejected. An `undefined` store through a lane pointer is rejected (a packed field takes `Zig.storeUndefBits`; a lane has no such store).
 
 Lane reads. `v.*[i]` through a pointer to a bit-packed vector is a lane pointer and a `load` in
 0.16.0 (`Zig.loadLane`), and a whole-vector `load` then `array_elem_val` in 0.15.2; canonicalization

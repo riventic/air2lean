@@ -205,15 +205,7 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
         (only 16, 32, 64, 80, 128)"
   | .ptr size isConst child =>
     let l := layouts[id]?.getD {}
-    -- `Canon.lean` rewrites the whole-byte lanes that 0.16.0 also addressed as elements.
     if l.isLanePtr && !l.laneBitPtr then
-      -- Zig 0.17.1 only: `&v[i]` of such a lane is an element pointer (`Canon.laneElemPtrs`),
-      -- which a value of the lane pointer type (the vector's address) is not.
-      if l.vectorIndex.isSome && wholeByteLane types layouts child then
-        throw s!"{fnName}: near line {line}: a value of a lane pointer type whose lane is a whole \
-          power-of-two number of bytes (vector_index; a parameter, a stored or returned `&v[i]`) \
-          is outside the subset: only `&v[i]` used where it is made is modelled, as an element \
-          pointer"
       throw s!"{fnName}: near line {line}: a pointer to a vector lane (vector_index) is outside \
         the subset, except a comptime lane of an integer, float or `bool` vector with a schema-12 \
         profile of Zig {", ".intercalate (ZigVersion.lanePtrVersions.map toString)} for the LLVM backend \
