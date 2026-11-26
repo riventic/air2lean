@@ -115,7 +115,7 @@
     {
       "out": "air/{version}/sync",
       "source": "../../../examples/sync/sync.zig",
-      "filter": "sync.,Io.Mutex.,Io.Event.,Io.Semaphore.,Io.RwLock.,debug.assert,Io.Condition.signal,Io.Condition.waitUncancelable",
+      "filter": "sync.,Io.Mutex.,Io.Event.,Io.Semaphore.,Io.RwLock.,debug.assert,Io.Condition.signal,Io.Condition.broadcast,Io.Condition.waitUncancelable",
       "versions": ["0.17.1"],
       "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
       "cwd": "repo"
