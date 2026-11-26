@@ -53,6 +53,27 @@ damaged AIR that has them is rejected too (`Checker.lean`, `negatives.py`).
 | erasing a pointer to storage that can hold an error value (`*anyerror!u32` → `*Handle`; Zig compiles it) | `a pointer cast has unresolved or cyclic symbolic storage provenance` (an open error set) or a `symbolic error storage` diagnostic, as for `*anyopaque` |
 | recovering a typed pointer in the default allocator model | `a pointer cast has unresolved or cyclic symbolic storage provenance`, as for `*anyopaque` |
 | an entry of kind `opaque` named `anyopaque`, one without `module`, one with a size or with fields | a parse or schema error |
+| a cast with a slice on one side only (`[]u8` → `*anyopaque`, `*Handle` → `[]u32`; Zig casts the slice's `.ptr`, so only hand-made AIR has it) | `a cast between a slice (a pointer and a length) and a type that is not a slice is outside the subset` |
+
+## Fields of a std model handle
+
+`std.mem.Allocator` (default allocator model), `std.Thread`, `std.Io` and `std.Io.Future(T)` are
+one whole value each in the model (`Zig.Allocator`, a thread id, `Zig.Io`, `Zig.Future`),
+without the native fields ([std models](../../../docs/std-models.md#opaque-std-handles)). A
+field of such a *value* therefore has no translation; before this rule the checker accepted it
+and the generated Lean did not compile (`Invalid projection`).
+
+| Use | Result |
+|---|---|
+| `a.ptr`, `a.vtable`, `io.userdata`, `io.vtable`, `f.result` of a handle value (`struct_field_val`), also of a handle that is a field of another struct | `` `struct_field_val` of a value of type … (`std.mem.Allocator`), which has no fields in the model `` |
+| the same through a local that the model holds as a value (`var c = a; c.ptr`), and a literal built in one (`return .{ .ptr = p, .vtable = v }`) | the same for `struct_field_ptr` |
+| a literal as one `aggregate_init` (hand-made AIR; `Checker.lean`) | the same for `aggregate_init` |
+| `&a.vtable` of a handle in memory (`a: *Allocator`), `&t.impl`, `&io.vtable`, `&f.result` | translated: the field's address. A load through it reads what the handle's decoder gives ([model handle bytes](../../../docs/model-handle-bytes.md)) |
+| the other fields of a struct that holds a handle (`h.n`, `h.a` as a whole) | translated |
+| all of the above for `mem.Allocator` under `--allocator-model translated` | translated: there it is the ordinary struct |
+
+The rule is one predicate on the type (`valueFields?` in `Air2Lean/Check.lean`): a struct, a
+union and a tuple have fields as values, nothing else has. No list of handle names decides it.
 
 ## Zig versions
 
@@ -75,6 +96,8 @@ the form of every unsupported type; it stays rejected with `type '…' is outsid
 | `air-recover/<version>` | Compiler exports of the recovery of a typed pointer (`--allocator-model translated`) |
 | `air-reject/<version>` | Compiler exports of `reject.zig` |
 | `std_handles.zig`, `air-std/<version>` | Uses of std's `Io.AnyFuture` (0.17.1, 0.16.0), all rejected |
+| `handle_fields.zig`, `air-fields/<version>` | Fields of `mem.Allocator` and `Thread` handles (all four versions): rejected as values, translated as addresses and under `--allocator-model translated` |
+| `io_fields.zig`, `air-io-fields/<version>` | Fields of `Io` and `Io.Future` handles (0.17.1, 0.16.0) |
 | `Runner.lean`, `RunnerRecover.lean` | The model's transcript of `main`, appended to the fresh translations |
 | `expected.txt` | The transcript: the native lines, and `model` lines for the two `@alignCast` panics that would end the native run |
 | `Checker.lean` | Checker controls on hand-built types and instructions: admitted types and casts in both allocator models, every rejection above |

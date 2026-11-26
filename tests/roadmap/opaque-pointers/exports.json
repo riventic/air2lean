@@ -25,6 +25,22 @@
       "cwd": "repo"
     },
     {
+      "out": "air-fields/{version}",
+      "source": "handle_fields.zig",
+      "filter": "handle_fields.",
+      "versions": ["0.17.1", "0.16.0", "0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air-io-fields/{version}",
+      "source": "io_fields.zig",
+      "filter": "io_fields.",
+      "versions": ["0.17.1", "0.16.0"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
       "out": "air-reject/{version}",
       "source": "reject.zig",
       "filter": "reject.",
