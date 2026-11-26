@@ -255,10 +255,7 @@ SEM = {
                               'mem.block mem.field.a mem.frame.two'),
     'alloc-block-size-zero': one('        let p ← liftMem (Zig.allocStack size align)',
                                  '        let p ← liftMem (Zig.allocStack 0 align)', 'mem.block mem.field.c'),
-    # `execFunc_mono` restates the body of `execFunc`: the second edit keeps the two in step.
-    'frame-not-freed': dict(edits=[('\n    frame.blocks.forM Zig.free\n', '\n'),
-                                   ('\n      frame.blocks.forM Zig.free\n', '\n')],
-                            kills=['mem.frame.freed'], cert=None),
+    'frame-not-freed': one('\n    frame.blocks.forM Zig.free\n', '\n', 'mem.frame.freed'),
     # Control flow.
     'arg-index-ignored': one('    match c.args[index]? with', '    match c.args[0]? with', 'flow.arg.second'),
     'br-value-dropped': one('  | .br t v => do pure (.br t (← liftR (operand c.func env v)))',

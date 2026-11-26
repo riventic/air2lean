@@ -2841,6 +2841,33 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let srcPtr := fc.isPtr a
     let dstPtr := fc.isPtrTy inst.ty
     let isInt (t : Ty) : Bool := match t with | .int .. => true | _ => false
+    -- `@alignCast`: a cast between pointer types (optional or not, slices too) to a stricter
+    -- alignment checks the operand's address itself (`Zig.checkAlign`), whatever else the cast
+    -- does (unwrap, wrap, null conversion); null passes, as in Zig. In a safe build the AIR
+    -- tests the address before the cast, so this check then never fails. A place has no
+    -- address in the model.
+    let alignCheck? : Option String :=
+      -- A pointer type or an optional pointer type: (optional, slice).
+      let ptrLike (t : Ty) : Option (Bool × Bool) := match t with
+        | .ptr size .. => some (false, size == "slice")
+        | .optional c => match fc.tyOfId c with
+          | .ptr size .. => some (true, size == "slice")
+          | _ => none
+        | _ => none
+      let align := fc.ptrAlignOf inst.ty
+      match ptrLike (fc.valTy a), ptrLike (fc.tyOfId inst.ty) with
+      | some (optional, slice), some _ =>
+        if fc.isPlace a || fc.isBytePlace a ||
+            align ≤ ((fc.valTyId? a).map fc.ptrAlignOf).getD 1 then none
+        else
+          let item := if slice then ".ptr" else ""
+          some (if optional then s!"({rv a}).forM (fun p => Zig.checkAlign {align} p{item})"
+            else s!"Zig.checkAlign {align} {rv a}{item}")
+      | _, _ => none
+    -- `conv` after the alignment check, if the cast has one.
+    let aligned (conv : String) : String := match alignCheck? with
+      | some check => s!"(do {fc.callMName} ({check}); {conv})"
+      | none => conv
     if srcPtr && isInt (fc.tyOfId inst.ty) then
       -- `@intFromPtr`.
       let expr := if fc.ptrBits == 64 || fc.tyBits inst.ty != fc.ptrBits then
@@ -2856,17 +2883,17 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else if srcPtr && fc.nullableVal a && fc.isOptScalarPtr (fc.tyOfId inst.ty) then
       -- A C/allowzero pointer to `?*T`: address zero is the explicit `none`.
-      let (env, l) := bindLet fc env inst.id s!"{fc.callMName} (Zig.ptrToOptional {rv a})"
+      let (env, l) := bindLet fc env inst.id (aligned s!"{fc.callMName} (Zig.ptrToOptional {rv a})")
       (env, some l)
     else if dstPtr && nullablePtrTy fc.types fc.layouts inst.ty && fc.isOptScalarPtr (fc.valTy a) then
       -- `?*T` to a C/allowzero pointer: `none` is address zero.
-      let (env, l) := bindLet fc env inst.id s!"pure (Zig.ptrOfOptional {rv a})"
+      let (env, l) := bindLet fc env inst.id (aligned s!"pure (Zig.ptrOfOptional {rv a})")
       (env, some l)
     else
     let srcOptPtr := (fc.valTyId? a).any (optSinglePtrTy fc.types fc.layouts)
     if srcOptPtr && dstPtr then
       -- `?*T` → `*U`: unwrap, null throws (`ZigLean/Mem/Repr.lean`).
-      let (env, l) := bindLet fc env inst.id s!"Zig.optPtrUnwrap {rv a}"
+      let (env, l) := bindLet fc env inst.id (aligned s!"Zig.optPtrUnwrap {rv a}")
       (env, some l)
     else if srcOptPtr && isInt (fc.tyOfId inst.ty) then
       -- `@intFromPtr` of `?*T`: null is 0.
@@ -2878,7 +2905,7 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
       let (env, l) := bindLet fc env inst.id expr; (env, some l)
     else if srcPtr && dstPtr && fc.nullableVal a &&
         !(nullablePtrTy fc.types fc.layouts inst.ty) then
-      let (env, l) := bindLet fc env inst.id s!"{fc.callMName} (Zig.ptrRequireNonNull {rv a})"
+      let (env, l) := bindLet fc env inst.id (aligned s!"{fc.callMName} (Zig.ptrRequireNonNull {rv a})")
       (env, some l)
     else
     -- `@errorCast` to a set that lacks some source error checks its error itself.
@@ -2894,12 +2921,10 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
     let expr :=
       if srcFloat && !dstFloat then s!"Zig.Float.toBits? {rv a}"
       else if !srcFloat && dstFloat then s!"pure ((Zig.Float.ofBits {rv a}) : {fc.emitTyOf inst.ty})"
-      else if srcPtr && dstPtr && fc.isMemPtr a && fc.ptrAlignOf inst.ty > fc.ptrAlign a then
-        -- `@alignCast` to a stricter alignment checks its pointer itself (`Zig.checkAlign`); a
-        -- slice checks its item pointer.
-        let p := if fc.isSlice a then s!"{rv a}.ptr" else rv a
-        s!"{fc.callMName} (Zig.checkAlign {fc.ptrAlignOf inst.ty} {p} >>= fun _ => pure {rv a})"
-      else s!"pure ({rv a})"
+      else match alignCheck? with
+        -- The cast is the operand itself (`*T` → `*U`, `?*T` → `?*U`, slices, `*T` → `?*U`).
+        | some check => s!"{fc.callMName} ({check} >>= fun _ => pure {rv a})"
+        | none => s!"pure ({rv a})"
     let (env, l) := bindLet fc env inst.id expr; (env, some l)
   | .floatRound op a =>
     -- Only f80's legacy extension changes rounding; vector lanes carry their scalar type here.

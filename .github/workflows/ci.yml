@@ -2461,6 +2461,21 @@ jobs:
           AIR2LEAN_DIFF_ZIG_CACHE: ${{ runner.temp }}/zig-diff-cache
         run: scripts/check.sh
 
+      # V01 stage 7 (docs/air-semantics.md §Conformance): the AIR interpreter (`Air2Lean.Sem`) on
+      # the AIR that the step above exported, for every corpus function inside its coverage and
+      # every corpus input; each outcome must agree with the native outcome and with the
+      # generated model's outcome of that step. The functions outside the coverage are counted by
+      # reason, and the set that runs is pinned (tests/roadmap/air-semantics/conformance/).
+      - name: AIR interpreter conformance on the differential corpus
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && matrix.full && !matrix.mutate && matrix.zig == '0.17.1' || !env.AIR2LEAN_REUSED && matrix.part == 'golden' && matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
+        run: |
+          set -euo pipefail
+          python3 -I -B tests/roadmap/air-semantics/test_conformance.py
+          python3 -I -B tests/roadmap/air-semantics/conformance.py --zig-version '${{ matrix.zig }}' \
+            --air-dir "$RUNNER_TEMP/air-out" \
+            --diff-out "$(cat '.lake/check-reports/${{ matrix.zig }}/build-tree')/tests/diff/out" \
+            --diff-report tests/diff/out/report.json
+
       # T06: correspondence beyond the committed inputs (docs/build-modes.md §Fresh inputs): the
       # generated inputs again from a seed derived from the commit, in a check tree; any value,
       # error or panic disagreement fails. The summary records the seed, so a failure reproduces.

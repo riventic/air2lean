@@ -951,8 +951,11 @@ def execFunc (prog : Prog) (call : Oracle) (f : Func) (args : List Value) : MemM
     if prog.entryTicked f.name then Zig.tick
     let (e, frame) ← (execBody ⟨prog, f, args, call, fun _ => none⟩ f.body.toList (fun _ => none)).run {}
     -- The stack frame ends at the return (a panic leaves the memory behind), its blocks in
-    -- reverse order of their allocation (`Frame.blocks` is newest first; MM-18: every free is
-    -- of the top of the stack).
+    -- reverse order of their allocation (`Frame.blocks` is newest first), so each free is of
+    -- the top entry of the thread's stack accounting, the shape the logic's free rule takes
+    -- (MM-18). The order is a discipline, not a check: `Zig.free` accepts any live block, a
+    -- stack entry pops lazily (`StackState.held`), and nothing runs between these frees, so the
+    -- memory after the last one is the same for any order.
     frame.blocks.forM Zig.free
     match e with
     | .ret v => pure v
@@ -1095,25 +1098,21 @@ theorem execBody_mono (prog : Prog) (f : Func) (args : List Value)
 @[partial_fixpoint_monotone]
 theorem execFunc_mono {γ : Type} [PartialOrder γ] (prog : Prog) (g : γ → Oracle) (hg : monotone g)
     (f : Func) (args : List Value) : monotone (fun x => execFunc prog (g x) f args) := by
-  have hbody : monotone (fun x => do
-      let (e, frame) ← (execBody ⟨prog, f, args, g x, fun _ => none⟩ f.body.toList (fun _ => none)).run {}
-      frame.blocks.forM Zig.free
-      match e with
-      | .ret v => pure v
-      | _ => StateT.lift stuck) := by
-    apply monotone_bind
-    · exact monotone_compose (g := fun o : Oracle =>
-        (execBody ⟨prog, f, args, o, fun _ => none⟩ f.body.toList (fun _ => none)).run {}) hg
-        (monotone_stateTRun _ (execBody_mono prog f args _ _ _) _)
-    · exact monotone_const _
+  -- Only the body's run reads the oracle; the frame's end after it (the frees, the exit) is the
+  -- same for every oracle, so it is not restated here.
+  have hrun : monotone (fun x =>
+      (execBody ⟨prog, f, args, g x, fun _ => none⟩ f.body.toList (fun _ => none)).run {}) :=
+    monotone_compose (g := fun o : Oracle =>
+      (execBody ⟨prog, f, args, o, fun _ => none⟩ f.body.toList (fun _ => none)).run {}) hg
+      (monotone_stateTRun _ (execBody_mono prog f args _ _ _) _)
   unfold execFunc
   apply monotone_ite _ _ _ _ (monotone_const _)
   apply monotone_ite
   · apply monotone_bind
     · exact monotone_const _
     · apply monotone_of_monotone_apply; intro
-      exact hbody
-  · exact hbody
+      exact monotone_bind _ _ _ hrun (monotone_const _)
+  · exact monotone_bind _ _ _ hrun (monotone_const _)
 
 end Monotone
 

@@ -716,7 +716,7 @@ def mem_alignPointer__anon_787bfe5d1eab (p0 : Zig.Ptr) (p1 : BitVec 64) : Zig.Me
         else (do
           throw .panic)) : Zig.MM mem_alignPointer__anon_787bfe5d1eabLocals mem_alignPointer__anon_787bfe5d1eabExit) with
       | .br13 => (do
-        let i18 ← pure (i9)
+        let i18 ← Zig.callM (Zig.checkAlign 16384 i9 >>= fun _ => pure i9)
         pure (.ret i18))
       | e => pure e)
     | e => pure e) : Zig.MM mem_alignPointer__anon_787bfe5d1eabLocals mem_alignPointer__anon_787bfe5d1eabExit).run' (default : mem_alignPointer__anon_787bfe5d1eabLocals)
