@@ -95,7 +95,7 @@ translated Zig 0.16.0 std code. All four are full-state contracts, for every imp
 |---|---|---|---|
 | `MutexImpl` (`ZigLean/Sep/Full/Mutex.lean`) | `Sync.ioMutex` (`Proofs/Sync/IoMutex.lean`) | `lock` moves the lock's resource to the holder; `unlock` moves it back | every protocol with the lock (`FLock.Fits`), any resource, any thread count |
 | `SemImpl` (`ZigLean/Sep/Full/Sem.lean`) | `Sync.ioSem` (`Proofs/Sync/IoSemaphore.lean`) | `post` moves a heap from the caller into the free permits' resource; `wait` moves one out | every protocol with the semaphore (`FSem.Fits`) |
-| `CondImpl` (`ZigLean/Sep/Full/Cond.lean`) | `Sync.ioCond` (`Proofs/Sync/Cond.lean`) | `wait` gives the mutex's resource back and returns holding it again; the caller rechecks its predicate | any number of waiters |
+| `CondImpl` (`ZigLean/Sep/Full/Cond.lean`) | `Sync.ioCond` (`Proofs/Sync/Cond.lean`), `Threadsync.threadCond` (`Proofs/Threadsync/Cond.lean`) | `wait` gives the mutex's resource back and returns holding it again; the caller rechecks its predicate; `signal` posts a signal or finds every waiter served; `broadcast` finds every waiter registered before its call served | any number of waiters |
 | `RwLockImpl` (`ZigLean/Sep/Full/RwLockImpl.lean`) | `Sync.ioRwLock` (`Proofs/Sync/IoRwLock.lean`) | the rules of `lockUncancelable`, `unlock`, `lockSharedUncancelable` and `unlockShared`, over the outer mutex (`MutexImpl`) and the semaphore (`SemImpl`) | every protocol with the lock (`FRw.Fits`) |
 
 The legacy-protocol `MutexContract`, `SemContract` and `CondContract` (PR125) had no client left

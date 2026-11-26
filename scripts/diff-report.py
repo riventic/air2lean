@@ -239,11 +239,32 @@ def normalized(value):
         return int(value)
     return value
 
+# One model byte (tests/diff/Diff.lean's `byteStr`): two digits, each a hex digit (its four bits
+# defined) or '?' (none defined), or '(<mask>:<value>)' for a byte with a partly defined digit.
+MODEL_BYTE = re.compile(r'([0-9a-f?]{2})|\(([0-9a-f]{2}):([0-9a-f]{2})\)')
+MODEL_BUFFER = re.compile(r'(?:%s)*' % MODEL_BYTE.pattern)
+NATIVE_BUFFER = re.compile(r'(?:[0-9a-f]{2})*')
+
+def model_byte(m):
+    """(defined-bit mask, value) of one MODEL_BYTE match."""
+    if m[1] is not None:
+        return int(''.join('0' if c == '?' else 'f' for c in m[1]), 16), int(m[1].replace('?', '0'), 16)
+    return int(m[2], 16), int(m[3], 16)
+
 def buffer_match(native, model):
-    # Pointer fragments ('pp') are unresolved, so they cannot establish byte equality.
-    if len(native)!=len(model) or len(native)%2:return False
-    if not re.fullmatch(r'[0-9a-f]*',native) or not re.fullmatch(r'[0-9a-f?]*',model):return False
-    return all(y=='?' or x==y for x,y in zip(native,model))
+    """Every defined bit of every model byte equals the native byte's bit (BM-3). Pointer
+    fragments ('pp') are unresolved, so they cannot establish byte equality."""
+    if not NATIVE_BUFFER.fullmatch(native):return False
+    if native == model:return True
+    if not MODEL_BUFFER.fullmatch(model):return False
+    matches = list(MODEL_BYTE.finditer(model))
+    zs = bytes.fromhex(native)
+    if len(matches) != len(zs):return False
+    for z, m in zip(zs, matches):
+        mask, value = model_byte(m)
+        if value & ~mask or z & mask != value:
+            return False
+    return True
 
 def same_extras(native, model):
     """The live allocation counts and the buffers after the call agree."""
