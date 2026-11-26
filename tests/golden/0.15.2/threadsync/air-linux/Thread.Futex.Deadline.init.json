@@ -552,7 +552,7 @@
   },
   {
    "k": "struct",
-   "name": "os.linux.timespec__struct_2627",
+   "name": "os.linux.timespec__struct_2653",
    "module": "std",
    "layout": "extern",
    "fields": [

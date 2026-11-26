@@ -1143,6 +1143,17 @@ jobs:
           lake build $(ls Proofs/*/AirCert.lean | sed 's#/#.#g; s#\.lean$##') Air2Lean.Main
           python3 -I -B tests/roadmap/air-semantics/test_lean.py "$PWD/.lake/build/bin/air2lean"
 
+      # Q02 (docs/mutation-map.md): the mutants of the interpreter's arms (Air2Lean/Sem.lean) and of
+      # the Canon rewrites without a preservation theorem, each applied in a check tree and killed
+      # by SemArms.lean or CanonRewrites.lean and, for an arm a committed certificate exercises, by
+      # that certificate's theorems. The sources are the same for every Zig version: one row.
+      - name: AIR semantics mutants
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate && matrix.zig == '0.17.1' }}
+        run: |
+          set -euo pipefail
+          lake build $(ls Proofs/*/AirCert.lean | sed 's#/#.#g; s#\.lean$##') Air2Lean.Main
+          python3 -I -B tests/roadmap/air-semantics/mutations.py --jobs 2
+
       - name: Stable scalar proof API regressions
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && matrix.full && !matrix.mutate && matrix.zig == '0.15.2' || !env.AIR2LEAN_REUSED && matrix.part == 'lean' && matrix.full && !matrix.mutate && matrix.zig == '0.16.0' }}
         run: |
@@ -1920,7 +1931,9 @@ jobs:
           bash tests/roadmap/thread-locals/check.sh
 
       # C14: std's condition broadcast of every supported version translates to the code that
-      # the condition contract's implementations prove (`CondImpl.broadcast_wp`).
+      # the condition contract's implementations prove (`CondImpl.broadcast_wp`). The broadcast
+      # client (`threadsync.handoffAll`) is built with Lake, and its two mutants, each in a check
+      # tree, must fail in the client's proof.
       - name: Condition broadcast exports (C14)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && matrix.full && !matrix.mutate }}
         run: bash tests/roadmap/cond-broadcast/check.sh
