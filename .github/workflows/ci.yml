@@ -1811,7 +1811,7 @@ jobs:
           case '${{ matrix.zig }}' in
             0.17.1) bash tests/roadmap/big-endian/check.sh --native '${{ matrix.zig }}' ;;
           esac
-          # T02 pointer_width.zig and names.zig natively and under Node's WASI (0.16.0: the
+          # T02 pointer_width.zig, names.zig and c_ints.zig natively and under Node's WASI (0.16.0: the
           # pointer-width step of the native part).
           case '${{ matrix.zig }}' in
             0.17.1) bash tests/roadmap/pointer-width/check.sh --native ;;
