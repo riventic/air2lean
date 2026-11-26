@@ -110,12 +110,14 @@ theorem lanePtr_not_refined (prog : Prog) (o : Oracle) (m : Zig.Mem) (p : Zig.Pt
   rw [heq, hm'] at hb
   cases hb
 
-/-! ## `itemReads` moves an item pointer's check (open finding)
+/-! ## `itemReads` folds only a `load` directly after its item pointer
 
 `Raw.itemReads` folds `ptr_elem_ptr` and the `load` that is its only reader into one
-`ptr_elem_val` at the load, wherever the load is. `Sem` checks the index where the pointer is
-formed, so with the load in a branch that does not run, the function before the rewrite is
-`.illegal` for an index past the count and the function after it returns
+`ptr_elem_val` at the load. It used to do so wherever the load was. `Sem` checks the index where
+the pointer is formed, so with the load in a branch that does not run, the function before that
+fold is `.illegal` for an index past the count and the function after it returns
+(`itemReads_not_preserved`). The rewrite now requires the load directly after the pointer, and
+`main` checks that it leaves this function alone
 (docs/architecture-audit/canon-drop-rewrites.md). -/
 
 /-- `%3 = ptr_elem_ptr(%0, %1)` of a `*[4]u8`, read only in the `then` branch of `%2`. -/
@@ -124,7 +126,8 @@ def itemBefore : Func :=
     ⟨4, 1, .condBr (.inst 2) #[⟨5, 2, .load (.inst 3)⟩, ⟨6, 1, .ret (.inst 5)⟩]
       #[⟨7, 1, .ret (.int 2 0)⟩]⟩]
 
-/-- `itemBefore` after `Raw.itemReads` (`main` checks that it is). -/
+/-- `itemBefore` with the pair folded at the load, as `Raw.itemReads` did before it required the
+load directly after the pointer. -/
 def itemAfter : Func :=
   fn #[10, 4, 5] #[⟨0, 10, .arg 0⟩, ⟨1, 4, .arg 1⟩, ⟨2, 5, .arg 2⟩,
     ⟨4, 1, .condBr (.inst 2) #[⟨5, 2, .ptrElemVal (.inst 0) (.inst 1)⟩, ⟨6, 1, .ret (.inst 5)⟩]
@@ -143,13 +146,67 @@ theorem itemReads_after (prog : Prog) (o : Oracle) (m : Zig.Mem) (p : Zig.Ptr) :
   cases ht : prog.entryTicked "canon.f" <;>
     simp only [execFunc, itemAfter, itemArgs, fn, argsOk, ht, air_sem] <;> simp <;> exact ⟨_, rfl⟩
 
-/-- `itemReads` does not preserve `Sem.execFunc` on this function. -/
+/-- Folding a `load` that is not directly after its item pointer does not preserve
+`Sem.execFunc`. -/
 theorem itemReads_not_preserved (prog : Prog) (o : Oracle) (m : Zig.Mem) (p : Zig.Ptr) :
     (execFunc prog o itemBefore (itemArgs p)).run m ≠ (execFunc prog o itemAfter (itemArgs p)).run m := by
   intro h
   obtain ⟨m', hm'⟩ := itemReads_after prog o m p
   rw [← h, itemReads_before prog o m p] at hm'
   cases hm'
+
+/-! ## `itemReads` on an adjacent pair is still no equality (open finding)
+
+With the load directly after the pointer, the fold still drops the pointer formation itself.
+`Zig.ptrProject` is illegal behaviour unless the base and the result are both inside the base's
+block (`getelementptr inbounds`); the folded `ptr_elem_val` loads from the item's address
+without forming a pointer from the base. For a base one byte before its block and the index 1,
+the function before the fold is `.illegal` and the function after it reads byte 0. -/
+
+/-- `%2 = ptr_elem_ptr(%0, %1)` of a `*[4]u8`, then `%3 = load(%2)`. -/
+def adjBefore : Func :=
+  fn #[10, 4] #[⟨0, 10, .arg 0⟩, ⟨1, 4, .arg 1⟩, ⟨2, 3, .elemPtr (.inst 0) (.inst 1)⟩,
+    ⟨3, 2, .load (.inst 2)⟩, ⟨4, 1, .ret (.inst 3)⟩]
+
+/-- `adjBefore` after `Raw.itemReads` (`main` checks that it is). -/
+def adjAfter : Func :=
+  fn #[10, 4] #[⟨0, 10, .arg 0⟩, ⟨1, 4, .arg 1⟩, ⟨3, 2, .ptrElemVal (.inst 0) (.inst 1)⟩,
+    ⟨4, 1, .ret (.inst 3)⟩]
+
+/-- A pointer one byte before block 0. -/
+def adjPtr : Zig.Ptr := ⟨some 0, -1⟩
+
+/-- That pointer and the index 1. -/
+def adjArgs : List Value := [.ptr adjPtr, .int false 64 1]
+
+/-- One live block of four defined bytes. -/
+def adjMem : Zig.Mem :=
+  { blocks := #[{ bytes := #[.int 7, .int 7, .int 7, .int 7], align := 1, kind := .heap, live := true,
+                  addr := 4096 }] }
+
+theorem adj_before (prog : Prog) (o : Oracle) :
+    ((execFunc prog o adjBefore adjArgs).run adjMem).run = some (.error .illegal) := by
+  cases ht : prog.entryTicked "canon.f" <;>
+    simp only [execFunc, adjBefore, adjArgs, fn, argsOk, ht, air_sem] <;> simp <;> rfl
+
+/-- `x` returns a value on the memory `m`. -/
+def returns {α : Type} (x : Zig.MemM α) (m : Zig.Mem) : Bool :=
+  match (x.run m).run with
+  | some (.ok _) => true
+  | _ => false
+
+theorem adj_after (prog : Prog) (o : Oracle) :
+    returns (execFunc prog o adjAfter adjArgs) adjMem = true := by
+  cases ht : prog.entryTicked "canon.f" <;>
+    simp only [returns, execFunc, adjAfter, adjArgs, fn, argsOk, ht, air_sem] <;> decide +kernel
+
+/-- `itemReads` does not preserve `Sem.execFunc` on an adjacent pair either. -/
+theorem itemReads_adjacent_not_preserved (prog : Prog) (o : Oracle) :
+    (execFunc prog o adjBefore adjArgs).run adjMem ≠ (execFunc prog o adjAfter adjArgs).run adjMem := by
+  intro h
+  have ha := adj_after prog o
+  simp only [returns, ← h, adj_before prog o] at ha
+  cases ha
 
 /-! ## The native binding -/
 
@@ -186,6 +243,11 @@ def rawItem : RawFunc :=
       thenBody := #[inst 5 "load" 2 #[.inst 3], inst 6 "ret" 1 #[.inst 5]],
       elseBody := #[inst 7 "ret" 1 #[.int 2 0]] }]
 
+/-- `adjBefore` as raw AIR. -/
+def rawAdj : RawFunc :=
+  rawFn #[10, 4] #[{ inst 0 "arg" 10 with param := some 0 }, { inst 1 "arg" 4 with param := some 1 },
+    inst 2 "ptr_elem_ptr" 3 #[.inst 0, .inst 1], inst 3 "load" 2 #[.inst 2], inst 4 "ret" 1 #[.inst 3]]
+
 def decoded (rewrite : RawFunc → RawFunc) (raw : RawFunc) : Except String (Func × Func) := do
   let pre ← normalizeCanonical raw
   let post ← normalizeCanonical (rewrite raw)
@@ -221,8 +283,19 @@ def main : IO Unit := do
       { escaping with body := escaping.body.filter fun i => i.id == 0 || i.id == 3 })
   let (pre, post) ← IO.ofExcept (decoded Raw.dropDeadRuntimeLanePtrs rawLanePtr)
   expect "dead runtime lane pointer stays unbound" false (CanonCertificate.dropBound false pre post)
-  -- The open `itemReads` finding is about the actual rewrite: the kernel-checked pair
-  -- (`itemReads_not_preserved`) is its input and its output.
-  let (pre, post) ← IO.ofExcept (decoded Raw.itemReads rawItem)
-  expect "itemReads counterexample is the rewrite's input and output" true
-    (CanonCertificate.sameFunction pre itemBefore && CanonCertificate.sameFunction post itemAfter)
+  -- `itemReads` leaves a `load` that is not directly after its item pointer
+  -- (`itemReads_not_preserved` is why), and still folds an adjacent pair: the kernel-checked
+  -- pair of the open finding (`itemReads_adjacent_not_preserved`) is its input and its output.
+  expect "itemReads leaves a load in a branch" true (Raw.itemReads rawItem == rawItem)
+  let (pre, post) ← IO.ofExcept (decoded Raw.itemReads rawAdj)
+  expect "itemReads adjacent counterexample is the rewrite's input and output" true
+    (CanonCertificate.sameFunction pre adjBefore && CanonCertificate.sameFunction post adjAfter)
+  -- A `load` between its item pointer and an `array_elem_val` of it is folded once, with the
+  -- pointer: no operand names an instruction that is gone.
+  let head := rawAdj.body.extract 0 2
+  let chain := rawFn #[10, 4] (head ++ #[inst 2 "ptr_elem_ptr" 3 #[.inst 0, .inst 1],
+    inst 3 "load" 2 #[.inst 2], inst 5 "array_elem_val" 2 #[.inst 3, .inst 1],
+    inst 4 "ret" 1 #[.inst 5]])
+  expect "itemReads folds a load with its item pointer only" true
+    ((Raw.itemReads chain).body == head ++ #[inst 3 "ptr_elem_val" 2 #[.inst 0, .inst 1],
+      inst 5 "array_elem_val" 2 #[.inst 3, .inst 1], inst 4 "ret" 1 #[.inst 5]])
