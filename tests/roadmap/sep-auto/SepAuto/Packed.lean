@@ -400,6 +400,26 @@ theorem mix_val (v : Mix) (h : Packed.mask v = BitVec.allOnes 83) :
     (Packed.ofBits (Packed.toBits v) : Mix) = v := by
   fsym_arith
 
+/-- A field without bits (`void`) at the offset of the float after it: the fields written as all
+ones are told by their place, not by their offset. -/
+structure ZF where
+  z : Unit
+  f : Float .f32
+  v : Zig.Vec (BitVec 4) 3
+  deriving Inhabited
+
+instance : Zig.Packed ZF 44 where
+  toBits v := ((Zig.Packed.toBits v.z).setWidth 44 <<< 0) ||| ((Zig.Packed.toBits v.f).setWidth 44 <<< 0) ||| ((Zig.Packed.toBits v.v).setWidth 44 <<< 32)
+  ofBits b := { z := Zig.Packed.get b 0, f := Zig.Packed.get b 0, v := Zig.Packed.get b 32 }
+  mask v := ((BitVec.allOnes 0).setWidth 44 <<< 0) ||| ((Zig.Packed.mask v.f).setWidth 44 <<< 0) ||| ((BitVec.allOnes 12).setWidth 44 <<< 32)
+
+theorem zf_bits (x : BitVec 44) : Packed.toBits (Packed.ofBits x : ZF) = x := by
+  fsym_arith
+
+theorem zf_val (v : ZF) (h : Packed.mask v = BitVec.allOnes 44) :
+    (Packed.ofBits (Packed.toBits v) : ZF) = v := by
+  fsym_arith
+
 /-- Lanes of lanes: the field's facts from its lanes', in any depth. -/
 structure VN where
   t : BitVec 4

@@ -145,6 +145,11 @@ def bits (n : Nat) (f : PField) : BitVec n := f.toBits.setWidth n <<< f.off
 `mask` writes them). -/
 def maskBits (n : Nat) (f : PField) : BitVec n := f.mask.setWidth n <<< f.off
 
+/-- `maskBits` as the generated `mask` writes it next to a float or packed-union field: all ones
+for a field marked `ones`, every bit of which is determined. -/
+def writtenMaskBits (n : Nat) (f : PField) (ones : Bool) : BitVec n :=
+  (bif ones then BitVec.allOnes f.w else f.mask).setWidth n <<< f.off
+
 /-- The field is the value of its bits of `b` (as the generated `ofBits` reads it). -/
 def Read {n : Nat} (b : BitVec n) (f : PField) : Prop :=
   f.val = @Packed.ofBits f.U f.w f.inst (b.extractLsb' f.off f.w)
@@ -364,26 +369,38 @@ theorem ofBits_toBits (L : PackedLayout α n) (hl : ∀ v, PAll PField.LawfulVal
   obtain ⟨he, hv⟩ := read_eq (Packed.toBits v) _ _ hs hf (L.ofBits_read _)
   exact ⟨(L.valid_iff _).mpr hv, L.ext _ _ he⟩
 
+/-- The fields' determined bits at their offsets, all ones for a field marked in `full` (in the
+fields' order), are the fields' own when every bit of each marked field is determined. -/
+private theorem maskBits_marked (n : Nat) :
+    ∀ (fs : List PField) (full : List Bool), full.length = fs.length →
+      PAll (fun p : PField × Bool => p.2 = false ∨ p.1.Full) (fs.zip full) →
+      List.zipWith (PField.writtenMaskBits n) fs full = fs.map (PField.maskBits n)
+  | [], [], _, _ => rfl
+  | [], _ :: _, hl, _ => by simp at hl
+  | _ :: _, [], hl, _ => by simp at hl
+  | f :: fs, b :: full, hl, ⟨h, hs⟩ => by
+    rw [List.zipWith_cons_cons, List.map_cons,
+      maskBits_marked n fs full (by simpa using hl) hs]
+    congr 1
+    rcases h with h | h
+    · rw [show b = false from h]; rfl
+    · unfold PField.maskBits PField.writtenMaskBits
+      rw [show f.mask = BitVec.allOnes f.w from h, Bool.cond_self]
+
 /-- `mask_full` of fields that tile the backing integer, for `mask` as the translator writes it
 for a struct with a float or packed-union field: each field's determined bits at its offset, and
-all ones for the fields at the offsets `full`, every bit of which is determined (`hf`: an
-integer, a vector of integers, any field kind next to any other). -/
-theorem mask_full_of {fields : α → List PField} (full : List Nat)
+all ones for the fields marked in `full` (one mark per field, in order), every bit of which is
+determined (`hf`: an integer, a vector of integers, any field kind next to any other). -/
+theorem mask_full_of {fields : α → List PField} (full : List Bool)
     (ht : ∀ v, PTiles n 0 ((fields v).map fun f => (f.off, f.w)) = true)
-    (hm : ∀ v, Packed.mask v = orAll ((fields v).map fun f =>
-      (bif full.contains f.off then BitVec.allOnes f.w else f.mask).setWidth n <<< f.off))
-    (hf : ∀ v, PAll (fun f => full.contains f.off = false ∨ f.Full) (fields v)) :
+    (hlen : ∀ v, full.length = (fields v).length)
+    (hm : ∀ v, Packed.mask v = orAll (List.zipWith (PField.writtenMaskBits n) (fields v) full))
+    (hf : ∀ v, PAll (fun p : PField × Bool => p.2 = false ∨ p.1.Full) ((fields v).zip full)) :
     ∀ v, Packed.mask v = BitVec.allOnes n → PAll PField.Full (fields v) := by
   intro v hv
   -- the value's determined bits are its fields' at their offsets
   have hm' : Packed.mask v = orAll ((fields v).map (PField.maskBits n)) := by
-    rw [hm v]
-    congr 1
-    refine List.map_congr_left fun f hmem => ?_
-    rcases (hf v).mem f hmem with h | h
-    · rw [h]; rfl
-    · unfold PField.maskBits
-      rw [show f.mask = BitVec.allOnes f.w from h, Bool.cond_self]
+    rw [hm v, maskBits_marked n _ _ (hlen v) (hf v)]
   refine PAll.of_mem fun f hf => ?_
   have e := PTiles.extract PField.mask (ht v) f hf
   have hb := PTiles.mem (ht v) f hf

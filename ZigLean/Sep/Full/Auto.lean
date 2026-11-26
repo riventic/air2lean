@@ -2629,10 +2629,11 @@ where
   definition, or an array's (`lanes`) or a vector's (`vec`) from its lanes', in any depth. -/
   laneFact (lanes vec : Name) (U : Expr) : TacticM Term := do
     let U ← whnfR U
-    let some l := if U.isAppOfArity ``Vector 2 then some lanes
-        else if U.isAppOfArity ``Zig.Vec 2 then some vec else none
-      | `(rfl)
-    `($(mkIdent l) (fun _ => $(← laneFact lanes vec (U.getArg! 0))) _)
+    let of (l : Name) : TacticM Term := do
+      `($(mkIdent l) (fun _ => $(← laneFact lanes vec (U.getArg! 0))) _)
+    if U.isAppOfArity ``Vector 2 then of lanes
+    else if U.isAppOfArity ``Zig.Vec 2 then of vec
+    else `(rfl)
   goal (m : Expr) : MetaM MVarId := do
     m.mvarId!.replaceTargetDefEq (← Core.betaReduce (← instantiateMVars (← m.mvarId!.getType)))
   /-- The instance's `ofBits b`, unfolded. -/
@@ -2708,17 +2709,20 @@ where
       laneFact ``Zig.Packed.valid_lanes_of ``Zig.Packed.valid_vec_of U
     let fulls ← sh.mapM fun (U, _) =>
       laneFact ``Zig.Packed.mask_lanes_of ``Zig.Packed.mask_vec_of U
-    -- the offsets of the fields whose bits the instance's `mask` writes as all ones (in a
-    -- struct with a float or packed-union field, the fields without one)
+    -- the fields whose bits the instance's `mask` writes as all ones (in a struct with a float
+    -- or packed-union field, the fields without one), in the fields' order
+    let noOnes := Array.replicate sh.size false
     let ones ← withLocalDeclD `v T fun v => do
-      let some mv ← unfoldProjInst? (mkApp4 (mkConst ``Packed.mask) T n inst v) | return #[]
-      (orOperands mv.headBeta).filterMapM fun x => do
-        let_expr HShiftLeft.hShiftLeft _ _ _ _ m o := x | return none
-        let_expr BitVec.setWidth _ _ a := m | return none
-        if a.isAppOf ``BitVec.allOnes then natVal? o else return none
-    let onesLit : Array Term := ones.map fun o => quote o
-    let fullOrMask ← all (← (sh.zip fulls).mapM fun ((_, _, _, off), h) =>
-      if ones.contains off then `(Or.inr $h) else `(Or.inl rfl))
+      let some mv ← unfoldProjInst? (mkApp4 (mkConst ``Packed.mask) T n inst v) | return noOnes
+      let xs := orOperands mv.headBeta
+      unless xs.size == sh.size do return noOnes
+      return xs.map fun x => Id.run do
+        let_expr HShiftLeft.hShiftLeft _ _ _ _ m _ := x | false
+        let_expr BitVec.setWidth _ _ a := m | false
+        a.isAppOf ``BitVec.allOnes
+    let onesLit : Array Term := ones.map fun b => quote b
+    let fullOrMask ← all (← (ones.zip fulls).mapM fun (b, h) =>
+      if b then `(Or.inr $h) else `(Or.inl rfl))
     let steps : Array (String × Syntax) := #[
       ("slots", ← `(tactic| exact fun _ => rfl)),
       ("tiles", ← `(tactic| exact rfl)),
@@ -2735,7 +2739,7 @@ where
       ("mask", ← `(tactic| first
         | exact fun _ _ => $(← all fulls)
         | exact Zig.PackedLayout.mask_full_of [$onesLit,*] (fun _ => rfl) (fun _ => rfl)
-            (fun _ => $fullOrMask))),
+            (fun _ => rfl) (fun _ => $fullOrMask))),
       ("ext", ← `(tactic| (intro v v' h; cases v; cases v'; first | rfl | (simp only
         [List.cons.injEq, Zig.PField.mk.injEq, heq_eq_eq, true_and, and_true] at h; simp only [h]))))]
     for (m, (what, tac)) in ms.zip steps do
