@@ -1025,7 +1025,7 @@
                "ty": 2,
                "callee": {
                 "ty": 29,
-                "func": "Io.futexWake__func_401",
+                "func": "Io.futexWake__func_5",
                 "module": "std",
                 "instance_key": "61005c422fa7c6c1e5ee41d8f70665b0e142d69f6d5b86f3b82db596f3f277f3",
                 "noreturn": false

@@ -508,19 +508,18 @@ def decodedTags : Array String := #[
 /-- The supported `zig_version` spellings, newest first (`ZigVersion.all`). -/
 def supportedVersions : List String := ZigVersion.all.map toString
 
-/-- The layout of a lane pointer `*align(a:0:n:i) T` (`&v[i]` of `@Vector(n, T)`, `T` an integer
-or `bool` of `w` bits) as the bit-pointer that `Zig.loadLane`/`Zig.storeLane` take: the
-vector's integer of `n * w` bits is its host (`⌈n * w / 8⌉` bytes, LLVM's store size), the lane
-is at bit `i * w`. `packedLanes` marks it. Any other lane pointer keeps its layout, which the
-checker rejects: also a pointer to a `wholeByteLane` (Zig 0.17.1 only), which is an element
-pointer where `&v[i]` makes it (`Canon.laneElemPtrs`) and has no model as a value of the lane
-pointer type (a parameter, a stored pointer). -/
-def lanePtrLayout (types : Array Ty) (layouts : Array Layout) (child : TyId) (l : Layout) :
-    Layout :=
+/-- The layout of a lane pointer `*align(a:0:n:i) T` (`&v[i]` of `@Vector(n, T)`, `T` an integer,
+a float or `bool` of `w` bits) as the bit-pointer that `Zig.loadLane`/`Zig.storeLane` take: the
+vector's address, with the vector's integer of `n * w` bits as its host (`⌈n * w / 8⌉` bytes,
+LLVM's store size) and the lane at bit `i * w`. `packedLanes` marks it. This is every lane
+pointer type, of every lane width: up to 0.16.0 only lanes that are not a power-of-two number of
+whole bytes have one (`&v[i]` of a `u32` lane is a plain `*u32` there), Zig 0.17.1 types every
+`&v[i]` so. Any other lane pointer keeps its layout, which the checker rejects. -/
+def lanePtrLayout (types : Array Ty) (child : TyId) (l : Layout) : Layout :=
   match l.vectorIndex, types[child]? with
   | some lane, some t =>
     let w := (laneBits? t).getD 0
-    if w == 0 || l.bitOffset != 0 || lane ≥ l.hostSize || wholeByteLane types layouts child then l
+    if w == 0 || l.bitOffset != 0 || lane ≥ l.hostSize then l
     else { l with hostSize := (l.hostSize * w + 7) / 8, bitOffset := lane * w, packedLanes := true }
   | _, _ => l
 
@@ -556,7 +555,7 @@ def normalizeCanonical (raw : Raw.RawFunc) : Except String Func := do
     let l := { l with ptrBytes := dialect.ptrBytes }
     match raw.types[i]? with
     | some (.vector ..) => { l with packedLanes }
-    | some (.ptr "one" _ c) => if laneBitPtrs then lanePtrLayout raw.types raw.layouts c l else l
+    | some (.ptr "one" _ c) => if laneBitPtrs then lanePtrLayout raw.types c l else l
     | _ => l
   return { dialect, name := raw.name, params := raw.params, ret := raw.ret,
            body, types := raw.types, layouts,

@@ -1,0 +1,31 @@
+{
+  "air_sha256": {
+    "air/0.14.1/Thread.Condition.FutexImpl.wake__anon_1717.json": "f4ff3af7c06611537f05b34a519caa23a9ff31d50be483c631c413a2b671fe59",
+    "air/0.14.1/Thread.Condition.broadcast.json": "afef2eb3d189d739f0cb95fa186142d0b4c75431bea4d99cea267f7484068c4c",
+    "air/0.14.1/Thread.Futex.LinuxImpl.wake.json": "190ddaed81059f1555bfa2c68e08122780797c92d4bcf472d6cd42679be6dc81",
+    "air/0.14.1/Thread.Futex.wake.json": "72a5f104cd8b66bb289a9ebad2e34648721587e6addad0cf07e604df4030d0c1",
+    "air/0.14.1/os.linux.errnoFromSyscall.json": "f4685e5a6b4e171d075c1cea7fe34b60657675d1d347e994559be4c2fd2e9118",
+    "air/0.14.1/posix.unexpectedErrno.json": "444f6a070912a6a8a364eff47e1aae390d955e351f8191a87b53db4377ff16a9",
+    "air/0.15.2/Thread.Condition.FutexImpl.wake__anon_1768.json": "3d0fb73c30dc646b4cb820783b27febcd36963bc74cf091f315702e9768e2f4b",
+    "air/0.15.2/Thread.Condition.broadcast.json": "77a9f6661a3096a77343a8591f17623a2629f04866772ec53128f72684ed7982",
+    "air/0.15.2/Thread.Futex.LinuxImpl.wake.json": "996f29e37c5828bd905b0fed626a5d2c29edb6e63384ad4d3a5475475699bf1d",
+    "air/0.15.2/Thread.Futex.wake.json": "a6428064dd20395b16cab8868e01df363d2a04de9f2cc634924bea1dfbfb2ca0",
+    "air/0.15.2/os.linux.errnoFromSyscall.json": "6e2e85dbaf93e747b67e9b55e60d09db2343afe9d7f9d96a3708cfa351c2b19d",
+    "air/0.15.2/posix.unexpectedErrno.json": "575fa55f15a618ef2e50d4316a0299f55c61d164df4b0e38fe8184c2ce7c91c8",
+    "air/0.16.0/Io.Condition.broadcast.json": "d0367171109f3f10ce6bc93536092ffc599144445be2bd31730dee52f1e0807c",
+    "air/0.16.0/posix.unexpectedErrno.json": "17073d5677389d4570ff9e3ff211a04bfb09b22d20701a313295cc9aa782b285",
+    "air/0.17.1/Io.Condition.broadcast.json": "e8c7445e0ec620cc87f4a9cb41945ee33cf096315dc2be235f4f26f1b57e60ad",
+    "air/0.17.1/posix.unexpectedErrno.json": "cc66c4f84f63af4abbd387649b24ede8e6c0c571f11c709b5b211d63fc7bfb1f"
+  },
+  "compilers": {
+    "0.14.1": "22c6d9c336aea5b40a991a3760179178db8a16dc15bc9f19e6e595d567db5f37",
+    "0.15.2": "9c78e1cdffeed237007105764dd1403ca2faadb3bd681e4c1d9af94de7360eec",
+    "0.16.0": "c7f33f99339241f401922ab14c913587f82ac814841847869f6b82050c76a815",
+    "0.17.1": "1953662bf1225a88b6c93545ccccf804f3eec5601df436181a1ba5b9ef1ab7c8"
+  },
+  "manifest_sha256": "377d19b834fcb7ce4872ffb88a6cd9be105aaf023fb4e1a00c2172a68d40120f",
+  "schema": 1,
+  "sources_sha256": {
+    "cond_broadcast.zig": "eda87de5415701494ac3b5949e78f9e0932dddc6ffe42a1283c7d9e04357094f"
+  }
+}
