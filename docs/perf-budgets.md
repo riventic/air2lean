@@ -269,13 +269,59 @@ After merging main into the branch, three outputs changed again, each equal to i
 reference translation. They are not rebaselined yet: the only measurements of the merged tree
 ran on a loaded host (calibration 11.4 and 12.4 s instead of 7.5 s), whose absolute times would
 loosen the limits about 1.5-fold. They stay `output-changed` until a quiet-host
-`record --workload layout --workload asm --workload asm-0.17.1` is rebaselined alone
-(`baseline --workload`):
+`record --per-module --workload …` of them is rebaselined alone (`baseline --workload`; the
+current list of workloads is under "State on main 2026-11-26"):
 
 | Change | Output change | Workloads |
 | --- | --- | --- |
 | #800 (A02: asm blocks as definitions over `ZigLean/Isa/X86`) | each `opaque airAsm_*` becomes a `def airIsa_*_block` with its `check` theorem and `airIsa_*` (and `_fault`) definitions, as in the updated `Proofs/Asm/Gen.lean` | asm, asm-0.17.1 |
 | #812 (golden host gate: layout goldens re-exported on x86_64-linux) | only the first-line profile record (target x86_64-linux instead of aarch64-macos); the body still equals `Proofs/Layout/Gen.lean` | layout |
+
+### State on main 2026-11-26 (`eee692962`, unchanged at `78011d489`)
+
+Translating every workload on main (Mac, `air2lean` of the same revision; the translation does not
+depend on the host) gives six outputs that differ from the 2026-11-25 baseline (`446c159cf`). Each
+equals its reference translation (`matches_reference`), and a line diff of the reference from
+`446c159cf` to main shows only the listed change:
+
+| Change | Output change | Workloads |
+| --- | --- | --- |
+| #800 (as above) | 8 `opaque airAsm_*` lines become 60 lines of `airIsa_*_block` definitions, `check` theorems and `zig_unfold` attributes | asm, asm-0.17.1 |
+| #812 (as above) | profile record only | layout |
+| #812, then #859 (L09 lane values) | profile record (x86_64-linux), and `laneSet`/`maskStore` store and load vector lanes through `Zig.storeLane`/`Zig.loadLane` instead of `ptrProject` element pointers (13 lines out, 15 in), as in `tests/golden/0.17.1/layout/Gen.lean` | layout-0.17.1 |
+| #822 (S6 futex), #840 (C14 broadcast) | `Thread.Futex.wake` and `Thread.Futex.DarwinImpl.wake` translated instead of the `Zig.threadFutexWakeC` primitive (the 2 removed lines), and the new `Thread.Condition.broadcast` with its `FutexImpl.wake` instance (202 lines added, `tests/golden/0.15.2/threadsync/Gen-darwin.lean`) | threadsync |
+| #840 | `Io.Condition.broadcast` (91 lines, `tests/golden/0.17.1/sync/Gen.lean`) | sync-0.17.1 |
+
+`sync-0.17.1` showed that #840 had added `Io.Condition.broadcast` to `examples/sync/filter-0.17.1`
+but not to this fixture's export filter: the export kept the old hash, no longer matched its
+reference, and `test_fixture_exports_follow_the_examples` failed on main. The filter now follows the
+example, and the fixture is re-exported with the patched 0.17.1 compiler (one new file,
+`Io.Condition.broadcast.json`; `fixture-exports.py check` ok).
+
+The six workloads stay `output-changed`: they are not rebaselined, because no quiet reference host
+was available. `--exclusive` holds back only build-guard jobs, and neo also runs a self-hosted
+GitHub Actions runner of another project (zig tests, pytest, playwright) and kernel-replay checkers
+outside the guard. An exclusive `record --per-module` of the six workloads plus `sync`
+(2026-11-26 01:42 to 01:51, load 2.6 to 4.1) had calibration 11.73 s (runs 10.73, 11.73, 12.14)
+instead of 7.47 s. Its absolute times would loosen the limits about 1.6-fold. A probe that then waited
+3 h for six readings of the 1-minute load below 1.0 in a row never got them (the load ended at 29).
+A rebaseline needs a host without unguarded load, with the calibration within about 5% of 7.47 s.
+That calibration is the check: time `Calibration.lean` alone (about 10 s) under the exclusive
+guard, and run the record only if it is within 5%. Waiting on the load average wastes host time.
+
+The export filter is a copy of `examples/sync/filter*`, which `test_fixture_exports_follow_the_examples`
+compares. A manifest entry that derives its filter from the example's filter files (the rule
+`scripts/check.sh` uses) would remove the copy. That change is left to a follow-up in
+`scripts/fixture-exports.py`.
+
+That loaded recording still answers the open question about `sync`/`threadsync` `proof.cold`. On
+the loaded host of 2026-11-25 (calibration 11.41 s), they took 10.57 and 11.37 units instead of 8.68
+and 10.60. On main they took 8.45 and 9.76 units. Every hotspot module was at or below its baseline
+ratio (`Sync.SemCounter` 2.84 vs 3.09, `Sync.Handoff` 1.98 vs 2.38, `Threadsync.WaitGroup.Wait`
+3.33 vs 3.77, `Threadsync.Handoff` 1.22 vs 1.33). The rise is not reproduced, and no proof-time
+regression is visible, so no PR is bisected. Only `threadsync` `elaborate` grew, from 0.60 to 0.94 units:
+the generated module grew by the 202 lines of #822/#840. That is the output change above, not a regression.
+Normalizing on a loaded host is approximate: its calibration runs spread 13%.
 
 ## Measured hotspots and optimizations
 
