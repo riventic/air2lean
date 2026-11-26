@@ -5,7 +5,7 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-6745 theorems in 440 files.
+6773 theorems in 441 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
@@ -14,13 +14,13 @@ premise was derived. This index covers the committed generated modules.
 | [PRF-03](premises.md#prf-03) | 65 | Gate-time generated module |
 | [PRF-04](premises.md#prf-04) | 985 | Parameterized pointer width |
 | [PRF-05](premises.md#prf-05) | 26 | Recorded `abi64-be-v1` big-endian profile |
-| [ALC-01](premises.md#alc-01) | 5006 | Single modelled allocator |
+| [ALC-01](premises.md#alc-01) | 5034 | Single modelled allocator |
 | [ALC-02](premises.md#alc-02) | 3096 | Allocation failure and request-cap policy |
-| [ALC-03](premises.md#alc-03) | 5006 | Byte remap policy |
+| [ALC-03](premises.md#alc-03) | 5034 | Byte remap policy |
 | [ALC-04](premises.md#alc-04) | 3227 | Byte sentinel allocation |
 | [ALC-05](premises.md#alc-05) | 3227 | Byte realloc and sentinel reallocation |
 | [ALC-06](premises.md#alc-06) | 3047 | Raw allocator interface contracts |
-| [ALC-08](premises.md#alc-08) | 4945 | Address reuse and provenance recovery |
+| [ALC-08](premises.md#alc-08) | 4973 | Address reuse and provenance recovery |
 | [ALC-09](premises.md#alc-09) | 22 | Caller-supplied `Allocator` behaves as the std model |
 | [ALC-10](premises.md#alc-10) | 3258 | Thread-safe allocator in concurrent code |
 | [IOM-01](premises.md#iom-01) | 167 | Caller-supplied `Io` behaves as the std model |
@@ -36,14 +36,14 @@ premise was derived. This index covers the committed generated modules.
 | [THR-10](premises.md#thr-10) | 3416 | Detached threads and explicit handle transfer |
 | [THR-11](premises.md#thr-11) | 26 | `Io.Future` tasks and cancelation (0.16.0) |
 | [THR-12](premises.md#thr-12) | 519 | A gone event setter is not joined while it sets |
-| [ORD-01](premises.md#ord-01) | 5054 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 5054 | No load buffering in compiled code |
-| [ORD-03](premises.md#ord-03) | 5054 | `seq_cst` treated as `acq_rel` |
+| [ORD-01](premises.md#ord-01) | 5082 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 5082 | No load buffering in compiled code |
+| [ORD-03](premises.md#ord-03) | 5082 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 3416 | Weak CAS spurious failure |
 | [ORD-05](premises.md#ord-05) | 2584 | Pointer atomics keep provenance and compare identities |
-| [ORD-06](premises.md#ord-06) | 5064 | Memory-model adequacy of the compiled code |
+| [ORD-06](premises.md#ord-06) | 5092 | Memory-model adequacy of the compiled code |
 | [TMR-02](premises.md#tmr-02) | 30 | Opt-in awake clock and timed scheduler |
-| [MTH-01](premises.md#mth-01) | 4807 | Executable IEEE-754 float model |
+| [MTH-01](premises.md#mth-01) | 4835 | Executable IEEE-754 float model |
 | [MTH-02](premises.md#mth-02) | 256 | Opaque libm transcendentals |
 | [MTH-03](premises.md#mth-03) | 31 | Version-specific compiler-rt float semantics |
 | [MTH-04](premises.md#mth-04) | 127 | aarch64 float lowering |
@@ -54,33 +54,33 @@ premise was derived. This index covers the committed generated modules.
 | [ASM-04](premises.md#asm-04) | 18 | Allowlisted assembly faults exactly on its entry's condition |
 | [ASM-05](premises.md#asm-05) | 18 | Environment-read assembly returns fresh oracle values |
 | [ASM-06](premises.md#asm-06) | 18 | Memory-region asm accesses only its declared regions |
-| [ASM-07](premises.md#asm-07) | 43 | The x86_64 instruction model matches the CPU and the compiled block |
+| [ASM-07](premises.md#asm-07) | 71 | The x86_64 instruction model matches the CPU and the compiled block |
 | [ASM-09](premises.md#asm-09) | 17 | The running CPU has the asm features that the profile lacks |
-| [SEM-01](premises.md#sem-01) | 5542 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 5029 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 5491 | Loops and triples are partial correctness |
+| [SEM-01](premises.md#sem-01) | 5570 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 5057 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 5519 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 2638 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 2777 | Model step and allocation counts are not time or memory measurements |
 | [SEM-06](premises.md#sem-06) | 130 | Canonical AIR fragment semantics |
-| [SEM-07](premises.md#sem-07) | 5029 | Block addresses are the environment's placement |
-| [STK-01](premises.md#stk-01) | 5486 | The native stack holds every call chain |
-| [STK-02](premises.md#stk-02) | 4945 | Stack reserves lie in address space the native run never maps |
+| [SEM-07](premises.md#sem-07) | 5057 | Block addresses are the environment's placement |
+| [STK-01](premises.md#stk-01) | 5514 | The native stack holds every call chain |
+| [STK-02](premises.md#stk-02) | 4973 | Stack reserves lie in address space the native run never maps |
 | [EXT-01](premises.md#ext-01) | 1632 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 11 | Assumed contracts and project axioms |
 | [EXT-03](premises.md#ext-03) | 11 | Extern functions at their linker identity |
 | [EXT-04](premises.md#ext-04) | 1632 | Registry models in concurrent programs |
 | [EXT-05](premises.md#ext-05) | 3283 | Environment implementations of open interfaces |
-| [EXT-06](premises.md#ext-06) | 4945 | External static storage is not written during the run |
+| [EXT-06](premises.md#ext-06) | 4973 | External static storage is not written during the run |
 | [EXT-07](premises.md#ext-07) | 0 | A weak definition is the symbol's definition in the image |
-| [TRU-01](premises.md#tru-01) | 6745 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 6773 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 1728 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 1728 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 262 | Reviewed opaque, extern and runtime-redirection policy |
 | [TRU-05](premises.md#tru-05) | 0 | Artifact signing key |
 | [TRU-06](premises.md#tru-06) | 0 | Filesystem publication atomicity |
-| [DEV-01](premises.md#dev-01) | 4945 | Declared device: trace and read oracle |
+| [DEV-01](premises.md#dev-01) | 4973 | Declared device: trace and read oracle |
 | [ENV-01](premises.md#env-01) | 33 | Selected handle read/write/close contract |
-| [ENV-02](premises.md#env-02) | 4958 | Distinct monotonic and wall clock observations |
+| [ENV-02](premises.md#env-02) | 4986 | Distinct monotonic and wall clock observations |
 | [ENV-03](premises.md#env-03) | 26 | Linux raw read/write/close are the bound models |
 | [OSF-01](premises.md#osf-01) | 1992 | Futex wait (`futex_4arg` WAIT, `__ulock_wait2`, `__ulock_wait`) |
 | [OSF-02](premises.md#osf-02) | 1992 | Futex wake (`futex_3arg` WAKE, `__ulock_wake`) |
@@ -94,7 +94,7 @@ premise was derived. This index covers the committed generated modules.
 | [OST-02](premises.md#ost-02) | 1971 | Thread exit, join and detach |
 | [OST-03](premises.md#ost-03) | 1993 | Thread ids, process id and CPU count |
 | [OSY-01](premises.md#osy-01) | 1971 | Yield |
-| [STD-01](premises.md#std-01) | 5006 | Hand model of the `std.mem.Allocator` wrappers |
+| [STD-01](premises.md#std-01) | 5034 | Hand model of the `std.mem.Allocator` wrappers |
 | [STD-02](premises.md#std-02) | 3416 | Hand model of `Thread.spawn` and `Thread.join` |
 | [STD-03](premises.md#std-03) | 3416 | Hand model of `Thread.detach` |
 | [STD-05](premises.md#std-05) | 3609 | Hand model of the std futex interface |
@@ -3516,6 +3516,41 @@ File premises: PRF-02, ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, M
 | `copy_eq` | PRF-02, ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, ASM-01, ASM-02, ASM-03, ASM-04, ASM-05, ASM-06, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, TRU-02, TRU-03, TRU-04, DEV-01, ENV-02, STD-01 |
 | `copy_frame` | PRF-02, ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-01, ASM-03, ASM-04, ASM-05, ASM-06, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, TRU-02, TRU-03, TRU-04, DEV-01, ENV-02, STD-01 |
 | `copy_overlap` | PRF-02, ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, ASM-01, ASM-03, ASM-04, ASM-05, ASM-06, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, TRU-02, TRU-03, TRU-04, DEV-01, ENV-02, STD-01 |
+
+## `tests/roadmap/asm-effects/Placement.lean`
+
+File premises: ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01
+
+| Theorem | Premises |
+|---|---|
+| `AsmPlacement.staleRead_rejected` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `AsmPlacement.staleRead_admissible` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `AsmPlacement.staleRead_entry` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `AsmPlacement.staleRead_differs` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `AsmPlacement.staleAddress_rejected` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `AsmPlacement.staleAddress_admissible` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `AsmPlacement.staleAddress_entry` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `AsmPlacement.staleAddress_differs` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `AsmPlacement.undefinedRead_rejected` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `AsmPlacement.undefinedRead_admissible` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `AsmPlacement.undefinedRead_entry` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `AsmPlacement.undefinedRead_differs` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `AsmPlacement.undeclaredWrite_rejected` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `AsmPlacement.undeclaredWrite_admissible` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `AsmPlacement.undeclaredWrite_entry` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `AsmPlacement.undeclaredWrite_differs` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `AsmPlacement.memWidth_rejected` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `AsmPlacement.memWidth_admissible` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `AsmPlacement.memWidth_entry` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `AsmPlacement.memWidth_differs` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `AsmPlacement.outputUndefined_rejected` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `AsmPlacement.outputUndefined_admissible` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `AsmPlacement.outputUndefined_entry` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `AsmPlacement.outputUndefined_differs` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `AsmPlacement.lzcnt_checked` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `AsmPlacement.lzcnt_admissible` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `AsmPlacement.lzcnt_shared` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `AsmPlacement.lzcnt_shared_one` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, ASM-07, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
 
 ## `tests/roadmap/big-endian/BigEndian/Names/V0_16_0/Proofs.lean`
 

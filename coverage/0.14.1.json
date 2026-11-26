@@ -24732,6 +24732,7 @@
       "ZigLean/Float/Value.lean": "5fe060b996d257f191c9c323a9a97118c1696df08169a2834d082438e4e19a53",
       "ZigLean/Float.lean": "f3dc30217dfab347453408f310bd01b151f81db75f7a76a8177a5e745e1063bb",
       "ZigLean/Isa/X86.lean": "2dea9d8ee588697c2df54beaf491d2df6d1381e51dfad4fb58e10892b46824ab",
+      "ZigLean/Isa/X86Placement.lean": "4e0a1ea10b8f60655885dfd486e0b57722b2b4155968b56880a45293dee58027",
       "ZigLean/Isa/X86Vectors.lean": "9228b44aff73b7667b12b122b7e48450cc3034c1014b9667d8b07c6a25a87443",
       "ZigLean/Lemmas.lean": "276805de525cbe46500f8c20ea42e8f873ec1b65e816351a51c7db314dfb7a3e",
       "ZigLean/Loop.lean": "2861063f17b0def5ef78ec13f090402aa2de9e723ae2abec102db1eab6d73daa",
