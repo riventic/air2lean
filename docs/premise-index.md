@@ -5,45 +5,45 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-6699 theorems in 439 files.
+6727 theorems in 439 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
 | [PRF-01](premises.md#prf-01) | 717 | Legacy 64-bit little-endian reference model |
-| [PRF-02](premises.md#prf-02) | 911 | Recorded `abi64-le-v1` schema-12 profile |
+| [PRF-02](premises.md#prf-02) | 927 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 65 | Gate-time generated module |
 | [PRF-04](premises.md#prf-04) | 979 | Parameterized pointer width |
 | [PRF-05](premises.md#prf-05) | 26 | Recorded `abi64-be-v1` big-endian profile |
-| [ALC-01](premises.md#alc-01) | 4960 | Single modelled allocator |
-| [ALC-02](premises.md#alc-02) | 3060 | Allocation failure and request-cap policy |
-| [ALC-03](premises.md#alc-03) | 4960 | Byte remap policy |
-| [ALC-04](premises.md#alc-04) | 3192 | Byte sentinel allocation |
-| [ALC-05](premises.md#alc-05) | 3192 | Byte realloc and sentinel reallocation |
-| [ALC-06](premises.md#alc-06) | 3012 | Raw allocator interface contracts |
-| [ALC-08](premises.md#alc-08) | 4899 | Address reuse and provenance recovery |
+| [ALC-01](premises.md#alc-01) | 4988 | Single modelled allocator |
+| [ALC-02](premises.md#alc-02) | 3088 | Allocation failure and request-cap policy |
+| [ALC-03](premises.md#alc-03) | 4988 | Byte remap policy |
+| [ALC-04](premises.md#alc-04) | 3220 | Byte sentinel allocation |
+| [ALC-05](premises.md#alc-05) | 3220 | Byte realloc and sentinel reallocation |
+| [ALC-06](premises.md#alc-06) | 3040 | Raw allocator interface contracts |
+| [ALC-08](premises.md#alc-08) | 4927 | Address reuse and provenance recovery |
 | [ALC-09](premises.md#alc-09) | 22 | Caller-supplied `Allocator` behaves as the std model |
-| [ALC-10](premises.md#alc-10) | 3223 | Thread-safe allocator in concurrent code |
+| [ALC-10](premises.md#alc-10) | 3251 | Thread-safe allocator in concurrent code |
 | [IOM-01](premises.md#iom-01) | 167 | Caller-supplied `Io` behaves as the std model |
-| [THR-01](premises.md#thr-01) | 3667 | Interleaving scheduler and partial-correctness meaning |
-| [THR-02](premises.md#thr-02) | 3380 | Thread spawn/join with the `available` policy |
-| [THR-03](premises.md#thr-03) | 3280 | Fallible thread assignment policy |
-| [THR-04](premises.md#thr-04) | 3247 | `Io.Group` tasks are model threads |
-| [THR-05](premises.md#thr-05) | 3573 | Futex model |
-| [THR-06](premises.md#thr-06) | 3247 | Darwin `os_unfair_lock` contract |
-| [THR-07](premises.md#thr-07) | 1951 | Progress hints without fairness |
-| [THR-08](premises.md#thr-08) | 3155 | Protocol (rely-guarantee / CSL) proofs over all schedules |
+| [THR-01](premises.md#thr-01) | 3695 | Interleaving scheduler and partial-correctness meaning |
+| [THR-02](premises.md#thr-02) | 3408 | Thread spawn/join with the `available` policy |
+| [THR-03](premises.md#thr-03) | 3308 | Fallible thread assignment policy |
+| [THR-04](premises.md#thr-04) | 3275 | `Io.Group` tasks are model threads |
+| [THR-05](premises.md#thr-05) | 3601 | Futex model |
+| [THR-06](premises.md#thr-06) | 3275 | Darwin `os_unfair_lock` contract |
+| [THR-07](premises.md#thr-07) | 1979 | Progress hints without fairness |
+| [THR-08](premises.md#thr-08) | 3183 | Protocol (rely-guarantee / CSL) proofs over all schedules |
 | [THR-09](premises.md#thr-09) | 10 | Eventually cooperative schedule (progress premise) |
-| [THR-10](premises.md#thr-10) | 3380 | Detached threads and explicit handle transfer |
+| [THR-10](premises.md#thr-10) | 3408 | Detached threads and explicit handle transfer |
 | [THR-11](premises.md#thr-11) | 26 | `Io.Future` tasks and cancelation (0.16.0) |
 | [THR-12](premises.md#thr-12) | 513 | A gone event setter is not joined while it sets |
-| [ORD-01](premises.md#ord-01) | 5008 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 5008 | No load buffering in compiled code |
-| [ORD-03](premises.md#ord-03) | 5008 | `seq_cst` treated as `acq_rel` |
-| [ORD-04](premises.md#ord-04) | 3380 | Weak CAS spurious failure |
-| [ORD-05](premises.md#ord-05) | 2550 | Pointer atomics keep provenance and compare identities |
-| [ORD-06](premises.md#ord-06) | 5018 | Memory-model adequacy of the compiled code |
+| [ORD-01](premises.md#ord-01) | 5036 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 5036 | No load buffering in compiled code |
+| [ORD-03](premises.md#ord-03) | 5036 | `seq_cst` treated as `acq_rel` |
+| [ORD-04](premises.md#ord-04) | 3408 | Weak CAS spurious failure |
+| [ORD-05](premises.md#ord-05) | 2578 | Pointer atomics keep provenance and compare identities |
+| [ORD-06](premises.md#ord-06) | 5046 | Memory-model adequacy of the compiled code |
 | [TMR-02](premises.md#tmr-02) | 30 | Opt-in awake clock and timed scheduler |
-| [MTH-01](premises.md#mth-01) | 4761 | Executable IEEE-754 float model |
+| [MTH-01](premises.md#mth-01) | 4789 | Executable IEEE-754 float model |
 | [MTH-02](premises.md#mth-02) | 246 | Opaque libm transcendentals |
 | [MTH-03](premises.md#mth-03) | 31 | Version-specific compiler-rt float semantics |
 | [MTH-04](premises.md#mth-04) | 127 | aarch64 float lowering |
@@ -56,50 +56,50 @@ premise was derived. This index covers the committed generated modules.
 | [ASM-06](premises.md#asm-06) | 18 | Memory-region asm accesses only its declared regions |
 | [ASM-07](premises.md#asm-07) | 43 | The x86_64 instruction model matches the CPU and the compiled block |
 | [ASM-09](premises.md#asm-09) | 17 | The running CPU has the asm features that the profile lacks |
-| [SEM-01](premises.md#sem-01) | 5496 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 4983 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 5445 | Loops and triples are partial correctness |
-| [SEM-04](premises.md#sem-04) | 2604 | Total-correctness statements |
-| [SEM-05](premises.md#sem-05) | 2743 | Model step and allocation counts are not time or memory measurements |
+| [SEM-01](premises.md#sem-01) | 5524 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 5011 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 5473 | Loops and triples are partial correctness |
+| [SEM-04](premises.md#sem-04) | 2632 | Total-correctness statements |
+| [SEM-05](premises.md#sem-05) | 2771 | Model step and allocation counts are not time or memory measurements |
 | [SEM-06](premises.md#sem-06) | 121 | Canonical AIR fragment semantics |
-| [SEM-07](premises.md#sem-07) | 4983 | Block addresses are the environment's placement |
-| [STK-01](premises.md#stk-01) | 5440 | The native stack holds every call chain |
-| [STK-02](premises.md#stk-02) | 4899 | Stack reserves lie in address space the native run never maps |
-| [EXT-01](premises.md#ext-01) | 1599 | User external model contracts |
+| [SEM-07](premises.md#sem-07) | 5011 | Block addresses are the environment's placement |
+| [STK-01](premises.md#stk-01) | 5468 | The native stack holds every call chain |
+| [STK-02](premises.md#stk-02) | 4927 | Stack reserves lie in address space the native run never maps |
+| [EXT-01](premises.md#ext-01) | 1627 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 11 | Assumed contracts and project axioms |
 | [EXT-03](premises.md#ext-03) | 11 | Extern functions at their linker identity |
-| [EXT-04](premises.md#ext-04) | 1599 | Registry models in concurrent programs |
-| [EXT-05](premises.md#ext-05) | 3247 | Environment implementations of open interfaces |
-| [EXT-06](premises.md#ext-06) | 4899 | External static storage is not written during the run |
+| [EXT-04](premises.md#ext-04) | 1627 | Registry models in concurrent programs |
+| [EXT-05](premises.md#ext-05) | 3275 | Environment implementations of open interfaces |
+| [EXT-06](premises.md#ext-06) | 4927 | External static storage is not written during the run |
 | [EXT-07](premises.md#ext-07) | 0 | A weak definition is the symbol's definition in the image |
-| [TRU-01](premises.md#tru-01) | 6699 | Lean kernel and standard axioms |
-| [TRU-02](premises.md#tru-02) | 1705 | Zig exporter and air2lean translation |
-| [TRU-03](premises.md#tru-03) | 1705 | Backend lowering and native execution |
+| [TRU-01](premises.md#tru-01) | 6727 | Lean kernel and standard axioms |
+| [TRU-02](premises.md#tru-02) | 1721 | Zig exporter and air2lean translation |
+| [TRU-03](premises.md#tru-03) | 1721 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 252 | Reviewed opaque, extern and runtime-redirection policy |
 | [TRU-05](premises.md#tru-05) | 0 | Artifact signing key |
 | [TRU-06](premises.md#tru-06) | 0 | Filesystem publication atomicity |
-| [DEV-01](premises.md#dev-01) | 4899 | Declared device: trace and read oracle |
+| [DEV-01](premises.md#dev-01) | 4927 | Declared device: trace and read oracle |
 | [ENV-01](premises.md#env-01) | 33 | Selected handle read/write/close contract |
-| [ENV-02](premises.md#env-02) | 4912 | Distinct monotonic and wall clock observations |
+| [ENV-02](premises.md#env-02) | 4940 | Distinct monotonic and wall clock observations |
 | [ENV-03](premises.md#env-03) | 26 | Linux raw read/write/close are the bound models |
-| [OSF-01](premises.md#osf-01) | 1956 | Futex wait (`futex_4arg` WAIT, `__ulock_wait2`, `__ulock_wait`) |
-| [OSF-02](premises.md#osf-02) | 1956 | Futex wake (`futex_3arg` WAKE, `__ulock_wake`) |
-| [OSG-01](premises.md#osg-01) | 1936 | Interrupting signal (`tgkill`, `pthread_kill` of `SIG.IO`) |
-| [OSK-01](premises.md#osk-01) | 1957 | Clock reads |
-| [OSK-02](premises.md#osk-02) | 1875 | Sleep |
+| [OSF-01](premises.md#osf-01) | 1984 | Futex wait (`futex_4arg` WAIT, `__ulock_wait2`, `__ulock_wait`) |
+| [OSF-02](premises.md#osf-02) | 1984 | Futex wake (`futex_3arg` WAKE, `__ulock_wake`) |
+| [OSG-01](premises.md#osg-01) | 1964 | Interrupting signal (`tgkill`, `pthread_kill` of `SIG.IO`) |
+| [OSK-01](premises.md#osk-01) | 1985 | Clock reads |
+| [OSK-02](premises.md#osk-02) | 1903 | Sleep |
 | [OSL-01](premises.md#osl-01) | 0 | macOS `os_unfair_lock` primitive contract |
-| [OSM-01](premises.md#osm-01) | 2438 | Trusted `posix.mmap`/`munmap`/`mremap` model |
-| [OSM-02](premises.md#osm-02) | 1957 | macOS `malloc`/`free`/`malloc_size` |
-| [OST-01](premises.md#ost-01) | 1957 | Thread creation (`clone`, `pthread_create`) |
-| [OST-02](premises.md#ost-02) | 1936 | Thread exit, join and detach |
-| [OST-03](premises.md#ost-03) | 1957 | Thread ids, process id and CPU count |
-| [OSY-01](premises.md#osy-01) | 1936 | Yield |
-| [STD-01](premises.md#std-01) | 4960 | Hand model of the `std.mem.Allocator` wrappers |
-| [STD-02](premises.md#std-02) | 3380 | Hand model of `Thread.spawn` and `Thread.join` |
-| [STD-03](premises.md#std-03) | 3380 | Hand model of `Thread.detach` |
-| [STD-05](premises.md#std-05) | 3573 | Hand model of the std futex interface |
-| [STD-06](premises.md#std-06) | 3247 | Hand model of `Thread.Mutex.DarwinImpl` |
-| [STD-08](premises.md#std-08) | 3247 | Hand model of `Io.Group` |
+| [OSM-01](premises.md#osm-01) | 2466 | Trusted `posix.mmap`/`munmap`/`mremap` model |
+| [OSM-02](premises.md#osm-02) | 1985 | macOS `malloc`/`free`/`malloc_size` |
+| [OST-01](premises.md#ost-01) | 1985 | Thread creation (`clone`, `pthread_create`) |
+| [OST-02](premises.md#ost-02) | 1964 | Thread exit, join and detach |
+| [OST-03](premises.md#ost-03) | 1985 | Thread ids, process id and CPU count |
+| [OSY-01](premises.md#osy-01) | 1964 | Yield |
+| [STD-01](premises.md#std-01) | 4988 | Hand model of the `std.mem.Allocator` wrappers |
+| [STD-02](premises.md#std-02) | 3408 | Hand model of `Thread.spawn` and `Thread.join` |
+| [STD-03](premises.md#std-03) | 3408 | Hand model of `Thread.detach` |
+| [STD-05](premises.md#std-05) | 3601 | Hand model of the std futex interface |
+| [STD-06](premises.md#std-06) | 3275 | Hand model of `Thread.Mutex.DarwinImpl` |
+| [STD-08](premises.md#std-08) | 3275 | Hand model of `Io.Group` |
 | [STD-09](premises.md#std-09) | 26 | Hand model of `Io.async` and `Io.Future` |
 | [STD-10](premises.md#std-10) | 30 | Hand model of `Io.Clock.now` and `Io.futexWaitTimeout` in the timed emitter |
 
@@ -9261,6 +9261,13 @@ File premises: PRF-02, PRF-04, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, A
 | `TryLifetimes.V0_14_1.Lifetimes.readPayload_error` | PRF-02, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
 | `TryLifetimes.V0_14_1.Lifetimes.writePayload_ok` | PRF-02, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
 | `TryLifetimes.V0_14_1.Lifetimes.writePayload_error` | PRF-02, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `TryLifetimes.V0_14_1.Lifetimes.reader_ok` | PRF-02, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `TryLifetimes.V0_14_1.Lifetimes.reader_error` | PRF-02, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `TryLifetimes.V0_14_1.Lifetimes.writer_ok` | PRF-02, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `TryLifetimes.V0_14_1.Lifetimes.writer_error` | PRF-02, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `TryLifetimes.V0_14_1.Lifetimes.setPayload_owned` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `TryLifetimes.V0_14_1.Lifetimes.setPayload32_owned` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `TryLifetimes.V0_14_1.Lifetimes.setPayload_shared_rejected` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
 
 ## `tests/roadmap/try-pointers/lifetimes/TryLifetimes/V0_14_1/Payloads.lean`
 
@@ -9303,6 +9310,13 @@ File premises: PRF-02, PRF-04, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, A
 | `TryLifetimes.V0_15_2.Lifetimes.readPayload_error` | PRF-02, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
 | `TryLifetimes.V0_15_2.Lifetimes.writePayload_ok` | PRF-02, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
 | `TryLifetimes.V0_15_2.Lifetimes.writePayload_error` | PRF-02, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `TryLifetimes.V0_15_2.Lifetimes.reader_ok` | PRF-02, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `TryLifetimes.V0_15_2.Lifetimes.reader_error` | PRF-02, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `TryLifetimes.V0_15_2.Lifetimes.writer_ok` | PRF-02, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `TryLifetimes.V0_15_2.Lifetimes.writer_error` | PRF-02, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `TryLifetimes.V0_15_2.Lifetimes.setPayload_owned` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `TryLifetimes.V0_15_2.Lifetimes.setPayload32_owned` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `TryLifetimes.V0_15_2.Lifetimes.setPayload_shared_rejected` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
 
 ## `tests/roadmap/try-pointers/lifetimes/TryLifetimes/V0_15_2/Payloads.lean`
 
@@ -9345,6 +9359,13 @@ File premises: PRF-02, PRF-04, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, A
 | `TryLifetimes.V0_16_0.Lifetimes.readPayload_error` | PRF-02, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
 | `TryLifetimes.V0_16_0.Lifetimes.writePayload_ok` | PRF-02, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
 | `TryLifetimes.V0_16_0.Lifetimes.writePayload_error` | PRF-02, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `TryLifetimes.V0_16_0.Lifetimes.reader_ok` | PRF-02, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `TryLifetimes.V0_16_0.Lifetimes.reader_error` | PRF-02, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `TryLifetimes.V0_16_0.Lifetimes.writer_ok` | PRF-02, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `TryLifetimes.V0_16_0.Lifetimes.writer_error` | PRF-02, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `TryLifetimes.V0_16_0.Lifetimes.setPayload_owned` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `TryLifetimes.V0_16_0.Lifetimes.setPayload32_owned` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `TryLifetimes.V0_16_0.Lifetimes.setPayload_shared_rejected` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
 
 ## `tests/roadmap/try-pointers/lifetimes/TryLifetimes/V0_16_0/Payloads.lean`
 
@@ -9387,6 +9408,13 @@ File premises: PRF-02, PRF-04, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, A
 | `TryLifetimes.V0_17_1.Lifetimes.readPayload_error` | PRF-02, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
 | `TryLifetimes.V0_17_1.Lifetimes.writePayload_ok` | PRF-02, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
 | `TryLifetimes.V0_17_1.Lifetimes.writePayload_error` | PRF-02, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `TryLifetimes.V0_17_1.Lifetimes.reader_ok` | PRF-02, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `TryLifetimes.V0_17_1.Lifetimes.reader_error` | PRF-02, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `TryLifetimes.V0_17_1.Lifetimes.writer_ok` | PRF-02, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `TryLifetimes.V0_17_1.Lifetimes.writer_error` | PRF-02, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, TRU-02, TRU-03, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `TryLifetimes.V0_17_1.Lifetimes.setPayload_owned` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `TryLifetimes.V0_17_1.Lifetimes.setPayload32_owned` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `TryLifetimes.V0_17_1.Lifetimes.setPayload_shared_rejected` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
 
 ## `tests/roadmap/try-pointers/lifetimes/TryLifetimes/V0_17_1/Payloads.lean`
 
