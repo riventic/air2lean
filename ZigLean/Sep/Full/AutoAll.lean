@@ -25,6 +25,7 @@ import ZigLean.Sep.Full.OsFutex
 import ZigLean.Sep.Full.TSum
 import ZigLean.Sep.Full.ListSeg
 import ZigLean.VecMem
+import ZigLean.ReprCast
 
 /-!
 # The proof framework in one import (`docs/proof-framework.md`)
@@ -38,7 +39,7 @@ primitives), the loop and recursion rules (`Loop`, a thread's `ThreadLoop`), the
 start memory (`Init`), the full-state witnesses of claims (`Witness`), the step ticks
 (`Tick`), the reset ledger's opaque atoms (`ResetLedger`), the OS futex rows (`OsFutex`:
 `futex_4arg`/`futex_3arg`, `__ulock_wait2`/`__ulock_wake`) and the library sum's arithmetic
-(`TSum`) and the library list family (`ListSeg`).
+(`TSum`), the library list family (`ListSeg`) and the size of a float's encoding (`ReprCast`).
 
 A module of the library that declares a rule is imported here (directly or through another);
 `tests/roadmap/one-logic/check.sh` fails otherwise, so a proof never misses a rule because of

@@ -1,7 +1,7 @@
 import Interfaces.Kinds
 import ZigLean.Mem.WidthLemmas
 import ZigLean.Sep.Full.SentinelBuf
-import ZigLean.Sep.Full.RegionEnc
+import ZigLean.Sep.Full.Region
 import ZigLean.ReprCast
 import ZigLean.Sep.Full.Dispatch
 import ZigLean.Sep.Full.Auto

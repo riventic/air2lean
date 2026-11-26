@@ -2,8 +2,7 @@
 # Open interfaces (docs/interfaces.md): calls through a `std.mem.Allocator`, a `std.Random` or
 # E02's `Visitor` callback that the caller passes in. Needs a built translator and `lake build ZigLean ZigLean.Sep.Full.Wrappers
 # ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Block ZigLean.Sep.Full.AutoPrim
-# ZigLean.Sep.Full.Typed ZigLean.Sep.Full.Try ZigLean.Sep.Full.Region ZigLean.Sep.Full.SentinelBuf
-# ZigLean.Sep.Full.RegionEnc`;
+# ZigLean.Sep.Full.Typed ZigLean.Sep.Full.Try ZigLean.Sep.Full.Region ZigLean.Sep.Full.SentinelBuf`;
 # runs no compiler. Every Zig version's exports translate under the registries and elaborate; the
 # 0.17.1 translations are the retained ones byte for byte, and the proofs over them
 # (Interfaces/*Spec.lean) check; the list proofs (Proofs/Lists, with M03's Policy) build over the
