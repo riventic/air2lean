@@ -2,7 +2,8 @@ import PackedCasts.V0_15_2.OptItems
 import PackedCasts.Show
 
 /-! `opt_items.zig` (Zig 0.14.1, 0.15.2; LLVM backend): kernel-checked results, then `main` prints
-the lines of `native.zig`'s cases. It is written for Zig 0.15.2; the module of 0.14.1 is that one
+the lines of `native.zig`'s cases (`intToZeros` and `intToBools` loop over the items, so only
+`main` runs them). It is written for Zig 0.15.2; the module of 0.14.1 is that one
 with the version renamed (`check.sh`, `scripts/fixtures.py instance`). -/
 
 open Zig PackedCasts.V0_15_2.OptItems PackedCastsShow
@@ -29,7 +30,6 @@ theorem intToU16s_ok : (intToU16s 0xEE015678FF011234#64).run = some (.ok 0x5678)
 theorem zerosToInt_ok : (zerosToInt #v[some 0, none, some 0, some 0]).run =
     some (.ok 0x01010001#32) := by
   decide +kernel
-theorem intToZeros_ok : (intToZeros 0x01000101#32).run = some (.ok 3) := by decide +kernel
 /-- Set bits above the `u12` in its payload bytes: `.unspecified`. -/
 theorem intToU12s_highBits : (intToU12s 0xAA01FABC#64).run = some (.error .unspecified) := by
   decide +kernel
@@ -38,7 +38,6 @@ self-hosted x86_64 backend does not). -/
 theorem intToU24s_padding : (intToU24s 0x00000001771234560000000000000000#128).run =
     some (.ok 0x123456) := by
   decide +kernel
-theorem intToBools_ok : (intToBools 0x01000101#32).run = some (.ok 7) := by decide +kernel
 theorem arraysToInt_ok : (arraysToInt #v[some #v[1, 2, 3], some #v[4, 5, 6]]).run =
     some (.ok 0x0106050401030201#64) := by
   decide +kernel
