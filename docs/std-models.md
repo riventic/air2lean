@@ -103,6 +103,15 @@ This is a conservative boundary: it also rejects a std opaque type that no model
 handle. It goes when the hand models go (§Retiring the hand models): a translated `Io.Future`
 has the native record behind its handle.
 
+A handle type itself (`mem.Allocator` in the default allocator model, `Thread`, `Io`,
+`Io.Future(T)`) is one whole value in the model, without the native fields. A field of such a
+value (`a.ptr`, `io.vtable`, `f.result`, a literal `Allocator{ … }`) has no translation, so the
+checker rejects it (`valueFields?` in `Air2Lean/Check.lean`: only a struct, a union and a tuple
+have fields as values); before, it was accepted and the generated Lean did not compile. A field's
+address in memory (`&a.vtable`) is translated, and a load through it reads what the handle's
+decoder gives ([model handle bytes](model-handle-bytes.md)). Cases:
+[opaque pointers](../tests/roadmap/opaque-pointers/README.md#fields-of-a-std-model-handle).
+
 Open (a maintainer decision,
 [audit 2026-11-26](architecture-audit/2026-11-26-std-model-handles.md)): the boundary covers a
 typed use of the handle only. The bytes of a model-owned object are still readable: the fields

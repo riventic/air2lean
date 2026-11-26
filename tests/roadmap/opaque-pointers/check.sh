@@ -5,7 +5,9 @@
 # air-recover/<version> under `--allocator-model translated`, their model runs print
 # expected.txt (the native `main`'s transcript plus the `model` lines), and the rejections hold:
 # air-recover in the default allocator model, the compiler rejection roots (air-reject/<version>)
-# and the changed type tables of negatives.py.
+# and the changed type tables of negatives.py. The fields of a std model handle
+# (air-fields/<version>, air-io-fields/<version>): rejected as fields of the handle's value,
+# translated and compiled as addresses in memory.
 #   check.sh                 the gate above (needs a built translator and `lake`; no compiler)
 #   check.sh --export [V..]  scripts/fixture-exports.py verify: a fresh export with the patched
 #                            compilers of versions V (default all) equals the committed one
@@ -94,5 +96,49 @@ for version in 0.17.1 0.16.0; do
     done
   done
 done
+# Fields of a std model handle (handle_fields.zig, io_fields.zig): a field of the handle's value
+# has no translation (the emitted projection or record would not type in Lean), so it is a
+# checker diagnostic; the fields' addresses in memory and the other functions translate, and
+# their translation compiles. Under `--allocator-model translated` `mem.Allocator` is the ordinary
+# struct, so all of handle_fields.zig translates and compiles there.
+no_fields='which has no fields in the model'
+pick() { # pick DIR SOURCE-DIR STEM NAME...: DIR holds the exports of the named functions
+  local dir=$1 from=$2 stem=$3 name
+  shift 3
+  mkdir -p "$dir"
+  for name in "$@"; do cp "$from/$stem.$name.json" "$dir/"; done
+}
+compiles() { # compiles OUT TRANSLATOR-ARGS...: the translation succeeds and Lean accepts it
+  local out=$1
+  shift
+  "$translator" "$@" -o "$out" --namespace HandleFields --profile abi64-le-v1
+  "${lean_cmd[@]}" "$out"
+}
+for version in 0.17.1 0.16.0 0.15.2 0.14.1; do
+  from=$here/air-fields/$version
+  for name in ctxOf vtableOf nested localCtx localNested make; do
+    pick "$work/fields-$version-$name" "$from" handle_fields "$name"
+    rejected "$version: field of an Allocator value ($name)" "(\`std.mem.Allocator\`), $no_fields" \
+      "$work/fields-$version-$name" --profile abi64-le-v1
+  done
+  pick "$work/fields-$version-std" "$from" handle_fields vtableAddr implAddr count pass
+  compiles "$work/Fields-$version.lean" "$work/fields-$version-std" --prefix handle_fields.
+  compiles "$work/FieldsTranslated-$version.lean" "$from" --prefix handle_fields. \
+    --allocator-model translated
+done
+for version in 0.17.1 0.16.0; do
+  from=$here/air-io-fields/$version
+  for spec in 'userdata|std.Io' 'vtableOf|std.Io' 'make|std.Io' 'resultOf|std.Io.Future' \
+      'localResult|std.Io.Future'; do
+    name=${spec%%|*} handle=${spec#*|}
+    pick "$work/io-fields-$version-$name" "$from" io_fields "$name"
+    for model in std translated; do
+      rejected "$version: field of an Io handle value ($name, $model)" "(\`$handle\`), $no_fields" \
+        "$work/io-fields-$version-$name" --profile abi64-le-v1 --allocator-model "$model"
+    done
+  done
+  pick "$work/io-fields-$version-std" "$from" io_fields vtableAddr resultAddr
+  compiles "$work/IoFields-$version.lean" "$work/io-fields-$version-std" --prefix io_fields.
+done
 python3 -B "$here/negatives.py" "$translator"
-echo "opaque pointer gate passed: checker controls, 4 versions x $(wc -l < "$here/expected.txt" | tr -d ' ') model lines (expected.txt), 13 compiler rejections per version, the std handles of 0.17.1 and 0.16.0, and the negatives per version"
+echo "opaque pointer gate passed: checker controls, 4 versions x $(wc -l < "$here/expected.txt" | tr -d ' ') model lines (expected.txt), 13 compiler rejections per version, the std handles of 0.17.1 and 0.16.0, the handle fields (6 rejections and 2 compiled translations per version; Io: 10 rejections and 1 compiled translation for 0.17.1 and 0.16.0), and the negatives per version"

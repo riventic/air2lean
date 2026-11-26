@@ -1,5 +1,6 @@
 import Air2Lean.CanonSem
 import Air2Lean.RenumberProgram
+import Air2Lean.SemDrop
 import Air2Lean.Memory
 
 /-!
@@ -44,6 +45,22 @@ def renumberBound (pre canonical : Func) : Bool :=
   let pairs := renumberPairs pre canonical
   decide (pairs.map (·.2)).Nodup &&
     sameFunction (Renumber.renFunc (Renumber.zipRen pairs) pre) canonical
+
+/-- The IDs of the instructions of `pre` that `post` does not have. -/
+def droppedIds (pre post : Func) : List InstId :=
+  let kept := post.allInsts.toList.map (·.id)
+  (pre.allInsts.toList.map (·.id)).filter (!kept.contains ·)
+
+/-- Native binding evidence for the drop theorems of `SemDrop` under TRU-02: `post` is the
+complete `pre` without the instructions it no longer has (`sameFunction`, every field), and the
+drop meets its obligation (`Drop.dropOk`): with `strict`, only debug information goes
+(`Drop.execFunc_dropDebug`, an equality); without, also instructions that have no behaviour in
+`Sem` (`Drop.execFunc_drop_le`, a refinement). The dropped set is only a guess: a wrong one fails
+the final comparison. -/
+def dropBound (strict : Bool) (pre post : Func) : Bool :=
+  let dead := droppedIds pre post
+  let D : InstId → Bool := fun id => dead.contains id
+  Drop.dropOk strict D pre && sameFunction (Drop.dropFunc D pre) post
 
 /-- Compact native evidence only: no generated data modules or per-function re-proofs.
 Main owns the exact original arguments and returns before any output-file writes. -/
