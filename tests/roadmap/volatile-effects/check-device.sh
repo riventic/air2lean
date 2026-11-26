@@ -126,7 +126,9 @@ assert device == collections.Counter({(f"device_asm.{n}", "ASM_VOLATILE_EFFECT")
                                       for n in ("fence", "ticksPlain")}), device
 PY
 
-lake build ZigLean ZigLean.Mem.Lemmas
+# The proofs are total triples walked by `fsym` (the framework's one import, and the counted
+# loop rule for `putc`'s polling loop).
+lake build ZigLean ZigLean.Sep.Full.AutoAll ZigLean.Sep.Full.Cost
 lean_path="$(lake env printenv LEAN_PATH)"
 for module in DeviceEffects DeviceAsm; do
   lake env lean -R "$work/base" -o "$work/base/$module/Gen.olean" "$work/base/$module/Gen.lean"

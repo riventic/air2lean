@@ -1,72 +1,78 @@
 import DeviceEffects.Gen
-import ZigLean.Mem.Lemmas
+import ZigLean.Sep.Full.AutoAll
+import ZigLean.Sep.Full.Cost
 
 /-!
 # Device-effect proofs on the generated UART driver (L13)
 
 `DeviceEffects/Gen.lean` is the unchanged translation of the real 0.16.0 export of
-`device_effects.zig` with `--device-contract uart.json`. Every theorem quantifies over the
-device oracle (`Mem.dev.oracle`) and the memory: the device contract (premise DEV-01) is only
-that the device answers the reads that the theorem names. Nothing about ordinary memory changes:
-each final memory is the initial one with the device events appended to its trace and, for the
-polling loop, its step ticks counted (`Zig.tick`, one per loop-body run: exactly one per poll).
+`device_effects.zig` with `--device-contract uart.json`. The statements are total triples of the
+full-state logic over the device state `devOwn D` (`docs/sep-full-state.md` §Device state), for
+every device state `D`: its oracle, and its trace so far. The device contract (premise DEV-01)
+is only that the device answers the reads that a theorem names. `fsym` walks the generated code
+with the library's device rules (`ZigLean/Sep/Full/Device.lean`), of which the `uart` contract
+is an instance. Nothing about ordinary memory changes: a triple frames every other resource.
 -/
 
 namespace DeviceEffectsProofs
-open Zig DeviceEffects
+open Zig Zig.Full Zig.Full.FAssn DeviceEffects
 
 /-- The register block's address (`uart.json`). -/
-def base : Nat := 268435456
-def uart : Ptr := ⟨none, (base : Int)⟩
-def STATUS : Nat := base
-def DATA : Nat := base + 4
+abbrev base : Nat := 268435456
+abbrev uart : Ptr := ⟨none, (base : Int)⟩
+abbrev STATUS : Nat := base
+abbrev DATA : Nat := base + 4
 
-/-- A status read event and a data write event. -/
-def rd (v : BitVec 32) : DevEvent := .read STATUS 32 v.toNat
-def wr (c : BitVec 8) : DevEvent := .write DATA 32 c.toNat
+/-- A status read event. A data write of the byte `c` is the event `.write DATA 32 c.toNat`,
+written out: the walk matches it up to the arithmetic of the byte's zero extension. -/
+abbrev rd (v : BitVec 32) : DevEvent := .read STATUS 32 v.toNat
 
-/-- The byte's zero extension keeps its value. -/
-theorem widen_toNat (c : BitVec 8) : (c.setWidth 32).toNat = c.toNat := by
-  have := c.isLt
-  simp [BitVec.toNat_setWidth]
-  omega
-
-/-- The memory `m` after the device events `es`, nothing else changed. -/
-def after (m : Mem) (es : List DevEvent) : Mem :=
-  { m with dev := { m.dev with trace := m.dev.trace ++ es } }
-
-theorem after_nil (m : Mem) : after m [] = m := by simp [after]
-
-theorem after_append (m : Mem) (es fs : List DevEvent) :
-    after (after m es) fs = after m (es ++ fs) := by simp [after]
-
-theorem withEvent_after (m : Mem) (e : DevEvent) : m.withEvent e = after m [e] := rfl
-
-/-- The memory `m` after `n` step ticks (`Zig.tick`), nothing else changed. -/
-def ticked (m : Mem) (n : Nat) : Mem := { m with ticks := m.ticks + n }
-
-/-- Steps and events of two consecutive runs add up. -/
-theorem after_ticked_merge (m : Mem) (a b : Nat) (es fs : List DevEvent) :
-    after (ticked (after (ticked m a) es) b) fs = after (ticked m (a + b)) (es ++ fs) := by
-  simp [after, ticked, Nat.add_assoc]
-
+/-- The registers' addresses: the facts of the contract that the device rules ask for. -/
 theorem status_addr : devAddr? uart = some STATUS := by decide
 theorem data_addr : devAddr? (uart.add 4) = some DATA := by decide
 
-/-- `&uart.data`: an offset inside the declared register window (`ptrProjectDevice`, DEV-01). -/
-theorem data_ptr (m : Mem) :
-    (ptrProjectDevice air2lean_device uart (·.add 4)).run m = pure (uart.add 4, m) :=
-  ptrProjectDevice_run (a := STATUS) (b := DATA) (by decide) (by decide) (by decide) (by decide)
+/-! ## Two reads are two events, never one merged read -/
 
-theorem status_read {m : Mem} {v : BitVec 32}
-    (ho : m.dev.oracle m.dev.trace STATUS 32 = some v) :
-    (vload air2lean_device 32 4 uart).run m = pure (v, after m [rd v]) :=
-  vload_run status_addr (by decide) (by decide) ho
+/-- `statusTwice` reads the status register twice: two `read` events, in order, and the second
+answer is the oracle's answer *after* the first read. -/
+theorem statusTwice_trace (D : DevState) (a b : BitVec 32)
+    (ha : D.oracle D.trace STATUS 32 = some a)
+    (hb : D.oracle (D.trace ++ [rd a]) STATUS 32 = some b) :
+    FTotalTriple (devOwn D) (statusTwice uart)
+      (fun r => ⟪r = a ^^^ b⟫ ⋆ devOwn { D with trace := D.trace ++ [rd a, rd b] }) := by
+  have hs := status_addr
+  fsym
 
-theorem data_write (m : Mem) (v : BitVec 32) :
-    (vstore air2lean_device 32 4 (uart.add 4) v).run m =
-      pure ((), after m [.write DATA 32 v.toNat]) :=
-  vstore_run data_addr (by decide) (by decide)
+/-- A device that counts the reads so far: the `k`-th read answers `k`. -/
+def counter : DevOracle := fun h _ n => some (BitVec.ofNat n h.length)
+
+/-- Under the counting device, `statusTwice` returns `0 ^^^ 1 = 1`. A translation that merged
+the two volatile reads into one would return `a ^^^ a = 0` under every device. -/
+theorem statusTwice_not_merged :
+    FTotalTriple (devOwn { oracle := counter }) (statusTwice uart)
+      (fun r => ⟪r = 1⟫ ⋆ devOwn { oracle := counter, trace := [rd 0, rd 1] }) :=
+  statusTwice_trace { oracle := counter } 0 1 rfl rfl
+
+theorem statusTwice_ne_merged : ∀ a : BitVec 32, (0 : BitVec 32) ^^^ 1 ≠ a ^^^ a := by
+  intro a; simp
+
+/-- An unused read is still one event (a read-to-clear register is cleared). -/
+theorem clearStatus_trace (D : DevState) (v : BitVec 32)
+    (ho : D.oracle D.trace STATUS 32 = some v) :
+    FTotalTriple (devOwn D) (clearStatus uart)
+      (fun _ => devOwn { D with trace := D.trace ++ [rd v] }) := by
+  have hs := status_addr
+  fsym
+
+/-- Program order: the write happens before the read, and the device answers the read after
+seeing the write. -/
+theorem sendThenStatus_trace (D : DevState) (c : BitVec 8) (v : BitVec 32)
+    (ho : D.oracle (D.trace ++ [.write DATA 32 c.toNat]) STATUS 32 = some v) :
+    FTotalTriple (devOwn D) (sendThenStatus uart c)
+      (fun r => ⟪r = v⟫ ⋆ devOwn { D with trace := D.trace ++ [.write DATA 32 c.toNat] ++ [rd v] }) := by
+  have hs := status_addr
+  have hd := data_addr
+  fsym
 
 /-! ## The polling contract
 
@@ -77,58 +83,160 @@ def Answers (o : DevOracle) : List DevEvent → List (BitVec 32) → BitVec 32 �
   | h, [], r => o h STATUS 32 = some r ∧ r &&& 1#32 ≠ 0#32
   | h, v :: vs, r => o h STATUS 32 = some v ∧ v &&& 1#32 = 0#32 ∧ Answers o (h ++ [rd v]) vs r
 
-/-- The specified trace of one `putc c`: every poll, in order, then the data write. -/
-def putcSpec (vs : List (BitVec 32)) (r : BitVec 32) (c : BitVec 8) : List DevEvent :=
-  (vs ++ [r]).map rd ++ [wr c]
+/-- The answer to the next poll at the trace `tr`, which is `h` and the polls so far. -/
+def nxt (h : List DevEvent) (vs : List (BitVec 32)) (r : BitVec 32) (tr : List DevEvent) :
+    BitVec 32 :=
+  (vs.drop (tr.length - h.length)).headD r
 
-theorem loop_busy (s : putcLocals) {m : Mem} {v : BitVec 32}
-    (ho : m.dev.oracle m.dev.trace STATUS 32 = some v) (hv : v &&& 1#32 = 0#32) :
-    ((putc.loop3 uart).run s).run m = pure ((.rep3, s), after (ticked m 1) [rd v]) := by
-  have ht : tick m = some (Except.ok ((), ticked m 1)) := rfl
-  have h := status_read (m := ticked m 1) (v := v) ho
-  simp only [StateT.run] at h
-  simp [putc.loop3, zig_unfold, ht, h, hv]
+/-- `tr` is the trace of a device that answers by the contract from `h` on, after some of its
+busy polls. -/
+structure Polled (o : DevOracle) (h : List DevEvent) (vs : List (BitVec 32)) (r : BitVec 32)
+    (tr : List DevEvent) : Prop where
+  answers : Answers o h vs r
+  polls : ∃ i, i ≤ vs.length ∧ tr = h ++ (vs.take i).map rd
 
-theorem loop_ready (s : putcLocals) {m : Mem} {v : BitVec 32}
-    (ho : m.dev.oracle m.dev.trace STATUS 32 = some v) (hv : v &&& 1#32 ≠ 0#32) :
-    ((putc.loop3 uart).run s).run m = pure ((.br2, s), after (ticked m 1) [rd v]) := by
-  have ht : tick m = some (Except.ok ((), ticked m 1)) := rfl
-  have h := status_read (m := ticked m 1) (v := v) ho
-  simp only [StateT.run] at h
-  simp [putc.loop3, zig_unfold, ht, h, hv]
-
-/-- The polling loop reads the status register once per iteration, in order, and exits on the
-first ready value; it makes exactly one step per read. -/
-theorem poll_run (s : putcLocals) (vs : List (BitVec 32)) (r : BitVec 32) :
-    ∀ m : Mem, Answers m.dev.oracle m.dev.trace vs r →
-      ((loop (putc.loop3 uart) putc.again3).run s).run m =
-        pure ((.br2, s), after (ticked m (vs.length + 1)) ((vs ++ [r]).map rd)) := by
+/-- The contract at each poll: the answer after the first `i` busy polls, busy before the last. -/
+theorem Answers.at {o : DevOracle} {vs : List (BitVec 32)} {r : BitVec 32} :
+    ∀ {h : List DevEvent}, Answers o h vs r → ∀ i, i ≤ vs.length →
+      o (h ++ (vs.take i).map rd) STATUS 32 = some ((vs.drop i).headD r) ∧
+      (i < vs.length → (vs.drop i).headD r &&& 1#32 = 0#32) ∧
+      (i = vs.length → (vs.drop i).headD r &&& 1#32 ≠ 0#32) := by
   induction vs with
   | nil =>
-    intro m ⟨ho, hr⟩
-    rw [loop_run_mm, loop_ready s ho hr]
-    simp [putc.again3, zig_unfold]
+    intro h ⟨ho, hr⟩ i hi
+    obtain rfl : i = 0 := by simpa using hi
+    simpa using ⟨ho, hr⟩
   | cons v vs ih =>
-    intro m ⟨ho, hv, hrest⟩
-    rw [loop_run_mm, loop_busy s ho hv]
-    have := ih (after (ticked m 1) [rd v]) hrest
-    have e : 1 + (vs.length + 1) = (v :: vs).length + 1 := by rw [List.length_cons]; omega
-    rw [after_ticked_merge, e] at this
-    simp only [StateT.run] at this
-    simp [putc.again3, zig_unfold, this]
+    intro h ⟨ho, hv, hrest⟩ i hi
+    cases i with
+    | zero => simpa using ⟨ho, hv⟩
+    | succ i =>
+      have := ih hrest i (by simpa using hi)
+      simpa [List.append_assoc] using this
+
+theorem Polled.start {o : DevOracle} {h : List DevEvent} {vs : List (BitVec 32)} {r : BitVec 32}
+    (hc : Answers o h vs r) : Polled o h vs r h :=
+  ⟨hc, 0, Nat.zero_le _, by simp⟩
+
+section
+variable {o : DevOracle} {h tr : List DevEvent} {vs : List (BitVec 32)} {r : BitVec 32}
+
+/-- The facts of a polled trace at its position `i`. -/
+theorem Polled.pos (hP : Polled o h vs r tr) :
+    ∃ i, i ≤ vs.length ∧ tr = h ++ (vs.take i).map rd ∧ tr.length - h.length = i ∧
+      tr.length = h.length + i := by
+  obtain ⟨i, hi, rfl⟩ := hP.polls
+  exact ⟨i, hi, rfl, by simp [Nat.min_eq_left hi], by simp [Nat.min_eq_left hi]⟩
+
+theorem Polled.oracle (hP : Polled o h vs r tr) : o tr STATUS 32 = some (nxt h vs r tr) := by
+  obtain ⟨i, hi, rfl, hd, -⟩ := hP.pos
+  rw [nxt, hd]
+  exact (hP.answers.at i hi).1
+
+theorem Polled.busy (hP : Polled o h vs r tr) (hk : vs.length + h.length - tr.length ≠ 0) :
+    nxt h vs r tr &&& 1#32 = 0#32 := by
+  obtain ⟨i, hi, rfl, hd, hl⟩ := hP.pos
+  rw [nxt, hd]
+  exact (hP.answers.at i hi).2.1 (by omega)
+
+theorem Polled.ready (hP : Polled o h vs r tr) (hk : vs.length + h.length - tr.length = 0) :
+    nxt h vs r tr &&& 1#32 ≠ 0#32 := by
+  obtain ⟨i, hi, rfl, hd, hl⟩ := hP.pos
+  rw [nxt, hd]
+  exact (hP.answers.at i hi).2.2 (by omega)
+
+/-- After a busy answer the trace is a polled trace again. -/
+theorem Polled.next (hP : Polled o h vs r tr) (hb : nxt h vs r tr &&& 1#32 = 0#32) :
+    Polled o h vs r (tr ++ [rd (nxt h vs r tr)]) := by
+  obtain ⟨i, hi, rfl, hd, hl⟩ := hP.pos
+  have hlt : i < vs.length := by
+    rcases Nat.lt_or_ge i vs.length with h' | h'
+    · exact h'
+    · exact absurd hb (hP.ready (by omega))
+  refine ⟨hP.answers, i + 1, hlt, ?_⟩
+  have hn : nxt h vs r (h ++ (vs.take i).map rd) = vs[i] := by
+    rw [nxt, hd, List.headD_eq_head?_getD, List.head?_drop, List.getElem?_eq_getElem hlt]; rfl
+  rw [hn, List.take_succ, List.getElem?_eq_getElem hlt, List.map_append, List.append_assoc]; rfl
+
+/-- After the ready answer the trace is the contract's whole trace. -/
+theorem Polled.last (hP : Polled o h vs r tr) (hr : ¬nxt h vs r tr &&& 1#32 = 0#32) :
+    tr ++ [rd (nxt h vs r tr)] = h ++ (vs ++ [r]).map rd := by
+  obtain ⟨i, hi, rfl, hd, hl⟩ := hP.pos
+  have he : i = vs.length := by
+    rcases Nat.lt_or_ge i vs.length with h' | h'
+    · exact absurd (hP.busy (by omega)) hr
+    · omega
+  subst he
+  simp [nxt]
+
+end
+
+set_option linter.unusedVariables false in
+/-- The polling loop's invariant, at the exact count `k` of the busy answers still to come: the
+device state is the entry's `D0` with a polled trace `tr`, and the device answers the next poll
+with `nxt … tr`, busy unless `k = 0` (the facts of `Polled` that the walk reads). -/
+@[fsym_inv] def _root_.DeviceEffects.putc.loop3.credits.inv (p0 : Ptr) (D0 : DevState)
+    (vs : List (BitVec 32)) (r : BitVec 32) (s : putcLocals) (k : Nat) : FAssn :=
+  FAssn.ex fun tr : List DevEvent =>
+    ⟪Polled D0.oracle D0.trace vs r tr ∧
+      k = vs.length + D0.trace.length - tr.length ∧
+      D0.oracle tr STATUS 32 = some (nxt D0.trace vs r tr) ∧
+      (k = 0 → nxt D0.trace vs r tr &&& 1#32 ≠ 0#32) ∧
+      (k ≠ 0 → nxt D0.trace vs r tr &&& 1#32 = 0#32)⟫ ⋆ devOwn { D0 with trace := tr }
+
+set_option linter.unusedVariables false in
+/-- At the loop's exit the trace is the contract's: every poll, in order. -/
+@[fsym_inv] def _root_.DeviceEffects.putc.loop3.credits.post (p0 : Ptr) (D0 : DevState)
+    (vs : List (BitVec 32)) (r : BitVec 32) (e : putcExit × putcLocals) : FAssn :=
+  FAssn.ex fun tr : List DevEvent =>
+    ⟪e.1 = .br2 ∧ tr = D0.trace ++ (vs ++ [r]).map rd⟫ ⋆ devOwn { D0 with trace := tr }
 
 /-- **`putc` meets its trace spec for every device oracle satisfying the polling contract**:
-the emitted trace is exactly the polls in order, then one data write of `c`; the run makes
-exactly one step per poll (`vs.length + 1`), and ordinary memory is unchanged. -/
-theorem putc_trace (m : Mem) (c : BitVec 8) (vs : List (BitVec 32)) (r : BitVec 32)
-    (hc : Answers m.dev.oracle m.dev.trace vs r) :
-    (putc uart c).run m = pure ((), after (ticked m (vs.length + 1)) (putcSpec vs r c)) := by
-  have hp := poll_run default vs r m hc
-  have hw := data_write (after (ticked m (vs.length + 1)) ((vs ++ [r]).map rd)) (c.setWidth 32)
-  have hd := data_ptr (after (ticked m (vs.length + 1)) ((vs ++ [r]).map rd))
-  have hi : Zig.intCast false false 32 c = pure (c.setWidth 32) := intCast_unsigned_widen c 32 (by decide)
-  simp only [StateT.run, List.map_append, List.map_cons, List.map_nil, widen_toNat] at hp hw hd
-  simp [putc, zig_unfold, hp, hw, hd, hi, after_append, putcSpec, wr]
+the emitted trace is exactly the polls in order, then one data write of `c`, and the run makes
+exactly one step per poll: it pays `vs.length + 1` credits (`fsym` takes the loop's credit-mode
+invariant and the counted loop rule). Ordinary memory is unchanged (the triple frames it). The
+goals `fsym` leaves are the invariant's pure facts, which are the contract's (`Polled`). -/
+theorem putc_trace (D : DevState) (c : BitVec 8) (vs : List (BitVec 32)) (r : BitVec 32)
+    (hc : Answers D.oracle D.trace vs r) :
+    FTotalTriple (devOwn D ⋆ credits (vs.length + 1)) (putc uart c)
+      (fun _ => devOwn { D with trace := D.trace ++ (vs ++ [r]).map rd ++ [.write DATA 32 c.toNat] } ⋆
+        spent (vs.length + 1)) := by
+  have hs := status_addr
+  have hd := data_addr
+  have hP := Polled.start hc
+  fsym
+  -- the invariant's facts: at the entry, after a busy answer, and the trace at the exit
+  all_goals first
+    | exact Polled.last (by assumption) (by assumption)
+    | exact hP.oracle
+    | exact fun h0 => hP.ready (by omega)
+    | exact fun h0 => hP.busy (by omega)
+    | exact Polled.next (by assumption) (by assumption)
+    | exact (Polled.next (by assumption) (by assumption)).oracle
+    | exact fun h0 => (Polled.next (by assumption) (by assumption)).ready (by simpa using h0)
+    | exact fun h0 => (Polled.next (by assumption) (by assumption)).busy (by simpa using h0)
+
+/-- **The run from program start**, with the environment's device state `D` in the start memory
+(adequacy: `initRes_holds_dev`, and the meter's `FTotalTriple.ticks_eq`): `putc` returns after
+exactly one step per poll. -/
+theorem putc_steps (σ : Placement) (D : DevState) (c : BitVec 8) (vs : List (BitVec 32))
+    (r : BitVec 32) (hc : Answers D.oracle D.trace vs r) :
+    ∃ m', (putc uart c).run { mem0 σ with dev := D } = pure ((), m') ∧
+      m'.ticks = vs.length + 1 := by
+  have hi := initRes_holds_dev σ [] (by simp) D
+  have ht : FTotalTriple ((devOwn D ⋆ globals []) ⋆ credits (vs.length + 1)) (putc uart c)
+      (fun _ => (devOwn { D with trace := D.trace ++ (vs ++ [r]).map rd ++
+        [.write DATA 32 c.toNat] } ⋆ globals []) ⋆ spent (vs.length + 1)) :=
+    (((putc_trace D c vs r hc).frame (R := globals [])).pre fun _ h => by
+      rwa [show ((devOwn D ⋆ credits (vs.length + 1)) ⋆ globals []) =
+        ((devOwn D ⋆ globals []) ⋆ credits (vs.length + 1)) by ac_rfl]).post fun _ _ h => by
+      rwa [show ((devOwn { D with trace := D.trace ++ (vs ++ [r]).map rd ++
+          [.write DATA 32 c.toNat] } ⋆ globals []) ⋆ spent (vs.length + 1)) =
+        ((devOwn { D with trace := D.trace ++ (vs ++ [r]).map rd ++
+          [.write DATA 32 c.toNat] } ⋆ spent (vs.length + 1)) ⋆ globals []) by ac_rfl]
+  obtain ⟨⟨⟩, m', hr, hticks⟩ := ht.ticks_eq hi.1 hi.2 (Mem.init_fseq_dev σ [] (by decide) D)
+    ⟨⟨by simp, fun L => by simp, by simp⟩, by simp⟩
+  exact ⟨m', hr, by simpa [Mem.ofGlobals] using hticks⟩
 
 /-! ## Every device that eventually reports ready
 
@@ -153,59 +261,13 @@ theorem answers_of_ready (o : DevOracle) :
       exact ⟨v :: vs, r, ho, hb, ha⟩
 
 /-- **`putc` returns for every device that eventually reports ready**, with the trace of its
-polls followed by exactly one data write of `c`, one step per poll, and nothing else changed. -/
-theorem putc_eventually (m : Mem) (c : BitVec 8) (k : Nat)
-    (hr : EventuallyReady m.dev.oracle m.dev.trace k) :
-    ∃ vs r, (putc uart c).run m =
-      pure ((), after (ticked m (vs.length + 1)) (putcSpec vs r c)) := by
+polls followed by exactly one data write of `c`, and one step per poll. -/
+theorem putc_eventually (D : DevState) (c : BitVec 8) (k : Nat)
+    (hr : EventuallyReady D.oracle D.trace k) :
+    ∃ vs r, FTotalTriple (devOwn D ⋆ credits (vs.length + 1)) (putc uart c)
+      (fun _ => devOwn { D with trace := D.trace ++ (vs ++ [r]).map rd ++ [.write DATA 32 c.toNat] } ⋆
+        spent (vs.length + 1)) := by
   obtain ⟨vs, r, ha⟩ := answers_of_ready _ k _ hr
-  exact ⟨vs, r, putc_trace m c vs r ha⟩
-
-/-! ## Two reads are two events, never one merged read -/
-
-/-- `statusTwice` reads the status register twice: two `read` events, in order, and the second
-answer is the oracle's answer *after* the first read. -/
-theorem statusTwice_trace (m : Mem) (a b : BitVec 32)
-    (ha : m.dev.oracle m.dev.trace STATUS 32 = some a)
-    (hb : m.dev.oracle (m.dev.trace ++ [rd a]) STATUS 32 = some b) :
-    (statusTwice uart).run m = pure (a ^^^ b, after m [rd a, rd b]) := by
-  have h1 := status_read ha
-  have h2 := status_read (m := after m [rd a]) (v := b) (by simpa [after] using hb)
-  simp only [StateT.run] at h1 h2
-  simp [statusTwice, zig_unfold, h1, h2, after_append]
-
-/-- A device that counts the reads so far: the `k`-th read answers `k`. -/
-def counter : DevOracle := fun h _ n => some (BitVec.ofNat n h.length)
-
-/-- Under the counting device, `statusTwice` returns `0 ^^^ 1 = 1`. A translation that merged
-the two volatile reads into one would return `a ^^^ a = 0` under every device. -/
-theorem statusTwice_not_merged :
-    (statusTwice uart).run { dev := { oracle := counter } } =
-      pure (1, after { dev := { oracle := counter } } [rd 0, rd 1]) :=
-  statusTwice_trace _ 0 1 rfl rfl
-
-theorem statusTwice_ne_merged : ∀ a : BitVec 32, (0 : BitVec 32) ^^^ 1 ≠ a ^^^ a := by
-  intro a; simp
-
-/-- An unused read is still one event (a read-to-clear register is cleared). -/
-theorem clearStatus_trace (m : Mem) (v : BitVec 32)
-    (ho : m.dev.oracle m.dev.trace STATUS 32 = some v) :
-    (clearStatus uart).run m = pure ((), after m [rd v]) := by
-  have h := status_read ho
-  simp only [StateT.run] at h
-  simp [clearStatus, zig_unfold, h]
-
-/-- Program order: the write happens before the read, and the device answers the read after
-seeing the write. -/
-theorem sendThenStatus_trace (m : Mem) (c : BitVec 8) (v : BitVec 32)
-    (ho : m.dev.oracle (m.dev.trace ++ [wr c]) STATUS 32 = some v) :
-    (sendThenStatus uart c).run m = pure (v, after m [wr c, rd v]) := by
-  have hi : Zig.intCast false false 32 c = pure (c.setWidth 32) := intCast_unsigned_widen c 32 (by decide)
-  have hw := data_write m (c.setWidth 32)
-  have hd := data_ptr m
-  have hr := status_read (m := after m [wr c]) (v := v) (by simpa [after] using ho)
-  simp only [StateT.run, widen_toNat] at hw hr hd
-  simp only [wr] at hr
-  simp [sendThenStatus, zig_unfold, hi, hw, hd, hr, after_append, wr]
+  exact ⟨vs, r, putc_trace D c vs r ha⟩
 
 end DeviceEffectsProofs

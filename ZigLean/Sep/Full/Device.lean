@@ -23,8 +23,13 @@ The device state is the exclusive ghost component `devOwn D` (`ZigLean/Sep/Full/
 Fail closed: a read whose answer no premise names, an address, width or direction that `d` does
 not declare, a template that `d` does not declare and a pointer into a model block have no rule
 (the operations throw there), and without `devOwn` no triple of a read exists
-(`tests/roadmap/sep-full/DeviceCX.lean`). All five rules are instances of one step rule
-(`FTotalTriple.devStep`, `FTotalTriple.of_read`).
+(`tests/roadmap/sep-full/DeviceCX.lean`). The four device steps are instances of one step rule
+(`FTotalTriple.devStep`).
+
+The new device state is written as the structure `{ D with trace := D.trace ++ [e] }`, not
+through a function of `D`: `fsym` compares two `devOwn` atoms field by field, the traces as lists.
+A run gets `devOwn D` from the start memory with the device state `D`
+(`FTotalTriple.run_init_dev`, `ZigLean/Sep/Full/Init.lean`).
 
 There is no thread rule: a device access of a spawned thread is not modelled (no locality lemma,
 so `fsym` does not derive one).
@@ -34,21 +39,11 @@ Proof-only: not reachable from `ZigLean.lean`.
 
 namespace Zig
 
-/-- The device state after one more event (`Mem.withEvent`). -/
-def DevState.withEvent (D : DevState) (e : DevEvent) : DevState := { D with trace := D.trace ++ [e] }
-
-@[simp] theorem DevState.withEvent_trace (D : DevState) (e : DevEvent) :
-    (D.withEvent e).trace = D.trace ++ [e] := rfl
-
-@[simp] theorem DevState.withEvent_oracle (D : DevState) (e : DevEvent) :
-    (D.withEvent e).oracle = D.oracle := rfl
-
-@[simp] theorem DevState.withEvent_asmOracle (D : DevState) (e : DevEvent) :
-    (D.withEvent e).asmOracle = D.asmOracle := rfl
-
 namespace Full
 
 open FAssn
+
+attribute [fsym_atom] devOwn
 
 /-- **A device step**: a command that, in every memory with the device state `D`, returns `v` and
 changes the device state to `D'` and nothing else, takes `devOwn D` to `devOwn D'`. -/
@@ -72,16 +67,16 @@ theorem FTotalTriple.devStep {α : Type} {c : MemM α} {D D' : DevState} {v : α
     {v : BitVec bits} (hp : devAddr? p = some addr) (hal : addr % align = 0)
     (hr : d.readable addr bits = true) (ho : D.oracle D.trace addr bits = some v) :
     FTotalTriple (devOwn D) (Zig.vload d bits align p)
-      (fun x => ⟪x = v⟫ ⋆ devOwn (D.withEvent (.read addr bits v.toNat))) :=
-  FTotalTriple.devStep fun _ hd => vload_run hp hal hr (hd ▸ ho)
+      (fun x => ⟪x = v⟫ ⋆ devOwn { D with trace := D.trace ++ [.read addr bits v.toNat] }) :=
+  FTotalTriple.devStep fun _ hd => by subst hd; exact vload_run hp hal hr ho
 
 /-- **A volatile store to a declared register**: one `write` event. -/
 @[fsym] theorem FTotalTriple.vstore {d : Device} {bits align addr : Nat} {p : Ptr} {D : DevState}
     {v : BitVec bits} (hp : devAddr? p = some addr) (hal : addr % align = 0)
     (hw : d.writable addr bits = true) :
     FTotalTriple (devOwn D) (Zig.vstore d bits align p v)
-      (fun _ => devOwn (D.withEvent (.write addr bits v.toNat))) :=
-  (FTotalTriple.devStep (v := ()) fun _ hd => hd ▸ vstore_run hp hal hw).post
+      (fun _ => devOwn { D with trace := D.trace ++ [.write addr bits v.toNat] }) :=
+  (FTotalTriple.devStep (v := ()) fun _ hd => by subst hd; exact vstore_run hp hal hw).post
     fun _ _ h => (sep_lift.mp h).2
 
 /-- **A declared `asm volatile` with an output**: one `asm` event with the asm oracle's answer
@@ -90,15 +85,15 @@ theorem FTotalTriple.devStep {α : Type} {c : MemM α} {D D' : DevState} {v : α
     {D : DevState} {v : BitVec bits} (hd : d.asms.contains t = true)
     (ho : D.asmOracle D.trace t ins bits = some v) :
     FTotalTriple (devOwn D) (Zig.vasm d t ins bits)
-      (fun x => ⟪x = v⟫ ⋆ devOwn (D.withEvent (.asm t ins bits v.toNat))) :=
-  FTotalTriple.devStep fun _ hm => vasm_run hd (hm ▸ ho)
+      (fun x => ⟪x = v⟫ ⋆ devOwn { D with trace := D.trace ++ [.asm t ins bits v.toNat] }) :=
+  FTotalTriple.devStep fun _ hm => by subst hm; exact vasm_run hd ho
 
 /-- **A declared `asm volatile` without an output**: one `asm` event. -/
 @[fsym] theorem FTotalTriple.vasmEffect {d : Device} {t : String} {ins : List Nat} {D : DevState}
     (hd : d.asms.contains t = true) :
     FTotalTriple (devOwn D) (Zig.vasmEffect d t ins)
-      (fun _ => devOwn (D.withEvent (.asm t ins 0 0))) :=
-  (FTotalTriple.devStep (v := ()) fun _ hm => hm ▸ vasmEffect_run hd).post
+      (fun _ => devOwn { D with trace := D.trace ++ [.asm t ins 0 0] }) :=
+  (FTotalTriple.devStep (v := ()) fun _ hm => by subst hm; exact vasmEffect_run hd).post
     fun _ _ h => (sep_lift.mp h).2
 
 /-- **A derived pointer inside the declared register window** (`&uart.data`): formed, and nothing

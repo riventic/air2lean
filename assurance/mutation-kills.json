@@ -1391,42 +1391,42 @@
         "kind": "check",
         "target": "tests/roadmap/volatile-effects/check-device.sh"
       },
-      "block_sha256": "6e8cc927b4918c9e5680687798577e0fc78cf836921912209e4f5b71e3d9bc25"
+      "block_sha256": "ea9bebdc51ec2584bec2c04f6e3bd8acc4827037890298ee4bb416806cd5cea9"
     },
     "tests/roadmap/volatile-effects/device-mutants.py#merge_asm": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/volatile-effects/check-device.sh"
       },
-      "block_sha256": "6e8cc927b4918c9e5680687798577e0fc78cf836921912209e4f5b71e3d9bc25"
+      "block_sha256": "ea9bebdc51ec2584bec2c04f6e3bd8acc4827037890298ee4bb416806cd5cea9"
     },
     "tests/roadmap/volatile-effects/device-mutants.py#merge_reads": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/volatile-effects/check-device.sh"
       },
-      "block_sha256": "6e8cc927b4918c9e5680687798577e0fc78cf836921912209e4f5b71e3d9bc25"
+      "block_sha256": "ea9bebdc51ec2584bec2c04f6e3bd8acc4827037890298ee4bb416806cd5cea9"
     },
     "tests/roadmap/volatile-effects/device-mutants.py#ordinary_load": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/volatile-effects/check-device.sh"
       },
-      "block_sha256": "6e8cc927b4918c9e5680687798577e0fc78cf836921912209e4f5b71e3d9bc25"
+      "block_sha256": "ea9bebdc51ec2584bec2c04f6e3bd8acc4827037890298ee4bb416806cd5cea9"
     },
     "tests/roadmap/volatile-effects/device-mutants.py#reorder_write_read": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/volatile-effects/check-device.sh"
       },
-      "block_sha256": "6e8cc927b4918c9e5680687798577e0fc78cf836921912209e4f5b71e3d9bc25"
+      "block_sha256": "ea9bebdc51ec2584bec2c04f6e3bd8acc4827037890298ee4bb416806cd5cea9"
     },
     "tests/roadmap/volatile-effects/device-mutants.py#repeatable_asm": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/volatile-effects/check-device.sh"
       },
-      "block_sha256": "6e8cc927b4918c9e5680687798577e0fc78cf836921912209e4f5b71e3d9bc25"
+      "block_sha256": "ea9bebdc51ec2584bec2c04f6e3bd8acc4827037890298ee4bb416806cd5cea9"
     },
     "tests/roadmap/weak-cas/qualify.py#spurious-failure-removed": {
       "killed_by": {

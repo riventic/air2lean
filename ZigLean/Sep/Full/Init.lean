@@ -427,6 +427,60 @@ theorem FTotalTriple.run_init_plain {α : Type} {c : MemM α} {Q : α → FAssn}
   obtain ⟨r', hh, hq, hs⟩ := this
   exact ⟨v, m', r', hr, hh, hq, hs⟩
 
+/-! ## Adequacy with a device (`docs/sep-full-state.md` §Device state)
+
+A program with a declared device (L13, `--device-contract`) runs from the start memory with the
+environment's device state `D` (its oracles, and the trace so far) in place of the silent
+default of `Mem.dev` (premise DEV-01: the oracles are the environment's, and a statement
+quantifies over them). `main` holds `devOwn D` (`Holds.addDev`, `Holds.setDev`), so the device
+rules (`Full/Device`) apply to its accesses, and `Holds.dev` reads the final device state off the
+postcondition's `devOwn`. -/
+
+/-- The globals hold no device fragment. -/
+@[simp] theorem initRes_dev (σ : Placement) (gs : List (Array Byte × Nat × BlockKind))
+    (X : DevState) : (initRes σ gs).gh.dev X = 0 := by
+  rw [initRes, initR_gh]; rfl
+
+/-- **The memory at program start with the device state `D` holds every global and `devOwn D`.** -/
+theorem initRes_holds_dev (σ : Placement) (gs : List (Array Byte × Nat × BlockKind))
+    (hK : ∀ g ∈ gs, g.2.2.mappedLo = 0) (D : DevState) :
+    Holds { Mem.ofGlobals σ gs with dev := D } ⟨(initRes σ gs).heap, (initRes σ gs).know,
+        (Ghost.devAt D).add (initRes σ gs).gh⟩ ⟨FHeap.empty, Know.none, Ghost.unit⟩ ∧
+      (devOwn D ⋆ globals gs) ⟨(initRes σ gs).heap, (initRes σ gs).know,
+        (Ghost.devAt D).add (initRes σ gs).gh⟩ := by
+  obtain ⟨hh, hg⟩ := initRes_holds σ gs hK
+  exact ⟨(hh.addDev fun X => by rw [Ghost.add_unit]; exact initRes_dev σ gs X).setDev D,
+    devOwn_sep_intro hg⟩
+
+/-- The start memory with a device state is a `Mem.FSeq` memory. -/
+theorem _root_.Zig.Mem.init_fseq_dev (σ : Placement) (gs : List (Array Byte × Nat × BlockKind))
+    (h : Mem.GlobalsFit gs) (D : DevState) : ({ Mem.ofGlobals σ gs with dev := D } : Mem).FSeq :=
+  have hs := Mem.init_fseq σ gs h
+  ⟨⟨hs.1.single⟩, hs.2.1, hs.2.2⟩
+
+/-- **Adequacy at program start with a device**: `FTriple.run_init` for a triple that also takes
+the device state. -/
+theorem FTriple.run_init_dev {α : Type} {c : MemM α} {Q : α → FAssn} (σ : Placement)
+    (gs : List (Array Byte × Nat × BlockKind)) (h : Mem.GlobalsFit gs)
+    (hK : ∀ g ∈ gs, g.2.2.mappedLo = 0) (D : DevState) (ht : FTriple (devOwn D ⋆ globals gs) c Q) :
+    match (c.run { Mem.ofGlobals σ gs with dev := D }).run with
+    | none => True
+    | some (.error e) => e = .stackOverflow
+    | some (.ok (v, m')) => ∃ r', Holds m' r' ⟨FHeap.empty, Know.none, Ghost.unit⟩ ∧ Q v r' ∧ m'.FSeq :=
+  have hi := initRes_holds_dev σ gs hK D
+  ht _ _ _ hi.1 hi.2 (Mem.init_fseq_dev σ gs h D)
+
+/-- **Adequacy at program start with a device, total**: the run returns, with the
+postcondition. -/
+theorem FTotalTriple.run_init_dev {α : Type} {c : MemM α} {Q : α → FAssn} (σ : Placement)
+    (gs : List (Array Byte × Nat × BlockKind)) (h : Mem.GlobalsFit gs)
+    (hK : ∀ g ∈ gs, g.2.2.mappedLo = 0) (D : DevState)
+    (ht : FTotalTriple (devOwn D ⋆ globals gs) c Q) :
+    ∃ v m' r', c.run { Mem.ofGlobals σ gs with dev := D } = pure (v, m') ∧
+      Holds m' r' ⟨FHeap.empty, Know.none, Ghost.unit⟩ ∧ Q v r' ∧ m'.FSeq :=
+  have hi := initRes_holds_dev σ gs hK D
+  ht.runs hi.1 hi.2 (Mem.init_fseq_dev σ gs h D)
+
 /-! ## Adequacy with a stack budget (`docs/sep-full-state.md` §Stack depth)
 
 `Mem.withStack S` gives the main thread the stack budget `S` (MM-18): its reserve is placed in
