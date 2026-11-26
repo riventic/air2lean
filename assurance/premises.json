@@ -105,6 +105,7 @@
     "ZigLean.Mem.ConstPtr": ["SEM-02"],
     "ZigLean.Mem.Null": ["SEM-02"],
     "ZigLean.Mem.Abi": ["SEM-02"],
+    "ZigLean.Mem.AbiLemmas": ["SEM-02"],
     "ZigLean.Mem.Repr": ["SEM-01", "SEM-02"],
     "ZigLean.Mem.NullLemmas": ["SEM-02"],
     "ZigLean.Mem.Parent": ["SEM-02"],

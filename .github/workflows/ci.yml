@@ -1772,6 +1772,8 @@ jobs:
           AIR2LEAN_ZIG_NATIVE="${{ github.workspace }}/host-zig/zig" tests/roadmap/bitcast-017/check.sh --native
           # @divCeil: committed compiler-exported AIR, translation and native differential.
           AIR2LEAN_ZIG_NATIVE="${{ github.workspace }}/host-zig/zig" tests/roadmap/zig017/divceil/check.sh
+          # array_to_vector: every lane kind and sentinel arrays, translation and native differential.
+          AIR2LEAN_ZIG_NATIVE="${{ github.workspace }}/host-zig/zig" tests/roadmap/zig017/tovec/check.sh
 
       # P04/P06: the ring buffer and the shifting array of queue.zig (0.17.1) prove the queue
       # contract (QueueImpl) with their step counts, its clients are proved from the contract
@@ -1811,7 +1813,7 @@ jobs:
           case '${{ matrix.zig }}' in
             0.17.1) bash tests/roadmap/big-endian/check.sh --native '${{ matrix.zig }}' ;;
           esac
-          # T02 pointer_width.zig and names.zig natively and under Node's WASI (0.16.0: the
+          # T02 pointer_width.zig, names.zig and c_ints.zig natively and under Node's WASI (0.16.0: the
           # pointer-width step of the native part).
           case '${{ matrix.zig }}' in
             0.17.1) bash tests/roadmap/pointer-width/check.sh --native ;;

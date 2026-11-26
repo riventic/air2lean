@@ -65,6 +65,7 @@ def renFlat (ρ : InstId → InstId) : Op → Op
   | .select p a b => .select (renVal ρ p) (renVal ρ a) (renVal ρ b)
   | .reduce op a => .reduce op (renVal ρ a)
   | .shuffle a b mask => .shuffle (renVal ρ a) (b.map (renVal ρ)) (mask.map (renLane ρ))
+  | .arrayToVector a => .arrayToVector (renVal ρ a)
   | .bit op a b => .bit op (renVal ρ a) (renVal ρ b)
   | .not a => .not (renVal ρ a)
   | .neg a => .neg (renVal ρ a)

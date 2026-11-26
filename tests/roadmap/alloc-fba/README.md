@@ -9,7 +9,7 @@ is modelled by hand.
 |---|---|
 | `air/{0.16.0,0.17.1}/client-linux/` | Zig 0.16.0 and 0.17.1 AIR, x86_64-linux, `ReleaseSafe`: the call/function-value closure of the `client.*` exports |
 | `exports.json`, `exports.lock.json` | how the AIR is exported, and its pin (`scripts/fixture-exports.py`) |
-| `AllocFba/Gen.lean` | the retained translation (Zig 0.16.0's); `check.sh` requires the fresh one to be byte-identical, and builds and audits the FAllocSpec proof and the `#guard`s over 0.17.1's in a check tree (`scripts/check-tree.py`) |
+| `AllocFba/Gen.lean` | the retained translation (Zig 0.17.1's); `check.sh` requires the fresh one to be byte-identical, and builds and audits the whole library again over 0.16.0's in a check tree (`scripts/check-tree.py`) |
 | `AllocFba/Impl.lean` | the translated entries as the raw vtable `impl` and the function pointers `fns` of the generated vtable constant |
 | `AllocFba/Full.lean` | `FBA.fallocSpec : FAllocSpec FLogic.total impl ctx (FBA.finv ctx B γ e)` for every struct, buffer and epoch `e` of a reset ledger `γ` (`fsym` with the updates of the returns); `FBA.ledger` (the second `ResetLedger` instance), `FBA.freset_spec` (the whole epoch token for the next one), `FBA.fown_init` (a new ledger) |
 | `AllocFba/Client.lean` | `Client.client_spec`: `fba_client v` returns, without an error, `1`–`4` (out of memory) or `v + v + (v +% 1)`, an `FTotalTriple` walked by `fsym` from the contracts only: the initialized FBA invariant (`fallocator_init`), the wrappers' contracts over `FBA.fallocSpec` and the reset contract (`freset_spec`); `Client.client_start`: the same from the program's start memory `mem0` (the strength example) |
@@ -41,17 +41,13 @@ program's real start: for every placement with room for a stack of `S` bytes
 (`stackCharge 24 8 + stackCharge 24 8 ≤ S`), the client run from `mem0` returns a result that
 satisfies `Res` (`FTotalTriple.run_init_stack_claims`). The `mem0` run is checked by `AllocFba/Eval.lean`.
 
-## Zig 0.17.1
+## Zig 0.16.0 and 0.17.1
 
-The allocator's entries (`heap_FixedBufferAllocator_*`) translate to the same code from Zig 0.16.0
-and 0.17.1, so `FBA.fallocSpec` and the creation theorems are one proof text for both:
-`check.sh` builds and audits them, and the `#guard`s, over the 0.17.1 translation. The
+One proof text holds over both translations: `check.sh` builds and audits the whole library over
+0.17.1's (the retained one) and again over 0.16.0's in a check tree. The allocator's entries
+(`heap_FixedBufferAllocator_*`) translate to the same code from both versions. The
 `std.mem.Allocator` wrappers differ: 0.17.1's `alloc`, `reallocAdvanced`, `allocSentinel` and
 `create` keep their result in a stack slot. Their contracts own the stack room for it (one
-statement for both versions, engine ledger row `fba-0171-wrapper-stack`, option (a)), and with
-them `alloc_spec`, `alignedAlloc_spec`, `create_spec`, `dupe_spec` and `allocSentinel_spec` build
-over 0.17.1. `reallocAdvanced_spec`, `realloc_spec`, `free_spec`, `freeSentinel_spec` and
-`destroy_spec` (so `Client.lean`) do not yet: `fsym` sticks at 0.17.1's `intCast` in
-`mem.Alignment.fromByteUnits` (engine ledger row 21a). Until 21a is closed, the retained
-translation stays 0.16.0's; afterwards it becomes 0.17.1's, with the whole library checked over
-0.16.0's in the check tree.
+statement for both versions, engine ledger row `fba-0171-wrapper-stack`, option (a)); 0.16.0's
+push none and frame the stack token. `fsym` evaluates `mem.Alignment.fromByteUnits` on its
+literal in both (engine ledger row 21a).

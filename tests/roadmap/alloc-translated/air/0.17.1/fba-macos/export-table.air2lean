@@ -13,12 +13,12 @@
    }
   },
   {
-   "name": "fba_resize",
+   "name": "fba_grow",
    "linkage": "strong",
    "visibility": "default",
    "function": {
     "module": "root",
-    "name": "fba.fba_resize",
+    "name": "fba.fba_grow",
     "cc": "aarch64_aapcs_darwin"
    }
   },
@@ -27,6 +27,16 @@
    "linkage": "weak",
    "visibility": "default",
    "function": null
+  },
+  {
+   "name": "fba_resize",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "fba.fba_resize",
+    "cc": "aarch64_aapcs_darwin"
+   }
   },
   {
    "name": "fba_create",
