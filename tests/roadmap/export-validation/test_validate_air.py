@@ -125,6 +125,12 @@ class ValidateAir(unittest.TestCase):
         self.assertFinding(self.mutate(lambda d: find(d['body'], 3)['args'].__setitem__(1, {'ty': 99, 'val': '0'})),
                            'type reference 99')
 
+    def test_opaque_type(self):
+        entry = {'k': 'opaque', 'name': 'basic.Handle', 'module': 'root'}
+        self.assertEqual(findings(self.mutate(lambda d: d['types'].append(dict(entry)))), [])
+        self.assertFinding(self.mutate(lambda d: d['types'].append(dict(entry, abi_size=0))),
+                           'opaque type with a size or alignment')
+
     def test_cyclic_value_type(self):
         def change(d):
             d['types'].append({'k': 'optional', 'child': len(d['types']) + 1})

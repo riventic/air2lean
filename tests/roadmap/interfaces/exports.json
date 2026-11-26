@@ -53,6 +53,15 @@
       "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
       "cwd": "repo",
       "closure": ["kinds.*"]
+    },
+    {
+      "out": "air/{version}/grow",
+      "source": "grow.zig",
+      "filter": "grow.,mem.,math.,debug.assert",
+      "versions": ["0.17.1", "0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo",
+      "closure": ["grow.*"]
     }
   ]
 }

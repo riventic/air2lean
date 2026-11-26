@@ -108,6 +108,16 @@ def checkedKey (module : Option String) (name : String) : Except String String :
     throw s!"std identity '{name}' is in namespace '{namespaceOf name}', which is not a known lib/std namespace; add it to Identity.stdNamespaces (docs/air-json.md §Identity)"
   pure (key module name)
 
+/-- The identity `name` of `module` is standard library code: exactly when the module is `std`
+or an unreviewed standard library (`modifiedStd`, which `checkedKey` rejects anyway).
+Without module identity (a legacy export, `module = none`) the namespace of the name decides
+(`stdNamespaces`), which also takes a user file named like a std namespace for std (fail
+closed). -/
+def stdDeclared (module : Option String) (name : String) : Bool :=
+  match module with
+  | some m => m == "std" || m == modifiedStd
+  | none => stdNamespaces.contains (namespaceOf name)
+
 /-- The module of a file's function: its `module`; `none` for a legacy export without it. -/
 def fileModule (j : Json) : Except String (Option String) := do
   let .ok m := j.getObjVal? "module" | pure none
@@ -183,7 +193,8 @@ def rewrite (j : Json) : Except String (Json × Array Record) := do
     let mut j := j.setObjVal! "name" (.str own)
     j ← mapArray j "types" fun t =>
       match (t.getObjValAs? String "k").toOption with
-      | some "struct" | some "enum" | some "union" => qualify legacy "type" t "name" "module"
+      | some "struct" | some "enum" | some "union" | some "opaque" =>
+        qualify legacy "type" t "name" "module"
       | _ => pure t
     j ← mapArray j "globals" fun g => do refs legacy (← qualify legacy "global" g "name" "module")
     mapArray j "body" (refs legacy)

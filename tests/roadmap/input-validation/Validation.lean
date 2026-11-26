@@ -400,7 +400,7 @@ private def validationChecks : IO Unit := do
   require (accepted (checkProgram #[spawn, spawnWorker])) "indexed spawn arguments rejected"
   require (rejected (checkProgram #[spawn, { spawnWorker with params := #[], body := #[] }])
     "worker 'spawnWorker' has 0 runtime parameters") "spawn argument index changed"
-  let opaqueFn := mkFunc "opaque" #[.other "anyopaque", .ptr "one" true 0, .void] #[1] 2 #[
+  let opaqueFn := mkFunc "opaque" #[Ty.anyopaque, .ptr "one" true 0, .void] #[1] 2 #[
     { id := 0, ty := 1, op := .arg 0 }, { id := 1, ty := 2, op := .call (.inst 0) #[] },
     { id := 2, ty := 2, op := .ret .void }]
   require ((opaqueFn.calleeFnTy? 0).isNone) "opaque pointer was classified as a function pointer"
