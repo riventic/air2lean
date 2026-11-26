@@ -1,8 +1,12 @@
 import FlowTime.Gen
+import ZigLean.Mem.WidthLemmas
 
 /-! Universal contracts for the two monomorphizations of Flow's original `addDuration`.
 The `timestamp*_body` lemmas unfold the generated definitions, connecting the reusable
-arithmetic argument to the AIR-derived code. There are no added axioms. -/
+arithmetic argument to the AIR-derived code: both are instances of the library's width-generic
+case analysis of `@addWithOverflow` against `maxInt` (`Zig.addWithOverflow_max_cases`), which
+the translations of the same rule for other targets use too
+(`tests/roadmap/wasm-correspondence`, T05). There are no added axioms. -/
 
 namespace FlowTime
 
@@ -26,39 +30,24 @@ theorem reserved_iff {n : Nat} (a b : BitVec n)
     apply BitVec.eq_of_toNat_eq
     simp [BitVec.toNat_add, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hm, he]
 
+/-- The contract is the width-generic closed form of the library (`Zig.addBelowMaxOpt`,
+`ZigLean/Mem/WidthLemmas.lean`): `none` is `error.TimeOverflow`. -/
+theorem timestampSpec_eq {n : Nat} (a b : BitVec n) :
+    timestampSpec a b = pure ((Zig.addBelowMaxOpt a b).elim (.error "TimeOverflow") .ok) := by
+  unfold timestampSpec Zig.addBelowMaxOpt
+  split <;> rfl
+
+/- Each monomorphization is an instance of the one width-generic case analysis
+(`Zig.addWithOverflow_max_cases`) at its width's `maxInt`. -/
 theorem timestamp32_body (a b : BitVec 32) : timestamp32 a b = timestampSpec a b := by
-  by_cases hov : 2 ^ 32 ≤ a.toNat + b.toNat
-  · have hbad : 2 ^ 32 - 1 ≤ a.toNat + b.toNat := by omega
-    simp [timestamp32, timestampSpec, zig_unfold, Zig.addWithOverflow,
-      BitVec.uaddOverflow, hov, hbad]
-  · have hlt : a.toNat + b.toNat < 2 ^ 32 := by omega
-    by_cases hr : a.toNat + b.toNat = 2 ^ 32 - 1
-    · have he : a + b = (4294967295 : BitVec 32) := (reserved_iff a b hlt).mpr hr
-      have hbad : 2 ^ 32 - 1 ≤ a.toNat + b.toNat := by omega
-      simp [timestamp32, timestampSpec, zig_unfold, Zig.addWithOverflow,
-        BitVec.uaddOverflow, hov, he, hbad]
-    · have he : a + b ≠ 4294967295#32 := by
-        intro he; exact hr ((reserved_iff a b hlt).mp he)
-      have hgood : ¬ 2 ^ 32 - 1 ≤ a.toNat + b.toNat := by omega
-      simp [timestamp32, timestampSpec, zig_unfold, Zig.addWithOverflow,
-        BitVec.uaddOverflow, hov, he, hgood]
+  rw [timestampSpec_eq]
+  rcases Zig.addWithOverflow_max_cases a b 4294967295#32 (by decide) with h | h | h <;>
+    simp [timestamp32, zig_unfold, h]
 
 theorem timestamp64_body (a b : BitVec 64) : timestamp64 a b = timestampSpec a b := by
-  by_cases hov : 2 ^ 64 ≤ a.toNat + b.toNat
-  · have hbad : 2 ^ 64 - 1 ≤ a.toNat + b.toNat := by omega
-    simp [timestamp64, timestampSpec, zig_unfold, Zig.addWithOverflow,
-      BitVec.uaddOverflow, hov, hbad]
-  · have hlt : a.toNat + b.toNat < 2 ^ 64 := by omega
-    by_cases hr : a.toNat + b.toNat = 2 ^ 64 - 1
-    · have he : a + b = (18446744073709551615 : BitVec 64) := (reserved_iff a b hlt).mpr hr
-      have hbad : 2 ^ 64 - 1 ≤ a.toNat + b.toNat := by omega
-      simp [timestamp64, timestampSpec, zig_unfold, Zig.addWithOverflow,
-        BitVec.uaddOverflow, hov, he, hbad]
-    · have he : a + b ≠ 18446744073709551615#64 := by
-        intro he; exact hr ((reserved_iff a b hlt).mp he)
-      have hgood : ¬ 2 ^ 64 - 1 ≤ a.toNat + b.toNat := by omega
-      simp [timestamp64, timestampSpec, zig_unfold, Zig.addWithOverflow,
-        BitVec.uaddOverflow, hov, he, hgood]
+  rw [timestampSpec_eq]
+  rcases Zig.addWithOverflow_max_cases a b 18446744073709551615#64 (by decide) with h | h | h <;>
+    simp [timestamp64, zig_unfold, h]
 
 /-- Generic exact-addition theorem used by both original-source monomorphizations. -/
 theorem timestampSpec_exact {n : Nat} (a b : BitVec n)

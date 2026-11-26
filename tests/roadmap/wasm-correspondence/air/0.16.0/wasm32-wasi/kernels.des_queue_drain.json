@@ -1,0 +1,4701 @@
+{
+ "schema": 12,
+ "zig_version": "0.16.0",
+ "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "wasm32-wasi.0.1...0.3-musl",
+  "pointer_bits": 32,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.16.0",
+  "backend": "stage2_llvm",
+  "cpu": "lime1",
+  "features": [
+   "bulk_memory_opt",
+   "call_indirect_overlong",
+   "extended_const",
+   "multivalue",
+   "mutable_globals",
+   "nontrapping_fptoint",
+   "sign_ext"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "kernels.des_queue_drain",
+ "module": "root",
+ "src": {
+  "file": "kernels.zig",
+  "module": "root",
+  "decl_line": 46
+ },
+ "params": [
+  0,
+  0
+ ],
+ "noalias": [],
+ "ret": 0,
+ "export": {
+  "name": "des_queue_drain",
+  "cc": "wasm_mvp"
+ },
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 0,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 3,
+   "tag": "alloc",
+   "ty": 2
+  },
+  {
+   "id": 4,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 3
+    },
+    {
+     "ty": 3,
+     "undef": true
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "tag": "dbg_var_ptr",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 3
+    }
+   ],
+   "name": "heap"
+  },
+  {
+   "id": 6,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 3,
+   "column": 5
+  },
+  {
+   "id": 7,
+   "tag": "alloc",
+   "ty": 4
+  },
+  {
+   "id": 8,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 7
+    },
+    {
+     "ty": 5,
+     "val": "0"
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "tag": "dbg_var_ptr",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 7
+    }
+   ],
+   "name": "len"
+  },
+  {
+   "id": 10,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 4,
+   "column": 5
+  },
+  {
+   "id": 11,
+   "tag": "alloc",
+   "ty": 6
+  },
+  {
+   "id": 12,
+   "tag": "bit_or",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "ty": 0,
+     "val": "1"
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "tag": "store",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 11
+    },
+    {
+     "inst": 12
+    }
+   ]
+  },
+  {
+   "id": 15,
+   "tag": "dbg_var_ptr",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 11
+    }
+   ],
+   "name": "x"
+  },
+  {
+   "id": 16,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 5,
+   "column": 35
+  },
+  {
+   "id": 17,
+   "tag": "rem",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 1
+    },
+    {
+     "ty": 0,
+     "val": "33"
+    }
+   ]
+  },
+  {
+   "id": 18,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 5,
+   "column": 24
+  },
+  {
+   "id": 19,
+   "tag": "intcast_safe",
+   "ty": 7,
+   "args": [
+    {
+     "inst": 17
+    }
+   ]
+  },
+  {
+   "id": 20,
+   "tag": "dbg_var_val",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 19
+    }
+   ],
+   "name": "count"
+  },
+  {
+   "id": 21,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 6,
+   "column": 5
+  },
+  {
+   "id": 22,
+   "tag": "alloc",
+   "ty": 8
+  },
+  {
+   "id": 23,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 22
+    },
+    {
+     "ty": 7,
+     "val": "0"
+    }
+   ]
+  },
+  {
+   "id": 24,
+   "tag": "dbg_var_ptr",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 22
+    }
+   ],
+   "name": "seq"
+  },
+  {
+   "id": 25,
+   "tag": "block",
+   "ty": 1,
+   "body": [
+    {
+     "id": 26,
+     "tag": "loop",
+     "ty": 9,
+     "body": [
+      {
+       "id": 27,
+       "tag": "block",
+       "ty": 1,
+       "body": [
+        {
+         "id": 28,
+         "tag": "dbg_stmt",
+         "ty": 1,
+         "line": 7,
+         "column": 12
+        },
+        {
+         "id": 29,
+         "tag": "load",
+         "ty": 7,
+         "args": [
+          {
+           "inst": 22
+          }
+         ]
+        },
+        {
+         "id": 30,
+         "tag": "cmp_lt",
+         "ty": 10,
+         "args": [
+          {
+           "inst": 29
+          },
+          {
+           "inst": 19
+          }
+         ]
+        },
+        {
+         "id": 185,
+         "tag": "cond_br",
+         "ty": 9,
+         "args": [
+          {
+           "inst": 30
+          }
+         ],
+         "then": [
+          {
+           "id": 31,
+           "tag": "block",
+           "ty": 1,
+           "body": [
+            {
+             "id": 32,
+             "tag": "dbg_stmt",
+             "ty": 1,
+             "line": 8,
+             "column": 9
+            },
+            {
+             "id": 33,
+             "tag": "load",
+             "ty": 0,
+             "args": [
+              {
+               "inst": 11
+              }
+             ]
+            },
+            {
+             "id": 34,
+             "tag": "load",
+             "ty": 0,
+             "args": [
+              {
+               "inst": 11
+              }
+             ]
+            },
+            {
+             "id": 35,
+             "tag": "dbg_stmt",
+             "ty": 1,
+             "line": 8,
+             "column": 16
+            },
+            {
+             "id": 36,
+             "tag": "shl",
+             "ty": 0,
+             "args": [
+              {
+               "inst": 34
+              },
+              {
+               "ty": 11,
+               "val": "13"
+              }
+             ]
+            },
+            {
+             "id": 37,
+             "tag": "xor",
+             "ty": 0,
+             "args": [
+              {
+               "inst": 33
+              },
+              {
+               "inst": 36
+              }
+             ]
+            },
+            {
+             "id": 38,
+             "tag": "store_safe",
+             "ty": 1,
+             "args": [
+              {
+               "inst": 11
+              },
+              {
+               "inst": 37
+              }
+             ]
+            },
+            {
+             "id": 39,
+             "tag": "dbg_stmt",
+             "ty": 1,
+             "line": 9,
+             "column": 9
+            },
+            {
+             "id": 40,
+             "tag": "load",
+             "ty": 0,
+             "args": [
+              {
+               "inst": 11
+              }
+             ]
+            },
+            {
+             "id": 41,
+             "tag": "load",
+             "ty": 0,
+             "args": [
+              {
+               "inst": 11
+              }
+             ]
+            },
+            {
+             "id": 42,
+             "tag": "dbg_stmt",
+             "ty": 1,
+             "line": 9,
+             "column": 16
+            },
+            {
+             "id": 43,
+             "tag": "shr",
+             "ty": 0,
+             "args": [
+              {
+               "inst": 41
+              },
+              {
+               "ty": 11,
+               "val": "7"
+              }
+             ]
+            },
+            {
+             "id": 44,
+             "tag": "xor",
+             "ty": 0,
+             "args": [
+              {
+               "inst": 40
+              },
+              {
+               "inst": 43
+              }
+             ]
+            },
+            {
+             "id": 45,
+             "tag": "store_safe",
+             "ty": 1,
+             "args": [
+              {
+               "inst": 11
+              },
+              {
+               "inst": 44
+              }
+             ]
+            },
+            {
+             "id": 46,
+             "tag": "dbg_stmt",
+             "ty": 1,
+             "line": 10,
+             "column": 9
+            },
+            {
+             "id": 47,
+             "tag": "load",
+             "ty": 0,
+             "args": [
+              {
+               "inst": 11
+              }
+             ]
+            },
+            {
+             "id": 48,
+             "tag": "load",
+             "ty": 0,
+             "args": [
+              {
+               "inst": 11
+              }
+             ]
+            },
+            {
+             "id": 49,
+             "tag": "dbg_stmt",
+             "ty": 1,
+             "line": 10,
+             "column": 16
+            },
+            {
+             "id": 50,
+             "tag": "shl",
+             "ty": 0,
+             "args": [
+              {
+               "inst": 48
+              },
+              {
+               "ty": 11,
+               "val": "17"
+              }
+             ]
+            },
+            {
+             "id": 51,
+             "tag": "xor",
+             "ty": 0,
+             "args": [
+              {
+               "inst": 47
+              },
+              {
+               "inst": 50
+              }
+             ]
+            },
+            {
+             "id": 52,
+             "tag": "store_safe",
+             "ty": 1,
+             "args": [
+              {
+               "inst": 11
+              },
+              {
+               "inst": 51
+              }
+             ]
+            },
+            {
+             "id": 53,
+             "tag": "dbg_stmt",
+             "ty": 1,
+             "line": 12,
+             "column": 9
+            },
+            {
+             "id": 54,
+             "tag": "load",
+             "ty": 5,
+             "args": [
+              {
+               "inst": 7
+              }
+             ]
+            },
+            {
+             "id": 55,
+             "tag": "dbg_stmt",
+             "ty": 1,
+             "line": 12,
+             "column": 13
+            },
+            {
+             "id": 56,
+             "tag": "cmp_lt",
+             "ty": 10,
+             "args": [
+              {
+               "inst": 54
+              },
+              {
+               "ty": 5,
+               "val": "32"
+              }
+             ]
+            },
+            {
+             "id": 59,
+             "tag": "block",
+             "ty": 1,
+             "body": [
+              {
+               "id": 60,
+               "tag": "cond_br",
+               "ty": 9,
+               "args": [
+                {
+                 "inst": 56
+                }
+               ],
+               "then": [
+                {
+                 "id": 61,
+                 "tag": "br",
+                 "ty": 9,
+                 "target": 59,
+                 "args": [
+                  {
+                   "ty": 1,
+                   "val": "{}"
+                  }
+                 ]
+                }
+               ],
+               "else": [
+                {
+                 "id": 57,
+                 "tag": "call",
+                 "ty": 9,
+                 "callee": {
+                  "ty": 12,
+                  "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                  "module": "std",
+                  "noreturn": true
+                 },
+                 "args": [
+                  {
+                   "inst": 54
+                  },
+                  {
+                   "ty": 5,
+                   "val": "32"
+                  }
+                 ]
+                },
+                {
+                 "id": 58,
+                 "tag": "unreach",
+                 "ty": 9
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "id": 62,
+             "tag": "ptr_elem_ptr",
+             "ty": 13,
+             "args": [
+              {
+               "inst": 3
+              },
+              {
+               "inst": 54
+              }
+             ]
+            },
+            {
+             "id": 63,
+             "tag": "struct_field_ptr_index_0",
+             "ty": 6,
+             "args": [
+              {
+               "inst": 62
+              }
+             ]
+            },
+            {
+             "id": 64,
+             "tag": "load",
+             "ty": 0,
+             "args": [
+              {
+               "inst": 11
+              }
+             ]
+            },
+            {
+             "id": 65,
+             "tag": "dbg_stmt",
+             "ty": 1,
+             "line": 12,
+             "column": 34
+            },
+            {
+             "id": 66,
+             "tag": "rem",
+             "ty": 0,
+             "args": [
+              {
+               "inst": 64
+              },
+              {
+               "ty": 0,
+               "val": "8"
+              }
+             ]
+            },
+            {
+             "id": 67,
+             "tag": "store_safe",
+             "ty": 1,
+             "args": [
+              {
+               "inst": 63
+              },
+              {
+               "inst": 66
+              }
+             ]
+            },
+            {
+             "id": 68,
+             "tag": "struct_field_ptr_index_1",
+             "ty": 8,
+             "args": [
+              {
+               "inst": 62
+              }
+             ]
+            },
+            {
+             "id": 69,
+             "tag": "load",
+             "ty": 7,
+             "args": [
+              {
+               "inst": 22
+              }
+             ]
+            },
+            {
+             "id": 70,
+             "tag": "store_safe",
+             "ty": 1,
+             "args": [
+              {
+               "inst": 68
+              },
+              {
+               "inst": 69
+              }
+             ]
+            },
+            {
+             "id": 71,
+             "tag": "dbg_stmt",
+             "ty": 1,
+             "line": 13,
+             "column": 9
+            },
+            {
+             "id": 72,
+             "tag": "alloc",
+             "ty": 4
+            },
+            {
+             "id": 73,
+             "tag": "load",
+             "ty": 5,
+             "args": [
+              {
+               "inst": 7
+              }
+             ]
+            },
+            {
+             "id": 74,
+             "tag": "store",
+             "ty": 1,
+             "args": [
+              {
+               "inst": 72
+              },
+              {
+               "inst": 73
+              }
+             ]
+            },
+            {
+             "id": 76,
+             "tag": "dbg_var_ptr",
+             "ty": 1,
+             "args": [
+              {
+               "inst": 72
+              }
+             ],
+             "name": "i"
+            },
+            {
+             "id": 77,
+             "tag": "dbg_stmt",
+             "ty": 1,
+             "line": 14,
+             "column": 9
+            },
+            {
+             "id": 78,
+             "tag": "load",
+             "ty": 5,
+             "args": [
+              {
+               "inst": 7
+              }
+             ]
+            },
+            {
+             "id": 79,
+             "tag": "dbg_stmt",
+             "ty": 1,
+             "line": 14,
+             "column": 13
+            },
+            {
+             "id": 80,
+             "tag": "add_safe",
+             "ty": 5,
+             "args": [
+              {
+               "inst": 78
+              },
+              {
+               "ty": 5,
+               "val": "1"
+              }
+             ]
+            },
+            {
+             "id": 81,
+             "tag": "store_safe",
+             "ty": 1,
+             "args": [
+              {
+               "inst": 7
+              },
+              {
+               "inst": 80
+              }
+             ]
+            },
+            {
+             "id": 82,
+             "tag": "block",
+             "ty": 1,
+             "body": [
+              {
+               "id": 83,
+               "tag": "loop",
+               "ty": 9,
+               "body": [
+                {
+                 "id": 84,
+                 "tag": "block",
+                 "ty": 1,
+                 "body": [
+                  {
+                   "id": 85,
+                   "tag": "dbg_stmt",
+                   "ty": 1,
+                   "line": 15,
+                   "column": 16
+                  },
+                  {
+                   "id": 86,
+                   "tag": "load",
+                   "ty": 5,
+                   "args": [
+                    {
+                     "inst": 72
+                    }
+                   ]
+                  },
+                  {
+                   "id": 87,
+                   "tag": "bitcast",
+                   "ty": 7,
+                   "args": [
+                    {
+                     "inst": 86
+                    }
+                   ]
+                  },
+                  {
+                   "id": 88,
+                   "tag": "cmp_gt",
+                   "ty": 10,
+                   "args": [
+                    {
+                     "inst": 87
+                    },
+                    {
+                     "ty": 7,
+                     "val": "0"
+                    }
+                   ]
+                  },
+                  {
+                   "id": 173,
+                   "tag": "cond_br",
+                   "ty": 9,
+                   "args": [
+                    {
+                     "inst": 88
+                    }
+                   ],
+                   "then": [
+                    {
+                     "id": 89,
+                     "tag": "block",
+                     "ty": 1,
+                     "body": [
+                      {
+                       "id": 90,
+                       "tag": "dbg_stmt",
+                       "ty": 1,
+                       "line": 16,
+                       "column": 13
+                      },
+                      {
+                       "id": 91,
+                       "tag": "load",
+                       "ty": 5,
+                       "args": [
+                        {
+                         "inst": 72
+                        }
+                       ]
+                      },
+                      {
+                       "id": 92,
+                       "tag": "dbg_stmt",
+                       "ty": 1,
+                       "line": 16,
+                       "column": 31
+                      },
+                      {
+                       "id": 93,
+                       "tag": "sub_safe",
+                       "ty": 5,
+                       "args": [
+                        {
+                         "inst": 91
+                        },
+                        {
+                         "ty": 5,
+                         "val": "1"
+                        }
+                       ]
+                      },
+                      {
+                       "id": 94,
+                       "tag": "dbg_stmt",
+                       "ty": 1,
+                       "line": 16,
+                       "column": 36
+                      },
+                      {
+                       "id": 95,
+                       "tag": "div_trunc",
+                       "ty": 5,
+                       "args": [
+                        {
+                         "inst": 93
+                        },
+                        {
+                         "ty": 5,
+                         "val": "2"
+                        }
+                       ]
+                      },
+                      {
+                       "id": 96,
+                       "tag": "dbg_var_val",
+                       "ty": 1,
+                       "args": [
+                        {
+                         "inst": 95
+                        }
+                       ],
+                       "name": "parent"
+                      },
+                      {
+                       "id": 97,
+                       "tag": "dbg_stmt",
+                       "ty": 1,
+                       "line": 17,
+                       "column": 17
+                      },
+                      {
+                       "id": 98,
+                       "tag": "block",
+                       "ty": 1,
+                       "body": [
+                        {
+                         "id": 99,
+                         "tag": "dbg_stmt",
+                         "ty": 1,
+                         "line": 17,
+                         "column": 24
+                        },
+                        {
+                         "id": 100,
+                         "tag": "load",
+                         "ty": 5,
+                         "args": [
+                          {
+                           "inst": 72
+                          }
+                         ]
+                        },
+                        {
+                         "id": 101,
+                         "tag": "dbg_stmt",
+                         "ty": 1,
+                         "line": 17,
+                         "column": 29
+                        },
+                        {
+                         "id": 102,
+                         "tag": "cmp_lt",
+                         "ty": 10,
+                         "args": [
+                          {
+                           "inst": 100
+                          },
+                          {
+                           "ty": 5,
+                           "val": "32"
+                          }
+                         ]
+                        },
+                        {
+                         "id": 105,
+                         "tag": "block",
+                         "ty": 1,
+                         "body": [
+                          {
+                           "id": 106,
+                           "tag": "cond_br",
+                           "ty": 9,
+                           "args": [
+                            {
+                             "inst": 102
+                            }
+                           ],
+                           "then": [
+                            {
+                             "id": 107,
+                             "tag": "br",
+                             "ty": 9,
+                             "target": 105,
+                             "args": [
+                              {
+                               "ty": 1,
+                               "val": "{}"
+                              }
+                             ]
+                            }
+                           ],
+                           "else": [
+                            {
+                             "id": 103,
+                             "tag": "call",
+                             "ty": 9,
+                             "callee": {
+                              "ty": 12,
+                              "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                              "module": "std",
+                              "noreturn": true
+                             },
+                             "args": [
+                              {
+                               "inst": 100
+                              },
+                              {
+                               "ty": 5,
+                               "val": "32"
+                              }
+                             ]
+                            },
+                            {
+                             "id": 104,
+                             "tag": "unreach",
+                             "ty": 9
+                            }
+                           ]
+                          }
+                         ]
+                        },
+                        {
+                         "id": 108,
+                         "tag": "ptr_elem_ptr",
+                         "ty": 13,
+                         "args": [
+                          {
+                           "inst": 3
+                          },
+                          {
+                           "inst": 100
+                          }
+                         ]
+                        },
+                        {
+                         "id": 109,
+                         "tag": "load",
+                         "ty": 14,
+                         "args": [
+                          {
+                           "inst": 108
+                          }
+                         ]
+                        },
+                        {
+                         "id": 110,
+                         "tag": "dbg_stmt",
+                         "ty": 1,
+                         "line": 17,
+                         "column": 38
+                        },
+                        {
+                         "id": 111,
+                         "tag": "cmp_lt",
+                         "ty": 10,
+                         "args": [
+                          {
+                           "inst": 95
+                          },
+                          {
+                           "ty": 5,
+                           "val": "32"
+                          }
+                         ]
+                        },
+                        {
+                         "id": 114,
+                         "tag": "block",
+                         "ty": 1,
+                         "body": [
+                          {
+                           "id": 115,
+                           "tag": "cond_br",
+                           "ty": 9,
+                           "args": [
+                            {
+                             "inst": 111
+                            }
+                           ],
+                           "then": [
+                            {
+                             "id": 116,
+                             "tag": "br",
+                             "ty": 9,
+                             "target": 114,
+                             "args": [
+                              {
+                               "ty": 1,
+                               "val": "{}"
+                              }
+                             ]
+                            }
+                           ],
+                           "else": [
+                            {
+                             "id": 112,
+                             "tag": "call",
+                             "ty": 9,
+                             "callee": {
+                              "ty": 12,
+                              "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                              "module": "std",
+                              "noreturn": true
+                             },
+                             "args": [
+                              {
+                               "inst": 95
+                              },
+                              {
+                               "ty": 5,
+                               "val": "32"
+                              }
+                             ]
+                            },
+                            {
+                             "id": 113,
+                             "tag": "unreach",
+                             "ty": 9
+                            }
+                           ]
+                          }
+                         ]
+                        },
+                        {
+                         "id": 117,
+                         "tag": "ptr_elem_ptr",
+                         "ty": 13,
+                         "args": [
+                          {
+                           "inst": 3
+                          },
+                          {
+                           "inst": 95
+                          }
+                         ]
+                        },
+                        {
+                         "id": 118,
+                         "tag": "load",
+                         "ty": 14,
+                         "args": [
+                          {
+                           "inst": 117
+                          }
+                         ]
+                        },
+                        {
+                         "id": 119,
+                         "tag": "dbg_stmt",
+                         "ty": 1,
+                         "line": 17,
+                         "column": 24
+                        },
+                        {
+                         "id": 120,
+                         "tag": "call",
+                         "ty": 10,
+                         "callee": {
+                          "ty": 15,
+                          "func": "kernels.before",
+                          "module": "root",
+                          "noreturn": false
+                         },
+                         "args": [
+                          {
+                           "inst": 109
+                          },
+                          {
+                           "inst": 118
+                          }
+                         ]
+                        },
+                        {
+                         "id": 121,
+                         "tag": "not",
+                         "ty": 10,
+                         "args": [
+                          {
+                           "inst": 120
+                          }
+                         ]
+                        },
+                        {
+                         "id": 124,
+                         "tag": "cond_br",
+                         "ty": 9,
+                         "args": [
+                          {
+                           "inst": 121
+                          }
+                         ],
+                         "then": [
+                          {
+                           "id": 122,
+                           "tag": "br",
+                           "ty": 9,
+                           "target": 82,
+                           "args": [
+                            {
+                             "ty": 1,
+                             "val": "{}"
+                            }
+                           ]
+                          }
+                         ],
+                         "else": [
+                          {
+                           "id": 123,
+                           "tag": "br",
+                           "ty": 9,
+                           "target": 98,
+                           "args": [
+                            {
+                             "ty": 1,
+                             "val": "{}"
+                            }
+                           ]
+                          }
+                         ]
+                        }
+                       ]
+                      },
+                      {
+                       "id": 125,
+                       "tag": "dbg_stmt",
+                       "ty": 1,
+                       "line": 18,
+                       "column": 13
+                      },
+                      {
+                       "id": 126,
+                       "tag": "load",
+                       "ty": 5,
+                       "args": [
+                        {
+                         "inst": 72
+                        }
+                       ]
+                      },
+                      {
+                       "id": 127,
+                       "tag": "dbg_stmt",
+                       "ty": 1,
+                       "line": 18,
+                       "column": 27
+                      },
+                      {
+                       "id": 128,
+                       "tag": "cmp_lt",
+                       "ty": 10,
+                       "args": [
+                        {
+                         "inst": 126
+                        },
+                        {
+                         "ty": 5,
+                         "val": "32"
+                        }
+                       ]
+                      },
+                      {
+                       "id": 131,
+                       "tag": "block",
+                       "ty": 1,
+                       "body": [
+                        {
+                         "id": 132,
+                         "tag": "cond_br",
+                         "ty": 9,
+                         "args": [
+                          {
+                           "inst": 128
+                          }
+                         ],
+                         "then": [
+                          {
+                           "id": 133,
+                           "tag": "br",
+                           "ty": 9,
+                           "target": 131,
+                           "args": [
+                            {
+                             "ty": 1,
+                             "val": "{}"
+                            }
+                           ]
+                          }
+                         ],
+                         "else": [
+                          {
+                           "id": 129,
+                           "tag": "call",
+                           "ty": 9,
+                           "callee": {
+                            "ty": 12,
+                            "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                            "module": "std",
+                            "noreturn": true
+                           },
+                           "args": [
+                            {
+                             "inst": 126
+                            },
+                            {
+                             "ty": 5,
+                             "val": "32"
+                            }
+                           ]
+                          },
+                          {
+                           "id": 130,
+                           "tag": "unreach",
+                           "ty": 9
+                          }
+                         ]
+                        }
+                       ]
+                      },
+                      {
+                       "id": 134,
+                       "tag": "ptr_elem_ptr",
+                       "ty": 13,
+                       "args": [
+                        {
+                         "inst": 3
+                        },
+                        {
+                         "inst": 126
+                        }
+                       ]
+                      },
+                      {
+                       "id": 135,
+                       "tag": "load",
+                       "ty": 14,
+                       "args": [
+                        {
+                         "inst": 134
+                        }
+                       ]
+                      },
+                      {
+                       "id": 136,
+                       "tag": "dbg_var_val",
+                       "ty": 1,
+                       "args": [
+                        {
+                         "inst": 135
+                        }
+                       ],
+                       "name": "t"
+                      },
+                      {
+                       "id": 137,
+                       "tag": "dbg_stmt",
+                       "ty": 1,
+                       "line": 19,
+                       "column": 13
+                      },
+                      {
+                       "id": 138,
+                       "tag": "load",
+                       "ty": 5,
+                       "args": [
+                        {
+                         "inst": 72
+                        }
+                       ]
+                      },
+                      {
+                       "id": 139,
+                       "tag": "dbg_stmt",
+                       "ty": 1,
+                       "line": 19,
+                       "column": 17
+                      },
+                      {
+                       "id": 140,
+                       "tag": "cmp_lt",
+                       "ty": 10,
+                       "args": [
+                        {
+                         "inst": 138
+                        },
+                        {
+                         "ty": 5,
+                         "val": "32"
+                        }
+                       ]
+                      },
+                      {
+                       "id": 143,
+                       "tag": "block",
+                       "ty": 1,
+                       "body": [
+                        {
+                         "id": 144,
+                         "tag": "cond_br",
+                         "ty": 9,
+                         "args": [
+                          {
+                           "inst": 140
+                          }
+                         ],
+                         "then": [
+                          {
+                           "id": 145,
+                           "tag": "br",
+                           "ty": 9,
+                           "target": 143,
+                           "args": [
+                            {
+                             "ty": 1,
+                             "val": "{}"
+                            }
+                           ]
+                          }
+                         ],
+                         "else": [
+                          {
+                           "id": 141,
+                           "tag": "call",
+                           "ty": 9,
+                           "callee": {
+                            "ty": 12,
+                            "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                            "module": "std",
+                            "noreturn": true
+                           },
+                           "args": [
+                            {
+                             "inst": 138
+                            },
+                            {
+                             "ty": 5,
+                             "val": "32"
+                            }
+                           ]
+                          },
+                          {
+                           "id": 142,
+                           "tag": "unreach",
+                           "ty": 9
+                          }
+                         ]
+                        }
+                       ]
+                      },
+                      {
+                       "id": 146,
+                       "tag": "ptr_elem_ptr",
+                       "ty": 13,
+                       "args": [
+                        {
+                         "inst": 3
+                        },
+                        {
+                         "inst": 138
+                        }
+                       ]
+                      },
+                      {
+                       "id": 147,
+                       "tag": "dbg_stmt",
+                       "ty": 1,
+                       "line": 19,
+                       "column": 27
+                      },
+                      {
+                       "id": 148,
+                       "tag": "cmp_lt",
+                       "ty": 10,
+                       "args": [
+                        {
+                         "inst": 95
+                        },
+                        {
+                         "ty": 5,
+                         "val": "32"
+                        }
+                       ]
+                      },
+                      {
+                       "id": 151,
+                       "tag": "block",
+                       "ty": 1,
+                       "body": [
+                        {
+                         "id": 152,
+                         "tag": "cond_br",
+                         "ty": 9,
+                         "args": [
+                          {
+                           "inst": 148
+                          }
+                         ],
+                         "then": [
+                          {
+                           "id": 153,
+                           "tag": "br",
+                           "ty": 9,
+                           "target": 151,
+                           "args": [
+                            {
+                             "ty": 1,
+                             "val": "{}"
+                            }
+                           ]
+                          }
+                         ],
+                         "else": [
+                          {
+                           "id": 149,
+                           "tag": "call",
+                           "ty": 9,
+                           "callee": {
+                            "ty": 12,
+                            "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                            "module": "std",
+                            "noreturn": true
+                           },
+                           "args": [
+                            {
+                             "inst": 95
+                            },
+                            {
+                             "ty": 5,
+                             "val": "32"
+                            }
+                           ]
+                          },
+                          {
+                           "id": 150,
+                           "tag": "unreach",
+                           "ty": 9
+                          }
+                         ]
+                        }
+                       ]
+                      },
+                      {
+                       "id": 154,
+                       "tag": "ptr_elem_ptr",
+                       "ty": 13,
+                       "args": [
+                        {
+                         "inst": 3
+                        },
+                        {
+                         "inst": 95
+                        }
+                       ]
+                      },
+                      {
+                       "id": 155,
+                       "tag": "load",
+                       "ty": 14,
+                       "args": [
+                        {
+                         "inst": 154
+                        }
+                       ]
+                      },
+                      {
+                       "id": 156,
+                       "tag": "store_safe",
+                       "ty": 1,
+                       "args": [
+                        {
+                         "inst": 146
+                        },
+                        {
+                         "inst": 155
+                        }
+                       ]
+                      },
+                      {
+                       "id": 157,
+                       "tag": "dbg_stmt",
+                       "ty": 1,
+                       "line": 20,
+                       "column": 17
+                      },
+                      {
+                       "id": 158,
+                       "tag": "cmp_lt",
+                       "ty": 10,
+                       "args": [
+                        {
+                         "inst": 95
+                        },
+                        {
+                         "ty": 5,
+                         "val": "32"
+                        }
+                       ]
+                      },
+                      {
+                       "id": 161,
+                       "tag": "block",
+                       "ty": 1,
+                       "body": [
+                        {
+                         "id": 162,
+                         "tag": "cond_br",
+                         "ty": 9,
+                         "args": [
+                          {
+                           "inst": 158
+                          }
+                         ],
+                         "then": [
+                          {
+                           "id": 163,
+                           "tag": "br",
+                           "ty": 9,
+                           "target": 161,
+                           "args": [
+                            {
+                             "ty": 1,
+                             "val": "{}"
+                            }
+                           ]
+                          }
+                         ],
+                         "else": [
+                          {
+                           "id": 159,
+                           "tag": "call",
+                           "ty": 9,
+                           "callee": {
+                            "ty": 12,
+                            "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                            "module": "std",
+                            "noreturn": true
+                           },
+                           "args": [
+                            {
+                             "inst": 95
+                            },
+                            {
+                             "ty": 5,
+                             "val": "32"
+                            }
+                           ]
+                          },
+                          {
+                           "id": 160,
+                           "tag": "unreach",
+                           "ty": 9
+                          }
+                         ]
+                        }
+                       ]
+                      },
+                      {
+                       "id": 164,
+                       "tag": "ptr_elem_ptr",
+                       "ty": 13,
+                       "args": [
+                        {
+                         "inst": 3
+                        },
+                        {
+                         "inst": 95
+                        }
+                       ]
+                      },
+                      {
+                       "id": 165,
+                       "tag": "store_safe",
+                       "ty": 1,
+                       "args": [
+                        {
+                         "inst": 164
+                        },
+                        {
+                         "inst": 135
+                        }
+                       ]
+                      },
+                      {
+                       "id": 166,
+                       "tag": "dbg_stmt",
+                       "ty": 1,
+                       "line": 21,
+                       "column": 13
+                      },
+                      {
+                       "id": 167,
+                       "tag": "store_safe",
+                       "ty": 1,
+                       "args": [
+                        {
+                         "inst": 72
+                        },
+                        {
+                         "inst": 95
+                        }
+                       ]
+                      },
+                      {
+                       "id": 168,
+                       "tag": "dbg_stmt",
+                       "ty": 1,
+                       "line": 22,
+                       "column": 9
+                      },
+                      {
+                       "id": 169,
+                       "tag": "dbg_empty_stmt",
+                       "ty": 1
+                      },
+                      {
+                       "id": 170,
+                       "tag": "br",
+                       "ty": 9,
+                       "target": 89,
+                       "args": [
+                        {
+                         "ty": 1,
+                         "val": "{}"
+                        }
+                       ]
+                      }
+                     ]
+                    },
+                    {
+                     "id": 171,
+                     "tag": "br",
+                     "ty": 9,
+                     "target": 84,
+                     "args": [
+                      {
+                       "ty": 1,
+                       "val": "{}"
+                      }
+                     ]
+                    }
+                   ],
+                   "else": [
+                    {
+                     "id": 172,
+                     "tag": "br",
+                     "ty": 9,
+                     "target": 82,
+                     "args": [
+                      {
+                       "ty": 1,
+                       "val": "{}"
+                      }
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                },
+                {
+                 "id": 174,
+                 "tag": "repeat",
+                 "ty": 9,
+                 "target": 83
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "id": 175,
+             "tag": "dbg_stmt",
+             "ty": 1,
+             "line": 23,
+             "column": 5
+            },
+            {
+             "id": 176,
+             "tag": "dbg_empty_stmt",
+             "ty": 1
+            },
+            {
+             "id": 177,
+             "tag": "br",
+             "ty": 9,
+             "target": 31,
+             "args": [
+              {
+               "ty": 1,
+               "val": "{}"
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "id": 178,
+           "tag": "dbg_stmt",
+           "ty": 1,
+           "line": 7,
+           "column": 28
+          },
+          {
+           "id": 179,
+           "tag": "load",
+           "ty": 7,
+           "args": [
+            {
+             "inst": 22
+            }
+           ]
+          },
+          {
+           "id": 180,
+           "tag": "dbg_stmt",
+           "ty": 1,
+           "line": 7,
+           "column": 32
+          },
+          {
+           "id": 181,
+           "tag": "add_safe",
+           "ty": 7,
+           "args": [
+            {
+             "inst": 179
+            },
+            {
+             "ty": 7,
+             "val": "1"
+            }
+           ]
+          },
+          {
+           "id": 182,
+           "tag": "store_safe",
+           "ty": 1,
+           "args": [
+            {
+             "inst": 22
+            },
+            {
+             "inst": 181
+            }
+           ]
+          },
+          {
+           "id": 183,
+           "tag": "br",
+           "ty": 9,
+           "target": 27,
+           "args": [
+            {
+             "ty": 1,
+             "val": "{}"
+            }
+           ]
+          }
+         ],
+         "else": [
+          {
+           "id": 184,
+           "tag": "br",
+           "ty": 9,
+           "target": 25,
+           "args": [
+            {
+             "ty": 1,
+             "val": "{}"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "id": 186,
+       "tag": "repeat",
+       "ty": 9,
+       "target": 26
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 187,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 24,
+   "column": 5
+  },
+  {
+   "id": 188,
+   "tag": "alloc",
+   "ty": 6
+  },
+  {
+   "id": 189,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 188
+    },
+    {
+     "ty": 0,
+     "val": "14695981039346656037"
+    }
+   ]
+  },
+  {
+   "id": 190,
+   "tag": "dbg_var_ptr",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 188
+    }
+   ],
+   "name": "hash"
+  },
+  {
+   "id": 191,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 25,
+   "column": 5
+  },
+  {
+   "id": 192,
+   "tag": "alloc",
+   "ty": 16
+  },
+  {
+   "id": 193,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 192
+    },
+    {
+     "ty": 17,
+     "null": true
+    }
+   ]
+  },
+  {
+   "id": 194,
+   "tag": "dbg_var_ptr",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 192
+    }
+   ],
+   "name": "last"
+  },
+  {
+   "id": 195,
+   "tag": "block",
+   "ty": 1,
+   "body": [
+    {
+     "id": 196,
+     "tag": "loop",
+     "ty": 9,
+     "body": [
+      {
+       "id": 197,
+       "tag": "block",
+       "ty": 1,
+       "body": [
+        {
+         "id": 198,
+         "tag": "dbg_stmt",
+         "ty": 1,
+         "line": 26,
+         "column": 12
+        },
+        {
+         "id": 199,
+         "tag": "load",
+         "ty": 5,
+         "args": [
+          {
+           "inst": 7
+          }
+         ]
+        },
+        {
+         "id": 200,
+         "tag": "bitcast",
+         "ty": 7,
+         "args": [
+          {
+           "inst": 199
+          }
+         ]
+        },
+        {
+         "id": 201,
+         "tag": "cmp_gt",
+         "ty": 10,
+         "args": [
+          {
+           "inst": 200
+          },
+          {
+           "ty": 7,
+           "val": "0"
+          }
+         ]
+        },
+        {
+         "id": 426,
+         "tag": "cond_br",
+         "ty": 9,
+         "args": [
+          {
+           "inst": 201
+          }
+         ],
+         "then": [
+          {
+           "id": 202,
+           "tag": "block",
+           "ty": 1,
+           "body": [
+            {
+             "id": 203,
+             "tag": "dbg_stmt",
+             "ty": 1,
+             "line": 27,
+             "column": 25
+            },
+            {
+             "id": 204,
+             "tag": "ptr_elem_ptr",
+             "ty": 13,
+             "args": [
+              {
+               "inst": 3
+              },
+              {
+               "ty": 5,
+               "val": "0"
+              }
+             ]
+            },
+            {
+             "id": 205,
+             "tag": "load",
+             "ty": 14,
+             "args": [
+              {
+               "inst": 204
+              }
+             ]
+            },
+            {
+             "id": 206,
+             "tag": "alloc",
+             "ty": 13
+            },
+            {
+             "id": 207,
+             "tag": "store_safe",
+             "ty": 1,
+             "args": [
+              {
+               "inst": 206
+              },
+              {
+               "inst": 205
+              }
+             ]
+            },
+            {
+             "id": 208,
+             "tag": "bitcast",
+             "ty": 18,
+             "args": [
+              {
+               "inst": 206
+              }
+             ]
+            },
+            {
+             "id": 209,
+             "tag": "dbg_var_val",
+             "ty": 1,
+             "args": [
+              {
+               "inst": 205
+              }
+             ],
+             "name": "top"
+            },
+            {
+             "id": 210,
+             "tag": "dbg_stmt",
+             "ty": 1,
+             "line": 28,
+             "column": 9
+            },
+            {
+             "id": 211,
+             "tag": "load",
+             "ty": 5,
+             "args": [
+              {
+               "inst": 7
+              }
+             ]
+            },
+            {
+             "id": 212,
+             "tag": "dbg_stmt",
+             "ty": 1,
+             "line": 28,
+             "column": 13
+            },
+            {
+             "id": 213,
+             "tag": "sub_safe",
+             "ty": 5,
+             "args": [
+              {
+               "inst": 211
+              },
+              {
+               "ty": 5,
+               "val": "1"
+              }
+             ]
+            },
+            {
+             "id": 214,
+             "tag": "store_safe",
+             "ty": 1,
+             "args": [
+              {
+               "inst": 7
+              },
+              {
+               "inst": 213
+              }
+             ]
+            },
+            {
+             "id": 215,
+             "tag": "dbg_stmt",
+             "ty": 1,
+             "line": 29,
+             "column": 13
+            },
+            {
+             "id": 216,
+             "tag": "ptr_elem_ptr",
+             "ty": 13,
+             "args": [
+              {
+               "inst": 3
+              },
+              {
+               "ty": 5,
+               "val": "0"
+              }
+             ]
+            },
+            {
+             "id": 217,
+             "tag": "load",
+             "ty": 5,
+             "args": [
+              {
+               "inst": 7
+              }
+             ]
+            },
+            {
+             "id": 218,
+             "tag": "dbg_stmt",
+             "ty": 1,
+             "line": 29,
+             "column": 23
+            },
+            {
+             "id": 219,
+             "tag": "cmp_lt",
+             "ty": 10,
+             "args": [
+              {
+               "inst": 217
+              },
+              {
+               "ty": 5,
+               "val": "32"
+              }
+             ]
+            },
+            {
+             "id": 222,
+             "tag": "block",
+             "ty": 1,
+             "body": [
+              {
+               "id": 223,
+               "tag": "cond_br",
+               "ty": 9,
+               "args": [
+                {
+                 "inst": 219
+                }
+               ],
+               "then": [
+                {
+                 "id": 224,
+                 "tag": "br",
+                 "ty": 9,
+                 "target": 222,
+                 "args": [
+                  {
+                   "ty": 1,
+                   "val": "{}"
+                  }
+                 ]
+                }
+               ],
+               "else": [
+                {
+                 "id": 220,
+                 "tag": "call",
+                 "ty": 9,
+                 "callee": {
+                  "ty": 12,
+                  "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                  "module": "std",
+                  "noreturn": true
+                 },
+                 "args": [
+                  {
+                   "inst": 217
+                  },
+                  {
+                   "ty": 5,
+                   "val": "32"
+                  }
+                 ]
+                },
+                {
+                 "id": 221,
+                 "tag": "unreach",
+                 "ty": 9
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "id": 225,
+             "tag": "ptr_elem_ptr",
+             "ty": 13,
+             "args": [
+              {
+               "inst": 3
+              },
+              {
+               "inst": 217
+              }
+             ]
+            },
+            {
+             "id": 226,
+             "tag": "load",
+             "ty": 14,
+             "args": [
+              {
+               "inst": 225
+              }
+             ]
+            },
+            {
+             "id": 227,
+             "tag": "store_safe",
+             "ty": 1,
+             "args": [
+              {
+               "inst": 216
+              },
+              {
+               "inst": 226
+              }
+             ]
+            },
+            {
+             "id": 228,
+             "tag": "dbg_stmt",
+             "ty": 1,
+             "line": 30,
+             "column": 9
+            },
+            {
+             "id": 229,
+             "tag": "alloc",
+             "ty": 4
+            },
+            {
+             "id": 230,
+             "tag": "store_safe",
+             "ty": 1,
+             "args": [
+              {
+               "inst": 229
+              },
+              {
+               "ty": 5,
+               "val": "0"
+              }
+             ]
+            },
+            {
+             "id": 231,
+             "tag": "dbg_var_ptr",
+             "ty": 1,
+             "args": [
+              {
+               "inst": 229
+              }
+             ],
+             "name": "i"
+            },
+            {
+             "id": 232,
+             "tag": "block",
+             "ty": 1,
+             "body": [
+              {
+               "id": 233,
+               "tag": "loop",
+               "ty": 9,
+               "body": [
+                {
+                 "id": 235,
+                 "tag": "dbg_stmt",
+                 "ty": 1,
+                 "line": 31,
+                 "column": 16
+                },
+                {
+                 "id": 236,
+                 "tag": "block",
+                 "ty": 1,
+                 "body": [
+                  {
+                   "id": 237,
+                   "tag": "dbg_stmt",
+                   "ty": 1,
+                   "line": 32,
+                   "column": 13
+                  },
+                  {
+                   "id": 238,
+                   "tag": "load",
+                   "ty": 5,
+                   "args": [
+                    {
+                     "inst": 229
+                    }
+                   ]
+                  },
+                  {
+                   "id": 239,
+                   "tag": "dbg_stmt",
+                   "ty": 1,
+                   "line": 32,
+                   "column": 25
+                  },
+                  {
+                   "id": 240,
+                   "tag": "mul_safe",
+                   "ty": 5,
+                   "args": [
+                    {
+                     "ty": 5,
+                     "val": "2"
+                    },
+                    {
+                     "inst": 238
+                    }
+                   ]
+                  },
+                  {
+                   "id": 241,
+                   "tag": "dbg_stmt",
+                   "ty": 1,
+                   "line": 32,
+                   "column": 29
+                  },
+                  {
+                   "id": 242,
+                   "tag": "add_safe",
+                   "ty": 5,
+                   "args": [
+                    {
+                     "inst": 240
+                    },
+                    {
+                     "ty": 5,
+                     "val": "1"
+                    }
+                   ]
+                  },
+                  {
+                   "id": 243,
+                   "tag": "dbg_var_val",
+                   "ty": 1,
+                   "args": [
+                    {
+                     "inst": 242
+                    }
+                   ],
+                   "name": "l"
+                  },
+                  {
+                   "id": 244,
+                   "tag": "dbg_stmt",
+                   "ty": 1,
+                   "line": 33,
+                   "column": 25
+                  },
+                  {
+                   "id": 245,
+                   "tag": "add_safe",
+                   "ty": 5,
+                   "args": [
+                    {
+                     "inst": 242
+                    },
+                    {
+                     "ty": 5,
+                     "val": "1"
+                    }
+                   ]
+                  },
+                  {
+                   "id": 246,
+                   "tag": "dbg_var_val",
+                   "ty": 1,
+                   "args": [
+                    {
+                     "inst": 245
+                    }
+                   ],
+                   "name": "r"
+                  },
+                  {
+                   "id": 247,
+                   "tag": "dbg_stmt",
+                   "ty": 1,
+                   "line": 34,
+                   "column": 13
+                  },
+                  {
+                   "id": 248,
+                   "tag": "alloc",
+                   "ty": 4
+                  },
+                  {
+                   "id": 249,
+                   "tag": "load",
+                   "ty": 5,
+                   "args": [
+                    {
+                     "inst": 229
+                    }
+                   ]
+                  },
+                  {
+                   "id": 250,
+                   "tag": "store",
+                   "ty": 1,
+                   "args": [
+                    {
+                     "inst": 248
+                    },
+                    {
+                     "inst": 249
+                    }
+                   ]
+                  },
+                  {
+                   "id": 252,
+                   "tag": "dbg_var_ptr",
+                   "ty": 1,
+                   "args": [
+                    {
+                     "inst": 248
+                    }
+                   ],
+                   "name": "m"
+                  },
+                  {
+                   "id": 253,
+                   "tag": "dbg_stmt",
+                   "ty": 1,
+                   "line": 35,
+                   "column": 17
+                  },
+                  {
+                   "id": 254,
+                   "tag": "block",
+                   "ty": 1,
+                   "body": [
+                    {
+                     "id": 255,
+                     "tag": "load",
+                     "ty": 5,
+                     "args": [
+                      {
+                       "inst": 7
+                      }
+                     ]
+                    },
+                    {
+                     "id": 256,
+                     "tag": "bitcast",
+                     "ty": 7,
+                     "args": [
+                      {
+                       "inst": 242
+                      }
+                     ]
+                    },
+                    {
+                     "id": 257,
+                     "tag": "bitcast",
+                     "ty": 7,
+                     "args": [
+                      {
+                       "inst": 255
+                      }
+                     ]
+                    },
+                    {
+                     "id": 258,
+                     "tag": "cmp_lt",
+                     "ty": 10,
+                     "args": [
+                      {
+                       "inst": 256
+                      },
+                      {
+                       "inst": 257
+                      }
+                     ]
+                    },
+                    {
+                     "id": 259,
+                     "tag": "block",
+                     "ty": 10,
+                     "body": [
+                      {
+                       "id": 283,
+                       "tag": "cond_br",
+                       "ty": 9,
+                       "args": [
+                        {
+                         "inst": 258
+                        }
+                       ],
+                       "then": [
+                        {
+                         "id": 261,
+                         "tag": "dbg_stmt",
+                         "ty": 1,
+                         "line": 35,
+                         "column": 40
+                        },
+                        {
+                         "id": 262,
+                         "tag": "cmp_lt",
+                         "ty": 10,
+                         "args": [
+                          {
+                           "inst": 242
+                          },
+                          {
+                           "ty": 5,
+                           "val": "32"
+                          }
+                         ]
+                        },
+                        {
+                         "id": 265,
+                         "tag": "block",
+                         "ty": 1,
+                         "body": [
+                          {
+                           "id": 266,
+                           "tag": "cond_br",
+                           "ty": 9,
+                           "args": [
+                            {
+                             "inst": 262
+                            }
+                           ],
+                           "then": [
+                            {
+                             "id": 267,
+                             "tag": "br",
+                             "ty": 9,
+                             "target": 265,
+                             "args": [
+                              {
+                               "ty": 1,
+                               "val": "{}"
+                              }
+                             ]
+                            }
+                           ],
+                           "else": [
+                            {
+                             "id": 263,
+                             "tag": "call",
+                             "ty": 9,
+                             "callee": {
+                              "ty": 12,
+                              "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                              "module": "std",
+                              "noreturn": true
+                             },
+                             "args": [
+                              {
+                               "inst": 242
+                              },
+                              {
+                               "ty": 5,
+                               "val": "32"
+                              }
+                             ]
+                            },
+                            {
+                             "id": 264,
+                             "tag": "unreach",
+                             "ty": 9
+                            }
+                           ]
+                          }
+                         ]
+                        },
+                        {
+                         "id": 268,
+                         "tag": "ptr_elem_ptr",
+                         "ty": 13,
+                         "args": [
+                          {
+                           "inst": 3
+                          },
+                          {
+                           "inst": 242
+                          }
+                         ]
+                        },
+                        {
+                         "id": 269,
+                         "tag": "load",
+                         "ty": 14,
+                         "args": [
+                          {
+                           "inst": 268
+                          }
+                         ]
+                        },
+                        {
+                         "id": 270,
+                         "tag": "load",
+                         "ty": 5,
+                         "args": [
+                          {
+                           "inst": 248
+                          }
+                         ]
+                        },
+                        {
+                         "id": 271,
+                         "tag": "dbg_stmt",
+                         "ty": 1,
+                         "line": 35,
+                         "column": 49
+                        },
+                        {
+                         "id": 272,
+                         "tag": "cmp_lt",
+                         "ty": 10,
+                         "args": [
+                          {
+                           "inst": 270
+                          },
+                          {
+                           "ty": 5,
+                           "val": "32"
+                          }
+                         ]
+                        },
+                        {
+                         "id": 275,
+                         "tag": "block",
+                         "ty": 1,
+                         "body": [
+                          {
+                           "id": 276,
+                           "tag": "cond_br",
+                           "ty": 9,
+                           "args": [
+                            {
+                             "inst": 272
+                            }
+                           ],
+                           "then": [
+                            {
+                             "id": 277,
+                             "tag": "br",
+                             "ty": 9,
+                             "target": 275,
+                             "args": [
+                              {
+                               "ty": 1,
+                               "val": "{}"
+                              }
+                             ]
+                            }
+                           ],
+                           "else": [
+                            {
+                             "id": 273,
+                             "tag": "call",
+                             "ty": 9,
+                             "callee": {
+                              "ty": 12,
+                              "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                              "module": "std",
+                              "noreturn": true
+                             },
+                             "args": [
+                              {
+                               "inst": 270
+                              },
+                              {
+                               "ty": 5,
+                               "val": "32"
+                              }
+                             ]
+                            },
+                            {
+                             "id": 274,
+                             "tag": "unreach",
+                             "ty": 9
+                            }
+                           ]
+                          }
+                         ]
+                        },
+                        {
+                         "id": 278,
+                         "tag": "ptr_elem_ptr",
+                         "ty": 13,
+                         "args": [
+                          {
+                           "inst": 3
+                          },
+                          {
+                           "inst": 270
+                          }
+                         ]
+                        },
+                        {
+                         "id": 279,
+                         "tag": "load",
+                         "ty": 14,
+                         "args": [
+                          {
+                           "inst": 278
+                          }
+                         ]
+                        },
+                        {
+                         "id": 280,
+                         "tag": "dbg_stmt",
+                         "ty": 1,
+                         "line": 35,
+                         "column": 35
+                        },
+                        {
+                         "id": 281,
+                         "tag": "call",
+                         "ty": 10,
+                         "callee": {
+                          "ty": 15,
+                          "func": "kernels.before",
+                          "module": "root",
+                          "noreturn": false
+                         },
+                         "args": [
+                          {
+                           "inst": 269
+                          },
+                          {
+                           "inst": 279
+                          }
+                         ]
+                        },
+                        {
+                         "id": 282,
+                         "tag": "br",
+                         "ty": 9,
+                         "target": 259,
+                         "args": [
+                          {
+                           "inst": 281
+                          }
+                         ]
+                        }
+                       ],
+                       "else": [
+                        {
+                         "id": 260,
+                         "tag": "br",
+                         "ty": 9,
+                         "target": 259,
+                         "args": [
+                          {
+                           "ty": 10,
+                           "val": "false"
+                          }
+                         ]
+                        }
+                       ]
+                      }
+                     ]
+                    },
+                    {
+                     "id": 288,
+                     "tag": "cond_br",
+                     "ty": 9,
+                     "args": [
+                      {
+                       "inst": 259
+                      }
+                     ],
+                     "then": [
+                      {
+                       "id": 284,
+                       "tag": "dbg_stmt",
+                       "ty": 1,
+                       "line": 35,
+                       "column": 55
+                      },
+                      {
+                       "id": 285,
+                       "tag": "store_safe",
+                       "ty": 1,
+                       "args": [
+                        {
+                         "inst": 248
+                        },
+                        {
+                         "inst": 242
+                        }
+                       ]
+                      },
+                      {
+                       "id": 286,
+                       "tag": "br",
+                       "ty": 9,
+                       "target": 254,
+                       "args": [
+                        {
+                         "ty": 1,
+                         "val": "{}"
+                        }
+                       ]
+                      }
+                     ],
+                     "else": [
+                      {
+                       "id": 287,
+                       "tag": "br",
+                       "ty": 9,
+                       "target": 254,
+                       "args": [
+                        {
+                         "ty": 1,
+                         "val": "{}"
+                        }
+                       ]
+                      }
+                     ]
+                    }
+                   ]
+                  },
+                  {
+                   "id": 289,
+                   "tag": "dbg_stmt",
+                   "ty": 1,
+                   "line": 36,
+                   "column": 17
+                  },
+                  {
+                   "id": 290,
+                   "tag": "block",
+                   "ty": 1,
+                   "body": [
+                    {
+                     "id": 291,
+                     "tag": "load",
+                     "ty": 5,
+                     "args": [
+                      {
+                       "inst": 7
+                      }
+                     ]
+                    },
+                    {
+                     "id": 292,
+                     "tag": "bitcast",
+                     "ty": 7,
+                     "args": [
+                      {
+                       "inst": 245
+                      }
+                     ]
+                    },
+                    {
+                     "id": 293,
+                     "tag": "bitcast",
+                     "ty": 7,
+                     "args": [
+                      {
+                       "inst": 291
+                      }
+                     ]
+                    },
+                    {
+                     "id": 294,
+                     "tag": "cmp_lt",
+                     "ty": 10,
+                     "args": [
+                      {
+                       "inst": 292
+                      },
+                      {
+                       "inst": 293
+                      }
+                     ]
+                    },
+                    {
+                     "id": 295,
+                     "tag": "block",
+                     "ty": 10,
+                     "body": [
+                      {
+                       "id": 319,
+                       "tag": "cond_br",
+                       "ty": 9,
+                       "args": [
+                        {
+                         "inst": 294
+                        }
+                       ],
+                       "then": [
+                        {
+                         "id": 297,
+                         "tag": "dbg_stmt",
+                         "ty": 1,
+                         "line": 36,
+                         "column": 40
+                        },
+                        {
+                         "id": 298,
+                         "tag": "cmp_lt",
+                         "ty": 10,
+                         "args": [
+                          {
+                           "inst": 245
+                          },
+                          {
+                           "ty": 5,
+                           "val": "32"
+                          }
+                         ]
+                        },
+                        {
+                         "id": 301,
+                         "tag": "block",
+                         "ty": 1,
+                         "body": [
+                          {
+                           "id": 302,
+                           "tag": "cond_br",
+                           "ty": 9,
+                           "args": [
+                            {
+                             "inst": 298
+                            }
+                           ],
+                           "then": [
+                            {
+                             "id": 303,
+                             "tag": "br",
+                             "ty": 9,
+                             "target": 301,
+                             "args": [
+                              {
+                               "ty": 1,
+                               "val": "{}"
+                              }
+                             ]
+                            }
+                           ],
+                           "else": [
+                            {
+                             "id": 299,
+                             "tag": "call",
+                             "ty": 9,
+                             "callee": {
+                              "ty": 12,
+                              "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                              "module": "std",
+                              "noreturn": true
+                             },
+                             "args": [
+                              {
+                               "inst": 245
+                              },
+                              {
+                               "ty": 5,
+                               "val": "32"
+                              }
+                             ]
+                            },
+                            {
+                             "id": 300,
+                             "tag": "unreach",
+                             "ty": 9
+                            }
+                           ]
+                          }
+                         ]
+                        },
+                        {
+                         "id": 304,
+                         "tag": "ptr_elem_ptr",
+                         "ty": 13,
+                         "args": [
+                          {
+                           "inst": 3
+                          },
+                          {
+                           "inst": 245
+                          }
+                         ]
+                        },
+                        {
+                         "id": 305,
+                         "tag": "load",
+                         "ty": 14,
+                         "args": [
+                          {
+                           "inst": 304
+                          }
+                         ]
+                        },
+                        {
+                         "id": 306,
+                         "tag": "load",
+                         "ty": 5,
+                         "args": [
+                          {
+                           "inst": 248
+                          }
+                         ]
+                        },
+                        {
+                         "id": 307,
+                         "tag": "dbg_stmt",
+                         "ty": 1,
+                         "line": 36,
+                         "column": 49
+                        },
+                        {
+                         "id": 308,
+                         "tag": "cmp_lt",
+                         "ty": 10,
+                         "args": [
+                          {
+                           "inst": 306
+                          },
+                          {
+                           "ty": 5,
+                           "val": "32"
+                          }
+                         ]
+                        },
+                        {
+                         "id": 311,
+                         "tag": "block",
+                         "ty": 1,
+                         "body": [
+                          {
+                           "id": 312,
+                           "tag": "cond_br",
+                           "ty": 9,
+                           "args": [
+                            {
+                             "inst": 308
+                            }
+                           ],
+                           "then": [
+                            {
+                             "id": 313,
+                             "tag": "br",
+                             "ty": 9,
+                             "target": 311,
+                             "args": [
+                              {
+                               "ty": 1,
+                               "val": "{}"
+                              }
+                             ]
+                            }
+                           ],
+                           "else": [
+                            {
+                             "id": 309,
+                             "tag": "call",
+                             "ty": 9,
+                             "callee": {
+                              "ty": 12,
+                              "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                              "module": "std",
+                              "noreturn": true
+                             },
+                             "args": [
+                              {
+                               "inst": 306
+                              },
+                              {
+                               "ty": 5,
+                               "val": "32"
+                              }
+                             ]
+                            },
+                            {
+                             "id": 310,
+                             "tag": "unreach",
+                             "ty": 9
+                            }
+                           ]
+                          }
+                         ]
+                        },
+                        {
+                         "id": 314,
+                         "tag": "ptr_elem_ptr",
+                         "ty": 13,
+                         "args": [
+                          {
+                           "inst": 3
+                          },
+                          {
+                           "inst": 306
+                          }
+                         ]
+                        },
+                        {
+                         "id": 315,
+                         "tag": "load",
+                         "ty": 14,
+                         "args": [
+                          {
+                           "inst": 314
+                          }
+                         ]
+                        },
+                        {
+                         "id": 316,
+                         "tag": "dbg_stmt",
+                         "ty": 1,
+                         "line": 36,
+                         "column": 35
+                        },
+                        {
+                         "id": 317,
+                         "tag": "call",
+                         "ty": 10,
+                         "callee": {
+                          "ty": 15,
+                          "func": "kernels.before",
+                          "module": "root",
+                          "noreturn": false
+                         },
+                         "args": [
+                          {
+                           "inst": 305
+                          },
+                          {
+                           "inst": 315
+                          }
+                         ]
+                        },
+                        {
+                         "id": 318,
+                         "tag": "br",
+                         "ty": 9,
+                         "target": 295,
+                         "args": [
+                          {
+                           "inst": 317
+                          }
+                         ]
+                        }
+                       ],
+                       "else": [
+                        {
+                         "id": 296,
+                         "tag": "br",
+                         "ty": 9,
+                         "target": 295,
+                         "args": [
+                          {
+                           "ty": 10,
+                           "val": "false"
+                          }
+                         ]
+                        }
+                       ]
+                      }
+                     ]
+                    },
+                    {
+                     "id": 324,
+                     "tag": "cond_br",
+                     "ty": 9,
+                     "args": [
+                      {
+                       "inst": 295
+                      }
+                     ],
+                     "then": [
+                      {
+                       "id": 320,
+                       "tag": "dbg_stmt",
+                       "ty": 1,
+                       "line": 36,
+                       "column": 55
+                      },
+                      {
+                       "id": 321,
+                       "tag": "store_safe",
+                       "ty": 1,
+                       "args": [
+                        {
+                         "inst": 248
+                        },
+                        {
+                         "inst": 245
+                        }
+                       ]
+                      },
+                      {
+                       "id": 322,
+                       "tag": "br",
+                       "ty": 9,
+                       "target": 290,
+                       "args": [
+                        {
+                         "ty": 1,
+                         "val": "{}"
+                        }
+                       ]
+                      }
+                     ],
+                     "else": [
+                      {
+                       "id": 323,
+                       "tag": "br",
+                       "ty": 9,
+                       "target": 290,
+                       "args": [
+                        {
+                         "ty": 1,
+                         "val": "{}"
+                        }
+                       ]
+                      }
+                     ]
+                    }
+                   ]
+                  },
+                  {
+                   "id": 325,
+                   "tag": "dbg_stmt",
+                   "ty": 1,
+                   "line": 37,
+                   "column": 17
+                  },
+                  {
+                   "id": 326,
+                   "tag": "block",
+                   "ty": 1,
+                   "body": [
+                    {
+                     "id": 327,
+                     "tag": "load",
+                     "ty": 5,
+                     "args": [
+                      {
+                       "inst": 248
+                      }
+                     ]
+                    },
+                    {
+                     "id": 328,
+                     "tag": "load",
+                     "ty": 5,
+                     "args": [
+                      {
+                       "inst": 229
+                      }
+                     ]
+                    },
+                    {
+                     "id": 329,
+                     "tag": "bitcast",
+                     "ty": 7,
+                     "args": [
+                      {
+                       "inst": 327
+                      }
+                     ]
+                    },
+                    {
+                     "id": 330,
+                     "tag": "bitcast",
+                     "ty": 7,
+                     "args": [
+                      {
+                       "inst": 328
+                      }
+                     ]
+                    },
+                    {
+                     "id": 331,
+                     "tag": "cmp_eq",
+                     "ty": 10,
+                     "args": [
+                      {
+                       "inst": 329
+                      },
+                      {
+                       "inst": 330
+                      }
+                     ]
+                    },
+                    {
+                     "id": 334,
+                     "tag": "cond_br",
+                     "ty": 9,
+                     "args": [
+                      {
+                       "inst": 331
+                      }
+                     ],
+                     "then": [
+                      {
+                       "id": 332,
+                       "tag": "br",
+                       "ty": 9,
+                       "target": 232,
+                       "args": [
+                        {
+                         "ty": 1,
+                         "val": "{}"
+                        }
+                       ]
+                      }
+                     ],
+                     "else": [
+                      {
+                       "id": 333,
+                       "tag": "br",
+                       "ty": 9,
+                       "target": 326,
+                       "args": [
+                        {
+                         "ty": 1,
+                         "val": "{}"
+                        }
+                       ]
+                      }
+                     ]
+                    }
+                   ]
+                  },
+                  {
+                   "id": 335,
+                   "tag": "dbg_stmt",
+                   "ty": 1,
+                   "line": 38,
+                   "column": 13
+                  },
+                  {
+                   "id": 336,
+                   "tag": "load",
+                   "ty": 5,
+                   "args": [
+                    {
+                     "inst": 229
+                    }
+                   ]
+                  },
+                  {
+                   "id": 337,
+                   "tag": "dbg_stmt",
+                   "ty": 1,
+                   "line": 38,
+                   "column": 27
+                  },
+                  {
+                   "id": 338,
+                   "tag": "cmp_lt",
+                   "ty": 10,
+                   "args": [
+                    {
+                     "inst": 336
+                    },
+                    {
+                     "ty": 5,
+                     "val": "32"
+                    }
+                   ]
+                  },
+                  {
+                   "id": 341,
+                   "tag": "block",
+                   "ty": 1,
+                   "body": [
+                    {
+                     "id": 342,
+                     "tag": "cond_br",
+                     "ty": 9,
+                     "args": [
+                      {
+                       "inst": 338
+                      }
+                     ],
+                     "then": [
+                      {
+                       "id": 343,
+                       "tag": "br",
+                       "ty": 9,
+                       "target": 341,
+                       "args": [
+                        {
+                         "ty": 1,
+                         "val": "{}"
+                        }
+                       ]
+                      }
+                     ],
+                     "else": [
+                      {
+                       "id": 339,
+                       "tag": "call",
+                       "ty": 9,
+                       "callee": {
+                        "ty": 12,
+                        "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                        "module": "std",
+                        "noreturn": true
+                       },
+                       "args": [
+                        {
+                         "inst": 336
+                        },
+                        {
+                         "ty": 5,
+                         "val": "32"
+                        }
+                       ]
+                      },
+                      {
+                       "id": 340,
+                       "tag": "unreach",
+                       "ty": 9
+                      }
+                     ]
+                    }
+                   ]
+                  },
+                  {
+                   "id": 344,
+                   "tag": "ptr_elem_ptr",
+                   "ty": 13,
+                   "args": [
+                    {
+                     "inst": 3
+                    },
+                    {
+                     "inst": 336
+                    }
+                   ]
+                  },
+                  {
+                   "id": 345,
+                   "tag": "load",
+                   "ty": 14,
+                   "args": [
+                    {
+                     "inst": 344
+                    }
+                   ]
+                  },
+                  {
+                   "id": 346,
+                   "tag": "dbg_var_val",
+                   "ty": 1,
+                   "args": [
+                    {
+                     "inst": 345
+                    }
+                   ],
+                   "name": "t"
+                  },
+                  {
+                   "id": 347,
+                   "tag": "dbg_stmt",
+                   "ty": 1,
+                   "line": 39,
+                   "column": 13
+                  },
+                  {
+                   "id": 348,
+                   "tag": "load",
+                   "ty": 5,
+                   "args": [
+                    {
+                     "inst": 229
+                    }
+                   ]
+                  },
+                  {
+                   "id": 349,
+                   "tag": "dbg_stmt",
+                   "ty": 1,
+                   "line": 39,
+                   "column": 17
+                  },
+                  {
+                   "id": 350,
+                   "tag": "cmp_lt",
+                   "ty": 10,
+                   "args": [
+                    {
+                     "inst": 348
+                    },
+                    {
+                     "ty": 5,
+                     "val": "32"
+                    }
+                   ]
+                  },
+                  {
+                   "id": 353,
+                   "tag": "block",
+                   "ty": 1,
+                   "body": [
+                    {
+                     "id": 354,
+                     "tag": "cond_br",
+                     "ty": 9,
+                     "args": [
+                      {
+                       "inst": 350
+                      }
+                     ],
+                     "then": [
+                      {
+                       "id": 355,
+                       "tag": "br",
+                       "ty": 9,
+                       "target": 353,
+                       "args": [
+                        {
+                         "ty": 1,
+                         "val": "{}"
+                        }
+                       ]
+                      }
+                     ],
+                     "else": [
+                      {
+                       "id": 351,
+                       "tag": "call",
+                       "ty": 9,
+                       "callee": {
+                        "ty": 12,
+                        "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                        "module": "std",
+                        "noreturn": true
+                       },
+                       "args": [
+                        {
+                         "inst": 348
+                        },
+                        {
+                         "ty": 5,
+                         "val": "32"
+                        }
+                       ]
+                      },
+                      {
+                       "id": 352,
+                       "tag": "unreach",
+                       "ty": 9
+                      }
+                     ]
+                    }
+                   ]
+                  },
+                  {
+                   "id": 356,
+                   "tag": "ptr_elem_ptr",
+                   "ty": 13,
+                   "args": [
+                    {
+                     "inst": 3
+                    },
+                    {
+                     "inst": 348
+                    }
+                   ]
+                  },
+                  {
+                   "id": 357,
+                   "tag": "load",
+                   "ty": 5,
+                   "args": [
+                    {
+                     "inst": 248
+                    }
+                   ]
+                  },
+                  {
+                   "id": 358,
+                   "tag": "dbg_stmt",
+                   "ty": 1,
+                   "line": 39,
+                   "column": 27
+                  },
+                  {
+                   "id": 359,
+                   "tag": "cmp_lt",
+                   "ty": 10,
+                   "args": [
+                    {
+                     "inst": 357
+                    },
+                    {
+                     "ty": 5,
+                     "val": "32"
+                    }
+                   ]
+                  },
+                  {
+                   "id": 362,
+                   "tag": "block",
+                   "ty": 1,
+                   "body": [
+                    {
+                     "id": 363,
+                     "tag": "cond_br",
+                     "ty": 9,
+                     "args": [
+                      {
+                       "inst": 359
+                      }
+                     ],
+                     "then": [
+                      {
+                       "id": 364,
+                       "tag": "br",
+                       "ty": 9,
+                       "target": 362,
+                       "args": [
+                        {
+                         "ty": 1,
+                         "val": "{}"
+                        }
+                       ]
+                      }
+                     ],
+                     "else": [
+                      {
+                       "id": 360,
+                       "tag": "call",
+                       "ty": 9,
+                       "callee": {
+                        "ty": 12,
+                        "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                        "module": "std",
+                        "noreturn": true
+                       },
+                       "args": [
+                        {
+                         "inst": 357
+                        },
+                        {
+                         "ty": 5,
+                         "val": "32"
+                        }
+                       ]
+                      },
+                      {
+                       "id": 361,
+                       "tag": "unreach",
+                       "ty": 9
+                      }
+                     ]
+                    }
+                   ]
+                  },
+                  {
+                   "id": 365,
+                   "tag": "ptr_elem_ptr",
+                   "ty": 13,
+                   "args": [
+                    {
+                     "inst": 3
+                    },
+                    {
+                     "inst": 357
+                    }
+                   ]
+                  },
+                  {
+                   "id": 366,
+                   "tag": "load",
+                   "ty": 14,
+                   "args": [
+                    {
+                     "inst": 365
+                    }
+                   ]
+                  },
+                  {
+                   "id": 367,
+                   "tag": "store_safe",
+                   "ty": 1,
+                   "args": [
+                    {
+                     "inst": 356
+                    },
+                    {
+                     "inst": 366
+                    }
+                   ]
+                  },
+                  {
+                   "id": 368,
+                   "tag": "dbg_stmt",
+                   "ty": 1,
+                   "line": 40,
+                   "column": 13
+                  },
+                  {
+                   "id": 369,
+                   "tag": "load",
+                   "ty": 5,
+                   "args": [
+                    {
+                     "inst": 248
+                    }
+                   ]
+                  },
+                  {
+                   "id": 370,
+                   "tag": "dbg_stmt",
+                   "ty": 1,
+                   "line": 40,
+                   "column": 17
+                  },
+                  {
+                   "id": 371,
+                   "tag": "cmp_lt",
+                   "ty": 10,
+                   "args": [
+                    {
+                     "inst": 369
+                    },
+                    {
+                     "ty": 5,
+                     "val": "32"
+                    }
+                   ]
+                  },
+                  {
+                   "id": 374,
+                   "tag": "block",
+                   "ty": 1,
+                   "body": [
+                    {
+                     "id": 375,
+                     "tag": "cond_br",
+                     "ty": 9,
+                     "args": [
+                      {
+                       "inst": 371
+                      }
+                     ],
+                     "then": [
+                      {
+                       "id": 376,
+                       "tag": "br",
+                       "ty": 9,
+                       "target": 374,
+                       "args": [
+                        {
+                         "ty": 1,
+                         "val": "{}"
+                        }
+                       ]
+                      }
+                     ],
+                     "else": [
+                      {
+                       "id": 372,
+                       "tag": "call",
+                       "ty": 9,
+                       "callee": {
+                        "ty": 12,
+                        "func": "debug.FullPanic((function 'defaultPanic')).outOfBounds",
+                        "module": "std",
+                        "noreturn": true
+                       },
+                       "args": [
+                        {
+                         "inst": 369
+                        },
+                        {
+                         "ty": 5,
+                         "val": "32"
+                        }
+                       ]
+                      },
+                      {
+                       "id": 373,
+                       "tag": "unreach",
+                       "ty": 9
+                      }
+                     ]
+                    }
+                   ]
+                  },
+                  {
+                   "id": 377,
+                   "tag": "ptr_elem_ptr",
+                   "ty": 13,
+                   "args": [
+                    {
+                     "inst": 3
+                    },
+                    {
+                     "inst": 369
+                    }
+                   ]
+                  },
+                  {
+                   "id": 378,
+                   "tag": "store_safe",
+                   "ty": 1,
+                   "args": [
+                    {
+                     "inst": 377
+                    },
+                    {
+                     "inst": 345
+                    }
+                   ]
+                  },
+                  {
+                   "id": 379,
+                   "tag": "dbg_stmt",
+                   "ty": 1,
+                   "line": 41,
+                   "column": 13
+                  },
+                  {
+                   "id": 380,
+                   "tag": "load",
+                   "ty": 5,
+                   "args": [
+                    {
+                     "inst": 248
+                    }
+                   ]
+                  },
+                  {
+                   "id": 381,
+                   "tag": "store_safe",
+                   "ty": 1,
+                   "args": [
+                    {
+                     "inst": 229
+                    },
+                    {
+                     "inst": 380
+                    }
+                   ]
+                  },
+                  {
+                   "id": 382,
+                   "tag": "dbg_stmt",
+                   "ty": 1,
+                   "line": 42,
+                   "column": 9
+                  },
+                  {
+                   "id": 383,
+                   "tag": "dbg_empty_stmt",
+                   "ty": 1
+                  },
+                  {
+                   "id": 384,
+                   "tag": "br",
+                   "ty": 9,
+                   "target": 236,
+                   "args": [
+                    {
+                     "ty": 1,
+                     "val": "{}"
+                    }
+                   ]
+                  }
+                 ]
+                },
+                {
+                 "id": 386,
+                 "tag": "repeat",
+                 "ty": 9,
+                 "target": 233
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "id": 387,
+             "tag": "dbg_stmt",
+             "ty": 1,
+             "line": 43,
+             "column": 13
+            },
+            {
+             "id": 388,
+             "tag": "block",
+             "ty": 1,
+             "body": [
+              {
+               "id": 389,
+               "tag": "load",
+               "ty": 17,
+               "args": [
+                {
+                 "inst": 192
+                }
+               ]
+              },
+              {
+               "id": 390,
+               "tag": "is_non_null",
+               "ty": 10,
+               "args": [
+                {
+                 "inst": 389
+                }
+               ]
+              },
+              {
+               "id": 402,
+               "tag": "cond_br",
+               "ty": 9,
+               "args": [
+                {
+                 "inst": 390
+                }
+               ],
+               "then": [
+                {
+                 "id": 391,
+                 "tag": "optional_payload",
+                 "ty": 14,
+                 "args": [
+                  {
+                   "inst": 389
+                  }
+                 ]
+                },
+                {
+                 "id": 392,
+                 "tag": "dbg_var_val",
+                 "ty": 1,
+                 "args": [
+                  {
+                   "inst": 391
+                  }
+                 ],
+                 "name": "prev"
+                },
+                {
+                 "id": 393,
+                 "tag": "block",
+                 "ty": 1,
+                 "body": [
+                  {
+                   "id": 394,
+                   "tag": "dbg_stmt",
+                   "ty": 1,
+                   "line": 43,
+                   "column": 36
+                  },
+                  {
+                   "id": 395,
+                   "tag": "call",
+                   "ty": 10,
+                   "callee": {
+                    "ty": 15,
+                    "func": "kernels.before",
+                    "module": "root",
+                    "noreturn": false
+                   },
+                   "args": [
+                    {
+                     "inst": 205
+                    },
+                    {
+                     "inst": 391
+                    }
+                   ]
+                  },
+                  {
+                   "id": 399,
+                   "tag": "cond_br",
+                   "ty": 9,
+                   "args": [
+                    {
+                     "inst": 395
+                    }
+                   ],
+                   "then": [
+                    {
+                     "id": 396,
+                     "tag": "dbg_stmt",
+                     "ty": 1,
+                     "line": 43,
+                     "column": 49
+                    },
+                    {
+                     "id": 397,
+                     "tag": "ret_safe",
+                     "ty": 9,
+                     "args": [
+                      {
+                       "ty": 0,
+                       "val": "18446744073709551615"
+                      }
+                     ]
+                    }
+                   ],
+                   "else": [
+                    {
+                     "id": 398,
+                     "tag": "br",
+                     "ty": 9,
+                     "target": 393,
+                     "args": [
+                      {
+                       "ty": 1,
+                       "val": "{}"
+                      }
+                     ]
+                    }
+                   ]
+                  }
+                 ]
+                },
+                {
+                 "id": 400,
+                 "tag": "br",
+                 "ty": 9,
+                 "target": 388,
+                 "args": [
+                  {
+                   "ty": 1,
+                   "val": "{}"
+                  }
+                 ]
+                }
+               ],
+               "else": [
+                {
+                 "id": 401,
+                 "tag": "br",
+                 "ty": 9,
+                 "target": 388,
+                 "args": [
+                  {
+                   "ty": 1,
+                   "val": "{}"
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "id": 403,
+             "tag": "dbg_stmt",
+             "ty": 1,
+             "line": 44,
+             "column": 9
+            },
+            {
+             "id": 404,
+             "tag": "wrap_optional",
+             "ty": 17,
+             "args": [
+              {
+               "inst": 205
+              }
+             ]
+            },
+            {
+             "id": 405,
+             "tag": "store_safe",
+             "ty": 1,
+             "args": [
+              {
+               "inst": 192
+              },
+              {
+               "inst": 404
+              }
+             ]
+            },
+            {
+             "id": 406,
+             "tag": "dbg_stmt",
+             "ty": 1,
+             "line": 45,
+             "column": 9
+            },
+            {
+             "id": 407,
+             "tag": "load",
+             "ty": 0,
+             "args": [
+              {
+               "inst": 188
+              }
+             ]
+            },
+            {
+             "id": 408,
+             "tag": "dbg_stmt",
+             "ty": 1,
+             "line": 45,
+             "column": 28
+            },
+            {
+             "id": 409,
+             "tag": "struct_field_ptr_index_0",
+             "ty": 19,
+             "args": [
+              {
+               "inst": 208
+              }
+             ]
+            },
+            {
+             "id": 410,
+             "tag": "load",
+             "ty": 0,
+             "args": [
+              {
+               "inst": 409
+              }
+             ]
+            },
+            {
+             "id": 411,
+             "tag": "dbg_stmt",
+             "ty": 1,
+             "line": 45,
+             "column": 34
+            },
+            {
+             "id": 412,
+             "tag": "shl",
+             "ty": 0,
+             "args": [
+              {
+               "inst": 410
+              },
+              {
+               "ty": 11,
+               "val": "32"
+              }
+             ]
+            },
+            {
+             "id": 413,
+             "tag": "dbg_stmt",
+             "ty": 1,
+             "line": 45,
+             "column": 45
+            },
+            {
+             "id": 414,
+             "tag": "struct_field_ptr_index_1",
+             "ty": 20,
+             "args": [
+              {
+               "inst": 208
+              }
+             ]
+            },
+            {
+             "id": 415,
+             "tag": "load",
+             "ty": 7,
+             "args": [
+              {
+               "inst": 414
+              }
+             ]
+            },
+            {
+             "id": 416,
+             "tag": "intcast",
+             "ty": 0,
+             "args": [
+              {
+               "inst": 415
+              }
+             ]
+            },
+            {
+             "id": 417,
+             "tag": "bit_or",
+             "ty": 0,
+             "args": [
+              {
+               "inst": 412
+              },
+              {
+               "inst": 416
+              }
+             ]
+            },
+            {
+             "id": 418,
+             "tag": "xor",
+             "ty": 0,
+             "args": [
+              {
+               "inst": 407
+              },
+              {
+               "inst": 417
+              }
+             ]
+            },
+            {
+             "id": 419,
+             "tag": "mul_wrap",
+             "ty": 0,
+             "args": [
+              {
+               "inst": 418
+              },
+              {
+               "ty": 0,
+               "val": "1099511628211"
+              }
+             ]
+            },
+            {
+             "id": 420,
+             "tag": "store_safe",
+             "ty": 1,
+             "args": [
+              {
+               "inst": 188
+              },
+              {
+               "inst": 419
+              }
+             ]
+            },
+            {
+             "id": 421,
+             "tag": "dbg_stmt",
+             "ty": 1,
+             "line": 46,
+             "column": 5
+            },
+            {
+             "id": 422,
+             "tag": "dbg_empty_stmt",
+             "ty": 1
+            },
+            {
+             "id": 423,
+             "tag": "br",
+             "ty": 9,
+             "target": 202,
+             "args": [
+              {
+               "ty": 1,
+               "val": "{}"
+              }
+             ]
+            }
+           ]
+          },
+          {
+           "id": 424,
+           "tag": "br",
+           "ty": 9,
+           "target": 197,
+           "args": [
+            {
+             "ty": 1,
+             "val": "{}"
+            }
+           ]
+          }
+         ],
+         "else": [
+          {
+           "id": 425,
+           "tag": "br",
+           "ty": 9,
+           "target": 195,
+           "args": [
+            {
+             "ty": 1,
+             "val": "{}"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      },
+      {
+       "id": 427,
+       "tag": "repeat",
+       "ty": 9,
+       "target": 196
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 428,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 47,
+   "column": 5
+  },
+  {
+   "id": 429,
+   "tag": "load",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 188
+    }
+   ]
+  },
+  {
+   "id": 430,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 47,
+   "column": 5
+  },
+  {
+   "id": 431,
+   "tag": "ret_safe",
+   "ty": 9,
+   "args": [
+    {
+     "inst": 429
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 3,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "array",
+   "len": 32,
+   "child": 14,
+   "sentinel": false,
+   "abi_size": 512,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 5,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 0,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 7,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 6,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "other",
+   "name": "fn (usize, usize) noreturn"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 14,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "struct",
+   "name": "kernels.Event",
+   "module": "root",
+   "layout": "auto",
+   "fields": [
+    {
+     "name": "time",
+     "ty": 0,
+     "offset": 0
+    },
+    {
+     "name": "seq",
+     "ty": 7,
+     "offset": 8
+    }
+   ],
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (kernels.Event, kernels.Event) bool"
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 17,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "optional",
+   "child": 14,
+   "abi_size": 24,
+   "abi_align": 8
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 14,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 0,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": true,
+   "child": 7,
+   "ptr_align": 4,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 4,
+   "abi_align": 4
+  }
+ ]
+}

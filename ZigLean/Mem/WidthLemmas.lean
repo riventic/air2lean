@@ -12,6 +12,8 @@ pointers; a decoded slice length, and so every byte count of a slice, is below
 The checked integer operations at every width (§Integer widths): an increment, a negation, a
 product and a same-width `@intCast` in closed form, so that each target's translation of a C
 integer type (`c_long` is 32 bits on wasm32, 64 on x86_64) is an instance of one statement.
+An unsigned sum whose maximum is reserved (`addBelowMaxOpt`) is the closed form of
+`@addWithOverflow` followed by a comparison with `maxInt` (`addWithOverflow_max_cases`).
 -/
 
 namespace Zig
@@ -34,6 +36,11 @@ def negSigned {w : Nat} (n : BitVec w) : Result (BitVec w) :=
 def mulUnsignedOpt {w : Nat} (a b : BitVec w) : Option (BitVec w) :=
   if 2 ^ w ≤ a.toNat * b.toNat then none else some (a * b)
 
+/-- An unsigned sum whose maximum is reserved: `none` when the sum does not fit `w` bits or is
+the maximum `2 ^ w - 1` itself. -/
+def addBelowMaxOpt {w : Nat} (a b : BitVec w) : Option (BitVec w) :=
+  if 2 ^ w - 1 ≤ a.toNat + b.toNat then none else some (a + b)
+
 theorem two_pow_pred {w : Nat} (hw : 1 ≤ w) : (2 : Int) ^ w = 2 * 2 ^ (w - 1) := by
   obtain ⟨k, rfl⟩ : ∃ k, w = k + 1 := ⟨w - 1, by omega⟩
   simp [Int.pow_succ]; omega
@@ -55,6 +62,45 @@ theorem add_one_unsigned_eq {w : Nat} (hw : 1 ≤ w) (n : BitVec w) :
     rw [BitVec.toNat_ofNat]; exact Nat.mod_eq_of_lt (Nat.one_lt_two_pow (by omega))
   unfold succUnsigned add
   by_cases h : 2 ^ w ≤ n.toNat + 1 <;> simp [BitVec.uaddOverflow, Error.ifSafe, h1, h]
+
+/-- `@addWithOverflow` on unsigned operands, then a comparison of the sum with the maximum `m`
+(`maxInt`): the overflow bit is set, or the sum is `m`, or neither and the sum is
+`addBelowMaxOpt`'s. Each case fixes what the code's two tests read, so a translation of
+`r[1] != 0 or r[0] == maxInt` is decided by `simp` in each. -/
+theorem addWithOverflow_max_cases {w : Nat} (a b m : BitVec w) (hm : m.toNat = 2 ^ w - 1) :
+    ((addWithOverflow false a b).2 = 1 ∧ addBelowMaxOpt a b = none) ∨
+    ((addWithOverflow false a b).2 = 0 ∧ (addWithOverflow false a b).1 = m ∧
+      addBelowMaxOpt a b = none) ∨
+    ((addWithOverflow false a b).2 = 0 ∧ (addWithOverflow false a b).1 ≠ m ∧
+      addBelowMaxOpt a b = some (addWithOverflow false a b).1) := by
+  have hp : 0 < 2 ^ w := Nat.two_pow_pos w
+  by_cases hov : 2 ^ w ≤ a.toNat + b.toNat
+  · have : 2 ^ w - 1 ≤ a.toNat + b.toNat := by omega
+    exact .inl (by simp [addWithOverflow, BitVec.uaddOverflow, addBelowMaxOpt, hov, this])
+  · have hlt : a.toNat + b.toNat < 2 ^ w := by omega
+    have he : a + b = m ↔ a.toNat + b.toNat = 2 ^ w - 1 := by
+      constructor
+      · intro h; have := congrArg BitVec.toNat h
+        rw [BitVec.toNat_add, Nat.mod_eq_of_lt hlt, hm] at this; exact this
+      · intro h; apply BitVec.eq_of_toNat_eq
+        rw [BitVec.toNat_add, Nat.mod_eq_of_lt hlt, hm]; exact h
+    by_cases hr : a.toNat + b.toNat = 2 ^ w - 1
+    · have h1 : 2 ^ w - 1 < 2 ^ w := by omega
+      exact .inr (.inl (by
+        simp [addWithOverflow, BitVec.uaddOverflow, addBelowMaxOpt, he.mpr hr, hr, h1]))
+    · have : ¬ 2 ^ w - 1 ≤ a.toNat + b.toNat := by omega
+      exact .inr (.inr (by
+        simp [addWithOverflow, BitVec.uaddOverflow, addBelowMaxOpt, hov, mt he.mp hr, this]))
+
+/-- A sum below the reserved maximum is the exact sum. -/
+theorem addBelowMaxOpt_eq_some {w : Nat} (a b : BitVec w) (h : a.toNat + b.toNat < 2 ^ w - 1) :
+    addBelowMaxOpt a b = some (a + b) ∧ (a + b).toNat = a.toNat + b.toNat := by
+  refine ⟨by simp [addBelowMaxOpt, Nat.not_le.mpr h], ?_⟩
+  rw [BitVec.toNat_add, Nat.mod_eq_of_lt (by omega)]
+
+theorem addBelowMaxOpt_eq_none_iff {w : Nat} (a b : BitVec w) :
+    addBelowMaxOpt a b = none ↔ 2 ^ w - 1 ≤ a.toNat + b.toNat := by
+  unfold addBelowMaxOpt; split <;> simp [*]
 
 theorem sub_zero_signed_eq {w : Nat} (hw : 1 ≤ w) (n : BitVec w) :
     sub true 0 n = negSigned n := by

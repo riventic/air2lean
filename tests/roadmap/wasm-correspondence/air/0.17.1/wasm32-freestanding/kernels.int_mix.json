@@ -1,0 +1,885 @@
+{
+ "schema": 12,
+ "zig_version": "0.17.1",
+ "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "wasm32-freestanding-none",
+  "pointer_bits": 32,
+  "endian": "little",
+  "abi": "none",
+  "zig_version": "0.17.1",
+  "backend": "stage2_llvm",
+  "cpu": "lime1",
+  "features": [
+   "bulk_memory_opt",
+   "call_indirect_overlong",
+   "extended_const",
+   "multivalue",
+   "mutable_globals",
+   "nontrapping_fptoint",
+   "sign_ext"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "kernels.int_mix",
+ "module": "root",
+ "src": {
+  "file": "kernels.zig",
+  "module": "root",
+  "decl_line": 98
+ },
+ "params": [
+  0,
+  0
+ ],
+ "noalias": [],
+ "ret": 0,
+ "export": {
+  "name": "int_mix",
+  "cc": "wasm_mvp"
+ },
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 0,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2,
+   "column": 21
+  },
+  {
+   "id": 3,
+   "tag": "trunc",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "tag": "dbg_var_val",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 3
+    }
+   ],
+   "name": "lo"
+  },
+  {
+   "id": 5,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 3,
+   "column": 20
+  },
+  {
+   "id": 6,
+   "tag": "trunc",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "tag": "dbg_var_val",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 6
+    }
+   ],
+   "name": "h"
+  },
+  {
+   "id": 8,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 4,
+   "column": 5
+  },
+  {
+   "id": 9,
+   "tag": "int_cast",
+   "ty": 4,
+   "args": [
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "tag": "int_cast",
+   "ty": 4,
+   "args": [
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 4,
+   "column": 31
+  },
+  {
+   "id": 12,
+   "tag": "mul_safe",
+   "ty": 4,
+   "args": [
+    {
+     "inst": 9
+    },
+    {
+     "inst": 10
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "tag": "dbg_var_val",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 12
+    }
+   ],
+   "name": "wide"
+  },
+  {
+   "id": 14,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 5,
+   "column": 5
+  },
+  {
+   "id": 15,
+   "tag": "alloc",
+   "ty": 5
+  },
+  {
+   "id": 16,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 5,
+   "column": 33
+  },
+  {
+   "id": 17,
+   "tag": "shr",
+   "ty": 4,
+   "args": [
+    {
+     "inst": 12
+    },
+    {
+     "ty": 6,
+     "val": "64"
+    }
+   ]
+  },
+  {
+   "id": 18,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 5,
+   "column": 18
+  },
+  {
+   "id": 19,
+   "tag": "trunc",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 17
+    }
+   ]
+  },
+  {
+   "id": 20,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 15
+    },
+    {
+     "inst": 19
+    }
+   ]
+  },
+  {
+   "id": 21,
+   "tag": "dbg_var_ptr",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 15
+    }
+   ],
+   "name": "r"
+  },
+  {
+   "id": 22,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 6,
+   "column": 5
+  },
+  {
+   "id": 23,
+   "tag": "load",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 15
+    }
+   ]
+  },
+  {
+   "id": 24,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 6,
+   "column": 52
+  },
+  {
+   "id": 26,
+   "tag": "rem",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 1
+    },
+    {
+     "ty": 0,
+     "val": "64"
+    }
+   ]
+  },
+  {
+   "id": 27,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 6,
+   "column": 40
+  },
+  {
+   "id": 28,
+   "tag": "trunc",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 26
+    }
+   ]
+  },
+  {
+   "id": 30,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 6,
+   "column": 23
+  },
+  {
+   "id": 31,
+   "tag": "call",
+   "ty": 0,
+   "callee": {
+    "ty": 7,
+    "func": "math.rotl__func_15",
+    "module": "std",
+    "instance_key": "bafa38080fd515e8b261fe3d3b0f6ed9d5faccb95b7d1bc2c9945d045bb12388",
+    "noreturn": false
+   },
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "inst": 28
+    }
+   ]
+  },
+  {
+   "id": 32,
+   "tag": "mul_wrap",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 1
+    },
+    {
+     "ty": 0,
+     "val": "11400714819323198485"
+    }
+   ]
+  },
+  {
+   "id": 33,
+   "tag": "add_wrap",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 31
+    },
+    {
+     "inst": 32
+    }
+   ]
+  },
+  {
+   "id": 34,
+   "tag": "xor",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 23
+    },
+    {
+     "inst": 33
+    }
+   ]
+  },
+  {
+   "id": 35,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 15
+    },
+    {
+     "inst": 34
+    }
+   ]
+  },
+  {
+   "id": 36,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 7,
+   "column": 5
+  },
+  {
+   "id": 37,
+   "tag": "load",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 15
+    }
+   ]
+  },
+  {
+   "id": 38,
+   "tag": "clz",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 39,
+   "tag": "int_cast",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 38
+    }
+   ]
+  },
+  {
+   "id": 40,
+   "tag": "ctz",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 41,
+   "tag": "int_cast",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 40
+    }
+   ]
+  },
+  {
+   "id": 42,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 7,
+   "column": 49
+  },
+  {
+   "id": 43,
+   "tag": "shl",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 41
+    },
+    {
+     "ty": 8,
+     "val": "8"
+    }
+   ]
+  },
+  {
+   "id": 44,
+   "tag": "bit_or",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 39
+    },
+    {
+     "inst": 43
+    }
+   ]
+  },
+  {
+   "id": 45,
+   "tag": "xor",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 0
+    },
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 46,
+   "tag": "popcount",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 45
+    }
+   ]
+  },
+  {
+   "id": 47,
+   "tag": "int_cast",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 46
+    }
+   ]
+  },
+  {
+   "id": 48,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 7,
+   "column": 83
+  },
+  {
+   "id": 49,
+   "tag": "shl",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 47
+    },
+    {
+     "ty": 8,
+     "val": "16"
+    }
+   ]
+  },
+  {
+   "id": 50,
+   "tag": "bit_or",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 44
+    },
+    {
+     "inst": 49
+    }
+   ]
+  },
+  {
+   "id": 51,
+   "tag": "add_wrap",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 37
+    },
+    {
+     "inst": 50
+    }
+   ]
+  },
+  {
+   "id": 52,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 15
+    },
+    {
+     "inst": 51
+    }
+   ]
+  },
+  {
+   "id": 53,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 8,
+   "column": 5
+  },
+  {
+   "id": 54,
+   "tag": "load",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 15
+    }
+   ]
+  },
+  {
+   "id": 55,
+   "tag": "byte_swap",
+   "ty": 2,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  },
+  {
+   "id": 56,
+   "tag": "int_cast",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 55
+    }
+   ]
+  },
+  {
+   "id": 57,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 8,
+   "column": 34
+  },
+  {
+   "id": 58,
+   "tag": "shl",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 56
+    },
+    {
+     "ty": 8,
+     "val": "24"
+    }
+   ]
+  },
+  {
+   "id": 59,
+   "tag": "bit_reverse",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 1
+    }
+   ]
+  },
+  {
+   "id": 60,
+   "tag": "xor",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 58
+    },
+    {
+     "inst": 59
+    }
+   ]
+  },
+  {
+   "id": 61,
+   "tag": "xor",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 54
+    },
+    {
+     "inst": 60
+    }
+   ]
+  },
+  {
+   "id": 62,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 15
+    },
+    {
+     "inst": 61
+    }
+   ]
+  },
+  {
+   "id": 63,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 9,
+   "column": 5
+  },
+  {
+   "id": 64,
+   "tag": "load",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 15
+    }
+   ]
+  },
+  {
+   "id": 65,
+   "tag": "byte_swap",
+   "ty": 3,
+   "args": [
+    {
+     "inst": 6
+    }
+   ]
+  },
+  {
+   "id": 66,
+   "tag": "int_cast",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 65
+    }
+   ]
+  },
+  {
+   "id": 67,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 9,
+   "column": 54
+  },
+  {
+   "id": 68,
+   "tag": "trunc",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 0
+    }
+   ]
+  },
+  {
+   "id": 69,
+   "tag": "int_cast",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 68
+    }
+   ]
+  },
+  {
+   "id": 70,
+   "tag": "mul_wrap",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 66
+    },
+    {
+     "inst": 69
+    }
+   ]
+  },
+  {
+   "id": 71,
+   "tag": "sub_wrap",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 64
+    },
+    {
+     "inst": 70
+    }
+   ]
+  },
+  {
+   "id": 72,
+   "tag": "store_safe",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 15
+    },
+    {
+     "inst": 71
+    }
+   ]
+  },
+  {
+   "id": 73,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 10,
+   "column": 5
+  },
+  {
+   "id": 74,
+   "tag": "load",
+   "ty": 0,
+   "args": [
+    {
+     "inst": 15
+    }
+   ]
+  },
+  {
+   "id": 75,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 10,
+   "column": 5
+  },
+  {
+   "id": 76,
+   "tag": "ret_safe",
+   "ty": 9,
+   "args": [
+    {
+     "inst": 74
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 16,
+   "abi_size": 2,
+   "abi_align": 2
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 128,
+   "abi_size": 16,
+   "abi_align": 16
+  },
+  {
+   "k": "ptr",
+   "size": "one",
+   "const": false,
+   "child": 0,
+   "ptr_align": 8,
+   "volatile": false,
+   "allowzero": false,
+   "address_space": "generic",
+   "sentinel": false,
+   "host_size": 0,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 7,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "other",
+   "name": "fn (u64, u7) u64"
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 6,
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  }
+ ]
+}

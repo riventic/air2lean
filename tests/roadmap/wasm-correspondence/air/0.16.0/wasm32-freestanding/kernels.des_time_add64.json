@@ -1,0 +1,230 @@
+{
+ "schema": 12,
+ "zig_version": "0.16.0",
+ "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "wasm32-freestanding-none",
+  "pointer_bits": 32,
+  "endian": "little",
+  "abi": "none",
+  "zig_version": "0.16.0",
+  "backend": "stage2_llvm",
+  "cpu": "lime1",
+  "features": [
+   "bulk_memory_opt",
+   "call_indirect_overlong",
+   "extended_const",
+   "multivalue",
+   "mutable_globals",
+   "nontrapping_fptoint",
+   "sign_ext"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "kernels.des_time_add64",
+ "module": "root",
+ "src": {
+  "file": "kernels.zig",
+  "module": "root",
+  "decl_line": 29
+ },
+ "params": [
+  0,
+  0
+ ],
+ "noalias": [],
+ "ret": 0,
+ "export": {
+  "name": "des_time_add64",
+  "cc": "wasm_mvp"
+ },
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 0,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 3,
+   "tag": "block",
+   "ty": 0,
+   "body": [
+    {
+     "id": 4,
+     "tag": "dbg_stmt",
+     "ty": 1,
+     "line": 2,
+     "column": 23
+    },
+    {
+     "id": 7,
+     "tag": "call",
+     "ty": 2,
+     "callee": {
+      "ty": 3,
+      "func": "kernels.addDuration__anon_1958",
+      "module": "root",
+      "instance_key": "416c8a64dc69bc9dee53f6fa397bde56b058900988ac1b20152cb950128452e2",
+      "noreturn": false
+     },
+     "args": [
+      {
+       "inst": 0
+      },
+      {
+       "inst": 1
+      }
+     ]
+    },
+    {
+     "id": 8,
+     "tag": "is_non_err",
+     "ty": 4,
+     "args": [
+      {
+       "inst": 7
+      }
+     ]
+    },
+    {
+     "id": 13,
+     "tag": "cond_br",
+     "ty": 5,
+     "args": [
+      {
+       "inst": 8
+      }
+     ],
+     "then": [
+      {
+       "id": 9,
+       "tag": "unwrap_errunion_payload",
+       "ty": 0,
+       "args": [
+        {
+         "inst": 7
+        }
+       ]
+      },
+      {
+       "id": 10,
+       "tag": "br",
+       "ty": 5,
+       "target": 3,
+       "args": [
+        {
+         "inst": 9
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 11,
+       "tag": "unwrap_errunion_err",
+       "ty": 6,
+       "args": [
+        {
+         "inst": 7
+        }
+       ]
+      },
+      {
+       "id": 12,
+       "tag": "br",
+       "ty": 5,
+       "target": 3,
+       "args": [
+        {
+         "ty": 0,
+         "val": "18446744073709551615"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 15,
+   "tag": "ret_safe",
+   "ty": 5,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "error_union",
+   "error": 6,
+   "payload": 0,
+   "abi_size": 16,
+   "abi_align": 8
+  },
+  {
+   "k": "other",
+   "name": "fn (u64, u64) error{TimeOverflow}!u64"
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "error_set",
+   "errors": [
+    "TimeOverflow"
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  }
+ ]
+}
