@@ -72,6 +72,61 @@ theorem writePayload_error (p : Ptr) (w : BitVec 8) :
         up (pts p 2 (Except.error "Bad" : Except ErrName (BitVec 8)))) := by
   fsym
 
+/-! The spawn targets themselves (`reader`, `writer`: the thread bodies with their `catch`), on
+what each thread is given: a reader a read share of the union and its own output cell, a writer
+its union. -/
+
+/-- A reader thread stores the payload of the shared union in its output cell. -/
+theorem reader_ok (p out : Ptr) (x w : BitVec 8) (φ : Frac) :
+    FTTotalTriple (spts p 2 φ (Except.ok x : Except ErrName (BitVec 8)) ⋆ up (pts out 1 w))
+      (reader p out)
+      (fun _ => spts p 2 φ (Except.ok x : Except ErrName (BitVec 8)) ⋆ up (pts out 1 x)) := by
+  fsym
+
+/-- A reader thread of a union that holds an error stores 0 (`catch 0`). -/
+theorem reader_error (p out : Ptr) (w : BitVec 8) (φ : Frac) :
+    FTTotalTriple (spts p 2 φ (Except.error "Other" : Except ErrName (BitVec 8)) ⋆ up (pts out 1 w))
+      (reader p out)
+      (fun _ => spts p 2 φ (Except.error "Other" : Except ErrName (BitVec 8)) ⋆
+        up (pts out 1 (0 : BitVec 8))) := by
+  fsym
+
+/-- A writer thread replaces the payload of the union it owns. -/
+theorem writer_ok (p : Ptr) (x w : BitVec 8) :
+    FTTotalTriple (up (pts p 2 (Except.ok x : Except ErrName (BitVec 8)))) (writer p w)
+      (fun _ => up (pts p 2 (Except.ok w : Except ErrName (BitVec 8)))) := by
+  fsym
+
+/-- A writer thread of a union that holds an error writes nothing (`catch {}`). -/
+theorem writer_error (p : Ptr) (w : BitVec 8) :
+    FTTotalTriple (up (pts p 2 (Except.error "Bad" : Except ErrName (BitVec 8)))) (writer p w)
+      (fun _ => up (pts p 2 (Except.error "Bad" : Except ErrName (BitVec 8)))) := by
+  fsym
+
+/-- A result location written by a thread that owns the union (`errunion_payload_ptr_set`, then
+the payload write): whatever the union held, it holds the payload. The error code is written, so
+the step is local only for an owner (`ThreadLocal.errSetOk_pts`, `errOkSlot_store`). -/
+theorem setPayload_owned (p : Ptr) (u : Except ErrName (BitVec 8)) (y : BitVec 8) :
+    FTTotalTriple (up (pts p 2 u))
+      (do let q ← Zig.errSetOk (BitVec 8) 2 p; Zig.store (α := BitVec 8) 1 q y)
+      (fun _ => up (pts p 2 (Except.ok y : Except ErrName (BitVec 8)))) := by
+  fsym
+
+/-- The same for a payload that lies before the error code (`E!u32`). -/
+theorem setPayload32_owned (p : Ptr) (u : Except ErrName (BitVec 32)) (y : BitVec 32) :
+    FTTotalTriple (up (pts p 4 u))
+      (do let q ← Zig.errSetOk (BitVec 32) 4 p; Zig.store (α := BitVec 32) 4 q y)
+      (fun _ => up (pts p 4 (Except.ok y : Except ErrName (BitVec 32)))) := by
+  fsym
+
+/-- A share gives no write: `errunion_payload_ptr_set` on a shared union has no thread rule. -/
+theorem setPayload_shared_rejected (p : Ptr) (u : Except ErrName (BitVec 8)) (φ : Frac) : True := by
+  fail_if_success
+    have : FTTotalTriple (spts p 2 φ u) (Zig.errSetOk (BitVec 8) 2 p)
+        (fun _ => spts p 2 φ u) := by
+      fsym
+  trivial
+
 end Threads
 
 private def require (ok : Bool) (message : String) : IO Unit :=

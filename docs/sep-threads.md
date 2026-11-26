@@ -226,7 +226,8 @@ again such a run. A stop of another kind (yield, futex, spawn, join, …) has no
   the sequential rule is `.toFTotalTriple` of a thread rule proved directly).
 
   Locality composes: `ThreadLocal.bind` (a local step whose successful sequential runs end in
-  `Q`, then a step local for `Q`), `pure`, `throw`, `ite`, `readBind` (a read of the blocks, as
+  `Q`, then a step local for `Q`; `bind_of` takes those runs from the step's sequential triple:
+  an error union's `errSetOk`, `Full/Try.lean`), `pure`, `throw`, `ite`, `readBind` (a read of the blocks, as
   `Mem.access`); from these `@memset`, `@memmove` and `@memcpy` are local from the ownership of
   their bytes. Ownership providers: `OwnsPtr.bytesAt_add`, `arr_elem`, `pts_add`, and for
   `fsym` (`Full/AutoThread.lean`) `OwnsPtr.bytesAt_in`, `regionIn_in`, `region_in`, `pts_in`,
