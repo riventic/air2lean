@@ -46,7 +46,9 @@ the content of every file of the checkout, tracked or not, and of the whole-tree
 files; every build output of the three Lake packages; the Lean toolchain's runtime digest; the
 content of each Zig compiler it names; python3, bash and git on PATH; the host; the inherited
 environment (all of it but RUN_VARIABLES, RUN_PREFIXES); and its CI step (`run_inputs`, `unit_key`). So any edit
-anywhere runs every unit again, and an unchanged tree runs none (docs/ci.md#full-build). A pass
+anywhere runs every unit again, and an unchanged tree runs none (docs/ci.md#full-build). The
+one exception is `OUTPUT_ROOTS`, the directories a check only writes (check trees, claim reports):
+no input, so a check that writes there still records its pass. A pass
 is recorded (~/.cache/air2lean/fixture-checks/passes, AIR2LEAN_FIXTURE_PASSES) only when those
 inputs are the same at the end of the run as at its start. CI (GITHUB_ACTIONS or CI set: pull
 requests, main, nightly, release) never reuses or records a pass. `--rerun` runs every unit;
@@ -548,6 +550,20 @@ RUN_VARIABLES = ('AIR2LEAN_FIXTURE_REPLAY_CACHE', 'AIR2LEAN_TOOLCHAIN_RUNTIME_RU
 RUN_PREFIXES = ('CLAUDE', 'AI_AGENT', 'WARP_', 'TERM_', 'COLORTERM', 'SSH_', 'XPC_', '__CF', 'HIST')
 
 
+# The worktree directories a check script only ever writes, never reads as an input of a later
+# run (the one list `worktree_records` leaves out of the digest, at the start and at the end of a
+# run alike: a run's leftovers must not change the next run's key either). A directory is here
+# only when it is rebuilt from scratch or overwritten before anything reads it:
+#   .lake/check-tree/                  derived workspaces (scripts/check-tree.py `create` removes
+#                                      DEST first); a copy of the checkout, never its source
+#   .lake/architecture-audit/claims/   the audit claims' reports (build.sh, test_cache.py), each
+#                                      written by the run that reads it
+#   .lake/assurance/claims/            the claim fixtures' reports (tests/roadmap/claims/check.sh)
+# A source, script, generated file or Lake build output is never here: an edit of it during a run
+# still prevents the pass.
+OUTPUT_ROOTS = ('.lake/check-tree', '.lake/architecture-audit/claims', '.lake/assurance/claims')
+
+
 class Unkeyable(Exception):
     """An input the key cannot cover: nothing is reused or recorded."""
 
@@ -571,7 +587,7 @@ def worktree_records(root):
     for directory, dirs, files in os.walk(root):
         here = Path(directory)
         skip = {'__pycache__', '.git'} if here == root else {'__pycache__'}  # `.git`: a file in a worktree
-        dirs[:] = sorted(d for d in dirs if d not in skip)
+        dirs[:] = sorted(d for d in dirs if d not in skip and str((here / d).relative_to(root)) not in OUTPUT_ROOTS)
         for name in sorted({*dirs, *files} - skip):
             path = here / name
             rel = str(path.relative_to(root))

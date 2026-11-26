@@ -160,6 +160,27 @@ class ReceiptTests(unittest.TestCase):
         nested["body"].append({"vector_index": None})
         self.assertIn("vector_index", NORMALIZER["normalize"](nested)["body"][-1])
 
+    def test_opaque_kind_matches_golden_that_predates_it_but_alignment_stays_observable(self):
+        base = len(CURRENT["types"])
+        pointer = {"k": "ptr", "size": "one", "child": base}
+        golden = copy.deepcopy(CURRENT)
+        golden["types"] += [{"k": "other", "name": "c.pthread_t__opaque_7"}, dict(pointer)]
+        fresh = copy.deepcopy(CURRENT)
+        fresh["types"] += [{"k": "opaque", "name": "c.pthread_t__opaque_9", "module": "std"},
+                           dict(pointer, ptr_align=1)]
+        self.assertEqual(NORMALIZER["normalize"](fresh), NORMALIZER["normalize"](golden))
+        # Another alignment, or the alignment of a pointer to another type, stays observable.
+        aligned = copy.deepcopy(fresh)
+        aligned["types"][-1]["ptr_align"] = 8
+        self.assertEqual(NORMALIZER["normalize"](aligned)["types"][-1]["ptr_align"], 8)
+        typed = copy.deepcopy(fresh)
+        typed["types"][-1]["child"] = 0
+        self.assertEqual(NORMALIZER["normalize"](typed)["types"][-1]["ptr_align"], 1)
+        # Another name is another type.
+        renamed = copy.deepcopy(fresh)
+        renamed["types"][base]["name"] = "Handle"
+        self.assertNotEqual(NORMALIZER["normalize"](renamed), NORMALIZER["normalize"](golden))
+
     def test_unsupported_golden_schema_and_profile_are_not_stripped(self):
         receipt = json.loads(self.report.read_text())["metadata"]["profile"]
         changed = copy.deepcopy(CURRENT)

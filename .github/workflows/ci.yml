@@ -1985,6 +1985,22 @@ jobs:
           tests/roadmap/null-pointers/check.sh --export ${{ matrix.zig }}
           tests/roadmap/null-pointers/check.sh --native "$GITHUB_WORKSPACE/host-zig/zig"
 
+      # Pointers to opaque types (`*anyopaque`, `*T` of a declared `opaque {}`): the checker
+      # controls, the committed exports of every version (model runs match expected.txt, the
+      # rejections hold), this job's patched exporter reproduces its version's export, and the
+      # shipping compiler's native run matches the same transcript.
+      - name: Opaque pointer source and semantic gate
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate && matrix.zig == '0.17.1' }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}
+          AIR2LEAN_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
+        run: |
+          set -euo pipefail
+          lake build ZigLean air2lean
+          tests/roadmap/opaque-pointers/check.sh
+          tests/roadmap/opaque-pointers/check.sh --export ${{ matrix.zig }}
+          tests/roadmap/opaque-pointers/check.sh --native "$GITHUB_WORKSPACE/host-zig/zig"
+
       # L14: error return tracing. The committed exports of every version translate and their
       # model runs match expected.txt, as does the shipping compiler's native run.
       - name: Error return tracing gate (L14)
@@ -2220,8 +2236,21 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean.VecMem ZigLean.Float.Allowed ZigLean.Mem.Thread
+          lake build ZigLean.VecMem ZigLean.Float.Allowed ZigLean.Mem.Thread ZigLean.Os ZigLean.Conc.Sched
           python3 -m unittest discover -s tests/roadmap/aarch64-abi -p 'test_*.py' -v
+
+      # The recorded `futex` rows of every version and profile (FUTEX_WAIT/WAKE, __ulock_*)
+      # against the outcomes of the model's OS rows, premises OSF-01 and OSF-02
+      # (docs/aarch64-abi.md#futex).
+      - name: aarch64 futex rows against the OS rows (T04)
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          for triple in aarch64-linux-gnu aarch64-macos-none; do
+            files=(tests/roadmap/aarch64-abi/expected/*/"$triple"-ReleaseSafe.txt)
+            [ "${#files[@]}" -eq 4 ]
+            lake env lean --run tests/roadmap/aarch64-abi/Futex.lean "$triple" "${files[@]}"
+          done
 
       - name: aarch64 ABI profile proofs (T04, 0.16.0)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
