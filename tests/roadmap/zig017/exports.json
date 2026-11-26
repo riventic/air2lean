@@ -17,6 +17,14 @@
       "cwd": "repo"
     },
     {
+      "out": "tovec/air/{version}",
+      "source": "tovec/tovec.zig",
+      "filter": "tovec.",
+      "versions": ["0.17.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
       "out": "overflow/air/{version}",
       "source": "overflow/overflow.zig",
       "filter": "overflow.",

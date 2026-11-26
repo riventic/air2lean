@@ -8,9 +8,76 @@ Proof-only (`ZigLean/Mem/Lemmas.lean`), so outside `ZigLean.lean`. For both widt
 an optional pointer and a slice decode to what was encoded, with `PtrWidth.bytes`-sized
 pointers; a decoded slice length, and so every byte count of a slice, is below
 `PtrWidth.bound`. The 64-bit `Enc Slice` is lawful (`LawfulEnc Slice`).
+
+The checked integer operations at every width (§Integer widths): an increment, a negation, a
+product and a same-width `@intCast` in closed form, so that each target's translation of a C
+integer type (`c_long` is 32 bits on wasm32, 64 on x86_64) is an instance of one statement.
 -/
 
 namespace Zig
+
+/-! ## Integer widths -/
+
+/-- A checked signed increment of a `w`-bit integer: overflow exactly at the maximum. -/
+def succSigned {w : Nat} (n : BitVec w) : Result (BitVec w) :=
+  if 2 ^ (w - 1) ≤ n.toInt + 1 then throw .overflow else pure (n + 1)
+
+/-- A checked unsigned increment of a `w`-bit integer. -/
+def succUnsigned {w : Nat} (n : BitVec w) : Result (BitVec w) :=
+  if 2 ^ w ≤ n.toNat + 1 then throw .overflow else pure (n + 1)
+
+/-- A checked signed negation: overflow exactly at the minimum. -/
+def negSigned {w : Nat} (n : BitVec w) : Result (BitVec w) :=
+  if n.toInt = -2 ^ (w - 1) then throw .overflow else pure (-n)
+
+/-- An unsigned product, `none` when it does not fit `w` bits. -/
+def mulUnsignedOpt {w : Nat} (a b : BitVec w) : Option (BitVec w) :=
+  if 2 ^ w ≤ a.toNat * b.toNat then none else some (a * b)
+
+theorem two_pow_pred {w : Nat} (hw : 1 ≤ w) : (2 : Int) ^ w = 2 * 2 ^ (w - 1) := by
+  obtain ⟨k, rfl⟩ : ∃ k, w = k + 1 := ⟨w - 1, by omega⟩
+  simp [Int.pow_succ]; omega
+
+theorem add_one_signed_eq {w : Nat} (hw : 2 ≤ w) (n : BitVec w) :
+    add true n 1 = succSigned n := by
+  have h1 : (1#w).toInt = 1 := BitVec.toInt_one (by omega)
+  have hlo := BitVec.le_two_mul_toInt (x := n)
+  have hp := two_pow_pred (w := w) (by omega)
+  unfold succSigned add
+  by_cases h : 2 ^ (w - 1) ≤ n.toInt + 1
+  · simp [BitVec.saddOverflow, Error.ifSafe, h1, h]
+  · have : ¬ (n.toInt + 1 < -2 ^ (w - 1)) := by omega
+    simp [BitVec.saddOverflow, h1, h, this]
+
+theorem add_one_unsigned_eq {w : Nat} (hw : 1 ≤ w) (n : BitVec w) :
+    add false n 1 = succUnsigned n := by
+  have h1 : (1#w).toNat = 1 := by
+    rw [BitVec.toNat_ofNat]; exact Nat.mod_eq_of_lt (Nat.one_lt_two_pow (by omega))
+  unfold succUnsigned add
+  by_cases h : 2 ^ w ≤ n.toNat + 1 <;> simp [BitVec.uaddOverflow, Error.ifSafe, h1, h]
+
+theorem sub_zero_signed_eq {w : Nat} (hw : 1 ≤ w) (n : BitVec w) :
+    sub true 0 n = negSigned n := by
+  have hlo := BitVec.le_two_mul_toInt (x := n)
+  have hhi := BitVec.two_mul_toInt_lt (x := n)
+  have hp := two_pow_pred (w := w) hw
+  unfold negSigned sub
+  by_cases h : n.toInt = -2 ^ (w - 1)
+  · simp [BitVec.ssubOverflow, Error.ifSafe, h]
+  · have h2 : ¬ (2 ^ (w - 1) ≤ -n.toInt) := by omega
+    have h3 : ¬ (-n.toInt < -2 ^ (w - 1)) := by omega
+    simp [BitVec.ssubOverflow, h, h2, h3]
+
+/-- A signed `@intCast` to the same width never fails. -/
+theorem intCast_signed_same {w : Nat} (hw : 1 ≤ w) (n : BitVec w) :
+    intCast true true w n = pure n := by
+  have hlo := BitVec.le_two_mul_toInt (x := n)
+  have hhi := BitVec.two_mul_toInt_lt (x := n)
+  have hp := two_pow_pred (w := w) hw
+  have h0 : 0 < w := by omega
+  have : intLo true w ≤ n.toInt ∧ n.toInt ≤ intHi true w := by
+    simp only [intLo, intHi, h0, and_self, ↓reduceIte]; constructor <;> omega
+  simp [intCast, val, this, BitVec.ofInt_toInt]
 
 theorem ptrFrags_size (w : PtrWidth) (p : Ptr) : (ptrFrags w p).size = w.bytes := by
   cases w <;> simp [ptrFrags, PtrWidth.bytes]

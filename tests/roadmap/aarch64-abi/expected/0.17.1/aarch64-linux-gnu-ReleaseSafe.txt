@@ -277,3 +277,16 @@ limit load_release @atomicLoad_atomic_ordering_must_not_be_release_or_acq_rel
 limit rmw_unordered @atomicRmw_atomic_ordering_must_not_be_unordered
 limit store_acq_rel @atomicStore_atomic_ordering_must_not_be_acquire_or_acq_rel
 limit store_acquire @atomicStore_atomic_ordering_must_not_be_acquire_or_acq_rel
+f80atomic load_monotonic llvm Broken_module_found,_compilation_aborted!
+f80atomic load_acquire llvm Broken_module_found,_compilation_aborted!
+f80atomic load_seq_cst llvm Broken_module_found,_compilation_aborted!
+f80atomic store_monotonic runs cell=other result=model
+f80atomic store_release runs cell=other result=model
+f80atomic store_seq_cst runs cell=other result=model
+f80atomic rmw_Xchg llvm Invalid_cast
+f80atomic rmw_Add llvm Broken_module_found,_compilation_aborted!
+f80atomic rmw_Sub llvm Broken_module_found,_compilation_aborted!
+f80atomic rmw_Max llvm Broken_module_found,_compilation_aborted!
+f80atomic rmw_Min llvm Broken_module_found,_compilation_aborted!
+f80atomic cmpxchg_strong zig expected_bool,_integer,_enum,_packed_struct,_or_pointer_type;_found_'f80'
+f80atomic cmpxchg_weak zig expected_bool,_integer,_enum,_packed_struct,_or_pointer_type;_found_'f80'
