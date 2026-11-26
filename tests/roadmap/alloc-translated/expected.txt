@@ -4,5 +4,6 @@ resize ok 1 ok 0 ok 0 ok 1
 reset ok 200 ok 400 ok 0
 fba_grow remap ok 5133 2573 4628 2564 4628 realloc ok 5133 2573 9759 2564 4628
 page_sum ok 0 10 10000 page_create ok 7 page_resize ok 1 1 1
+page_large ok 1048577 4194304
 page_grow remap ok 4 13 13 4 20 realloc ok 15 13 13 4 31
 page_grow_stale remap ok 0 realloc fault

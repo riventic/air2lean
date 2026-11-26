@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const fba = @import("fba.zig");
 const page = @import("page.zig");
 
@@ -22,6 +23,9 @@ pub fn main() void {
         fba.fba_grow(10, 300, 1, false), fba.fba_grow(10, 250, 1, true),
     });
     std.debug.print("page_sum ok {d} {d} {d} page_create ok {d} page_resize ok {d} {d} {d}\n", .{ page.page_sum(0), page.page_sum(10), page.page_sum(10000), page.page_create(7), b(page.page_resize(10, 20)), b(page.page_resize(10, 5000)), b(page.page_resize(8192, 10)) });
+    // M03: requests above the model's old fixed cap of 1 MiB (one byte above it, and 4 MiB), every
+    // byte written and read back (`AllocTranslated/Large.lean` prints the model's line).
+    std.debug.print("page_large ok {d} {d}\n", .{ page.page_sum(1048577), page.page_sum(4194304) });
     // M02: growth by `remap` (0) and by `realloc` (1): in place after the pages behind the block
     // were freed, within the page, a shrink, an impossible length, and into a neighbour's pages.
     const far = 1 << 47;
@@ -32,6 +36,43 @@ pub fn main() void {
         page.page_grow(10, 10, far, 1),      page.page_grow_blocked(10, 1),
     });
     std.debug.print("page_grow_stale remap {s} realloc {s}\n", .{ stale(0), stale(1) });
+    // M02: a growth that the kernel fails for lack of memory (`ENOMEM`). Linux only: macOS has no
+    // `mremap` and does not enforce `RLIMIT_AS`.
+    if (builtin.os.tag == .linux) {
+        std.debug.print("page_grow_enomem remap ok {d} realloc ok {d}\n", .{ enomem(0), enomem(1) });
+    }
+}
+
+/// `page_grow(10, 10, 49152, how)` in a child process whose address space may grow by one page
+/// only (`RLIMIT_AS`: the pages the child has, from `/proc/self/statm`, plus the block's page).
+/// The block's mapping succeeds; the growth by `mremap`, and the new mapping that `realloc` asks
+/// for after it, fail with `ENOMEM`. Returns the function's word (4: the growth failed and the old
+/// block kept its bytes), 100 or more when the child or its limit could not be set up, or minus the
+/// signal that ended the child.
+fn enomem(how: u8) i64 {
+    const linux = std.os.linux;
+    const pid = linux.fork();
+    if (pid == 0) {
+        var buf: [64]u8 = undefined;
+        const fd = linux.open("/proc/self/statm", .{ .ACCMODE = .RDONLY }, 0);
+        if (@as(isize, @bitCast(fd)) < 0) linux.exit(100);
+        const got = linux.read(@intCast(fd), &buf, buf.len);
+        if (@as(isize, @bitCast(got)) <= 0) linux.exit(101);
+        var pages: u64 = 0;
+        for (buf[0..got]) |c| {
+            if (c < '0' or c > '9') break;
+            pages = pages * 10 + (c - '0');
+        }
+        const bytes = (pages + 1) * std.heap.pageSize();
+        const limit: linux.rlimit = .{ .cur = bytes, .max = bytes };
+        if (linux.setrlimit(.AS, &limit) != 0) linux.exit(102);
+        linux.exit(@intCast(page.page_grow(10, 10, 49152, how)));
+    }
+    if (@as(isize, @bitCast(pid)) < 0) return 103;
+    var s: u32 = undefined;
+    if (@as(isize, @bitCast(linux.waitpid(@intCast(pid), @ptrCast(&s), 0))) < 0) return 104;
+    const sig: i64 = s & 0x7f;
+    return if (sig == 0) (s >> 8) & 0xff else -sig;
 }
 
 /// The segfault handler would turn the stale read's fault into a message and an abort.

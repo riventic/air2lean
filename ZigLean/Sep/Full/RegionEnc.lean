@@ -1,0 +1,110 @@
+import ZigLean.Sep.Full.Region
+
+/-!
+# Items of any encoding in a byte region
+
+`Region.lean`'s item rules (`regionStore`, `regionLoadWritten` and their `Add` forms) ask for
+`LawfulEnc T`: every value of `T` reads back from its bytes. Not every item type has that
+instance: a float's NaN has undefined bytes (`Float.detMask`), so a load of them is
+`.unspecified`. The rules here are stated for every `Enc T` and ask for what one step needs, as
+facts about the one value:
+
+* a **store** needs the size of the value's bytes (`regionStoreEnc`, `regionStoreAddEnc`): the
+  region holds the bytes afterwards, whatever they are (as `Auto.storeEnc_region` at a region's
+  start);
+* a **load** of bytes a store wrote needs that this value reads back (`regionLoadEnc`,
+  `regionLoadAddEnc`).
+
+Both facts hold for every value of a `LawfulEnc` type, so the rules cover `Region.lean`'s. They
+are `@[fsym]` rules: for an item type without a `LawfulEnc` instance, `Region.lean`'s rules leave
+that instance open and `fsym` takes these (a proof imports this module). For a float the two
+facts are `Float.size_encode` and the decidable read-back `Float.decidableReadsBack`
+(`ZigLean/ReprCast.lean`, which a proof about floats in memory imports too): a float constant's
+read-back is its NaN check.
+
+An optional pointer item's `==` (`optPtrEqAddr`, a `[:null]?*T`'s sentinel check) is normalized by
+the shape of its operands (`optPtrEqAddr_none_none` and its three siblings).
+-/
+
+namespace Zig
+
+/-! ## `==` on optional pointers
+
+`optPtrEqAddr` by the shape of its operands, as program normalization (`fsym_norm`): two nulls are
+equal and a null and a pointer are not, without a step; two pointers compare as `ptrEqAddr`,
+which the pointer rules execute. -/
+
+@[fsym_norm] theorem optPtrEqAddr_none_none : optPtrEqAddr none none = pure true := rfl
+
+@[fsym_norm] theorem optPtrEqAddr_none_some (q : Ptr) : optPtrEqAddr none (some q) = pure false :=
+  rfl
+
+@[fsym_norm] theorem optPtrEqAddr_some_none (p : Ptr) : optPtrEqAddr (some p) none = pure false :=
+  rfl
+
+@[fsym_norm] theorem optPtrEqAddr_some_some (p q : Ptr) :
+    optPtrEqAddr (some p) (some q) = ptrEqAddr p q := rfl
+
+namespace Full
+namespace FTotalTriple
+
+open FAssn
+
+variable {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte}
+
+/-- **Store an item** `v` of any encoding at the byte offset `k` of a region (a pointer formed
+by `ptrProject` or `Ptr.add`, aligned to `al`): its bytes are `v`'s. `hsz` is the one fact about
+`v`'s encoding the step needs. -/
+@[fsym] theorem regionStoreAddEnc {T : Type} [Enc T] {k : Int} {al : Nat} (v : T)
+    (hsz : (Enc.encode v).size = Enc.size T) (hpos : 0 < Enc.size T) (h0 : 0 ≤ k)
+    (ho : k.toNat + Enc.size T ≤ bs.size) (hal : al ∣ a) (halo : al ∣ k.toNat) :
+    FTotalTriple (up (regionIn p A S K a bs)) (Zig.store al (p.add k) v)
+      (fun _ => up (regionIn p A S K a (writeBytes bs k.toNat (Enc.encode v)))) := by
+  have e : p.add k = p.add ((k.toNat : Nat) : Int) := by rw [Int.toNat_of_nonneg h0]
+  rw [e]
+  exact region_of' fun hA hK => store_bytesAt v (by rw [hsz]; exact hpos)
+    (by rw [hsz]; exact ho) (mod_add_dvd hA hal halo) hK
+
+/-- **Load an item a store wrote** at the byte offset `o`, through a pointer formed with
+`Ptr.add`, for a value `v` that reads back from its bytes (`hdec`): its value. -/
+@[fsym] theorem regionLoadAddEnc {T : Type} [Enc T] {k : Int} {al o : Nat} {v : T}
+    (hsz : (Enc.encode v).size = Enc.size T) (hdec : Enc.decode (Enc.encode v) = pure v)
+    (hpos : 0 < Enc.size T) (ho : o + Enc.size T ≤ bs.size) (hko : k = (o : Int))
+    (hal : al ∣ a) (halo : al ∣ o) :
+    FTotalTriple (up (regionIn p A S K a (writeBytes bs o (Enc.encode v))))
+      (Zig.load T al (p.add k))
+      (fun r => ⟪r = v⟫ ⋆ up (regionIn p A S K a (writeBytes bs o (Enc.encode v)))) := by
+  have hs : (writeBytes bs o (Enc.encode v)).size = bs.size := writeBytes_size _ _ _ (by omega)
+  subst hko
+  refine region_of fun hA _ => load_bytesAt hpos (by omega) (mod_add_dvd hA hal halo) ?_
+  have e := extract_writeBytes bs o (Enc.encode v) (by omega)
+  rw [hsz] at e
+  rw [e]; exact hdec
+
+/-- **Store an item** `v` of any encoding at item `i` of a region (aligned to `al`): its bytes are
+`v`'s. -/
+@[fsym] theorem regionStoreEnc {T : Type} [Enc T] {i : BitVec 64} {al : Nat} (v : T)
+    (hsz : (Enc.encode v).size = Enc.size T) (hpos : 0 < Enc.size T)
+    (ho : Enc.size T * i.toNat + Enc.size T ≤ bs.size) (hal : al ∣ a)
+    (halo : al ∣ Enc.size T * i.toNat) :
+    FTotalTriple (up (regionIn p A S K a bs)) (Zig.store al (p.elem (Enc.size T) i) v)
+      (fun _ => up (regionIn p A S K a (writeBytes bs (Enc.size T * i.toNat) (Enc.encode v)))) := by
+  rw [Ptr.elem_eq]
+  exact region_of' fun hA hK => store_bytesAt v (by rw [hsz]; exact hpos)
+    (by rw [hsz]; exact ho) (mod_add_dvd hA hal halo) hK
+
+/-- **Load an item a store wrote** (at item `i`, byte `o`), for a value `v` that reads back from
+its bytes (`hdec`): its value. -/
+@[fsym] theorem regionLoadEnc {T : Type} [Enc T] {i : BitVec 64} {al o : Nat} {v : T}
+    (hsz : (Enc.encode v).size = Enc.size T) (hdec : Enc.decode (Enc.encode v) = pure v)
+    (hpos : 0 < Enc.size T) (ho : o + Enc.size T ≤ bs.size) (hoi : Enc.size T * i.toNat = o)
+    (hal : al ∣ a) (halo : al ∣ o) :
+    FTotalTriple (up (regionIn p A S K a (writeBytes bs o (Enc.encode v))))
+      (Zig.load T al (p.elem (Enc.size T) i))
+      (fun r => ⟪r = v⟫ ⋆ up (regionIn p A S K a (writeBytes bs o (Enc.encode v)))) := by
+  rw [Ptr.elem_eq, hoi]
+  exact regionLoadAddEnc hsz hdec hpos ho rfl hal halo
+
+end FTotalTriple
+end Full
+end Zig
