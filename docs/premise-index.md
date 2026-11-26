@@ -20,7 +20,6 @@ premise was derived. This index covers the committed generated modules.
 | [ALC-04](premises.md#alc-04) | 3010 | Byte sentinel allocation |
 | [ALC-05](premises.md#alc-05) | 3010 | Byte realloc and sentinel reallocation |
 | [ALC-06](premises.md#alc-06) | 2830 | Raw allocator interface contracts |
-| [ALC-07](premises.md#alc-07) | 0 | Allocator identity and the arena policy |
 | [ALC-08](premises.md#alc-08) | 4673 | Address reuse and provenance recovery |
 | [ALC-09](premises.md#alc-09) | 22 | Caller-supplied `Allocator` behaves as the std model |
 | [ALC-10](premises.md#alc-10) | 3040 | Thread-safe allocator in concurrent code |
