@@ -12,7 +12,8 @@ A fixture whose AIR is a patched-compiler export declares how it is made in
                                    scripts/check.sh builds it for each version: `x.` and the lines
                                    of examples/x/filter and examples/x/filter-VERSION)
                                    "cwd": "fixture" | "repo", "command": "build-obj" | "build-exe",
-                                   "closure": ["x.*"], "stop": ["os.linux.read"]}]}
+                                   "closure": ["x.*"], "stop": ["os.linux.read"],
+                                   "modules": {"dep": "../other/dep.zig"}}]}
                      Each entry is one `zig COMMAND -fno-emit-bin ARGS SOURCE` per version with
                      ZIG_AIR_JSON_FILTER=FILTER, its files written to OUT ({version} substituted;
                      an entry of one version may omit it; the tool owns OUT: nothing else may
@@ -27,8 +28,11 @@ A fixture whose AIR is a patched-compiler export declares how it is made in
                      or a name prefix ending in `*`. `stop` (needs `closure`; names and `*`
                      prefixes) cuts the closure: a stopped function is neither kept nor followed
                      (a primitive the model binds, the panic handlers the translator normalizes).
+                     `modules`, if given, are the named modules SOURCE imports (`@import("dep")`;
+                     paths relative to the fixture): the compiler then gets `--dep NAME...
+                     -Mroot=SOURCE -MNAME=PATH...` in place of SOURCE.
   exports.lock.json  the manifest's hash, the hash of every .zig file of the fixture and of the
-                     directory of each SOURCE outside it (an import may change an export), the
+                     directory of each SOURCE or module outside it (an import may change an export), the
                      identity of each version's patched compiler
                      (the digest of exactly what zig-patch/build.sh reads, scripts/cas.py
                      zig_patch_inputs: host-independent, unlike the binary) and the hash of every
@@ -68,7 +72,7 @@ import cas  # noqa: E402
 MANIFEST, LOCK = 'exports.json', 'exports.lock.json'
 SCHEMA = 1
 ENTRY_KEYS = {'out', 'source', 'versions', 'args'}
-OPTIONAL_KEYS = {'filter', 'cwd', 'command', 'closure', 'stop'}
+OPTIONAL_KEYS = {'filter', 'cwd', 'command', 'closure', 'stop', 'modules'}
 # The exporter's `build_mode` for `-O<mode>` (0.17's `std.lang.Optimize` tags, Dialect.lean
 # buildModeRenames, or the 0.16.0 spelling).
 BUILD_MODES = {'Debug': {'Debug', 'debug'}, 'ReleaseSafe': {'ReleaseSafe', 'safe'},
@@ -154,9 +158,17 @@ def manifest(fixture):
                 raise Error('%s: %s is a non-empty list of function names and `*` prefixes' % (where, key))
         if 'stop' in entry and 'closure' not in entry:
             raise Error('%s: stop cuts a closure: give closure too' % where)
-        source = (FIXTURES / fixture / entry['source']).resolve()
-        if not source.is_file() or FIXTURES.resolve().parents[1] not in source.parents:  # the repository
+        def in_repository(path):
+            resolved = (FIXTURES / fixture / path).resolve()
+            return resolved.is_file() and FIXTURES.resolve().parents[1] in resolved.parents
+
+        if not in_repository(entry['source']):
             raise Error('%s: no source %s in the repository' % (where, entry['source']))
+        modules = entry.get('modules')
+        if 'modules' in entry and (not isinstance(modules, dict) or not modules or 'root' in modules or not all(
+                re.fullmatch(r'[A-Za-z_]\w*', name) and isinstance(path, str) and in_repository(path)
+                for name, path in modules.items())):
+            raise Error('%s: modules maps module names (not `root`) to sources in the repository' % where)
         if 'filter' not in entry and example_of(fixture, entry) is None:
             raise Error('%s: without a filter the source must be examples/<x>/<x>.zig' % where)
         if not all(isinstance(a, str) for a in entry['args']) or '-fno-emit-bin' in entry['args']:
@@ -189,15 +201,17 @@ def outputs(fixture, data):
 
 def sources(fixture, data):
     """{path relative to the fixture: sha256} of the fixture's .zig files outside its OUTs and of
-    the .zig files of the directory of each SOURCE that lies outside the fixture."""
+    the .zig files of the directory of each SOURCE or module that lies outside the fixture."""
     here = FIXTURES / fixture
     owned = [here / out for _, _, out in jobs(fixture, data)]
     found = {p.relative_to(here).as_posix(): sha256(p) for p in sorted(here.rglob('*.zig'))
              if not any(o in p.parents for o in owned)}
     for entry in data['exports']:
-        directory = (here / entry['source']).resolve().parent
-        if here.resolve() != directory and here.resolve() not in directory.parents:
-            found.update({os.path.relpath(p, here.resolve()): sha256(p) for p in sorted(directory.rglob('*.zig'))})
+        for path in (entry['source'], *entry.get('modules', {}).values()):
+            directory = (here / path).resolve().parent
+            if here.resolve() != directory and here.resolve() not in directory.parents:
+                found.update({os.path.relpath(p, here.resolve()): sha256(p)
+                              for p in sorted(directory.rglob('*.zig'))})
     return dict(sorted(found.items()))
 
 
@@ -312,6 +326,15 @@ def keep_closure(directory, roots, stop=()):
             path.unlink()
 
 
+def module_args(source, modules):
+    """The compiler's source arguments: SOURCE alone, or SOURCE as the root module that imports
+    the named MODULES ({name: path})."""
+    if not modules:
+        return [source]
+    return ([arg for name in modules for arg in ('--dep', name)] + ['-Mroot=' + source]
+            + ['-M%s=%s' % item for item in modules.items()])
+
+
 def run_exports(fixture, data, scratch, only=()):
     """Export every job of FIXTURE (of the versions in ONLY, if given) into SCRATCH/<out>;
     returns {out: {file: sha256}}."""
@@ -335,7 +358,8 @@ def run_exports(fixture, data, scratch, only=()):
         if platform.system() == 'Darwin' and version in cas.DARWIN_NO_XCRUN:
             env['PATH'] = str(shim) + os.pathsep + env.get('PATH', '')  # zig-patch/README.md
         command = ([str(compilers[version]), entry.get('command', 'build-obj'), '-fno-emit-bin']
-                   + entry['args'] + [source])
+                   + entry['args'] + module_args(source, {name: os.path.relpath(here / path, cwd)
+                                                          for name, path in entry.get('modules', {}).items()}))
         done = subprocess.run(command, cwd=cwd, env=env, capture_output=True, text=True)
         if done.returncode:
             raise Error('%s %s (%s): export failed (exit %d)\n%s' % (fixture, out, version, done.returncode,

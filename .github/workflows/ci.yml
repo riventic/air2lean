@@ -2426,6 +2426,22 @@ jobs:
           python3 scripts/wasm-correspondence.py record --zig "$PWD/host-zig/zig" --target native --verify
           python3 scripts/wasm-correspondence.py record --zig "$PWD/host-zig/zig" --target wasm32 --verify
 
+      # T05: kernels.zig translated for x86_64-linux, aarch64-macos, wasm32-freestanding and
+      # wasm32-wasi by each exported Zig version; one contract, met by every translation.
+      - name: Native/WASM correspondence contracts (x86_64, aarch64, wasm32)
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && !matrix.mutate && matrix.zig == '0.16.0' }}
+        env:
+          AIR2LEAN_ZIG_AIR: ${{ github.workspace }}
+          AIR2LEAN_TRANSLATOR: ${{ github.workspace }}/.lake/build/bin/air2lean
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          lake build ZigLean Air2Lean air2lean ZigLean.Mem.WidthLemmas
+          bash tests/roadmap/wasm-correspondence/check.sh
+          # A fresh export equals the committed AIR, which check.sh translates to the retained
+          # Gen.lean files byte for byte.
+          python3 -B scripts/fixture-exports.py verify wasm-correspondence --version ${{ matrix.zig }}
+
       # T03: s390x and mips64 (big endian) and x86_64 translations of one source by every
       # exported Zig version, both-order proofs, the big-endian rejections, and the native
       # program of this row's version on s390x and mips64 under qemu-user and on the host.

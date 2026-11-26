@@ -2,8 +2,9 @@
 """T05 native/WASM correspondence: observe paired fixtures and check the stated relation.
 
 One source (tests/roadmap/wasm-correspondence/kernels.zig) is compiled for a native target and
-for wasm32-freestanding with the same stock compiler and optimize mode. Every export maps `u64`
-words to a `u64` word; an observation is that word or `trap` (a safety panic). The relation in
+for wasm32-freestanding and wasm32-wasi with the same stock compiler and optimize mode. Every
+export maps `u64` words to a `u64` word; an observation is that word or `trap` (a safety panic;
+its report, which wasm32-wasi writes to stderr, is not part of it). The relation in
 `relation.json` gives each export one class (docs/research/T05.md):
 
   exact            the native and the wasm32 observation are equal, word or trap;
@@ -14,12 +15,16 @@ words to a `u64` word; an observation is that word or `trap` (a safety panic). T
                    per-profile model of the effect.
 
 `record` builds and runs one target and writes its observations, bound to the Zig version, the
-source bytes and the generated cases (the compiler hash is kept as provenance). `check` fails
+source bytes and the generated cases (the compiler hash is kept as provenance). A target whose
+relation entry pins a `runtime` (wasm32-wasi: the Node release whose WASI preview1 runs it) is
+observed under exactly that runtime, or not at all. `check` relates every native record of a
+version to each of its wasm32 records, and fails
 closed: an export without a relation entry (or an entry without an export), a missing,
 mislabelled or stale record, an unknown class, an unrelated pair, and a claim that cites a theorem about another target's
 generated module (a native theorem is never relabeled as a wasm32 theorem) all fail.
 
-  scripts/wasm-correspondence.py record --zig ZIG --target native|wasm32   (writes records/)
+  scripts/wasm-correspondence.py record --zig ZIG --target native|wasm32|wasm32-wasi
+                                                                            (writes records/)
   scripts/wasm-correspondence.py record --zig ZIG --target ... --verify     (rerun = record)
   scripts/wasm-correspondence.py check
 """
@@ -44,6 +49,7 @@ CASE_DIR = ROOT / 'tests/roadmap/wasm-correspondence'
 RELATION = CASE_DIR / 'relation.json'
 RECORDS = CASE_DIR / 'records'
 WASM = 'wasm32-freestanding'
+WASI = 'wasm32-wasi'
 CLASSES = ('exact', 'tolerated', 'target-specific')
 TRAP = 'trap'
 MASK64 = (1 << 64) - 1
@@ -151,6 +157,12 @@ def validate(relation: dict, root: Path = ROOT) -> list[str]:
     for target, facts in relation['targets'].items():
         if facts.get('pointer_bits') not in (32, 64) or not isinstance(facts.get('model_target'), str):
             errors.append(f'target {target}: needs pointer_bits 32 or 64 and a model_target')
+        runtime = facts.get('runtime')
+        if 'runtime' in facts and (not isinstance(runtime, dict) or set(runtime) != {'node'}
+                                   or not re.fullmatch(r'\d+\.\d+\.\d+', str(runtime['node']))):
+            errors.append(f'target {target}: runtime pins one Node release ({{"node": "X.Y.Z"}})')
+        if target == WASI and 'runtime' not in facts:
+            errors.append(f'target {target}: needs a pinned runtime (its WASI implementation)')
     return errors
 
 
@@ -201,6 +213,10 @@ def sources(relation: dict, root: Path = ROOT) -> dict[str, str]:
 
 # ------------------------------------------------------------------------------ observation
 
+def is_wasm(target: str) -> bool:
+    return target.startswith('wasm32-')
+
+
 def native_target() -> str:
     arch = {'x86_64': 'x86_64', 'AMD64': 'x86_64', 'arm64': 'aarch64', 'aarch64': 'aarch64'}[platform.machine()]
     return f'{arch}-{ {"Darwin": "macos", "Linux": "linux"}[platform.system()]}'
@@ -213,9 +229,9 @@ def build(zig: str, relation: dict, target: str, out: Path) -> Path:
     modules.append(f'-Mroot={ROOT / relation["source"]}')
     modules += [f'-M{name}={ROOT / path}' for name, path in relation['modules'].items()]
     common = [f'-O{relation["optimize"]}', '--cache-dir', str(out / 'cache'), '--global-cache-dir', str(out / 'gcache')]
-    if target == WASM:
+    if is_wasm(target):
         binary = out / 'kernels.wasm'
-        command = [zig, 'build-exe', *common, '-target', WASM, '-fno-entry', '-rdynamic', *modules]
+        command = [zig, 'build-exe', *common, '-target', target, '-fno-entry', '-rdynamic', *modules]
     else:
         binary = out / ('libkernels.dylib' if target.endswith('macos') else 'libkernels.so')
         # macOS dylibs must link libSystem; the Linux library links no libc.
@@ -277,15 +293,22 @@ def zig_version(zig: str) -> str:
     return subprocess.run([zig, 'version'], capture_output=True, text=True, check=True).stdout.strip()
 
 
+def node_version() -> str:
+    return subprocess.run(['node', '--version'], capture_output=True, text=True, check=True).stdout.strip().lstrip('v')
+
+
 def record(zig: str, which: str, relation: dict) -> tuple[Path, dict]:
-    target = WASM if which == 'wasm32' else native_target()
+    target = {'wasm32': WASM, 'native': native_target()}.get(which, which)
     version = zig_version(zig)
     if target not in relation['matrix'].get(version, []):
         raise ValueError(f'{target} is not declared for Zig {version} in the relation matrix')
+    pinned = relation['targets'][target].get('runtime')
+    if pinned and (node := node_version()) != pinned['node']:
+        raise ValueError(f'{target} is observed under Node {pinned["node"]} (the pinned runtime), not Node {node}')
     calls = cases(relation)
     with tempfile.TemporaryDirectory(prefix='air2lean-wasm-corr-') as tmp:
         binary = build(zig, relation, target, Path(tmp))
-        results = observe_wasm(binary, calls) if target == WASM else observe_native(binary, calls)
+        results = observe_wasm(binary, calls) if is_wasm(target) else observe_native(binary, calls)
     data = {'schema': 1, 'zig_version': version, 'target': target, 'optimize': relation['optimize'],
             'compiler_sha256': file_sha256(Path(zig).resolve()), 'sources_sha256': sources(relation),
             'cases_sha256': digest(calls), 'results': results}
@@ -455,11 +478,11 @@ def check(relation: dict, root: Path = ROOT, records: Path = RECORDS) -> tuple[l
             if loaded[target]['zig_version'] != version or loaded[target]['target'] != target:
                 errors.append(f'{path}: records Zig {loaded[target]["zig_version"]} on {loaded[target]["target"]}')
                 del loaded[target]
-        if WASM not in loaded:
-            continue
-        for target in sorted(set(loaded) - {WASM}):
+        wasms = [t for t in sorted(loaded) if is_wasm(t)]
+        natives = [t for t in sorted(loaded) if not is_wasm(t)]
+        for wasm, target in ((w, t) for w in wasms for t in natives):
             bits = {'native': relation['targets'][target]['pointer_bits'],
-                    'wasm32': relation['targets'][WASM]['pointer_bits']}
+                    'wasm32': relation['targets'][wasm]['pointer_bits']}
             counts = {cls: 0 for cls in (*CLASSES, 'illegal')}
             for name, rows in calls.items():
                 entry = relation['kernels'][name]
@@ -468,12 +491,12 @@ def check(relation: dict, root: Path = ROOT, records: Path = RECORDS) -> tuple[l
                         counts['illegal'] += 1
                         continue
                     reason = relate(entry, args, loaded[target]['results'][name][i],
-                                    loaded[WASM]['results'][name][i], bits, minor(version))
+                                    loaded[wasm]['results'][name][i], bits, minor(version))
                     if reason:
-                        errors.append(f'{version} {target}/{WASM} {name}{tuple(args)}: {reason}')
+                        errors.append(f'{version} {target}/{wasm} {name}{tuple(args)}: {reason}')
                     else:
                         counts[entry['class']] += 1
-            summary[f'{version} {target}/{WASM}'] = counts
+            summary[f'{version} {target}/{wasm}'] = counts
     return errors, summary
 
 
@@ -506,7 +529,8 @@ def main(argv=None) -> int:
     sub = parser.add_subparsers(dest='command', required=True)
     rec = sub.add_parser('record', help='build and observe one target')
     rec.add_argument('--zig', required=True)
-    rec.add_argument('--target', choices=('native', 'wasm32'), required=True)
+    rec.add_argument('--target', required=True,
+                     help='native (the host), wasm32 (wasm32-freestanding) or a target of the relation')
     rec.add_argument('--verify', action='store_true', help='compare with the committed record instead of writing')
     sub.add_parser('check', help='check the relation on every committed record pair')
     args = parser.parse_args(argv)
@@ -516,7 +540,11 @@ def main(argv=None) -> int:
         if errors:
             print('\n'.join(errors), file=sys.stderr)
             return 1
-        path, data = record(args.zig, args.target, relation)
+        try:
+            path, data = record(args.zig, args.target, relation)
+        except ValueError as error:  # an undeclared target, or not the pinned runtime
+            print(error, file=sys.stderr)
+            return 1
         if args.verify:
             committed = json.loads(path.read_text()) if path.is_file() else None
             problems = reobservation_errors(relation, committed, data)

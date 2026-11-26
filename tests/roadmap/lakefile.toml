@@ -119,6 +119,14 @@ name = "BigEndian"
 srcDir = "big-endian"
 globs = ["BigEndian.+"]
 
+# wasm-correspondence/check.sh (T05): as NanBits, per Zig version and target
+# (WasmCorrespondence.V0_17_1.Wasm32.Gen), the contract stated once
+# (WasmCorrespondence.Contracts) and each version's proof that every target meets it.
+[[lean_lib]]
+name = "WasmCorrespondence"
+srcDir = "wasm-correspondence"
+globs = ["WasmCorrespondence.+"]
+
 # As NanBits: one retained translation and one model per Zig version.
 [[lean_lib]]
 name = "TryLifetimes"

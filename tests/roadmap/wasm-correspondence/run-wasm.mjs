@@ -1,8 +1,12 @@
-// T05 wasm32 driver: call the exports of a wasm32-freestanding kernels module.
+// T05 wasm32 driver: call the exports of a wasm32-freestanding or wasm32-wasi kernels module.
 // stdin: {"kernel": [[arg, ...], ...], ...} with decimal u64 strings; stdout: the same shape
 // with each result a decimal u64 string, or "trap" when the call trapped (a Zig safety panic
 // is `unreachable`). A fresh instance follows every trap: a trap leaves the shadow stack
 // pointer and memory as they were mid-call. Any other exception fails the run.
+// A module that imports WASI preview1 runs as a reactor under Node's WASI with no arguments,
+// environment or preopened directory; what it writes to stdout or stderr (a panic's report) is
+// discarded, so this driver's stdout carries the results only.
+import { openSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import process from 'node:process';
 
@@ -12,7 +16,16 @@ if (!path) {
   process.exit(2);
 }
 const module = await WebAssembly.compile(await readFile(path));
-const fresh = () => WebAssembly.instantiate(module, {});
+const usesWasi = WebAssembly.Module.imports(module).some((i) => i.module === 'wasi_snapshot_preview1');
+const { WASI } = usesWasi ? await import('node:wasi') : {};
+const sink = usesWasi ? openSync('/dev/null', 'w') : undefined;
+const fresh = async () => {
+  if (!usesWasi) return WebAssembly.instantiate(module, {});
+  const wasi = new WASI({ version: 'preview1', args: [], env: {}, stdout: sink, stderr: sink });
+  const instance = await WebAssembly.instantiate(module, wasi.getImportObject());
+  wasi.initialize(instance);
+  return instance;
+};
 let instance = await fresh();
 let input = '';
 for await (const chunk of process.stdin) input += chunk;

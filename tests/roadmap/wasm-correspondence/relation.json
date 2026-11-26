@@ -11,6 +11,13 @@
    "pointer_bits": 32,
    "model_target": "wasm32-freestanding"
   },
+  "wasm32-wasi": {
+   "pointer_bits": 32,
+   "model_target": "wasm32-wasi",
+   "runtime": {
+    "node": "24.16.0"
+   }
+  },
   "x86_64-linux": {
    "pointer_bits": 64,
    "model_target": "x86_64-linux"
@@ -23,20 +30,24 @@
  "matrix": {
   "0.17.1": [
    "wasm32-freestanding",
+   "wasm32-wasi",
    "x86_64-linux",
    "aarch64-macos"
   ],
   "0.16.0": [
    "wasm32-freestanding",
+   "wasm32-wasi",
    "x86_64-linux",
    "aarch64-macos"
   ],
   "0.15.2": [
    "wasm32-freestanding",
+   "wasm32-wasi",
    "x86_64-linux"
   ],
   "0.14.1": [
    "wasm32-freestanding",
+   "wasm32-wasi",
    "x86_64-linux"
   ]
  },
@@ -296,6 +307,102 @@
    "target": "x86_64-linux",
    "theorem": "PointerWidth.Proofs.succ_x64",
    "file": "tests/roadmap/pointer-width/PointerWidth/Proofs.lean"
+  },
+  {
+   "kernel": "des_time_add32",
+   "target": "x86_64-linux",
+   "theorem": "WasmCorrespondence.V0_17_1.Proofs.des_time_add32_x64",
+   "file": "tests/roadmap/wasm-correspondence/WasmCorrespondence/V0_17_1/Proofs.lean"
+  },
+  {
+   "kernel": "des_time_add32",
+   "target": "aarch64-macos",
+   "theorem": "WasmCorrespondence.V0_17_1.Proofs.des_time_add32_a64",
+   "file": "tests/roadmap/wasm-correspondence/WasmCorrespondence/V0_17_1/Proofs.lean"
+  },
+  {
+   "kernel": "des_time_add32",
+   "target": "wasm32-freestanding",
+   "theorem": "WasmCorrespondence.V0_17_1.Proofs.des_time_add32_wasm32",
+   "file": "tests/roadmap/wasm-correspondence/WasmCorrespondence/V0_17_1/Proofs.lean"
+  },
+  {
+   "kernel": "des_time_add32",
+   "target": "wasm32-wasi",
+   "theorem": "WasmCorrespondence.V0_17_1.Proofs.des_time_add32_wasi",
+   "file": "tests/roadmap/wasm-correspondence/WasmCorrespondence/V0_17_1/Proofs.lean"
+  },
+  {
+   "kernel": "des_time_add64",
+   "target": "x86_64-linux",
+   "theorem": "WasmCorrespondence.V0_17_1.Proofs.des_time_add64_x64",
+   "file": "tests/roadmap/wasm-correspondence/WasmCorrespondence/V0_17_1/Proofs.lean"
+  },
+  {
+   "kernel": "des_time_add64",
+   "target": "aarch64-macos",
+   "theorem": "WasmCorrespondence.V0_17_1.Proofs.des_time_add64_a64",
+   "file": "tests/roadmap/wasm-correspondence/WasmCorrespondence/V0_17_1/Proofs.lean"
+  },
+  {
+   "kernel": "des_time_add64",
+   "target": "wasm32-freestanding",
+   "theorem": "WasmCorrespondence.V0_17_1.Proofs.des_time_add64_wasm32",
+   "file": "tests/roadmap/wasm-correspondence/WasmCorrespondence/V0_17_1/Proofs.lean"
+  },
+  {
+   "kernel": "des_time_add64",
+   "target": "wasm32-wasi",
+   "theorem": "WasmCorrespondence.V0_17_1.Proofs.des_time_add64_wasi",
+   "file": "tests/roadmap/wasm-correspondence/WasmCorrespondence/V0_17_1/Proofs.lean"
+  },
+  {
+   "kernel": "des_event_before",
+   "target": "x86_64-linux",
+   "theorem": "WasmCorrespondence.V0_17_1.Proofs.des_event_before_x64",
+   "file": "tests/roadmap/wasm-correspondence/WasmCorrespondence/V0_17_1/Proofs.lean"
+  },
+  {
+   "kernel": "des_event_before",
+   "target": "aarch64-macos",
+   "theorem": "WasmCorrespondence.V0_17_1.Proofs.des_event_before_a64",
+   "file": "tests/roadmap/wasm-correspondence/WasmCorrespondence/V0_17_1/Proofs.lean"
+  },
+  {
+   "kernel": "des_event_before",
+   "target": "wasm32-freestanding",
+   "theorem": "WasmCorrespondence.V0_17_1.Proofs.des_event_before_wasm32",
+   "file": "tests/roadmap/wasm-correspondence/WasmCorrespondence/V0_17_1/Proofs.lean"
+  },
+  {
+   "kernel": "des_event_before",
+   "target": "wasm32-wasi",
+   "theorem": "WasmCorrespondence.V0_17_1.Proofs.des_event_before_wasi",
+   "file": "tests/roadmap/wasm-correspondence/WasmCorrespondence/V0_17_1/Proofs.lean"
+  },
+  {
+   "kernel": "usize_bits",
+   "target": "x86_64-linux",
+   "theorem": "WasmCorrespondence.V0_17_1.Proofs.usize_bits_x64",
+   "file": "tests/roadmap/wasm-correspondence/WasmCorrespondence/V0_17_1/Proofs.lean"
+  },
+  {
+   "kernel": "usize_bits",
+   "target": "aarch64-macos",
+   "theorem": "WasmCorrespondence.V0_17_1.Proofs.usize_bits_a64",
+   "file": "tests/roadmap/wasm-correspondence/WasmCorrespondence/V0_17_1/Proofs.lean"
+  },
+  {
+   "kernel": "usize_bits",
+   "target": "wasm32-freestanding",
+   "theorem": "WasmCorrespondence.V0_17_1.Proofs.usize_bits_wasm32",
+   "file": "tests/roadmap/wasm-correspondence/WasmCorrespondence/V0_17_1/Proofs.lean"
+  },
+  {
+   "kernel": "usize_bits",
+   "target": "wasm32-wasi",
+   "theorem": "WasmCorrespondence.V0_17_1.Proofs.usize_bits_wasi",
+   "file": "tests/roadmap/wasm-correspondence/WasmCorrespondence/V0_17_1/Proofs.lean"
   }
  ]
 }

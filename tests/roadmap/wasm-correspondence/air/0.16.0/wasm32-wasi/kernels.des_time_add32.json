@@ -1,0 +1,281 @@
+{
+ "schema": 12,
+ "zig_version": "0.16.0",
+ "target_endian": "little",
+ "unchecked_ib": [
+  "for_len"
+ ],
+ "profile": {
+  "name": "abi64-le-v1",
+  "target_triple": "wasm32-wasi.0.1...0.3-musl",
+  "pointer_bits": 32,
+  "endian": "little",
+  "abi": "musl",
+  "zig_version": "0.16.0",
+  "backend": "stage2_llvm",
+  "cpu": "lime1",
+  "features": [
+   "bulk_memory_opt",
+   "call_indirect_overlong",
+   "extended_const",
+   "multivalue",
+   "mutable_globals",
+   "nontrapping_fptoint",
+   "sign_ext"
+  ],
+  "build_mode": "ReleaseSafe",
+  "float_mode": "per-instruction",
+  "error_set_bits": 16,
+  "error_layout": "type-table",
+  "error_tracing": false,
+  "export_stage": "analyzed-air"
+ },
+ "name": "kernels.des_time_add32",
+ "module": "root",
+ "src": {
+  "file": "kernels.zig",
+  "module": "root",
+  "decl_line": 24
+ },
+ "params": [
+  0,
+  0
+ ],
+ "noalias": [],
+ "ret": 0,
+ "export": {
+  "name": "des_time_add32",
+  "cc": "wasm_mvp"
+ },
+ "body": [
+  {
+   "id": 0,
+   "tag": "arg",
+   "ty": 0,
+   "param": 0
+  },
+  {
+   "id": 1,
+   "tag": "arg",
+   "ty": 0,
+   "param": 1
+  },
+  {
+   "id": 2,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 3,
+   "tag": "block",
+   "ty": 0,
+   "body": [
+    {
+     "id": 4,
+     "tag": "dbg_stmt",
+     "ty": 1,
+     "line": 2,
+     "column": 29
+    },
+    {
+     "id": 5,
+     "tag": "trunc",
+     "ty": 2,
+     "args": [
+      {
+       "inst": 0
+      }
+     ]
+    },
+    {
+     "id": 7,
+     "tag": "dbg_stmt",
+     "ty": 1,
+     "line": 2,
+     "column": 46
+    },
+    {
+     "id": 8,
+     "tag": "trunc",
+     "ty": 2,
+     "args": [
+      {
+       "inst": 1
+      }
+     ]
+    },
+    {
+     "id": 10,
+     "tag": "dbg_stmt",
+     "ty": 1,
+     "line": 2,
+     "column": 23
+    },
+    {
+     "id": 11,
+     "tag": "call",
+     "ty": 3,
+     "callee": {
+      "ty": 4,
+      "func": "kernels.addDuration__anon_7808",
+      "module": "root",
+      "instance_key": "59ee9d3fd6312bf8ebdaac8c545258658517bcac53d858c5919b13a676ba9253",
+      "noreturn": false
+     },
+     "args": [
+      {
+       "inst": 5
+      },
+      {
+       "inst": 8
+      }
+     ]
+    },
+    {
+     "id": 12,
+     "tag": "is_non_err",
+     "ty": 5,
+     "args": [
+      {
+       "inst": 11
+      }
+     ]
+    },
+    {
+     "id": 18,
+     "tag": "cond_br",
+     "ty": 6,
+     "args": [
+      {
+       "inst": 12
+      }
+     ],
+     "then": [
+      {
+       "id": 13,
+       "tag": "unwrap_errunion_payload",
+       "ty": 2,
+       "args": [
+        {
+         "inst": 11
+        }
+       ]
+      },
+      {
+       "id": 14,
+       "tag": "intcast",
+       "ty": 0,
+       "args": [
+        {
+         "inst": 13
+        }
+       ]
+      },
+      {
+       "id": 15,
+       "tag": "br",
+       "ty": 6,
+       "target": 3,
+       "args": [
+        {
+         "inst": 14
+        }
+       ]
+      }
+     ],
+     "else": [
+      {
+       "id": 16,
+       "tag": "unwrap_errunion_err",
+       "ty": 7,
+       "args": [
+        {
+         "inst": 11
+        }
+       ]
+      },
+      {
+       "id": 17,
+       "tag": "br",
+       "ty": 6,
+       "target": 3,
+       "args": [
+        {
+         "ty": 0,
+         "val": "18446744073709551615"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": 19,
+   "tag": "dbg_stmt",
+   "ty": 1,
+   "line": 2,
+   "column": 5
+  },
+  {
+   "id": 20,
+   "tag": "ret_safe",
+   "ty": 6,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
+  }
+ ],
+ "types": [
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "int",
+   "signed": false,
+   "bits": 32,
+   "abi_size": 4,
+   "abi_align": 4
+  },
+  {
+   "k": "error_union",
+   "error": 7,
+   "payload": 2,
+   "abi_size": 8,
+   "abi_align": 4
+  },
+  {
+   "k": "other",
+   "name": "fn (u32, u32) error{TimeOverflow}!u32"
+  },
+  {
+   "k": "bool",
+   "abi_size": 1,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
+  },
+  {
+   "k": "error_set",
+   "errors": [
+    "TimeOverflow"
+   ],
+   "abi_size": 2,
+   "abi_align": 2
+  }
+ ]
+}

@@ -1,0 +1,172 @@
+{
+ "schema": 12,
+ "zig_version": "0.17.1",
+ "exports": [
+  {
+   "name": "f64_to_i64",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "kernels.f64_to_i64",
+    "cc": "aarch64_aapcs_darwin"
+   }
+  },
+  {
+   "name": "f64_sin",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "kernels.f64_sin",
+    "cc": "aarch64_aapcs_darwin"
+   }
+  },
+  {
+   "name": "_mh_execute_header",
+   "linkage": "weak",
+   "visibility": "default",
+   "function": null
+  },
+  {
+   "name": "f32_fma",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "kernels.f32_fma",
+    "cc": "aarch64_aapcs_darwin"
+   }
+  },
+  {
+   "name": "f64_sqrt",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "kernels.f64_sqrt",
+    "cc": "aarch64_aapcs_darwin"
+   }
+  },
+  {
+   "name": "f64_arith",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "kernels.f64_arith",
+    "cc": "aarch64_aapcs_darwin"
+   }
+  },
+  {
+   "name": "pw_succ",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "kernels.pw_succ",
+    "cc": "aarch64_aapcs_darwin"
+   }
+  },
+  {
+   "name": "pw_byte_count",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "kernels.pw_byte_count",
+    "cc": "aarch64_aapcs_darwin"
+   }
+  },
+  {
+   "name": "usize_bits",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "kernels.usize_bits",
+    "cc": "aarch64_aapcs_darwin"
+   }
+  },
+  {
+   "name": "int_shl_exact",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "kernels.int_shl_exact",
+    "cc": "aarch64_aapcs_darwin"
+   }
+  },
+  {
+   "name": "int_add_checked",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "kernels.int_add_checked",
+    "cc": "aarch64_aapcs_darwin"
+   }
+  },
+  {
+   "name": "int_divmod",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "kernels.int_divmod",
+    "cc": "aarch64_aapcs_darwin"
+   }
+  },
+  {
+   "name": "int_mix",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "kernels.int_mix",
+    "cc": "aarch64_aapcs_darwin"
+   }
+  },
+  {
+   "name": "des_queue_drain",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "kernels.des_queue_drain",
+    "cc": "aarch64_aapcs_darwin"
+   }
+  },
+  {
+   "name": "des_event_before",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "kernels.des_event_before",
+    "cc": "aarch64_aapcs_darwin"
+   }
+  },
+  {
+   "name": "des_time_add64",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "kernels.des_time_add64",
+    "cc": "aarch64_aapcs_darwin"
+   }
+  },
+  {
+   "name": "des_time_add32",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "kernels.des_time_add32",
+    "cc": "aarch64_aapcs_darwin"
+   }
+  }
+ ]
+}

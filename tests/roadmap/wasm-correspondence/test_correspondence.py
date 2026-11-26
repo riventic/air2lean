@@ -10,6 +10,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.dont_write_bytecode = True
@@ -43,6 +44,53 @@ class Relation(unittest.TestCase):
         self.assertTrue(all(counts['exact'] and counts['tolerated'] and counts['target-specific']
                             for counts in summary.values()))
         self.assertIn('0.17.1 x86_64-linux/wasm32-freestanding', summary)
+        # Every native record is related to each wasm32 record of its version.
+        self.assertEqual(len(summary), sum(len([t for t in targets if not wc.is_wasm(t)]) *
+                                           len([t for t in targets if wc.is_wasm(t)])
+                                           for targets in self.relation['matrix'].values()))
+        self.assertIn('0.14.1 x86_64-linux/wasm32-wasi', summary)
+
+    def test_wasi_observation_is_checked(self):
+        self.edit('0.16.0', 'wasm32-wasi', lambda d: d['results']['des_time_add32'].__setitem__(0, 'trap'))
+        errors = self.check()
+        self.assertTrue(errors)
+        self.assertTrue(all(e.startswith('0.16.0 ') and '/wasm32-wasi des_time_add32' in e for e in errors), errors)
+
+    def test_wasi_needs_its_pinned_runtime(self):
+        relation = copy.deepcopy(self.relation)
+        del relation['targets']['wasm32-wasi']['runtime']
+        self.assertTrue(any('needs a pinned runtime' in e for e in self.check(relation)))
+        relation['targets']['wasm32-wasi']['runtime'] = {'node': 'latest'}
+        self.assertTrue(any('runtime pins one Node release' in e for e in self.check(relation)))
+        # `record` observes the target under the pinned release only (no compiler runs here).
+        with mock.patch.object(wc, 'zig_version', lambda zig: '0.17.1'), \
+                mock.patch.object(wc, 'node_version', lambda: '0.0.1'), \
+                self.assertRaisesRegex(ValueError, 'the pinned runtime'):
+            wc.record('zig', 'wasm32-wasi', self.relation)
+
+    def test_exported_and_observed_module_graphs_agree(self):
+        """The AIR exports (exports.json) and the observed builds (relation.json) compile the
+        same source with the same named modules."""
+        exports = json.loads((wc.CASE_DIR / 'exports.json').read_text())['exports']
+        observed = (ROOT / self.relation['source'],
+                    {name: (ROOT / path).resolve() for name, path in self.relation['modules'].items()})
+        for entry in exports:
+            self.assertEqual(((wc.CASE_DIR / entry['source']), {name: (wc.CASE_DIR / path).resolve()
+                                                               for name, path in entry['modules'].items()}),
+                             observed)
+
+    def test_wasm32_theorem_is_not_a_wasi_claim(self):
+        relation = copy.deepcopy(self.relation)
+        claim = next(c for c in relation['claims'] if c['theorem'].endswith('des_time_add64_wasi'))
+        claim['theorem'] = claim['theorem'].replace('_wasi', '_wasm32')
+        errors = self.check(relation)
+        self.assertTrue(any('never relabeled' in e and 'wasm32-freestanding' in e for e in errors), errors)
+
+    def test_every_contract_kernel_is_claimed_on_every_target(self):
+        claimed = {(c['kernel'], c['target']) for c in self.relation['claims']}
+        for kernel in ('des_time_add32', 'des_time_add64', 'des_event_before', 'usize_bits'):
+            for target in self.relation['targets']:
+                self.assertIn((kernel, target), claimed)
 
     def test_unclassified_export_fails(self):
         relation = copy.deepcopy(self.relation)
