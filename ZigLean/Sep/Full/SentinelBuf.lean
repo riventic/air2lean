@@ -28,9 +28,13 @@ statement would be the identity. An instance proves `made` and the fee directly.
 A sentinel copy (`dupeSentinel`, `dupeZ` before Zig 0.17) returns the source's bytes followed by
 the sentinel: `copy_grant`, from the walk's shape (`copy_bytes`).
 
+`remap` and the in-place `resize` of a sentinel slice have the statements `moved` and `fitted`
+and the generic theorems `move_grant` and `fit_grant`, from the shapes `movedAt` and `fittedAt`.
+
 Instances: `tests/roadmap/interfaces/Interfaces/SentinelSpec.lean` (`u8`: `sz = 1`, `k = 0`),
-`WideSpec.lean` (`u16`, `u32`, `u64`) and `KindsSpec.lean` (a non-zero sentinel, an optional
-pointer item, a float item, an over-aligned slice, and the copy).
+`WideSpec.lean` (`u16`, `u32`, `u64`), `KindsSpec.lean` (a non-zero sentinel, an optional
+pointer item, a float item, an over-aligned slice, and the copy) and `GrowSpec.lean` (`realloc`,
+`remap` and `resize` of the sentinel slice itself, `u8` and `u32`).
 -/
 
 namespace Zig.Full.SentinelBuf
@@ -152,7 +156,7 @@ variable {I φ} {Tgt : Type} {x : ConcM Tgt (Except ErrName Slice)} {P F : FAssn
   {z c bs : Array Byte} {old : Ptr}
 
 /-- A consequence in the result assertion of a client's postcondition. -/
-private theorem post_result {A B : Except ErrName Slice → FAssn}
+private theorem post_result {α : Type} {x : ConcM Tgt α} {A B : α → FAssn}
     (h : CTriple P x (fun r => I.own ⋆ (A r ⋆ F) ⋆ plain)) (hab : ∀ r res, A r res → B r res) :
     CTriple P x (fun r => I.own ⋆ (B r ⋆ F) ⋆ plain) :=
   h.post fun r _ => sep_mono_right fun _ => sep_mono_left fun _ => sep_mono_left (hab r)
@@ -184,6 +188,79 @@ theorem resize_grant {n : BitVec 64} (hz : z.size = sz) (hlen : (len + 1) * sz =
     | ok r =>
       refine sep_mono_right (fun _ => sep_mono_left ?_) hr
       rintro _ ⟨g, o, hg⟩
+      obtain ⟨⟨hs, hk, rfl⟩, hg⟩ := sep_lift.mp hg
+      exact ⟨_, sep_lift.mpr ⟨Resized.of_write hz hlen hs hk, hg⟩⟩
+
+/-! ## `remap` and the in-place `resize` of the sentinel slice
+
+A client that calls `remap` or `resize` with the sentinel slice itself (std counts the sentinel
+item: `mem.absorbSentinel`, Zig 0.17) and stores the sentinel at the new length. No second fee:
+neither entry makes a fresh grant beside the old one. -/
+
+variable (I φ)
+
+/-- What `remap` of a buffer of `len` items (the grant `bs` at `old`) to `n` items returns: the
+grant of `n` items and the sentinel, in place or moved, or `null` and the old grant unchanged. -/
+def moved (k sz : Nat) (z : Array Byte) (old : Ptr) (bs : Array Byte) (len : Nat) (n : BitVec 64) :
+    Option Slice → FAssn
+  | some r => ⟪r.len = n⟫ ⋆ FAssn.ex fun bs' => ⟪Resized sz z bs bs' len n.toNat⟫ ⋆
+      I.granted r.ptr k φ bs'
+  | none => I.granted old k φ bs
+
+/-- What the in-place `resize` of a buffer of `len` items (the grant `bs` at `old`) to `n` items
+returns: `true` and the grant of `n` items and the sentinel at the same pointer, or `false` and
+the old grant unchanged. -/
+def fitted (k sz : Nat) (z : Array Byte) (old : Ptr) (bs : Array Byte) (len n : Nat) :
+    Bool → FAssn
+  | true => FAssn.ex fun bs' => ⟪Resized sz z bs bs' len n⟫ ⋆ I.granted old k φ bs'
+  | false => I.granted old k φ bs
+
+/-- The shape of `remap`: the grant remapped to `n + 1` items (`g`, which keeps the common
+prefix), then the sentinel `z` stored at byte `o = n * sz`; or `null`, the old grant unchanged. -/
+def movedAt (k sz : Nat) (z : Array Byte) (old : Ptr) (bs : Array Byte) (n : BitVec 64) :
+    Option Slice → FAssn
+  | some r => ⟪r.len = n⟫ ⋆ FAssn.ex fun g => FAssn.ex fun o =>
+      ⟪g.size = (n.toNat + 1) * sz ∧ keepsPrefix bs g ∧ o = n.toNat * sz⟫ ⋆
+        I.granted r.ptr k φ (writeBytes g o z)
+  | none => I.granted old k φ bs
+
+/-- The shape of the in-place `resize`: the grant resized to `n + 1` items (`g`), then the
+sentinel `z` stored at byte `o = n * sz`; or `false`, the old grant unchanged. -/
+def fittedAt (k sz : Nat) (z : Array Byte) (old : Ptr) (bs : Array Byte) (n : Nat) : Bool → FAssn
+  | true => FAssn.ex fun g => FAssn.ex fun o =>
+      ⟪g.size = (n + 1) * sz ∧ keepsPrefix bs g ∧ o = n * sz⟫ ⋆ I.granted old k φ (writeBytes g o z)
+  | false => I.granted old k φ bs
+
+variable {I φ}
+
+/-- **`remap` of a sentinel slice, for every item kind**: code of the shape `movedAt` returns `n`
+items, the old items below `min n (len + 1)` kept, the sentinel at item `n`; or `null` and the
+old buffer. -/
+theorem move_grant {x : ConcM Tgt (Option Slice)} {n : BitVec 64} (hz : z.size = sz)
+    (hlen : (len + 1) * sz = bs.size)
+    (h : CTriple P x (fun r => I.own ⋆ (movedAt I φ k sz z old bs n r ⋆ F) ⋆ plain)) :
+    CTriple P x (fun r => I.own ⋆ (moved I φ k sz z old bs len n r ⋆ F) ⋆ plain) :=
+  post_result h fun r _ hr => by
+    cases r with
+    | none => exact hr
+    | some r =>
+      refine sep_mono_right (fun _ => ?_) hr
+      rintro ⟨g, o, hg⟩
+      obtain ⟨⟨hs, hk, rfl⟩, hg⟩ := sep_lift.mp hg
+      exact ⟨_, sep_lift.mpr ⟨Resized.of_write hz hlen hs hk, hg⟩⟩
+
+/-- **The in-place `resize` of a sentinel slice, for every item kind**: code of the shape
+`fittedAt` returns `true` with `n` items at the same pointer, the old items below
+`min n (len + 1)` kept and the sentinel at item `n`; or `false` and the old buffer. -/
+theorem fit_grant {x : ConcM Tgt Bool} {n : Nat} (hz : z.size = sz)
+    (hlen : (len + 1) * sz = bs.size)
+    (h : CTriple P x (fun r => I.own ⋆ (fittedAt I φ k sz z old bs n r ⋆ F) ⋆ plain)) :
+    CTriple P x (fun r => I.own ⋆ (fitted I φ k sz z old bs len n r ⋆ F) ⋆ plain) :=
+  post_result h fun r _ hr => by
+    cases r with
+    | false => exact hr
+    | true =>
+      obtain ⟨g, o, hg⟩ := hr
       obtain ⟨⟨hs, hk, rfl⟩, hg⟩ := sep_lift.mp hg
       exact ⟨_, sep_lift.mpr ⟨Resized.of_write hz hlen hs hk, hg⟩⟩
 
