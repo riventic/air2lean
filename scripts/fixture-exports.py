@@ -7,6 +7,10 @@ A fixture whose AIR is a patched-compiler export declares how it is made in
 
   exports.json       {"exports": [{"out": "air/{version}", "source": "x.zig", "filter": "x.",
                                    "versions": ["0.16.0", ...], "args": ["-OReleaseSafe", ...],
+                                   (`filter` may be omitted when SOURCE is an example,
+                                   `examples/x/x.zig`: the filter is then the example's, as
+                                   scripts/check.sh builds it for each version: `x.` and the lines
+                                   of examples/x/filter and examples/x/filter-VERSION)
                                    "cwd": "fixture" | "repo", "command": "build-obj" | "build-exe",
                                    "closure": ["x.*"], "stop": ["os.linux.read"]}]}
                      Each entry is one `zig COMMAND -fno-emit-bin ARGS SOURCE` per version with
@@ -63,8 +67,8 @@ import cas  # noqa: E402
 
 MANIFEST, LOCK = 'exports.json', 'exports.lock.json'
 SCHEMA = 1
-ENTRY_KEYS = {'out', 'source', 'filter', 'versions', 'args'}
-OPTIONAL_KEYS = {'cwd', 'command', 'closure', 'stop'}
+ENTRY_KEYS = {'out', 'source', 'versions', 'args'}
+OPTIONAL_KEYS = {'filter', 'cwd', 'command', 'closure', 'stop'}
 # The exporter's `build_mode` for `-O<mode>` (0.17's `std.lang.Optimize` tags, Dialect.lean
 # buildModeRenames, or the 0.16.0 spelling).
 BUILD_MODES = {'Debug': {'Debug', 'debug'}, 'ReleaseSafe': {'ReleaseSafe', 'safe'},
@@ -95,6 +99,31 @@ def fixtures(names):
     if missing:
         raise Error('no %s in tests/roadmap/%s' % (MANIFEST, ', tests/roadmap/'.join(missing)))
     return names
+
+
+def example_of(fixture, entry):
+    """The example `examples/<x>/<x>.zig` that the entry's source is, else None."""
+    source = (FIXTURES / fixture / entry['source']).resolve()
+    example = source.stem
+    return example if source == (ROOT / 'examples' / example / (example + '.zig')).resolve() else None
+
+
+def entry_filter(fixture, entry, version):
+    """ZIG_AIR_JSON_FILTER of one export: the entry's `filter`, else the example's, as
+    scripts/check.sh builds it (`<x>.`, then the lines of examples/<x>/filter and of
+    examples/<x>/filter-<version>), so an example's filter files are the one declaration."""
+    return entry['filter'] if 'filter' in entry else example_filter(example_of(fixture, entry), version)
+
+
+def example_filter(example, version):
+    """The one implementation of the example filter rule that scripts/check.sh states in shell
+    (scripts/stage2-translations.py calls this)."""
+    out = [example + '.']
+    for name in ('filter', 'filter-' + version):
+        path = ROOT / 'examples' / example / name
+        if path.is_file():
+            out += [line.strip() for line in path.read_text().splitlines() if line.strip()]
+    return ','.join(out)
 
 
 def manifest(fixture):
@@ -128,6 +157,8 @@ def manifest(fixture):
         source = (FIXTURES / fixture / entry['source']).resolve()
         if not source.is_file() or FIXTURES.resolve().parents[1] not in source.parents:  # the repository
             raise Error('%s: no source %s in the repository' % (where, entry['source']))
+        if 'filter' not in entry and example_of(fixture, entry) is None:
+            raise Error('%s: without a filter the source must be examples/<x>/<x>.zig' % where)
         if not all(isinstance(a, str) for a in entry['args']) or '-fno-emit-bin' in entry['args']:
             raise Error('%s: args are strings (build-obj -fno-emit-bin is implied)' % where)
         outs += [entry['out'].format(version=v) for v in entry['versions']]
@@ -299,7 +330,8 @@ def run_exports(fixture, data, scratch, only=()):
         target.mkdir(parents=True)
         cwd = here if entry.get('cwd', 'fixture') == 'fixture' else ROOT
         source = os.path.relpath(here / entry['source'], cwd)
-        env = dict(os.environ, ZIG_AIR_JSON_DIR=str(target), ZIG_AIR_JSON_FILTER=entry['filter'])
+        filter_ = entry_filter(fixture, entry, version)
+        env = dict(os.environ, ZIG_AIR_JSON_DIR=str(target), ZIG_AIR_JSON_FILTER=filter_)
         if platform.system() == 'Darwin' and version in cas.DARWIN_NO_XCRUN:
             env['PATH'] = str(shim) + os.pathsep + env.get('PATH', '')  # zig-patch/README.md
         command = ([str(compilers[version]), entry.get('command', 'build-obj'), '-fno-emit-bin']
@@ -311,7 +343,7 @@ def run_exports(fixture, data, scratch, only=()):
         if 'closure' in entry:
             keep_closure(target, entry['closure'], entry.get('stop', ()))
         if not any(target.glob('*.json')):
-            raise Error('%s %s: the export wrote no file (filter %r)' % (fixture, out, entry['filter']))
+            raise Error('%s %s: the export wrote no file (filter %r)' % (fixture, out, filter_))
     return {out: digests(scratch / out) for _, version, out in jobs(fixture, data) if not only or version in only}
 
 

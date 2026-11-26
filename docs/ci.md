@@ -948,6 +948,18 @@ the imports of one check's Lean files (what the `check.sh` scripts run first).
 `scripts/worktree-init.sh` and `scripts/preflight.sh` (unless `--no-translator`) run the full
 build; run it after every merge of `main` and before any check that elaborates Lean files.
 
+### Runtime root
+
+`assurance/runtime-root.json` declares the Lean runtime root, the one module that generated code
+and executables import (`import ZigLean`), and the theory floor: the modules that carry the proofs
+about the runtime's own definitions (`ZigLean.Mem.Lemmas`, `ZigLean.Conc.Lemmas`). A module is
+proof-only when its import closure contains a floor module. `scripts/lean-deps.py --runtime-root
+check` (preflight) fails, with the import chain, when the root's closure reaches one. This is what
+lets `scripts/mutate.sh` run its differential windows on the root as committed: Lean-runtime
+mutants (f, k, n) correctly break those lemmas, so a proof-only module reachable from the root
+would stop `scripts/diff.sh` before its `TOTAL` line. A proof imports the proof-only module it
+needs (`import ZigLean.Conc.WeakCas`); the root does not.
+
 ### Current declarations
 
 - Narrowed to top-level directories (from the syscall traces of run 38187552806 under the
