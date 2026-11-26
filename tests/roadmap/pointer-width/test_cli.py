@@ -135,7 +135,8 @@ def main():
                          "def longlongSucc (p0 : BitVec 64) : Zig.Result (BitVec 64)",
                          "  ll : BitVec 64\n",
                          f"  size := {24 if wasm else 32}\n  align := 8\n",
-                         f"  v : Zig.{'F128' if wasm else 'F80'}\n"):
+                         f"  v : Zig.{'F128' if wasm else 'F80'}\n",
+                         "Zig.Enc.fields 32 [(0, Zig.Enc.encode v.tag), (16, Zig.Enc.encode v.v)]"):
                 assert term in text, (version, target, term)
             checks += 1
 

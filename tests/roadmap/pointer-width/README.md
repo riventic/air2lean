@@ -52,8 +52,10 @@ needs no C-specific rule. `PointerWidth/CInts/V0_17_1/Proofs.lean` proves, for a
 each of the three translations, every operation equal to one width-generic specification
 (`ZigLean/Mem/WidthLemmas.lean` §Integer widths) at its target's width, with concrete boundary
 cases where the profiles differ (`c_long`'s maximum overflows on wasm32 only), and the stored
-layouts through the field reads; `V0_16_0/Proofs.lean` is its 0.16.0 instance
-(`scripts/fixtures.py instance`).
+layouts of the integer structs through the field reads; `V0_16_0/Proofs.lean` is its 0.16.0
+instance (`scripts/fixtures.py instance`). The `long double` functions are translated and their
+types and layout checked by `test_cli.py` only: `assurance/float-semantics.json` has no wasm32
+target to label a float theorem with.
 
 `test_cli.py` checks the translations' runtime names, that an exported pointer layout of
 the other width is rejected (the model's sizes come from the profile), that

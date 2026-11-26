@@ -45,7 +45,7 @@ theorem add_one_signed_eq {w : Nat} (hw : 2 ≤ w) (n : BitVec w) :
   have hp := two_pow_pred (w := w) (by omega)
   unfold succSigned add
   by_cases h : 2 ^ (w - 1) ≤ n.toInt + 1
-  · simp [BitVec.saddOverflow, h1, h]
+  · simp [BitVec.saddOverflow, Error.ifSafe, h1, h]
   · have : ¬ (n.toInt + 1 < -2 ^ (w - 1)) := by omega
     simp [BitVec.saddOverflow, h1, h, this]
 
@@ -54,7 +54,7 @@ theorem add_one_unsigned_eq {w : Nat} (hw : 1 ≤ w) (n : BitVec w) :
   have h1 : (1#w).toNat = 1 := by
     rw [BitVec.toNat_ofNat]; exact Nat.mod_eq_of_lt (Nat.one_lt_two_pow (by omega))
   unfold succUnsigned add
-  by_cases h : 2 ^ w ≤ n.toNat + 1 <;> simp [BitVec.uaddOverflow, h1, h]
+  by_cases h : 2 ^ w ≤ n.toNat + 1 <;> simp [BitVec.uaddOverflow, Error.ifSafe, h1, h]
 
 theorem sub_zero_signed_eq {w : Nat} (hw : 1 ≤ w) (n : BitVec w) :
     sub true 0 n = negSigned n := by
@@ -63,7 +63,7 @@ theorem sub_zero_signed_eq {w : Nat} (hw : 1 ≤ w) (n : BitVec w) :
   have hp := two_pow_pred (w := w) hw
   unfold negSigned sub
   by_cases h : n.toInt = -2 ^ (w - 1)
-  · simp [BitVec.ssubOverflow, h]
+  · simp [BitVec.ssubOverflow, Error.ifSafe, h]
   · have h2 : ¬ (2 ^ (w - 1) ≤ -n.toInt) := by omega
     have h3 : ¬ (-n.toInt < -2 ^ (w - 1)) := by omega
     simp [BitVec.ssubOverflow, h, h2, h3]

@@ -19,8 +19,9 @@ target's width: `c_char` 8 (signed on all three targets), `c_short` and
 `c_long`, `c_ulong` and `isize` 32 bits on wasm32 (ILP32) and 64 on x86_64 (LP64). The
 extern-struct layouts are checked through stored values: `{ int, long, short }` (12 or 24
 bytes), `{ char, long long, unsigned short, unsigned long }` (24 or 32 bytes; `long long` at
-offset 8 on both), `{ isize, usize }` (8 or 16) and `{ char, long double }` (32 bytes, the
-`f128` or `f80` at offset 16).
+offset 8 on both) and `{ isize, usize }` (8 or 16). `long double` (`f128` on wasm32, `f80` on
+x86_64) is translated (`ldAdd`, `ldV`) and its layout checked by `test_cli.py`; no theorem is
+stated about it here, as `assurance/float-semantics.json` labels no wasm32 float target.
 -/
 
 namespace PointerWidth.CInts.V0_16_0.Proofs
@@ -207,45 +208,33 @@ theorem longOfIsize_w32 (n : BitVec 32) : Wasm32.longOfIsize n = pure n := rfl
 theorem longOfIsize_wasi (n : BitVec 32) : Wasi.longOfIsize n = pure n := rfl
 theorem longOfIsize_x64 (n : BitVec 64) : X64.longOfIsize n = pure n := rfl
 
-/-- `long double` addition is the `f128` addition on wasm32 and the `f80` one on x86_64. -/
-theorem ldAdd_w32 (a b : F128) : Wasm32.ldAdd a b = pure (Zig.Float.add a b) := rfl
-theorem ldAdd_wasi (a b : F128) : Wasi.ldAdd a b = pure (Zig.Float.add a b) := rfl
-theorem ldAdd_x64 (a b : F80) : X64.ldAdd a b = pure (Zig.Float.add a b) := rfl
-
 /-! ## Extern-struct layouts in memory -/
 
 /-- A `long long` with distinct bytes: a field read at a wrong offset or width reads others. -/
 def ll0 : BitVec 64 := 0x0102030405060708
 
-/-- `0.5` as `f128` and as `f80` (explicit integer bit). -/
-def half128 : F128 := ⟨0x3ffe0000000000000000000000000000⟩
-def half80 : F80 := ⟨0x3ffe8000000000000000⟩
-
-/-- One block per struct: `Rec`, `Mixed`, `Sizes`, `Ld`. -/
+/-- One block per struct: `Rec`, `Mixed`, `Sizes`. -/
 def memW32 : Mem := Mem.ofGlobals .fresh [
   (Enc.encode ({ a := 1, b := 0xfffffffe, c := 0x8003 } : Wasm32.Rec), 4, .global),
   (Enc.encode ({ c := 0xff, ll := ll0, us := 0x1234, ul := 0xfffffffe } : Wasm32.Mixed), 8, .global),
-  (Enc.encode ({ i := 0xffffffff, u := 0xfffffffd } : Wasm32.Sizes), 4, .global),
-  (Enc.encode ({ tag := 1, v := half128 } : Wasm32.Ld), 16, .global)]
+  (Enc.encode ({ i := 0xffffffff, u := 0xfffffffd } : Wasm32.Sizes), 4, .global)]
 
 def memWasi : Mem := Mem.ofGlobals .fresh [
   (Enc.encode ({ a := 1, b := 0xfffffffe, c := 0x8003 } : Wasi.Rec), 4, .global),
   (Enc.encode ({ c := 0xff, ll := ll0, us := 0x1234, ul := 0xfffffffe } : Wasi.Mixed), 8, .global),
-  (Enc.encode ({ i := 0xffffffff, u := 0xfffffffd } : Wasi.Sizes), 4, .global),
-  (Enc.encode ({ tag := 1, v := half128 } : Wasi.Ld), 16, .global)]
+  (Enc.encode ({ i := 0xffffffff, u := 0xfffffffd } : Wasi.Sizes), 4, .global)]
 
 def memX64 : Mem := Mem.ofGlobals .fresh [
   (Enc.encode ({ a := 1, b := 0xfffffffffffffffe, c := 0x8003 } : X64.Rec), 8, .global),
   (Enc.encode ({ c := 0xff, ll := ll0, us := 0x1234, ul := 0xfffffffffffffffe } : X64.Mixed), 8,
     .global),
-  (Enc.encode ({ i := 0xffffffffffffffff, u := 0xfffffffffffffffd } : X64.Sizes), 8, .global),
-  (Enc.encode ({ tag := 1, v := half80 } : X64.Ld), 16, .global)]
+  (Enc.encode ({ i := 0xffffffffffffffff, u := 0xfffffffffffffffd } : X64.Sizes), 8, .global)]
 
-/-- The sizes: `Rec` 12/24, `Mixed` 24/32, `Sizes` 8/16, `Ld` 32/32 bytes. -/
+/-- The sizes: `Rec` 12/24, `Mixed` 24/32, `Sizes` 8/16 bytes. -/
 theorem layout_sizes :
-    memW32.blocks.toList.map (·.bytes.size) = [12, 24, 8, 32] ∧
-    memWasi.blocks.toList.map (·.bytes.size) = [12, 24, 8, 32] ∧
-    memX64.blocks.toList.map (·.bytes.size) = [24, 32, 16, 32] := by
+    memW32.blocks.toList.map (·.bytes.size) = [12, 24, 8] ∧
+    memWasi.blocks.toList.map (·.bytes.size) = [12, 24, 8] ∧
+    memX64.blocks.toList.map (·.bytes.size) = [24, 32, 16] := by
   decide +kernel
 
 /-- `long` at offset 4 (wasm32) or 8 (x86_64), the `short` after it at 8 or 16. -/
@@ -291,14 +280,6 @@ theorem sizesU_wasi : ((Wasi.sizesU ⟨some 2, 0⟩).run' memWasi).run = some (.
   decide +kernel
 theorem sizesU_x64 :
     ((X64.sizesU ⟨some 2, 0⟩).run' memX64).run = some (.ok 0xfffffffffffffffd) := by
-  decide +kernel
-
-/-- The `long double` at offset 16: `f128` on wasm32, `f80` on x86_64. -/
-theorem ldV_w32 : ((Wasm32.ldV ⟨some 3, 0⟩).run' memW32).run = some (.ok half128) := by
-  decide +kernel
-theorem ldV_wasi : ((Wasi.ldV ⟨some 3, 0⟩).run' memWasi).run = some (.ok half128) := by
-  decide +kernel
-theorem ldV_x64 : ((X64.ldV ⟨some 3, 0⟩).run' memX64).run = some (.ok half80) := by
   decide +kernel
 
 end PointerWidth.CInts.V0_16_0.Proofs
