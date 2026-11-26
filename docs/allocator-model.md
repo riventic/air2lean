@@ -110,7 +110,7 @@ Allocator milestone 1 proves the translated `FixedBufferAllocator` (`tests/roadm
 `FBA.fallocSpec`, and a client through the generated wrappers, `Client.client_spec`) and the
 translated `PageAllocator`
 (`tests/roadmap/alloc-translated`: `free`/`resize`/`remap` on x86_64-linux and aarch64-macos,
-`alloc` on x86_64-linux for every alignment, partial correctness) against the generic
+`alloc` on both targets for alignments up to a page, partial correctness) against the generic
 specification ([alloc-spec.md](alloc-spec.md), [alloc-page.md](alloc-page.md)), from their Zig
 code down to `posix.mmap`/`munmap`/`mremap` (OSM-01). The `std` mode still carries the
 hand-written models below except L1, which step 1 deleted. Each step removes one only after
