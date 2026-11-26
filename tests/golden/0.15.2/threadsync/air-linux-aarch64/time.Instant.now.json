@@ -319,7 +319,7 @@
   },
   {
    "k": "struct",
-   "name": "os.linux.timespec__struct_2708",
+   "name": "os.linux.timespec__struct_2734",
    "module": "std",
    "layout": "extern",
    "fields": [
@@ -346,7 +346,7 @@
   },
   {
    "k": "other",
-   "name": "fn (os.linux.clockid_t) error{Unexpected,UnsupportedClock}!os.linux.timespec__struct_2708"
+   "name": "fn (os.linux.clockid_t) error{Unexpected,UnsupportedClock}!os.linux.timespec__struct_2734"
   },
   {
    "k": "bool",

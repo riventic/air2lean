@@ -106,6 +106,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : P.init tgt g) (u : ThreadId)
     rintro _ G' m' _ ⟨-, hi'⟩
     exact qkid (FAssn.Unshared.plain rp hplain) hi'
   | producer p => exact absurd hg.1 (by simp [workOf])
+  | producerAll p => exact absurd hg.1 (by simp [workOf])
   | task p => exact absurd hg.1 (by simp [workOf])
 
 /-! ## `main` -/

@@ -78,7 +78,7 @@
  "types": [
   {
    "k": "enum",
-   "name": "os.linux.E__enum_1920",
+   "name": "os.linux.E__enum_1929",
    "module": "std",
    "tag": 4,
    "exhaustive": false,

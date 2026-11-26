@@ -82,6 +82,7 @@ def runner (ex name : String) (input : Json) (fuel : Nat) : IO Runner := do
     let main ← match name with
       | "mutexCounter" => pure Threadsync.mutexCounter
       | "handoff" => pure Threadsync.handoff
+      | "handoffAll" => pure Threadsync.handoffAll
       | "waitGroup" => pure Threadsync.waitGroup
       | _ => throw (IO.userError s!"unknown concurrent function {ex}.{name}")
     pure (runWith fuel Threadsync.dispatch (Threadsync.mem0 .fresh) main payload)
