@@ -146,6 +146,7 @@ knowledge after `free` (`known`, O1).
 | O1, O3 | resolved: the allocator state owns the hint word (`aptsE`) and knows its target's page-aligned address (`known`); one state for every page size | `PageTok.hown` (`PageAlloc.own`, `PageAllocMacos.own`) |
 | O4 | fixed in the memory model: an ambiguous `@ptrFromInt` gives a pointer without provenance | below |
 | `alloc` | proved for alignments up to a page (`ainv.fits`: `k ≤ 12` on x86_64-linux, `k ≤ 14` on aarch64-macos), partial correctness: `PageAlloc.fallocSpec` and `PageAllocMacos.fallocSpec` are the whole `FAllocSpec FLogic.partial`, each with its creation triple from the start memory's null hint word | `tests/roadmap/alloc-translated/PageAlloc.lean`, `PageAllocMacos.lean` |
+| thread triples | proved on both targets: the four entries as thread triples (`fthread_alloc` by `CTriple.toSoloThread`, the others by `fsym`'s thread backend) and `cAllocSpec : CAllocSpec (CVTable.ofRaw vt) c ainv`, the allocator as an environment of an open `std.mem.Allocator` ([interfaces.md](interfaces.md)), with its creation triple; the same alignments, partial correctness. The hint word is the allocator's only shared state, so OSM-01 is the only premise | `tests/roadmap/alloc-translated/PageThread.lean` (and `PageCreation.lean`), `PageThreadMacos.lean` |
 | `alloc`, total | open: no judgment of the framework states it | below |
 | O5 | fixed in the OS model (OSM-01): `mmap` fails with `ENOMEM` above `Os.Target.addrLimit`; the proof of `alloc` for alignments above a page is open | below |
 
