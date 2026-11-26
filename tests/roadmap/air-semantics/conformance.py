@@ -30,7 +30,7 @@ the run too (the classifier of `Conformance.lean` missed a reason).
 Nothing is skipped silently. Each function outside the coverage is counted under each of its
 reasons (an instruction kind without an arm, a value kind without a value, a call out of the
 program), and the table of reasons is printed: it is the work list of stages 4 to 6.
-`conformance/<V>.json` pins the functions that run; `--update` rewrites it. `--coverage-only`
+`conformance/<V>.txt` pins the functions that run; `--update` rewrites it. `--coverage-only`
 stops after that check and needs no native side.
 
 The whole corpus (the heavy run; under scripts/build-guard.py on a shared machine):
@@ -200,20 +200,22 @@ def print_coverage(records, excluded, log):
 def check_pin(version, run, update, log):
     """The functions that run are the pinned ones (the same on every host: `asm`, which only an
     x86_64 host selects, is outside the coverage)."""
-    path = HERE / 'conformance' / f'{version}.json'
-    current = {'zig_version': version, 'run': [f'{ex}.{fn}' for ex, fn in run]}
+    # One function per line. Not JSON: scripts/validate-air.py reads every committed `.json`
+    # below a directory named `air…` as AIR.
+    path = HERE / 'conformance' / f'{version}.txt'
+    current = [f'{ex}.{fn}' for ex, fn in run]
     if update:
         path.parent.mkdir(exist_ok=True)
-        path.write_text(json.dumps(current, indent=1) + '\n')
+        path.write_text(''.join(name + '\n' for name in current))
         return True
     if not path.is_file():
         print(f'conformance: no pinned coverage {path.relative_to(ROOT)} (--update writes it)', file=log)
         return False
-    pinned = json.loads(path.read_text())
+    pinned = path.read_text().split()
     if pinned == current:
         return True
-    gone = sorted(set(pinned['run']) - set(current['run']))
-    new = sorted(set(current['run']) - set(pinned['run']))
+    gone = sorted(set(pinned) - set(current))
+    new = sorted(set(current) - set(pinned))
     print(f'conformance: coverage differs from {path.relative_to(ROOT)}: no longer run {gone}, newly run {new} '
           '(--update after review)', file=log)
     return False

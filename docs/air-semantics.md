@@ -614,7 +614,7 @@ of a packed struct, a call out of the program). The decision does not follow pat
 `layout.ptrFromAddr` is outside for its `@ptrFromInt`, although every corpus input panics before
 it. Every function outside is counted under each of its reasons, and the table is printed; a
 function that passes the classifier and is stuck on an input fails the run (a reason is missing).
-The functions that run are pinned in `tests/roadmap/air-semantics/conformance/<V>.json`, so the
+The functions that run are pinned in `tests/roadmap/air-semantics/conformance/<V>.txt`, so the
 coverage changes only with a reviewed `--update`.
 
 State (aarch64-macos; the corpus has 181 functions in 17 examples at both versions; `asm` runs
