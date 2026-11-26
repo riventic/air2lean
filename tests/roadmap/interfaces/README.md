@@ -65,7 +65,7 @@ item last), and `append_grant` and `resize_grant` are proved once from the shape
 code (`appendedAt`, `resizedAt`: the reallocated grant with the item and the sentinel written at
 their byte offsets) and the size of its encoding. `SentinelSpec` is the instance `sz = 1`,
 `k = 0`; `WideSpec` has `u16`, `u32` and `u64`. An instance supplies the walk of its own copy of
-the generated code and nothing else.
+the generated code and the size of its encoding, nothing else.
 
 `check.sh` also runs the designated mutants of the translated allocator wrappers
 (`tests/roadmap/callbacks/mutants.py`, root `sentinel`): the unchanged `SentinelSpec` and

@@ -10,7 +10,7 @@ and `2 ^ k` the slice's alignment (`@alignOf(T)`, or more for an over-aligned sl
 states that once, for every item size `sz`, log2 alignment `k`, sentinel bytes `z` (the encoding
 of `s`) and allocator invariant `I`:
 
-* the bytes of a grown buffer: `Appended`, `Resized`;
+* the bytes of a reallocated buffer: `Appended`, `Resized`;
 * what the four operations of a client return, as plain assertions (`docs/interfaces.md`: a
   contract is a pre- and a postcondition, there is no judgment of its own): `made`, `appended`,
   `resized`; `release` gives the fee back;
@@ -64,18 +64,12 @@ theorem Appended.of_writes (hc : c.size = sz) (hz : z.size = sz) (hlen : (len + 
   have hw := writeBytes_size g (len * sz) c (by omega)
   have hw' := writeBytes_size (writeBytes g (len * sz) c) (len * sz + sz) z (by omega)
   refine ⟨by omega, ?_, ?_, ?_⟩
-  · have e := extract_writeBytes_disjoint (writeBytes g (len * sz) c) (len * sz + sz) z 0 (len * sz)
-      (by omega) (by omega) (by right; omega)
-    have e' := extract_writeBytes_disjoint g (len * sz) c 0 (len * sz) (by omega) (by omega)
-      (by right; omega)
-    rw [Nat.zero_add] at e e'
-    rw [e, e']
+  · rw [extract_writeBytes_other (by omega) (by omega) (by omega) (by right; omega),
+      extract_writeBytes_other (by omega) (by omega) (by omega) (by right; omega)]
     exact extract_of_keepsPrefix hk (by omega) (by omega)
-  · have e := extract_writeBytes_disjoint (writeBytes g (len * sz) c) (len * sz + sz) z (len * sz) sz
-      (by omega) (by omega) (by right; omega)
-    have e' := extract_writeBytes g (len * sz) c (by omega)
-    rw [e]
-    rwa [hc] at e'
+  · rw [extract_writeBytes_other (by omega) (by omega) (by omega) (by right; omega)]
+    have e := extract_writeBytes g (len * sz) c (by omega)
+    rwa [hc] at e
   · have e := extract_writeBytes (writeBytes g (len * sz) c) (len * sz + sz) z (by omega)
     rwa [hz] at e
 
@@ -91,10 +85,7 @@ theorem Resized.of_write (hz : z.size = sz) (hlen : (len + 1) * sz = bs.size)
   unfold Resized
   rw [e1] at hg ⊢
   refine ⟨by rw [writeBytes_size g (n * sz) z (by omega)]; exact hg, ?_, ?_⟩
-  · have e := extract_writeBytes_disjoint g (n * sz) z 0 (Min.min n (len + 1) * sz) (by omega)
-      (by omega) (by right; omega)
-    rw [Nat.zero_add] at e
-    rw [e]
+  · rw [extract_writeBytes_other (by omega) (by omega) (by omega) (by right; omega)]
     exact extract_of_keepsPrefix hk (by omega) (by omega)
   · have e := extract_writeBytes g (n * sz) z (by omega)
     rwa [hz] at e
@@ -126,7 +117,11 @@ def resized (k sz : Nat) (z : Array Byte) (old : Ptr) (bs : Array Byte) (len : N
       I.granted r.ptr k φ bs') ⋆ I.fee φ)
   | .error e => ⟪e = "OutOfMemory"⟫ ⋆ (I.granted old k φ bs ⋆ I.fee φ)
 
-/-! ## The shape of an instance's code, and the generic theorems -/
+/-! ## The shape of an instance's code, and the generic theorems
+
+The byte offsets of the stores are stated as values with their equations (`o₁ = len * sz`), not
+as terms of the bytes: a walk has them in its own normal form (`s.len.toNat * 2`), and proves
+the equations by arithmetic. -/
 
 /-- The shape of `append`: the absorbed buffer reallocated to `len + 2` items (`g`, which keeps
 the old bytes), then the item `c` stored at byte `o₁ = len * sz` and the sentinel `z` at byte
@@ -151,13 +146,19 @@ def resizedAt (k sz : Nat) (z : Array Byte) (old : Ptr) (bs : Array Byte) (n : B
 variable {I φ} {Tgt : Type} {x : ConcM Tgt (Except ErrName Slice)} {P F : FAssn} {k sz len : Nat}
   {z c bs : Array Byte} {old : Ptr}
 
+/-- A consequence in the result assertion of a client's postcondition. -/
+private theorem post_result {A B : Except ErrName Slice → FAssn}
+    (h : CTriple P x (fun r => I.own ⋆ (A r ⋆ F) ⋆ plain)) (hab : ∀ r res, A r res → B r res) :
+    CTriple P x (fun r => I.own ⋆ (B r ⋆ F) ⋆ plain) :=
+  h.post fun r _ => sep_mono_right fun _ => sep_mono_left fun _ => sep_mono_left (hab r)
+
 /-- **`append`, for every item kind**: code of the shape `appendedAt` for an item and a sentinel
 of `sz` bytes each returns one more item `c` with the sentinel after it, the old payload kept; or
 the old buffer. -/
 theorem append_grant (hc : c.size = sz) (hz : z.size = sz) (hlen : (len + 1) * sz = bs.size)
     (h : CTriple P x (fun r => I.own ⋆ (appendedAt I φ k sz z c old bs len r ⋆ F) ⋆ plain)) :
     CTriple P x (fun r => I.own ⋆ (appended I φ k sz z c old bs len r ⋆ F) ⋆ plain) :=
-  h.post fun r _ => sep_mono_right fun _ => sep_mono_left fun _ => sep_mono_left fun _ hr => by
+  post_result h fun r _ hr => by
     cases r with
     | error e => exact hr
     | ok r =>
@@ -172,7 +173,7 @@ old buffer. -/
 theorem resize_grant {n : BitVec 64} (hz : z.size = sz) (hlen : (len + 1) * sz = bs.size)
     (h : CTriple P x (fun r => I.own ⋆ (resizedAt I φ k sz z old bs n r ⋆ F) ⋆ plain)) :
     CTriple P x (fun r => I.own ⋆ (resized I φ k sz z old bs len n r ⋆ F) ⋆ plain) :=
-  h.post fun r _ => sep_mono_right fun _ => sep_mono_left fun _ => sep_mono_left fun _ hr => by
+  post_result h fun r _ hr => by
     cases r with
     | error e => exact hr
     | ok r =>
