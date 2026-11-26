@@ -208,7 +208,7 @@ theorem makeFlt_spec (n : BitVec 64) (hn : n.toNat + 1 < 2 ^ 64)
     CTriple (I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList) ⋆ plain) (Buf_f32_4_0_make ⟨ctx, vtp⟩ n)
       (fun r => I.own ⋆ (made I φ 2 4 (Enc.encode zeroF32) n r ⋆ vtR vtp fns.toList) ⋆
         plain) := by
-  fsym [CAllocSpec.alloc h, FTotalTriple.regionStoreEnc, FTotalTriple.regionLoadEnc]
+  fsym [CAllocSpec.alloc h]
 
 /-- **`append`** of an `f32` for every allocator. -/
 theorem appendFlt_grant (s : Slice) (c : Zig.F32) (bs : Array Byte)
@@ -220,8 +220,7 @@ theorem appendFlt_grant (s : Slice) (c : Zig.F32) (bs : Array Byte)
       (fun r => I.own ⋆ (appended I φ 2 4 (Enc.encode zeroF32) (Enc.encode c) s.ptr bs
         s.len.toNat r ⋆ vtR vtp fns.toList) ⋆ plain) :=
   append_grant (by fsym_arith) (by fsym_arith) hlen (by
-    fsym [reallocFlt_spec ctx vtp fns I e φ (h := h), FTotalTriple.regionStoreEnc,
-      FTotalTriple.regionLoadEnc])
+    fsym [reallocFlt_spec ctx vtp fns I e φ (h := h)])
 
 /-- **`resize`** of a `[:0]f32` for every allocator. -/
 theorem resizeFlt_grant (s : Slice) (n : BitVec 64) (bs : Array Byte)
@@ -232,8 +231,7 @@ theorem resizeFlt_grant (s : Slice) (n : BitVec 64) (bs : Array Byte)
       (fun r => I.own ⋆ (resized I φ 2 4 (Enc.encode zeroF32) s.ptr bs s.len.toNat n r ⋆
         vtR vtp fns.toList) ⋆ plain) :=
   resize_grant (by fsym_arith) hlen (by
-    fsym [reallocFlt_spec ctx vtp fns I e φ (h := h), FTotalTriple.regionStoreEnc,
-      FTotalTriple.regionLoadEnc])
+    fsym [reallocFlt_spec ctx vtp fns I e φ (h := h)])
 
 /-- **`release`** (`free` of a `[:0]f32`) for every allocator. -/
 theorem releaseFlt_spec (s : Slice) (bs : Array Byte) (hlen : (s.len.toNat + 1) * 4 = bs.size)

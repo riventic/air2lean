@@ -13,8 +13,9 @@ for every `Enc T` and ask for what one step needs, as facts about the one value:
   afterwards, whatever they are (as `Auto.Bytes.storeEnc_region` at a region's start);
 * a **load** of bytes a store wrote needs that this value reads back (`regionLoadEnc`).
 
-Both facts hold for every value of a `LawfulEnc` type, so the rules cover `Region.lean`'s. A proof
-whose items have no `LawfulEnc` instance names them: `fsym [regionStoreEnc, regionLoadEnc]`. For
+Both facts hold for every value of a `LawfulEnc` type, so the rules cover `Region.lean`'s. They
+are `@[fsym]` rules: for an item type without a `LawfulEnc` instance, `Region.lean`'s rules leave
+that instance open and `fsym` takes these (a proof imports this module, nothing else). For
 a float the two facts are `Float.size_encode` and the decidable read-back
 `Float.decidableReadsBack` (`ZigLean/ReprCast.lean`): a float constant's is its NaN check.
 
@@ -50,7 +51,7 @@ variable {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte}
 
 /-- **Store an item** `v` of any encoding at item `i` of a region (aligned to `al`): its bytes are
 `v`'s. `hsz` is the one fact about `v`'s encoding the step needs. -/
-theorem regionStoreEnc {T : Type} [Enc T] {i : BitVec 64} {al : Nat} (v : T)
+@[fsym] theorem regionStoreEnc {T : Type} [Enc T] {i : BitVec 64} {al : Nat} (v : T)
     (hsz : (Enc.encode v).size = Enc.size T) (hpos : 0 < Enc.size T)
     (ho : Enc.size T * i.toNat + Enc.size T ≤ bs.size) (hal : al ∣ a)
     (halo : al ∣ Enc.size T * i.toNat) :
@@ -62,7 +63,7 @@ theorem regionStoreEnc {T : Type} [Enc T] {i : BitVec 64} {al : Nat} (v : T)
 
 /-- **Load an item a store wrote** (at item `i`, byte `o`), for a value `v` that reads back from
 its bytes (`hdec`): its value. -/
-theorem regionLoadEnc {T : Type} [Enc T] {i : BitVec 64} {al o : Nat} {v : T}
+@[fsym] theorem regionLoadEnc {T : Type} [Enc T] {i : BitVec 64} {al o : Nat} {v : T}
     (hsz : (Enc.encode v).size = Enc.size T) (hdec : Enc.decode (Enc.encode v) = pure v)
     (hpos : 0 < Enc.size T) (ho : o + Enc.size T ≤ bs.size) (hoi : Enc.size T * i.toNat = o)
     (hal : al ∣ a) (halo : al ∣ o) :

@@ -66,7 +66,7 @@ standard axioms):
   `releaseOver_spec`: the sentinels `0xff`, `null` and `+0.0`, and the grant at alignment 16),
   and `copy_spec`: the copy's grant holds the source's bytes and the sentinel after them. Also
   checked over the 0.16.0, 0.15.2 and 0.14.1 translations. A float has no `LawfulEnc` instance
-  (a NaN's bytes are undefined), so its walk names the value-wise region rules of
+  (a NaN's bytes are undefined), so its walk takes the value-wise region rules of
   `ZigLean/Sep/Full/RegionEnc.lean`; the sentinel `+0.0` reads back because it is not a NaN.
 
 The sentinel statements are generic (`ZigLean/Sep/Full/SentinelBuf.lean`): `made`, `appended`
