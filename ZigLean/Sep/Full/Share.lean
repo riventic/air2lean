@@ -246,6 +246,7 @@ theorem Ghost.sharesOf_add (H : FHeap) (q₁ q₂ : Frac) :
     rcases H l with _ | c
     · exact SCell.add_zero _
     · exact SCell.of_add _ _ _
+  · exact (congrArg Ghost.dev (Ghost.add_unit Ghost.unit) :)
 
 /-- The unit ghost state cancels. -/
 theorem Ghost.unit_cancel (g₁ g₂ : Ghost) (h : Ghost.unit.add g₁ = Ghost.unit.add g₂) : g₁ = g₂ := by
@@ -257,11 +258,12 @@ theorem Ghost.sharesOf_cancel {H : FHeap} {q : Frac} {g₁ g₂ : Ghost}
   have hu : (Ghost.unit.add g₁).led = (Ghost.unit.add g₂).led ∧
       (Ghost.unit.add g₁).extent = (Ghost.unit.add g₂).extent ∧
       (Ghost.unit.add g₁).cl = (Ghost.unit.add g₂).cl ∧
-      (Ghost.unit.add g₁).ac = (Ghost.unit.add g₂).ac :=
+      (Ghost.unit.add g₁).ac = (Ghost.unit.add g₂).ac ∧
+      (Ghost.unit.add g₁).dev = (Ghost.unit.add g₂).dev :=
     ⟨(congrArg Ghost.led h :), (congrArg Ghost.extent h :), (congrArg Ghost.cl h :),
-      (congrArg Ghost.ac h :)⟩
+      (congrArg Ghost.ac h :), (congrArg Ghost.dev h :)⟩
   rw [Ghost.unit_add, Ghost.unit_add] at hu
-  obtain ⟨h1, h2, h3, h4⟩ := hu
+  obtain ⟨h1, h2, h3, h4, h5⟩ := hu
   ext1
   · exact h1
   · exact h2
@@ -272,6 +274,7 @@ theorem Ghost.sharesOf_cancel {H : FHeap} {q : Frac} {g₁ g₂ : Ghost}
     have hs := congrArg (fun g : Ghost => ((g.share l) c).val) h
     simp only [Ghost.add_share, SCell.add_val] at hs
     grind
+  · exact h5
 
 /-- **Split and join of one heap's share are equalities.** -/
 theorem sheap_add {H : FHeap} {q₁ q₂ : Frac} {r : Res} :
