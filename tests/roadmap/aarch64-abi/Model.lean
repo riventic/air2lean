@@ -373,13 +373,15 @@ whatever the row records (`CheckCtx.atomicChild`, "a float atomic is outside the
 Zig 0.17.1 an `@atomicStore` runs and leaves another value in the cell
 (`docs/upstream/f80-atomic-store.md`). -/
 def f80AtomicRow? : List String → Option String
-  | ["f80atomic", op, "zig", msg] => if f80AtomicOps.contains op then some s!"{op}: Sema rejects it ({msg})" else none
-  | ["f80atomic", op, "llvm", msg] => if f80AtomicOps.contains op then some s!"{op}: LLVM fails on it ({msg})" else none
-  | ["f80atomic", op, "runs", cell, result] =>
+  | "f80atomic" :: op :: outcome =>
     let flag (name s : String) := s == s!"{name}=model" || s == s!"{name}=other"
-    if f80AtomicOps.contains op && flag "cell" cell && flag "result" result then
-      some s!"{op}: runs, {cell} {result}"
-    else none
+    let what := match outcome with
+      | ["zig", msg] => some s!"Sema rejects it ({msg})"
+      | ["llvm", msg] => some s!"LLVM fails on it ({msg})"
+      | ["runs", cell, result] =>
+        if flag "cell" cell && flag "result" result then some s!"runs, {cell} {result}" else none
+      | _ => none
+    if f80AtomicOps.contains op then what.map (s!"{op}: " ++ ·) else none
   | _ => none
 
 def main (args : List String) : IO UInt32 := do
