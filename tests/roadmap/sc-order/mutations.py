@@ -13,10 +13,10 @@ its check of the native observations (`main`). This file covers those two:
   unmutated Sc.lean with the named message (an SC-forbidden outcome of an all-`seq_cst` test, an
   outcome outside the model, a missing test).
 * `MUTANTS`: one change of Sc.lean each, killed in the way its entry names:
-  - `guard`: elaboration fails, every error is at a `#guard`, and the ORD-03 guard is among them
+  - `GUARD`: elaboration fails, every error is at a `#guard`, and the ORD-03 guard is among them
     (the oracle no longer forbids the outcomes RC11 forbids);
-  - `observed`: the mutant elaborates and rejects a committed observation with the message;
-  - `accepts NAME`: the mutant elaborates and accepts the wrong observation NAME, which the
+  - `OBSERVED`: the mutant elaborates and rejects a committed observation as not SC;
+  - `(ACCEPTS, NAME)`: the mutant elaborates and accepts the wrong observation NAME, which the
     unmutated check rejects.
 A mutant that survives, or fails for another reason, aborts the run. Kills are reported to
 AIR2LEAN_MUTATION_KILL_LOG (scripts/mutation_kill_log.py).
@@ -28,7 +28,7 @@ sys.dont_write_bytecode = True
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
-from lean_mutant import ERROR, edit, run as run_lean  # noqa: E402
+from lean_mutant import ERROR, edit, error_decls, run as run_lean  # noqa: E402
 from mutation_kill_log import killed as log_kill  # noqa: E402
 
 SELF = "tests/roadmap/sc-order/mutations.py"
@@ -37,8 +37,9 @@ SC = HERE / "Sc.lean"
 OBSERVED = sorted((HERE / "observed").glob("*.txt"))
 ORD03_GUARD = '#guard [("sb", "00"), ("2+2w", "11"), ("iriw", "1010")].all'
 NOT_SC = "is not sequentially consistent"
+GUARD, OBSERVED_KILL, ACCEPTS = "guard", "observed", "accepts"
 
-# name -> (the line that starts with this, what replaces the line's end ('' drops the line), the
+# name -> (the line that starts with this, what is appended to it ('' drops the line), the
 # message of the rejection).
 BAD_OBSERVATIONS = {
     "sb-seq-cst-both-zero": ("litmus sb seq_cst ", " 00:1", f"sb seq_cst: outcome 00 (1 rounds) {NOT_SC}"),
@@ -48,20 +49,26 @@ BAD_OBSERVATIONS = {
     "sb-mixed-line-missing": ("litmus sb mixed ", "", "no line for sb mixed"),
 }
 
-INTERLEAVE = "(progs.zipIdx.filterMap fun (ops, k) => ops.head?.map (·, k)).flatMap fun (op, k) =>\n    let rest"
+# `scExplore`'s choice of the next thread: every thread that has an operation left.
+STEPS = "progs.zipIdx.filterMap fun (ops, k) => ops.head?.map (·, k)"
+REST = "fun (op, k) =>\n    let rest"
 # name -> (edits of Sc.lean, kill)
 MUTANTS = {
     # The oracle: a load that ignores the store, a store that is lost, threads that never interleave.
-    "sc-load-reads-initial": ([("regs.set! reg mem[loc]!", "regs.set! reg 0")], "guard"),
-    "sc-store-dropped": ([("scExplore final (mem.set! loc v) regs rest", "scExplore final mem regs rest")], "guard"),
-    "sc-threads-never-interleave": ([(INTERLEAVE, INTERLEAVE.replace(").flatMap", ").take 1).flatMap").replace("(progs", "((progs", 1))],
-                                    "observed"),
+    "sc-load-reads-initial": ([("regs.set! reg mem[loc]!", "regs.set! reg 0")], GUARD),
+    "sc-store-dropped": ([("scExplore final (mem.set! loc v) regs rest", "scExplore final mem regs rest")], GUARD),
+    "sc-threads-never-interleave": ([(f"({STEPS}).flatMap {REST}", f"(({STEPS}).take 1).flatMap {REST}")], OBSERVED_KILL),
     # The observation check: each of its three rejections removed.
-    "sc-outcome-check-dropped": ([("else if t.allSc && !sc then", "else if false then")], "accepts sb-seq-cst-both-zero"),
-    "model-outcome-check-dropped": ([("if !os.contains o then", "if false then")], "accepts sb-relaxed-outside-model"),
+    "sc-outcome-check-dropped": ([("else if t.allSc && !sc then", "else if false then")], (ACCEPTS, "sb-seq-cst-both-zero")),
+    "model-outcome-check-dropped": ([("if !os.contains o then", "if false then")], (ACCEPTS, "sb-relaxed-outside-model")),
     "missing-test-accepted": ([('| [] => bad := bad ++ [s!"{file}: no line for {key t}"]', "| [] => pure ()")],
-                              "accepts sb-mixed-line-missing"),
+                              (ACCEPTS, "sb-mixed-line-missing")),
 }
+
+
+def fail(name, why, out):
+    sys.stderr.write(out[-4000:])
+    raise SystemExit(f"{name}: {why}")
 
 
 def bad_observation(name, work):
@@ -78,14 +85,14 @@ def bad_observation(name, work):
 
 
 def check(source, files):
-    """Run SOURCE's `main` on FILES: (exit code, output, the elaboration errors' line numbers)."""
+    """Run SOURCE's `main` on FILES: (exit code, output, the lines of SOURCE with an elaboration
+    error). An error in another file (an import) is no result of SOURCE: the run aborts."""
     rc, out = run_lean(["--run", source, *files])
-    return rc, out, [int(m["line"]) for m in ERROR.finditer(out)]
-
-
-def fail(name, why, out):
-    sys.stderr.write(out[-4000:])
-    raise SystemExit(f"{name}: {why}")
+    stray = error_decls(out, source)[1]
+    if stray:
+        fail(Path(source).stem, f"errors outside {Path(source).name}: {stray[:3]}", out)
+    lines = Path(source).read_text(encoding="utf-8").splitlines()
+    return rc, out, [lines[int(m["line"]) - 1] for m in ERROR.finditer(out)]
 
 
 def main(argv):
@@ -94,32 +101,35 @@ def main(argv):
     work = Path(argv[1])
     work.mkdir(parents=True, exist_ok=True)
     bad = {name: bad_observation(name, work) for name in BAD_OBSERVATIONS}
-    for name, path in bad.items():
-        rc, out, errors = check(SC, [path])
-        if rc != 1 or errors or f"error: {path}: {BAD_OBSERVATIONS[name][2]}" not in out:
-            fail(name, "the wrong observation was not rejected with its message", out)
-        print(f"{name}: wrong observation rejected")
+    # One run of the unmutated check: every wrong file is rejected, each for its one reason.
+    rc, out, errors = check(SC, list(bad.values()))
+    wanted = {f"error: {path}: {BAD_OBSERVATIONS[name][2]}" for name, path in bad.items()}
+    rejections = [line for line in out.splitlines() if line.startswith("error: ")]
+    if rc != 1 or errors or len(rejections) != len(wanted) or any(
+            not any(line.startswith(w) for line in rejections) for w in wanted):
+        fail("wrong observations", "not rejected one by one with their messages", out)
+    print(f"{len(bad)} wrong observations rejected: {', '.join(bad)}")
     for name, (edits, kill) in MUTANTS.items():
         mutant = work / f"{name}.lean"
-        text = edit(SC.read_text(encoding="utf-8"), edits, name)
-        mutant.write_text(text, encoding="utf-8")
-        how, _, wrong = kill.partition(" ")
-        rc, out, errors = check(mutant, [bad[wrong]] if wrong else OBSERVED)
-        lines = text.splitlines()
-        if how == "guard":
-            guards = [lines[n - 1] for n in errors]
-            if rc == 0 or not guards or any(not g.startswith("#guard") for g in guards) or not any(
-                    g.startswith(ORD03_GUARD) for g in guards):
-                fail(name, f"SURVIVED or rejected for another reason (errors at {guards})", out)
+        mutant.write_text(edit(SC.read_text(encoding="utf-8"), edits, name), encoding="utf-8")
+        accepted = kill[1] if isinstance(kill, tuple) and kill[0] == ACCEPTS else None
+        rc, out, errors = check(mutant, [bad[accepted]] if accepted else OBSERVED)
+        if kill == GUARD:
+            if rc == 0 or not errors or any(not e.startswith("#guard") for e in errors) or not any(
+                    e.startswith(ORD03_GUARD) for e in errors):
+                fail(name, f"SURVIVED or rejected for another reason (errors at {errors})", out)
         elif errors:
             fail(name, "the mutant does not elaborate (an invalid mutant)", out)
-        elif how == "observed":
+        elif kill == OBSERVED_KILL:
             if rc != 1 or NOT_SC not in out:
                 fail(name, "SURVIVED: the committed observations are still accepted", out)
-        elif rc != 0:
-            fail(name, f"the mutant still rejects {wrong}, so that observation does not detect it", out)
+        elif accepted:
+            if rc != 0:
+                fail(name, f"the mutant still rejects {accepted}, so that observation does not detect it", out)
+        else:
+            raise SystemExit(f"{name}: unknown kill {kill!r}")
         log_kill(SELF, name, CHECK)
-        print(f"{name}: killed ({kill})")
+        print(f"{name}: killed ({kill if accepted is None else f'accepts {accepted}'})")
     print(f"sc-order: {len(BAD_OBSERVATIONS)} wrong observations rejected, {len(MUTANTS)} mutants killed")
 
 
