@@ -49,6 +49,27 @@ theorem add_le_of_mod {a b P : Nat} (ha : a % P = 0) (hb : b % P = 0) (h : a < b
   have : q₁ < q₂ := Nat.lt_of_mul_lt_mul_left h
   rw [← Nat.mul_succ]; exact Nat.mul_le_mul_left _ this
 
+/-- The only `d < P` with `a + d` a multiple of `P` is the distance to `alignUp a P`. -/
+theorem alignUp_unique {a d P : Nat} (hP : 0 < P) (hd : d < P) (h : (a + d) % P = 0) :
+    a + d = alignUp a P := by
+  have h1 := alignUp_mod_self (n := a) hP
+  have h2 := alignUp_lt (n := a) hP
+  have h3 := le_alignUp a P
+  rcases Nat.lt_trichotomy (a + d) (alignUp a P) with hlt | he | hgt
+  · have := add_le_of_mod h h1 hlt; omega
+  · exact he
+  · have := add_le_of_mod h1 h hgt; omega
+
+/-- An address whose rounding up to a divisor `P` of `M` leaves `[0, M)` by less than `P`:
+`alignUp` leaves it too. -/
+theorem le_alignUp_of_overflow {a P M : Nat} (hP : 0 < P) (hM : M % P = 0) (h : M ≤ a + (P - 1)) :
+    M ≤ alignUp a P := by
+  have h1 := alignUp_mod_self (n := a) hP
+  have h3 := le_alignUp a P
+  rcases Nat.lt_or_ge (alignUp a P) M with hlt | hge
+  · have := add_le_of_mod h1 hM hlt; omega
+  · exact hge
+
 /-! ## The failure decision -/
 
 /-- `mmap`/`mremap` fail exactly when `rawAlloc` would (`Mem.allocDenied`). -/

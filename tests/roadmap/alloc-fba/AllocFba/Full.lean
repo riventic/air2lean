@@ -128,25 +128,21 @@ attribute [fsym_atom] fcov
 def FFacts (ctx : Ptr) (B : FBuf) (ei : Nat) (tail : Array Byte) (b cb : BlockId) : Prop :=
   FOk ctx B ei tail ∧ B.ptr.block = some b ∧ ctx.block = some cb
 
-/-- The allocator's state at epoch `e` of the ledger `γ` (module doc): the ledger, the struct with
-`end_index = ei`, the parts no entry changes, the tail and its claim, the receipt of the buffer's
-claim, the junk and the coverage. (The parts are written out here, not behind a definition: an
-update that produces one of them, `fparts`, closes it in the postcondition as it stands.) -/
-def fown (ctx : Ptr) (B : FBuf) (γ e : Nat) : FAssn :=
-  FAssn.ex fun ei => FAssn.ex fun tail => FAssn.ex fun q => FAssn.ex fun b => FAssn.ex fun cb =>
-    FAssn.ex fun mN => FAssn.ex fun M => FAssn.ex fun jh =>
-      ⟪FFacts ctx B ei tail b cb⟫ ⋆
-        ((gauthP γ e M none ⋆ LedgerRcpts γ e M) ⋆ ((wEnd ctx ei ⋆ fparts ctx B q b cb) ⋆
-          ((ftail B ei tail ⋆ fclaim B ei b γ e) ⋆ (frcpt B b γ e ⋆ (JunkAt jh ⋆ fcov B b ei mN M jh)))))
-
-/-- The allocator's state with `end_index = ei` exposed: `fown` is this at some `ei`
-(`fown_eq`). A statement about how much room is left (`fthread_alloc_at`) is over it. -/
+/-- The allocator's state at epoch `e` of the ledger `γ` with `end_index = ei` (module doc): the
+ledger, the struct, the parts no entry changes, the tail and its claim, the receipt of the
+buffer's claim, the junk and the coverage. (The parts are written out here, not behind a
+definition: an update that produces one of them, `fparts`, closes it in the postcondition as it
+stands.) A statement about how much room is left (`fthread_alloc_at`) is over it. -/
 def fownAt (ctx : Ptr) (B : FBuf) (γ e ei : Nat) : FAssn :=
   FAssn.ex fun tail => FAssn.ex fun q => FAssn.ex fun b => FAssn.ex fun cb =>
     FAssn.ex fun mN => FAssn.ex fun M => FAssn.ex fun jh =>
       ⟪FFacts ctx B ei tail b cb⟫ ⋆
         ((gauthP γ e M none ⋆ LedgerRcpts γ e M) ⋆ ((wEnd ctx ei ⋆ fparts ctx B q b cb) ⋆
           ((ftail B ei tail ⋆ fclaim B ei b γ e) ⋆ (frcpt B b γ e ⋆ (JunkAt jh ⋆ fcov B b ei mN M jh)))))
+
+/-- The allocator's state at epoch `e` of the ledger `γ`, the invariant's `own`: `fownAt` at some
+`end_index`. -/
+def fown (ctx : Ptr) (B : FBuf) (γ e : Nat) : FAssn := FAssn.ex fun ei => fownAt ctx B γ e ei
 
 theorem fown_eq (ctx : Ptr) (B : FBuf) (γ e : Nat) :
     fown ctx B γ e = FAssn.ex fun ei => fownAt ctx B γ e ei := rfl
@@ -680,30 +676,9 @@ readings in one thread (`FTTotalTriple.toFTotalTriple`). -/
 
 /-! ### The padding: `mem.alignPointerOffset` -/
 
-/-- The only `d < P` with `a + d` a multiple of `P` is the distance to `alignUp a P`. -/
-theorem alignUp_unique {a d P : Nat} (hP : 0 < P) (hd : d < P) (h : (a + d) % P = 0) :
-    a + d = alignUp a P := by
-  have h1 := alignUp_mod_self (n := a) hP
-  have h2 := alignUp_lt (n := a) hP
-  have h3 := le_alignUp a P
-  rcases Nat.lt_trichotomy (a + d) (alignUp a P) with hlt | he | hgt
-  · have := add_le_of_mod h h1 hlt; omega
-  · exact he
-  · have := add_le_of_mod h1 h hgt; omega
-
-/-- An address whose rounding up to a divisor `P` of `M` leaves `[0, M)` by less than `P`:
-`alignUp` leaves it too. -/
-theorem le_alignUp_of_overflow {a P M : Nat} (hP : 0 < P) (hM : M % P = 0) (h : M ≤ a + (P - 1)) :
-    M ≤ alignUp a P := by
-  have h1 := alignUp_mod_self (n := a) hP
-  have h3 := le_alignUp a P
-  rcases Nat.lt_or_ge (alignUp a P) M with hlt | hge
-  · have := add_le_of_mod h1 hM hlt; omega
-  · exact hge
-
 /-- What std's `mem.alignPointerOffset(p, 2 ^ k)` returns for a pointer at the address `a`, in
 the form its walk shows: `null` when rounding up overflows a `usize`, else an offset below the
-alignment to a multiple of it. `alignOffset_spec` reads it as the distance to `alignUp`. -/
+alignment to a multiple of it. `fpad_spec` reads it as the distance to `alignUp`. -/
 def alignWalk (b : BlockId) (A a k : Nat) : Option (BitVec 64) → FAssn
   | none => ⟪2 ^ 64 ≤ a + (2 ^ k - 1)⟫ ⋆ known b A
   | some d => ⟪(a + d.toNat) % 2 ^ k = 0 ∧ d.toNat < 2 ^ k⟫ ⋆ known b A
@@ -795,7 +770,6 @@ theorem fthread_alloc_at (ctx : Ptr) (B : FBuf) (γ e ei : Nat) (n : BitVec 64) 
         (by omega) hhi ht (by
           rw [show w.toNat - n.toNat = ei + fpad B ei k by omega]; exact fpad_aligned B ei k)
   fsym [fpad_spec B ei k, u]
-
 
 theorem fthread_alloc (ctx : Ptr) (B : FBuf) (γ e : Nat) (n : BitVec 64) (k : Nat) (ra : BitVec 64)
     (φ : Frac) (hn : 0 < n.toNat) (hk : k < 64) (hfit : (finv ctx B γ e).fits n.toNat k) :

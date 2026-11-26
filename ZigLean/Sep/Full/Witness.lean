@@ -236,7 +236,8 @@ theorem FTTAdmit.ex {γ : Type} {P : γ → FAssn} (h : FTTAdmit (FAssn.ex P)) :
 
 theorem FTTAdmit.lift {φ : Prop} {P : FAssn} (h : FTTAdmit (⟪φ⟫ ⋆ P)) : φ ∧ FTTAdmit P :=
   have ⟨m, r, rF, hh, h, hc, ho, _⟩ := h
-  ⟨(Full.sep_lift.mp h).1, m, r, rF, hh, (Full.sep_lift.mp h).2, hc, ho, trivial⟩
+  have ⟨hφ, hp⟩ := Full.sep_lift.mp h
+  ⟨hφ, m, r, rF, hh, hp, hc, ho, trivial⟩
 
 /-- **A total thread triple carries admissibility from its precondition to a state of its
 postcondition** (the thread analogue of `FAdmit.of_total`): the step returns (`FTTReturns`), and

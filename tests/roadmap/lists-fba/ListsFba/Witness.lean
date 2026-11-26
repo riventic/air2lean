@@ -284,9 +284,8 @@ theorem granted_admissible (n : BitVec 64) (k : Nat) (hn : 0 < n.toNat) (hk : k 
           rw [← Frac.half_add_half Frac.one.half, epFee_add γ 0 hq hq, Frac.half_add_half]
           ac_rfl))
   have hpad : fpad (B A1 A0) 0 k = 0 := fpad_of_aligned (by
-    have : A1 % 2 ^ k = 0 := by
-      obtain rfl | rfl | rfl | rfl : k = 0 ∨ k = 1 ∨ k = 2 ∨ k = 3 := by omega
-      all_goals omega
+    have : A1 % 2 ^ k = 0 := Nat.mod_eq_zero_of_dvd
+      (Nat.dvd_trans (Nat.pow_dvd_pow 2 hk) (Nat.dvd_of_mod_eq_zero h8))
     simpa [B, bufp] using this)
   obtain ⟨v, h⟩ := FTTAdmit.of_total ((fthread_alloc_room ctx (B A1 A0) γ 0 0 n k 0
     Frac.one.half.half hn (by omega) (fits16 A1 A0 γ hk (by omega))
@@ -338,11 +337,9 @@ nonvacuity_witness Lists.Append.append_spec := by
     (FAdmit.Start.frame (R := plain) h).cadmit⟩
 
 nonvacuity_witness Lists.Alloc.push_spec := by
-  obtain ⟨A1, A0, γ, h⟩ := start_admissible
+  obtain ⟨A1, A0, γ, h⟩ := make_admissible
   exact ⟨ext, ctx, vtp, fns, I0 A1 A0 γ, env0, Frac.one.half, none, 0,
-    by simp [finv, ffits, B], fba_spec A1 A0 γ,
-    (FAdmit.Start.frame (R := Lists.Append.alist (I0 A1 A0 γ) Frac.one.half hdr [])
-      (h.mono fun _ h => ac_cast h (by simp only [startPre]; ac_rfl))).cadmit⟩
+    by simp [finv, ffits, B], fba_spec A1 A0 γ, h⟩
 
 -- `freeAll` of the empty list (`list I φ none []` is `⟪none = none⟫`): the allocator's
 -- invariant and the vtable; the fee, the header and `plain` join the frame.
