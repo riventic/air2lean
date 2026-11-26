@@ -1377,7 +1377,8 @@ theorem ThreadLocal.errSetOk {Q : Unit → FAssn}
 
 /-! #### The providers, per view
 
-The rules above hold for any precondition that reads the bytes (`ReadsPtr`). `fsym` gets them
+The rules above hold for any precondition that reads the bytes (`ReadsPtr`; `errSetOk`: that
+owns the error code). `fsym` gets them
 per view of the union, as atom providers: an owned union (`up (pts …)`, `OwnsPtr.errCode`) and a
 shared one (`spts`, `ReadsPtr.errCode_spts`). A provider about the whole precondition would be
 unified with every command that has no head constant (a `let`, an applied continuation) in each

@@ -14,7 +14,9 @@ modules of 0.14.1, 0.15.2 and 0.16.0 are this one with the version renamed: `che
   payload is a data race (`.illegal`), on every schedule.
 
 Kernel-checked theorems for the sequential cases, `fsym` thread steps for the thread bodies
-(`readPayload` on a shared union, `writePayload` on an owned one); `main` runs the schedules. -/
+(`readPayload` on a shared union, `writePayload` on an owned one), the spawn targets (`reader`,
+`writer`) and a result location written by an owner; `main` runs the schedules. The spawn and
+the join are not composed in the logic (`README.md`). -/
 
 open Zig TryLifetimes.V0_17_1
 
@@ -119,7 +121,8 @@ theorem setPayload32_owned (p : Ptr) (u : Except ErrName (BitVec 32)) (y : BitVe
       (fun _ => up (pts p 4 (Except.ok y : Except ErrName (BitVec 32)))) := by
   fsym
 
-/-- A share gives no write: `errunion_payload_ptr_set` on a shared union has no thread rule. -/
+/-- A share gives no write: `errunion_payload_ptr_set` on a shared union has no rule, sequential
+or in a thread (fail closed; the control fails for either reason). -/
 theorem setPayload_shared_rejected (p : Ptr) (u : Except ErrName (BitVec 8)) (φ : Frac) : True := by
   fail_if_success
     have : FTTotalTriple (spts p 2 φ u) (Zig.errSetOk (BitVec 8) 2 p)
