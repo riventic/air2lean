@@ -47,8 +47,8 @@ pub fn main() void {
 /// only (`RLIMIT_AS`: the pages the child has, from `/proc/self/statm`, plus the block's page).
 /// The block's mapping succeeds; the growth by `mremap`, and the new mapping that `realloc` asks
 /// for after it, fail with `ENOMEM`. Returns the function's word (4: the growth failed and the old
-/// block kept its bytes), 100 or more when the limit could not be set, or minus the signal that
-/// ended the child.
+/// block kept its bytes), 100 or more when the child or its limit could not be set up, or minus the
+/// signal that ended the child.
 fn enomem(how: u8) i64 {
     const linux = std.os.linux;
     const pid = linux.fork();
@@ -68,8 +68,9 @@ fn enomem(how: u8) i64 {
         if (linux.setrlimit(.AS, &limit) != 0) linux.exit(102);
         linux.exit(@intCast(page.page_grow(10, 10, 49152, how)));
     }
+    if (@as(isize, @bitCast(pid)) < 0) return 103;
     var s: u32 = undefined;
-    _ = linux.waitpid(@intCast(pid), @ptrCast(&s), 0);
+    if (@as(isize, @bitCast(linux.waitpid(@intCast(pid), @ptrCast(&s), 0))) < 0) return 104;
     const sig: i64 = s & 0x7f;
     return if (sig == 0) (s >> 8) & 0xff else -sig;
 }

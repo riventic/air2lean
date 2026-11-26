@@ -117,13 +117,13 @@ if [ -n "${AIR2LEAN_NATIVE_ZIG:-}" ]; then
   # (the harness of one example is built with it and not used).
   AIR2LEAN_ZIG="$AIR2LEAN_NATIVE_ZIG" AIR2LEAN_EXAMPLES=basic bash scripts/diff.sh --build-only "$work/diff-native"
   large() {  # large TREE: the compiled runner over TREE's translations against the expected files
-    local runner=$1/tests/roadmap/.lake/build/bin/alloc-translated-large os
+    local runner=$1/tests/roadmap/.lake/build/bin/alloc-translated-large os file
     mkdir -p "$1/tests/diff/out/libm"
     cp "$work/diff-native/air2lean_libm.a" "$1/tests/diff/out/libm/air2lean_libm.a"
     (cd "$1" && python3 -B scripts/fixtures.py build alloc-translated-large)
     for os in linux macos; do
-      case "$os" in linux) expected=$here/expected-linux.txt ;; macos) expected=$here/expected.txt ;; esac
-      diff <(grep '^page_large' "$expected") <("$runner" "$os")
+      case "$os" in linux) file=$here/expected-linux.txt ;; macos) file=$here/expected.txt ;; esac
+      diff <(grep '^page_large' "$file") <("$runner" "$os")
       # Under the old fixed cap (the differential harness's policy) every request is denied: the
       # line above depends on the default policy having no cap.
       [ "$("$runner" "$os" capped)" = 'page_large ok 0 0' ]
