@@ -12,7 +12,16 @@ pub noinline fn fromInt(a: usize) *Handle {
     return @ptrFromInt(a);
 }
 
+// A handle as a constant: the address of a global behind the opaque type. A constant pointer
+// to a global needs the global's storage behind its pointee type, as for `*anyopaque`.
+var backing: u32 = 5;
+const backing_handle: *Handle = @ptrCast(&backing);
+pub noinline fn globalHandle() *Handle {
+    return backing_handle;
+}
+
 comptime {
     _ = &externHandle;
     _ = &fromInt;
+    _ = &globalHandle;
 }

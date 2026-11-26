@@ -42,7 +42,7 @@
  "src": {
   "file": "opaque_ptrs.zig",
   "module": "opaque_ptrs",
-  "decl_line": 78
+  "decl_line": 97
  },
  "params": [
   0

@@ -13,7 +13,26 @@ pub const Handle = opaque {
 };
 pub const Other = opaque {};
 
+/// A generic opaque type: one type per `T`, with a name the compiler makes (`Typed(u32)`).
+pub fn Typed(comptime T: type) type {
+    return opaque {
+        pub noinline fn of(p: *T) *@This() {
+            return @ptrCast(p);
+        }
+    };
+}
+
 pub const Cell = struct { h: *Handle, o: ?*Handle, n: u32 };
+
+pub noinline fn typedOf(p: *u32) *Typed(u32) {
+    return Typed(u32).of(p);
+}
+pub noinline fn typedSame(a: *Typed(u32), b: *Typed(u32)) bool {
+    return a == b;
+}
+pub noinline fn typedToHandle(t: *Typed(u32)) *Handle {
+    return @ptrCast(t);
+}
 
 // Copy, comparison, null test, optional wrap and unwrap.
 pub noinline fn copy(h: *Handle) *Handle {
@@ -140,6 +159,7 @@ pub fn main() void {
     std.debug.print("pair {d} {d} item {d} {d}\n", .{ bit(hs[0] == hx), bit(hs[1] == hy), bit(item(&hs, 0) == hx), bit(item(&hs, 1) == hy) });
     std.debug.print("casts {d} {d} {d} {d} {d} {d}\n", .{ bit(fromAny(toAny(hx)) == hx), bit(@intFromPtr(toOther(hx)) == @intFromPtr(hx)), bit(toConst(hx) == hx), bit(optErase(null) == null), bit(optErase(&y) == hy), bit(address(hx) == @intFromPtr(&x)) });
     std.debug.print("align {d}\n", .{bit(alignDown(alignUp(hx)) == hx)});
+    std.debug.print("typed {d} {d} {d}\n", .{ bit(typedSame(typedOf(&x), typedOf(&x))), bit(typedSame(typedOf(&x), typedOf(&y))), bit(typedToHandle(typedOf(&x)) == hx) });
     std.debug.print("viaApply {d}\n", .{bit(viaApply(hx))});
     std.debug.print("value {d} roundTrip {d} {d}\n", .{ hx.value(), roundTrip(&x), x });
 }

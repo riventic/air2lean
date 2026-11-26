@@ -1,7 +1,7 @@
 # Pointers to opaque types
 
 An opaque type is `anyopaque` or a declared `opaque {}` (`const Handle = opaque {};`, with or
-without declarations). It has no size, no alignment and no values, so the only thing a program
+without declarations, also one a generic function returns). It has no size, no alignment and no values, so the only thing a program
 has of it is a single-item pointer (`*Handle`, `*const Handle`, `?*Handle`, `*align(N) Handle`).
 The translator has one type kind for both (`Ty.opaque`, `Air2Lean/Air/Op.lean`): a declared
 opaque type gets exactly what `*anyopaque` had, and nothing is specific to one name.
@@ -37,6 +37,7 @@ damaged AIR that has them is rejected too (`Checker.lean`, `negatives.py`).
 | pointer arithmetic, an item pointer | `type … has no size in the AIR file` |
 | an item access, `@memset`/`@memcpy` through it | `item access through pointer type …, which has no items` |
 | an `extern var` of an opaque type (Zig compiles it) | `` `extern` global …: its type can hold a function pointer, a union or an unresolved type `` |
+| a constant opaque pointer to a global (`const h: *Handle = @ptrCast(&global)`; Zig compiles it) | `global alias has unresolved or cyclic symbolic storage provenance`, as for `*anyopaque` |
 | `@ptrFromInt` to an opaque pointer (Zig compiles it) | `recovering a symbolic error pointer from an integer or opaque value needs unsupported storage provenance`, as for `*anyopaque` |
 | erasing a pointer to storage that can hold an error value (`*E!u32` → `*Handle`) | a `symbolic error storage` diagnostic, as for `*anyopaque` |
 | recovering a typed pointer in the default allocator model | `a pointer cast has unresolved or cyclic symbolic storage provenance`, as for `*anyopaque` |

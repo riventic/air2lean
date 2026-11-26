@@ -74,6 +74,13 @@ def main : IO Unit := do
     let (_, _, hx, _) ← handles
     pure (bit ((← OpaquePtrs.alignDown (← OpaquePtrs.alignUp hx)) = hx)))
   IO.println s!"align {a}"
+  let (a, b, c) ← observed (do
+    let (x, y, hx, _) ← handles
+    let tx ← OpaquePtrs.typedOf x
+    pure (bit (← OpaquePtrs.typedSame tx (← OpaquePtrs.typedOf x)),
+      bit (← OpaquePtrs.typedSame tx (← OpaquePtrs.typedOf y)),
+      bit ((← OpaquePtrs.typedToHandle tx) = hx)))
+  IO.println s!"typed {a} {b} {c}"
   let a ← observed (do
     let (_, _, hx, _) ← handles
     pure (bit (← OpaquePtrs.viaApply hx)))

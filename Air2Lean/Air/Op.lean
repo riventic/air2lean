@@ -77,9 +77,12 @@ inductive Ty where
   | other (name : String)
   deriving Repr, Inhabited, BEq
 
-/-- The primitive `anyopaque`. A declared `opaque {}` has a qualified name (`mod.Name`), never
-this one (`Json.lean`'s `parseTy`). -/
-def Ty.anyopaque : Ty := .opaque "anyopaque"
+/-- The name of the primitive opaque type. A declared `opaque {}` has a qualified name
+(`mod.Name`), never this one (`Json.lean`'s `parseTy`). -/
+def Ty.anyopaqueName : String := "anyopaque"
+
+/-- The primitive `anyopaque`. -/
+def Ty.anyopaque : Ty := .opaque Ty.anyopaqueName
 
 /-- Type `id` is an opaque type; an unknown id is not. -/
 def opaqueTy (types : Array Ty) (id : TyId) : Bool :=

@@ -280,12 +280,12 @@ def parseTy (j : Json) (allocatorModel : AllocatorModel := .std) : Except String
   -- which stays outside the subset). The primitive has only its `other` entry.
   | "opaque" =>
     let name ← (← j.getObjVal? "name").getStr?
-    if Ty.opaque name == Ty.anyopaque then
-      throw "a declared opaque type cannot have the primitive's name 'anyopaque'"
+    if name == Ty.anyopaqueName then
+      throw s!"a declared opaque type cannot have the primitive's name '{name}'"
     opaqueEntry name
   | "other" =>
     let name ← (← j.getObjVal? "name").getStr?
-    if Ty.opaque name == Ty.anyopaque then opaqueEntry name else return .other name
+    if name == Ty.anyopaqueName then opaqueEntry name else return .other name
   | "error_union" =>
     let set ← (← j.getObjVal? "error").getNat?
     let payload ← (← j.getObjVal? "payload").getNat?

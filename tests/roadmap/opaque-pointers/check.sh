@@ -65,11 +65,14 @@ for version in 0.17.1 0.16.0 0.15.2 0.14.1; do
   rejected "$version: recovery in the default allocator model" \
     'a pointer cast has unresolved or cyclic symbolic storage provenance' \
     "$here/air-recover/$version" --profile abi64-le-v1
-  for name in externHandle fromInt; do
+  for name in externHandle fromInt globalHandle; do
     mkdir -p "$work/reject-$version-$name"
     cp "$here/air-reject/$version/reject.$name.json" "$work/reject-$version-$name/"
-    expected=$([ "$name" = externHandle ] && echo '`extern` global global_handle: its type can hold' ||
-      echo 'recovering a symbolic error pointer from an integer or opaque value')
+    case "$name" in
+      externHandle) expected='`extern` global global_handle: its type can hold' ;;
+      fromInt) expected='recovering a symbolic error pointer from an integer or opaque value' ;;
+      globalHandle) expected='global alias has unresolved or cyclic symbolic storage provenance' ;;
+    esac
     for model in std translated; do
       rejected "$version: $name ($model)" "$expected" "$work/reject-$version-$name" \
         --profile abi64-le-v1 --allocator-model "$model"
@@ -77,4 +80,4 @@ for version in 0.17.1 0.16.0 0.15.2 0.14.1; do
   done
 done
 python3 -B "$here/negatives.py" "$translator"
-echo "opaque pointer gate passed: checker controls, 4 versions x $(wc -l < "$here/expected.txt" | tr -d ' ') model lines (expected.txt), 5 compiler rejections and the negatives per version"
+echo "opaque pointer gate passed: checker controls, 4 versions x $(wc -l < "$here/expected.txt" | tr -d ' ') model lines (expected.txt), 7 compiler rejections and the negatives per version"

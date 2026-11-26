@@ -1474,9 +1474,9 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       -- like an integer: the target must be provably error-free.
       let opaquePointee (t : TyId) : Bool := ((ptrOrOptChild cx.types t).map (opaqueTy cx.types)).getD false
       let fromOpaque := cx.allocatorModel == .translated && opaquePointee aty
-      -- Erasing an error-free pointer to a pointer to an opaque type (an allocator's `ctx`, a
-      -- futex address for the OS, a handle) in every allocator model: the bytes carry no
-      -- symbolic error. A recovery passes `fromOpaque`, which only the translated allocator
+      -- Erasing an error-free typed pointer to a pointer to an opaque type (an allocator's
+      -- `ctx`, a futex address for the OS, a handle) in every allocator model: the bytes carry
+      -- no symbolic error. A recovery passes `fromOpaque`, which only the translated allocator
       -- model has; elsewhere it fails closed below.
       -- Between two opaque pointees (`*anyopaque` ↔ `*H`, `*H` → `*G`) nothing is erased or
       -- recovered: the pointee stays untyped, and the checks at the erasure before and at any
