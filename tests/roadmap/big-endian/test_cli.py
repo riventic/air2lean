@@ -4,7 +4,8 @@
 Accepts the real s390x-linux export as the big-endian model profile `abi64-be-v1` (and only
 with the `Zig.BigEndian` instances and `.big` bit-pointer accesses), keeps x86_64 on
 `abi64-le-v1` without them, rejects contradictory endian metadata, and rejects every real
-s390x export of `reject.zig` with its reason. A rejection leaves the previous output intact.
+s390x export of `reject.zig` with its reason (`vecLanes` from Zig 0.17.1 on: its 0.16.0 export
+has no lane pointer and translates). A rejection leaves the previous output intact.
 Never builds or runs a compiler.
 """
 import copy
@@ -141,7 +142,10 @@ def check_version(binary, version):
         ("reject.nibbleLanes.json", "a vector of non-byte-multiple lanes is outside"),
         ("reject.u128Bytes.json", "the memory model gives type"),
         ("reject.vecByte.json", "a pointer cast between a vector and another pointee type is illegal behaviour"),
-        ("reject.vecLane0FromBytes.json", "a pointer cast between a vector and another pointee type is illegal behaviour"),
+        ("reject.vecFromBytes.json", "a pointer cast between a vector and another pointee type is illegal behaviour"),
+        # Translated on 0.16.0 (`reject.zig`).
+        ("reject.vecLanes.json", None if version == "0.16.0" else
+         "a pointer to a vector lane (vector_index) is outside the subset"),
     ]:
         run(binary, one(rejects, name), error=error, prefix="reject.")
         checks += 1
