@@ -1648,8 +1648,8 @@
           "anchor": "\"non-power-of-two alignment\""
         },
         {
-          "path": "tests/roadmap/interfaces/Interfaces/SentinelSpec.lean",
-          "anchor": "| .error e => ⟪e = \"OutOfMemory\"⟫ ⋆ (I.granted old 0 φ bs ⋆ I.fee φ)"
+          "path": "ZigLean/Sep/Full/SentinelBuf.lean",
+          "anchor": "| .error e => ⟪e = \"OutOfMemory\"⟫ ⋆ (I.granted old k φ bs ⋆ I.fee φ)"
         },
         {
           "path": "tests/roadmap/interfaces/test_cli.py",

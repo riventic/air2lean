@@ -292,7 +292,6 @@ asm_zig="ZigLean/Isa/X86.lean"
 vec_lean="ZigLean/Vec.lean"
 thread_lean="ZigLean/Mem/Thread.lean"
 sched_lean="ZigLean/Conc/Sched.lean"
-conc_lean="ZigLean/Conc.lean"
 allowed_lean="ZigLean/Float/Allowed.lean"
 gen_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-gen.XXXXXX")
 options_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-options-gen.XXXXXX")
@@ -309,7 +308,6 @@ asm_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-asm.XXXXXX")
 vec_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-vec.XXXXXX")
 thread_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-thread.XXXXXX")
 sched_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-sched.XXXXXX")
-conc_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-conc.XXXXXX")
 allowed_backup=$(mktemp "${TMPDIR:-/tmp}/air2lean-mutate-allowed.XXXXXX")
 cp "$gen_file" "$gen_backup"
 cp "$options_gen" "$options_backup"
@@ -326,7 +324,6 @@ cp "$asm_zig" "$asm_backup"
 cp "$vec_lean" "$vec_backup"
 cp "$thread_lean" "$thread_backup"
 cp "$sched_lean" "$sched_backup"
-cp "$conc_lean" "$conc_backup"
 cp "$allowed_lean" "$allowed_backup"
 
 mutate_tmp=""
@@ -351,10 +348,9 @@ cleanup() {
   cp "$vec_backup" "$vec_lean"
   cp "$thread_backup" "$thread_lean"
   cp "$sched_backup" "$sched_lean"
-  cp "$conc_backup" "$conc_lean"
   cp "$allowed_backup" "$allowed_lean"
   rm -f "$gen_backup" "$options_backup" "$variants_backup" "$layout_backup" "$slices_backup" "$basic_backup" "$lemmas_backup" "$round_backup" \
-    "$mem_backup" "$enc_backup" "$alloc_backup" "$asm_backup" "$vec_backup" "$thread_backup" "$sched_backup" "$conc_backup" "$allowed_backup"
+    "$mem_backup" "$enc_backup" "$alloc_backup" "$asm_backup" "$vec_backup" "$thread_backup" "$sched_backup" "$allowed_backup"
   [ -n "$mutate_tmp" ] && rm -rf "$mutate_tmp"
   [ -n "$air_dir" ] && rm -rf "$air_dir"
   [ -n "$mutation_outcome_tmp" ] && rm -rf "$mutation_outcome_tmp"
@@ -403,7 +399,7 @@ require_mutated() {
       "$layout_gen:$layout_backup" "$slices_gen:$slices_backup" "$basic_lean:$basic_backup" \
       "$lemmas_lean:$lemmas_backup" "$round_lean:$round_backup" "$mem_lean:$mem_backup" \
       "$enc_lean:$enc_backup" "$alloc_lean:$alloc_backup" "$asm_zig:$asm_backup" "$vec_lean:$vec_backup" \
-      "$thread_lean:$thread_backup" "$sched_lean:$sched_backup" "$conc_lean:$conc_backup" "$allowed_lean:$allowed_backup"; do
+      "$thread_lean:$thread_backup" "$sched_lean:$sched_backup" "$allowed_lean:$allowed_backup"; do
     cmp -s "${pair%%:*}" "${pair#*:}" || return 0
   done
   echo "error: $1: the mutation changed no source file (its pattern no longer matches?)" >&2
@@ -462,19 +458,11 @@ run_and_report() {
     mutation_outcome_tmp=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-mutate-outcomes.XXXXXX")
     report_dir=$mutation_outcome_tmp
   fi
-  # Generated runtime code needs Call's weak wrappers, not WeakCas's proof interfaces.
-  # Correct Mem lemmas deliberately fail under differential mutants (e.g. k/n).
-  # Exclude only this new proof import for the differential window; baselines and
-  # proof_report retain it. The EXIT/signal trap also restores it on interrupted runs.
-  [ "$(grep -Fxc 'import ZigLean.Conc.WeakCas' "$conc_lean" || true)" -eq 1 ] || {
-    echo "error: $label: expected exactly one WeakCas proof import" >&2
-    exit 1
-  }
-  sed -i.bak '/^import ZigLean\.Conc\.WeakCas$/d' "$conc_lean"
-  rm -f "$conc_lean.bak"
+  # The runtime root (`import ZigLean`) reaches no proof-only module (assurance/runtime-root.json;
+  # preflight runs `lean-deps.py --runtime-root check`), so the differential build does not
+  # elaborate the Mem/Conc lemmas that Lean-runtime mutants (e.g. k/n) correctly break.
   AIR2LEAN_DIFF_REPORT="$report_dir/summary.json" AIR2LEAN_EXAMPLES=$ex \
     bash scripts/diff.sh >"$out" 2>&1 || status=$?
-  cp "$conc_backup" "$conc_lean"
   local total_line
   total_line=$(grep '^TOTAL:' "$out" || true)
   if [ -z "$total_line" ]; then
