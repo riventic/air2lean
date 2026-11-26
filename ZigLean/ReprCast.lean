@@ -156,41 +156,72 @@ theorem list_mapM_pure_of {α β : Type} {f : α → Result β} {g : α → β} 
     rw [List.mapM_cons, h x (by simp), list_mapM_pure_of t (fun y hy => h y (by simp [hy]))]
     simp
 
+private theorem flatten_length_of {s : Nat} :
+    ∀ l : List (List Byte), (∀ a ∈ l, a.length = s) → l.flatten.length = l.length * s
+  | [], _ => by simp
+  | a :: t, h => by
+    have ih := flatten_length_of t fun b hb => h b (by simp [hb])
+    simp only [List.flatten_cons, List.length_append, List.length_cons, h a (by simp), ih,
+      Nat.succ_mul]
+    omega
+
+/-- The image of `[n]T` has `n * Enc.size α` bytes when each item's image has the item size. -/
+theorem vector_size_encode_of {α : Type} [Enc α] {n : Nat} (v : Vector α n)
+    (hs : ∀ x ∈ v.toArray, (Enc.encode x).size = Enc.size α) :
+    (Enc.encode v).size = n * Enc.size α := by
+  show ((v.toArray.map Enc.encode).flatten).size = n * Enc.size α
+  rw [← Array.length_toList, Array.toList_flatten,
+    flatten_length_of (s := Enc.size α) _ (by
+      intro a ha
+      simp only [Array.toList_map, List.map_map, List.mem_map, Array.mem_toList_iff] at ha
+      obtain ⟨x, hx, rfl⟩ := ha
+      simpa using hs x hx)]
+  simp
+
+/-- `[n]T` reads back as stored when each of its items does (an array of floats without a NaN
+item; `lawfulEnc_vector` for lawful items). -/
+theorem vector_decode_encode_of {α : Type} [Enc α] {n : Nat} (v : Vector α n)
+    (hs : ∀ x ∈ v.toArray, (Enc.encode x).size = Enc.size α)
+    (hd : ∀ x ∈ v.toArray, (Enc.decode (Enc.encode x) : Result α) = pure x) :
+    (Enc.decode (Enc.encode v) : Result (Vector α n)) = pure v := by
+  show (do
+    let xs ← (Array.range n).mapM fun i =>
+      (Enc.decode (((v.toArray.map Enc.encode).flatten).extract (i * Enc.size α) ((i + 1) * Enc.size α)) : Result α)
+    if h : xs.size = n then pure ⟨xs, h⟩ else (throw Error.unspecified : Result (Vector α n))) = pure v
+  rcases Nat.eq_zero_or_pos n with rfl | hn
+  · have : v = #v[] := by ext i hi; omega
+    subst this
+    rw [show Array.range 0 = #[] from rfl, Array.mapM_empty]
+    rfl
+  haveI : Inhabited α := ⟨v[0]⟩
+  have hm : (Array.range n).mapM (fun i =>
+      (Enc.decode (((v.toArray.map Enc.encode).flatten).extract (i * Enc.size α) ((i + 1) * Enc.size α)) : Result α))
+      = pure v.toArray := by
+    have hv : ((List.range n).map fun i => v.toArray[i]!).toArray = v.toArray := by
+      apply Array.ext
+      · simp
+      · intro i h1 h2
+        have : i < n := by simpa using h1
+        simp [this]
+    rw [Array.mapM_eq_mapM_toList, list_mapM_pure_of (g := fun i => v.toArray[i]!)]
+    · simp only [Array.toList_range, map_pure, hv]
+    · intro i hi
+      have hi : i < n := by simpa using hi
+      rw [flatten_chunk _ i (by
+        intro a ha
+        obtain ⟨x, hx, rfl⟩ := Array.mem_map.1 ha
+        exact hs x hx) (by simpa using hi)]
+      have hx : v.toArray[i]! = v[i] := by simp [hi]
+      rw [hx]
+      simpa using hd v[i] (by simp)
+  rw [hm]
+  simp [bind, ExceptT.bind, pure, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+
 /-- `[n]T` of lawful items reads back as stored. -/
 theorem lawfulEnc_vector {α : Type} [Enc α] [LawfulEnc α] (n : Nat) : LawfulEnc (Vector α n) where
-  size_encode v := by
-    show ((v.toArray.map Enc.encode).flatten).size = n * Enc.size α
-    rw [← Array.length_toList, Array.toList_flatten]
-    simp [List.length_flatten, Function.comp_def, LawfulEnc.size_encode, List.map_const',
-      List.sum_replicate_nat]
-  decode_encode v := by
-    show (do
-      let xs ← (Array.range n).mapM fun i =>
-        (Enc.decode (((v.toArray.map Enc.encode).flatten).extract (i * Enc.size α) ((i + 1) * Enc.size α)) : Result α)
-      if h : xs.size = n then pure ⟨xs, h⟩ else (throw Error.unspecified : Result (Vector α n))) = pure v
-    rcases Nat.eq_zero_or_pos n with rfl | hn
-    · have : v = #v[] := by ext i hi; omega
-      subst this
-      rw [show Array.range 0 = #[] from rfl, Array.mapM_empty]
-      rfl
-    haveI : Inhabited α := ⟨v[0]⟩
-    have hm : (Array.range n).mapM (fun i =>
-        (Enc.decode (((v.toArray.map Enc.encode).flatten).extract (i * Enc.size α) ((i + 1) * Enc.size α)) : Result α))
-        = pure v.toArray := by
-      have hv : ((List.range n).map fun i => v.toArray[i]!).toArray = v.toArray := by
-        apply Array.ext
-        · simp
-        · intro i h1 h2
-          have : i < n := by simpa using h1
-          simp [this]
-      rw [Array.mapM_eq_mapM_toList, list_mapM_pure_of (g := fun i => v.toArray[i]!)]
-      · simp only [Array.toList_range, map_pure, hv]
-      · intro i hi
-        have hi : i < n := by simpa using hi
-        rw [flatten_chunk _ i (by simp [LawfulEnc.size_encode]) (by simpa using hi)]
-        simp [LawfulEnc.decode_encode, hi]
-    rw [hm]
-    simp [bind, ExceptT.bind, pure, ExceptT.pure, ExceptT.mk, ExceptT.bindCont]
+  size_encode v := vector_size_encode_of v fun x _ => LawfulEnc.size_encode x
+  decode_encode v := vector_decode_encode_of v (fun x _ => LawfulEnc.size_encode x)
+    fun x _ => LawfulEnc.decode_encode x
 
 /-! ## Padding: concrete cases -/
 
