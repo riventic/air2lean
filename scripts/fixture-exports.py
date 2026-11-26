@@ -112,9 +112,12 @@ def entry_filter(fixture, entry, version):
     """ZIG_AIR_JSON_FILTER of one export: the entry's `filter`, else the example's, as
     scripts/check.sh builds it (`<x>.`, then the lines of examples/<x>/filter and of
     examples/<x>/filter-<version>), so an example's filter files are the one declaration."""
-    if 'filter' in entry:
-        return entry['filter']
-    example = example_of(fixture, entry)
+    return entry['filter'] if 'filter' in entry else example_filter(example_of(fixture, entry), version)
+
+
+def example_filter(example, version):
+    """The one implementation of the example filter rule that scripts/check.sh states in shell
+    (scripts/stage2-translations.py calls this)."""
     out = [example + '.']
     for name in ('filter', 'filter-' + version):
         path = ROOT / 'examples' / example / name
