@@ -162,7 +162,7 @@ def main():
         rows(example, function)
     assert rows("threads", "disjoint") == rows("threads", "race")
     for example, functions in {
-        "threadsync": ("mutexCounter", "handoff", "waitGroup"),
+        "threadsync": ("mutexCounter", "handoff", "handoffAll", "waitGroup"),
         "iogroup": ("groupCounter", "groupConcurrent"),
         "sync": ("semaphoreCounter", "rwLockRead"),
     }.items():

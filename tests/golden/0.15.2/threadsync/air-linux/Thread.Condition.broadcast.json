@@ -124,7 +124,7 @@
    "ty": 1,
    "callee": {
     "ty": 5,
-    "func": "Thread.Condition.FutexImpl.wake__anon_1640",
+    "func": "Thread.Condition.FutexImpl.wake__anon_11577",
     "module": "std",
     "instance_key": "2a7d9bbe22f6e8e0f40a5924a7dc13113ff80dd28e4ae5e5ac72679153298383",
     "noreturn": false

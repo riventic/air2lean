@@ -141,7 +141,7 @@ pub fn main() !void {
     try genClaim();
     try genAtomics();
     try genSync();
-    try genNoArgs("tests/diff/threadsync/inputs", .{ "mutexCounter", "handoff", "waitGroup" });
+    try genNoArgs("tests/diff/threadsync/inputs", .{ "mutexCounter", "handoff", "handoffAll", "waitGroup" });
     try genNoArgs("tests/diff/iogroup/inputs", .{ "groupCounter", "groupConcurrent" });
     // The fitness generator runs last, so every earlier input stays the same.
     try genFitness(rng);

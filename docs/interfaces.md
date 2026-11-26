@@ -95,7 +95,10 @@ The proof side belongs to the full-state framework (on main since the arena land
   of a wider item type) and `Interfaces/KindsSpec.lean` (a non-zero sentinel, an optional pointer
   item, a float item, an over-aligned slice, and a sentinel copy) and `Interfaces/GrowSpec.lean`
   (`realloc`, `remap` and the in-place `resize` of the sentinel slice itself, Zig 0.17.1; all
-  four entries are the environment's there). The sentinel statements and
+  four entries are the environment's there) and `Interfaces/RawSpec.lean` (a client of
+  `rawAlloc`, `rawResize`, `rawRemap`, `rawFree` and the in-place `resize`, whose premises are
+  the contract's preconditions; `Interfaces/RawNeg.lean` checks that a call outside them has no
+  proof). The sentinel statements and
   the theorems of `append`, `resize` and the copy are
   generic (`ZigLean/Sep/Full/SentinelBuf.lean`: every item size, alignment and sentinel bytes);
   the copies of the generated code are instances that supply the

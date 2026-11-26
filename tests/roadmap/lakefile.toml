@@ -30,7 +30,7 @@ globs = ["AllocFba.+"]
 name = "AllocTranslated"
 srcDir = "alloc-translated"
 globs = ["AllocTranslated.+", "KernelBytes", "ListsPage", "PageAlloc", "PageAllocMacos", "PageCreation",
-         "PageObstruction", "PageSpec", "PageSpecMacos", "PageThread", "PageTok"]
+         "PageObstruction", "PageSpec", "PageSpecMacos", "PageThread", "PageThreadMacos", "PageTok"]
 
 # M03: the compiled runner of the translated PageAllocator's requests above 1 MiB
 # (alloc-translated/AllocTranslated/Large.lean, built and run by alloc-translated/check.sh in a
@@ -54,12 +54,12 @@ name = "ListsFba"
 srcDir = "lists-fba"
 globs = ["ListsFba.+"]
 
-# The modules of tests/roadmap/interfaces that ListsFba imports (M04's sentinel program and its
-# proofs); interfaces/check.sh still elaborates the fixture's other files itself.
+# The modules of tests/roadmap/interfaces that ListsFba imports (M04's sentinel programs and
+# their proofs); interfaces/check.sh still elaborates the fixture's other files itself.
 [[lean_lib]]
 name = "Interfaces"
 srcDir = "interfaces"
-globs = ["Interfaces.Sentinel", "Interfaces.SentinelSpec"]
+globs = ["Interfaces.Sentinel", "Interfaces.SentinelSpec", "Interfaces.Wide", "Interfaces.WideSpec"]
 
 # The general symbolic executor `fsym` on library-only examples (tests/roadmap/sep-auto/check.sh).
 [[lean_lib]]
