@@ -93,7 +93,7 @@
  "src": {
   "file": "fba.zig",
   "module": "fba",
-  "decl_line": 33
+  "decl_line": 78
  },
  "params": [
   0

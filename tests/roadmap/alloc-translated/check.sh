@@ -13,8 +13,9 @@
 # translations are 0.17.1's, and the same proofs, audit, `#guard`s and growth lines are checked
 # over the 0.16.0 ones in a check tree (scripts/check-tree.py).
 # M02: the model's lines of the growths by `remap` and `realloc` (in place, moved, failed, the
-# read of a moved block's old address; Eval.lean `growLinux`, `growMacos`) are compared with the
-# `page_grow` lines of expected-linux.txt and expected.txt on every host. With
+# read of a moved block's old address; Eval.lean `growLinux`, `growMacos`), and those of the fixed
+# buffer (`fbaGrowLinux`, `fbaGrowMacos`), are compared with the `page_grow` and `fba_grow` lines
+# of expected-linux.txt and expected.txt on every host. With
 # AIR2LEAN_NATIVE_ZIG (a stock Zig 0.16.0 or 0.17.1), also builds and runs native.zig and compares it with
 # expected.txt (16 KiB pages, recorded on aarch64-macos) or expected-linux.txt (4 KiB pages,
 # recorded on x86_64-linux): the output depends on the page size only, not on the OS. So the
@@ -72,9 +73,13 @@ prove() {  # prove LINES: build, audit and run the library of the current tree; 
     PageThread PageCreation ListsPage KernelBytes "${theorems[@]}"
   # M02: the model's growth lines against the files the native runs are compared with.
   python3 -B scripts/fixtures.py run "$1" AllocTranslated.Eval:AllocTranslated.Eval.growLinux \
-    AllocTranslated.Eval:AllocTranslated.Eval.growMacos
+    AllocTranslated.Eval:AllocTranslated.Eval.growMacos \
+    AllocTranslated.Eval:AllocTranslated.Eval.fbaGrowLinux \
+    AllocTranslated.Eval:AllocTranslated.Eval.fbaGrowMacos
   diff <(grep '^page_grow' "$here/expected-linux.txt") "$1/AllocTranslated.Eval.growLinux.txt"
   diff <(grep '^page_grow' "$here/expected.txt") "$1/AllocTranslated.Eval.growMacos.txt"
+  diff <(grep '^fba_grow' "$here/expected-linux.txt") "$1/AllocTranslated.Eval.fbaGrowLinux.txt"
+  diff <(grep '^fba_grow' "$here/expected.txt") "$1/AllocTranslated.Eval.fbaGrowMacos.txt"
 }
 prove "$work/lines"
 # The same proof text over the Zig 0.16.0 translations, in a check tree with them in place of the
