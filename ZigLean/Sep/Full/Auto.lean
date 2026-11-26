@@ -2531,21 +2531,39 @@ derives it for the types the translator generates, from their `Packed` instances
 enum by its tags (`EnumTags`: the instance reads the bits through the enum's `ofInt?`), a packed
 struct by its layout (`PackedLayout`: each field `Packed.get` of the bits at its offset in the
 instance's `ofBits`) with lawful fields, again derived, and a type whose bits are its value (a
-non-exhaustive enum) by definition. Any other type (a packed union, an array) gets none.
-`packedRoundTrip` rewrites `Packed.toBits (Packed.ofBits b)` to `b` in the arithmetic normal
-form, before the instance is unfolded into the fields' shifted bits that `omega` cannot read. -/
+non-exhaustive enum) by definition. Each direction of the law is derived on its own
+(`LawfulPackedBits`, `LawfulPackedVal`; `LawfulPacked` is both): a packed union has the bits
+direction only (`PackedU.bitsOf_intBytes`), a struct has each direction all its fields have
+(`PackedLayout.lawfulBits`/`lawfulVal`), and an array or vector has each direction its lanes have
+(the generic instances, over the lane's law derived first). Any other type gets none.
+`packedRoundTrip` (bits direction) rewrites `Packed.toBits (Packed.ofBits b)` to `b` in the
+arithmetic normal form, before the instance is unfolded into the fields' shifted bits that
+`omega` cannot read; `packedValRoundTrip`/`packedValidToBits` use the value direction. -/
 
 /-- Run `x` in `MetaM` (a simproc of the arithmetic normal form), without error recovery. -/
 def runTacticM {α : Type} (x : TacticM α) : MetaM α :=
   (x { elaborator := .anonymous, recover := false } |>.run' { goals := [] }).run'
 
+/-- `ty` is the law of a packed type or one of its two directions, `C T n inst`
+(`lawfulPackedOf?`). -/
+def isPackedLaw (ty : Expr) : Bool :=
+  ty.getAppNumArgs == 3 &&
+    #[``LawfulPacked, ``LawfulPackedBits, ``LawfulPackedVal].contains ty.getAppFn.constName
+
+/-- The operands of `x₀ ||| x₁ ||| …` (`|||` associates to the left). -/
+partial def orOperands (e : Expr) : Array Expr :=
+  match_expr e with
+  | HOr.hOr _ _ _ _ a b => (orOperands a).push b
+  | _ => #[e]
+
 -- the steps name their hypotheses across tactics
 set_option hygiene false in
-/-- An instance of `ty = LawfulPacked T n inst`: synthesized, or derived from `T`'s `Packed`
-instance (above); cached per run. -/
+/-- An instance of `ty = C T n inst`, `C` the law (`LawfulPacked`) or one of its directions
+(`LawfulPackedBits`, `LawfulPackedVal`): synthesized, or derived from `T`'s `Packed` instance
+(above); cached per run. -/
 partial def lawfulPackedOf? (ty : Expr) (fuel : Nat := 4) : TacticM (Option Expr) := do
   let ty ← instantiateMVars ty
-  unless ty.isAppOfArity ``LawfulPacked 3 do return none
+  unless isPackedLaw ty do return none
   -- (an instance in the context first: a generic client's `[LawfulPacked T n]` of a local `T`)
   if let some i ← trySynth? ty then return some i
   if ty.hasExprMVar || ty.hasFVar then return none
@@ -2555,11 +2573,19 @@ partial def lawfulPackedOf? (ty : Expr) (fuel : Nat := 4) : TacticM (Option Expr
     -- (no error recovery: a step that does not elaborate fails, logging nothing)
     let r ← withReader ({ · with recover := false }) do
       try
-        match ← enum? with
-        | some e => pure (some e)
-        | none => match ← struct? with
-          | some e => pure (some e)
-          | none => byDefn?
+        if cls == ``LawfulPacked then
+          if let some e ← enum? then pure (some e)
+          else if let some e ← lanes? then pure (some e)
+          else if let some e ← struct? then pure (some e)
+          else byDefn?
+        -- a direction: of the law where the type has both (one derivation, cached, for both
+        -- directions), else on its own (a packed union's bits, a struct of such fields)
+        else if let some e ← lawfulPackedOf? (mkApp3 (mkConst ``LawfulPacked) T n inst) fuel then
+          pure <| some (mkAppN (mkConst (if cls == ``LawfulPackedBits then ``LawfulPacked.bits
+            else ``LawfulPacked.val)) #[T, n, inst, e])
+        else if let some e ← lanes? then pure (some e)
+        else if let some e ← struct? then pure (some e)
+        else union?
       catch ex => do
         trace[fsym] "LawfulPacked of {ty.getArg! 0}: {ex.toMessageData}"; pure none
     -- (closed: it is cached for the whole run)
@@ -2571,10 +2597,43 @@ partial def lawfulPackedOf? (ty : Expr) (fuel : Nat := 4) : TacticM (Option Expr
     if r.isNone then s.restore
     return r
 where
+  cls := ty.getAppFn.constName
   T := ty.getArg! 0
   n := ty.getArg! 1
   inst := ty.getArg! 2
   bits := mkApp (mkConst ``BitVec) n
+  /-- A packed union (its bytes): the bits direction, `ofBits` writing the bits as the integer's
+  bytes and `toBits` reading them back (`PackedU.bitsOf_intBytes`). -/
+  union? : TacticM (Option Expr) := do
+    unless cls == ``LawfulPackedBits do return none
+    let g ← mkFreshExprSyntheticOpaqueMVar ty
+    unless ← closeWith g.mvarId!
+        (← `(tactic| exact ⟨fun b _ => Zig.PackedU.bitsOf_intBytes b (by decide)⟩)) do
+      return none
+    return some g
+  /-- An array or vector of lanes (`Vector α k`, `Vec α k`): the generic instance of the
+  direction, over the lane's law of it, derived first (an enum's or a struct's is no instance). -/
+  lanes? : TacticM (Option Expr) := do
+    let T' ← whnfR T
+    unless T'.isAppOfArity ``Vector 2 || T'.isAppOfArity ``Zig.Vec 2 do return none
+    let α := T'.getArg! 0
+    let w ← mkFreshExprMVar (mkConst ``Nat)
+    let some iα ← trySynth? (mkApp2 (mkConst ``Packed) α w) | return none
+    let some hα ← lawfulPackedOf? (mkApp3 (mkConst cls) α (← instantiateMVars w) iα) (fuel - 1)
+      | return none
+    -- (the lane's law a local instance)
+    withLocalDeclD `h (← inferType hα) fun h => do
+      let some i ← trySynth? ty | return none
+      return some ((← mkLambdaFVars #[h] i).beta #[hα])
+  /-- A fact of every value of a field's type `U` (its bits' validity, its determined bits): by
+  definition, or an array's (`lanes`) or a vector's (`vec`) from its lanes', in any depth. -/
+  laneFact (lanes vec : Name) (U : Expr) : TacticM Term := do
+    let U ← whnfR U
+    let of (l : Name) : TacticM Term := do
+      `($(mkIdent l) (fun _ => $(← laneFact lanes vec (U.getArg! 0))) _)
+    if U.isAppOfArity ``Vector 2 then of lanes
+    else if U.isAppOfArity ``Zig.Vec 2 then of vec
+    else `(rfl)
   goal (m : Expr) : MetaM MVarId := do
     m.mvarId!.replaceTargetDefEq (← Core.betaReduce (← instantiateMVars (← m.mvarId!.getType)))
   /-- The instance's `ofBits b`, unfolded. -/
@@ -2583,7 +2642,7 @@ where
     return some (← whnfR ob.headBeta)
   /-- A type whose bits are its value (a non-exhaustive enum). -/
   byDefn? : TacticM (Option Expr) := do
-    let g ← mkFreshExprSyntheticOpaqueMVar ty
+    let g ← mkFreshExprSyntheticOpaqueMVar (mkApp3 (mkConst ``LawfulPacked) T n inst)
     unless ← closeWith g.mvarId! (← `(tactic| exact ⟨fun _ _ => rfl, fun _ _ => ⟨rfl, rfl⟩⟩)) do
       return none
     return some g
@@ -2640,38 +2699,65 @@ where
     let mk := mkAppN (mkConst ``PackedLayout.mk) #[T, n, inst, fields, slots]
     let (ms, _, _) ← forallMetaTelescope (← inferType mk)
     unless ms.size == 7 do return none
-    -- `PAll` of a fact by definition for each field
-    let each : Term ← if sh.isEmpty then `(trivial) else
-      let xs : Array Term := (Array.replicate sh.size (← `(rfl))).push (← `(trivial))
-      `(⟨$xs,*⟩)
+    -- `PAll` of a fact for each field
+    let all (xs : Array Term) : TacticM Term := do
+      if xs.isEmpty then return ← `(trivial)
+      `(⟨$(xs.push (← `(trivial))),*⟩)
+    let each ← all (Array.replicate sh.size (← `(rfl)))
+    -- each field's validity and determined bits, where every value of its type has them
+    let valids ← sh.mapM fun (U, _) =>
+      laneFact ``Zig.Packed.valid_lanes_of ``Zig.Packed.valid_vec_of U
+    let fulls ← sh.mapM fun (U, _) =>
+      laneFact ``Zig.Packed.mask_lanes_of ``Zig.Packed.mask_vec_of U
+    -- the fields whose bits the instance's `mask` writes as all ones (in a struct with a float
+    -- or packed-union field, the fields without one), in the fields' order
+    let noOnes := Array.replicate sh.size false
+    let ones ← withLocalDeclD `v T fun v => do
+      let some mv ← unfoldProjInst? (mkApp4 (mkConst ``Packed.mask) T n inst v) | return noOnes
+      let xs := orOperands mv.headBeta
+      unless xs.size == sh.size do return noOnes
+      return xs.map fun x => Id.run do
+        let_expr HShiftLeft.hShiftLeft _ _ _ _ m _ := x | false
+        let_expr BitVec.setWidth _ _ a := m | false
+        a.isAppOf ``BitVec.allOnes
+    let onesLit : Array Term := ones.map fun b => quote b
+    let fullOrMask ← all (← (ones.zip fulls).mapM fun (b, h) =>
+      if b then `(Or.inr $h) else `(Or.inl rfl))
     let steps : Array (String × Syntax) := #[
       ("slots", ← `(tactic| exact fun _ => rfl)),
       ("tiles", ← `(tactic| exact rfl)),
       ("toBits", ← `(tactic| exact fun _ => rfl)),
       ("ofBits", ← `(tactic| exact fun _ => $each)),
-      -- valid: every field's (no enum field), or the instance's conjunction of the enum fields'
+      -- valid: every field's (no enum field), or the instance's conjunction of the enum
+      -- fields', the others' (an array's by its lanes') holding for all bits
       ("valid", ← `(tactic| first
-        | exact fun _ => ⟨fun _ => $each, fun _ => rfl⟩
+        | exact fun _ => ⟨fun _ => $(← all valids), fun _ => rfl⟩
         | (intro b; simp only [Zig.PAll, Zig.PField.Valid, Zig.Packed.valid, Zig.Packed.validAt,
-            Bool.and_eq_true, and_true, true_and, and_assoc]))),
-      -- mask: every bit determined, or the instance's fields' masks at their offsets
+            Vector.all_eq_true, implies_true, Bool.and_eq_true, and_true, true_and, and_assoc]))),
+      -- mask: every bit determined, or the instance's fields' masks at their offsets, all ones
+      -- for the fields `ones`
       ("mask", ← `(tactic| first
-        | exact fun _ _ => $each
-        | exact Zig.PackedLayout.mask_full_of (fun _ => rfl) (fun _ => rfl))),
+        | exact fun _ _ => $(← all fulls)
+        | exact Zig.PackedLayout.mask_full_of [$onesLit,*] (fun _ => rfl) (fun _ => rfl)
+            (fun _ => rfl) (fun _ => $fullOrMask))),
       ("ext", ← `(tactic| (intro v v' h; cases v; cases v'; first | rfl | (simp only
         [List.cons.injEq, Zig.PField.mk.injEq, heq_eq_eq, true_and, and_true] at h; simp only [h]))))]
     for (m, (what, tac)) in ms.zip steps do
       unless ← closeWith (← goal m) tac do
         trace[fsym] "LawfulPacked of {T}: {what} not proved"; return none
-    -- the fields' types lawful
+    -- the fields' types lawful in the direction asked for
+    let (fieldLaw, layoutLaw) :=
+      if cls == ``LawfulPackedBits then (``PField.LawfulBits, ``PackedLayout.lawfulBits)
+      else if cls == ``LawfulPackedVal then (``PField.LawfulVal, ``PackedLayout.lawfulVal)
+      else (``PField.Lawful, ``PackedLayout.lawful)
     let mut ls : Array Expr := #[]
     for (U, w, iU, _) in sh do
-      let some l ← lawfulPackedOf? (mkApp3 (mkConst ``LawfulPacked) U w iU) (fuel - 1)
-        | trace[fsym] "LawfulPacked of {T}: {U} not lawful"; return none
+      let some l ← lawfulPackedOf? (mkApp3 (mkConst cls) U w iU) (fuel - 1)
+        | trace[fsym] "{cls} of {T}: {U} not lawful"; return none
       ls := ls.push l
-    let hl ← withLocalDeclD `v T fun v => do
-      let some (_, xs) := (← whnfR (mkApp fields v)).listLit? | throwError "fsym: fields"
-      let P := mkConst ``PField.Lawful
+    let hl? ← withLocalDeclD `v T fun v => do
+      let some (_, xs) := (← whnfR (mkApp fields v)).listLit? | return none
+      let P := mkConst fieldLaw
       let allT (ys : List Expr) : MetaM Expr := do
         return mkApp3 (mkConst ``PAll) pfield P (← mkListLit pfield ys)
       let mut acc ← mkExpectedTypeHint (mkConst ``True.intro) (← allT [])
@@ -2680,8 +2766,9 @@ where
         let tl := xs.drop (i + 1)
         acc ← mkExpectedTypeHint (mkApp4 (mkConst ``And.intro) (mkApp P xs[i]!) (← allT tl) ls[i]! acc)
           (← allT (xs[i]! :: tl))
-      mkLambdaFVars #[v] acc
-    return some (← mkAppM ``PackedLayout.lawful #[mkAppN mk ms, hl])
+      return some (← mkLambdaFVars #[v] acc)
+    let some hl := hl? | return none
+    return some (← mkAppM layoutLaw #[mkAppN mk ms, hl])
 
 open Simp in
 /-- A fact `x = y` of the round trip's conditions (the bits' validity, a value's determined bits):
@@ -2697,9 +2784,10 @@ def packedFact? (x y : Expr) : SimpM (Option Expr) := do
     return some d
   (← getMethods).discharge? t
 
-/-- A type's `LawfulPacked` (`lawfulPackedOf?`), in the arithmetic normal form. -/
-def lawfulPackedIn? (T n inst : Expr) : MetaM (Option Expr) :=
-  withDefault <| runTacticM (lawfulPackedOf? (mkApp3 (mkConst ``LawfulPacked) T n inst))
+/-- A type's law of class `cls` (a direction, `LawfulPackedBits`/`LawfulPackedVal`;
+`lawfulPackedOf?`), in the arithmetic normal form. -/
+def lawfulPackedIn? (cls : Name) (T n inst : Expr) : MetaM (Option Expr) :=
+  withDefault <| runTacticM (lawfulPackedOf? (mkApp3 (mkConst cls) T n inst))
 
 open Simp in
 /-- Valid bits of a lawful type read back: `Packed.toBits (Packed.ofBits b : T)` is `b`
@@ -2708,7 +2796,7 @@ simproc ↓ [fsym_arith] packedRoundTrip (Packed.toBits (Packed.ofBits _)) := fu
   let_expr Packed.toBits T n inst x := e | return .continue
   let_expr Packed.ofBits T' n' inst' b := x | return .continue
   unless T == T' && n == n' && inst == inst' do return .continue
-  let some hl ← lawfulPackedIn? T n inst | return .continue
+  let some hl ← lawfulPackedIn? ``LawfulPackedBits T n inst | return .continue
   let some hv ← packedFact? (mkApp4 (mkConst ``Packed.valid) T n inst b) (mkConst ``Bool.true)
     | return .continue
   return .done { expr := b, proof? := some (mkAppN (mkConst ``Packed.toBits_ofBits_of)
@@ -2716,14 +2804,14 @@ simproc ↓ [fsym_arith] packedRoundTrip (Packed.toBits (Packed.ofBits _)) := fu
 
 open Simp in
 /-- For `f (Packed.toBits v)` (`f` = `Packed.ofBits`, `Packed.valid` of the same instance) of a
-lawful type with every bit of `v` determined: the arguments `T, n, inst, LawfulPacked, v,
+lawful type with every bit of `v` determined: the arguments `T, n, inst, LawfulPackedVal, v,
 mask v = allOnes` of `Packed.ofBits_toBits_of`/`Packed.valid_toBits_of` (the determined bits by
 `packedFact?`). -/
 def lawfulFullArgs? (e : Expr) : SimpM (Option (Array Expr)) := do
   let #[T, n, inst, x] := e.getAppArgs | return none
   let_expr Packed.toBits T' n' inst' v := x | return none
   unless T == T' && n == n' && inst == inst' do return none
-  let some hl ← lawfulPackedIn? T n inst | return none
+  let some hl ← lawfulPackedIn? ``LawfulPackedVal T n inst | return none
   let some hm ← packedFact? (mkApp4 (mkConst ``Packed.mask) T n inst v)
       (mkApp (mkConst ``BitVec.allOnes) n) | return none
   return some #[T, n, inst, hl, v, hm]
@@ -2754,7 +2842,7 @@ def synthInstArgs (args : Array Expr) : TacticM Unit := do
     if (← isClass? ty).isSome then
       if ty.isAppOfArity ``LawfulEnc 2 then
         if let some inst ← lawfulEncOf? ty then discard <| isDefEq a inst
-      else if ty.isAppOfArity ``LawfulPacked 3 then
+      else if isPackedLaw ty then
         if let some inst ← lawfulPackedOf? ty then discard <| isDefEq a inst
       else if let some inst ← trySynth? ty then
         discard <| isDefEq a inst
@@ -2766,7 +2854,7 @@ def instArgsMissing (args : Array Expr) : TacticM Bool := do
   for a in args do
     if ← a.mvarId!.isAssigned then continue
     let ty ← instantiateMVars (← inferType a)
-    if ty.hasExprMVar || ty.isAppOf ``LawfulEnc || ty.isAppOf ``LawfulPacked then continue
+    if ty.hasExprMVar || ty.isAppOf ``LawfulEnc || isPackedLaw ty then continue
     if (← isClass? ty).isSome then
       match ← trySynth? ty with
       | some inst => unless ← isDefEq a inst do return true
