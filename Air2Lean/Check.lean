@@ -527,9 +527,12 @@ types, so an *array item* may be an `auto` struct or a tagged union; its bits ar
 (`Type.bitSize` of a non-packed container) and its memory image is the exporter's layout, the
 tag included (`compile-errors/README.md` in `tests/roadmap/packed-casts`). So may a
 non-pointer optional, whose bits are its ABI size: the payload (any item type above), a flag
-byte, padding (`Enc (Option α)`). A tuple or error item compiles there too and stays outside. -/
+byte, padding (`Zig.Enc.optionRepr`). `asItem`: `id` is an array item or such an optional's
+payload; an optional anywhere else (a field of an item) stays outside, since only these are
+decoded with the cast's own flag rule (`emitStorageEnc`'s `reprOpt`). A tuple or error item
+compiles there too and stays outside. -/
 partial def reprBitSize (types : Array Ty) (layouts : Array Layout) (id : TyId)
-    (autoItems : Bool := false) : Except String Nat := do
+    (autoItems : Bool := false) (asItem : Bool := false) : Except String Nat := do
   let sizeOf (t : TyId) : Except String Nat :=
     match layouts[t]?.bind (·.size) with
     | some s => pure s
@@ -545,7 +548,7 @@ partial def reprBitSize (types : Array Ty) (layouts : Array Layout) (id : TyId)
       else do
         for (_, t) in fields do let _ ← recur t
         (8 * ·) <$> sizeOf c
-    | _ => recur c
+    | _ => reprBitSize types layouts c autoItems (asItem := true)
   let some ty := types[id]? | throw s!"an unknown type (type {id})"
   match ty with
   | .int _ bits | .float bits => pure bits
@@ -585,9 +588,12 @@ partial def reprBitSize (types : Array Ty) (layouts : Array Layout) (id : TyId)
     else if !autoItems then
       throw s!"an optional (type {id}; no guaranteed in-memory layout; Zig 0.14.1 and 0.15.2 \
         accept an array of optionals, Sema rejects it from Zig 0.16.0)"
+    else if !asItem then
+      throw s!"an optional that is not an array item (type {id}: a field of an item; the \
+        cast's flag rule applies to array items and their payloads only)"
     else do
       -- An item on 0.14.1/0.15.2: the payload at offset 0, the flag byte at the payload's
-      -- size, padding to its alignment (`Enc (Option α)`); `Type.bitSize` is the ABI size.
+      -- size, padding to its alignment (`Zig.Enc.optionRepr`); `Type.bitSize` is the ABI size.
       -- The flag's offset is pinned by the exporter's payload and optional layouts.
       let _ ← item child
       let agrees (t : TyId) : Except String Bool := do

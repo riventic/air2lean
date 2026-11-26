@@ -31,7 +31,10 @@ private def types : Array Ty := #[
   .array 1 12 false, .struct "P" "extern" #[("p", 13)],                -- 17..18: [1]*u32, extern {?*u32}
   .int false 40, .array 1 6 false,                                     -- 19..20: u40, [1]tuple
   .void, .array 4 21 false, .int false 0,                              -- 21..23: void, [4]void, u0
-  .vector 5 1]                                                         -- 24: @Vector(5, u8)
+  .vector 5 1,                                                         -- 24: @Vector(5, u8)
+  .optional 1, .array 1 25 false,                                      -- 25..26: ?u8, [1]?u8
+  .struct "AO" "auto" #[("o", 25)], .array 1 27 false,                 -- 27..28: auto {?u8}, [1]AO
+  .int false 16]                                                       -- 29: u16
 
 private def layouts : Array Layout := #[
   {size := some 4, align := some 4}, {size := some 1, align := some 1},
@@ -49,14 +52,19 @@ private def layouts : Array Layout := #[
   {size := some 8, align := some 8}, {size := some 8, align := some 4},
   {size := some 0, align := some 1}, {size := some 0, align := some 1},
   {size := some 0, align := some 1},
-  {size := some 8, align := some 8}]
+  {size := some 8, align := some 8},
+  {size := some 2, align := some 1}, {size := some 2, align := some 1},
+  {size := some 2, align := some 1, offsets := #[0]}, {size := some 2, align := some 1},
+  {size := some 2, align := some 2}]
 
-private def cx (version : String) (src : TyId) : CheckCtx :=
+/-- `backend`: the profile's code generator; the default is the legacy profile's (`unverified`). -/
+private def cx (version : String) (src : TyId) (backend : String := "unverified") : CheckCtx :=
   { fnName := "probe.f", types, layouts, instTys := #[(0, src)], places := #[],
-    dialect := (ZigVersion.ofString? version).map Dialect.ofVersion }
+    dialect := (ZigVersion.ofString? version).map ({ version := ·, backend }) }
 
-private def result (version : String) (src dst : TyId) : Except String Nat :=
-  checkOp (cx version src) 0 dst (.bitcast false (.inst 0))
+private def result (version : String) (src dst : TyId) (backend : String := "unverified") :
+    Except String Nat :=
+  checkOp (cx version src backend) 0 dst (.bitcast false (.inst 0))
 
 private def accepts (version : String) (src dst : TyId) : Bool := (result version src dst).isOk
 
@@ -67,17 +75,26 @@ private def rejects (version : String) (src dst : TyId) (marker : String) : Bool
 
 def main : IO Unit := do
   let casts : List (TyId × TyId) :=
-    [(2, 0), (0, 2), (4, 3), (3, 4), (3, 5), (10, 11), (11, 10), (15, 0), (0, 15),
+    [(2, 0), (0, 2), (4, 3), (3, 4), (3, 5), (15, 0), (0, 15),
      (13, 12), (13, 5), (5, 13)]
   for v in ["0.14.1", "0.15.2", "0.16.0"] do
     for (s, d) in casts do
       require (accepts v s d) s!"{v}: cast {s} → {d} is rejected: {result v s d}"
+    -- `[2]u24` ↔ `u56`: a padded integer is decoded with the backend's storage encoding, so the
+    -- cast holds on a profile of the LLVM or the self-hosted x86_64 backend and is rejected on
+    -- one that names no backend (the legacy profile; fail closed).
+    for (s, d) in [(10, 11), (11, 10)] do
+      for backend in [Target.llvmBackend, "stage2_x86_64"] do
+        require (result v s d backend).isOk
+          s!"{v} {backend}: cast {s} → {d} is rejected: {result v s d backend}"
+      require (rejects v s d "of an integer with padding bits")
+        s!"{v}: the padded cast {s} → {d} on a legacy profile: {result v s d}"
   -- A context without a version rejects them all. Only ≤0.16 has the representation casts:
   -- 0.17.1 takes the logical-bit-order path (`Air2Lean/BitCast.lean`, docs/bitcast-semantics.md),
   -- which admits `[4]u8` ↔ `u32` (equal logical bits) and rejects the rest (extern aggregates,
   -- `[2]u24` ↔ `u56` at 48 vs 56 logical bits). The three optional-pointer casts (`@ptrCast`,
   -- `@intFromPtr`, `@ptrFromInt`) are no `@bitCast`s and hold for every version.
-  for (s, d) in casts do
+  for (s, d) in casts ++ [(10, 11), (11, 10)] do
     require (!accepts "" s d) s!"\"\": cast {s} → {d} is accepted"
     let admitted := [(2, 0), (0, 2), (13, 12), (13, 5), (5, 13)].contains (s, d)
     require (accepts "0.17.1" s d == admitted)
@@ -92,7 +109,18 @@ def main : IO Unit := do
   for v in ["0.14.1", "0.15.2", "0.16.0"] do
     for (s, d) in [(17, 5), (5, 17), (18, 5), (5, 18), (17, 18)] do
       require (rejects v s d "involving a pointer") s!"{v}: pointer-bearing cast {s} → {d} is accepted"
-  require (rejects "0.16.0" 10 5 "between types of 56 and 64 bits") "[2]u24 → u64 is accepted"
+  require (match result "0.16.0" 10 5 Target.llvmBackend with
+      | .error e => (e.splitOn "between types of 56 and 64 bits").length > 1
+      | .ok _ => false) "[2]u24 → u64 is accepted"
+  -- Zig 0.14.1 and 0.15.2: an optional array item is decoded with the cast's flag rule
+  -- (`Zig.Enc.optionRepr`); an optional field of an `auto` struct item is not, and is rejected.
+  for v in ["0.14.1", "0.15.2"] do
+    require (accepts v 26 29 && accepts v 29 26) s!"{v}: [1]?u8 ↔ u16: {result v 26 29}"
+    require (rejects v 28 29 "an optional that is not an array item")
+      s!"{v}: [1]auto struct of ?u8 → u16: {result v 28 29}"
+    require (rejects v 29 28 "an optional that is not an array item")
+      s!"{v}: u16 → [1]auto struct of ?u8: {result v 29 28}"
+  require (rejects "0.16.0" 26 29 "involving an optional") "0.16.0: [1]?u8 → u16 is accepted"
   -- A sentinel-terminated array is one more item (`lenIncludingSentinel`): `[4:0]u8` has 40 bits
   -- up to 0.16. Zig 0.17 is rejected by name (docs/upstream/bitcast-sentinel-array.md), and so
   -- is a vector on the other side (up to 0.15.2 the LLVM lowering copies the items only).

@@ -32,6 +32,7 @@ opt_u8sToInt: 0x1340112
 opt_nullToInt: unspecified
 opt_intToU8s: 0x34
 opt_intToU8sNull: 0x100
+opt_intToU8sBadFlag: unspecified
 opt_u16sToInt: 0x1567800011234
 opt_intToU16s: 0x5678
 opt_zerosToInt: 0x1010001

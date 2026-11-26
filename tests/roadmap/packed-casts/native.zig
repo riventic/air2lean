@@ -100,6 +100,8 @@ pub fn main() void {
         hex("opt_nullToInt", oi.u8sToInt(.{ null, 0x34 }));
         hex("opt_intToU8s", oi.intToU8s(0x0134_0012));
         hex("opt_intToU8sNull", oi.intToU8s(0x0034_0112));
+        // A flag byte of 2: the model says `unspecified`, native code goes on (non-null).
+        hex("opt_intToU8sBadFlag", oi.intToU8s(0x0234_0012));
         hex("opt_u16sToInt", oi.u16sToInt(.{ 0x1234, 0x5678 }));
         hex("opt_intToU16s", oi.intToU16s(0xEE01_5678_FF01_1234));
         hex("opt_zerosToInt", oi.zerosToInt(.{ 0, null, 0, 0 }));

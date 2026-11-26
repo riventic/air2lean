@@ -17,9 +17,9 @@ theorem u8sToInt_null : (u8sToInt #v[none, some 0x34]).run = some (.error .unspe
   decide +kernel
 theorem intToU8s_ok : (intToU8s 0x01340012#32).run = some (.ok 0x34) := by decide +kernel
 theorem intToU8s_null : (intToU8s 0x00340112#32).run = some (.ok 0x100) := by decide +kernel
-/-- Item 1's flag byte holds 2: no flag, `.illegal` (native code reads it as non-null: the
-model over-approximates, `README.md` §Scope). -/
-theorem intToU8s_badFlag : (intToU8s 0x02340012#32).run = some (.error .illegal) := by
+/-- Item 1's flag byte holds 2: `.unspecified`, not `.illegal` (native code reads it as non-null
+and goes on; `Zig.Enc.optionRepr`, `README.md` §Scope). -/
+theorem intToU8s_badFlag : (intToU8s 0x02340012#32).run = some (.error .unspecified) := by
   decide +kernel
 /-- `?u16`'s padding byte is undefined. -/
 theorem u16sToInt_padding : (u16sToInt #v[some 0x1234, some 0x5678]).run =
@@ -49,6 +49,7 @@ def main : IO Unit := do
   line "opt_nullToInt" (u8sToInt #v[none, some 0x34])
   line "opt_intToU8s" (intToU8s 0x01340012#32)
   line "opt_intToU8sNull" (intToU8s 0x00340112#32)
+  line "opt_intToU8sBadFlag" (intToU8s 0x02340012#32)
   line "opt_u16sToInt" (u16sToInt #v[some 0x1234, some 0x5678])
   line "opt_intToU16s" (intToU16s 0xEE015678FF011234#64)
   line "opt_zerosToInt" (zerosToInt #v[some 0, none, some 0, some 0])
