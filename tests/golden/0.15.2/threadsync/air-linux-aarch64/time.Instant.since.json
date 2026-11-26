@@ -430,7 +430,7 @@
   },
   {
    "k": "struct",
-   "name": "os.linux.timespec__struct_2708",
+   "name": "os.linux.timespec__struct_2734",
    "module": "std",
    "layout": "extern",
    "fields": [

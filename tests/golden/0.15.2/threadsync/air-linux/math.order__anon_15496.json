@@ -37,7 +37,7 @@
   "error_tracing": false,
   "export_stage": "analyzed-air"
  },
- "name": "math.order__anon_15463",
+ "name": "math.order__anon_15496",
  "module": "std",
  "src": {
   "file": "math.zig",

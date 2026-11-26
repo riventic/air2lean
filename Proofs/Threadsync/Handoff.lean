@@ -49,9 +49,10 @@ def lo : Layout where
   ok := by decide
   fits := by decide
 
-/-- The producer's argument. -/
+/-- The producer's argument (`producer` of `handoff`, `producerAll` of `handoffAll`). -/
 def prodOf : Tgt → Option Ptr
   | .producer p => some p
+  | .producerAll p => some p
   | _ => none
 
 /-! ## The producer -/
@@ -73,12 +74,35 @@ theorem producer_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) {rp : Res} (hp :
     (fitsL (Lo := lo) (prodOf := prodOf)).wp_hold (g' := fun r => gH rp r { ph := .rdy }),
     U_storeHeld (Lo := lo), vOf, Ph.hasV, Ph.hasR]
 
+/-- `handoffAll`'s producer: as `producer_spec`, with the condition's `broadcast`
+(`Handoff.wp_broadcast`: the contract's `CondImpl.broadcast_wp`) in place of `signal`. -/
+theorem producerAll_spec (G : ThreadId → Gh) (m : Mem) (d : Nat) {rp : Res} (hp : rp.Plain)
+    (hi : (proto lo prodOf).inv (upd G 1 (gO rp { ph := .lk })) m) (_hc : m.current = 1) :
+    (proto lo prodOf).WP 1 (producerAll bPtr) (fun _ G' m' _ => m'.current = 1 ∧
+      (proto lo prodOf).inv (upd G' 1 (⟨.gone, rp, rnil⟩, { ph := .fin })) m') G m d := by
+  unfold producerAll
+  -- `lock`, `v = 7` and `ready = true`, `unlock`, `broadcast`, `set`
+  fsym [WP.liftMem_pure (projI (Lo := lo) (prodOf := prodOf) _ _) rfl,
+    (fitsL (Lo := lo) (prodOf := prodOf)).wp_tick_plain,
+    wp_lockP (Lo := lo) (prodOf := prodOf) threadMutex rfl rfl ⟨⟩ hp,
+    wp_unlockP (Lo := lo) (prodOf := prodOf) threadMutex rfl rfl ⟨⟩,
+    wp_broadcast (Lo := lo) (prodOf := prodOf) threadCond rfl ⟨⟩ hp,
+    wp_set (Lo := lo) (prodOf := prodOf) resetEvent rfl ⟨⟩ hp,
+    (fitsL (Lo := lo) (prodOf := prodOf)).wp_hold (g' := fun r => gH rp r { ph := .v7 }),
+    (fitsL (Lo := lo) (prodOf := prodOf)).wp_hold (g' := fun r => gH rp r { ph := .rdy }),
+    U_storeHeld (Lo := lo), vOf, Ph.hasV, Ph.hasR]
+
 omit [Zig.Os.HasEnv] in
 theorem discard_eq (x : ConcM Tgt Unit) : discard x = (fun _ => ()) <$> x := rfl
 
 omit [Zig.Os.HasEnv] in
 theorem dispatch_producer (p : Ptr) : dispatch (Tgt.producer p) = (fun _ => ()) <$> producer p := by
   rw [show dispatch (Tgt.producer p) = discard (producer p) from rfl]; exact discard_eq _
+
+omit [Zig.Os.HasEnv] in
+theorem dispatch_producerAll (p : Ptr) :
+    dispatch (Tgt.producerAll p) = (fun _ => ()) <$> producerAll p := by
+  rw [show dispatch (Tgt.producerAll p) = discard (producerAll p) from rfl]; exact discard_eq _
 
 /-- The producer: its code, then its end. -/
 theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : (proto lo prodOf).init tgt g) (u : ThreadId)
@@ -95,6 +119,19 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : (proto lo prodOf).init tgt g) (
     subst hu1
     rw [dispatch_producer]
     refine WP.map (WP.mono ?_ (producer_spec G _ d (Res.plain_of hpP)
+      (by rw [show gO rp { ph := .lk } = G 1 from hgu.symm, upd_same]
+          exact inv_cur 1 hi (by rw [hgu]; nofun)) rfl))
+    rintro _ G' m' _ ⟨-, hi'⟩
+    exact qkid hi'
+  | producerAll p =>
+    obtain ⟨hp, rp, hpP, rfl⟩ := hg
+    obtain rfl : p = bPtr := Option.some.inj hp
+    have hu1 : u = 1 := by
+      obtain ⟨rX, -, hU⟩ := id hi
+      exact hU.shape.one (u := u) (by show (G u).2.ph.isProd = true; rw [hgu]; rfl)
+    subst hu1
+    rw [dispatch_producerAll]
+    refine WP.map (WP.mono ?_ (producerAll_spec G _ d (Res.plain_of hpP)
       (by rw [show gO rp { ph := .lk } = G 1 from hgu.symm, upd_same]
           exact inv_cur 1 hi (by rw [hgu]; nofun)) rfl))
     rintro _ G' m' _ ⟨-, hi'⟩
@@ -149,6 +186,49 @@ theorem main_spec (σ : Placement) (d : Nat) :
     wp_join (Lo := lo) (prodOf := prodOf), wp_free (Lo := lo) (prodOf := prodOf),
     joinedAll_of_threads]
 
+/-! ## `handoffAll`'s `main`
+
+The same walk over `handoffAll`'s generated code: it spawns `producerAll`. -/
+
+/-- `handoffAll`'s `ready` loop's invariant: `main` holds the mutex at `run`. -/
+def invA12 (rM : Res) (_ : handoffAllLocals) (G : ThreadId → Gh) (m : Mem) (_ : Nat) : Prop :=
+  m.current = 0 ∧ ∃ rL, (proto lo prodOf).inv (upd G 0 (gH rM rL { ph := .run })) m
+
+/-- `handoffAll`'s `ready` loop ends: `main` read `ready = true`. -/
+def postA12 (rM : Res) (r : handoffAllExit × handoffAllLocals) (G : ThreadId → Gh) (m : Mem)
+    (_ : Nat) : Prop :=
+  r.1 = .br11 ∧ m.current = 0 ∧ ∃ rL, (proto lo prodOf).inv (upd G 0 (gH rM rL { ph := .run })) m ∧
+    (G 1).2.ph.hasR = true
+
+theorem loopA12_body (rM : Res) (hpl : rM.Plain) (s : handoffAllLocals) (G : ThreadId → Gh)
+    (m : Mem) (d : Nat) (h : invA12 rM s G m d) :
+    (proto lo prodOf).WP 0 ((handoffAll.loop12 bPtr).run s) (fun r G' m' d' =>
+      if handoffAll.again12 r.1 then invA12 rM r.2 G' m' d' ∧
+        (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : handoffAllLocals) => 0) s)
+      else postA12 rM r G' m' d') G m d := by
+  obtain ⟨hc, rL, hi⟩ := h
+  unfold handoffAll.loop12
+  fsym [WP.liftMem_pure (projI (Lo := lo) (prodOf := prodOf) _ _) rfl,
+    (fitsL (Lo := lo) (prodOf := prodOf)).wp_tick_plain,
+    (fitsL (Lo := lo) (prodOf := prodOf)).wp_hold (g' := fun r => gH rM r { ph := .run }),
+    U_holdStep (Lo := lo), wp_cwait (Lo := lo) (prodOf := prodOf) threadCond rfl rfl rfl ⟨⟩ hpl,
+    handoffAll.again12]
+
+theorem mainAll_spec (σ : Placement) (d : Nat) :
+    (proto lo prodOf).WP 0 handoffAll QM G0 { mem0 σ with current := 0 } d := by
+  have := FOwned.start0_facts (σ := σ) (m := mem0 σ) rfl
+  unfold handoffAll
+  fsym [inv_of_box (Lo := lo) (prodOf := prodOf), inv_spawn (Lo := lo) (prodOf := prodOf),
+    WP.liftMem_pure (projI (Lo := lo) (prodOf := prodOf) _ _) rfl,
+    wp_lockM (Lo := lo) (prodOf := prodOf) threadMutex rfl rfl ⟨⟩ _,
+    WP.loop _ _ (invA12 _) (fun _ => 0) (postA12 _) (loopA12_body _ _),
+    (fitsL (Lo := lo) (prodOf := prodOf)).wp_hold (g' := (fun rM r => gH rM r { ph := .run }) _),
+    U_holdStep (Lo := lo), vOf_ready,
+    wp_unlockM (Lo := lo) (prodOf := prodOf) threadMutex rfl rfl ⟨⟩,
+    wp_ewait (Lo := lo) (prodOf := prodOf) resetEvent rfl ⟨⟩ _,
+    wp_join (Lo := lo) (prodOf := prodOf), wp_free (Lo := lo) (prodOf := prodOf),
+    joinedAll_of_threads]
+
 /-! ## The results -/
 
 /-- **`threadsync.handoff` gives 7 under every schedule** (every oracle `o`, every `fuel`). -/
@@ -175,6 +255,33 @@ loops). -/
 theorem handoff_completes :
     ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0)
       (@handoff ⟨Os.Env.example⟩) (mem0 σ)) = some 7 := by
+  refine ⟨.fresh, ?_⟩
+  iterate 8 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
+  decide +kernel
+
+/-- **`threadsync.handoffAll` gives 7 under every schedule** (every oracle `o`, every `fuel`):
+the hand-off whose producer calls `Thread.Condition.broadcast`, through the condition
+contract's `CondImpl.broadcast_wp`. -/
+theorem handoffAll_spec (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run env dispatch fuel o handoffAll (mem0 σ)).run = some (.ok (v, m))) :
+    v = .ok 7 := by
+  obtain ⟨_, _, hv, -⟩ := (proto lo prodOf).run_sound env (Proto.of_available henv) dispatch G0
+    dispatch_spec (fun _ _ _ _ _ hq => hq.2) rfl (mainAll_spec σ) h
+  exact hv
+
+/-- **No run of `threadsync.handoffAll` gives an error**: no data race, no deadlock at a futex,
+no panic, under every schedule. -/
+theorem handoffAll_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} :
+    e ≠ .stackOverflow → (Sched.run env dispatch fuel o handoffAll (mem0 σ)).run ≠ some (.error e) :=
+  (proto lo prodOf).run_safe env (Proto.of_available henv) dispatch G0 rfl dispatch_spec
+    (fun _ _ _ _ hq => hq.2) rfl (mainAll_spec σ)
+
+omit [Zig.Os.HasEnv] in
+/-- One schedule of `handoffAll` completes (as `handoff_completes`): 7 within fuel 1000 under the
+oracle that always picks option 0. -/
+theorem handoffAll_completes :
+    ∃ σ, Witness.okVal (Sched.run ⟨.any, .available⟩ dispatch 1000 (fun _ => 0)
+      (@handoffAll ⟨Os.Env.example⟩) (mem0 σ)) = some 7 := by
   refine ⟨.fresh, ?_⟩
   iterate 8 (simp (config := { singlePass := true, unfoldPartialApp := true }) only [zig_run])
   decide +kernel
