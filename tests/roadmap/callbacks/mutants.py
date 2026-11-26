@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Semantic mutants of the retained E02 translations (`Callbacks/Gen.lean`, `Callbacks/Async.lean`),
-of A01's `asm-effects/AsmEnv/Gen.lean` and of M04's `interfaces/Interfaces/{Sentinel,Wide}.lean`.
+of A01's `asm-effects/AsmEnv/Gen.lean` and of M04's `interfaces/Interfaces/{Sentinel,Wide,Grow}.lean`.
 
 `generate ROOT OUT` writes, per mutant of the fixture ROOT (`callbacks`, `asm-env`, `sentinel`), a mutated
 copy of its module under `OUT/<name>/<Module path>` and prints `name:<Module path>:<Proofs path>`.
@@ -85,6 +85,14 @@ MUTANTS = {
             [("def mem_Allocator_reallocAdvanced__anon_37f73f8446a2",
               "math_mul__anon_44faaf286c79 (2 : BitVec 64) p2", "math_mul__anon_44faaf286c79 (1 : BitVec 64) p2")],
             {"realloc16_spec"}, set()),
+        # Growth of the sentinel slice itself (`Interfaces/Grow.lean`) under `GrowSpec`:
+        # `mem.absorbSentinel` of a `[:0]u8` returns `len` items instead of `len + 1`, so `realloc`,
+        # `remap`, `resize` and `free` hand the allocator one byte less than the grant (what the std
+        # of Zig 0.15.2 and 0.14.1 does).
+        "grow-absorb-omits-sentinel": ("Interfaces/Grow.lean", "Interfaces/GrowSpec.lean",
+            [("def mem_absorbSentinel__anon_2445b0d558b2",
+              "    let i7 ← Zig.add false i6 (1 : BitVec 64)\n", "    let i7 ← pure i6\n")],
+            {"free8_spec", "realloc8_spec", "move8_grant", "fit8_grant"}, set()),
     },
 }
 ROOTS = {"callbacks": ROADMAP / "callbacks", "asm-env": ROADMAP / "asm-effects", "sentinel": ROADMAP / "interfaces"}
