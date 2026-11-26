@@ -12,6 +12,15 @@ pub fn main() void {
     }.f;
     std.debug.print("resize ok {d} ok {d} ok {d} ok {d}\n", .{ b(fba.fba_resize(10, 20)), b(fba.fba_resize(10, 300)), b(fba.fba_resize(0, 5)), b(fba.fba_resize(10, 0)) });
     std.debug.print("reset ok {d} ok {d} ok {d}\n", .{ fba.fba_reset(100), fba.fba_reset(200), fba.fba_reset(0) });
+    // M02: the fixed buffer's growth by `remap` (0) and by `realloc` (1): in place as the last
+    // allocation, a shrink, behind another block (`realloc` moves), past the buffer, and behind
+    // another block past the buffer.
+    std.debug.print("fba_grow remap ok {d} {d} {d} {d} {d} realloc ok {d} {d} {d} {d} {d}\n", .{
+        fba.fba_grow(10, 20, 0, false), fba.fba_grow(100, 10, 0, false), fba.fba_grow(10, 20, 0, true),
+        fba.fba_grow(10, 300, 0, false), fba.fba_grow(10, 250, 0, true),
+        fba.fba_grow(10, 20, 1, false), fba.fba_grow(100, 10, 1, false), fba.fba_grow(10, 20, 1, true),
+        fba.fba_grow(10, 300, 1, false), fba.fba_grow(10, 250, 1, true),
+    });
     std.debug.print("page_sum ok {d} {d} {d} page_create ok {d} page_resize ok {d} {d} {d}\n", .{ page.page_sum(0), page.page_sum(10), page.page_sum(10000), page.page_create(7), b(page.page_resize(10, 20)), b(page.page_resize(10, 5000)), b(page.page_resize(8192, 10)) });
     // M02: growth by `remap` (0) and by `realloc` (1): in place after the pages behind the block
     // were freed, within the page, a shrink, an impossible length, and into a neighbour's pages.
