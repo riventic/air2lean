@@ -104,5 +104,40 @@ changes. Outside the window the operation is MM-3's `ptrProject`, which has its 
     FTotalTriple P (Zig.ptrProjectDevice d p project) (fun q => ⟪q = project p⟫ ⋆ P) :=
   FTotalTriple.of_read fun _ _ _ _ _ _ => ptrProjectDevice_run hp hq ha hb
 
+/-! ## The run of a triple over the device state
+
+What a triple over `devOwn` says about a run, for a memory that is `Mem.FSeq` and holds a resource
+and a frame without a device fragment (`Holds.addDev` hands `devOwn m.dev` to the program): the
+run returns, its final device state is the postcondition's, and the frame is held again. A triple
+says nothing about another memory and does not fix the final memory's other fields
+(`tests/roadmap/sep-auto/SepAuto/DeviceRunCX.lean`: `not_exact`, `not_every_memory`). The step
+count of such a run is `FTotalTriple.run_dev_ticks` (`ZigLean/Sep/Full/Cost.lean`). -/
+
+/-- **The run of a total triple over the device state**: from a memory that holds `P` (no device
+fragment in the resource or the frame), the run returns, and the final device state is `D'`. -/
+theorem FTotalTriple.run_dev {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn} {D' : DevState}
+    {m : Mem} {r rF : Res} (ht : FTotalTriple (devOwn m.dev ⋆ P) c (fun x => devOwn D' ⋆ Q x))
+    (hh : Holds m r rF) (hp : P r) (hs : m.FSeq) (h0 : ∀ X, (r.gh.add rF.gh).dev X = 0) :
+    ∃ v m' r', c.run m = pure (v, m') ∧ m'.dev = D' ∧ Holds m' r' rF ∧
+      (devOwn D' ⋆ Q v) r' ∧ m'.FSeq := by
+  obtain ⟨v, m', r', hr, hh', hq, hs'⟩ := ht.runs (hh.addDev h0) (devOwn_sep_intro hp) hs
+  exact ⟨v, m', r', hr, hh'.dev hq, hh', hq, hs'⟩
+
+/-- **The run of a device triple that returns `v`**: the form of the device rules. From every
+`Mem.FSeq` memory that holds a resource and a frame without a device fragment, the run returns
+`v`, and the final device state is `D'`. -/
+theorem FTotalTriple.run_dev_val {α : Type} {c : MemM α} {v : α} {D' : DevState} {m : Mem}
+    {r rF : Res} (ht : FTotalTriple (devOwn m.dev) c (fun x => ⟪x = v⟫ ⋆ devOwn D'))
+    (hh : Holds m r rF) (hs : m.FSeq) (h0 : ∀ X, (r.gh.add rF.gh).dev X = 0) :
+    ∃ m', c.run m = pure (v, m') ∧ m'.dev = D' := by
+  obtain ⟨x, m', r', hr, hd, -, hq, -⟩ :=
+    FTotalTriple.run_dev (P := fun y => y = r) (Q := fun x => ⟪x = v⟫ ⋆ fun y => y = r)
+      ((ht.frame (R := fun y => y = r)).post fun x r' h => by
+        rwa [show (devOwn D' ⋆ (⟪x = v⟫ ⋆ fun y => y = r)) =
+          ((⟪x = v⟫ ⋆ devOwn D') ⋆ fun y => y = r) by ac_rfl]) hh rfl hs h0
+  obtain ⟨-, r₂, -, -, -, h2⟩ := hq
+  obtain ⟨rfl, -⟩ := sep_lift.mp h2
+  exact ⟨m', hr, hd⟩
+
 end Full
 end Zig

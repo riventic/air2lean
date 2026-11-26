@@ -193,9 +193,20 @@ without `devOwn` no triple of a read exists (`tests/roadmap/sep-full/DeviceCX.le
 thread rule: a device access of a spawned thread is not modelled. A run gets `devOwn D` from the
 start memory with the device state `D` (`FTotalTriple.run_init_dev`, `initRes_holds_dev`,
 `ZigLean/Sep/Full/Init.lean`); `Holds.dev` reads the final device state off the postcondition
-(`DeviceAsm/Proofs.lean`, `elapsed_run`). Library regression for every device:
+(`DeviceAsm/Proofs.lean`, `elapsed_start`). Library regression for every device:
 `tests/roadmap/sep-auto/SepAuto/Device.lean`. The run equations of `ZigLean/Mem/Device.lean` stay
 as run-level lemmas (the rules are proved from them).
+
+**What a triple says about a run.** From every `Mem.FSeq` memory that holds a resource and a
+frame without a device fragment, a device triple gives the returned value and the final device
+state (`FTotalTriple.run_dev`, `run_dev_val`, `ZigLean/Sep/Full/Device.lean`) and, with credits,
+the exact step count (`FTotalTriple.run_dev_ticks`, `run_dev_steps`, `ZigLean/Sep/Full/Cost.lean`).
+The fixture states these as `elapsed_run`, `statusTwice_run`, `clearStatus_run`,
+`sendThenStatus_run`, `putc_run` and `putc_eventually_run`. A triple does not give a run equation
+over every memory that fixes the whole final memory: it says nothing about a memory that is not
+`Mem.FSeq`, and it does not fix the fields that no resource reads
+(`tests/roadmap/sep-auto/SepAuto/DeviceRunCX.lean`: `not_every_memory`, `not_exact`,
+kernel-checked).
 
 ## Inline asm
 
@@ -360,7 +371,8 @@ translates to two `Zig.vasm` (`DeviceAsm/Gen.lean`) and the others stay rejected
 comments of `device_asm.zig` predate A01's barrier entry; the source is pinned by `provenance.json`.)
 `DeviceAsm/Proofs.lean` proves `elapsed_trace` (a total triple over `devOwn D`, walked by `fsym`
 with `FTotalTriple.vasm`: two `asm` events in order, the second answered
-after the first; the result is their difference), `elapsed_run` (the run from program start with
+after the first; the result is their difference), `elapsed_run` (the run from a memory that holds
+resources), `elapsed_start` (the run from program start with
 the device state `D`) and `elapsed_not_merged` (under a counter oracle
 the result is 1, and a merged value gives `a - a = 0`). The `merge_asm` and `repeatable_asm`
 mutants (an M21 opaque constant for both reads) are rejected by `elapsed_trace`.

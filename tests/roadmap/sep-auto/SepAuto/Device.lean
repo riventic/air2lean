@@ -104,6 +104,18 @@ theorem start_run (σ : Placement) {a b : BitVec bits} (hp : devAddr? p = some a
   obtain ⟨rfl, hd⟩ := sep_lift.mp (sep_assoc hq)
   exact ⟨m', hrun, by rw [hh.dev hd]⟩
 
+/-- **The run from a memory that holds resources** (`FTotalTriple.run_dev_val`): what the triple
+says about a run; what it does not say is `SepAuto/DeviceRunCX.lean`. -/
+theorem twice_run {m : Mem} {r rF : Res} (hh : Holds m r rF) (hs : m.FSeq)
+    (h0 : ∀ X, (r.gh.add rF.gh).dev X = 0) {a b : BitVec bits} (hp : devAddr? p = some addr)
+    (hal : addr % align = 0) (hr : d.readable addr bits = true)
+    (ha : m.dev.oracle m.dev.trace addr bits = some a)
+    (hb : m.dev.oracle (m.dev.trace ++ [.read addr bits a.toNat]) addr bits = some b) :
+    ∃ m', (twice d bits align p).run m = pure ((a, b), m') ∧
+      m'.dev = { m.dev with
+        trace := m.dev.trace ++ [.read addr bits a.toNat, .read addr bits b.toNat] } :=
+  (twice_spec hp hal hr ha hb).run_dev_val hh hs h0
+
 /-! ## A stored word known by its value (engine ledger `trace-eq-up-to-arith`)
 
 A widened byte is an opaque word `w` with the fact `w.toNat = c.toNat`, so the write's event is

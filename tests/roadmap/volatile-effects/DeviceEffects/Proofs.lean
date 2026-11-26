@@ -74,6 +74,37 @@ theorem sendThenStatus_trace (D : DevState) (c : BitVec 8) (v : BitVec 32)
   have hd := data_addr
   fsym
 
+/-! ## The runs
+
+What the triples above say about a run (`FTotalTriple.run_dev_val`): from every `Mem.FSeq` memory
+that holds a resource and a frame without a device fragment, the run returns the value and the
+final device state is the memory's with the events appended. -/
+
+section
+variable {m : Mem} {r rF : Res}
+
+theorem statusTwice_run (hh : Holds m r rF) (hs : m.FSeq) (h0 : ∀ X, (r.gh.add rF.gh).dev X = 0)
+    (a b : BitVec 32) (ha : m.dev.oracle m.dev.trace STATUS 32 = some a)
+    (hb : m.dev.oracle (m.dev.trace ++ [rd a]) STATUS 32 = some b) :
+    ∃ m', (statusTwice uart).run m = pure (a ^^^ b, m') ∧
+      m'.dev = { m.dev with trace := m.dev.trace ++ [rd a, rd b] } :=
+  (statusTwice_trace m.dev a b ha hb).run_dev_val hh hs h0
+
+theorem clearStatus_run (hh : Holds m r rF) (hs : m.FSeq) (h0 : ∀ X, (r.gh.add rF.gh).dev X = 0)
+    (v : BitVec 32) (ho : m.dev.oracle m.dev.trace STATUS 32 = some v) :
+    ∃ m', (clearStatus uart).run m = pure ((), m') ∧
+      m'.dev = { m.dev with trace := m.dev.trace ++ [rd v] } :=
+  ((clearStatus_trace m.dev v ho).post fun _ _ h => sep_lift.mpr ⟨rfl, h⟩).run_dev_val hh hs h0
+
+theorem sendThenStatus_run (hh : Holds m r rF) (hs : m.FSeq)
+    (h0 : ∀ X, (r.gh.add rF.gh).dev X = 0) (c : BitVec 8) (v : BitVec 32)
+    (ho : m.dev.oracle (m.dev.trace ++ [.write DATA 32 c.toNat]) STATUS 32 = some v) :
+    ∃ m', (sendThenStatus uart c).run m = pure (v, m') ∧
+      m'.dev = { m.dev with trace := m.dev.trace ++ [.write DATA 32 c.toNat] ++ [rd v] } :=
+  (sendThenStatus_trace m.dev c v ho).run_dev_val hh hs h0
+
+end
+
 /-! ## The polling contract
 
 `Answers o h vs r`: from the trace `h` on, the device answers the status reads with the busy
@@ -216,6 +247,19 @@ theorem putc_trace (D : DevState) (c : BitVec 8) (vs : List (BitVec 32)) (r : Bi
     | exact fun h0 => (Polled.next (by assumption) (by assumption)).ready (by simpa using h0)
     | exact fun h0 => (Polled.next (by assumption) (by assumption)).busy (by simpa using h0)
 
+/-- **The run of `putc`**, from every credit-free `Mem.FSeq` memory that holds a resource and a
+frame without a device fragment (`FTotalTriple.run_dev_steps`): it returns, the final device
+state is the memory's with the specified trace appended, and it makes exactly one step per poll. -/
+theorem putc_run {m : Mem} {r rF : Res} (hh : Holds m r rF) (hs : m.FSeq) (hf : CreditFree r rF)
+    (h0 : ∀ X, (r.gh.add rF.gh).dev X = 0) (c : BitVec 8) (vs : List (BitVec 32)) (a : BitVec 32)
+    (hc : Answers m.dev.oracle m.dev.trace vs a) :
+    ∃ m', (putc uart c).run m = pure ((), m') ∧
+      m'.dev = { m.dev with trace :=
+        m.dev.trace ++ (vs ++ [a]).map rd ++ [.write DATA 32 c.toNat] } ∧
+      m'.ticks = m.ticks + (vs.length + 1) := by
+  obtain ⟨⟨⟩, m', h⟩ := (putc_trace m.dev c vs a hc).run_dev_steps hh hs hf h0
+  exact ⟨m', h⟩
+
 /-- **The run from program start**, with the environment's device state `D` in the start memory
 (adequacy: `initRes_holds_dev`, and the meter's `FTotalTriple.ticks_eq`): `putc` returns after
 exactly one step per poll. -/
@@ -260,5 +304,16 @@ theorem putc_eventually (D : DevState) (c : BitVec 8) (k : Nat)
         spent (vs.length + 1)) := by
   obtain ⟨vs, r, ha⟩ := answers_of_ready _ k _ hr
   exact ⟨vs, r, putc_trace D c vs r ha⟩
+
+/-- **The run of `putc` for every device that eventually reports ready** (`putc_run`). -/
+theorem putc_eventually_run {m : Mem} {r rF : Res} (hh : Holds m r rF) (hs : m.FSeq)
+    (hf : CreditFree r rF) (h0 : ∀ X, (r.gh.add rF.gh).dev X = 0) (c : BitVec 8) (k : Nat)
+    (hr : EventuallyReady m.dev.oracle m.dev.trace k) :
+    ∃ vs a m', (putc uart c).run m = pure ((), m') ∧
+      m'.dev = { m.dev with trace :=
+        m.dev.trace ++ (vs ++ [a]).map rd ++ [.write DATA 32 c.toNat] } ∧
+      m'.ticks = m.ticks + (vs.length + 1) := by
+  obtain ⟨vs, a, ha⟩ := answers_of_ready _ k _ hr
+  exact ⟨vs, a, putc_run hh hs hf h0 c vs a ha⟩
 
 end DeviceEffectsProofs

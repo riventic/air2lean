@@ -36,10 +36,21 @@ theorem elapsed_trace (D : DevState) (a b : BitVec 64)
       (fun r => ⟪r = b - a⟫ ⋆ devOwn { D with trace := D.trace ++ [stamp a, stamp b] }) := by
   fsym
 
+/-- **The run**, from every `Mem.FSeq` memory that holds a resource and a frame without a device
+fragment (`FTotalTriple.run_dev_val`): `elapsed` returns the difference, and the final device
+state is the memory's with the two events appended. -/
+theorem elapsed_run {m : Mem} {r rF : Res} (hh : Holds m r rF) (hs : m.FSeq)
+    (h0 : ∀ X, (r.gh.add rF.gh).dev X = 0) (a b : BitVec 64)
+    (ha : m.dev.asmOracle m.dev.trace tsc [] 64 = some a)
+    (hb : m.dev.asmOracle (m.dev.trace ++ [stamp a]) tsc [] 64 = some b) :
+    ∃ m', elapsed.run m = pure (b - a, m') ∧
+      m'.dev = { m.dev with trace := m.dev.trace ++ [stamp a, stamp b] } :=
+  (elapsed_trace m.dev a b ha hb).run_dev_val hh hs h0
+
 /-- **The run from program start**, with the environment's device state `D` in the start memory
 (adequacy, `FTotalTriple.run_init_dev`): `elapsed` returns the difference, and the final device
 state is `D` with the two events appended. -/
-theorem elapsed_run (σ : Placement) (D : DevState) (a b : BitVec 64)
+theorem elapsed_start (σ : Placement) (D : DevState) (a b : BitVec 64)
     (ha : D.asmOracle D.trace tsc [] 64 = some a)
     (hb : D.asmOracle (D.trace ++ [stamp a]) tsc [] 64 = some b) :
     ∃ m', elapsed.run { mem0 σ with dev := D } = pure (b - a, m') ∧
