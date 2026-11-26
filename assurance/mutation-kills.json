@@ -1597,6 +1597,20 @@
       },
       "block_sha256": "807fdea4e41c366aa2a21faef263d5d8aad31adb07f2b33c75f0098284f3b15d"
     },
+    "tests/roadmap/cond-broadcast/mutations.py#broadcast-dropped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/cond-broadcast/check.sh"
+      },
+      "block_sha256": "03da9f47421cf9fe279a353370735060144a0697f5693c53564b16eb691a1b45"
+    },
+    "tests/roadmap/cond-broadcast/mutations.py#broadcast-is-signal": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/cond-broadcast/check.sh"
+      },
+      "block_sha256": "03da9f47421cf9fe279a353370735060144a0697f5693c53564b16eb691a1b45"
+    },
     "tests/roadmap/deadline-cases/mutations.py#boundary-solves-at-deadline": {
       "killed_by": {
         "kind": "check",

@@ -42,7 +42,7 @@
  "src": {
   "file": "threadsync.zig",
   "module": "threadsync",
-  "decl_line": 72
+  "decl_line": 96
  },
  "params": [
   0

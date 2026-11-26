@@ -11,8 +11,8 @@ deleted (`docs/legacy-retirement.md`, the chain's deletion). The paragraphs belo
 "Reusable synchronization contracts" are the record of the snapshot client's first landing
 (PR104); where they name the adapter `RwLockContract.lean`, `ProtectedFacts`, `NPts` or `U.parts`,
 they describe that deleted proof, not the fixture. C14 remains partial (its register entry
-has the scope): what `RwLockImpl` covers of arbitrary readers and resources, and the Event/WaitGroup
-contracts.
+has the scope): what `RwLockImpl` covers of arbitrary readers and resources, and a WaitGroup
+contract (the event contract is `EventImpl`, for one waiter at a time).
 
 The legacy adapter `RwLockContract.lean` retained reader 0, writer 1, the fixed Zig 0.16 `std.Io`
 layout, count at most 2, concrete `Sync.Tgt`, and the full semaphore/protocol premises; it did not
@@ -131,9 +131,12 @@ in Lean, not Zig exports; they call the translated std operations) are proved th
 as compiled finite witnesses (complete runs with 10 / 34, joined threads, freed block).
 
 Not covered, stated: fairness, termination and starvation freedom (every contract is partial
-correctness plus strict safety); a reusable RwLock contract for arbitrary readers and
-resources; an `Io.Event`/`ResetEvent` kit (the translated `Io_Event_*` code is proved only
-inside the fixed `handoff` protocol); WaitGroup (Zig 0.16.0's `examples/sync` has no
-translated `WaitGroup`; the 0.15.2 one is a fixed two-task client); broadcast, several
-condition waiters, timeouts and cancellation. The two clients are Lean model clients: no Zig
+correctness plus strict safety); what the reader/writer contract `RwLockImpl` covers of
+arbitrary readers and resources; an event with several waiters at a time (`EventImpl`, proved
+by `Sync.ioEvent` and `Threadsync.resetEvent`, is the event contract for one waiter at a time);
+WaitGroup (Zig 0.16.0's `examples/sync` has no translated `WaitGroup`; the 0.15.2 one is a
+fixed two-task client, and there is no `WaitGroupImpl`); a broadcast client of `Io.Condition`
+(the contract has `CondImpl.broadcast_wp`, and 0.15.2's `threadsync.handoffAll` is proved
+through it: `tests/roadmap/cond-broadcast`), a client with several condition waiters, timeouts
+and cancellation. The two clients are Lean model clients: no Zig
 source, AIR golden or native/model differential exists for them.

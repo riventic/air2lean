@@ -779,6 +779,7 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : proto.init tgt g) (u : ThreadId
     rintro _ G' m' _ ⟨-, g', hfin, hi'⟩
     exact qkid_fin hu hfin hi'
   | producer p => exact hg.elim
+  | producerAll p => exact hg.elim
   | work p => exact hg.elim
 
 end Threadsync.WG

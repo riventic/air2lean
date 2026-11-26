@@ -42,7 +42,7 @@
  "src": {
   "file": "threadsync.zig",
   "module": "threadsync",
-  "decl_line": 80
+  "decl_line": 104
  },
  "params": [],
  "noalias": [],
@@ -216,7 +216,7 @@
    "ty": 16,
    "callee": {
     "ty": 17,
-    "func": "Thread.spawn__anon_1571",
+    "func": "Thread.spawn__anon_1580",
     "module": "std",
     "instance_key": "16f53fe5f1a3de4b12b2489242732bd2c62acb1c8ca5c70cf3be0c59a056d4b0",
     "noreturn": false,
@@ -370,7 +370,7 @@
    "ty": 16,
    "callee": {
     "ty": 17,
-    "func": "Thread.spawn__anon_1571",
+    "func": "Thread.spawn__anon_1580",
     "module": "std",
     "instance_key": "16f53fe5f1a3de4b12b2489242732bd2c62acb1c8ca5c70cf3be0c59a056d4b0",
     "noreturn": false,
@@ -1229,7 +1229,7 @@
   },
   {
    "k": "struct",
-   "name": "atomic.Value(Thread.Completion__enum_752)",
+   "name": "atomic.Value(Thread.Completion__enum_758)",
    "module": "std",
    "layout": "extern",
    "fields": [
@@ -1290,7 +1290,7 @@
   },
   {
    "k": "enum",
-   "name": "Thread.Completion__enum_752",
+   "name": "Thread.Completion__enum_758",
    "module": "std",
    "tag": 49,
    "exhaustive": true,

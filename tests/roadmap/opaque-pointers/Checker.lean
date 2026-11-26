@@ -28,7 +28,10 @@ private def types : Array Ty := #[
   .other "m.Handle", .ptr "one" false 24,                                    -- 24..25: an unmarked export's entry
   .optional 6, .optional 5, .int false 64,                                   -- 26..28: ?*u32, ?*anyopaque, usize
   .opaque "Io.AnyFuture" true, .ptr "one" false 29, .optional 30,            -- 29..31: a std opaque type, its pointers
-  .int false 8, .ptr "slice" false 32]                                       -- 32..33: u8, []u8
+  .int false 8, .ptr "slice" false 32,                                       -- 32..33: u8, []u8
+  .allocator, .io, .thread, .future 0,                                       -- 34..37: the std model handles
+  .ptr "one" false 34, .optional 33, .ptr "one" false 13,                    -- 38..40: *Allocator, ?[]u8, *Cell
+  .tuple #[0, 23], .ptr "many" false 32, .optional 42]                       -- 41..43: tuple, [*]u8, ?[*]u8
 
 private def layouts : Array Layout := #[
   {size := some 4, align := some 4}, {}, ptrLayout 1, optLayout,
@@ -42,7 +45,11 @@ private def layouts : Array Layout := #[
   {}, ptrLayout 1,
   optLayout, optLayout, {size := some 8, align := some 8},
   {}, ptrLayout 1, optLayout,
-  {size := some 1, align := some 1}, {size := some 16, align := some 8, ptrAlign := some 1}]
+  {size := some 1, align := some 1}, {size := some 16, align := some 8, ptrAlign := some 1},
+  {size := some 16, align := some 8, offsets := #[0, 8]}, {size := some 16, align := some 8, offsets := #[0, 8]},
+  {size := some 8, align := some 8, offsets := #[0]}, {size := some 16, align := some 8, offsets := #[0, 8]},
+  ptrLayout 8, {size := some 16, align := some 8}, ptrLayout 8,
+  {size := some 8, align := some 4, offsets := #[0, 4]}, ptrLayout 1, optLayout]
 
 private def tyOk (id : TyId) : Except String Unit := checkTy "probe.f" types layouts 0 id
 
@@ -145,4 +152,54 @@ def main : IO Unit := do
   -- The pointer itself passes through a function.
   let passes := func #[2] 2 #[arg, { id := 1, ty := 22, op := .ret (.inst 0) }]
   require (check passes).isOk s!"*Handle → *Handle: {describe (check passes)}"
+  -- A field of a value (`valueFields?`): a struct, a union and a tuple have fields; a std model
+  -- handle is one whole value. The emitter's projection or record would not type in Lean.
+  let noFields := "which has no fields in the model"
+  let outOfRange := "is out of range"
+  -- One op on a value of type `src` (instruction 0), of result type `ty`.
+  let onValue (src ty : TyId) (op : Op) : Except String Nat := checkOp (cx .std src) 0 ty op
+  -- The same with instruction 0 a local that the model holds as a Lean value (a place).
+  let onPlace (src ty : TyId) (op : Op) : Except String Nat :=
+    checkOp { cx .std src with places := #[0] } 0 ty op
+  for (handle, name) in [(34, "`std.mem.Allocator`"), (35, "`std.Io`"), (36, "`std.Thread`"),
+      (37, "`std.Io.Future`")] do
+    let read := onValue handle 5 (.structFieldVal (.inst 0) 0)
+    require (has read noFields && has read name) s!"field of handle {handle}: {describe read}"
+    let build := onValue 5 handle (.aggregateInit #[.inst 0, .inst 0])
+    require (has build noFields && has build name) s!"literal of handle {handle}: {describe build}"
+  -- Scalars and pointers have no fields either.
+  for src in [0, 5, 33] do
+    require (has (onValue src 0 (.structFieldVal (.inst 0) 0)) noFields)
+      s!"field of type {src}: {describe (onValue src 0 (.structFieldVal (.inst 0) 0))}"
+  require (has (onValue 5 0 (.aggregateInit #[.inst 0])) noFields) "a scalar literal is accepted"
+  -- Controls: the fields of a struct and of a tuple, and their literals, in range.
+  for (src, idx, ty) in [(13, 0, 2), (13, 1, 3), (41, 0, 0), (41, 1, 23)] do
+    require (onValue src ty (.structFieldVal (.inst 0) idx)).isOk
+      s!"field {idx} of type {src}: {describe (onValue src ty (.structFieldVal (.inst 0) idx))}"
+  for src in [13, 41] do
+    require (has (onValue src 0 (.structFieldVal (.inst 0) 2)) outOfRange)
+      s!"field 2 of type {src}: {describe (onValue src 0 (.structFieldVal (.inst 0) 2))}"
+    require (onValue 0 src (.aggregateInit #[.inst 0, .inst 0])).isOk s!"literal of type {src} is rejected"
+    -- One operand per field: more or fewer would be a record literal that does not type.
+    for operands in [#[], #[Val.inst 0], #[.inst 0, .inst 0, .inst 0]] do
+      require (has (onValue 0 src (.aggregateInit operands)) "operands for the 2 fields of its type")
+        s!"literal of type {src} with {operands.size} operands is accepted"
+  require (onValue 2 14 (.aggregateInit #[.inst 0, .inst 0])).isOk "an array literal is rejected"
+  -- A field pointer: into a local held as a value it is the value's field; into memory it is an
+  -- address, also of a handle.
+  require (has (onPlace 38 5 (.fieldPtr (.inst 0) 0)) noFields)
+    s!"field pointer into a handle local: {describe (onPlace 38 5 (.fieldPtr (.inst 0) 0))}"
+  require (onPlace 40 2 (.fieldPtr (.inst 0) 0)).isOk "field pointer into a struct local is rejected"
+  require (has (onPlace 40 2 (.fieldPtr (.inst 0) 2)) outOfRange) "field 2 of a struct local is accepted"
+  require (onValue 38 5 (.fieldPtr (.inst 0) 1)).isOk
+    s!"field pointer into a handle in memory: {describe (onValue 38 5 (.fieldPtr (.inst 0) 1))}"
+  -- A cast with a slice on one side only (hand-made: Zig casts the slice's `.ptr`): the model's
+  -- slice is a pointer and a length, the other side is not.
+  let oneSlice := "a cast between a slice (a pointer and a length) and a type that is not a slice"
+  for model in [AllocatorModel.std, .translated] do
+    for (s, d) in [(33, 5), (5, 33), (33, 6), (6, 33), (33, 42), (42, 33), (33, 28), (28, 33),
+        (39, 43), (43, 39), (39, 27), (33, 43), (42, 39)] do
+      require (has (ptrCast model s d) oneSlice) s!"cast {s} → {d}: {describe (ptrCast model s d)}"
+    for (s, d) in [(33, 33), (33, 39), (42, 43)] do
+      require (ptrCast model s d).isOk s!"cast {s} → {d} is rejected: {describe (ptrCast model s d)}"
   IO.println "opaque pointer checker controls passed"
