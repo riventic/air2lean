@@ -72,7 +72,8 @@ theorem holds_exts {m : Mem} {h : FHeap} {k : Know} {E : BlockId → Option (Nat
   · exact exts_ok E
   · show ExtTrue m ((Ghost.exts E).add Ghost.unit); rw [Ghost.add_unit]; exact ht
   · show ClFresh m ((Ghost.exts E).add Ghost.unit); rw [Ghost.add_unit]; exact fun _ _ _ => rfl
-  · show MemAuth m ((Ghost.exts E).add Ghost.unit).ac; simpa using MemAuth.unit hns
+  · show MemAuth m ((Ghost.exts E).add Ghost.unit).ac ((Ghost.exts E).add Ghost.unit).dev
+    simpa using MemAuth.unit hns
 
 /-! ## The memory at program start -/
 
@@ -182,6 +183,7 @@ private theorem gextGh_eq (j : BlockId) (S : Nat) (K : BlockKind) :
   · funext b x; split <;> simp [Ghost.atExt, Ghost.exts, Ghost.unit]
   · split <;> simp
   · split <;> rfl
+  · split <;> rfl
 
 private theorem exts_add {E E' : BlockId → Option (Nat × BlockKind)}
     (h : ∀ b, E b = none ∨ E' b = none) :
@@ -194,6 +196,7 @@ private theorem exts_add {E E' : BlockId → Option (Nat × BlockKind)}
   · funext b x; simp [Ghost.add, Ghost.exts]
   · simp
   · funext l; simp [Ghost.add, Ghost.exts]
+  · funext D; simp [Ghost.add, Ghost.exts]
 
 private theorem initR_gh (m : Mem) (n : Nat) : (initR m n).gh = Ghost.exts (initE m n) := by
   induction n with
@@ -489,7 +492,8 @@ theorem initRes_holds_stack (σ : Placement) (gs : List (Array Byte × Nat × Bl
         simp [c, curCell, this]
     refine ⟨hsa, ⟨fun L hL => by simp [c, spCell, curCell] at hL, by simp [c, spCell, curCell],
       fun _ L => by simp [c, spCell, curCell]⟩, fun h => by simp [c, spCell, curCell] at h,
-      fun k L _ => by simp [c, spCell, curCell], fun v hv => ?_⟩
+      fun k L _ => by simp [c, spCell, curCell], fun v hv => ?_, fun D hD => absurd hD (by
+        simp [Ghost.stackStart, Ghost.cur, Ghost.ofAC, initRes, initR_gh])⟩
     have : v = (0, 0) := Classical.byContradiction fun hne => by
       simp [c, spCell, curCell, hne] at hv
     subst this

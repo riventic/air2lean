@@ -69,8 +69,12 @@ abbrev _root_.Zig.Mem.unstacked (m : Mem) : Mem := { m with stacks := #[] }
 whose counter cell is emptied. -/
 theorem Holds.unstack {m : Mem} {r rF : Res} (hh : Holds m r rF) (hr : r.gh = Ghost.ofAC r.gh.ac) :
     Holds m.unstacked ⟨r.heap, r.know, Ghost.unit⟩ ⟨rF.heap, rF.know, { rF.gh with ac := ACell.unit }⟩ := by
-  refine hh.reAC rfl rfl ?_ ?_ ?_ (by simpa using ACell.valid_unit)
-    (by simpa using MemAuth.unit (m := m.unstacked) (Mem.noStack_of_stacks rfl))
+  have hd := hh.ghost.2.2.2.dev
+  rw [hr] at hd
+  have hM : MemAuth m.unstacked ACell.unit rF.gh.dev :=
+    (MemAuth.unit (Mem.noStack_of_stacks rfl)).withDev fun D hD => by
+      simpa using hd D (by simpa using hD)
+  refine hh.reAC rfl rfl ?_ ?_ ?_ (by simpa using ACell.valid_unit) (by simpa using hM)
     (by rw [hr]; funext _; simp [Ghost.ofAC])
   · rw [hr]; funext γ; simp [Ghost.add, Ghost.ofAC, Ghost.unit]
   · rw [hr]; funext b; simp [Ghost.add, Ghost.ofAC, Ghost.unit]
@@ -133,7 +137,10 @@ theorem FTotalTriple.allocStack_sp {t S D : Nat} (size align : Nat) (ha : 0 < al
       (by funext b x; simp [pushRes, Ghost.add, Ghost.ofAC, Ghost.unit, Ghost.exts])
       (by rw [ecell]; exact hv')
       (by
-        rw [ecell]
+        have edev : (((pushRes m.blocks.size nb).gh.add (Ghost.ofAC a')).add rF.gh).dev =
+            (r.gh.add rF.gh).dev := by
+          rw [hr]; simp [pushRes, Ghost.cur]
+        rw [ecell, edev]
         refine hM.restack hsa' rfl rfl (fun h => absurd (h t) (by rw [hS]; simp))
           (fun k => by simp [spCell, entCell]) (fun k n => by simp [spCell, entCell])
           (fun v => by simp [spCell, entCell]))
@@ -355,7 +362,7 @@ demands none (`MemAuth.dropCur`). The stack tokens are not dropped (`StackAuth` 
       (by funext γ; simp [Ghost.add, Ghost.cur, Ghost.ofAC, Ghost.unit])
       (by funext x; simp [Ghost.add, Ghost.cur, Ghost.ofAC, Ghost.unit])
       (by funext x y; simp [Ghost.add, Ghost.cur, Ghost.ofAC, Ghost.unit])
-      hV.of_add_right hM.dropCur
+      hV.of_add_right (hM.dropCur.dropDev fun D => by simp [Ghost.cur, Ghost.ofAC])
     refine ⟨r₂, ?_, h2⟩
     simpa [FHeap.empty_union, Know.none_union] using h
 
