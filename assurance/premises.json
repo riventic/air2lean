@@ -78,6 +78,7 @@
     "ZigLean.VecMem": ["SEM-01", "SEM-02"],
     "ZigLean.ReprCast": ["SEM-01", "SEM-02"],
     "ZigLean.VecCast": ["SEM-01", "SEM-02"],
+    "ZigLean.VecStride": ["SEM-01", "SEM-02"],
     "ZigLean.PackedLemmas": ["SEM-01", "SEM-02"],
     "ZigLean.PackedLayout": ["SEM-01", "SEM-02"],
     "ZigLean.Lemmas": ["SEM-01"],
