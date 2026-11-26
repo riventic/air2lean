@@ -771,7 +771,7 @@ def replay_block(request, expected, binary):
 
 
 def case_bundle(root, summary, example, function, index, *, replay=False, binary=None, timeout=60, air_dir=None,
-                zig_source=None, zig=None, difftest=None, spec=None, pre=None):
+                zig_source=None, zig=None, difftest=None, spec=None, pre=None, runner=None):
     difftest = difftest or root/DIFFTEST
     data = REPORT.read_summary(summary)
     if data.get('complete') is not True: raise Invalid('incomplete differential summary')
@@ -816,14 +816,14 @@ def case_bundle(root, summary, example, function, index, *, replay=False, binary
             request = None
         if request is not None and spec is not None:
             # Decide the postcondition on this row; the replay below repeats it in fresh processes.
-            probe = lean_evaluate(root, request, timeout)
+            probe = lean_evaluate(root, request, timeout, runner)
             if probe['status'] == 'error': raise Invalid(f"--spec: {probe['detail']}")
             violated = probe['violated'] if probe['status'] == 'ok' else 'timeout'
             request['expected']['violation'] = violated is True
             source.update(spec=spec, pre=pre, postcondition={True: 'violated', False: 'holds'}.get(violated, 'undecided'))
         if request is not None:
             replay_info = with_native(root, lean_block(request), zig_source, function)
-            if replay and violated != 'timeout': replay_info.update(confirm(root, replay_info, timeout, zig))
+            if replay and violated != 'timeout': replay_info.update(confirm(root, replay_info, timeout, zig, runner))
         elif search is None and zig_source is None:
             # Any other sequential shape: rerun the example's production runners on this row.
             row_request = diff_row_request(root, example, function, index, native_line, model_line)
