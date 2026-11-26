@@ -277,7 +277,7 @@ def op16 (p0 : BitVec 8) (p1 : Zig.F16) (p2 : Zig.F16) (p3 : Zig.F16) : Zig.Resu
                 pure (.br5 i14))
               else (do
                 if p0 == (4 : BitVec 8) then (do
-                  let i16 ← Zig.Float.fmaRt017Chk p1 p2 p3
+                  let i16 ← Zig.Float.conv .f16 <$> Zig.Float.fmaRt017Chk (Zig.Float.conv .f64 p1) (Zig.Float.conv .f64 p2) (Zig.Float.conv .f64 p3)
                   pure (.br5 i16))
                 else (do
                   if p0 == (5 : BitVec 8) then (do

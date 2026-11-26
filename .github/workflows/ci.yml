@@ -1661,6 +1661,13 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/aarch64-abi/test_float_atomics.py "$PWD/.lake/build/bin/air2lean"
 
+      # T04: the term emitted for a `@mulAdd` on every qualified target, recorded Zig version,
+      # `fullfp16` setting and float mode (the native `fma` and `cpu` rows: docs/aarch64-abi.md),
+      # and the rejection of an aarch64 profile without the float instructions.
+      - name: "`@mulAdd` per target, version and CPU"
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/aarch64-abi/test_mul_add.py "$PWD/.lake/build/bin/air2lean"
+
       # T06: the stage2_x86_64 rules (`CheckCtx.checkStage2Backend`) on the patched compilers'
       # self-hosted exports of the divergence reproducers: rejected there, accepted on LLVM.
       - name: Reject stage2_x86_64 backend divergences
@@ -2252,7 +2259,7 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean.VecMem ZigLean.Float.Allowed ZigLean.Mem.Thread ZigLean.Os ZigLean.Conc.Sched
+          lake build ZigLean.VecMem ZigLean.Float.Allowed ZigLean.Mem.Thread ZigLean.Os ZigLean.Conc.Sched Air2Lean.Air.Dialect
           python3 -m unittest discover -s tests/roadmap/aarch64-abi -p 'test_*.py' -v
 
       # The recorded `futex` rows of every version and profile (FUTEX_WAIT/WAKE, __ulock_*)
