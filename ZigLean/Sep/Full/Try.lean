@@ -1375,7 +1375,7 @@ variable {x : Except ErrName α} {T : Type} [Enc T] {s : T} {n : Nat}
 
 @[fsym_provider] theorem ThreadLocal.loadDiscardBytes_pts (hn : n ≤ Enc.size T) :
     ThreadLocal (up (Zig.pts q a s)) (Zig.loadDiscardBytes n al q) :=
-  ThreadLocal.loadDiscardBytes (.of_owns (OwnsPtr.pts_in rfl (le_refl _) (by omega)))
+  ThreadLocal.loadDiscardBytes (.of_owns (OwnsPtr.pts_in rfl (Int.le_refl _) (by omega)))
 
 @[fsym_provider] theorem ThreadLocal.loadDiscardBytes_spts (hn : n ≤ Enc.size T) :
     ThreadLocal (spts q a φ s) (Zig.loadDiscardBytes n al q) :=
