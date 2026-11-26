@@ -408,6 +408,10 @@ NON_COMPILER_AIR = {
         'wasm32 compiler export: evidence for the T02 32-bit profile only (README), not this inventory',
     'tests/roadmap/pointer-width/air/{version}/names/wasm32-wasi':
         'wasm32 compiler export: evidence for the T02 32-bit profile only (README), not this inventory',
+    'tests/roadmap/pointer-width/air/{version}/c_ints/wasm32-freestanding':
+        'wasm32 compiler export: evidence for the T02 32-bit profile only (README), not this inventory',
+    'tests/roadmap/pointer-width/air/{version}/c_ints/wasm32-wasi':
+        'wasm32 compiler export: evidence for the T02 32-bit profile only (README), not this inventory',
     'tests/roadmap/pointer-width/air/{version}/pointer_width/wasm32-freestanding':
         'wasm32 compiler export: evidence for the T02 32-bit profile only (README), not this inventory',
     'tests/roadmap/pointer-width/air/{version}/pointer_width/wasm32-wasi':

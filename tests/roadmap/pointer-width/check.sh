@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # T02 pointer-width fixtures. `--export DIR` writes fresh AIR of pointer_width.zig and
-# reject.zig (Zig 0.16.0) for every profile with a patched compiler; names.zig (0.17.1, 0.16.0)
-# and the 0.17.1 exports of pointer_width.zig and reject.zig are declared in exports.json and
-# pinned by exports.lock.json (scripts/fixture-exports.py verify|export pointer-width).
+# reject.zig (Zig 0.16.0) for every profile with a patched compiler; names.zig and c_ints.zig
+# (0.17.1, 0.16.0) and the 0.17.1 exports of pointer_width.zig and reject.zig are declared in
+# exports.json and pinned by exports.lock.json (scripts/fixture-exports.py verify|export pointer-width).
 # `--native` runs the sources' layout/boundary/name tests on the host and under wasm32-wasi
 # (Node WASI). The default re-translates the retained AIR, compares
 # it with the retained Gen.lean files byte for byte and checks the proofs and rejections.
@@ -40,7 +40,7 @@ case "${1:---check}" in
     : "${AIR2LEAN_ZIG_NATIVE:?set a stock host Zig (0.16.0 or 0.17.1)}"
     wasm_dir=$(mktemp -d "${TMPDIR:-/tmp}/air2lean-pointer-width-wasi.XXXXXX")
     trap 'rm -rf "$wasm_dir"' EXIT
-    for s in "$src" "$case_dir/names.zig"; do
+    for s in "$src" "$case_dir/names.zig" "$case_dir/c_ints.zig"; do
       "$AIR2LEAN_ZIG_NATIVE" test -OReleaseSafe "$s"
       # Compiled for wasm32-freestanding: pointer_width.zig's comptime layout asserts are
       # evaluated for that target's ABI.
@@ -88,26 +88,32 @@ done
 python3 -B scripts/fixtures.py instance "$case_dir/PointerWidth/Proofs.lean" \
   --subst PointerWidth=PointerWidth.V0_17_1
 "${lean_cmd[@]}" -R "$case_dir" "$case_dir/PointerWidth/V0_17_1/Proofs.lean"
-# names.zig (`@tagName`, `@errorName`) per Zig version of exports.json and target. The proofs are
-# stated once (0.17.1) and instantiated for 0.16.0 (scripts/fixtures.py instance).
-for v in 0.17.1 0.16.0; do
-  V="V${v//./_}"
-  for pair in Wasm32:wasm32-freestanding Wasi:wasm32-wasi X64:x86_64-linux; do
-    ns=${pair%%:*}
-    t=${pair#*:}
-    gen="PointerWidth/Names/$V/$ns/Gen.lean"
-    mkdir -p "$(dirname "$work/$gen")"
-    "$translator" "$case_dir/air/$v/names/$t" -o "$work/$gen" \
-      --namespace "PointerWidth.Names.$V.$ns" --prefix names.
-    cmp "$work/$gen" "$case_dir/$gen"
-    "${lean_cmd[@]}" -R "$work" -o "$work/${gen%.lean}.olean" "$work/$gen"
+# names.zig (`@tagName`, `@errorName`) and c_ints.zig (the C integer types, `isize`, extern
+# struct layouts) per Zig version of exports.json and target. The proofs are stated once (0.17.1)
+# and instantiated for 0.16.0 (scripts/fixtures.py instance).
+for source in names:Names c_ints:CInts; do
+  stem=${source%%:*}
+  dir=${source#*:}
+  for v in 0.17.1 0.16.0; do
+    V="V${v//./_}"
+    for pair in Wasm32:wasm32-freestanding Wasi:wasm32-wasi X64:x86_64-linux; do
+      ns=${pair%%:*}
+      t=${pair#*:}
+      gen="PointerWidth/$dir/$V/$ns/Gen.lean"
+      mkdir -p "$(dirname "$work/$gen")"
+      "$translator" "$case_dir/air/$v/$stem/$t" -o "$work/$gen" \
+        --namespace "PointerWidth.$dir.$V.$ns" --prefix "$stem."
+      cmp "$work/$gen" "$case_dir/$gen"
+      "${lean_cmd[@]}" -R "$work" -o "$work/${gen%.lean}.olean" "$work/$gen"
+    done
+    [ "$V" = V0_17_1 ] || python3 -B scripts/fixtures.py instance \
+      "$case_dir/PointerWidth/$dir/V0_17_1/Proofs.lean" --subst "V0_17_1=$V"
+    "${lean_cmd[@]}" -R "$case_dir" "$case_dir/PointerWidth/$dir/$V/Proofs.lean"
   done
-  [ "$V" = V0_17_1 ] || python3 -B scripts/fixtures.py instance \
-    "$case_dir/PointerWidth/Names/V0_17_1/Proofs.lean" --subst "V0_17_1=$V"
-  "${lean_cmd[@]}" -R "$case_dir" "$case_dir/PointerWidth/Names/$V/Proofs.lean"
 done
 # Layout, overflow and bounds mutants of the retained translations (mutations.py): each builds,
-# and PointerWidth.Proofs fails in the theorems of the changed fact.
+# and its proofs (PointerWidth.Proofs or PointerWidth.CInts.V0_17_1.Proofs) fail in the theorems
+# of the changed fact.
 python3 -B "$case_dir/mutations.py" --self-test
 python3 -B "$case_dir/mutations.py" run "$work"
 python3 "$case_dir/test_cli.py" "$translator"
