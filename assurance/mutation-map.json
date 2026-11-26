@@ -1681,9 +1681,34 @@
           "name": "sentinel-stored-at-item-0",
           "path": "tests/roadmap/callbacks/mutants.py",
           "category": "layout"
+        },
+        {
+          "name": "wide-alloc-bytes-are-item-count",
+          "path": "tests/roadmap/callbacks/mutants.py",
+          "category": "layout"
+        },
+        {
+          "name": "wide-alloc-alignment-is-one",
+          "path": "tests/roadmap/callbacks/mutants.py",
+          "category": "layout"
+        },
+        {
+          "name": "wide-sentinel-at-byte-n",
+          "path": "tests/roadmap/callbacks/mutants.py",
+          "category": "layout"
+        },
+        {
+          "name": "wide-free-bytes-are-item-count",
+          "path": "tests/roadmap/callbacks/mutants.py",
+          "category": "layout"
+        },
+        {
+          "name": "wide-realloc-bytes-are-item-count",
+          "path": "tests/roadmap/callbacks/mutants.py",
+          "category": "layout"
         }
       ],
-      "note": "byte-sentinel and mutate.sh s mutate the retiring hand model (ZigLean/Mem/Alloc.lean); the sentinel-* mutants mutate the translated std allocator path (interfaces/Interfaces/Sentinel.lean), killed by the unchanged Interfaces.SentinelSpec in interfaces/check.sh."
+      "note": "byte-sentinel and mutate.sh s mutate the retiring hand model (ZigLean/Mem/Alloc.lean); the sentinel-* mutants mutate the translated std allocator path (interfaces/Interfaces/Sentinel.lean), killed by the unchanged Interfaces.SentinelSpec in interfaces/check.sh; the wide-* mutants mutate the same path for item types wider than a byte (interfaces/Interfaces/Wide.lean: u16, u32, u64), killed by the unchanged Interfaces.WideSpec there."
     },
     "M05": {
       "categories": [
