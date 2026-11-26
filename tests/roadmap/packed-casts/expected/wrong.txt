@@ -17,3 +17,13 @@ intToVoids: 0x0
 # The ≤0.16 memory reading of a float array and of a packed union, bytes swapped:
 floatsToInt: 0x3f800000c0000000
 bytesToU: 0x3412
+# Optional items (0.14.1, 0.15.2) with the flag byte before the payload:
+opt_u8sToInt: 0x34011201
+opt_arraysToInt: 0x605040103020101
+# ... with the flag in the item's last byte (after the padding), not at the payload's size:
+opt_intToU16s: 0x10000
+opt_intToU24s: 0x1000000
+opt_intToPacked: 0xffff
+# ... `?u0` with no flag byte (the payload's zero bits only), `??u8` with one shared flag:
+opt_zerosToInt: 0x0
+opt_nestedToInt: 0x1220111

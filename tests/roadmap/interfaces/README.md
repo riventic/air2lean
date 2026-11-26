@@ -55,11 +55,17 @@ standard axioms):
   generated `allocSentinel`, `realloc`/`reallocAdvanced` and `free` wrappers: a sentinel buffer
   of `len` items is a grant of `len + 1` bytes with the sentinel last, on success and on
   `error.OutOfMemory` (M04). It is also checked over the 0.16.0, 0.15.2 and 0.14.1 translations;
-- `WideSpec.lean`: the same for `wide`. The statements are made once for every item size `sz`,
-  log2 alignment `k` and sentinel bytes (a buffer of `len` items is a grant of `(len + 1) * sz`
-  bytes at alignment `2 ^ k`, the sentinel item last); the `u16`, `u32` and `u64` copies of the
-  generated wrappers and clients each prove them (`make16_spec` … `release64_spec`). Also
-  checked over the 0.16.0, 0.15.2 and 0.14.1 translations.
+- `WideSpec.lean`: the same for `wide` (`make16_spec` … `release64_spec`). Also checked over the
+  0.16.0, 0.15.2 and 0.14.1 translations.
+
+The sentinel statements are generic (`ZigLean/Sep/Full/SentinelBuf.lean`): `made`, `appended`
+and `resized` are stated once for every item size `sz`, log2 alignment `k` and sentinel bytes (a
+buffer of `len` items is a grant of `(len + 1) * sz` bytes at alignment `2 ^ k`, the sentinel
+item last), and `append_grant` and `resize_grant` are proved once from the shape of an instance's
+code (`appendedAt`, `resizedAt`: the reallocated grant with the item and the sentinel written at
+their byte offsets) and the size of its encoding. `SentinelSpec` is the instance `sz = 1`,
+`k = 0`; `WideSpec` has `u16`, `u32` and `u64`. An instance supplies the walk of its own copy of
+the generated code and the size of its encoding, nothing else.
 
 `check.sh` also runs the designated mutants of the translated allocator wrappers
 (`tests/roadmap/callbacks/mutants.py`, root `sentinel`): the unchanged `SentinelSpec` and
