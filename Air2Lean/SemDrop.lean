@@ -164,8 +164,6 @@ theorem refl {α : Type} [PartialOrder α] (x : α) : Rl strict x x := by
   · exact PartialOrder.rel_refl
   · exact rfl
 
-theorem of_eq {α : Type} [PartialOrder α] {x y : α} (h : x = y) : Rl strict x y := h ▸ refl x
-
 theorem bind {m : Type → Type} [Monad m] [∀ α, PartialOrder (m α)] [MonoBind m] {α β : Type}
     {x y : m α} {k₁ k₂ : α → m β} (hx : Rl strict x y) (hk : ∀ a, Rl strict (k₁ a) (k₂ a)) :
     Rl strict (x >>= k₁) (y >>= k₂) := by
@@ -206,9 +204,6 @@ theorem run {α : Type} {x y : SM α} (h : Rl strict x y) (fr : Frame) :
     exact rfl
 
 end Rl
-
-theorem lift_stuck_bind {α β : Type} (k : α → MemM β) :
-    (StateT.lift (stuck : Result α) : MemM α) >>= k = StateT.lift stuck := rfl
 
 /-- A stuck step is below every computation. -/
 theorem stuck_le {α β : Type} (k : α → SM β) (y : SM β) :
@@ -673,10 +668,10 @@ theorem execBody_drop : ∀ l env, EnvD D env →
              exact Rl.bind_right ih')
       case loopSwitchBr v cs el =>
         simp only [dropInst, execBody, execInst, dctx, evalMem_withBody]
-        exact Rl.bind (Rl.of_eq rfl) ih'
+        exact Rl.bind (Rl.refl _) ih'
       case tryPtr v eb =>
         simp only [dropInst, execBody, execInst, dctx, evalMem_withBody]
-        exact Rl.bind (Rl.of_eq rfl) ih'
+        exact Rl.bind (Rl.refl _) ih'
       all_goals first
         | exact (h1 _ rfl).elim | exact (h2 _ rfl).elim | exact (h3 _ rfl).elim
         | exact (h4 _ _ rfl).elim | exact (h5 _ rfl).elim | exact (h6 _ rfl).elim | exact (h7 rfl).elim

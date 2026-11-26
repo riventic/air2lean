@@ -69,14 +69,15 @@ cond_br(%2) { %5 = load(%3); ret %5 } else { ret 0 }
 patterns accept a `load` anywhere after the pointer; only the `load`/`array_elem_val` pattern
 requires the second instruction directly after the first (`nextNonDebug`).
 
-The same gap exists without a branch: a call between `%3` and `%5` that panics, returns an
-error or does not return runs before the check after the rewrite and after it before.
+By the same argument (not kernel-checked) the gap exists without a branch: a call between `%3`
+and `%5` that panics or does not return runs before the check after the rewrite, and after it
+before.
 
 Fix (not in this PR, it changes `Canon.lean` and possibly goldens): require
 `next[x.id]? == some u.id` for these two patterns too, as for the third. With the pair adjacent
-the check stays where it was, and the remaining proof obligation is one lemma over
-`Zig.ptrProject`/`Zig.load` (the alignment of the item pointer's type against
-`Sem.itemLayout`'s).
+the check stays where it was. The preservation theorem is then still to be proved; it is
+expected to need one lemma over `Zig.ptrProject`/`Zig.load` and a side condition on the
+alignment of the item pointer's type against `Sem.itemLayout`'s (not checked yet).
 
 ## Reachability
 

@@ -1142,6 +1142,9 @@ jobs:
           python3 -I -B tests/roadmap/air-semantics/test_cli.py "$PWD/.lake/build/bin/air2lean"
           lake build $(ls Proofs/*/AirCert.lean | sed 's#/#.#g; s#\.lean$##') Air2Lean.Main
           python3 -I -B tests/roadmap/air-semantics/test_lean.py "$PWD/.lake/build/bin/air2lean"
+          # The drop theorems' kernel-checked boundaries and the controls of their native binding
+          # (it fails on a wrong outcome).
+          lake env lean --run tests/roadmap/air-semantics/CanonDrop.lean
 
       # Q02 (docs/mutation-map.md): the mutants of the interpreter's arms (Air2Lean/Sem.lean) and of
       # the Canon rewrites without a preservation theorem, each applied in a check tree and killed
