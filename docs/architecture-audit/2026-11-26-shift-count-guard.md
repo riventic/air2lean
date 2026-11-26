@@ -3,7 +3,7 @@
 Class: SOUNDNESS. Status: **fixed** (option 2 below; see "Fix"). Lane `checker-queue`; found
 while reading `Air2Lean/Emit.lean` for the pointer-alignment rule of PR #914, confirmed with the
 translator of main `1847099ab` (plus PR #910, which leaves `Emit.lean` alone) on Zig 0.17.1,
-0.16.0 and 0.14.1 (x86_64-linux, ReleaseSafe). The sections up to "Options" describe the
+0.16.0 and 0.14.1 (x86_64-linux, ReleaseSafe). "The fact" and "Counterexample" describe the
 translator before the fix.
 
 ## Fix

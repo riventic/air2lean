@@ -1730,10 +1730,11 @@ instructions between) does not guard this shift
 (`docs/architecture-audit/2026-11-26-shift-count-guard.md`). -/
 def FCtx.shiftCountGuarded (fc : FCtx) (shift : InstId) (count : Val) (w : Nat) : Bool :=
   let real (insts : Array Inst) := insts.filter fun i => !(i.op matches .line _ | .dbg ..)
+  let isCompare (i : Inst) : Bool := match i.op with
+    | .cmp .lt x (.int _ k) => x == count && k == w
+    | _ => false
   let countBelowWidth (c : Val) : Bool := match c with
-    | .inst id => fc.allInsts.any fun i => i.id == id && match i.op with
-      | .cmp .lt x (.int _ k) => x == count && k == w
-      | _ => false
+    | .inst id => fc.allInsts.any fun i => i.id == id && isCompare i
     | _ => false
   let panics (insts : Array Inst) : Bool := match real insts with
     | #[⟨_, _, .call callee _⟩, ⟨_, _, .unreach⟩] =>
@@ -1743,9 +1744,6 @@ def FCtx.shiftCountGuarded (fc : FCtx) (shift : InstId) (count : Val) (w : Nat) 
     | .block body => match real body with
       | #[⟨_, _, .condBr c _ els⟩] => countBelowWidth c && panics els
       | _ => false
-    | _ => false
-  let isCompare (i : Inst) : Bool := match i.op with
-    | .cmp .lt x (.int _ k) => x == count && k == w
     | _ => false
   fc.bodies.any fun body => match body.findIdx? (·.id == shift) with
     | some k =>
