@@ -50,6 +50,38 @@ theorem memsetUndef_total (n : BitVec 64) (bs : Array Byte) (h : n.toNat = bs.si
       (fun _ => up (regionIn p A S K 1 (Array.replicate n.toNat .undef))) := by
   fsym
 
+/-- The same at the region's alignment (the `@memset` of a `free` of `[]align(8) u8`): the rule for
+any alignment (`memsetRegion`) leaves `memsetBytes n none`, which is the undefined bytes
+(`memsetBytes_undef`). -/
+theorem memsetUndef_aligned (n : BitVec 64) (bs : Array Byte) (h : n.toNat = bs.size) :
+    FTotalTriple (up (regionIn p A S K 8 bs)) (Zig.memset (α := BitVec 8) 8 p n none)
+      (fun _ => up (regionIn p A S K 8 (Array.replicate n.toNat .undef))) := by
+  fsym
+
+/-- Undefined items of a wider type: `n` items of 4 bytes. -/
+theorem memsetUndef_words (n : BitVec 64) (bs : Array Byte) (h : n.toNat * 4 = bs.size) :
+    FTotalTriple (up (regionIn p A S K 4 bs)) (Zig.memset (α := BitVec 32) 4 p n none)
+      (fun _ => up (regionIn p A S K 4 (Array.replicate (n.toNat * 4) .undef))) := by
+  fsym
+
+/-- Undefined items of any lawful type. -/
+theorem memsetUndef_items {T : Type} [Enc T] [LawfulEnc T] (n : BitVec 64) (bs : Array Byte)
+    (h : n.toNat * Enc.size T = bs.size) :
+    FTotalTriple (up (regionIn p A S K (Enc.align T) bs))
+      (Zig.memset (α := T) (Enc.align T) p n none)
+      (fun _ => up (regionIn p A S K (Enc.align T) (Array.replicate (n.toNat * Enc.size T) .undef))) := by
+  fsym
+
+/-- An aligned undefined memset, then a store into the undefined bytes and its read-back. -/
+theorem memsetUndef_store (bs : Array Byte) (h : bs.size = 8) (w : BitVec 32) :
+    FTotalTriple (up (regionIn p A S K 4 bs))
+      (do Zig.memset (α := BitVec 32) 4 p 2 none
+          Zig.store 4 (p.elem 4 1) w
+          Zig.load (BitVec 32) 4 (p.elem 4 1))
+      (fun r => ⟪r = w⟫ ⋆ up (regionIn p A S K 4
+        (writeBytes (Array.replicate 8 .undef) 4 (Enc.encode w)))) := by
+  fsym
+
 /-- Defined bytes written by memset are readable as their original value. -/
 theorem memset_read (bs : Array Byte) (h : bs.size = 4) (v : BitVec 8) :
     FTotalTriple (up (regionIn p A S K 1 bs))

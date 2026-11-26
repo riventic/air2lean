@@ -294,6 +294,14 @@ and byte value. Read providers can use their ordinary array facts after this nor
   simp only [memsetBytes, Enc.encode_byte]
   exact Region.flatten_replicate_single _ _
 
+/-- The bytes of an undefined memset are undefined bytes, for every item type and count (the
+twin of `memsetBytes_byte`): what `memsetRegion` leaves for `@memset(_, undefined)` at any
+alignment. -/
+@[fsym_arith] theorem _root_.Zig.memsetBytes_undef {T : Type} [Enc T] (n : Nat) :
+    memsetBytes n (none : Option T) = Array.replicate (n * Enc.size T) .undef := by
+  simp only [memsetBytes]
+  exact Array.flatten_replicate_replicate
+
 /-! ### Reads of bytes (the arithmetic normalization of a provider's `Enc.decode (bs.extract lo hi)`)
 
 A read normalizes the bytes it reads: through a store that wrote other bytes, a memset's item, a
@@ -388,8 +396,8 @@ undefined (the `@memset` of `allocBytesWithAlignment` and of `free`). -/
 @[fsym] theorem memsetUndef {n : BitVec 64} (hn : n.toNat = bs.size) :
     FTotalTriple (up (regionIn p A S K a bs)) (Zig.memset (α := BitVec 8) 1 p n none)
       (fun _ => up (regionIn p A S K a (Array.replicate n.toNat .undef))) := by
-  have e : memsetBytes n.toNat (none : Option (BitVec 8)) = Array.replicate n.toNat .undef :=
-    Region.flatten_replicate_single _ _
+  have e : memsetBytes n.toNat (none : Option (BitVec 8)) = Array.replicate n.toNat .undef := by
+    rw [memsetBytes_undef, Region.enc_size_byte, Nat.mul_one]
   have t := memsetRegion (p := p) (A := A) (S := S) (K := K) (T := BitVec 8) (n := n) (v := none)
     (by simpa only [Region.enc_size_byte, Nat.mul_one] using hn) (Nat.one_dvd a)
   simpa only [e] using t
