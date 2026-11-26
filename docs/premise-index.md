@@ -5,48 +5,48 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-6531 theorems in 428 files.
+6556 theorems in 429 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
 | [PRF-01](premises.md#prf-01) | 717 | Legacy 64-bit little-endian reference model |
 | [PRF-02](premises.md#prf-02) | 909 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 65 | Gate-time generated module |
-| [PRF-04](premises.md#prf-04) | 931 | Parameterized pointer width |
+| [PRF-04](premises.md#prf-04) | 947 | Parameterized pointer width |
 | [PRF-05](premises.md#prf-05) | 26 | Recorded `abi64-be-v1` big-endian profile |
-| [ALC-01](premises.md#alc-01) | 4793 | Single modelled allocator |
-| [ALC-02](premises.md#alc-02) | 2911 | Allocation failure and request-cap policy |
-| [ALC-03](premises.md#alc-03) | 4793 | Byte remap policy |
-| [ALC-04](premises.md#alc-04) | 3043 | Byte sentinel allocation |
-| [ALC-05](premises.md#alc-05) | 3043 | Byte realloc and sentinel reallocation |
-| [ALC-06](premises.md#alc-06) | 2863 | Raw allocator interface contracts |
-| [ALC-08](premises.md#alc-08) | 4732 | Address reuse and provenance recovery |
+| [ALC-01](premises.md#alc-01) | 4818 | Single modelled allocator |
+| [ALC-02](premises.md#alc-02) | 2936 | Allocation failure and request-cap policy |
+| [ALC-03](premises.md#alc-03) | 4818 | Byte remap policy |
+| [ALC-04](premises.md#alc-04) | 3068 | Byte sentinel allocation |
+| [ALC-05](premises.md#alc-05) | 3068 | Byte realloc and sentinel reallocation |
+| [ALC-06](premises.md#alc-06) | 2888 | Raw allocator interface contracts |
+| [ALC-08](premises.md#alc-08) | 4757 | Address reuse and provenance recovery |
 | [ALC-09](premises.md#alc-09) | 22 | Caller-supplied `Allocator` behaves as the std model |
-| [ALC-10](premises.md#alc-10) | 3073 | Thread-safe allocator in concurrent code |
+| [ALC-10](premises.md#alc-10) | 3098 | Thread-safe allocator in concurrent code |
 | [IOM-01](premises.md#iom-01) | 167 | Caller-supplied `Io` behaves as the std model |
-| [THR-01](premises.md#thr-01) | 3517 | Interleaving scheduler and partial-correctness meaning |
-| [THR-02](premises.md#thr-02) | 3230 | Thread spawn/join with the `available` policy |
-| [THR-03](premises.md#thr-03) | 3130 | Fallible thread assignment policy |
-| [THR-04](premises.md#thr-04) | 3097 | `Io.Group` tasks are model threads |
-| [THR-05](premises.md#thr-05) | 3423 | Futex model |
-| [THR-06](premises.md#thr-06) | 3097 | Darwin `os_unfair_lock` contract |
-| [THR-07](premises.md#thr-07) | 1809 | Progress hints without fairness |
-| [THR-08](premises.md#thr-08) | 3005 | Protocol (rely-guarantee / CSL) proofs over all schedules |
+| [THR-01](premises.md#thr-01) | 3542 | Interleaving scheduler and partial-correctness meaning |
+| [THR-02](premises.md#thr-02) | 3255 | Thread spawn/join with the `available` policy |
+| [THR-03](premises.md#thr-03) | 3155 | Fallible thread assignment policy |
+| [THR-04](premises.md#thr-04) | 3122 | `Io.Group` tasks are model threads |
+| [THR-05](premises.md#thr-05) | 3448 | Futex model |
+| [THR-06](premises.md#thr-06) | 3122 | Darwin `os_unfair_lock` contract |
+| [THR-07](premises.md#thr-07) | 1834 | Progress hints without fairness |
+| [THR-08](premises.md#thr-08) | 3030 | Protocol (rely-guarantee / CSL) proofs over all schedules |
 | [THR-09](premises.md#thr-09) | 10 | Eventually cooperative schedule (progress premise) |
-| [THR-10](premises.md#thr-10) | 3230 | Detached threads and explicit handle transfer |
+| [THR-10](premises.md#thr-10) | 3255 | Detached threads and explicit handle transfer |
 | [THR-11](premises.md#thr-11) | 26 | `Io.Future` tasks and cancelation (0.16.0) |
 | [THR-12](premises.md#thr-12) | 513 | A gone event setter is not joined while it sets |
-| [ORD-01](premises.md#ord-01) | 4841 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 4841 | No load buffering in compiled code |
-| [ORD-03](premises.md#ord-03) | 4841 | `seq_cst` treated as `acq_rel` |
-| [ORD-04](premises.md#ord-04) | 3230 | Weak CAS spurious failure |
-| [ORD-05](premises.md#ord-05) | 2401 | Pointer atomics keep provenance and compare identities |
-| [ORD-06](premises.md#ord-06) | 4851 | Memory-model adequacy of the compiled code |
+| [ORD-01](premises.md#ord-01) | 4866 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 4866 | No load buffering in compiled code |
+| [ORD-03](premises.md#ord-03) | 4866 | `seq_cst` treated as `acq_rel` |
+| [ORD-04](premises.md#ord-04) | 3255 | Weak CAS spurious failure |
+| [ORD-05](premises.md#ord-05) | 2426 | Pointer atomics keep provenance and compare identities |
+| [ORD-06](premises.md#ord-06) | 4876 | Memory-model adequacy of the compiled code |
 | [TMR-02](premises.md#tmr-02) | 30 | Opt-in awake clock and timed scheduler |
-| [MTH-01](premises.md#mth-01) | 4594 | Executable IEEE-754 float model |
+| [MTH-01](premises.md#mth-01) | 4619 | Executable IEEE-754 float model |
 | [MTH-02](premises.md#mth-02) | 246 | Opaque libm transcendentals |
 | [MTH-03](premises.md#mth-03) | 31 | Version-specific compiler-rt float semantics |
-| [MTH-04](premises.md#mth-04) | 124 | aarch64 float lowering |
+| [MTH-04](premises.md#mth-04) | 127 | aarch64 float lowering |
 | [MTH-05](premises.md#mth-05) | 16 | Program linked without libc |
 | [ASM-01](premises.md#asm-01) | 6 | Assembly outside the instruction model is an opaque function |
 | [ASM-02](premises.md#asm-02) | 2 | Instruction behavior as an explicit hypothesis |
@@ -56,50 +56,50 @@ premise was derived. This index covers the committed generated modules.
 | [ASM-06](premises.md#asm-06) | 18 | Memory-region asm accesses only its declared regions |
 | [ASM-07](premises.md#asm-07) | 43 | The x86_64 instruction model matches the CPU and the compiled block |
 | [ASM-09](premises.md#asm-09) | 17 | The running CPU has the asm features that the profile lacks |
-| [SEM-01](premises.md#sem-01) | 5329 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 4816 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 5278 | Loops and triples are partial correctness |
-| [SEM-04](premises.md#sem-04) | 2455 | Total-correctness statements |
-| [SEM-05](premises.md#sem-05) | 2593 | Model step and allocation counts are not time or memory measurements |
+| [SEM-01](premises.md#sem-01) | 5354 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 4841 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 5303 | Loops and triples are partial correctness |
+| [SEM-04](premises.md#sem-04) | 2480 | Total-correctness statements |
+| [SEM-05](premises.md#sem-05) | 2618 | Model step and allocation counts are not time or memory measurements |
 | [SEM-06](premises.md#sem-06) | 121 | Canonical AIR fragment semantics |
-| [SEM-07](premises.md#sem-07) | 4816 | Block addresses are the environment's placement |
-| [STK-01](premises.md#stk-01) | 5273 | The native stack holds every call chain |
-| [STK-02](premises.md#stk-02) | 4732 | Stack reserves lie in address space the native run never maps |
-| [EXT-01](premises.md#ext-01) | 1456 | User external model contracts |
+| [SEM-07](premises.md#sem-07) | 4841 | Block addresses are the environment's placement |
+| [STK-01](premises.md#stk-01) | 5298 | The native stack holds every call chain |
+| [STK-02](premises.md#stk-02) | 4757 | Stack reserves lie in address space the native run never maps |
+| [EXT-01](premises.md#ext-01) | 1481 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 11 | Assumed contracts and project axioms |
 | [EXT-03](premises.md#ext-03) | 11 | Extern functions at their linker identity |
-| [EXT-04](premises.md#ext-04) | 1456 | Registry models in concurrent programs |
-| [EXT-05](premises.md#ext-05) | 3097 | Environment implementations of open interfaces |
-| [EXT-06](premises.md#ext-06) | 4732 | External static storage is not written during the run |
+| [EXT-04](premises.md#ext-04) | 1481 | Registry models in concurrent programs |
+| [EXT-05](premises.md#ext-05) | 3122 | Environment implementations of open interfaces |
+| [EXT-06](premises.md#ext-06) | 4757 | External static storage is not written during the run |
 | [EXT-07](premises.md#ext-07) | 0 | A weak definition is the symbol's definition in the image |
-| [TRU-01](premises.md#tru-01) | 6531 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 6556 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 1703 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 1703 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 252 | Reviewed opaque, extern and runtime-redirection policy |
 | [TRU-05](premises.md#tru-05) | 0 | Artifact signing key |
 | [TRU-06](premises.md#tru-06) | 0 | Filesystem publication atomicity |
-| [DEV-01](premises.md#dev-01) | 4732 | Declared device: trace and read oracle |
+| [DEV-01](premises.md#dev-01) | 4757 | Declared device: trace and read oracle |
 | [ENV-01](premises.md#env-01) | 33 | Selected handle read/write/close contract |
-| [ENV-02](premises.md#env-02) | 4745 | Distinct monotonic and wall clock observations |
+| [ENV-02](premises.md#env-02) | 4770 | Distinct monotonic and wall clock observations |
 | [ENV-03](premises.md#env-03) | 26 | Linux raw read/write/close are the bound models |
-| [OSF-01](premises.md#osf-01) | 1814 | Futex wait (`futex_4arg` WAIT, `__ulock_wait2`, `__ulock_wait`) |
-| [OSF-02](premises.md#osf-02) | 1814 | Futex wake (`futex_3arg` WAKE, `__ulock_wake`) |
-| [OSG-01](premises.md#osg-01) | 1794 | Interrupting signal (`tgkill`, `pthread_kill` of `SIG.IO`) |
-| [OSK-01](premises.md#osk-01) | 1815 | Clock reads |
-| [OSK-02](premises.md#osk-02) | 1733 | Sleep |
+| [OSF-01](premises.md#osf-01) | 1839 | Futex wait (`futex_4arg` WAIT, `__ulock_wait2`, `__ulock_wait`) |
+| [OSF-02](premises.md#osf-02) | 1839 | Futex wake (`futex_3arg` WAKE, `__ulock_wake`) |
+| [OSG-01](premises.md#osg-01) | 1819 | Interrupting signal (`tgkill`, `pthread_kill` of `SIG.IO`) |
+| [OSK-01](premises.md#osk-01) | 1840 | Clock reads |
+| [OSK-02](premises.md#osk-02) | 1758 | Sleep |
 | [OSL-01](premises.md#osl-01) | 0 | macOS `os_unfair_lock` primitive contract |
-| [OSM-01](premises.md#osm-01) | 2290 | Trusted `posix.mmap`/`munmap`/`mremap` model |
-| [OSM-02](premises.md#osm-02) | 1815 | macOS `malloc`/`free`/`malloc_size` |
-| [OST-01](premises.md#ost-01) | 1815 | Thread creation (`clone`, `pthread_create`) |
-| [OST-02](premises.md#ost-02) | 1794 | Thread exit, join and detach |
-| [OST-03](premises.md#ost-03) | 1815 | Thread ids, process id and CPU count |
-| [OSY-01](premises.md#osy-01) | 1794 | Yield |
-| [STD-01](premises.md#std-01) | 4793 | Hand model of the `std.mem.Allocator` wrappers |
-| [STD-02](premises.md#std-02) | 3230 | Hand model of `Thread.spawn` and `Thread.join` |
-| [STD-03](premises.md#std-03) | 3230 | Hand model of `Thread.detach` |
-| [STD-05](premises.md#std-05) | 3423 | Hand model of the std futex interface |
-| [STD-06](premises.md#std-06) | 3097 | Hand model of `Thread.Mutex.DarwinImpl` |
-| [STD-08](premises.md#std-08) | 3097 | Hand model of `Io.Group` |
+| [OSM-01](premises.md#osm-01) | 2315 | Trusted `posix.mmap`/`munmap`/`mremap` model |
+| [OSM-02](premises.md#osm-02) | 1840 | macOS `malloc`/`free`/`malloc_size` |
+| [OST-01](premises.md#ost-01) | 1840 | Thread creation (`clone`, `pthread_create`) |
+| [OST-02](premises.md#ost-02) | 1819 | Thread exit, join and detach |
+| [OST-03](premises.md#ost-03) | 1840 | Thread ids, process id and CPU count |
+| [OSY-01](premises.md#osy-01) | 1819 | Yield |
+| [STD-01](premises.md#std-01) | 4818 | Hand model of the `std.mem.Allocator` wrappers |
+| [STD-02](premises.md#std-02) | 3255 | Hand model of `Thread.spawn` and `Thread.join` |
+| [STD-03](premises.md#std-03) | 3255 | Hand model of `Thread.detach` |
+| [STD-05](premises.md#std-05) | 3448 | Hand model of the std futex interface |
+| [STD-06](premises.md#std-06) | 3122 | Hand model of `Thread.Mutex.DarwinImpl` |
+| [STD-08](premises.md#std-08) | 3122 | Hand model of `Io.Group` |
 | [STD-09](premises.md#std-09) | 26 | Hand model of `Io.async` and `Io.Future` |
 | [STD-10](premises.md#std-10) | 30 | Hand model of `Io.Clock.now` and `Io.futexWaitTimeout` in the timed emitter |
 
@@ -4626,6 +4626,38 @@ File premises: ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, T
 | `Interfaces.ClosureCX.never_spec` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSM-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
 | `Interfaces.ClosureCX.double_not_spec` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSM-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
 | `Interfaces.ClosureCX.naive_unsound` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSM-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+
+## `tests/roadmap/interfaces/Interfaces/KindsSpec.lean`
+
+File premises: PRF-04, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, MTH-04, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08
+
+| Theorem | Premises |
+|---|---|
+| `Interfaces.KindsSpec.freeFf_spec` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `Interfaces.KindsSpec.reallocFf_spec` | PRF-04, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `Interfaces.KindsSpec.makeFf_spec` | PRF-04, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `Interfaces.KindsSpec.appendFf_grant` | PRF-04, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `Interfaces.KindsSpec.resizeFf_grant` | PRF-04, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `Interfaces.KindsSpec.releaseFf_spec` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `Interfaces.KindsSpec.freeOpt_spec` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `Interfaces.KindsSpec.reallocOpt_spec` | PRF-04, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `Interfaces.KindsSpec.makeOpt_spec` | PRF-04, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `Interfaces.KindsSpec.appendOpt_grant` | PRF-04, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `Interfaces.KindsSpec.resizeOpt_grant` | PRF-04, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `Interfaces.KindsSpec.releaseOpt_spec` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `Interfaces.KindsSpec.freeFlt_spec` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `Interfaces.KindsSpec.reallocFlt_spec` | PRF-04, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `Interfaces.KindsSpec.makeFlt_spec` | PRF-04, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, MTH-04, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `Interfaces.KindsSpec.appendFlt_grant` | PRF-04, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, MTH-04, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `Interfaces.KindsSpec.resizeFlt_grant` | PRF-04, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, MTH-04, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `Interfaces.KindsSpec.releaseFlt_spec` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `Interfaces.KindsSpec.freeOver_spec` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `Interfaces.KindsSpec.reallocOver_spec` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `Interfaces.KindsSpec.makeOver_spec` | PRF-04, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `Interfaces.KindsSpec.appendOver_grant` | PRF-04, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `Interfaces.KindsSpec.resizeOver_grant` | PRF-04, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `Interfaces.KindsSpec.releaseOver_spec` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `Interfaces.KindsSpec.copy_spec` | PRF-04, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
 
 ## `tests/roadmap/interfaces/Interfaces/MixSpec.lean`
 
