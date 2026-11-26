@@ -103,6 +103,14 @@ This is a conservative boundary: it also rejects a std opaque type that no model
 handle. It goes when the hand models go (§Retiring the hand models): a translated `Io.Future`
 has the native record behind its handle.
 
+Open (a maintainer decision,
+[audit 2026-11-26](architecture-audit/2026-11-26-std-model-handles.md)): the boundary covers a
+typed use of the handle only. The bytes of a model-owned object are still readable: the fields
+of `Io.Group` (`token`, `state`) and the lock word of `Thread.Mutex.DarwinImpl` by name, and
+those and a future's record through a pointer cast, pointer arithmetic from a neighbouring
+field or an integer address. A theorem about a program that reads them is a theorem about the
+model's bytes, not the native ones.
+
 ## Version qualification
 
 Every modelled row of `stdModels` lists the Zig versions it is qualified for, each with the

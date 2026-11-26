@@ -545,6 +545,17 @@ in `test_lean.py`.
   loop's increment) each break exactly their function's `_step` (the loop's: its iteration
   lemma); a hand-written caller fixture gets `_eq`; the Zig 0.15.2 slices goldens certify their
   expected functions and the fresh certificate checks.
+* `tests/roadmap/air-semantics/mutations.py` (Q02, [mutation-map.md](mutation-map.md)): the
+  interpreter and the trusted rewrites themselves are mutated, in a check tree. `SemArms.lean`
+  states the meaning of every instruction kind of the fragment on concrete inputs (a literal
+  outcome per check: a value, an error kind or stuck); each mutant of an arm of `Sem.lean` must
+  fail its checks, and the mutants of arms that a committed certificate exercises must also break
+  that certificate's theorems. `CanonRewrites.lean` holds, for each rewrite on a `trusted-Canon`
+  line, a raw function on which the rewrite's condition decides the result (a read before the
+  copy's store, a write between a load and its item read, a signed `0 <= x`, a read placeholder
+  or lane pointer, a load that is no pointer formation, an integer `bit_and`, an `arg` behind a
+  `void` parameter, a call that takes the error return trace); the mutant that drops that
+  condition must fail it. These are negative tests of the rewrites, not preservation theorems.
 * The coverage lint: `Sem.outside?` classifies every `Op` constructor (no wildcard arm), and
   `tests/roadmap/op-effects/test_op_table.py` checks it against the interpreter (see its
   docstring).
