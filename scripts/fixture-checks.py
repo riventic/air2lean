@@ -462,7 +462,11 @@ def report(units, statuses, stats, path, top=20):
 
 # The compiled modules the units import: the root package's and the proof-fixture package's
 # (tests/roadmap/lakefile.toml), whose every library `FIXTURE_BUILD` builds before the units.
-SHARED = (ROOT / '.lake/build/lib/lean', ROOT / 'tests/roadmap/.lake/build/lib/lean')
+SHARED_PACKAGES = (ROOT / '.lake', ROOT / 'tests/roadmap/.lake')  # the two packages' Lake directories
+SHARED = tuple(p / 'build/lib/lean' for p in SHARED_PACKAGES)
+# The shared build (`prepare_shared`) writes only below a package's `.lake` (Lake's build tree, its
+# traces, the extractor's tool traces): the only paths that may differ after it, as outputs.
+SHARED_BUILD_OUTPUTS = tuple(str(p.relative_to(ROOT)) + os.sep for p in SHARED_PACKAGES)
 FIXTURE_BUILD = [sys.executable, '-B', str(ROOT / 'scripts/fixtures.py'), 'build']
 
 
@@ -669,22 +673,35 @@ def run_inputs(units):
         raise Unkeyable(str(error)) from error
 
 
-def changed_inputs(before, after, top=10):
-    """What differs between two `run_inputs` snapshots (AFTER None: it could not be read): each
-    differing component, and for the worktree its first TOP changed, added or removed paths."""
-    if after is None:
-        return ['the inputs could not be read again']
-    changed = []
+def input_changes(before, after):
+    """What differs between two `run_inputs` snapshots: the changed, added or removed worktree
+    paths, and the other components that differ ('git state', 'lean', ...)."""
+    paths, components = [], []
     for component in sorted(before.keys() | after.keys()):
         if component == 'worktree' and component in before and component in after:
             old, new = ({r[0]: r for r in side[component][1]} for side in (before, after))
             paths = sorted(p for p in old.keys() | new.keys() if old.get(p) != new.get(p))
-            changed += paths[:top] + ['... (%d paths in all)' % len(paths)] * (len(paths) > top)
             if before[component][0] != after[component][0] or before[component][2] != after[component][2]:
-                changed.append('git state')
+                components.append('git state')
         elif before.get(component) != after.get(component):
-            changed.append(component)
-    return changed
+            components.append(component)
+    return paths, components
+
+
+def changed_inputs(before, after, top=10):
+    """The differences of `input_changes` as names, the worktree paths first (AFTER None: the
+    inputs could not be read again; at most TOP paths are named)."""
+    if after is None:
+        return ['the inputs could not be read again']
+    paths, components = input_changes(before, after)
+    return paths[:top] + ['... (%d paths in all)' % len(paths)] * (len(paths) > top) + components
+
+
+def outside_build_outputs(before, after):
+    """What a shared build changed besides its own outputs (`SHARED_BUILD_OUTPUTS`): a source edited
+    while it ran, the git state, any other component. Empty: the inputs are those the units start from."""
+    paths, components = input_changes(before, after)
+    return [p for p in paths if not p.startswith(SHARED_BUILD_OUTPUTS)] + components
 
 
 def unit_key(unit, run_digest):
@@ -803,10 +820,17 @@ def main(argv=None):
                         if inputs is not None:
                             # The shared build writes the worktree's build outputs: the units start
                             # from, and their pass is keyed on, the inputs as it left them.
+                            # Anything else that changed (a source edited while it built, so its
+                            # outputs may be of the old text) is a concurrent edit: no pass.
                             try:
-                                snapshot = run_inputs(selected)
-                                inputs = CAS.digest(snapshot)
-                                keys = {u['name']: unit_key(u, inputs) for u in units}
+                                built = run_inputs(selected)
+                                if outside := outside_build_outputs(snapshot, built):
+                                    print('fixture-checks: the inputs changed during the shared build: '
+                                          'no pass is recorded: %s' % ', '.join(outside[:10]))
+                                    inputs = None
+                                else:
+                                    snapshot, inputs = built, CAS.digest(built)
+                                    keys = {u['name']: unit_key(u, inputs) for u in units}
                             except Unkeyable as error:
                                 print('fixture-checks: no pass is recorded: %s' % error, file=sys.stderr)
                                 inputs = None
