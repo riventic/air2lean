@@ -133,6 +133,17 @@ x86_64-linux (ReleaseSafe), Zig 0.16.0, 0.17.1 and 0.15.2 each: 1,710 lists case
 matches (the six large lines among them), 0 mismatches, the pinned `allocatorWord` exclusion;
 each whole run, the build of the Lean side included, took under two minutes.
 
+**Large requests through the translated allocator.** The lines above run the `std` allocator
+model. `tests/roadmap/alloc-translated`
+([README](../tests/roadmap/alloc-translated/README.md#requests-above-1-mib-against-the-native-run-m03))
+sends requests of 1 MiB + 1 byte and 4 MiB through the translated `PageAllocator`
+(`page_sum`, down to `Zig.Os.mmap`; the failure decision there is `Mem.mapDenied`, the same policy)
+under the default policy and compares the results with the native run, for the Zig 0.17.1 and
+0.16.0 translations on x86_64-linux and aarch64-macos. The model's side is a compiled executable:
+Lean's interpreter keeps a frame per iteration of a loop in the concurrent monad and does not run
+loops of that length. Under the harness policy (the old cap) the same run is denied, which the
+check requires.
+
 **Standalone fixture.** `tests/roadmap/allocation-policy` compares twenty exact cases of
 `rawAlloc` against `TestAllocator`. Ten cover the failure index, the list and the cap: legacy
 success/failure, several failures, combined legacy/trace failure, duplicate indices, all

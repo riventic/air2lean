@@ -22,10 +22,15 @@ of `s`) and allocator invariant `I`:
   for every `sz`, `k` and `z`. An instance supplies only those facts.
 
 `make` (`allocSentinel`) and `release` (`free`) have no step between the walk and the statement:
-an instance proves `made` and the fee directly.
+the walk's postcondition is `made`, or the fee, as stated, so a theorem from a shape to the
+statement would be the identity. An instance proves `made` and the fee directly.
+
+A sentinel copy (`dupeSentinel`, `dupeZ` before Zig 0.17) returns the source's bytes followed by
+the sentinel: `copy_grant`, from the walk's shape (`copy_bytes`).
 
 Instances: `tests/roadmap/interfaces/Interfaces/SentinelSpec.lean` (`u8`: `sz = 1`, `k = 0`),
-`WideSpec.lean` (`u16`, `u32`, `u64`).
+`WideSpec.lean` (`u16`, `u32`, `u64`) and `KindsSpec.lean` (a non-zero sentinel, an optional
+pointer item, a float item, an over-aligned slice, and the copy).
 -/
 
 namespace Zig.Full.SentinelBuf
@@ -181,6 +186,32 @@ theorem resize_grant {n : BitVec 64} (hz : z.size = sz) (hlen : (len + 1) * sz =
       rintro _ ⟨g, o, hg⟩
       obtain ⟨⟨hs, hk, rfl⟩, hg⟩ := sep_lift.mp hg
       exact ⟨_, sep_lift.mpr ⟨Resized.of_write hz hlen hs hk, hg⟩⟩
+
+/-- The bytes of a sentinel copy (`dupeSentinel`, `dupeZ`): a new buffer of `m` undefined bytes
+with the source's `n` bytes copied to its start and the sentinel `z` written after them is the
+source followed by the sentinel. -/
+theorem copy_bytes {m n : Nat} (hn : n = bs.size) (hm : m = n + z.size) :
+    writeBytes (writeBytes (Array.replicate m .undef) 0 (bs.extract 0 n)) n z = bs ++ z := by
+  subst hn hm
+  have e : bs.extract 0 bs.size = bs := by simp
+  have h1 : writeBytes (Array.replicate (bs.size + z.size) Byte.undef) 0 bs =
+      bs ++ Array.replicate z.size .undef := by
+    rw [writeBytes_eq]
+    apply Array.ext_getElem?
+    intro i
+    simp [Array.getElem?_append]
+  rw [e, h1, writeBytes_eq]
+  simp [Array.extract_append, Array.extract_eq_empty_of_le]
+
+/-- **A sentinel copy, for every item kind**: from the code's shape (the source's `n` bytes
+copied into a new grant of `m` bytes, then the sentinel `z` written at byte `n`) the copy returns
+`len` items whose grant holds the source's bytes `bs` and the sentinel after them
+(`I.bytesResult`), or `error.OutOfMemory` and nothing. -/
+theorem copy_grant {m n : Nat} {len : BitVec 64} (hn : n = bs.size) (hm : m = n + z.size)
+    (h : CTriple P x (fun r => I.own ⋆ (I.bytesResult k φ len
+      (writeBytes (writeBytes (Array.replicate m .undef) 0 (bs.extract 0 n)) n z) r ⋆ F) ⋆ plain)) :
+    CTriple P x (fun r => I.own ⋆ (I.bytesResult k φ len (bs ++ z) r ⋆ F) ⋆ plain) := by
+  rwa [copy_bytes hn hm] at h
 
 /-- The vtable's `free` of a slice that the `free` wrapper has made undefined
 (`@memset(bytes, undefined)` of the whole slice): the fee back. `CAllocSpec.free'` at those
