@@ -122,6 +122,8 @@ FIXTURES = [
      ["--namespace", "BitCastReal", "--prefix", "bitcast017."], "exact"),
     ("tests/roadmap/zig017/divceil/DivCeil/Gen.lean", "tests/roadmap/zig017/divceil/air/0.17.1",
      ["--namespace", "DivCeil", "--prefix", "divceil."], "body"),  # committed without the host header
+    ("tests/roadmap/zig017/tovec/ToVec/Gen.lean", "tests/roadmap/zig017/tovec/air/0.17.1",
+     ["--namespace", "ToVec", "--prefix", "tovec."], "body"),  # committed without the host header
     ("tests/roadmap/noreturn-variants/NoreturnVariants/Gen.lean", "tests/roadmap/noreturn-variants/air/0.16.0",
      ["--namespace", "NoreturnVariants", "--prefix", "noreturn_variants."], "exact"),
     ("Proofs/Provenance/Gen.lean", "assurance/provenance/air",
