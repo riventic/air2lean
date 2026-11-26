@@ -376,19 +376,31 @@ theorem load_sbytesAt {T : Type} [Enc T] {v : T} {k al : Nat} (hq : 0 < q.val)
       (fun x => ⟪x = v⟫ ⋆ sbytesAt p A S K bs q) :=
   load_of_read (fun _ _ _ hh hp => hh.sbytesRead hp hq) hn hk ha hv
 
-/-- **Load of a shared typed value** (`spts`, `@[fsym]`): the share stays. -/
-@[fsym] theorem sload {T : Type} [Enc T] {a : Nat} {v : T} (hn : 0 < Enc.size T) :
-    FTotalTriple (spts p a q v) (Zig.load T a p) (fun x => ⟪x = v⟫ ⋆ spts p a q v) :=
+/-- **A rule on a shared typed value** (`spts`) from a rule on its bytes, which every resource
+of the precondition reads (`Holds.sbytesRead`): the share stays. -/
+theorem spts_read {T β : Type} [Enc T] {a : Nat} {v : T} {c : MemM β} {Φ : β → Prop}
+    (h : ∀ (A S : Nat) (K : BlockKind) (bs : Array Byte) (P : FAssn),
+      (A + p.off.toNat) % a = 0 → bs.size = Enc.size T → Enc.decode bs = pure v →
+      (∀ m r rF, Holds m r rF → P r → m.BytesRead p A S K bs) →
+      FTotalTriple P c (fun x => ⟪Φ x⟫ ⋆ P)) :
+    FTotalTriple (spts p a q v) c (fun x => ⟪Φ x⟫ ⋆ spts p a q v) :=
   of_cases fun _ hp => by
     obtain ⟨hq, H, hP, hs⟩ := hp
     obtain ⟨A, S, K, bs, ha, hsz, hv, hb, -⟩ := hP.1
-    have t := load_of_read (P := fun r => spts p a q v r ∧ sbytesAt p A S K bs q r) (q := p)
-      (k := 0) (al := a) (fun _ _ _ hh hp => hh.sbytesRead hp.2 hq) hn (by omega)
-      (by simpa using ha) (by rw [Nat.zero_add, ← hsz, Array.extract_size]; exact hv)
+    refine ⟨fun r => spts p a q v r ∧ sbytesAt p A S K bs q r, _,
+      h A S K bs _ ha hsz hv fun _ _ _ hh hp => hh.sbytesRead hp.2 hq,
+      ⟨⟨hq, H, hP, hs⟩, H, ⟨hb, rfl, rfl⟩, hs⟩, fun _ _ h => ?_⟩
+    obtain ⟨hΦ, hb'⟩ := sep_lift.mp h
+    exact sep_lift.mpr ⟨hΦ, hb'.1⟩
+
+/-- **Load of a shared typed value** (`spts`, `@[fsym]`): the share stays. -/
+@[fsym] theorem sload {T : Type} [Enc T] {a : Nat} {v : T} (hn : 0 < Enc.size T) :
+    FTotalTriple (spts p a q v) (Zig.load T a p) (fun x => ⟪x = v⟫ ⋆ spts p a q v) :=
+  spts_read fun _ _ _ _ _ ha hsz hv hr => by
+    have t := load_of_read (q := p) (k := 0) (al := a) hr hn (by omega) (by simpa using ha)
+      (by rw [Nat.zero_add, ← hsz, Array.extract_size]; exact hv)
     simp only [Int.natCast_zero, Ptr.add_zero] at t
-    exact ⟨_, _, t, ⟨⟨hq, H, hP, hs⟩, H, ⟨hb, rfl, rfl⟩, hs⟩, fun v' _ h => by
-      obtain ⟨hφ, hb'⟩ := sep_lift.mp h
-      exact sep_lift.mpr ⟨hφ, hb'.1⟩⟩
+    exact t
 
 end FTotalTriple
 
@@ -406,13 +418,28 @@ theorem spts_owned {T : Type} [Enc T] {a : Nat} {v : T} {b : BlockId} (hpb : p.b
   rw [hs.2.2, Ghost.sharesOf_share, hfc, Option.elim_some, SCell.of_self]
   exact hq
 
+/-- The `n` bytes from byte `k` of a shared typed value are read (`ReadsPtr`). -/
+theorem ReadsPtr.spts_add {T : Type} [Enc T] {a : Nat} {v : T} {k n : Nat}
+    (hk : k + n ≤ Enc.size T) : ReadsPtr (spts p a q v) (p.add k) n := fun b hb r hp x h1 h2 => by
+  have h0 : 0 ≤ p.off := by
+    obtain ⟨-, H, hP, -⟩ := hp
+    obtain ⟨A, S, K, bs, -, -, -, ⟨-, -, h0, -⟩, -⟩ := hP.1
+    exact h0
+  have e : (p.add k).off.toNat = p.off.toNat + k := by simp only [Ptr.add]; omega
+  exact spts_owned (p := p) hb hp (by omega) (by omega)
+
+/-- The first `n` bytes of a shared typed value are read (a locality provider). -/
+@[fsym_provider] theorem ReadsPtr.spts_in {T : Type} [Enc T] {a : Nat} {v : T} {n : Nat}
+    (hn : n ≤ Enc.size T) : ReadsPtr (spts p a q v) p n :=
+  fun _ hb _ hp _ h1 h2 => spts_owned hb hp h1 (by omega)
+
 /-- **A load of a shared typed value is local to the thread** (`spts`, a locality provider,
 §Read shares): the share orders every write before the load, and other holders of the share may
 read the bytes meanwhile (`ThreadLocal.loadOwned`). So `fsym` applies the sequential `sload` in a
 thread (`FTTotalTriple.ofSeq`, `Full/AutoThread.lean`), and the share stays. -/
 @[fsym_provider] theorem ThreadLocal.sload {T : Type} [Enc T] {a : Nat} {v : T} :
     ThreadLocal (spts p a q v) (Zig.load T a p) :=
-  ThreadLocal.loadOwned fun _ hpb _ hp _ h1 h2 => spts_owned hpb hp h1 h2
+  ThreadLocal.loadOwned (ReadsPtr.spts_in (Nat.le_refl _))
 
 /-- **Shared bytes split** into two shares of the same bytes. -/
 theorem sbytesAt_split {q₁ q₂ : Frac} {r : Res} (h : sbytesAt p A S K bs (q₁.add q₂) r) :
