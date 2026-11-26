@@ -126,8 +126,12 @@ def main : IO Unit := do
   -- is a vector on the other side (up to 0.15.2 the LLVM lowering copies the items only).
   require (rejects "0.16.0" 16 0 "between types of 40 and 32 bits") "[4:0]u8 → u32 is accepted"
   for v in ["0.14.1", "0.15.2", "0.16.0"] do
-    require (accepts v 16 19) s!"{v}: [4:0]u8 → u40 is rejected: {result v 16 19}"
-    require (accepts v 19 16) s!"{v}: u40 → [4:0]u8 is rejected: {result v 19 16}"
+    -- (`u40` has padding bits: on a profile that names its backend.)
+    for (s, d) in [(16, 19), (19, 16)] do
+      require (result v s d Target.llvmBackend).isOk
+        s!"{v}: sentinel cast {s} → {d} is rejected: {result v s d Target.llvmBackend}"
+      require (rejects v s d "of an integer with padding bits")
+        s!"{v}: the padded sentinel cast {s} → {d} on a legacy profile: {result v s d}"
     require (rejects v 16 24 "a sentinel-terminated array and a vector")
       s!"{v}: [4:0]u8 → @Vector(5, u8) is accepted"
   for (s, d) in [(16, 19), (19, 16)] do

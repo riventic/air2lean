@@ -82,7 +82,7 @@ inductive arraysToIntExit where
 
 def arraysToInt (p0 : Vector (Option (Vector (BitVec 8) 3)) 2) : Zig.Result (BitVec 64) := do
   let e ← ((do
-    let i1 ← Zig.reprCast (BitVec 64) (p0 : Vector (Option (Vector (BitVec 8) 3)) 2)
+    let i1 ← (letI : Zig.Enc (Vector (Option (Vector (BitVec 8) 3)) 2) := Zig.Enc.vectorWith 2 (Zig.Enc.optionRepr ((inferInstance : Zig.Enc (Vector (BitVec 8) 3)))); Zig.reprCast (BitVec 64) (p0 : Vector (Option (Vector (BitVec 8) 3)) 2))
     pure (.ret i1)) : Zig.M arraysToIntLocals arraysToIntExit).run' (default : arraysToIntLocals)
   match e with
   | .ret v => pure v
@@ -97,7 +97,7 @@ inductive boolsToIntExit where
 
 def boolsToInt (p0 : Vector (Option (Bool)) 2) : Zig.Result (BitVec 32) := do
   let e ← ((do
-    let i1 ← Zig.reprCast (BitVec 32) (p0 : Vector (Option (Bool)) 2)
+    let i1 ← (letI : Zig.Enc (Vector (Option (Bool)) 2) := Zig.Enc.vectorWith 2 (Zig.Enc.optionRepr ((inferInstance : Zig.Enc (Bool)))); Zig.reprCast (BitVec 32) (p0 : Vector (Option (Bool)) 2))
     pure (.ret i1)) : Zig.M boolsToIntLocals boolsToIntExit).run' (default : boolsToIntLocals)
   match e with
   | .ret v => pure v
@@ -112,7 +112,7 @@ inductive enumsToIntExit where
 
 def enumsToInt (p0 : Vector (Option (E)) 2) : Zig.Result (BitVec 32) := do
   let e ← ((do
-    let i1 ← Zig.reprCast (BitVec 32) (p0 : Vector (Option (E)) 2)
+    let i1 ← (letI : Zig.Enc (Vector (Option (E)) 2) := Zig.Enc.vectorWith 2 (Zig.Enc.optionRepr ((inferInstance : Zig.Enc (E)))); Zig.reprCast (BitVec 32) (p0 : Vector (Option (E)) 2))
     pure (.ret i1)) : Zig.M enumsToIntLocals enumsToIntExit).run' (default : enumsToIntLocals)
   match e with
   | .ret v => pure v
@@ -127,7 +127,7 @@ inductive gridToIntExit where
 
 def gridToInt (p0 : Vector (Vector (Option (BitVec 8)) 2) 2) : Zig.Result (BitVec 64) := do
   let e ← ((do
-    let i1 ← Zig.reprCast (BitVec 64) (p0 : Vector (Vector (Option (BitVec 8)) 2) 2)
+    let i1 ← (letI : Zig.Enc (Vector (Vector (Option (BitVec 8)) 2) 2) := Zig.Enc.vectorWith 2 (Zig.Enc.vectorWith 2 (Zig.Enc.optionRepr ((inferInstance : Zig.Enc (BitVec 8))))); Zig.reprCast (BitVec 64) (p0 : Vector (Vector (Option (BitVec 8)) 2) 2))
     pure (.ret i1)) : Zig.M gridToIntLocals gridToIntExit).run' (default : gridToIntLocals)
   match e with
   | .ret v => pure v
@@ -143,7 +143,7 @@ inductive intToArraysExit where
 
 def intToArrays (p0 : BitVec 64) : Zig.Result (BitVec 32) := do
   let e ← ((do
-    let i1 ← Zig.reprCast (Vector (Option (Vector (BitVec 8) 3)) 2) (p0 : BitVec 64)
+    let i1 ← (letI : Zig.Enc (Vector (Option (Vector (BitVec 8) 3)) 2) := Zig.Enc.vectorWith 2 (Zig.Enc.optionRepr ((inferInstance : Zig.Enc (Vector (BitVec 8) 3)))); Zig.reprCast (Vector (Option (Vector (BitVec 8) 3)) 2) (p0 : BitVec 64))
     match ← ((do
       let i3 ← Zig.call (Zig.vindex i1 (1 : BitVec 64))
       let i4 ← pure ((i3).isSome)
@@ -172,7 +172,7 @@ inductive intToAutoExit where
 
 def intToAuto (p0 : BitVec 96) : Zig.Result (BitVec 16) := do
   let e ← ((do
-    let i1 ← (letI : Zig.Enc (BitVec 96) := Zig.intEncExt .little false 96; Zig.reprCast (Vector (Option (S)) 2) (p0 : BitVec 96))
+    let i1 ← (letI : Zig.Enc (BitVec 96) := Zig.intEncExt .little false 96; (letI : Zig.Enc (Vector (Option (S)) 2) := Zig.Enc.vectorWith 2 (Zig.Enc.optionRepr ((inferInstance : Zig.Enc (S)))); Zig.reprCast (Vector (Option (S)) 2) (p0 : BitVec 96)))
     match ← ((do
       let i3 ← Zig.call (Zig.vindex i1 (1 : BitVec 64))
       let i4 ← pure ((i3).isSome)
@@ -249,7 +249,7 @@ def intToBools.loop7 (i1 : Vector (Option (Bool)) 2) : Zig.M intToBoolsLocals in
 
 def intToBools (p0 : BitVec 32) : Zig.Result (BitVec 8) := do
   let e ← ((do
-    let i1 ← Zig.reprCast (Vector (Option (Bool)) 2) (p0 : BitVec 32)
+    let i1 ← (letI : Zig.Enc (Vector (Option (Bool)) 2) := Zig.Enc.vectorWith 2 (Zig.Enc.optionRepr ((inferInstance : Zig.Enc (Bool)))); Zig.reprCast (Vector (Option (Bool)) 2) (p0 : BitVec 32))
     modify (fun s => { s with n := (0 : BitVec 8) })
     modify (fun s => { s with local4 := (0 : BitVec 64) })
     match ← ((do
@@ -273,7 +273,7 @@ inductive intToEnumsExit where
 
 def intToEnums (p0 : BitVec 32) : Zig.Result (BitVec 8) := do
   let e ← ((do
-    let i1 ← Zig.reprCast (Vector (Option (E)) 2) (p0 : BitVec 32)
+    let i1 ← (letI : Zig.Enc (Vector (Option (E)) 2) := Zig.Enc.vectorWith 2 (Zig.Enc.optionRepr ((inferInstance : Zig.Enc (E)))); Zig.reprCast (Vector (Option (E)) 2) (p0 : BitVec 32))
     match ← ((do
       let i3 ← Zig.call (Zig.vindex i1 (1 : BitVec 64))
       let i4 ← pure ((i3).isSome)
@@ -301,7 +301,7 @@ inductive intToExternExit where
 
 def intToExtern (p0 : BitVec 48) : Zig.Result (BitVec 16) := do
   let e ← ((do
-    let i1 ← (letI : Zig.Enc (BitVec 48) := Zig.intEncExt .little false 48; Zig.reprCast (Vector (Option (ES)) 2) (p0 : BitVec 48))
+    let i1 ← (letI : Zig.Enc (BitVec 48) := Zig.intEncExt .little false 48; (letI : Zig.Enc (Vector (Option (ES)) 2) := Zig.Enc.vectorWith 2 (Zig.Enc.optionRepr ((inferInstance : Zig.Enc (ES)))); Zig.reprCast (Vector (Option (ES)) 2) (p0 : BitVec 48)))
     match ← ((do
       let i3 ← Zig.call (Zig.vindex i1 (1 : BitVec 64))
       let i4 ← pure ((i3).isSome)
@@ -334,7 +334,7 @@ inductive intToF128Exit where
 
 def intToF128 (p0 : BitVec 256) : Zig.Result (BitVec 128) := do
   let e ← ((do
-    let i1 ← Zig.reprCast (Vector (Option (Zig.F128)) 1) (p0 : BitVec 256)
+    let i1 ← (letI : Zig.Enc (Vector (Option (Zig.F128)) 1) := Zig.Enc.vectorWith 1 (Zig.Enc.optionRepr ((inferInstance : Zig.Enc (Zig.F128)))); Zig.reprCast (Vector (Option (Zig.F128)) 1) (p0 : BitVec 256))
     match ← ((do
       let i3 ← Zig.call (Zig.vindex i1 (0 : BitVec 64))
       let i4 ← pure ((i3).isSome)
@@ -362,7 +362,7 @@ inductive intToF16Exit where
 
 def intToF16 (p0 : BitVec 32) : Zig.Result (BitVec 16) := do
   let e ← ((do
-    let i1 ← Zig.reprCast (Vector (Option (Zig.F16)) 1) (p0 : BitVec 32)
+    let i1 ← (letI : Zig.Enc (Vector (Option (Zig.F16)) 1) := Zig.Enc.vectorWith 1 (Zig.Enc.optionRepr ((inferInstance : Zig.Enc (Zig.F16)))); Zig.reprCast (Vector (Option (Zig.F16)) 1) (p0 : BitVec 32))
     match ← ((do
       let i3 ← Zig.call (Zig.vindex i1 (0 : BitVec 64))
       let i4 ← pure ((i3).isSome)
@@ -390,7 +390,7 @@ inductive intToF32Exit where
 
 def intToF32 (p0 : BitVec 64) : Zig.Result (BitVec 32) := do
   let e ← ((do
-    let i1 ← Zig.reprCast (Vector (Option (Zig.F32)) 1) (p0 : BitVec 64)
+    let i1 ← (letI : Zig.Enc (Vector (Option (Zig.F32)) 1) := Zig.Enc.vectorWith 1 (Zig.Enc.optionRepr ((inferInstance : Zig.Enc (Zig.F32)))); Zig.reprCast (Vector (Option (Zig.F32)) 1) (p0 : BitVec 64))
     match ← ((do
       let i3 ← Zig.call (Zig.vindex i1 (0 : BitVec 64))
       let i4 ← pure ((i3).isSome)
@@ -418,7 +418,7 @@ inductive intToF64Exit where
 
 def intToF64 (p0 : BitVec 128) : Zig.Result (BitVec 64) := do
   let e ← ((do
-    let i1 ← Zig.reprCast (Vector (Option (Zig.F64)) 1) (p0 : BitVec 128)
+    let i1 ← (letI : Zig.Enc (Vector (Option (Zig.F64)) 1) := Zig.Enc.vectorWith 1 (Zig.Enc.optionRepr ((inferInstance : Zig.Enc (Zig.F64)))); Zig.reprCast (Vector (Option (Zig.F64)) 1) (p0 : BitVec 128))
     match ← ((do
       let i3 ← Zig.call (Zig.vindex i1 (0 : BitVec 64))
       let i4 ← pure ((i3).isSome)
@@ -446,7 +446,7 @@ inductive intToF80Exit where
 
 def intToF80 (p0 : BitVec 256) : Zig.Result (BitVec 80) := do
   let e ← ((do
-    let i1 ← Zig.reprCast (Vector (Option (Zig.F80)) 1) (p0 : BitVec 256)
+    let i1 ← (letI : Zig.Enc (Vector (Option (Zig.F80)) 1) := Zig.Enc.vectorWith 1 (Zig.Enc.optionRepr ((inferInstance : Zig.Enc (Zig.F80)))); Zig.reprCast (Vector (Option (Zig.F80)) 1) (p0 : BitVec 256))
     match ← ((do
       let i3 ← Zig.call (Zig.vindex i1 (0 : BitVec 64))
       let i4 ← pure ((i3).isSome)
@@ -474,7 +474,7 @@ inductive intToGridExit where
 
 def intToGrid (p0 : BitVec 64) : Zig.Result (BitVec 16) := do
   let e ← ((do
-    let i1 ← Zig.reprCast (Vector (Vector (Option (BitVec 8)) 2) 2) (p0 : BitVec 64)
+    let i1 ← (letI : Zig.Enc (Vector (Vector (Option (BitVec 8)) 2) 2) := Zig.Enc.vectorWith 2 (Zig.Enc.vectorWith 2 (Zig.Enc.optionRepr ((inferInstance : Zig.Enc (BitVec 8))))); Zig.reprCast (Vector (Vector (Option (BitVec 8)) 2) 2) (p0 : BitVec 64))
     match ← ((do
       let i3 ← Zig.call (Zig.vindex i1 (1 : BitVec 64))
       let i4 ← Zig.call (Zig.vindex i3 (0 : BitVec 64))
@@ -503,7 +503,7 @@ inductive intToI8sExit where
 
 def intToI8s (p0 : BitVec 32) : Zig.Result (BitVec 16) := do
   let e ← ((do
-    let i1 ← Zig.reprCast (Vector (Option (BitVec 8)) 2) (p0 : BitVec 32)
+    let i1 ← (letI : Zig.Enc (Vector (Option (BitVec 8)) 2) := Zig.Enc.vectorWith 2 (Zig.Enc.optionRepr ((inferInstance : Zig.Enc (BitVec 8)))); Zig.reprCast (Vector (Option (BitVec 8)) 2) (p0 : BitVec 32))
     match ← ((do
       let i3 ← Zig.call (Zig.vindex i1 (1 : BitVec 64))
       let i4 ← pure ((i3).isSome)
@@ -532,7 +532,7 @@ inductive intToNestedExit where
 
 def intToNested (p0 : BitVec 48) : Zig.Result (BitVec 16) := do
   let e ← ((do
-    let i1 ← (letI : Zig.Enc (BitVec 48) := Zig.intEncExt .little false 48; Zig.reprCast (Vector (Option (Option (BitVec 8))) 2) (p0 : BitVec 48))
+    let i1 ← (letI : Zig.Enc (BitVec 48) := Zig.intEncExt .little false 48; (letI : Zig.Enc (Vector (Option (Option (BitVec 8))) 2) := Zig.Enc.vectorWith 2 (Zig.Enc.optionRepr (Zig.Enc.optionRepr ((inferInstance : Zig.Enc (BitVec 8))))); Zig.reprCast (Vector (Option (Option (BitVec 8))) 2) (p0 : BitVec 48)))
     match ← ((do
       let i3 ← Zig.call (Zig.vindex i1 (1 : BitVec 64))
       let i4 ← pure ((i3).isSome)
@@ -569,7 +569,7 @@ inductive intToPackedExit where
 
 def intToPacked (p0 : BitVec 64) : Zig.Result (BitVec 16) := do
   let e ← ((do
-    let i1 ← Zig.reprCast (Vector (Option (PS)) 2) (p0 : BitVec 64)
+    let i1 ← (letI : Zig.Enc (Vector (Option (PS)) 2) := Zig.Enc.vectorWith 2 (Zig.Enc.optionRepr ((inferInstance : Zig.Enc (PS)))); Zig.reprCast (Vector (Option (PS)) 2) (p0 : BitVec 64))
     match ← ((do
       let i3 ← Zig.call (Zig.vindex i1 (1 : BitVec 64))
       let i4 ← pure ((i3).isSome)
@@ -598,7 +598,7 @@ inductive intToU128Exit where
 
 def intToU128 (p0 : BitVec 256) : Zig.Result (BitVec 128) := do
   let e ← ((do
-    let i1 ← Zig.reprCast (Vector (Option (BitVec 128)) 1) (p0 : BitVec 256)
+    let i1 ← (letI : Zig.Enc (Vector (Option (BitVec 128)) 1) := Zig.Enc.vectorWith 1 (Zig.Enc.optionRepr ((inferInstance : Zig.Enc (BitVec 128)))); Zig.reprCast (Vector (Option (BitVec 128)) 1) (p0 : BitVec 256))
     match ← ((do
       let i3 ← Zig.call (Zig.vindex i1 (0 : BitVec 64))
       let i4 ← pure ((i3).isSome)
@@ -625,7 +625,7 @@ inductive intToU12sExit where
 
 def intToU12s (p0 : BitVec 64) : Zig.Result (BitVec 16) := do
   let e ← ((do
-    let i1 ← (letI : Zig.Enc (Vector (Option (BitVec 12)) 2) := Zig.Enc.vectorWith 2 (Zig.Enc.optionWith (Zig.intEncExt .little false 12)); Zig.reprCast (Vector (Option (BitVec 12)) 2) (p0 : BitVec 64))
+    let i1 ← (letI : Zig.Enc (Vector (Option (BitVec 12)) 2) := Zig.Enc.vectorWith 2 (Zig.Enc.optionRepr (Zig.intEncExt .little false 12)); Zig.reprCast (Vector (Option (BitVec 12)) 2) (p0 : BitVec 64))
     match ← ((do
       let i3 ← Zig.call (Zig.vindex i1 (0 : BitVec 64))
       let i4 ← pure ((i3).isSome)
@@ -653,7 +653,7 @@ inductive intToU16sExit where
 
 def intToU16s (p0 : BitVec 64) : Zig.Result (BitVec 32) := do
   let e ← ((do
-    let i1 ← Zig.reprCast (Vector (Option (BitVec 16)) 2) (p0 : BitVec 64)
+    let i1 ← (letI : Zig.Enc (Vector (Option (BitVec 16)) 2) := Zig.Enc.vectorWith 2 (Zig.Enc.optionRepr ((inferInstance : Zig.Enc (BitVec 16)))); Zig.reprCast (Vector (Option (BitVec 16)) 2) (p0 : BitVec 64))
     match ← ((do
       let i3 ← Zig.call (Zig.vindex i1 (1 : BitVec 64))
       let i4 ← pure ((i3).isSome)
@@ -681,7 +681,7 @@ inductive intToU24sExit where
 
 def intToU24s (p0 : BitVec 128) : Zig.Result (BitVec 32) := do
   let e ← ((do
-    let i1 ← (letI : Zig.Enc (Vector (Option (BitVec 24)) 2) := Zig.Enc.vectorWith 2 (Zig.Enc.optionWith (Zig.intEncExt .little false 24)); Zig.reprCast (Vector (Option (BitVec 24)) 2) (p0 : BitVec 128))
+    let i1 ← (letI : Zig.Enc (Vector (Option (BitVec 24)) 2) := Zig.Enc.vectorWith 2 (Zig.Enc.optionRepr (Zig.intEncExt .little false 24)); Zig.reprCast (Vector (Option (BitVec 24)) 2) (p0 : BitVec 128))
     match ← ((do
       let i3 ← Zig.call (Zig.vindex i1 (1 : BitVec 64))
       let i4 ← pure ((i3).isSome)
@@ -709,7 +709,7 @@ inductive intToU64Exit where
 
 def intToU64 (p0 : BitVec 128) : Zig.Result (BitVec 64) := do
   let e ← ((do
-    let i1 ← Zig.reprCast (Vector (Option (BitVec 64)) 1) (p0 : BitVec 128)
+    let i1 ← (letI : Zig.Enc (Vector (Option (BitVec 64)) 1) := Zig.Enc.vectorWith 1 (Zig.Enc.optionRepr ((inferInstance : Zig.Enc (BitVec 64)))); Zig.reprCast (Vector (Option (BitVec 64)) 1) (p0 : BitVec 128))
     match ← ((do
       let i3 ← Zig.call (Zig.vindex i1 (0 : BitVec 64))
       let i4 ← pure ((i3).isSome)
@@ -736,7 +736,7 @@ inductive intToU8sExit where
 
 def intToU8s (p0 : BitVec 32) : Zig.Result (BitVec 16) := do
   let e ← ((do
-    let i1 ← Zig.reprCast (Vector (Option (BitVec 8)) 2) (p0 : BitVec 32)
+    let i1 ← (letI : Zig.Enc (Vector (Option (BitVec 8)) 2) := Zig.Enc.vectorWith 2 (Zig.Enc.optionRepr ((inferInstance : Zig.Enc (BitVec 8)))); Zig.reprCast (Vector (Option (BitVec 8)) 2) (p0 : BitVec 32))
     match ← ((do
       let i3 ← Zig.call (Zig.vindex i1 (1 : BitVec 64))
       let i4 ← pure ((i3).isSome)
@@ -764,7 +764,7 @@ inductive intToVectorExit where
 
 def intToVector (p0 : BitVec 256) : Zig.Result (BitVec 32) := do
   let e ← ((do
-    let i1 ← Zig.reprCast (Vector (Option (Zig.Vec (BitVec 32) 4)) 1) (p0 : BitVec 256)
+    let i1 ← (letI : Zig.Enc (Vector (Option (Zig.Vec (BitVec 32) 4)) 1) := Zig.Enc.vectorWith 1 (Zig.Enc.optionRepr ((inferInstance : Zig.Enc (Zig.Vec (BitVec 32) 4)))); Zig.reprCast (Vector (Option (Zig.Vec (BitVec 32) 4)) 1) (p0 : BitVec 256))
     match ← ((do
       let i3 ← Zig.call (Zig.vindex i1 (0 : BitVec 64))
       let i4 ← pure ((i3).isSome)
@@ -828,7 +828,7 @@ def intToZeros.loop7 (i1 : Vector (Option (BitVec 0)) 4) : Zig.M intToZerosLocal
 
 def intToZeros (p0 : BitVec 32) : Zig.Result (BitVec 8) := do
   let e ← ((do
-    let i1 ← Zig.reprCast (Vector (Option (BitVec 0)) 4) (p0 : BitVec 32)
+    let i1 ← (letI : Zig.Enc (Vector (Option (BitVec 0)) 4) := Zig.Enc.vectorWith 4 (Zig.Enc.optionRepr ((inferInstance : Zig.Enc (BitVec 0)))); Zig.reprCast (Vector (Option (BitVec 0)) 4) (p0 : BitVec 32))
     modify (fun s => { s with n := (0 : BitVec 8) })
     modify (fun s => { s with local4 := (0 : BitVec 64) })
     match ← ((do
@@ -851,7 +851,7 @@ inductive nestedToIntExit where
 
 def nestedToInt (p0 : Vector (Option (Option (BitVec 8))) 2) : Zig.Result (BitVec 48) := do
   let e ← ((do
-    let i1 ← (letI : Zig.Enc (BitVec 48) := Zig.intEncExt .little false 48; Zig.reprCast (BitVec 48) (p0 : Vector (Option (Option (BitVec 8))) 2))
+    let i1 ← (letI : Zig.Enc (Vector (Option (Option (BitVec 8))) 2) := Zig.Enc.vectorWith 2 (Zig.Enc.optionRepr (Zig.Enc.optionRepr ((inferInstance : Zig.Enc (BitVec 8))))); (letI : Zig.Enc (BitVec 48) := Zig.intEncExt .little false 48; Zig.reprCast (BitVec 48) (p0 : Vector (Option (Option (BitVec 8))) 2)))
     pure (.ret i1)) : Zig.M nestedToIntLocals nestedToIntExit).run' (default : nestedToIntLocals)
   match e with
   | .ret v => pure v
@@ -866,7 +866,7 @@ inductive u16sToIntExit where
 
 def u16sToInt (p0 : Vector (Option (BitVec 16)) 2) : Zig.Result (BitVec 64) := do
   let e ← ((do
-    let i1 ← Zig.reprCast (BitVec 64) (p0 : Vector (Option (BitVec 16)) 2)
+    let i1 ← (letI : Zig.Enc (Vector (Option (BitVec 16)) 2) := Zig.Enc.vectorWith 2 (Zig.Enc.optionRepr ((inferInstance : Zig.Enc (BitVec 16)))); Zig.reprCast (BitVec 64) (p0 : Vector (Option (BitVec 16)) 2))
     pure (.ret i1)) : Zig.M u16sToIntLocals u16sToIntExit).run' (default : u16sToIntLocals)
   match e with
   | .ret v => pure v
@@ -881,7 +881,7 @@ inductive u8sToIntExit where
 
 def u8sToInt (p0 : Vector (Option (BitVec 8)) 2) : Zig.Result (BitVec 32) := do
   let e ← ((do
-    let i1 ← Zig.reprCast (BitVec 32) (p0 : Vector (Option (BitVec 8)) 2)
+    let i1 ← (letI : Zig.Enc (Vector (Option (BitVec 8)) 2) := Zig.Enc.vectorWith 2 (Zig.Enc.optionRepr ((inferInstance : Zig.Enc (BitVec 8)))); Zig.reprCast (BitVec 32) (p0 : Vector (Option (BitVec 8)) 2))
     pure (.ret i1)) : Zig.M u8sToIntLocals u8sToIntExit).run' (default : u8sToIntLocals)
   match e with
   | .ret v => pure v
@@ -896,7 +896,7 @@ inductive zerosToIntExit where
 
 def zerosToInt (p0 : Vector (Option (BitVec 0)) 4) : Zig.Result (BitVec 32) := do
   let e ← ((do
-    let i1 ← Zig.reprCast (BitVec 32) (p0 : Vector (Option (BitVec 0)) 4)
+    let i1 ← (letI : Zig.Enc (Vector (Option (BitVec 0)) 4) := Zig.Enc.vectorWith 4 (Zig.Enc.optionRepr ((inferInstance : Zig.Enc (BitVec 0)))); Zig.reprCast (BitVec 32) (p0 : Vector (Option (BitVec 0)) 4))
     pure (.ret i1)) : Zig.M zerosToIntLocals zerosToIntExit).run' (default : zerosToIntLocals)
   match e with
   | .ret v => pure v
