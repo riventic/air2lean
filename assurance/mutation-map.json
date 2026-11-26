@@ -1516,23 +1516,23 @@
       "categories": [],
       "negative_tests": [
         {
-          "path": "tests/roadmap/allocator-identity/Check.lean",
-          "anchor": "expect \"arena-block-std-free\""
+          "path": "tests/roadmap/alloc-arena/ArenaObstruction.lean",
+          "anchor": "theorem foreign_free_panics"
         },
         {
-          "path": "tests/roadmap/allocator-identity/Check.lean",
-          "anchor": "expect \"arena-block-other-arena-free\""
+          "path": "tests/roadmap/alloc-arena/AllocArena/Core.lean",
+          "anchor": "theorem granted_in_node"
         },
         {
-          "path": "tests/roadmap/allocator-identity/Check.lean",
-          "anchor": "expect \"reset-own-block\""
+          "path": "tests/roadmap/alloc-arena/AllocArena/Eval.lean",
+          "anchor": "#guard first (arena_oom_free 8) dispatch (mem0 .fresh) = \"fail Zig.Error.illegal\""
         }
       ],
       "mutants": [
         {"name": "fba-alloc-end-index-kept", "path": "tests/roadmap/alloc-fba/mutant.sh", "category": "other"},
         {"name": "page-shrink-tail-kept-mapped", "path": "tests/roadmap/alloc-translated/mutant.sh", "category": "other"}
       ],
-      "note": "Cross-allocator free/destroy/remap and use after reset are .illegal (executable regressions). The translated allocators' full-state proofs reject a FixedBufferAllocator alloc that does not advance end_index (FBA.fallocSpec fails) and a PageAllocator shrink that leaves the cut pages mapped (PageSpec fails)."
+      "note": "Over the translated ArenaAllocator: a foreign free panics natively, a slice the arena takes back lies in one of its used nodes (a foreign or stale slice has no token), and the stock arena's free after a failed alloc is .illegal (O-E). The translated allocators' full-state proofs reject a FixedBufferAllocator alloc that does not advance end_index (FBA.fallocSpec fails) and a PageAllocator shrink that leaves the cut pages mapped (PageSpec fails)."
     },
     "M02": {
       "categories": [
