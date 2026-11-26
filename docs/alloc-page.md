@@ -7,8 +7,9 @@ versions' translations, `tests/roadmap/alloc-translated/check.sh`; x86_64-linux 
 that holds at program start. This is a limit of the specification's logic, not a bug of the
 allocator or of the OS model: the native program is fine. This page records the obstructions,
 their kernel-checked evidence, two upstream Zig bugs, the native comparison, and the status with
-the full-state logic: the whole vtable is proved against `FAllocSpec` for every alignment
-(`alloc` partial, `free`/`resize`/`remap` total). O5, the model's unbounded fallback address, is
+the full-state logic: the whole vtable is proved against `FAllocSpec` on x86_64-linux and
+aarch64-macos (`free`/`resize`/`remap` total; `alloc` partial, for alignments up to a page: the
+two open points are below, "Open: total correctness of `alloc`" and "O5"). O5, the model's unbounded fallback address, is
 fixed in the OS model: no mapping ends above the target's user address space.
 
 ## The obstructions
@@ -142,10 +143,12 @@ knowledge after `free` (`known`, O1).
 | `free`, `resize`, `remap` | proved: `free_spec`, `resize_spec`, `remap_spec` are the `FAllocSpec FLogic.total` fields for every allocator state `own`, from the generated code and OSM-01 only; x86_64-linux and aarch64-macos (no `mremap`: `remap` stays in place) | `tests/roadmap/alloc-translated/PageSpec.lean`, `PageSpecMacos.lean` |
 | block extents | each entry collects the mapping's whole extent (the token's authority and the grant's share, `EUpd.unlend`), runs the full-state OS rules on it (`FTotalTriple.munmapWhole'`, `munmapTailR`, `mremapShrinkR`, `mremapMove'`, `ZigLean/Sep/Full/Mmap.lean`) and lends half of the new extent to the new grant. `PageSpec.inv_legacy` (the legacy reading of the invariant, for the removed wrapper contracts) is gone: a legacy grant has no extent share | `tests/roadmap/alloc-translated/PageSpec.lean`, `ZigLean/Sep/Full/Mmap.lean` |
 | size bounds | `fits n k := n + 2^k + P ≤ 2^64`; the token keeps `n + P ≤ 2^64` | `PageSpec.legacy` |
-| O1, O3 | resolved: the allocator state owns the hint word (`aptsE`) and knows its target's page-aligned address (`known`) | `PageAlloc.own` |
+| O1, O3 | resolved: the allocator state owns the hint word (`aptsE`) and knows its target's page-aligned address (`known`); one state for every page size | `PageTok.hown` (`PageAlloc.own`, `PageAllocMacos.own`) |
 | O4 | fixed in the memory model: an ambiguous `@ptrFromInt` gives a pointer without provenance | below |
-| `alloc` | proved for every alignment (`k < 64`, `fits`), partial correctness: `PageAlloc.fallocSpec` is the whole `FAllocSpec FLogic.partial` for x86_64-linux | `tests/roadmap/alloc-translated/PageAlloc.lean` |
-| O5 | fixed in the OS model (OSM-01): `mmap` fails with `ENOMEM` above `Os.Target.addrLimit` | below |
+| `alloc` | proved for alignments up to a page (`ainv.fits`: `k ≤ 12` on x86_64-linux, `k ≤ 14` on aarch64-macos), partial correctness: `PageAlloc.fallocSpec` and `PageAllocMacos.fallocSpec` are the whole `FAllocSpec FLogic.partial`, each with its creation triple from the start memory's null hint word | `tests/roadmap/alloc-translated/PageAlloc.lean`, `PageAllocMacos.lean` |
+| thread triples | proved on both targets: the four entries as thread triples (`fthread_alloc` by `CTriple.toSoloThread`, the others by `fsym`'s thread backend) and `cAllocSpec : CAllocSpec (CVTable.ofRaw vt) c ainv`, the allocator as an environment of an open `std.mem.Allocator` ([interfaces.md](interfaces.md)), with its creation triple; the same alignments, partial correctness. The hint word, an atomic, is the allocator's only shared state: no lock or thread primitive of the OS is reached, and the premises are those of `fallocSpec` | `tests/roadmap/alloc-translated/PageThread.lean` (and `PageCreation.lean`), `PageThreadMacos.lean` |
+| `alloc`, total | open: no judgment of the framework states it | below |
+| O5 | fixed in the OS model (OSM-01): `mmap` fails with `ENOMEM` above `Os.Target.addrLimit`; the proof of `alloc` for alignments above a page is open | below |
 
 ### O4: an ambiguous `@ptrFromInt` (fixed)
 
@@ -168,7 +171,10 @@ returns a mapping.
 
 ### `alloc`
 
-`PageAlloc.lean` proves `alloc` from the generated code. The allocator state `own` is the hint
+`PageAlloc.lean` (x86_64-linux) and `PageAllocMacos.lean` (aarch64-macos, where `posix.mmap` and
+`munmap` are libc's, the same `Os.mmap`/`Os.munmap` of OSM-01 at `Os.Target.macos`) prove
+`alloc` from the generated code, with one proof text each: the invariant and `fsym`. The
+allocator state is the same on both targets, `PageTok.hown P` for the page size `P`: the hint
 word as a pointer-valued atomic points-to (`aptsE`) and, for a non-null hint, `known b A` of its
 block with `A + off` page-aligned. `alloc` reads the hint (`FTriple.atomicLoadUnorderedEnc`),
 takes its address (`FTriple.ptrAddr`: the hinted mapping may be unmapped), passes the page check
@@ -186,7 +192,31 @@ is the same reading (`alloc_run`, `Sched.run_eq_seqRun`). The scheduler's run it
 (`checkJoinedByChild`), which fails in an `FSeq` memory with another current thread or an
 unjoined child, whatever the allocator does.
 
-### O5: alignments above a page (fixed)
+### Open: total correctness of `alloc`
+
+`free`, `resize` and `remap` are `FTotalTriple`s. `alloc` is not, and no proof inside the
+current framework can make it one:
+
+* `alloc` is a `ConcM` function (its two atomic ops stop at an oracle pick). The framework's
+  judgment for a `ConcM` call is `CTriple`, which is partial correctness by definition: a run
+  tree that is `leaf none` (no result at this depth) satisfies `CTriple.Run`
+  (`ZigLean/Sep/Full/Conc.lean`). There is no total judgment for a `ConcM` call.
+* The vtable entry is the `MemM` program `Sched.soloRun 16 (heap_PageAllocator_alloc …)`. Its
+  total statement `FTotalTriple (ainv.own ⋆ ainv.fee φ) (vt.alloc c len k ra) (ainv.allocPost
+  len.toNat k φ)` is well-formed, but `fsym` has no rule and no backend for the in-thread
+  reading: it stops with `fsym: no rule for the command Sched.soloRun 16
+  (heap_PageAllocator_alloc c len { bits := BitVec.ofNat 6 k } ra)`. No library equation moves
+  `soloRun` through a bind: the depth left for the rest of a bind is the depth at which the
+  first part's run ended, so `soloRun n (x >>= f)` is not a `MemM` bind of `soloRun n x`.
+* The atomic rules of the hint word (`FTTriple.atomicLoadUnorderedEnc`, `FTTriple.cmpxchgPtr`,
+  `ZigLean/Sep/Full/AtomicPtr.lean`) are partial too: they are proved by `FTTriple.of_step`,
+  which leaves the run without a result unconstrained.
+
+What a proof needs is a decision on the framework (a total reading of a `ConcM` call with the
+depth as a resource, and `fsym`'s walk of it), then the two atomic rules as total rules; the
+invariant and the statement above stay as they are. Engine ledger row `conc-call-total`.
+
+### O5: alignments above a page (fixed in the model; the proof is open)
 
 For `2^k > P`, `map` asks for `2^k - P` extra bytes, and `std.mem.alignPointer` adds
 `2^k - 1` to the mapping's address with an overflow check. A placement proposal is taken only
@@ -203,11 +233,24 @@ mapping would end above the target's user address space (`Os.Target.addrLimit`: 
 x86_64-linux, `MACH_VM_MAX_ADDRESS = 0x7FFFFE000000` on aarch64-macos), at a proposed address or
 at the fallback `Mem.top`, fails with `ENOMEM`, and `TotalTriple.mmap` gives the bound
 `A + alignUp len P ≤ addrLimit` ([os-mmap.md](os-mmap.md)). With it `alignPointer`'s check
-`A + 2^k - 1 < 2^64` always passes (`PageAlloc.alignPointer_gen`): the aligned pointer is
-`drop A (2^k) = alignUp A 2^k - A` bytes in. `map` unmaps those bytes
-(`TotalTriple.munmapPrefix`, `PageAlloc.munmap_drop`) and the pages above the granted ones
-(`TotalTriple.munmapTail`, `PageAlloc.munmap_rest`), and `ainv` is `PageSpec.inv own` with the
-unrestricted `fits`. `PageAlloc.alloc_high` is now the regression: from the same memory the
+`A + 2^k - 1 < 2^64` always passes: the aligned pointer is `alignUp A 2^k - A` bytes in, and
+`map` unmaps those bytes and the pages above the granted ones.
+
+**The proof for `k` above the page's is open.** A hand-walked proof over the legacy judgment
+covered every alignment (`PageAlloc.alignPointer_gen`, `munmap_drop`, `munmap_rest`,
+`TotalTriple.munmapPrefix`/`munmapTail`); it was removed when `alloc` moved to the invariant and
+`fsym` (2026-10-12), and since then `ainv.fits` again requires `k ≤ 12` (`k ≤ 14` on
+aarch64-macos). With the unrestricted `fits` of `PageSpec.inv`, `fsym` stops in the branch that
+unmaps the pages above the granted ones: at the default heartbeat limit in the rule
+`FTTotalTriple.ptrProject_elem_of` on `ptrProject (a.ptr.elem 1 …) fun x => x.elem 1 (… &&&
+~~~4095#64)`, and with fifteen times the limit one step later, in `FTotalTriple.munmapTailR` on
+that tail's `munmap`. The offsets there are terms in a symbolic `2 ^ k`, which the arithmetic
+solver does not decide. The rule for the bytes before the aligned address,
+`FTotalTriple.munmapPrefix'` (`ZigLean/Sep/Full/Mmap.lean`), is not a step rule of `fsym` and is
+stated over `bytesAt`; only the tail has a region form (`munmapTailR`). Engine ledger row
+`page-alloc-large-align`.
+
+`PageAlloc.alloc_high` is now the regression: from the same memory the
 `mmap` fails and `alloc` returns `null`. `PageAlloc.alloc_top` runs the prefix `munmap` on a
 mapping that a placement proposal puts three pages below `2^47`, `PageAlloc.alloc_edge` the tail
 `munmap` on an aligned mapping that ends exactly at `2^47`. Still open: the model never
