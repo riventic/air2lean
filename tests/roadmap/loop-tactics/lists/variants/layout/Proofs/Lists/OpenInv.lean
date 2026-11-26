@@ -1,4 +1,4 @@
--- air2lean-invgen: {"generator":{"lean":"4.34.0","modules":[["Air2Lean.InvGen","e150e822f60c9665e6f579faa1228824dc14cc7f3bcadace35297fb22dcad67d"],["Air2Lean.InvGenMain","e061d338c83da8533f907187b602421b117875acffd7516867ba5ac7d821fb6e"],["Air2Lean.Revision","0abdb80bf11b8b7e1b0820755e2015f43cce91c00db65dd085b2a8afa6e65f8c"]],"revision":"a48bad5e2192bedfd42ead19f195fac848e59d0b0595aaa2ef3f25fac6c45d53"},"inputs":[["tests/roadmap/loop-tactics/lists/variants/layout/Proofs/Lists/Open.lean","bc78b1f16100a42a51d973d96489ad30a442a1af8ba83b7d0e8b59d1472ad651"]],"loops":[{"fingerprint":"80bea2d46865e026f86b082ce08c05ea5474fb0454c80f2331da518cc80020b0","function":"evens","loop":"evens.loop8","none":"a call: Zig.callMC do\n  Zig.checkIndex p1.len i9\n  Zig.load (BitVec 32) 4 (p1.ptr.elem 4 i9)"},{"fingerprint":"019b059598907303cc92fcef74948f77b2456430dff33eb4c8b4eaad9ca4986c","function":"freeAll","loop":"freeAll.loop5","none":"a call: Zig.callC (Lists.Open.mem_Allocator_destroy__anon_a9add1f02861 p0 i10)"},{"fingerprint":"ab92db2069579360a32a451c249b57e696d855d279eef192d399405d5dbcf419","function":"reverse","loop":"reverse.loop6","none":"a residual of the step that no candidate explains: `0 ≤ p.off` (side_condition_not_proved, rule_premise)"},{"credits":{"count":"zs.length"},"family":"list-walk","fingerprint":"c6e9f20331ed56611e96536154d79605eaa703e0e3e3ad443c9d8336a27f31fb","function":"sum","loop":"sum.loop6","pruned":[]}],"module":"Proofs.Lists.Open","namespace":"Lists.Open","output":"6a6962a19b68f547af1bf03b382d7544d2d6748b288d0fe9dbe190711e816322","version":3}
+-- air2lean-invgen: {"generator":{"lean":"4.34.0","modules":[["Air2Lean.InvGen","07d048f2e429693faebb7225ed5dfcaa3912770ae3c78f3f4ee4646b52ed656e"],["Air2Lean.InvGenMain","e061d338c83da8533f907187b602421b117875acffd7516867ba5ac7d821fb6e"],["Air2Lean.Revision","0abdb80bf11b8b7e1b0820755e2015f43cce91c00db65dd085b2a8afa6e65f8c"]],"revision":"ed81291f2e4bba34578322085b6d1d97c15eeba5d9c534b24ff788941523918a"},"inputs":[["tests/roadmap/loop-tactics/lists/variants/layout/Proofs/Lists/Open.lean","bc78b1f16100a42a51d973d96489ad30a442a1af8ba83b7d0e8b59d1472ad651"]],"loops":[{"fingerprint":"80bea2d46865e026f86b082ce08c05ea5474fb0454c80f2331da518cc80020b0","function":"evens","loop":"evens.loop8","none":"a call: Zig.callMC do\n  Zig.checkIndex p1.len i9\n  Zig.load (BitVec 32) 4 (p1.ptr.elem 4 i9)"},{"fingerprint":"019b059598907303cc92fcef74948f77b2456430dff33eb4c8b4eaad9ca4986c","function":"freeAll","loop":"freeAll.loop5","none":"a call: Zig.callC (Lists.Open.mem_Allocator_destroy__anon_a9add1f02861 p0 i10)"},{"credits":{"count":"zs.length"},"family":"list-walk","fingerprint":"ab92db2069579360a32a451c249b57e696d855d279eef192d399405d5dbcf419","function":"reverse","loop":"reverse.loop6","pruned":[]},{"credits":{"count":"zs.length"},"family":"list-walk","fingerprint":"c6e9f20331ed56611e96536154d79605eaa703e0e3e3ad443c9d8336a27f31fb","function":"sum","loop":"sum.loop6","pruned":[]}],"module":"Proofs.Lists.Open","namespace":"Lists.Open","output":"9563973d7eafa9297d986764118ef4b5b18565744662a74ee93d61fb19a034c1","version":3}
 import Proofs.Lists.Open
 import ZigLean.Sep.Full.Ghost
 import ZigLean.Sep.Full.AutoAttr
@@ -13,6 +13,40 @@ set_option linter.unusedVariables false
 
 namespace Lists.Open
 open Zig Zig.Full Zig.Full.FAssn
+
+/-- The node layout of `reverse.loop6`: `next` at offset 8, the rest. -/
+abbrev reverse.loop6.node (V : Type) (D : Zig.Ptr → V → FAssn) (p : Zig.Ptr) (v : V) (q : Option Zig.Ptr) : FAssn :=
+  ⟪0 ≤ p.off⟫ ⋆ up (pts (p.add 8) 8 q) ⋆ D p v
+
+/-- The invariant of `reverse.loop6`, a list walk that reverses the list `xs` at `cur` (`reverse.loop6.node`): `zs` are the `n` nodes left.
+`s0` holds the locals at loop entry. -/
+@[fsym_inv] def reverse.loop6.inv (V : Type) (D : Zig.Ptr → V → FAssn) (xs : List V) (s0 : reverseLocals) (s : reverseLocals) (n : Nat) : FAssn :=
+  FAssn.ex fun ys : List V => FAssn.ex fun zs : List V =>
+    ⟪xs = ys.reverse ++ zs ∧
+      zs.length = n⟫ ⋆
+    listSeg (Lists.Open.reverse.loop6.node V D) s.prev none ys ⋆
+    listSeg (Lists.Open.reverse.loop6.node V D) s.cur none zs ⋆
+    plain
+
+/-- The exit post of `reverse.loop6`: the loop exits with `r`, after all iterations. -/
+@[fsym_inv] def reverse.loop6.post (V : Type) (D : Zig.Ptr → V → FAssn) (xs : List V) (s0 : reverseLocals) (r : reverseExit × reverseLocals) : FAssn :=
+  ⟪r.1 = reverseExit.br5⟫ ⋆
+    listSeg (Lists.Open.reverse.loop6.node V D) r.2.prev none xs.reverse ⋆
+    plain
+
+/-- The credit-mode invariant of `reverse.loop6` (a walk that counts its steps, `loop_exact`): `reverse.loop6.inv` without the plain mode, at the exact count `n` of the body runs left before the last one.
+`s0` holds the locals at loop entry. -/
+@[fsym_inv] def reverse.loop6.credits.inv (V : Type) (D : Zig.Ptr → V → FAssn) (xs : List V) (s0 : reverseLocals) (s : reverseLocals) (n : Nat) : FAssn :=
+  FAssn.ex fun ys : List V => FAssn.ex fun zs : List V =>
+    ⟪xs = ys.reverse ++ zs ∧
+      zs.length = n⟫ ⋆
+    listSeg (Lists.Open.reverse.loop6.node V D) s.prev none ys ⋆
+    listSeg (Lists.Open.reverse.loop6.node V D) s.cur none zs
+
+/-- The exit post of `reverse.loop6.credits`: the loop exits with `r`, after all iterations. -/
+@[fsym_inv] def reverse.loop6.credits.post (V : Type) (D : Zig.Ptr → V → FAssn) (xs : List V) (s0 : reverseLocals) (r : reverseExit × reverseLocals) : FAssn :=
+  ⟪r.1 = reverseExit.br5⟫ ⋆
+    listSeg (Lists.Open.reverse.loop6.node V D) r.2.prev none xs.reverse
 
 /-- The node layout of `sum.loop6`: `next` at offset 8, the item, the rest. -/
 abbrev sum.loop6.node (X : Zig.Ptr → FAssn) (p : Zig.Ptr) (v : BitVec 32) (q : Option Zig.Ptr) : FAssn :=

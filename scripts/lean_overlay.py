@@ -105,7 +105,8 @@ class Overlay:
         self._imports(path)
         result = self._lean(path, root, self.out / (module.replace('.', '/') + '.olean'))
         if result.returncode or SORRY_WARNING in result.stdout:
-            raise Failed(path.relative_to(ROOT).as_posix(), result.stdout)
+            raise Failed(path.relative_to(ROOT).as_posix() if path.is_relative_to(ROOT) else str(path),
+                         result.stdout)
 
     def elaborate(self, file, root='.'):
         """Elaborate `file` (a path relative to the repository, a file of the directory `root`)

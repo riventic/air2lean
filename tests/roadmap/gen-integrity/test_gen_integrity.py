@@ -672,10 +672,12 @@ class InvgenRecordTests(unittest.TestCase):
 
     def test_target_with_contracts_records_its_specification(self):
         """A target generated with contracts (scripts/invgen.py CONTRACTS): the record names the
-        specification module and the rules, and the module's source is an input."""
-        (self.root / "Fx/Fx/Spec.lean").write_text("-- contracts\n")
+        specification module and the rules, and the module's source is an input: a module of the
+        repository's package (`Fx.Spec` is `Fx/Spec.lean`), not of the target's fixture root, so
+        that a variant of the target reads the same hand-written file."""
+        (self.root / "Fx/Spec.lean").write_text("-- contracts\n")
         contracts = {"Fx/Fx/Inv.lean": ("Fx.Spec", ["Fx.rule"])}
-        inputs = [[p, self.digest(p)] for p in ("Fx/Fx/Gen.lean", "Fx/Fx/Spec.lean")]
+        inputs = [[p, self.digest(p)] for p in ("Fx/Fx/Gen.lean", "Fx/Spec.lean")]
         self.write_record(inputs=inputs, specs=["Fx.Spec"], contracts=["Fx.rule"])
         self.assertEqual(gi.invgen_errors(self.TARGETS, contracts), [])
         # a record without them is not this target's, nor is one of other rules
@@ -686,9 +688,9 @@ class InvgenRecordTests(unittest.TestCase):
         self.assertIn("not the record of Fx.Gen", gi.invgen_errors(self.TARGETS, contracts)[0])
         # a changed specification makes the file stale
         self.write_record(inputs=inputs, specs=["Fx.Spec"], contracts=["Fx.rule"])
-        (self.root / "Fx/Fx/Spec.lean").write_text("-- changed contracts\n")
+        (self.root / "Fx/Spec.lean").write_text("-- changed contracts\n")
         error, = gi.invgen_errors(self.TARGETS, contracts)
-        self.assertIn("is stale (input Fx/Fx/Spec.lean changed)", error)
+        self.assertIn("is stale (input Fx/Spec.lean changed)", error)
 
     def test_record_outside_the_targets_fails(self):
         self.write_record(path="Fx/Fx/Other.lean")
