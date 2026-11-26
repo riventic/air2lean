@@ -12,8 +12,8 @@ a `Raw.RawFunc` or a tag string.
 One tag table serves every supported version: no subset tag differs between 0.14.1, 0.15.2 and
 0.16.0 (`zig-patch/<version>/TAGS.md`). Zig 0.17.1's renamed and split tags are mapped back to
 the 0.16.0 spelling by `Canon.lean`'s `versionTags`, which also rejects a tag that the file's
-version does not have; the table below reads the result, plus `div_ceil`, which only 0.17.1
-has (`array_to_vector`, `union_from_enum` and `spirv_runtime_array_len` stay rejected). To add a
+version does not have; the table below reads the result, plus `div_ceil` and `array_to_vector`,
+which only 0.17.1 has (`union_from_enum` and `spirv_runtime_array_len` stay rejected). To add a
 Zig version: add it to `ZigVersion` (`Air2Lean/Air/Dialect.lean`); if a subset tag differs, add a
 version case to `normalizeOp` (`PLAN.md` §Zig version support).
 -/
@@ -76,8 +76,6 @@ def runtimeTagReasons : Array (Array String × String) := #[
     "runtime TLS/extern navigation pointers require identity and lifetime semantics outside the model; constant global pointers are not a substitute"),
   (#["spirv_runtime_array_len"],
     "SPIR-V runtime arrays exist only on SPIR-V targets, outside the x86_64-linux/aarch64-macos model"),
-  (#["array_to_vector"],
-    "Zig 0.17.1's array-to-vector coercion is outside the subset; the vector model has no array conversion"),
   (#["union_from_enum"],
     "Zig 0.17.1's enum-to-tagged-union coercion is outside the subset; the union model has no tag-only conversion")]
 
@@ -269,6 +267,8 @@ partial def normalizeOp (fnName : String) (raw : Raw.RawInst) : Except String Op
     let some a := raw.args[0]?
       | throw s!"{fnName}: inst {raw.id}: '{raw.tag}' needs at least 1 arg"
     return .shuffle a raw.args[1]? raw.mask
+  -- Zig 0.17.1 only (`Canon.tagsOnly017` rejects it in another version's file).
+  | "array_to_vector" => let a ← arg1 fnName raw true; return .arrayToVector a
   | "bool_and" => let (a, b) ← arg2 fnName raw; return .boolAnd a b
   | "bool_or" => let (a, b) ← arg2 fnName raw; return .boolOr a b
   | "intcast" => let a ← arg1 fnName raw; return .intCast false a
@@ -482,8 +482,8 @@ def decodedTags : Array String := #[
   "tan", "exp", "exp2", "log", "log2", "log10", "mul_add", "fptrunc", "fpext", "float_from_int",
   "int_from_float", "int_from_float_safe", "shl", "shl_exact", "shl_sat", "shr", "shr_exact",
   "cmp_lt", "cmp_lte", "cmp_eq", "cmp_neq", "cmp_gte", "cmp_gt", "cmp_vector", "splat", "select",
-  "reduce", "shuffle_one", "shuffle_two", "shuffle", "bool_and", "bool_or", "intcast",
-  "intcast_safe", "trunc", "bitcast", "bitcast_safe", "is_null", "is_non_null", "optional_payload",
+  "reduce", "shuffle_one", "shuffle_two", "shuffle", "array_to_vector", "bool_and", "bool_or",
+  "intcast", "intcast_safe", "trunc", "bitcast", "bitcast_safe", "is_null", "is_non_null", "optional_payload",
   "wrap_optional", "is_null_ptr", "is_non_null_ptr", "optional_payload_ptr",
   "optional_payload_ptr_set", "is_err_ptr", "is_non_err_ptr", "unwrap_errunion_payload_ptr",
   "errunion_payload_ptr_set", "unwrap_errunion_err_ptr", "is_err", "is_non_err",

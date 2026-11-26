@@ -1,6 +1,6 @@
 import ZigLean.Sep.Full.Ops
 import ZigLean.Sep.Full.AutoAttr
-import ZigLean.Mem.Abi
+import ZigLean.Mem.AbiLemmas
 
 /-!
 # Full-state rules of the C-ABI conversion at a bound extern call (X01)
