@@ -863,22 +863,29 @@ private theorem storeBytes_run_eq_impl (p : Ptr) (align : Nat) (bs : Array Byte)
         simp [hlt, hx]
       · simp [Array.getElem?_eq_none hge] at h
     · simp [hj]
-  simp only [storeBytes, storeBytesImpl, StateT.run_bind, StateT.run_get, pure_bind,
-    liftM, monadLift, MonadLift.monadLift, Mem.accessW]
-  rcases access_cases m p bs.size align with h | ⟨b, blk, o, h⟩
-  · rw [h]; rfl
-  · have hb := hblk b blk o h
-    rw [h]
-    simp only [pure_bind]
-    by_cases hk : blk.kind = .constGlobal
-    · rw [if_pos hk]; rfl
-    · rw [if_neg hk, show (StateT.lift (pure (b, blk, o)) : MemM _).run m = pure ((b, blk, o), m) from rfl]
-      unfold recordAccess
-      simp only [StateT.run_bind, StateT.run_get, pure_bind]
+  -- Both sides run the same `Mem.accessW`; the proof uses only that a location it returns is the
+  -- block the memory holds, never which accesses it refuses.
+  have hw : m.accessW p bs.size align = throw .illegal ∨
+      ∃ b blk o, m.accessW p bs.size align = pure (b, blk, o) ∧ m.blocks[b]? = some blk := by
+    unfold Mem.accessW
+    rcases access_cases m p bs.size align with h | ⟨b, blk, o, h⟩
+    · rw [h]; exact .inl rfl
+    · rw [h]
+      simp only [pure_bind]
       split
-      · rfl
-      · have := hset m.blocks b blk (fun blk => { blk with bytes := writeBytes blk.bytes o bs }) hb
-        simp only [StateT.run_set, StateT.run_modify, pure_bind, this]
+      · exact .inl rfl
+      · exact .inr ⟨b, blk, o, rfl, hblk b blk o h⟩
+  simp only [storeBytes, storeBytesImpl, StateT.run_bind, StateT.run_get, pure_bind,
+    liftM, monadLift, MonadLift.monadLift]
+  rcases hw with h | ⟨b, blk, o, h, hb⟩
+  · rw [h]; rfl
+  · rw [h, show (StateT.lift (pure (b, blk, o)) : MemM _).run m = pure ((b, blk, o), m) from rfl]
+    unfold recordAccess
+    simp only [StateT.run_bind, StateT.run_get, pure_bind]
+    split
+    · rfl
+    · have := hset m.blocks b blk (fun blk => { blk with bytes := writeBytes blk.bytes o bs }) hb
+      simp only [StateT.run_set, StateT.run_modify, pure_bind, this]
 
 /-- The compiler runs `storeBytesImpl`; the kernel and every proof keep `storeBytes` (the
 lemmas that unfold it, e.g. `storeBytes_ok`, stay as they are). A change to `storeBytes` that
