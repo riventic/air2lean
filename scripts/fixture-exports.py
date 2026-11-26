@@ -158,14 +158,15 @@ def manifest(fixture):
                 raise Error('%s: %s is a non-empty list of function names and `*` prefixes' % (where, key))
         if 'stop' in entry and 'closure' not in entry:
             raise Error('%s: stop cuts a closure: give closure too' % where)
-        source = (FIXTURES / fixture / entry['source']).resolve()
-        if not source.is_file() or FIXTURES.resolve().parents[1] not in source.parents:  # the repository
+        def in_repository(path):
+            resolved = (FIXTURES / fixture / path).resolve()
+            return resolved.is_file() and FIXTURES.resolve().parents[1] in resolved.parents
+
+        if not in_repository(entry['source']):
             raise Error('%s: no source %s in the repository' % (where, entry['source']))
         modules = entry.get('modules')
         if 'modules' in entry and (not isinstance(modules, dict) or not modules or 'root' in modules or not all(
-                re.fullmatch(r'[A-Za-z_]\w*', name) and isinstance(path, str)
-                and (FIXTURES / fixture / path).resolve().is_file()
-                and FIXTURES.resolve().parents[1] in (FIXTURES / fixture / path).resolve().parents
+                re.fullmatch(r'[A-Za-z_]\w*', name) and isinstance(path, str) and in_repository(path)
                 for name, path in modules.items())):
             raise Error('%s: modules maps module names (not `root`) to sources in the repository' % where)
         if 'filter' not in entry and example_of(fixture, entry) is None:

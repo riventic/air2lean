@@ -157,10 +157,9 @@ def validate(relation: dict, root: Path = ROOT) -> list[str]:
     for target, facts in relation['targets'].items():
         if facts.get('pointer_bits') not in (32, 64) or not isinstance(facts.get('model_target'), str):
             errors.append(f'target {target}: needs pointer_bits 32 or 64 and a model_target')
-        if is_wasm(target) != (facts.get('pointer_bits') == 32):
-            errors.append(f'target {target}: wasm32 targets, and only they, have 32-bit pointers')
-        runtime = facts.get('runtime', {'node': '0.0.0'})
-        if not isinstance(runtime, dict) or set(runtime) != {'node'} or not re.fullmatch(r'\d+\.\d+\.\d+', str(runtime['node'])):
+        runtime = facts.get('runtime')
+        if 'runtime' in facts and (not isinstance(runtime, dict) or set(runtime) != {'node'}
+                                   or not re.fullmatch(r'\d+\.\d+\.\d+', str(runtime['node']))):
             errors.append(f'target {target}: runtime pins one Node release ({{"node": "X.Y.Z"}})')
         if target == WASI and 'runtime' not in facts:
             errors.append(f'target {target}: needs a pinned runtime (its WASI implementation)')
@@ -304,9 +303,8 @@ def record(zig: str, which: str, relation: dict) -> tuple[Path, dict]:
     if target not in relation['matrix'].get(version, []):
         raise ValueError(f'{target} is not declared for Zig {version} in the relation matrix')
     pinned = relation['targets'][target].get('runtime')
-    if pinned and node_version() != pinned['node']:
-        raise ValueError(f'{target} is observed under Node {pinned["node"]} (the pinned runtime), '
-                         f'not Node {node_version()}')
+    if pinned and (node := node_version()) != pinned['node']:
+        raise ValueError(f'{target} is observed under Node {pinned["node"]} (the pinned runtime), not Node {node}')
     calls = cases(relation)
     with tempfile.TemporaryDirectory(prefix='air2lean-wasm-corr-') as tmp:
         binary = build(zig, relation, target, Path(tmp))
@@ -480,8 +478,9 @@ def check(relation: dict, root: Path = ROOT, records: Path = RECORDS) -> tuple[l
             if loaded[target]['zig_version'] != version or loaded[target]['target'] != target:
                 errors.append(f'{path}: records Zig {loaded[target]["zig_version"]} on {loaded[target]["target"]}')
                 del loaded[target]
-        for target, wasm in ((t, w) for w in sorted(loaded) if is_wasm(w)
-                             for t in sorted(loaded) if not is_wasm(t)):
+        wasms = [t for t in sorted(loaded) if is_wasm(t)]
+        natives = [t for t in sorted(loaded) if not is_wasm(t)]
+        for wasm, target in ((w, t) for w in wasms for t in natives):
             bits = {'native': relation['targets'][target]['pointer_bits'],
                     'wasm32': relation['targets'][wasm]['pointer_bits']}
             counts = {cls: 0 for cls in (*CLASSES, 'illegal')}
@@ -530,7 +529,8 @@ def main(argv=None) -> int:
     sub = parser.add_subparsers(dest='command', required=True)
     rec = sub.add_parser('record', help='build and observe one target')
     rec.add_argument('--zig', required=True)
-    rec.add_argument('--target', choices=('native', 'wasm32', WASI), required=True)
+    rec.add_argument('--target', required=True,
+                     help='native (the host), wasm32 (wasm32-freestanding) or a target of the relation')
     rec.add_argument('--verify', action='store_true', help='compare with the committed record instead of writing')
     sub.add_parser('check', help='check the relation on every committed record pair')
     args = parser.parse_args(argv)

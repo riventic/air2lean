@@ -10,6 +10,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.dont_write_bytecode = True
@@ -62,13 +63,21 @@ class Relation(unittest.TestCase):
         relation['targets']['wasm32-wasi']['runtime'] = {'node': 'latest'}
         self.assertTrue(any('runtime pins one Node release' in e for e in self.check(relation)))
         # `record` observes the target under the pinned release only (no compiler runs here).
-        saved = wc.zig_version, wc.node_version
-        wc.zig_version, wc.node_version = (lambda zig: '0.17.1'), (lambda: '0.0.1')
-        try:
-            with self.assertRaisesRegex(ValueError, 'the pinned runtime'):
-                wc.record('zig', 'wasm32-wasi', self.relation)
-        finally:
-            wc.zig_version, wc.node_version = saved
+        with mock.patch.object(wc, 'zig_version', lambda zig: '0.17.1'), \
+                mock.patch.object(wc, 'node_version', lambda: '0.0.1'), \
+                self.assertRaisesRegex(ValueError, 'the pinned runtime'):
+            wc.record('zig', 'wasm32-wasi', self.relation)
+
+    def test_exported_and_observed_module_graphs_agree(self):
+        """The AIR exports (exports.json) and the observed builds (relation.json) compile the
+        same source with the same named modules."""
+        exports = json.loads((wc.CASE_DIR / 'exports.json').read_text())['exports']
+        observed = (ROOT / self.relation['source'],
+                    {name: (ROOT / path).resolve() for name, path in self.relation['modules'].items()})
+        for entry in exports:
+            self.assertEqual(((wc.CASE_DIR / entry['source']), {name: (wc.CASE_DIR / path).resolve()
+                                                               for name, path in entry['modules'].items()}),
+                             observed)
 
     def test_wasm32_theorem_is_not_a_wasi_claim(self):
         relation = copy.deepcopy(self.relation)

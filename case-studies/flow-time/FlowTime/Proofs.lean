@@ -54,9 +54,8 @@ theorem timestampSpec_exact {n : Nat} (a b : BitVec n)
     (h : a.toNat + b.toNat < 2 ^ n - 1) :
     timestampSpec a b = pure (.ok (a + b)) ∧
       (a + b).toNat = a.toNat + b.toNat := by
-  constructor
-  · simp [timestampSpec, Nat.not_le.mpr h]
-  · rw [BitVec.toNat_add, Nat.mod_eq_of_lt (by omega)]
+  have hs := Zig.addBelowMaxOpt_eq_some a b h
+  exact ⟨by rw [timestampSpec_eq, hs.1]; rfl, hs.2⟩
 
 /-- The only error cases are machine overflow or equality with the reserved maximum. -/
 theorem timestampSpec_error_iff {n : Nat} (a b : BitVec n) :
