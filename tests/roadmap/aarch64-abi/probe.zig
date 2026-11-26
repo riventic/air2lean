@@ -120,6 +120,33 @@ fn floatCases(out: *Out, comptime T: type) !void {
     try fop(out, T, "isnan(0/0)", std.math.isNan(zero / zero));
 }
 
+/// `fma <type> <a> <b> <c> <@mulAdd(a, b, c)>` (bits): operands whose result depends on where the
+/// rounding happens. The `f16` ones differ between an `f16` multiply-add and an `f32` one rounded
+/// to `f16`; an `f64` one rounded to `f16` gives the `f16` result. The `f32` and `f64` ones differ
+/// between a multiply-add and a rounded product plus the addend.
+fn mulAdds(out: *Out) !void {
+    inline for (.{
+        .{ f16, 0xc290, 0xc47c, 0x0ffe },
+        .{ f16, 0xbf80, 0x74e8, 0x154e },
+        .{ f16, 0xee40, 0xb848, 0x0643 },
+        .{ f16, 0x3e00, 0x3c01, 0x8001 },
+        .{ f32, 0x3f800001, 0x3f7fffff, 0x28000001 },
+        .{ f64, 0x3ff0000000000001, 0x3fefffffffffffff, 0xbff0000000000000 },
+    }) |case| {
+        const T = case[0];
+        const B = Bits(T);
+        const a: T = @bitCast(rt(B, case[1]));
+        const b: T = @bitCast(rt(B, case[2]));
+        const c: T = @bitCast(rt(B, case[3]));
+        try out.print("fma {s}", .{@typeName(T)});
+        inline for (.{ a, b, c, @mulAdd(T, a, b, c) }) |x| {
+            try out.print(" ", .{});
+            try hex(out, T, x);
+        }
+        try out.print("\n", .{});
+    }
+}
+
 fn probeF80(out: *Out) !void {
     // x87 encodings that IEEE formats do not have (exponent, integer bit, fraction): x87
     // hardware treats the first three as NaN, a soft-float implementation need not.
@@ -406,6 +433,7 @@ pub fn main() !void {
     try floatCases(out, f80);
     try probeF80(out);
     try floatCases(out, f128);
+    try mulAdds(out);
 
     inline for (.{ u8, u16, u24, u32, u40, u64, u128 }) |T| {
         try atomic(out, T, 0x00);

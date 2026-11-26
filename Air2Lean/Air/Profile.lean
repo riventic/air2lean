@@ -186,13 +186,12 @@ def collect (j : Json) (schema : Nat) (zigVersion : String) : Collect (Option Bu
   for f in features.getD #[] do
     unless !f.isEmpty && !seen.contains f do report "profile.features: empty or duplicate feature"
     seen := seen.insert f
-  -- The float rules are those of the target's baseline CPU (`FloatRules`): without `fullfp16`
-  -- (aarch64-linux `generic`) an `f16` `@mulAdd` rounds through `f32`. A CPU with `fullfp16`
-  -- fuses it, which those rules do not state (fail closed).
+  -- The target's rules need these CPU features (`Target.requiredFeatures`): fail closed.
   if let (some t, some fs) := (qualifiedTarget, features) then
-    if t.floatRules == .aarch64 (fusedF16 := false) && fs.contains "fullfp16" then
-      report s!"profile.features: fullfp16 is outside the {t.arch}-{t.os} float rules (baseline \
-        CPU without fullfp16: an f16 @mulAdd rounds through f32; docs/floats.md §Targets)"
+    for f in t.requiredFeatures do
+      unless fs.contains f do
+        report s!"profile.features: the {t.arch}-{t.os} model needs the CPU feature {f} \
+          (docs/floats.md §Targets)"
   let buildMode ← take? (do canonicalBuildMode zigVersion (← strField p "build_mode"))
   let floatMode ← take? (strField p "float_mode")
   if let some floatMode := floatMode then
@@ -316,6 +315,7 @@ def Dialect.ofProfile (version : ZigVersion) (p : BuildProfile) : Dialect :=
     os := ((parts.getD 1 "").splitOn ".").headD ""
     ptrBytes := p.pointerBits / 8
     endian := (Endian.ofString? p.endian).getD .little
-    errorSetBits := p.errorSetBits, backend := p.backend, buildMode := p.buildMode }
+    errorSetBits := p.errorSetBits, backend := p.backend, buildMode := p.buildMode
+    features := p.features }
 
 end Air2Lean
