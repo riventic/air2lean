@@ -30,7 +30,7 @@ globs = ["AllocFba.+"]
 name = "AllocTranslated"
 srcDir = "alloc-translated"
 globs = ["AllocTranslated.+", "KernelBytes", "ListsPage", "PageAlloc", "PageAllocMacos", "PageCreation",
-         "PageObstruction", "PageSpec", "PageSpecMacos", "PageThread", "PageTok"]
+         "PageObstruction", "PageSpec", "PageSpecMacos", "PageThread", "PageThreadMacos", "PageTok"]
 
 # M03: the compiled runner of the translated PageAllocator's requests above 1 MiB
 # (alloc-translated/AllocTranslated/Large.lean, built and run by alloc-translated/check.sh in a
