@@ -504,6 +504,84 @@ theorem resizeTo_thread :
 
 end Cases
 
+/-! ## Providers by the command's head
+
+A locality lemma about a command (`ThreadLocal P (c …)`, also one over the whole precondition) is
+tried for the goals about `c` only. A goal's command that is not an application of a constant as
+written (a definition unfolded by the provider search: a `let`, an applied `fun`) is read in weak
+head normal form; a lemma about another command is not unified with it. Unifying it would unfold
+the lemma's command at default transparency (the pointer-`try` providers over the whole
+precondition against the unfolded `atomicLoadPtrAt` ran the arena's proofs out of heartbeats).
+Here that unfolding evaluates `slowNat 64 0`, which no heartbeat limit allows. -/
+
+section Heads
+
+/-- `slowNat n a = a + 2 ^ n - 1`, in `2 ^ n` steps of distinct arguments. -/
+def slowNat : Nat → Nat → Nat
+  | 0, a => a
+  | n + 1, a => slowNat n (slowNat n (a + 1))
+
+/-- A command whose definition compares an expensive number. -/
+def slowCheck (k : Nat) : MemM Unit := if slowNat 64 0 = k then pure () else throw .panic
+
+/-- A locality lemma over the whole precondition, about `slowCheck`. -/
+theorem ThreadLocal.slowCheck {P : FAssn} {k : Nat} (_h : P = P) : ThreadLocal P (slowCheck k) :=
+  ThreadLocal.ite (fun _ => ThreadLocal.pure _) fun _ => ThreadLocal.throw _
+
+attribute [fsym_provider] ThreadLocal.slowCheck
+
+/-- A check whose definition is a `let`: it has no locality lemma of its own, so its definition is
+unfolded, and the goal's command is then no application of a constant as written. -/
+def letCheck (len i : BitVec 64) : MemM Unit :=
+  let n := len.toNat
+  if i.toNat = n then pure () else throw .panic
+
+/-- The same behind an applied `fun`. -/
+def funCheck (len i : BitVec 64) : MemM Unit :=
+  (fun n : Nat => if i.toNat = n then pure () else throw .panic) len.toNat
+
+variable {P : FAssn} {len i : BitVec 64}
+
+theorem letCheck_seq (h : i.toNat = len.toNat) : FTotalTriple P (letCheck len i) (fun _ => P) := by
+  unfold letCheck
+  fsym
+
+theorem funCheck_seq (h : i.toNat = len.toNat) : FTotalTriple P (funCheck len i) (fun _ => P) := by
+  unfold funCheck
+  fsym
+
+/-- The sequential rule in a thread: local by the unfolded definition (`ThreadLocal.ite`), without
+a trial of `ThreadLocal.slowCheck`. -/
+theorem letCheck_thread (h : i.toNat = len.toNat) :
+    FTTotalTriple P (letCheck len i) (fun _ => P) := by
+  fsym [letCheck_seq h]
+
+theorem funCheck_thread (h : i.toNat = len.toNat) :
+    FTTotalTriple P (funCheck len i) (fun _ => P) := by
+  fsym [funCheck_seq h]
+
+/-- The lemma still applies to its own command. -/
+theorem slowCheck_thread (k : Nat) (hr : FTotalTriple P (slowCheck k) (fun _ => P)) :
+    FTTotalTriple P (slowCheck k) (fun _ => P) := by
+  fsym [hr]
+
+/-- A store behind a `let`. -/
+def letStore (p : Ptr) (w : BitVec 8) : MemM Unit :=
+  let a := 1
+  Zig.store a p w
+
+set_option linter.unusedVariables false in
+/-- Rejected: a store of bytes the precondition does not own is not local. The search ends
+after the lemmas about a store; before, it went on to every lemma over the whole precondition
+(`ThreadLocal.slowCheck` too: a timeout, which `fail_if_success` does not catch). -/
+example (p : Ptr) (w : BitVec 8) (hr : FTotalTriple emp (letStore p w) (fun _ => emp)) : True := by
+  fail_if_success
+    have : FTTotalTriple emp (letStore p w) (fun _ => emp) := by
+      fsym [hr]
+  trivial
+
+end Heads
+
 section Tick
 
 /-! A step tick in a thread: the sequential tick rules (`Full/Tick`) with the provider

@@ -2879,21 +2879,28 @@ def assnIdx (t : Expr) : MetaM Nat := do
   return args.size - 1
 
 /-- The commands among a provider goal's arguments (of type `MemM _`, also unfolded: a
-`StateT.lift` of a `Result`): their positions and heads. A provider lemma about another command
-does not apply (`providerLemmas`). -/
-def cmdHeads (t : Expr) : MetaM (Array (Nat × Name)) := do
+`StateT.lift` of a `Result`): their positions and heads. A command that is not an application of
+a constant as written (a `let`, an applied `fun`: a definition unfolded by the provider search)
+is read in weak head normal form without unfolding a definition; its head is `none` if that is
+no constant either (a variable applied, a `fun`). An unknown command has no entry. A provider
+lemma about another command does not apply (`providerLemmas`). -/
+def cmdHeads (t : Expr) : MetaM (Array (Nat × Option Name)) := do
   let args := t.getAppArgs
   let mut out := #[]
   for i in [0:args.size] do
     unless (← whnfR (← inferType args[i]!)).isAppOf ``StateT do continue
-    if let .const c _ := args[i]!.getAppFn then out := out.push (i, c)
+    let mut hd := args[i]!.getAppFn
+    unless hd.isConst do hd := (← whnfCore (← instantiateMVars args[i]!)).getAppFn
+    unless hd.isMVar do out := out.push (i, hd.constName?)
   return out
 
 /-- The provider lemmas (`@[fsym_provider]`) of the kind `k`, for a goal whose assertion is
 argument `ip` and whose commands have the heads `cmds`: those about an atom (the conclusion's
 assertion is an application; with its `headKey`), and those about the whole precondition (a
-variable). -/
-def providerLemmas (k : Name) (ip : Nat) (cmds : Array (Nat × Name)) :
+variable). A lemma whose command is an application of a constant is one for the goals whose
+command has that head (`cmdHeads`): it is not unified with another command, nor with a command
+without a head, where unification at default transparency would unfold the lemma's command. -/
+def providerLemmas (k : Name) (ip : Nat) (cmds : Array (Nat × Option Name)) :
     MetaM (Array (Name × Name) × Array Name) := do
   let mut atomL := #[]
   let mut wholeL := #[]
@@ -2904,7 +2911,7 @@ def providerLemmas (k : Name) (ip : Nat) (cmds : Array (Nat × Name)) :
     let some a := bargs[ip]? | continue
     -- a command of another head
     if cmds.any (fun (i, c) => match (bargs[i]?.map (·.getAppFn) : Option Expr) with
-        | some (Expr.const c' _) => c' != c
+        | some (Expr.const c' _) => c != some c'
         | _ => false) then continue
     if a.isBVar then wholeL := wholeL.push n else atomL := atomL.push (n, headKey a)
   return (atomL, wholeL)
