@@ -26,7 +26,9 @@ ld = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ld)
 
 
-class Classify(unittest.TestCase):
+class TinyRepo(unittest.TestCase):
+    """A one-library repository (`Lib/A.lean`, `Lib/B.lean`) that `lean-deps` is pointed at."""
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -44,6 +46,8 @@ class Classify(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
 
+
+class Classify(TinyRepo):
     def classify(self):
         subprocess.run(["git", "init", "-q"], cwd=self.repo, check=True)
         subprocess.run(["git", "add", "-A"], cwd=self.repo, check=True)
@@ -253,7 +257,7 @@ class Classify(unittest.TestCase):
             ld.precompiled_libs()
 
 
-class RuntimeRoot(Classify):
+class RuntimeRoot(TinyRepo):
     """--runtime-root check: the runtime root's closure holds no module above the theory floor."""
 
     def violations(self, **declaration):
