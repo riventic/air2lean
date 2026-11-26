@@ -15,10 +15,9 @@ bytes through a pointer there (one source line, selected by `zig_version`). `rej
 s390x operations outside the qualified big-endian model (`air/<version>/s390x-reject/`), and
 the two byte views of a vector in memory (`vecByte`, `vecFromBytes`): a `@ptrCast`
 between a vector and an array is illegal behaviour (langref §Vectors,
-`docs/illegal-behavior.md`), rejected for every profile. Both store and load their vector
-whole: Zig 0.17.1 reads, writes and initializes a single lane of a vector in memory through a
-lane pointer, which has no big-endian model (`vecLanes`: rejected from 0.17.1 on, translated
-on 0.16.0, whose whole-byte lane has a plain element pointer; `docs/profiles.md` §Byte order).
+`docs/illegal-behavior.md`), rejected for every profile. `vecLanes` accesses single lanes
+of a vector in memory: a lane pointer from Zig 0.17.1 on, rejected at big endian
+(`docs/profiles.md` §Byte order), and translated on 0.16.0.
 
 | File | Role |
 |---|---|

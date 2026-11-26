@@ -142,11 +142,10 @@ def check_version(binary, version):
         ("reject.nibbleLanes.json", "a vector of non-byte-multiple lanes is outside"),
         ("reject.u128Bytes.json", "the memory model gives type"),
         ("reject.vecByte.json", "a pointer cast between a vector and another pointee type is illegal behaviour"),
-        ("reject.vecFromBytes.json","a pointer cast between a vector and another pointee type is illegal behaviour"),
-        # Zig 0.17.1 makes every `&v[i]` a lane pointer, modelled for the lane probe's targets
-        # only; up to 0.16.0 a whole-byte lane has a plain element pointer, which translates.
-        ("reject.vecLanes.json", "a pointer to a vector lane (vector_index) is outside the subset"
-         if "vector_index" in json.dumps(rejects["reject.vecLanes.json"]["types"]) else None),
+        ("reject.vecFromBytes.json", "a pointer cast between a vector and another pointee type is illegal behaviour"),
+        # Translated on 0.16.0 (`reject.zig`).
+        ("reject.vecLanes.json", None if version == "0.16.0" else
+         "a pointer to a vector lane (vector_index) is outside the subset"),
     ]:
         run(binary, one(rejects, name), error=error, prefix="reject.")
         checks += 1

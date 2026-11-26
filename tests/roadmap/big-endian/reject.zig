@@ -4,8 +4,8 @@ const std = @import("std");
 
 /// Byte `i` of a vector in memory: a pointer cast between a vector and another pointee is
 /// illegal behaviour (a vector has no defined byte layout; docs/illegal-behavior.md), rejected
-/// for every profile. The vector is stored whole: an element-wise initialization is `vecLanes`'
-/// rejection in Zig 0.17.1, which comes first.
+/// for every profile. The vector is stored whole, so that the cast is the first rejection
+/// (`vecLanes`).
 pub fn vecByte(x: @Vector(2, u16), i: usize) u8 {
     var v = x;
     const bytes: *const [4]u8 = @ptrCast(&v);

@@ -227,6 +227,6 @@
     "concurrency_native.zig": "2a778843bf67650867cefffdda758b69b5165e1b5dade667fe15616ecad4f5b7",
     "names.zig": "8e9686ac5697d7810b154b889977f0b711bcbb7776a62f8a6b25b7625c6a39dc",
     "native.zig": "9de5768185dab65b1a489f17f836c57e46d8f1a12cf4769c70b8ff7d9ecb6463",
-    "reject.zig": "d69b52e4c95c16111529d81e31e93dcfac3595d69d4e59deed1a572e0dc0f4ca"
+    "reject.zig": "b6d93f2726d47e069677b5ec68f7c158bda36843bd78404208a3e24c821fa402"
   }
 }
