@@ -138,5 +138,7 @@ if [ -n "${AIR2LEAN_NATIVE_ZIG:-}" ]; then
   python3 -B scripts/check-tree.py create "$tree_retained"
   large "$tree_retained"
   large "$tree"
+  # The designated mutant: a model with the old cap in its default policy fails these lines.
+  bash "$here/mutant-cap.sh" "$work/diff-native/air2lean_libm.a"
 fi
 echo "alloc-translated: ok"

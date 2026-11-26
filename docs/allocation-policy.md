@@ -142,7 +142,10 @@ under the default policy and compares the results with the native run, for the Z
 0.16.0 translations on x86_64-linux and aarch64-macos. The model's side is a compiled executable:
 Lean's interpreter keeps a frame per iteration of a loop in the concurrent monad and does not run
 loops of that length. Under the harness policy (the old cap) the same run is denied, which the
-check requires.
+check requires. The designated mutant of this clause is the model itself with the old cap as the
+default of `AllocPolicy.maxBytes` (`tests/roadmap/alloc-translated/mutant-cap.sh`, in a check
+tree): the runner built over it prints `page_large ok 0 0`, not the native line, so the fixture's
+check kills it (recorded in `assurance/mutation-kills.json`).
 
 **Standalone fixture.** `tests/roadmap/allocation-policy` compares twenty exact cases of
 `rawAlloc` against `TestAllocator`. Ten cover the failure index, the list and the cap: legacy
