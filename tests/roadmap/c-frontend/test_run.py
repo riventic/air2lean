@@ -83,6 +83,13 @@ class Gates(unittest.TestCase):
         e["gates"] = [{"id": "TC-GOTO", "evidence": "stale"}]
         self.assertEqual(run.outcome(e), "lean_ok")
 
+    def test_a_demoted_file_is_never_lean_ok(self):
+        # A function translate-c demoted to an extern is not in the program the later stages check.
+        e = entry(c_native=OK, translate_c={"status": "demoted", "demoted_functions": ["f"], "extern_calls": [],
+                                            "warnings": []},
+                  zig_native=OK, air_export=OK, air2lean={"status": "checked"}, lean=OK)
+        self.assertEqual(run.outcome(e), "translate_c")
+
     def test_deferred_lean_is_not_ok(self):
         e = entry(c_native=OK, translate_c=OK, zig_native=OK, air_export=OK,
                   air2lean={"status": "checked"}, lean={"status": "deferred"})

@@ -21,6 +21,10 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / 'scripts'))
+from mutation_kill_log import killed as log_kill  # noqa: E402
+
 
 def spans(proof):
     """Each theorem's lines in `proof`, 1-based and half-open: from its `theorem` line up to the
@@ -99,6 +103,10 @@ def main():
             failed.append(f"mutant {m['name']}: {why}")
         else:
             print(f"mutant {m['name']} of the generated invariant rejected")
+    rejected = [m['name'] for m, why in zip(mutants, results) if not why]
+    # Q02: each rejected mutant is a kill by the fixture's CI check (assurance/mutation-map.json, P09).
+    rel = fixture.resolve().relative_to(ROOT).as_posix()
+    log_kill(f'{rel}/mutants.json', rejected, f'{rel}/check.sh')
     if failed:
         sys.exit('\n'.join(failed))
 
