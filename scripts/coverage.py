@@ -400,11 +400,21 @@ NON_COMPILER_AIR = {
     'tests/roadmap/error-width/air': 'hand-written AIR per error-code width (make-fixtures.py, README)',
     'tests/roadmap/asm-effects/air': 'hand-written AIR in the exporter schema (README)',
     'tests/roadmap/const-bases/air': 'hand-written AIR in the exporter schema (README)',
-    'tests/roadmap/pointer-width/air/0.16.0/wasm32-freestanding':
+    'tests/roadmap/pointer-width/air/{version}/wasm32-freestanding':
         'wasm32 compiler export: evidence for the T02 32-bit profile only (README), not this inventory',
-    'tests/roadmap/pointer-width/air/0.16.0/wasm32-wasi':
+    'tests/roadmap/pointer-width/air/{version}/wasm32-wasi':
         'wasm32 compiler export: evidence for the T02 32-bit profile only (README), not this inventory',
-    'tests/roadmap/pointer-width/air/0.16.0/wasm32-reject':
+    'tests/roadmap/pointer-width/air/{version}/names/wasm32-freestanding':
+        'wasm32 compiler export: evidence for the T02 32-bit profile only (README), not this inventory',
+    'tests/roadmap/pointer-width/air/{version}/names/wasm32-wasi':
+        'wasm32 compiler export: evidence for the T02 32-bit profile only (README), not this inventory',
+    'tests/roadmap/pointer-width/air/{version}/pointer_width/wasm32-freestanding':
+        'wasm32 compiler export: evidence for the T02 32-bit profile only (README), not this inventory',
+    'tests/roadmap/pointer-width/air/{version}/pointer_width/wasm32-wasi':
+        'wasm32 compiler export: evidence for the T02 32-bit profile only (README), not this inventory',
+    'tests/roadmap/pointer-width/air/{version}/wasm32-reject':
+        'wasm32 compiler export of rejected forms (reject.zig, README), not this inventory',
+    'tests/roadmap/pointer-width/air/{version}/reject/wasm32-freestanding':
         'wasm32 compiler export of rejected forms (reject.zig, README), not this inventory',
     'tests/roadmap/noreturn-variants/air-reject': 'compiler AIR for layout rejections (test_cli.py, provenance.json); not tag evidence',
     'tests/roadmap/union-bases/air-reject': 'compiler AIR of rejected union-member bases (test_cli.py, exports.json); not tag evidence',
@@ -441,10 +451,16 @@ def roadmap_fixture_paths(version):
     return selected
 
 
+def _template_match(template, directory, below=False):
+    """Whether `directory` is `template` (`{version}`: any one path component), or with `below`
+    a directory under it."""
+    pattern = re.escape(template).replace(re.escape('{version}'), r'[^/]+')
+    return re.fullmatch(pattern + ('(/.*)?' if below else ''), directory) is not None
+
+
 def compiler_fixture_root(directory):
     """Whether a repository-relative directory is a reviewed COMPILER_FIXTURE_ROOTS entry."""
-    return any(re.fullmatch(re.escape(t).replace(re.escape('{version}'), r'[^/]+'), directory)
-               for t in COMPILER_FIXTURE_ROOTS)
+    return any(_template_match(t, directory) for t in COMPILER_FIXTURE_ROOTS)
 
 
 def unreviewed_air_roots():
@@ -453,7 +469,7 @@ def unreviewed_air_roots():
     for path in (ROOT/'tests/roadmap').rglob('*.json'):
         relative = str(path.parent.relative_to(ROOT))
         if compiler_fixture_root(relative) or \
-                any(relative == r or relative.startswith(r + '/') for r in NON_COMPILER_AIR):
+                any(_template_match(r, relative, below=True) for r in NON_COMPILER_AIR):
             continue
         try:
             data = json.loads(path.read_text())

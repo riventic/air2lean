@@ -222,11 +222,17 @@ cp "$repo_root/compatibility.json" "$mutate/"
 awk '{ for (i = 1; i <= NF; i++) if ($i != "w") printf "%s ", $i } END { print ""; print "w" }' \
   "$repo_root/scripts/mutation-shards.txt" >"$mutate/scripts/mutation-shards.txt"
 touch "$mutate/examples/atomics/atomics.zig" "$mutate/examples/recursion/recursion.zig"
-for path in Proofs/Basic/Gen.lean Proofs/Options/Gen.lean Proofs/Variants/Gen.lean \
-  Proofs/Layout/Gen.lean Proofs/Slices/Gen.lean ZigLean/Basic.lean ZigLean/Lemmas.lean \
-  ZigLean/Float/Round.lean ZigLean/Mem/Basic.lean ZigLean/Mem/Enc.lean ZigLean/Mem/Alloc.lean \
-  ZigLean/Isa/X86.lean ZigLean/Vec.lean ZigLean/Mem/Thread.lean ZigLean/Conc/Sched.lean \
-  ZigLean/Conc.lean; do
+# The sources mutate.sh backs up (its `cp "$var" "$name_backup"` lines, resolved through its
+# `var="path"` assignments): one list, so a new mutated source cannot be missing here.
+mutated_sources=$(awk '
+  /^[a-z_]+="[^"$]*"$/ { i = index($0, "="); v = substr($0, i + 2); val[substr($0, 1, i - 1)] = substr(v, 1, length(v) - 1) }
+  /^cp "\$[a-z_]+" "\$[a-z_]+_backup"$/ {
+    v = $2; gsub(/["$]/, "", v)
+    if (!(v in val)) { print "unresolved mutate.sh source variable " v > "/dev/stderr"; exit 1 }
+    print val[v]
+  }' "$repo_root/scripts/mutate.sh")
+[ -n "$mutated_sources" ] || { echo "FAILED: no backed-up sources found in scripts/mutate.sh" >&2; exit 1; }
+for path in $mutated_sources; do
   mkdir -p "$mutate/$(dirname "$path")"
   cp "$repo_root/$path" "$mutate/$path"
 done

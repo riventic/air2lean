@@ -38,7 +38,8 @@
     "FuturesFallible.Gen": "tests/roadmap/futures/check.sh translates the committed AIR with --spawn-policy fallible into FuturesFallible/Gen.lean at gate time.",
     "ThreadTuplesFallible.Gen": "tests/roadmap/thread-tuples/check.sh translates the committed AIR with --spawn-policy fallible into ThreadTuplesFallible/Gen.lean at gate time.",
     "EnvStd15.Gen": "tests/roadmap/env-boundaries/check.sh translates the committed Zig 0.15.2 std I/O AIR into EnvStd15/Gen.lean with the ENV-03 registry.",
-    "EnvStd16.Gen": "tests/roadmap/env-boundaries/check.sh translates the committed Zig 0.16.0 std I/O AIR into EnvStd16/Gen.lean with the ENV-03 registry."
+    "EnvStd16.Gen": "tests/roadmap/env-boundaries/check.sh translates the committed Zig 0.16.0 std I/O AIR into EnvStd16/Gen.lean with the ENV-03 registry.",
+    "EnvStd17.Gen": "tests/roadmap/env-boundaries/check.sh translates the committed Zig 0.17.1 std I/O AIR into EnvStd17/Gen.lean with the ENV-03 registry."
   },
   "generated_premises": ["TRU-02"],
   "generated_markers": {
@@ -144,6 +145,7 @@
     "ZigLean.Conc.Progress": ["THR-07"],
     "ZigLean.Conc.Total": ["THR-07", "SEM-04"],
     "ZigLean.Conc.Returns": ["THR-08", "SEM-04"],
+    "ZigLean.Conc.RunInv": ["THR-08"],
     "ZigLean.Conc.TimedSched": ["TMR-02", "THR-05"],
     "ZigLean.Conc.TimedBody": ["TMR-02"],
     "ZigLean.Conc.TimedBudget": ["TMR-02", "THR-05"],
