@@ -525,6 +525,80 @@ The slices example has no committed certificate (its golden AIR mixes Zig versio
 `sumZ` (a loop over a many-pointer with register locals) and `sumSlice` (a pure function's slice)
 in `test_lean.py`.
 
+### Conformance on the differential corpus
+
+A certificate proves that the emitted model refines the interpreter; nothing in it says that the
+interpreter is the semantics of the AIR. `tests/roadmap/air-semantics/conformance.py` (V01 stage 7)
+tests that on the differential corpus (`tests/diff/<ex>/inputs/<fn>.jsonl`,
+[differential-testing.md](differential-testing.md)). For every corpus function, the compiled
+`Conformance.lean` runs `Sem.run` on the function's freshly exported AIR (the patched compiler's
+export for the Zig version, never a golden of another version) with every corpus input, from the
+empty memory plus the input's buffers. Each outcome is compared three ways:
+
+* with the generated model's outcome (`scripts/diff.sh`'s Lean side): the two must be the same
+  value, buffer bytes (undefined bytes included) and returned error, or the same `Zig.Error`;
+* with the native outcome, by `scripts/diff-report.py`'s classifier: the interpreter must match
+  it as the model does (a value, returned-error, panic or trap match, or the model's own pinned
+  `.illegal`/`.unspecified` input of `unspecified.txt`, where the interpreter must give that
+  error too).
+
+Anything else is a disagreement and fails the run with the function, the input line and the three
+outcomes. Each one is a potential soundness finding: an interpreter bug (`Sem.lean`), an emitter or
+model bug, or an upstream difference.
+
+A function runs only when every instruction that it and its callees reach has an arm for the value
+kinds it uses. `Conformance.lean` decides that from the AIR before running: `Sem.outside?` for
+the instruction kind, the types of the instruction and its operands for the value kind (a struct,
+an enum, a float, a vector, …), and the shapes that an arm takes only in part (a load or store of
+an optional or a slice outside a register local, a cast between an integer and a pointer, a field
+of a packed struct, a call out of the program). The decision does not follow paths:
+`layout.ptrFromAddr` is outside for its `@ptrFromInt`, although every corpus input panics before
+it. Every function outside is counted under each of its reasons, and the table is printed; a
+function that passes the classifier and is stuck on an input fails the run (a reason is missing).
+The functions that run are pinned in `tests/roadmap/air-semantics/conformance/<V>.json`, so the
+coverage changes only with a reviewed `--update`.
+
+State (aarch64-macos; the corpus has 181 functions in 17 examples at both versions; `asm` runs
+only on x86_64, `threadsync` is not built with these versions):
+
+| Zig | Functions run | Cases | Value | Returned error | Panic | Pinned `.illegal` | Disagree | Stuck |
+|---|---|---|---|---|---|---|---|---|
+| 0.17.1 | 33 of 181 | 9900 | 8362 | 446 | 1090 | 2 | 0 | 0 |
+| 0.16.0 | 34 of 181 | 10200 | 8662 | 446 | 1090 | 2 | 0 | 0 |
+
+The 33 functions: `basic` (6), `errors` (3), `layout` (3), `options` (3), `pointers` (6),
+`recursion` (4), `slices` (6), `vectors` (2); Zig 0.16.0 also runs `layout.laneSet`. No
+disagreement was found. As an end-to-end control, an interpreter with `is_non_null` negated gives
+600 disagreements on `options.findOr` and `options.firstIndexPlusOne`. The 148 functions outside (0.17.1), by the stage of
+[research/V01-V02.md](research/V01-V02.md) that removes a reason (a function counts under each of
+its reasons):
+
+| Stage | Functions | Largest reasons (functions) |
+|---|---|---|
+| 4 (aggregates, enums, unions, globals) | 95 | struct values 29, aggregate values 29, casts other than integer to integer and pointer to pointer 28, enum values 26, aggregate constants 23, fields of packed structs and unions 22, union values 13, a result through the return pointer 11, slicing 7, bulk memory 6 |
+| 5 (floats, vectors) | 55 | vector values 30, float values 28, vector instructions 19, float rounding, square root and `@abs` 6 each |
+| 6 (atomics, threads, externals) | 29 | a call out of the program 26, std handles 23, atomics 12, indirect calls 2 |
+| not staged | 19 | volatile, allowzero, bit-packed or sentinel-terminated pointers 16, integer shifts 4 |
+
+The run prints the full table (161 rows of `<instruction kind>: <reason>` with the functions that
+only this reason keeps out, and the instruction count).
+
+Commands. The whole corpus is the heavy run (the differential run of `scripts/check.sh` first;
+CI: the step "AIR interpreter conformance on the differential corpus" of the full golden rows of
+0.17.1 and 0.16.0):
+
+```sh
+AIR2LEAN_ZIG_VERSION=0.17.1 AIR2LEAN_OUT_DIR=$OUT scripts/check.sh
+python3 -B tests/roadmap/air-semantics/conformance.py --zig-version 0.17.1 --air-dir $OUT \
+    --diff-out "$(cat .lake/check-reports/0.17.1/build-tree)/tests/diff/out" \
+    --diff-report tests/diff/out/report.json
+```
+
+The bounded run takes some examples (`AIR2LEAN_EXAMPLES="basic recursion" scripts/diff.sh`, then
+`conformance.py --examples "basic recursion"`), and `conformance.py --coverage-only` checks the
+classification and the pin without a native side. `test_conformance.py` holds the comparison's
+causal controls on fabricated outcomes.
+
 ### Checks (CI step "AIR semantics certificates")
 
 * `tests/roadmap/air-semantics/test_cli.py`: the certificate flag leaves `Gen.lean`
@@ -556,6 +630,8 @@ in `test_lean.py`.
   or lane pointer, a load that is no pointer formation, an integer `bit_and`, an `arg` behind a
   `void` parameter, a call that takes the error return trace); the mutant that drops that
   condition must fail it. These are negative tests of the rewrites, not preservation theorems.
+* `tests/roadmap/air-semantics/conformance.py` (CI step "AIR interpreter conformance on the
+  differential corpus"; §Conformance above) and its controls `test_conformance.py`.
 * The coverage lint: `Sem.outside?` classifies every `Op` constructor (no wildcard arm), and
   `tests/roadmap/op-effects/test_op_table.py` checks it against the interpreter (see its
   docstring).
