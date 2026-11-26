@@ -16,18 +16,34 @@ package's library first, which would hide a replaced module of the package), and
 code a Lake build of the file would load (scripts/lean-deps.py `native_options`). Lean runs
 unguarded here: callers run under scripts/build-guard.py.
 """
+import functools
 import os
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import assumptions  # noqa: E402
+from theorem_universe import SORRY_WARNING  # noqa: E402
 
-SORRY_WARNING = "declaration uses 'sorry'"
 # `lake env` with the directories of its first argument in front of Lake's LEAN_PATH.
 IN_FRONT = ['lake', 'env', 'sh', '-c', 'LEAN_PATH="$1:$LEAN_PATH"; export LEAN_PATH; shift; exec "$@"', 'sh']
+# The Lake modules already built for an overlay in this process, and the sources read for the
+# native options (scripts/lean-deps.py `library_closure`).
+_BUILT, _SOURCES, _LOCK = set(), {}, threading.Lock()
+
+
+@functools.cache
+def deps():
+    """scripts/lean-deps.py, loaded once: its Lake queries are cached in the module."""
+    return assumptions.lean_deps()
+
+
+@functools.cache
+def precompiled_modules():
+    return deps().precompiled_modules()
 
 
 class Failed(Exception):
@@ -44,24 +60,28 @@ def in_front(lean_path, command, **options):
                           text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, **options)
 
 
+def accepted(result, file):
+    """`result` of Lean on `file`, or `Failed` if Lean rejects it or warns of a `sorry`."""
+    if result.returncode or SORRY_WARNING in result.stdout:
+        raise Failed(file, result.stdout)
+    return result
+
+
 class Overlay:
     def __init__(self, roots, out, below=None):
         self.roots, self.out, self.below = [Path(r) for r in roots], Path(out), below
-        self.deps = assumptions.lean_deps()
-        self.lib_roots = self.deps.lib_roots()
+        self.layers = [self] + (below.layers if below else [])
+        self.lib_roots = deps().lib_roots()
         self._dirty, self._done = {}, set()
 
-    def layers(self):
-        return [self] + (self.below.layers() if self.below else [])
-
     def lean_path(self):
-        return [layer.out for layer in self.layers()]
+        return [layer.out for layer in self.layers]
 
     def source(self, module):
         """(layer or None for the Lake package, root, path) of the source of `module`; None for a
         module with no source here (Lean's own)."""
         rel = module.replace('.', '/') + '.lean'
-        for layer in self.layers():
+        for layer in self.layers:
             for root in layer.roots:
                 if (ROOT / root / rel).is_file():
                     return layer, root, ROOT / root / rel
@@ -76,16 +96,19 @@ class Overlay:
             found = self.source(module)
             self._dirty[module] = False  # (an import cycle is Lean's to report)
             self._dirty[module] = found is not None and (
-                found[0] is self or any(self.dirty(m) for m in sorted(self.deps.imports(found[2]))))
+                found[0] is self or any(self.dirty(m) for m in deps().imports(found[2])))
         return self._dirty[module]
 
     def _imports(self, path):
         """Compile the imports of the file `path` that this layer compiles and build the Lake
         modules among the others."""
-        imports = sorted(self.deps.imports(path))
-        lake = [m for m in imports if not self.dirty(m) and (found := self.source(m)) and found[0] is None]
-        if lake:
-            subprocess.run(['lake', 'build', '-q', *lake], cwd=ROOT, check=True)
+        imports = sorted(deps().imports(path))
+        with _LOCK:
+            lake = [m for m in imports if m not in _BUILT and not self.dirty(m)
+                    and (found := self.source(m)) and found[0] is None]
+            if lake:
+                subprocess.run(['lake', 'build', '-q', *lake], cwd=ROOT, check=True)
+                _BUILT.update(lake)
         for module in imports:
             self.compile(module)
 
@@ -97,18 +120,19 @@ class Overlay:
         run of Lean in the layer; a program that imports through `lean_path` calls it first."""
         if not self.out.is_dir():
             return
-        lower = [layer.out for layer in self.layers()[1:]] + [ROOT / '.lake/build/lib/lean']
+        lower = [layer.out for layer in self.layers[1:]] + [ROOT / '.lake/build/lib/lean']
         for top in [p for p in self.out.iterdir() if p.is_dir() and p.name != 'files']:
             for directory in lower:
                 for file in (directory / top.name).rglob('*.olean*'):
                     rel = file.relative_to(directory)
                     module = '.'.join(rel.with_name(rel.name.split('.')[0]).parts)
-                    if not (self.out / rel).exists() and not self.dirty(module):
+                    if not os.path.lexists(self.out / rel) and not self.dirty(module):
                         (self.out / rel).parent.mkdir(parents=True, exist_ok=True)
                         (self.out / rel).symlink_to(file.resolve())
 
     def _lean(self, path, root, olean):
-        native = self.deps.native_options(str(path), {}, self.deps.precompiled_modules())
+        with _LOCK:
+            native = deps().native_options(str(path), _SOURCES, precompiled_modules())
         olean.parent.mkdir(parents=True, exist_ok=True)
         if olean.is_symlink():  # (never write through a link into a lower layer)
             olean.unlink()
@@ -124,10 +148,8 @@ class Overlay:
         self._done.add(module)
         _, root, path = self.source(module)
         self._imports(path)
-        result = self._lean(path, root, self.out / (module.replace('.', '/') + '.olean'))
-        if result.returncode or SORRY_WARNING in result.stdout:
-            raise Failed(path.relative_to(ROOT).as_posix() if path.is_relative_to(ROOT) else str(path),
-                         result.stdout)
+        accepted(self._lean(path, root, self.out / (module.replace('.', '/') + '.olean')),
+                 path.relative_to(ROOT).as_posix() if path.is_relative_to(ROOT) else str(path))
 
     def elaborate(self, file, root='.'):
         """Elaborate `file` (a path relative to the repository, a file of the directory `root`)
@@ -139,7 +161,4 @@ class Overlay:
 
     def check(self, file, root='.'):
         """`elaborate`, and `Failed` if Lean rejects the file or warns of a `sorry`."""
-        result = self.elaborate(file, root)
-        if result.returncode or SORRY_WARNING in result.stdout:
-            raise Failed(file, result.stdout)
-        return result
+        return accepted(self.elaborate(file, root), file)

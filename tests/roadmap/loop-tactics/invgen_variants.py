@@ -72,8 +72,8 @@ def same_but(source, variant, declaration):
     found = [re.search(declaration, t, re.S) for t in texts]
     if not all(found):
         return f'{variant}: no declaration {declaration!r} in it or in {source}'
-    if [t[:m.start()] + t[m.end():] for t, m in zip(texts, found)][0] != \
-            [t[:m.start()] + t[m.end():] for t, m in zip(texts, found)][1]:
+    rest = [t[:m.start()] + t[m.end():] for t, m in zip(texts, found)]
+    if rest[0] != rest[1]:
         return f'{variant} differs from {source} outside the declaration {declaration!r}'
     fields = [sorted(line.strip() for line in m.group(0).splitlines()[1:-1]) for m in found]
     if fields[0] != fields[1]:
@@ -81,39 +81,33 @@ def same_but(source, variant, declaration):
     return None
 
 
+def targets_of(vroot):
+    """The generated files of the variant at `vroot` (scripts/invgen.py), relative to the
+    repository."""
+    return [target[0] for root, _, target in invgen.variants() if root == vroot]
+
+
 def mutate(client, overlay, vroot, work, mutant, spans):
     """Why `mutant` was not rejected inside its theorems, or None."""
-    targets = [target for root, _, target in invgen.variants() if root == vroot]
-    inv = mutant.get('inv', Path(targets[0][0]).relative_to(vroot).as_posix())
+    inv = mutant.get('inv', Path(targets_of(vroot)[0]).relative_to(vroot).as_posix())
     proof = mutant.get('proof', client['files'][0])
     if proof not in spans:
         spans[proof] = invgen_mutants.spans(ROOT / proof)
     missing = [t for t in mutant['in'] if t not in spans[proof]]
     if missing:
         return f"{proof} has no theorem {', '.join(missing)}"
-    text = (ROOT / vroot / inv).read_text()
-    lo, hi, where = 0, len(text), 'the generated file'
-    if 'def' in mutant:
-        span = invgen_mutants.scope(text, mutant['def'])
-        if span is None:
-            return f"{vroot}/{inv} does not have exactly one definition {mutant['def']}"
-        lo, hi, where = *span, mutant['def']
-    if text.count(mutant['old'], lo, hi) != 1:
-        return f"{mutant['old']!r} does not occur exactly once in {where} of {vroot}/{inv}"
+    text, why = invgen_mutants.mutated((ROOT / vroot / inv).read_text(), mutant)
+    if why:
+        return f'{vroot}/{inv}: {why}'
     mdir = work / f"mutant-{mutant['name']}"
     (mdir / 'src' / inv).parent.mkdir(parents=True)
-    (mdir / 'src' / inv).write_text(text[:lo] + text[lo:hi].replace(mutant['old'], mutant['new']) + text[hi:])
+    (mdir / 'src' / inv).write_text(text)
     layer = lean_overlay.Overlay([mdir / 'src'], mdir / 'olean', below=overlay)
     try:
         result = layer.elaborate(proof, client['root'])
     except lean_overlay.Failed as error:  # the mutant itself, or a file between it and the proof
         return f'{error}: {error.output[-600:]}'
-    if result.returncode == 0:
-        return 'accepted'
-    lines = [int(n) for n in re.findall(re.escape(Path(proof).name) + r':(\d+):\d+: error', result.stdout)]
-    if not any(a <= n < b for t in mutant['in'] for a, b in [spans[proof][t]] for n in lines):
-        return f"no error in {', '.join(mutant['in'])}: {result.stdout[-600:]}"
-    return None
+    return invgen_mutants.survived(result.returncode, result.stdout, Path(proof).name, mutant, spans[proof])
 
 
 def rejected(name, expected, overlay, vroot, root):
@@ -123,10 +117,9 @@ def rejected(name, expected, overlay, vroot, root):
     translation: it is not proved of it, and it is not regenerated either)."""
     prefix = invgen.integrity()['INVGEN_PREFIX'].decode()
     families = {}
-    for root_, _, target in invgen.variants():
-        if root_ == vroot:
-            record = json.loads((ROOT / target[0]).read_text().split('\n', 1)[0][len(prefix):])
-            families.update({e['loop']: e.get('family') for e in record['loops']})
+    for target in targets_of(vroot):
+        record = json.loads((ROOT / target).read_text().split('\n', 1)[0][len(prefix):])
+        families.update({e['loop']: e.get('family') for e in record['loops']})
     missing = [loop for loop in expected['families'] if not families.get(loop)]
     if missing:
         return [f"{vroot}: no generated invariant for {', '.join(missing)}"]
@@ -135,12 +128,10 @@ def rejected(name, expected, overlay, vroot, root):
         result = overlay.elaborate(file, root)
     except lean_overlay.Failed as error:
         return [f'{vroot}: {error}:\n{error.output[-3000:]}']
-    spans = invgen_mutants.spans(ROOT / file)
-    lines = [int(n) for n in re.findall(re.escape(Path(file).name) + r':(\d+):\d+: error', result.stdout)]
-    kept = [t for t in expected['in'] if not any(spans[t][0] <= n < spans[t][1] for n in lines)]
-    if result.returncode == 0 or kept:
+    hit = invgen_mutants.errors_in(result.stdout, Path(file).name, expected['in'], invgen_mutants.spans(ROOT / file))
+    if result.returncode == 0 or hit != expected['in']:
         return [f"{vroot}: {file} states another layout and must be rejected in {', '.join(expected['in'])}; "
-                f"not rejected: {', '.join(kept) or 'the file'}"]
+                f"rejected only in: {', '.join(hit) or 'none of them'}"]
     print(f"{name}/{Path(vroot).name}: invariants generated for {', '.join(expected['families'])}; "
           f"{file}, which states the first layout, is rejected in {', '.join(expected['in'])}", flush=True)
     return []
@@ -149,14 +140,14 @@ def rejected(name, expected, overlay, vroot, root):
 def check(name, client, vroot, work):
     """The errors of the variant at `vroot`."""
     variant = Path(vroot).name
-    targets = [target[0] for root, _, target in invgen.variants() if root == vroot]
     for command in (['scripts/gen-integrity.py', 'check', '--only', vroot + '/'],
-                    ['scripts/invgen.py', 'check', *targets]):
+                    ['scripts/invgen.py', 'check', *targets_of(vroot)]):
         if subprocess.run([sys.executable, '-B', *command], cwd=ROOT).returncode:
             return [f"{vroot}: {' '.join(command)} failed"]
-    own = Path(vroot).parent.parent / variant / Path(client.get('source', ('x', ''))[0]).name
-    if 'source' in client and (ROOT / own).is_file():
-        error = same_but(client['source'][0], own.as_posix(), client['source'][1])
+    # A variant that is not another Zig version's translation has a source of its own.
+    if not variant[0].isdigit():
+        source, declaration = client['source']
+        error = same_but(source, (Path(vroot).parent.parent / variant / Path(source).name).as_posix(), declaration)
         if error:
             return [error]
     # The variant's modules in front of the first translation's (a fixture's own root, or the

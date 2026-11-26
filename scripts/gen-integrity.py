@@ -76,6 +76,8 @@ PROFILE_PREFIX = b"-- air2lean-profile: "
 GOLDEN_HOST = re.compile(r"[a-z0-9_]+(?:-[a-z0-9_]+)*")
 # The compiler-identity marker that check.sh's overlay normalization rewrites to `__<kind>_N`.
 IDENTITY = runpy.run_path(str(Path(__file__).with_name("normalize-air.py")))["IDENTITY_MARKER"]
+# The retranslations of the clients of the generated loop invariants (scripts/invgen.py).
+INVGEN_VARIANTS = runpy.run_path(str(Path(__file__).with_name("invgen.py")))["VARIANTS"]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import premise_markers  # noqa: E402
 import canon_certification  # noqa: E402
@@ -203,21 +205,21 @@ FIXTURES = [
      ["--namespace", "Counted", "--prefix", "counted."], "exact"),
     # P09 retranslations (docs/invariant-synthesis.md, "Retranslation"): the same sources by other
     # Zig versions, and the lists with permuted `Node` fields, each under its own root with the
-    # module names of the first translation (tests/roadmap/loop-tactics/variants.sh).
-    *[(f"tests/roadmap/loop-tactics/{name}/variants/{version}/{namespace}/Gen.lean",
-       f"tests/roadmap/loop-tactics/{name}/variants/{version}/air",
-       ["--namespace", namespace, "--prefix", name + "."], "exact")
-      for name, namespace, versions in [("counted", "Counted", ["0.16.0", "0.15.2", "0.14.1"]),
-                                        ("nested", "Nested", ["0.17.1", "0.15.2", "0.14.1"])]
-      for version in versions],
-    *[(f"tests/roadmap/loop-tactics/lists/variants/{variant}/Proofs/Lists/Open.lean", air,
+    # module names of the first translation (the variants of scripts/invgen.py VARIANTS;
+    # tests/roadmap/loop-tactics/check-variants.sh).
+    *[(f"{directory}/{version}/{namespace}/Gen.lean", f"{directory}/{version}/air",
+       ["--namespace", namespace, "--prefix", prefix], "exact")
+      for root, namespace, prefix in [("tests/roadmap/loop-tactics/counted", "Counted", "counted."),
+                                      ("tests/roadmap/loop-tactics/nested", "Nested", "nested.")]
+      for directory, versions in [INVGEN_VARIANTS[root]] for version in versions],
+    # (the list's other Zig versions: the AIR of tests/roadmap/interfaces; a variant with a source
+    # of its own has its export in its root)
+    *[(f"{directory}/{variant}/Proofs/Lists/Open.lean",
+       f"tests/roadmap/interfaces/air/{variant}/lists" if variant[0].isdigit() else f"{directory}/{variant}/air",
        ["--namespace", "Lists.Open", "--prefix", "lists.", "--profile", "abi64-le-v1",
         "--model-registry", "tests/roadmap/interfaces/registry-alloc.json",
         "--allocator-model", "translated"], "exact")
-      for variant, air in [(version, f"tests/roadmap/interfaces/air/{version}/lists")
-                           for version in ["0.16.0", "0.15.2", "0.14.1"]] +
-                          [(variant, f"tests/roadmap/loop-tactics/lists/variants/{variant}/air")
-                           for variant in ["permuted", "layout"]]],
+      for directory, variants in [INVGEN_VARIANTS["."]] for variant in variants],
     # P04/P06: the ring-buffer queue (0.17.1).
     ("tests/roadmap/queue-adt/QueueAdt/Gen.lean", "tests/roadmap/queue-adt/air",
      ["--namespace", "QueueAdt", "--prefix", "queue."], "exact"),

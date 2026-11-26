@@ -1413,7 +1413,8 @@ library list family `listSeg` (`ZigLean/Sep/Full/ListSeg.lean`) with a ghost mea
 nodes left (`loop_ghost_ex`). The node layout `name.node` is read off the body: `next` at its
 offset, the item's field if the body reads one (the item then is that field's value and the rest
 of a node `X p`), else an abstract rest `D p v` of an item type `V` (the walk holds for every
-node that has the `next` field). The lists are `xs = ys ++ zs` for a visit (the visited segment
+node that has the `next` field); a layout with no field at offset 0 also states `0 ≤ p.off`,
+which a field at 0 would give. The lists are `xs = ys ++ zs` for a visit (the visited segment
 `ys` from the cursor's entry value, the nodes left `zs` at the cursor) or `xs = ys.reverse ++ zs`
 for a reversal (the prefix `ys` reversed at the prefix's local); each accumulator is its entry
 value plus the sum of the visited items (or `k` per node), with the no-overflow fact over all of
