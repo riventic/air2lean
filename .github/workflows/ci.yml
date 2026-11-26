@@ -2179,7 +2179,8 @@ jobs:
       # L09: this host's (x86_64-linux, LLVM) vector memory images against the model's
       # encoding, the recorded aarch64-macos images, and the checker's backend gate; lane
       # pointers: the native lanes.zig test, a fresh export, the committed translations,
-      # theorems and kernel-checked runs.
+      # theorems and kernel-checked runs. Element stride: this host's self-hosted x86_64 backend
+      # (Debug and ReleaseSafe) prints the recorded probe output, which equals the model's lines.
       - name: Vector memory layouts, compiler probe, lane pointers and checker controls
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         env:
@@ -2187,7 +2188,8 @@ jobs:
           AIR2LEAN_ZIG_NATIVE: ${{ github.workspace }}/host-zig/zig
         run: |
           set -euo pipefail
-          lake build ZigLean ZigLean.VecMem Air2Lean air2lean
+          lake build ZigLean ZigLean.VecMem ZigLean.VecStride Air2Lean air2lean
+          bash tests/roadmap/vector-layouts/strided.sh --native
           observed="$RUNNER_TEMP/vector-layouts-x86_64-linux-ReleaseSafe.txt"
           host-zig/zig run -fllvm -OReleaseSafe tests/roadmap/vector-layouts/probe.zig 2> "$observed"
           lake env lean --run tests/roadmap/vector-layouts/Model.lean "$observed"
