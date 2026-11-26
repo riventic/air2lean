@@ -224,18 +224,9 @@ theorem putc_steps (σ : Placement) (D : DevState) (c : BitVec 8) (vs : List (Bi
     ∃ m', (putc uart c).run { mem0 σ with dev := D } = pure ((), m') ∧
       m'.ticks = vs.length + 1 := by
   have hi := initRes_holds_dev σ [] (by simp) D
-  have ht : FTotalTriple ((devOwn D ⋆ globals []) ⋆ credits (vs.length + 1)) (putc uart c)
-      (fun _ => (devOwn { D with trace := D.trace ++ (vs ++ [r]).map rd ++
-        [.write DATA 32 c.toNat] } ⋆ globals []) ⋆ spent (vs.length + 1)) :=
-    (((putc_trace D c vs r hc).frame (R := globals [])).pre fun _ h => by
-      rwa [show ((devOwn D ⋆ credits (vs.length + 1)) ⋆ globals []) =
-        ((devOwn D ⋆ globals []) ⋆ credits (vs.length + 1)) by ac_rfl]).post fun _ _ h => by
-      rwa [show ((devOwn { D with trace := D.trace ++ (vs ++ [r]).map rd ++
-          [.write DATA 32 c.toNat] } ⋆ globals []) ⋆ spent (vs.length + 1)) =
-        ((devOwn { D with trace := D.trace ++ (vs ++ [r]).map rd ++
-          [.write DATA 32 c.toNat] } ⋆ spent (vs.length + 1)) ⋆ globals []) by ac_rfl]
-  obtain ⟨⟨⟩, m', hr, hticks⟩ := ht.ticks_eq hi.1 hi.2 (Mem.init_fseq_dev σ [] (by decide) D)
-    ⟨⟨by simp, fun L => by simp, by simp⟩, by simp⟩
+  have hp : (devOwn D ⋆ emp) _ := hi.2
+  obtain ⟨⟨⟩, m', hr, hticks⟩ := (putc_trace D c vs r hc).ticks_eq hi.1 (sep_emp.mp hp)
+    (Mem.init_fseq_dev σ [] (by decide) D) ⟨⟨by simp, fun L => by simp, by simp⟩, by simp⟩
   exact ⟨m', hr, by simpa [Mem.ofGlobals] using hticks⟩
 
 /-! ## Every device that eventually reports ready

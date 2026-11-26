@@ -2054,7 +2054,7 @@
     "tests/roadmap/volatile-effects/DeviceEffects/Proofs.lean"
    ],
    "deletion_plan": "`sendThenStatus_trace` states its trace as `D.trace ++ [.write DATA 32 c.toNat] ++ [rd v]` and its oracle hypothesis with the write event written out. Once both parts land: state the trace as `D.trace ++ [wr c, rd v]` with an abbreviation `wr` beside `rd`, in the hypothesis too; the proof stays `fsym`.",
-   "note": "Smallest goals: tests/roadmap/sep-auto/SepAuto/Device.lean (`trace_shape`, `premise_abbrev`: the forms that walk today, and each other form as an expected failure)."
+   "note": "Smallest goals: tests/roadmap/sep-auto/SepAuto/Device.lean (`trace_shape`: the form that walks today; the two examples after it, \"Open (1)\" and \"Open (2)\", are the two other forms as expected failures)."
   },
   {
    "id": "contract-stack-room",

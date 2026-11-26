@@ -158,7 +158,7 @@ example {c : BitVec 8} {v : BitVec 32} (hp : devAddr? p = some addr)
 set_option linter.unusedVariables false
 
 /-- No `devOwn`: no rule applies (and no triple exists, `tests/roadmap/sep-full/DeviceCX.lean`). -/
-example (R : FAssn) {a : BitVec bits} (hp : devAddr? p = some addr) (hal : addr % align = 0)
+example (R : FAssn) (hp : devAddr? p = some addr) (hal : addr % align = 0)
     (hr : d.readable addr bits = true) : True := by
   fail_if_success
     have : FTotalTriple R (Zig.vload d bits align p) (fun _ => R) := by

@@ -2258,7 +2258,7 @@ Deletion plan: Restate `putc_trace`, `putc_eventually`, `statusTwice_trace`, `cl
 
 Status: **open**. Requester: device-read lane (2026-11-26).
 
-Note: Smallest goals: tests/roadmap/sep-auto/SepAuto/Device.lean (`trace_shape`, `premise_abbrev`: the forms that walk today, and each other form as an expected failure).
+Note: Smallest goals: tests/roadmap/sep-auto/SepAuto/Device.lean (`trace_shape`: the form that walks today; the two examples after it, "Open (1)" and "Open (2)", are the two other forms as expected failures).
 
 Progress: Open. Two matches that `fsym` does not make, both met at the device trace (`devOwn { D with trace := … }`) after a store of a widened byte (`Zig.intCast` gives an opaque word `x` with the fact `x.toNat = c.toNat`). (1) `proveEqGoal` (Auto.lean) proves a `List` equation by `simp only [fsym_arith]` alone and then by congruence on the terms as written: the state's `D.trace ++ [.write a 32 x.toNat] ++ [e]` against a postcondition's `D.trace ++ [.write a 32 c.toNat, e]` fails (the normal form needs `x.toNat = c.toNat`, and the two sides have different shapes), so the return is left as `EUpd (devOwn …) (devOwn …)`. It is proved when the postcondition is written in the state's shape (`D.trace ++ [.write a 32 c.toNat] ++ [e]`: congruence item by item, the number by the solver). (2) `congrEq` (`assumptionEq`: a rule's premise closed by a hypothesis equal up to arithmetic) compares the heads as written: a hypothesis `D.oracle (D.trace ++ [wr c]) a 32 = some v` with a reducible abbreviation `wr c := .write a 32 c.toNat` does not close the premise `D.oracle (D.trace ++ [.write a 32 x.toNat]) a 32 = some ?v` (`wr` against `DevEvent.write`); it does with the event written out.
 
