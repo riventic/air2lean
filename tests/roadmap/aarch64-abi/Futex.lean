@@ -43,13 +43,16 @@ def nextSchedule (pre opts : Array Nat) : Option (Array Nat) :=
   go opts.size
 
 def illegal : String := "Zig.Error.illegal"
+/-- Marks the outcomes of a run that stopped at its cap with schedules left. -/
+def capped : String := "capped"
 
-/-- The distinct results of the schedules of `main` from `m0` (at most `cap` runs; at most the
-first `width` options of each choice), sorted. An error is its name; out of fuel is `none`. -/
+/-- The distinct results of the schedules of `main` from `m0` (at most the first `width` options
+of each choice), sorted. An error is its name; out of fuel is `none`; `capped` is added if
+schedules remain after `cap` runs. -/
 def outcomes (dispatch : Tgt → ConcM Tgt Unit) (main : ConcM Tgt String) (m0 : Mem := {})
     (fuel : Nat := 40) (cap : Nat := 4000) (width : Nat := 4) : List String :=
   let rec go : Nat → Array Nat → List String → List String
-    | 0, _, acc => acc
+    | 0, _, acc => capped :: acc
     | k + 1, pre, acc =>
       let (out, opts) := Sched.runTrace { io := .any, spawn := .available } dispatch fuel
         (pre.getD · 0) main m0
@@ -106,6 +109,10 @@ open Zig.Os.Linux
 
 /-- Bits 63 and 55 set: an address that no `access_ok` admits. -/
 def kernel : Int := 2 ^ 63 + 2 ^ 55
+/-- The word's address (4096 in the model's fresh memory) with a top-byte tag, and with bit 63
+alone: addresses whose admission the model leaves open. -/
+def tagged : Int := 2 ^ 56 + 4096
+def high : Int := 2 ^ 63 + 4096
 
 /-- `FUTEX_WAIT` cases at a word that holds 1: the name, the timeout, the expected value and
 the address (from the word's pointer). -/
@@ -118,13 +125,15 @@ def waits : List (String × Option (Int × Int) × BitVec 32 × (Ptr → Ptr)) :
   ("bad_nsec_kernel", some (0, 1000000000), 1, fun _ => addr kernel),
   ("unaligned", none, 1, (·.add 1)), ("unaligned2", none, 1, (·.add 2)),
   ("unaligned_kernel", none, 1, fun _ => addr (kernel + 1)), ("kernel", none, 1, fun _ => addr kernel),
-  ("kernel_top", none, 1, fun _ => addr (2 ^ 64 - 4)), ("null", none, 1, fun _ => addr 0)]
+  ("kernel_top", none, 1, fun _ => addr (2 ^ 64 - 4)), ("tagged", none, 0, fun _ => addr tagged),
+  ("high", none, 0, fun _ => addr high), ("null", none, 1, fun _ => addr 0)]
 
 /-- `FUTEX_WAKE` cases with nobody asleep: the name, `val` and the address. -/
 def wakes : List (String × BitVec 32 × (Ptr → Ptr)) := [
   ("none", 1, id), ("none_val0", 0, id), ("none_max", 0x7fffffff, id), ("unaligned", 1, (·.add 1)),
   ("unaligned_kernel", 1, fun _ => addr (kernel + 1)), ("kernel", 1, fun _ => addr kernel),
-  ("kernel_top", 1, fun _ => addr (2 ^ 64 - 4)), ("null", 1, fun _ => addr 0)]
+  ("kernel_top", 1, fun _ => addr (2 ^ 64 - 4)), ("tagged", 1, fun _ => addr tagged),
+  ("high", 1, fun _ => addr high), ("null", 1, fun _ => addr 0)]
 
 /-- The op of a domain: `FUTEX_PRIVATE_FLAG` unless shared. -/
 def op (cmd : BitVec 32) (shared : Bool) : BitVec 32 := if shared then cmd else cmd ||| FUTEX_PRIVATE
@@ -276,6 +285,70 @@ def wakeAsleep (k : Nat) (all : Bool) : List String :=
 
 end Darwin
 
+/-! ## The lock of `futex.zig` (`Lock`) in the model
+
+The `mutex` row is native: four threads, 20 000 rounds each. The model's run of the same lock on
+the Linux rows is two threads and one round each, over every schedule (no choice is cut, and
+the cap is not reached): the counter is 2 in every run that ends, no run is a data race on the
+plain counter (`.illegal`) and none is a deadlock. A waiter whose wait returns without a wake
+(`EINTR`, a spurious return) tries again; the run bounds that with `retries`.
+
+On the macOS rows the choice of a wait's result makes the schedules too many for this check.
+There the model's `__ulock_wake` can also return `-EINTR` with nobody woken, so a lock that does
+not repeat such a wake can deadlock in the model; `futex.zig`'s lock repeats it, as std does. -/
+
+namespace Lock
+
+open Zig.Os.Linux
+
+def retries : Nat := 3
+/-- The result of a run whose waiter used up `retries`. -/
+def bound : String := "Zig.Error.unspecified"
+
+def cas (expected new : BitVec 32) : ConcM Tgt (Option (BitVec 32)) := do
+  let c ← pick (casCount 32 .acquire 4 p0 expected)
+  lift (cmpxchgAt c .acquire .relaxed 4 p0 expected new)
+
+def xchg (v : BitVec 32) (ord : AtomicOrder) : ConcM Tgt (BitVec 32) := do
+  let c ← pick (rmwCount 32 ord 4 p0)
+  lift (atomicRmwAt c .xchg false ord 4 p0 v)
+
+/-- `Lock.lock`'s loop: mark the lock contended; if it was held, sleep while it is 2. -/
+def contend : Nat → ConcM Tgt Unit
+  | 0 => throw .unspecified
+  | k + 1 => do
+    if (← xchg 2 .acquire) = 0 then return
+    let _ ← futex_4arg p0 (FUTEX_WAIT ||| FUTEX_PRIVATE) 2 none
+    contend k
+
+/-- `Lock.work`, one round: lock, add one to the plain counter (`slot`), unlock. -/
+def work : Tgt → ConcM Tgt Unit := fun _ => do
+  if (← cas 0 1).isSome then contend retries
+  let v ← lift (load (BitVec 64) 8 slot)
+  lift (store 8 slot (v + 1))
+  if (← xchg 0 .release) = 2 then
+    let _ ← futex_3arg p0 (FUTEX_WAKE ||| FUTEX_PRIVATE) 1
+
+/-- The counter after two threads did one round each, under every schedule. -/
+def run : List String :=
+  outcomes work (fuel := 60) (cap := 100000) (width := 2 ^ 32) do
+    let _ ← word 0
+    let counter ← lift (alloc .stack 8 8)
+    lift (store 8 counter (0 : BitVec 64))
+    let spawn : ConcM Tgt ThreadId := do
+      match ← ConcM.sync (.spawn 0) with
+      | .ok t => pure t
+      | .error _ => throw .unspecified
+    let a ← spawn
+    let b ← spawn
+    ConcM.sync (.join a)
+    ConcM.sync (.join b)
+    return toString (← lift (load (BitVec 64) 8 counter)).toNat
+
+#guard run == ["2", bound]
+
+end Lock
+
 /-! ## Cases -/
 
 /-- What a row's value must be. -/
@@ -300,6 +373,12 @@ def Shape.accepts : Shape → String → Bool
         | _, _, _ => false
       | _ => false
     | _ => false
+
+/-- Every outcome of the model's runs behind the shape. -/
+def Shape.outs : Shape → List String
+  | .whole outs => outs
+  | .waiters wakes _ codes => wakes ++ codes
+  | .count => []
 
 /-- The model's outcomes that the shape compares the value with (for the messages). -/
 def Shape.model : Shape → String
@@ -351,7 +430,10 @@ address is not a live word of the model, and the native result needs mapping kno
 model leaves open (`ZigLean/Os/Futex.lean`, "Address validation"; premises OSF-01, OSF-02,
 "Model gaps"). Natively these return `-EFAULT`. -/
 def refused : List String :=
-  ["wait_private_null", "wait_shared_null", "wake_shared_null", "wait2_unmapped", "wait_unmapped"]
+  ["wait_private_null", "wait_shared_null", "wake_shared_null", "wait2_unmapped", "wait_unmapped"] ++
+  -- Linux: a top-byte tag (admitted only under the tagged-address ABI), and bit 63 alone.
+  (["wait", "wake"].flatMap fun call => ["private", "shared"].flatMap fun domain =>
+    ["tagged", "high"].map fun name => s!"{call}_{domain}_{name}")
 
 def casesOf : String → Option (String × List (String × Shape))
   | "aarch64-linux-gnu" => some ("linux", linuxCases)
@@ -394,6 +476,8 @@ def forbidden : List (String × String × String) := [
   | some shape => !shape.accepts value
   | none => false
 
+-- No case's run reaches the cap: its outcomes are those of every schedule (up to `width`).
+#guard (linuxCases ++ macosCases).all fun (_, shape) => !shape.outs.contains capped
 -- Every refused case is a case of some profile.
 #guard refused.all fun name => (linuxCases ++ macosCases).any (·.1 == name)
 

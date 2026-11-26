@@ -174,6 +174,10 @@ fn linuxRows(out: anytype) !void {
     const at = @intFromPtr(&word);
     // Bits 63 and 55 set: an address that no `access_ok` admits (`Linux.futexKey`).
     const kernel: usize = (1 << 63) | (1 << 55);
+    // The word's address with a top-byte tag, and with bit 63 alone: whether the kernel admits
+    // them depends on the process (the tagged-address ABI), so the model refuses both.
+    const tagged = at | (1 << 56);
+    const high = at | (1 << 63);
     const ms: Timespec = .{ .sec = 0, .nsec = 1_000_000 };
     const zero: Timespec = .{ .sec = 0, .nsec = 0 };
     const bad_nsec: Timespec = .{ .sec = 0, .nsec = 1_000_000_000 };
@@ -201,6 +205,9 @@ fn linuxRows(out: anytype) !void {
         try out.print("futex wait_{s}_unaligned_kernel {d}\n", .{ domain, futex(kernel + 1, wait, 1, null) });
         try out.print("futex wait_{s}_kernel {d}\n", .{ domain, futex(kernel, wait, 1, null) });
         try out.print("futex wait_{s}_kernel_top {d}\n", .{ domain, futex(std.math.maxInt(usize) - 3, wait, 1, null) });
+        // A mismatch (the word is 1), so that a kernel that admits the address does not sleep.
+        try out.print("futex wait_{s}_tagged {d}\n", .{ domain, futex(tagged, wait, 0, null) });
+        try out.print("futex wait_{s}_high {d}\n", .{ domain, futex(high, wait, 0, null) });
         try out.print("futex wait_{s}_null {d}\n", .{ domain, futex(0, wait, 1, null) });
         // WAKE with nobody waiting.
         try out.print("futex wake_{s}_none {d}\n", .{ domain, futex(at, wake, 1, null) });
@@ -210,6 +217,8 @@ fn linuxRows(out: anytype) !void {
         try out.print("futex wake_{s}_unaligned_kernel {d}\n", .{ domain, futex(kernel + 1, wake, 1, null) });
         try out.print("futex wake_{s}_kernel {d}\n", .{ domain, futex(kernel, wake, 1, null) });
         try out.print("futex wake_{s}_kernel_top {d}\n", .{ domain, futex(std.math.maxInt(usize) - 3, wake, 1, null) });
+        try out.print("futex wake_{s}_tagged {d}\n", .{ domain, futex(tagged, wake, 1, null) });
+        try out.print("futex wake_{s}_high {d}\n", .{ domain, futex(high, wake, 1, null) });
         try out.print("futex wake_{s}_null {d}\n", .{ domain, futex(0, wake, 1, null) });
     }
 
@@ -375,7 +384,12 @@ const Lock = struct {
     fn unlock(self: *Lock) void {
         if (@atomicRmw(u32, &self.state, .Xchg, 0, .release) != 2) return;
         const addr = @intFromPtr(&self.state);
-        _ = if (is_linux) futex(addr, WAKE | PRIVATE, 1, null) else ulockWake(addr, false);
+        if (is_linux) {
+            _ = futex(addr, WAKE | PRIVATE, 1, null);
+        } else {
+            // As std does: the model's `__ulock_wake` may return `-EINTR` with nobody woken.
+            while (ulockWake(addr, false) == EINTR) {}
+        }
     }
 
     fn work(self: *Lock, rounds: usize) void {

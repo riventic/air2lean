@@ -47,7 +47,7 @@ def edited(triple, changes, drop=(), extra=()):
 
 class Futex(unittest.TestCase):
     def test_every_version_records_the_same_rows_per_profile(self):
-        for triple, count in zip(TRIPLES, (71, 35)):
+        for triple, count in zip(TRIPLES, (79, 35)):
             rows = {version: [line for line in expected(version, triple).read_text().splitlines()
                               if line.startswith('futex ')] for version in VERSIONS}
             self.assertEqual(len(rows['0.17.1']), count, triple)
@@ -57,7 +57,7 @@ class Futex(unittest.TestCase):
             self.assertNotIn('stuck', '\n'.join(rows['0.17.1']))
 
     def test_recorded_rows_are_model_outcomes(self):
-        for triple, matched, refused in zip(TRIPLES, (68, 33), (3, 2)):
+        for triple, matched, refused in zip(TRIPLES, (68, 33), (11, 2)):
             code, out = check(triple, expected('0.17.1', triple))
             self.assertEqual(code, 0, out)
             self.assertIn(f'{matched} native futex results are outcomes of the model', out)

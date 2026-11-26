@@ -232,6 +232,8 @@ futex wait_private_unaligned2 -22
 futex wait_private_unaligned_kernel -22
 futex wait_private_kernel -14
 futex wait_private_kernel_top -14
+futex wait_private_tagged -14
+futex wait_private_high -14
 futex wait_private_null -14
 futex wake_private_none 0
 futex wake_private_none_val0 0
@@ -240,6 +242,8 @@ futex wake_private_unaligned -22
 futex wake_private_unaligned_kernel -22
 futex wake_private_kernel -14
 futex wake_private_kernel_top -14
+futex wake_private_tagged -14
+futex wake_private_high -14
 futex wake_private_null 0
 futex wait_shared_mismatch -11
 futex wait_shared_mismatch_timed -11
@@ -256,6 +260,8 @@ futex wait_shared_unaligned2 -22
 futex wait_shared_unaligned_kernel -22
 futex wait_shared_kernel -14
 futex wait_shared_kernel_top -14
+futex wait_shared_tagged -14
+futex wait_shared_high -14
 futex wait_shared_null -14
 futex wake_shared_none 0
 futex wake_shared_none_val0 0
@@ -264,6 +270,8 @@ futex wake_shared_unaligned -22
 futex wake_shared_unaligned_kernel -22
 futex wake_shared_kernel -14
 futex wake_shared_kernel_top -14
+futex wake_shared_tagged -14
+futex wake_shared_high -14
 futex wake_shared_null -14
 futex wake1_private_val1 1/0
 futex wake1_private_val2 1/0
