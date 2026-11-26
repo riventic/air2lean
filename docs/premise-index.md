@@ -5,45 +5,45 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-6671 theorems in 434 files.
+6680 theorems in 435 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
 | [PRF-01](premises.md#prf-01) | 717 | Legacy 64-bit little-endian reference model |
 | [PRF-02](premises.md#prf-02) | 909 | Recorded `abi64-le-v1` schema-12 profile |
 | [PRF-03](premises.md#prf-03) | 65 | Gate-time generated module |
-| [PRF-04](premises.md#prf-04) | 975 | Parameterized pointer width |
+| [PRF-04](premises.md#prf-04) | 977 | Parameterized pointer width |
 | [PRF-05](premises.md#prf-05) | 26 | Recorded `abi64-be-v1` big-endian profile |
-| [ALC-01](premises.md#alc-01) | 4933 | Single modelled allocator |
-| [ALC-02](premises.md#alc-02) | 3034 | Allocation failure and request-cap policy |
-| [ALC-03](premises.md#alc-03) | 4933 | Byte remap policy |
-| [ALC-04](premises.md#alc-04) | 3166 | Byte sentinel allocation |
-| [ALC-05](premises.md#alc-05) | 3166 | Byte realloc and sentinel reallocation |
-| [ALC-06](premises.md#alc-06) | 2986 | Raw allocator interface contracts |
-| [ALC-08](premises.md#alc-08) | 4872 | Address reuse and provenance recovery |
+| [ALC-01](premises.md#alc-01) | 4941 | Single modelled allocator |
+| [ALC-02](premises.md#alc-02) | 3041 | Allocation failure and request-cap policy |
+| [ALC-03](premises.md#alc-03) | 4941 | Byte remap policy |
+| [ALC-04](premises.md#alc-04) | 3173 | Byte sentinel allocation |
+| [ALC-05](premises.md#alc-05) | 3173 | Byte realloc and sentinel reallocation |
+| [ALC-06](premises.md#alc-06) | 2993 | Raw allocator interface contracts |
+| [ALC-08](premises.md#alc-08) | 4880 | Address reuse and provenance recovery |
 | [ALC-09](premises.md#alc-09) | 22 | Caller-supplied `Allocator` behaves as the std model |
-| [ALC-10](premises.md#alc-10) | 3196 | Thread-safe allocator in concurrent code |
+| [ALC-10](premises.md#alc-10) | 3204 | Thread-safe allocator in concurrent code |
 | [IOM-01](premises.md#iom-01) | 167 | Caller-supplied `Io` behaves as the std model |
-| [THR-01](premises.md#thr-01) | 3640 | Interleaving scheduler and partial-correctness meaning |
-| [THR-02](premises.md#thr-02) | 3353 | Thread spawn/join with the `available` policy |
-| [THR-03](premises.md#thr-03) | 3253 | Fallible thread assignment policy |
-| [THR-04](premises.md#thr-04) | 3220 | `Io.Group` tasks are model threads |
-| [THR-05](premises.md#thr-05) | 3546 | Futex model |
-| [THR-06](premises.md#thr-06) | 3220 | Darwin `os_unfair_lock` contract |
-| [THR-07](premises.md#thr-07) | 1928 | Progress hints without fairness |
-| [THR-08](premises.md#thr-08) | 3128 | Protocol (rely-guarantee / CSL) proofs over all schedules |
+| [THR-01](premises.md#thr-01) | 3648 | Interleaving scheduler and partial-correctness meaning |
+| [THR-02](premises.md#thr-02) | 3361 | Thread spawn/join with the `available` policy |
+| [THR-03](premises.md#thr-03) | 3261 | Fallible thread assignment policy |
+| [THR-04](premises.md#thr-04) | 3228 | `Io.Group` tasks are model threads |
+| [THR-05](premises.md#thr-05) | 3554 | Futex model |
+| [THR-06](premises.md#thr-06) | 3228 | Darwin `os_unfair_lock` contract |
+| [THR-07](premises.md#thr-07) | 1934 | Progress hints without fairness |
+| [THR-08](premises.md#thr-08) | 3136 | Protocol (rely-guarantee / CSL) proofs over all schedules |
 | [THR-09](premises.md#thr-09) | 10 | Eventually cooperative schedule (progress premise) |
-| [THR-10](premises.md#thr-10) | 3353 | Detached threads and explicit handle transfer |
+| [THR-10](premises.md#thr-10) | 3361 | Detached threads and explicit handle transfer |
 | [THR-11](premises.md#thr-11) | 26 | `Io.Future` tasks and cancelation (0.16.0) |
 | [THR-12](premises.md#thr-12) | 513 | A gone event setter is not joined while it sets |
-| [ORD-01](premises.md#ord-01) | 4981 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 4981 | No load buffering in compiled code |
-| [ORD-03](premises.md#ord-03) | 4981 | `seq_cst` treated as `acq_rel` |
-| [ORD-04](premises.md#ord-04) | 3353 | Weak CAS spurious failure |
-| [ORD-05](premises.md#ord-05) | 2524 | Pointer atomics keep provenance and compare identities |
-| [ORD-06](premises.md#ord-06) | 4991 | Memory-model adequacy of the compiled code |
+| [ORD-01](premises.md#ord-01) | 4989 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 4989 | No load buffering in compiled code |
+| [ORD-03](premises.md#ord-03) | 4989 | `seq_cst` treated as `acq_rel` |
+| [ORD-04](premises.md#ord-04) | 3361 | Weak CAS spurious failure |
+| [ORD-05](premises.md#ord-05) | 2531 | Pointer atomics keep provenance and compare identities |
+| [ORD-06](premises.md#ord-06) | 4999 | Memory-model adequacy of the compiled code |
 | [TMR-02](premises.md#tmr-02) | 30 | Opt-in awake clock and timed scheduler |
-| [MTH-01](premises.md#mth-01) | 4734 | Executable IEEE-754 float model |
+| [MTH-01](premises.md#mth-01) | 4742 | Executable IEEE-754 float model |
 | [MTH-02](premises.md#mth-02) | 246 | Opaque libm transcendentals |
 | [MTH-03](premises.md#mth-03) | 31 | Version-specific compiler-rt float semantics |
 | [MTH-04](premises.md#mth-04) | 127 | aarch64 float lowering |
@@ -56,50 +56,50 @@ premise was derived. This index covers the committed generated modules.
 | [ASM-06](premises.md#asm-06) | 18 | Memory-region asm accesses only its declared regions |
 | [ASM-07](premises.md#asm-07) | 43 | The x86_64 instruction model matches the CPU and the compiled block |
 | [ASM-09](premises.md#asm-09) | 17 | The running CPU has the asm features that the profile lacks |
-| [SEM-01](premises.md#sem-01) | 5469 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 4956 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 5418 | Loops and triples are partial correctness |
-| [SEM-04](premises.md#sem-04) | 2578 | Total-correctness statements |
-| [SEM-05](premises.md#sem-05) | 2716 | Model step and allocation counts are not time or memory measurements |
+| [SEM-01](premises.md#sem-01) | 5477 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 4964 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 5426 | Loops and triples are partial correctness |
+| [SEM-04](premises.md#sem-04) | 2585 | Total-correctness statements |
+| [SEM-05](premises.md#sem-05) | 2724 | Model step and allocation counts are not time or memory measurements |
 | [SEM-06](premises.md#sem-06) | 121 | Canonical AIR fragment semantics |
-| [SEM-07](premises.md#sem-07) | 4956 | Block addresses are the environment's placement |
-| [STK-01](premises.md#stk-01) | 5413 | The native stack holds every call chain |
-| [STK-02](premises.md#stk-02) | 4872 | Stack reserves lie in address space the native run never maps |
-| [EXT-01](premises.md#ext-01) | 1575 | User external model contracts |
+| [SEM-07](premises.md#sem-07) | 4964 | Block addresses are the environment's placement |
+| [STK-01](premises.md#stk-01) | 5421 | The native stack holds every call chain |
+| [STK-02](premises.md#stk-02) | 4880 | Stack reserves lie in address space the native run never maps |
+| [EXT-01](premises.md#ext-01) | 1581 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 11 | Assumed contracts and project axioms |
 | [EXT-03](premises.md#ext-03) | 11 | Extern functions at their linker identity |
-| [EXT-04](premises.md#ext-04) | 1575 | Registry models in concurrent programs |
-| [EXT-05](premises.md#ext-05) | 3220 | Environment implementations of open interfaces |
-| [EXT-06](premises.md#ext-06) | 4872 | External static storage is not written during the run |
+| [EXT-04](premises.md#ext-04) | 1581 | Registry models in concurrent programs |
+| [EXT-05](premises.md#ext-05) | 3228 | Environment implementations of open interfaces |
+| [EXT-06](premises.md#ext-06) | 4880 | External static storage is not written during the run |
 | [EXT-07](premises.md#ext-07) | 0 | A weak definition is the symbol's definition in the image |
-| [TRU-01](premises.md#tru-01) | 6671 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 6680 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 1703 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 1703 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 252 | Reviewed opaque, extern and runtime-redirection policy |
 | [TRU-05](premises.md#tru-05) | 0 | Artifact signing key |
 | [TRU-06](premises.md#tru-06) | 0 | Filesystem publication atomicity |
-| [DEV-01](premises.md#dev-01) | 4872 | Declared device: trace and read oracle |
+| [DEV-01](premises.md#dev-01) | 4880 | Declared device: trace and read oracle |
 | [ENV-01](premises.md#env-01) | 33 | Selected handle read/write/close contract |
-| [ENV-02](premises.md#env-02) | 4885 | Distinct monotonic and wall clock observations |
+| [ENV-02](premises.md#env-02) | 4893 | Distinct monotonic and wall clock observations |
 | [ENV-03](premises.md#env-03) | 26 | Linux raw read/write/close are the bound models |
-| [OSF-01](premises.md#osf-01) | 1933 | Futex wait (`futex_4arg` WAIT, `__ulock_wait2`, `__ulock_wait`) |
-| [OSF-02](premises.md#osf-02) | 1933 | Futex wake (`futex_3arg` WAKE, `__ulock_wake`) |
-| [OSG-01](premises.md#osg-01) | 1913 | Interrupting signal (`tgkill`, `pthread_kill` of `SIG.IO`) |
-| [OSK-01](premises.md#osk-01) | 1934 | Clock reads |
-| [OSK-02](premises.md#osk-02) | 1852 | Sleep |
+| [OSF-01](premises.md#osf-01) | 1939 | Futex wait (`futex_4arg` WAIT, `__ulock_wait2`, `__ulock_wait`) |
+| [OSF-02](premises.md#osf-02) | 1939 | Futex wake (`futex_3arg` WAKE, `__ulock_wake`) |
+| [OSG-01](premises.md#osg-01) | 1919 | Interrupting signal (`tgkill`, `pthread_kill` of `SIG.IO`) |
+| [OSK-01](premises.md#osk-01) | 1940 | Clock reads |
+| [OSK-02](premises.md#osk-02) | 1858 | Sleep |
 | [OSL-01](premises.md#osl-01) | 0 | macOS `os_unfair_lock` primitive contract |
-| [OSM-01](premises.md#osm-01) | 2413 | Trusted `posix.mmap`/`munmap`/`mremap` model |
-| [OSM-02](premises.md#osm-02) | 1934 | macOS `malloc`/`free`/`malloc_size` |
-| [OST-01](premises.md#ost-01) | 1934 | Thread creation (`clone`, `pthread_create`) |
-| [OST-02](premises.md#ost-02) | 1913 | Thread exit, join and detach |
-| [OST-03](premises.md#ost-03) | 1934 | Thread ids, process id and CPU count |
-| [OSY-01](premises.md#osy-01) | 1913 | Yield |
-| [STD-01](premises.md#std-01) | 4933 | Hand model of the `std.mem.Allocator` wrappers |
-| [STD-02](premises.md#std-02) | 3353 | Hand model of `Thread.spawn` and `Thread.join` |
-| [STD-03](premises.md#std-03) | 3353 | Hand model of `Thread.detach` |
-| [STD-05](premises.md#std-05) | 3546 | Hand model of the std futex interface |
-| [STD-06](premises.md#std-06) | 3220 | Hand model of `Thread.Mutex.DarwinImpl` |
-| [STD-08](premises.md#std-08) | 3220 | Hand model of `Io.Group` |
+| [OSM-01](premises.md#osm-01) | 2419 | Trusted `posix.mmap`/`munmap`/`mremap` model |
+| [OSM-02](premises.md#osm-02) | 1940 | macOS `malloc`/`free`/`malloc_size` |
+| [OST-01](premises.md#ost-01) | 1940 | Thread creation (`clone`, `pthread_create`) |
+| [OST-02](premises.md#ost-02) | 1919 | Thread exit, join and detach |
+| [OST-03](premises.md#ost-03) | 1940 | Thread ids, process id and CPU count |
+| [OSY-01](premises.md#osy-01) | 1919 | Yield |
+| [STD-01](premises.md#std-01) | 4941 | Hand model of the `std.mem.Allocator` wrappers |
+| [STD-02](premises.md#std-02) | 3361 | Hand model of `Thread.spawn` and `Thread.join` |
+| [STD-03](premises.md#std-03) | 3361 | Hand model of `Thread.detach` |
+| [STD-05](premises.md#std-05) | 3554 | Hand model of the std futex interface |
+| [STD-06](premises.md#std-06) | 3228 | Hand model of `Thread.Mutex.DarwinImpl` |
+| [STD-08](premises.md#std-08) | 3228 | Hand model of `Io.Group` |
 | [STD-09](premises.md#std-09) | 26 | Hand model of `Io.async` and `Io.Future` |
 | [STD-10](premises.md#std-10) | 30 | Hand model of `Io.Clock.now` and `Io.futexWaitTimeout` in the timed emitter |
 
@@ -3330,6 +3330,19 @@ File premises: PRF-04, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, A
 | `AllocTranslated.PageAlloc.alloc_threadFree` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSM-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
 | `AllocTranslated.PageAlloc.alloc_run` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSM-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
 
+## `tests/roadmap/alloc-translated/PageAllocMacos.lean`
+
+File premises: PRF-04, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08
+
+| Theorem | Premises |
+|---|---|
+| `AllocTranslated.PageAllocMacos.alloc_ct` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `AllocTranslated.PageAllocMacos.alloc_spec` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `AllocTranslated.PageAllocMacos.fallocSpec` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `AllocTranslated.PageAllocMacos.fallocSpec.creation` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `AllocTranslated.PageAllocMacos.fallocSpec.creation_input_at` | PRF-04, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `AllocTranslated.PageAllocMacos.fallocSpec.creation_admission` | PRF-04, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+
 ## `tests/roadmap/alloc-translated/PageCreation.lean`
 
 File premises: PRF-04, ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08
@@ -3375,6 +3388,7 @@ File premises: ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, T
 | Theorem | Premises |
 |---|---|
 | `AllocTranslated.PageSpecMacos.free_spec` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `AllocTranslated.PageSpecMacos.free_dead_spec` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
 | `AllocTranslated.PageSpecMacos.resize_spec` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
 | `AllocTranslated.PageSpecMacos.remap_spec` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-07, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-01, EXT-04, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSF-01, OSF-02, OSG-01, OSK-01, OSK-02, OSM-01, OSM-02, OST-01, OST-02, OST-03, OSY-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
 
@@ -3397,6 +3411,8 @@ File premises: ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, T
 | Theorem | Premises |
 |---|---|
 | `AllocTranslated.PageTok.pinv_fitsUpTo` | ALC-01, ALC-02, ALC-03, ALC-04, ALC-05, ALC-06, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-05, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-04, SEM-05, SEM-07, STK-01, STK-02, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, OSM-01, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
+| `AllocTranslated.PageTok.hintAligned_iff` | TRU-01 |
+| `AllocTranslated.PageTok.HintKn_linux_eq` | ALC-01, ALC-03, ALC-08, ALC-10, THR-01, THR-02, THR-03, THR-04, THR-05, THR-06, THR-08, THR-10, ORD-01, ORD-02, ORD-03, ORD-04, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-05, SEM-07, STK-01, STK-02, EXT-05, EXT-06, TRU-01, DEV-01, ENV-02, STD-01, STD-02, STD-03, STD-05, STD-06, STD-08 |
 
 ## `tests/roadmap/asm-effects/AsmEffects/Gen.lean`
 
