@@ -1473,7 +1473,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       -- `ctx: *anyopaque`, a handle `*H` of a declared `opaque {}`) carries no typed storage,
       -- like an integer: the target must be provably error-free.
       let opaquePointee (t : TyId) : Bool := ((ptrOrOptChild cx.types t).map (opaqueTy cx.types)).getD false
-      let fromOpaque := cx.allocatorModel == .translated && opaquePointee aty
+      let fromOpaque := cx.allocatorModel == .translated && opaquePointee aty && !opaquePointee ty
       -- Erasing an error-free typed pointer to a pointer to an opaque type (an allocator's
       -- `ctx`, a futex address for the OS, a handle) in every allocator model: the bytes carry
       -- no symbolic error. A recovery passes `fromOpaque`, which only the translated allocator
@@ -1481,11 +1481,10 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
       -- Between two opaque pointees (`*anyopaque` ↔ `*H`, `*H` → `*G`) nothing is erased or
       -- recovered: the pointee stays untyped, and the checks at the erasure before and at any
       -- recovery after are unchanged.
-      let betweenOpaque := opaquePointee aty && opaquePointee ty
       let toOpaque := opaquePointee ty &&
-        (betweenOpaque || ((ptrOrOptChild cx.types aty).bind capability) == some false)
+        (opaquePointee aty || ((ptrOrOptChild cx.types aty).bind capability) == some false)
       -- A qualifier-only or optional-wrap cast of an opaque pointer keeps its pointee: no recovery.
-      if fromOpaque && !betweenOpaque && !qualifierOnly && !optionalWrapOnly then
+      if fromOpaque && !qualifierOnly && !optionalWrapOnly then
         if let some target := ptrOrOptChild cx.types ty then
           unless capability target == some false do
             cx.fail line "recovering a symbolic error pointer from an integer or opaque value needs unsupported storage provenance"

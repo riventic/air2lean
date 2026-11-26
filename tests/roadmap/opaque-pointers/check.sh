@@ -65,14 +65,12 @@ for version in 0.17.1 0.16.0 0.15.2 0.14.1; do
   rejected "$version: recovery in the default allocator model" \
     'a pointer cast has unresolved or cyclic symbolic storage provenance' \
     "$here/air-recover/$version" --profile abi64-le-v1
-  for name in externHandle fromInt globalHandle; do
+  for spec in 'externHandle|`extern` global global_handle: its type can hold' \
+      'fromInt|recovering a symbolic error pointer from an integer or opaque value' \
+      'globalHandle|global alias has unresolved or cyclic symbolic storage provenance'; do
+    name=${spec%%|*} expected=${spec#*|}
     mkdir -p "$work/reject-$version-$name"
     cp "$here/air-reject/$version/reject.$name.json" "$work/reject-$version-$name/"
-    case "$name" in
-      externHandle) expected='`extern` global global_handle: its type can hold' ;;
-      fromInt) expected='recovering a symbolic error pointer from an integer or opaque value' ;;
-      globalHandle) expected='global alias has unresolved or cyclic symbolic storage provenance' ;;
-    esac
     for model in std translated; do
       rejected "$version: $name ($model)" "$expected" "$work/reject-$version-$name" \
         --profile abi64-le-v1 --allocator-model "$model"

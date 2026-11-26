@@ -64,10 +64,10 @@ def pointer_size(size):
 
 def by_value(types):
     # Every `*Handle` becomes `Handle` itself: a parameter and a result of the opaque type.
-    index = types.index(opaque(types))
-    for i, t in enumerate(types):
-        if t['k'] == 'ptr' and t['child'] == index:
-            types[i] = dict(types[index])
+    entry = dict(opaque(types))
+    for t in pointers(types):
+        t.clear()
+        t.update(entry)
 
 
 CASES = {
