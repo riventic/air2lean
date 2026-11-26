@@ -30841,7 +30841,7 @@
       "ZigLean/Conc/Call.lean": "2d9c5f288ff434180b55d4899e9f1595845200918629c78bbb91927392d877d3",
       "ZigLean/Conc/Capture.lean": "1f52cb076e33c92cd131d034990cf8d00cede39d026b082184a21120d59bb401",
       "ZigLean/Conc/Clock.lean": "d7e98e62b8ebd70fc1688f98b43d965230b78d2eb6f4d0a10db815abf7f5db17",
-      "ZigLean/Conc/Detach.lean": "e9248d3a4f3be978526828ff294cf0c992419bb350eb0fded5cda3aaa499c37b",
+      "ZigLean/Conc/Detach.lean": "dc70f19a88a95d9dc98a55a6113aa797f1239e293a68f1ab86938ae34ad48c2c",
       "ZigLean/Conc/Endian.lean": "924157f3a57a7c7cd9ea0c73015ec3cbe734b6491db06017bd944177c09d4663",
       "ZigLean/Conc/Future.lean": "8e705d38f6bd704a80892cb90d38dd6c4e9b1575a90ae270a440c96b301bb582",
       "ZigLean/Conc/FutureLemmas.lean": "4ce8501ebf5ffacc1e5fcd97e2051cdbe2e8aeef25ba746e125cf120931f6480",
