@@ -772,10 +772,11 @@ theorem Inv.enter {G : ThreadId → γ} {m : Mem} {t : ThreadId} {g : γ}
     · have eu : u ≠ t := fun e => by rw [e, upd_self, hg] at hu; cases hu
       exact .inr ⟨u, by rw [upd_ne _ _ eu] at hu ⊢; exact hu⟩
 
-/-- A step of `t` that keeps the writes and the futex queue (a read, a return from a futex wait,
-a change of `t`'s lock place): the other threads keep their ghost values, and `t` changes its
-place as the premises say. -/
-theorem Inv.move {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} (hI : E.Inv L G m)
+/-- **`Inv.move` with the waiter role of `t` free**: `t` may wait where it is a waiter after the
+step (`hwx'`), and each `waiting` write has its witness after the step (`hwby`, `Inv.wby`: a
+thread that may wait and is above the write). `Inv.move` gives both from a role that `t` keeps;
+`Inv.leave` takes the witness from the client, so `t` can give the role up. -/
+theorem Inv.moveW {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} (hI : E.Inv L G m)
     (hG : ∀ u, u ≠ t → G' u = G u) (hh : E.W.hist m' = E.W.hist m)
     (hwt : m'.waiters = m.waiters) (hclk : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
     (hth : m.threads.size ≤ m'.threads.size)
@@ -789,7 +790,10 @@ theorem Inv.move {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} (hI : E.In
         (E.ph (G' t) = .w1 ∧ L.ph (G' t) = .away))
     (htq : ∀ w ∈ m.waiters, w.1 = t →
       (E.ph (G' t) = .w1 → w.2 = E.W.key m ∨ w.2 = L.key m) ∧ (w.2 = E.W.key m → E.ph (G' t) = .w1))
-    (hwxt : E.wx (G t) → E.wx (G' t)) (hsxt : (E.ph (G' t)).Setting → E.sx (G' t))
+    (hwx' : (E.ph (G' t)).Waiting → E.wx (G' t))
+    (hwby : ∀ j < (E.W.hist m).size, (E.W.hist m)[j]!.Val (1 : BitVec 32) →
+      ∃ u, E.wx (G' u) ∧ VClock.le (E.W.hist m)[j]!.clock (m'.clocks[u]!) = true)
+    (hsxt : (E.ph (G' t)).Setting → E.sx (G' t))
     (hF : E.W.Fresh m') (hk : E.W.key m' = E.W.key m) (hkL : L.key m' = L.key m) :
     E.Inv L G' m' := by
   have key : ∀ x, (E.ph (G' x)).Waiting → (E.ph (G x)).Waiting := fun x hx => by
@@ -799,8 +803,9 @@ theorem Inv.move {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} (hI : E.In
   refine ⟨by rw [hh]; exact hI.vals, by rw [hh]; exact hI.mono,
     fun u v hu hv => hI.one u v (key u hu) (key v hv), fun u hu j hj hv => ?_, fun u hu => ?_,
     fun u hu => ?_, fun w hw hp => ?_, fun w hw hp => ?_, fun u hu => ?_,
-    fun u hu => wx_of hG hwxt (hI.wx u (key u hu)),
-    fun j hj hv => by rw [hh] at hj hv ⊢; exact hI.wby_of hG hwxt hclk hj hv,
+    fun u hu => if e : u = t then by subst e; exact hwx' hu
+      else by rw [hG u e] at hu ⊢; exact hI.wx u hu,
+    fun j hj hv => by rw [hh] at hj hv ⊢; exact hwby j hj hv,
     fun u hu => if e : u = t then by subst e; exact hsxt hu
       else by rw [hG u e] at hu ⊢; exact hI.sx u hu, hF,
     fun u hu => Nat.lt_of_lt_of_le (if e : u = t then by subst e; exact hI.swex u (hsw.mpr hu)
@@ -843,6 +848,29 @@ theorem Inv.move {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} (hI : E.In
         by_cases e : u = t
         · subst e; exact hsw.mp hu
         · rw [hG u e]; exact hu
+
+/-- A step of `t` that keeps the writes and the futex queue (a read, a return from a futex wait,
+a change of `t`'s lock place): the other threads keep their ghost values, and `t` changes its
+place as the premises say and keeps its waiter role (`hwxt`). -/
+theorem Inv.move {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} (hI : E.Inv L G m)
+    (hG : ∀ u, u ≠ t → G' u = G u) (hh : E.W.hist m' = E.W.hist m)
+    (hwt : m'.waiters = m.waiters) (hclk : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
+    (hth : m.threads.size ≤ m'.threads.size)
+    (hone : (E.ph (G' t)).Waiting → (E.ph (G t)).Waiting)
+    (hw0 : E.ph (G' t) = .w0 → E.ph (G t) = .w0)
+    (hw1 : E.ph (G' t) = .w1 → ∃ i < (E.W.hist m).size, (E.W.hist m)[i]!.Val (1 : BitVec 32) ∧
+      VClock.le (E.W.hist m)[i]!.clock (m'.clocks[t]!) = true)
+    (hsw : E.ph (G t) = .sw ↔ E.ph (G' t) = .sw)
+    (hlpt : E.ph (G' t) ≠ .out →
+      L.ph (G' t) = .out ∨ ((E.ph (G' t)).Setting ∧ L.ph (G' t) = .gone) ∨
+        (E.ph (G' t) = .w1 ∧ L.ph (G' t) = .away))
+    (htq : ∀ w ∈ m.waiters, w.1 = t →
+      (E.ph (G' t) = .w1 → w.2 = E.W.key m ∨ w.2 = L.key m) ∧ (w.2 = E.W.key m → E.ph (G' t) = .w1))
+    (hwxt : E.wx (G t) → E.wx (G' t)) (hsxt : (E.ph (G' t)).Setting → E.sx (G' t))
+    (hF : E.W.Fresh m') (hk : E.W.key m' = E.W.key m) (hkL : L.key m' = L.key m) :
+    E.Inv L G' m' :=
+  hI.moveW hG hh hwt hclk hth hone hw0 hw1 hsw hlpt htq (fun h => hwxt (hI.wx t (hone h)))
+    (fun _ hj hv => hI.wby_of hG hwxt hclk hj hv) hsxt hF hk hkL
 
 /-- The waiter's successful `cmpxchg(unset → waiting)` (`w0` → `w1`). -/
 theorem Inv.casOk {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} {ord : AtomicOrder}
@@ -1150,60 +1178,29 @@ theorem Inv.leave {G : ThreadId → γ} {m : Mem} {t : ThreadId} {g : γ} (hI : 
     (hwby : ∀ j < (E.W.hist m).size, (E.W.hist m)[j]!.Val (1 : BitVec 32) →
       ∃ u, E.wx (upd G t g u) ∧ VClock.le (E.W.hist m)[j]!.clock (m.clocks[u]!) = true) :
     E.Inv L (upd G t g) m := by
-  -- A thread at a place other than `out` and `sd` is not `t`, before and after the step.
-  have hne : ∀ {u : ThreadId} {p : EPh}, E.ph (upd G t g u) = p → p ≠ .out → p ≠ .sd → u ≠ t :=
-    fun {u p} h h1 h2 e => by
-      subst e; rw [upd_self] at h
-      rcases hg with e | e
-      · exact h1 (h.symm.trans e)
-      · exact h2 (h.symm.trans e)
-  have hne' : ∀ {u : ThreadId} {p : EPh}, E.ph (G u) = p → p ≠ .out → p ≠ .sd → u ≠ t :=
-    fun {u p} h h1 h2 e => by
-      subst e
-      rcases ht with e | e
-      · exact h1 (h.symm.trans e)
-      · exact h2 (h.symm.trans e)
-  have hwait : ∀ u, (E.ph (upd G t g u)).Waiting → u ≠ t := fun u h => by
-    rcases h with h | h
-    · exact hne h (by decide) (by decide)
-    · exact hne h (by decide) (by decide)
-  refine ⟨hI.vals, hI.mono, fun u v hu hv => ?_, fun u hu => ?_, fun u hu => ?_, fun u hu => ?_,
-    fun w hw hp => ?_, fun w hw hp => ?_, fun u hu => ?_, fun u hu => ?_, hwby, fun u hu => ?_,
-    hI.fresh, fun u hu => ?_, hI.rel, hI.relMono⟩
-  · have eu := hwait u hu
-    have ev := hwait v hv
-    rw [upd_ne _ _ eu] at hu; rw [upd_ne _ _ ev] at hv
-    exact hI.one u v hu hv
-  · have eu := hne hu (by decide) (by decide)
-    rw [upd_ne _ _ eu] at hu; exact hI.hb u hu
-  · have eu := hne hu (by decide) (by decide)
-    rw [upd_ne _ _ eu] at hu; exact hI.seen u hu
-  · by_cases eu : u = t
-    · subst eu; rw [upd_self] at hu ⊢
-      have hsd : E.ph g = .sd := hg.resolve_left hu
-      rcases hgo hsd with e | e
-      · exact .inl e
-      · exact .inr (.inl ⟨.inr hsd, e⟩)
-    · rw [upd_ne _ _ eu] at hu ⊢; exact hI.lp u hu
-  · have eu := hne hp (by decide) (by decide)
-    rw [upd_ne _ _ eu] at hp; exact hI.qw w hw hp
-  · obtain ⟨h1, h2⟩ := hI.q w hw hp
-    refine ⟨by rw [upd_ne _ _ (hne' h1 (by decide) (by decide))]; exact h1, ?_⟩
-    rcases h2 with h | ⟨u, hu⟩
-    · exact .inl h
-    · exact .inr ⟨u, by rw [upd_ne _ _ (hne' hu (by decide) (by decide))]; exact hu⟩
-  · have eu := hne hu (by decide) (by decide)
-    rw [upd_ne _ _ eu] at hu; exact hI.swset u hu
-  · have eu := hwait u hu
-    rw [upd_ne _ _ eu] at hu ⊢; exact hI.wx u hu
-  · by_cases eu : u = t
-    · subst eu; rw [upd_self] at hu ⊢
-      rcases hu with e | e
+  have hgt : E.ph (upd G t g t) = .out ∨ E.ph (upd G t g t) = .sd := by rw [upd_self]; exact hg
+  have hnw : ¬ (E.ph (upd G t g t)).Waiting := fun h => by
+    rcases hgt with e | e <;> rw [e] at h <;> rcases h with h | h <;> cases h
+  refine hI.moveW (fun u hu => upd_ne _ _ hu) rfl rfl (fun _ => VClock.le_refl _) (Nat.le_refl _)
+    (fun h => absurd h hnw) (fun h => ?_) (fun h => ?_)
+    ⟨fun h => (by rcases ht with e | e <;> rw [e] at h <;> cases h), fun h => ?_⟩
+    (fun h => ?_)
+    (fun w hw e => ⟨fun h => ?_, fun h => by
+      have := (hI.q w hw h).1; rw [e] at this; rcases ht with e' | e' <;> rw [e'] at this <;>
+        cases this⟩)
+    (fun h => absurd h hnw) hwby
+    (fun h => by
+      rw [upd_self] at h ⊢
+      rcases h with e | e
       · rcases hg with e' | e' <;> rw [e'] at e <;> cases e
-      · exact hsx e
-    · rw [upd_ne _ _ eu] at hu ⊢; exact hI.sx u hu
-  · have eu := hne hu (by decide) (by decide)
-    rw [upd_ne _ _ eu] at hu; exact hI.swex u hu
+      · exact hsx e) hI.fresh rfl rfl
+  all_goals first
+    | (rcases hgt with e | e <;> rw [e] at h <;> cases h)
+    | (rw [upd_self] at h ⊢
+       have hsd : E.ph g = .sd := hg.resolve_left h
+       rcases hgo hsd with e | e
+       · exact .inl e
+       · exact .inr (.inl ⟨.inr hsd, e⟩))
 
 /-- **`Inv.leave` when each thread that may wait is below one that may wait after the step**
 (`hle`; a thread that joined `t` and may wait covers `t`, which gives its role up): the witness
