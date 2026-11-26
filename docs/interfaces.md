@@ -91,10 +91,12 @@ The proof side belongs to the full-state framework (on main since the arena land
   and the theorem vacuous. `Proofs/Lists/Alloc.lean` (`push`, `freeAll`),
   `tests/roadmap/interfaces/Interfaces/MixSpec.lean`,
   `tests/roadmap/interfaces/Interfaces/SentinelSpec.lean` (M04: a `[:0]u8` through
-  `allocSentinel`, `realloc` and `free`) and `Interfaces/WideSpec.lean` (the same for a `[:0]T`
-  of a wider item type). The sentinel statements and the theorems of `append` and `resize` are
+  `allocSentinel`, `realloc` and `free`), `Interfaces/WideSpec.lean` (the same for a `[:0]T`
+  of a wider item type) and `Interfaces/KindsSpec.lean` (a non-zero sentinel, an optional pointer
+  item, a float item, an over-aligned slice, and a sentinel copy). The sentinel statements and
+  the theorems of `append`, `resize` and the copy are
   generic (`ZigLean/Sep/Full/SentinelBuf.lean`: every item size, alignment and sentinel bytes);
-  the `u8`, `u16`, `u32` and `u64` copies of the generated code are instances that supply the
+  the copies of the generated code are instances that supply the
   walk of their code and the size of their encoding.
 * **One contract form for every interface function: `FnSpec P Q g := ∀ a, CTriple (P a) (g a)
   (Q a)`.** An interface states only its pre- and postcondition as plain assertions over the

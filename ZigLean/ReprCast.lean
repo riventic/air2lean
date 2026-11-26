@@ -17,6 +17,8 @@ not part of the `ZigLean` umbrella.
   (padding-derived) byte throws `.unspecified`.
 * `lawfulEnc_bitVec`, `lawfulEnc_vector`: integers of every width and arrays of lawful items
   read back as stored, so `reprCast_roundtrip` applies to arrays.
+* `Float.size_encode`, `Float.decode_encode_eq`, `Float.decidableReadsBack`: a float's bytes have
+  its format's size, and it reads back exactly when it is not a NaN (no `LawfulEnc` instance).
 * Concrete cases (by kernel evaluation): `[4]u8 ↔ u32` round-trips; `[2]u24 → u56` reads the
   padding byte of item 0 and throws; `u56 → [2]u24` loses byte 3, so casting back throws.
 -/
@@ -125,6 +127,59 @@ theorem lawfulEnc_bitVec (n : Nat) : LawfulEnc (BitVec n) where
     show intOfBytes n (padTo (intSize n) (intBytes v)) = pure v
     apply intOfBytes_of_extract
     simp [padTo, Array.extract_append, intBytes_size]
+
+/-! ## Floats
+
+A float type has no `LawfulEnc` instance: a NaN's bytes are undefined (`Float.detMask`), so a load
+of them is `.unspecified`. Its encoding has the format's size for every value, and a value reads
+back exactly when it is not a NaN. -/
+
+/-- A float's encoding has its format's size: the NaN's too (undefined bytes). -/
+@[fsym_arith] theorem Float.size_encode {fmt : FloatFmt} (x : Float fmt) :
+    (Enc.encode x).size = Enc.size (Float fmt) := by
+  have h := intBytes_le_intSize fmt.width
+  show (padTo (intSize fmt.width) (maskedBytes x.bits x.detMask)).size = intSize fmt.width
+  simp only [padTo, Array.size_append, Array.size_replicate, maskedBytes, Array.size_map,
+    Array.size_range]
+  omega
+
+/-- A float that is not a NaN reads back from its bytes. -/
+theorem Float.decode_encode {fmt : FloatFmt} {x : Float fmt} (h : x.isNaN = false) :
+    Enc.decode (Enc.encode x) = pure x := by
+  show (do pure ⟨← intOfBytes fmt.width
+    (padTo (intSize fmt.width) (maskedBytes x.bits x.detMask))⟩ : Result (Float fmt)) = pure x
+  rw [Float.maskedBytes_of_not_isNaN h, intOfBytes_of_extract x.bits (by
+    rw [padTo, Array.extract_append]
+    simp [intBytes_size, Array.extract_eq_self_of_le])]
+  rfl
+
+/-- A float reads back from its bytes exactly when it is not a NaN: a NaN's bits are undefined in
+memory (`docs/floats.md` §NaN in memory), so its load is `.unspecified`. -/
+theorem Float.decode_encode_eq {fmt : FloatFmt} (x : Float fmt) :
+    (Enc.decode (Enc.encode x) = pure x) = (x.isNaN = false) := by
+  refine propext ⟨fun h => ?_, Float.decode_encode⟩
+  cases hn : x.isNaN with
+  | false => rfl
+  | true =>
+    exfalso
+    have hw : 0 < (fmt.width + 7) / 8 := by cases fmt <;> decide
+    have e : intOfBytes fmt.width
+        (padTo (intSize fmt.width) (maskedBytes x.bits x.detMask)) = throw .unspecified :=
+      intOfBytes_undef false (i := 0) hw (by
+        rw [Float.maskedBytes_of_isNaN hn, padTo, Array.getElem?_append_left (by simpa using hw)]
+        simp [hw])
+    have h' : (do pure ⟨← intOfBytes fmt.width
+        (padTo (intSize fmt.width) (maskedBytes x.bits x.detMask))⟩ : Result (Float fmt)) =
+        pure x := h
+    rw [e] at h'
+    cases h'
+
+/-- Whether a float reads back is its NaN check: for a float constant it evaluates (`decide`), so
+a read-back premise of a float constant (a `[:0]f32`'s sentinel, `FTotalTriple.regionLoadEnc`) is
+a closed fact. -/
+instance Float.decidableReadsBack {fmt : FloatFmt} (x : Float fmt) :
+    Decidable (Enc.decode (Enc.encode x) = pure x) :=
+  decidable_of_iff (x.isNaN = false) (by rw [Float.decode_encode_eq])
 
 private theorem list_chunk {s : Nat} : ∀ (l : List (List Byte)) (i : Nat), (∀ a ∈ l, a.length = s) →
     (hi : i < l.length) → ((l.flatten.drop (i * s)).take s) = l[i]
