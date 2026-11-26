@@ -1437,9 +1437,14 @@ def listCand (ns : Name) (name again binders tbinders args run triple loc exit :
         | none => pure ("V", "(V : Type) (D : Zig.Ptr → V → FAssn) ", "V D", "D p v")
       -- (qualified: a parameter named like the body's first component would capture it)
       let N := s!"({ns}.{name}.node {layoutArgs})"
+      -- A field at offset 0 says that the node's pointer is at or after its block's start. A
+      -- layout that owns no such field (`next` further on and no item there: an `extern struct`,
+      -- permuted fields) states it, for the body's projections to the fields it does own.
+      let based := nextOff == 0 || w.item?.any (·.1 == 0)
+      let base := if based then "" else "⟪0 ≤ p.off⟫ ⋆ "
       let pre := s!"/-- The node layout of `{name}`: `next` at offset {nextOff}{if w.item?.isSome then ", the item" else ""}, \
         the rest. -/\nabbrev {name}.node {layout}(p : Zig.Ptr) (v : {T}) (q : Option Zig.Ptr) : FAssn :=\n  \
-        up (pts {ptr nextOff} {nextAl} q) ⋆ {rest}\n\n"
+        {base}up (pts {ptr nextOff} {nextAl} q) ⋆ {rest}\n\n"
       pure (T, layout, layoutArgs, "", N, N, (#[] : Array String), pre)
     | some k => do
       -- the node's variables: the pointer, `next`'s value and the item (the other value field)

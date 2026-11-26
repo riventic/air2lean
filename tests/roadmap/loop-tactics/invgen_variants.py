@@ -57,7 +57,11 @@ CLIENTS = {
     'lists': {'root': '.', 'mutants': f'{LOOPS}/lists/mutants.json',
               'files': ['Proofs/Lists/Linked.lean', 'Proofs/Lists/Alloc.lean', 'Proofs/Lists/Bounded.lean',
                         f'{LOOPS}/Queue.lean'],
-              'source': ('examples/lists/lists.zig', r'pub const Node = (?:extern )?struct \{.*?\n\};\n')},
+              'source': ('examples/lists/lists.zig', r'pub const Node = (?:extern )?struct \{.*?\n\};\n'),
+              # `Node` as an `extern struct`: `val` at offset 0, `next` at 8. The generator follows
+              # (scripts/invgen.py PARTIAL); `Linked.node` states `next` at 0 and `val` at 8.
+              'rejected': {'layout': {'file': 'Proofs/Lists/Linked.lean', 'in': ['reverse_thread', 'sum_total'],
+                                      'families': ['reverse.loop6', 'sum.loop6']}}},
 }
 
 
@@ -112,6 +116,36 @@ def mutate(client, overlay, vroot, work, mutant, spans):
     return None
 
 
+def rejected(name, expected, overlay, vroot, root):
+    """The errors of a variant whose layout a hand-written file states otherwise: the generator
+    still finds an invariant for each loop of `expected['families']`, and `expected['file']` is
+    rejected inside each theorem of `expected['in']` (its specification does not hold of this
+    translation: it is not proved of it, and it is not regenerated either)."""
+    prefix = invgen.integrity()['INVGEN_PREFIX'].decode()
+    families = {}
+    for root_, _, target in invgen.variants():
+        if root_ == vroot:
+            record = json.loads((ROOT / target[0]).read_text().split('\n', 1)[0][len(prefix):])
+            families.update({e['loop']: e.get('family') for e in record['loops']})
+    missing = [loop for loop in expected['families'] if not families.get(loop)]
+    if missing:
+        return [f"{vroot}: no generated invariant for {', '.join(missing)}"]
+    file = expected['file']
+    try:
+        result = overlay.elaborate(file, root)
+    except lean_overlay.Failed as error:
+        return [f'{vroot}: {error}:\n{error.output[-3000:]}']
+    spans = invgen_mutants.spans(ROOT / file)
+    lines = [int(n) for n in re.findall(re.escape(Path(file).name) + r':(\d+):\d+: error', result.stdout)]
+    kept = [t for t in expected['in'] if not any(spans[t][0] <= n < spans[t][1] for n in lines)]
+    if result.returncode == 0 or kept:
+        return [f"{vroot}: {file} states another layout and must be rejected in {', '.join(expected['in'])}; "
+                f"not rejected: {', '.join(kept) or 'the file'}"]
+    print(f"{name}/{Path(vroot).name}: invariants generated for {', '.join(expected['families'])}; "
+          f"{file}, which states the first layout, is rejected in {', '.join(expected['in'])}", flush=True)
+    return []
+
+
 def check(name, client, vroot, work):
     """The errors of the variant at `vroot`."""
     variant = Path(vroot).name
@@ -129,6 +163,8 @@ def check(name, client, vroot, work):
     # Lake package).
     overlay = lean_overlay.Overlay([vroot] + ([client['root']] if client['root'] != '.' else []),
                                    work / 'olean')
+    if variant in client.get('rejected', {}):
+        return rejected(name, client['rejected'][variant], overlay, vroot, client['root'])
     try:
         for file in client['files']:
             overlay.check(file, client['root'])

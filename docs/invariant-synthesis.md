@@ -876,6 +876,38 @@ Clients (instances, not special cases): `Proofs/Lists/OpenInv.lean` (`sum.loop6`
 `sumInv`, `sumPost`, `sum_step`, `freeInvExact`, `freePost`, `freeAll_step_nil_exact`,
 `freeAll_step_cons_exact`, `freeAll_step_exact` and `freeAll_loop_exact` are deleted.
 
+### Implemented: retranslation needs a regeneration only
+
+The acceptance sentence "retranslation for another Zig version or with permuted struct fields
+needs regeneration only" is checked mechanically for every client of the generator
+(`tests/roadmap/loop-tactics/check-variants.sh`, CI step "Retranslated loop-invariant clients").
+
+A **variant** of a client is a fixture root that holds another translation of the same program
+under the module names of the first one, and the `Inv.lean` files generated from it
+(`scripts/invgen.py` `VARIANTS`; the translations are rows of `scripts/gen-integrity.py`
+`FIXTURES`, the invariants targets of `scripts/invgen.py`, so `scripts/regen.sh` regenerates both
+and preflight checks their records like the first translation's). The hand-written files, the
+specifications and the proofs, exist once. For each variant `invgen_variants.py`
+
+1. checks that the translation is the translator's output for the variant's committed AIR and
+   that each `Inv.lean` is the generator's output for that translation: the two regenerations;
+2. elaborates the client's hand-written files against the variant, unchanged
+   (`scripts/lean_overlay.py`: the variant's modules replace the first translation's, each
+   module that imports a replaced one is compiled again, and Lean's search path has the
+   replacements in front of the Lake package's own library);
+3. applies each seeded mutant of the client's `mutants.json` to the variant's generated
+   invariants and requires the proof to fail inside the mutant's theorems.
+
+| Client | First translation | Variants |
+|---|---|---|
+| `tests/roadmap/loop-tactics/counted` (`Proof.lean`, 14 mutants) | Zig 0.17.1 | 0.16.0, 0.15.2, 0.14.1 |
+| `tests/roadmap/loop-tactics/nested` (`Proof.lean`) | Zig 0.16.0 | 0.17.1, 0.15.2, 0.14.1 |
+| the linked list of `Proofs/Lists` (`Linked.lean`, `AllocNode.lean`, `Alloc.lean`, `Bounded.lean`, `loop-tactics/Queue.lean`; mutants `loop-tactics/lists/mutants.json`) | Zig 0.17.1 | 0.16.0, 0.15.2, 0.14.1 (the AIR of `tests/roadmap/interfaces`), `permuted`, `layout` |
+
+The list's `permuted` variant is `examples/lists/lists.zig` with the fields of `Node` in the other
+order (`tests/roadmap/loop-tactics/lists/permuted/lists.zig`; the check requires that the two
+sources differ in nothing else).
+
 What the slices do not have yet (next slices, sizes S < M < L):
 
 | Next | Content | Size |

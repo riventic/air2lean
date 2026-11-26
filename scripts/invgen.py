@@ -68,13 +68,25 @@ VARIANTS = {
 }
 
 
+# A variant that has only these targets of the first translation. The list's `layout` variant
+# (`Node` an `extern struct`, so `val` is at offset 0 and `next` at 8) has the invariants of the
+# walks that need no contract; the hand-written files state the first layout (`Linked.node`,
+# `AllocNode.nodeRest`) and are rejected for it, so the contract of `AllocInv.lean`'s loop does not
+# exist there (docs/invariant-synthesis.md, "Retranslation": a layout that a specification states
+# is not regenerated).
+PARTIAL = {
+    'tests/roadmap/loop-tactics/lists/variants/layout': ['Proofs/Lists/OpenInv.lean'],
+}
+
+
 def variants(first=FIRST):
     """`(variant root, path of the first translation's target, the variant's target)` for each
-    target of `first` and each variant of its root."""
+    target of `first` and each variant of its root that has it."""
     return [(f'{directory}/{name}', path,
              (f'{directory}/{name}/{Path(path).relative_to(root).as_posix()}', f'{directory}/{name}', module, namespace))
             for path, root, module, namespace in first
-            for directory, names in [VARIANTS.get(root, ('', []))] for name in names]
+            for directory, names in [VARIANTS.get(root, ('', []))] for name in names
+            if path in PARTIAL.get(f'{directory}/{name}', [path])]
 
 
 # Every generated file: (Inv.lean, fixture root, translated module, its namespace)
