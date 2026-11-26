@@ -69,7 +69,9 @@ and a dropped asm fault-condition premise (`scripts/claims.py`), the perf-budget
 and trust report (`scripts/validate-air.py`, `scripts/trust-report.py`), the ABI probe
 (`scripts/abi-probe.py`), the Q01 generator's type checker and evaluator
 (`tests/roadmap/fuzz/zig_gen.py`), the native/wasm32 relation (`scripts/wasm-correspondence.py`)
-and the C front-end record (`tests/roadmap/c-frontend/run.py`). Each one replaces one exact anchor, compiles the result under the
+the C front-end record (`tests/roadmap/c-frontend/run.py`) and the fail-closed gates of fast math
+(F03: the `*_optimized` rejection rows of `scripts/coverage.py`, the tested sources of
+`scripts/build-modes.py`). Each one replaces one exact anchor, compiles the result under the
 script's own path, swaps it into the loaded regression test module and runs only the named
 killing tests. The control (unmutated) must pass those tests. The mutant is killed only by an
 assertion failure. A test error such as a crash does not count.
@@ -96,6 +98,25 @@ message. A mutant that passes or fails for another reason aborts the check: a su
 The seeded mutants of the generated loop invariants (`tests/roadmap/loop-tactics/<fixture>/mutants.json`,
 P09) follow the same rule in `tests/roadmap/loop-tactics/invgen_mutants.py`: the mutated `Inv.lean`
 must elaborate and the proof must fail inside the mutant's named theorems.
+
+Three more runners report kills of mutants that are not edits of a retained translation:
+
+- `tests/roadmap/packed-casts/check.sh` (L07): each line of `expected/wrong.txt` is the result of a
+  wrong model of a cast. Put in place of the model's line of that name, it must fail the comparison
+  with the retained native observation. The mutant's name is the line's name and its map entry's
+  `anchor` is the line.
+- `tests/roadmap/air-semantics/test_lean.py` (V01, V02): the named one-operator changes of the AIR
+  a committed certificate embeds (`MUTATIONS`), each rejected in its function's theorem; a guessed
+  motive order of a recursive clique; and the wrong canonical functions of `CanonBinding.lean`
+  (`BINDING_MUTANTS`), which the native bindings must not bind.
+- `tests/roadmap/sc-order/mutations.py` (C10): mutants of `Sc.lean`'s oracle of the sequentially
+  consistent outcomes and of its observation check. A mutant is killed by a failing `#guard` that
+  includes the ORD-03 one, by a committed observation it rejects, or by a wrong observation
+  (`BAD_OBSERVATIONS`) that it accepts and the unmutated check rejects.
+
+A research row has mutants only for code that exists. Where a row is a design without an
+implementation (C13, F02), or the mutants cover only part of it (C10, F03, V01, V02), the entry's
+`note` says so and names the mutants that are due with the implementation.
 
 ## Kill evidence
 
