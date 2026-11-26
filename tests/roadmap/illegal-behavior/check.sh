@@ -4,7 +4,7 @@
 #   - translates each probe.zig function alone (probe-air/) and checks expected.json;
 #   - runs Runtime.lean (runtime ops) and Cases.lean (generated functions) and the
 #     emitter-output mutants of mutations.py, each of which Cases.lean must reject.
-# The AIR (air/, probe-air/, for-air/<version>/) is declared in exports.json and pinned by
+# The AIR (air/, probe-air/, for-air/, align-air/ and shift-air/<version>/) is declared in exports.json and pinned by
 # exports.lock.json (checked here; scripts/fixture-exports.py verify illegal-behavior re-exports it).
 # Optional: AIR2LEAN_ZIG=stock 0.16.0 zig reruns native.zig in ReleaseSafe and ReleaseFast and compares
 # its rows with native/<mode>.txt.
@@ -34,6 +34,16 @@ for version in 0.17.1 0.16.0 0.15.2 0.14.1; do
     --prefix aligncast.
   cat "$here/AlignCases.lean" >> "$work/Align-$version.lean"
   lake env lean --run "$work/Align-$version.lean"
+done
+
+# Shifts of a 24-bit integer with Sema's shift-amount check on some paths only (shiftguard.zig,
+# row 14), every supported version: a shift is total only where its own check guards it, and
+# every other one gives `.illegal` for an amount of 24 or more (ShiftCases.lean).
+for version in 0.17.1 0.16.0 0.15.2 0.14.1; do
+  lake exe air2lean "$here/shift-air/$version" -o "$work/Shift-$version.lean" --namespace ShiftGuard \
+    --prefix shiftguard.
+  cat "$here/ShiftCases.lean" >> "$work/Shift-$version.lean"
+  lake env lean --run "$work/Shift-$version.lean"
 done
 
 python3 -B "$here/mutations.py" "$work/Gen.lean" "$work/mutants"

@@ -900,6 +900,8 @@ structure FCtx where
   exactFloatDivs : Array InstId := #[]
   /-- The sentinel slicings that a Sema check compares (`sentinelCheckedSlices`). -/
   sentinelChecked : Array InstId := #[]
+  /-- The instruction list of the body and of each nested body (`bodyLists`). -/
+  bodies : Array (Array Inst) := #[]
   /-- This function is in a recursive call group (`callGroups`): its call depth is not bounded
   by the call graph, so a function that uses memory charges its frame to the stack budget
   (`Zig.enterFrame`, MM-5). -/
@@ -1713,16 +1715,42 @@ def FCtx.nullableVal (fc : FCtx) (v : Val) : Bool :=
 /-- `t` is an ordinary optional single/many pointer (`?*T`, `?[*]T`), `Option Zig.Ptr`. -/
 def FCtx.isOptScalarPtr (fc : FCtx) (t : Ty) : Bool := optScalarPtr fc.types t
 
-/-- `count` is checked by Sema's shift-amount safety check against the width `w`: the function
-calls the `shiftRhsTooBig` panic handler and compares exactly this count `< w`. -/
-def FCtx.shiftCountGuarded (fc : FCtx) (count : Val) (w : Nat) : Bool :=
-  let insts := fc.allInsts
-  insts.any (fun i => match i.op with
-      | .call callee _ => panicMember? (fc.resolveCallee callee).2 == some "shiftRhsTooBig"
-      | _ => false) &&
-    insts.any fun i => match i.op with
-      | .cmp .lt c (.int _ k) => c == count && k == w
+/-- Sema's shift-amount safety check of this shift's own `count` against the width `w` guards
+the shift instruction `shift`. The check is a block whose only instruction branches on
+`count < w` and whose false branch does nothing but call the `shiftRhsTooBig` panic handler.
+It guards the shift in two places of the shift's own instruction list:
+
+* before it (`<<`): control reaches the instructions after the block only through its true
+  branch, so the shift runs with `count < w`;
+* right after it, with only the comparison between (`>>`): the out-of-range result is LLVM
+  poison that nothing uses before the panic.
+
+A check anywhere else in the function (another scope, another branch, later with other
+instructions between) does not guard this shift
+(`docs/architecture-audit/2026-11-26-shift-count-guard.md`). -/
+def FCtx.shiftCountGuarded (fc : FCtx) (shift : InstId) (count : Val) (w : Nat) : Bool :=
+  let real (insts : Array Inst) := insts.filter fun i => !(i.op matches .line _ | .dbg ..)
+  let isCompare (i : Inst) : Bool := match i.op with
+    | .cmp .lt x (.int _ k) => x == count && k == w
+    | _ => false
+  let countBelowWidth (c : Val) : Bool := match c with
+    | .inst id => fc.allInsts.any fun i => i.id == id && isCompare i
+    | _ => false
+  let panics (insts : Array Inst) : Bool := match real insts with
+    | #[⟨_, _, .call callee _⟩, ⟨_, _, .unreach⟩] =>
+      panicMember? (fc.resolveCallee callee).2 == some "shiftRhsTooBig"
+    | _ => false
+  let check (i : Inst) : Bool := match i.op with
+    | .block body => match real body with
+      | #[⟨_, _, .condBr c _ els⟩] => countBelowWidth c && panics els
       | _ => false
+    | _ => false
+  fc.bodies.any fun body => match body.findIdx? (·.id == shift) with
+    | some k =>
+      (body.extract 0 k).any check ||
+        -- The shift first (`>>`): nothing but the comparison is between it and the check.
+        (((real (body.extract (k + 1) body.size)).toList.dropWhile isCompare).head?.any check)
+    | none => false
 
 /-- `v` is a volatile pointer (L13: a device access with `--device-contract`). -/
 def FCtx.isVolatileVal (fc : FCtx) (v : Val) : Bool :=
@@ -2711,12 +2739,12 @@ def emitScalar (fc : FCtx) (env : Array (InstId × String)) (inst : Inst) :
   | .shift op a b =>
     let sgn := if fc.valSigned a then "true" else "false"
     -- The count of a width that is not a power of two can reach the width: illegal behaviour
-    -- that only a safety check (`shiftRhsTooBig`) catches (`Zig.shiftCountOk`). Under that
-    -- check (`fc.shiftCountGuarded`) Sema may emit the shift before it: the out-of-range result
-    -- is LLVM poison that is never used, and the panic follows, so the shift itself is total.
+    -- that only a safety check (`shiftRhsTooBig`) catches (`Zig.shiftCountOk`). A shift
+    -- that runs only after that check of its own count has passed (`fc.shiftCountGuarded`) is
+    -- total; every other one checks its count itself (`Zig.shlChk`, `Zig.shrChk`).
     let countChecked := match fc.valTy a, b with
       | .int _ w, .int _ k => k < w || k == 0
-      | .int _ w, _ => w &&& (w - 1) == 0 || fc.shiftCountGuarded b w  -- a power of two (or `u0`)
+      | .int _ w, _ => w &&& (w - 1) == 0 || fc.shiftCountGuarded inst.id b w  -- a power of two (or `u0`)
       | _, _ => true
     let expr := match op with
       | .shl => if countChecked then s!"pure (Zig.shl {rv a} {rv b})" else s!"Zig.shlChk {rv a} {rv b}"
@@ -4069,7 +4097,8 @@ private def mkFCtxUnprepared (f : Func) (structNames : Array (String × String))
       conc := concFuncs.contains f.name, concFuncs, openFnTys := f.openFnTys,
       abiCalls := f.abiCalls, escaping := escapingAllocs f, globalIds, byteLocals := byteLocals f, rawFuncs,
       rawRet := rawFuncs.contains f.name,
-      exactFloatDivs := exactFloatDivs allInsts, sentinelChecked := sentinelCheckedSlices allInsts }
+      exactFloatDivs := exactFloatDivs allInsts, sentinelChecked := sentinelCheckedSlices allInsts,
+      bodies := bodyLists f.body }
   let fc := { fc with places := fc.computePlaces, bytePlaces := fc.computeBytePlaces }
   { fc with rawInsts := fc.computeRawInsts fc.rawRet }
 
