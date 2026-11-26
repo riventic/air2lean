@@ -25,6 +25,9 @@ nothing else.
 The model has no addresses, symbols, branches or instruction pointer (`Instr` has no such
 operand, and the decoder rejects a template with one), so a block's value cannot depend on where
 its code is loaded: there is nothing to prove about the load address.
+
+Two memory operands are two locations of the machine state here, as in the model. That they do
+not overlap is the effect contract's (premise ASM-03), not a fact about placement.
 -/
 
 namespace Zig.Isa.X86
@@ -112,11 +115,7 @@ def Instr.locs : Instr → List Loc
   | .xchg _ a b => [a, b]
   | .div _ src => [src]
 
-namespace Block
-
-def operandLocs (b : Block) : List Loc := b.inputLocs ++ b.outputLocs
-
-end Block
+def Block.operandLocs (b : Block) : List Loc := b.inputLocs ++ b.outputLocs
 
 /-- What the compiler guarantees of a placement (the residue of premise ASM-07 item 4):
 
@@ -148,6 +147,14 @@ names a memory operand after a register of its address changed (it would access 
 def Placement.run (P : Placement) (p0 : State) : List Instr → State → Option State
   | [], p => some p
   | i :: rest, p => if i.locs.all (P.intact p0 p) then P.run p0 rest (i.step p) else none
+
+/-- The placed block on the machine, from the entry state `p0`. -/
+def Placement.exec (P : Placement) (b : Block) (p0 : State) : Option State :=
+  P.run p0 (b.instrs.map (Instr.place P.loc)) p0
+
+/-- The first fault of the placed block on the machine, from the entry state `p0`. -/
+def Placement.fault (P : Placement) (b : Block) (p0 : State) : Option Fault :=
+  faultInstrs (b.instrs.map (Instr.place P.loc)) p0
 
 /-- Output `k` of the block in the machine state `p`. -/
 def Placement.out (P : Placement) (b : Block) (p : State) (k : Nat) : BitVec 64 :=
@@ -389,7 +396,7 @@ theorem Sim.read {P : Placement} {b : Block} {p0 : State} {t : Track} {s p : Sta
 /-- One checked write keeps the invariant. -/
 theorem Sim.write {P : Placement} {b : Block} {p0 : State} {t : Track} {s p : State}
     (hP : P.Admissible b) (h : Sim P b p0 t s p) (l : Loc) (w : Width) (v : BitVec w.bits)
-    (hw : b.writable l = true) (hst : ¬(l.isMem = true ∧ l ∈ t.stale)) :
+    (hw : b.writable l = true) :
     Sim P b p0 (t.write b l w) (s.set w l v) (p.set w (P.loc l) v) := by
   have hwc := Block.writable_cases hw
   have hout_op : ∀ {x}, x ∈ b.outputLocs → x ∈ b.operandLocs := fun hx =>
@@ -574,9 +581,9 @@ theorem Sim.writes {P : Placement} {b : Block} {p0 : State} (hP : P.Admissible b
       · cases hok
       · split at hok
         · cases hok
-        · rename_i h1 h2 h3
+        · rename_i _ h2 _
           simp only [List.map_cons, List.foldl_cons]
-          exact ih (h.write hP e.l e.w e.v (by simpa using h2) (by simpa using h3)) hok
+          exact ih (h.write hP e.l e.w e.v (by simpa using h2)) hok
 
 /-- One checked instruction: its memory operands are accessible on the machine, it keeps the
 invariant, and it faults on the machine exactly when the model's does. -/
@@ -667,9 +674,8 @@ placed instructions run (each memory operand is accessed while its address is in
 output holds the value that the model computes, and the fault is the model's. -/
 theorem Block.check_placement {b : Block} (hc : b.check = none) {P : Placement}
     (hP : P.Admissible b) {vals : List (BitVec 64)} {p0 : State} (h0 : P.Entry b vals p0) :
-    ∃ p, P.run p0 (b.instrs.map (Instr.place P.loc)) p0 = some p ∧
-      (∀ k, P.out b p k = b.out vals k) ∧
-      faultInstrs (b.instrs.map (Instr.place P.loc)) p0 = b.fault vals := by
+    ∃ p, P.exec b p0 = some p ∧ (∀ k, P.out b p k = b.out vals k) ∧
+      P.fault b p0 = b.fault vals := by
   simp only [Block.check] at hc
   split at hc
   · cases hc
@@ -715,11 +721,8 @@ outputs and the same fault: the value of a checked block depends on neither. -/
 theorem Block.placement_independent {b : Block} (hc : b.check = none) {P Q : Placement}
     (hP : P.Admissible b) (hQ : Q.Admissible b) {vals : List (BitVec 64)} {p0 q0 : State}
     (hp : P.Entry b vals p0) (hq : Q.Entry b vals q0) :
-    ∃ p q, P.run p0 (b.instrs.map (Instr.place P.loc)) p0 = some p ∧
-      Q.run q0 (b.instrs.map (Instr.place Q.loc)) q0 = some q ∧
-      (∀ k, P.out b p k = Q.out b q k) ∧
-      faultInstrs (b.instrs.map (Instr.place P.loc)) p0 =
-        faultInstrs (b.instrs.map (Instr.place Q.loc)) q0 := by
+    ∃ p q, P.exec b p0 = some p ∧ Q.exec b q0 = some q ∧
+      (∀ k, P.out b p k = Q.out b q k) ∧ P.fault b p0 = Q.fault b q0 := by
   obtain ⟨p, hpr, hpo, hpf⟩ := Block.check_placement hc hP hp
   obtain ⟨q, hqr, hqo, hqf⟩ := Block.check_placement hc hQ hq
   exact ⟨p, q, hpr, hqr, fun k => (hpo k).trans (hqo k).symm, hpf.trans hqf.symm⟩

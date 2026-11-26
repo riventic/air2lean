@@ -43,7 +43,7 @@ def only (r : Fin 16) (v : BitVec 64) : State := fun l => if l = .reg r then v e
 
 /-- The outputs of the placed block on the machine, from `p0`. -/
 def machine (P : Placement) (b : Block) (p0 : State) (k : Nat) : Option (BitVec 64) :=
-  (P.run p0 (b.instrs.map (Instr.place P.loc)) p0).map (P.out b · k)
+  (P.exec b p0).map (P.out b · k)
 
 /-! ## `"stale-read-unchecked"` -/
 
@@ -93,8 +93,7 @@ theorem staleAddress_entry : addressInOutput.Entry staleAddress [7] (only 1 7) :
 
 /-- The second instruction stores through `rax`, which no longer holds the address. -/
 theorem staleAddress_differs :
-    addressInOutput.run (only 1 7) (staleAddress.instrs.map (Instr.place addressInOutput.loc))
-      (only 1 7) = none := by
+    addressInOutput.exec staleAddress (only 1 7) = none := by
   rfl
 
 /-! ## `"undefined-read-unchecked"` -/
@@ -217,7 +216,7 @@ theorem lzcnt_admissible : shared.Admissible lzcnt := by
 /-- The theorem's hypotheses are satisfiable with both operands in one register, and its
 conclusion is what the machine computes: `lzcnt(1) = 63`. -/
 theorem lzcnt_shared (x : BitVec 64) (p0 : State) (h : p0 (.reg 0) = x) :
-    ∃ p, shared.run p0 (lzcnt.instrs.map (Instr.place shared.loc)) p0 = some p ∧
+    ∃ p, shared.exec lzcnt p0 = some p ∧
       shared.out lzcnt p 0 = lzcnt.out [x] 0 := by
   have hentry : shared.Entry lzcnt [x] p0 := by
     simp [Placement.Entry, lzcnt, shared, Placement.loc, initState, State.get, h]
