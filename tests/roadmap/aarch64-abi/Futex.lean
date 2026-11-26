@@ -11,7 +11,8 @@ aarch64-macos-none, under the scheduler (`Zig.Sched.runTrace`), over every sched
 choice of the oracle (`outcomes`; a choice among more than `width` options is cut to its first
 `width`, which only removes outcomes). The model's rows are the same for every Zig version.
 
-`lake env lean --run tests/roadmap/aarch64-abi/Futex.lean TRIPLE FILE` fails unless
+`lake env lean --run tests/roadmap/aarch64-abi/Futex.lean TRIPLE FILE...` fails unless, for each
+file,
 
 * the file has exactly one well-formed row for every case of the profile, and no other `futex`
   row, and
@@ -250,7 +251,7 @@ def wakeRun (all : Bool) (at_ : Ptr → Option Ptr) : List String :=
 
 /-- The waiter of a one-waiter case: one wait at the word (0) for 0; its return goes to `slot`. -/
 def waiter (old timed : Bool) : Tgt → ConcM Tgt Unit := fun _ => do
-  let r ← wait old (some p0) 0 (if !timed then 0 else if old then 60000000 else 0xffffffff)
+  let r ← wait old (some p0) 0 (if !timed then 0 else if old then 60000000 else 60000000000)
   lift (store 4 slot r)
 
 /-- One waiter and a waker that repeats `__ulock_wake` (here: twice) while it returns `-ENOENT`:
@@ -481,15 +482,13 @@ def forbidden : List (String × String × String) := [
 -- Every refused case is a case of some profile.
 #guard refused.all fun name => (linuxCases ++ macosCases).any (·.1 == name)
 
-def main (args : List String) : IO UInt32 := do
-  let [triple, path] := args
-    | IO.eprintln "usage: Futex.lean aarch64-linux-gnu|aarch64-macos-none FILE"; return 2
-  let some (os, cases) := casesOf triple
-    | IO.eprintln s!"aarch64-abi futex: no cases for {triple}"; return 2
+/-- Checks the `futex` rows of the file at `path` against `cases` (those of `triple`, whose
+files have the line `meta os <os>`): whether every row passed. -/
+def checkFile (triple os : String) (cases : List (String × Shape)) (path : String) : IO Bool := do
   let lines := ((← IO.FS.readFile path).splitOn "\n").map (·.splitOn " " |>.filter (!·.isEmpty))
   unless lines.contains ["meta", "os", os] do
     IO.eprintln s!"aarch64-abi futex: {path}: no `meta os {os}` line (not a {triple} file)"
-    return 1
+    return false
   let rows := lines.filter (·.headD "" == "futex")
   let mut bad : List String := []
   -- A malformed, unknown or repeated row is a failure, not a skipped case.
@@ -521,10 +520,22 @@ def main (args : List String) : IO UInt32 := do
     else if shape.accepts value then matched := matched + 1
     else bad := bad ++ [s!"{name}: native `{value}` is not an outcome of the model: {shape.model}"]
   for b in bad.eraseDups do IO.eprintln s!"aarch64-abi futex: {path}: {b}"
-  unless bad.isEmpty do return 1
-  IO.println s!"aarch64-abi futex: {triple}: {matched} native futex results are outcomes of the \
-    model's OS rows (OSF-01, OSF-02); {refusals} calls the model refuses (none counted as matches)"
-  return 0
+  unless bad.isEmpty do return false
+  IO.println s!"aarch64-abi futex: {path}: {triple}: {matched} native futex results are outcomes \
+    of the model's OS rows (OSF-01, OSF-02); {refusals} calls the model refuses (none counted as \
+    matches)"
+  return true
+
+def main (args : List String) : IO UInt32 := do
+  let triple :: paths@(_ :: _) := args
+    | IO.eprintln "usage: Futex.lean aarch64-linux-gnu|aarch64-macos-none FILE..."; return 2
+  let some (os, cases) := casesOf triple
+    | IO.eprintln s!"aarch64-abi futex: no cases for {triple}"; return 2
+  -- The model's rows do not depend on the Zig version: one run of the cases for every file.
+  let mut ok := true
+  for path in paths do
+    unless ← checkFile triple os cases path do ok := false
+  return if ok then 0 else 1
 
 end T04Futex
 

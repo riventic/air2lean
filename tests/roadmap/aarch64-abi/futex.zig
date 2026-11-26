@@ -11,7 +11,8 @@
 //! failure), or a list of them. Every row is the same on every run: a threaded case records only
 //! what does not depend on when its waiters fall asleep (the waker repeats its call until every
 //! waiter has returned, and a case with several waiters records the returns only where each one
-//! is forced). A case that does not finish within its bound prints `stuck`.
+//! is forced). A waker that gives up at its bound prints `stuck` (a `domain` case: a wake return
+//! of 0); a waiter that nothing wakes ends the run at the driver's timeout.
 const std = @import("std");
 const builtin = @import("builtin");
 
@@ -52,9 +53,9 @@ fn ul(wake_all: bool) c.UL {
 
 /// macOS wait: `__ulock_wait2` (nanoseconds) or the older `__ulock_wait` (microseconds); a
 /// timeout of 0 waits without one.
-fn ulockWait(old: bool, addr: usize, val: u32, timeout: u32) isize {
+fn ulockWait(old: bool, addr: usize, val: u32, timeout: u64) isize {
     const p: ?*const anyopaque = @ptrFromInt(addr);
-    return if (old) c.__ulock_wait(ul(false), p, val, timeout) else c.__ulock_wait2(ul(false), p, val, timeout, 0);
+    return if (old) c.__ulock_wait(ul(false), p, val, @intCast(timeout)) else c.__ulock_wait2(ul(false), p, val, timeout, 0);
 }
 
 fn ulockWake(addr: usize, wake_all: bool) isize {
@@ -68,7 +69,7 @@ fn nap(us: u32) void {
         const ts: Timespec = .{ .sec = 0, .nsec = @as(isize, us) * 1000 };
         _ = futex(@intFromPtr(&word), WAIT | PRIVATE, 0, &ts);
     } else {
-        _ = ulockWait(false, @intFromPtr(&word), 0, us * 1000);
+        _ = ulockWait(false, @intFromPtr(&word), 0, @as(u64, us) * 1000);
     }
 }
 
@@ -95,7 +96,7 @@ const Waiters = struct {
             r = if (is_linux)
                 futex(addr, if (how.shared) WAIT else WAIT | PRIVATE, 0, if (how.timed) &long else null)
             else
-                ulockWait(how.old, addr, 0, if (!how.timed) 0 else if (how.old) 60_000_000 else std.math.maxInt(u32));
+                ulockWait(how.old, addr, 0, if (!how.timed) 0 else if (how.old) 60_000_000 else 60_000_000_000);
         }
         self.codes[i] = r;
         _ = @atomicRmw(u32, &self.done, .Add, 1, .seq_cst);

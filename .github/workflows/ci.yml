@@ -2214,11 +2214,10 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
-          for version in 0.17.1 0.16.0 0.15.2 0.14.1; do
-            for triple in aarch64-linux-gnu aarch64-macos-none; do
-              lake env lean --run tests/roadmap/aarch64-abi/Futex.lean "$triple" \
-                "tests/roadmap/aarch64-abi/expected/$version/$triple-ReleaseSafe.txt"
-            done
+          for triple in aarch64-linux-gnu aarch64-macos-none; do
+            files=(tests/roadmap/aarch64-abi/expected/*/"$triple"-ReleaseSafe.txt)
+            [ "${#files[@]}" -eq 4 ]
+            lake env lean --run tests/roadmap/aarch64-abi/Futex.lean "$triple" "${files[@]}"
           done
 
       - name: aarch64 ABI profile proofs (T04, 0.16.0)
