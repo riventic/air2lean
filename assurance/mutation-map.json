@@ -1641,16 +1641,16 @@
       ],
       "negative_tests": [
         {
-          "path": "tests/roadmap/byte-sentinel/Check.lean",
-          "anchor": "| .error _ => pure false"
+          "path": "tests/roadmap/interfaces/Interfaces/RawNeg.lean",
+          "anchor": "theorem take_zero"
         },
         {
-          "path": "tests/roadmap/sentinel-realloc/Check.lean",
-          "anchor": "\"payload-only realloc\""
+          "path": "tests/roadmap/interfaces/Interfaces/RawNeg.lean",
+          "anchor": "theorem give_other_length"
         },
         {
-          "path": "tests/roadmap/sentinel-realloc/Check.lean",
-          "anchor": "\"non-power-of-two alignment\""
+          "path": "tests/roadmap/interfaces/Interfaces/RawNeg.lean",
+          "anchor": "theorem give_other_alignment"
         },
         {
           "path": "ZigLean/Sep/Full/SentinelBuf.lean",
@@ -1716,9 +1716,24 @@
           "name": "grow-absorb-omits-sentinel",
           "path": "tests/roadmap/callbacks/mutants.py",
           "category": "layout"
+        },
+        {
+          "name": "sentinel-realloc-failure-clobbers-old",
+          "path": "tests/roadmap/callbacks/mutants.py",
+          "category": "failure-cleanup"
+        },
+        {
+          "name": "sentinel-realloc-move-omits-copy",
+          "path": "tests/roadmap/callbacks/mutants.py",
+          "category": "layout"
+        },
+        {
+          "name": "raw-free-alignment-is-one",
+          "path": "tests/roadmap/callbacks/mutants.py",
+          "category": "layout"
         }
       ],
-      "note": "byte-sentinel and mutate.sh s mutate the retiring hand model (ZigLean/Mem/Alloc.lean); the sentinel-* mutants mutate the translated std allocator path (interfaces/Interfaces/Sentinel.lean), killed by the unchanged Interfaces.SentinelSpec in interfaces/check.sh; the wide-* mutants mutate the same path for item types wider than a byte (interfaces/Interfaces/Wide.lean: u16, u32, u64), killed by the unchanged Interfaces.WideSpec there; grow-absorb-omits-sentinel mutates std's sentinel accounting in realloc/remap/resize/free of a sentinel slice itself (mem.absorbSentinel in interfaces/Interfaces/Grow.lean), killed by the unchanged Interfaces.GrowSpec there."
+      "note": "byte-sentinel and mutate.sh s mutate the retiring hand model (ZigLean/Mem/Alloc.lean); the sentinel-* mutants mutate the translated std allocator path (interfaces/Interfaces/Sentinel.lean), killed by the unchanged Interfaces.SentinelSpec in interfaces/check.sh; the wide-* mutants mutate the same path for item types wider than a byte (interfaces/Interfaces/Wide.lean: u16, u32, u64), killed by the unchanged Interfaces.WideSpec there; grow-absorb-omits-sentinel mutates std's sentinel accounting in realloc/remap/resize/free of a sentinel slice itself (mem.absorbSentinel in interfaces/Interfaces/Grow.lean), killed by the unchanged Interfaces.GrowSpec there; sentinel-realloc-failure-clobbers-old (the old buffer made undefined before OutOfMemory) and sentinel-realloc-move-omits-copy mutate the u8 realloc path, killed by SentinelSpec.realloc_spec; raw-free-alignment-is-one mutates a raw precondition (interfaces/Interfaces/Raw.lean), killed by RawSpec.give_spec. The negative tests are over the contract (Interfaces/RawNeg.lean: a raw call without a precondition has no proof); the hand-model checks byte-sentinel/Check.lean and sentinel-realloc/Check.lean are no evidence for this row."
     },
     "M05": {
       "categories": [
@@ -2573,6 +2588,38 @@
         {
           "path": "tests/roadmap/counterexamples/test_goal.py",
           "anchor": "def test_correct_loop_has_no_counterexample"
+        },
+        {
+          "path": "tests/roadmap/counterexamples/test_goal.py",
+          "anchor": "def test_unsupported_types_are_rejected_with_the_reason"
+        },
+        {
+          "path": "tests/roadmap/counterexamples/test_goal.py",
+          "anchor": "def test_values_rows_literals_and_native_results_follow_the_kind"
+        },
+        {
+          "path": "tests/roadmap/counterexamples/test_goal.py",
+          "anchor": "def test_domains_are_exhaustive_only_when_finite"
+        },
+        {
+          "path": "tests/roadmap/counterexamples/test_goal.py",
+          "anchor": "def test_the_postcondition_is_decided_on_the_native_outcome"
+        },
+        {
+          "path": "tests/roadmap/counterexamples/test_goal.py",
+          "anchor": "def test_no_correct_twin_is_reported"
+        },
+        {
+          "path": "tests/roadmap/counterexamples/test_goal.py",
+          "anchor": "def test_native_program_without_the_bug_never_confirms_the_violation"
+        },
+        {
+          "path": "tests/roadmap/counterexamples/test_goal.py",
+          "anchor": "def test_a_slice_the_function_writes_is_rejected_with_the_reason"
+        },
+        {
+          "path": "tests/roadmap/counterexamples/test_row.py",
+          "anchor": "def test_from_case_decides_a_stated_postcondition_on_the_row"
         }
       ],
       "mutants": [
@@ -2869,6 +2916,14 @@
         {
           "path": "tests/roadmap/air-semantics/PlacementCounterexample.lean",
           "anchor": "theorem promoted_lt"
+        },
+        {
+          "path": "tests/roadmap/air-semantics/SemArms.lean",
+          "anchor": "bad \"arith.add.checked.overflow\""
+        },
+        {
+          "path": "tests/roadmap/air-semantics/SemArms.lean",
+          "anchor": "stuckOn \"call.arg.type\""
         }
       ],
       "mutants": [
@@ -2936,9 +2991,534 @@
           "name": "parsedigit-wrong-error",
           "path": "tests/roadmap/air-semantics/test_lean.py",
           "category": "other"
+        },
+        {
+          "name": "arith-add-checked-wraps",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "arith-add-unchecked-panics",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "arith-add-wrap-saturates",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "arith-add-sat-wraps",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "arith-sub-checked-wraps",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "arith-sub-unchecked-panics",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "arith-sub-wrap-saturates",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "arith-sub-sat-wraps",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "arith-mul-checked-wraps",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "arith-mul-unchecked-panics",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "arith-mul-wrap-saturates",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "arith-mul-sat-wraps",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "intbin-operands-swapped",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "operand-order"
+        },
+        {
+          "name": "intbin-signedness-flipped",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "div-trunc-floors",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "div-floor-truncates",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "div-exact-truncates",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "div-rem-as-mod",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "div-mod-as-rem",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "div-ceil-floors",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "minmax-swapped",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "bit-and-as-or",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "bit-or-as-xor",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "bit-xor-as-or",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "bit-bool-and-as-or",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "bit-bool-or-as-and",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "bit-bool-xor-as-or",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "not-bool-identity",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "not-int-identity",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "bool-and-as-or",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "bool-or-as-and",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "cmp-lt-as-le",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "cmp-le-as-lt",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "cmp-gt-as-ge",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "cmp-ge-as-gt",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "cmp-eq-as-ne",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "cmp-ne-as-eq",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "cmp-bool-eq-as-ne",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "cmp-bool-ne-as-eq",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "cmp-ptr-eq-as-ne",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "cmp-ptr-ne-as-eq",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "cmp-ptr-lt-as-le",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "cmp-ptr-le-as-lt",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "cmp-ptr-gt-operands-swapped",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "operand-order"
+        },
+        {
+          "name": "cmp-ptr-ge-operands-swapped",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "operand-order"
+        },
+        {
+          "name": "intcast-unchecked",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "intcast-always-safe",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "intcast-signedness-swapped",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "trunc-result-signedness",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "bitcast-result-signedness",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "ptr-bitcast-untyped",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "opt-nonnull-negated",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "opt-null-not-negated",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "opt-payload-identity",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "opt-wrap-untyped",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "err-iserr-negated",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "err-isnonerr-not-negated",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "err-payload-as-code",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "err-code-as-payload",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "err-wrap-payload-untyped",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "err-wrap-as-payload",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "const-error-unchecked",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "store-dropped",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "store-undef-keeps-bytes",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "load-address-off-by-one",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "field-offset-zero",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "layout"
+        },
+        {
+          "name": "ptr-add-sub-swapped",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "ptr-add-item-size-one",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "layout"
+        },
+        {
+          "name": "elem-ptr-item-size-one",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "layout"
+        },
+        {
+          "name": "elem-ptr-slice-bounds-dropped",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "elem-ptr-array-bounds-dropped",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "elem-val-item-size-one",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "layout"
+        },
+        {
+          "name": "elem-val-array-bounds-dropped",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "array-sentinel-not-an-item",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "slice-elem-bounds-dropped",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "slice-len-untyped",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "slice-ptr-untyped",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "slice-view-ignored",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "cell-undefined-reads-void",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "cell-store-undef-stores-void",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "cell-read-untyped",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "alloc-all-register",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "alloc-block-size-zero",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "layout"
+        },
+        {
+          "name": "frame-not-freed",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "failure-cleanup"
+        },
+        {
+          "name": "arg-index-ignored",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "br-value-dropped",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "cond-branches-swapped",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "switch-item-negated",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "switch-range-exclusive",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "switch-range-unsigned",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "loop-tick-dropped",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "loop-tick-always",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "entry-tick-dropped",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "unreach-as-panic",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "trap-as-unreachable",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "try-payload-runs-error-body",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "call-args-reversed",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "operand-order"
+        },
+        {
+          "name": "call-arg-error-set-unchecked",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "panic-default-as-overflow",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "panic-overflow-as-panic",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "panic-bounds-as-panic",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "panic-start-as-panic",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "panic-zero-as-panic",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "panic-unreachable-as-panic",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "panic-null-as-illegal",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
         }
       ],
-      "note": "Each mutant changes one operator of the AIR a committed certificate embeds (Proofs/<Ex>/AirCert.lean); test_lean.py requires the certificate to fail in that function's theorem, so the interpreter gives the two operators different meanings on that function. The mutants edit the interpreted AIR, not the interpreter's arms (Air2Lean/Sem.lean): a mutant of an arm needs a rebuild of every certificate and is not designated yet. The value kinds outside the fragment have no semantics to mutate."
+      "note": "Two kinds of mutants. test_lean.py changes one operator of the AIR a committed certificate embeds (Proofs/<Ex>/AirCert.lean) and requires the certificate to fail in that function's theorem. mutations.py changes one arm of the interpreter itself (Air2Lean/Sem.lean) per mutant, over every family of arms (arithmetic in each overflow mode, division, bit and boolean operations, comparisons, casts, optionals and error unions, memory, control flow, calls and panic names): the mutated module must still build, SemArms.lean must fail the named checks, and for the arms a committed certificate exercises the certificate must fail in the named theorems. Not mutated, because Sem.lean's own theorems reject the change before any check runs: the block and loop exit arms (`execBody_ok`), the argument check of `execFunc` (`argsOk_cons`, `valOk_int`) and the `Value` accessors (their `rfl` lemmas). The order in which a frame's blocks are freed is not observable in the model (`Zig.free` accepts any live block), so its mutant is equivalent and not designated. The value kinds outside the fragment have no semantics to mutate."
     },
     "V02": {
       "categories": [],
@@ -3022,9 +3602,54 @@
           "path": "tests/roadmap/air-semantics/CanonBinding.lean",
           "category": "other",
           "anchor": "unbound \"wrong function metadata\""
+        },
+        {
+          "name": "version-tags-int-and-as-bool",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "arg-ranks-rank-as-slot",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "operand-order"
+        },
+        {
+          "name": "err-traces-call-without-trace",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "forwarding"
+        },
+        {
+          "name": "alloc-placeholder-read-dropped",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "lane-ptr-read-dropped",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "copy-read-before-store-forwarded",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "forwarding"
+        },
+        {
+          "name": "item-read-past-write",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "true-check-signed-dropped",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "sink-any-nullable-operand",
+          "path": "tests/roadmap/air-semantics/mutations.py",
+          "category": "other"
         }
       ],
-      "note": "The preservation that exists is mutated: a certificate with a wrong view key or a guessed motive order of a recursive clique must fail (test_lean.py), and CanonBinding.lean's wrong canonical functions (a changed ID, body, layout, metadata, offset or initializer for the debug-ID rewrite; a collapsed ID, operand or metadata for `renumber`) must not bind, which test_lean.py checks line by line. The Canon rewrites that are still trusted (`forwardReadOnlyCopies`, `itemReads`, `dropTrueChecks`, the dead-code passes) have no preservation theorem, so no mutant of them can be killed yet."
+      "note": "The preservation that exists is mutated: a certificate with a wrong view key or a guessed motive order of a recursive clique must fail (test_lean.py), and CanonBinding.lean's wrong canonical functions (a changed ID, body, layout, metadata, offset or initializer for the debug-ID rewrite; a collapsed ID, operand or metadata for `renumber`) must not bind, which test_lean.py checks line by line. The nine Canon rewrites that are still trusted (`versionTags`, `argRanks`, `errTraces`, `dropDeadAllocPlaceholders`, `dropDeadRuntimeLanePtrs`, `forwardReadOnlyCopies`, `itemReads`, `dropTrueChecks`, `sinkPastChecks`) have no preservation theorem; mutations.py drops, per rewrite, the condition that makes it meaning-preserving in Air2Lean/Air/Canon.lean, and CanonRewrites.lean must then fail on the raw function on which that condition decides the result. These checks pin each rewrite's condition on one function; they do not replace the preservation theorems, which stay open."
     },
     "V03": {
       "categories": [],

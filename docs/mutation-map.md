@@ -99,7 +99,7 @@ The seeded mutants of the generated loop invariants (`tests/roadmap/loop-tactics
 P09) follow the same rule in `tests/roadmap/loop-tactics/invgen_mutants.py`: the mutated `Inv.lean`
 must elaborate and the proof must fail inside the mutant's named theorems.
 
-Three more runners report kills of mutants that are not edits of a retained translation:
+Four more runners report kills of mutants that are not edits of a retained translation:
 
 - `tests/roadmap/packed-casts/check.sh` (L07): each line of `expected/wrong.txt` is the result of a
   wrong model of a cast. Put in place of the model's line of that name, it must fail the comparison
@@ -109,6 +109,16 @@ Three more runners report kills of mutants that are not edits of a retained tran
   a committed certificate embeds (`MUTATIONS`), each rejected in its function's theorem; a guessed
   motive order of a recursive clique; and the wrong canonical functions of `CanonBinding.lean`
   (`BINDING_MUTANTS`), which the native bindings must not bind.
+- `tests/roadmap/air-semantics/mutations.py` (V01, V02): mutants of the translator's own sources,
+  each applied in a check tree (`scripts/check-tree.py`), where the mutated module must still build.
+  `sem`: one changed arm of the interpreter `Air2Lean/Sem.lean` per mutant, over every family of
+  arms (arithmetic in each overflow mode, division, bit and boolean operations, comparisons,
+  casts, optionals and error unions, memory, control flow, calls). `SemArms.lean`, which states
+  the meaning of each instruction kind on concrete inputs, must fail the checks the mutant names;
+  for the arms a committed certificate exercises, `Proofs/<Ex>/AirCert.lean` must also fail in the
+  named theorems. `canon`: one mutant per Canon rewrite without a preservation theorem, which
+  drops the condition that makes the rewrite meaning-preserving; `CanonRewrites.lean` holds a raw
+  function per rewrite on which that condition decides the result.
 - `tests/roadmap/sc-order/mutations.py` (C10): mutants of `Sc.lean`'s oracle of the sequentially
   consistent outcomes and of its observation check. A mutant is killed by a failing `#guard` that
   includes the ORD-03 one, by a committed observation it rejects, or by a wrong observation

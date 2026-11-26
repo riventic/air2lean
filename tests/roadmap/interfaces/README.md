@@ -22,7 +22,9 @@ Calls through an interface value that the caller passes in (docs/interfaces.md).
   `copy`, a sentinel copy of a slice (`dupeSentinel`, `dupeZ` before Zig 0.17);
 - `grow` (`grow.zig`): growth of the sentinel slice itself, `Buf(T)` at `u8` and `u32`: `append`
   and `resize` (`realloc` of the `[:0]T`), `move` (`remap`) and `fit` (the in-place `resize`).
-  Zig 0.16.0 rejects these calls at compile time, so `grow` has no 0.16.0 export.
+  Zig 0.16.0 rejects these calls at compile time, so `grow` has no 0.16.0 export;
+- `raw` (`raw.zig`): the lower-level entry points as a client calls them: `rawAlloc`,
+  `rawResize`, `rawRemap` and `rawFree` at alignment 4, and the in-place `resize` of a `[]u32`.
 
 `registry-alloc.json` opens `mem.Allocator.VTable` and `registry-random.json` opens `Random`
 (the `interfaces` array of docs/external-models.md, premise EXT-05). `air/<version>/<program>`
@@ -33,7 +35,7 @@ sources, the exporter and every file (`scripts/fixture-exports.py`,
 
 `check.sh` translates every program on every version, elaborates each translation, keeps the
 0.17.1 translations byte for byte (`lists` as `Proofs/Lists/Open.lean`, the program of the
-list proofs; the others as `Interfaces/{Mix,Rnd,Callbacks,Sentinel,Wide,Kinds,Grow}.lean`), and runs
+list proofs; the others as `Interfaces/{Mix,Rnd,Callbacks,Sentinel,Wide,Kinds,Grow,Raw}.lean`), and runs
 `test_cli.py`:
 an unused entry, a type opened twice, a struct without function-pointer fields, a non-EXT-05
 premise and `--proof-api` are rejected; without the registry every call keeps the closed
@@ -80,7 +82,13 @@ standard axioms):
   `realloc` of an empty sentinel slice allocates anew and leaves the old one-item grant
   (`docs/upstream/realloc-empty-sentinel-leak.md`). The std of Zig 0.15.2 and 0.14.1 hands the
   allocator `len * sz` bytes of the `(len + 1) * sz`-byte grant, which is outside `CAllocSpec`:
-  `check.sh` pins that the proofs stop at that precondition on both.
+  `check.sh` pins that the proofs stop at that precondition on both;
+- `RawSpec.lean`: the raw entry points of `raw` (`take_spec`, `fit_spec`, `move_spec`,
+  `give_spec`, `refit_spec`): the contract's preconditions (`0 < len`, the grant at the call's
+  alignment and at its own length) are the client's premises, and its postconditions the
+  client's. Also checked over the 0.16.0, 0.15.2 and 0.14.1 translations. `RawNeg.lean` is the
+  negative check: the same statements without one precondition each, which `check.sh` requires
+  to fail where that precondition is asked for.
 
 The sentinel statements are generic (`ZigLean/Sep/Full/SentinelBuf.lean`): `made`, `appended`
 and `resized` are stated once for every item size `sz`, log2 alignment `k` and sentinel bytes (a
