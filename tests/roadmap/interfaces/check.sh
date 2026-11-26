@@ -88,7 +88,10 @@ for version in 0.16.0 0.15.2 0.14.1 0.17.1; do
       echo "interfaces: GrowSpec holds over the $version translation: review GrowSpec.lean's versions" >&2
       exit 1
     fi
-    grep -q '\.len\.toNat = bs\.size$' "$work/GrowSpec-$version.txt" || {
+    # The six theorems that reach `remap` or `resize` (`realloc*_spec`, `move*_grant`,
+    # `fit*_grant`) fail, each with that goal; nothing else does.
+    [ "$(grep -c 'GrowSpec\.lean:[0-9]*:[0-9]*: error' "$work/GrowSpec-$version.txt")" = 6 ] &&
+      [ "$(grep -c '\.len\.toNat = bs\.size$' "$work/GrowSpec-$version.txt")" = 6 ] || {
       cat "$work/GrowSpec-$version.txt" >&2; exit 1; }
   fi
 done
