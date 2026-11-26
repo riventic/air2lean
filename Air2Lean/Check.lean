@@ -100,7 +100,7 @@ private partial def errorCapabilityScan (types : Array Ty) (id fuel : Nat)
   let mut remaining := fuel - 1
   if count > remaining then none
   let mut symbolic := match ty with | .errorSet _ | .errorUnion .. => true | _ => false
-  for child in if fnPointer then #[] else childTys ty do
+  for child in (if fnPointer then #[] else childTys ty : Array TyId) do
     let (next, childCap) ← errorCapabilityScan types child remaining (seen.push id) cycles
     remaining := next
     symbolic := symbolic || childCap
@@ -4739,7 +4739,7 @@ def programIssues (funcs : Array Func) (models : Array ModelBinding := #[])
         | some (.ptr "slice" _ c) => some c
         | _ => none
       for i in insts do
-        let items := match i.op with
+        let items : Array TyId := match i.op with
           | .sliceElemVal s _ => (sliceItem s).toArray
           | .call (.func callee _ spawnFn) args =>
             if let some k := (threadFn? callee).bind (·.taskArgs?) then

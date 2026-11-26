@@ -5,7 +5,7 @@
     "air_json_schemas": {"min": 1, "max": 12}
   },
   "lean": {
-    "toolchain": "leanprover/lean4:v4.34.0",
+    "toolchain": "leanprover/lean4:v4.36.0",
     "lake_packages": [],
     "elan": {
       "version": "v4.2.4",

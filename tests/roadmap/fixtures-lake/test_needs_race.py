@@ -78,6 +78,11 @@ class NeedsRace(unittest.TestCase):
         (dep / "Dep/Top.lean").write_text(f"import Dep.M{CHAIN - 1}\nimport Dep.M{CHAIN - 2}\n")
         status, output = lake(dep, ["build", "Dep.Top"])
         self.assertEqual(status, 0, output)
+        # The dep's own up-to-date build creates each job of the closure once: the reference count
+        # (Lake 4.34 has one job per module, Lake 4.36 two: the elaboration and its `irArts`).
+        status, output = lake(dep, ["build", "Dep.Top"])
+        self.assertEqual(status, 0, output)
+        single = jobs(output)
 
         needs = assumptions.module_needs(["Dep.Top"], [(dep / ".lake/build/lib/lean").resolve()], [dep])
         self.assertEqual(needs, ["@dep/+Dep.Top:olean", "@dep/+Dep.Top:depTrace"])
@@ -94,7 +99,7 @@ class NeedsRace(unittest.TestCase):
         self.assertEqual(status, 0, output)
         self.assertNotIn(PANIC, output)
         once = jobs(output)
-        self.assertLessEqual(once, CHAIN + 8, output)  # a job per module, a few for the rest
+        self.assertLessEqual(once, single + 8, output)  # the closure's jobs once, a few for the rest
 
         status, control = lake(ws, ["build", "W.R"], timeout=45)  # up to date: seconds, unless deadlocked
         if status is not None:  # a deadlocked control shows the race as well

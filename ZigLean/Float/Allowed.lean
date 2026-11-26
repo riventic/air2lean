@@ -231,7 +231,7 @@ theorem Float.max_allowed (a b : Float fmt) : Float.MaxAllowed a b (Float.max a 
 /-- A signed zero classifies as a finite value with mantissa 0. -/
 theorem Float.classify_zero (neg : Bool) :
     (Float.zero (fmt := fmt) neg).classify = .finite neg 0 (fmt.emin - fmt.fracBits) := by
-  cases fmt <;> cases neg <;> decide
+  cases fmt <;> cases neg <;> rfl
 
 /-- Both zeros compare equal to `+0` and are not NaN. -/
 private theorem zero_eq_zero (neg : Bool) :

@@ -896,10 +896,10 @@ theorem Float.divRt_eq_div_of_special {a b : Float .f128}
   intro s m e hc
   left
   have hz : ∀ t : Bool, (Float.zero t : Float .f128).classify = .finite t 0 (-16494) := by
-    intro t; cases t <;> decide
+    intro t; cases t <;> rfl
   have hn : (Float.nan : Float .f128).classify = .nan := by decide
   have hi : ∀ t : Bool, (Float.inf t : Float .f128).classify = .inf t := by
-    intro t; cases t <;> decide
+    intro t; cases t <;> rfl
   have hr : ∀ (t : Bool) (q : Rat), q = 0 → Float.roundRat .f128 t q = Float.zero t := by
     intro t q hq; subst hq; unfold Float.roundRat; simp
   unfold Float.div at hc

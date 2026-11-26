@@ -4129,7 +4129,7 @@ private def emitProofApiKnown (f : Func) (p : FuncParts) (recursive : DeclId →
   let fc := p.ctx
   let base := proofApiName f.name
   -- The definition's environment binders (`FCtx.extBinder`) come first.
-  let envBinders := if fc.extBinder.isEmpty then "" else " " ++ fc.extBinder.trimRight
+  let envBinders := if fc.extBinder.isEmpty then "" else " " ++ fc.extBinder.trimAsciiEnd.copy
   let binders (xs : Array (String × String)) :=
     envBinders ++ String.join (xs.toList.map fun (name, ty) => s!" ({name} : {ty})")
   let applied (head : String) (xs : Array (String × String)) :=

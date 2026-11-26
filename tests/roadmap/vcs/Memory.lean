@@ -104,7 +104,7 @@ def guarded (b : Bool) : MemM Unit := if b then throw .panic else pure ()
 info: fsym-report {"residuals":[{"goal":{"head":"Zig.Full.FLogic.T","text":"FLogic.total.T emp (throw Error.panic) fun x => emp"},"index":0,"origin":{"condition":"reachability","judgment":"Zig.Full.FLogic.T","program":{"head":"MonadExcept.throw","text":"throw Error.panic"},"reason":"panic_not_refuted","rule":null,"source":{"head":"Zig.Full.FLogic.T","text":"FLogic.total.T emp (throw Error.panic) fun x => emp"}}}],"schemaVersion":1,"status":"stopped"}
 ---
 error: unsolved goals
-case inl
+case isTrue
 ⊢ FLogic.total.T emp (throw Error.panic) fun x => emp
 -/
 #guard_msgs in
