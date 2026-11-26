@@ -175,8 +175,13 @@ for index, (at, line) in enumerate(errors):
     where, expected = want[name]
     block = text[at:bounds[index + 2]] if where == goal else text[bounds[index]:at]
     assert expected in block, f"RawNeg.{name}: does not stop at its precondition:\n{block}"
+    # A call's text precedes its error, after the previous theorem's goals: it is this theorem's
+    # only if no other theorem prints it.
+    assert where == goal or text.count(expected) == 1, f"RawNeg.{name}: {expected!r} is not unique"
     seen.add(name)
 assert seen == set(want), f"RawNeg.lean: no error in {sorted(set(want) - seen)}\n{text}"
+calls = sum(where == call for where, _ in want.values())
+assert text.count("fsym: no rule for the command") == calls, f"RawNeg.lean: want {calls} calls without a rule\n{text}"
 print(f"RawNeg: {len(seen)} statements without a precondition have no proof")
 PY
 # M04: semantic mutants of the translated std allocator sentinel path (the retained 0.17.1
