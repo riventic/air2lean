@@ -72,12 +72,8 @@ def load_script(name):
 
 def export_air(example, version, zig_air, dest):
     """Export the example's AIR with the patched compiler, as scripts/check.sh step 1 does (the
-    same command, filter and CPU; through the shared cache when AIR2LEAN_CAS_DIR is set)."""
-    prefixes = [f'{example}.']
-    for name in ('filter', f'filter-{version}'):
-        path = ROOT / 'examples' / example / name
-        if path.is_file():
-            prefixes += path.read_text().split()
+    same command, the filter of scripts/fixture-exports.py and the same CPU; through the shared
+    cache when AIR2LEAN_CAS_DIR is set)."""
     command = [zig_air, 'build-obj', '-fno-emit-bin', '-OReleaseSafe', '-fno-error-tracing']
     if (platform.system(), platform.machine()) == ('Linux', 'aarch64'):
         command.append('-mcpu=baseline')
@@ -85,7 +81,8 @@ def export_air(example, version, zig_air, dest):
     if os.environ.get('AIR2LEAN_CAS_DIR'):
         command = [sys.executable, '-B', str(ROOT / 'scripts/cas.py'), 'air', '--'] + command
     dest.mkdir(parents=True)
-    env = dict(os.environ, ZIG_AIR_JSON_DIR=str(dest), ZIG_AIR_JSON_FILTER=','.join(prefixes))
+    env = dict(os.environ, ZIG_AIR_JSON_DIR=str(dest),
+               ZIG_AIR_JSON_FILTER=load_script('fixture-exports').example_filter(example, version))
     run = subprocess.run(command, cwd=ROOT, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     if run.returncode != 0 or not list(dest.glob('*.json')):
         sys.exit(f'conformance: the AIR export of {example} failed:\n{run.stdout}')
@@ -117,9 +114,7 @@ def interpret(version, examples, air_dir, execute, log):
     records = {}
     with tempfile.TemporaryDirectory(prefix='air2lean-conformance.') as tmp:
         if air_dir is None:
-            zig_air = os.environ.get('AIR2LEAN_ZIG_AIR') or subprocess.run(
-                [str(ROOT / 'scripts/zig-air.sh'), version], check=True, text=True,
-                stdout=subprocess.PIPE).stdout.strip()
+            zig_air = str(load_script('fixture-exports').patched_compiler(version))
             air_dir = Path(tmp) / 'air'
             for example in examples:
                 export_air(example, version, zig_air, air_dir / example)
@@ -198,8 +193,9 @@ def print_coverage(records, excluded, log):
 
 
 def check_pin(version, run, update, log):
-    """The functions that run are the pinned ones (the same on every host: `asm`, which only an
-    x86_64 host selects, is outside the coverage)."""
+    """The functions that run are the pinned ones. The pin was written on aarch64-macos; `asm`,
+    which only an x86_64 host selects, is outside the coverage, and a host whose export differs
+    in the set reports it here."""
     # One function per line. Not JSON: scripts/validate-air.py reads every committed `.json`
     # below a directory named `air…` as AIR.
     path = HERE / 'conformance' / f'{version}.txt'

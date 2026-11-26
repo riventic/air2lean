@@ -104,6 +104,11 @@ def opVals : Op → List Val
   | .call _ args => args.toList
   | _ => []
 
+/-- The type of an operand: an instruction's (`tyOf`) or a constant's. -/
+def valTy (tyOf : InstId → Option TyId) : Val → Option TyId
+  | .inst x => tyOf x
+  | v => v.constTy?
+
 /-- Why a value of the type `t`, which has a `Sem.Value`, has no load or store: `loadAs` and
 `storeAs` read and write integers, `bool` and plain pointers. -/
 def memReason (f : Func) (t : TyId) : Option String :=
@@ -120,9 +125,7 @@ switch selector, a cast, a field pointer. A type with a `kindReason` is reported
 every instruction of `f`. -/
 def shapeReasons (f : Func) (all : Array Inst) (tyOf : InstId → Option TyId) (i : Inst) :
     List String :=
-  let tyOfVal : Val → Option TyId
-    | .inst x => tyOf x
-    | v => v.constTy?
+  let tyOfVal := valTy tyOf
   let valued (t : TyId) : Bool := (kindReason f 4 t).isNone
   let isInt (t : TyId) : Bool := (intTy? f t).isSome
   let cell : Val → Bool
@@ -160,24 +163,22 @@ def instReasons (f : Func) (all : Array Inst) (tyOf : InstId → Option TyId)
   match outside? i.op with
   | some reason => [s!"{name}: {reason}"]
   | none =>
+    let panicCall := match i.op with
+      | .call (.func callee ..) _ => (panicOf? callee).isSome
+      | _ => false
     let callee : List String := match i.op with
       | .call (.func callee ..) _ =>
-        if (panicOf? callee).isSome || callOk callee then []
+        if panicCall || callOk callee then []
         else ["call: a function outside the program (an external or std model, stage 6)"]
       | .call .. => ["call: indirect calls (stage 6)"]
       | _ => []
     -- A call to a panic handler evaluates no argument.
-    let vals := match i.op with
-      | .call (.func callee ..) _ => if (panicOf? callee).isSome then [] else opVals i.op
-      | _ => opVals i.op
+    let vals := if panicCall then [] else opVals i.op
     let storeVal := match i.op with | .store _ v => some v | _ => none
     let ofVal (v : Val) : List String :=
       match constReason (storeVal == some v) v with
       | some r => [r]
-      | none =>
-        match v with
-        | .inst x => ((tyOf x).bind (kindReason f 4)).toList
-        | _ => (v.constTy?.bind (kindReason f 4)).toList
+      | none => ((valTy tyOf v).bind (kindReason f 4)).toList
     callee ++ (((kindReason f 4 i.ty).toList ++ vals.flatMap ofVal ++ shapeReasons f all tyOf i).eraseDups.map
       fun r => s!"{name}: {r}")
 
@@ -187,11 +188,16 @@ def insts (f : Func) : Array Inst := Certificate.allInsts f.body
 /-- The reasons of `f` alone: its parameter and result types, then its instructions. -/
 def funcReasons (p : Program) (f : Func) : List String :=
   let all := insts f
-  let tyOf (x : InstId) : Option TyId := (all.find? (·.id == x)).map (·.ty)
+  let types : Std.HashMap InstId TyId := all.foldl (fun m i => m.insert i.id i.ty) {}
+  let tyOf (x : InstId) : Option TyId := types[x]?
   let params := f.params.toList.filterMap fun t => (kindReason f 3 t).map (s!"parameter: {·}")
-  let ret := match f.types[f.ret]? with
-    | some (.errorSet _) => ["result: harness: a bare error has no rendering"]
-    | _ => ((kindReason f 3 f.ret).map (s!"result: {·}")).toList
+  -- An error set as the result, or inside an optional result, has no rendering (`valueStr`).
+  let isErrorSet (t : TyId) : Bool := f.types[t]? matches some (.errorSet _)
+  let bare : Bool := isErrorSet f.ret || (match f.types[f.ret]? with
+    | some (.optional c) => isErrorSet c
+    | _ => false)
+  let ret := if bare then ["result: harness: a bare error has no rendering"]
+    else ((kindReason f 3 f.ret).map (s!"result: {·}")).toList
   params ++ ret ++ all.toList.flatMap (instReasons f all tyOf fun n => (p.lookup n).isSome)
 
 /-- The functions of `p` that `f` reaches by direct calls, `f` first. -/
@@ -228,7 +234,9 @@ def intOf (j : Json) : Except String Int :=
 
 /-- A pointer `{"buf":i,"off":o}` into the input buffers (block `i`: the memory starts empty). -/
 def ptrOf (j : Json) : Except String Zig.Ptr := do
-  pure ⟨some (← intOf (← field j "buf")).toNat, ← intOf (← field j "off")⟩
+  let buf ← intOf (← field j "buf")
+  if buf < 0 then throw "a negative buffer index"
+  pure ⟨some buf.toNat, ← intOf (← field j "off")⟩
 
 /-- The argument `j` of the AIR type `t`. -/
 def argOf (f : Func) : Nat → TyId → Json → Except String Value
