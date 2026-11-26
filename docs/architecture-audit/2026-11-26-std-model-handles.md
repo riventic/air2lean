@@ -224,12 +224,12 @@ Alternatives, if E is not wanted:
 Found while probing; not a read of private state, so E does not fix it.
 
 ```zig
-fn slow(out: *u32) void { …busy loop…; @atomicStore(u32, out, 7, .seq_cst); }
+fn atask(out: *u32) void { @atomicStore(u32, out, 7, .seq_cst); }
 
 pub fn reinit(io: Io) u32 {             // accepted, both allocator models, 0.16.0 and 0.17.1
     var out: u32 = 0;
     var g: Io.Group = .init;
-    g.async(io, slow, .{&out});
+    g.async(io, atask, .{&out});
     g = .init;
     g.await(io) catch {};
     return @atomicLoad(u32, &out, .seq_cst);
@@ -237,7 +237,8 @@ pub fn reinit(io: Io) u32 {             // accepted, both allocator models, 0.16
 ```
 
 Model: the tasks stay under the group's address, `await` joins them, the result is 7 and no
-run has an error. Native (0.16.0 and 0.17.1): `await` returns at once (the token is null), the
+run has an error. Native (0.16.0 and 0.17.1; the native run's task spins before its store, so
+that the task is still pending at the `await`): `await` returns at once (the token is null), the
 function returns 0, and the orphaned worker then fails std's assertion (`Io/Threaded.zig:1797`,
 `:1845` in 0.17.1: `reached unreachable code`), in some runs before the result is printed. So
 the model proves a result and safety that the native run does not have. The store of `.init`
