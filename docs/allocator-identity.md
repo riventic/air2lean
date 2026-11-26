@@ -1,46 +1,25 @@
 # Allocator identity and arenas (M01)
 
-`ZigLean/Mem/Owned.lean` adds allocators with an identity to the heap model. Allocator `a`
-is `Mem.allocators[a]` (an `OwnedAlloc`: policy and liveness). The
-kind of a block records its owner: `.heap` is the model's `std.mem.Allocator`
-(`ZigLean/Mem/Alloc.lean`, unchanged), `.owned a` is allocator `a`. `AllocRef` (`.std` or
-`.owned a`) gives the `std.mem.Allocator` calls (`create`, `destroy`, `alloc`, `free`,
-`remap`) for either.
+Allocators other than the model's `std.mem.Allocator` (`ZigLean/Mem/Alloc.lean`, blocks of kind
+`.heap`) are translated from their Zig code (`--allocator-model translated`,
+[allocator-model.md](allocator-model.md)) and proved down to the OS primitives (OSM-01):
+`std.heap.FixedBufferAllocator` (`tests/roadmap/alloc-fba`: `FBA.fallocSpec`,
+`Client.client_spec`), `std.heap.PageAllocator` (`tests/roadmap/alloc-translated`) and
+`std.heap.ArenaAllocator` (`tests/roadmap/alloc-arena`, [alloc-arena.md](alloc-arena.md)). An
+allocator's identity is its state and its token in the full-state logic, not a block kind: its
+slices lie in the blocks it gets from its child or the OS (`.mapped`, a global or stack buffer), and a
+slice it did not grant has no token.
 
-Owned blocks get fresh model addresses by default. The opt-in address-reuse policy (M05,
-[address-reuse.md](address-reuse.md)) may give a new owned block the address of a freed or reset
-one; block ids, and so every ownership and liveness check, are unaffected.
-
-This model is legacy, scheduled for deletion ([allocator-model.md](allocator-model.md),
-"Removing the hand-written allocator models"). Its fixed-buffer policy is already deleted (step
-1): `std.heap.FixedBufferAllocator` is translated from its Zig code (`--allocator-model
-translated`) and proved against `FAllocSpec` (`tests/roadmap/alloc-fba`: `FBA.fallocSpec`,
-`Client.client_spec`).
-
-## Semantics
-
-The policy follows the Zig 0.16.0 source `lib/std/heap/ArenaAllocator.zig`.
-
-| Operation | Model |
-| --- | --- |
-| `ArenaAllocator.init(child)` | `Arena.init`: a new id; no block. |
-| arena `alloc` | a new `.owned a` block; one attempt of `failAt`, `maxBytes` and the failure indices of `Mem.allocPolicy`, not of its oracle `fails` or `budget` (every arena request may fail; Zig asks the child only for a new node). |
-| arena `free` | the block must be a whole live `.owned a` block, else `.illegal`; its lifetime ends. Zig gives the bytes back only for the last allocation; the arena model has no capacity, so nothing else changes. |
-| `arena.reset(mode)` | `Owned.reset`: every `.owned a` block dies, no other block changes. The boolean result (a capacity hint for the retaining modes) is not modelled, nor is the capacity the retaining modes keep. |
-| `arena.deinit()` | `Arena.deinit`: reset, then the arena is dead; later use throws `.illegal`. |
-| `remap` | ownership check first; same or smaller length succeeds in place; growth fails. |
-
-A free, destroy or remap through allocator `r` of a block of another kind throws `.illegal`:
-an arena's block through `std.mem.Allocator` or another arena, a `std.mem.Allocator` block
-through an arena, a stack or global block through any allocator. The existing
-`Allocator.free`/`destroy` already required `.heap`; `AllocRef.remap .std` adds the check that
-the failing default `Allocator.remap` omits.
+The hand-written model that gave each allocator an id and its blocks the kind `.owned a`
+(`ZigLean/Mem/Owned.lean`, `OwnedPolicy`, `OwnedAlloc`, `AllocRef`, `Mem.allocators`, premise
+ALC-07) is deleted (steps 1 and 2 of the removal plan in [allocator-model.md](allocator-model.md)),
+with its executable regressions (`tests/roadmap/allocator-identity`). No theorem rested on it:
+its proof layer (`ZigLean/Sep/Owned.lean`, `ZigLean/Sep/ArenaClient.lean`) was retired before
+([alloc-spec.md](alloc-spec.md), "Retired claims").
 
 ## Theorems
 
-The proofs about this hand-written model (`ZigLean/Sep/Owned.lean`, `ZigLean/Sep/ArenaClient.lean`)
-are retired (CLAUDE.md, "Trusted base"; [alloc-spec.md](alloc-spec.md), "Retired claims"). M01's
-theorems are stated over the translated `std.heap.ArenaAllocator` in the full-state logic
+M01's theorems are stated over the translated `std.heap.ArenaAllocator` in the full-state logic
 (`tests/roadmap/alloc-arena`, [alloc-arena.md](alloc-arena.md)):
 
 * cross-allocator frees: a `free`, `resize` or `remap` through the arena needs the arena's token
@@ -61,20 +40,12 @@ theorems are stated over the translated `std.heap.ArenaAllocator` in the full-st
 
 ## Limits
 
-* In `std` mode the translator does not route `std.heap.ArenaAllocator` calls: translated
-  programs still use one `std.mem.Allocator` and their `heap.*` calls stay rejected. A
-  generated `Allocator` value carries no identity, so this model is for hand-written clients
-  and specifications. `--allocator-model translated` translates the arena itself.
-* Owned blocks get fresh model addresses, not addresses inside the arena's nodes;
-  address-sensitive programs are M05.
-* Growing remap of the last allocation fails in the model; Zig grows it in place when it fits
-  (M02).
-* `reset`/`deinit` record no race-check access; Zig's are not thread-safe either, and the
-  theorems assume `Mem.Seq` (one thread).
-* Custom allocators with other policies are not modelled; E01 external contracts remain the
-  route for them.
+* In `std` mode the translator does not route `std.heap` allocator calls: those programs use
+  one `std.mem.Allocator` and their `heap.*` calls stay rejected. `--allocator-model translated`
+  translates the allocators themselves.
+* Custom allocators have no hand-written model; E01 external contracts remain the route for an
+  allocator from outside the program.
 
-Checks: `bash tests/roadmap/allocator-identity/check.sh` runs the executable regressions of
-this model (cross-allocator frees, double free, reset frame, deinit and a session with policy
-failures); `bash tests/roadmap/alloc-arena/check.sh` prints the axioms of the
-M01 theorems over the translated arena.
+Checks: `bash tests/roadmap/alloc-arena/check.sh` runs the translated arena's executable
+regressions (`AllocArena/Eval.lean`, against the native run) and prints the axioms of the M01
+theorems over it.

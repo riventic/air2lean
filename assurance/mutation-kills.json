@@ -202,14 +202,14 @@
         "kind": "check",
         "target": "tests/roadmap/address-reuse/check.sh"
       },
-      "block_sha256": "365d0d1c8791d852265069910265eaa889440e6f11c8df05a2c944f3ef79fafb"
+      "block_sha256": "e278547cdd0d0752a00408531d1f2f475cc9b29442bea30edbfc17476343f9fa"
     },
     "tests/roadmap/address-reuse/Check.lean#reuse-policy-ignored": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/address-reuse/check.sh"
       },
-      "block_sha256": "365d0d1c8791d852265069910265eaa889440e6f11c8df05a2c944f3ef79fafb"
+      "block_sha256": "e278547cdd0d0752a00408531d1f2f475cc9b29442bea30edbfc17476343f9fa"
     },
     "tests/roadmap/air-semantics/CanonBinding.lean#debug-one-bad-item": {
       "killed_by": {
