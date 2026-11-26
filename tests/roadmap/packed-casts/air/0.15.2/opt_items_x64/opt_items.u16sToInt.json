@@ -12,7 +12,7 @@
   "endian": "little",
   "abi": "musl",
   "zig_version": "0.15.2",
-  "backend": "stage2_llvm",
+  "backend": "stage2_x86_64",
   "cpu": "x86_64",
   "features": [
    "64bit",
@@ -37,12 +37,12 @@
   "error_tracing": false,
   "export_stage": "analyzed-air"
  },
- "name": "reject_items.optionalsToInt",
+ "name": "opt_items.u16sToInt",
  "module": "root",
  "src": {
-  "file": "reject_items.zig",
-  "module": "reject_items",
-  "decl_line": 35
+  "file": "opt_items.zig",
+  "module": "opt_items",
+  "decl_line": 23
  },
  "params": [
   0
@@ -97,15 +97,15 @@
    "len": 2,
    "child": 4,
    "sentinel": false,
-   "abi_size": 4,
-   "abi_align": 1
+   "abi_size": 8,
+   "abi_align": 2
   },
   {
    "k": "int",
    "signed": false,
-   "bits": 32,
-   "abi_size": 4,
-   "abi_align": 4
+   "bits": 64,
+   "abi_size": 8,
+   "abi_align": 8
   },
   {
    "k": "void",
@@ -118,15 +118,15 @@
   {
    "k": "optional",
    "child": 5,
-   "abi_size": 2,
-   "abi_align": 1
+   "abi_size": 4,
+   "abi_align": 2
   },
   {
    "k": "int",
    "signed": false,
-   "bits": 8,
-   "abi_size": 1,
-   "abi_align": 1
+   "bits": 16,
+   "abi_size": 2,
+   "abi_align": 2
   }
  ]
 }

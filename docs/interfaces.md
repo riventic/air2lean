@@ -91,7 +91,11 @@ The proof side belongs to the full-state framework (on main since the arena land
   and the theorem vacuous. `Proofs/Lists/Alloc.lean` (`push`, `freeAll`),
   `tests/roadmap/interfaces/Interfaces/MixSpec.lean`,
   `tests/roadmap/interfaces/Interfaces/SentinelSpec.lean` (M04: a `[:0]u8` through
-  `allocSentinel`, `realloc` and `free`).
+  `allocSentinel`, `realloc` and `free`) and `Interfaces/WideSpec.lean` (the same for a `[:0]T`
+  of a wider item type). The sentinel statements and the theorems of `append` and `resize` are
+  generic (`ZigLean/Sep/Full/SentinelBuf.lean`: every item size, alignment and sentinel bytes);
+  the `u8`, `u16`, `u32` and `u64` copies of the generated code are instances that supply the
+  walk of their code and the size of their encoding.
 * **One contract form for every interface function: `FnSpec P Q g := ∀ a, CTriple (P a) (g a)
   (Q a)`.** An interface states only its pre- and postcondition as plain assertions over the
   call's arguments (logical variables quantified outside: `∀ x, FnSpec (P x) (Q x) g`); there
@@ -125,6 +129,41 @@ The proof side belongs to the full-state framework (on main since the arena land
   local to the thread; EXT-02's evidence does not say so yet, so no interface proof uses a
   registry model's arm (open: extend EXT-02 so that a registered contract's `frame` bounds the
   model under concurrency, and derive `ThreadLocal` from it).
+
+## The list proofs over older Zig versions
+
+The list proofs are one text (`Proofs/Lists`) over the retained 0.17.1 translation
+`Proofs/Lists/Open.lean`. `tests/roadmap/interfaces/check.sh` builds the same text over the other
+versions' translations of `examples/lists` in check trees:
+
+| Zig | `Linked`, `Bounded` (no allocator) | `Alloc` (`push`, `freeAll`) | `Append`, `Policy` (`append_spec`, M03's `appendEach_spec`) |
+|---|---|---|---|
+| 0.17.1, 0.16.0, 0.15.2 | build | build | build |
+| 0.14.1 | build | not claimed | not claimed |
+
+Zig 0.14.1 is not claimed for the allocator proofs, for two reasons found by building them
+(Lean 4.34.0, the tree of `check.sh`):
+
+* **`Append` and `Policy` name functions that 0.14.1 does not have.** 0.14.1's std calls the list
+  type `ArrayListAlignedUnmanaged`; 0.15 renamed it to `array_list.Aligned`. The translation's
+  functions are `array_list_ArrayListAlignedUnmanaged_u32_null_append` and so on, and the proof
+  text names `array_list_Aligned_u32_null_append`. One text cannot name both, so these proofs
+  over 0.14.1 would be a second text. `check.sh` pins the two names.
+* **`Alloc` passes Lean's default recursion depth in three theorems** (`create_spec`,
+  `push_grant`, `push_spec`: "maximum recursion depth has been reached" at their `fsym` walks).
+  0.14.1's `mem.Allocator.allocBytesWithAlignment` computes the alignment argument of the vtable
+  call at run time (`Zig.callRC (mem_Alignment_fromByteUnits (8 : BitVec 64))`: a power-of-two
+  check, an assertion, `@ctz` and an enum conversion), where 0.15.2 and later pass the constant
+  `mem_Alignment.«8»`. The walk has to evaluate that call. With `-DmaxRecDepth=8192` the unchanged
+  file elaborates over the 0.14.1 translation, so this is a budget, not a missing rule: the
+  theorems of the free path, whose code has the same call in every version, already carry
+  `set_option maxRecDepth 20000`. Giving the three theorems that option would make `Alloc` build
+  over 0.14.1; it is not done here because `Append` and `Policy` stay out of reach for the first
+  reason.
+
+The translated allocators themselves (`--allocator-model translated` down to `posix.mmap`) need
+Zig 0.16.0 or 0.17.1 ([allocator-model.md](allocator-model.md)); the proofs above take the
+allocator as an open interface, which every version translates.
 
 ## Premise
 

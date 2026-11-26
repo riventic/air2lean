@@ -259,7 +259,7 @@
   "compilers": {
     "0.17.1": "1953662bf1225a88b6c93545ccccf804f3eec5601df436181a1ba5b9ef1ab7c8"
   },
-  "manifest_sha256": "73dcf41a829148d78e4dd6d8c488ca56978b9ca9fd445a8e1d00e719a741eaed",
+  "manifest_sha256": "8964981a7174e4dad371d548f629271f3d0e9caeabf1de8e435b95e67b0f8318",
   "schema": 1,
   "sources_sha256": {
     "../../../examples/asm/asm.zig": "664aaaaf38427183526d7efb69746f3373158d30f4f0f5b69548112f0c10e754",

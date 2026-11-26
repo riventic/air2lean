@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "description": "The Lean runtime root: the one module that generated code and executables import (Air2Lean/Emit.lean's `import ZigLean`), and the theory floor that separates runtime from proof-only modules. A module is proof-only when its import closure contains a floor module (the floor modules included). `scripts/lean-deps.py --runtime-root check` (preflight) fails when the root's import closure reaches a proof-only module, so scripts/mutate.sh builds its differential runs from the root as it is, with no import cut out. docs/ci.md#runtime-root.",
+  "root": "ZigLean",
+  "theory_floor": [
+    "ZigLean.Mem.Lemmas",
+    "ZigLean.Conc.Lemmas"
+  ]
+}
