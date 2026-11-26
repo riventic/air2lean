@@ -102,6 +102,14 @@ theorem mod_pow_of_le {z x c M : Nat} (hM : M = 2 ^ c) (h : x ≤ c) : z % 2 ^ x
 theorem optPtrAddr_some (p : Ptr) : optPtrAddr (some p) = ptrAddr p := rfl
 theorem optPtrAddr_none : optPtrAddr none = pure 0 := rfl
 
+/- `==` on optional pointers (`optPtrEqAddr`, a `[:null]?*T`'s sentinel check) by the shape of its
+operands: two nulls are equal and a null and a pointer are not, without a step; two pointers
+compare as `ptrEqAddr`, which the pointer rules execute. -/
+theorem optPtrEqAddr_none_none : optPtrEqAddr none none = pure true := rfl
+theorem optPtrEqAddr_none_some (q : Ptr) : optPtrEqAddr none (some q) = pure false := rfl
+theorem optPtrEqAddr_some_none (p : Ptr) : optPtrEqAddr (some p) none = pure false := rfl
+theorem optPtrEqAddr_some_some (p q : Ptr) : optPtrEqAddr (some p) (some q) = ptrEqAddr p q := rfl
+
 /-- Owned atomic bytes: their block reaches their end. -/
 theorem Reaches.abytes {b : BlockId} {p : Ptr} {A S : Nat} {K : BlockKind} {bs : Array Byte}
     {tg : Option (Nat × Nat)} (hpb : p.block = some b) (hpos : 0 < bs.size) :
@@ -138,7 +146,8 @@ attribute [fsym_provider] Reaches.apts Reaches.aptsE
 
 end Seq
 
-attribute [fsym_norm] optPtrAddr_some optPtrAddr_none
+attribute [fsym_norm] optPtrAddr_some optPtrAddr_none optPtrEqAddr_none_none optPtrEqAddr_none_some
+  optPtrEqAddr_some_none optPtrEqAddr_some_some
 attribute [fsym_arith] Zig.subWrap Zig.addWrap Zig.mulWrap BitVec.sub_self
 attribute [fsym_norm] Option.isSome_some Option.isSome_none Option.isNone_some Option.isNone_none
 

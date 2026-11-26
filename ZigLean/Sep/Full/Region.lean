@@ -27,7 +27,9 @@ what generated code that works on regions needs beyond the step rules of `AutoRu
 * **Byte operations on regions** (`@[fsym]`): `@memset(_, undefined)` of a whole region
   (`memsetUndef`), the store of an item (`regionStore`, and `regionStoreAdd` through a pointer
   that `ptrProject` formed with `Ptr.add`), the load of an item that a store wrote
-  (`regionLoadWritten`, `regionLoadWrittenAdd`), and `@memcpy` between two separate regions (`memcpyRegions`; the model's
+  (`regionLoadWritten`, `regionLoadWrittenAdd`), the same for an item of any encoding by facts
+  about the one value (`regionStoreEnc`, `regionLoadEnc` and their `Add` forms; §Items of any
+  encoding), and `@memcpy` between two separate regions (`memcpyRegions`; the model's
   overlap check passes by separation). They are the native rules of owned bytes (`Ops.lean`)
   with the region's alignment and kind (`FTotalTriple.region_of`). Not `@[fsym]`: a store of a
   value over a whole region, relabelled with the store's alignment (`region_storeAll`).
@@ -579,6 +581,86 @@ theorem FTotalTriple.region_storePacked_wpts {p : Ptr} {A S : Nat} {K : BlockKin
     show Zig.storeBytes p 8 (Enc.encode w) = Zig.storeBytes p 8 (Enc.encode (Packed.toBits w))
     rw [he]
   rw [e]; exact FTotalTriple.region_store_wpts (a := a) _ hA
+
+/-! ## Items of any encoding
+
+The item rules above (`regionStore`, `regionLoadWritten` and their `Add` forms) ask for
+`LawfulEnc T`: every value of `T` reads back from its bytes. Not every item type has that
+instance: a float's NaN has undefined bytes (`Float.detMask`), so a load of them is
+`.unspecified`. The rules here are stated for every `Enc T` and ask for what one step needs, as
+facts about the one value:
+
+* a **store** needs the size of the value's bytes (`regionStoreEnc`, `regionStoreAddEnc`): the
+  region holds the bytes afterwards, whatever they are (as `Auto.storeEnc_region` at a region's
+  start);
+* a **load** of bytes a store wrote needs that this value reads back (`regionLoadEnc`,
+  `regionLoadAddEnc`).
+
+Both facts hold for every value of a `LawfulEnc` type, so these rules and the ones above give the
+same triple where both apply. For an item type without a `LawfulEnc` instance the rules above
+leave that instance open and `fsym` takes these. For a float the two facts are
+`Float.size_encode` and the decidable read-back `Float.decidableReadsBack`
+(`ZigLean/ReprCast.lean`, which a proof about floats in memory imports): a float constant's
+read-back is its NaN check. -/
+
+namespace FTotalTriple
+
+variable {p : Ptr} {A S : Nat} {K : BlockKind} {a : Nat} {bs : Array Byte}
+
+/-- **Store an item** `v` of any encoding at the byte offset `k` of a region (a pointer formed
+by `ptrProject` or `Ptr.add`, aligned to `al`): its bytes are `v`'s. `hsz` is the one fact about
+`v`'s encoding the step needs. -/
+@[fsym] theorem regionStoreAddEnc {T : Type} [Enc T] {k : Int} {al : Nat} (v : T)
+    (hsz : (Enc.encode v).size = Enc.size T) (hpos : 0 < Enc.size T) (h0 : 0 ≤ k)
+    (ho : k.toNat + Enc.size T ≤ bs.size) (hal : al ∣ a) (halo : al ∣ k.toNat) :
+    FTotalTriple (up (regionIn p A S K a bs)) (Zig.store al (p.add k) v)
+      (fun _ => up (regionIn p A S K a (writeBytes bs k.toNat (Enc.encode v)))) := by
+  have e : p.add k = p.add ((k.toNat : Nat) : Int) := by rw [Int.toNat_of_nonneg h0]
+  rw [e]
+  exact region_of' fun hA hK => store_bytesAt v (by rw [hsz]; exact hpos)
+    (by rw [hsz]; exact ho) (mod_add_dvd hA hal halo) hK
+
+/-- **Load an item a store wrote** at the byte offset `o`, through a pointer formed with
+`Ptr.add`, for a value `v` that reads back from its bytes (`hdec`): its value. -/
+@[fsym] theorem regionLoadAddEnc {T : Type} [Enc T] {k : Int} {al o : Nat} {v : T}
+    (hsz : (Enc.encode v).size = Enc.size T) (hdec : Enc.decode (Enc.encode v) = pure v)
+    (hpos : 0 < Enc.size T) (ho : o + Enc.size T ≤ bs.size) (hko : k = (o : Int))
+    (hal : al ∣ a) (halo : al ∣ o) :
+    FTotalTriple (up (regionIn p A S K a (writeBytes bs o (Enc.encode v))))
+      (Zig.load T al (p.add k))
+      (fun r => ⟪r = v⟫ ⋆ up (regionIn p A S K a (writeBytes bs o (Enc.encode v)))) := by
+  have hs : (writeBytes bs o (Enc.encode v)).size = bs.size := writeBytes_size _ _ _ (by omega)
+  subst hko
+  refine region_of fun hA _ => load_bytesAt hpos (by omega) (mod_add_dvd hA hal halo) ?_
+  have e := extract_writeBytes bs o (Enc.encode v) (by omega)
+  rw [hsz] at e
+  rw [e]; exact hdec
+
+/-- **Store an item** `v` of any encoding at item `i` of a region (aligned to `al`): its bytes are
+`v`'s. -/
+@[fsym] theorem regionStoreEnc {T : Type} [Enc T] {i : BitVec 64} {al : Nat} (v : T)
+    (hsz : (Enc.encode v).size = Enc.size T) (hpos : 0 < Enc.size T)
+    (ho : Enc.size T * i.toNat + Enc.size T ≤ bs.size) (hal : al ∣ a)
+    (halo : al ∣ Enc.size T * i.toNat) :
+    FTotalTriple (up (regionIn p A S K a bs)) (Zig.store al (p.elem (Enc.size T) i) v)
+      (fun _ => up (regionIn p A S K a (writeBytes bs (Enc.size T * i.toNat) (Enc.encode v)))) := by
+  rw [Ptr.elem_eq]
+  exact region_of' fun hA hK => store_bytesAt v (by rw [hsz]; exact hpos)
+    (by rw [hsz]; exact ho) (mod_add_dvd hA hal halo) hK
+
+/-- **Load an item a store wrote** (at item `i`, byte `o`), for a value `v` that reads back from
+its bytes (`hdec`): its value. -/
+@[fsym] theorem regionLoadEnc {T : Type} [Enc T] {i : BitVec 64} {al o : Nat} {v : T}
+    (hsz : (Enc.encode v).size = Enc.size T) (hdec : Enc.decode (Enc.encode v) = pure v)
+    (hpos : 0 < Enc.size T) (ho : o + Enc.size T ≤ bs.size) (hoi : Enc.size T * i.toNat = o)
+    (hal : al ∣ a) (halo : al ∣ o) :
+    FTotalTriple (up (regionIn p A S K a (writeBytes bs o (Enc.encode v))))
+      (Zig.load T al (p.elem (Enc.size T) i))
+      (fun r => ⟪r = v⟫ ⋆ up (regionIn p A S K a (writeBytes bs o (Enc.encode v)))) := by
+  rw [Ptr.elem_eq, hoi]
+  exact regionLoadAddEnc hsz hdec hpos ho rfl hal halo
+
+end FTotalTriple
 
 /-! ## In a thread
 
