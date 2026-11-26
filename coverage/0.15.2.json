@@ -28722,6 +28722,7 @@
       "tests/roadmap/perf-budgets/air/0.17.1/slices/slices.sumSlice.json": "a9851f8001ec1103492e3fb35e084dcd329a2c9a60e22725cff7d82e1afdb9e5",
       "tests/roadmap/perf-budgets/air/0.17.1/slices/slices.sumZ.json": "41227bea69e70b91203038250724362369908cf3f55d908dbae86560b4eb0dc4",
       "tests/roadmap/perf-budgets/air/0.17.1/slices/slices.total.json": "534b0da817ab903c0f053a40dae85b78579fbf4922534387222ea174277067b1",
+      "tests/roadmap/perf-budgets/air/0.17.1/sync/Io.Condition.broadcast.json": "883e305b5536498738942d45e556b8059f3807480a9dbd4c8f0e2c2d19c43093",
       "tests/roadmap/perf-budgets/air/0.17.1/sync/Io.Condition.signal.json": "bf93f78751ebba230d9c2dc1d8202b368ab52aa2515e6b03f9766022b2b9c684",
       "tests/roadmap/perf-budgets/air/0.17.1/sync/Io.Condition.waitUncancelable.json": "9182ec07bcbf853e716a62f28a317e794826f77345c707aad4c7cf23eac481da",
       "tests/roadmap/perf-budgets/air/0.17.1/sync/Io.Event.set.json": "85baa10c4bbb6047e33a828f9b21e2417ac8a27083689cf3abc02ff58dba22b8",
