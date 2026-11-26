@@ -23,7 +23,9 @@ import ZigLean.Mem.Thread
 * `f80atomic` rows: each atomic op on an `f80` cell (`atomic_f80.zig`), with the compiler's
   rejection or, if it runs, whether it does the op. The translator rejects every float atomic,
   so none is a claim of the model; each is printed as rejected, never counted as a match
-  (`f80AtomicRow?`). -/
+  (`f80AtomicRow?`).
+* `futex` rows (`futex.zig`): `Futex.lean` checks each one against the outcomes of the OS rows
+  (`ZigLean/Os/Futex.lean`); this file only requires that the profile's rows are recorded. -/
 
 open Zig
 
@@ -396,7 +398,9 @@ def main (args : List String) : IO UInt32 := do
   let some version := version | IO.eprintln s!"aarch64-abi: {path}: no `meta zig` line"; return 1
   -- Every synchronization row the probe prints must be present (a missing row is not a pass).
   let required : List (String × Nat) := [("rmw", 110), ("order", 4), ("atomic_ext", 5),
-    ("litmus", 3), ("limit", 1 + limitMessages.length), ("f80atomic", f80AtomicOps.length)]
+    ("litmus", 3), ("limit", 1 + limitMessages.length), ("f80atomic", f80AtomicOps.length),
+    -- Checked row by row against the OS rows by `Futex.lean`; here only that they are recorded.
+    ("futex", if triple == "aarch64-linux-gnu" then 79 else 35)]
   for (kind, n) in required do
     let count := (lines.filter (·.headD "" == kind)).length
     unless count == n do
