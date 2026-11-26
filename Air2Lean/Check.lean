@@ -2084,6 +2084,17 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
           cx.fail line "`@shuffle` mask lane reads a missing second operand or is out of range"
       | _ => pure ()
     pure line
+  -- Zig 0.17.1's coercion `[n]T` → `@Vector(n, T)` (`Air.zig` `array_to_vector`; Sema emits it
+  -- only for the same item type and length): lane `i` is item `i` and a sentinel of the array is
+  -- not a lane. The lane type is any the vector model has (the type check above).
+  | .arrayToVector a =>
+    let some (.vector n lane) := cx.types[ty]?
+      | cx.fail line "`array_to_vector` result is not a vector"
+    let some (.array len item _) := (cx.valTy? a).bind (cx.types[·]?)
+      | cx.fail line "`array_to_vector` operand is not an array"
+    unless len == n && item == lane do
+      cx.fail line "`array_to_vector` between an array and a vector of another length or item type"
+    pure line
   | .vectorStoreElem vptr idx v =>
     -- Zig 0.14.1/0.15.2 `v[i] = x` with a runtime index (L09): the lane store at bit `i * w` of
     -- the bit-packed vector (`Zig.storeLaneAt`), with the comptime lane pointers' evidence.
