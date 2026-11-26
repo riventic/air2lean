@@ -6,6 +6,7 @@ import ZigLean.Sep.Full.Reclaim
 import ZigLean.Sep.AllocSpec.Ops
 import ZigLean.Sep.AllocSpec.Norm
 import ZigLean.Range
+import ZigLean.Bit
 
 /-!
 # The rule library of the full-state symbolic executor (`fsym`, `docs/proof-automation.md`)
@@ -1003,6 +1004,75 @@ def reduceLitArithCore (op lem : Name) : Simproc := fun e => do
 simproc [fsym_norm] reduceLitAdd (Zig.add false _ _ _) := reduceLitArithCore ``Zig.add ``add_lit
 simproc [fsym_norm] reduceLitSub (Zig.sub false _ _ _) := reduceLitArithCore ``Zig.sub ``sub_lit
 simproc [fsym_norm] reduceLitMul (Zig.mul false _ _ _) := reduceLitArithCore ``Zig.mul ``mul_lit
+
+theorem intCast_lit {n m : Nat} {s₁ s₂ safe : Bool} {a : BitVec n} (r : BitVec m)
+    (h : Zig.intLo s₂ m ≤ Zig.val s₁ a ∧ Zig.val s₁ a ≤ Zig.intHi s₂ m)
+    (hr : BitVec.ofInt m (Zig.val s₁ a) = r) :
+    Zig.intCast s₁ s₂ m a safe = pure r := by
+  simp only [Zig.intCast, if_pos h, hr]
+theorem intCast_lit_out {n m : Nat} {s₁ s₂ safe : Bool} {a : BitVec n}
+    (h : ¬(Zig.intLo s₂ m ≤ Zig.val s₁ a ∧ Zig.val s₁ a ≤ Zig.intHi s₂ m)) :
+    Zig.intCast s₁ s₂ m a safe = throw (.ifSafe safe .overflow) := by
+  simp only [Zig.intCast, if_neg h]
+
+open Lean Meta Simp in
+/-- The step `e = r` of a closed-word simproc: `r` computed, the equation decided by evaluation
+(`of_decide_eq_true rfl`). -/
+def litStep (e r : Expr) : MetaM Simp.Step := do
+  return .done { expr := r, proof? := some (← mkDecideProof (← mkEq e r)) }
+
+/-- A Boolean literal (`true`, `false`): the signedness arguments of casts and values. -/
+def boolLit? (x : Lean.Expr) : Option Bool :=
+  if x.isConstOf ``Bool.true then some true else if x.isConstOf ``Bool.false then some false
+  else none
+
+open Lean Meta Simp in
+/-- A bit count (`Zig.ctz`, `Zig.clz`, `Zig.popcount`) or a truncation (`Zig.trunc`) `f m a` of a
+word literal `a` to a literal result width `m`: its value, computed here and decided on the
+literal (`litStep`). Generated pure helpers compute constants this way
+(`mem_Alignment.fromByteUnits 8`: `ctz`, then `intCast`, then `val`; ledger #21a). -/
+def reduceLitWordCore (op : Name) (f : {n : Nat} → (m : Nat) → BitVec n → BitVec m) : Simproc :=
+  fun e => do
+    unless e.isAppOfArity op 3 do return .continue
+    let some ⟨_, a⟩ ← getBitVecValue? e.appArg! | return .continue
+    let some m ← getNatValue? (e.getArg! 1) | return .continue
+    litStep e (toExpr (f m a))
+
+simproc [fsym_norm, fsym_arith] reduceLitCtz (Zig.ctz _ _) := reduceLitWordCore ``Zig.ctz Zig.ctz
+simproc [fsym_norm, fsym_arith] reduceLitClz (Zig.clz _ _) := reduceLitWordCore ``Zig.clz Zig.clz
+simproc [fsym_norm, fsym_arith] reduceLitPopcount (Zig.popcount _ _) :=
+  reduceLitWordCore ``Zig.popcount Zig.popcount
+simproc [fsym_norm, fsym_arith] reduceLitTrunc (Zig.trunc _ _) := reduceLitWordCore ``Zig.trunc Zig.trunc
+
+open Lean Meta Simp in
+/-- The value (`Zig.val`) of a word literal with a literal signedness (`litStep`). -/
+simproc [fsym_norm, fsym_arith] reduceLitVal (Zig.val _ _) := fun e => do
+  unless e.isAppOfArity ``Zig.val 3 do return .continue
+  let some ⟨_, a⟩ ← getBitVecValue? e.appArg! | return .continue
+  let some s := boolLit? (e.getArg! 1) | return .continue
+  litStep e (toExpr (Zig.val s a))
+
+open Lean Meta Simp in
+/-- `@intCast` of a word literal to a literal width: `pure` of its value when it fits, else its
+`throw` (`intCast_lit`, `intCast_lit_out`; the range decided on the literal). -/
+simproc [fsym_norm] reduceLitIntCast (Zig.intCast _ _ _ _ _) := fun e => do
+  unless e.isAppOfArity ``Zig.intCast 6 do return .continue
+  let args := e.getAppArgs
+  let (some s₁, some s₂) := (boolLit? args[1]!, boolLit? args[2]!) | return .continue
+  let some m ← getNatValue? args[3]! | return .continue
+  let some ⟨_, a⟩ ← getBitVecValue? args[4]! | return .continue
+  let v := Zig.val s₁ a
+  -- the lemma's side conditions are its own hypotheses' types, each decided on the literal
+  let lits := #[none, some args[3]!, some args[1]!, some args[2]!, some args[5]!, some args[4]!]
+  let pf ← if Zig.intLo s₂ m ≤ v ∧ v ≤ Zig.intHi s₂ m then do
+      let f ← mkAppOptM ``intCast_lit (lits.push (some (toExpr (BitVec.ofInt m v))))
+      let .forallE _ hTy (.forallE _ hrTy _ _) _ ← inferType f
+        | throwError "reduceLitIntCast: {f} takes no side conditions"
+      pure (mkApp2 f (← mkDecideProof hTy) (← mkDecideProof hrTy))
+    else do
+      let f ← mkAppOptM ``intCast_lit_out lits
+      pure (mkApp f (← mkDecideProof (← inferType f).bindingDomain!))
+  return .visit { expr := (← inferType pf).appArg!, proof? := some pf }
 
 open Lean Meta Simp in
 /-- A field accessor of generated code applied to a structure value (`mem_Alignment.toBits ⟨x⟩`
