@@ -146,14 +146,15 @@ theorem dispatch_spec (tgt : Tgt) (g : Gh) (hg : (proto lo prodOf).init tgt g) (
 
 /-! ## `main` -/
 
-/-- The `ready` loop's invariant: `main` holds the mutex at `run`. -/
-def inv12 (rM : Res) (_ : handoffLocals) (G : ThreadId → Gh) (m : Mem) (_ : Nat) : Prop :=
+/-- The `ready` loop's invariant, for the locals `S` of either `main` (`handoff`, `handoffAll`):
+`main` holds the mutex at `run`. -/
+def inv12 (rM : Res) {S : Type} (_ : S) (G : ThreadId → Gh) (m : Mem) (_ : Nat) : Prop :=
   m.current = 0 ∧ ∃ rL, (proto lo prodOf).inv (upd G 0 (gH rM rL { ph := .run })) m
 
-/-- The `ready` loop ends: `main` read `ready = true`. -/
-def post12 (rM : Res) (r : handoffExit × handoffLocals) (G : ThreadId → Gh) (m : Mem) (_ : Nat) :
+/-- The `ready` loop ends (at its exit `e`): `main` read `ready = true`. -/
+def post12 (rM : Res) {X S : Type} (e : X) (r : X × S) (G : ThreadId → Gh) (m : Mem) (_ : Nat) :
     Prop :=
-  r.1 = .br11 ∧ m.current = 0 ∧ ∃ rL, (proto lo prodOf).inv (upd G 0 (gH rM rL { ph := .run })) m ∧
+  r.1 = e ∧ m.current = 0 ∧ ∃ rL, (proto lo prodOf).inv (upd G 0 (gH rM rL { ph := .run })) m ∧
     (G 1).2.ph.hasR = true
 
 theorem loop12_body (rM : Res) (hpl : rM.Plain) (s : handoffLocals) (G : ThreadId → Gh) (m : Mem) (d : Nat)
@@ -161,7 +162,7 @@ theorem loop12_body (rM : Res) (hpl : rM.Plain) (s : handoffLocals) (G : ThreadI
     (proto lo prodOf).WP 0 ((handoff.loop12 bPtr).run s) (fun r G' m' d' =>
       if handoff.again12 r.1 then inv12 rM r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : handoffLocals) => 0) s)
-      else post12 rM r G' m' d') G m d := by
+      else post12 rM handoffExit.br11 r G' m' d') G m d := by
   obtain ⟨hc, rL, hi⟩ := h
   unfold handoff.loop12
   -- `ready`: the lock holder's step at `main`'s place (`FLock.Fits.wp_hold`); `false`: the
@@ -183,7 +184,7 @@ theorem main_spec (σ : Placement) (d : Nat) :
   fsym [inv_of_box (Lo := lo) (prodOf := prodOf), inv_spawn (Lo := lo) (prodOf := prodOf),
     WP.liftMem_pure (projI (Lo := lo) (prodOf := prodOf) _ _) rfl,
     wp_lockM (Lo := lo) (prodOf := prodOf) threadMutex rfl rfl ⟨⟩ _,
-    WP.loop _ _ (inv12 _) (fun _ => 0) (post12 _) (loop12_body _ _),
+    WP.loop _ _ (inv12 _) (fun _ => 0) (post12 _ handoffExit.br11) (loop12_body _ _),
     (fitsL (Lo := lo) (prodOf := prodOf)).wp_hold (g' := (fun rM r => gH rM r { ph := .run }) _),
     U_holdStep (Lo := lo), vOf_ready,
     wp_unlockM (Lo := lo) (prodOf := prodOf) threadMutex rfl rfl ⟨⟩,
@@ -193,24 +194,15 @@ theorem main_spec (σ : Placement) (d : Nat) :
 
 /-! ## `handoffAll`'s `main`
 
-The same walk over `handoffAll`'s generated code: it spawns `producerAll`. -/
-
-/-- `handoffAll`'s `ready` loop's invariant: `main` holds the mutex at `run`. -/
-def invA12 (rM : Res) (_ : handoffAllLocals) (G : ThreadId → Gh) (m : Mem) (_ : Nat) : Prop :=
-  m.current = 0 ∧ ∃ rL, (proto lo prodOf).inv (upd G 0 (gH rM rL { ph := .run })) m
-
-/-- `handoffAll`'s `ready` loop ends: `main` read `ready = true`. -/
-def postA12 (rM : Res) (r : handoffAllExit × handoffAllLocals) (G : ThreadId → Gh) (m : Mem)
-    (_ : Nat) : Prop :=
-  r.1 = .br11 ∧ m.current = 0 ∧ ∃ rL, (proto lo prodOf).inv (upd G 0 (gH rM rL { ph := .run })) m ∧
-    (G 1).2.ph.hasR = true
+The same walk over `handoffAll`'s generated code, with the same loop invariant (`inv12`,
+`post12`): it spawns `producerAll`. -/
 
 theorem loopA12_body (rM : Res) (hpl : rM.Plain) (s : handoffAllLocals) (G : ThreadId → Gh)
-    (m : Mem) (d : Nat) (h : invA12 rM s G m d) :
+    (m : Mem) (d : Nat) (h : inv12 rM s G m d) :
     (proto lo prodOf).WP 0 ((handoffAll.loop12 bPtr).run s) (fun r G' m' d' =>
-      if handoffAll.again12 r.1 then invA12 rM r.2 G' m' d' ∧
+      if handoffAll.again12 r.1 then inv12 rM r.2 G' m' d' ∧
         (d' < d ∨ d' = d ∧ (fun _ => 0) r.2 < (fun (_ : handoffAllLocals) => 0) s)
-      else postA12 rM r G' m' d') G m d := by
+      else post12 rM handoffAllExit.br11 r G' m' d') G m d := by
   obtain ⟨hc, rL, hi⟩ := h
   unfold handoffAll.loop12
   fsym [WP.liftMem_pure (projI (Lo := lo) (prodOf := prodOf) _ _) rfl,
@@ -226,7 +218,7 @@ theorem mainAll_spec (σ : Placement) (d : Nat) :
   fsym [inv_of_box (Lo := lo) (prodOf := prodOf), inv_spawn (Lo := lo) (prodOf := prodOf),
     WP.liftMem_pure (projI (Lo := lo) (prodOf := prodOf) _ _) rfl,
     wp_lockM (Lo := lo) (prodOf := prodOf) threadMutex rfl rfl ⟨⟩ _,
-    WP.loop _ _ (invA12 _) (fun _ => 0) (postA12 _) (loopA12_body _ _),
+    WP.loop _ _ (inv12 _) (fun _ => 0) (post12 _ handoffAllExit.br11) (loopA12_body _ _),
     (fitsL (Lo := lo) (prodOf := prodOf)).wp_hold (g' := (fun rM r => gH rM r { ph := .run }) _),
     U_holdStep (Lo := lo), vOf_ready,
     wp_unlockM (Lo := lo) (prodOf := prodOf) threadMutex rfl rfl ⟨⟩,

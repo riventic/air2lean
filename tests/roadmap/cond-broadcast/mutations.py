@@ -33,18 +33,19 @@ CLIENT = "Proofs.Threadsync.Handoff"
 CLIENT_SOURCE = ROOT / "Proofs/Threadsync/Handoff.lean"
 # The contract proofs of this program's sync objects: they must build on every mutant.
 IMPORTS = ["Proofs.Threadsync.Cond", "Proofs.Threadsync.Event"]
-BROADCAST = "    let _i10 ← Zig.callC (Thread_Condition_broadcast i9)\n"
+# The one call of the broadcast in the translation (only `producerAll` calls it); the numbers of
+# the temporaries are the translator's, so the line is found by its shape.
+BROADCAST = re.compile(r"^ *let _i\d+ ← Zig\.callC \(Thread_Condition_broadcast i\d+\)\n", re.M)
 
-# name -> (edits, theorems of the client that must fail). Each `old` occurs exactly once in the
-# committed translation: only `producerAll` calls `Thread_Condition_broadcast`.
+# name -> (what replaces the broadcast's line, theorems of the client that must fail).
 MUTANTS = {
     # `producerAll` signals instead of broadcasting.
-    "broadcast-is-signal": ([
-        (BROADCAST, BROADCAST.replace("Thread_Condition_broadcast", "Thread_Condition_signal")),
-    ], ["producerAll_spec"]),
+    "broadcast-is-signal": (
+        lambda line: line.replace("Thread_Condition_broadcast", "Thread_Condition_signal"),
+        ["producerAll_spec"]),
     # `producerAll` wakes no waiter: the proof fails, and so does the kernel-computed run of
     # `handoffAll_completes` (under its schedule the main thread sleeps and is never woken).
-    "broadcast-dropped": ([(BROADCAST, "")], ["producerAll_spec", "handoffAll_completes"]),
+    "broadcast-dropped": (lambda line: "", ["producerAll_spec", "handoffAll_completes"]),
 }
 # Lake prints a Lean error as `error: FILE:LINE:COL: message`; lean_mutant reads `FILE:LINE:COL: error`.
 LAKE_ERROR = re.compile(r"^error: (\S+?):(\d+):(\d+): ", re.M)
@@ -56,20 +57,26 @@ def lake(tree, targets):
     return done.returncode, done.stdout
 
 
+def mutants():
+    """(name, mutated translation, theorems that must fail) of every mutant."""
+    source = (ROOT / GEN).read_text(encoding="utf-8")
+    lines = BROADCAST.findall(source)
+    if len(lines) != 1:
+        raise SystemExit(f"{GEN}: {len(lines)} calls of Thread_Condition_broadcast, expected one")
+    for name, (change, broken) in MUTANTS.items():
+        yield name, edit(source, [(lines[0], change(lines[0]))], name), broken
+
+
 def run(work):
     work = Path(work)
-    source = (ROOT / GEN).read_text(encoding="utf-8")
-    for name, (edits, broken) in MUTANTS.items():
+    for name, text, broken in mutants():
         mutated = work / f"{name}.Gen.lean"
-        mutated.write_text(edit(source, edits, name), encoding="utf-8")
+        mutated.write_text(text, encoding="utf-8")
         tree = ROOT / ".lake/check-tree" / f"cond-broadcast-{name}"
         subprocess.run([sys.executable, "-B", str(ROOT / "scripts/check-tree.py"), "create", str(tree),
                         "--replace", f"{GEN}={mutated}"], cwd=ROOT, check=True)
-        rc, out = lake(tree, IMPORTS)
-        if rc != 0:
-            sys.stderr.write(out[-4000:])
-            raise SystemExit(f"{name}: the contract proofs do not build on the mutant (an invalid mutant)")
-        rc, out = lake(tree, [CLIENT])
+        # One build: a contract proof that fails is among Lake's failed targets (an invalid mutant).
+        rc, out = lake(tree, [*IMPORTS, CLIENT])
         failed = re.search(r"^Some required targets logged failures:\n((?:- .*\n?)*)", out, re.M)
         failed = {line[2:].strip() for line in failed.group(1).splitlines()} if failed else set()
         decls, stray = error_decls(LAKE_ERROR.sub(r"\1:\2:\3: error: ", out), CLIENT_SOURCE)
@@ -92,8 +99,8 @@ def run(work):
 def main(argv):
     if argv[1:] == ["--self-test"]:
         source = (ROOT / GEN).read_text(encoding="utf-8")
-        for name, (edits, _) in MUTANTS.items():
-            assert edit(source, edits, name) != source, name
+        for name, text, _ in mutants():
+            assert text != source, name
         print(f"cond-broadcast mutant self-test: {len(MUTANTS)}")
     elif len(argv) == 3 and argv[1] == "run":
         run(argv[2])

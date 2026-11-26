@@ -2,7 +2,9 @@
 # C14 condition broadcast (README.md): every version's committed export translates to the
 # broadcast that the condition contract's implementations prove, function for function; and the
 # broadcast client (`threadsync.handoffAll`) is proved, and its mutants (mutations.py) are not.
-#   check.sh                 the gate above (needs a built translator and Lake; no compiler)
+#   check.sh                 the gate above (needs a built translator and Lake; no compiler). It
+#                            builds the client's proofs and two check trees with Lake: run it
+#                            under scripts/build-guard.py
 #   check.sh --export [V..]  scripts/fixture-exports.py verify: a fresh export with the patched
 #                            compilers of versions V (default all) equals the committed one
 set -euo pipefail
