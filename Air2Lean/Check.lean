@@ -1092,6 +1092,93 @@ def CheckCtx.checkLongDoubleCall (cx : CheckCtx) (line : Nat) (op : Op) : Except
       compiler_rt's only in a program without libc, and the AIR profile records no link_libc \
       fact; pass --assume-no-libc for a program linked without libc (docs/floats.md §Targets)"
 
+/-- How a `@mulAdd` on `f16`, `f32` or `f64` is computed (`docs/floats.md` §Targets). -/
+inductive MulAddLowering where
+  /-- The CPU's multiply-add instruction on `bits`-bit floats: one rounding. -/
+  | instruction (bits : Nat)
+  /-- compiler_rt's routine on `bits`-bit floats (`fmaf`, `fma`). -/
+  | routine (bits : Nat)
+  /-- `f16` only: an `f32` multiply-add of the extended operands, rounded to `f16`
+  (`F16MulAdd.viaF32`: LLVM's widening up to Zig 0.16.0, and `__fmah`). -/
+  | f16ThroughF32
+  /-- `f16` only: an `f64` multiplication and an `f64` addition (`F16MulAdd.viaF64MulAdd`). -/
+  | f16MulThenAdd
+  deriving BEq
+
+def MulAddLowering.describe : MulAddLowering → String
+  | .instruction bits => s!"the CPU's f{bits} multiply-add instruction"
+  | .routine bits => s!"compiler_rt's f{bits} routine"
+  | .f16ThroughF32 => "an f32 multiply-add rounded to f16"
+  | .f16MulThenAdd => "an f64 multiplication and addition rounded to f16"
+
+/-- An `F16MulAdd` as a lowering; `instruction64`: its `f64` multiply-add is an instruction. -/
+def MulAddLowering.ofF16 (instruction64 : Bool) : F16MulAdd → MulAddLowering
+  | .fused => .instruction 16
+  | .viaF32 => .f16ThroughF32
+  | .viaF64 _ => if instruction64 then .instruction 64 else .routine 64
+  | .viaF64MulAdd => .f16MulThenAdd
+
+/-- The profile's CPU has a multiply-add instruction on `bits`-bit floats, and its backend
+computes a `@mulAdd` with it: aarch64 `fmadd` (`f16`: with `fullfp16`), x86_64 `vfmadd…` with
+`fma` or `fma4` (`f16`: `avx512fp16`), s390x `maebr`/`madbr`. -/
+def Dialect.mulAddInstruction (d : Dialect) (bits : Nat) : Bool :=
+  let has := d.features.contains
+  match d.arch, bits with
+  | "aarch64", 16 => has "fullfp16"
+  | "x86_64", 16 => has "avx512fp16"
+  | "aarch64", 32 | "aarch64", 64 | "s390x", 32 | "s390x", 64 => true
+  | "x86_64", 32 | "x86_64", 64 => has "fma" || has "fma4"
+  | _, _ => false
+
+/-- The lowering that the translation of a `bits`-bit `@mulAdd` states (`FCtx.mulAddExpr`):
+the instruction on aarch64 and the routine elsewhere; an `f16` as `Dialect.f16MulAdd` says. -/
+def Dialect.mulAddModel (d : Dialect) (bits : Nat) : MulAddLowering :=
+  let aarch64 := d.floatRules == .aarch64
+  if bits != 16 then (if aarch64 then .instruction bits else .routine bits)
+  else .ofF16 (aarch64 || d.f16MulAdd == .viaF64 (libcall := false)) d.f16MulAdd
+
+/-- The lowering of a `bits`-bit `@mulAdd` by the profile's backend for its CPU, read from the
+profile's features, backend and target; `none` when it is not known. An `f16` without an `f16`
+instruction: `__fmah` on the self-hosted x86_64 backend; through `f32` up to Zig 0.16.0; from
+0.17.1 the LLVM backend's lowering for the target (`Target.f16MulAdd017`), whose `f64`
+multiply-add is the CPU's instruction if it has one; no other backend's is recorded. A legacy
+profile names no backend and no target: it is the reference target with the LLVM backend
+(`docs/profiles.md`), as `Dialect.f16MulAdd` reads it. -/
+def Dialect.mulAddLowering? (d : Dialect) (bits : Nat) : Option MulAddLowering :=
+  if d.mulAddInstruction bits then some (.instruction bits)
+  else if bits != 16 then some (.routine bits)
+  else if d.backend == "stage2_x86_64" || !d.version.f16MulAddThroughF64 then some .f16ThroughF32
+  else if d.backend == BuildProfile.unverified then some (.routine 64)
+  else if d.backend != Target.llvmBackend then none
+  else d.target?.map fun t => .ofF16 (d.mulAddInstruction 64) t.f16MulAdd017
+
+/-- A `@mulAdd` on `f16`, `f32` or `f64` (or a vector of them) is translated as one lowering
+(`Dialect.mulAddModel`), which must be the one of the profile's backend and CPU
+(`Dialect.mulAddLowering?`). Otherwise it is outside the subset: an x86_64 CPU with `fma`
+(or `avx512fp16` for `f16`) and s390x compute it with an instruction where the model states
+compiler_rt's routine, and a backend whose `f16` lowering is not recorded may differ from the
+LLVM one. The check does not depend on `--float-semantics`: in `ieee` mode an instruction and
+the routine of the same width are the same function in the model, so rejecting them there is a
+conservative over-approximation. `f80` and `f128` are compiler_rt's routines on every target. -/
+def CheckCtx.checkMulAdd (cx : CheckCtx) (line : Nat) (op : Op) : Except String Unit := do
+  let .mulAdd a _ _ := op | return
+  let some d := cx.dialect | return
+  let some aty := cx.valTy? a | return
+  let elem := match cx.types[aty]? with
+    | some (.vector _ c) => cx.types[c]?
+    | other => other
+  let some (.float bits) := elem | return
+  unless [16, 32, 64].contains bits do return
+  let model := d.mulAddModel bits
+  let lowering := d.mulAddLowering? bits
+  unless lowering == some model do
+    let native := match lowering with
+      | some l => s!"this profile (backend '{d.backend}', CPU features of {d.arch}) computes it \
+        with {l.describe}"
+      | none => s!"the lowering of backend '{d.backend}' is not recorded"
+    cx.fail line s!"`@mulAdd` on f{bits} is outside the subset for this profile: the model \
+      states {model.describe}, and {native} (docs/floats.md §Targets)"
+
 /-- An access to the items of `ptr` (a slice, many-pointer or array pointer): the item type must be
 one the model encodes. -/
 def CheckCtx.itemAccess (cx : CheckCtx) (line : Nat) (ptr : Val) : Except String Unit := do
@@ -1466,6 +1553,7 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   cx.checkPaddedAtomic line op
   cx.checkStage2Backend line op
   cx.checkLongDoubleCall line op
+  cx.checkMulAdd line op
   cx.checkNoreturnVariant line ty op
   match op with
   | .arith _ mode _ _ =>

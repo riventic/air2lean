@@ -1668,6 +1668,17 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/aarch64-abi/test_mul_add.py "$PWD/.lake/build/bin/air2lean"
 
+      # A `@mulAdd` is admitted only where the profile's backend and CPU compute it as the model
+      # states (`CheckCtx.checkMulAdd`): the compiler exports of mul_add.zig for x86_64-linux at
+      # the baseline CPU, `haswell` (`fma`) and `sapphirerapids` (`avx512fp16`), every version.
+      - name: "`@mulAdd` lowering per CPU (x86_64 exports)"
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/mul-add-lowering/test_cli.py --self-test
+          PYTHONDONTWRITEBYTECODE=1 python3 tests/roadmap/mul-add-lowering/test_cli.py "$PWD/.lake/build/bin/air2lean"
+          python3 -B scripts/fixture-exports.py check mul-add-lowering
+
       # T06: the stage2_x86_64 rules (`CheckCtx.checkStage2Backend`) on the patched compilers'
       # self-hosted exports of the divergence reproducers: rejected there, accepted on LLVM.
       - name: Reject stage2_x86_64 backend divergences

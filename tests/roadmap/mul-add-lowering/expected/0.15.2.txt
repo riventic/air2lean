@@ -1,0 +1,2 @@
+baseline fma32 0x3f800000
+haswell fma32 0x3f800001

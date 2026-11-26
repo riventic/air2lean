@@ -101,6 +101,68 @@ def expected(bits, target, version, mode, backend=LLVM, features=None):
     return f"Zig.Float.conv .f16 <$> Zig.Float.fma{routine}Chk {wide}"
 
 
+def instruction(bits, target, features):
+    """The CPU has a multiply-add instruction on `bits`-bit floats (`Dialect.mulAddInstruction`)."""
+    arch = target.split("-")[0]
+    if bits == 16:
+        return {"aarch64": "fullfp16", "x86_64": "avx512fp16"}.get(arch) in features
+    return arch in ("aarch64", "s390x") or arch == "x86_64" and bool({"fma", "fma4"} & set(features))
+
+
+def lowering(bits, target, version, backend, features):
+    """How the profile's backend computes it for its CPU (`Dialect.mulAddLowering?`): None when
+    that is not recorded."""
+    if instruction(bits, target, features):
+        return f"f{bits}-instruction"
+    if bits != 16:
+        return f"f{bits}-routine"
+    if version != "0.17.1" or backend == SELF_HOSTED:
+        return "f32"
+    if backend != LLVM:
+        return None
+    row = TARGETS[target][1]
+    if row in ("f64-routine", "f64-instruction"):
+        return "f64-instruction" if instruction(64, target, features) else "f64-routine"
+    return row
+
+
+def model(bits, target, version, backend, features):
+    """The lowering that the translation states (`Dialect.mulAddModel`)."""
+    if bits != 16:
+        return f"f{bits}-instruction" if target in AARCH64 else f"f{bits}-routine"
+    kind = rule(target, version, backend, features)
+    if kind == "f16":
+        return "f16-instruction"
+    if kind == "f64-routine" and target in AARCH64:
+        return "f64-instruction"
+    return kind
+
+
+def rejected(bits, target, version, backend=LLVM, features=None):
+    """`CheckCtx.checkMulAdd`: the profile's lowering is not the model's."""
+    features = TARGETS[target][0]["features"] if features is None else features
+    return lowering(bits, target, version, backend, features) != \
+        model(bits, target, version, backend, features)
+
+
+def cpu_cases():
+    """As `cases`, for CPUs and backends other than each target's own: an x86_64 CPU with a
+    multiply-add instruction (`fma`, `fma4`; `avx512fp16` for `f16`) and a backend whose `f16`
+    lowering is not recorded."""
+    result = []
+    for version in VERSIONS:
+        for mode in MODES:
+            for features in (["fma"], ["fma4"], ["avx512fp16", "fma"], ["avx512fp16"], ["avx2"]):
+                for bits in (16, 32, 64):
+                    result.append((bits, "x86_64-linux", version, mode, LLVM, features))
+            for bits in (16, 32, 64):
+                result.append((bits, "x86_64-linux", version, mode, "stage2_c", None))
+            if version != "0.14.1":
+                for bits in (16, 32):
+                    result.append((bits, "x86_64-linux", version, mode, SELF_HOSTED, ["fma"]))
+    return result
+
+
 def cases():
     """(bits, target, version, mode, backend, features or None for the target's own)."""
     result = []
@@ -126,17 +188,26 @@ def write(air, doc):
 def check_cases(binary, tmp, air):
     out = tmp / "Gen.lean"
     checks = 0
-    for bits, target, version, mode, backend, features in cases():
+    for bits, target, version, mode, backend, features in cases() + cpu_cases():
         where = (bits, target, version, mode, backend, features)
         write(air, document(bits, profile(target, version, backend, features)))
-        # The self-hosted backend's modes are not all qualified (docs/build-modes.md): opt in.
-        extra = ["--allow-unqualified-build-mode"] if backend == SELF_HOSTED else []
+        # The self-hosted backend's modes are not all qualified (docs/build-modes.md), and no
+        # other backend's is: opt in.
+        extra = ["--allow-unqualified-build-mode"] if backend != LLVM else []
+        out.write_text("KEEP\n")
         result = invoke(binary, air, "-o", out, "--namespace", "MulAdd", "--float-semantics", mode,
                         *extra)
+        checks += 1
+        if rejected(bits, target, version, backend, features):
+            # The profile's lowering is not the model's (`CheckCtx.checkMulAdd`), in both modes.
+            assert result.returncode == 1, (where, result.stderr)
+            assert f"`@mulAdd` on f{bits} is outside the subset for this profile" in result.stderr, \
+                (where, result.stderr)
+            assert out.read_text() == "KEEP\n", where
+            continue
         assert result.returncode == 0, (where, result.stderr)
         line = f" ← {expected(bits, target, version, mode, backend, features)}\n"
         assert out.read_text().count(line) == 1, (where, line, out.read_text())
-        checks += 1
     # Without the float instructions every float op is a compiler_rt call: outside the rules.
     for target in AARCH64:
         for version in VERSIONS:
@@ -187,6 +258,37 @@ class SelfTest(unittest.TestCase):
                 ((16, "mips64-linux", "0.17.1", "compiler-rt"), "Zig.Float.fmaRt017Chk p0 p1 p2"),
                 ((64, "x86_64-linux", "0.17.1", "compiler-rt"), "Zig.Float.fmaRt017Chk p0 p1 p2")):
             self.assertEqual(expected(*args), want, args)
+
+    def test_rejections(self):
+        """The profile's lowering against the model's, for the target's own CPU and others."""
+        for args, want in (
+                # Every target's own CPU and backend: admitted, but for s390x `f32`/`f64` (the
+                # `maebr`/`madbr` instructions, where the model states compiler_rt's routines).
+                ((32, "x86_64-linux", "0.16.0"), False), ((16, "x86_64-linux", "0.17.1"), False),
+                ((64, "aarch64-linux", "0.17.1"), False), ((16, "aarch64-macos", "0.14.1"), False),
+                ((16, "mips64-linux", "0.17.1"), False), ((64, "wasm32-wasi", "0.17.1"), False),
+                ((32, "s390x-linux", "0.16.0"), True), ((64, "s390x-linux", "0.17.1"), True),
+                ((16, "s390x-linux", "0.17.1"), False), ((16, "s390x-linux", "0.16.0"), False),
+                # x86_64 with `fma`: `f32`/`f64` by `vfmadd…`; an `f16` through `f32` stays the
+                # model's rule up to 0.16.0, and from 0.17.1 its `f64` op is the instruction.
+                ((32, "x86_64-linux", "0.16.0", LLVM, ["fma"]), True),
+                ((64, "x86_64-linux", "0.14.1", LLVM, ["fma4"]), True),
+                ((16, "x86_64-linux", "0.16.0", LLVM, ["fma"]), False),
+                ((16, "x86_64-linux", "0.17.1", LLVM, ["fma"]), True),
+                ((16, "x86_64-linux", "0.15.2", LLVM, ["avx512fp16"]), True),
+                ((32, "x86_64-linux", "0.17.1", LLVM, ["avx512fp16"]), False),
+                ((32, "x86_64-linux", "0.17.1", SELF_HOSTED, ["fma"]), True),
+                ((16, "x86_64-linux", "0.17.1", SELF_HOSTED, ["fma"]), False),
+                # A backend whose `f16` lowering is not recorded, from 0.17.1.
+                ((16, "x86_64-linux", "0.17.1", "stage2_c", []), True),
+                ((16, "x86_64-linux", "0.16.0", "stage2_c", []), False),
+                ((64, "x86_64-linux", "0.17.1", "stage2_c", []), False)):
+            self.assertEqual(rejected(*args), want, args)
+        # The accepted cases of the CLI run still cover every target but for those two formats.
+        self.assertEqual({(c[0], c[1]) for c in cases() if rejected(c[0], c[1], c[2], c[4], c[5])},
+                         {(32, "s390x-linux"), (64, "s390x-linux")})
+        self.assertTrue(any(rejected(c[0], c[1], c[2], c[4], c[5]) for c in cpu_cases()))
+        self.assertTrue(any(not rejected(c[0], c[1], c[2], c[4], c[5]) for c in cpu_cases()))
 
     def test_cases_cover_every_target_version_mode_and_fullfp16(self):
         seen = {(target, version, mode) for _, target, version, mode, _, _ in cases()}

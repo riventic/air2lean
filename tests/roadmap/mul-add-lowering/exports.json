@@ -1,0 +1,28 @@
+{
+  "exports": [
+    {
+      "out": "air/{version}/baseline",
+      "source": "mul_add.zig",
+      "filter": "mul_add.",
+      "versions": ["0.17.1", "0.16.0", "0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/haswell",
+      "source": "mul_add.zig",
+      "filter": "mul_add.",
+      "versions": ["0.17.1", "0.16.0", "0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=haswell"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air/{version}/sapphirerapids",
+      "source": "mul_add.zig",
+      "filter": "mul_add.",
+      "versions": ["0.17.1", "0.16.0", "0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=sapphirerapids"],
+      "cwd": "repo"
+    }
+  ]
+}
