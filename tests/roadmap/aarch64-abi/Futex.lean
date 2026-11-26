@@ -71,6 +71,12 @@ def noKids : Tgt → ConcM Tgt Unit := fun _ => pure ()
 
 def lift {α : Type} (x : MemM α) : ConcM Tgt α := ConcM.liftMem x
 
+/-- The scheduler's spawn of the case's one target (it cannot fail in `outcomes`' environment). -/
+def spawnKid : ConcM Tgt ThreadId := do
+  match ← ConcM.sync (.spawn 0) with
+  | .ok t => pure t
+  | .error _ => throw .unspecified
+
 /-! ## The probe's memory -/
 
 /-- The futex word (`futex.zig`'s `word`, on the main thread's stack): block 0 of a fresh
@@ -168,9 +174,7 @@ def pairRun (shared timed : Bool) (val : BitVec 32) : List String :=
   outcomes (waiter shared timed) do
     let _ ← word 0
     let _ ← lift (alloc .stack 8 8)
-    let t ← match ← ConcM.sync (.spawn 0) with
-      | .ok t => pure t
-      | .error _ => throw .unspecified
+    let t ← spawnKid
     let r ← futex_3arg p0 (op FUTEX_WAKE shared) val
     let r ← if r = 0 then futex_3arg p0 (op FUTEX_WAKE shared) val else pure r
     ConcM.sync (.join t)
@@ -260,9 +264,7 @@ def pairRun (old timed all : Bool) : List String :=
   outcomes (waiter old timed) do
     let _ ← word 0
     let _ ← lift (alloc .stack 4 4)
-    let t ← match ← ConcM.sync (.spawn 0) with
-      | .ok t => pure t
-      | .error _ => throw .unspecified
+    let t ← spawnKid
     let r ← __ulock_wake (op all) (some p0) 0
     let r ← if r = negErrno32 E.NOENT then __ulock_wake (op all) (some p0) 0 else pure r
     ConcM.sync (.join t)
@@ -336,12 +338,8 @@ def run : List String :=
     let _ ← word 0
     let counter ← lift (alloc .stack 8 8)
     lift (store 8 counter (0 : BitVec 64))
-    let spawn : ConcM Tgt ThreadId := do
-      match ← ConcM.sync (.spawn 0) with
-      | .ok t => pure t
-      | .error _ => throw .unspecified
-    let a ← spawn
-    let b ← spawn
+    let a ← spawnKid
+    let b ← spawnKid
     ConcM.sync (.join a)
     ConcM.sync (.join b)
     return toString (← lift (load (BitVec 64) 8 counter)).toNat
@@ -391,6 +389,9 @@ def hex (v : BitVec 32) : String := String.ofList (Nat.toDigits 16 v.toNat)
 
 /-- The cases of aarch64-linux-gnu, in `futex.zig`'s order. -/
 def linuxCases : List (String × Shape) :=
+  -- One run each, shared by the cases with several waiters.
+  let woken := Linux.wokenCodes false false
+  let wokenShared := Linux.wokenCodes true false
   ([("private", false), ("shared", true)].flatMap fun (domain, shared) =>
     (Linux.waits.map fun (name, ts, val, at_) =>
       (s!"wait_{domain}_{name}", Shape.whole (Linux.waitRun shared ts val at_))) ++
@@ -401,17 +402,17 @@ def linuxCases : List (String × Shape) :=
       (s!"wake1_{name}_val{hex val}", Shape.whole (Linux.pairRun shared timed val))) ++
   ([1, 0, 0xffffffff].map fun val =>
     (s!"wake3_private_val{hex val}",
-      Shape.waiters (Linux.threeRun val) 3 (Linux.wokenCodes false false))) ++
+      Shape.waiters (Linux.threeRun val) 3 woken)) ++
   ([2, 0x7fffffff].map fun val =>
-    (s!"wake3_private_val{hex val}",
-      Shape.waiters (Linux.sumRun val) 3 (Linux.wokenCodes false false))) ++
+    (s!"wake3_private_val{hex val}", Shape.waiters (Linux.sumRun val) 3 woken)) ++
   ([("shared", true), ("private", false)].map fun (domain, shared) =>
     (s!"domain_{domain}_waiter",
-      Shape.waiters (Linux.domainRun shared) 1 (Linux.wokenCodes shared false))) ++
+      Shape.waiters (Linux.domainRun shared) 1 (if shared then wokenShared else woken))) ++
   [("mutex", Shape.count)]
 
 /-- The cases of aarch64-macos-none, in `futex.zig`'s order. -/
 def macosCases : List (String × Shape) :=
+  let woken := Darwin.wokenClasses
   ([("wait2", false), ("wait", true)].flatMap fun (call, old) =>
     Darwin.waits.map fun (name, at_, val, timed) =>
       (s!"{call}_{name}", Shape.whole (Darwin.waitRun old at_ val timed))) ++
@@ -421,9 +422,9 @@ def macosCases : List (String × Shape) :=
       ("wait_timed", true, true)].flatMap fun (waiter, old, timed) =>
     [("one", false), ("all", true)].map fun (call, all) =>
       (s!"wake1_{call}_{waiter}", Shape.whole (Darwin.pairRun old timed all))) ++
-  [("wake3_one", .waiters (Darwin.wakeAsleep 3 false) 3 Darwin.wokenClasses),
+  [("wake3_one", .waiters (Darwin.wakeAsleep 3 false) 3 woken),
    -- `WAKE_ALL`: the probe prints the distinct returns other than `-ENOENT`.
-   ("wake3_all", .waiters (Darwin.wakeAsleep 1 true) 3 Darwin.wokenClasses),
+   ("wake3_all", .waiters (Darwin.wakeAsleep 1 true) 3 woken),
    ("mutex", .count)]
 
 /-- The cases in which the model refuses the call (`.illegal`) where the kernel answers: the

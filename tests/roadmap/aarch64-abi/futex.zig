@@ -27,6 +27,10 @@ const Timespec = extern struct { sec: isize, nsec: isize };
 const WAIT: u32 = 0;
 const WAKE: u32 = 1;
 const PRIVATE: u32 = 0x80;
+/// The op of a domain: `FUTEX_PRIVATE_FLAG` unless shared.
+fn opIn(cmd: u32, shared: bool) u32 {
+    return if (shared) cmd else cmd | PRIVATE;
+}
 const EINTR: isize = -4;
 const ENOENT: isize = -2;
 
@@ -94,7 +98,7 @@ const Waiters = struct {
         var r: isize = EINTR;
         while (r == EINTR) {
             r = if (is_linux)
-                futex(addr, if (how.shared) WAIT else WAIT | PRIVATE, 0, if (how.timed) &long else null)
+                futex(addr, opIn(WAIT, how.shared), 0, if (how.timed) &long else null)
             else
                 ulockWait(how.old, addr, 0, if (!how.timed) 0 else if (how.old) 60_000_000 else 60_000_000_000);
         }
@@ -155,7 +159,7 @@ fn linuxWake(w: *Waiters, n: usize, how: How, wake_shared: bool, val: u32) !Code
     try w.start(n, how);
     var naps: u32 = 0;
     while (w.finished() < n and !rets.stuck) {
-        const r = futex(@intFromPtr(&w.word), if (wake_shared) WAKE else WAKE | PRIVATE, val, null);
+        const r = futex(@intFromPtr(&w.word), opIn(WAKE, wake_shared), val, null);
         if (r != 0) {
             rets.add(r);
             continue;
@@ -165,7 +169,7 @@ fn linuxWake(w: *Waiters, n: usize, how: How, wake_shared: bool, val: u32) !Code
         if (naps == patience) rets.stuck = true;
     }
     // A stuck case leaves its waiters asleep: wake them, whatever the case's own call does.
-    while (w.finished() < n) : (nap(200)) _ = futex(@intFromPtr(&w.word), if (how.shared) WAKE else WAKE | PRIVATE, max_waiters, null);
+    while (w.finished() < n) : (nap(200)) _ = futex(@intFromPtr(&w.word), opIn(WAKE, how.shared), max_waiters, null);
     w.join();
     return rets;
 }
@@ -185,10 +189,10 @@ fn linuxRows(out: anytype) !void {
     const neg_nsec: Timespec = .{ .sec = 0, .nsec = -1 };
     const neg_sec: Timespec = .{ .sec = -1, .nsec = 0 };
 
-    inline for (.{ "private", "shared" }) |domain| {
-        const flag: u32 = if (comptime std.mem.eql(u8, domain, "private")) PRIVATE else 0;
-        const wait = WAIT | flag;
-        const wake = WAKE | flag;
+    inline for (.{ .{ "private", false }, .{ "shared", true } }) |case| {
+        const domain = case[0];
+        const wait = opIn(WAIT, case[1]);
+        const wake = opIn(WAKE, case[1]);
         // WAIT: the word is 1. An expected value of 0 is a mismatch; 1 sleeps.
         try out.print("futex wait_{s}_mismatch {d}\n", .{ domain, futex(at, wait, 0, null) });
         try out.print("futex wait_{s}_mismatch_timed {d}\n", .{ domain, futex(at, wait, 0, &ms) });
@@ -271,11 +275,11 @@ fn linuxRows(out: anytype) !void {
         var w: Waiters = .{};
         try w.start(1, .{ .shared = case[1] });
         nap(20_000);
-        const other = futex(@intFromPtr(&w.word), if (case[1]) WAKE | PRIVATE else WAKE, std.math.maxInt(i32), null);
+        const other = futex(@intFromPtr(&w.word), opIn(WAKE, !case[1]), std.math.maxInt(i32), null);
         var own: isize = 0;
         var naps: u32 = 0;
         while (own == 0 and naps < patience) : (naps += 1) {
-            own = futex(@intFromPtr(&w.word), if (case[1]) WAKE else WAKE | PRIVATE, 1, null);
+            own = futex(@intFromPtr(&w.word), opIn(WAKE, case[1]), 1, null);
             if (own == 0) nap(200);
         }
         w.join();
