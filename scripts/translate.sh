@@ -17,7 +17,13 @@ Options:
   --zig-air PATH            Existing patched compiler (default: repo/zig-air-VERSION/bin/zig)
   --prefix PREFIX           Strip this prefix from Lean names (default: input basename + '.')
   --filter PREFIXES         Comma-separated AIR name prefixes (default: --prefix)
+  --closure ROOTS           Comma-separated function names or name prefixes ending in '*':
+                            translate only what they reach through calls and function values
+                            (a std prefix in --filter also matches instances that only the
+                            compiler's own panic and debug code uses)
   --float-semantics MODE    ieee (default) or compiler-rt; forwarded to air2lean
+  --allocator-model MODEL   std (default) or translated (docs/allocator-model.md; add the
+                            allocator's code to --filter); forwarded to air2lean
   --assume-no-lb            Accept relaxed load-then-store code (premise ORD-02); forwarded
   --overwrite               Replace an existing OUTPUT after a successful check (default)
   --no-clobber              Refuse to replace an existing OUTPUT, even one created concurrently
@@ -39,7 +45,7 @@ HELP
 }
 zig_version=${AIR2LEAN_ZIG_VERSION:-$(air2lean_default_zig_version "$repo_root")}
 zig_air=${AIR2LEAN_ZIG_AIR:-}
-input='' output='' namespace='' prefix='' filter='' float_semantics=ieee
+input='' output='' namespace='' prefix='' filter='' float_semantics=ieee allocator_model=std closure=''
 overwrite=--overwrite workflow_stage_timeout=${AIR2LEAN_STAGE_TIMEOUT:-3600}
 prefix_set=0 filter_set=0 positional_only=0 assume_no_lb=()
 while [ "$#" -gt 0 ]; do
@@ -52,12 +58,13 @@ while [ "$#" -gt 0 ]; do
     --) positional_only=1; shift ;;
     --overwrite | --no-clobber) overwrite=$1; shift ;;
     --assume-no-lb) assume_no_lb=(--assume-no-lb); shift ;;
-    -o | --namespace | --zig-version | --zig-air | --prefix | --filter | --float-semantics | --timeout)
+    -o | --namespace | --zig-version | --zig-air | --prefix | --filter | --closure | --float-semantics | --allocator-model | --timeout)
       [ "$#" -ge 2 ] || { workflow_error "missing value for $1"; exit 2; }
       case "$1" in
         -o) output=$2 ;; --namespace) namespace=$2 ;; --zig-version) zig_version=$2 ;;
         --zig-air) zig_air=$2 ;; --prefix) prefix=$2; prefix_set=1 ;;
         --filter) filter=$2; filter_set=1 ;; --float-semantics) float_semantics=$2 ;;
+        --allocator-model) allocator_model=$2 ;; --closure) closure=$2 ;;
         --timeout) workflow_stage_timeout=$2 ;;
       esac
       shift 2 ;;
@@ -71,6 +78,10 @@ done
 case "$float_semantics" in
   ieee | compiler-rt) ;;
   *) workflow_error "invalid --float-semantics '$float_semantics'; choose ieee or compiler-rt"; exit 2 ;;
+esac
+case "$allocator_model" in
+  std | translated) ;;
+  *) workflow_error "invalid --allocator-model '$allocator_model'; choose std or translated"; exit 2 ;;
 esac
 case "$workflow_stage_timeout" in
   '' | *[!0-9]*) workflow_error "invalid --timeout '$workflow_stage_timeout'; give whole seconds (0 disables)"; exit 2 ;;
@@ -140,10 +151,16 @@ if [ ! -f "${jsons[0]}" ]; then
   printf 'hint: use the patched compiler; export fn or reference functions in comptime { _ = &f; }; check --filter\n' >&2
   exit 1
 fi
+if [ -n "$closure" ]; then
+  IFS=, read -r -a closure_roots <<<"$closure"
+  if ! python3 -B "$repo_root/scripts/fixture-exports.py" closure "$work/air" "${closure_roots[@]}"; then
+    workflow_error 'the --closure roots were not exported; output was not changed'; exit 1
+  fi
+fi
 printf '3/4 Translating AIR to Lean\n' >&2
 if ! workflow_run_stage "$repo_root/.lake/build/bin/air2lean" "$work/air" -o "$stage/Gen.lean" \
     --namespace "$namespace" --prefix "$prefix" --float-semantics "$float_semantics" \
-    ${assume_no_lb[@]+"${assume_no_lb[@]}"}; then
+    --allocator-model "$allocator_model" ${assume_no_lb[@]+"${assume_no_lb[@]}"}; then
   workflow_error 'translation failed; check the reported subset/model limitation; output was not changed'; exit 1
 fi
 [ -f "$stage/Gen.lean" ] || { workflow_error 'translator did not write fresh Lean output'; exit 1; }

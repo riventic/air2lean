@@ -3,8 +3,9 @@
 #   --light [SEEDS]                 generator/shrinker unit tests + typed generator invariants; no tools
 #   --air BINARY [SEEDS] [SAVE_DIR] [ZIG_VERSION]  committed regressions + seeded malformed AIR JSON against a
 #                                    built translator (ZIG_VERSION: that version's seeds and AIR only)
-#   --heavy OUT_DIR [START] [COUNT] [PROFILE]  generated Zig (PROFILE core|wide, default core): native test,
-#                                    AIR export + translation, Lean evaluation
+#   --heavy OUT_DIR [START] [COUNT] [PROFILE]  generated Zig (PROFILE core|wide|ext, default core): native
+#                                    test, AIR export + translation, Lean evaluation. ext also compares
+#                                    illegal behaviour: the native safety panic and the model's error
 #   --reproduces CASE_DIR STAGE      exit 1 iff STAGE (native|translate|lean) is the first failing stage
 # --heavy needs AIR2LEAN_ZIG_NATIVE (stock Zig) and AIR2LEAN_ZIG_AIR (patched Zig). It runs
 # compilers and Lean sequentially; wrap the whole invocation in one scripts/build-guard.py.
@@ -18,21 +19,54 @@ stages=(native translate lean)
 
 # Run the stages of one emitted case directory; print the first failing stage, if any.
 first_failure() {
-  local dir=$1 zig module namespace
-  zig=$(find "$dir" -maxdepth 1 -name 'fuzz_[sw]*.zig' -print -quit)
+  local dir=$1 zig module namespace extra=()
+  zig=$(find "$dir" -maxdepth 1 -name 'fuzz_[swe]*.zig' -print -quit)
   module=$(basename "$zig" .zig)
   namespace="Fuzz${module#fuzz_}"
-  if ! "$AIR2LEAN_ZIG_NATIVE" test "$zig" -OReleaseSafe >"$dir/native.log" 2>&1; then
+  if [ -f "$dir/driver.zig" ]; then
+    # ext: illegal behaviour is an expected outcome, so a harness runs every input and prints one
+    # outcome line each (a panic's safety check by name); `verify` compares them with the reference.
+    native_ext "$dir" >"$dir/native.log" 2>&1 || { echo native; return; }
+    while IFS= read -r arg; do extra+=("$arg"); done < <(python3 -c \
+      'import json, sys; print("\n".join(json.load(open(sys.argv[1]))["translate_args"]))' "$dir/expected.json")
+  elif ! "$AIR2LEAN_ZIG_NATIVE" test "$zig" -OReleaseSafe >"$dir/native.log" 2>&1; then
     echo native; return
   fi
   if ! scripts/translate.sh "$zig" -o "$dir/Gen.lean" --namespace "$namespace" \
-      --zig-air "$AIR2LEAN_ZIG_AIR" --overwrite >"$dir/translate.log" 2>&1; then
+      ${extra[@]+"${extra[@]}"} --zig-air "$AIR2LEAN_ZIG_AIR" --overwrite >"$dir/translate.log" 2>&1; then
     echo translate; return
   fi
   if ! python3 "$here/zig_gen.py" lean-checks "$dir/expected.json" "$dir/Gen.lean" "$namespace" \
-      "$dir/Check.lean" >"$dir/lean.log" 2>&1 || ! lake env lean "$dir/Check.lean" >>"$dir/lean.log" 2>&1; then
+      "$dir/Check.lean" >"$dir/lean.log" 2>&1 || ! lake env lean "$dir/Check.lean" >"$dir/lean.out" 2>>"$dir/lean.log"; then
+    cat "$dir/lean.out" >>"$dir/lean.log" 2>/dev/null || true
     echo lean; return
   fi
+  if [ -f "$dir/driver.zig" ] && ! python3 "$here/zig_gen.py" verify lean "$dir/expected.json" "$dir/lean.out" \
+      >>"$dir/lean.log" 2>&1; then
+    echo lean; return
+  fi
+}
+
+# Build an ext case's harness with the stock Zig and compare its outcome lines on the host. With
+# AIR2LEAN_FUZZ_X86_IMAGE (any linux/amd64 Docker image; the harness is static), a host that is not
+# x86_64-linux also cross-builds it for x86_64-linux, the translation's target, and runs it in a
+# `--platform linux/amd64` container (Rosetta on Apple silicon, docs/rosetta.md).
+native_ext() {
+  local dir=$1 cache
+  cache=${AIR2LEAN_FUZZ_ZIG_CACHE:-$dir/zig-cache}
+  "$AIR2LEAN_ZIG_NATIVE" build-exe "$dir/driver.zig" -OReleaseSafe -femit-bin="$dir/driver" \
+    --cache-dir "$cache" --global-cache-dir "$cache" || return 1
+  "$dir/driver" 2>"$dir/native.out" || return 1
+  python3 "$here/zig_gen.py" verify native "$dir/expected.json" "$dir/native.out" || return 1
+  [ -n "${AIR2LEAN_FUZZ_X86_IMAGE:-}" ] || return 0
+  # The Mac cannot tell what the Docker engine is; -z norelro is harmless elsewhere.
+  AIR2LEAN_ROSETTA=1 . scripts/rosetta.sh
+  "$AIR2LEAN_ZIG_NATIVE" build-exe "$dir/driver.zig" -OReleaseSafe -target x86_64-linux -mcpu=baseline \
+    ${AIR2LEAN_ROSETTA_LINK_FLAGS:-} -femit-bin="$dir/driver-x86_64-linux" \
+    --cache-dir "$cache" --global-cache-dir "$cache" || return 1
+  docker run --rm --platform linux/amd64 -v "$dir:/case:ro" "$AIR2LEAN_FUZZ_X86_IMAGE" \
+    /case/driver-x86_64-linux 2>"$dir/native-x86_64-linux.out" || return 1
+  python3 "$here/zig_gen.py" verify native "$dir/expected.json" "$dir/native-x86_64-linux.out" || return 1
 }
 
 # A failure's normalized first error (paths, function names and numbers removed), so shrinking
@@ -46,7 +80,7 @@ signature() {
                    || grep -E -B1 -m1 '^error: ' "$dir/translate.log" | head -1 ;;
       *) grep -E -m1 'error' "$dir/lean.log" ;;
     esac || true; } \
-    | sed -E 's#^.*\.(json|zig|lean)(:[0-9]+)*: ##; s#fuzz_[sw][0-9]+\.[A-Za-z0-9_]+: ##; s#fuzz_[sw][0-9]+#S#g; s#[0-9]+#N#g'
+    | sed -E 's#^.*\.(json|zig|lean)(:[0-9]+)*: ##; s#fuzz_[swe][0-9]+\.[A-Za-z0-9_]+: ##; s#fuzz_[swe][0-9]+#S#g; s#[0-9]+#N#g'
 }
 
 case "${1:-}" in
@@ -54,6 +88,7 @@ case "${1:-}" in
     python3 -m unittest discover -s "$here" -p 'test_*.py' -v
     python3 "$here/zig_gen.py" light --seeds "${2:-300}"
     python3 "$here/zig_gen.py" light --seeds "${2:-300}" --profile wide
+    python3 "$here/zig_gen.py" light --seeds "${2:-300}" --profile ext
     ;;
   --air)
     [ "$#" -ge 2 ] || { echo 'usage: check.sh --air BINARY [SEEDS] [SAVE_DIR] [ZIG_VERSION]' >&2; exit 2; }
@@ -75,7 +110,7 @@ case "${1:-}" in
     [ "$#" -ge 2 ] || { echo 'usage: check.sh --heavy OUT_DIR [START] [COUNT] [PROFILE]' >&2; exit 2; }
     : "${AIR2LEAN_ZIG_NATIVE:?set a stock host Zig}" "${AIR2LEAN_ZIG_AIR:?set the patched Zig}"
     out=$2 start=${3:-0} count=${4:-5} profile=${5:-core} failed=0
-    case "$profile" in core|wide) ;; *) echo 'PROFILE must be core or wide' >&2; exit 2 ;; esac
+    case "$profile" in core|wide|ext) ;; *) echo 'PROFILE must be core, wide or ext' >&2; exit 2 ;; esac
     # Each seed costs minutes (AIR export, translation, Lean); a range is capped unless overridden.
     max=${AIR2LEAN_FUZZ_HEAVY_MAX:-50}
     case "$start$count" in *[!0-9]*) echo 'START and COUNT must be whole numbers' >&2; exit 2 ;; esac

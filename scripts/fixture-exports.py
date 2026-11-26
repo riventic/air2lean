@@ -41,6 +41,8 @@ A fixture whose AIR is a patched-compiler export declares how it is made in
   fixture-exports.py verify [FIXTURE...]          export into a scratch directory and require the
                                                   committed files byte for byte (nothing written)
   fixture-exports.py export [FIXTURE...]          export, replace each OUT, write the lock
+  fixture-exports.py closure DIR ROOT...          keep only the closure of ROOTs in the export
+                                                  directory DIR (scripts/translate.sh --closure)
 
 FIXTURE is a directory name under tests/roadmap (default: every fixture with a manifest). The
 patched compilers come from scripts/cas.py zig-air (the shared cache with AIR2LEAN_CAS_DIR set,
@@ -392,7 +394,7 @@ def export(fixture):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('action', choices=('list', 'check', 'verify', 'export'))
+    parser.add_argument('action', choices=('list', 'check', 'verify', 'export', 'closure'))
     parser.add_argument('fixtures', nargs='*')
     parser.add_argument('--version', action='append', default=[],
                         help='verify: only the exports of this Zig version (repeatable)')
@@ -400,6 +402,11 @@ def main():
     if args.version and args.action != 'verify':
         parser.error('--version is for verify only (export rewrites the whole lock)')
     try:
+        if args.action == 'closure':  # scripts/translate.sh --closure: any export directory
+            if len(args.fixtures) < 2:
+                parser.error('closure DIR ROOT...')
+            keep_closure(Path(args.fixtures[0]), args.fixtures[1:])
+            return 0
         names = fixtures(args.fixtures)
         if args.action == 'list':
             print('\n'.join(names))
