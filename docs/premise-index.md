@@ -5,7 +5,7 @@ Each row lists the premise IDs that a theorem uses. Their meanings are in
 [premises.md](premises.md). `scripts/premises.py explain <theorem>` shows why each
 premise was derived. This index covers the committed generated modules.
 
-6509 theorems in 423 files.
+6512 theorems in 424 files.
 
 | Premise | Theorems | Title |
 |---|---|---|
@@ -14,13 +14,13 @@ premise was derived. This index covers the committed generated modules.
 | [PRF-03](premises.md#prf-03) | 65 | Gate-time generated module |
 | [PRF-04](premises.md#prf-04) | 931 | Parameterized pointer width |
 | [PRF-05](premises.md#prf-05) | 26 | Recorded `abi64-be-v1` big-endian profile |
-| [ALC-01](premises.md#alc-01) | 4771 | Single modelled allocator |
+| [ALC-01](premises.md#alc-01) | 4774 | Single modelled allocator |
 | [ALC-02](premises.md#alc-02) | 2912 | Allocation failure and request-cap policy |
-| [ALC-03](premises.md#alc-03) | 4771 | Byte remap policy |
+| [ALC-03](premises.md#alc-03) | 4774 | Byte remap policy |
 | [ALC-04](premises.md#alc-04) | 3044 | Byte sentinel allocation |
 | [ALC-05](premises.md#alc-05) | 3044 | Byte realloc and sentinel reallocation |
 | [ALC-06](premises.md#alc-06) | 2864 | Raw allocator interface contracts |
-| [ALC-08](premises.md#alc-08) | 4710 | Address reuse and provenance recovery |
+| [ALC-08](premises.md#alc-08) | 4713 | Address reuse and provenance recovery |
 | [ALC-09](premises.md#alc-09) | 22 | Caller-supplied `Allocator` behaves as the std model |
 | [ALC-10](premises.md#alc-10) | 3074 | Thread-safe allocator in concurrent code |
 | [IOM-01](premises.md#iom-01) | 167 | Caller-supplied `Io` behaves as the std model |
@@ -36,14 +36,14 @@ premise was derived. This index covers the committed generated modules.
 | [THR-10](premises.md#thr-10) | 3231 | Detached threads and explicit handle transfer |
 | [THR-11](premises.md#thr-11) | 26 | `Io.Future` tasks and cancelation (0.16.0) |
 | [THR-12](premises.md#thr-12) | 513 | A gone event setter is not joined while it sets |
-| [ORD-01](premises.md#ord-01) | 4819 | RC11 approximation for atomics |
-| [ORD-02](premises.md#ord-02) | 4819 | No load buffering in compiled code |
-| [ORD-03](premises.md#ord-03) | 4819 | `seq_cst` treated as `acq_rel` |
+| [ORD-01](premises.md#ord-01) | 4822 | RC11 approximation for atomics |
+| [ORD-02](premises.md#ord-02) | 4822 | No load buffering in compiled code |
+| [ORD-03](premises.md#ord-03) | 4822 | `seq_cst` treated as `acq_rel` |
 | [ORD-04](premises.md#ord-04) | 3231 | Weak CAS spurious failure |
 | [ORD-05](premises.md#ord-05) | 2402 | Pointer atomics keep provenance and compare identities |
-| [ORD-06](premises.md#ord-06) | 4829 | Memory-model adequacy of the compiled code |
+| [ORD-06](premises.md#ord-06) | 4832 | Memory-model adequacy of the compiled code |
 | [TMR-02](premises.md#tmr-02) | 30 | Opt-in awake clock and timed scheduler |
-| [MTH-01](premises.md#mth-01) | 4572 | Executable IEEE-754 float model |
+| [MTH-01](premises.md#mth-01) | 4575 | Executable IEEE-754 float model |
 | [MTH-02](premises.md#mth-02) | 246 | Opaque libm transcendentals |
 | [MTH-03](premises.md#mth-03) | 31 | Version-specific compiler-rt float semantics |
 | [MTH-04](premises.md#mth-04) | 124 | aarch64 float lowering |
@@ -56,31 +56,31 @@ premise was derived. This index covers the committed generated modules.
 | [ASM-06](premises.md#asm-06) | 18 | Memory-region asm accesses only its declared regions |
 | [ASM-07](premises.md#asm-07) | 43 | The x86_64 instruction model matches the CPU and the compiled block |
 | [ASM-09](premises.md#asm-09) | 17 | The running CPU has the asm features that the profile lacks |
-| [SEM-01](premises.md#sem-01) | 5307 | Zig value and safety semantics |
-| [SEM-02](premises.md#sem-02) | 4794 | Byte-level block memory model |
-| [SEM-03](premises.md#sem-03) | 5256 | Loops and triples are partial correctness |
+| [SEM-01](premises.md#sem-01) | 5310 | Zig value and safety semantics |
+| [SEM-02](premises.md#sem-02) | 4797 | Byte-level block memory model |
+| [SEM-03](premises.md#sem-03) | 5259 | Loops and triples are partial correctness |
 | [SEM-04](premises.md#sem-04) | 2456 | Total-correctness statements |
 | [SEM-05](premises.md#sem-05) | 2594 | Model step and allocation counts are not time or memory measurements |
 | [SEM-06](premises.md#sem-06) | 121 | Canonical AIR fragment semantics |
-| [SEM-07](premises.md#sem-07) | 4794 | Block addresses are the environment's placement |
-| [STK-01](premises.md#stk-01) | 5251 | The native stack holds every call chain |
-| [STK-02](premises.md#stk-02) | 4710 | Stack reserves lie in address space the native run never maps |
+| [SEM-07](premises.md#sem-07) | 4797 | Block addresses are the environment's placement |
+| [STK-01](premises.md#stk-01) | 5254 | The native stack holds every call chain |
+| [STK-02](premises.md#stk-02) | 4713 | Stack reserves lie in address space the native run never maps |
 | [EXT-01](premises.md#ext-01) | 1457 | User external model contracts |
 | [EXT-02](premises.md#ext-02) | 11 | Assumed contracts and project axioms |
 | [EXT-03](premises.md#ext-03) | 11 | Extern functions at their linker identity |
 | [EXT-04](premises.md#ext-04) | 1457 | Registry models in concurrent programs |
 | [EXT-05](premises.md#ext-05) | 3098 | Environment implementations of open interfaces |
-| [EXT-06](premises.md#ext-06) | 4710 | External static storage is not written during the run |
+| [EXT-06](premises.md#ext-06) | 4713 | External static storage is not written during the run |
 | [EXT-07](premises.md#ext-07) | 0 | A weak definition is the symbol's definition in the image |
-| [TRU-01](premises.md#tru-01) | 6509 | Lean kernel and standard axioms |
+| [TRU-01](premises.md#tru-01) | 6512 | Lean kernel and standard axioms |
 | [TRU-02](premises.md#tru-02) | 1703 | Zig exporter and air2lean translation |
 | [TRU-03](premises.md#tru-03) | 1703 | Backend lowering and native execution |
 | [TRU-04](premises.md#tru-04) | 252 | Reviewed opaque, extern and runtime-redirection policy |
 | [TRU-05](premises.md#tru-05) | 0 | Artifact signing key |
 | [TRU-06](premises.md#tru-06) | 0 | Filesystem publication atomicity |
-| [DEV-01](premises.md#dev-01) | 4710 | Declared device: trace and read oracle |
+| [DEV-01](premises.md#dev-01) | 4713 | Declared device: trace and read oracle |
 | [ENV-01](premises.md#env-01) | 33 | Selected handle read/write/close contract |
-| [ENV-02](premises.md#env-02) | 4723 | Distinct monotonic and wall clock observations |
+| [ENV-02](premises.md#env-02) | 4726 | Distinct monotonic and wall clock observations |
 | [ENV-03](premises.md#env-03) | 26 | Linux raw read/write/close are the bound models |
 | [OSF-01](premises.md#osf-01) | 1814 | Futex wait (`futex_4arg` WAIT, `__ulock_wait2`, `__ulock_wait`) |
 | [OSF-02](premises.md#osf-02) | 1814 | Futex wake (`futex_3arg` WAKE, `__ulock_wake`) |
@@ -94,7 +94,7 @@ premise was derived. This index covers the committed generated modules.
 | [OST-02](premises.md#ost-02) | 1794 | Thread exit, join and detach |
 | [OST-03](premises.md#ost-03) | 1815 | Thread ids, process id and CPU count |
 | [OSY-01](premises.md#osy-01) | 1794 | Yield |
-| [STD-01](premises.md#std-01) | 4771 | Hand model of the `std.mem.Allocator` wrappers |
+| [STD-01](premises.md#std-01) | 4774 | Hand model of the `std.mem.Allocator` wrappers |
 | [STD-02](premises.md#std-02) | 3231 | Hand model of `Thread.spawn` and `Thread.join` |
 | [STD-03](premises.md#std-03) | 3231 | Hand model of `Thread.detach` |
 | [STD-05](premises.md#std-05) | 3424 | Hand model of the std futex interface |
@@ -9344,6 +9344,16 @@ File premises: ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, S
 | `example@L23` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
 | `example@L26` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
 | `example@L28` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+
+## `tests/roadmap/vector-layouts/ModelStrided.lean`
+
+File premises: ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01
+
+| Theorem | Premises |
+|---|---|
+| `example@L20` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `example@L26` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
+| `example@L30` | ALC-01, ALC-03, ALC-08, ORD-01, ORD-02, ORD-03, ORD-06, MTH-01, SEM-01, SEM-02, SEM-03, SEM-07, STK-01, STK-02, EXT-06, TRU-01, DEV-01, ENV-02, STD-01 |
 
 ## `tests/roadmap/volatile-effects/DeviceAsm/Proofs.lean`
 
