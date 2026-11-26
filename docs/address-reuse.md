@@ -7,7 +7,7 @@ separate contract for programs whose behavior depends on addresses.
 
 The short answer: lifetime safety does not depend on fresh addresses. A pointer is a block id and
 an offset. Block ids are never reused. Every liveness check (`Mem.access`, `free`, `rawFree`,
-`poisonFree`, the ownership checks of `ZigLean/Mem/Owned.lean`) looks up the block id, never an
+`poisonFree`) looks up the block id, never an
 address. Addresses matter only for the operations that observe them: `@intFromPtr`,
 `@ptrFromInt`, pointer order and address equality, the alignment check and the `@memcpy`
 overlap check.
@@ -105,7 +105,9 @@ free `p`, allocate `q` (reusing the address), store 7 in `q`, load through `@ptr
 
 `tests/roadmap/address-reuse/Check.lean` adds runtime regressions. A proposal is refused over a
 live block, when misaligned, when 0 and past 2^64; an adjacent, lower or far address is taken.
-Stack blocks are placed the same way. An arena reuses a reset block's address.
+Stack blocks are placed the same way. (A translated allocator's slices lie in the blocks it gets
+from its child or the OS, so an arena's reuse after a reset is the child's: the
+`FixedBufferAllocator`'s end index or `mmap`'s placement; `tests/roadmap/alloc-arena`.)
 `std.mem.Allocator` use after free and double free stay `.illegal` under reuse. The one-past
 address of a dead block that a live block starts at is ambiguous (no provenance under
 `.strict`). An address with one covering block keeps that block's provenance; a dead block

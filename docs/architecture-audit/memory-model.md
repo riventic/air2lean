@@ -317,7 +317,8 @@ which is false natively. The translator does not route these allocators yet
 offset).
 
 **Status: fixed by deletion (allocator removal plan step 1, `docs/allocator-model.md`).**
-`FixedBuffer.init` and the fixed-buffer policy are gone from `ZigLean/Mem/Owned.lean`.
+`FixedBuffer.init` and the fixed-buffer policy are gone from `ZigLean/Mem/Owned.lean` (step 2
+deleted that file).
 `std.heap.FixedBufferAllocator` is translated from its Zig code (`--allocator-model
 translated`): its allocations are pointers into the buffer's own block, so a write to `buf[0]`
 and the allocated object alias exactly as natively (`tests/roadmap/alloc-fba`,

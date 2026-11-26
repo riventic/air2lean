@@ -1676,6 +1676,15 @@ jobs:
           lake build ZigLean
           bash tests/roadmap/undef-operands/check.sh
           bash tests/roadmap/undef-locals/check.sh
+      # C10 evidence (docs/research/C10.md): the model's outcomes against the sequentially
+      # consistent ones (`#guard`s of Sc.lean), the committed native observations, and the wrong
+      # observations and mutants of the SC oracle and the observation check (Q02). No compiler.
+      - name: SC order litmus evidence (C10)
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'inputs' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          lake build ZigLean
+          bash tests/roadmap/sc-order/check.sh
       # Illegal behaviour (docs/illegal-behavior.md): each op's own check gives `.illegal` on the
       # retained 0.16.0 fixtures, emitter mutants that drop a check are killed, translator
       # probes, and the trust-chain audit's unchecked-memcpy case stays fixed.
@@ -2021,12 +2030,6 @@ jobs:
           python3 tests/roadmap/allocation-policy/static.py 2>&1 | tee "$AIR2LEAN_ALLOCATION_REPORT_DIR/static.log"
           bash tests/roadmap/allocation-policy/check.sh 2>&1 | tee "$AIR2LEAN_ALLOCATION_REPORT_DIR/check.log"
           python3 tests/roadmap/allocation-policy/mutations.py 2>&1 | tee "$AIR2LEAN_ALLOCATION_REPORT_DIR/mutations.log"
-
-      # M01: allocator identity and the arena policy of the std-mode model (executable
-      # regressions; M01's theorems over the translated arena run in tests/roadmap/alloc-arena).
-      - name: Allocator identity model regressions
-        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'lean' && !matrix.mutate }}
-        run: bash tests/roadmap/allocator-identity/check.sh
 
       # M05: opt-in address reuse, lifetime safety from provenance, stale @ptrFromInt.
       - name: Address reuse proofs and model regressions

@@ -514,9 +514,86 @@
       ]
     },
     "L07": {
-      "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "categories": [
+        "layout"
+      ],
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/packed-casts/check.sh",
+          "anchor": "a rejected cast wrote a translation"
+        },
+        {
+          "path": "tests/roadmap/packed-casts/reject/expected.txt",
+          "anchor": "0.17.1 reject_sentinel sentToInt a Zig 0.17 `@bitCast` of a sentinel-terminated array"
+        },
+        {
+          "path": "tests/roadmap/packed-casts/compile-errors/expected.txt",
+          "anchor": "0.14.1 auto_struct.zig error"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "sentToInt",
+          "path": "tests/roadmap/packed-casts/expected/wrong.txt",
+          "category": "layout",
+          "anchor": "sentToInt: 0x30211"
+        },
+        {
+          "name": "wideToInt",
+          "path": "tests/roadmap/packed-casts/expected/wrong.txt",
+          "category": "layout",
+          "anchor": "wideToInt: 0x300020077"
+        },
+        {
+          "name": "nestedToInt",
+          "path": "tests/roadmap/packed-casts/expected/wrong.txt",
+          "category": "layout",
+          "anchor": "nestedToInt: 0x6050400030211"
+        },
+        {
+          "name": "sentItem3",
+          "path": "tests/roadmap/packed-casts/expected/wrong.txt",
+          "category": "layout",
+          "anchor": "sentItem3: 0x0"
+        },
+        {
+          "name": "roundTrip",
+          "path": "tests/roadmap/packed-casts/expected/wrong.txt",
+          "category": "layout",
+          "anchor": "roundTrip: 0xbbccdd"
+        },
+        {
+          "name": "intToSentAt3",
+          "path": "tests/roadmap/packed-casts/expected/wrong.txt",
+          "category": "layout",
+          "anchor": "intToSentAt3: 0x0"
+        },
+        {
+          "name": "voidsToInt",
+          "path": "tests/roadmap/packed-casts/expected/wrong.txt",
+          "category": "other",
+          "anchor": "voidsToInt: 0x1"
+        },
+        {
+          "name": "intToVoids",
+          "path": "tests/roadmap/packed-casts/expected/wrong.txt",
+          "category": "other",
+          "anchor": "intToVoids: 0x0"
+        },
+        {
+          "name": "floatsToInt",
+          "path": "tests/roadmap/packed-casts/expected/wrong.txt",
+          "category": "layout",
+          "anchor": "floatsToInt: 0x3f800000c0000000"
+        },
+        {
+          "name": "bytesToU",
+          "path": "tests/roadmap/packed-casts/expected/wrong.txt",
+          "category": "layout",
+          "anchor": "bytesToU: 0x3412"
+        }
+      ],
+      "note": "expected/wrong.txt holds the results other readings of the casts would give (a sentinel left out of the bits, the result's sentinel forced, an array of `void` with bits, a float array and a packed union with their bytes swapped). check.sh (`wrong_models_rejected`) puts each in place of the model's line of that name and requires the comparison with the retained native observation to fail; the mutants are results of a wrong model, not edits of the Lean model, so a kill shows that the observation separates the readings."
     },
     "L08": {
       "categories": [
@@ -1164,8 +1241,53 @@
     },
     "C10": {
       "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/sc-order/mutations.py",
+          "anchor": "\"sb-seq-cst-both-zero\""
+        },
+        {
+          "path": "tests/roadmap/sc-order/mutations.py",
+          "anchor": "\"sb-relaxed-outside-model\""
+        },
+        {
+          "path": "tests/roadmap/sc-order/mutations.py",
+          "anchor": "\"sb-mixed-line-missing\""
+        }
+      ],
+      "mutants": [
+        {
+          "name": "sc-load-reads-initial",
+          "path": "tests/roadmap/sc-order/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "sc-store-dropped",
+          "path": "tests/roadmap/sc-order/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "sc-threads-never-interleave",
+          "path": "tests/roadmap/sc-order/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "sc-outcome-check-dropped",
+          "path": "tests/roadmap/sc-order/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "model-outcome-check-dropped",
+          "path": "tests/roadmap/sc-order/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "missing-test-accepted",
+          "path": "tests/roadmap/sc-order/mutations.py",
+          "category": "other"
+        }
+      ],
+      "note": "The `seq_cst` semantics is not implemented (docs/research/C10.md), so it has no mutants: a model that treats `seq_cst` as release/acquire is what main has today, and tests/roadmap/sc-order/Sc.lean records by `#guard` that no litmus outcome separates the two (premise ORD-03). The mutants cover what exists: Sc.lean's executable oracle of the sequentially consistent outcomes and its check of the native observations. Mutants of the semantics (a dropped SC floor, an SC write placed before the newest SC message) are due with the implementation."
     },
     "C11": {
       "categories": [
@@ -1300,8 +1422,22 @@
     },
     "C13": {
       "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/progress/Total.lean",
+          "anchor": "example : (countdown 1) 0 {} = .leaf none := rfl"
+        },
+        {
+          "path": "tests/roadmap/progress/Total.lean",
+          "anchor": "example : ¬ (∀ t ∈ (twoReady 0).ready.toList, ∃ step,"
+        },
+        {
+          "path": "tests/roadmap/progress/Total.lean",
+          "anchor": "stuck_not_eventuallyReturns env _ _ _"
+        }
+      ],
+      "mutants": [],
+      "note": "No designated mutant, because there is no C13 implementation to mutate: the row is a design (docs/research/C13.md) and a native probe (docs/research/c13-probe). `WeakFair` on the trace, the wait-token resource, its rules and a client do not exist, and the futex counterexample is an argument, not a checked theorem. The only code is the bounded countdown family of PR90 (ZigLean.Conc.Total), whose negative facts are the tests above (a zero budget is not a result, readiness does not give the child a turn, a stuck program never returns); its results hold for every oracle, so no fairness premise or wait token is in use whose removal a mutant could show. Mutants (a dropped fairness premise, a mintable wait token, a waiting iteration without a token) are due with the first implementation slice."
     },
     "C14": {
       "categories": [
@@ -1338,23 +1474,23 @@
       "categories": [],
       "negative_tests": [
         {
-          "path": "tests/roadmap/allocator-identity/Check.lean",
-          "anchor": "expect \"arena-block-std-free\""
+          "path": "tests/roadmap/alloc-arena/ArenaObstruction.lean",
+          "anchor": "theorem foreign_free_panics"
         },
         {
-          "path": "tests/roadmap/allocator-identity/Check.lean",
-          "anchor": "expect \"arena-block-other-arena-free\""
+          "path": "tests/roadmap/alloc-arena/AllocArena/Core.lean",
+          "anchor": "theorem granted_in_node"
         },
         {
-          "path": "tests/roadmap/allocator-identity/Check.lean",
-          "anchor": "expect \"reset-own-block\""
+          "path": "tests/roadmap/alloc-arena/AllocArena/Eval.lean",
+          "anchor": "#guard first (arena_oom_free 8) dispatch (mem0 .fresh) = \"fail Zig.Error.illegal\""
         }
       ],
       "mutants": [
         {"name": "fba-alloc-end-index-kept", "path": "tests/roadmap/alloc-fba/mutant.sh", "category": "other"},
         {"name": "page-shrink-tail-kept-mapped", "path": "tests/roadmap/alloc-translated/mutant.sh", "category": "other"}
       ],
-      "note": "Cross-allocator free/destroy/remap and use after reset are .illegal (executable regressions). The translated allocators' full-state proofs reject a FixedBufferAllocator alloc that does not advance end_index (FBA.fallocSpec fails) and a PageAllocator shrink that leaves the cut pages mapped (PageSpec fails)."
+      "note": "Over the translated ArenaAllocator: a foreign free panics natively, a slice the arena takes back lies in one of its used nodes (a foreign or stale slice has no token), and the stock arena's free after a failed alloc is .illegal (O-E). The translated allocators' full-state proofs reject a FixedBufferAllocator alloc that does not advance end_index (FBA.fallocSpec fails) and a PageAllocator shrink that leaves the cut pages mapped (PageSpec fails)."
     },
     "M02": {
       "categories": [
@@ -1610,12 +1746,38 @@
     "F02": {
       "categories": [],
       "negative_tests": [],
-      "mutants": []
+      "mutants": [],
+      "note": "No implementation to mutate: F02 is a design (docs/research/F02.md) with recorded native probes. No `LibmContract` premise, contract instance or numeric client exists; the transcendental operations keep the opaque behaviour they had before the row. Negative tests and mutants (a contract of the wrong libm for the profile, a widened error bound, a dropped domain condition) are due with the first contract."
     },
     "F03": {
       "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/diagnostics/RuntimeTags.lean",
+          "anchor": "rejectedWith (file #[instruction \"add_optimized\"]) \"optimized float mode\""
+        },
+        {
+          "path": "tests/roadmap/inventory/test_inventory.py",
+          "anchor": "rows['add_optimized']['rejection'] = None"
+        },
+        {
+          "path": "tests/roadmap/build-modes/test_build_modes.py",
+          "anchor": "def test_fast_math_in_tested_sources"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "fast-math-rejection-unchecked",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        },
+        {
+          "name": "fast-math-tested-source-accepted",
+          "path": "tests/roadmap/mutation-map/mutants.py",
+          "category": "other"
+        }
+      ],
+      "note": "The semantics of the `*_optimized` operations is not implemented (docs/research/F03.md), so it has no mutants. What exists is the fail-closed side: the normalizer rejects every `*_optimized` tag, the inventory requires that rejection with its current reason for each such tag, and the build-mode gate refuses tested sources that set the optimized float mode. The two mutants remove the last two checks. Mutants of the semantics (a per-operation relation, a NaN operand that is not `.illegal`, a dropped `observe`) are due with the implementation; tests/roadmap/fast-math/check.py (the native strict/fast records) runs in no CI job and has no mutants."
     },
     "F04": {
       "categories": [],
@@ -2622,13 +2784,170 @@
     },
     "V01": {
       "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/op-effects/test_op_table.py",
+          "anchor": "'neg: an arm that is only stuck'"
+        },
+        {
+          "path": "tests/roadmap/air-semantics/PlacementCounterexample.lean",
+          "anchor": "theorem promoted_lt"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "scale-mul-wrapping",
+          "path": "tests/roadmap/air-semantics/test_lean.py",
+          "category": "other"
+        },
+        {
+          "name": "absdiff-gt-as-lt",
+          "path": "tests/roadmap/air-semantics/test_lean.py",
+          "category": "other"
+        },
+        {
+          "name": "clampadd-add-as-sub",
+          "path": "tests/roadmap/air-semantics/test_lean.py",
+          "category": "other"
+        },
+        {
+          "name": "gcd-rem-as-divtrunc",
+          "path": "tests/roadmap/air-semantics/test_lean.py",
+          "category": "other"
+        },
+        {
+          "name": "iseven-ret-false",
+          "path": "tests/roadmap/air-semantics/test_lean.py",
+          "category": "other"
+        },
+        {
+          "name": "dueof-field-offset",
+          "path": "tests/roadmap/air-semantics/test_lean.py",
+          "category": "layout"
+        },
+        {
+          "name": "swap-store-wrong-value",
+          "path": "tests/roadmap/air-semantics/test_lean.py",
+          "category": "other"
+        },
+        {
+          "name": "same-eq-as-ne",
+          "path": "tests/roadmap/air-semantics/test_lean.py",
+          "category": "other"
+        },
+        {
+          "name": "writeflag-field-offset",
+          "path": "tests/roadmap/air-semantics/test_lean.py",
+          "category": "layout"
+        },
+        {
+          "name": "sumto-counter-wrapping",
+          "path": "tests/roadmap/air-semantics/test_lean.py",
+          "category": "other"
+        },
+        {
+          "name": "sum-add-as-sub",
+          "path": "tests/roadmap/air-semantics/test_lean.py",
+          "category": "other"
+        },
+        {
+          "name": "digitorzero-nonerr-as-err",
+          "path": "tests/roadmap/air-semantics/test_lean.py",
+          "category": "other"
+        },
+        {
+          "name": "parsedigit-wrong-error",
+          "path": "tests/roadmap/air-semantics/test_lean.py",
+          "category": "other"
+        }
+      ],
+      "note": "Each mutant changes one operator of the AIR a committed certificate embeds (Proofs/<Ex>/AirCert.lean); test_lean.py requires the certificate to fail in that function's theorem, so the interpreter gives the two operators different meanings on that function. The mutants edit the interpreted AIR, not the interpreter's arms (Air2Lean/Sem.lean): a mutant of an arm needs a rebuild of every certificate and is not designated yet. The value kinds outside the fragment have no semantics to mutate."
     },
     "V02": {
       "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "negative_tests": [
+        {
+          "path": "tests/roadmap/air-semantics/CanonBinding.lean",
+          "anchor": "native debug binding accepted {label}"
+        },
+        {
+          "path": "tests/roadmap/gen-integrity/test_certification.py",
+          "anchor": "def test_mismatch_producer_failure_and_invalid_protocol_never_reach_audit"
+        }
+      ],
+      "mutants": [
+        {
+          "name": "sum-view-key",
+          "path": "tests/roadmap/air-semantics/test_lean.py",
+          "category": "other"
+        },
+        {
+          "name": "clique-guessed-motive-order",
+          "path": "tests/roadmap/air-semantics/test_lean.py",
+          "category": "other"
+        },
+        {
+          "name": "debug-wrong-live-id",
+          "path": "tests/roadmap/air-semantics/CanonBinding.lean",
+          "category": "other",
+          "anchor": "reject \"wrong live ID\""
+        },
+        {
+          "name": "debug-wrong-nested-body",
+          "path": "tests/roadmap/air-semantics/CanonBinding.lean",
+          "category": "other",
+          "anchor": "reject \"wrong nested body\""
+        },
+        {
+          "name": "debug-wrong-layout",
+          "path": "tests/roadmap/air-semantics/CanonBinding.lean",
+          "category": "layout",
+          "anchor": "reject \"wrong layout\""
+        },
+        {
+          "name": "debug-wrong-function-metadata",
+          "path": "tests/roadmap/air-semantics/CanonBinding.lean",
+          "category": "other",
+          "anchor": "reject \"wrong function metadata\""
+        },
+        {
+          "name": "debug-wrong-offset",
+          "path": "tests/roadmap/air-semantics/CanonBinding.lean",
+          "category": "other",
+          "anchor": "reject \"wrong offset\""
+        },
+        {
+          "name": "debug-wrong-global-initializer",
+          "path": "tests/roadmap/air-semantics/CanonBinding.lean",
+          "category": "other",
+          "anchor": "reject \"wrong global initializer\""
+        },
+        {
+          "name": "debug-one-bad-item",
+          "path": "tests/roadmap/air-semantics/CanonBinding.lean",
+          "category": "other",
+          "anchor": "reject \"one bad item\""
+        },
+        {
+          "name": "renumber-collapsed-ids",
+          "path": "tests/roadmap/air-semantics/CanonBinding.lean",
+          "category": "other",
+          "anchor": "unbound \"collapsed IDs\""
+        },
+        {
+          "name": "renumber-wrong-operand",
+          "path": "tests/roadmap/air-semantics/CanonBinding.lean",
+          "category": "other",
+          "anchor": "unbound \"wrong operand\""
+        },
+        {
+          "name": "renumber-wrong-function-metadata",
+          "path": "tests/roadmap/air-semantics/CanonBinding.lean",
+          "category": "other",
+          "anchor": "unbound \"wrong function metadata\""
+        }
+      ],
+      "note": "The preservation that exists is mutated: a certificate with a wrong view key or a guessed motive order of a recursive clique must fail (test_lean.py), and CanonBinding.lean's wrong canonical functions (a changed ID, body, layout, metadata, offset or initializer for the debug-ID rewrite; a collapsed ID, operand or metadata for `renumber`) must not bind, which test_lean.py checks line by line. The Canon rewrites that are still trusted (`forwardReadOnlyCopies`, `itemReads`, `dropTrueChecks`, the dead-code passes) have no preservation theorem, so no mutant of them can be killed yet."
     },
     "V03": {
       "categories": [],

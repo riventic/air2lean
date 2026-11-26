@@ -242,9 +242,9 @@ free of the last allocation, reset, a fresh allocation) from these contracts onl
 * The M04 vtable contracts (the retired `ZigLean/Sep/RawAlloc.lean`, premise ALC-06) needed
   whole `.heap` blocks and specific remap policies; `AllocSpec` states the same four entries
   over byte ranges for any allocator, proved rather than assumed.
-* `.owned a` blocks and allocator identities (ALC-07) model arenas by hand (the hand-written
-  fixed buffer is deleted; the translated `FixedBufferAllocator` replaces it);
-  with `AllocSpec` a foreign free is a missing token (a permission violation), and arena reset
+* `.owned a` blocks and allocator identities (ALC-07) modelled arenas and fixed buffers by hand;
+  both are deleted (the translated `FixedBufferAllocator` and `ArenaAllocator` replace them).
+  With `AllocSpec` a foreign free is a missing token (a permission violation), and arena reset
   invalidation is a consequence of the translated arena's invariant.
 
 ## Retired claims
@@ -255,9 +255,9 @@ with `Wrap`, `Wrappers`, `Dispatch`, `Toy`) is retired (CLAUDE.md, "Trusted base
 Every claim it makes is either **replaced** by a statement over translated allocators and
 `FAllocSpec` in the full-state logic, or **retired** with the reason below. Retired claims are
 about the hand-written model itself. The executable checks of the `std` allocator model
-(`tests/roadmap/{allocation-policy, allocator-identity, byte-sentinel, sentinel-realloc,
-resize-remap}`: kernel runs of `Zig.Allocator` and `ZigLean/Mem/Owned.lean`) test the semantics
-that `--allocator-model std` still emits. They are **legacy std allocator model checks**: they
+(`tests/roadmap/{allocation-policy, byte-sentinel, sentinel-realloc, resize-remap}`: kernel runs
+of `Zig.Allocator`) test the semantics that `--allocator-model std` still emits; the arena
+model's checks went with `ZigLean/Mem/Owned.lean`. They are **legacy std allocator model checks**: they
 stay, importing `ZigLean/Mem/*` only, and retire with `--allocator-model std`
 ([allocator-model.md](allocator-model.md), step 3 onwards). No new evidence is built on them.
 
