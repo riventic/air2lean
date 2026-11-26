@@ -15606,7 +15606,6 @@
     "Zig.FootprintEntry",
     "Zig.FutexKey",
     "Zig.NaScope",
-    "Zig.OwnedAlloc",
     "Zig.Ptr",
     "Zig.StackState",
     "Zig.ThreadId",
@@ -15712,9 +15711,6 @@
         "closed": "List.toArray"
        },
        {
-        "closed": "List.toArray"
-       },
-       {
         "closed": "Option.none"
        },
        {
@@ -15752,7 +15748,6 @@
       "fn": "Zig.Mem.mk",
       "fn_module": "ZigLean.Mem.Basic",
       "params": [
-       "default",
        "default",
        "default",
        "default",
