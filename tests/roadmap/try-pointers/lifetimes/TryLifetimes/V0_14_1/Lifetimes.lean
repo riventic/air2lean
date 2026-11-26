@@ -1,4 +1,5 @@
 import TryLifetimes.V0_14_1.Gen
+import ZigLean.Sep.Full.AutoAll
 
 /-! L04 lifetimes of addressed error unions (`try_lifetimes.zig`), on the translation of the
 retained export of one Zig version (`TryLifetimes.V0_14_1.Gen`; written for Zig 0.17.1, the
@@ -12,7 +13,8 @@ modules of 0.14.1, 0.15.2 and 0.16.0 are this one with the version renamed: `che
   and writes of two unions give the native results, and a write racing a read of one union's
   payload is a data race (`.illegal`), on every schedule.
 
-Kernel-checked theorems for the sequential cases; `main` runs the schedules. -/
+Kernel-checked theorems for the sequential cases, `fsym` thread steps for the thread bodies
+(`readPayload` on a shared union, `writePayload` on an owned one); `main` runs the schedules. -/
 
 open Zig TryLifetimes.V0_14_1
 
@@ -33,6 +35,44 @@ theorem freeOnError_error : runFreed (freeOnError default 7 true) = some (.ok (.
 /-- The payload pointer of a freed union is dangling: the read is a use after free. -/
 theorem readDangling_illegal : runFreed (readDangling default 5) = some (.error .illegal) := by
   decide +kernel
+
+/-! ### The thread bodies as thread steps
+
+`fsym` walks each thread body of `concurrentReads` and `concurrentWrites` as a thread step
+(`FTTotalTriple`): the readers hold a read share of the union (`spts`, the pointer-try rules on
+a shared union and their locality providers, `ZigLean/Sep/Full/Try.lean`), a writer owns its
+union. -/
+
+section Threads
+open Zig.Full Zig.Full.FAssn
+
+/-- A reader of a union that holds a payload gets it, through its payload pointer. -/
+theorem readPayload_ok (p : Ptr) (x : BitVec 8) (φ : Frac) :
+    FTTotalTriple (spts p 2 φ (Except.ok x : Except ErrName (BitVec 8))) (readPayload p)
+      (fun r => ⟪r = .ok x⟫ ⋆ spts p 2 φ (Except.ok x : Except ErrName (BitVec 8))) := by
+  fsym
+
+/-- A reader of a union that holds an error gets the error. -/
+theorem readPayload_error (p : Ptr) (φ : Frac) :
+    FTTotalTriple (spts p 2 φ (Except.error "Bad" : Except ErrName (BitVec 8))) (readPayload p)
+      (fun r => ⟪r = .error "Bad"⟫ ⋆
+        spts p 2 φ (Except.error "Bad" : Except ErrName (BitVec 8))) := by
+  fsym
+
+/-- A writer of an owned union that holds a payload replaces it through its payload pointer. -/
+theorem writePayload_ok (p : Ptr) (x w : BitVec 8) :
+    FTTotalTriple (up (pts p 2 (Except.ok x : Except ErrName (BitVec 8)))) (writePayload p w)
+      (fun r => ⟪r = .ok ()⟫ ⋆ up (pts p 2 (Except.ok w : Except ErrName (BitVec 8)))) := by
+  fsym
+
+/-- A writer of an owned union that holds an error gets the error and writes nothing. -/
+theorem writePayload_error (p : Ptr) (w : BitVec 8) :
+    FTTotalTriple (up (pts p 2 (Except.error "Bad" : Except ErrName (BitVec 8)))) (writePayload p w)
+      (fun r => ⟪r = .error "Bad"⟫ ⋆
+        up (pts p 2 (Except.error "Bad" : Except ErrName (BitVec 8)))) := by
+  fsym
+
+end Threads
 
 private def require (ok : Bool) (message : String) : IO Unit :=
   unless ok do throw (IO.userError message)
