@@ -43,8 +43,7 @@ def Enc.optionRepr {α : Type} (enc : Enc α) : Enc (Option α) :=
   { (inferInstance : Enc (Option α)) with
     decode := fun bs =>
       match (bs[Enc.size α]? : Option Byte) with
-      | some (.int 0) => pure none
-      | some (.int 1) => some <$> Enc.decode bs
+      | some (.int 0) | some (.int 1) => (inferInstance : Enc (Option α)).decode bs
       | _ => throw .unspecified }
 
 /-- `*T` → `?*T`: the pointer itself. Its bytes are the pointer's bytes (`optPtr_encode_wrap`). -/

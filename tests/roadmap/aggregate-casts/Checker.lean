@@ -70,8 +70,9 @@ private def result (version : String) (src dst : TyId) (backend : String := "unv
 
 private def accepts (version : String) (src dst : TyId) : Bool := (result version src dst).isOk
 
-private def rejects (version : String) (src dst : TyId) (marker : String) : Bool :=
-  match result version src dst with
+private def rejects (version : String) (src dst : TyId) (marker : String)
+    (backend : String := "unverified") : Bool :=
+  match result version src dst backend with
   | .error e => (e.splitOn marker).length > 1
   | .ok _ => false
 
@@ -111,9 +112,8 @@ def main : IO Unit := do
   for v in ["0.14.1", "0.15.2", "0.16.0"] do
     for (s, d) in [(17, 5), (5, 17), (18, 5), (5, 18), (17, 18)] do
       require (rejects v s d "involving a pointer") s!"{v}: pointer-bearing cast {s} → {d} is accepted"
-  require (match result "0.16.0" 10 5 Target.llvmBackend with
-      | .error e => (e.splitOn "between types of 56 and 64 bits").length > 1
-      | .ok _ => false) "[2]u24 → u64 is accepted"
+  require (rejects "0.16.0" 10 5 "between types of 56 and 64 bits" Target.llvmBackend)
+    "[2]u24 → u64 is accepted"
   -- Zig 0.14.1 and 0.15.2: an optional array item is decoded with the cast's flag rule
   -- (`Zig.Enc.optionRepr`); an optional in a field of an `auto` struct item (also as an item of
   -- an array field) is decoded by the struct's own encoding, and is rejected.
