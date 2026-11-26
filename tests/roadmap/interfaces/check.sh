@@ -6,8 +6,9 @@
 # ZigLean.Sep.Full.RegionEnc`;
 # runs no compiler. Every Zig version's exports translate under the registries and elaborate; the
 # 0.17.1 translations are the retained ones byte for byte, and the proofs over them
-# (Interfaces/*Spec.lean) check; the list proofs (Proofs/Lists) build over the 0.17.1, 0.16.0 and
-# 0.15.2 lists translations; test_cli.py covers the rejections and the closed default.
+# (Interfaces/*Spec.lean) check; the list proofs (Proofs/Lists, with M03's Policy) build over the
+# 0.17.1, 0.16.0 and 0.15.2 lists translations, and those that take no allocator over the 0.14.1
+# one; test_cli.py covers the rejections and the closed default.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
@@ -83,13 +84,29 @@ done
 # with that translation in place of Proofs/Lists/Open.lean (the trees clone the checkout's
 # build, so only Open and the proofs rebuild there). Lake's own search path only: not this
 # check's LEAN_PATH, whose checkout build holds the 0.17.1 Proofs.Lists.Open.
-lists_proofs=(Proofs.Lists.Linked Proofs.Lists.Alloc Proofs.Lists.Append Proofs.Lists.Bounded)
+# Proofs.Lists.Policy is M03's `appendEach_spec`: the append loop for every allocator and every
+# failure decision.
+lists_proofs_no_allocator=(Proofs.Lists.Linked Proofs.Lists.Bounded)
+lists_proofs=("${lists_proofs_no_allocator[@]}" Proofs.Lists.Alloc Proofs.Lists.Append Proofs.Lists.Policy)
 env -u LEAN_PATH lake build "${lists_proofs[@]}"
-for version in 0.16.0 0.15.2; do
-  tree=$repo_root/.lake/check-tree/interfaces-lists-$version
+lists_tree() {  # lists_tree VERSION MODULE...: the modules over VERSION's lists translation
+  local version=$1 tree=$repo_root/.lake/check-tree/interfaces-lists-$1
+  shift
   python3 scripts/check-tree.py create "$tree" --replace "Proofs/Lists/Open.lean=$work/lists-$version.lean"
-  (cd "$tree" && env -u LEAN_PATH lake build "${lists_proofs[@]}")
-done
+  (cd "$tree" && env -u LEAN_PATH lake build "$@")
+}
+for version in 0.16.0 0.15.2; do lists_tree "$version" "${lists_proofs[@]}"; done
+# Zig 0.14.1: only the proofs that take no allocator; the others are not claimed for it, and why
+# their text does not hold there is in docs/interfaces.md#the-list-proofs-over-older-zig-versions.
+# One of the two reasons is pinned here, so a translation that changes it is noticed: 0.14.1's std
+# names the list type `ArrayListAlignedUnmanaged`, not `Aligned` as Append and Policy do.
+if ! grep -q '^def array_list_ArrayListAlignedUnmanaged_u32_null_append ' "$work/lists-0.14.1.lean" ||
+    grep -q '^def array_list_Aligned_u32_null_append ' "$work/lists-0.14.1.lean"; then
+  echo 'interfaces: the 0.14.1 lists translation no longer names the list ArrayListAlignedUnmanaged:' \
+    'review the versions above and docs/interfaces.md' >&2
+  exit 1
+fi
+lists_tree 0.14.1 "${lists_proofs_no_allocator[@]}"
 # The proofs over the 0.17.1 translations (docs/interfaces.md, proof side), kernel-checked with
 # only the standard axioms; ClosureCX (after MixSpec, which it imports) is the counterexample to
 # using the environment's contract for a vtable of the program.
