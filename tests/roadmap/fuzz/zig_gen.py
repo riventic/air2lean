@@ -190,7 +190,7 @@ class Gen:
             self.globals.append({"name": f"g{k}", "ty": ty, "init": rng.choice([0, 1, 5, 1000, 70000])
                                  if ty == "u32" else rng.choice([0, -1, 3, -70000])})
         for k in range(rng.randint(0, 2)):
-            err = rng.random() < 0.5
+            err = rng.random() < (0.7 if self.ext else 0.5)  # ext: `try` needs two error functions
             params = [[f"p{j}", rng.choice(["u32", "i32"])] for j in range(rng.randint(0, 2))]
             self.funcs.append(self.function(f"f{k}", params, err))
         self.funcs.append(self.function("work", [["p0", "u32"], ["p1", "u32"]], False))
@@ -560,7 +560,7 @@ class Gen:
             if ty == "u32" and self.callable(True):
                 kinds += ["cunreach"] * 3
                 if self.err and not self.in_defer:
-                    kinds.append("try")
+                    kinds += ["try"] * 6
         if not kinds:
             return None
         kind = rng.choice(kinds)

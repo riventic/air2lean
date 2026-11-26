@@ -775,12 +775,11 @@ class ZigGenerator(unittest.TestCase):
             for candidate in zig_gen.candidates(reduced):
                 if zig_gen.typecheck(candidate) and zig_gen.size(candidate) < zig_gen.size(reduced):
                     self.assertFalse(panics_on_division(candidate))
-            # One unguarded division is left, and nothing around it.
-            self.assertEqual([f["name"] for f in reduced["funcs"]], ["work"])
-            work = reduced["funcs"][0]
-            divisions = [e for e in _subexpressions([work["body"], work["ret"]]) if e[0] == "div"]
+            # One unguarded division is left, in `work` or in a function on the call path to it.
+            self.assertLessEqual(len(reduced["funcs"]), 3)
+            divisions = [e for f in reduced["funcs"] for e in _subexpressions([f["body"], f["ret"]]) if e[0] == "div"]
             self.assertEqual([e[5] for e in divisions], [False])
-            self.assertLess(zig_gen.size(reduced)[0], 460)
+            self.assertLess(zig_gen.size(reduced)[0], 460 if len(reduced["funcs"]) == 1 else 900)
         # Guarding an operation is a reduction step of its own.
         program = _ext([["let", "x1", "i7", ["div", "rem", "i7", LIT("i7", 1), LIT("i7", 0), False]]])
         self.assertIn(True, [c["funcs"][-1]["body"][0][3][5] for c in zig_gen.candidates(program)
