@@ -24,8 +24,10 @@ python3 scripts/aarch64-abi.py check --zig /path/to/zig --target aarch64-linux-g
 python3 scripts/aarch64-abi.py check --zig /path/to/zig --target aarch64-macos-none
 # Any host:
 python3 scripts/aarch64-abi.py compare --target aarch64-linux-gnu OBSERVED.txt
-lake build ZigLean.VecMem ZigLean.Float.Allowed ZigLean.Mem.Thread
+lake build ZigLean.VecMem ZigLean.Float.Allowed ZigLean.Mem.Thread ZigLean.Os ZigLean.Conc.Sched
 lake env lean --run tests/roadmap/aarch64-abi/Model.lean aarch64-linux-gnu \
+  tests/roadmap/aarch64-abi/expected/0.16.0/aarch64-linux-gnu-ReleaseSafe.txt
+lake env lean --run tests/roadmap/aarch64-abi/Futex.lean aarch64-linux-gnu \
   tests/roadmap/aarch64-abi/expected/0.16.0/aarch64-linux-gnu-ReleaseSafe.txt
 python3 -m unittest discover -s tests/roadmap/aarch64-abi -p 'test_*.py'
 python3 tests/roadmap/aarch64-abi/test_float_atomics.py .lake/build/bin/air2lean
@@ -56,7 +58,8 @@ python3 tests/roadmap/aarch64-abi/test_float_atomics.py .lake/build/bin/air2lean
     threaded litmus tests with a deterministic outcome on a conforming target (message passing
     with release/acquire: no stale read in 100000 rounds; store buffering with `seq_cst`: never
     both zero; four threads adding to `u8`, `u24`, `u128` and a `cmpxchgWeak` loop on `u64`: the
-    exact sum). A relaxed litmus test is not recorded, because its outcome is not deterministic.
+    exact sum). A relaxed litmus test is not recorded, because its outcome is not deterministic;
+  - the `futex` rows of `tests/roadmap/aarch64-abi/futex.zig` (§Futex).
 - L09's `tests/roadmap/vector-layouts/probe.zig`: bit-packed vector sizes, alignments and
   memory images.
 - `tests/roadmap/aarch64-abi/limits/*.zig`: programs the compiler must reject, one `limit` row
@@ -178,6 +181,99 @@ aarch64-linux-gnu and aarch64-macos-none profile and checks that every float wid
 `f128`) and every atomic op that reaches AIR is rejected with its diagnostic and leaves the
 output untouched, while the same ops on a `u32` cell are accepted.
 
+### Futex
+
+The model's kernel wait queue is two trusted OS rows per target (`ZigLean/Os/Futex.lean`,
+premises [OSF-01 and OSF-02](premises.md#osf-01)): `futex_4arg`/`futex_3arg` on Linux and
+`__ulock_wait2`/`__ulock_wait`/`__ulock_wake` on macOS. Their sources are the kernels' code;
+`futex.zig` observes the same calls natively on each aarch64 profile, and
+`tests/roadmap/aarch64-abi/Futex.lean` checks every `futex <case> <value>` row against the rows.
+
+For each case `Futex.lean` runs the model's row on the same arguments under the scheduler
+(`Zig.Sched.runTrace`), over every schedule and every choice of the oracle, and collects the
+results. A choice among more than four options (the `2^31 + 1` results of a macOS wait) is cut
+to its first four, which only removes outcomes. The native value must be one of these outcomes.
+The check fails on a missing, repeated, unknown or malformed row and on a file of the other
+profile. `Model.lean` requires the profile's number of `futex` rows (79 on aarch64-linux-gnu,
+35 on aarch64-macos-none). When `Futex.lean` is elaborated, it checks that no case's run stops
+at its cap of 4000 schedules, and that the model excludes a list of values (`forbidden`: a wake
+above its limit, a wake of a sleeper in the other domain, a success where the kernel must
+fail).
+
+A value is a return code as a signed decimal (`-errno` on failure). On the std wrappers: the
+probe calls the wrapper that the translator binds (`futex_4arg`/`futex_3arg`;
+`futex_wait`/`futex_wake` on 0.14.1) wherever its pointer type can carry the address, and the
+raw system call for a null address and, on 0.14.1, for an unaligned one. The rows are the same
+for all four Zig versions.
+
+**aarch64-linux-gnu**, each case with `FUTEX_PRIVATE_FLAG` and without (the word is on a stack:
+anonymous memory, as a shared key needs it in the model):
+
+| Case | Native | Model |
+| --- | --- | --- |
+| WAIT, word ≠ expected, with and without a timeout | `-EAGAIN` | the same |
+| WAIT, word = expected, timeout 1 ms or 0 | `-ETIMEDOUT` | `-ETIMEDOUT` or `-EINTR` |
+| WAIT, timeout with `nsec = 10^9`, `nsec < 0` or `sec < 0`; also with a mismatch, an unaligned address or a kernel address | `-EINVAL` | the same (the timeout is validated first) |
+| WAIT or WAKE, address not a multiple of 4, also a kernel address | `-EINVAL` | the same (alignment before the address) |
+| WAIT or WAKE, address with bits 63 and 55 set, and `2^64 - 4` | `-EFAULT` | the same |
+| WAKE with nobody asleep, `val` 1, 0 and `2^31 - 1` | 0 | the same |
+| private WAKE at address 0 | 0 | the same (a private key needs no page) |
+| one sleeper, WAKE with `val` 1, 2, 0, `2^31 - 1`, `0xffffffff`; the sleeper private, shared, or with a 60 s timeout | the wake returns 1, the wait 0 | among the outcomes |
+| three sleepers, `val` 1, 0, `0xffffffff` | three non-zero returns, each 1 | the same (`Linux.wakeLimit`: `val ≤ 0` wakes one) |
+| three sleepers, `val` 2 and `2^31 - 1` | the returns sum to 3, none above `val` | the same |
+| a shared sleeper and a private WAKE of all, and the reverse | 0, then the sleeper's own domain wakes it | the same (the key has the domain) |
+
+**aarch64-macos-none**, `__ulock_wait2` and `__ulock_wait` with `COMPARE_AND_WAIT | NO_ERRNO`,
+`__ulock_wake` with and without `WAKE_ALL`:
+
+| Case | Native | Model |
+| --- | --- | --- |
+| wait, word ≠ expected, with and without a timeout | 0 (`--ull_nwaiters`) | `-EFAULT` or any non-negative code |
+| wait, word = expected, timeout 1 ms | `-ETIMEDOUT` | `-ETIMEDOUT` or `-EINTR` |
+| wait, null or unaligned address | `-EINVAL` | the same |
+| wake, null address | `-EINVAL` | the same |
+| wake with nobody asleep; at an unaligned or unmapped address | `-ENOENT` | `-ENOENT`, 0 or `-EINTR` |
+| one sleeper (either wait call, with or without a timeout), wake of one or all | the wake returns 0, the wait 0 | among the outcomes |
+| three sleepers, wake of one, each after the last woken waiter returned | three successes; every wait returns a non-negative code | among the outcomes |
+| three sleepers, `WAKE_ALL` | only successes; every wait returns a non-negative code | among the outcomes |
+
+Both profiles also record `futex mutex 4x20000=80000`: four threads take a lock built on the
+two calls alone (Drepper's three-state mutex) 20 000 times each around a plain counter. No
+increment is lost and the run ends. `Futex.lean` checks the product, as `Model.lean` does for
+the `litmus counters` row: it is a native observation of the calls under contention. Beside
+it, `Futex.lean` runs the same lock on the model's Linux rows, two threads and one round each,
+over every schedule (`Lock.run`, checked at elaboration): the counter is 2 in every run that
+ends, and no run is a data race on the counter or a deadlock. On the macOS rows the schedules
+are too many for that check. There the model's `__ulock_wake` may return `-EINTR` with nobody
+woken (a conservative extra outcome: xnu's wake path never does), so a lock that does not
+repeat such a wake can deadlock in the model; the probe's lock repeats it, as std does.
+
+Thirteen calls are **refused by the model**: it says `.illegal` where the kernel returns
+`-EFAULT`, the conservative refusal of an address that is not a live word of the model and
+whose native result needs mapping or address-space knowledge (OSF-01/OSF-02, "Model gaps").
+`Futex.lean` prints each as `refused by the model (.illegal, not a match)`, requires that the
+model still refuses it, and never counts it as a match:
+
+| Case | Native |
+| --- | --- |
+| Linux WAIT at address 0, private and shared | `-EFAULT` |
+| Linux shared WAKE at address 0 | `-EFAULT` |
+| Linux WAIT and WAKE, private and shared, at the word's address with a top-byte tag (bit 56; the process has not enabled the tagged-address ABI) | `-EFAULT` |
+| Linux WAIT and WAKE, private and shared, at the word's address with bit 63 set | `-EFAULT` |
+| macOS `__ulock_wait2` and `__ulock_wait` at an unmapped address (8) | `-EFAULT` |
+
+Every row is the same on every run, so the rows are part of the expected file. A threaded case
+records only what does not depend on when its sleepers fall asleep: the waker repeats its call
+until every waiter has returned, and with three sleepers the returns are recorded only where
+each one is forced (a limit of one), else their sum. A case that does not end within 10 s
+prints `stuck`, which is a mismatch.
+
+Not probed: `EINTR` (the probe sends no signal); a shared key on a file-backed page (the model
+refuses it); how a wake above one splits over sleepers that are all asleep (the probe cannot
+know when a thread sleeps); `os_unfair_lock` and the `EDOM` gap at a `std.Thread.Mutex` word
+(STD-06, [audit S6 finding 4](architecture-audit/soundness-2026-10-14.md)); `std.Thread.Futex`,
+`std.Thread.Mutex` and `Io.Threaded`, which are translated std code over these rows.
+
 ### Zig 0.17.1
 
 The 0.17.1 files (recorded with the stock 0.17.1: natively on Apple silicon, and in a
@@ -244,7 +340,8 @@ Not covered:
 - weak orderings (`monotonic` message passing, relaxed store buffering): outcomes are
   allowed, not forced, so nothing deterministic can be recorded; the model's weak-memory
   semantics is in `ZigLean/Conc/WeakCas.lean` (`docs/weak-cas.md`);
-- instruction-level ordering strength (LDAR/STLR vs LL/SC) and futex/mutex behaviour;
+- instruction-level ordering strength (LDAR/STLR vs LL/SC);
+- the futex cases listed as not probed in §Futex;
 - the `-mcpu` features other than `baseline`;
 - other Zig versions. A new version needs its own `expected/<version>/` files; without them
   `compare` reports `excluded`, and the translator rejects its aarch64 AIR;

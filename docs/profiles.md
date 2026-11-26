@@ -289,7 +289,10 @@ records a bounded candidate for T04/T05/T06.
 - `c_longdouble`;
 - L09 vector layouts;
 - atomic widths, alignment and results, the 128-bit atomic limit, every `@atomicRmw`
-  operation, the accepted orderings, `bool`/enum/pointer/float cells, and threaded litmus tests.
+  operation, the accepted orderings, `bool`/enum/pointer/float cells, and threaded litmus tests;
+- the kernel's futex calls (`FUTEX_WAIT`/`FUTEX_WAKE` on Linux, `__ulock_*` on macOS): return
+  codes, the order of the checks, wake limits and key domains, each checked against the outcomes
+  of the OS rows by `tests/roadmap/aarch64-abi/Futex.lean` ([aarch64-abi.md](aarch64-abi.md#futex)).
 
 The output must equal that profile's versioned expected file
 (`tests/roadmap/aarch64-abi/expected/<zig>/`, Zig 0.17.1, 0.16.0, 0.15.2 and 0.14.1). A wrong host or an unrecorded Zig version
