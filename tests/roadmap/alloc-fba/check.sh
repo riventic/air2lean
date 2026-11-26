@@ -10,8 +10,8 @@
 # exports.json's export, pinned by exports.lock.json (scripts/fixture-exports.py), of Zig 0.16.0
 # and 0.17.1. The retained translation is 0.17.1's; over 0.16.0's, in a check tree, the whole
 # library is built and audited again (README, "Zig 0.16.0 and 0.17.1"). With AIR2LEAN_NATIVE_ZIG
-# (a stock Zig 0.16.0 or 0.17.1), also builds and runs
-# native.zig and compares it with expected.txt.
+# (a stock Zig 0.16.0 or 0.17.1), also builds and runs native.zig and compares it with
+# expected.txt.
 set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
