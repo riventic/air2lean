@@ -14,8 +14,7 @@
  "spirv": "SPIR-V runtime arrays",
  "splatSentinelArray": "splat to a sentinel-terminated array (Zig 0.17.1) is outside the subset",
  "subByteLane": "a pointer to a vector lane (vector_index) is outside the subset",
- "toVec": "tag 'array_to_vector': Zig 0.17.1's array-to-vector coercion is outside the subset",
- "toVecSentinel": "tag 'array_to_vector': Zig 0.17.1's array-to-vector coercion",
+ "toVecLength": "`array_to_vector` between an array and a vector of another length or item type",
  "unionFromEnum": "tag 'union_from_enum': Zig 0.17.1's enum-to-tagged-union coercion is outside the subset",
  "unionFromEnumOn016": "tag 'union_from_enum' is not a Zig 0.16.0 AIR tag (introduced in 0.17.0)",
  "unknownTag": "tag 'int_from_bitpack' has no schema entry"
