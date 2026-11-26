@@ -2,7 +2,8 @@
 # Open interfaces (docs/interfaces.md): calls through a `std.mem.Allocator`, a `std.Random` or
 # E02's `Visitor` callback that the caller passes in. Needs a built translator and `lake build ZigLean ZigLean.Sep.Full.Wrappers
 # ZigLean.Sep.Full.Dispatch ZigLean.Sep.Full.Auto ZigLean.Sep.Full.Block ZigLean.Sep.Full.AutoPrim
-# ZigLean.Sep.Full.Typed ZigLean.Sep.Full.Try ZigLean.Sep.Full.Region ZigLean.Sep.Full.SentinelBuf`;
+# ZigLean.Sep.Full.Typed ZigLean.Sep.Full.Try ZigLean.Sep.Full.Region ZigLean.Sep.Full.SentinelBuf
+# ZigLean.Sep.Full.RegionEnc`;
 # runs no compiler. Every Zig version's exports translate under the registries and elaborate; the
 # 0.17.1 translations are the retained ones byte for byte, and the proofs over them
 # (Interfaces/*Spec.lean) check; the list proofs (Proofs/Lists) build over the 0.17.1, 0.16.0 and
@@ -47,6 +48,7 @@ programs=(
   "callbacks|Callbacks|Interfaces.Callbacks|$here/Interfaces/Callbacks.lean|callbacks.|tests/roadmap/callbacks/air/{v}|$work/registry-callbacks-{v}.json|"
   "sentinel|Sentinel|Interfaces.Sentinel|$here/Interfaces/Sentinel.lean|source.|$here/air/{v}/sentinel|$here/registry-alloc.json|--allocator-model translated"
   "wide|Wide|Interfaces.Wide|$here/Interfaces/Wide.lean|wide.|$here/air/{v}/wide|$here/registry-alloc.json|--allocator-model translated"
+  "kinds|Kinds|Interfaces.Kinds|$here/Interfaces/Kinds.lean|kinds.|$here/air/{v}/kinds|$here/registry-alloc.json|--allocator-model translated"
 )
 translate() {  # translate VERSION ENTRY OUT
   local name module namespace retained prefix air registry extra
@@ -62,10 +64,10 @@ for version in 0.16.0 0.15.2 0.14.1 0.17.1; do
     "${lean_cmd[@]}" -R "$work" -o "$work/Interfaces/$module.olean" "$work/Interfaces/$module.lean"
     if [ "$module" = Lists ]; then cp "$work/Interfaces/Lists.lean" "$work/lists-$version.lean"; fi
   done
-  # The sentinel proofs (`u8`, and the wider item types) hold for this version's translation too
-  # (0.17.1: the axioms loop below).
+  # The sentinel proofs (`u8`, the wider item types and the other item kinds) hold for this
+  # version's translation too (0.17.1: the axioms loop below).
   if [ "$version" != 0.17.1 ]; then
-    for spec in SentinelSpec WideSpec; do
+    for spec in SentinelSpec WideSpec KindsSpec; do
       "${lean_cmd[@]}" -R "$work" "$here/Interfaces/$spec.lean" > "$work/$spec-$version.txt" 2>&1 || {
         cat "$work/$spec-$version.txt" >&2; exit 1; }
     done
@@ -91,7 +93,7 @@ done
 # The proofs over the 0.17.1 translations (docs/interfaces.md, proof side), kernel-checked with
 # only the standard axioms; ClosureCX (after MixSpec, which it imports) is the counterexample to
 # using the environment's contract for a vtable of the program.
-for spec in MixSpec ClosureCX RndSpec CallbacksSpec SentinelSpec WideSpec; do
+for spec in MixSpec ClosureCX RndSpec CallbacksSpec SentinelSpec WideSpec KindsSpec; do
   { cat "$here/Interfaces/$spec.lean"; echo
     grep -o '^theorem [^ :({\[]*' "$here/Interfaces/$spec.lean" | while read -r _ t; do
       echo "#print axioms Interfaces.$spec.$t"; done; } > "$work/Interfaces/$spec.lean"
