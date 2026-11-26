@@ -94,6 +94,54 @@ checks these gates. Retranslating every committed golden and roadmap AIR set (54
 output and diagnostics before and after this change. None of them has a schema-12 LLVM profile
 with a non-byte vector in memory.
 
+## Element-stride layout
+
+The self-hosted x86_64 backend (`stage2_x86_64`, the default of a Debug build for x86_64-linux
+from Zig 0.15) and the C backend do not bit-pack integer and float lanes. A lane sits at its ABI
+stride, as in the array `[n]T` (`@Vector(4, u9)`: four 2-byte lanes; `@Vector(2, f80)`: two
+16-byte lanes), and the vector is padded to its alignment (Zig's `Type.abiSize`/`abiAlignment`):
+
+| Backend | Alignment | Size |
+|---|---|---|
+| `stage2_x86_64`, integer or float lanes | 16 at the baseline CPU (32 with AVX above 16 bytes, 64 with AVX-512 above 32 bytes); 1 for no lanes | `n * @sizeOf(T)` rounded up to the alignment |
+| `stage2_x86_64`, `bool` lanes (bit-packed, lane `i` is bit `i`) | `⌈n / 8⌉` rounded up to a power of 2 up to 64 lanes, 16 above (32 with AVX2 above 128 lanes, 64 with AVX-512 above 256) | `⌈n / 8⌉` rounded up to the alignment |
+| `stage2_c` | the lane's | `n * @sizeOf(T)` |
+
+`ZigLean/VecStride.lean` has the baseline `stage2_x86_64` rows (`x86VecAlign`, `x86VecSize`,
+`x86BoolVecAlign`, `x86BoolVecSize`) and one encoding for every row with a byte stride:
+`Vec.stridedEnc n size align` is the image of the array of the lanes (any lane encoding
+`Enc α`), then undefined padding bytes up to `size`.
+
+| Theorem (`ZigLean/VecStride.lean`) | Statement |
+|---|---|
+| `Vec.stridedEnc_size_encode`, `Vec.stridedEnc_decode_encode`, `Vec.stridedEnc_lawful` | A vector has an image of exactly `size` bytes when its lanes fit, and reads back as stored when each lane does. |
+| `Vec.stridedEnc_float_decode_encode` | A float vector without a NaN lane reads back as stored, at either byte order. |
+| `Vec.stridedEnc_cell` | The bytes at `[i * s, (i + 1) * s)` (`s` the lane's size) are lane `i`'s image, so a load of the lane type at that offset reads lane `i`. |
+| `Vec.stridedEnc_set` | A store of a lane's bytes at its cell leaves exactly the image of `v.set i x`: lane `i` is replaced and no other byte changes (`Vec.set_lane_ne`). |
+| `x86BoolVec_eq` | Up to 64 lanes, a `bool` vector has the LLVM size and alignment (its image is `Vec.packedEnc`'s). |
+| `intEncExt_lawful` (`ZigLean/EndianLemmas.lean`) | The integer lane encoding of this backend (a store writes the extension of the whole ABI integer) is lawful. |
+
+These are universal over the lane encoding, lane count, size and lane values, and introduce no
+axioms.
+
+Compiler evidence. `tests/roadmap/vector-layouts/probe_strided.zig` prints `@sizeOf` and
+`@alignOf` of 812 vector types (19 integer and float lane types at 0 to 40 lanes; `bool` up to
+513 lanes) and, for 16 vectors (`u9`, `i9`, `u12`, `u4`, `u1`, `u24`, `i24`, `u40`, `u8`, `u16`,
+`u32`, `u64`, `f32`, `f80`, `bool`), the image after a store of every lane, after a load and a
+store of the whole vector and after a store through `&v[i]`, a load through `&v[j]`, and the
+bytes of an a5-filled vector after a store through `&v[i]` (only lane `i`'s cell changes).
+`ModelStrided.lean` prints the same 910 lines from the encoding, with `Zig.intEncExt` for an
+integer lane, and compares them with `stage2-x86_64-linux.txt`. The stock compilers of Zig
+0.14.1, 0.15.2, 0.16.0 and 0.17.1 (`-fno-llvm -fno-lld -target x86_64-linux -mcpu=baseline`,
+Debug and ReleaseSafe; run in a `linux/amd64` container under Rosetta) printed that file byte
+for byte. The lines cover the listed vectors at the baseline CPU only.
+
+Translator scope. None yet: `modelLayout` gives every vector the LLVM size and alignment and
+compares them with the exporter's, so a `stage2_x86_64` profile is accepted only where the two
+layouts are the same bytes (a byte-lane vector of exactly 16 bytes, a `bool` vector of up to 64
+lanes) and rejected elsewhere. Not covered by the encoding: a `bool` vector of more than 64
+lanes, a CPU with AVX, and the `stage2_c` rows (no probe).
+
 ## Lane pointers
 
 Zig gives `&v[i]` of `@Vector(n, T)`, where `T` is `bool` or an integer whose bit size `w` is not

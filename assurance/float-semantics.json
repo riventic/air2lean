@@ -4604,6 +4604,15 @@
       ],
       "correspondence": "model"
     },
+    "ZigLean.VecStride::Zig.Vec.stridedEnc_float_decode_encode": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
     "ZigLean.Sep.Full.Try::Zig.Float.prefixDecode": {
       "semantics": "abstract-spec",
       "targets": [
