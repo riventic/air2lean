@@ -4,7 +4,8 @@
 //!   * a tuple: the memory model has no tuple layout;
 //!   * error storage (an error set or an error union): the model's error bytes are symbolic, not
 //!     the compilation's error codes;
-//!   * an optional: no guaranteed in-memory layout.
+//!   * an optional of one of these or of a pointer (pointer bytes carry provenance). Other
+//!     optionals are memory reinterpretations (`opt_items.zig`).
 //! Each function is translated alone and must be rejected with its diagnostic (`check.sh`,
 //! `reject/expected.txt`).
 pub const Pair = struct { u8, u16 };
@@ -32,8 +33,21 @@ pub fn errorUnionsToInt(a: [2]E!u16) u64 {
     return @bitCast(a);
 }
 
-pub fn optionalsToInt(a: [2]?u8) u32 {
+pub fn optTuplesToInt(a: [2]?Pair) u96 {
     return @bitCast(a);
+}
+
+pub fn optErrorsToInt(a: [2]?E) u32 {
+    return @bitCast(a);
+}
+
+pub fn optPtrsToInt(a: [2]?*u8) u128 {
+    return @bitCast(a);
+}
+
+pub fn intToOptPtrs(x: u128) bool {
+    const a: [2]?*u8 = @bitCast(x);
+    return a[1] == null;
 }
 
 comptime {
@@ -42,5 +56,8 @@ comptime {
     _ = &errorsToInt;
     _ = &intToErrors;
     _ = &errorUnionsToInt;
-    _ = &optionalsToInt;
+    _ = &optTuplesToInt;
+    _ = &optErrorsToInt;
+    _ = &optPtrsToInt;
+    _ = &intToOptPtrs;
 }
