@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # L04 pointer-try lifetimes and native runs (README.md). Lake builds the library TryLifetimes
 # (tests/roadmap/lakefile.toml; scripts/fixtures.py, run it under scripts/build-guard.py).
-#   check.sh [--check]          translate air/<version>/ (0.14.1, 0.15.2, 0.16.0, 0.17.1), compare
-#                               with TryLifetimes/<version>/Gen.lean, check that each version's
-#                               Lifetimes.lean is the 0.17.1 one with the version renamed, build
-#                               the library, audit the axioms and run each version's Lifetimes
-#                               `main` (kernel-checked sequential theorems, 32 scheduler oracles)
+#   check.sh [--check]          translate air/<version>/ and air-payloads/<version>/ (0.14.1,
+#                               0.15.2, 0.16.0, 0.17.1), compare with TryLifetimes/<version>/
+#                               Gen.lean and PayloadsGen.lean, check that each version's
+#                               Lifetimes.lean and Payloads.lean are the 0.17.1 ones with the
+#                               version renamed, build the library, audit the axioms and run each
+#                               version's `main`s (kernel-checked sequential theorems, 32 scheduler
+#                               oracles; the payload-shape runtime cases)
 #   check.sh --native VERSION   with a stock Zig VERSION (AIR2LEAN_ZIG_NATIVE): the tests of
-#                               try_pointers.zig, try_aliases.zig and try_lifetimes.zig for
+#                               try_pointers.zig, try_aliases.zig, try_lifetimes.zig and
+#                               try_payloads.zig for
 #                               x86_64-linux-musl, ReleaseSafe and Debug, in Docker linux/amd64
 #                               (AIR2LEAN_X86_64_RUN overrides the runner; empty: the host)
 set -euo pipefail
@@ -22,7 +25,7 @@ case "${1:---check}" in
     work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-try-native.XXXXXX")
     trap 'rm -rf "$work"' EXIT
     for src in tests/roadmap/try-pointers/try_pointers.zig tests/roadmap/try-pointers/try_aliases.zig \
-        "$dir/try_lifetimes.zig"; do
+        "$dir/try_lifetimes.zig" "$dir/try_payloads.zig"; do
       for mode in ReleaseSafe Debug; do
         bin="$work/$(basename "$src" .zig)-$mode"
         "$AIR2LEAN_ZIG_NATIVE" test "$src" "-O$mode" -target x86_64-linux-musl --test-no-exec \
@@ -46,25 +49,34 @@ translator=${AIR2LEAN_TRANSLATOR:-"$repo_root/.lake/build/bin/air2lean"}
 [ -x "$translator" ] || { echo 'build the translator first (lake build air2lean)' >&2; exit 1; }
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/air2lean-try-lifetimes.XXXXXX")
 trap 'rm -rf "$work"' EXIT
-primary="$dir/TryLifetimes/V0_17_1/Lifetimes.lean"
 modules=() mains=() theorems=()
 for v in "${versions[@]}"; do
   t="V${v//./_}"
-  # The retained translation is the fresh one, byte for byte (Lake builds the retained file).
+  # The retained translations are the fresh ones, byte for byte (Lake builds the retained files).
   "$translator" "$dir/air/$v" -o "$work/$t.lean" --namespace "TryLifetimes.$t" \
     --prefix try_lifetimes.
   cmp "$work/$t.lean" "$dir/TryLifetimes/$t/Gen.lean"
-  # Every version's module states the same theorems: the 0.17.1 one, the version renamed.
-  [ "$t" = V0_17_1 ] || python3 -B scripts/fixtures.py instance "$primary" --subst "V0_17_1=$t"
-  modules+=("TryLifetimes.$t.Lifetimes")
-  mains+=("TryLifetimes.$t.Lifetimes:TryLifetimes.$t.Lifetimes.main")
-  theorems+=(--declaration "TryLifetimes.$t.Lifetimes.readDangling_illegal")
+  "$translator" "$dir/air-payloads/$v" -o "$work/$t.payloads.lean" \
+    --namespace "TryLifetimes.$t.Payloads" --prefix try_payloads.
+  cmp "$work/$t.payloads.lean" "$dir/TryLifetimes/$t/PayloadsGen.lean"
+  # Every version's modules state the same theorems: the 0.17.1 ones, the version renamed.
+  for primary in Lifetimes Payloads; do
+    [ "$t" = V0_17_1 ] || python3 -B scripts/fixtures.py instance \
+      "$dir/TryLifetimes/V0_17_1/$primary.lean" --subst "V0_17_1=$t"
+  done
+  modules+=("TryLifetimes.$t.Lifetimes" "TryLifetimes.$t.Payloads")
+  mains+=("TryLifetimes.$t.Lifetimes:TryLifetimes.$t.Lifetimes.main"
+    "TryLifetimes.$t.Payloads:TryLifetimes.$t.PayloadRules.main")
+  theorems+=(--declaration "TryLifetimes.$t.Lifetimes.readDangling_illegal"
+    --declaration "TryLifetimes.$t.PayloadRules.cleanup64_owned"
+    --declaration "TryLifetimes.$t.PayloadRules.resetOnErrorPair_owned")
 done
 python3 -B scripts/fixtures.py build TryLifetimes
 # Compiled and audited (axioms, sorry, kernel replay), not only run: they are indexed (F2).
 python3 -B scripts/fixtures.py audit "${modules[@]}" "${theorems[@]}"
 python3 -B scripts/fixtures.py run "$work/out" "${mains[@]}"
 for v in "${versions[@]}"; do
-  line=$(cat "$work/out/TryLifetimes.V${v//./_}.Lifetimes.main.txt")
-  echo "$v: $line"
+  t="V${v//./_}"
+  echo "$v: $(cat "$work/out/TryLifetimes.$t.Lifetimes.main.txt")"
+  echo "$v: $(cat "$work/out/TryLifetimes.$t.PayloadRules.main.txt")"
 done
