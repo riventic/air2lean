@@ -1157,9 +1157,9 @@ bytes apply to a share, which stays (`FTotalTriple.spts_read`): `tryPayloadPtr_s
 `errPayload_sload`.
 
 In a thread every pointer-try command is local where its bytes are read (`ReadsPtr`: owned bytes,
-`ReadsPtr.of_owns`, or a share, `ReadsPtr.spts_add`): `ThreadLocal.tryPayloadPtr` & co. are the
-locality providers, so `fsym` applies the sequential rules of this module, owned or shared, in a
-thread (`FTTotalTriple.ofSeq`). `errSetOk` writes the error code and has no thread rule yet. -/
+`ReadsPtr.of_owns`, or a share, `ReadsPtr.spts_add`): `ThreadLocal.tryPayloadPtr` & co., with
+their providers per view (`…_pts`, `…_spts`), so `fsym` applies the sequential rules of this
+module, owned or shared, in a thread (`FTTotalTriple.ofSeq`). `errSetOk` writes the error code and has no thread rule yet. -/
 
 section Shared
 
@@ -1275,7 +1275,7 @@ pointer. -/
 variable {P : FAssn}
 
 /-- **An unused load** is local where its bytes are read. -/
-@[fsym_provider] theorem ThreadLocal.loadDiscardBytes {n : Nat} (h : ReadsPtr P q n) :
+theorem ThreadLocal.loadDiscardBytes {n : Nat} (h : ReadsPtr P q n) :
     ThreadLocal P (Zig.loadDiscardBytes n al q) := by
   rw [Zig.loadDiscardBytes_eq]
   exact ThreadLocal.loadBytes_bind h fun _ => ThreadLocal.pure _
@@ -1298,14 +1298,14 @@ theorem ThreadLocal.tryPayloadPtr_bind {β : Type} {k : Except ErrName Ptr → M
     exact ThreadLocal.ptrProject_bind fun _ => hk _
 
 /-- **Pointer-form `try`** is local where its error code is read. -/
-@[fsym_provider] theorem ThreadLocal.tryPayloadPtr
+theorem ThreadLocal.tryPayloadPtr
     (h : ReadsPtr P (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2) :
     ThreadLocal P (Zig.tryPayloadPtr α al q) := by
   rw [← bind_pure (Zig.tryPayloadPtr α al q)]
   exact ThreadLocal.tryPayloadPtr_bind h ThreadLocal.pure
 
 /-- **Pointer-form `try`** with a finite error domain is local where its error code is read. -/
-@[fsym_provider] theorem ThreadLocal.finiteTryPayloadPtr
+theorem ThreadLocal.finiteTryPayloadPtr
     (h : ReadsPtr P (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2) :
     ThreadLocal P (Zig.finiteTryPayloadPtr d α al q) :=
   ThreadLocal.tryPayloadPtr_bind h fun _ => ThreadLocal.liftR _
@@ -1329,20 +1329,20 @@ theorem ThreadLocal.errCodeAt_bind {β : Type} {k : ErrName → MemM β}
 
 /-- **The error of an error union** (`unwrap_errunion_err_ptr`) is local where its error code is
 read. -/
-@[fsym_provider] theorem ThreadLocal.errCodeAt
+theorem ThreadLocal.errCodeAt
     (h : ReadsPtr P (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2) :
     ThreadLocal P (Zig.errCodeAt α al q) := by
   rw [← bind_pure (Zig.errCodeAt α al q)]
   exact ThreadLocal.errCodeAt_bind h ThreadLocal.pure
 
 /-- **The error** with a finite error domain is local where its error code is read. -/
-@[fsym_provider] theorem ThreadLocal.finiteErrCodeAt
+theorem ThreadLocal.finiteErrCodeAt
     (h : ReadsPtr P (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2) :
     ThreadLocal P (Zig.finiteErrCodeAt d α al q) :=
   ThreadLocal.errCodeAt_bind h fun _ => ThreadLocal.liftR _
 
 /-- **Is it an error** (`is_err_ptr`) is local where the error code is read. -/
-@[fsym_provider] theorem ThreadLocal.errIsErrAt
+theorem ThreadLocal.errIsErrAt
     (h : ReadsPtr P (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2) :
     ThreadLocal P (Zig.errIsErrAt α al q) := by
   show ThreadLocal P (do
@@ -1352,7 +1352,7 @@ read. -/
   exact ThreadLocal.loadBytes_bind h fun _ => ThreadLocal.liftR_bind fun _ => ThreadLocal.pure _
 
 /-- **Is it an error** with a finite error domain is local where the error code is read. -/
-@[fsym_provider] theorem ThreadLocal.finiteErrIsErrAt
+theorem ThreadLocal.finiteErrIsErrAt
     (h : ReadsPtr P (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2) :
     ThreadLocal P (Zig.finiteErrIsErrAt d α al q) := by
   show ThreadLocal P (do
@@ -1360,6 +1360,74 @@ read. -/
       (← Zig.loadBytes (q.add (errUnionOffsets (Enc.size α) (Enc.align α)).1) 2 (Nat.min al 2)))
     Pure.pure x.isSome)
   exact ThreadLocal.loadBytes_bind h fun _ => ThreadLocal.liftR_bind fun _ => ThreadLocal.pure _
+
+/-! #### The providers, per view
+
+The rules above hold for any precondition that reads the bytes (`ReadsPtr`). `fsym` gets them
+per view of the union, as atom providers: an owned union (`up (pts …)`, `OwnsPtr.errCode`) and a
+shared one (`spts`, `ReadsPtr.errCode_spts`). A provider about the whole precondition would be
+unified with every command that has no head constant (a `let`, an applied continuation) in each
+locality search, and the definitions of these commands unfold there: the search for a command
+with no locality lemma (`atomicLoadPtrAt`, unfolded) then runs out of heartbeats
+(`ArenaSpec.Entries`). Another view names the general rule (`fsym [ThreadLocal.tryPayloadPtr h]`). -/
+
+variable {x : Except ErrName α} {T : Type} [Enc T] {s : T} {n : Nat}
+
+@[fsym_provider] theorem ThreadLocal.loadDiscardBytes_pts (hn : n ≤ Enc.size T) :
+    ThreadLocal (up (Zig.pts q a s)) (Zig.loadDiscardBytes n al q) :=
+  ThreadLocal.loadDiscardBytes (.of_owns (OwnsPtr.pts_in rfl (le_refl _) (by omega)))
+
+@[fsym_provider] theorem ThreadLocal.loadDiscardBytes_spts (hn : n ≤ Enc.size T) :
+    ThreadLocal (spts q a φ s) (Zig.loadDiscardBytes n al q) :=
+  ThreadLocal.loadDiscardBytes (ReadsPtr.spts_in hn)
+
+@[fsym_provider] theorem ThreadLocal.tryPayloadPtr_pts :
+    ThreadLocal (up (Zig.pts q a x)) (Zig.tryPayloadPtr α al q) :=
+  ThreadLocal.tryPayloadPtr (.of_owns OwnsPtr.errCode)
+
+@[fsym_provider] theorem ThreadLocal.tryPayloadPtr_spts :
+    ThreadLocal (spts q a φ x) (Zig.tryPayloadPtr α al q) :=
+  ThreadLocal.tryPayloadPtr ReadsPtr.errCode_spts
+
+@[fsym_provider] theorem ThreadLocal.finiteTryPayloadPtr_pts :
+    ThreadLocal (up (Zig.pts q a x)) (Zig.finiteTryPayloadPtr d α al q) :=
+  ThreadLocal.finiteTryPayloadPtr (.of_owns OwnsPtr.errCode)
+
+@[fsym_provider] theorem ThreadLocal.finiteTryPayloadPtr_spts :
+    ThreadLocal (spts q a φ x) (Zig.finiteTryPayloadPtr d α al q) :=
+  ThreadLocal.finiteTryPayloadPtr ReadsPtr.errCode_spts
+
+@[fsym_provider] theorem ThreadLocal.errCodeAt_pts :
+    ThreadLocal (up (Zig.pts q a x)) (Zig.errCodeAt α al q) :=
+  ThreadLocal.errCodeAt (.of_owns OwnsPtr.errCode)
+
+@[fsym_provider] theorem ThreadLocal.errCodeAt_spts :
+    ThreadLocal (spts q a φ x) (Zig.errCodeAt α al q) :=
+  ThreadLocal.errCodeAt ReadsPtr.errCode_spts
+
+@[fsym_provider] theorem ThreadLocal.finiteErrCodeAt_pts :
+    ThreadLocal (up (Zig.pts q a x)) (Zig.finiteErrCodeAt d α al q) :=
+  ThreadLocal.finiteErrCodeAt (.of_owns OwnsPtr.errCode)
+
+@[fsym_provider] theorem ThreadLocal.finiteErrCodeAt_spts :
+    ThreadLocal (spts q a φ x) (Zig.finiteErrCodeAt d α al q) :=
+  ThreadLocal.finiteErrCodeAt ReadsPtr.errCode_spts
+
+@[fsym_provider] theorem ThreadLocal.errIsErrAt_pts :
+    ThreadLocal (up (Zig.pts q a x)) (Zig.errIsErrAt α al q) :=
+  ThreadLocal.errIsErrAt (.of_owns OwnsPtr.errCode)
+
+@[fsym_provider] theorem ThreadLocal.errIsErrAt_spts :
+    ThreadLocal (spts q a φ x) (Zig.errIsErrAt α al q) :=
+  ThreadLocal.errIsErrAt ReadsPtr.errCode_spts
+
+@[fsym_provider] theorem ThreadLocal.finiteErrIsErrAt_pts :
+    ThreadLocal (up (Zig.pts q a x)) (Zig.finiteErrIsErrAt d α al q) :=
+  ThreadLocal.finiteErrIsErrAt (.of_owns OwnsPtr.errCode)
+
+@[fsym_provider] theorem ThreadLocal.finiteErrIsErrAt_spts :
+    ThreadLocal (spts q a φ x) (Zig.finiteErrIsErrAt d α al q) :=
+  ThreadLocal.finiteErrIsErrAt ReadsPtr.errCode_spts
 
 end Shared
 
