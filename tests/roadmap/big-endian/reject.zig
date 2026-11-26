@@ -12,9 +12,8 @@ pub fn vecByte(x: @Vector(2, u16), i: usize) u8 {
     return bytes[i];
 }
 
-/// A vector whose memory bytes were stored as an array: the same illegal cast. (The name is of
-/// the lane it first returned; a lane read is `vecLanes`' rejection in Zig 0.17.1.)
-pub fn vecLane0FromBytes(x: @Vector(2, u32), b: [8]u8) u32 {
+/// A vector whose memory bytes were stored as an array: the same illegal cast.
+pub fn vecFromBytes(x: @Vector(2, u32), b: [8]u8) u32 {
     var v = x;
     const bytes: *[8]u8 = @ptrCast(&v);
     bytes.* = b;
@@ -72,7 +71,7 @@ pub fn u128Bytes(x: u128) [16]u8 {
 comptime {
     _ = &atomicU12;
     _ = &vecByte;
-    _ = &vecLane0FromBytes;
+    _ = &vecFromBytes;
     _ = &vecLanes;
     _ = &packedUnion;
     _ = &f80Add;

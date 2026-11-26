@@ -342,7 +342,7 @@ big-endian subset, the translator rejects (fails closed):
 | A packed struct with a float field | Its memory image with undetermined bits (`Zig.Packed.encodeOf`) is little endian only |
 | `packed union` | Its fields sit at the low bits, the end of its bytes, at big endian |
 | Vectors of `bool`, pointer or non-byte-multiple lanes | Bit-packed lane order is unqualified at big endian |
-| A lane pointer (`vector_index`): from Zig 0.17.1 on every `&v[i]`, so a lane of a vector in memory that is read, written or initialized on its own (`v[i]`, `v[i] = x`, `.{ a, b }` of runtime values); whole-vector loads, stores and operations are not affected, nor is Zig 0.16.0, whose whole-byte lane has a plain element pointer | The lane pointer model (the vector's address, the lane as bits of the vector's integer) is admitted for the lane probe's targets only, none big-endian ([vector-proofs.md](vector-proofs.md), Scope) |
+| A lane pointer (`vector_index`): from Zig 0.17.1 on every `&v[i]`, so a lane of a vector in memory that is read, written or initialized on its own (`v[i]`, `v[i] = x`, `.{ a, b }` of runtime values). Zig 0.16.0 gives a whole-byte lane a plain element pointer, which translates (`big-endian/reject.zig`'s `vecLanes`, both versions) | The lane pointer model (the vector's address, the lane as bits of the vector's integer) is admitted for the lane probe's targets only, none big-endian ([vector-proofs.md](vector-proofs.md), Scope) |
 | `f80` | Software format on s390x, unqualified |
 | `error_set_bits` other than 16 | No big-endian error-width evidence |
 | Inline assembly | Unqualified |

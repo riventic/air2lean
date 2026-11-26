@@ -13,7 +13,7 @@ casts give the same bytes on both targets, natively and in the model, and the by
 through memory only. 0.17 has no `@bitCast` of an `extern struct`, so `externToBytes` reads its
 bytes through a pointer there (one source line, selected by `zig_version`). `reject.zig` holds
 s390x operations outside the qualified big-endian model (`air/<version>/s390x-reject/`), and
-the two byte views of a vector in memory (`vecByte`, `vecLane0FromBytes`): a `@ptrCast`
+the two byte views of a vector in memory (`vecByte`, `vecFromBytes`): a `@ptrCast`
 between a vector and an array is illegal behaviour (langref §Vectors,
 `docs/illegal-behavior.md`), rejected for every profile. Both store and load their vector
 whole: Zig 0.17.1 reads, writes and initializes a single lane of a vector in memory through a
