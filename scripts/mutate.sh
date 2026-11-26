@@ -133,6 +133,10 @@
 # (ah) Lean-runtime mutation, floats: `Float.MinAllowed`/`MaxAllowed` admit only `+0` for
 #     `@min`/`@max` of `+0` and `−0` (group D). Detected by the proof build: `min_zero_varies`
 #     (Proofs/Floats/AllowedNeg.lean).
+# (ai) Lean-runtime mutation, lists: the default of `AllocPolicy.maxBytes` (ZigLean/Mem/Basic.lean)
+#     is the old fixed cap `maxAllocBytes` (1 MiB) again, not `unboundedAllocBytes`. The six
+#     `sumRange` lines with `"max_bytes": null` (the model default; buffers of 1 MiB + 4 bytes up
+#     to 4 MiB) then return `error.OutOfMemory` where Zig returns the sum.
 #
 # Usage: mutate.sh
 # Env:
@@ -141,7 +145,7 @@
 #   AIR2LEAN_EXAMPLES     Space-separated example dirs. A mutation runs only if its example
 #                         (basic for (a)/(b), options for (c), floatops for (d), variants for (e),
 #                         pointers (f), slices (g), lists (h), asm (i), vectors (j),
-#                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q), slices (r), lists (s), layout (t)/(u), threads (v), atomics (w)/(x), sync (y)/(z), threads (aa)/(ab), floats (ag)/(ah))
+#                         threads (k)/(l), layout (m)/(n)/(o)/(p), vectors (q), slices (r), lists (s), layout (t)/(u), threads (v), atomics (w)/(x), sync (y)/(z), threads (aa)/(ab), floats (ag)/(ah), lists (ai))
 #                         is in the list.
 #                         Default: every dir in examples/.
 #   AIR2LEAN_MUTATION_SHARD   Run only the mutations of line N (from 1) of
@@ -233,7 +237,7 @@ diff_baseline_for floatops d
 diff_baseline_for variants e
 diff_baseline_for pointers f
 diff_baseline_for slices g r
-diff_baseline_for lists h s
+diff_baseline_for lists h s ai
 diff_baseline_for asm i
 diff_baseline_for vectors j q
 diff_baseline_for threads k l v
@@ -1135,6 +1139,24 @@ else
   proof_report "mutation (ah)" Proofs.Floats.AllowedNeg
   [ "$detected" -eq 1 ] || all_detected=0
   cp "$allowed_backup" "$allowed_lean"
+fi
+
+echo "== mutation (ai): the default allocation policy has the fixed 1 MiB cap again (Lean runtime) ==" >&2
+if ! want_mutation ai; then
+  echo "mutation (ai): skipped (not in this shard)"
+elif ! has_example lists; then
+  echo "mutation (ai): skipped (AIR2LEAN_EXAMPLES excludes lists)"
+else
+  sed -i.bak 's/^  maxBytes : Nat := unboundedAllocBytes$/  maxBytes : Nat := maxAllocBytes/' "$mem_lean"
+  rm -f "$mem_lean.bak"
+  grep -q '^  maxBytes : Nat := maxAllocBytes$' "$mem_lean" || {
+    echo "error: mutation (ai): sed did not change the default of AllocPolicy.maxBytes" >&2
+    exit 1
+  }
+
+  run_and_report "mutation (ai)" lists
+  [ "$detected" -eq 1 ] || all_detected=0
+  cp "$mem_backup" "$mem_lean"
 fi
 
 [ "$mutations_run" -gt 0 ] || { echo "error: selection ran no mutations" >&2; exit 1; }

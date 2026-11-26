@@ -988,7 +988,8 @@ def allocationOracleRule (j : Json) : IO (Nat → Nat → Bool) := do
 one matches) and `budget` (`AllocPolicy.budget`). This is the test-model policy, not native
 malloc. The harness keeps its 1 MiB request cap (`AllocPolicy.harness`,
 `TestAllocator.max_alloc_bytes`) explicitly; the model default has no fixed cap, and
-`"max_bytes": null` selects it (`unboundedAllocBytes`; natively `maxInt(usize)`). -/
+`"max_bytes": null` selects that default itself (the `maxBytes` of `({} : AllocPolicy)`, not a
+constant named here, so a cap put back into the default is seen; natively `maxInt(usize)`). -/
 def withFailAt {α : Type} (fa : Json) (r : Zig.MemM α) : IO (Zig.MemM α) := do
   let (f, policy) ← match fa with
     | .null => pure (none, Zig.AllocPolicy.harness)
@@ -1008,8 +1009,9 @@ def withFailAt {α : Type} (fa : Json) (r : Zig.MemM α) : IO (Zig.MemM α) := d
       let rules ← match fa.getObjVal? "oracle" with
         | .ok j => do (← getArr j).toList.mapM allocationOracleRule
         | .error _ => pure []
+      let modelDefault : Zig.AllocPolicy := {}
       let policy : Zig.AllocPolicy :=
-        { maxBytes := if uncapped then Zig.unboundedAllocBytes else (nat "max_bytes").getD Zig.maxAllocBytes
+        { maxBytes := if uncapped then modelDefault.maxBytes else (nat "max_bytes").getD Zig.maxAllocBytes
           failures := failures
           fails := fun i n => rules.any fun rule => rule i n
           budget := nat "budget" }

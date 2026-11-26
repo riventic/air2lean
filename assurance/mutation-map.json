@@ -1585,6 +1585,11 @@
           "name": "h",
           "path": "scripts/mutate.sh",
           "category": "other"
+        },
+        {
+          "name": "ai",
+          "path": "scripts/mutate.sh",
+          "category": "other"
         }
       ]
     },
