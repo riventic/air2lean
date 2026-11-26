@@ -623,17 +623,33 @@
       "name": "Sync.Mailbox.mailbox_spec",
       "module": "Proofs.Sync.Mailbox",
       "example": "sync",
-      "excluded": [{"zig": "0.17.1", "target": "linux", "reason": "the module imports Proofs.Sync.Cond, the IoCondCode instance of the public (0.16.0) translation: 0.17.1 Linux has its Io.Condition contract only per case (Proofs/Sync/CondCases.lean), not this client proof"}],
+      "cases": [{"zig": "0.17.1", "target": "linux", "theorem": "Sync.CaseContracts.V0_17_1.H_6c696e7578.Mailbox.mailbox_spec"}],
       "scope": "all-schedules",
-      "domain": "the Lean model producer/consumer `mailMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Semaphore` wait (condition-variable loop with predicate recheck) and post, for every `io`: one producer, one consumer, one two-field message moved by ownership transfer; proved against the semaphore contract `SemImpl` only (for every implementation; instance `Sync.ioSem`): every completed run returns 34; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+      "domain": "the Lean model producer/consumer `mailMain` (not a Zig export; C14) with the translated `Io.Semaphore` (0.16.0; 0.17.1 through its case theorem) wait (condition-variable loop with predicate recheck) and post, for every `io`: one producer, one consumer, one two-field message moved by ownership transfer; proved against the semaphore contract `SemImpl` only (for every implementation; instance `Sync.ioSem`): every completed run returns 34; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
     {
       "name": "Sync.Mailbox.mailbox_safe",
       "module": "Proofs.Sync.Mailbox",
       "example": "sync",
-      "excluded": [{"zig": "0.17.1", "target": "linux", "reason": "the module imports Proofs.Sync.Cond, the IoCondCode instance of the public (0.16.0) translation: 0.17.1 Linux has its Io.Condition contract only per case (Proofs/Sync/CondCases.lean), not this client proof"}],
+      "cases": [{"zig": "0.17.1", "target": "linux", "theorem": "Sync.CaseContracts.V0_17_1.H_6c696e7578.Mailbox.mailbox_safe"}],
       "scope": "all-schedules",
-      "domain": "the Lean model producer/consumer `mailMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Semaphore` wait (condition-variable loop with predicate recheck) and post, for every `io`: one producer, one consumer, one two-field message moved by ownership transfer; proved against the semaphore contract `SemImpl` only (for every implementation; instance `Sync.ioSem`): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, lifetime or other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+      "domain": "the Lean model producer/consumer `mailMain` (not a Zig export; C14) with the translated `Io.Semaphore` (0.16.0; 0.17.1 through its case theorem) wait (condition-variable loop with predicate recheck) and post, for every `io`: one producer, one consumer, one two-field message moved by ownership transfer; proved against the semaphore contract `SemImpl` only (for every implementation; instance `Sync.ioSem`): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, lifetime or other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Sync.CaseContracts.V0_17_1.H_6c696e7578.Mailbox.mailbox_spec",
+      "module": "Proofs.Sync.MailboxCases",
+      "example": "sync",
+      "gen": "Proofs/Sync/Gen/V0_17_1/H_6c696e7578/Gen.lean",
+      "scope": "all-schedules",
+      "domain": "`Sync.Mailbox.mailbox_spec` for the Zig 0.17.1 Linux translation (the same Lean model client `mailMain`, not a Zig export, over that translation's spawn targets, semaphore value and `Io.Semaphore` contract): every completed run returns 34; for every fuel and every oracle of `Sched.run` from `mem0`; partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Sync.CaseContracts.V0_17_1.H_6c696e7578.Mailbox.mailbox_safe",
+      "module": "Proofs.Sync.MailboxCases",
+      "example": "sync",
+      "gen": "Proofs/Sync/Gen/V0_17_1/H_6c696e7578/Gen.lean",
+      "scope": "all-schedules",
+      "domain": "`Sync.Mailbox.mailbox_safe` for the Zig 0.17.1 Linux translation (the same Lean model client `mailMain`, not a Zig export): for every fuel and every oracle of `Sched.run` from `mem0`, strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`); a run with no result (out of fuel) is still allowed; no termination or fairness"
     }
   ]
 }
