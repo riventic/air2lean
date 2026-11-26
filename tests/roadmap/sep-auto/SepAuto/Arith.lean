@@ -420,6 +420,21 @@ def omega_proofs_shared : MetaM Unit := do
     for (p, ty) in [(p1, ty1), (p2, ty2)] do
       Meta.check p
       unless ← isDefEq (← inferType p) ty do throwError "omega_proofs_shared: {p} does not prove {ty}"
+    -- facts that are proof terms, not locals, enter `omega` as locals and are substituted back:
+    -- the proof type-checks in the context, states the target and mentions none of those locals
+    let f1 ← mkAppM ``Nat.le_trans #[h1, ← mkAppM ``Nat.le_add_right #[c, d]]
+    let f2 ← mkAppM ``Nat.le_trans #[h2, h3]
+    let ty3 ← le (← add a b) (mkNatLit 10)
+    let some p3 ← omegaRaw #[f1, h4, f2] ty3 | throwError "omega_proofs_shared: no proof from terms"
+    Meta.check p3
+    unless ← isDefEq (← inferType p3) ty3 do
+      throwError "omega_proofs_shared: {p3} does not prove {ty3}"
+    let lctx ← getLCtx
+    if p3.hasAnyFVar (fun f => !lctx.contains f) then
+      throwError "omega_proofs_shared: a local of `omega`'s context is left in {p3}"
+    unless (p3.find? (· == f1)).isSome && (p3.find? (· == f2)).isSome do
+      throwError "omega_proofs_shared: the facts' proofs are not in {p3}"
+    unless (← goals) == before do throwError "omega_proofs_shared: goals kept (facts as terms)"
     for (what, x) in [("the first", p1), ("both", mkApp2 (mkConst ``Prod.mk) p1 p2)] do
       let n ← x.numObjs
       let m ← (ShareCommon.shareCommon' x).numObjs
