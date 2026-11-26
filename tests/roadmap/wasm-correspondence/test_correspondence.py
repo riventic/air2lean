@@ -77,22 +77,29 @@ class Relation(unittest.TestCase):
         native = json.loads((self.records / '0.17.1/x86_64-linux.json').read_text())
         self.edit('0.17.1', 'wasm32-freestanding',
                   lambda d: d['results'].__setitem__('usize_bits', native['results']['usize_bits']))
-        self.assertTrue(any('usize_bits' in e and 'bits 32' in e for e in self.check()))
+        errors = self.check()
+        self.assertTrue(errors)
+        self.assertTrue(all(e.startswith('0.17.1 ') and 'usize_bits' in e and 'bits 32' in e for e in errors), errors)
+
+    def unrelated(self, reason, text):
+        """The pair is refused (a failure, not an error, when it is related), for `text`."""
+        self.assertIn(text, reason or '')
 
     def test_float_tolerance(self):
         f64 = {'class': 'tolerated', 'format': 'f64', 'ulp': 1}
         one = 0x3FF0000000000000
         self.assertIsNone(wc.relate(f64, [], 0x7FF8000000000000, 0xFFF8000000000001, {}))  # NaN class
         self.assertIsNone(wc.relate(f64, [], one, one + 1, {}))
-        self.assertIn('2 ulp', wc.relate(f64, [], one, one + 2, {}))
-        self.assertIn('only one side is NaN', wc.relate(f64, [], 0x7FF8000000000000, one, {}))
+        self.unrelated(wc.relate(f64, [], one, one + 2, {}), '2 ulp')
+        self.unrelated(wc.relate(f64, [], 0x7FF8000000000000, one, {}), 'only one side is NaN')
+        self.unrelated(wc.relate(f64, [], 'trap', one, {}), 'a trap pairs with')
         self.assertIsNone(wc.relate(f64, [], 0, 1 << 63, {}))  # +0 and -0 are one ulp apart
         self.assertIsNotNone(wc.relate({**f64, 'ulp': 0}, [], 0, 1 << 63, {}))
 
     def test_f32_high_bits_are_observed(self):
         f32 = {'class': 'tolerated', 'format': 'f32', 'ulp': 0}
         self.assertIsNone(wc.relate(f32, [], 0x3F800000, 0x3F800000, {}))
-        self.assertIn('above bit 31', wc.relate(f32, [], 0x3F800000, 0xDEADBEEF3F800000, {}))
+        self.unrelated(wc.relate(f32, [], 0x3F800000, 0xDEADBEEF3F800000, {}), 'above bit 31')
 
     def test_expect_sees_the_record_version(self):
         entry = {'class': 'target-specific', 'expect': 'TRAP if zig < 15 else a'}

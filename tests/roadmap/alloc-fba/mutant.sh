@@ -25,3 +25,5 @@ cp "$here/AllocFba/Impl.lean" "$here/AllocFba/Full.lean" "$work/AllocFba/"
 # The proof fails in its own module (Gen and Impl build).
 python3 -B scripts/fixtures.py mutant alloc-fba --src "$work" --fails AllocFba.Full
 echo "alloc-fba mutant: rejected (the FAllocSpec proof fails for the non-advancing alloc)"
+# Q02: the kill of the designated mutant (assurance/mutation-map.json, M01).
+python3 -B scripts/mutation_kill_log.py --check "$here/check.sh" "$here/mutant.sh" 'fba-alloc-end-index-kept'
