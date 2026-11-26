@@ -104,9 +104,8 @@ def main(argv):
     # One run of the unmutated check: every wrong file is rejected, each for its one reason.
     rc, out, errors = check(SC, list(bad.values()))
     wanted = {f"error: {path}: {BAD_OBSERVATIONS[name][2]}" for name, path in bad.items()}
-    rejections = [line for line in out.splitlines() if line.startswith("error: ")]
-    if rc != 1 or errors or len(rejections) != len(wanted) or any(
-            not any(line.startswith(w) for line in rejections) for w in wanted):
+    # Counted in the text, not by line: the output interleaves stdout (the matches) and stderr.
+    if rc != 1 or errors or out.count("error: ") != len(wanted) or any(w not in out for w in wanted):
         fail("wrong observations", "not rejected one by one with their messages", out)
     print(f"{len(bad)} wrong observations rejected: {', '.join(bad)}")
     for name, (edits, kill) in MUTANTS.items():
