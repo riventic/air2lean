@@ -49,7 +49,11 @@ def source_0 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "basic.absDiff"
 (@_root_.List.toArray
 @_root_.Nat
@@ -832,7 +836,11 @@ def source_1 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "basic.clampAdd"
 (@_root_.List.toArray
 @_root_.Nat
@@ -1221,7 +1229,11 @@ def source_2 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "basic.classify"
 (@_root_.List.toArray
 @_root_.Nat
@@ -1772,7 +1784,11 @@ def source_3 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "basic.scale"
 (@_root_.List.toArray
 @_root_.Nat
@@ -2243,7 +2259,11 @@ def source_4 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "basic.sum"
 (@_root_.List.toArray
 @_root_.Nat
@@ -3659,7 +3679,11 @@ def source_5 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "basic.tardiness"
 (@_root_.List.toArray
 @_root_.Nat
@@ -4250,7 +4274,11 @@ def source_6 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "basic.totalWeightedTardiness"
 (@_root_.List.toArray
 @_root_.Nat
@@ -6921,7 +6949,11 @@ def source_7 : _root_.Air2Lean.Func :=
 (nat_lit 16)))
 "unverified"
 "unverified"
-@_root_.Bool.false)
+@_root_.Bool.false
+(@_root_.List.toArray
+@_root_.String
+(@_root_.List.nil
+@_root_.String)))
 "basic.weightedTardiness"
 (@_root_.List.toArray
 @_root_.Nat
