@@ -84,10 +84,10 @@ inductive Byte where
   | mask (d b : BitVec 8)
   deriving DecidableEq, Repr, Inhabited
 
-/-- The identity of an allocator other than the model's `std.mem.Allocator`: an index into
-`Mem.allocators`. -/
-abbrev AllocId := Nat
-
+/-- The kind of a block. A `.heap` block is one of the model's `std.mem.Allocator`. Every other
+allocator (`std.heap.ArenaAllocator`, `FixedBufferAllocator`, `PageAllocator`, a user's) is
+translated from its Zig code (`--allocator-model translated`, `docs/allocator-model.md`): its
+slices lie in the blocks it gets from its child or the OS (`.mapped`, a global buffer). -/
 inductive BlockKind where
   | stack
   | heap
@@ -95,10 +95,6 @@ inductive BlockKind where
   /-- A `const` global, a string literal or a function: read-only. A write to it (through
   `@constCast`) throws `.illegal`. -/
   | constGlobal
-  /-- A block that the allocator `a` made: an arena (`Mem.allocators[a]`,
-  `ZigLean/Mem/Owned.lean`). A `.heap` block is one of the model's `std.mem.Allocator`, so a
-  free through one allocator of a block that another one made throws `.illegal`. -/
-  | owned (a : AllocId)
   /-- An OS page mapping (`posix.mmap`, `ZigLean/Os/Mmap.lean`, premise OSM-01). The mapping's
   live bytes are the offsets from `lo` to the block's size: `munmap` of a page prefix moves `lo`
   up, of a page tail shrinks the bytes, of the whole mapping ends the block. An access below
@@ -112,18 +108,17 @@ def BlockKind.mappedLo : BlockKind → Nat
   | _ => 0
 
 /-- The block's pages are anonymous memory natively: a stack, a heap block or an OS mapping
-(`mmap` admits only `MAP_PRIVATE | MAP_ANONYMOUS`, OSM-01). A global, and an allocator's block
-(whose buffer may be a global), can lie on a file-backed page. -/
+(`mmap` admits only `MAP_PRIVATE | MAP_ANONYMOUS`, OSM-01). A global can lie on a file-backed
+page. -/
 def BlockKind.anon : BlockKind → Bool
   | .stack | .heap | .mapped _ => true
-  | .global | .constGlobal | .owned _ => false
+  | .global | .constGlobal => false
 
 @[simp] theorem BlockKind.mappedLo_mapped (lo : Nat) : (BlockKind.mapped lo).mappedLo = lo := rfl
 @[simp] theorem BlockKind.mappedLo_stack : BlockKind.stack.mappedLo = 0 := rfl
 @[simp] theorem BlockKind.mappedLo_heap : BlockKind.heap.mappedLo = 0 := rfl
 @[simp] theorem BlockKind.mappedLo_global : BlockKind.global.mappedLo = 0 := rfl
 @[simp] theorem BlockKind.mappedLo_constGlobal : BlockKind.constGlobal.mappedLo = 0 := rfl
-@[simp] theorem BlockKind.mappedLo_owned (a : AllocId) : (BlockKind.owned a).mappedLo = 0 := rfl
 
 structure Block where
   bytes : Array Byte
@@ -326,21 +321,6 @@ instance : Repr AllocPolicy where
 /-- The differential harness policy: the legacy 1 MiB request cap and no other failures. -/
 def AllocPolicy.harness : AllocPolicy := { maxBytes := maxAllocBytes }
 
-/-- The kind of an allocator with an identity (`ZigLean/Mem/Owned.lean`, M01). The
-`std.heap.FixedBufferAllocator` is translated from its Zig code (`--allocator-model
-translated`, `docs/allocator-model.md`), not modelled here. -/
-inductive OwnedPolicy where
-  /-- `std.heap.ArenaAllocator` over the model's `std.mem.Allocator`. -/
-  | arena
-  deriving DecidableEq, Repr, Inhabited
-
-/-- The state of an allocator with an identity. -/
-structure OwnedAlloc where
-  policy : OwnedPolicy
-  /-- `false` after `ArenaAllocator.deinit`: every later use throws `.illegal`. -/
-  live : Bool := true
-  deriving DecidableEq, Repr, Inhabited
-
 /-! ## Device effects (L13, `ZigLean/Mem/Device.lean`, `docs/volatile-effects.md`)
 
 Only the opt-in device semantics (`air2lean --device-contract`) reads or writes `Mem.dev`. The
@@ -533,8 +513,6 @@ structure Mem where
   /-- The tasks of each `Io.Group` (by its address) that no `await` has joined yet, in the order
   of their spawn (`ZigLean/Mem/Thread.lean`). -/
   groups : Array (Ptr × ThreadId) := #[]
-  /-- The allocators with an identity, by `AllocId` (`ZigLean/Mem/Owned.lean`). -/
-  allocators : Array OwnedAlloc := #[]
   /-- The thread-assignment budget of the `fallible` spawn policy (`ZigLean/Conc/Spawn.lean`):
   at most this many assigned child threads that no join has reclaimed. `none` (the default) sets
   no budget. The `available` policy ignores it. -/

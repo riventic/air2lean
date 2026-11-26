@@ -35,8 +35,8 @@ the list into `fails`. `allocDenied_asOracle` and `rawAlloc_asOracle`
 outcome and memory apart from the policy field. `rawAlloc_eq` characterizes every `rawAlloc`
 run: it either fails after only counting the attempt, or allocates a new heap block. Policies
 do not qualify native malloc, a custom allocator's policy, successful resize or address reuse.
-Those remain separate M02/M05 work. Allocator identities, arenas and fixed buffers (M01) are in
-[allocator-identity.md](allocator-identity.md); arena requests use this policy.
+Those remain separate M02/M05 work. Allocator identities, arenas and fixed buffers (M01) are
+translated from their Zig code ([allocator-identity.md](allocator-identity.md)).
 
 **Translated allocators.** With `--allocator-model translated` the same policy decides the OS
 primitives: `mmap` and a growing `mremap` fail exactly when `rawAlloc` would

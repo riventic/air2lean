@@ -1658,17 +1658,14 @@ variable (m : Mem) (n a : Nat)
 @[simp] theorem Mem.allocOk_heap : m.allocOk .heap n a = m.roomFor n a := rfl
 @[simp] theorem Mem.allocOk_global : m.allocOk .global n a = m.roomFor n a := rfl
 @[simp] theorem Mem.allocOk_constGlobal : m.allocOk .constGlobal n a = m.roomFor n a := rfl
-@[simp] theorem Mem.allocOk_owned (i : AllocId) : m.allocOk (.owned i) n a = m.roomFor n a := rfl
 @[simp] theorem Mem.allocOk_mapped (lo : Nat) : m.allocOk (.mapped lo) n a = m.roomFor n a := rfl
 @[simp] theorem Mem.allocAddr_heap : m.allocAddr .heap n a = m.newAddr n a := rfl
 @[simp] theorem Mem.allocAddr_global : m.allocAddr .global n a = m.newAddr n a := rfl
 @[simp] theorem Mem.allocAddr_constGlobal : m.allocAddr .constGlobal n a = m.newAddr n a := rfl
-@[simp] theorem Mem.allocAddr_owned (i : AllocId) : m.allocAddr (.owned i) n a = m.newAddr n a := rfl
 @[simp] theorem Mem.allocAddr_mapped (lo : Nat) : m.allocAddr (.mapped lo) n a = m.newAddr n a := rfl
 @[simp] theorem Mem.stacksAfterAlloc_heap : m.stacksAfterAlloc .heap n a = m.stacks := rfl
 @[simp] theorem Mem.stacksAfterAlloc_global : m.stacksAfterAlloc .global n a = m.stacks := rfl
 @[simp] theorem Mem.stacksAfterAlloc_constGlobal : m.stacksAfterAlloc .constGlobal n a = m.stacks := rfl
-@[simp] theorem Mem.stacksAfterAlloc_owned (i : AllocId) : m.stacksAfterAlloc (.owned i) n a = m.stacks := rfl
 @[simp] theorem Mem.stacksAfterAlloc_mapped (lo : Nat) : m.stacksAfterAlloc (.mapped lo) n a = m.stacks := rfl
 end
 
@@ -1961,10 +1958,6 @@ theorem Mem.ofGlobals_eq (σ : Placement) (gs : List (Array Byte × Nat × Block
 
 @[simp] theorem Mem.ofGlobals_groups (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
     (Mem.ofGlobals σ gs).groups = #[] := by
-  rw [Mem.ofGlobals_eq]
-
-@[simp] theorem Mem.ofGlobals_allocators (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
-    (Mem.ofGlobals σ gs).allocators = #[] := by
   rw [Mem.ofGlobals_eq]
 
 theorem Mem.ofGlobals_size (σ : Placement) (gs : List (Array Byte × Nat × BlockKind)) :
