@@ -278,7 +278,7 @@ generated headline: {"lean_ok": 30}
 | libc_ctype | ok | ok | ok | ok | ok | checked | ok | – | – |
 | libc_stdio | ok | ok | ok | ok | ok | rejected | – | CALLEE_EXTERN_UNBOUND×1, PROGRAM_FAILURE×1 | EXT-VARIADIC |
 | libc_stdlib | ok | ok | ok | runtime_error | ok | rejected | – | CALLEE_BLOCKED×4, CALLEE_EXTERN_UNBOUND×7, CONSTANT_FAILURE×2, INSTRUCTION_FAILURE×1, PREREQUISITE_SKIPPED×1, PROGRAM_FAILURE×9, STRUCTURE_FAILURE×1 | NATIVE-DIVERGENCE |
-| libc_string | ok | ok | ok | ok | ok | rejected | – | CALLEE_BLOCKED×2, CALLEE_EXTERN_UNBOUND×4, NORMALIZATION_FAILURE×4, PREREQUISITE_SKIPPED×1, PROGRAM_FAILURE×5 | – |
+| libc_string | ok | ok | ok | ok | ok | rejected | – | CALLEE_EXTERN_UNBOUND×4, PROGRAM_FAILURE×5 | – |
 | linked_list | ok | ok | ok | ok | ok | checked | ok | – | – |
 | loops | ok | ok | ok | ok | ok | checked | ok | – | – |
 | macros | ok | ok | ok | ok | ok | checked | ok | – | – |
@@ -326,12 +326,11 @@ Rejection histogram (files whose diagnostics contain the code):
 
 | code | files |
 |---|---|
-| CALLEE_BLOCKED | 4 |
+| CALLEE_BLOCKED | 3 |
 | CALLEE_EXTERN_UNBOUND | 9 |
 | CONSTANT_FAILURE | 2 |
 | INSTRUCTION_FAILURE | 4 |
-| NORMALIZATION_FAILURE | 1 |
-| PREREQUISITE_SKIPPED | 2 |
+| PREREQUISITE_SKIPPED | 1 |
 | PROGRAM_FAILURE | 9 |
 | STRUCTURE_FAILURE | 1 |
 
@@ -387,7 +386,7 @@ blocked (alone or with other gaps). G1, G3, G5, G6 and G9 of the 0.16.0 baseline
 
 | # | gap | translate-c Zig shape | rejected by | files | size | depends on |
 |---|---|---|---|---|---|---|
-| G1b | **libc symbols whose Zig definition does not translate** | `strcmp`, `strchr`, `malloc`, `free`, … bind through the C-ABI conversion (closed below) | (b) `CALLEE_EXTERN_UNBOUND` for `memcpy`, `memset`, `memcmp`, `strlen`: `compiler_rt` is another compilation, in ReleaseFast ([build-modes.md](build-modes.md)); (c) `lib/c/malloc.zig` reaches code outside the subset (§libc boundary); (d) `strchr` reaches `std.mem.findScalarPos`, whose Zig 0.17.1 `array_to_vector` is outside the subset; `qsort`'s definition fails normalization ("global initializer") | 3 (`libc_string`, `malloc_vec`, `libc_stdlib`) | (b) M: programs of two build profiles; (c) L; (d) S–M | libc boundary; Q07, M01–M03, L09 |
+| G1b | **libc symbols whose Zig definition does not translate** | `strcmp`, `strchr`, `malloc`, `free`, … bind through the C-ABI conversion (closed below) | (b) `CALLEE_EXTERN_UNBOUND` for `memcpy`, `memset`, `memcmp`, `strlen`: `compiler_rt` is another compilation, in ReleaseFast ([build-modes.md](build-modes.md)); (c) `lib/c/malloc.zig` reaches code outside the subset (§libc boundary); (d) `qsort`'s definition fails normalization ("global initializer"); `strchr` (`std.mem.findScalarPos`, Zig 0.17.1 `array_to_vector`) translates | 3 (`libc_string`, `malloc_vec`, `libc_stdlib`) | (b) M: programs of two build profiles; (c) L; (d) S | libc boundary; Q07, M01–M03, L09 |
 | G4 | **negative `[*c]` index** | `p[@bitCast(@as(isize, @intCast(-1)))]` = index 2⁶⁴−1 | accepted, but the model's `p.elem 4 (2^64-1)` is past the block, so `entry` is `.illegal` while native Zig and C are defined (conservative, not unsound) | 1 (`ptr_arith`) | M: a signed (two's-complement) item offset for `[*c]`/many-item `ptr_elem_*`/`ptr_add` in the memory model, not a plain wrap modulo 2⁶⁴ (that would make index 2⁶² of a 4-byte item the same place as item 0, which the compiler's in-bounds pointer arithmetic does not promise) | L05 |
 | G7 | **translate-c refusals** | `goto`/labels; bitfields; variadic definitions; case labels inside nested statements | gates `TC-GOTO`, `TC-BITFIELD`, `TC-VARIADIC-DEF`, `TC-COMPLEX-SWITCH` | 6 | goto: forward-only Aro patch M, general L (§goto); bitfields M–L (C ABI storage units as packed host integers); variadic definitions L; Duff M | upstream Aro translate-c or a pinned patch (joins the trusted base); L03, L08, L14 |
 | G8 | **translate-c semantic divergences** | `(a > b) - (a < b)` → `@intFromBool(a > b) - @intFromBool(a < b)` (`u1` arithmetic); `setjmp`/`longjmp` as plain calls | gates `NATIVE-DIVERGENCE`, `LIBC-SETJMP` | 3 | S: upstream promotion fix | upstream translate-c |
@@ -509,8 +508,10 @@ the rejected pairs (`test_cli.py`).
 The remaining corpus symbols stay rejected for three reasons. Each is a translator or model rule,
 not harness work:
 
-1. **Definitions outside the subset.** `strchr` reaches `std.mem.findScalarPos`, whose
-   Zig 0.17.1 `array_to_vector` is outside the subset. `qsort`'s definition fails normalization.
+1. **Definitions outside the subset.** `qsort`'s definition fails normalization. (`strchr`
+   translates: its `std.mem.findScalarPos` loads 16-byte blocks as arrays and coerces them to
+   vectors, Zig 0.17.1's `array_to_vector`, which the translator models lane-wise for every lane
+   type, `tests/roadmap/zig017/tovec`. `libc_string` is now rejected only for reason 2.)
 2. **`compiler_rt` is another compilation.** For an executable, `memcpy`, `memset`, `memcmp`
    and `strlen` come from `compiler_rt`, which the compiler builds separately and always in
    ReleaseFast (`Compilation.compilerRtOptMode`; not a qualified mode,
