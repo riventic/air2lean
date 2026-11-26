@@ -26,7 +26,9 @@ ld = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ld)
 
 
-class Classify(unittest.TestCase):
+class TinyRepo(unittest.TestCase):
+    """A one-library repository (`Lib/A.lean`, `Lib/B.lean`) that `lean-deps` is pointed at."""
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
@@ -44,6 +46,8 @@ class Classify(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
 
+
+class Classify(TinyRepo):
     def classify(self):
         subprocess.run(["git", "init", "-q"], cwd=self.repo, check=True)
         subprocess.run(["git", "add", "-A"], cwd=self.repo, check=True)
@@ -251,6 +255,37 @@ class Classify(unittest.TestCase):
         self.write("lakefile.toml", '[[lean_lib]]\nname = "P"\nglobs = ["Lib.Gone"]\nprecompileModules = true\n')
         with self.assertRaisesRegex(SystemExit, "must name existing modules"):
             ld.precompiled_libs()
+
+
+class RuntimeRoot(TinyRepo):
+    """--runtime-root check: the runtime root's closure holds no module above the theory floor."""
+
+    def violations(self, **declaration):
+        return ld.runtime_root_violations({"root": "Lib.Root", "theory_floor": ["Lib.Lemmas"], **declaration})
+
+    def setUp(self):
+        super().setUp()
+        self.write("Lib/Lemmas.lean", "import Lib.A\ntheorem t : True := trivial\n")
+        self.write("Lib/Proofs.lean", "import Lib.Lemmas\n")
+        self.write("Lib/Root.lean", "import Lib.B\nimport Lean\n")
+
+    def test_runtime_closure_without_proof_modules_is_clean(self):
+        self.assertEqual(self.violations(), [])
+
+    def test_a_proof_only_module_in_the_closure_is_reported_with_its_chain(self):
+        self.write("Lib/B.lean", "import Lib.A\nimport Lib.Proofs\n")
+        self.assertEqual(self.violations(),
+                         ["proof-only module Lib.Lemmas is reachable from the runtime root: "
+                          "Lib.Lemmas <- Lib.Proofs <- Lib.B <- Lib.Root"])
+
+    def test_a_proof_only_module_outside_the_closure_is_fine(self):
+        self.write("Lib/Other.lean", "import Lib.Proofs\nimport Lib.Root\n")  # proofs may import the root
+        self.assertEqual(self.violations(), [])
+
+    def test_malformed_declarations_are_errors(self):
+        self.assertEqual(len(self.violations(theory_floor=[])), 1)
+        self.assertEqual(len(self.violations(theory_floor=["Lib.Gone"])), 1)
+        self.assertEqual(len(self.violations(root="Lib.Gone")), 1)
 
 
 if __name__ == "__main__":
