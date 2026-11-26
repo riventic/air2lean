@@ -393,6 +393,13 @@
       },
       "block_sha256": "403df14b28353ecac5974e306d11c0b98509d6fffcb8cb64903e57d013d02306"
     },
+    "tests/roadmap/alloc-translated/mutant-cap.sh#default-policy-capped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/alloc-translated/check.sh"
+      },
+      "block_sha256": "2d60e207b32063f04845f338288f8c7e698ec67f638643de6a5aa4f95a830103"
+    },
     "tests/roadmap/alloc-translated/mutant.sh#page-shrink-tail-kept-mapped": {
       "killed_by": {
         "kind": "check",

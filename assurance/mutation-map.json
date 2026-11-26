@@ -1624,6 +1624,11 @@
           "category": "other"
         },
         {
+          "name": "default-policy-capped",
+          "path": "tests/roadmap/alloc-translated/mutant-cap.sh",
+          "category": "other"
+        },
+        {
           "name": "h",
           "path": "scripts/mutate.sh",
           "category": "other"

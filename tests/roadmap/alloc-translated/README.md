@@ -122,3 +122,9 @@ builds (`scripts/diff.sh --build-only`). So `check.sh` runs the compiled lines o
 neither the archive nor the executable). It also runs the same requests under the differential
 harness's policy, the old cap (`alloc-translated-large OS capped`), and requires the line
 `page_large ok 0 0`: with a cap in the default policy the fixture would fail.
+
+That is also checked on the model itself. `mutant-cap.sh` (M03's designated mutant
+`default-policy-capped`, `assurance/mutation-map.json`) makes the old cap the default of
+`AllocPolicy.maxBytes` in a copy of `ZigLean/Mem/Basic.lean`, builds the runner over it in a
+check tree (the retained 0.17.1 translations) and requires that its lines are `page_large ok 0 0`
+and not the expected ones. `check.sh` runs it after the comparisons above.
