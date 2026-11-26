@@ -30,11 +30,39 @@ translator rejects 0.14.1 (`the callee 'math.cast…' has no AIR file and no mod
 `check.sh` requires that rejection. `examples/threadsync`, the proved implementation, is
 0.15.2-only.
 
+## The client
+
+`examples/threadsync` has `handoffAll` (Zig 0.15.2): the hand-off whose producer, `producerAll`,
+calls `Thread.Condition.broadcast`. Its proof uses only the contracts:
+
+- `Handoff.wp_broadcast` (`Proofs/Handoff/Ops.lean`), once for every layout and every
+  `CondImpl`: the producer's broadcast step from `CondImpl.broadcast_wp`. The post with
+  `all = true` gives the signal's post (`FCond.SigPost.mono`), so the registered waiter is
+  signalled.
+- `Threadsync.HO.handoffAll_spec` (every completed run returns 7) and `handoffAll_safe` (no data
+  race, no deadlock, no panic, under every schedule) in `Proofs/Threadsync/Handoff.lean`: the
+  walk of the generated code with `Threadsync.threadMutex`, `threadCond` and `resetEvent`.
+- The differential test runs it natively and in the model (`tests/diff/threadsync`).
+
+`mutations.py` holds the client's designated mutants. Each is one change of `producerAll` in
+the committed translation, built in a check tree where the sync objects' contract proofs must
+still build and the named theorems of the client must fail (no other):
+
+| Mutant | Change | Killed by |
+|---|---|---|
+| `broadcast-is-signal` | `signal` in place of `broadcast` | the client's proof: it has the broadcast contract's rule only |
+| `broadcast-dropped` | no wake-up | the client's proof, and the kernel-computed run `handoffAll_completes` (a lost wake-up: the main thread is not woken) |
+
+The client has one waiter, the main thread, so `broadcast-is-signal` is still a correct program
+and the differential run does not tell it from the original. A client with two or more waiters,
+where the signal leaves a waiter asleep, is open (register C14).
+
 ```sh
 lake build air2lean
 bash tests/roadmap/cond-broadcast/check.sh
 bash tests/roadmap/cond-broadcast/check.sh --export    # needs the patched compilers
 ```
 
-Scope: no client in the examples calls broadcast, and the fixture has no native run. Timeouts
-and cancellation (`Io.Condition.wait`, `waitTimeout`) stay outside the contract (register C14).
+Scope: the client is 0.15.2's `Thread.Condition`; no client calls `Io.Condition.broadcast`
+(0.16.0, 0.17.1) yet. Timeouts and cancellation (`Io.Condition.wait`, `waitTimeout`) stay outside
+the contract (register C14).

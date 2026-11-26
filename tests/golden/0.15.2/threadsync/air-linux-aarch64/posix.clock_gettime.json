@@ -133,7 +133,7 @@
    "ty": 7,
    "callee": {
     "ty": 8,
-    "func": "posix.errno__anon_2381",
+    "func": "posix.errno__anon_2407",
     "module": "std",
     "instance_key": "c57b4435c781f8ef64888c1ef324e0248ad8ccb2174d47aee499ab856992825e",
     "noreturn": false
@@ -436,7 +436,7 @@
   },
   {
    "k": "struct",
-   "name": "os.linux.timespec__struct_2708",
+   "name": "os.linux.timespec__struct_2734",
    "module": "std",
    "layout": "extern",
    "fields": [
@@ -463,11 +463,11 @@
   },
   {
    "k": "other",
-   "name": "fn (os.linux.clockid_t, *os.linux.timespec__struct_2708) usize"
+   "name": "fn (os.linux.clockid_t, *os.linux.timespec__struct_2734) usize"
   },
   {
    "k": "enum",
-   "name": "os.linux.E__enum_1967",
+   "name": "os.linux.E__enum_1976",
    "module": "std",
    "tag": 16,
    "exhaustive": false,
@@ -1078,7 +1078,7 @@
   },
   {
    "k": "other",
-   "name": "fn (usize) os.linux.E__enum_1967"
+   "name": "fn (usize) os.linux.E__enum_1976"
   },
   {
    "k": "noreturn"
@@ -1097,7 +1097,7 @@
   },
   {
    "k": "other",
-   "name": "fn (os.linux.E__enum_1967) error{Unexpected}"
+   "name": "fn (os.linux.E__enum_1976) error{Unexpected}"
   },
   {
    "k": "error_set",

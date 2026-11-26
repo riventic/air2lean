@@ -177,7 +177,9 @@ wake is no access). A thread out of it does not access the word, so a plain acce
 read of the struct the event is in) need not be below that thread. A client step that puts a
 thread in the set (gives it a role, or moves a setter from `sd` back to `out`: `Inv.toOut`) has
 its rest show the word for the larger set (the plain accesses are below that thread). A thread
-without a role does not access the word (`wp_peek` takes one). -/
+without a role does not access the word (`wp_peek` takes one). A thread out of the event's code
+leaves the set by giving its roles up (`Inv.leave`, `Inv.leaveTo`; the word is fine for the
+smaller set, `Live.ok_upd`), so a plain access after its last access need not be below it. -/
 def Live (g : γ) : Prop := (E.wx g ∨ E.sx g) ∧ ¬ (E.ph g).Setting
 
 /-- A step preserving the event's history preserves its set state. -/
@@ -770,10 +772,11 @@ theorem Inv.enter {G : ThreadId → γ} {m : Mem} {t : ThreadId} {g : γ}
     · have eu : u ≠ t := fun e => by rw [e, upd_self, hg] at hu; cases hu
       exact .inr ⟨u, by rw [upd_ne _ _ eu] at hu ⊢; exact hu⟩
 
-/-- A step of `t` that keeps the writes and the futex queue (a read, a return from a futex wait,
-a change of `t`'s lock place): the other threads keep their ghost values, and `t` changes its
-place as the premises say. -/
-theorem Inv.move {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} (hI : E.Inv L G m)
+/-- **`Inv.move` with the waiter role of `t` free**: `t` may wait where it is a waiter after the
+step (`hwx'`), and each `waiting` write has its witness after the step (`hwby`, `Inv.wby`: a
+thread that may wait and is above the write). `Inv.move` gives both from a role that `t` keeps;
+`Inv.leave` takes the witness from the client, so `t` can give the role up. -/
+theorem Inv.moveW {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} (hI : E.Inv L G m)
     (hG : ∀ u, u ≠ t → G' u = G u) (hh : E.W.hist m' = E.W.hist m)
     (hwt : m'.waiters = m.waiters) (hclk : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
     (hth : m.threads.size ≤ m'.threads.size)
@@ -787,7 +790,10 @@ theorem Inv.move {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} (hI : E.In
         (E.ph (G' t) = .w1 ∧ L.ph (G' t) = .away))
     (htq : ∀ w ∈ m.waiters, w.1 = t →
       (E.ph (G' t) = .w1 → w.2 = E.W.key m ∨ w.2 = L.key m) ∧ (w.2 = E.W.key m → E.ph (G' t) = .w1))
-    (hwxt : E.wx (G t) → E.wx (G' t)) (hsxt : (E.ph (G' t)).Setting → E.sx (G' t))
+    (hwx' : (E.ph (G' t)).Waiting → E.wx (G' t))
+    (hwby : ∀ j < (E.W.hist m).size, (E.W.hist m)[j]!.Val (1 : BitVec 32) →
+      ∃ u, E.wx (G' u) ∧ VClock.le (E.W.hist m)[j]!.clock (m'.clocks[u]!) = true)
+    (hsxt : (E.ph (G' t)).Setting → E.sx (G' t))
     (hF : E.W.Fresh m') (hk : E.W.key m' = E.W.key m) (hkL : L.key m' = L.key m) :
     E.Inv L G' m' := by
   have key : ∀ x, (E.ph (G' x)).Waiting → (E.ph (G x)).Waiting := fun x hx => by
@@ -797,8 +803,9 @@ theorem Inv.move {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} (hI : E.In
   refine ⟨by rw [hh]; exact hI.vals, by rw [hh]; exact hI.mono,
     fun u v hu hv => hI.one u v (key u hu) (key v hv), fun u hu j hj hv => ?_, fun u hu => ?_,
     fun u hu => ?_, fun w hw hp => ?_, fun w hw hp => ?_, fun u hu => ?_,
-    fun u hu => wx_of hG hwxt (hI.wx u (key u hu)),
-    fun j hj hv => by rw [hh] at hj hv ⊢; exact hI.wby_of hG hwxt hclk hj hv,
+    fun u hu => if e : u = t then by subst e; exact hwx' hu
+      else by rw [hG u e] at hu ⊢; exact hI.wx u hu,
+    fun j hj hv => by rw [hh] at hj hv ⊢; exact hwby j hj hv,
     fun u hu => if e : u = t then by subst e; exact hsxt hu
       else by rw [hG u e] at hu ⊢; exact hI.sx u hu, hF,
     fun u hu => Nat.lt_of_lt_of_le (if e : u = t then by subst e; exact hI.swex u (hsw.mpr hu)
@@ -841,6 +848,29 @@ theorem Inv.move {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} (hI : E.In
         by_cases e : u = t
         · subst e; exact hsw.mp hu
         · rw [hG u e]; exact hu
+
+/-- A step of `t` that keeps the writes and the futex queue (a read, a return from a futex wait,
+a change of `t`'s lock place): the other threads keep their ghost values, and `t` changes its
+place as the premises say and keeps its waiter role (`hwxt`). -/
+theorem Inv.move {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} (hI : E.Inv L G m)
+    (hG : ∀ u, u ≠ t → G' u = G u) (hh : E.W.hist m' = E.W.hist m)
+    (hwt : m'.waiters = m.waiters) (hclk : ∀ u : ThreadId, VClock.le (m.clocks[u]!) (m'.clocks[u]!) = true)
+    (hth : m.threads.size ≤ m'.threads.size)
+    (hone : (E.ph (G' t)).Waiting → (E.ph (G t)).Waiting)
+    (hw0 : E.ph (G' t) = .w0 → E.ph (G t) = .w0)
+    (hw1 : E.ph (G' t) = .w1 → ∃ i < (E.W.hist m).size, (E.W.hist m)[i]!.Val (1 : BitVec 32) ∧
+      VClock.le (E.W.hist m)[i]!.clock (m'.clocks[t]!) = true)
+    (hsw : E.ph (G t) = .sw ↔ E.ph (G' t) = .sw)
+    (hlpt : E.ph (G' t) ≠ .out →
+      L.ph (G' t) = .out ∨ ((E.ph (G' t)).Setting ∧ L.ph (G' t) = .gone) ∨
+        (E.ph (G' t) = .w1 ∧ L.ph (G' t) = .away))
+    (htq : ∀ w ∈ m.waiters, w.1 = t →
+      (E.ph (G' t) = .w1 → w.2 = E.W.key m ∨ w.2 = L.key m) ∧ (w.2 = E.W.key m → E.ph (G' t) = .w1))
+    (hwxt : E.wx (G t) → E.wx (G' t)) (hsxt : (E.ph (G' t)).Setting → E.sx (G' t))
+    (hF : E.W.Fresh m') (hk : E.W.key m' = E.W.key m) (hkL : L.key m' = L.key m) :
+    E.Inv L G' m' :=
+  hI.moveW hG hh hwt hclk hth hone hw0 hw1 hsw hlpt htq (fun h => hwxt (hI.wx t (hone h)))
+    (fun _ hj hv => hI.wby_of hG hwxt hclk hj hv) hsxt hF hk hkL
 
 /-- The waiter's successful `cmpxchg(unset → waiting)` (`w0` → `w1`). -/
 theorem Inv.casOk {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} {ord : AtomicOrder}
@@ -1134,6 +1164,58 @@ theorem Inv.frame {G G' : ThreadId → γ} {m m' : Mem} {t : ThreadId} (hI : E.I
       fun h => by rw [hph, ← e]; exact (hI.q w hw h).1⟩) hwxt
     (fun h => hsxt (hI.sx t (by rw [← hph]; exact h))) hF hk hkL
 
+/-- **A thread out of the event's code or done (`out`, `sd`) gets any ghost value there, also one
+without its waiter role** (`g`, at `out` or `sd`; a client's own ghost step: a waiter that will
+not wait again, e.g. before it ends). The writes and the queue stay. `Inv.wby` is kept through
+the client's witness `hwby`: each `waiting` write happened before a thread that may wait after
+the step (the thread itself when it keeps the role, `Inv.toOut`; a thread that joined it and may
+wait when it gives the role up). With neither role `t` is out of the word's live set
+(`FEvent.Live`, `Live.ok_upd`), so a later plain access to the word need not be below it. At
+`sd` the thread is out of the lock's code or gone from it (`hgo`) and may set (`hsx`). -/
+theorem Inv.leave {G : ThreadId → γ} {m : Mem} {t : ThreadId} {g : γ} (hI : E.Inv L G m)
+    (ht : E.ph (G t) = .out ∨ E.ph (G t) = .sd) (hg : E.ph g = .out ∨ E.ph g = .sd)
+    (hgo : E.ph g = .sd → L.ph g = .out ∨ L.ph g = .gone) (hsx : E.ph g = .sd → E.sx g)
+    (hwby : ∀ j < (E.W.hist m).size, (E.W.hist m)[j]!.Val (1 : BitVec 32) →
+      ∃ u, E.wx (upd G t g u) ∧ VClock.le (E.W.hist m)[j]!.clock (m.clocks[u]!) = true) :
+    E.Inv L (upd G t g) m := by
+  have hgt : E.ph (upd G t g t) = .out ∨ E.ph (upd G t g t) = .sd := by rw [upd_self]; exact hg
+  have hnw : ¬ (E.ph (upd G t g t)).Waiting := fun h => by
+    rcases hgt with e | e <;> rw [e] at h <;> rcases h with h | h <;> cases h
+  refine hI.moveW (fun u hu => upd_ne _ _ hu) rfl rfl (fun _ => VClock.le_refl _) (Nat.le_refl _)
+    (fun h => absurd h hnw) (fun h => ?_) (fun h => ?_)
+    ⟨fun h => (by rcases ht with e | e <;> rw [e] at h <;> cases h), fun h => ?_⟩
+    (fun h => ?_)
+    (fun w hw e => ⟨fun h => ?_, fun h => by
+      have := (hI.q w hw h).1; rw [e] at this; rcases ht with e' | e' <;> rw [e'] at this <;>
+        cases this⟩)
+    (fun h => absurd h hnw) hwby
+    (fun h => by
+      rw [upd_self] at h ⊢
+      rcases h with e | e
+      · rcases hg with e' | e' <;> rw [e'] at e <;> cases e
+      · exact hsx e) hI.fresh rfl rfl
+  all_goals first
+    | (rcases hgt with e | e <;> rw [e] at h <;> cases h)
+    | (rw [upd_self] at h ⊢
+       have hsd : E.ph g = .sd := hg.resolve_left h
+       rcases hgo hsd with e | e
+       · exact .inl e
+       · exact .inr (.inl ⟨.inr hsd, e⟩))
+
+/-- **`Inv.leave` when each thread that may wait is below one that may wait after the step**
+(`hle`; a thread that joined `t` and may wait covers `t`, which gives its role up): the witness
+of each `waiting` write (`Inv.wby`) moves along `hle`. -/
+theorem Inv.leaveTo {G : ThreadId → γ} {m : Mem} {t : ThreadId} {g : γ} (hI : E.Inv L G m)
+    (ht : E.ph (G t) = .out ∨ E.ph (G t) = .sd) (hg : E.ph g = .out ∨ E.ph g = .sd)
+    (hgo : E.ph g = .sd → L.ph g = .out ∨ L.ph g = .gone) (hsx : E.ph g = .sd → E.sx g)
+    (hle : ∀ v, E.wx (G v) →
+      ∃ u, E.wx (upd G t g u) ∧ VClock.le (m.clocks[v]!) (m.clocks[u]!) = true) :
+    E.Inv L (upd G t g) m :=
+  hI.leave ht hg hgo hsx fun j hj hv =>
+    let ⟨v, hv', hc⟩ := hI.wby j hj hv
+    let ⟨u, hu, hl⟩ := hle v hv'
+    ⟨u, hu, VClock.le_trans hc hl⟩
+
 /-- **A thread out of the event's code or done (`out`, `sd`) gets a ghost value there** (`g`, at
 `out` or `sd`; a client's own ghost step, e.g. a setter's end after its `set`, before it sets or
 waits again, or a setter that finds the event set, `Fits.doneSet`): the writes and the queue stay,
@@ -1143,29 +1225,21 @@ theorem Inv.toOut {G : ThreadId → γ} {m : Mem} {t : ThreadId} {g : γ} (hI : 
     (ht : E.ph (G t) = .out ∨ E.ph (G t) = .sd) (hg : E.ph g = .out ∨ E.ph g = .sd)
     (hgo : E.ph g = .sd → L.ph g = .out ∨ L.ph g = .gone) (hwx : E.wx (G t) → E.wx g)
     (hsx : E.ph g = .sd → E.sx g) :
-    E.Inv L (upd G t g) m := by
-  have hgt : E.ph (upd G t g t) = .out ∨ E.ph (upd G t g t) = .sd := by rw [upd_self]; exact hg
-  refine hI.move (fun u hu => upd_ne _ _ hu) rfl rfl (fun _ => VClock.le_refl _) (Nat.le_refl _)
-    (fun h => ?_) (fun h => ?_) (fun h => ?_)
-    ⟨fun h => (by rcases ht with e | e <;> rw [e] at h <;> cases h), fun h => ?_⟩
-    (fun h => ?_)
-    (fun w hw e => ⟨fun h => ?_, fun h => by
-      have := (hI.q w hw h).1; rw [e] at this; rcases ht with e' | e' <;> rw [e'] at this <;>
-        cases this⟩)
-    (fun h => by rw [upd_self]; exact hwx h)
-    (fun h => by
-      rw [upd_self] at h ⊢
-      rcases h with e | e
-      · rcases hg with e' | e' <;> rw [e'] at e <;> cases e
-      · exact hsx e) hI.fresh rfl rfl
-  · rcases hgt with e | e <;> rw [e] at h <;> rcases h with h | h <;> cases h
-  all_goals first
-    | (rcases hgt with e | e <;> rw [e] at h <;> cases h)
-    | (rw [upd_self] at h ⊢
-       have hsd : E.ph g = .sd := hg.resolve_left h
-       rcases hgo hsd with e | e
-       · exact .inl e
-       · exact .inr (.inl ⟨.inr hsd, e⟩))
+    E.Inv L (upd G t g) m :=
+  hI.leave ht hg hgo hsx fun _ hj hv =>
+    hI.wby_of (fun u hu => upd_ne _ _ hu) (by rw [upd_self]; exact hwx)
+      (fun _ => VClock.le_refl _) hj hv
+
+/-- **The word's live set after a ghost step of `t` that adds no thread to it** (`Inv.leave`: `t`
+gives up its roles, or keeps them): the word is fine for the smaller set (`Word.Ok.anti`), so a
+plain access to it need not be below `t` any more. -/
+theorem Live.ok_upd {G : ThreadId → γ} {m : Mem} {t : ThreadId} {g : γ}
+    (hw : E.W.Ok m (fun u => E.Live (G u))) (hl : E.Live g → E.Live (G t)) :
+    E.W.Ok m (fun u => E.Live (upd G t g u)) :=
+  hw.anti fun u hu => by
+    by_cases e : u = t
+    · subst e; rw [upd_self] at hu; exact hl hu
+    · rwa [upd_ne _ _ e] at hu
 
 /-- **A step of another component of the protocol** (a condition's code) by `t`, which keeps
 `t`'s place in the event and the word's writes: `t` keeps its lock place or goes `out` of the

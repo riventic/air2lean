@@ -1071,7 +1071,7 @@ def runSync : IO Unit := do
     processConcurrent "sync" name
 
 def runThreadsync : IO Unit := do
-  for name in ["mutexCounter", "handoff", "waitGroup"] do
+  for name in ["mutexCounter", "handoff", "handoffAll", "waitGroup"] do
     processConcurrent "threadsync" name
 
 def runIogroup : IO Unit := do
