@@ -118,18 +118,20 @@ theorem U.q_addrs {G : ThreadId → Gh} {rX : Res} {m m' : Mem} (hu : U K G rX m
   rw [(L K).key_of_addrs h hb₀, hu.we.key_of_addrs h]
   exact hu.q w hw'
 
-/-- The protocol, in strict mode: the producer starts with a plain part and the message. -/
-def proto : Proto Tgt Gh where
+variable {Tgt : Type}
+
+/-- The protocol, in strict mode: the producer starts with a plain part and the message; `swOf`
+reads the producer's argument from a spawn target. -/
+def proto (swOf : Tgt → Option Ptr) : Proto Tgt Gh where
   inv G m := ∃ rX, (L K).Inv G rX m ∧ U K G rX m
-  init tgt g := match tgt with
-    | .semWork p => p = cPtr ∧ ∃ rp rc, plain rp ∧ Msg 0 rc ∧ FHeap.Disjoint rp.heap rc.heap ∧
-        g = (⟨.out, rsum rp rc, rnil⟩, { ph := .pr 0 })
-    | _ => False
+  init tgt g := swOf tgt = some cPtr ∧ ∃ rp rc, plain rp ∧ Msg 0 rc ∧
+    FHeap.Disjoint rp.heap rc.heap ∧ g = (⟨.out, rsum rp rc, rnil⟩, { ph := .pr 0 })
   fin g := g.1.ph = .gone ∧ g.2 = { ph := .fin }
   strict := true
   joins g := g.1.ph = .out ∧ g.2 = { ph := .joins }
 
 variable {K}
+variable {swOf : Tgt → Option Ptr}
 
 /-! ## The layout -/
 
@@ -973,7 +975,7 @@ theorem R_congr {Y Y' : ThreadId → X} (h : ∀ u, (Y' u).ph = (Y u).ph) : R Y'
   unfold R; rw [show (fun u => (Y' u).ph) = fun u => (Y u).ph from funext h]
 
 /-- **The protocol has the lock**, for the threads that run its code (`ok`). -/
-theorem fitsL : (L K).Fits (FPrim.empty Gh) (proto K) (U K) ok :=
+theorem fitsL : (L K).Fits (FPrim.empty Gh) (proto K swOf) (U K) ok :=
   .ofLock (fun _ _ => Iff.rfl) (fun _ h => h.1) (fun _ h => h.1) (fun _ _ _ => Iff.rfl)
     (fun _ _ => Iff.rfl) stable (fun _ _ _ t _ hu => atStop t hu) tickStable
     fun _ _ _ _ _ _ => FLock.NoGather.of_R _ fun _ => .sep (.up _) (by
@@ -984,7 +986,7 @@ theorem fitsL : (L K).Fits (FPrim.empty Gh) (proto K) (U K) ok :=
 /-- **The protocol keeps the semaphore** (`FSem.Fits`): the lock's laws, the steps of the
 condition's and the semaphore's code (`cstep`, `U_own`, `enterStep`, `holdStep`), the ticks, and
 the window: a registered `main` has at most one epoch write after its saved one (`regE`). -/
-theorem fitsS : (S K).Fits (proto K) (U K) ok where
+theorem fitsS : (S K).Fits (proto K swOf) (U K) ok where
   ok_s _ h := h.2
   win G rX m hu u i jr e hreg _ _ := by
     have := (hu.regE u i jr false e hreg).1
@@ -1024,7 +1026,7 @@ theorem fitsS : (S K).Fits (proto K) (U K) ok where
   role_part _ _ _ := Iff.rfl
   ok_calm _ _ _ hp hq := ⟨fun _ => hq, fun _ => hp⟩
   holdLive _ _ _ _ hi _ hv := FLock.holdLive_none (fun _ h => h) hi hv
-  noGather := fitsL.noGather
+  noGather := (fitsL (K := K) (swOf := swOf)).noGather
   kstep := by
     intro t G rX m G' rX' m' hs hu
     rcases hs with ⟨hSI, hs | ⟨hC, hmv⟩⟩ | hs

@@ -360,48 +360,87 @@
       "name": "Sync.Handoff.handoff_spec",
       "module": "Proofs.Sync.Handoff",
       "example": "sync",
+      "cases": [{"zig": "0.17.1", "target": "linux", "theorem": "Sync.CaseContracts.V0_17_1.H_6c696e7578.Handoff.handoff_spec"}],
       "scope": "all-schedules",
-      "domain": "`handoff` with 0.16.0 `Io.Mutex`, `Io.Condition` and `Io.Event`, for every `io`: every completed run returns 7; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+      "domain": "`handoff` with the translated `Io.Mutex`, `Io.Condition` and `Io.Event` (0.16.0; 0.17.1 through its case theorem), for every `io`: every completed run returns 7; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
     {
       "name": "Sync.Handoff.handoff_safe",
       "module": "Proofs.Sync.Handoff",
       "example": "sync",
+      "cases": [{"zig": "0.17.1", "target": "linux", "theorem": "Sync.CaseContracts.V0_17_1.H_6c696e7578.Handoff.handoff_safe"}],
       "scope": "all-schedules",
-      "domain": "`handoff` with 0.16.0 `Io.Mutex`, `Io.Condition` and `Io.Event`, for every `io`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+      "domain": "`handoff` with the translated `Io.Mutex`, `Io.Condition` and `Io.Event` (0.16.0; 0.17.1 through its case theorem), for every `io`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Sync.CaseContracts.V0_17_1.H_6c696e7578.Handoff.handoff_spec",
+      "module": "Proofs.Sync.HandoffCases",
+      "example": "sync",
+      "gen": "Proofs/Sync/Gen/V0_17_1/H_6c696e7578/Gen.lean",
+      "scope": "all-schedules",
+      "domain": "`Sync.Handoff.handoff_spec` for the Zig 0.17.1 Linux translation (its own `Io.Mutex`, `Io.Condition` and `Io.Event` contracts): every completed run returns 7; for every fuel and every oracle of `Sched.run` from `mem0`; partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Sync.CaseContracts.V0_17_1.H_6c696e7578.Handoff.handoff_safe",
+      "module": "Proofs.Sync.HandoffCases",
+      "example": "sync",
+      "gen": "Proofs/Sync/Gen/V0_17_1/H_6c696e7578/Gen.lean",
+      "scope": "all-schedules",
+      "domain": "`Sync.Handoff.handoff_safe` for the Zig 0.17.1 Linux translation: for every fuel and every oracle of `Sched.run` from `mem0`, strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
     {
       "name": "Sync.SemCounter.semaphoreCounter_spec",
       "module": "Proofs.Sync.SemCounter",
       "example": "sync",
+      "cases": [{"zig": "0.17.1", "target": "linux", "theorem": "Sync.CaseContracts.V0_17_1.H_6c696e7578.SemCounter.semaphoreCounter_spec"}],
       "scope": "all-schedules",
-      "domain": "`semaphoreCounter` with 0.16.0 `Io.Semaphore`, `Io.Mutex` and `Io.Condition`, for every `io`: every completed run returns 4; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+      "domain": "`semaphoreCounter` with the translated `Io.Semaphore`, `Io.Mutex` and `Io.Condition` (0.16.0; 0.17.1 through its case theorem), for every `io`: every completed run returns 4; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
     {
       "name": "Sync.SemCounter.semaphoreCounter_safe",
       "module": "Proofs.Sync.SemCounter",
       "example": "sync",
+      "cases": [{"zig": "0.17.1", "target": "linux", "theorem": "Sync.CaseContracts.V0_17_1.H_6c696e7578.SemCounter.semaphoreCounter_safe"}],
       "scope": "all-schedules",
-      "domain": "`semaphoreCounter` with 0.16.0 `Io.Semaphore`, `Io.Mutex` and `Io.Condition`, for every `io`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+      "domain": "`semaphoreCounter` with the translated `Io.Semaphore`, `Io.Mutex` and `Io.Condition` (0.16.0; 0.17.1 through its case theorem), for every `io`: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Sync.CaseContracts.V0_17_1.H_6c696e7578.SemCounter.semaphoreCounter_spec",
+      "module": "Proofs.Sync.SemCounterCases",
+      "example": "sync",
+      "gen": "Proofs/Sync/Gen/V0_17_1/H_6c696e7578/Gen.lean",
+      "scope": "all-schedules",
+      "domain": "`Sync.SemCounter.semaphoreCounter_spec` for the Zig 0.17.1 Linux translation (its own `Io.Semaphore`, `Io.Mutex` and `Io.Condition` contracts): every completed run returns 4; for every fuel and every oracle of `Sched.run` from `mem0`; partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Sync.CaseContracts.V0_17_1.H_6c696e7578.SemCounter.semaphoreCounter_safe",
+      "module": "Proofs.Sync.SemCounterCases",
+      "example": "sync",
+      "gen": "Proofs/Sync/Gen/V0_17_1/H_6c696e7578/Gen.lean",
+      "scope": "all-schedules",
+      "domain": "`Sync.SemCounter.semaphoreCounter_safe` for the Zig 0.17.1 Linux translation: for every fuel and every oracle of `Sched.run` from `mem0`, strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
     {
       "name": "Sync.RwLockRead.rwLockRead_spec",
       "module": "Proofs.Sync.RwLockFixture",
       "example": "sync",
+      "cases": [{"zig": "0.17.1", "target": "linux", "theorem": "Sync.CaseContracts.V0_17_1.H_6c696e7578.RwLockRead.rwLockRead_spec"}],
       "scope": "all-schedules",
-      "domain": "`rwLockRead` with 0.16.0 `Io.RwLock` (its `Io.Mutex` and `Io.Semaphore`), for every `io`; the fixed client: main reader and one writer adding 1 twice: every completed run returns 2, 12 or 22; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+      "domain": "`rwLockRead` with the translated `Io.RwLock` (its `Io.Mutex` and `Io.Semaphore`; 0.16.0, and 0.17.1 through its case theorem), for every `io`; the fixed client: main reader and one writer adding 1 twice: every completed run returns 2, 12 or 22; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
     {
       "name": "Sync.RwLockRead.rwLockRead_safe",
       "module": "Proofs.Sync.RwLockFixture",
       "example": "sync",
+      "cases": [{"zig": "0.17.1", "target": "linux", "theorem": "Sync.CaseContracts.V0_17_1.H_6c696e7578.RwLockRead.rwLockRead_safe"}],
       "scope": "all-schedules",
-      "domain": "`rwLockRead` with 0.16.0 `Io.RwLock` (its `Io.Mutex` and `Io.Semaphore`), for every `io`; the fixed client: main reader and one writer adding 1 twice: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+      "domain": "`rwLockRead` with the translated `Io.RwLock` (its `Io.Mutex` and `Io.Semaphore`; 0.16.0, and 0.17.1 through its case theorem), for every `io`; the fixed client: main reader and one writer adding 1 twice: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
     {
       "name": "Sync.RwLockSnapshotPair.snapshotPair_spec",
       "module": "Proofs.Sync.RwLockFixture",
       "example": "sync",
+      "cases": [{"zig": "0.17.1", "target": "linux", "theorem": "Sync.CaseContracts.V0_17_1.H_6c696e7578.RwLockSnapshotPair.snapshotPair_spec"}],
       "scope": "all-schedules",
       "domain": "`snapshotPair` (`rwLockSnapshotPair`, C14) for every `io`; the fixed client, proved over the contract `RwLockImpl` in Proofs/Sync/RwLockFixture.lean (main reader, one writer, writer count ≤ 2, one shared hold over both loads, join before reclamation); not a reusable RwLock contract for arbitrary readers or resources: every completed run returns 0, 11 or 22; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
@@ -409,8 +448,41 @@
       "name": "Sync.RwLockSnapshotPair.snapshotPair_safe",
       "module": "Proofs.Sync.RwLockFixture",
       "example": "sync",
+      "cases": [{"zig": "0.17.1", "target": "linux", "theorem": "Sync.CaseContracts.V0_17_1.H_6c696e7578.RwLockSnapshotPair.snapshotPair_safe"}],
       "scope": "all-schedules",
       "domain": "`snapshotPair` (`rwLockSnapshotPair`, C14) for every `io`; the fixed client, proved over the contract `RwLockImpl` in Proofs/Sync/RwLockFixture.lean (main reader, one writer, writer count ≤ 2, one shared hold over both loads, join before reclamation); not a reusable RwLock contract for arbitrary readers or resources: for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, overflow, other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Sync.CaseContracts.V0_17_1.H_6c696e7578.RwLockRead.rwLockRead_spec",
+      "module": "Proofs.Sync.RwLockFixtureCases",
+      "example": "sync",
+      "gen": "Proofs/Sync/Gen/V0_17_1/H_6c696e7578/Gen.lean",
+      "scope": "all-schedules",
+      "domain": "`Sync.RwLockRead.rwLockRead_spec` for the Zig 0.17.1 Linux translation (its own `Io.RwLock`, `Io.Semaphore`, `Io.Condition` and `Io.Mutex` contracts): every completed run returns 2, 12 or 22; for every fuel and every oracle of `Sched.run` from `mem0`; partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Sync.CaseContracts.V0_17_1.H_6c696e7578.RwLockRead.rwLockRead_safe",
+      "module": "Proofs.Sync.RwLockFixtureCases",
+      "example": "sync",
+      "gen": "Proofs/Sync/Gen/V0_17_1/H_6c696e7578/Gen.lean",
+      "scope": "all-schedules",
+      "domain": "`Sync.RwLockRead.rwLockRead_safe` for the Zig 0.17.1 Linux translation: for every fuel and every oracle of `Sched.run` from `mem0`, strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Sync.CaseContracts.V0_17_1.H_6c696e7578.RwLockSnapshotPair.snapshotPair_spec",
+      "module": "Proofs.Sync.RwLockFixtureCases",
+      "example": "sync",
+      "gen": "Proofs/Sync/Gen/V0_17_1/H_6c696e7578/Gen.lean",
+      "scope": "all-schedules",
+      "domain": "`Sync.RwLockSnapshotPair.snapshotPair_spec` for the Zig 0.17.1 Linux translation (its own `Io.RwLock` contract): every completed run returns 0, 11 or 22; for every fuel and every oracle of `Sched.run` from `mem0`; partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Sync.CaseContracts.V0_17_1.H_6c696e7578.RwLockSnapshotPair.snapshotPair_safe",
+      "module": "Proofs.Sync.RwLockFixtureCases",
+      "example": "sync",
+      "gen": "Proofs/Sync/Gen/V0_17_1/H_6c696e7578/Gen.lean",
+      "scope": "all-schedules",
+      "domain": "`Sync.RwLockSnapshotPair.snapshotPair_safe` for the Zig 0.17.1 Linux translation: for every fuel and every oracle of `Sched.run` from `mem0`, strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`); a run with no result (out of fuel) is still allowed; no termination or fairness"
     },
     {
       "name": "Atomics.MP.mpRelAcq_spec",
@@ -551,15 +623,33 @@
       "name": "Sync.Mailbox.mailbox_spec",
       "module": "Proofs.Sync.Mailbox",
       "example": "sync",
+      "cases": [{"zig": "0.17.1", "target": "linux", "theorem": "Sync.CaseContracts.V0_17_1.H_6c696e7578.Mailbox.mailbox_spec"}],
       "scope": "all-schedules",
-      "domain": "the Lean model producer/consumer `mailMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Semaphore` wait (condition-variable loop with predicate recheck) and post, for every `io`: one producer, one consumer, one two-field message moved by ownership transfer; proved against the semaphore contract `SemImpl` only (for every implementation; instance `Sync.ioSem`): every completed run returns 34; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+      "domain": "the Lean model producer/consumer `mailMain` (not a Zig export; C14) with the translated `Io.Semaphore` (0.16.0; 0.17.1 through its case theorem) wait (condition-variable loop with predicate recheck) and post, for every `io`: one producer, one consumer, one two-field message moved by ownership transfer; proved against the semaphore contract `SemImpl` only (for every implementation; instance `Sync.ioSem`): every completed run returns 34; for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model: the RC11 atomics, futex and thread model of ZigLean/Conc); partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
     },
     {
       "name": "Sync.Mailbox.mailbox_safe",
       "module": "Proofs.Sync.Mailbox",
       "example": "sync",
+      "cases": [{"zig": "0.17.1", "target": "linux", "theorem": "Sync.CaseContracts.V0_17_1.H_6c696e7578.Mailbox.mailbox_safe"}],
       "scope": "all-schedules",
-      "domain": "the Lean model producer/consumer `mailMain` (not a Zig export; C14) with the translated 0.16.0 `Io.Semaphore` wait (condition-variable loop with predicate recheck) and post, for every `io`: one producer, one consumer, one two-field message moved by ownership transfer; proved against the semaphore contract `SemImpl` only (for every implementation; instance `Sync.ioSem`): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, lifetime or other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+      "domain": "the Lean model producer/consumer `mailMain` (not a Zig export; C14) with the translated `Io.Semaphore` (0.16.0; 0.17.1 through its case theorem) wait (condition-variable loop with predicate recheck) and post, for every `io`: one producer, one consumer, one two-field message moved by ownership transfer; proved against the semaphore contract `SemImpl` only (for every implementation; instance `Sync.ioSem`): for every fuel and every oracle of `Sched.run` from `mem0` (all schedules of the model), strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`) (data race, deadlock, lifetime or other illegal behaviour); a run with no result (out of fuel) is still allowed; no termination or fairness"
+    },
+    {
+      "name": "Sync.CaseContracts.V0_17_1.H_6c696e7578.Mailbox.mailbox_spec",
+      "module": "Proofs.Sync.MailboxCases",
+      "example": "sync",
+      "gen": "Proofs/Sync/Gen/V0_17_1/H_6c696e7578/Gen.lean",
+      "scope": "all-schedules",
+      "domain": "`Sync.Mailbox.mailbox_spec` for the Zig 0.17.1 Linux translation (the same Lean model client `mailMain`, not a Zig export, over that translation's spawn targets, semaphore value and `Io.Semaphore` contract): every completed run returns 34; for every fuel and every oracle of `Sched.run` from `mem0`; partial correctness: a run with no result, out of fuel included, satisfies it; no termination or fairness"
+    },
+    {
+      "name": "Sync.CaseContracts.V0_17_1.H_6c696e7578.Mailbox.mailbox_safe",
+      "module": "Proofs.Sync.MailboxCases",
+      "example": "sync",
+      "gen": "Proofs/Sync/Gen/V0_17_1/H_6c696e7578/Gen.lean",
+      "scope": "all-schedules",
+      "domain": "`Sync.Mailbox.mailbox_safe` for the Zig 0.17.1 Linux translation (the same Lean model client `mailMain`, not a Zig export): for every fuel and every oracle of `Sched.run` from `mem0`, strict mode: no run ends in an error other than `.stackOverflow` (premise STK-01: the hypothesis `e ≠ .stackOverflow`); a run with no result (out of fuel) is still allowed; no termination or fairness"
     }
   ]
 }

@@ -367,6 +367,9 @@ print("Proofs.Basic.Cases")
     def build_tree(self):
         return Path((self.repo / ".lake/check-reports/0.16.0/build-tree").read_text().strip())
 
+    def diff_tree(self):
+        return Path((self.repo / ".lake/check-reports/0.16.0/diff-tree").read_text().strip())
+
     def tearDown(self):
         self.temp.cleanup()
 
@@ -420,6 +423,7 @@ print("Proofs.Basic.Cases")
         self.assertEqual((tree / "Proofs/Basic/Gen.lean").read_bytes(), generated(self.fixture, version_body))
         self.assertIn("build Proofs.Basic.Gen", (tree / "calls.log").read_text())
         self.assertNotIn("build Proofs", (self.repo / "calls.log").read_text())  # only the translator is built here
+        self.assertEqual(self.diff_tree(), tree)
         # A golden that is not this translation fails, still without writing.
         golden.write_bytes(BODY.replace(b"42", b"39"))
         self.commit("stale golden")
@@ -427,6 +431,26 @@ print("Proofs.Basic.Cases")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("generated semantics changed", result.stderr)
         self.assert_checkout_unchanged()
+
+    def test_case_family_keeps_its_public_module_where_proofs_build(self):
+        # A case family's cases are their own modules with per-case proofs: the build tree keeps
+        # the committed public module, and only the differential test gets this translation.
+        os_name = subprocess.run(["uname", "-s"], check=True, capture_output=True, text=True).stdout.strip().lower()
+        golden = self.repo / f"tests/golden/0.16.0/basic/Gen-{os_name}.lean"
+        golden.parent.mkdir(parents=True)
+        version_body = BODY.replace(b"42", b"40")
+        golden.write_bytes(version_body)
+        (self.repo / "generated.txt").write_bytes(generated(self.fixture, version_body))
+        (self.repo / "examples/basic/all-cases").touch()
+        self.commit("case family with a version golden")
+        result = self.pipeline()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assert_checkout_unchanged()
+        self.assertEqual(self.build_tree(), self.repo.resolve())
+        self.assertIn("build Proofs.Basic.Gen Proofs.Basic.Cases", (self.repo / "calls.log").read_text())
+        diff_tree = self.diff_tree()
+        self.assertEqual(diff_tree, (self.repo / ".lake/check-tree/0.16.0-diff").resolve())
+        self.assertEqual((diff_tree / "Proofs/Basic/Gen.lean").read_bytes(), generated(self.fixture, version_body))
 
     def test_new_translation_outside_ci_is_tested_in_a_check_tree(self):
         changed = BODY.replace(b"42", b"41")

@@ -21,7 +21,7 @@ open Zig Zig.Conc Zig.Conc.Proto Zig.Full Zig.Full.FAssn
 
 namespace Sync.Mailbox
 
-variable {K : Cfg}
+variable {K : Cfg} {Tgt : Type} {swOf : Tgt → Option Ptr}
 
 /-! ## The count and the pool -/
 
@@ -166,12 +166,12 @@ theorem U_move {G : ThreadId → Gh} {rX : Res} {m : Mem} {t : ThreadId} {g₀ g
 
 /-- **A move of thread `t`'s program place** (`U_move`): the protocol's invariant. -/
 theorem inv_move {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g₀ g₁ : Gh}
-    (hi : (proto K).inv (upd G t g₀) m) (hc₀ : g₀.2.c = .out) (hc₁ : g₁.2.c = .out)
+    (hi : (proto K swOf).inv (upd G t g₀) m) (hc₀ : g₀.2.c = .out) (hc₁ : g₁.2.c = .out)
     (hs₀ : g₀.2.s = .out) (hs₁ : g₁.2.s = .out)
     (hl : g₁.1 = g₀.1 ∨ g₀.1.ph = .out ∧ g₁.1 = ⟨.gone, g₀.1.part, rnil⟩)
     (hav : avail (fun u => (upd G t g₁ u).2.ph) = avail (fun u => (upd G t g₀ u).2.ph))
     (shape : ∀ rX, U K (upd G t g₀) rX m → Shape (fun u => (upd G t g₁ u).2) m) :
-    (proto K).inv (upd G t g₁) m := by
+    (proto K swOf).inv (upd G t g₁) m := by
   obtain ⟨rX, hL, hu⟩ := hi
   have hRk : ∀ r, (L K).R (upd G t g₀) r → (L K).R (upd (upd G t g₀) t g₁) r := fun r hR => by
     rw [upd_upd]
@@ -195,8 +195,8 @@ theorem inv_move {G : ThreadId → Gh} {m : Mem} {t : ThreadId} {g₀ g₁ : Gh}
 
 /-- **The producer writes** a field of its message: from `pr k` to `pr k'`. -/
 theorem inv_pr {G : ThreadId → Gh} {m : Mem} {r : Res} {k k' : Nat}
-    (hi : (proto K).inv (upd G 1 (gO r { ph := .pr k })) m) :
-    (proto K).inv (upd G 1 (gO r { ph := .pr k' })) m :=
+    (hi : (proto K swOf).inv (upd G 1 (gO r { ph := .pr k })) m) :
+    (proto K swOf).inv (upd G 1 (gO r { ph := .pr k' })) m :=
   inv_move hi rfl rfl rfl rfl (.inl rfl) (by simp [avail, upd_self, gO, Ph.posted])
     fun rX hu => by
       have hs := hu.shape
@@ -208,8 +208,8 @@ theorem inv_pr {G : ThreadId → Gh} {m : Mem} {r : Res} {k k' : Nat}
 
 /-- **The producer's end** after its post: it is `gone` at `fin`. -/
 theorem inv_fin {G : ThreadId → Gh} {m : Mem} {r : Res}
-    (hi : (proto K).inv (upd G 1 (gO r { ph := .pd })) m) :
-    (proto K).inv (upd G 1 (⟨.gone, r, rnil⟩, { ph := .fin })) m :=
+    (hi : (proto K swOf).inv (upd G 1 (gO r { ph := .pd })) m) :
+    (proto K swOf).inv (upd G 1 (⟨.gone, r, rnil⟩, { ph := .fin })) m :=
   inv_move hi rfl rfl rfl rfl (.inr ⟨rfl, rfl⟩) (by simp [avail, upd_self, upd1_0, gO, Ph.posted])
     fun rX hu => by
       refine hu.shape.prod (by show (upd G 1 _ 1).2.ph.isProd = true; rw [upd_self]; rfl)
@@ -225,8 +225,8 @@ the producer has not posted, so it has not ended, it does not join, and it sleep
 (at the mutex, `Fits.noWaits`; at the epoch it would be a registered waiter, `U.waits0`). -/
 theorem wait_live (G₁ : ThreadId → Gh) (m₁ : Mem)
     (hreg : ∃ i jr e, C.ph (G₁ 0) = .reg i jr false e) (_ : (L K).ph (G₁ 0) = .away)
-    (hi : (proto K).inv G₁ m₁) (_ : FCond.sOf (C.lastS m₁) = 0) (_ : ∀ v, (C.ph (G₁ v)).sig = false)
-    (hcnt : (S K).cnt G₁ = 0) : (proto K).Live 0 G₁ m₁ := by
+    (hi : (proto K swOf).inv G₁ m₁) (_ : FCond.sOf (C.lastS m₁) = 0) (_ : ∀ v, (C.ph (G₁ v)).sig = false)
+    (hcnt : (S K).cnt G₁ = 0) : (proto K swOf).Live 0 G₁ m₁ := by
   intro _ hall
   obtain ⟨rX, hL, hu⟩ := hi
   obtain ⟨i, jr, e, hr⟩ := hreg
@@ -246,7 +246,7 @@ theorem wait_live (G₁ : ThreadId → Gh) (m₁ : Mem)
   · obtain ⟨w, hw, he⟩ := Array.any_eq_true'.mp h
     have e1 : w.1 = 1 := by simpa using he
     rcases hu.q w hw with hq | hq
-    · exact (fitsL (K := K)).noWaits hL hu hall (Array.any_eq_true'.mpr ⟨w, hw, by simp [hq]⟩)
+    · exact (fitsL (K := K) (swOf := swOf)).noWaits hL hu hall (Array.any_eq_true'.mpr ⟨w, hw, by simp [hq]⟩)
     · obtain ⟨i', jr', e', h1, -⟩ := hu.cinv.q w hw hq
       have hw1 : ((G₁ w.1).2.c).waits = true := by
         show (C.ph (G₁ w.1)).waits = true; rw [h1]; rfl
@@ -266,7 +266,7 @@ abbrev gW (rM : Res) : Gh := gO rM { ph := .wt }
 abbrev gT (rM : Res) : Gh := gO rM { ph := .got }
 
 theorem wait_cnt : ∀ (G : ThreadId → Gh) rL m,
-    (proto K).inv (upd G 0 ((L K).set ((S K).set (gW rM) .wt) .holds rL)) m →
+    (proto K swOf).inv (upd G 0 ((L K).set ((S K).set (gW rM) .wt) .holds rL)) m →
     (S K).cnt (upd G 0 (gW rM)) ≠ 0 →
     (S K).cnt (upd G 0 ((fun _ => gT rM) ((S K).xs (upd G 0 (gW rM))))) =
       (S K).cnt (upd G 0 (gW rM)) - 1 := by
@@ -277,7 +277,7 @@ theorem wait_cnt : ∀ (G : ThreadId → Gh) rL m,
   rw [h1, pv_took (by simp [upd_self, gO, Ph.took])]; decide
 
 theorem wait_pool : ∀ (G : ThreadId → Gh) rL m,
-    (proto K).inv (upd G 0 ((L K).set ((S K).set (gW rM) .wt) .holds rL)) m →
+    (proto K swOf).inv (upd G 0 ((L K).set ((S K).set (gW rM) .wt) .holds rL)) m →
     (S K).cnt (upd G 0 (gW rM)) ≠ 0 → ∀ r, (S K).Pool ((S K).xs (upd G 0 (gW rM))) r →
     ((S K).Pool ((S K).xs (upd G 0 ((fun _ => gT rM) ((S K).xs (upd G 0 (gW rM)))))) ⋆
       (fun _ => Msg 2) ((S K).xs (upd G 0 (gW rM)))) r := by
@@ -326,7 +326,7 @@ theorem wait_U : ∀ (G : ThreadId → Gh) rX m h₁ h₂ r sh sc, (S K).cnt (up
     · rw [upd_ne _ _ e] at h ⊢; have := hu.swt u; rw [upd_ne _ _ e] at this; exact this h
 
 theorem wait_room : ∀ (G₁ : ThreadId → Gh) rL m₁,
-    (proto K).inv (upd G₁ 0 ((L K).set ((S K).set (gW rM) .wt) .holds rL)) m₁ →
+    (proto K swOf).inv (upd G₁ 0 ((L K).set ((S K).set (gW rM) .wt) .holds rL)) m₁ →
     (S K).cnt (upd G₁ 0 (gW rM)) = 0 → ∀ n, (∀ u, n ≤ u → C.ph (upd G₁ 0 (gW rM) u) = .out) →
     C.nreg (upd G₁ 0 (gW rM)) n < 65535 := by
   intro G₁ rL m₁ hi _ n _
@@ -339,13 +339,13 @@ theorem wait_room : ∀ (G₁ : ThreadId → Gh) rL m₁,
 
 /-- **`main`'s wait** (`SemImpl.wait_wp`): it takes the permit and the message, to `got`. -/
 theorem wp_waitM (I : SemImpl Tgt) (hLc : K.c = I.c) (io : Io) {G : ThreadId → Gh} {m : Mem}
-    {d : Nat} (hpl : rM.Plain) (hi : (proto K).inv (upd G 0 (gO rM { ph := .wt })) m)
+    {d : Nat} (hpl : rM.Plain) (hi : (proto K swOf).inv (upd G 0 (gO rM { ph := .wt })) m)
     (hc : m.current = 0) :
-    (proto K).WP 0 (I.wait cPtr io) (fun _ G' m' d' => d' < d ∧ m'.current = 0 ∧ ∃ r, Msg 2 r ∧
+    (proto K swOf).WP 0 (I.wait cPtr io) (fun _ G' m' d' => d' < d ∧ m'.current = 0 ∧ ∃ r, Msg 2 r ∧
       FHeap.Disjoint rM.heap r.heap ∧
-      (proto K).inv (upd G' 0 (gO (rsum rM r) { ph := .got })) m') G m d :=
+      (proto K swOf).inv (upd G' 0 (gO (rsum rM r) { ph := .got })) m') G m d :=
   WP.mono (fun _ _ _ _ ⟨hd, hc', _, r, hT, hdj, hi'⟩ => ⟨hd, hc', r, hT, hdj, hi'⟩)
-    (I.wait_wp (fitsS (K := K)) rfl hLc rfl 0 (gW rM) (fun _ => gT rM) (fun _ => Msg 2)
+    (I.wait_wp (fitsS (K := K) (swOf := swOf)) rfl hLc rfl 0 (gW rM) (fun _ => gT rM) (fun _ => Msg 2)
       rfl rfl rfl rfl ⟨rfl, .inl rfl⟩ (fun _ => rfl) (fun _ => rfl) (fun _ => rfl) (fun _ => rfl)
       (fun _ => ⟨rfl, .inl rfl⟩) wait_cnt wait_pool wait_U wait_room wait_live io G m d hpl hi hc)
 
@@ -362,7 +362,7 @@ abbrev gP (rp rc : Res) : Gh := gO (rsum rp rc) { ph := .pr 2 }
 abbrev gD (rp : Res) : Gh := gO rp { ph := .pd }
 
 /-- Before its post `main` has not taken the permit. -/
-theorem untaken {G : ThreadId → Gh} {g : Gh} {m : Mem} (hi : (proto K).inv (upd G 1 g) m)
+theorem untaken {G : ThreadId → Gh} {g : Gh} {m : Mem} (hi : (proto K swOf).inv (upd G 1 g) m)
     (hg : g.2.ph.posted = false) : (G 0).2.ph.took = false := by
   obtain ⟨rX, -, hu⟩ := hi
   cases h : (G 0).2.ph.took
@@ -371,7 +371,7 @@ theorem untaken {G : ThreadId → Gh} {g : Gh} {m : Mem} (hi : (proto K).inv (up
     simp only [upd_self] at this; rw [hg] at this; cases this
 
 theorem post_cnt : ∀ (G : ThreadId → Gh) rL m,
-    (proto K).inv (upd G 1 ((L K).set (gP rp rc) .holds rL)) m →
+    (proto K swOf).inv (upd G 1 ((L K).set (gP rp rc) .holds rL)) m →
     (S K).cnt (upd G 1 (gD rp)) = (S K).cnt (upd G 1 (gP rp rc)) + 1 ∧
       ((S K).cnt (upd G 1 (gP rp rc))).toNat + 1 < 2 ^ 64 := by
   intro G _ _ hi
@@ -384,7 +384,7 @@ theorem post_cnt : ∀ (G : ThreadId → Gh) rL m,
   decide
 
 theorem post_pool (hm : Msg 2 rc) : ∀ (G : ThreadId → Gh) rL m,
-    (proto K).inv (upd G 1 ((L K).set (gP rp rc) .holds rL)) m → ∀ r,
+    (proto K swOf).inv (upd G 1 ((L K).set (gP rp rc) .holds rL)) m → ∀ r,
     ((fun r => r = rc) ⋆ (S K).Pool ((S K).xs (upd G 1 (gP rp rc)))) r →
     (S K).Pool ((S K).xs (upd G 1 (gD rp))) r := by
   intro G _ _ hi r hr
@@ -420,10 +420,10 @@ theorem post_U : ∀ (G : ThreadId → Gh) rX m h₁ h₂ sh sc,
 /-- **The producer's post** (`SemImpl.post_wp`): it gives the message to the pool, to `pd`. -/
 theorem wp_postP (I : SemImpl Tgt) (hLc : K.c = I.c) (io : Io) {G : ThreadId → Gh} {m : Mem}
     {d : Nat} (hpl : rp.Plain) (hm : Msg 2 rc) (hdj : FHeap.Disjoint rp.heap rc.heap)
-    (hi : (proto K).inv (upd G 1 (gO (rsum rp rc) { ph := .pr 2 })) m) (hc : m.current = 1) :
-    (proto K).WP 1 (I.post cPtr io) (fun _ G' m' d' => d' < d ∧ m'.current = 1 ∧
-      (proto K).inv (upd G' 1 (gO rp { ph := .pd })) m') G m d :=
-  I.post_wp (fitsS (K := K)) rfl hLc rfl 1 (gP rp rc) (gD rp) rc rfl rfl rfl ⟨rfl, .inl rfl⟩
+    (hi : (proto K swOf).inv (upd G 1 (gO (rsum rp rc) { ph := .pr 2 })) m) (hc : m.current = 1) :
+    (proto K swOf).WP 1 (I.post cPtr io) (fun _ G' m' d' => d' < d ∧ m'.current = 1 ∧
+      (proto K swOf).inv (upd G' 1 (gO rp { ph := .pd })) m') G m d :=
+  I.post_wp (fitsS (K := K) (swOf := swOf)) rfl hLc rfl 1 (gP rp rc) (gD rp) rc rfl rfl rfl ⟨rfl, .inl rfl⟩
     rfl rfl rfl rfl ⟨rfl, .inl rfl⟩ rfl hdj post_cnt (post_pool hm) post_U io G m d
     hpl.unmetered hi hc
 
@@ -459,10 +459,10 @@ theorem st_b (rp : Res) :
 /-- **The producer**: it writes the message on its part, posts it (`wp_postP`) and ends. -/
 theorem producer_spec (I : SemImpl Tgt) (hLc : K.c = I.c) (G : ThreadId → Gh) (m : Mem) (d : Nat)
     {rp rc : Res} (hp : rp.Plain) (hrc : Msg 0 rc) (hdj : FHeap.Disjoint rp.heap rc.heap)
-    (hi : (proto K).inv (upd G 1 (gO (rsum rp rc) { ph := .pr 0 })) m) (hc : m.current = 1) :
-    (proto K).WP 1 (producer I cPtr) (fun _ G' m' _ => m'.current = 1 ∧
-      (proto K).inv (upd G' 1 (⟨.gone, rp, rnil⟩, { ph := .fin })) m') G m d := by
-  have hF := (fitsS (K := K)).toC.toFits
+    (hi : (proto K swOf).inv (upd G 1 (gO (rsum rp rc) { ph := .pr 0 })) m) (hc : m.current = 1) :
+    (proto K swOf).WP 1 (producer I cPtr) (fun _ G' m' _ => m'.current = 1 ∧
+      (proto K swOf).inv (upd G' 1 (⟨.gone, rp, rnil⟩, { ph := .fin })) m') G m d := by
+  have hF := (fitsS (K := K) (swOf := swOf)).toC.toFits
   unfold producer
   rw [StateT.run'_eq]
   refine WP.map ?_
@@ -471,12 +471,12 @@ theorem producer_spec (I : SemImpl Tgt) (hLc : K.c = I.c) (G : ThreadId → Gh) 
     fun _ m₁ r₁ _ hq hc₁ _ _ hi₁ => ?_)
   obtain ⟨r₀, r₁', hd₁, he, h0, hm₁⟩ := hq
   rw [h0] at hd₁ he; subst he
-  have hi₁' : (proto K).inv (upd G 1 (gO (rsum rp r₁') { ph := .pr 1 })) m₁ := inv_pr hi₁
+  have hi₁' : (proto K swOf).inv (upd G 1 (gO (rsum rp r₁') { ph := .pr 1 })) m₁ := inv_pr hi₁
   refine WP.bind (FCond.wp_liftPartM hF (.inl rfl) hi₁' hc₁ (st_b rp) ⟨_, _, hd₁, rfl, rfl, hm₁⟩
     fun _ m₂ r₂ _ hq hc₂ _ _ hi₂ => ?_)
   obtain ⟨r₀, r₂', hd₂, he, h0, hm₂⟩ := hq
   rw [h0] at hd₂ he; subst he
-  have hi₂' : (proto K).inv (upd G 1 (gO (rsum rp r₂') { ph := .pr 2 })) m₂ := inv_pr hi₂
+  have hi₂' : (proto K swOf).inv (upd G 1 (gO (rsum rp r₂') { ph := .pr 2 })) m₂ := inv_pr hi₂
   refine WP.callC (WP.mono ?_ (wp_postP I hLc (⟨⟩ : Io) hp hm₂ hd₂ hi₂' hc₂))
   rintro _ G' m' _ ⟨-, hc', hi'⟩
   exact ⟨hc', inv_fin hi'⟩

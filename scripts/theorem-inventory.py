@@ -11,7 +11,10 @@ closed when they are missing. A theorem must be checked against
 the translation of every Zig version/target that its example supports (`translations`):
 `tests/golden/<v>/<ex>/Gen-<os>.lean`, else `tests/golden/<v>/<ex>/Gen.lean`, else the
 committed `Proofs/<Ex>/Gen.lean` (the rule of scripts/check.sh); a theorem whose entry names
-`gen` only against that retained translation (`retained`). A run result is current only
+`gen` only against that retained translation (`retained`). An entry's `cases` names, per Zig
+version and target, the listed theorem that checks that translation instead (`case_result`: the
+same statement over a retained translation of a case family's golden case, whose own run is
+the result). A run result is current only
 while the translation file and every `Proofs` source the module imports have the hashes the
 run recorded.
 
@@ -614,6 +617,40 @@ def current_result(root: Path, inv: dict, thm: dict, tr: dict, decl_closure: lis
     return None
 
 
+def case_result(root: Path, inv: dict, thm: dict, decl: dict, case: str, tr: dict, listed: dict,
+                decl_cache: dict, runs: bool, prepared: dict, discovered: dict):
+    """A translation that a case theorem checks (`cases` in the entry): a listed theorem of the
+    same example and scope over a retained translation (`gen`) of that Zig version and target,
+    whose statement is this theorem's word for word (its module opens the case's namespace, so
+    the same text names that translation's declarations). Its current run is the result.
+    (problem or None, run id or None)"""
+    other = listed.get(case)
+    if other is None or not other.get('gen'):
+        return f'case theorem {case} is not a listed theorem over a retained translation (`gen`)', None
+    if other['example'] != thm['example'] or other['scope'] != thm['scope']:
+        return f'case theorem {case} has another example or scope', None
+    try:
+        own = retained(root, other['gen'])
+    except (Error, OSError, KeyError, ValueError) as error:
+        return str(error), None
+    if (own['zig'], own['target']) != (tr['zig'], tr['target']):
+        return f'case theorem {case} is over {own["zig"]}/{own["target"]}', None
+    other_decl = decl_cache.get(other['module'], {}).get(case)
+    if other_decl is None or other_decl['statement'].split() != decl['statement'].split():
+        return f'case theorem {case} does not have this theorem\'s statement', None
+    try:
+        mods = discover_modules(root, [other['module']], {}, discovered)
+    except Error as error:
+        return str(error), None
+    public = gen_module(thm['example'])
+    if public in mods:
+        # The same text could then name the public translation's declarations.
+        return f'case theorem {case}: {other["module"]} imports the public translation {public}', None
+    if not runs:
+        return None, None
+    return None, current_result(root, inv, other, own, mods, prepared, discovered)
+
+
 def results(root: Path, inv: dict, runs: bool = True) -> tuple[list[dict], list[str]]:
     """Per theorem: its required translations with the current run (or the exclusion).
     `runs=False` checks the list alone: no run is looked up."""
@@ -664,6 +701,9 @@ def results(root: Path, inv: dict, runs: bool = True) -> tuple[list[dict], list[
         if imported not in mods:
             errors.append(f'{name}: {thm["module"]} does not import {imported}')
         excluded = {(e['zig'], e['target']): e['reason'] for e in thm.get('excluded', [])}
+        cases = {(c['zig'], c['target']): c['theorem'] for c in thm.get('cases', [])}
+        for zig, target in sorted(excluded.keys() & cases.keys()):
+            errors.append(f'{name}: both excludes {zig}/{target} and covers it by a case theorem')
         checks = []
         try:
             required = theorem_translations(root, thm)
@@ -675,6 +715,16 @@ def results(root: Path, inv: dict, runs: bool = True) -> tuple[list[dict], list[
             if (tr['zig'], tr['target']) in excluded:
                 checks.append({**tr, 'excluded': excluded.pop((tr['zig'], tr['target']))})
                 continue
+            if (tr['zig'], tr['target']) in cases:
+                case = cases.pop((tr['zig'], tr['target']))
+                problem, run = case_result(root, inv, thm, decl, case, tr, listed, decl_cache,
+                                           runs, prepared, discovered)
+                if problem:
+                    errors.append(f'{name}: {label}: {problem}')
+                elif runs and run is None:
+                    errors.append(f'{name}: no current check result for {label} (case theorem {case})')
+                checks.append({**tr, 'case': case, 'run': run})
+                continue
             run = current_result(root, inv, thm, tr, mods, prepared, discovered) if runs else None
             if runs and run is None:
                 errors.append(f'{name}: no current check result for {label} ({tr["gen"]})')
@@ -682,6 +732,9 @@ def results(root: Path, inv: dict, runs: bool = True) -> tuple[list[dict], list[
         for zig, target in excluded:
             errors.append(f'{name}: excludes {zig}/{target}, which is not a translation of '
                           f'{thm["example"]}')
+        for zig, target in cases:
+            errors.append(f'{name}: covers {zig}/{target} by a case theorem, which is not a '
+                          f'translation of {thm["example"]}')
         rows.append({**thm, 'checks': checks})
     return rows, errors
 
@@ -763,6 +816,9 @@ def render(rows: list[dict], inv: dict) -> str:
             label = f'{c["zig"]}/{c["target"]}'
             if 'excluded' in c:
                 checks.append(f'{label}: excluded ({cell(c["excluded"])})')
+            elif 'case' in c:
+                checks.append(f'{label}: ' + (f'pass via `{c["case"]}`, run `{c["run"]}`' if c['run']
+                                              else f'none (via `{c["case"]}`)'))
             else:
                 checks.append(f'{label}: {"pass, run `" + c["run"] + "`" if c["run"] else "none"}')
         out.append(f'| `{row["name"]}` | `{row["module"]}` | {scope_label(row)} | {cell(row["domain"])} '
@@ -826,9 +882,10 @@ def plan(root: Path, inv: dict) -> dict[str, dict]:
     committed: set[str] = set()
     swapped: dict[tuple[str, str], dict] = {}
     for thm in inv.get('theorems', []):
-        excluded = {(e['zig'], e['target']) for e in thm.get('excluded', [])}
+        # An excluded translation has no run; one a case theorem checks has the case's run.
+        skipped = {(e['zig'], e['target']) for e in [*thm.get('excluded', []), *thm.get('cases', [])]}
         for tr in theorem_translations(root, thm):
-            if (tr['zig'], tr['target']) in excluded:
+            if (tr['zig'], tr['target']) in skipped:
                 continue
             if tr['gen'].startswith('Proofs/'):
                 committed.add(thm['module'])

@@ -2485,7 +2485,7 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate && matrix.full && matrix.zig == '0.15.2' || !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate && matrix.full && matrix.zig == '0.16.0' }}
         run: |
           summary="$PWD/tests/diff/out/report.json"  # check.sh writes it in the checkout.
-          tree=$(cat .lake/check-reports/${{ matrix.zig }}/build-tree)  # The modules check.sh built.
+          tree=$(cat .lake/check-reports/${{ matrix.zig }}/diff-tree)  # Where check.sh's diff test ran.
           cd "$tree"
           python3 -I -B tests/roadmap/outcome-accounting/test_report.py
           python3 -I -B tests/roadmap/outcome-accounting/test_schedules.py
@@ -2854,19 +2854,21 @@ jobs:
           cd .lake/check-tree/0.15.2-linux-aarch64
           lake build Proofs.Threadsync.ThreadMutex Proofs.Threadsync.Event Proofs.Threadsync.Cond Proofs.Threadsync.Handoff Proofs.Threadsync.Mutex
 
-      # 0.17.1 translates `Io.Event` to the same code and names as 0.16.0 (tests/golden/0.17.1/
-      # sync/Gen.lean): `Sync.ioEvent : EventImpl` holds for that translation too. It inlines
-      # `Io.Condition.waitInner` into `waitUncancelable`: `Sync.ioCond : CondImpl` walks it in its
-      # 0.17.1 block (`when_defined`), which only this translation elaborates. `handoff`'s
-      # `main` and producer are the same code as 0.16.0's: `Proofs/Sync/Handoff.lean` holds too,
-      # and so does `Proofs/Sync/Mutex.lean` (`mutexCounter`'s `main` and `work`: the same code).
-      - name: Build sync event, condition, handoff and mutex proofs (0.17.1 translation)
+      # `sync` is a case family: its 0.17.1 translation is its own module
+      # (Proofs/Sync/Gen/V0_17_1/H_6c696e7578/Gen.lean), and its `Io.Mutex` and `Io.Condition`
+      # (which inlines `waitInner` into `waitUncancelable`) are per-case contract instances
+      # (Proofs/Sync/MutexCases.lean, Proofs/Sync/CondCases.lean) built with `Proofs`. 0.17.1
+      # translates `Io.Event` and `mutexCounter`'s `main` and `work` to the same code and names as
+      # 0.16.0: `Sync.ioEvent : EventImpl`, `Proofs/Sync/Mutex.lean` and the kernel runs of
+      # `Proofs/Sync/Proofs.lean`, which need no condition, hold for that translation too, built in
+      # a tree with it as the public module.
+      - name: Build sync event and mutex proofs (0.17.1 translation)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'golden' && !matrix.mutate && matrix.zig == '0.17.1' }}
         run: |
           python3 scripts/check-tree.py create .lake/check-tree/0.17.1-sync \
             --replace Proofs/Sync/Gen.lean=tests/golden/0.17.1/sync/Gen.lean
           cd .lake/check-tree/0.17.1-sync
-          lake build Proofs.Sync.Event Proofs.Sync.Cond Proofs.Sync.Handoff Proofs.Sync.Mutex
+          lake build Proofs.Sync.Event Proofs.Sync.Mutex Proofs.Sync.Proofs
 
       - name: Mutation check
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'mutation' && matrix.mutate }}

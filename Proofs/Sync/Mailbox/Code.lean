@@ -1,4 +1,4 @@
-import Proofs.Sync.Gen
+import ZigLean
 import ZigLean.Sep.Full.Sem
 
 /-!
@@ -10,8 +10,11 @@ condition's state and epoch at 12 and 16, padding at 20) and a two-field message
 `b` (28..32). `main` stores zeros, spawns a producer and hands it the message cells. The producer
 writes `a = 3`, `b = 4` and `post`s; `main` `wait`s, reads both fields, joins the producer and
 returns `10 * a + b`. The code takes the semaphore as a `SemImpl` (`I.wait`, `I.post`): the proof
-uses only that contract (`ZigLean/Sep/Full/Sem.lean`), and the results instantiate it with the
-translated std semaphore (`Sync.ioSem`, `Proofs/Sync/IoSemaphore.lean`).
+uses only that contract (`ZigLean/Sep/Full/Sem.lean`). The code and its proof are once for every
+translation of the Sync profile: they take the translation's spawn targets and its semaphore
+value as parameters and do not import a translation. The results instantiate them with the
+translated std semaphore: `Proofs/Sync/Mailbox.lean` for the public translation (`Sync.ioSem`),
+`Proofs/Sync/MailboxCases.lean` for a golden case's own.
 
 The sync objects, for every mutex value `c` of the semaphore's mutex (`Cfg`):
 - **Ghost values** (`Gh = FLG × X`): the lock's part (`FLG`), and `X`: the thread's place in the
@@ -28,19 +31,23 @@ open Zig Zig.Conc Zig.Full Zig.Full.FAssn
 
 namespace Sync.Mailbox
 
-/-- The semaphore with no permit. -/
-def semZ : Io_Semaphore :=
-  { mutex := ({ state := ({ raw := Io_Mutex_State.unlocked } : atomic_Value_Io_Mutex_State) } : Io_Mutex),
-    cond := ({ state := ({ raw := (Packed.ofBits (0 : BitVec 32) : Io_Condition_State) } :
-      atomic_Value_Io_Condition_State), epoch := ({ raw := (0 : BitVec 32) } : atomic_Value_u32) } :
-      Io_Condition),
-    permits := (0 : BitVec 64) }
+/-- The bytes of an `Io.Semaphore` with no permit: the permit count 0 (at 0), the mutex's word
+`unlocked` (at 8), the condition's state and epoch 0 (at 12 and 16); the padding (20..24) is
+undefined. -/
+def semBytes : Array Byte :=
+  Enc.fields 24 [(0, Enc.encode (0 : BitVec 64)), (8, Enc.encode (0 : BitVec 32)),
+    (12, Enc.encode (0 : BitVec 32)), (16, Enc.encode (0 : BitVec 32))]
 
-/-! ## The code -/
+/-! ## The code
+
+The code is once for every translation: over the translation's spawn targets `Tgt` (`sw p` is
+the target that runs the producer on `p`, `swOf` reads `p` back) and its semaphore type `Sm`
+(`z` is its value with no permit, the bytes `semBytes`). -/
 
 section Code
 
-variable (I : SemImpl Tgt)
+variable {Tgt : Type} (sw : Ptr → Tgt) (swOf : Tgt → Option Ptr) {Sm : Type} [Enc Sm] (z : Sm)
+  (I : SemImpl Tgt)
 
 /-- The producer: write the message, then `post`. -/
 def producer (p : Ptr) : ConcM Tgt Unit :=
@@ -49,19 +56,20 @@ def producer (p : Ptr) : ConcM Tgt Unit :=
     Zig.store (α := BitVec 32) 4 (p.add 28) 4
     callC (I.post p ⟨⟩) : CM Tgt Unit Unit).run' ()
 
-/-- The spawn targets: `semWork p` runs the producer. -/
-def dispatch : Tgt → ConcM Tgt Unit
-  | .semWork p => producer I p
-  | _ => pure ()
+/-- The spawn targets: the producer's target (`swOf`) runs the producer. -/
+def dispatch (tgt : Tgt) : ConcM Tgt Unit :=
+  match swOf tgt with
+  | some p => producer I p
+  | none => pure ()
 
 /-- `main`: build the mailbox, spawn the producer, `wait`, read the message, join, free. -/
 def mailMain (io : Io) : ConcM Tgt (Except ErrName (BitVec 32)) := do
   let s1 ← Zig.allocStack 32 8
   let e ← ((do
-    Zig.store (α := Io_Semaphore) 8 (s1.add 0) semZ
+    Zig.store (α := Sm) 8 (s1.add 0) z
     Zig.store (α := BitVec 32) 4 (s1.add 24) 0
     Zig.store (α := BitVec 32) 4 (s1.add 28) 0
-    let t ← Zig.spawnC (Tgt.semWork s1)
+    let t ← Zig.spawnC (sw s1)
     match t with
     | .error e => pure (.error e)
     | .ok tid => do

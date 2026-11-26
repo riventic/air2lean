@@ -26,7 +26,7 @@ open Zig Zig.Conc Zig.Conc.Proto Zig.Full Zig.Full.FAssn
 
 namespace Sync.Mailbox
 
-variable {K : Cfg}
+variable {K : Cfg} {Tgt : Type} {swOf : Tgt → Option Ptr}
 
 theorem empty_disj (h : FHeap) : FHeap.Disjoint FHeap.empty h := (FHeap.disjoint_empty h).symm
 
@@ -127,7 +127,7 @@ theorem inv_of_box {m : Mem} {r : Res} {A : Nat} {bs : Array Byte}
     (hA : A % 8 = 0) (hth : m.threads = #[{ spawner := 0, joined := true }])
     (hat : m.atomics = #[]) (hq : m.waiters = #[]) :
     ∃ rM rc, rM.Plain ∧ Msg 0 rc ∧ FHeap.Disjoint rM.heap rc.heap ∧
-      (proto K).inv (upd G0 0 (gO (rsum rM rc) { ph := .pre })) m := by
+      (proto K swOf).inv (upd G0 0 (gO (rsum rM rc) { ph := .pre })) m := by
   have h1 : m.threads.size = 1 := by rw [hth]; rfl
   have ht : 0 < m.threads.size := by rw [h1]; decide
   -- the block: block 0, at `A`, 32 bytes on the stack, its bytes `bs`
@@ -272,10 +272,10 @@ theorem clk_fork {cs : Array VClock} {t : ThreadId} (ht : t < cs.size) (u : Thre
 
 theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM rc : Res}
     (hp : rM.Plain) (hd : FHeap.Disjoint rM.heap rc.heap)
-    (hi : (proto K).inv G m) (hg : G 0 = gO (rsum rM rc) { ph := .pre })
+    (hi : (proto K swOf).inv G m) (hg : G 0 = gO (rsum rM rc) { ph := .pre })
     (hf : (Thread.fork.run { m with current := 0 }).run = some (.ok (c, m'))) :
     c = 1 ∧ m'.current = 0 ∧ ∃ rp, plain rp ∧ FHeap.Disjoint rp.heap rc.heap ∧
-      (proto K).inv (upd (upd G 1 (⟨.out, rsum rp rc, rnil⟩, { ph := .pr 0 })) 0
+      (proto K swOf).inv (upd (upd G 1 (⟨.out, rsum rp rc, rnil⟩, { ph := .pr 0 })) 0
         (gO rM { ph := .wt })) m' := by
   obtain ⟨rX, hL, hU⟩ := hi
   obtain ⟨h00, ⟨hs1, -, hnone⟩ | ⟨-, -, -, h0, -⟩⟩ := hU.shape
@@ -300,7 +300,7 @@ theorem inv_spawn {G : ThreadId → Gh} {m m' : Mem} {c : ThreadId} {rM rc : Res
      by simp only [Ghost.add_ac, ACell.add_frag]; have := hp.2; omega⟩
   have hL₀ : (L K).Inv (upd G 0 (G 0)) rX { m with current := 0 } := by
     rw [upd_same]; exact hL.cur 0
-  obtain ⟨r, ⟨r₁, rP, hdP, rfl, hr₁, hpP⟩, hL'⟩ := hL₀.eupdPart (proto K) rfl
+  obtain ⟨r, ⟨r₁, rP, hdP, rfl, hr₁, hpP⟩, hL'⟩ := hL₀.eupdPart (proto K swOf) rfl
     (by rw [hg]; exact fun h => nomatch h) (EUpd.plain_split (P := fun r => r = (L K).part (G 0))
       fun r hr => by rw [hr, hg]; exact hpl)
   have hr₁' : r₁ = rsum rM rc := by rw [hr₁, hg]; rfl
@@ -438,12 +438,12 @@ theorem wp_loadPart {G : ThreadId → Gh} {m : Mem} {n : Nat} {rM r : Res} {x : 
     (htt : FTTriple ((· = rM) ⋆ Msg 2) (Zig.load (BitVec 32) 4 p)
       (fun a => ⟪a = v⟫ ⋆ ((· = rM) ⋆ Msg 2)))
     (hr : Msg 2 r) (hd : FHeap.Disjoint rM.heap r.heap)
-    (hi : (proto K).inv (upd G 0 (gO (rsum rM r) x)) m) (hc : m.current = 0)
+    (hi : (proto K swOf).inv (upd G 0 (gO (rsum rM r) x)) m) (hc : m.current = 0)
     {Q : BitVec 32 → (ThreadId → Gh) → Mem → Nat → Prop}
     (h : ∀ m' r', m'.current = 0 → Msg 2 r' → FHeap.Disjoint rM.heap r'.heap →
-      (proto K).inv (upd G 0 (gO (rsum rM r') x)) m' → Q v G m' n) :
-    (proto K).WP 0 (ConcM.liftMem (Zig.load (BitVec 32) 4 p) : ConcM Tgt (BitVec 32)) Q G m n :=
-  FCond.wp_liftPart (fitsS (K := K)).toC.toFits (.inl rfl) hi hc htt ⟨rM, r, hd, rfl, rfl, hr⟩
+      (proto K swOf).inv (upd G 0 (gO (rsum rM r') x)) m' → Q v G m' n) :
+    (proto K swOf).WP 0 (ConcM.liftMem (Zig.load (BitVec 32) 4 p) : ConcM Tgt (BitVec 32)) Q G m n :=
+  FCond.wp_liftPart (fitsS (K := K) (swOf := swOf)).toC.toFits (.inl rfl) hi hc htt ⟨rM, r, hd, rfl, rfl, hr⟩
     fun a m' r' _ hq hc' _ _ hi' => by
       obtain ⟨rfl, r₁, r₂, hd', rfl, rfl, h2⟩ := sep_lift.mp hq
       exact h m' r₂ hc' h2 hd' hi'
@@ -451,11 +451,11 @@ theorem wp_loadPart {G : ThreadId → Gh} {m : Mem} {n : Nat} {rM r : Res} {x : 
 /-- **`main`'s load of `a`**: 3. -/
 theorem wp_loadA {G : ThreadId → Gh} {m : Mem} {n : Nat} {rM r : Res} {x : X}
     (hr : Msg 2 r) (hd : FHeap.Disjoint rM.heap r.heap)
-    (hi : (proto K).inv (upd G 0 (gO (rsum rM r) x)) m) (hc : m.current = 0)
+    (hi : (proto K swOf).inv (upd G 0 (gO (rsum rM r) x)) m) (hc : m.current = 0)
     {Q : BitVec 32 → (ThreadId → Gh) → Mem → Nat → Prop}
     (h : ∀ m' r', m'.current = 0 → Msg 2 r' → FHeap.Disjoint rM.heap r'.heap →
-      (proto K).inv (upd G 0 (gO (rsum rM r') x)) m' → Q 3 G m' n) :
-    (proto K).WP 0 (ConcM.liftMem (Zig.load (BitVec 32) 4 (cPtr.add 24)) : ConcM Tgt (BitVec 32))
+      (proto K swOf).inv (upd G 0 (gO (rsum rM r') x)) m' → Q 3 G m' n) :
+    (proto K swOf).WP 0 (ConcM.liftMem (Zig.load (BitVec 32) 4 (cPtr.add 24)) : ConcM Tgt (BitVec 32))
       Q G m n := by
   refine wp_loadPart ?_ hr hd hi hc h
   rw [msg2]
@@ -467,11 +467,11 @@ theorem wp_loadA {G : ThreadId → Gh} {m : Mem} {n : Nat} {rM r : Res} {x : X}
 /-- **`main`'s load of `b`**: 4. -/
 theorem wp_loadB {G : ThreadId → Gh} {m : Mem} {n : Nat} {rM r : Res} {x : X}
     (hr : Msg 2 r) (hd : FHeap.Disjoint rM.heap r.heap)
-    (hi : (proto K).inv (upd G 0 (gO (rsum rM r) x)) m) (hc : m.current = 0)
+    (hi : (proto K swOf).inv (upd G 0 (gO (rsum rM r) x)) m) (hc : m.current = 0)
     {Q : BitVec 32 → (ThreadId → Gh) → Mem → Nat → Prop}
     (h : ∀ m' r', m'.current = 0 → Msg 2 r' → FHeap.Disjoint rM.heap r'.heap →
-      (proto K).inv (upd G 0 (gO (rsum rM r') x)) m' → Q 4 G m' n) :
-    (proto K).WP 0 (ConcM.liftMem (Zig.load (BitVec 32) 4 (cPtr.add 28)) : ConcM Tgt (BitVec 32))
+      (proto K swOf).inv (upd G 0 (gO (rsum rM r') x)) m' → Q 4 G m' n) :
+    (proto K swOf).WP 0 (ConcM.liftMem (Zig.load (BitVec 32) 4 (cPtr.add 28)) : ConcM Tgt (BitVec 32))
       Q G m n := by
   refine wp_loadPart ?_ hr hd hi hc h
   rw [msg2]
@@ -481,8 +481,8 @@ theorem wp_loadB {G : ThreadId → Gh} {m : Mem} {n : Nat} {rM r : Res} {x : X}
   exact sep_lift.mpr ⟨hv, r₁, _, hd, rfl, h1, s₁, s₂, hd', rfl, hA, hB⟩
 
 theorem inv_joins {G : ThreadId → Gh} {m : Mem} {r : Res}
-    (hi : (proto K).inv (upd G 0 (gO r { ph := .got })) m) :
-    (proto K).inv (upd G 0 (gO r { ph := .joins })) m :=
+    (hi : (proto K swOf).inv (upd G 0 (gO r { ph := .got })) m) :
+    (proto K swOf).inv (upd G 0 (gO r { ph := .joins })) m :=
   inv_move hi rfl rfl rfl rfl (.inl rfl) (by simp [avail, upd_self, gO, Ph.took]) fun _ hu => by
     have hs := hu.shape
     refine hs.main (by show (upd G 0 _ 0).2.ph ≠ .pre; rw [upd_self]; simp [gO])
@@ -492,10 +492,10 @@ theorem inv_joins {G : ThreadId → Gh} {m : Mem} {r : Res}
       (fun _ e => upd_ne₂ e)
 
 theorem wp_join {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} {rM : Res}
-    (hi : (proto K).inv (upd G 0 (gO rM { ph := .joins })) m)
+    (hi : (proto K swOf).inv (upd G 0 (gO rM { ph := .joins })) m)
     {Q : Unit × σ → (ThreadId → Gh) → Mem → Nat → Prop}
     (h : ∀ k G₁ m', n = k + 1 → BlkOk m' → m'.ClocksLe → joinedAll 0 m' → Q ((), s) G₁ m' k) :
-    (proto K).WP 0 ((joinC 1 : CM Tgt σ Unit).run s) Q G m n := by
+    (proto K swOf).WP 0 ((joinC 1 : CM Tgt σ Unit).run s) Q G m n := by
   refine WP.joinC fun k hk => ⟨_, hi, fun G₁ m₁ hg hi₁ => ?_⟩
   obtain ⟨rX, hL, hu⟩ := hi₁
   obtain ⟨h00, ⟨-, h0, -⟩ | ⟨hs2, hr1, -⟩⟩ := hu.shape
@@ -521,7 +521,7 @@ theorem wp_join {σ : Type} {s : σ} {G : ThreadId → Gh} {m : Mem} {n : Nat} {
 theorem wp_free {G : ThreadId → Gh} {m : Mem} {n : Nat} {p : Ptr} (hp : p = cPtr) (hb : BlkOk m)
     (hcl : m.ClocksLe) {Q : Unit → (ThreadId → Gh) → Mem → Nat → Prop}
     (h : ∀ m', m'.threads = m.threads → Q () G m' n) :
-    (proto K).WP 0 (ConcM.liftMem (free p) : ConcM Tgt Unit) Q G m n := by
+    (proto K swOf).WP 0 (ConcM.liftMem (free p) : ConcM Tgt Unit) Q G m n := by
   subst hp
   obtain ⟨blk, hblk, hl, -, hk⟩ := hb
   refine WP.liftMem (fun e he => (free_noErr hblk hl (hcl.freeRaces _ _) (by rw [hk]; nofun) e
@@ -532,9 +532,9 @@ theorem wp_free {G : ThreadId → Gh} {m : Mem} {n : Nat} {p : Ptr} (hp : p = cP
 /-! ## The threads -/
 
 /-- The invariant at a stop of a live thread `t`. -/
-theorem inv_cur {G : ThreadId → Gh} {m : Mem} (t : ThreadId) (hi : (proto K).inv G m)
-    (hph : (G t).1.ph ≠ .gone) : (proto K).inv G { m with current := t } := by
-  obtain ⟨-, -, -, h⟩ := (fitsL (K := K)).cur t hi hph
+theorem inv_cur {G : ThreadId → Gh} {m : Mem} (t : ThreadId) (hi : (proto K swOf).inv G m)
+    (hph : (G t).1.ph ≠ .gone) : (proto K swOf).inv G { m with current := t } := by
+  obtain ⟨-, -, -, h⟩ := (fitsL (K := K) (swOf := swOf)).cur t hi hph
   exact h
 
 /-- `main` spawned every thread. -/
@@ -549,8 +549,8 @@ theorem spawners {Y : ThreadId → X} {m : Mem} (h : Shape Y m) : ∀ r ∈ m.th
 
 /-- **The producer's end** (`QKid`): it is `gone` at `fin` and spawned no thread. -/
 theorem qkid {G : ThreadId → Gh} {m : Mem} {d : Nat} {rp : Res}
-    (hi : (proto K).inv (upd G 1 (⟨.gone, rp, rnil⟩, { ph := .fin })) m) :
-    (proto K).QKid 1 () G m d := by
+    (hi : (proto K swOf).inv (upd G 1 (⟨.gone, rp, rnil⟩, { ph := .fin })) m) :
+    (proto K swOf).QKid 1 () G m d := by
   refine ⟨_, hi, ⟨rfl, rfl⟩, fun _ => ?_⟩
   obtain ⟨rX, -, hu⟩ := hi
   exact joinedAll_of_main (spawners hu.shape) (by decide)
