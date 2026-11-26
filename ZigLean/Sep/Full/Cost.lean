@@ -74,10 +74,11 @@ theorem Holds.mintCredits {m : Mem} {r rF : Res} (n : Nat) (hh : Holds m r rF)
         by simpa using h4, by simpa using h5⟩
     · exact (hV k).congr (by simp [hkc]) (by simp) (by simp)
   · rw [e]
-    obtain ⟨hs, ⟨-, t2, -⟩, hn, -, hcur⟩ := hM
+    obtain ⟨hs, ⟨-, t2, -⟩, hn, -, hcur, hdev⟩ := hM
     exact ⟨hs.congr fun k v => by simp, ⟨fun L hL => by simp [ha L] at hL, by simpa using t2,
       fun _ L => by simpa using ha L⟩, fun hp => hn (by simpa using hp),
-      fun k L hk => by simpa using ho k L hk, fun v hv => hcur v (by simpa using hv)⟩
+      fun k L hk => by simpa using ho k L hk, fun v hv => hcur v (by simpa using hv),
+      by simpa [Ghost.cred, Ghost.ofAC] using hdev⟩
 
 /-- A resource with `n` credits added. -/
 theorem sep_credits_intro {P : FAssn} {r : Res} (hp : P r) (n : Nat) :
@@ -151,11 +152,11 @@ theorem Holds.addSpent {m : Mem} {r rF : Res} (hh : Holds m r rF)
         fun n hn => by simp [ho .spent n (by decide)] at hn, by simpa using h4, by simpa using h5⟩
     · exact (hV k).congr (by simp [hks]) (by simp) (by simp)
   · rw [e]
-    obtain ⟨hst, ⟨t1, -, t3⟩, hn, -, hcur⟩ := hM
+    obtain ⟨hst, ⟨t1, -, t3⟩, hn, -, hcur, hdev⟩ := hM
     exact ⟨hst.congr fun k v => by simp, ⟨fun L hL => by simpa using t1 L (by simpa using hL),
       by simp [hs], fun hp L => by simpa using t3 (by simpa using hp) L⟩,
       fun hp => hn (by simpa using hp), fun k L hk => by simpa using ho k L hk,
-      fun v hv => hcur v (by simpa using hv)⟩
+      fun v hv => hcur v (by simpa using hv), by simpa [Ghost.ofAC] using hdev⟩
 
 /-- A meter-free start: the resources and the frame hold no credit, meter or `unmetered`
 fragment, so a meter can be added (`Holds.addCredits`). -/

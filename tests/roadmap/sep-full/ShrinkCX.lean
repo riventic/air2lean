@@ -96,7 +96,7 @@ theorem gE_ok : GOk m2 Ghost.unit gE := by
     split
     · have := (ECell.dormant_unit (Ghost.ls ⟨fun γ => GCell.unit.add GCell.unit,
         fun b' => if b' = 0 then ECell.auth1 8192 (.mapped 0) Frac.one else ECell.unit, fun _ _ => ECell.unit,
-        ACell.unit.add ACell.unit, fun _ => SCell.zero.add SCell.zero⟩)).auth1_ok
+        ACell.unit.add ACell.unit, fun _ => SCell.zero.add SCell.zero, fun _ => 0 + 0⟩)).auth1_ok
         (S := 8192) (K := .mapped 0)
       rwa [ECell.add_unit] at this
     · exact ⟨ECell.valid_unit, ECell.tagOk_unit _⟩

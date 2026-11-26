@@ -1284,6 +1284,15 @@ jobs:
           assert ': error' not in text and text.count('depends on axioms') == 2, text
           assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
           EOF
+          # Device state (decision 2026-11-25): no device-read triple without `devOwn`; `devOwn` fixes the read.
+          lake env lean tests/roadmap/sep-full/DeviceCX.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/device-cx.log"
+          python3 - "$RUNNER_TEMP/sep-full/device-cx.log" <<'EOF'
+          import re, sys
+          text = open(sys.argv[1]).read()
+          used = {a.strip() for group in re.findall(r'axioms: \[([^\]]*)\]', text) for a in group.split(',')}
+          assert ': error' not in text and text.count('depends on axioms') == 5, text
+          assert used <= {'propext', 'Classical.choice', 'Quot.sound'}, text
+          EOF
           # Byte-range claims (decision O1): overlapping claims are invalid; the arena-node obstruction is impossible.
           lake env lean tests/roadmap/sep-full/ClaimsCX.lean 2>&1 | tee "$RUNNER_TEMP/sep-full/claims-cx.log"
           python3 - "$RUNNER_TEMP/sep-full/claims-cx.log" <<'EOF'
@@ -1772,6 +1781,8 @@ jobs:
           AIR2LEAN_ZIG_NATIVE="${{ github.workspace }}/host-zig/zig" tests/roadmap/bitcast-017/check.sh --native
           # @divCeil: committed compiler-exported AIR, translation and native differential.
           AIR2LEAN_ZIG_NATIVE="${{ github.workspace }}/host-zig/zig" tests/roadmap/zig017/divceil/check.sh
+          # array_to_vector: every lane kind and sentinel arrays, translation and native differential.
+          AIR2LEAN_ZIG_NATIVE="${{ github.workspace }}/host-zig/zig" tests/roadmap/zig017/tovec/check.sh
 
       # P04/P06: the ring buffer and the shifting array of queue.zig (0.17.1) prove the queue
       # contract (QueueImpl) with their step counts, its clients are proved from the contract
@@ -1811,7 +1822,7 @@ jobs:
           case '${{ matrix.zig }}' in
             0.17.1) bash tests/roadmap/big-endian/check.sh --native '${{ matrix.zig }}' ;;
           esac
-          # T02 pointer_width.zig and names.zig natively and under Node's WASI (0.16.0: the
+          # T02 pointer_width.zig, names.zig and c_ints.zig natively and under Node's WASI (0.16.0: the
           # pointer-width step of the native part).
           case '${{ matrix.zig }}' in
             0.17.1) bash tests/roadmap/pointer-width/check.sh --native ;;

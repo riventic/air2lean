@@ -500,7 +500,7 @@ theorem Step.same {t : ThreadId} {m m' : Mem} (ht : m'.threads = m.threads)
     (hg : m'.groups = m.groups) (hb : m'.blocks = m.blocks) (hc : m'.clocks = m.clocks)
     (hf : m'.footprint = m.footprint) (ha : m'.atomics = m.atomics)
     (hw : m'.waiters.filter (·.2 != L.key m) = m.waiters.filter (·.2 != L.key m))
-    (hx : m.Aux m' := by exact ⟨rfl, rfl, rfl⟩)
+    (hx : m.Aux m' := by exact ⟨rfl, rfl, rfl, rfl⟩)
     (hs : m'.seen = m.seen := by first | rfl | assumption)
     (hn : m.nextMsg ≤ m'.nextMsg := by first | exact Nat.le_refl _ | assumption)
     (hk : ∀ u, u ≠ t → m.woken.contains u = true → m'.woken.contains u = true :=
@@ -1408,7 +1408,7 @@ theorem WInv.recordStep {P : ThreadId → LPh} {m : Mem} {t : ThreadId} {k : Acc
   have hcs : t < m.clocks.size := by rw [hi.csize]; exact ht
   refine ⟨rfl, fun e he => ?_, rfl, by simp [Mem.recordAt], ?_, ?_, rfl, .inl rfl,
     rfl, fun _ _ h => h, fun _ h => h, .inl rfl, fun e he => ?_, .of_atomics rfl,
-    ⟨rfl, rfl, rfl⟩,
+    ⟨rfl, rfl, rfl, rfl⟩,
     Mem.MsgCov.recordAt, Nat.le_refl _, fun _ _ => ⟨some, AMap.of_eq rfl rfl⟩,
     newQ_of_sub fun _ h => h⟩
   · simp only [Mem.recordAt, Array.mem_push] at he
@@ -1584,7 +1584,7 @@ theorem WInv.locIdx {P : ThreadId → LPh} {m m₁ : Mem} {li : Nat} (hi : L.WIn
     obtain ⟨rfl, rfl⟩ := locIdx_found hf (by rw [hg]; exact hlen) (by rw [hg]; exact hlast)
       (by rw [hg]; exact hi.loc.plain i _ hl) h
     exact ⟨_, hl, hi, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun _ _ h => h, .inl rfl, .refl _,
-      ⟨rfl, rfl, rfl⟩⟩
+      ⟨rfl, rfl, rfl, rfl⟩⟩
   | none =>
     have hno := noOverlap_of_only hf hi.loc.only
     obtain ⟨rfl, rfl⟩ := locIdx_new hf hno h
@@ -1598,7 +1598,7 @@ theorem WInv.locIdx {P : ThreadId → LPh} {m m₁ : Mem} {li : Nat} (hi : L.WIn
     have honly : ∀ i l, L.Loc { m with atomics := m.atomics.push nl, nextMsg := m.nextMsg + 1 }
         i l → i = m.atomics.size ∧ l = nl := fun i l hl => loc_unique hl hnl
     refine ⟨nl, hnl, ?_, rfl, rfl, rfl, rfl, rfl, rfl, rfl, fun i l h => absurd h (hno' i l),
-      .inr ⟨nl, rfl, rfl⟩, .inr ⟨?_, fun s hs => ?_⟩, ⟨rfl, rfl, rfl⟩⟩
+      .inr ⟨nl, rfl, rfl⟩, .inr ⟨?_, fun s hs => ?_⟩, ⟨rfl, rfl, rfl, rfl⟩⟩
     · obtain ⟨w, hw, hu, -⟩ := hi.word
       exact ⟨hi.csize, hi.live, hi.blk, hi.word, hi.one,
         ⟨fun l hl hb h1 h2 => by
@@ -1648,7 +1648,7 @@ theorem rmw_eff {m₁ m₂ M : Mem} {li : Nat} {l : ALoc} {ord : AtomicOrder} {r
   have h2 : m₂.atomics = m₁.atomics ∧ m₂.blocks = m₁.blocks ∧ m₂.threads = m₁.threads ∧
       m₂.footprint = m₁.footprint ∧ m₂.waiters = m₁.waiters ∧ m₂.current = m₁.current ∧
       m₂.groups = m₁.groups ∧ m₁.Aux m₂ := by
-    subst hm₂; split <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+    subst hm₂; split <;> exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
   obtain ⟨ha₂, hb₂, ht₂, hf₂, hw₂, hc₂, hg₂, hx₂⟩ := h2
   have hl₂ : m₂.atomics[li]! = l := by rw [ha₂]; exact hl0
   have hblk₂ : m₂.blocks[(m₂.atomics[li]!).block]? = some blk := by rw [hl₂, hlb, hb₂]; exact hb
@@ -1660,7 +1660,7 @@ theorem rmw_eff {m₁ m₂ M : Mem} {li : Nat} {l : ALoc} {ord : AtomicOrder} {r
   rw [← hm₂, hp]
   dsimp only
   rw [hins]
-  refine ⟨ht₂, hf₂, hw₂, hg₂, hc₂, rfl, ?_, ?_, hx₂.trans ⟨rfl, rfl, rfl⟩⟩
+  refine ⟨ht₂, hf₂, hw₂, hg₂, hc₂, rfl, ?_, ?_, hx₂.trans ⟨rfl, rfl, rfl, rfl⟩⟩
   · simp only [observeM, Mem.write, hlb, hlo, hb₂]; rfl
   · simp only [observeM, ha₂]
 

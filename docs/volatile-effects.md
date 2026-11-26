@@ -163,6 +163,12 @@ the write, dropping the unused read, and an ordinary repeatable `Zig.load` for t
 `check-device.sh --export DIR` re-exports with `$AIR2LEAN_ZIG_AIR` and requires the same
 translation. `writeAll` is translated and pinned, but has no theorem.
 
+In the full-state logic the device state is an exclusive ghost component (maintainer decision
+2026-11-25): `devOwn D` says the memory's device state (oracles and trace) is `D`, and only a
+device step changes it (`docs/sep-full-state.md` §Device state). The theorems above are run
+equations over the whole memory; their restatement as `FTotalTriple`s over `devOwn`, walked by
+`fsym`, is engine-ledger row `device-read-rules`.
+
 ## Inline asm
 
 An M21 asm op is an `opaque` function of its register inputs, so two executions with equal inputs
