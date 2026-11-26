@@ -20,7 +20,26 @@ pub noinline fn globalHandle() *Handle {
     return backing_handle;
 }
 
+// A global that holds a handle: the alias proof of a global needs the storage behind every
+// pointer it can hold, and an opaque pointee has none to state, as for `?*anyopaque`.
+var current: ?*Handle = null;
+pub noinline fn setGlobal(h: ?*Handle) void {
+    current = h;
+}
+pub noinline fn getGlobal() ?*Handle {
+    return current;
+}
+
+// Erasing storage that can hold an error value: the bytes behind the handle would lose their
+// symbolic errors, as for `*anyopaque`.
+pub noinline fn eraseError(p: *anyerror!u32) *Handle {
+    return @ptrCast(p);
+}
+
 comptime {
+    _ = &setGlobal;
+    _ = &getGlobal;
+    _ = &eraseError;
     _ = &externHandle;
     _ = &fromInt;
     _ = &globalHandle;

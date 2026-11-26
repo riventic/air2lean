@@ -26,7 +26,9 @@ private def types : Array Ty := #[
   .errorSet (some #["Bad"]), .errorUnion 18 0, .ptr "one" false 19,          -- 18..20: E, E!u32, *E!u32
   .void, .noreturn, .bool,                                                   -- 21..23
   .other "m.Handle", .ptr "one" false 24,                                    -- 24..25: an unmarked export's entry
-  .optional 6, .optional 5, .int false 64]                                   -- 26..28: ?*u32, ?*anyopaque, usize
+  .optional 6, .optional 5, .int false 64,                                   -- 26..28: ?*u32, ?*anyopaque, usize
+  .opaque "Io.AnyFuture" true, .ptr "one" false 29, .optional 30,            -- 29..31: a std opaque type, its pointers
+  .int false 8, .ptr "slice" false 32]                                       -- 32..33: u8, []u8
 
 private def layouts : Array Layout := #[
   {size := some 4, align := some 4}, {}, ptrLayout 1, optLayout,
@@ -38,7 +40,9 @@ private def layouts : Array Layout := #[
   {size := some 2, align := some 2}, {size := some 8, align := some 4}, ptrLayout 4,
   {size := some 0, align := some 1}, {}, {size := some 1, align := some 1},
   {}, ptrLayout 1,
-  optLayout, optLayout, {size := some 8, align := some 8}]
+  optLayout, optLayout, {size := some 8, align := some 8},
+  {}, ptrLayout 1, optLayout,
+  {size := some 1, align := some 1}, {size := some 16, align := some 8, ptrAlign := some 1}]
 
 private def tyOk (id : TyId) : Except String Unit := checkTy "probe.f" types layouts 0 id
 
@@ -76,6 +80,14 @@ def main : IO Unit := do
   for id in [24, 25] do
     require (has (tyOk id) "type 'm.Handle' is outside the subset (otherwise unsupported)")
       s!"unmarked type {id}: {describe (tyOk id)}"
+  -- An opaque type of the standard library: no value behind any pointer (the handle of a
+  -- hand-written std model). Its presence in this table rejects nothing else here.
+  for id in [29, 30, 31] do
+    require (has (tyOk id) "opaque type 'Io.AnyFuture' is declared in the standard library")
+      s!"std opaque type {id}: {describe (tyOk id)}"
+  for model in [AllocatorModel.std, .translated] do
+    for (s, d) in [(30, 6), (6, 30), (30, 5), (5, 30), (30, 2), (2, 30)] do
+      require (!(ptrCast model s d).isOk) s!"std opaque cast {s} → {d} is accepted"
   for model in [AllocatorModel.std, .translated] do
     -- To an opaque pointer from error-free typed storage, between opaque pointees, a
     -- qualifier change and the optional wrap.
@@ -106,6 +118,9 @@ def main : IO Unit := do
       ("load", 1, Op.load p, noSize), ("u32 load", 0, .load p, inMemory),
       ("u32 store", 21, .store p (.int 0 5), inMemory),
       ("atomic load", 0, .atomicLoad p .seqCst, inMemory),
+      ("atomic store", 21, .atomicStore p (.int 0 5) .seqCst, inMemory),
+      ("atomic rmw", 0, .atomicRmw .add .seqCst p (.int 0 1), inMemory),
+      ("cmpxchg", 0, .cmpxchg false p (.int 0 0) (.int 0 1) .seqCst .seqCst, inMemory),
       ("field pointer", 6, .fieldPtr p 0, inMemory),
       -- Arithmetic that needs the item size.
       ("pointer add", 2, .ptrAdd false p (.int 28 1), noItemSize),
@@ -114,6 +129,15 @@ def main : IO Unit := do
       ("memset", 21, .memset p (.int 0 1), noItems),
       ("slice", 11, .slice p (.int 28 1), noSize)] do
     require (has (one ty op) marker) s!"{what} through *Handle: {describe (one ty op)}"
+  -- `@memcpy` needs items on both sides: a single-item pointer to an opaque type (declared or
+  -- the primitive) or to a scalar has none, as destination and as source.
+  let copy (dst src : TyId) : Except String Unit :=
+    check (func #[dst, src] 21 #[{ id := 0, ty := dst, op := .arg 0 }, { id := 1, ty := src, op := .arg 1 },
+      { id := 2, ty := 21, op := .memcpy false (.inst 0) (.inst 1) }, { id := 3, ty := 22, op := .ret .void }])
+  require (copy 33 33).isOk s!"memcpy []u8 ← []u8: {describe (copy 33 33)}"
+  for single in [2, 5, 6] do
+    require (has (copy single 33) noItems) s!"memcpy {single} ← []u8: {describe (copy single 33)}"
+    require (has (copy 33 single) noItems) s!"memcpy []u8 ← {single}: {describe (copy 33 single)}"
   let byValue := func #[1] 21 #[{ id := 0, ty := 1, op := .arg 0 }, { id := 1, ty := 22, op := .ret .void }]
   require (has (check byValue) noSize) s!"by-value parameter: {describe (check byValue)}"
   let retValue := func #[2] 1 #[arg, { id := 1, ty := 22, op := .ret (.inst 0) }]

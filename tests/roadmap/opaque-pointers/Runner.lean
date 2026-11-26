@@ -85,6 +85,11 @@ def main : IO Unit := do
     let (_, _, hx, _) ← handles
     pure (bit (← OpaquePtrs.viaApply hx)))
   IO.println s!"viaApply {a}"
+  let (a, b, c) ← observed (do
+    let (_, _, hx, _) ← handles
+    pure (bit ((← OpaquePtrs.viaExtern hx) = hx), bit (← OpaquePtrs.viaExternOpt (some hx)),
+      bit (← OpaquePtrs.viaExternOpt none)))
+  IO.println s!"extern {a} {b} {c}"
   -- Model only (the native `main` would end here): the `@alignCast` check of a handle at an
   -- odd address panics.
   let misaligned := ((do

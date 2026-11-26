@@ -67,7 +67,10 @@ for version in 0.17.1 0.16.0 0.15.2 0.14.1; do
     "$here/air-recover/$version" --profile abi64-le-v1
   for spec in 'externHandle|`extern` global global_handle: its type can hold' \
       'fromInt|recovering a symbolic error pointer from an integer or opaque value' \
-      'globalHandle|global alias has unresolved or cyclic symbolic storage provenance'; do
+      'globalHandle|global alias has unresolved or cyclic symbolic storage provenance' \
+      'setGlobal|global alias has unresolved or cyclic symbolic storage provenance' \
+      'getGlobal|global alias has unresolved or cyclic symbolic storage provenance' \
+      'eraseError|a pointer cast has unresolved or cyclic symbolic storage provenance'; do
     name=${spec%%|*} expected=${spec#*|}
     mkdir -p "$work/reject-$version-$name"
     cp "$here/air-reject/$version/reject.$name.json" "$work/reject-$version-$name/"
@@ -77,5 +80,19 @@ for version in 0.17.1 0.16.0 0.15.2 0.14.1; do
     done
   done
 done
+# An opaque type of the standard library (std_handles.zig; `Io` is 0.16.0 and later): the handle
+# of the hand-modelled `Io.Future` and the type alone, in both allocator models.
+for version in 0.17.1 0.16.0; do
+  for name in peek pending isNull; do
+    mkdir -p "$work/std-$version-$name"
+    cp "$here/air-std/$version/std_handles.$name.json" "$here/air-std/$version/std_handles.square.json" \
+      "$work/std-$version-$name/"
+    for model in std translated; do
+      rejected "$version: std handle $name ($model)" \
+        "opaque type 'Io.AnyFuture' is declared in the standard library" "$work/std-$version-$name" \
+        --profile abi64-le-v1 --allocator-model "$model"
+    done
+  done
+done
 python3 -B "$here/negatives.py" "$translator"
-echo "opaque pointer gate passed: checker controls, 4 versions x $(wc -l < "$here/expected.txt" | tr -d ' ') model lines (expected.txt), 7 compiler rejections and the negatives per version"
+echo "opaque pointer gate passed: checker controls, 4 versions x $(wc -l < "$here/expected.txt" | tr -d ' ') model lines (expected.txt), 13 compiler rejections per version, the std handles of 0.17.1 and 0.16.0, and the negatives per version"

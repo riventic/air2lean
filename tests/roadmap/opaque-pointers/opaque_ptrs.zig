@@ -125,6 +125,24 @@ pub noinline fn viaApply(h: *Handle) bool {
     return apply(pass, h) == h;
 }
 
+// A handle across the C ABI: `export fn` definitions called through their `extern` declarations.
+export fn handle_id(h: *Handle) *Handle {
+    return h;
+}
+export fn handle_some(h: ?*Handle) bool {
+    return h != null;
+}
+const abi = struct {
+    extern fn handle_id(h: *Handle) *Handle;
+    extern fn handle_some(h: ?*Handle) bool;
+};
+pub noinline fn viaExtern(h: *Handle) *Handle {
+    return abi.handle_id(h);
+}
+pub noinline fn viaExternOpt(h: ?*Handle) bool {
+    return abi.handle_some(h);
+}
+
 // Recovering the typed pointer (`--allocator-model translated` only, as for `*anyopaque`).
 pub noinline fn recover(h: *Handle) *u32 {
     return @ptrCast(@alignCast(h));
@@ -161,5 +179,6 @@ pub fn main() void {
     std.debug.print("align {d}\n", .{bit(alignDown(alignUp(hx)) == hx)});
     std.debug.print("typed {d} {d} {d}\n", .{ bit(typedSame(typedOf(&x), typedOf(&x))), bit(typedSame(typedOf(&x), typedOf(&y))), bit(typedToHandle(typedOf(&x)) == hx) });
     std.debug.print("viaApply {d}\n", .{bit(viaApply(hx))});
+    std.debug.print("extern {d} {d} {d}\n", .{ bit(viaExtern(hx) == hx), bit(viaExternOpt(hx)), bit(viaExternOpt(null)) });
     std.debug.print("value {d} roundTrip {d} {d}\n", .{ hx.value(), roundTrip(&x), x });
 }

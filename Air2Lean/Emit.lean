@@ -226,7 +226,7 @@ partial def emitTy (structNames : Array (String × String)) (types : Array Ty) (
   | .thread => "Zig.ThreadId"
   | .io => "Zig.Io"
   | .future r => s!"Zig.Future ({emitTy structNames types types[r]!})"
-  | .opaque name | .other name => name
+  | .opaque name _ | .other name => name
 
 /-- A finite declared name table, with checked capacity and uniqueness. These positions
 are not ABI error ordinals; storage retains the shared symbolic `errFrag` identity. -/

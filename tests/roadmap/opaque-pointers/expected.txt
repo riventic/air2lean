@@ -8,6 +8,7 @@ casts 1 1 1 1 1 1
 align 1
 typed 1 0 1
 viaApply 1
+extern 1 1 0
 model alignUp misaligned panic
 value 41 roundTrip 42 42
 model recover misaligned panic

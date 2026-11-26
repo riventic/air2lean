@@ -59,7 +59,7 @@ def printTy : Ty → String
   | .thread => ".thread"
   | .io => ".io"
   | .future r => s!"(.future {r})"
-  | .opaque n => s!"(.opaque {str n})"
+  | .opaque n std => s!"(.opaque {str n} {std})"
   | .other n => s!"(.other {str n})"
 
 partial def printVal : Val → String

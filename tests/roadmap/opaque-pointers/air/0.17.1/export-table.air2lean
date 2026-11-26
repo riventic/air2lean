@@ -13,12 +13,32 @@
    }
   },
   {
+   "name": "handle_some",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "opaque_ptrs.handle_some",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
    "name": "getauxval",
    "linkage": "weak",
    "visibility": "default",
    "function": {
     "module": "std",
     "name": "os.linux.getauxvalImpl",
+    "cc": "x86_64_sysv"
+   }
+  },
+  {
+   "name": "handle_id",
+   "linkage": "strong",
+   "visibility": "default",
+   "function": {
+    "module": "root",
+    "name": "opaque_ptrs.handle_id",
     "cc": "x86_64_sysv"
    }
   }

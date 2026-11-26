@@ -3,7 +3,7 @@
     {
       "out": "air/{version}",
       "source": "opaque_ptrs.zig",
-      "filter": "opaque_ptrs.copy,opaque_ptrs.same,opaque_ptrs.constSame,opaque_ptrs.isNull,opaque_ptrs.wrap,opaque_ptrs.unwrap,opaque_ptrs.orElse,opaque_ptrs.optSame,opaque_ptrs.slotSwap,opaque_ptrs.cellPut,opaque_ptrs.cellGet,opaque_ptrs.cellOpt,opaque_ptrs.item,opaque_ptrs.pair,opaque_ptrs.erase,opaque_ptrs.toAny,opaque_ptrs.fromAny,opaque_ptrs.toOther,opaque_ptrs.toConst,opaque_ptrs.optErase,opaque_ptrs.address,opaque_ptrs.alignUp,opaque_ptrs.alignDown,opaque_ptrs.apply,opaque_ptrs.pass,opaque_ptrs.viaApply,opaque_ptrs.typed,opaque_ptrs.Typed",
+      "filter": "opaque_ptrs.copy,opaque_ptrs.same,opaque_ptrs.constSame,opaque_ptrs.isNull,opaque_ptrs.wrap,opaque_ptrs.unwrap,opaque_ptrs.orElse,opaque_ptrs.optSame,opaque_ptrs.slotSwap,opaque_ptrs.cellPut,opaque_ptrs.cellGet,opaque_ptrs.cellOpt,opaque_ptrs.item,opaque_ptrs.pair,opaque_ptrs.erase,opaque_ptrs.toAny,opaque_ptrs.fromAny,opaque_ptrs.toOther,opaque_ptrs.toConst,opaque_ptrs.optErase,opaque_ptrs.address,opaque_ptrs.alignUp,opaque_ptrs.alignDown,opaque_ptrs.apply,opaque_ptrs.pass,opaque_ptrs.viaApply,opaque_ptrs.viaExtern,opaque_ptrs.handle_id,opaque_ptrs.handle_some,opaque_ptrs.typed,opaque_ptrs.Typed",
       "versions": ["0.17.1", "0.16.0", "0.15.2", "0.14.1"],
       "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
       "cwd": "repo"
@@ -13,6 +13,14 @@
       "source": "opaque_ptrs.zig",
       "filter": "opaque_ptrs.erase,opaque_ptrs.recover,opaque_ptrs.roundTrip,opaque_ptrs.Handle.value",
       "versions": ["0.17.1", "0.16.0", "0.15.2", "0.14.1"],
+      "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
+      "cwd": "repo"
+    },
+    {
+      "out": "air-std/{version}",
+      "source": "std_handles.zig",
+      "filter": "std_handles.",
+      "versions": ["0.17.1", "0.16.0"],
       "args": ["-OReleaseSafe", "-fno-error-tracing", "-target", "x86_64-linux", "-mcpu=baseline"],
       "cwd": "repo"
     },

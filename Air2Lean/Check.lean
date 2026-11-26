@@ -89,7 +89,7 @@ private partial def errorCapabilityScan (types : Array Ty) (id fuel : Nat)
     | .ptr _ _ c => (types[c]?.map isFnTy).getD false
     | _ => false
   let count ← match ty with
-    | .opaque _ | .other _ | .errorSet none => none
+    | .opaque .. | .other _ | .errorSet none => none
     | .ptr .. => some (if fnPointer then 0 else 1)
     | .array .. | .vector .. | .optional .. | .enum .. => some 1
     | .errorUnion .. => some 2
@@ -126,7 +126,7 @@ private def closedErrorFreeAliasGraph (types : Array Ty) (root child : TyId)
       let some ty := types[id]? | return false
       match ty with
       | .other _ => unless isFnTy ty do return false
-      | .opaque _ | .errorSet _ | .errorUnion .. => return false
+      | .opaque .. | .errorSet _ | .errorUnion .. => return false
       | _ => pure ()
       let count := match ty with
         | .ptr .. | .array .. | .vector .. | .optional .. | .enum .. => 1
@@ -199,9 +199,19 @@ partial def checkTy (fnName : String) (types : Array Ty) (layouts : Array Layout
   | .other name =>
     throw s!"{fnName}: near line {line}: type '{name}' is outside the subset (otherwise \
       unsupported)"
+  -- An opaque type of the standard library, in any use (also behind a single-item pointer:
+  -- `opaqueTy` is false for it). The hand-written std models keep their own records behind such
+  -- handles (`Io.Future`'s `any_future: ?*Io.AnyFuture`), so a pointer to one has no native
+  -- meaning in the model; no list of names decides this, the declaring module does.
+  | .opaque name true =>
+    throw s!"{fnName}: near line {line}: opaque type '{name}' is declared in the standard \
+      library: a pointer to it can be a handle of a hand-written std model, whose bytes are not \
+      the native ones, so it is outside the subset (only `anyopaque` and an opaque type declared \
+      outside std are admitted behind a single-item pointer; docs/std-models.md §Opaque std \
+      handles)"
   -- Reached only where the opaque type is used other than as the pointee of a single-item
   -- pointer (the `.ptr` arm does not recur into it): Zig gives it no size, alignment or values.
-  | .opaque name =>
+  | .opaque name false =>
     throw s!"{fnName}: near line {line}: opaque type '{name}' has no size, alignment or values: \
       only a single-item pointer to it is a value (a by-value use, and a many-item, slice or C \
       pointer to it, are outside the subset)"
@@ -1766,9 +1776,14 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
     cx.knownSize line child
     pure line
   | .memcpy _ dst src =>
-    let _ ← cx.memPtrTy line src
+    -- Both operands have items of an encodable type (a single-item pointer to a scalar or to
+    -- an opaque type has none).
+    cx.itemAccess line src
+    cx.itemAccess line dst
     let dty ← cx.memPtrTy line dst
-    cx.knownSize line (itemTy cx.types dty).get!
+    let some item := itemTy cx.types dty
+      | cx.fail line s!"item access through pointer type {dty}, which has no items"
+    cx.knownSize line item
     -- The count comes from the destination if it is a slice or array pointer, else the source.
     unless cx.hasLength dst (withVector := false) || cx.hasLength src do
       cx.fail line "`memcpy` has no operand with an item count (a slice or a pointer to an array)"

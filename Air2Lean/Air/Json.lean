@@ -277,15 +277,17 @@ def parseTy (j : Json) (allocatorModel : AllocatorModel := .std) : Except String
       return (fname, fty)
     return .union name layout tag fields
   -- A declared `opaque {}` (exporters that mark it; an older export writes it as `other`,
-  -- which stays outside the subset). The primitive has only its `other` entry.
+  -- which stays outside the subset). The primitive has only its `other` entry. The entry's
+  -- `module` (kept by `Identity.rewrite`) says whether the standard library declares it.
   | "opaque" =>
     let name ← (← j.getObjVal? "name").getStr?
     if name == Ty.anyopaqueName then
       throw s!"a declared opaque type cannot have the primitive's name '{name}'"
-    opaqueEntry name
+    let module ← (optField j "module").mapM Json.getStr?
+    opaqueEntry name (Identity.stdDeclared module name)
   | "other" =>
     let name ← (← j.getObjVal? "name").getStr?
-    if name == Ty.anyopaqueName then opaqueEntry name else return .other name
+    if name == Ty.anyopaqueName then opaqueEntry name false else return .other name
   | "error_union" =>
     let set ← (← j.getObjVal? "error").getNat?
     let payload ← (← j.getObjVal? "payload").getNat?
@@ -302,10 +304,10 @@ def parseTy (j : Json) (allocatorModel : AllocatorModel := .std) : Except String
   | other => throw s!"unknown type kind: {other}"
 where
   /-- An opaque type has no layout: an entry that states one is not an export of it. -/
-  opaqueEntry (name : String) : Except String Ty := do
+  opaqueEntry (name : String) (std : Bool) : Except String Ty := do
     if (optField j "abi_size").isSome || (optField j "abi_align").isSome then
       throw s!"opaque type '{name}' has no size, alignment or values: its entry cannot state a layout"
-    return .opaque name
+    return .opaque name std
 
 /-- The memory facts of a type entry (schema 6): `abi_size`, `abi_align`, the fields' `offset`,
 `sentinel`, and a pointer's `ptr_align`, `volatile`, `allowzero`, `host_size`, `bit_offset`,

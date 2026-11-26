@@ -108,6 +108,15 @@ def checkedKey (module : Option String) (name : String) : Except String String :
     throw s!"std identity '{name}' is in namespace '{namespaceOf name}', which is not a known lib/std namespace; add it to Identity.stdNamespaces (docs/air-json.md §Identity)"
   pure (key module name)
 
+/-- The identity `name` of `module` is standard library code: exactly when the module is `std`.
+Without module identity (a legacy export, `module = none`) the namespace of the name decides
+(`stdNamespaces`), which also takes a user file named like a std namespace for std (fail
+closed). -/
+def stdDeclared (module : Option String) (name : String) : Bool :=
+  match module with
+  | some m => m == "std"
+  | none => stdNamespaces.contains (namespaceOf name)
+
 /-- The module of a file's function: its `module`; `none` for a legacy export without it. -/
 def fileModule (j : Json) : Except String (Option String) := do
   let .ok m := j.getObjVal? "module" | pure none
