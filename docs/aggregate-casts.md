@@ -54,11 +54,18 @@ rejects at the outer type in every version, `tests/roadmap/packed-casts/compile-
 a tuple, error storage, an optional, or a pointer or optional pointer. One exception follows Sema:
 Zig 0.14.1 and 0.15.2 check only the outer types, so an *array item* may be an `auto` struct or a
 tagged union (`ZigVersion.bitCastAutoItems`); its memory image is the exporter's layout, padding
-undefined and the tag included (`tests/roadmap/packed-casts/auto_items.zig`). The other items
-those two versions accept stay rejected by name (`reject_items.zig`): a tuple (the memory model
-has no tuple layout), an error set or error union (the model's error bytes are symbolic and are
-not the compilation's error codes; the check for symbolic error storage in an opaque cast rejects
-them first), and an optional (no guaranteed layout). Pointer-bearing repr casts are rejected (fail
+undefined and the tag included (`tests/roadmap/packed-casts/auto_items.zig`). So may a
+non-pointer optional (`opt_items.zig`): its payload (any such item), a flag byte at the payload's
+size, then padding (`Enc (Option α)`), the flag's offset pinned by the exporter's layouts. A flag
+byte other than 0 or 1 is `.illegal`, a conservative choice: native code reads any nonzero flag
+as non-null. The bytes are decoded with the profile's storage encodings (`Dialect.intPadding`):
+the self-hosted x86_64 backend reads a `u24` payload's padding byte as part of the value, so on
+its profile a padding byte that is not the extension is `.unspecified`, and on a profile that
+names no backend a padded integer in a repr cast is rejected. The other items those two versions
+accept stay rejected by name (`reject_items.zig`): a tuple (the memory model has no tuple
+layout), an error set or error union (the model's error bytes are symbolic and are not the
+compilation's error codes; the check for symbolic error storage in an opaque cast rejects them
+first), and an optional of one of these or of a pointer. Pointer-bearing repr casts are rejected (fail
 closed): the model's pointer bytes carry provenance and are not integer bits, so it could not
 give Zig's address there. It also rejects casts whose bit sizes differ. Enums, pointers and
 optionals on the outer side are rejected as before.
