@@ -61,7 +61,8 @@ for name in KernelBytes.start_admissible KernelBytes.push_succeeds ListsPage.con
     PageSpecMacos.free_spec PageSpecMacos.free_dead_spec PageSpecMacos.resize_spec \
     PageSpecMacos.remap_spec PageAllocMacos.alloc_ct PageAllocMacos.fallocSpec \
     PageAllocMacos.fallocSpec.creation PageAllocMacos.fallocSpec.creation_input_at \
-    PageAllocMacos.fallocSpec.creation_admission; do
+    PageAllocMacos.fallocSpec.creation_admission PageTok.hintAligned_iff \
+    PageTok.HintKn_linux_eq; do
   theorems+=(--declaration "AllocTranslated.$name")
 done
 prove() {  # prove LINES: build, audit and run the library of the current tree; LINES: output dir

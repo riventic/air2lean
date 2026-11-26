@@ -74,6 +74,25 @@ def HintKn (P : Nat) : Option Ptr → FAssn
   | some h => FAssn.ex fun b => FAssn.ex fun A : Nat =>
       ⟪h.block = some b ∧ 0 ≤ h.off ∧ (A + h.off.toNat) % P = 0⟫ ⋆ known b A
 
+/-- The alignment fact of `HintKn` at 4 KiB pages is the fact the x86_64-linux state had before
+it was stated for every page size (`((A : Int) + h.off) % 4096 = 0`), for an offset `0 ≤ o`. -/
+theorem hintAligned_iff (A : Nat) (o : Int) (h0 : 0 ≤ o) :
+    (A + o.toNat) % 4096 = 0 ↔ ((A : Int) + o) % 4096 = 0 := by
+  omega
+
+/-- **`HintKn 4096` is the former x86_64-linux knowledge**, as an equation of assertions: the
+restatement over the page size changed no statement that uses it (`PageAlloc.own`). -/
+theorem HintKn_linux_eq (h : Ptr) :
+    HintKn 4096 (some h) = FAssn.ex fun b => FAssn.ex fun A : Nat =>
+      ⟪h.block = some b ∧ 0 ≤ h.off ∧ ((A : Int) + h.off) % 4096 = 0⟫ ⋆ known b A := by
+  have e : ∀ b (A : Nat), (h.block = some b ∧ 0 ≤ h.off ∧ (A + h.off.toNat) % 4096 = 0) =
+      (h.block = some b ∧ 0 ≤ h.off ∧ ((A : Int) + h.off) % 4096 = 0) := fun b A =>
+    propext ⟨fun ⟨h1, h2, h3⟩ => ⟨h1, h2, (hintAligned_iff A _ h2).mp h3⟩,
+      fun ⟨h1, h2, h3⟩ => ⟨h1, h2, (hintAligned_iff A _ h2).mpr h3⟩⟩
+  show (FAssn.ex fun b => FAssn.ex fun A : Nat =>
+    ⟪h.block = some b ∧ 0 ≤ h.off ∧ (A + h.off.toNat) % 4096 = 0⟫ ⋆ known b A) = _
+  simp only [e]
+
 /-- The allocator state for page size `P`: the hint word with its atomic layout (`aptsE`, O3),
 and the knowledge of its target (`known`, O1: the hinted mapping may be unmapped).
 `docs/alloc-page.md`. -/
