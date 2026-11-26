@@ -211,6 +211,181 @@
       },
       "block_sha256": "365d0d1c8791d852265069910265eaa889440e6f11c8df05a2c944f3ef79fafb"
     },
+    "tests/roadmap/air-semantics/CanonBinding.lean#debug-one-bad-item": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/air-semantics/test_lean.py"
+      },
+      "block_sha256": "61fb0f9325f58139bbf734c98be62ddfaba0e7c55c2d40d4e20044e249d3301f"
+    },
+    "tests/roadmap/air-semantics/CanonBinding.lean#debug-wrong-function-metadata": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/air-semantics/test_lean.py"
+      },
+      "block_sha256": "61fb0f9325f58139bbf734c98be62ddfaba0e7c55c2d40d4e20044e249d3301f"
+    },
+    "tests/roadmap/air-semantics/CanonBinding.lean#debug-wrong-global-initializer": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/air-semantics/test_lean.py"
+      },
+      "block_sha256": "61fb0f9325f58139bbf734c98be62ddfaba0e7c55c2d40d4e20044e249d3301f"
+    },
+    "tests/roadmap/air-semantics/CanonBinding.lean#debug-wrong-layout": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/air-semantics/test_lean.py"
+      },
+      "block_sha256": "61fb0f9325f58139bbf734c98be62ddfaba0e7c55c2d40d4e20044e249d3301f"
+    },
+    "tests/roadmap/air-semantics/CanonBinding.lean#debug-wrong-live-id": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/air-semantics/test_lean.py"
+      },
+      "block_sha256": "61fb0f9325f58139bbf734c98be62ddfaba0e7c55c2d40d4e20044e249d3301f"
+    },
+    "tests/roadmap/air-semantics/CanonBinding.lean#debug-wrong-nested-body": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/air-semantics/test_lean.py"
+      },
+      "block_sha256": "61fb0f9325f58139bbf734c98be62ddfaba0e7c55c2d40d4e20044e249d3301f"
+    },
+    "tests/roadmap/air-semantics/CanonBinding.lean#debug-wrong-offset": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/air-semantics/test_lean.py"
+      },
+      "block_sha256": "61fb0f9325f58139bbf734c98be62ddfaba0e7c55c2d40d4e20044e249d3301f"
+    },
+    "tests/roadmap/air-semantics/CanonBinding.lean#renumber-collapsed-ids": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/air-semantics/test_lean.py"
+      },
+      "block_sha256": "61fb0f9325f58139bbf734c98be62ddfaba0e7c55c2d40d4e20044e249d3301f"
+    },
+    "tests/roadmap/air-semantics/CanonBinding.lean#renumber-wrong-function-metadata": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/air-semantics/test_lean.py"
+      },
+      "block_sha256": "61fb0f9325f58139bbf734c98be62ddfaba0e7c55c2d40d4e20044e249d3301f"
+    },
+    "tests/roadmap/air-semantics/CanonBinding.lean#renumber-wrong-operand": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/air-semantics/test_lean.py"
+      },
+      "block_sha256": "61fb0f9325f58139bbf734c98be62ddfaba0e7c55c2d40d4e20044e249d3301f"
+    },
+    "tests/roadmap/air-semantics/test_lean.py#absdiff-gt-as-lt": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/air-semantics/test_lean.py"
+      },
+      "block_sha256": "de5ba226a9eafef2ee5848f57b47cdfbdda86e12b031553f7eeb82b0b0695913"
+    },
+    "tests/roadmap/air-semantics/test_lean.py#clampadd-add-as-sub": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/air-semantics/test_lean.py"
+      },
+      "block_sha256": "de5ba226a9eafef2ee5848f57b47cdfbdda86e12b031553f7eeb82b0b0695913"
+    },
+    "tests/roadmap/air-semantics/test_lean.py#clique-guessed-motive-order": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/air-semantics/test_lean.py"
+      },
+      "block_sha256": "de5ba226a9eafef2ee5848f57b47cdfbdda86e12b031553f7eeb82b0b0695913"
+    },
+    "tests/roadmap/air-semantics/test_lean.py#digitorzero-nonerr-as-err": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/air-semantics/test_lean.py"
+      },
+      "block_sha256": "de5ba226a9eafef2ee5848f57b47cdfbdda86e12b031553f7eeb82b0b0695913"
+    },
+    "tests/roadmap/air-semantics/test_lean.py#dueof-field-offset": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/air-semantics/test_lean.py"
+      },
+      "block_sha256": "de5ba226a9eafef2ee5848f57b47cdfbdda86e12b031553f7eeb82b0b0695913"
+    },
+    "tests/roadmap/air-semantics/test_lean.py#gcd-rem-as-divtrunc": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/air-semantics/test_lean.py"
+      },
+      "block_sha256": "de5ba226a9eafef2ee5848f57b47cdfbdda86e12b031553f7eeb82b0b0695913"
+    },
+    "tests/roadmap/air-semantics/test_lean.py#iseven-ret-false": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/air-semantics/test_lean.py"
+      },
+      "block_sha256": "de5ba226a9eafef2ee5848f57b47cdfbdda86e12b031553f7eeb82b0b0695913"
+    },
+    "tests/roadmap/air-semantics/test_lean.py#parsedigit-wrong-error": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/air-semantics/test_lean.py"
+      },
+      "block_sha256": "de5ba226a9eafef2ee5848f57b47cdfbdda86e12b031553f7eeb82b0b0695913"
+    },
+    "tests/roadmap/air-semantics/test_lean.py#same-eq-as-ne": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/air-semantics/test_lean.py"
+      },
+      "block_sha256": "de5ba226a9eafef2ee5848f57b47cdfbdda86e12b031553f7eeb82b0b0695913"
+    },
+    "tests/roadmap/air-semantics/test_lean.py#scale-mul-wrapping": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/air-semantics/test_lean.py"
+      },
+      "block_sha256": "de5ba226a9eafef2ee5848f57b47cdfbdda86e12b031553f7eeb82b0b0695913"
+    },
+    "tests/roadmap/air-semantics/test_lean.py#sum-add-as-sub": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/air-semantics/test_lean.py"
+      },
+      "block_sha256": "de5ba226a9eafef2ee5848f57b47cdfbdda86e12b031553f7eeb82b0b0695913"
+    },
+    "tests/roadmap/air-semantics/test_lean.py#sum-view-key": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/air-semantics/test_lean.py"
+      },
+      "block_sha256": "de5ba226a9eafef2ee5848f57b47cdfbdda86e12b031553f7eeb82b0b0695913"
+    },
+    "tests/roadmap/air-semantics/test_lean.py#sumto-counter-wrapping": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/air-semantics/test_lean.py"
+      },
+      "block_sha256": "de5ba226a9eafef2ee5848f57b47cdfbdda86e12b031553f7eeb82b0b0695913"
+    },
+    "tests/roadmap/air-semantics/test_lean.py#swap-store-wrong-value": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/air-semantics/test_lean.py"
+      },
+      "block_sha256": "de5ba226a9eafef2ee5848f57b47cdfbdda86e12b031553f7eeb82b0b0695913"
+    },
+    "tests/roadmap/air-semantics/test_lean.py#writeflag-field-offset": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/air-semantics/test_lean.py"
+      },
+      "block_sha256": "de5ba226a9eafef2ee5848f57b47cdfbdda86e12b031553f7eeb82b0b0695913"
+    },
     "tests/roadmap/alloc-fba/mutant.sh#fba-alloc-end-index-kept": {
       "killed_by": {
         "kind": "check",
@@ -1142,6 +1317,76 @@
       },
       "block_sha256": "ff54fa5e5a6929213afdb3b48a073c323efc9cdb4b0aebd887457a1e3fe3dacb"
     },
+    "tests/roadmap/packed-casts/expected/wrong.txt#bytesToU": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/packed-casts/check.sh"
+      },
+      "block_sha256": "53d66488e9f7a1ae27a730e63a9bbeb2ece7f62793c39b0081a245ca3e654ae1"
+    },
+    "tests/roadmap/packed-casts/expected/wrong.txt#floatsToInt": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/packed-casts/check.sh"
+      },
+      "block_sha256": "53d66488e9f7a1ae27a730e63a9bbeb2ece7f62793c39b0081a245ca3e654ae1"
+    },
+    "tests/roadmap/packed-casts/expected/wrong.txt#intToSentAt3": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/packed-casts/check.sh"
+      },
+      "block_sha256": "53d66488e9f7a1ae27a730e63a9bbeb2ece7f62793c39b0081a245ca3e654ae1"
+    },
+    "tests/roadmap/packed-casts/expected/wrong.txt#intToVoids": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/packed-casts/check.sh"
+      },
+      "block_sha256": "53d66488e9f7a1ae27a730e63a9bbeb2ece7f62793c39b0081a245ca3e654ae1"
+    },
+    "tests/roadmap/packed-casts/expected/wrong.txt#nestedToInt": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/packed-casts/check.sh"
+      },
+      "block_sha256": "53d66488e9f7a1ae27a730e63a9bbeb2ece7f62793c39b0081a245ca3e654ae1"
+    },
+    "tests/roadmap/packed-casts/expected/wrong.txt#roundTrip": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/packed-casts/check.sh"
+      },
+      "block_sha256": "53d66488e9f7a1ae27a730e63a9bbeb2ece7f62793c39b0081a245ca3e654ae1"
+    },
+    "tests/roadmap/packed-casts/expected/wrong.txt#sentItem3": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/packed-casts/check.sh"
+      },
+      "block_sha256": "53d66488e9f7a1ae27a730e63a9bbeb2ece7f62793c39b0081a245ca3e654ae1"
+    },
+    "tests/roadmap/packed-casts/expected/wrong.txt#sentToInt": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/packed-casts/check.sh"
+      },
+      "block_sha256": "53d66488e9f7a1ae27a730e63a9bbeb2ece7f62793c39b0081a245ca3e654ae1"
+    },
+    "tests/roadmap/packed-casts/expected/wrong.txt#voidsToInt": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/packed-casts/check.sh"
+      },
+      "block_sha256": "53d66488e9f7a1ae27a730e63a9bbeb2ece7f62793c39b0081a245ca3e654ae1"
+    },
+    "tests/roadmap/packed-casts/expected/wrong.txt#wideToInt": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/packed-casts/check.sh"
+      },
+      "block_sha256": "53d66488e9f7a1ae27a730e63a9bbeb2ece7f62793c39b0081a245ca3e654ae1"
+    },
     "tests/roadmap/pointer-atomics/Mutants.lean#free-before-join": {
       "killed_by": {
         "kind": "check",
@@ -1252,6 +1497,48 @@
     "tests/roadmap/resize-remap/mutations.py#moved-old-stays-live": {
       "unrecorded": "mutations.py only writes patches of the retiring hand model ZigLean/Mem/Alloc.lean; no CI check applies them and runs Check.lean",
       "block_sha256": "c93cec4e6d0892a52c2894febf66de31e627b278f2a2da8d4f0005b2f4c36c89"
+    },
+    "tests/roadmap/sc-order/mutations.py#missing-test-accepted": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/sc-order/check.sh"
+      },
+      "block_sha256": "50f7a388d4c0323d872ee7f843d8151b6fabc79f225a1050ca3bf50f40149f49"
+    },
+    "tests/roadmap/sc-order/mutations.py#model-outcome-check-dropped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/sc-order/check.sh"
+      },
+      "block_sha256": "50f7a388d4c0323d872ee7f843d8151b6fabc79f225a1050ca3bf50f40149f49"
+    },
+    "tests/roadmap/sc-order/mutations.py#sc-load-reads-initial": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/sc-order/check.sh"
+      },
+      "block_sha256": "50f7a388d4c0323d872ee7f843d8151b6fabc79f225a1050ca3bf50f40149f49"
+    },
+    "tests/roadmap/sc-order/mutations.py#sc-outcome-check-dropped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/sc-order/check.sh"
+      },
+      "block_sha256": "50f7a388d4c0323d872ee7f843d8151b6fabc79f225a1050ca3bf50f40149f49"
+    },
+    "tests/roadmap/sc-order/mutations.py#sc-store-dropped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/sc-order/check.sh"
+      },
+      "block_sha256": "50f7a388d4c0323d872ee7f843d8151b6fabc79f225a1050ca3bf50f40149f49"
+    },
+    "tests/roadmap/sc-order/mutations.py#sc-threads-never-interleave": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/sc-order/check.sh"
+      },
+      "block_sha256": "50f7a388d4c0323d872ee7f843d8151b6fabc79f225a1050ca3bf50f40149f49"
     },
     "tests/roadmap/sep-auto/SepAuto/Steps.lean#array-update-wrong-neighbor": {
       "killed_by": {
