@@ -21,6 +21,11 @@ the contracts of the sync objects (`MutexImpl`, `CondImpl`, `EventImpl`): this p
 version (`Proofs/Handoff/`, the same as `Proofs/Sync/Handoff.lean`'s); this file gives the `Box`'s
 layout (`lo`: no `io`, the mutex at 0, the condition's state and epoch at 4 and 8, the event at
 12, `v` at 16, `ready` at 20) and walks `main` and the producer of the generated code.
+
+`handoffAll` is the same hand-off with a producer (`producerAll`) that calls
+`Thread.Condition.broadcast` in place of `signal`: its walk takes the contract's broadcast
+(`Handoff.wp_broadcast`, from `CondImpl.broadcast_wp`), and the results are `handoffAll_spec` and
+`handoffAll_safe`. The program has one waiter, `main`.
 -/
 
 open Zig Zig.Conc Zig.Conc.Proto Zig.Full Zig.Full.FAssn Zig.Handoff Threadsync

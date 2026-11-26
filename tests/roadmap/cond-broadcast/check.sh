@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # C14 condition broadcast (README.md): every version's committed export translates to the
-# broadcast that the condition contract's implementations prove, function for function.
-#   check.sh                 the gate above (needs a built translator; no compiler, no Lean)
+# broadcast that the condition contract's implementations prove, function for function; and the
+# broadcast client (`threadsync.handoffAll`) is proved, and its mutants (mutations.py) are not.
+#   check.sh                 the gate above (needs a built translator and Lake; no compiler)
 #   check.sh --export [V..]  scripts/fixture-exports.py verify: a fresh export with the patched
 #                            compilers of versions V (default all) equals the committed one
 set -euo pipefail
@@ -72,3 +73,10 @@ print(f'cond-broadcast {version}: {", ".join(names)} equal {proved}')
 PY
 done
 echo 'condition broadcast gate passed: 0.15.2, 0.16.0 and 0.17.1 translate to the proved broadcast; 0.14.1 is rejected'
+# The client: `threadsync.handoffAll` (0.15.2) calls `Thread.Condition.broadcast` and is proved
+# from the condition contract (`CondImpl.broadcast_wp`). Its mutants are each built in a check
+# tree and rejected in the client's proof. Lake's own search path only (as the check trees).
+python3 -B "$here/mutations.py" --self-test
+env -u LEAN_PATH lake build Proofs.Threadsync.Handoff
+env -u LEAN_PATH python3 -B "$here/mutations.py" run "$work"
+echo 'condition broadcast client gate passed: handoffAll is proved; its mutants are rejected'
