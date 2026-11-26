@@ -13,7 +13,8 @@ finding. Only a rejected mutant reports its kill. `--self-test` checks every anc
 The client has one waiter (the main thread), so `broadcast-is-signal` is a program that is still
 correct: its kill is that the client's proof has no rule for a `signal` there (it is proved from
 `CondImpl.broadcast_wp` alone), not a wrong result. `broadcast-dropped` is a wrong program (a
-lost wake-up: the main thread can wait for good).
+lost wake-up: the main thread can wait for good), which the proof and the kernel-computed run
+`handoffAll_completes` both reject.
 """
 from pathlib import Path
 import re
@@ -41,8 +42,9 @@ MUTANTS = {
     "broadcast-is-signal": ([
         (BROADCAST, BROADCAST.replace("Thread_Condition_broadcast", "Thread_Condition_signal")),
     ], ["producerAll_spec"]),
-    # `producerAll` wakes no waiter.
-    "broadcast-dropped": ([(BROADCAST, "")], ["producerAll_spec"]),
+    # `producerAll` wakes no waiter: the proof fails, and so does the kernel-computed run of
+    # `handoffAll_completes` (under its schedule the main thread sleeps and is never woken).
+    "broadcast-dropped": ([(BROADCAST, "")], ["producerAll_spec", "handoffAll_completes"]),
 }
 # Lake prints a Lean error as `error: FILE:LINE:COL: message`; lean_mutant reads `FILE:LINE:COL: error`.
 LAKE_ERROR = re.compile(r"^error: (\S+?):(\d+):(\d+): ", re.M)

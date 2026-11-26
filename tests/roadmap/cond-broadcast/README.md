@@ -46,12 +46,12 @@ calls `Thread.Condition.broadcast`. Its proof uses only the contracts:
 
 `mutations.py` holds the client's designated mutants. Each is one change of `producerAll` in
 the committed translation, built in a check tree where the sync objects' contract proofs must
-still build and `producerAll_spec` must fail:
+still build and the named theorems of the client must fail (no other):
 
 | Mutant | Change | Killed by |
 |---|---|---|
 | `broadcast-is-signal` | `signal` in place of `broadcast` | the client's proof: it has the broadcast contract's rule only |
-| `broadcast-dropped` | no wake-up | the client's proof: the producer does not reach its `set` place (a lost wake-up) |
+| `broadcast-dropped` | no wake-up | the client's proof, and the kernel-computed run `handoffAll_completes` (a lost wake-up: the main thread is not woken) |
 
 The client has one waiter, the main thread, so `broadcast-is-signal` is still a correct program
 and the differential run does not tell it from the original. A client with two or more waiters,
