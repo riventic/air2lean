@@ -1357,70 +1357,119 @@
         "kind": "check",
         "target": "tests/roadmap/packed-casts/check.sh"
       },
-      "block_sha256": "53d66488e9f7a1ae27a730e63a9bbeb2ece7f62793c39b0081a245ca3e654ae1"
+      "block_sha256": "9f379f53af42b3223e83eadfd9e4dc7e4392dedc29331a574cdd882787920a44"
     },
     "tests/roadmap/packed-casts/expected/wrong.txt#floatsToInt": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/packed-casts/check.sh"
       },
-      "block_sha256": "53d66488e9f7a1ae27a730e63a9bbeb2ece7f62793c39b0081a245ca3e654ae1"
+      "block_sha256": "9f379f53af42b3223e83eadfd9e4dc7e4392dedc29331a574cdd882787920a44"
     },
     "tests/roadmap/packed-casts/expected/wrong.txt#intToSentAt3": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/packed-casts/check.sh"
       },
-      "block_sha256": "53d66488e9f7a1ae27a730e63a9bbeb2ece7f62793c39b0081a245ca3e654ae1"
+      "block_sha256": "9f379f53af42b3223e83eadfd9e4dc7e4392dedc29331a574cdd882787920a44"
     },
     "tests/roadmap/packed-casts/expected/wrong.txt#intToVoids": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/packed-casts/check.sh"
       },
-      "block_sha256": "53d66488e9f7a1ae27a730e63a9bbeb2ece7f62793c39b0081a245ca3e654ae1"
+      "block_sha256": "9f379f53af42b3223e83eadfd9e4dc7e4392dedc29331a574cdd882787920a44"
     },
     "tests/roadmap/packed-casts/expected/wrong.txt#nestedToInt": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/packed-casts/check.sh"
       },
-      "block_sha256": "53d66488e9f7a1ae27a730e63a9bbeb2ece7f62793c39b0081a245ca3e654ae1"
+      "block_sha256": "9f379f53af42b3223e83eadfd9e4dc7e4392dedc29331a574cdd882787920a44"
+    },
+    "tests/roadmap/packed-casts/expected/wrong.txt#opt_arraysToInt": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/packed-casts/check.sh"
+      },
+      "block_sha256": "9f379f53af42b3223e83eadfd9e4dc7e4392dedc29331a574cdd882787920a44"
+    },
+    "tests/roadmap/packed-casts/expected/wrong.txt#opt_intToPacked": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/packed-casts/check.sh"
+      },
+      "block_sha256": "9f379f53af42b3223e83eadfd9e4dc7e4392dedc29331a574cdd882787920a44"
+    },
+    "tests/roadmap/packed-casts/expected/wrong.txt#opt_intToU16s": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/packed-casts/check.sh"
+      },
+      "block_sha256": "9f379f53af42b3223e83eadfd9e4dc7e4392dedc29331a574cdd882787920a44"
+    },
+    "tests/roadmap/packed-casts/expected/wrong.txt#opt_intToU24s": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/packed-casts/check.sh"
+      },
+      "block_sha256": "9f379f53af42b3223e83eadfd9e4dc7e4392dedc29331a574cdd882787920a44"
+    },
+    "tests/roadmap/packed-casts/expected/wrong.txt#opt_nestedToInt": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/packed-casts/check.sh"
+      },
+      "block_sha256": "9f379f53af42b3223e83eadfd9e4dc7e4392dedc29331a574cdd882787920a44"
+    },
+    "tests/roadmap/packed-casts/expected/wrong.txt#opt_u8sToInt": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/packed-casts/check.sh"
+      },
+      "block_sha256": "9f379f53af42b3223e83eadfd9e4dc7e4392dedc29331a574cdd882787920a44"
+    },
+    "tests/roadmap/packed-casts/expected/wrong.txt#opt_zerosToInt": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/packed-casts/check.sh"
+      },
+      "block_sha256": "9f379f53af42b3223e83eadfd9e4dc7e4392dedc29331a574cdd882787920a44"
     },
     "tests/roadmap/packed-casts/expected/wrong.txt#roundTrip": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/packed-casts/check.sh"
       },
-      "block_sha256": "53d66488e9f7a1ae27a730e63a9bbeb2ece7f62793c39b0081a245ca3e654ae1"
+      "block_sha256": "9f379f53af42b3223e83eadfd9e4dc7e4392dedc29331a574cdd882787920a44"
     },
     "tests/roadmap/packed-casts/expected/wrong.txt#sentItem3": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/packed-casts/check.sh"
       },
-      "block_sha256": "53d66488e9f7a1ae27a730e63a9bbeb2ece7f62793c39b0081a245ca3e654ae1"
+      "block_sha256": "9f379f53af42b3223e83eadfd9e4dc7e4392dedc29331a574cdd882787920a44"
     },
     "tests/roadmap/packed-casts/expected/wrong.txt#sentToInt": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/packed-casts/check.sh"
       },
-      "block_sha256": "53d66488e9f7a1ae27a730e63a9bbeb2ece7f62793c39b0081a245ca3e654ae1"
+      "block_sha256": "9f379f53af42b3223e83eadfd9e4dc7e4392dedc29331a574cdd882787920a44"
     },
     "tests/roadmap/packed-casts/expected/wrong.txt#voidsToInt": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/packed-casts/check.sh"
       },
-      "block_sha256": "53d66488e9f7a1ae27a730e63a9bbeb2ece7f62793c39b0081a245ca3e654ae1"
+      "block_sha256": "9f379f53af42b3223e83eadfd9e4dc7e4392dedc29331a574cdd882787920a44"
     },
     "tests/roadmap/packed-casts/expected/wrong.txt#wideToInt": {
       "killed_by": {
         "kind": "check",
         "target": "tests/roadmap/packed-casts/check.sh"
       },
-      "block_sha256": "53d66488e9f7a1ae27a730e63a9bbeb2ece7f62793c39b0081a245ca3e654ae1"
+      "block_sha256": "9f379f53af42b3223e83eadfd9e4dc7e4392dedc29331a574cdd882787920a44"
     },
     "tests/roadmap/pointer-atomics/Mutants.lean#free-before-join": {
       "killed_by": {

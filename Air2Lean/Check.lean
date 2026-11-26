@@ -487,6 +487,23 @@ def packedScalarCast (types : Array Ty) (src dst : TyId) : Bool :=
   src != dst && (packedAgg src || packedAgg dst) && scalar src && scalar dst &&
     (packedBits types src).isSome && packedBits types src == packedBits types dst
 
+/-- The storage type `id` holds an integer with padding bits (`bits ≠ 8 * intSize bits`) that its
+`Zig.Enc` encoding stores as an integer: itself, an enum's tag, or such an item, payload or
+field (not behind a pointer; packed types and vector lanes are bit-packed, not stored per item).
+`fuel` bounds the walk (`validateTypeGraph` rejects cycles that are not behind a pointer). -/
+partial def storesPaddedInt (types : Array Ty) (id : TyId) (fuel : Nat := types.size) : Bool :=
+  if fuel == 0 then false else
+  let go (c : TyId) := storesPaddedInt types c (fuel - 1)
+  match types[id]? with
+  | some (.int _ bits) => bits != 8 * Zig.intSize bits
+  | some (.enum _ tag _ _) => go tag
+  | some (.array _ c _) | some (.optional c) | some (.future c) => go c
+  | some (.errorUnion _ p) => go p
+  | some (.struct _ layout fields) => layout != "packed" && fields.any (go ·.2)
+  | some (.union _ layout _ fields) => layout != "packed" && fields.any (go ·.2)
+  | some (.tuple fields) => fields.any go
+  | _ => false
+
 /-! ## Zig ≤0.16 representation casts (`docs/aggregate-casts.md`) -/
 
 /-- An aggregate whose ≤0.16 `@bitCast` is a representation cast: an array (with its sentinel,
@@ -526,15 +543,31 @@ closed).
 `autoItems` (Zig 0.14.1 and 0.15.2, `ZigVersion.bitCastAutoItems`): Sema checks only the outer
 types, so an *array item* may be an `auto` struct or a tagged union; its bits are its ABI size
 (`Type.bitSize` of a non-packed container) and its memory image is the exporter's layout, the
-tag included (`compile-errors/README.md` in `tests/roadmap/packed-casts`). A tuple, error or
-optional item compiles there too and stays outside. -/
+tag included (`compile-errors/README.md` in `tests/roadmap/packed-casts`). So may a
+non-pointer optional, whose bits are its ABI size: the payload (any item type above), a flag
+byte, padding (`Zig.Enc.optionRepr`). `inField`: `id` is in a field of a struct or union, at
+any depth; an optional there stays outside, since the container's own encoding decodes it, not
+the cast's flag rule (`emitStorageEnc`'s `reprOpt`). A tuple or error item compiles there too
+and stays outside. -/
 partial def reprBitSize (types : Array Ty) (layouts : Array Layout) (id : TyId)
-    (autoItems : Bool := false) : Except String Nat := do
+    (autoItems : Bool := false) (inField : Bool := false) : Except String Nat := do
   let sizeOf (t : TyId) : Except String Nat :=
     match layouts[t]?.bind (·.size) with
     | some s => pure s
     | none => throw s!"a type without a layout in the AIR file (type {t})"
-  let recur (t : TyId) := reprBitSize types layouts t autoItems
+  let recur (t : TyId) := reprBitSize types layouts t autoItems inField
+  let field (t : TyId) := reprBitSize types layouts t autoItems (inField := true)
+  -- An array item, or (`autoItems`) an optional item's payload.
+  let item (c : TyId) : Except String Nat :=
+    match types[c]? with
+    | some (.struct _ "auto" fields) | some (.union _ _ (some _) fields) =>
+      if !autoItems then
+        throw s!"an array of `auto` structs or tagged unions (type {c}; items without a \
+          guaranteed in-memory layout; Sema rejects its `@bitCast` from Zig 0.16.0)"
+      else do
+        for (_, t) in fields do let _ ← field t
+        (8 * ·) <$> sizeOf c
+    | _ => recur c
   let some ty := types[id]? | throw s!"an unknown type (type {id})"
   match ty with
   | .int _ bits | .float bits => pure bits
@@ -546,18 +579,10 @@ partial def reprBitSize (types : Array Ty) (layouts : Array Layout) (id : TyId)
     | some bits => pure bits
     | none => throw s!"a packed struct or union without a modelled backing integer (type {id})"
   | .struct _ "extern" fields | .union _ "extern" none fields =>
-    for (_, t) in fields do let _ ← recur t
+    for (_, t) in fields do let _ ← field t
     (8 * ·) <$> sizeOf id
   | .array len child sentinel =>
-    let eb ← match types[child]? with
-      | some (.struct _ "auto" fields) | some (.union _ _ (some _) fields) =>
-        if !autoItems then
-          throw s!"an array of `auto` structs or tagged unions (type {id}; items without a \
-            guaranteed in-memory layout; Sema rejects its `@bitCast` from Zig 0.16.0)"
-        else do
-          for (_, t) in fields do let _ ← recur t
-          (8 * ·) <$> sizeOf child
-      | _ => recur child
+    let eb ← item child
     let es ← sizeOf child
     let count := len + if sentinel then 1 else 0
     pure (if count == 0 then 0 else (count - 1) * 8 * es + eb)
@@ -579,8 +604,25 @@ partial def reprBitSize (types : Array Ty) (layouts : Array Layout) (id : TyId)
     if types[child]? matches some (.ptr ..) then
       throw s!"a pointer in an optional (type {id}; the model's pointer bytes carry \
         provenance, not integer bits)"
-    else throw s!"an optional (type {id}; no guaranteed in-memory layout; Zig 0.14.1 and \
-      0.15.2 accept an array of optionals, Sema rejects it from Zig 0.16.0)"
+    else if !autoItems then
+      throw s!"an optional (type {id}; no guaranteed in-memory layout; Zig 0.14.1 and 0.15.2 \
+        accept an array of optionals, Sema rejects it from Zig 0.16.0)"
+    else if inField then
+      throw s!"an optional in a field of a struct or union (type {id}; the cast's flag rule \
+        covers an optional array item and its payload, not one that the container's own \
+        encoding decodes)"
+    else do
+      -- An item on 0.14.1/0.15.2: the payload at offset 0, the flag byte at the payload's
+      -- size, padding to its alignment (`Zig.Enc.optionRepr`); `Type.bitSize` is the ABI size.
+      -- The flag's offset is pinned by the exporter's payload and optional layouts.
+      let _ ← item child
+      let agrees (t : TyId) : Except String Bool := do
+        let (s, a) ← modelLayout types layouts t
+        pure (layouts[t]?.map (fun l => (l.size, l.align)) == some (some s, some a))
+      unless (← agrees child) && (← agrees id) do
+        throw s!"an optional (type {id}) whose layout in the AIR file is not its payload's, \
+          a flag byte and padding"
+      (8 * ·) <$> sizeOf id
   | _ => throw s!"a type without a guaranteed in-memory layout (type {id}: an `auto` struct, \
       tagged union or another type Sema rejects in a `@bitCast`)"
 
@@ -1626,6 +1668,15 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
           cx.fail line "a Zig ≤0.16 `@bitCast` between a sentinel-terminated array and a vector \
             is outside the subset (the compilers disagree on whether the sentinel is an item); \
             cast through an array without a sentinel"
+        -- The bytes are decoded with the profile's storage encodings (`Dialect.intPadding`;
+        -- the self-hosted x86_64 backend reads a `u24`'s padding byte as part of its value).
+        if cx.dialect.any (·.intPadding == .unknown) &&
+            (storesPaddedInt cx.types aty || storesPaddedInt cx.types ty) then
+          cx.fail line s!"a Zig ≤0.16 representation `@bitCast` of an integer with padding bits \
+            (a `uN`/`iN` whose width is not 8 * its ABI size, or a type holding one) is outside \
+            the subset for backend '{(cx.dialect.map (·.backend)).getD ""}': how a load reads \
+            the padding bits depends on the backend; export with a schema-12 profile of the \
+            LLVM or self-hosted x86_64 backend"
         let autoItems := cx.dialect.any (·.version.bitCastAutoItems)
         let bitSize (t : TyId) : Except String Nat :=
           (reprBitSize cx.types cx.layouts t autoItems).mapError fun part =>
@@ -3101,23 +3152,6 @@ def checkForLenFact (f : Func) (insts : Array Inst) : Except String Unit := do
 /-- `@errorName` (`error_name`). -/
 def Op.isErrorName : Op → Bool
   | .errorName _ => true
-  | _ => false
-
-/-- The storage type `id` holds an integer with padding bits (`bits ≠ 8 * intSize bits`) that its
-`Zig.Enc` encoding stores as an integer: itself, an enum's tag, or such an item, payload or
-field (not behind a pointer; packed types and vector lanes are bit-packed, not stored per item).
-`fuel` bounds the walk (`validateTypeGraph` rejects cycles that are not behind a pointer). -/
-partial def storesPaddedInt (types : Array Ty) (id : TyId) (fuel : Nat := types.size) : Bool :=
-  if fuel == 0 then false else
-  let go (c : TyId) := storesPaddedInt types c (fuel - 1)
-  match types[id]? with
-  | some (.int _ bits) => bits != 8 * Zig.intSize bits
-  | some (.enum _ tag _ _) => go tag
-  | some (.array _ c _) | some (.optional c) | some (.future c) => go c
-  | some (.errorUnion _ p) => go p
-  | some (.struct _ layout fields) => layout != "packed" && fields.any (go ·.2)
-  | some (.union _ layout _ fields) => layout != "packed" && fields.any (go ·.2)
-  | some (.tuple fields) => fields.any go
   | _ => false
 
 /-- An integer with padding bits in memory needs the backend's encoding of it

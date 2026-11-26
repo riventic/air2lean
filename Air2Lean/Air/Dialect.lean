@@ -121,8 +121,9 @@ def buildModeRenames : ZigVersion → List (String × String)
   | v0_14_1 | v0_15_2 | v0_16_0 => []
   | v0_17_1 => [("debug", "Debug"), ("safe", "ReleaseSafe"), ("fast", "ReleaseFast"), ("small", "ReleaseSmall")]
 
-/-- Sema checks a `@bitCast` operand's outer type only, so an array of `auto` structs or tagged
-unions is a memory reinterpretation (`reprBitSize`); 0.16.0 checks the items too. -/
+/-- Sema checks a `@bitCast` operand's outer type only, so an array of `auto` structs, tagged
+unions or non-pointer optionals is a memory reinterpretation (`reprBitSize`); 0.16.0 checks the
+items too. -/
 def bitCastAutoItems : ZigVersion → Bool
   | v0_14_1 | v0_15_2 => true
   | v0_16_0 | v0_17_1 => false
