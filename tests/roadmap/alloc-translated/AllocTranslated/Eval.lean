@@ -16,17 +16,19 @@ oracle `fun _ => 0` picks its results equal the native ones too.
 
 namespace AllocTranslated.Eval
 
-def word (r : Zig.MemM (BitVec 64)) (m : Zig.Mem) : String :=
+/-- A run's result from the memory `m`, its value printed by `fmt`. -/
+def shown {α : Type} (fmt : α → String) (r : Zig.MemM α) (m : Zig.Mem) : String :=
   match (r.run m).run with
-  | some (.ok (v, _)) => s!"ok {v.toNat}"
+  | some (.ok (v, _)) => s!"ok {fmt v}"
   | some (.error e) => s!"fail {repr e}"
   | none => "diverge"
 
-def flag (r : Zig.MemM Bool) (m : Zig.Mem) : String :=
-  match (r.run m).run with
-  | some (.ok (v, _)) => s!"ok {if v then 1 else 0}"
-  | some (.error e) => s!"fail {repr e}"
-  | none => "diverge"
+/-- Words as `native.zig` prints a row: decimal, separated by spaces. -/
+def words (vs : List (BitVec 64)) : String := " ".intercalate (vs.map fun v => toString v.toNat)
+
+def word : Zig.MemM (BitVec 64) → Zig.Mem → String := shown fun v => toString v.toNat
+
+def flag : Zig.MemM Bool → Zig.Mem → String := shown fun v => if v then "1" else "0"
 
 section Linux
 open AllocTranslated.FbaLinux
@@ -67,11 +69,7 @@ def fbaGrowRow (grow : BitVec 64 → BitVec 64 → BitVec 8 → Bool → Zig.Mem
 /-- The model's `fba_grow` line. -/
 def fbaGrowLine (grow : BitVec 64 → BitVec 64 → BitVec 8 → Bool → Zig.MemM (BitVec 64))
     (m : Zig.Mem) : String :=
-  let words (vs : List (BitVec 64)) : String := " ".intercalate (vs.map fun v => toString v.toNat)
-  let row := fun how => match ((fbaGrowRow grow how).run m).run with
-    | some (.ok (vs, _)) => s!"ok {words vs}"
-    | some (.error e) => s!"fail {repr e}"
-    | none => "diverge"
+  let row := fun how => shown words (fbaGrowRow grow how) m
   s!"fba_grow remap {row 0} realloc {row 1}"
 
 /-- The model's `fba_grow` line for x86_64-linux (`expected-linux.txt`). -/
@@ -175,8 +173,7 @@ def nativeWord {Tgt α : Type} (fmt : α → String) (main : Zig.ConcM Tgt α)
 def growLines {Tgt : Type} (dispatch : Tgt → Zig.ConcM Tgt Unit) (m : Zig.Mem)
     (grow : BitVec 64 → BitVec 64 → BitVec 64 → BitVec 8 → Zig.ConcM Tgt (BitVec 64))
     (blocked stale : BitVec 64 → BitVec 8 → Zig.ConcM Tgt (BitVec 64)) : List String :=
-  let row := fun how => nativeWord (fun vs => " ".intercalate (vs.map fun v => toString v.toNat))
-    (growRow grow blocked how) dispatch m
+  let row := fun how => nativeWord words (growRow grow blocked how) dispatch m
   let old := fun how => nativeWord (fun v => toString v.toNat) (stale 10 how) dispatch m
   [s!"page_grow remap {row 0} realloc {row 1}", s!"page_grow_stale remap {old 0} realloc {old 1}"]
 

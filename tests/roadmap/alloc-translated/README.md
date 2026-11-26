@@ -77,6 +77,7 @@ growth where a kernel returns `ENOMEM`.
 `FixedBufferAllocator` to `m` bytes the same two ways, with an 8-byte block allocated behind it
 when `behind` holds. Its word has the bits above (16: the block behind kept its bytes) plus the
 buffer's `end_index` afterwards from bit 8 on, so the capacity a growth uses up is compared too.
+The word is 32 alone when one of the two first allocations fails (no compared call does).
 `Eval.lean`'s `fbaGrowLinux` and `fbaGrowMacos` print the model's `fba_grow` line, `check.sh`
 compares it with both files; the line is the same on every target (no page size enters).
 
