@@ -70,7 +70,8 @@ standard axioms):
   and `copy_spec`: the copy's grant holds the source's bytes and the sentinel after them. Also
   checked over the 0.16.0, 0.15.2 and 0.14.1 translations. A float has no `LawfulEnc` instance
   (a NaN's bytes are undefined), so its walk takes the value-wise region rules of
-  `ZigLean/Sep/Full/Region.lean` (§Items of any encoding); the sentinel `+0.0` reads back because it is not a NaN;
+  `ZigLean/Sep/Full/Region.lean` (§Items of any encoding); the sentinel `+0.0` reads back because
+  it is not a NaN;
 - `GrowSpec.lean`: growth of the sentinel slice itself (`grow`), over the 0.17.1 translation:
   `append{8,32}_grant` and `resize{8,32}_grant` (`realloc`, a nonempty slice), `move{8,32}_grant`
   (`remap`: the new grant with the sentinel, or `null` and the old grant) and `fit{8,32}_grant`
