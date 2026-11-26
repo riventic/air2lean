@@ -527,17 +527,18 @@ types, so an *array item* may be an `auto` struct or a tagged union; its bits ar
 (`Type.bitSize` of a non-packed container) and its memory image is the exporter's layout, the
 tag included (`compile-errors/README.md` in `tests/roadmap/packed-casts`). So may a
 non-pointer optional, whose bits are its ABI size: the payload (any item type above), a flag
-byte, padding (`Zig.Enc.optionRepr`). `asItem`: `id` is an array item or such an optional's
-payload; an optional anywhere else (a field of an item) stays outside, since only these are
-decoded with the cast's own flag rule (`emitStorageEnc`'s `reprOpt`). A tuple or error item
-compiles there too and stays outside. -/
+byte, padding (`Zig.Enc.optionRepr`). `inField`: `id` is in a field of a struct or union, at
+any depth; an optional there stays outside, since the container's own encoding decodes it, not
+the cast's flag rule (`emitStorageEnc`'s `reprOpt`). A tuple or error item compiles there too
+and stays outside. -/
 partial def reprBitSize (types : Array Ty) (layouts : Array Layout) (id : TyId)
-    (autoItems : Bool := false) (asItem : Bool := false) : Except String Nat := do
+    (autoItems : Bool := false) (inField : Bool := false) : Except String Nat := do
   let sizeOf (t : TyId) : Except String Nat :=
     match layouts[t]?.bind (·.size) with
     | some s => pure s
     | none => throw s!"a type without a layout in the AIR file (type {t})"
-  let recur (t : TyId) := reprBitSize types layouts t autoItems
+  let recur (t : TyId) := reprBitSize types layouts t autoItems inField
+  let field (t : TyId) := reprBitSize types layouts t autoItems (inField := true)
   -- An array item, or (`autoItems`) an optional item's payload.
   let item (c : TyId) : Except String Nat :=
     match types[c]? with
@@ -546,9 +547,9 @@ partial def reprBitSize (types : Array Ty) (layouts : Array Layout) (id : TyId)
         throw s!"an array of `auto` structs or tagged unions (type {c}; items without a \
           guaranteed in-memory layout; Sema rejects its `@bitCast` from Zig 0.16.0)"
       else do
-        for (_, t) in fields do let _ ← recur t
+        for (_, t) in fields do let _ ← field t
         (8 * ·) <$> sizeOf c
-    | _ => reprBitSize types layouts c autoItems (asItem := true)
+    | _ => recur c
   let some ty := types[id]? | throw s!"an unknown type (type {id})"
   match ty with
   | .int _ bits | .float bits => pure bits
@@ -560,7 +561,7 @@ partial def reprBitSize (types : Array Ty) (layouts : Array Layout) (id : TyId)
     | some bits => pure bits
     | none => throw s!"a packed struct or union without a modelled backing integer (type {id})"
   | .struct _ "extern" fields | .union _ "extern" none fields =>
-    for (_, t) in fields do let _ ← recur t
+    for (_, t) in fields do let _ ← field t
     (8 * ·) <$> sizeOf id
   | .array len child sentinel =>
     let eb ← item child
@@ -588,9 +589,10 @@ partial def reprBitSize (types : Array Ty) (layouts : Array Layout) (id : TyId)
     else if !autoItems then
       throw s!"an optional (type {id}; no guaranteed in-memory layout; Zig 0.14.1 and 0.15.2 \
         accept an array of optionals, Sema rejects it from Zig 0.16.0)"
-    else if !asItem then
-      throw s!"an optional that is not an array item (type {id}: a field of an item; the \
-        cast's flag rule applies to array items and their payloads only)"
+    else if inField then
+      throw s!"an optional in a field of a struct or union (type {id}; the cast's flag rule \
+        covers an optional array item and its payload, not one that the container's own \
+        encoding decodes)"
     else do
       -- An item on 0.14.1/0.15.2: the payload at offset 0, the flag byte at the payload's
       -- size, padding to its alignment (`Zig.Enc.optionRepr`); `Type.bitSize` is the ABI size.

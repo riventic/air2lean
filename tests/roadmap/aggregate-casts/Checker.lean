@@ -34,7 +34,8 @@ private def types : Array Ty := #[
   .vector 5 1,                                                         -- 24: @Vector(5, u8)
   .optional 1, .array 1 25 false,                                      -- 25..26: ?u8, [1]?u8
   .struct "AO" "auto" #[("o", 25)], .array 1 27 false,                 -- 27..28: auto {?u8}, [1]AO
-  .int false 16]                                                       -- 29: u16
+  .int false 16,                                                       -- 29: u16
+  .struct "AA" "auto" #[("a", 26)], .array 1 30 false]                 -- 30..31: auto {[1]?u8}, [1]AA
 
 private def layouts : Array Layout := #[
   {size := some 4, align := some 4}, {size := some 1, align := some 1},
@@ -55,7 +56,8 @@ private def layouts : Array Layout := #[
   {size := some 8, align := some 8},
   {size := some 2, align := some 1}, {size := some 2, align := some 1},
   {size := some 2, align := some 1, offsets := #[0]}, {size := some 2, align := some 1},
-  {size := some 2, align := some 2}]
+  {size := some 2, align := some 2},
+  {size := some 2, align := some 1, offsets := #[0]}, {size := some 2, align := some 1}]
 
 /-- `backend`: the profile's code generator; the default is the legacy profile's (`unverified`). -/
 private def cx (version : String) (src : TyId) (backend : String := "unverified") : CheckCtx :=
@@ -113,13 +115,14 @@ def main : IO Unit := do
       | .error e => (e.splitOn "between types of 56 and 64 bits").length > 1
       | .ok _ => false) "[2]u24 → u64 is accepted"
   -- Zig 0.14.1 and 0.15.2: an optional array item is decoded with the cast's flag rule
-  -- (`Zig.Enc.optionRepr`); an optional field of an `auto` struct item is not, and is rejected.
+  -- (`Zig.Enc.optionRepr`); an optional in a field of an `auto` struct item (also as an item of
+  -- an array field) is decoded by the struct's own encoding, and is rejected.
   for v in ["0.14.1", "0.15.2"] do
     require (accepts v 26 29 && accepts v 29 26) s!"{v}: [1]?u8 ↔ u16: {result v 26 29}"
-    require (rejects v 28 29 "an optional that is not an array item")
-      s!"{v}: [1]auto struct of ?u8 → u16: {result v 28 29}"
-    require (rejects v 29 28 "an optional that is not an array item")
-      s!"{v}: u16 → [1]auto struct of ?u8: {result v 29 28}"
+    for a in [28, 31] do
+      for (s, d) in [(a, 29), (29, a)] do
+        require (rejects v s d "an optional in a field of a struct or union")
+          s!"{v}: an optional in a field of an auto struct item, cast {s} → {d}: {result v s d}"
   require (rejects "0.16.0" 26 29 "involving an optional") "0.16.0: [1]?u8 → u16 is accepted"
   -- A sentinel-terminated array is one more item (`lenIncludingSentinel`): `[4:0]u8` has 40 bits
   -- up to 0.16. Zig 0.17 is rejected by name (docs/upstream/bitcast-sentinel-array.md), and so
