@@ -93,6 +93,66 @@ Indexes are side-effect free (literals and locals, never globals or calls), so Z
 operand order between an lvalue and its right-hand side cannot affect the reference result;
 every index is reduced modulo the static length, so no bounds trap is reachable.
 
+`--profile ext` adds, with its own seed space, the constructs whose outcome may be illegal
+behaviour. Each program draws its own types (`types` in the AST): three integer types of any width
+from 1 to 128 bits and either signedness (half the draws at a byte, word or power-of-two edge),
+one or two of `f16`/`f32`/`f64`, and the element, field and payload types of its array, struct and
+optional. Every construct below is generated at every type of the program.
+
+| Feature | Constructs |
+|---|---|
+| `int_width` | locals, wrapping arithmetic, comparisons and casts (`widen`, `@truncate`, `@bitCast`, `@intCast`) at `u1`..`i128` |
+| `divmod` | `/` (unsigned), `@divTrunc`, `@divFloor`, `@divExact`, `@rem`, `@mod` by a run-time divisor |
+| `shift` | `<<`, `>>`, `@shlExact`, `@shrExact` by a run-time count (`@intCast` of a `u32` to the `Log2Int` type) |
+| `checked` | `+`, `-`, `*` and negation with their overflow checks |
+| `conv` | `@intCast` to a type that may not hold the value |
+| `bounds` | unreduced array and slice indexes |
+| `unwrap` | `o.?` and `f() catch unreachable`; `unreachable` under a run-time condition |
+| `try` | `try f()` in an error function (its `errdefer` runs, its caller catches) |
+| `float` | `+ - * /`, negation, `@sqrt`, `@floor`, `@ceil`, `@trunc`, `@round`, `@abs`, comparisons, `@floatCast`, `@floatFromInt`, `@intFromFloat`, `@bitCast` to the bits |
+| `alloc` | `alloc`/`free` of a slice and `create`/`destroy` of one value through `std.heap.FixedBufferAllocator` over a 64-byte buffer, freed by `defer`, at the end of the block or never, so that out-of-memory and reuse of the last allocation are reached |
+| `generic` | `fn (comptime T: type, …)`, `anytype`, a `comptime` count unrolled by `inline for`, a `comptime_int` parameter and a generic struct `GPair(T)` with methods, each instantiated at the program's types |
+
+An operation with a safety check comes guarded or unguarded. A guarded one tests its operands
+first and never traps; an unguarded one traps for some operands, and then the program's outcome
+for that input is the panic. The reference evaluator names the check (`std.builtin.panic`'s
+member), the native harness (`driver.zig`, written beside the program) installs a panic namespace
+that prints the member and goes on with the next input, and the translated `entry` must return the
+`Zig.Error` that `scripts/panic-policy.tsv` assigns to that member. So an input agrees when all
+three give the same value or the same check: the model is illegal exactly when the native program
+panics, and for the same reason. Operands of these operations are bound to run-time locals
+(`var t: T = e; _ = &t;`), because Sema rejects a comptime-known illegal operation and folds a
+comptime-known legal one.
+
+What `ext` leaves out, and why:
+
+- Illegal behaviour without a native safety check has no native outcome to compare:
+  `@rem`/`@mod` of the least value by -1 (rendered with the divisor tested, result 0), an inexact
+  `@shrExact` (always guarded), `@intFromFloat` of a NaN (always guarded), reads of freed or
+  uninitialized memory (a freed slice is out of scope, an allocation is initialized).
+- Floats stay inside the model's exact subset (docs/floats.md, `assurance/float-semantics.json`):
+  no `f80`/`f128`, `@mulAdd`, `@min`/`@max`, float `@rem`/`@mod`/`@divExact` or libm functions. A NaN's
+  payload and sign are not observed: `@bitCast` of a float to its bits is rendered with a NaN
+  replaced by the canonical quiet NaN, and a NaN stored to memory reads back as
+  `Zig.Error.unspecified` in the model (docs/floats.md, "NaN in memory"), so for an input on which
+  the evaluator produced a NaN the Lean stage accepts `.unspecified` in place of the value. The
+  reference arithmetic is `softfloat.py`, exact rational arithmetic with one rounding per operation.
+- Allocation goes through the translated allocator (`--allocator-model translated`,
+  docs/allocator-model.md), never a hand-written model: the case's `expected.json` carries the
+  `scripts/translate.sh` arguments (`--filter` with the allocator's code, `--closure` of the
+  module's functions). The buffer is a `[4]u128`, whose type gives it alignment 16, and `entry`
+  casts its address at run time: the AIR export does not record a declared `align(N)` of a global,
+  so the model places a `[64]u8 align(16)` at any address (`collectGlobals` in
+  `Air2Lean/Emit.lean`), and allocation offsets would then depend on the placement.
+- Threads are not generated. The harness compares one value per input, and a concurrent function
+  has none: it is a `Zig.ConcM` whose result depends on the schedule oracle, natively one run
+  shows one schedule, and agreement is a search over schedules with caps (`scripts/diff.sh`,
+  `tests/diff/ScheduleSearch.lean`), which a capped search excludes rather than decides. The
+  `std.Thread` rows are also qualified for Zig 0.14.1-0.16.0 only, so a 0.17 program is rejected.
+  Generated concurrent programs belong to that harness, not to this one.
+
+The profiles share these parts:
+
 - `typecheck` states the generator's invariants: lexical scope, types, no shadowing,
   immutable parameters, Zig's unused-local, never-mutated and unreachable-code rules,
   bounded loops, `break` only in loops, no exits from `defer`, `errdefer`/errors only in
@@ -179,6 +239,7 @@ The JSON oracle detects crashes, placeholders and inconsistent diagnostics. It d
 decide whether an accepted mutated input is semantically correct. The corpus is a
 committed snapshot, so changing goldens changes what a seed generates. Reproduce a run with
 the same commit. The Zig generator covers a
-deliberately small, UB-free subset (no division by variables, no overflow traps, no
-recursion, no floats, threads, allocation or multi-dimensional or generic types); a native-test failure can be a generator or
-evaluator bug rather than a translator bug.
+deliberately small subset: the `core` and `wide` profiles are free of illegal behaviour, and `ext`
+generates only illegal behaviour that a native safety check reports (see its exclusions above). No
+profile has recursion, threads, multi-dimensional types, allocators other than the fixed-buffer one,
+or IO. A native-stage failure can be a generator or evaluator bug rather than a translator bug.
