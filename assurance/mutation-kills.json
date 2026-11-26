@@ -456,6 +456,48 @@
       },
       "block_sha256": "38cc291c279750ed50bb182ae4dfb4d69a8409a3bb28fa7abe1e4fc5623fa625"
     },
+    "tests/roadmap/asm-effects/Placement.lean#mem-width-unchecked": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/asm-effects/check.sh"
+      },
+      "block_sha256": "17b051730b0b40af2a1cadaafb0230422218e5aebe0394a444edc38c5820b8a7"
+    },
+    "tests/roadmap/asm-effects/Placement.lean#output-undefined-unchecked": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/asm-effects/check.sh"
+      },
+      "block_sha256": "17b051730b0b40af2a1cadaafb0230422218e5aebe0394a444edc38c5820b8a7"
+    },
+    "tests/roadmap/asm-effects/Placement.lean#stale-address-unchecked": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/asm-effects/check.sh"
+      },
+      "block_sha256": "17b051730b0b40af2a1cadaafb0230422218e5aebe0394a444edc38c5820b8a7"
+    },
+    "tests/roadmap/asm-effects/Placement.lean#stale-read-unchecked": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/asm-effects/check.sh"
+      },
+      "block_sha256": "17b051730b0b40af2a1cadaafb0230422218e5aebe0394a444edc38c5820b8a7"
+    },
+    "tests/roadmap/asm-effects/Placement.lean#undeclared-write-unchecked": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/asm-effects/check.sh"
+      },
+      "block_sha256": "17b051730b0b40af2a1cadaafb0230422218e5aebe0394a444edc38c5820b8a7"
+    },
+    "tests/roadmap/asm-effects/Placement.lean#undefined-read-unchecked": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/asm-effects/check.sh"
+      },
+      "block_sha256": "17b051730b0b40af2a1cadaafb0230422218e5aebe0394a444edc38c5820b8a7"
+    },
     "tests/roadmap/asm-effects/harness.py#guard_dropped": {
       "killed_by": {
         "kind": "check",
