@@ -28,6 +28,7 @@ lake build ZigLean.VecMem ZigLean.Float.Allowed ZigLean.Mem.Thread
 lake env lean --run tests/roadmap/aarch64-abi/Model.lean aarch64-linux-gnu \
   tests/roadmap/aarch64-abi/expected/0.16.0/aarch64-linux-gnu-ReleaseSafe.txt
 python3 -m unittest discover -s tests/roadmap/aarch64-abi -p 'test_*.py'
+python3 tests/roadmap/aarch64-abi/test_float_atomics.py .lake/build/bin/air2lean
 ```
 
 ## Probes
@@ -63,8 +64,12 @@ python3 -m unittest discover -s tests/roadmap/aarch64-abi -p 'test_*.py'
   integer type or smaller") records the widest atomic integer. The others record the
   boundaries of the memory orderings (a `release` load, an `acquire` store, an `unordered` RMW,
   a `cmpxchg` whose failure ordering is stronger than its success ordering or is `release`) and
-  of the cell types (an array or a vector; `Add` on a `bool`; `And` on a float). An atomic
-  `f80` is not listed: Zig 0.16.0 and 0.15.2 hand the module to LLVM, which aborts on it.
+  of the cell types (an array or a vector; `Add` on a `bool`; `And` on a float).
+- `tests/roadmap/aarch64-abi/atomic_f80.zig`, built once per atomic op on an `f80` cell (load
+  and store at each ordering, RMW `.Xchg`/`.Add`/`.Sub`/`.Max`/`.Min`, `cmpxchg` strong and
+  weak; `F80_OPS`): one `f80atomic` row each with Sema's error (`zig`), the LLVM backend's
+  error (`llvm`), or, if it runs, whether the cell and the returned value are those of the op
+  without atomics (`runs cell=model|other result=model|other`). See §Atomic `f80`.
 
 ## Expected results and compare
 
@@ -149,6 +154,30 @@ padded width, not only whole padding bytes: on 0.14.1 to 0.16.0 a signed `.Max` 
 `u48` and `u56`. All of these are padded `cmpxchg`/`.Max`/`.Min` operations, which the translator
 rejects; widths without padding (`u8` to `u64`, `i8` to `i64`) agree with the model everywhere.
 
+### Atomic `f80`
+
+The model has no float atomic messages, and the translator rejects every atomic op on a float
+cell on every target and version (`CheckCtx.atomicChild`: "a float atomic is outside the
+subset"; on 0.17.1 aarch64 the `f80` cell's alignment is rejected first, see below, and an `f80`
+`.Max`/`.Min` is `PADDED_ATOMIC`). The `f80atomic` rows show that nothing weaker would be sound.
+On both profiles:
+
+| Op | 0.14.1, 0.15.2, 0.16.0 | 0.17.1 |
+| --- | --- | --- |
+| `@atomicLoad` (each ordering), `@atomicRmw` `.Add`/`.Sub`/`.Max`/`.Min` | LLVM: `Broken module found` | the same |
+| `@atomicRmw` `.Xchg` | LLVM: `Invalid cast` | the same |
+| `@atomicStore` (each ordering) | LLVM: `Broken module found` | **runs, the cell is not the operand** |
+| `@cmpxchgStrong`/`@cmpxchgWeak` | Sema: `expected bool, integer, enum, packed struct, or pointer type; found 'f80'` | the same |
+
+0.17.1 lowers `@atomicStore(f80, p, v, …)` to `store atomic ptr <v's address>, ptr p`: the cell's
+low eight bytes become an address (different on each run) and its high bytes keep the old value
+([upstream draft](upstream/f80-atomic-store.md)). `Model.lean` prints each `f80atomic` row as
+rejected by the translator, never as a match, and fails on a missing or malformed row;
+`test_float_atomics.py` runs the translator on AIR fixtures with each recorded version's
+aarch64-linux-gnu and aarch64-macos-none profile and checks that every float width (`f16` to
+`f128`) and every atomic op that reaches AIR is rejected with its diagnostic and leaves the
+output untouched, while the same ops on a `u32` cell are accepted.
+
 ### Zig 0.17.1
 
 The 0.17.1 files (recorded with the stock 0.17.1: natively on Apple silicon, and in a
@@ -216,7 +245,7 @@ Not covered:
   allowed, not forced, so nothing deterministic can be recorded; the model's weak-memory
   semantics is in `ZigLean/Conc/WeakCas.lean` (`docs/weak-cas.md`);
 - instruction-level ordering strength (LDAR/STLR vs LL/SC) and futex/mutex behaviour;
-- atomics on `f80`, and the `-mcpu` features other than `baseline`;
+- the `-mcpu` features other than `baseline`;
 - other Zig versions. A new version needs its own `expected/<version>/` files; without them
   `compare` reports `excluded`, and the translator rejects its aarch64 AIR;
 - programs linked with libc on aarch64-linux: `f128` `long double` libcalls then resolve to
