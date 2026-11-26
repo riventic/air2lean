@@ -8618,7 +8618,7 @@ def source_4 : _root_.Air2Lean.Func :=
 (nat_lit 44))))
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
-(@_root_.Air2Lean.Ty.other
+(@_root_.Air2Lean.Ty.opaque
 "anyopaque")
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
@@ -13623,7 +13623,7 @@ def source_5 : _root_.Air2Lean.Func :=
 (nat_lit 27))))
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
-(@_root_.Air2Lean.Ty.other
+(@_root_.Air2Lean.Ty.opaque
 "anyopaque")
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
@@ -19951,7 +19951,7 @@ def source_6 : _root_.Air2Lean.Func :=
 (nat_lit 48))))
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
-(@_root_.Air2Lean.Ty.other
+(@_root_.Air2Lean.Ty.opaque
 "anyopaque")
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
@@ -24985,7 +24985,7 @@ def source_7 : _root_.Air2Lean.Func :=
 (nat_lit 27))))
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
-(@_root_.Air2Lean.Ty.other
+(@_root_.Air2Lean.Ty.opaque
 "anyopaque")
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
@@ -31770,7 +31770,7 @@ def source_10 : _root_.Air2Lean.Func :=
 (nat_lit 36))))
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
-(@_root_.Air2Lean.Ty.other
+(@_root_.Air2Lean.Ty.opaque
 "anyopaque")
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
