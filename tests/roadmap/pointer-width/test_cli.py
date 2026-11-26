@@ -149,6 +149,53 @@ def main():
             run(binary, bad, error="the memory model gives type", prefix="c_ints.")
             checks += 1
 
+    # `extern` struct and union layouts (layouts.zig, every exported version and target): the
+    # compiler's layouts pass the C layout rule, also with explicit field alignments, and a
+    # changed type table does not: fields out of declaration order, a size that is not the
+    # rounded-up end, an alignment that is no power of two, and a field type whose model layout
+    # is not the exporter's although the function never loads that field.
+    def named(doc, name):
+        return next(t for t in doc["types"] if t.get("name") == name)
+
+    def swap(doc):
+        fields = named(doc, "layouts.Plain")["fields"]
+        fields[1]["offset"], fields[2]["offset"] = fields[2]["offset"], fields[1]["offset"]
+
+    def grow(name):
+        def change(doc):
+            entry = named(doc, name)
+            entry["abi_size"] += entry["abi_align"]
+        return change
+
+    def odd_align(doc):
+        named(doc, "layouts.Under")["abi_align"] = 3
+
+    def unloaded_field(doc):
+        # `n: c_long` of `Plain`: `plainT` loads only `t`.
+        entry = doc["types"][named(doc, "layouts.Plain")["fields"][2]["ty"]]
+        entry["abi_align"] //= 2
+
+    not_c = "is not a C layout: "
+    layout_cases = [
+        ("layouts.plainN.json", swap, "`extern` struct 'layouts.Plain' " + not_c + "a field at offset"),
+        ("layouts.plainN.json", grow("layouts.Plain"), "`extern` struct 'layouts.Plain' " + not_c + "its size"),
+        ("layouts.underC.json", odd_align, "`extern` struct 'layouts.Under' " + not_c + "its alignment 3"),
+        ("layouts.eitherB.json", grow("layouts.Either"), "`extern` union 'layouts.Either' " + not_c + "its size"),
+        ("layouts.plainT.json", unloaded_field, ", a field of struct 'layouts.Plain', size"),
+    ]
+    for version in sorted(p.name for p in (HERE / "air").iterdir() if (p / "layouts").is_dir()):
+        for target in TARGETS:
+            if not (HERE / "air" / version / "layouts" / target).is_dir():
+                continue
+            docs = load(f"layouts/{target}", version)
+            run(binary, docs, prefix="layouts.")
+            checks += 1
+            for name, change, error in layout_cases:
+                bad = one(docs, name)
+                change(bad[name])
+                run(binary, bad, error=error, prefix="layouts.")
+                checks += 1
+
     # Real wasm32 exports of operations that stay 64-bit only (`reject.zig`), every version.
     for version, directory in REJECT.items():
         rejects = load(directory, version)
