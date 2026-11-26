@@ -250,6 +250,75 @@ theorem ctor_inj_post (P : FAssn) (acc N : Nat) (h : acc = N) :
       (fun r => ⟪r.1 = .ret N ∧ rk r.2 < rk .idle⟫ ⋆ P) := by
   fsym
 
+/-! ## Casts and bit counts of word literals (ledger #21a)
+
+`fsym_norm` evaluates `@intCast`, `@ctz`, `@clz`, `@popCount`, `@truncate` and `Zig.val` of a word
+literal to a literal width (`reduceLitIntCast`, `reduceLitWordCore`). Each equation below is
+closed by that simproc alone (no lemma of the cast): what it rewrites to is exactly the
+definition's value, as a literal `v#w`; an `@intCast` out of range rewrites to its `throw` (with
+the `safe` flag of the cast). Operands are word literals as the translator emits them (a negative
+value is its two's-complement word: `0xff80 : BitVec 16` is `-128`). -/
+
+section Lits
+open Zig.Full.Auto
+
+/-- Unsigned to unsigned: in range, at the top boundary, one past it. -/
+example : Zig.intCast false false 8 (255 : BitVec 16) = pure 255#8 := by
+  simp only [reduceLitIntCast]
+example : Zig.intCast false false 8 (256 : BitVec 16) = throw (.ifSafe true .overflow) := by
+  simp only [reduceLitIntCast]
+/-- … the unchecked form panics as illegal behaviour (`Error.ifSafe false`). -/
+example : Zig.intCast false false 8 (256 : BitVec 16) false = throw (.ifSafe false .overflow) := by
+  simp only [reduceLitIntCast]
+
+/-- Signed to signed: both boundaries (`-128`, `127`) and one past each (`-129`, `128`). -/
+example : Zig.intCast true true 8 (0xff80 : BitVec 16) = pure 128#8 := by
+  simp only [reduceLitIntCast]
+example : Zig.intCast true true 8 (127 : BitVec 16) = pure 127#8 := by
+  simp only [reduceLitIntCast]
+example : Zig.intCast true true 8 (0xff7f : BitVec 16) = throw (.ifSafe true .overflow) := by
+  simp only [reduceLitIntCast]
+example : Zig.intCast true true 8 (128 : BitVec 16) = throw (.ifSafe true .overflow) := by
+  simp only [reduceLitIntCast]
+
+/-- Across signedness: `-1` to an unsigned type, an unsigned value above the signed range, a
+widening of `-1`. -/
+example : Zig.intCast true false 64 (0xff : BitVec 8) = throw (.ifSafe true .overflow) := by
+  simp only [reduceLitIntCast]
+example : Zig.intCast false true 8 (200 : BitVec 8) = throw (.ifSafe true .overflow) := by
+  simp only [reduceLitIntCast]
+example : Zig.intCast false true 8 (127 : BitVec 8) = pure 127#8 := by
+  simp only [reduceLitIntCast]
+example : Zig.intCast true true 64 (0xff : BitVec 8) = pure 0xffffffffffffffff#64 := by
+  simp only [reduceLitIntCast]
+
+/-- Zero-width targets hold only `0`. -/
+example : Zig.intCast false false 0 (0 : BitVec 8) = pure 0#0 := by simp only [reduceLitIntCast]
+example : Zig.intCast true true 0 (1 : BitVec 8) = throw (.ifSafe true .overflow) := by
+  simp only [reduceLitIntCast]
+
+/-- Bit counts (zero counts the width), truncation and the value of literals. -/
+example : Zig.ctz 7 (8 : BitVec 64) = 3#7 := by simp only [reduceLitCtz]
+example : Zig.ctz 7 (0 : BitVec 64) = 64#7 := by simp only [reduceLitCtz]
+example : Zig.clz 7 (1 : BitVec 64) = 63#7 := by simp only [reduceLitClz]
+example : Zig.popcount 4 (0xff : BitVec 64) = 8#4 := by simp only [reduceLitPopcount]
+example : Zig.trunc 8 (0x1ff : BitVec 16) = 255#8 := by simp only [reduceLitTrunc]
+example : Zig.val true (0xff : BitVec 8) = -1 := by simp only [reduceLitVal]
+example : Zig.val false (0xff : BitVec 8) = 255 := by simp only [reduceLitVal]
+
+/-- `mem.Alignment.fromByteUnits 8`: `ctz`, then `intCast` to the `u6` log2. -/
+example : Zig.intCast false false 6 (Zig.ctz 7 (8 : BitVec 64)) = pure 3#6 := by
+  simp only [reduceLitCtz, reduceLitIntCast]
+
+set_option linter.unusedVariables false in
+/-- A symbolic operand is not evaluated. -/
+example (a : BitVec 16) : True := by
+  fail_if_success
+    have : Zig.intCast false false 8 a = pure (a.setWidth 8) := by simp only [reduceLitIntCast]
+  trivial
+
+end Lits
+
 /-! ## A probe's budget (`withBudget`, ledger #probe-case-budget)
 
 A probe searches the case facts within a budget of heartbeats of its own. These checks spend the
@@ -351,6 +420,21 @@ def omega_proofs_shared : MetaM Unit := do
     for (p, ty) in [(p1, ty1), (p2, ty2)] do
       Meta.check p
       unless ← isDefEq (← inferType p) ty do throwError "omega_proofs_shared: {p} does not prove {ty}"
+    -- facts that are proof terms, not locals, enter `omega` as locals and are substituted back:
+    -- the proof type-checks in the context, states the target and mentions none of those locals
+    let f1 ← mkAppM ``Nat.le_trans #[h1, ← mkAppM ``Nat.le_add_right #[c, d]]
+    let f2 ← mkAppM ``Nat.le_trans #[h2, h3]
+    let ty3 ← le (← add a b) (mkNatLit 10)
+    let some p3 ← omegaRaw #[f1, h4, f2] ty3 | throwError "omega_proofs_shared: no proof from terms"
+    Meta.check p3
+    unless ← isDefEq (← inferType p3) ty3 do
+      throwError "omega_proofs_shared: {p3} does not prove {ty3}"
+    let lctx ← getLCtx
+    if p3.hasAnyFVar (fun f => !lctx.contains f) then
+      throwError "omega_proofs_shared: a local of `omega`'s context is left in {p3}"
+    unless (p3.find? (· == f1)).isSome && (p3.find? (· == f2)).isSome do
+      throwError "omega_proofs_shared: the facts' proofs are not in {p3}"
+    unless (← goals) == before do throwError "omega_proofs_shared: goals kept (facts as terms)"
     for (what, x) in [("the first", p1), ("both", mkApp2 (mkConst ``Prod.mk) p1 p2)] do
       let n ← x.numObjs
       let m ← (ShareCommon.shareCommon' x).numObjs

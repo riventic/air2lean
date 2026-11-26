@@ -658,7 +658,13 @@ A thread's own stack block (`main` before its spawn: the allocation, field point
 byte offsets of the block's bytes, `FTotalTriple.storeBytesAt`) is walked segment by segment;
 the size of a closed array (a struct's encoding whose `Enc` is not `LawfulEnc`) is a literal for
 the arithmetic (`reduceClosedSize`, evaluated by the kernel), and a closed side goal that `decide`
-does not evaluate is `decide +kernel`.
+does not evaluate is `decide +kernel`. Over imported constants only, the kernel makes that check
+in the imports' environment (`importEnvFor?`, `kernelDecides?`), which does not wait for the
+file's earlier theorems, and the goal takes `decide`'s proof `of_decide_eq_true inst rfl` itself;
+the kernel checks it again with the theorem, so a wrong answer there can only fail the theorem.
+These two kernel calls (`Kernel.isDefEq`, `Kernel.whnf`) run without the heartbeat limit and
+without the cancel token: a closed fact whose evaluation is very long is given up only when the
+kernel returns, where `decide +kernel` stopped at `maxHeartbeats`.
 
 The protocol's start at the spawn is walked too, so a `main` is one `fsym` call from its start
 facts (`FOwned.start0_facts`: the parts, the plain mode, one thread, no atomic location, no
@@ -1072,7 +1078,11 @@ set, `zig_run` (`ZigLean/SimpAttr.lean`), and names no generated declaration:
   `(0 : BitVec 1)`).
 * Library facts that are not arithmetic (`keepsPrefix`, fractions): `macro_rules | `(tactic| fsym_fact) => …`.
 * Generated code computes constants at run time (`alignment - 1`): `+ - *` of two word literals
-  are folded by proof-producing simprocs (`add_lit`, `sub_lit`, `mul_lit`). `~~~` of a literal is
+  are folded by proof-producing simprocs (`add_lit`, `sub_lit`, `mul_lit`), and so are the casts,
+  bit counts and values of a word literal to a literal width that generated pure helpers compute
+  (`mem_Alignment.fromByteUnits 8`: `Zig.ctz`, `Zig.intCast`, `Zig.val`; also `Zig.clz`,
+  `Zig.popcount`, `Zig.trunc`): the value computed by the simproc, the equation decided on the
+  literal (`litStep`; an `intCast` out of range becomes its `throw`; ledger #21a). `~~~` of a literal is
   not folded in programs (the kernel would check the folded program by a deep unfolding); the
   arithmetic solver reads literal high masks (`2 ^ w - 2 ^ j`) directly.
 

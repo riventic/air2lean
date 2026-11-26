@@ -63,7 +63,8 @@ var render_bufs: []const Buf = &.{};
 
 /// The allocator of a function that takes a `std.mem.Allocator`, with the rules of the model
 /// (`ZigLean/Mem/Alloc.lean`, docs/std-models.md): allocation number `fail_at` (from 0) fails, and
-/// so does an allocation of more than `max_alloc_bytes` bytes, one that the failure oracle
+/// so does an allocation of more than `request_cap` bytes (`max_alloc_bytes` unless the policy
+/// says otherwise; `"max_bytes": null` is no cap), one that the failure oracle
 /// `oracle` selects by (attempt, bytes), and one that would take the live allocations above
 /// `budget` bytes (`Mem.allocPolicy`, docs/allocation-policy.md); `resize` and `remap` always
 /// fail; a free of memory that is not a live allocation of the same length panics with the kind
@@ -114,7 +115,11 @@ pub const TestAllocator = struct {
         if (value.object.get("fail_at")) |v| {
             if (v != .null) result.fail_at = try policyNat(v);
         }
-        if (value.object.get("max_bytes")) |v| result.request_cap = try policyNat(v);
+        // `null` is the model's default policy, no request cap (`unboundedAllocBytes`); a
+        // missing field keeps the harness cap.
+        if (value.object.get("max_bytes")) |v| {
+            result.request_cap = if (v == .null) std.math.maxInt(usize) else try policyNat(v);
+        }
         if (value.object.get("budget")) |v| {
             if (v != .null) result.budget = try policyNat(v);
         }

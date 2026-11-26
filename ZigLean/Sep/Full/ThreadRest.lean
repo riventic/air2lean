@@ -109,7 +109,7 @@ theorem trans {W : Loc → Prop} {m m₁ m' : Mem} (h₁ : RestStep W m m₁)
     · exact h₁.fp e he
     · exact .inr ⟨hw, by rw [h₁.bsize] at hb; exact hb⟩
   · refine ⟨fun c hc => ?_, h₂.auth.ticks.trans h₁.auth.ticks,
-      fun h => h₂.auth.noStack (h₁.auth.noStack h), rfl⟩
+      fun h => h₂.auth.noStack (h₁.auth.noStack h), rfl, h₂.auth.dev.trans h₁.auth.dev⟩
     have hmid : StackAuth m₁ c := (h₁.auth.stack c hc).keep_shape rfl rfl rfl
       fun _ blk hb => ⟨blk, hb, rfl, rfl, rfl, rfl⟩
     exact (h₂.auth.stack c hmid).keep_shape rfl rfl rfl

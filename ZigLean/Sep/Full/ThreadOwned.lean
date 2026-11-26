@@ -730,7 +730,7 @@ theorem join {u : ThreadId} (ho : FOwned own rO m) (ht : t < m.threads.size) (hu
 a futex queue, a cancelation request, a group's table) keeps the parts. -/
 theorem keep (ho : FOwned own rO m) (hb : m'.blocks = m.blocks) (ha : m'.atomics = m.atomics)
     (ht : m'.threads = m.threads) (hc : m'.clocks = m.clocks) (hf : m'.footprint = m.footprint)
-    (hx : m.Aux m' := by exact ⟨rfl, rfl, rfl⟩) :
+    (hx : m.Aux m' := by exact ⟨rfl, rfl, rfl, rfl⟩) :
     FOwned own rO m' := by
   have hsh : shapes m' = shapes m := by simp only [shapes, ha]
   refine ⟨?_, fun u hu => ?_, fun u hu => ho.outside u (ht ▸ hu), by rw [hc, ht]; exact ho.csize,

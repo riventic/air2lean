@@ -114,7 +114,7 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
 | Category | IDs |
 |---|---|
 | Target and build profiles | [PRF-01](#prf-01) [PRF-02](#prf-02) [PRF-03](#prf-03) [PRF-04](#prf-04) [PRF-05](#prf-05) |
-| Allocator policies | [ALC-01](#alc-01) [ALC-02](#alc-02) [ALC-03](#alc-03) [ALC-04](#alc-04) [ALC-05](#alc-05) [ALC-06](#alc-06) [ALC-07](#alc-07) [ALC-08](#alc-08) [ALC-09](#alc-09) [ALC-10](#alc-10) |
+| Allocator policies | [ALC-01](#alc-01) [ALC-02](#alc-02) [ALC-03](#alc-03) [ALC-04](#alc-04) [ALC-05](#alc-05) [ALC-06](#alc-06) [ALC-08](#alc-08) [ALC-09](#alc-09) [ALC-10](#alc-10) |
 | Io interface | [IOM-01](#iom-01) |
 | Thread creation and scheduling | [THR-01](#thr-01) [THR-02](#thr-02) [THR-03](#thr-03) [THR-04](#thr-04) [THR-05](#thr-05) [THR-06](#thr-06) [THR-07](#thr-07) [THR-08](#thr-08) [THR-09](#thr-09) [THR-10](#thr-10) [THR-11](#thr-11) [THR-12](#thr-12) |
 | Memory ordering | [ORD-01](#ord-01) [ORD-02](#ord-02) [ORD-03](#ord-03) [ORD-04](#ord-04) [ORD-05](#ord-05) [ORD-06](#ord-06) |
@@ -260,22 +260,6 @@ Roadmap clients outside `Proofs/` have only the source derivation. Committed `Pr
   the whole live heap block allocated with that alignment. A violation is `.illegal`.
 - Derived from: tokens `vtableAlloc`, `vtableResize`, `vtableRemap`, `vtableFree`, `rawAlignOk`.
 - Sources: [allocation-policy.md](allocation-policy.md), [sentinel realloc README](../tests/roadmap/sentinel-realloc/README.md).
-
-<a id="alc-07"></a>
-### ALC-07 — Allocator identity and the arena policy
-
-- Kind: environment.
-- Statement: `Mem.allocators[a]` is allocator `a`, an arena; its blocks have kind `.owned a`. A
-  free, destroy or remap through one allocator of another's block is `.illegal`. An arena
-  request is an `ALC-02` attempt of `failAt`, `maxBytes` and the failure indices (not of the
-  oracle `fails` or the `budget`, which only `rawAlloc` asks); an arena free ends one block's lifetime; reset/deinit end
-  exactly the arena's blocks. Owned blocks get fresh model addresses unless the reuse policy
-  (`ALC-08`) selects a valid reused one; growing remap fails; reset records no race-check
-  access. In `std` mode the translator does not route `std.heap` arena calls. (The
-  `FixedBufferAllocator` is not modelled: it is translated from its Zig code, OSM-01.)
-- Derived from: `ZigLean.Mem.Owned`; tokens
-  `AllocRef`, `Arena.`, `Owned.`, `ownedFree`, `resetOwned`.
-- Sources: [allocator-identity.md](allocator-identity.md), `tests/roadmap/allocator-identity`.
 
 <a id="alc-08"></a>
 ### ALC-08 — Address reuse and provenance recovery

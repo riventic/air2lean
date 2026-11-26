@@ -1349,7 +1349,7 @@
     },
     "zig_native": {
      "status": "runtime_error",
-     "log": "1/1 c_libc_stdlib_native.test.c_frontend_native...thread 91993985 panic: integer overflow\n/private/tmp/claude-501/-opt-dev-air2lean/26041896-5b67-4316-9be4-c9c01b7f0c6f/scratchpad/cf2/libc_stdlib/c_libc_stdlib_native.zig:106:32: 0x102ce6863 in cmp (test)\n    return @intFromBool(a > b) - @intFromBool(a < b);\n                               ^\n???:?:?: 0x18356207b in ??? (/usr/lib/system/libsystem_c.dylib)\n/private/tmp/claude-501/-opt-dev-air2lean/26041896-5b67-4316-9be4-c9c01b7f0c6f/scratchpad/cf2/libc_stdlib/c_libc_stdlib_native.zig:124:10: 0x102ca5a9b in entry (test)\n    qsort(@ptrCast(@alignCast(v)), 6, @sizeOf(@TypeOf(v.*)), cmp);\n         ^\n/private/tmp/claude-501/-opt-dev-air2lean/26041896-5b67-4316-9be4-c9c01b7f0c6f/scratchpad/cf2/libc_stdlib/c_libc_stdlib_native.zig:555:57: 0x102ca596b in test.c_frontend_native (test)\n    try std.testing.expectEqual(@as(c_uint, 1150), entry(1, 2));\n                                                        ^\n$AIR2LEAN_ZIG_NATIVE/lib/compiler/test_runner.zig:295:25: 0x102ce722f in mainTerminal (test)\n        if (test_fn.func()) |_| {\n                        ^\n???:?:?: 0x1832f7e7f in start (/usr/lib/dyld)\nerror: the following test command terminated with signal ABRT:\n$HOME/.cache/zig/o/ca406af0cc7eca52399b8e5bbfe263bb/test --seed=0x77be1c4b\n"
+     "log": "1/1 c_libc_stdlib_native.test.c_frontend_native...thread 102658985 panic: integer overflow\n/private/tmp/claude-501/-opt-dev-air2lean/26041896-5b67-4316-9be4-c9c01b7f0c6f/scratchpad/cf2/libc_stdlib/c_libc_stdlib_native.zig:106:32: 0x10480e863 in cmp (test)\n    return @intFromBool(a > b) - @intFromBool(a < b);\n                               ^\n???:?:?: 0x18356207b in ??? (/usr/lib/system/libsystem_c.dylib)\n/private/tmp/claude-501/-opt-dev-air2lean/26041896-5b67-4316-9be4-c9c01b7f0c6f/scratchpad/cf2/libc_stdlib/c_libc_stdlib_native.zig:124:10: 0x1047cda9b in entry (test)\n    qsort(@ptrCast(@alignCast(v)), 6, @sizeOf(@TypeOf(v.*)), cmp);\n         ^\n/private/tmp/claude-501/-opt-dev-air2lean/26041896-5b67-4316-9be4-c9c01b7f0c6f/scratchpad/cf2/libc_stdlib/c_libc_stdlib_native.zig:555:57: 0x1047cd96b in test.c_frontend_native (test)\n    try std.testing.expectEqual(@as(c_uint, 1150), entry(1, 2));\n                                                        ^\n$AIR2LEAN_ZIG_NATIVE/lib/compiler/test_runner.zig:295:25: 0x10480f22f in mainTerminal (test)\n        if (test_fn.func()) |_| {\n                        ^\n???:?:?: 0x1832f7e7f in start (/usr/lib/dyld)\nerror: the following test command terminated with signal ABRT:\n$HOME/.cache/zig/o/ca406af0cc7eca52399b8e5bbfe263bb/test --seed=0xf07b1f18\n"
     },
     "air_export": {
      "status": "ok",
@@ -1793,48 +1793,10 @@
     "air2lean": {
      "status": "rejected",
      "codes": {
-      "CALLEE_BLOCKED": 2,
       "CALLEE_EXTERN_UNBOUND": 4,
-      "NORMALIZATION_FAILURE": 4,
-      "PREREQUISITE_SKIPPED": 1,
       "PROGRAM_FAILURE": 5
      },
      "diagnostics": [
-      {
-       "code": "NORMALIZATION_FAILURE",
-       "phase": "normalize",
-       "category": "unsupported_semantics",
-       "function": "mem.findScalarPos__anon_cb7245b9af75",
-       "message": "mem.findScalarPos__anon_cb7245b9af75: inst 43: tag 'array_to_vector': Zig 0.17.1's array-to-vector coercion is outside the subset; the vector model has no array conversion"
-      },
-      {
-       "code": "NORMALIZATION_FAILURE",
-       "phase": "normalize",
-       "category": "unsupported_semantics",
-       "function": "mem.findScalarPos__anon_cb7245b9af75",
-       "message": "mem.findScalarPos__anon_cb7245b9af75: inst 80: tag 'array_to_vector': Zig 0.17.1's array-to-vector coercion is outside the subset; the vector model has no array conversion"
-      },
-      {
-       "code": "NORMALIZATION_FAILURE",
-       "phase": "normalize",
-       "category": "unsupported_semantics",
-       "function": "mem.findScalarPos__anon_cb7245b9af75",
-       "message": "mem.findScalarPos__anon_cb7245b9af75: inst 139: tag 'array_to_vector': Zig 0.17.1's array-to-vector coercion is outside the subset; the vector model has no array conversion"
-      },
-      {
-       "code": "NORMALIZATION_FAILURE",
-       "phase": "normalize",
-       "category": "unsupported_semantics",
-       "function": "mem.findScalarPos__anon_cb7245b9af75",
-       "message": "mem.findScalarPos__anon_cb7245b9af75: inst 187: tag 'array_to_vector': Zig 0.17.1's array-to-vector coercion is outside the subset; the vector model has no array conversion"
-      },
-      {
-       "code": "PREREQUISITE_SKIPPED",
-       "phase": "check",
-       "category": "skipped_prerequisite",
-       "function": "mem.findScalarPos__anon_cb7245b9af75",
-       "message": "not inspected: prerequisite failed"
-      },
       {
        "code": "CALLEE_EXTERN_UNBOUND",
        "phase": "program",
@@ -1862,20 +1824,6 @@
        "category": "unsupported_semantics",
        "function": "c_libc_string.entry",
        "message": "c_libc_string.entry: CALLEE_EXTERN_UNBOUND: extern function 'memcmp' has no definition in the program (an `export fn memcmp` in the AIR set, or an `@export` record of the export table) and no registry model 'extern:memcmp' (--model-registry, docs/external-models.md) (docs/air-json.md \u00a7Extern calls)"
-      },
-      {
-       "code": "CALLEE_BLOCKED",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "mem.findScalar__anon_dd601c4a8a93",
-       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
-      },
-      {
-       "code": "CALLEE_BLOCKED",
-       "phase": "program",
-       "category": "validation_failure",
-       "function": "mem.findScalar__anon_dd601c4a8a93",
-       "message": "named dependency is absent, ambiguous or blocked; see diagnostic code"
       },
       {
        "code": "PROGRAM_FAILURE",
@@ -1913,7 +1861,7 @@
        "message": "c_libc_string.entry: CALLEE_EXTERN_UNBOUND: extern function 'memcmp' is bound to neither a definition nor a registry model (docs/air-json.md \u00a7Extern calls)"
       }
      ],
-     "diagnostic_count": 16
+     "diagnostic_count": 9
     }
    },
    "c_defined_functions": [
@@ -3806,12 +3754,11 @@
    ]
   },
   "rejection_codes_by_file": {
-   "CALLEE_BLOCKED": 4,
+   "CALLEE_BLOCKED": 3,
    "CALLEE_EXTERN_UNBOUND": 9,
    "CONSTANT_FAILURE": 2,
    "INSTRUCTION_FAILURE": 4,
-   "NORMALIZATION_FAILURE": 1,
-   "PREREQUISITE_SKIPPED": 2,
+   "PREREQUISITE_SKIPPED": 1,
    "PROGRAM_FAILURE": 9,
    "STRUCTURE_FAILURE": 1
   },

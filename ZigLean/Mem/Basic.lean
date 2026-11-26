@@ -84,10 +84,10 @@ inductive Byte where
   | mask (d b : BitVec 8)
   deriving DecidableEq, Repr, Inhabited
 
-/-- The identity of an allocator other than the model's `std.mem.Allocator`: an index into
-`Mem.allocators`. -/
-abbrev AllocId := Nat
-
+/-- The kind of a block. A `.heap` block is one of the model's `std.mem.Allocator`. Every other
+allocator (`std.heap.ArenaAllocator`, `FixedBufferAllocator`, `PageAllocator`, a user's) is
+translated from its Zig code (`--allocator-model translated`, `docs/allocator-model.md`): its
+slices lie in the blocks it gets from its child or the OS (`.mapped`, a global buffer). -/
 inductive BlockKind where
   | stack
   | heap
@@ -95,10 +95,6 @@ inductive BlockKind where
   /-- A `const` global, a string literal or a function: read-only. A write to it (through
   `@constCast`) throws `.illegal`. -/
   | constGlobal
-  /-- A block that the allocator `a` made: an arena (`Mem.allocators[a]`,
-  `ZigLean/Mem/Owned.lean`). A `.heap` block is one of the model's `std.mem.Allocator`, so a
-  free through one allocator of a block that another one made throws `.illegal`. -/
-  | owned (a : AllocId)
   /-- An OS page mapping (`posix.mmap`, `ZigLean/Os/Mmap.lean`, premise OSM-01). The mapping's
   live bytes are the offsets from `lo` to the block's size: `munmap` of a page prefix moves `lo`
   up, of a page tail shrinks the bytes, of the whole mapping ends the block. An access below
@@ -112,18 +108,17 @@ def BlockKind.mappedLo : BlockKind → Nat
   | _ => 0
 
 /-- The block's pages are anonymous memory natively: a stack, a heap block or an OS mapping
-(`mmap` admits only `MAP_PRIVATE | MAP_ANONYMOUS`, OSM-01). A global, and an allocator's block
-(whose buffer may be a global), can lie on a file-backed page. -/
+(`mmap` admits only `MAP_PRIVATE | MAP_ANONYMOUS`, OSM-01). A global can lie on a file-backed
+page. -/
 def BlockKind.anon : BlockKind → Bool
   | .stack | .heap | .mapped _ => true
-  | .global | .constGlobal | .owned _ => false
+  | .global | .constGlobal => false
 
 @[simp] theorem BlockKind.mappedLo_mapped (lo : Nat) : (BlockKind.mapped lo).mappedLo = lo := rfl
 @[simp] theorem BlockKind.mappedLo_stack : BlockKind.stack.mappedLo = 0 := rfl
 @[simp] theorem BlockKind.mappedLo_heap : BlockKind.heap.mappedLo = 0 := rfl
 @[simp] theorem BlockKind.mappedLo_global : BlockKind.global.mappedLo = 0 := rfl
 @[simp] theorem BlockKind.mappedLo_constGlobal : BlockKind.constGlobal.mappedLo = 0 := rfl
-@[simp] theorem BlockKind.mappedLo_owned (a : AllocId) : (BlockKind.owned a).mappedLo = 0 := rfl
 
 structure Block where
   bytes : Array Byte
@@ -326,21 +321,6 @@ instance : Repr AllocPolicy where
 /-- The differential harness policy: the legacy 1 MiB request cap and no other failures. -/
 def AllocPolicy.harness : AllocPolicy := { maxBytes := maxAllocBytes }
 
-/-- The kind of an allocator with an identity (`ZigLean/Mem/Owned.lean`, M01). The
-`std.heap.FixedBufferAllocator` is translated from its Zig code (`--allocator-model
-translated`, `docs/allocator-model.md`), not modelled here. -/
-inductive OwnedPolicy where
-  /-- `std.heap.ArenaAllocator` over the model's `std.mem.Allocator`. -/
-  | arena
-  deriving DecidableEq, Repr, Inhabited
-
-/-- The state of an allocator with an identity. -/
-structure OwnedAlloc where
-  policy : OwnedPolicy
-  /-- `false` after `ArenaAllocator.deinit`: every later use throws `.illegal`. -/
-  live : Bool := true
-  deriving DecidableEq, Repr, Inhabited
-
 /-! ## Device effects (L13, `ZigLean/Mem/Device.lean`, `docs/volatile-effects.md`)
 
 Only the opt-in device semantics (`air2lean --device-contract`) reads or writes `Mem.dev`. The
@@ -533,8 +513,6 @@ structure Mem where
   /-- The tasks of each `Io.Group` (by its address) that no `await` has joined yet, in the order
   of their spawn (`ZigLean/Mem/Thread.lean`). -/
   groups : Array (Ptr × ThreadId) := #[]
-  /-- The allocators with an identity, by `AllocId` (`ZigLean/Mem/Owned.lean`). -/
-  allocators : Array OwnedAlloc := #[]
   /-- The thread-assignment budget of the `fallible` spawn policy (`ZigLean/Conc/Spawn.lean`):
   at most this many assigned child threads that no join has reclaimed. `none` (the default) sets
   no budget. The `available` policy ignores it. -/
@@ -678,11 +656,55 @@ theorem writeBytes_eq (a : Array Byte) (o : Nat) (bs : Array Byte) :
     List.extract, List.drop_zero, Nat.sub_zero, ← Array.length_toList, ← List.length_drop,
     List.take_length]
 
-/-- The compiler uses native array operations through a checked function equality;
-kernel reduction continues to use the list spine above. -/
-@[csimp] private theorem writeBytes_eq_array : writeBytes = writeBytesArray := by
+/-- `a` with `bs[i]` written at `o + i` for every `i` from `i` on, one `set!` each: in place
+when `a` is unshared, so a store costs its own bytes, not the block's. -/
+private def writeBytesLoop (a : Array Byte) (o : Nat) (bs : Array Byte) (i : Nat) : Array Byte :=
+  if h : i < bs.size then writeBytesLoop (a.set! (o + i) bs[i]) o bs (i + 1) else a
+termination_by bs.size - i
+
+private theorem writeBytesLoop_getElem? (a : Array Byte) (o : Nat) (bs : Array Byte) (i : Nat)
+    (hfit : o + bs.size ≤ a.size) (j : Nat) :
+    (writeBytesLoop a o bs i)[j]? = if o + i ≤ j ∧ j < o + bs.size then bs[j - o]? else a[j]? := by
+  induction a, i using writeBytesLoop.induct o bs with
+  | case1 a i h ih =>
+    rw [writeBytesLoop, dif_pos h, ih (by simpa using hfit)]
+    by_cases hji : j = o + i
+    · subst hji
+      simp [h, show o + i < a.size by omega]
+    · by_cases hin : o + (i + 1) ≤ j ∧ j < o + bs.size
+      · rw [if_pos hin, if_pos (by omega)]
+      · rw [if_neg hin, if_neg (by omega)]
+        simp [Ne.symm hji]
+  | case2 a i h =>
+    rw [writeBytesLoop, dif_neg h, if_neg (by omega)]
+
+/-- The compiled `writeBytes`: the in-place loop when `bs` fits, else the splice. -/
+private def writeBytesImpl (a : Array Byte) (o : Nat) (bs : Array Byte) : Array Byte :=
+  if o + bs.size ≤ a.size then writeBytesLoop a o bs 0 else writeBytesArray a o bs
+
+/-- The compiler uses native array operations through a checked function equality (a store
+that fits writes its bytes in place); kernel reduction continues to use the list spine above. -/
+@[csimp] private theorem writeBytes_eq_impl : writeBytes = writeBytesImpl := by
   funext a o bs
-  exact writeBytes_eq a o bs
+  rw [writeBytes_eq, writeBytesImpl]
+  split
+  · next hfit =>
+    symm
+    apply Array.ext_getElem?
+    intro j
+    rw [writeBytesLoop_getElem? a o bs 0 hfit j]
+    simp only [Array.getElem?_append, Array.getElem?_extract, Array.size_append,
+      Array.size_extract, Nat.add_zero]
+    rw [Nat.min_eq_left (by omega : o ≤ a.size), Nat.min_self, Nat.sub_zero, Nat.zero_add]
+    by_cases h1 : j < o
+    · simp [h1, show j < o + bs.size by omega, show ¬ o ≤ j by omega]
+    · by_cases h2 : j < o + bs.size
+      · simp [h1, h2, show o ≤ j by omega]
+      · rw [if_neg (by omega), if_neg h2]
+        by_cases h3 : j < a.size
+        · rw [if_pos (by omega)]; congr 1; omega
+        · rw [if_neg (by omega)]; simp; omega
+  · rfl
 
 /-- The race error of the first (chronologically earliest) footprint entry of `fp` that overlaps
 `block`/`off`/`len` with a concurrent clock and races with `kind` (`racePair`); `none` if no
@@ -805,6 +827,65 @@ def storeBytes (p : Ptr) (align : Nat) (bs : Array Byte) (kind : AccessKind := .
   recordAccess b o bs.size kind
   let m ← get
   set { m with blocks := m.blocks.set! b { blk with bytes := writeBytes blk.bytes o bs } }
+
+/-- The compiled `storeBytes`: the same steps, but the block is changed where the memory holds
+it (`Array.modify`), so no other reference shares its bytes and `writeBytes` writes them in
+place. `storeBytes` above copies the whole block on every store, which makes a loop of stores
+into one block quadratic in the block's size. -/
+private def storeBytesImpl (p : Ptr) (align : Nat) (bs : Array Byte) (kind : AccessKind := .write) :
+    MemM Unit := do
+  let (b, _, o) ← (← get).accessW p bs.size align
+  recordAccess b o bs.size kind
+  modify fun m => { m with blocks := m.blocks.modify b fun blk => { blk with bytes := writeBytes blk.bytes o bs } }
+
+private theorem storeBytes_run_eq_impl (p : Ptr) (align : Nat) (bs : Array Byte) (kind : AccessKind)
+    (m : Mem) : (storeBytes p align bs kind).run m = (storeBytesImpl p align bs kind).run m := by
+  have hblk : ∀ b blk o, m.access p bs.size align = pure (b, blk, o) → m.blocks[b]? = some blk := by
+    intro b blk o h
+    unfold Mem.access at h
+    split at h
+    · cases h
+    · split at h
+      · cases h
+      · split at h
+        · cases h; assumption
+        · cases h
+  have hset : ∀ (xs : Array Block) b blk (f : Block → Block), xs[b]? = some blk →
+      xs.set! b (f blk) = xs.modify b f := by
+    intro xs b blk f h
+    apply Array.ext_getElem?
+    intro j
+    rw [Array.getElem?_modify, Array.set!, Array.getElem?_setIfInBounds]
+    by_cases hj : b = j
+    · subst hj
+      rcases Nat.lt_or_ge b xs.size with hlt | hge
+      · have hx : xs[b] = blk := by simpa [hlt] using h
+        simp [hlt, hx]
+      · simp [Array.getElem?_eq_none hge] at h
+    · simp [hj]
+  simp only [storeBytes, storeBytesImpl, StateT.run_bind, StateT.run_get, pure_bind,
+    liftM, monadLift, MonadLift.monadLift, Mem.accessW]
+  rcases access_cases m p bs.size align with h | ⟨b, blk, o, h⟩
+  · rw [h]; rfl
+  · have hb := hblk b blk o h
+    rw [h]
+    simp only [pure_bind]
+    by_cases hk : blk.kind = .constGlobal
+    · rw [if_pos hk]; rfl
+    · rw [if_neg hk, show (StateT.lift (pure (b, blk, o)) : MemM _).run m = pure ((b, blk, o), m) from rfl]
+      unfold recordAccess
+      simp only [StateT.run_bind, StateT.run_get, pure_bind]
+      split
+      · rfl
+      · have := hset m.blocks b blk (fun blk => { blk with bytes := writeBytes blk.bytes o bs }) hb
+        simp only [StateT.run_set, StateT.run_modify, pure_bind, this]
+
+/-- The compiler runs `storeBytesImpl`; the kernel and every proof keep `storeBytes` (the
+lemmas that unfold it, e.g. `storeBytes_ok`, stay as they are). A change to `storeBytes` that
+`storeBytesImpl` does not mirror fails this theorem, so the two cannot drift apart. -/
+@[csimp] private theorem storeBytes_eq_impl : @storeBytes = @storeBytesImpl := by
+  funext p align bs kind
+  exact StateT.ext fun m => storeBytes_run_eq_impl p align bs kind m
 
 /-- `blk` does not constrain a range `[A, A + n)`: it is dead, one of the two ranges is empty, or
 they are disjoint. Zig guarantees disjoint storage for live objects, nothing else (no gap, no
