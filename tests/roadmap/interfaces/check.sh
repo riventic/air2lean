@@ -52,6 +52,7 @@ programs=(
   "wide|Wide|Interfaces.Wide|$here/Interfaces/Wide.lean|wide.|$here/air/{v}/wide|$here/registry-alloc.json|--allocator-model translated"
   "kinds|Kinds|Interfaces.Kinds|$here/Interfaces/Kinds.lean|kinds.|$here/air/{v}/kinds|$here/registry-alloc.json|--allocator-model translated"
   "grow|Grow|Interfaces.Grow|$here/Interfaces/Grow.lean|grow.|$here/air/{v}/grow|$here/registry-alloc.json|--allocator-model translated"
+  "raw|Raw|Interfaces.Raw|$here/Interfaces/Raw.lean|raw.|$here/air/{v}/raw|$here/registry-alloc.json|--allocator-model translated"
 )
 translate() {  # translate VERSION ENTRY OUT
   local name module namespace retained prefix air registry extra
@@ -70,10 +71,10 @@ for version in 0.16.0 0.15.2 0.14.1 0.17.1; do
     "${lean_cmd[@]}" -R "$work" -o "$work/Interfaces/$module.olean" "$work/Interfaces/$module.lean"
     if [ "$module" = Lists ]; then cp "$work/Interfaces/Lists.lean" "$work/lists-$version.lean"; fi
   done
-  # The sentinel proofs (`u8`, the wider item types and the other item kinds) hold for this
-  # version's translation too (0.17.1: the axioms loop below).
+  # The sentinel proofs (`u8`, the wider item types and the other item kinds) and the proofs of
+  # the raw entry points hold for this version's translation too (0.17.1: the axioms loop below).
   if [ "$version" != 0.17.1 ]; then
-    for spec in SentinelSpec WideSpec KindsSpec; do
+    for spec in SentinelSpec WideSpec KindsSpec RawSpec; do
       "${lean_cmd[@]}" -R "$work" "$here/Interfaces/$spec.lean" > "$work/$spec-$version.txt" 2>&1 || {
         cat "$work/$spec-$version.txt" >&2; exit 1; }
     done
@@ -131,7 +132,7 @@ lists_tree 0.14.1 "${lists_proofs_no_allocator[@]}"
 # The proofs over the 0.17.1 translations (docs/interfaces.md, proof side), kernel-checked with
 # only the standard axioms; ClosureCX (after MixSpec, which it imports) is the counterexample to
 # using the environment's contract for a vtable of the program.
-for spec in MixSpec ClosureCX RndSpec CallbacksSpec SentinelSpec WideSpec KindsSpec GrowSpec; do
+for spec in MixSpec ClosureCX RndSpec CallbacksSpec SentinelSpec WideSpec KindsSpec GrowSpec RawSpec; do
   { cat "$here/Interfaces/$spec.lean"; echo
     grep -o '^theorem [^ :({\[]*' "$here/Interfaces/$spec.lean" | while read -r _ t; do
       echo "#print axioms Interfaces.$spec.$t"; done; } > "$work/Interfaces/$spec.lean"
@@ -147,6 +148,42 @@ assert ": error" not in text and len(groups) == n, text
 assert used <= {"propext", "Classical.choice", "Quot.sound"}, text
 PY
 done
+# M04: a raw call outside the contract's preconditions has no proof. Interfaces/RawNeg.lean
+# states RawSpec's theorems without one precondition each, with RawSpec's proofs: every theorem
+# must fail, and where the missing precondition is asked for: the goal the walk leaves (a length
+# that may be 0, a length that is not the grant's) or the vtable call it has no rule for (a grant
+# at another alignment).
+status=0
+"${lean_cmd[@]}" -R "$work" "$here/Interfaces/RawNeg.lean" > "$work/RawNeg.txt" 2>&1 || status=$?
+python3 - "$here/Interfaces/RawNeg.lean" "$work/RawNeg.txt" "$status" <<'PY'
+import re, sys
+source, text, status = open(sys.argv[1]).read().splitlines(), open(sys.argv[2]).read(), sys.argv[3]
+goal, call = "goal", "call"  # where the expected text is: after the error line, or before it
+want = {
+    "take_zero": (goal, "⊢ 0 < n.toNat\n"), "fit_zero": (goal, "⊢ 0 < n.toNat\n"),
+    "move_zero": (goal, "⊢ 0 < n.toNat\n"), "give_other_length": (goal, "⊢ m.len.toNat = bs.size\n"),
+    "give_other_alignment": (call, "fsym: no rule for the command\n  extCall (Ext.call3 fns.free ctx m mem_Alignment.«4» "),
+    "fit_other_alignment": (call, "fsym: no rule for the command\n  extCall (Ext.call1 fns.resize ctx m mem_Alignment.«4» "),
+}
+assert status == "1", f"RawNeg.lean: Lean exit {status}, want 1\n{text}"
+assert set(want) == set(re.findall(r"^theorem (\S+)", "\n".join(source), re.M)), "RawNeg.lean: theorems"
+errors = [(m.start(), int(m.group(1))) for m in re.finditer(r"RawNeg\.lean:(\d+):\d+: error", text)]
+bounds = [0] + [at for at, _ in errors] + [len(text)]
+seen = set()
+for index, (at, line) in enumerate(errors):
+    name = next(m.group(1) for l in reversed(source[:line]) if (m := re.match(r"theorem (\S+)", l)))
+    where, expected = want[name]
+    block = text[at:bounds[index + 2]] if where == goal else text[bounds[index]:at]
+    assert expected in block, f"RawNeg.{name}: does not stop at its precondition:\n{block}"
+    # A call's text precedes its error, after the previous theorem's goals: it is this theorem's
+    # only if no other theorem prints it.
+    assert where == goal or text.count(expected) == 1, f"RawNeg.{name}: {expected!r} is not unique"
+    seen.add(name)
+assert seen == set(want), f"RawNeg.lean: no error in {sorted(set(want) - seen)}\n{text}"
+calls = sum(where == call for where, _ in want.values())
+assert text.count("fsym: no rule for the command") == calls, f"RawNeg.lean: want {calls} calls without a rule\n{text}"
+print(f"RawNeg: {len(seen)} statements without a precondition have no proof")
+PY
 # M04: semantic mutants of the translated std allocator sentinel path (the retained 0.17.1
 # Interfaces/Sentinel.lean, for item types wider than a byte Interfaces/Wide.lean, and for growth
 # of the sentinel slice itself Interfaces/Grow.lean): the unchanged SentinelSpec, WideSpec and
