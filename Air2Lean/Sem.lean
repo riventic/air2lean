@@ -894,7 +894,7 @@ def outside? : Op → Option String
   | .neg .. => some "float negation (stage 5)"
   | .abs .. => some "float `@abs`; the checker rejects integer `abs` (stage 5)"
   -- Vectors (stage 5, lane-wise).
-  | .splat .. | .select .. | .shuffle .. | .reduce .. | .vectorStoreElem .. =>
+  | .splat .. | .select .. | .shuffle .. | .reduce .. | .arrayToVector .. | .vectorStoreElem .. =>
     some "vectors (stage 5)"
   -- Integer operations.
   | .shift .. => some "integer shifts (not staged)"
