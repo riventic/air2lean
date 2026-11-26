@@ -778,6 +778,20 @@
       },
       "block_sha256": "807fdea4e41c366aa2a21faef263d5d8aad31adb07f2b33c75f0098284f3b15d"
     },
+    "tests/roadmap/cond-broadcast/mutations.py#broadcast-dropped": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/cond-broadcast/check.sh"
+      },
+      "block_sha256": "99214859f988c03f5538a82840c234558bfad7e02b98d0e7662d0515a4f991d5"
+    },
+    "tests/roadmap/cond-broadcast/mutations.py#broadcast-is-signal": {
+      "killed_by": {
+        "kind": "check",
+        "target": "tests/roadmap/cond-broadcast/check.sh"
+      },
+      "block_sha256": "99214859f988c03f5538a82840c234558bfad7e02b98d0e7662d0515a4f991d5"
+    },
     "tests/roadmap/deadline-cases/mutations.py#boundary-solves-at-deadline": {
       "killed_by": {
         "kind": "check",
