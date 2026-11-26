@@ -2220,8 +2220,21 @@ jobs:
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
         run: |
           set -euo pipefail
-          lake build ZigLean.VecMem ZigLean.Float.Allowed ZigLean.Mem.Thread
+          lake build ZigLean.VecMem ZigLean.Float.Allowed ZigLean.Mem.Thread ZigLean.Os ZigLean.Conc.Sched
           python3 -m unittest discover -s tests/roadmap/aarch64-abi -p 'test_*.py' -v
+
+      # The recorded `futex` rows of every version and profile (FUTEX_WAIT/WAKE, __ulock_*)
+      # against the outcomes of the model's OS rows, premises OSF-01 and OSF-02
+      # (docs/aarch64-abi.md#futex).
+      - name: aarch64 futex rows against the OS rows (T04)
+        if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
+        run: |
+          set -euo pipefail
+          for triple in aarch64-linux-gnu aarch64-macos-none; do
+            files=(tests/roadmap/aarch64-abi/expected/*/"$triple"-ReleaseSafe.txt)
+            [ "${#files[@]}" -eq 4 ]
+            lake env lean --run tests/roadmap/aarch64-abi/Futex.lean "$triple" "${files[@]}"
+          done
 
       - name: aarch64 ABI profile proofs (T04, 0.16.0)
         if: ${{ !env.AIR2LEAN_REUSED && matrix.part == 'native' && matrix.full && matrix.zig == '0.16.0' && !matrix.mutate }}
