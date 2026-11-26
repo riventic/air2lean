@@ -10,7 +10,7 @@ The macOS counterpart of `PageThread.lean`: the same statements over
 `AllocTranslated/PageMacos.lean` (16 KiB pages), from the generated code and the OS mapping model
 only (premise OSM-01: libc's `mmap`/`munmap` are `Os.mmap`/`Os.munmap` at `Os.Target.macos`; there
 is no `mremap`). The allocator's only shared state is the hint word, an atomic, so no thread or
-lock primitive of the OS is reached and no further premise is used.
+lock primitive of the OS is reached: the premises are those of `PageAllocMacos.fallocSpec`.
 
 * `fthread_alloc`: the in-thread reading of the concurrent `alloc` (`CTriple.toSoloThread` of
   `PageAllocMacos.alloc_ct`).

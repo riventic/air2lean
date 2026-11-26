@@ -6,9 +6,8 @@
 # x86_64-linux, PageAllocMacos.lean for aarch64-macos, over the hint state of PageTok.lean), the
 # obstructions (PageObstruction.lean), the O5 regressions (PageAlloc.alloc_high, alloc_top, alloc_edge), a
 # mutant (mutant.sh); the four entries as thread triples and CAllocSpec (PageThread.lean for
-# x86_64-linux, PageThreadMacos.lean for aarch64-macos); the
-# memory-safety tutorial's refuted clients over the page allocator (ListsPage.lean). Every Lean
-# file is a module of the fixture's library AllocTranslated (tests/roadmap/lakefile.toml), built
+# x86_64-linux, PageThreadMacos.lean for aarch64-macos); the memory-safety tutorial's refuted
+# clients over the page allocator (ListsPage.lean). Every Lean file is a module of the fixture's library AllocTranslated (tests/roadmap/lakefile.toml), built
 # by Lake with what it imports (scripts/fixtures.py; run it under scripts/build-guard.py). Needs
 # a built translator; runs no compiler. The AIR of both programs is exports.json's export, pinned
 # by exports.lock.json (scripts/fixture-exports.py), of Zig 0.17.1 and 0.16.0: the retained
