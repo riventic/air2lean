@@ -142,19 +142,26 @@ register until bit 0 is set, then writes the byte to the data register; `writeAl
 byte; `statusTwice` reads status twice; `clearStatus` discards a status read; `sendThenStatus`
 writes then reads. The patched 0.16.0, 0.15.2 and 0.14.1 compilers export it; the three
 translations are identical except for the profile header, and the 0.16.0 one is committed
-(`DeviceEffects/Gen.lean`). `DeviceEffects/Proofs.lean` proves on that unchanged generated code:
+(`DeviceEffects/Gen.lean`). `DeviceEffects/Proofs.lean` proves on that unchanged generated code,
+as total triples of the full-state logic over the device state `devOwn D`, for every device
+state `D` (its oracles and its trace so far), walked by `fsym` with the device rules below:
 
-* `putc_trace`: for every memory and every oracle satisfying the polling contract `Answers`
-  (busy answers `vs`, then a ready answer `r`), `putc uart c` returns and the final memory is the
-  initial one with exactly the trace `putcSpec vs r c` appended: one status read per poll, in
-  order, then one data write of `c`, and with its step count (`Mem.ticks`) raised by exactly one
-  per poll (`vs.length + 1`). `putc_eventually`: every oracle that reports ready within
-  finitely many polls satisfies such a contract.
+* `putc_trace`: for every oracle satisfying the polling contract `Answers` (busy answers `vs`,
+  then a ready answer `r`), `putc uart c` takes `devOwn D ⋆ credits (vs.length + 1)` to `devOwn`
+  of `D` with exactly one status read per poll appended, in order, then one data write of `c`,
+  and `spent (vs.length + 1)`: one step per poll, paid by credits (the loop's credit-mode
+  invariant `putc.loop3.credits.inv`, `docs/proof-automation.md` §Loops; the goals `fsym` leaves
+  are the invariant's pure facts, lemmas of the contract). `putc_steps`: the run from program
+  start with the device state `D` returns with the step count `vs.length + 1`.
+  `putc_eventually`: every oracle that reports ready within finitely many polls satisfies such a
+  contract.
 * `statusTwice_trace`, `statusTwice_not_merged`: two read events; under a counting device the
   result is `0 ^^^ 1 = 1`, which a merged read (`a ^^^ a = 0`) can never give.
 * `clearStatus_trace`: an unused read is still one event.
 * `sendThenStatus_trace`: the write precedes the read, and the oracle answers the read after
   seeing the write.
+
+Nothing else changes: a triple frames every other resource.
 
 `check-device.sh` requires the committed translation, the default rejection of the same AIR, the
 proofs (no `sorry`/`axiom`/`native_decide`) and four semantic mutants of the generated code, each
@@ -163,11 +170,43 @@ the write, dropping the unused read, and an ordinary repeatable `Zig.load` for t
 `check-device.sh --export DIR` re-exports with `$AIR2LEAN_ZIG_AIR` and requires the same
 translation. `writeAll` is translated and pinned, but has no theorem.
 
-In the full-state logic the device state is an exclusive ghost component (maintainer decision
-2026-11-25): `devOwn D` says the memory's device state (oracles and trace) is `D`, and only a
-device step changes it (`docs/sep-full-state.md` §Device state). The theorems above are run
-equations over the whole memory; their restatement as `FTotalTriple`s over `devOwn`, walked by
-`fsym`, is engine-ledger row `device-read-rules`.
+**Device rules** (`ZigLean/Sep/Full/Device.lean`, `@[fsym]`; `docs/sep-full-state.md` §Device
+state). In the full-state logic the device state is an exclusive ghost component (maintainer
+decision 2026-11-25): `devOwn D` says the memory's device state (oracles and trace) is `D`, and
+only a device step changes it. The rules are stated once, for every declared device `d`, register
+and device state; a program's `air2lean_device` is an instance:
+
+| Rule | Premises | Pre | Post |
+| --- | --- | --- | --- |
+| `FTotalTriple.vload` | `devAddr? p = some addr`, `addr % align = 0`, `d.readable addr bits`, the oracle's answer `D.oracle D.trace addr bits = some v` | `devOwn D` | `⟪x = v⟫ ⋆ devOwn { D with trace := D.trace ++ [.read addr bits v.toNat] }` |
+| `FTotalTriple.vstore` | `devAddr? p = some addr`, `addr % align = 0`, `d.writable addr bits` | `devOwn D` | `devOwn { D with trace := D.trace ++ [.write addr bits v.toNat] }` |
+| `FTotalTriple.vasm` | `d.asms.contains t`, the asm oracle's answer `D.asmOracle D.trace t ins bits = some v` | `devOwn D` | `⟪x = v⟫ ⋆ devOwn { D with trace := D.trace ++ [.asm t ins bits v.toNat] }` |
+| `FTotalTriple.vasmEffect` | `d.asms.contains t` | `devOwn D` | `devOwn { D with trace := D.trace ++ [.asm t ins 0 0] }` |
+| `FTotalTriple.ptrProjectDevice` | `devAddr? p = some a`, `devAddr? (project p) = some b`, both in `d`'s window | any `P` | `⟪q = project p⟫ ⋆ P` |
+
+The oracle's answer is a premise of the rule (the environment's side of DEV-01): a statement
+names the answers it relies on as hypotheses, and `fsym` closes the rule's premise by them. The
+register's facts (`devAddr?`) are hypotheses too; the declared directions, templates and the
+window are decided on the contract. Fail closed: a read whose answer no hypothesis names, an
+undeclared register, direction or template and a pointer into a model block have no rule, and
+without `devOwn` no triple of a read exists (`tests/roadmap/sep-full/DeviceCX.lean`). There is no
+thread rule: a device access of a spawned thread is not modelled. A run gets `devOwn D` from the
+start memory with the device state `D` (`FTotalTriple.run_init_dev`, `initRes_holds_dev`,
+`ZigLean/Sep/Full/Init.lean`); `Holds.dev` reads the final device state off the postcondition
+(`DeviceAsm/Proofs.lean`, `elapsed_start`). Library regression for every device:
+`tests/roadmap/sep-auto/SepAuto/Device.lean`. The run equations of `ZigLean/Mem/Device.lean` stay
+as run-level lemmas (the rules are proved from them).
+
+**What a triple says about a run.** From every `Mem.FSeq` memory that holds a resource and a
+frame without a device fragment, a device triple gives the returned value and the final device
+state (`FTotalTriple.run_dev`, `run_dev_val`, `ZigLean/Sep/Full/Device.lean`) and, with credits,
+the exact step count (`FTotalTriple.run_dev_ticks`, `run_dev_steps`, `ZigLean/Sep/Full/Cost.lean`).
+The fixture states these as `elapsed_run`, `statusTwice_run`, `clearStatus_run`,
+`sendThenStatus_run`, `putc_run` and `putc_eventually_run`. A triple does not give a run equation
+over every memory that fixes the whole final memory: it says nothing about a memory that is not
+`Mem.FSeq`, and it does not fix the fields that no resource reads
+(`tests/roadmap/sep-auto/SepAuto/DeviceRunCX.lean`: `not_every_memory`, `not_exact`,
+kernel-checked).
 
 ## Inline asm
 
@@ -330,8 +369,11 @@ environment-read entries: `elapsed`, `random` and `ticksPlain` are now accepted 
 reads, `fence` stays rejected. Under `tsc.json`, which declares only the `rdtsc` template, `elapsed`
 translates to two `Zig.vasm` (`DeviceAsm/Gen.lean`) and the others stay rejected. (The source
 comments of `device_asm.zig` predate A01's barrier entry; the source is pinned by `provenance.json`.)
-`DeviceAsm/Proofs.lean` proves `elapsed_trace` (two `asm` events in order, the second answered
-after the first; the result is their difference) and `elapsed_not_merged` (under a counter oracle
+`DeviceAsm/Proofs.lean` proves `elapsed_trace` (a total triple over `devOwn D`, walked by `fsym`
+with `FTotalTriple.vasm`: two `asm` events in order, the second answered
+after the first; the result is their difference), `elapsed_run` (the run from a memory that holds
+resources), `elapsed_start` (the run from program start with
+the device state `D`) and `elapsed_not_merged` (under a counter oracle
 the result is 1, and a merged value gives `a - a = 0`). The `merge_asm` and `repeatable_asm`
 mutants (an M21 opaque constant for both reads) are rejected by `elapsed_trace`.
 `test_cli.py` repeats these rejections on exporter-schema fixtures for 0.14.1, 0.15.2 and 0.16.0.

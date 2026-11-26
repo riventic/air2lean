@@ -1379,9 +1379,25 @@ full-state logic (maintainer decision 2026-11-25), as the stack depth and the st
 
 Without `devOwn` a memory with silent oracles holds the same resources, so a device read has no
 triple (`tests/roadmap/sep-full/DeviceCX.lean`: `vload_no_triple`, `vasm_no_triple`); with it the
-read's answer and the step are fixed (`vload_run_of_devOwn`, `vload_step_holds`). The `@[fsym]`
-rules of the device operations build on this (engine-ledger row `device-read-rules`). The run
-equations of `ZigLean/Mem/Device.lean` stay as run-level lemmas beside them.
+read's answer and the step are fixed (`vload_run_of_devOwn`, `vload_step_holds`).
+
+The device operations have `@[fsym]` rules built on this (`ZigLean/Sep/Full/Device.lean`; the
+table is in `docs/volatile-effects.md` §Device contract), all instances of one step rule:
+
+* `FTotalTriple.devStep`: a command that, in every memory with the device state `D`, returns `v`
+  and changes the device state to `D'` and nothing else takes `devOwn D` to
+  `⟪x = v⟫ ⋆ devOwn D'`.
+* `FTotalTriple.vload`, `FTotalTriple.vasm`: a read appends one event with the oracle's answer;
+  the answer `D.oracle D.trace addr bits = some v` is the rule's premise (DEV-01), which `fsym`
+  closes by a hypothesis of the statement. `FTotalTriple.vstore`, `FTotalTriple.vasmEffect`: one
+  more event. `FTotalTriple.ptrProjectDevice`: an offset inside the declared window is formed.
+* They are stated for every declared device `d : Device` and device state; a generated module's
+  `air2lean_device` is an instance. No rule where the contract declares nothing (fail closed),
+  and no thread rule.
+* Adequacy: the start memory with the device state `D` holds `devOwn D ⋆ globals gs`
+  (`initRes_holds_dev`, `FTotalTriple.run_init_dev`, `ZigLean/Sep/Full/Init.lean`).
+
+The run equations of `ZigLean/Mem/Device.lean` stay as run-level lemmas beside them.
 
 ## Ghost state: epoch ledgers (revocable allocator tokens)
 

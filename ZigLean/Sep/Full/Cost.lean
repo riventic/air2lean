@@ -260,6 +260,48 @@ theorem FTotalTriple.ticks_eq {α : Type} {P : FAssn} {c : MemM α} {Q : α → 
   obtain ⟨v, m', hr, ht, -⟩ := h.ticks_eq_post hh hp hs hc
   exact ⟨v, m', hr, ht⟩
 
+/-- A credit-free start stays credit-free with the device state added (`Holds.addDev`). -/
+theorem CreditFree.addDev {r rF : Res} (hc : CreditFree r rF) (D : DevState) :
+    CreditFree ⟨r.heap, r.know, (Ghost.devAt D).add r.gh⟩ rF := by
+  have e : (((Ghost.devAt D).add r.gh).add rF.gh).ac = (r.gh.add rF.gh).ac := by
+    rw [Ghost.add_assoc, Ghost.devAt_add_eq]
+  have h1 := hc.cred
+  have h2 := hc.auth
+  have h3 := hc.unmetered
+  have h4 := hc.spent
+  rw [← e] at h1 h2 h3 h4
+  exact ⟨⟨h1, h2, h3⟩, h4⟩
+
+/-- **The run of a metered triple over the device state** (`FTotalTriple.run_dev` with the step
+count): from a credit-free memory that holds `P` (no device fragment in the resource or the
+frame), a run proved with `N` credits and `N` receipts returns, its final device state is `D'`,
+and it makes exactly `N` steps. -/
+theorem FTotalTriple.run_dev_ticks {α : Type} {P : FAssn} {c : MemM α} {Q : α → FAssn}
+    {D' : DevState} {N : Nat} {m : Mem} {r rF : Res}
+    (ht : FTotalTriple ((devOwn m.dev ⋆ P) ⋆ credits N) c (fun x => (devOwn D' ⋆ Q x) ⋆ spent N))
+    (hh : Holds m r rF) (hp : P r) (hs : m.FSeq) (hc : CreditFree r rF)
+    (h0 : ∀ X, (r.gh.add rF.gh).dev X = 0) :
+    ∃ v m', c.run m = pure (v, m') ∧ m'.dev = D' ∧ m'.ticks = m.ticks + N := by
+  have hc' := hc.addDev m.dev
+  obtain ⟨v, m', r', hr, hh', hq, -⟩ :=
+    ht.runs (Holds.addCredits N (hh.addDev h0) hc'.cred hc'.auth hc'.unmetered)
+      (sep_credits_intro (devOwn_sep_intro hp) N) hs
+  exact ⟨v, m', hr, hh'.dev (sep_assoc hq),
+    (ht.toPartial.ticks_eq_post (hh.addDev h0) (devOwn_sep_intro hp) hs hc' hr).1⟩
+
+/-- **The run of a metered device triple**: `FTotalTriple.run_dev_ticks` for a triple over the
+device state and the credits alone, from every credit-free `Mem.FSeq` memory that holds a
+resource and a frame without a device fragment. -/
+theorem FTotalTriple.run_dev_steps {α : Type} {c : MemM α} {D' : DevState} {N : Nat} {m : Mem}
+    {r rF : Res} (ht : FTotalTriple (devOwn m.dev ⋆ credits N) c (fun _ => devOwn D' ⋆ spent N))
+    (hh : Holds m r rF) (hs : m.FSeq) (hc : CreditFree r rF)
+    (h0 : ∀ X, (r.gh.add rF.gh).dev X = 0) :
+    ∃ v m', c.run m = pure (v, m') ∧ m'.dev = D' ∧ m'.ticks = m.ticks + N := by
+  have key : ∀ A B C : FAssn, ((A ⋆ B) ⋆ C) = ((A ⋆ C) ⋆ B) := fun _ _ _ => by ac_rfl
+  exact FTotalTriple.run_dev_ticks (P := fun y => y = r) (Q := fun _ y => y = r)
+    ((ht.frame (R := fun y => y = r)).conseq (fun _ h => by rwa [key])
+      fun _ _ h => by rwa [key]) hh rfl hs hc h0
+
 /-- **The step count is tight**: a run proved with `N` credits and `N` receipts cannot be paid
 with fewer credits: a credit-free start that holds the precondition refutes it. -/
 theorem FTotalTriple.not_fewer_credits {α : Type} {P : FAssn} {c : MemM α} {Q Q' : α → FAssn}

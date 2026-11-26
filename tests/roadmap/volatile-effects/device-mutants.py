@@ -36,8 +36,8 @@ MUTANTS = {
                          {"clearStatus_trace"}, set()),
     # The status poll as an ordinary repeatable memory load.
     "ordinary_load": ("DeviceEffects", [(f"let i6 ← {VLOAD} i5\n    let i7", "let i6 ← Zig.load (BitVec 32) 4 i5\n    let i7")],
-                      # The poll steps fail first; `putc_trace` builds on them.
-                      {"loop_busy", "loop_ready"}, {"poll_run", "putc_trace"}),
+                      # The loop's step has no device event: the walk of `putc_trace` stops there.
+                      {"putc_trace"}, set()),
     # The two `rdtsc` merged into one value.
     "merge_asm": ("DeviceAsm", [(f"let i1 ← {VASM}", "let i1 ← pure i0")],
                   {"elapsed_trace"}, {"elapsed_not_merged"}),
