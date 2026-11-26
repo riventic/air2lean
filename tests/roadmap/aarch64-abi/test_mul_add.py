@@ -13,26 +13,29 @@ and an aarch64 profile without the float instructions (`fp_armv8`) is rejected. 
 checks the expected table without a translator.
 """
 import argparse
+import importlib.util
 import json
 from pathlib import Path
-import subprocess
 import sys
 import tempfile
 import unittest
 
 sys.dont_write_bytecode = True
-VERSIONS = ("0.17.1", "0.16.0", "0.15.2", "0.14.1")
+# The aarch64 profiles of the native AIR exports, and the CLI call.
+spec = importlib.util.spec_from_file_location("float_atomics",
+                                              Path(__file__).with_name("test_float_atomics.py"))
+float_atomics = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(float_atomics)
+invoke = float_atomics.invoke
+VERSIONS =("0.17.1", "0.16.0", "0.15.2", "0.14.1")
 MODES = ("ieee", "compiler-rt")
 LLVM, SELF_HOSTED = "stage2_llvm", "stage2_x86_64"
 # name -> (profile fields, the row's `f16` rule from Zig 0.17.1 without an `f16` instruction)
 TARGETS = {
     "x86_64-linux": (dict(target_triple="x86_64-linux-gnu", abi="gnu", cpu="x86_64", features=[]),
                      "f64-routine"),
-    "aarch64-linux": (dict(target_triple="aarch64-linux.7.0.14...7.0.14-gnu.2.39", abi="gnu",
-                           cpu="generic", features=["fp_armv8", "neon"]), "f64-instruction"),
-    "aarch64-macos": (dict(target_triple="aarch64-macos.27.0.1...27.0.1-none", abi="none",
-                           cpu="apple_m1", features=["fp_armv8", "fullfp16", "lse", "neon"]),
-                      "f64-instruction"),
+    "aarch64-linux": (float_atomics.PROFILES["aarch64-linux-gnu"], "f64-instruction"),
+    "aarch64-macos": (float_atomics.PROFILES["aarch64-macos-none"], "f64-instruction"),
     "s390x-linux": (dict(target_triple="s390x-linux-gnu", abi="gnu", cpu="arch8", features=[],
                          endian="big", name="abi64-be-v1"), "f64-instruction"),
     "mips64-linux": (dict(target_triple="mips64-linux-muslabi64", abi="muslabi64", cpu="mips64r2",
@@ -112,11 +115,6 @@ def cases():
             if version != "0.14.1":  # the self-hosted backend's Debug profile (from 0.15.2)
                 result.append((16, "x86_64-linux", version, mode, SELF_HOSTED, None))
     return result
-
-
-def invoke(binary, *argv):
-    return subprocess.run([str(binary), *map(str, argv)], capture_output=True, text=True,
-                          timeout=30, check=False)
 
 
 def write(air, doc):

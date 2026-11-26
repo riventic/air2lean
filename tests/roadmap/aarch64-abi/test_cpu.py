@@ -12,10 +12,10 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[3]
 VERSIONS = ('0.17.1', '0.16.0', '0.15.2', '0.14.1')
-TRIPLES = ('aarch64-linux-gnu', 'aarch64-macos-none')
 spec = importlib.util.spec_from_file_location('aarch64_abi', ROOT / 'scripts/aarch64-abi.py')
 abi = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(abi)
+TRIPLES = tuple(abi.PROFILES)
 # The `f16` operands of the probe, with the result of an `f16` multiply-add (also that of an
 # `f64` one rounded to `f16`) and of an `f32` one rounded to `f16`.
 F16 = {'c290 c47c 0ffe': ('4b5b', '4b5c'), 'bf80 74e8 154e': ('f899', 'f89a'),
@@ -23,7 +23,7 @@ F16 = {'c290 c47c 0ffe': ('4b5b', '4b5c'), 'bf80 74e8 154e': ('f899', 'f89a'),
 
 
 def expected(version, triple):
-    return (ROOT / f'tests/roadmap/aarch64-abi/expected/{version}/{triple}-ReleaseSafe.txt').read_text()
+    return abi.expected_path(version, triple, 'ReleaseSafe').read_text()
 
 
 def check(triple, text):
@@ -65,14 +65,15 @@ class Rows(unittest.TestCase):
                 text = expected(version, triple)
                 fp16 = '\nfeature fullfp16 1\n' in text
                 self.assertEqual(fp16, triple == 'aarch64-macos-none')
-                self.assertEqual(f16_rows(text), {k: v[0 if fp16 else narrow] for k, v in F16.items()},
+                base = f16_rows(text)
+                self.assertEqual(base, {k: v[0 if fp16 else narrow] for k, v in F16.items()},
                                  (version, triple))
                 for cpu in abi.CPUS[triple]:
                     rows = f16_rows(text, f'cpu {cpu} fma f16 ')
                     flipped = f'cpu {cpu} feature fullfp16 ' in text
                     want = {k: v[0 if fp16 != flipped else narrow] for k, v in F16.items()}
                     # Only a differing row is recorded.
-                    self.assertEqual(rows, {k: v for k, v in want.items() if f16_rows(text)[k] != v},
+                    self.assertEqual(rows, {k: v for k, v in want.items() if base[k] != v},
                                      (version, triple, cpu))
 
     def test_cpu_rows_of_the_driver(self):

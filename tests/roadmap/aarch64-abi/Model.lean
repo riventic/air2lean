@@ -405,18 +405,21 @@ def rejectedByTranslator : List String → Bool
   | ["rmw", ty, op, _, _, _, _] => padded ty && (op == "Max" || op == "Min")
   | _ => false
 
-/-- The `cpu <name> …` rows of one CPU against the baseline rows `base`. A row that differs
+/-- The value of a `feature <name> <0|1>` row. -/
+def feature (rows : List (List String)) (name : String) : Option Bool :=
+  rows.findSome? fun l => match l with
+    | ["feature", n, v] => if n == name then some (v == "1") else none
+    | _ => none
+
+/-- The `cpu <name> …` rows of one CPU against the baseline rows `base` (whose `fullfp16` is
+`baseFp16`). A row that differs
 from the baseline must be the CPU's name, a feature, an `fma` row, or a row of an operation
 that the translator rejects (`rejectedByTranslator`, never a match); the count of unchanged
 rows must be the rest; and every `fma` row, changed or not, must be the rule's result with the
 CPU's `fullfp16`. Returns the number of `fma` rows checked and the rejected rows, or what is
 wrong. -/
-def cpuRows (os : String) (version : Air2Lean.ZigVersion) (cpu : String)
+def cpuRows (os : String) (version : Air2Lean.ZigVersion) (baseFp16 : Bool) (cpu : String)
     (base rows : List (List String)) : Except String (Nat × List String) := do
-  let feature (ls : List (List String)) (name : String) : Option Bool :=
-    ls.findSome? fun l => match l with
-      | ["feature", n, v] => if n == name then some (v == "1") else none
-      | _ => none
   let changed := rows.filter (·.head? != some "same")
   let [["same", same, "of", total]] := rows.filter (·.head? == some "same")
     | throw s!"cpu {cpu}: no single `same <k> of <n>` row"
@@ -435,7 +438,6 @@ def cpuRows (os : String) (version : Air2Lean.ZigVersion) (cpu : String)
     | _ =>
       if rejectedByTranslator l then rejected := rejected ++ [s!"cpu {cpu} {" ".intercalate (l.take 5)}"]
       else throw s!"cpu {cpu}: `{" ".intercalate l}` depends on the CPU, which the model does not state"
-  let some baseFp16 := feature base "fullfp16" | throw "no `feature fullfp16` row"
   let rule := f16Rule os version ((feature changed "fullfp16").getD baseFp16)
   let fmas := base.filter (·.head? == some "fma")
   for l in fmas do
@@ -493,8 +495,7 @@ def main (args : List String) : IO UInt32 := do
   -- The baseline CPU's rows, and each other CPU's.
   let cpuLines := lines.filterMap fun l => match l with | "cpu" :: cpu :: row => some (cpu, row) | _ => none
   let lines := lines.filter (·.head? != some "cpu")
-  let some fullfp16 := lines.findSome? fun l => match l with
-      | ["feature", "fullfp16", v] => some (v == "1") | _ => none
+  let some fullfp16 := feature lines "fullfp16"
     | IO.eprintln s!"aarch64-abi: {path}: no `feature fullfp16` line"; return 1
   let rule := f16Rule os zig fullfp16
   -- Every synchronization row the probe prints must be present (a missing row is not a pass).
@@ -573,7 +574,7 @@ def main (args : List String) : IO UInt32 := do
   unless (cpuLines.map (·.1)).eraseDups == cpus triple do
     bad := bad ++ [s!"`cpu` rows of {(cpuLines.map (·.1)).eraseDups}, expected {cpus triple}"]
   for cpu in cpus triple do
-    match cpuRows os zig cpu lines (cpuLines.filterMap fun (c, row) => if c == cpu then some row else none) with
+    match cpuRows os zig fullfp16 cpu lines (cpuLines.filterMap fun (c, row) => if c == cpu then some row else none) with
     | .ok (n, rows) => cpuFmas := cpuFmas + n; rejected := rejected ++ rows
     | .error e => bad := bad ++ [e]
   for d in diverged do IO.println s!"divergence (not a match) {d}"
