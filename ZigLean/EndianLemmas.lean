@@ -10,7 +10,7 @@ Proof-only (it imports `ZigLean/Mem/Lemmas.lean` through `ZigLean.ReprCast`), so
 
 * `intEncOf_lawful`, `sliceEncOf_lawful`, `optSliceEncOf_lawful`: integers of every width,
   slices and optional slices read back as stored; `floatEncOf_decode_encode`: so does a float
-  that is not a NaN;
+  that is not a NaN; `intEncExt_lawful`: so does an integer stored with its padding extended;
 * `floatEncOf_nan_int`, `floatEncOf_decode_encode_nan`: a stored NaN's bytes are undefined, so
   an integer or float read of them is `.unspecified` (`docs/architecture-audit/nan-bits.md`);
 * `Vec.packedEncOf_lawful`: a vector reads back as stored, whenever its lanes' bits do;

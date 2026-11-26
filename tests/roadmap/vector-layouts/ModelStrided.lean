@@ -15,21 +15,25 @@ and `Vec.stridedEnc_set`). -/
 
 open Zig
 
-/-- The lanes fit at every count, so the encoding is lawful at the backend's size. -/
+/-- The encoding of an integer vector is lawful at every lane width and count, and its size is
+the backend's. -/
 example (n w : Nat) (signed : Bool) :
     letI := intEncExt .little signed w
-    @LawfulEnc (Vec (BitVec w) n) (Vec.stridedEnc n (x86VecSize n (intSize w)) (x86VecAlign n (intSize w))) :=
+    @LawfulEnc (Vec (BitVec w) n) (Vec.stridedEnc n (x86VecAlign n (intSize w))) :=
   letI := intEncExt .little signed w
   haveI := intEncExt_lawful .little signed w
-  Vec.stridedEnc_lawful n _ _ (le_x86VecSize n (intSize w))
+  Vec.stridedEnc_lawful n _
+example (n w : Nat) (signed : Bool) :
+    (@Vec.stridedEnc _ (intEncExt .little signed w) n (x86VecAlign n (intSize w))).size =
+      x86VecSize n (intSize w) := rfl
 /-- A store of lane 2's bytes at its cell leaves the image of the vector with lane 2 replaced. -/
 example (v : Vec (BitVec 9) 4) (x : BitVec 9) :
     letI := intEncExt .little false 9
-    (Vec.stridedEnc 4 16 16).encode (v.set 2 x) =
-      writeBytes ((Vec.stridedEnc 4 16 16).encode v) (2 * 2) (Enc.encode x) :=
+    (Vec.stridedEnc 4 16).encode (v.set 2 x) =
+      writeBytes ((Vec.stridedEnc 4 16).encode v) (2 * 2) (Enc.encode x) :=
   letI := intEncExt .little false 9
   haveI := intEncExt_lawful .little false 9
-  Vec.stridedEnc_set 16 16 v 2 x (fun y _ => LawfulEnc.size_encode y) (LawfulEnc.size_encode x)
+  Vec.stridedEnc_set 16 v 2 x (fun y _ => LawfulEnc.size_encode y) (LawfulEnc.size_encode x)
 
 def hex2 (x : BitVec 8) : String :=
   let s := String.ofList (Nat.toDigits 16 x.toNat)
@@ -56,8 +60,9 @@ def case {α : Type} {n : Nat} [BEq α] (enc : Enc α) (bits : α → Nat) (name
     (lanes : Vector α n) (i : Fin n) (x : α) : List String × Bool :=
   letI := enc
   let s := Enc.size α
-  let (size, align) := (x86VecSize n s, x86VecAlign n s)
-  letI : Enc (Vec α n) := Vec.stridedEnc n size align
+  let align := x86VecAlign n s
+  letI : Enc (Vec α n) := Vec.stridedEnc n align
+  let size := Enc.size (Vec α n)
   let v : Vec α n := ⟨lanes⟩
   let w := v.set i x
   let j := (i.val + 1) % n

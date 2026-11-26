@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # L09 element-stride vector layout (tests/roadmap/vector-layouts/README.md §Element stride).
-# Needs `lake build ZigLean.VecStride`.
 #
 #   strided.sh [--native]
 #
@@ -14,6 +13,7 @@ set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "$repo_root"
 here=tests/roadmap/vector-layouts
+python3 -B scripts/lean-deps.py --build "$here/ModelStrided.lean"
 lean_cmd=(lake env lean)
 if [ -n "${AIR2LEAN_LEAN:-}" ]; then lean_cmd=("$AIR2LEAN_LEAN"); fi
 "${lean_cmd[@]}" --run "$here/ModelStrided.lean" "$here/stage2-x86_64-linux.txt"

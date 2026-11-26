@@ -107,21 +107,23 @@ stride, as in the array `[n]T` (`@Vector(4, u9)`: four 2-byte lanes; `@Vector(2,
 | `stage2_x86_64`, `bool` lanes (bit-packed, lane `i` is bit `i`) | `⌈n / 8⌉` rounded up to a power of 2 up to 64 lanes, 16 above (32 with AVX2 above 128 lanes, 64 with AVX-512 above 256) | `⌈n / 8⌉` rounded up to the alignment |
 | `stage2_c` | the lane's | `n * @sizeOf(T)` |
 
+The table is Zig 0.14.1's `src/Type.zig`; the probe below confirms the baseline `stage2_x86_64`
+rows for Zig 0.14.1–0.17.1, and nothing here confirms the AVX thresholds or the `stage2_c` row.
 `ZigLean/VecStride.lean` has the baseline `stage2_x86_64` rows (`x86VecAlign`, `x86VecSize`,
 `x86BoolVecAlign`, `x86BoolVecSize`) and one encoding for every row with a byte stride:
-`Vec.stridedEnc n size align` is the image of the array of the lanes (any lane encoding
-`Enc α`), then undefined padding bytes up to `size`.
+`Vec.stridedEnc n align` is the image of the array of the lanes (any lane encoding `Enc α`),
+then undefined padding bytes up to its size, `n * Enc.size α` rounded up to `align`.
 
 | Theorem (`ZigLean/VecStride.lean`) | Statement |
 |---|---|
-| `Vec.stridedEnc_size_encode`, `Vec.stridedEnc_decode_encode`, `Vec.stridedEnc_lawful` | A vector has an image of exactly `size` bytes when its lanes fit, and reads back as stored when each lane does. |
+| `Vec.stridedEnc_size_encode`, `Vec.stridedEnc_decode_encode`, `Vec.stridedEnc_lawful` | A vector has an image of exactly the encoding's size, and reads back as stored when each lane does. |
 | `Vec.stridedEnc_float_decode_encode` | A float vector without a NaN lane reads back as stored, at either byte order. |
 | `Vec.stridedEnc_cell` | The bytes at `[i * s, (i + 1) * s)` (`s` the lane's size) are lane `i`'s image, so a load of the lane type at that offset reads lane `i`. |
 | `Vec.stridedEnc_set` | A store of a lane's bytes at its cell leaves exactly the image of `v.set i x`: lane `i` is replaced and no other byte changes (`Vec.set_lane_ne`). |
-| `x86BoolVec_eq` | Up to 64 lanes, a `bool` vector has the LLVM size and alignment (its image is `Vec.packedEnc`'s). |
+| `x86BoolVec_eq` | Up to 64 lanes, a `bool` vector has the LLVM size and alignment (`boolVecLayout`); the probe's two `bool` vectors have `Vec.packedEnc`'s image. |
 | `intEncExt_lawful` (`ZigLean/EndianLemmas.lean`) | The integer lane encoding of this backend (a store writes the extension of the whole ABI integer) is lawful. |
 
-These are universal over the lane encoding, lane count, size and lane values, and introduce no
+These are universal over the lane encoding, lane count, alignment and lane values, and introduce no
 axioms.
 
 Compiler evidence. `tests/roadmap/vector-layouts/probe_strided.zig` prints `@sizeOf` and
@@ -138,8 +140,8 @@ for byte. The lines cover the listed vectors at the baseline CPU only.
 
 Translator scope. None yet: `modelLayout` gives every vector the LLVM size and alignment and
 compares them with the exporter's, so a `stage2_x86_64` profile is accepted only where the two
-layouts are the same bytes (a byte-lane vector of exactly 16 bytes, a `bool` vector of up to 64
-lanes) and rejected elsewhere. Not covered by the encoding: a `bool` vector of more than 64
+layouts are the same bytes (a vector of whole-byte lanes that take 9 to 16 bytes, a `bool` vector
+of up to 64 lanes) and rejected elsewhere. Not covered by the encoding: a `bool` vector of more than 64
 lanes, a CPU with AVX, and the `stage2_c` rows (no probe).
 
 ## Lane pointers
