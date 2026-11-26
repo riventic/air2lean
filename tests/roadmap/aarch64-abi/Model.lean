@@ -422,6 +422,12 @@ def cpuRows (os : String) (version : Air2Lean.ZigVersion) (cpu : String)
     | throw s!"cpu {cpu}: no single `same <k> of <n>` row"
   unless same.toNat?.isSome && total.toNat? == same.toNat?.map (· + changed.length) do
     throw s!"cpu {cpu}: `same {same} of {total}` with {changed.length} changed rows"
+  -- The rows of `probe.zig` (the other baseline rows are those of the vector probe, the limit
+  -- programs and the `f80` atomics, which run at the baseline CPU only).
+  let probe := base.filter fun l =>
+    !(l.head?.any (["vector", "lane", "load", "pad", "limit", "f80atomic"].contains ·))
+  unless total.toNat? == some probe.length do
+    throw s!"cpu {cpu}: `same {same} of {total}`, but the baseline has {probe.length} probe rows"
   let mut rejected : List String := []
   for l in changed do
     match l with

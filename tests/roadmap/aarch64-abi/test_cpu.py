@@ -146,6 +146,9 @@ class Model(unittest.TestCase):
                           'cpu generic+lse+rcpc: `rmw u64 Max 1 2 1 1` depends on the CPU')
         self.assert_fails('aarch64-linux-gnu', linux.replace(same, 'cpu generic+lse+rcpc same 303 of 304\n'),
                           'cpu generic+lse+rcpc: `same 303 of 304` with 2 changed rows')
+        # A count that adds up, of fewer rows than the probe prints.
+        self.assert_fails('aarch64-linux-gnu', linux.replace(same, 'cpu generic+lse+rcpc same 1 of 3\n'),
+                          'cpu generic+lse+rcpc: `same 1 of 3`, but the baseline has 304 probe rows')
         self.assert_fails('aarch64-linux-gnu', linux.replace(same, ''),
                           'cpu generic+lse+rcpc: no single `same <k> of <n>` row')
         dropped = '\n'.join(l for l in linux.splitlines() if not l.startswith('cpu generic+lse+rcpc ')) + '\n'

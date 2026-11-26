@@ -83,14 +83,14 @@ def expected(bits, target, version, mode, backend=LLVM, features=None):
     rt = "" if mode == "ieee" else "Rt017" if version == "0.17.1" else "Rt"
     fused = f"pure (Zig.Float.fma{rt}Fused {A} {B} {C})"
     reference = f"Zig.Float.fma{rt}Chk {A} {B} {C}"
-    wide = " ".join(f"(Zig.Float.conv .f64 {x})" for x in (A, B, C))
+    a, b, c = (f"(Zig.Float.conv .f64 {x})" for x in (A, B, C))
+    wide = f"{a} {b} {c}"
     kind = rule(target, version, backend, features) if bits == 16 else "f16"
     if kind == "f16":
         return fused if target in AARCH64 else reference
     if kind == "f32":
         return reference
     if kind == "f64-mul-add":
-        a, b, c = (f"(Zig.Float.conv .f64 {x})" for x in (A, B, C))
         return f"pure (Zig.Float.conv .f16 (Zig.Float.add (Zig.Float.mul {a} {b}) {c}))"
     if target in AARCH64:
         return f"pure (Zig.Float.conv .f16 (Zig.Float.fma{rt}Fused {wide}))"
