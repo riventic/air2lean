@@ -13,8 +13,11 @@ for the list theorems (`ListsFba.Witness`):
   translated `FixedBufferAllocator`, every other pointer is `.illegal` (`env_runs`); its contract
   comes from the allocator's proof through `CAllocSpec.env_ofRaw` (`fba_spec`), so every theorem
   of `SentinelSpec` has a satisfiable allocator premise.
-* `Interfaces.SentinelSpec.make_spec.nonvacuous`: `make` of zero items, with the precondition at
-  program start (`ListsFba.start_admissible`; the empty list joins the frame).
+* `Interfaces.SentinelSpec.make_spec.nonvacuous`: `make` of one item, with the precondition at
+  program start (`ListsFba.make_admissible`; the empty list joins the frame).
+* `append_grant.nonvacuous`, `resize_grant.nonvacuous`, `release_spec.nonvacuous`: an empty
+  buffer whose one-byte grant the real allocator made (`ListsFba.granted_admissible`: its `alloc`
+  run from program start returns a grant, `AllocFba.FBA.fthread_alloc_room`).
 -/
 
 namespace ListsFba.Sentinel
@@ -54,13 +57,27 @@ theorem fba_spec (A1 A0 γ : Nat) :
     (fun s k ra φ bs _ h2 h3 => (fthread_free ctx (B A1 A0) γ 0 s k ra φ bs h2 h3).toPartial.post
       fun _ _ h => Full.sep_emp.mpr h))
 
--- `make` of zero items: the allocator's invariant, the fee and the vtable at program start; the
--- empty list joins the frame.
+-- `make` of one item at program start (`make_admissible`).
 nonvacuity_witness Interfaces.SentinelSpec.make_spec := by
-  obtain ⟨A1, A0, γ, h⟩ := start_admissible
-  exact ⟨ext, ctx, vtp, fns, I0 A1 A0 γ, env0, Frac.one.half, 0, by decide,
-    by simp [finv, ffits, B], fba_spec A1 A0 γ,
-    (FAdmit.Start.frame (R := Lists.Append.alist (I0 A1 A0 γ) Frac.one.half hdr [])
-      (h.mono fun _ h => ac_cast h (by simp only [startPre]; ac_rfl))).cadmit⟩
+  obtain ⟨A1, A0, γ, h⟩ := make_admissible
+  exact ⟨ext, ctx, vtp, fns, I0 A1 A0 γ, env0, Frac.one.half, 1, by decide,
+    fits16 A1 A0 γ (by decide) (by decide), fba_spec A1 A0 γ, h⟩
+
+-- `append`, `resize` and `release` of an empty buffer: its grant of one byte (the sentinel's) is
+-- the real allocator's, after its `alloc` ran from program start (`granted_admissible`).
+nonvacuity_witness Interfaces.SentinelSpec.append_grant := by
+  obtain ⟨A1, A0, γ, p, bs, hbs, h⟩ := granted_admissible 1 0 (by decide) (by decide) (by decide)
+  exact ⟨ext, ctx, vtp, fns, I0 A1 A0 γ, env0, Frac.one.half.half, ⟨p, 0⟩, 0, bs, hbs.symm,
+    by simp, fits16 A1 A0 γ (by decide) (by simp), fba_spec A1 A0 γ, CAdmit.of h⟩
+
+nonvacuity_witness Interfaces.SentinelSpec.resize_grant := by
+  obtain ⟨A1, A0, γ, p, bs, hbs, h⟩ := granted_admissible 1 0 (by decide) (by decide) (by decide)
+  exact ⟨ext, ctx, vtp, fns, I0 A1 A0 γ, env0, Frac.one.half.half, ⟨p, 0⟩, 1, bs, hbs.symm,
+    by simp, by decide, fits16 A1 A0 γ (by decide) (by decide), fba_spec A1 A0 γ, CAdmit.of h⟩
+
+nonvacuity_witness Interfaces.SentinelSpec.release_spec := by
+  obtain ⟨A1, A0, γ, p, bs, hbs, h⟩ := granted_admissible' 1 0 (by decide) (by decide) (by decide)
+  exact ⟨ext, ctx, vtp, fns, I0 A1 A0 γ, env0, Frac.one.half.half, ⟨p, 0⟩, bs, hbs.symm,
+    by rw [hbs]; decide, fba_spec A1 A0 γ, CAdmit.of h⟩
 
 end ListsFba.Sentinel

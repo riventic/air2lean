@@ -122,9 +122,12 @@ theorem FAdmit.Start.toFAdmit {P : FAssn} (h : FAdmit.Start P) : FAdmit P :=
   FAdmit.iff_at.mpr ⟨m, hs, h⟩
 
 /-- A thread's admissible input: the thread owns every heap of a memory with no recorded access. -/
-theorem FAdmit.Start.cadmit {P : FAssn} (h : FAdmit.Start P) : CAdmit P :=
+theorem FAdmit.Start.fttadmit {P : FAssn} (h : FAdmit.Start P) : FTTAdmit P :=
   have ⟨m, ⟨hs, hf⟩, r, rF, hh, hp⟩ := h
-  CAdmit.of ⟨m, r, rF, hh, hp, hs.fconc, .of_owns (owns_of_footprint hf _ _), trivial⟩
+  ⟨m, r, rF, hh, hp, hs.fconc, .of_owns (owns_of_footprint hf _ _), trivial⟩
+
+theorem FAdmit.Start.cadmit {P : FAssn} (h : FAdmit.Start P) : CAdmit P :=
+  CAdmit.of h.fttadmit
 
 theorem FAdmit.Start.eupd {P P' : FAssn} (h : FAdmit.Start P) (hu : EUpd P P') :
     FAdmit.Start P' :=
