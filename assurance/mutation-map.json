@@ -123,9 +123,22 @@
       ]
     },
     "T05": {
-      "categories": [],
-      "negative_tests": [],
-      "mutants": []
+      "categories": [
+        "profile-selection"
+      ],
+      "negative_tests": [
+        {"path": "tests/roadmap/wasm-correspondence/test_correspondence.py", "anchor": "def test_unclassified_export_fails"},
+        {"path": "tests/roadmap/wasm-correspondence/test_correspondence.py", "anchor": "def test_trap_against_value_fails"},
+        {"path": "tests/roadmap/wasm-correspondence/test_correspondence.py", "anchor": "def test_target_specific_model_is_per_profile"},
+        {"path": "tests/roadmap/wasm-correspondence/test_correspondence.py", "anchor": "def test_relabeled_native_theorem_fails"}
+      ],
+      "mutants": [
+        {"name": "wasm-profile-model-native-width", "path": "tests/roadmap/mutation-map/mutants.py", "category": "profile-selection"},
+        {"name": "wasm-one-sided-nan-tolerated", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "wasm-ulp-bound-ignored", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "wasm-stale-sources-accepted", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"}
+      ],
+      "note": "The native/wasm32 relation checker (scripts/wasm-correspondence.py): a target-specific kernel meets each side's own profile model, a tolerated float pair needs both or no NaN and the declared ulp bound, and a record of other kernel sources is stale."
     },
     "T06": {
       "categories": [
@@ -1337,8 +1350,11 @@
           "anchor": "expect \"reset-own-block\""
         }
       ],
-      "mutants": [],
-      "note": "Cross-allocator free/destroy/remap and use after reset are .illegal (executable regressions); no designated mutant yet."
+      "mutants": [
+        {"name": "fba-alloc-end-index-kept", "path": "tests/roadmap/alloc-fba/mutant.sh", "category": "other"},
+        {"name": "page-shrink-tail-kept-mapped", "path": "tests/roadmap/alloc-translated/mutant.sh", "category": "other"}
+      ],
+      "note": "Cross-allocator free/destroy/remap and use after reset are .illegal (executable regressions). The translated allocators' full-state proofs reject a FixedBufferAllocator alloc that does not advance end_index (FBA.fallocSpec fails) and a PageAllocator shrink that leaves the cut pages mapped (PageSpec fails)."
     },
     "M02": {
       "categories": [
@@ -2336,7 +2352,28 @@
           "anchor": "theorem no_creation_falseInv"
         }
       ],
-      "mutants": []
+      "mutants": [
+        {"name": "down-relation", "path": "tests/roadmap/loop-tactics/counted/mutants.json", "category": "other"},
+        {"name": "ne-bound", "path": "tests/roadmap/loop-tactics/counted/mutants.json", "category": "other"},
+        {"name": "le-range", "path": "tests/roadmap/loop-tactics/counted/mutants.json", "category": "other"},
+        {"name": "len-measure", "path": "tests/roadmap/loop-tactics/counted/mutants.json", "category": "other"},
+        {"name": "read-cell", "path": "tests/roadmap/loop-tactics/counted/mutants.json", "category": "other"},
+        {"name": "houdini-pruned-kept", "path": "tests/roadmap/loop-tactics/counted/mutants.json", "category": "other"},
+        {"name": "post-exit-counter", "path": "tests/roadmap/loop-tactics/counted/mutants.json", "category": "other"},
+        {"name": "houdini-kept-dropped", "path": "tests/roadmap/loop-tactics/counted/mutants.json", "category": "other"},
+        {"name": "credits-count-wrong", "path": "tests/roadmap/loop-tactics/counted/mutants.json", "category": "other"},
+        {"name": "credits-count-dropped", "path": "tests/roadmap/loop-tactics/counted/mutants.json", "category": "other"},
+        {"name": "array-item-relation", "path": "tests/roadmap/loop-tactics/counted/mutants.json", "category": "other"},
+        {"name": "array-items-swapped", "path": "tests/roadmap/loop-tactics/counted/mutants.json", "category": "other"},
+        {"name": "sum-wrong-term", "path": "tests/roadmap/loop-tactics/counted/mutants.json", "category": "other"},
+        {"name": "credits-plain-kept", "path": "tests/roadmap/loop-tactics/counted/mutants.json", "category": "other"},
+        {"name": "relation", "path": "tests/roadmap/loop-tactics/nested/mutants.json", "category": "other"},
+        {"name": "bound", "path": "tests/roadmap/loop-tactics/nested/mutants.json", "category": "other"},
+        {"name": "outer-sum", "path": "tests/roadmap/loop-tactics/nested/mutants.json", "category": "other"},
+        {"name": "outer-bound", "path": "tests/roadmap/loop-tactics/nested/mutants.json", "category": "other"},
+        {"name": "measure", "path": "tests/roadmap/loop-tactics/nested/mutants.json", "category": "other"}
+      ],
+      "note": "The generator is untrusted: each seeded wrong invariant, measure or credit count of the committed Inv.lean (mutants.json) must elaborate and make the fixture's Proof.lean fail inside its named theorems (invgen_mutants.py)."
     },
     "I01": {
       "categories": [
@@ -3279,9 +3316,15 @@
         {
           "path": "tests/roadmap/c-frontend/cgen.py",
           "anchor": "a loop counter is assigned"
-        }
+        },
+        {"path": "tests/roadmap/c-frontend/test_run.py", "anchor": "def test_a_demoted_file_is_never_lean_ok"}
       ],
-      "mutants": []
+      "mutants": [
+        {"name": "c-demoted-file-counted-translated", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "c-deferred-lean-ok", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"},
+        {"name": "c-native-mismatch-ungated", "path": "tests/roadmap/mutation-map/mutants.py", "category": "other"}
+      ],
+      "note": "The C front-end record (run.py): a file with a demoted function or a deferred Lean run is never lean_ok, and a translated program whose results differ from C's is gated."
     }
   }
 }
