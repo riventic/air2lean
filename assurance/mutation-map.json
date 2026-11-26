@@ -591,9 +591,51 @@
           "path": "tests/roadmap/packed-casts/expected/wrong.txt",
           "category": "layout",
           "anchor": "bytesToU: 0x3412"
+        },
+        {
+          "name": "opt_u8sToInt",
+          "path": "tests/roadmap/packed-casts/expected/wrong.txt",
+          "category": "layout",
+          "anchor": "opt_u8sToInt: 0x34011201"
+        },
+        {
+          "name": "opt_arraysToInt",
+          "path": "tests/roadmap/packed-casts/expected/wrong.txt",
+          "category": "layout",
+          "anchor": "opt_arraysToInt: 0x605040103020101"
+        },
+        {
+          "name": "opt_intToU16s",
+          "path": "tests/roadmap/packed-casts/expected/wrong.txt",
+          "category": "layout",
+          "anchor": "opt_intToU16s: 0x10000"
+        },
+        {
+          "name": "opt_intToU24s",
+          "path": "tests/roadmap/packed-casts/expected/wrong.txt",
+          "category": "layout",
+          "anchor": "opt_intToU24s: 0x1000000"
+        },
+        {
+          "name": "opt_intToPacked",
+          "path": "tests/roadmap/packed-casts/expected/wrong.txt",
+          "category": "layout",
+          "anchor": "opt_intToPacked: 0xffff"
+        },
+        {
+          "name": "opt_zerosToInt",
+          "path": "tests/roadmap/packed-casts/expected/wrong.txt",
+          "category": "layout",
+          "anchor": "opt_zerosToInt: 0x0"
+        },
+        {
+          "name": "opt_nestedToInt",
+          "path": "tests/roadmap/packed-casts/expected/wrong.txt",
+          "category": "layout",
+          "anchor": "opt_nestedToInt: 0x1220111"
         }
       ],
-      "note": "expected/wrong.txt holds the results other readings of the casts would give (a sentinel left out of the bits, the result's sentinel forced, an array of `void` with bits, a float array and a packed union with their bytes swapped). check.sh (`wrong_models_rejected`) puts each in place of the model's line of that name and requires the comparison with the retained native observation to fail; the mutants are results of a wrong model, not edits of the Lean model, so a kill shows that the observation separates the readings."
+      "note": "expected/wrong.txt holds the results other readings of the casts would give (a sentinel left out of the bits, the result's sentinel forced, an array of `void` with bits, a float array and a packed union with their bytes swapped, an optional item's flag byte before its payload, in the item's last byte, left out or shared by a nested optional). check.sh (`wrong_models_rejected`) puts each in place of the model's line of that name and requires the comparison with the retained native observation to fail; the mutants are results of a wrong model, not edits of the Lean model, so a kill shows that the observation separates the readings."
     },
     "L08": {
       "categories": [
