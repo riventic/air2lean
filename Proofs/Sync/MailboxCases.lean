@@ -43,22 +43,20 @@ abbrev stdDispatch := dispatch swOf sem
 /-- The std semaphore's mutex value. -/
 def stdK : Cfg := ⟨sem.c, .inr (.inl rfl)⟩
 
+/-- `semZ`'s bytes are the mailbox's (`semBytes`). -/
+theorem semZ_bytes : Enc.encode semZ = semBytes := by decide +kernel
+
 /-- **The consumer receives the whole message under every schedule**: every completed run of
 the mailbox client returns 34 (every oracle, every fuel; the spawn does not fail). -/
 theorem mailbox_spec (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {v : Except ErrName (BitVec 32)} {m : Mem}
     (io : Io) (h : (Sched.run env stdDispatch fuel o (stdMain io) (mem0 σ)).run = some (.ok (v, m))) :
-    v = .ok 34 := by
-  obtain ⟨_, _, hv, -⟩ := (proto stdK swOf).run_sound env (Proto.of_available henv) stdDispatch G0
-    (dispatch_spec sem rfl) (fun _ _ _ _ _ hq => hq.2) rfl
-    (main_spec Tgt.semWork (fun _ => rfl) semZ (by decide +kernel) sem rfl (m₀ := mem0 σ) rfl io) h
-  exact hv
+    v = .ok 34 :=
+  run_spec Tgt.semWork (fun _ => rfl) semZ semZ_bytes sem stdK rfl env henv io h
 
 /-- **No run of the mailbox client gives an error**: no data race on the message, no deadlock
 (also when the consumer sleeps at the condition first), no lifetime error at the free. -/
 theorem mailbox_safe (env : Env) (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} {e : Error} (io : Io) :
     e ≠ .stackOverflow → (Sched.run env stdDispatch fuel o (stdMain io) (mem0 σ)).run ≠ some (.error e) :=
-  (proto stdK swOf).run_safe env (Proto.of_available henv) stdDispatch G0 rfl (dispatch_spec sem rfl)
-    (fun _ _ _ _ hq => hq.2) rfl
-    (main_spec Tgt.semWork (fun _ => rfl) semZ (by decide +kernel) sem rfl (m₀ := mem0 σ) rfl io)
+  run_safe Tgt.semWork (fun _ => rfl) semZ semZ_bytes sem stdK rfl env henv io
 
 end Sync.CaseContracts.V0_17_1.H_6c696e7578.Mailbox

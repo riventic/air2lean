@@ -14,9 +14,9 @@ profile and every semaphore implementation:
   the producer's on the mailbox, so `dispatch` runs `producer` (`producer_spec`), then its end
   (`qkid`).
 - **`main`** (`main_spec`), from the start memory `m₀` of a translation with no globals (its
-  `mem0 σ`, `hm₀`): the mailbox's block and its stores, the protocol's start
-  (`inv_of_box`), the spawn (`inv_spawn`), the wait (`wp_waitM`), the loads of the message from
-  its part, the join of the producer and the free of the block.
+  `mem0 σ`, `hm₀`).
+- **The results** (`run_spec`, `run_safe`): every completed run returns 34, and no run gives an
+  error, from the protocol's soundness (`Proto.run_sound`, `Proto.run_safe`).
 
 The parameters: the spawn targets `Tgt` with the producer's target `sw` and its reader `swOf`
 (`hsw`), the semaphore type `Sm` with its value `z` with no permit (`hz`: its bytes are
@@ -86,5 +86,34 @@ theorem main_spec (sw : Ptr → Tgt) (hsw : ∀ p, swOf (sw p) = some p) {Sm : T
     wp_loadA (K := K) (swOf := swOf), wp_loadB (K := K) (swOf := swOf),
     inv_joins (K := K) (swOf := swOf), wp_join (K := K) (swOf := swOf),
     wp_free (K := K) (swOf := swOf), joinedAll_of_threads, empty_disj, hsw, hz, semBytes, hb]
+
+/-! ## The results, for every translation and every semaphore implementation -/
+
+section Results
+
+variable (sw : Ptr → Tgt) (hsw : ∀ p, swOf (sw p) = some p) {Sm : Type} [Enc Sm] (z : Sm)
+  (hz : Enc.encode z = semBytes) (I : SemImpl Tgt) (K : Cfg) (hLc : K.c = I.c) (env : Env)
+  (henv : env.spawn = .available) {σ : Placement} {fuel : Nat} {o : Nat → Nat} (io : Io)
+
+include hsw hz hLc henv
+
+/-- **The consumer receives the whole message under every schedule**: every completed run of
+the mailbox client returns 34 (every oracle, every fuel; the spawn does not fail). -/
+theorem run_spec {v : Except ErrName (BitVec 32)} {m : Mem}
+    (h : (Sched.run env (dispatch swOf I) fuel o (mailMain sw z I io) (Mem.ofGlobals σ [])).run =
+      some (.ok (v, m))) : v = .ok 34 := by
+  obtain ⟨_, _, hv, -⟩ := (proto K swOf).run_sound env (Proto.of_available henv) (dispatch swOf I)
+    G0 (dispatch_spec I hLc) (fun _ _ _ _ _ hq => hq.2) rfl (main_spec sw hsw z hz I hLc rfl io) h
+  exact hv
+
+/-- **No run of the mailbox client gives an error**: no data race on the message, no deadlock
+(also when the consumer sleeps at the condition first), no lifetime error at the free. -/
+theorem run_safe {e : Error} : e ≠ .stackOverflow →
+    (Sched.run env (dispatch swOf I) fuel o (mailMain sw z I io) (Mem.ofGlobals σ [])).run ≠
+      some (.error e) :=
+  (proto K swOf).run_safe env (Proto.of_available henv) (dispatch swOf I) G0 rfl
+    (dispatch_spec I hLc) (fun _ _ _ _ hq => hq.2) rfl (main_spec sw hsw z hz I hLc rfl io)
+
+end Results
 
 end Sync.Mailbox
