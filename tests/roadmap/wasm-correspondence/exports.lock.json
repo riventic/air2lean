@@ -210,6 +210,7 @@
   "schema": 1,
   "sources_sha256": {
     "../pointer-width/c_ints.zig": "72a8f58c410898bf5dda1909ad210b7554f0459e12bc4bf284d0bcb68709dd43",
+    "../pointer-width/layouts.zig": "a9a5ae7483f404676be7c45fbf9611ed21adeb9222878302b39356948702559a",
     "../pointer-width/names.zig": "e537458fdfb7004a767a4774008242c7e8e19fe5f4c1921e031cd6bbc6b8eab6",
     "../pointer-width/pointer_width.zig": "c159b677b1c4b1f29da4a45e1cb4254b6fada56952c1181cee71df70fc0823ee",
     "../pointer-width/reject.zig": "45427fb0bedcf1233750a62fc4d5da2a907dc4e8f050a547f63d672527f29d2f",
