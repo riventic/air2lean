@@ -2022,9 +2022,29 @@
           "name": "i",
           "path": "scripts/mutate.sh",
           "category": "other"
+        },
+        {
+          "name": "stale-read-unchecked",
+          "path": "tests/roadmap/asm-effects/Placement.lean",
+          "category": "other"
+        },
+        {
+          "name": "stale-address-unchecked",
+          "path": "tests/roadmap/asm-effects/Placement.lean",
+          "category": "other"
+        },
+        {
+          "name": "undefined-read-unchecked",
+          "path": "tests/roadmap/asm-effects/Placement.lean",
+          "category": "other"
+        },
+        {
+          "name": "undeclared-write-unchecked",
+          "path": "tests/roadmap/asm-effects/Placement.lean",
+          "category": "other"
         }
       ],
-      "note": "A02 decision 1: a block outside the instruction model or whose operands do not match its instructions is rejected (test_cli.py), only uncovered entries stay opaque (test_env_cli.py), and mutation (i) breaks the model's bswap, which the differential test of examples/asm must detect."
+      "note": "A02 decision 1: a block outside the instruction model or whose operands do not match its instructions is rejected (test_cli.py), only uncovered entries stay opaque (test_env_cli.py), and mutation (i) breaks the model's bswap, which the differential test of examples/asm must detect. Placement independence (Block.check_placement): Placement.lean has, for each rule of the footprint check, a block that only this rule rejects and that computes another value on the machine under an admissible placement; the check without the rule would accept it."
     },
     "A03": {
       "categories": [
