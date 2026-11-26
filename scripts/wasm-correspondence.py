@@ -540,7 +540,11 @@ def main(argv=None) -> int:
         if errors:
             print('\n'.join(errors), file=sys.stderr)
             return 1
-        path, data = record(args.zig, args.target, relation)
+        try:
+            path, data = record(args.zig, args.target, relation)
+        except ValueError as error:  # an undeclared target, or not the pinned runtime
+            print(error, file=sys.stderr)
+            return 1
         if args.verify:
             committed = json.loads(path.read_text()) if path.is_file() else None
             problems = reobservation_errors(relation, committed, data)

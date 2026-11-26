@@ -161,12 +161,12 @@ def manifest(fixture):
         source = (FIXTURES / fixture / entry['source']).resolve()
         if not source.is_file() or FIXTURES.resolve().parents[1] not in source.parents:  # the repository
             raise Error('%s: no source %s in the repository' % (where, entry['source']))
-        modules = entry.get('modules', {'dep': entry['source']})
-        if not isinstance(modules, dict) or not modules or 'root' in modules or not all(
+        modules = entry.get('modules')
+        if 'modules' in entry and (not isinstance(modules, dict) or not modules or 'root' in modules or not all(
                 re.fullmatch(r'[A-Za-z_]\w*', name) and isinstance(path, str)
                 and (FIXTURES / fixture / path).resolve().is_file()
                 and FIXTURES.resolve().parents[1] in (FIXTURES / fixture / path).resolve().parents
-                for name, path in modules.items()):
+                for name, path in modules.items())):
             raise Error('%s: modules maps module names (not `root`) to sources in the repository' % where)
         if 'filter' not in entry and example_of(fixture, entry) is None:
             raise Error('%s: without a filter the source must be examples/<x>/<x>.zig' % where)

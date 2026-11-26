@@ -4,7 +4,8 @@
 // is `unreachable`). A fresh instance follows every trap: a trap leaves the shadow stack
 // pointer and memory as they were mid-call. Any other exception fails the run.
 // A module that imports WASI preview1 runs as a reactor under Node's WASI with no arguments,
-// environment or preopened directory; the panic report it writes to stderr is discarded.
+// environment or preopened directory; what it writes to stdout or stderr (a panic's report) is
+// discarded, so this driver's stdout carries the results only.
 import { openSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import process from 'node:process';
@@ -20,7 +21,7 @@ const { WASI } = usesWasi ? await import('node:wasi') : {};
 const sink = usesWasi ? openSync('/dev/null', 'w') : undefined;
 const fresh = async () => {
   if (!usesWasi) return WebAssembly.instantiate(module, {});
-  const wasi = new WASI({ version: 'preview1', args: [], env: {}, stderr: sink });
+  const wasi = new WASI({ version: 'preview1', args: [], env: {}, stdout: sink, stderr: sink });
   const instance = await WebAssembly.instantiate(module, wasi.getImportObject());
   wasi.initialize(instance);
   return instance;

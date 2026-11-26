@@ -45,7 +45,8 @@ Run this command from the air2lean repository with the pinned Lean toolchain
 available. It checks the production hash, exports AIR with the explicit
 `x86_64-linux-musl` / `baseline` / `ReleaseSafe` profile, compares both complete JSON
 exports and the complete generated Lean body with committed artifacts, tests the wrapper's
-native boundary cases, builds `ZigLean`, and kernel-checks the generated module
+native boundary cases, builds `ZigLean` and `ZigLean.Mem.WidthLemmas` (the width-generic
+closed form both body lemmas are instances of), and kernel-checks the generated module
 and proofs. The native compiler version is checked before export. Only the stock-compiler
 native test uses the host target; it imports the same wrapper
 and original source. The script creates temporary compiler and Lean outputs and
