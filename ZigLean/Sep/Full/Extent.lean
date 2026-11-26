@@ -407,9 +407,11 @@ theorem GOk.ext1 {m : Mem} {L : Ghost} (hL : ∀ x, L.extent x = ECell.unit) {b 
     (by rw [← eb]; exact ht b)
   have ecl : ((L.add (Ghost.atExt b c')).add gF).cl = ((L.add (Ghost.atExt b c)).add gF).cl := by
     funext x y; simp
+  have edev : ((L.add (Ghost.atExt b c')).add gF).dev = ((L.add (Ghost.atExt b c)).add gF).dev := by
+    funext D; simp [Ghost.add, Ghost.atExt]
   refine ⟨⟨⟨by rw [eled]; exact hv, fun x => ?_, hcv.1.congr ecl eep, by simpa using hcv.2⟩, N, fun γ hγ =>
     ⟨by rw [eled]; exact (hN γ hγ).1, fun x e k => ?_, by rw [eled]; exact (hN γ hγ).2.2⟩⟩, fun x => ?_,
-    hcf.congr ecl, by simpa using hma⟩
+    hcf.congr ecl, by rw [edev]; simpa using hma⟩
   · rw [eep]
     by_cases e : x = b
     · subst e; rw [eb]; exact ⟨hb.1, hb.2.1⟩
@@ -472,11 +474,11 @@ variable {P P' P'' R : FAssn}
 
 /-- A ghost update (`Upd`) is an update in every memory: it keeps the extent claims. -/
 theorem of_upd (hu : Upd P P') : EUpd P P' := fun m r rF hh hp _ => by
-  obtain ⟨r', hp', e, k, x, xc, xa, xs, hg, ht⟩ := hu r hp rF.gh hh.ghost.1
+  obtain ⟨r', hp', e, k, x, xc, xa, xs, xd, hg, ht⟩ := hu r hp rF.gh hh.ghost.1
   exact ⟨r', ⟨by rw [e]; exact hh.disj, by rw [e]; exact hh.heap.reShare (Ghost.share_add₂ xs rfl),
     by rw [k]; exact hh.know,
     hh.knowF, ⟨hg, ht m hh.ghost.2.1, hh.ghost.2.2.1.congr (by funext x y; simp [xc]),
-      by simpa [xa] using hh.ghost.2.2.2⟩⟩, hp'⟩
+      MemAuth.congrGh (by simp [xa]) (by funext D; simp [xd]) hh.ghost.2.2.2⟩⟩, hp'⟩
 
 /-- Ghost resources (anything that owns no bytes, no knowledge and no stack token: extent claims,
 ledger tokens, epoch tokens, credits) can be dropped. -/

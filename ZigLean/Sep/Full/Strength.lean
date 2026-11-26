@@ -91,7 +91,8 @@ theorem holds_ofHeap {m : Mem} {hP hF : Heap} (hd : Heap.Disjoint hP hF) (hm : m
   · show Ghost.Ok _ _; rw [Ghost.Ok, Ghost.add_comm]; exact hok
   · show ExtTrue m (Ghost.unit.add _); rw [Ghost.unit_add]; exact heapExts_true hd hm
   · show ClFresh m (Ghost.unit.add _); rw [Ghost.unit_add]; exact fun _ _ _ => rfl
-  · show MemAuth m (Ghost.unit.add _).ac; simpa using MemAuth.unit hns
+  · show MemAuth m (Ghost.unit.add _).ac (Ghost.unit.add _).dev
+    simpa using MemAuth.unit hns
 
 /-- The memories of the strength log: `Mem.FSeq` memories without stack budgets (the memories
 of the legacy logic; under a budget a full-state frame holds the threads' stack tokens). -/

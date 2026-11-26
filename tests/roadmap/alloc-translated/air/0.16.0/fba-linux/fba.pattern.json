@@ -37,19 +37,18 @@
   "error_tracing": false,
   "export_stage": "analyzed-air"
  },
- "name": "mem.absorbSentinel__anon_26269",
- "module": "std",
+ "name": "fba.pattern",
+ "module": "root",
  "src": {
-  "file": "mem.zig",
-  "module": "std",
-  "decl_line": 4727
+  "file": "fba.zig",
+  "module": "fba",
+  "decl_line": 41
  },
- "instance_key": "7342b53a30ed5047ec91039edea814cdc01d94e10127775cd607a33832861686",
  "params": [
   0
  ],
  "noalias": [],
- "ret": 0,
+ "ret": 1,
  "body": [
   {
    "id": 0,
@@ -59,29 +58,36 @@
   },
   {
    "id": 1,
-   "tag": "alloc",
-   "ty": 1
+   "tag": "dbg_stmt",
+   "ty": 2,
+   "line": 2,
+   "column": 5
   },
   {
    "id": 2,
-   "tag": "store_safe",
-   "ty": 2,
+   "tag": "mul_wrap",
+   "ty": 0,
    "args": [
     {
-     "inst": 1
+     "inst": 0
     },
     {
-     "inst": 0
+     "ty": 0,
+     "val": "31"
     }
    ]
   },
   {
    "id": 3,
-   "tag": "bitcast",
-   "ty": 3,
+   "tag": "add_wrap",
+   "ty": 0,
    "args": [
     {
-     "inst": 1
+     "inst": 2
+    },
+    {
+     "ty": 0,
+     "val": "7"
     }
    ]
   },
@@ -89,77 +95,44 @@
    "id": 4,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 4,
-   "column": 9
+   "line": 2,
+   "column": 12
+  },
+  {
+   "id": 5,
+   "tag": "trunc",
+   "ty": 1,
+   "args": [
+    {
+     "inst": 3
+    }
+   ]
   },
   {
    "id": 6,
    "tag": "dbg_stmt",
    "ty": 2,
-   "line": 5,
-   "column": 9
+   "line": 2,
+   "column": 5
   },
   {
    "id": 7,
    "tag": "ret_safe",
-   "ty": 4,
+   "ty": 3,
    "args": [
     {
-     "inst": 0
+     "inst": 5
     }
    ]
   }
  ],
  "types": [
   {
-   "k": "ptr",
-   "size": "slice",
-   "const": false,
-   "child": 5,
-   "ptr_align": 1,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 16,
-   "abi_align": 8
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": false,
-   "child": 0,
-   "ptr_align": 8,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
+   "k": "int",
+   "signed": false,
+   "bits": 64,
    "abi_size": 8,
    "abi_align": 8
-  },
-  {
-   "k": "void",
-   "abi_size": 0,
-   "abi_align": 1
-  },
-  {
-   "k": "ptr",
-   "size": "one",
-   "const": true,
-   "child": 0,
-   "ptr_align": 8,
-   "volatile": false,
-   "allowzero": false,
-   "address_space": "generic",
-   "sentinel": false,
-   "host_size": 0,
-   "abi_size": 8,
-   "abi_align": 8
-  },
-  {
-   "k": "noreturn"
   },
   {
    "k": "int",
@@ -167,6 +140,14 @@
    "bits": 8,
    "abi_size": 1,
    "abi_align": 1
+  },
+  {
+   "k": "void",
+   "abi_size": 0,
+   "abi_align": 1
+  },
+  {
+   "k": "noreturn"
   }
  ]
 }
