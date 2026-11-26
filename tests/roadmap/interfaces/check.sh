@@ -80,7 +80,8 @@ done
 # check's LEAN_PATH, whose checkout build holds the 0.17.1 Proofs.Lists.Open.
 # Proofs.Lists.Policy is M03's `appendEach_spec`: the append loop for every allocator and every
 # failure decision.
-lists_proofs=(Proofs.Lists.Linked Proofs.Lists.Alloc Proofs.Lists.Append Proofs.Lists.Bounded Proofs.Lists.Policy)
+lists_proofs_no_allocator=(Proofs.Lists.Linked Proofs.Lists.Bounded)
+lists_proofs=("${lists_proofs_no_allocator[@]}" Proofs.Lists.Alloc Proofs.Lists.Append Proofs.Lists.Policy)
 env -u LEAN_PATH lake build "${lists_proofs[@]}"
 lists_tree() {  # lists_tree VERSION MODULE...: the modules over VERSION's lists translation
   local version=$1 tree=$repo_root/.lake/check-tree/interfaces-lists-$1
@@ -89,18 +90,17 @@ lists_tree() {  # lists_tree VERSION MODULE...: the modules over VERSION's lists
   (cd "$tree" && env -u LEAN_PATH lake build "$@")
 }
 for version in 0.16.0 0.15.2; do lists_tree "$version" "${lists_proofs[@]}"; done
-# Zig 0.14.1: the proofs that take no allocator hold over its translation. The proof text of the
-# others does not (docs/interfaces.md#the-list-proofs-over-older-zig-versions): 0.14.1's std names
-# the list type `ArrayListAlignedUnmanaged`, so the functions that Append and Policy name
-# (`array_list_Aligned_u32_null_*`) do not exist in its translation, and its `mem.Allocator`
-# computes the alignment by a call of `Alignment.fromByteUnits` at run time, whose walk in Alloc
-# passes Lean's default recursion depth. These proofs are not claimed for 0.14.1.
-lists_tree 0.14.1 Proofs.Lists.Linked Proofs.Lists.Bounded
-grep -q '^def array_list_ArrayListAlignedUnmanaged_u32_null_append ' "$work/lists-0.14.1.lean"
-if grep -q '^def array_list_Aligned_u32_null_append ' "$work/lists-0.14.1.lean"; then
-  echo 'interfaces: the 0.14.1 lists translation names the list as the proofs do: add it to the versions above' >&2
+# Zig 0.14.1: only the proofs that take no allocator; the others are not claimed for it, and why
+# their text does not hold there is in docs/interfaces.md#the-list-proofs-over-older-zig-versions.
+# One of the two reasons is pinned here, so a translation that changes it is noticed: 0.14.1's std
+# names the list type `ArrayListAlignedUnmanaged`, not `Aligned` as Append and Policy do.
+if ! grep -q '^def array_list_ArrayListAlignedUnmanaged_u32_null_append ' "$work/lists-0.14.1.lean" ||
+    grep -q '^def array_list_Aligned_u32_null_append ' "$work/lists-0.14.1.lean"; then
+  echo 'interfaces: the 0.14.1 lists translation no longer names the list ArrayListAlignedUnmanaged:' \
+    'review the versions above and docs/interfaces.md' >&2
   exit 1
 fi
+lists_tree 0.14.1 "${lists_proofs_no_allocator[@]}"
 # The proofs over the 0.17.1 translations (docs/interfaces.md, proof side), kernel-checked with
 # only the standard axioms; ClosureCX (after MixSpec, which it imports) is the counterexample to
 # using the environment's contract for a vtable of the program.
