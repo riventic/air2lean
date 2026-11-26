@@ -1,0 +1,16 @@
+{
+  "fixture": "Zig 0.17.1 array-to-vector coercion (array_to_vector), compiler-exported AIR",
+  "export": {
+    "manifest": "tests/roadmap/zig017/exports.json (source, flags, versions), pinned by exports.lock.json (scripts/fixture-exports.py)",
+    "air_shape": "each function: arg (the array), array_to_vector, ret_safe; lane kinds u8, i16, u24, i32, u64, i128, u1, i7, bool, f16, f32, f64, f80, f128, and the sentinel arrays [5:0]u8, [3:7]i16"
+  },
+  "inputs": {"path": "tests/roadmap/zig017/tovec/inputs.txt", "generator": "gen_inputs.py (seed 17)", "count": 420,
+             "sha256": "fe6b6123b2bbfb74b0a914781e4b4ad44980d3f66b3e2478525b07bbcfbf407e"},
+  "differential": [
+    {"host": "aarch64-macos (native, check.sh)", "stock_zig_sha256": "bb6397b497438ce9e9d0d668fbfb42e777082f2b0af87ab06dec5ec928e19df5",
+     "result": "420 vectors equal"},
+    {"host": "x86_64-linux (docker linux/amd64, Rosetta; native.zig cross-built -target x86_64-linux -z norelro by the same stock Zig)",
+     "stock_zig_sha256": "bb6397b497438ce9e9d0d668fbfb42e777082f2b0af87ab06dec5ec928e19df5",
+     "result": "420 vectors equal"}
+  ]
+}
