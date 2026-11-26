@@ -56,6 +56,53 @@ class AirFuzz(unittest.TestCase):
         distinct = {tuple(air_fuzz.generate(s, self.corpus, self.vocab)[0]) for s in range(40)}
         self.assertGreater(len(distinct), 35)
 
+    def test_legacy_corpus_keeps_its_seeds(self):
+        # The mixed corpus (CI's first run, the committed regressions' seeds) is unchanged: the
+        # schema-11 in-file seeds first, then every golden file.
+        names = [name for name, _ in self.corpus[:3]]
+        self.assertEqual(names, ["builtin:ident", "builtin:call", "builtin:global"])
+        self.assertTrue(all(docs[0]["schema"] == 11 and docs[0]["zig_version"] == "0.16.0"
+                            for _, docs in self.corpus[:3]))
+        self.assertEqual(self.vocab[3:], ([], []))
+
+    def test_version_corpus_is_that_versions_air_only(self):
+        for version in air_fuzz.supported_versions():
+            corpus = air_fuzz.load_corpus(version)
+            seeds = corpus[:3]
+            self.assertEqual([name for name, _ in seeds], ["builtin:ident", "builtin:call", "builtin:global"])
+            for _, docs in corpus:
+                for doc in docs:
+                    self.assertEqual(doc["zig_version"], version)
+                    # Older versions also have legacy schema-11 goldens (no profile).
+                    if doc["schema"] == 12:
+                        self.assertEqual(doc["profile"]["zig_version"], version)
+            self.assertTrue(all(docs[0]["schema"] == 12 for _, docs in seeds))
+            # The seeds use the version's schema-12 fields: module, typed callee, full pointer type.
+            self.assertEqual(seeds[1][1][0]["body"][1]["callee"]["module"], "root")
+            self.assertIn("address_space", seeds[2][1][0]["types"][3])
+            sources = {name for name, _ in corpus[3:]}
+            self.assertTrue(any(name.startswith("tests/golden/") for name in sources), version)
+        corpus = air_fuzz.load_corpus("0.17.1")
+        tags, _, _, foreign, others = air_fuzz._vocabulary(corpus, "0.17.1")
+        # 0.17's renamed tags come from its exports (fixture manifests too), 0.16's names are foreign.
+        self.assertTrue({"bit_cast", "bit_cast_safe", "ptr_cast", "int_cast", "div_ceil"} <= set(tags))
+        self.assertTrue({"bitcast", "intcast", "struct_field_val", "bool_and"} <= set(foreign))
+        self.assertFalse(set(foreign) & set(tags))
+        self.assertEqual(sorted(others), sorted(set(air_fuzz.supported_versions()) - {"0.17.1"}))
+
+    def test_version_generation_is_reproducible_and_uses_the_version_mutations(self):
+        corpus = air_fuzz.load_corpus("0.17.1")
+        vocab = air_fuzz._vocabulary(corpus, "0.17.1")
+        steps = []
+        for seed in range(300):
+            first = air_fuzz.generate(seed, corpus, vocab)
+            self.assertEqual(first, air_fuzz.generate(seed, corpus, vocab))
+            steps += first[1]["steps"]
+        self.assertTrue(any("zig_version" in step for step in steps))
+        foreign = set(vocab[3])
+        self.assertTrue(any(step.startswith("doc") and " tag " in step and step.rsplit("-> ", 1)[1] in foreign
+                            for step in steps))
+
     def test_emit_oracle(self):
         header = "-- air2lean-profile: {}\n"
         self.assertIsNone(air_fuzz.classify_emit(0, "", header + "def f := 1\n"))
@@ -122,7 +169,7 @@ class AirFuzz(unittest.TestCase):
         self.assertTrue(cases, "expected at least one committed shrunk regression")
         for case in cases:
             meta = json.loads((case / "case.json").read_text())
-            self.assertEqual(case.name, f"seed-{meta['seed']}")
+            self.assertEqual(case.name, air_fuzz.case_name(meta["seed"], meta.get("zig_version")))
             self.assertIn(meta["expected_exit"], (0, 1))
             self.assertTrue(meta["original_failure"])
             self.assertTrue(list(case.glob("[0-9][0-9].json")))

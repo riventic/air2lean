@@ -28,3 +28,5 @@ cp "$here/PageTok.lean" "$here/PageSpec.lean" "$work/"
 # The proof fails in PageSpec itself (the mutated translation and PageTok build).
 python3 -B scripts/fixtures.py mutant alloc-translated --src "$work" --fails PageSpec
 echo "alloc-translated mutant: rejected (the resize proof fails for the leaking shrink)"
+# Q02: the kill of the designated mutant (assurance/mutation-map.json, M01).
+python3 -B scripts/mutation_kill_log.py --check "$here/check.sh" "$here/mutant.sh" 'page-shrink-tail-kept-mapped'

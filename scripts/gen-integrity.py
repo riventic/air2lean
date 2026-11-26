@@ -234,6 +234,13 @@ FIXTURES = [
     for v in ("0.15.2", "0.17.1")
     for target, ns in (("s390x-linux", "S390x"), ("mips64-linux", "Mips64"), ("x86_64-linux", "X64"))
 ] + [
+    # T03 check.sh: names.zig (`@tagName`, `@errorName`) per Zig version and target.
+    (f"tests/roadmap/big-endian/BigEndian/Names/V{v.replace('.', '_')}/{ns}/Gen.lean",
+     f"tests/roadmap/big-endian/air/{v}/names/{target}",
+     ["--namespace", f"BigEndian.Names.V{v.replace('.', '_')}.{ns}", "--prefix", "names."], "exact")
+    for v in ("0.16.0", "0.17.1")
+    for target, ns in (("s390x-linux", "S390x"), ("mips64-linux", "Mips64"), ("x86_64-linux", "X64"))
+] + [
     # L07/L08 packed-casts/check.sh: one translation per source and version.
     (f"tests/roadmap/packed-casts/PackedCasts/V{v.replace('.', '_')}/{ns}.lean",
      f"tests/roadmap/packed-casts/air/{v}/{src}",
@@ -276,11 +283,24 @@ FIXTURES = [
      ["--namespace", f"PointerWidth.{ns}", "--prefix", "pointer_width."], "exact")
     for ns, target in (("Wasm32", "wasm32-freestanding"), ("Wasi", "wasm32-wasi"), ("X64", "x86_64-linux"))
 ] + [
+    # T02 check.sh: pointer_width.zig exported by Zig 0.17.1.
+    (f"tests/roadmap/pointer-width/PointerWidth/V0_17_1/{ns}/Gen.lean",
+     f"tests/roadmap/pointer-width/air/0.17.1/pointer_width/{target}",
+     ["--namespace", f"PointerWidth.V0_17_1.{ns}", "--prefix", "pointer_width."], "exact")
+    for ns, target in (("Wasm32", "wasm32-freestanding"), ("Wasi", "wasm32-wasi"), ("X64", "x86_64-linux"))
+] + [
+    # T02 check.sh: names.zig (`@tagName`, `@errorName`) per Zig version and target.
+    (f"tests/roadmap/pointer-width/PointerWidth/Names/V{v.replace('.', '_')}/{ns}/Gen.lean",
+     f"tests/roadmap/pointer-width/air/{v}/names/{target}",
+     ["--namespace", f"PointerWidth.Names.V{v.replace('.', '_')}.{ns}", "--prefix", "names."], "exact")
+    for v in ("0.16.0", "0.17.1")
+    for ns, target in (("Wasm32", "wasm32-freestanding"), ("Wasi", "wasm32-wasi"), ("X64", "x86_64-linux"))
+] + [
     # tests/roadmap/env-boundaries/translate.sh: the committed ENV-03 registry binds the OS primitives.
     (f"tests/roadmap/env-boundaries/expected/EnvStd{v}.lean", f"tests/roadmap/env-boundaries/air/{zv}",
-     ["--namespace", f"EnvStd{v}", "--prefix", f"std_io{v}.",
+     ["--namespace", f"EnvStd{v}", "--prefix", f"{src}.",
       "--model-registry", str(ROOT / f"tests/roadmap/env-boundaries/registry/std{v}.json")], "exact")
-    for v, zv in (("15", "0.15.2"), ("16", "0.16.0"))
+    for v, zv, src in (("15", "0.15.2", "std_io15"), ("16", "0.16.0", "std_io16"), ("17", "0.17.1", "std_io16"))
 ] + [
     (f"tests/roadmap/error-width/expected/ErrorWidth{bits}.lean", f"tests/roadmap/error-width/air/bits{bits}",
      ["--namespace", f"ErrorWidth{bits}", "--prefix", "error_width."], "exact")
@@ -301,7 +321,10 @@ FIXTURES = [
         ("error_ints_w8", "ErrorInts", "ErrorIntsW8", "error_ints.", "0.16.0", ("0.16.0", "0.17.1", "0.15.2")),
         ("runtime_lanes", "RuntimeLanes", "RuntimeLanes", "runtime_lanes.", "0.15.2", ("0.15.2",)),
         ("float_lanes", "FloatLanes", "FloatLanes", "float_lanes.", "0.16.0", ("0.16.0", "0.15.2", "0.14.1")),
-        ("lane_shapes", "LaneShapes", "LaneShapes", "lane_shapes.", "0.16.0", ("0.16.0", "0.15.2", "0.14.1")))
+        ("lane_shapes", "LaneShapes", "LaneShapes", "lane_shapes.", "0.16.0",
+         ("0.16.0", "0.17.1", "0.15.2", "0.14.1")),
+        ("lane_values", "LaneValues", "LaneValues", "lane_values.", "0.16.0",
+         ("0.16.0", "0.17.1", "0.15.2", "0.14.1")))
     for v in versions
 ]
 

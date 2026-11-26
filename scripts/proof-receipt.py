@@ -21,8 +21,19 @@ import time
 ROOT = Path(__file__).absolute().parents[1]
 # The full assumption audit is written compactly (~165 MB at 29k theorems) and grows with the proof corpus.
 MAX_JSON = 256 * 1024 * 1024
-MAX_FILES = 30000
-MAX_DECLARATIONS = 65536
+MAX_FILES = 30000  # Files of a checkout/inventory; independent of the audit's entry counts below.
+
+
+def entry_limit(byte_limit, smallest_entry):
+    """Most entries of a JSON array that fit in `byte_limit` bytes: each takes at least the compact
+    encoding of the smallest entry its validator accepts, plus a separating comma."""
+    return byte_limit // (len(json.dumps(smallest_entry, separators=(',', ':'))) + 1)
+
+
+# Entry-count limits on the audit's arrays follow from the JSON byte limit (docs/proof-receipts.md).
+MAX_THEOREMS = entry_limit(MAX_JSON, {'allowed': True, 'module': '', 'name': ''})
+MAX_DECLARATIONS = entry_limit(MAX_JSON, {'dependencies': [], 'kind': '', 'module': '', 'name': ''})
+MAX_ARTIFACTS = entry_limit(MAX_JSON, {'module': ''})
 MAX_FILE = 512 * 1024 * 1024
 MAX_TOTAL = 16 * 1024 * 1024 * 1024
 OVERLAYS = ('LEAN', 'LAKE', 'LEAN_PATH', 'LEAN_SRC_PATH', 'LEAN_SYSROOT', 'LAKE_HOME', 'ELAN_TOOLCHAIN',
@@ -410,7 +421,7 @@ def artifact_rows(freshness):
     """module -> its row in the audit's freshness binding (scripts/assumptions.py
     `replay_and_freshness`): the olean the audit loaded, its source, and both digests."""
     rows = freshness.get('artifacts')
-    demand(isinstance(rows, list) and len(rows) <= MAX_FILES, 'invalid audit artifact binding')
+    demand(isinstance(rows, list) and len(rows) <= MAX_ARTIFACTS, 'invalid audit artifact binding')
     bound = {}
     for row in rows:
         mapping(row, 'audit artifact')
@@ -439,7 +450,7 @@ def audit_ok(plan, audit):
            and audit.get('modules') == plan['modules'] and audit.get('build_checked') is True,
            'audit status/scope/build mismatch')
     theorems = audit.get('theorems')
-    demand(isinstance(theorems, list) and bool(theorems) and len(theorems) <= MAX_FILES,
+    demand(isinstance(theorems, list) and bool(theorems) and len(theorems) <= MAX_THEOREMS,
            'empty/oversized theorem inventory')
     for theorem in theorems:
         mapping(theorem, 'theorem entry')

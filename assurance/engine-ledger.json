@@ -794,17 +794,12 @@
   {
    "id": "61",
    "title": "A rule whose precondition has an if the facts do not decide",
-   "status": "open",
+   "status": "closed",
    "requester": "arena",
-   "progress": "open, reproduced minimally 2026-11-24 (SepAuto/LedgerOpen.lean, row 61): the rule's precondition is `P ⋆ rel A n len` with `def rel A n len := if n < len then A else emp`, the state holds the part `A ⋆ P` and no fact decides `n < len`: `fsym [h]` reports `no rule for the command c with the precondition A ⋆ P`. With `rel A n len` (or the `if` itself) in the state the rule applies and frames. Missing in the engine's planner: a case split on a rule precondition's undecided condition when the state has no matching `if` (in the arena: `relBytes` at resize's `callIndirect`). Earlier note: the plain case WORKS on fsym-wp (agent 14 /tmp/fsym-eng/f14/T61.lean: a rule with `if n < len then … else …` in its pre, against the same undecided `if` in the state, framed). Needs the arena's resize (`relBytes`, a `callIndirect` rule) to reproduce",
+   "progress": "closed by PR #843 (claude/fsym-split): the planner notes the undecided condition of an assertion-level `if` it meets while a frame is to be inferred (`noteSplit`), and when no rule applies (or only one with a refuted side goal) the walk splits the goal on it before inlining the command (Auto.lean `walkCore`, `splitWalk`); a rule argument that only the refuted case mentions (`relBytes … tl` of a growth) takes a default value. Regressions SepAuto/Updates.lean `Split.rule_if`, `Split.rule_if_unused`; `CAllocSpec.resize_shrink`/`resize_grow` deleted for `CAllocSpec.resize_upTo` in the arena's `loop66` proofs.",
    "request": "**A rule whose precondition has an `if` the facts do not decide** (`relBytes s.ptr … n len tl`: `if n < len`) is not applied; `fsym` then walks the `callIndirect` arms inline (into the page allocator's `munmap`) and stops with \"no rule\". Needed: split on the undecided condition, as for side conditions. Workaround: `resize_shrink`/`resize_grow` (Core), the condition a side goal of each.",
-   "workaround_sites": [
-    "ZigLean/Sep/Full/Dispatch.lean",
-    "tests/roadmap/alloc-arena/ArenaSpec.lean",
-    "tests/roadmap/alloc-arena/ArenaSpecMacos.lean",
-    "tests/roadmap/alloc-arena/ArenaSpecFixed.lean"
-   ],
-   "deletion_plan": "delete `CAllocSpec.resize_shrink` and `CAllocSpec.resize_grow` (Dispatch.lean) and pass `CAllocSpec.resize` with `FitsUpTo.fits` in the arena's `loop66` proofs (ArenaSpec*.lean) once a rule whose precondition has an undecided `if` (`relBytes`) is applied with the `if` split as a side condition.",
+   "workaround_sites": [],
+   "deletion_plan": "Done (PR #843): `CAllocSpec.resize_shrink`/`resize_grow` deleted; the arena's `loop66` proofs pass `CAllocSpec.resize_upTo`.",
    "note": "plain case works; the arena case REPRODUCED on codex/arena-reset-retain (2026-10-19): `loop66_c0` with the plain refined `resize` under `FitsUpTo` in place of `resize_shrink`/`resize_grow` walks the dispatch arms inline and stops with \"no rule for the command ConcM.liftMem (Os.munmap …)\" (scratch arena-retain9/exp/E14.lean). Workaround site: the arena's `reset` (`loop66`, ArenaSpec*.lean) resizes a kept node through `CAllocSpec.resize_shrink`/`resize_grow`."
   },
   {
@@ -832,15 +827,12 @@
    "title": "An update at a return against a state with an undecided if",
    "status": "open",
    "requester": "fba-reset",
-   "progress": "open, reproduced minimally 2026-11-24 (SepAuto/LedgerOpen.lean, row 64): pre `apts p v ⋆ (if n < len then apts q w else emp)`, `pure ()`, post `Pub p ⋆ (if n < len then Pub q else emp)`, with one update for each case in the list. `fsym` leaves `hc : n < len ⊢ EUpd (apts p v ⋆ apts q w) (Pub p ⋆ if n < len then Pub q else emp)` and the same for `¬ n < len`: the return entailment splits the state's `if`, but in each case the post's `if` is not reduced by `hc` and the caller's updates are not tried again. Client check: AllocFba/Full.lean without its `by_cases` runs into the heartbeat limit (200000). Engine change in `closeEntail`/`tryUpd`.",
+   "progress": "engine part done by PR #843 (claude/fsym-split): at a return with the caller's updates, the walk splits the state's undecided assertion-level `if` first, so each case plans the updates with its own atoms; a rule's side goal left with such an `if` in the state splits the `if` first too (Auto.lean `walkCore`, `stateIf?`). Regression SepAuto/Updates.lean `Split.state_if` (the former LedgerOpen repro); the arena's `resize_ct` (ArenaSpec*.lean) dropped its `rcases Nat.lt_trichotomy`. Open only for the FBA site (`fresize_spec`'s `by_cases`, lane fba-0171).",
    "request": "**An update at a return against a state with an undecided `if`** (FBA `resize`: the spec's `relBytes … n len tl` = `if n < len then region ⋆ claim else emp`): the walk keeps the `if` to the return; `closeEntail` splits it, but `tryUpd` plans the update's P₀ in the unsplit state, so an update that applies in one branch (resize of the last grant: the released region joins the tail) applies in neither. Needed: split the state's undecided `if` before trying the caller's updates (each branch with its own update). WORKAROUND: `by_cases hc : n.toNat < s.len.toNat <;> fsym [...]` in tests/roadmap/alloc-fba/AllocFba/Full.lean `fresize_spec` (codex/fba-reset-ledger).",
    "workaround_sites": [
-    "tests/roadmap/alloc-fba/AllocFba/Full.lean",
-    "tests/roadmap/alloc-arena/ArenaSpec.lean",
-    "tests/roadmap/alloc-arena/ArenaSpecMacos.lean",
-    "tests/roadmap/alloc-arena/ArenaSpecFixed.lean"
+    "tests/roadmap/alloc-fba/AllocFba/Full.lean"
    ],
-   "deletion_plan": "delete the `by_cases hc : n.toNat < s.len.toNat` split in `fresize_spec` and the arena's `rcases Nat.lt_trichotomy n.toNat s.len.toNat` in each `resize_ct` (the latter also needs #return-bool-split) once the walk splits the state's undecided `if` before the caller's updates (replaced by the P09-E5 ghost-update registry)."
+   "deletion_plan": "delete the `by_cases hc : n.toNat < s.len.toNat` split in `fresize_spec` now that the walk splits the state's undecided `if` before the caller's updates (the arena's sites went with PR #843)."
   },
   {
    "id": "65",
@@ -1007,16 +999,12 @@
   {
    "id": "return-bool-split",
    "title": "A return whose Boolean value the postcondition matches on is not split",
-   "status": "open",
+   "status": "closed",
    "requester": "arena-gen (arena macros -> fsym)",
-   "progress": "open, reproduced minimally 2026-11-24 (SepAuto/LedgerOpen.lean, row return-bool-split): `pure (decide (n ≤ len))` with the post `match r with | true => ⟪n ≤ len⟫ | false => ⟪len < n⟫` (⋆ `P`) leaves `EUpd P ((match decide (n ≤ len) with …) ⋆ P)`; with a post defined by cases (`PostB p n len r`) and an update it leaves `EUpd (apts p v) (PostB p n len (decide (n ≤ len)))`. Missing: a split of the return entailment on the undecided Boolean that the post matches on (engine, `closeEntail`). Earlier note: an update now takes its result unknowns from the return's value (ledger #update-result-unknowns), so only the split is missing",
+   "progress": "closed by PR #843 (claude/fsym-split): a return that neither the entailment nor an update closes, of a value of a non-recursive inductive type that is not a constructor and that the postcondition depends on, is split by cases on the value (generalized with its equation), each case a return of a constructor (Auto.lean `walkCore`, `splitValue`). Regressions SepAuto/Updates.lean `Split.return_bool`, `Split.return_bool_match` (the former LedgerOpen repros); the arena's `resize_ct` (ArenaSpec*.lean) dropped its `rcases Nat.lt_trichotomy`.",
    "request": "**A return of an undecided Boolean expression that the postcondition matches on is not split**: the arena's `resize` returns `pure (le false n len)` on the path of a grant that is not the first node's last; the postcondition `rresizePost … (le false n len)` matches on it, and with `n` against `len` undecided (`n ≥ len` known, `n = len` or `n > len` not) no update closes the return (`resize_other_upd` needs `n ≤ len`, `resize_false_upd` needs `n > len`). Needed: at a return, split on an undecided `Bool`/`Prop` that the postcondition matches on, as on an `if` of the program.",
-   "workaround_sites": [
-    "tests/roadmap/alloc-arena/ArenaSpec.lean",
-    "tests/roadmap/alloc-arena/ArenaSpecMacos.lean",
-    "tests/roadmap/alloc-arena/ArenaSpecFixed.lean"
-   ],
-   "deletion_plan": "delete `rcases Nat.lt_trichotomy n.toNat s.len.toNat` in each arena `resize_ct` (with #64) once the walk splits a return's undecided Boolean that the postcondition matches on."
+   "workaround_sites": [],
+   "deletion_plan": "Done (PR #843): the `rcases Nat.lt_trichotomy` in each arena `resize_ct` is gone."
   },
   {
    "id": "arena-resize-update-cost",
@@ -1138,11 +1126,11 @@
    "progress": "open, unchanged (checked 2026-11-24): `loop78_step` still splits the list by hand (`rcases ns with _ | ⟨nd, _ | ⟨nd2, ns⟩⟩ <;> cases it`, ArenaSpec.lean) in the three arena specs. The uniform walk is the list-walk engine work of row list-walk-step (owned by running work); this row closes with it.",
    "request": "**A loop over a linked list whose invariant names the rest of the list as one recursive predicate is not walked uniformly.** The arena's `loop78` keeps the last node: its invariant is `Chain CI true (ns.map NodeV.full) s.it` (`Chain` recursive over the list, its next pointer null at the last node). `fsym` needs the list's cases split by hand (`rcases ns with _ | ⟨nd, _ | ⟨nd2, ns⟩⟩ <;> cases it`), `Chain` kept folded (`attribute [local fsym_atom] Chain FreeCl`) and, per case, a hand unfolding of the first node and the folded rest (`chain_one`, `chain_full_cons2`, Reset.lean) with its own rule list. Needed: unfold a recursive predicate of the state by one constructor at the step that tests its pointer (the `if next == null` of the body), keeping the rest folded where the invariant names it again; then `loop78_step` takes the shape of `loop19_step` (one `cases … <;> simp only … <;> fsym`).",
    "workaround_sites": [
-    "tests/roadmap/alloc-arena/ArenaSpec.lean",
-    "tests/roadmap/alloc-arena/ArenaSpecMacos.lean",
-    "tests/roadmap/alloc-arena/ArenaSpecFixed.lean"
+    "tests/roadmap/alloc-arena/ArenaSpec/Retain.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecMacos/Retain.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed/Retain.lean"
    ],
-   "deletion_plan": "replace the per-case bullets of `loop78_step` (ArenaSpec.lean, ArenaSpecMacos.lean, ArenaSpecFixed.lean) with one uniform `fsym` walk, drop the local `fsym_atom` attribute and delete `chain_one`, `chain_cons2`, `chain_full_cons2` and `chain_head` (Reset.lean) if no other proof uses them, once fsym unfolds a recursive list predicate by the case the step tests."
+   "deletion_plan": "replace the per-case bullets of `loop78_step` (ArenaSpec/Retain.lean, ArenaSpecMacos/Retain.lean, ArenaSpecFixed/Retain.lean) with one uniform `fsym` walk, drop the local `fsym_atom` attribute and delete `chain_one`, `chain_cons2`, `chain_full_cons2` and `chain_head` (Reset.lean) if no other proof uses them, once fsym unfolds a recursive list predicate by the case the step tests."
   },
   {
    "id": "77",
@@ -1626,11 +1614,14 @@
    "progress": "open (workaround: the limit split before the walk)",
    "request": "**(perf)** The arena's `loop66` body computes a kept node's size `adj = (24 + v) &&& ~1` from a list's limit `v` and branches on `adj == 24` (give the node back) before the long keep path (resize in place, or a new node from the child). Walked once with the branch undecided, both list indices time out at 4M heartbeats each (one file, 428 s, 11 GB peak) and one index alone is killed at 16M (12 GB guard, 315 s); split before the walk on `v.toNat < 2` (which decides the branch) both paths of both indices take 247 s and 7 GB together. Suspected: the negative branch's fact `¬ adj = 24` (a disequality of a masked value) makes every later `omega` problem of the keep path split. Needed: the walk's cost with an undecided branch near that of the split cases (a disequality fact that `omega` does not split when the goal does not need it).",
    "workaround_sites": [
-    "tests/roadmap/alloc-arena/ArenaSpec.lean",
-    "tests/roadmap/alloc-arena/ArenaSpecMacos.lean",
-    "tests/roadmap/alloc-arena/ArenaSpecFixed.lean"
+    "tests/roadmap/alloc-arena/ArenaSpec/Loop66C0.lean",
+    "tests/roadmap/alloc-arena/ArenaSpec/Loop66C1.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecMacos/Loop66C0.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecMacos/Loop66C1.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed/Loop66C0.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed/Loop66C1.lean"
    ],
-   "deletion_plan": "delete the `by_cases hsm : v.toNat < 2` before `fsym` in `loop66_c0` and `loop66_c1` of each ArenaSpec*.lean once one walk of the body with the undecided branch stays within the budget."
+   "deletion_plan": "delete the `by_cases hsm : v.toNat < 2` before `fsym` in `loop66_c0` and `loop66_c1` of each ArenaSpec*/Loop66C0.lean, Loop66C1.lean once one walk of the body with the undecided branch stays within the budget."
   },
   {
    "id": "per-translation-walks",
@@ -1641,9 +1632,17 @@
    "request": "**The arena's three translations (`AllocArena.ArenaLinux`, `ArenaMacos`, `ArenaFixedLinux`) are separate Lean modules with their own constants and types**, even where the source is the same: `heap_ArenaAllocator_reset`, `.loop66`, `.loop78`, `heap_ArenaAllocator_deinit`, `countListCapacity` are byte-identical text in the three files (diff of the `reset` section: empty), but `heap_ArenaAllocator_resetLocals`, `heap_ArenaAllocator_resetExit`, `heap_ArenaAllocator_deinitLocals`, `heap_ArenaAllocator_State` are three distinct structures and inductives, and the generated functions three distinct constants. A specification is stated over a module's own types (`Inv66 … (s : heap_ArenaAllocator_resetLocals)` reads `s.local55`; `Exit66`/`Exit78`/`Exit9`/`Exit19` match the module's exit constructors `.br65`, `.br77`, `.br8`, `.br18`; `tables` names the module's entries) and proved by `fsym` unfolding the module's concrete body, so it cannot be stated once and instantiated: there is no common type to state `Inv66` over, and no shared code for one walk. After renaming the namespaces, `ArenaSpecMacos.lean` and `ArenaSpecFixed.lean` differ only in their doc comments (17 lines), and from `ArenaSpec.lean` only in its extra M01 statements; the module-independent layer (invariant, updates, ghost part, kept nodes) is already shared (`AllocArena/Core.lean`, `AllocArena/Reset.lean`). Needed: the translator emits std code that does not depend on the target once, in a module the target translations share (target constants as parameters, ledger mechanism M10-style generic code), or a module-generic presentation of a translation (a record of its types and functions with the defining equations, which `fsym` walks and each translation proves by `rfl`), so that a specification and its walk are stated once over it.",
    "workaround_sites": [
     "tests/roadmap/alloc-arena/ArenaSpecMacos.lean",
-    "tests/roadmap/alloc-arena/ArenaSpecFixed.lean"
+    "tests/roadmap/alloc-arena/ArenaSpecMacos/Entries.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecMacos/Retain.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecMacos/Loop66C0.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecMacos/Loop66C1.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed/Entries.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed/Retain.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed/Loop66C0.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed/Loop66C1.lean"
    ],
-   "deletion_plan": "state once, in a shared module over the generic translation, the defs and theorems that ArenaSpecMacos.lean and ArenaSpecFixed.lean repeat from ArenaSpec.lean (main's 24: `free_ct`/`free_spec`, `resize_ct`/`resize_granted_ct`/`remap_ct`/`resize_spec`/`remap_spec`, `al`, `tables`, `child_decode`, `count_loop`/`count_spec`, `Inv19`/`Exit19`/`loop19_step`/`loop19_ct`, `Lists9`/`Inv9`/`Exit9`/`loop9_step`/`loop9_ct`, `deinit_ct`, `reset_free_all_ct`/`reset_free_all_spec`; and the retaining reset's 15: `count_free`, `Inv78`/`Exit78`/`loop78_step`/`loop78_ct`, `Inv66`/`Exit66`/`loop66_c0`/`loop66_c1`/`loop66_step`/`loop66_ct`, `reset_retain_capacity_ct`/`reset_retain_with_limit_ct`/`reset_retain_capacity_spec`/`reset_retain_with_limit_spec`), and make each ArenaSpec*.lean an instance (only a walk over code that differs between translations, the patched `free` and `resize`, stays per module), once the translator emits the shared std code once or fsym walks a module-generic presentation."
+   "deletion_plan": "state once, in a shared module over the generic translation, the defs and theorems that ArenaSpecMacos.lean and ArenaSpecFixed.lean (with their modules ArenaSpecMacos/*.lean, ArenaSpecFixed/*.lean) repeat from ArenaSpec.lean (with ArenaSpec/*.lean) (main's 24: `free_ct`/`free_spec`, `resize_ct`/`resize_granted_ct`/`remap_ct`/`resize_spec`/`remap_spec`, `al`, `tables`, `child_decode`, `count_loop`/`count_spec`, `Inv19`/`Exit19`/`loop19_step`/`loop19_ct`, `Lists9`/`Inv9`/`Exit9`/`loop9_step`/`loop9_ct`, `deinit_ct`, `reset_free_all_ct`/`reset_free_all_spec`; and the retaining reset's 15: `count_free`, `Inv78`/`Exit78`/`loop78_step`/`loop78_ct`, `Inv66`/`Exit66`/`loop66_c0`/`loop66_c1`/`loop66_step`/`loop66_ct`, `reset_retain_capacity_ct`/`reset_retain_with_limit_ct`/`reset_retain_capacity_spec`/`reset_retain_with_limit_spec`), and make each ArenaSpec*.lean an instance (only a walk over code that differs between translations, the patched `free` and `resize`, stays per module), once the translator emits the shared std code once or fsym walks a module-generic presentation."
   },
   {
    "id": "arena-retained-capacity",
@@ -1668,10 +1667,16 @@
    "request": "**`attribute [local fsym_facts] MemFacts.region_end` (ArenaSpec.lean, ArenaSpecMacos.lean, ArenaSpecFixed.lean, before `Inv66`) lets `fsym` derive that an owned region ends at an offset of at most `2 ^ 63` (`ZigLean/Sep/Full/OwnedBound.lean`).** The retaining reset's `loop66` additions need it for the overflow-checked sums, and it is switched on by hand per file because making it a default fact costs every other walk. Needed: `fsym` derives or demands the bound only where an arithmetic side goal asks for it (on-demand facts from the state's owned regions), so no proof opts in.",
    "workaround_sites": [
     "tests/roadmap/alloc-arena/ArenaSpec.lean",
+    "tests/roadmap/alloc-arena/ArenaSpec/Loop66C0.lean",
+    "tests/roadmap/alloc-arena/ArenaSpec/Loop66C1.lean",
     "tests/roadmap/alloc-arena/ArenaSpecMacos.lean",
-    "tests/roadmap/alloc-arena/ArenaSpecFixed.lean"
+    "tests/roadmap/alloc-arena/ArenaSpecMacos/Loop66C0.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecMacos/Loop66C1.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed/Loop66C0.lean",
+    "tests/roadmap/alloc-arena/ArenaSpecFixed/Loop66C1.lean"
    ],
-   "deletion_plan": "delete the three `attribute [local fsym_facts] MemFacts.region_end` lines (ArenaSpec.lean, ArenaSpecMacos.lean, ArenaSpecFixed.lean) once `fsym` supplies the owned-region end bound on demand (or as a default fact without a measurable cost)."
+   "deletion_plan": "delete the nine `attribute [local fsym_facts] MemFacts.region_end` lines (ArenaSpec.lean, ArenaSpecMacos.lean, ArenaSpecFixed.lean and the Loop66C0.lean, Loop66C1.lean modules of each) once `fsym` supplies the owned-region end bound on demand (or as a default fact without a measurable cost)."
   },
   {
    "id": "l10-native-lock-step-contract",
@@ -1906,9 +1911,9 @@
   {
    "id": "mutex-impl-relaxed-witness",
    "title": "No kernel-checked witness that `MutexImpl` rejects a relaxed `unlock`",
-   "status": "open",
+   "status": "closed",
    "requester": "L21 (retirement of ZigLean/Conc/Spec, PR677)",
-   "progress": "open",
+   "progress": "closed by tests/roadmap/sep-full/RelaxedUnlockCX.lean, checked in CI's full-state step: `relaxed_unlock_not_wp` refutes `MutexImpl.unlock_wp` (c = 2, `Io.Mutex`'s states) for `Io.Mutex.unlock` with a relaxed swap; `no_relaxed_mutexImpl`: no `MutexImpl` has that unlock. The state (thread 0 holds the lock after writing the resource, thread 1 live) is reached from the start memory by real code and proved rules (`FLock.Inv.make`, `FLock.wp_casOn`, `Fits.wp_hold`, `Fits.ofLockAll`), so it does not build `Mem` or ghost values by hand. The WP inversions it uses are library lemmas (`ZigLean/Conc/RunInv.lean`).",
    "request": "The retired `Conc/Spec/MutexToy.relaxed_not_spec` showed that `MutexSpec` rejects a spin mutex whose `unlock` writes with `monotonic` (the next holder misses the previous holder's write). No statement shows the same of `MutexImpl`. Needed: a test (`tests/roadmap/sep-full/*CX.lean` style) that refutes `unlock_wp` for a `monotonic` unlock: a concrete memory satisfying `FLock.Inv` with a holder that wrote the lock's resource, a protocol with `FLock.Fits` (e.g. via `Fits.ofLock`), and the step after which `LockWord.Owns` fails for a live thread.",
    "workaround_sites": [],
    "deletion_plan": "Closes when the witness is in tests and checked by its fixture's check script."
@@ -2010,11 +2015,11 @@
    "title": "Proto.returnsWithin concludes ReturnsWithin directly",
    "status": "open",
    "requester": "legacy-flip lane (maintainer decision 2026-11-25: ReturnsWithin, EventuallyReturns, EventuallyReturnsUnder are `target` outcome vocabulary of Sched.run, proved through Proto.WP + Proto.returnsWithin)",
-   "progress": "Open. `Proto.returnsWithin` (ZigLean/Conc/Returns.lean) has no client and its conclusion is written out (`∀ o fuel, cr (G0 0) ≤ fuel → ∃ r, run = some r ∧ (ok ∧ QM ∨ r = .error .stackOverflow)`), so it does not conclude `ReturnsWithin`; the only producers of the Conc/Total predicates are the hand `countdown` proofs and the idle loop's direct scheduler proof.",
-   "request": "Two library lemmas, no new judgment or tactic: (a) `Proto.returnsWithin` with the sharper hypothesis `cr (G0 0) - 1 ≤ fuel` (the potential BInv starts at `cr (G0 0) - 1`, Returns.lean:572; check the depth side); (b) a scheduler lemma `m0.NoStack` -> no run ends in `.stackOverflow` (only per-triple forms exist: `FTotalTriple.of_noStack`, Full/Block.lean:657). With both, `Proto.returnsWithin` concludes `ReturnsWithin (cr (G0 0) - 1) env dispatch main m0 (fun v m => ∃ G d, QM v G m d)` directly. Then re-prove `countdown` through a Proto with `cost := some cr` and `strict := true`, or delete it as a toy. `EventuallyReturnsUnder` needs C13 phases 1-3 (SCH-01 WeakFair), not this row.",
+   "progress": "OPEN, BLOCKED on a maintainer decision. `Proto.returnsWithin` (ZigLean/Conc/Returns.lean) has no client and its conclusion is written out (`∀ o fuel, cr (G0 0) ≤ fuel → ∃ r, run = some r ∧ (ok ∧ QM ∨ r = .error .stackOverflow)`), so it does not conclude `ReturnsWithin`; the only producers of the Conc/Total predicates are the hand `countdown` proofs and the idle loop's direct scheduler proof. The two library lemmas this row first asked for are FALSE, kernel-checked in #829 (Returns.lean): (a) `returnsWithin_sharp_false`: `cr (G0 0) - 1` turns are not enough, since a thread with `c` credits needs depth `c` (the segment after its last stop runs at depth at least one, and a `ConcM` may depend on the depth: `cxShallow` under the strict `cxProto` meets every hypothesis and has no result with `cr - 1` turns); (b) `returnsWithin_noStack_false`: `m0.NoStack` does not exclude `.stackOverflow`, since `alloc` throws it when the address space has no room (`Mem.allocOk`, STK-01) without any stack budget, and `Safe`'s error leaf admits it in every mode. So `returnsWithin` keeps its statement, and `countdown_total`/`countdown_within` (ZigLean/Conc/Total.lean) keep their direct scheduler proofs.",
+   "request": "`Proto.returnsWithin` concludes `ReturnsWithin` (ZigLean/Conc/Total.lean) directly, with no new judgment or tactic. Needs a maintainer decision on one of: (1) a refinement of `Safe`'s error leaf or of STK-01 that lets a program without stack allocation exclude `.stackOverflow` (e.g. the address-space room as an explicit premise of the run; `ReturnsWithin` itself is not weakened to admit `.stackOverflow`); and (2) for the bound, either `ReturnsWithin (cr (G0 0))` (the bound `returnsWithin` proves today) or a depth premise on the program (its depth is spent only by its stops, as `countdown`'s is). Then re-prove `countdown` through a Proto with `cost := some cr` and `strict := true`, or delete it as a toy. `EventuallyReturnsUnder` needs C13 phases 1-3 (SCH-01 WeakFair), not this row.",
    "workaround_sites": [],
-   "deletion_plan": "Not a workaround: the hand `countdown_total`/`countdown_within` proofs in ZigLean/Conc/Total.lean are replaced by the Proto route once the two lemmas exist.",
-   "note": "One Opus lane, ZigLean/Conc/Returns.lean (size S-M). Design: handoffs/claude-legacy-design.md sections 2-4."
+   "deletion_plan": "Not a workaround: the hand `countdown_total`/`countdown_within` proofs in ZigLean/Conc/Total.lean are replaced by the Proto route once the decision above is taken and `returnsWithin` concludes `ReturnsWithin`.",
+   "note": "Design: handoffs/claude-legacy-design.md sections 2-4. Lane returns-within (#829) refuted the original two lemmas; handoffs/claude-returns-within.md."
   },
   {
    "id": "timed-budget-concm",

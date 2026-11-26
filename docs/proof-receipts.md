@@ -125,6 +125,18 @@ Identity files are capped at 512 MiB each, 30000 files and 16 GiB per inventory.
 remaining inventory allowance limits each streaming read; excess bytes stop hashing
 immediately rather than being checked after the whole inventory is consumed.
 
+Limit rules (`scripts/proof-receipt.py`). The entry-count limits on the untrusted `audit.json`
+arrays are derived, not free constants: `entry_limit(MAX_JSON, smallest_entry)` is the 256 MiB
+JSON byte limit divided by the compact encoding (plus a comma) of the smallest entry the
+validator accepts. `MAX_THEOREMS` guards `theorems` (smallest `{"allowed":true,"module":"","name":""}`),
+`MAX_DECLARATIONS` guards `nodes` (smallest `{"dependencies":[],"kind":"","module":"","name":""}`)
+and `MAX_ARTIFACTS` guards the freshness `artifacts` rows (smallest `{"module":""}`). A count
+limit therefore never rejects an audit the byte limit admits, and growing the corpus needs
+no constant bump; only the byte limit is a policy value. `MAX_FILES` (30000) is a different
+kind of limit: files of a checkout or tracked/inventoried tree (identity inventories, tracked
+files, the artifact manifest's link inventory). It bounds the work of hashing a tree, has no
+relation to the JSON size, and is raised only with a documented reason.
+
 ## Verify current identities
 
 ```sh
