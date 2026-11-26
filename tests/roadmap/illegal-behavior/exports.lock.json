@@ -108,7 +108,31 @@
     "probe-air/probe.shl24Safe.json": "26e50aad30fcd74bf24ec36b96c4e404c7615fff658d03730098f5aa0761c167",
     "probe-air/probe.tagNameSafe.json": "5ef5f60678a4b77b88aa09129abcd130d30a2cf527b33d10df8c5118f9fddc95",
     "probe-air/probe.tagNameUnsafe.json": "7cadd81a2f63de7baa882b312ed3478c856a9150d3deed8ccaad981546b74c69",
-    "probe-air/probe.vecPtrCast.json": "bd95bc0f13f4f404a22866c9640dd3f3c91d1a73296054ca37de174a3fecde15"
+    "probe-air/probe.vecPtrCast.json": "bd95bc0f13f4f404a22866c9640dd3f3c91d1a73296054ca37de174a3fecde15",
+    "shift-air/0.14.1/shiftguard.checkedFirst.json": "28e3165c43147154e1a3f5f01da6e4cbff833b9b09c787b65d7785b2c31e591d",
+    "shift-air/0.14.1/shiftguard.mixed.json": "1414261417f10fcbd8e920e70a69d431f49d5338e235f5893eff40f95e37034d",
+    "shift-air/0.14.1/shiftguard.mixedShr.json": "06a5e2206326b6df88d61a3465749a0bb97c669e893f4b33979ddf506383b953",
+    "shift-air/0.14.1/shiftguard.otherCount.json": "50416c46ae60f0e7dcdb4d291df751ce0c672e4b85f6d187a3af9a9ebbba6815",
+    "shift-air/0.14.1/shiftguard.safe.json": "9df94e641c5f9cdea1205c3ddebb8709d6bc10da644f7b4d1600dc19ddceade2",
+    "shift-air/0.14.1/shiftguard.unsafeOnly.json": "76284a4cfabdf4637a921c52a832d63a25b57f5994784db8734f8a95cd5190a8",
+    "shift-air/0.15.2/shiftguard.checkedFirst.json": "d989e96601992f56873e7b579e506c92b98fede32968a09bf124cb664f8f6732",
+    "shift-air/0.15.2/shiftguard.mixed.json": "5b3768ceb23aaf235436a6829a3c43703445e329c5abe3baf2bf15fa112bd45b",
+    "shift-air/0.15.2/shiftguard.mixedShr.json": "ad364656acd336349a4c103ecceb4dab9de7672e8f4bf6019465f3615a1d466a",
+    "shift-air/0.15.2/shiftguard.otherCount.json": "4ee9c29e004fecb3b509e9d2211cfeff23ea5a3a317615a904df9cc023d9b1b7",
+    "shift-air/0.15.2/shiftguard.safe.json": "b469417f7b1d011d14e9f88cdbded2edc00e98ba72fd44b88646bb3c7a71baa0",
+    "shift-air/0.15.2/shiftguard.unsafeOnly.json": "c2fcf01cebdec5177b3a3885e81c10b3603068f9775239b650dfc77aac941d07",
+    "shift-air/0.16.0/shiftguard.checkedFirst.json": "c215ef46e60ebd9fcd8e46d695f66321c3712844f08b3085c2c86dc24abe49df",
+    "shift-air/0.16.0/shiftguard.mixed.json": "32293bfc4ca90cc05b2aa74e0e6d0f5c8560d6d4f729f37b078baeff1195e189",
+    "shift-air/0.16.0/shiftguard.mixedShr.json": "0fcc5f6e7e1dfbd67fbea5930757e540a14e003ed0233207ff216a465e7ff3c6",
+    "shift-air/0.16.0/shiftguard.otherCount.json": "4ee1404b277b9f5fab040d3a636ab1962dc0ace0014c46023118b12f7125e0bb",
+    "shift-air/0.16.0/shiftguard.safe.json": "357fe2c4b12e4f41fb8c2349456400e496cd3ebf7f9cb4a62d6ad3f7aaaa720e",
+    "shift-air/0.16.0/shiftguard.unsafeOnly.json": "8d86af654eb3fc787703f47ff7da767882e17e011e209a2fc99bfdbc5e13ffba",
+    "shift-air/0.17.1/shiftguard.checkedFirst.json": "e27bc390c99352295d571285d8098684c821c70715b9058931c17f0d5f63743f",
+    "shift-air/0.17.1/shiftguard.mixed.json": "8e0e23499f6c388c7c4fedd3daa71253d1b6e38ecba9744dbcaac4206b47d023",
+    "shift-air/0.17.1/shiftguard.mixedShr.json": "92920733c692e0f959e2bbba45d2444e048e9ae8520440b29b4dfb8d17ea0c37",
+    "shift-air/0.17.1/shiftguard.otherCount.json": "5ba08bc3e01ded2461d5c6b9283ab2b8b6362e3a65c60f85749ecb0bfda0b855",
+    "shift-air/0.17.1/shiftguard.safe.json": "4317b4d6c277289f8b8a7fa12790469277bf57aead6cd421998bc865d764c543",
+    "shift-air/0.17.1/shiftguard.unsafeOnly.json": "2a4ba0c17761b05c8848cb6ed74e4be1a4d2d02faeb8d2d92f6e641c08e86bda"
   },
   "compilers": {
     "0.14.1": "3086fbca57219075e9bcd4b54545bdf1c2e5c68874438240509996448bbdcd64",
@@ -116,13 +140,14 @@
     "0.16.0": "5b7ba648aaf746ce69278459042a3f0d110df95ed44693854738546bb926536b",
     "0.17.1": "9955e0692b08d9888314d73cd600454986304af0d35a394f7ba75cbf67b84468"
   },
-  "manifest_sha256": "f63c395b32fabcab13fc529ae270e8c10dbf9ddb7cdee1287118b737274a876a",
+  "manifest_sha256": "732e6ef23a9e1041d99c4f76ac39ca2ac25abb9cd27815edacca0c1448fbb2ab",
   "schema": 1,
   "sources_sha256": {
     "aligncast.zig": "9af311ccb1b80004ea6aec40c98bb636fbf77f258bbb559fde4cd1a77a83ef6b",
     "forlen.zig": "117e78a748fd31310fdce22561bfc9814e8431482795289d79dc2655c3fefbc3",
     "ib.zig": "208560bb8463aad65653e9a91a3f0a21e5f3570237b0cc8fdfdbbab61c988702",
     "native.zig": "1d9194c90fb5a49ca6acaf8206d229cb8254103e839cd040373de17cfb7ffbb2",
-    "probe.zig": "599b4b803d94136ad9111afddff6a6152049f7cf44850d476666ea0efbc3daec"
+    "probe.zig": "599b4b803d94136ad9111afddff6a6152049f7cf44850d476666ea0efbc3daec",
+    "shiftguard.zig": "e41a1e70497bc3fd2b0cd4879c922b0d76502c23a00d116076d9585bb0adc091"
   }
 }

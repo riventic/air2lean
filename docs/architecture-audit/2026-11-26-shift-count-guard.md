@@ -1,9 +1,27 @@
 # A shift-amount check in one scope makes every shift of that count total (2026-11-26)
 
-Class: SOUNDNESS. Status: **open**. Lane `checker-queue`; found while reading
-`Air2Lean/Emit.lean` for the pointer-alignment rule of PR #914, confirmed with the translator of
-main `1847099ab` (plus PR #910, which leaves `Emit.lean` alone) on Zig 0.17.1, 0.16.0 and 0.14.1
-(x86_64-linux, ReleaseSafe). The PR that adds this note changes no translator or model code.
+Class: SOUNDNESS. Status: **fixed** (option 2 below; see "Fix"). Lane `checker-queue`; found
+while reading `Air2Lean/Emit.lean` for the pointer-alignment rule of PR #914, confirmed with the
+translator of main `1847099ab` (plus PR #910, which leaves `Emit.lean` alone) on Zig 0.17.1,
+0.16.0 and 0.14.1 (x86_64-linux, ReleaseSafe). The sections up to "Options" describe the
+translator before the fix.
+
+## Fix
+
+`FCtx.shiftCountGuarded` is decided per shift instruction. Sema's check is a block whose only
+instruction branches on `count < width` and whose false branch only calls `shiftRhsTooBig`. It
+guards a shift in two places of the shift's own instruction list, the two shapes Sema emits on
+0.14.1–0.17.1:
+
+- the check block comes before the shift (`<<`): the shift runs only when the check passed;
+- the shift comes first and the check block is the next instruction, with only the comparison
+  of this amount between (`>>`): the out-of-range result is unused when the handler runs.
+
+Every other shift is `Zig.shlChk`/`Zig.shrChk`. A check in another scope, on another branch, of
+another amount, or later with other instructions between does not count. No committed
+translation changes (`scripts/gen-integrity.py check`). `tests/roadmap/illegal-behavior/
+shiftguard.zig` holds the counterexample below and its variants, exported by every supported
+version; `ShiftCases.lean` runs each translation.
 
 ## The fact
 
