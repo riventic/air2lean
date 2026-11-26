@@ -10,6 +10,7 @@ import io
 import json
 import os
 from pathlib import Path
+import random
 import subprocess
 import sys
 import tempfile
@@ -171,6 +172,13 @@ class Kinds(unittest.TestCase):
         gen = KINDS_GEN.replace('def w (p0 : Bool)', 'def w (p0 : Option (Option (BitVec 16)))')
         with self.assertRaises(EVAL.Unsupported) as caught: EVAL.signature(gen, 'w', dict(params=[0], ret=18, types=twice))
         self.assertIn('ambiguous', str(caught.exception))
+        # A type that contains itself through a slice is rejected with the reason (never a RecursionError).
+        tree = ('import ZigLean\nnamespace T\nstructure Node where\n  v : BitVec 8\n  kids : Array (Node)\n\n'
+                'def depth (p0 : Node) : Zig.Result (BitVec 8) := do\n  pure 0\nend T\n')
+        node = [dict(k='int', signed=False, bits=8), dict(k='ptr', size='slice', const=True, child=2, sentinel=False),
+                dict(k='struct', name='t.Node', layout='auto', fields=[dict(name='v', ty=0), dict(name='kids', ty=1)])]
+        with self.assertRaises(EVAL.Unsupported) as caught: EVAL.signature(tree, 'depth', dict(params=[2], ret=0, types=node))
+        self.assertIn('recursive type', str(caught.exception))
         # Without an AIR type table only the scalar kinds resolve, integers as unsigned.
         legacy = EVAL.signature(FAKE_GEN.replace('Bool', 'BitVec 8'), 'flip')
         self.assertEqual((legacy.types, legacy.ret, legacy.typed), ([EVAL.Int(8, False)], EVAL.Int(8, False), False))
@@ -194,6 +202,13 @@ class Kinds(unittest.TestCase):
                 with self.assertRaises(EVAL.Mismatch): kind.parse(bad)
         with self.assertRaises(EVAL.Mismatch): self.sig.parse_args([point])           # one value per parameter
         self.assertEqual(EVAL.Int(64, False).parse('18446744073709551615', wide=True), 2 ** 64 - 1)
+        # A signed integer is read in its own range only: 200 is no i8 (it is not silently the i8 -56).
+        i8 = EVAL.Int(8, True)
+        self.assertEqual([i8.parse(v) for v in (-128, -1, 127)], [-128, -1, 127])
+        for bad in (128, 200, 255, -129):
+            with self.subTest(i8=bad):
+                with self.assertRaises(EVAL.Mismatch): i8.parse(bad)
+        with self.assertRaises(EVAL.Mismatch): self.sig.parse_args([{'x': 7, 'at': 40000}, 5, [], 9])   # the i16 field `at`
         with self.assertRaises(EVAL.Unsupported): self.p.extern()                      # no C-ABI spelling: `pub fn` only
         self.assertEqual((EVAL.Int(8, True).extern(), EVAL.Bool().extern()), ('i8', 'bool'))
 
@@ -209,6 +224,19 @@ class Kinds(unittest.TestCase):
         self.assertEqual(rows, sorted(rows, key=lambda row: EVAL.row_key(self.sig.types, row)))   # smallest first
         self.assertIn([], [row[2] for row in rows])                                    # the empty slice is a boundary value
         for row in rows: self.sig.parse_args(list(row))                                # every candidate is a value of its kind
+        # A type without values (`enum {}`) under a sampled domain: no IndexError, and no value of it is invented.
+        never = EVAL.Enum('K.Never', u8 := EVAL.Int(8, False), (), True)
+        maybe, items = EVAL.Opt(never), EVAL.Slice(u8)
+        either = EVAL.Union('K.E', (('no', never), ('yes', u8)), ('no', 'yes'), ())
+        rows, exhaustive = EVAL.inputs([maybe, either, EVAL.ErrUnion(('Bad',), never), items], 64, 1)
+        self.assertFalse(exhaustive); self.assertTrue(rows)
+        self.assertEqual({(row[0], next(iter(row[1])), json.dumps(row[2])) for row in rows}, {(None, 'yes', '{"err": "Bad"}')})
+        self.assertEqual(EVAL.inputs([never, items], 64, 1), ([], True))               # no input at all: nothing left to try
+        # A struct of many fields: the boundary values of every field are candidates, also those of the last one.
+        six = EVAL.Struct('K.Six', tuple((f'f{k}', f'f{k}', u8) for k in range(6)))
+        candidates = six.boundary(random.Random(0))
+        for name, _, t in six.fields:
+            self.assertLessEqual(set(t.boundary(None)), {v[name] for v in candidates}, name)
 
     def test_the_driver_has_one_decoder_and_renderer_per_kind(self):
         rows = [tuple(self.sig.parse_args([{'x': 7, 'at': -2}, 5, [{'none_': None}], 9]))]

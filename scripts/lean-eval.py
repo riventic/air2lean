@@ -56,7 +56,8 @@ def lean_str(text):
 
 
 def combine(lists, rng, cap=64):
-    """Tuples over `lists`: the whole product when small, else each list varied alone plus seeded picks."""
+    """Tuples over `lists`: the whole product when small, else each list varied alone (all of them, also
+    beyond `cap`: every value of every list occurs) plus seeded picks up to `cap`."""
     size = 1
     for values in lists: size *= len(values)
     if size <= cap: return list(itertools.product(*lists))
@@ -65,7 +66,7 @@ def combine(lists, rng, cap=64):
     for k, values in enumerate(lists):
         out += [first[:k] + (v,) + first[k + 1:] for v in values[1:]]
     while len(out) < cap: out.append(tuple(rng.choice(values) for values in lists))
-    return out[:cap]
+    return out
 
 
 # --- Value kinds --------------------------------------------------------------------------
@@ -118,7 +119,10 @@ class Int(Kind):
     def parse(self, j, wide=False):
         if wide and isinstance(j, str) and re.fullmatch(r'-?\d+', j): j = int(j)
         if type(j) is bool: j = int(j)
-        if type(j) is not int or not -2 ** (self.bits - 1) <= j < 2 ** self.bits: raise Mismatch(f'{j!r} is not a {self.lean}')
+        # A signed integer is in its own range. An unsigned one may also be written as the signed value of
+        # the same bits: without an AIR type table every integer is assumed unsigned, and rows carry signs.
+        top = 2 ** (self.bits - 1) if self.signed else 2 ** self.bits
+        if type(j) is not int or not -2 ** (self.bits - 1) <= j < top: raise Mismatch(f'{j!r} is not a {self.lean}')
         return self.of_bits(j % self.size())
 
     def shrinks(self, v):
@@ -289,7 +293,7 @@ class Union(Kind):
     def boundary(self, rng): return [{name: v} for name, t in self.fields for v in t.boundary(rng)[:16]]
 
     def random(self, rng):
-        name, t = rng.choice(self.fields)
+        name, t = rng.choice([f for f in self.fields if f[1].size() != 0])   # a payload type without values has no value
         return {name: t.random(rng)}
 
     def active(self, v):
@@ -348,7 +352,7 @@ class Opt(Kind):
     def size(self): return None if self.child.size() is None else 1 + self.child.size()
     def values(self): return itertools.chain((None,), self.child.values())
     def boundary(self, rng): return [None] + self.child.boundary(rng)
-    def random(self, rng): return None if rng.random() < 0.25 else self.child.random(rng)
+    def random(self, rng): return None if self.child.size() == 0 or rng.random() < 0.25 else self.child.random(rng)
     def parse(self, j, wide=False): return None if j is None else self.child.parse(j, wide)
     def shrinks(self, v): return [] if v is None else [None] + self.child.shrinks(v)
     def weight(self, v): return 0 if v is None else self.child.weight(v)
@@ -379,7 +383,8 @@ class ErrUnion(Kind):
     def boundary(self, rng): return [{'err': e} for e in self.errors] + self.payload.boundary(rng)
 
     def random(self, rng):
-        return {'err': rng.choice(self.errors)} if self.errors and rng.random() < 0.25 else self.payload.random(rng)
+        error = self.errors and (self.payload.size() == 0 or rng.random() < 0.25)
+        return {'err': rng.choice(self.errors)} if error else self.payload.random(rng)
 
     def parse(self, j, wide=False):
         if isinstance(j, dict) and list(j) == ['err']:
@@ -516,6 +521,7 @@ class Types:
     (assumed unsigned) and `Bool` resolve."""
     def __init__(self, gen_text, namespace, air_types=None):
         self.gen_text, self.decls, self.namespace, self.air = gen_text, declarations(gen_text), namespace, air_types
+        self.open = []                                    # the named types being resolved, outermost first
 
     def air_type(self, tid, kind, text):
         t = self.air[tid] if self.air is not None and type(tid) is int and 0 <= tid < len(self.air) else None
@@ -555,7 +561,12 @@ class Types:
             if t.get('size') != 'slice' or t.get('const') is not True or t.get('sentinel') is not False:
                 raise Unsupported(f'{text}: not a read-only slice without sentinel')
             return Slice(self.resolve(rest, t.get('child')))
-        if text in self.decls: return self.named(text, tid)
+        if text in self.decls:
+            # A type that contains itself (through a slice) has no finite description here.
+            if text in self.open: raise Unsupported(f'{text}: a recursive type is not covered')
+            self.open.append(text)
+            try: return self.named(text, tid)
+            finally: self.open.pop()
         raise Unsupported(f'unsupported type {text} (supported: {SUPPORTED}; a pointer or a mutable slice is a place in '
                           'memory, floats and vectors are not covered)')
 
@@ -679,6 +690,7 @@ def inputs(types, max_inputs, seed, randoms=256):
     total = 1
     for t in types: total = None if total is None or t.size() is None else total * t.size()
     order = lambda rows: sorted(rows, key=lambda row: row_key(types, row))
+    if any(t.size() == 0 for t in types): return [], True  # a parameter type without values: there is no input at all
     if total is not None and total <= max_inputs:
         return order(itertools.product(*[list(t.values()) for t in types])), True
     rng = random.Random(seed)
