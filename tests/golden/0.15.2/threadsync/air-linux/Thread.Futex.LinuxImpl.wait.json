@@ -893,7 +893,7 @@
   },
   {
    "k": "struct",
-   "name": "os.linux.timespec__struct_2627",
+   "name": "os.linux.timespec__struct_2653",
    "module": "std",
    "layout": "extern",
    "fields": [
@@ -990,7 +990,7 @@
   },
   {
    "k": "other",
-   "name": "fn (*const anyopaque, os.linux.FUTEX_OP, u32, ?*const os.linux.timespec__struct_2627) usize"
+   "name": "fn (*const anyopaque, os.linux.FUTEX_OP, u32, ?*const os.linux.timespec__struct_2653) usize"
   },
   {
    "k": "struct",
@@ -1090,7 +1090,7 @@
   },
   {
    "k": "enum",
-   "name": "os.linux.E__enum_1920",
+   "name": "os.linux.E__enum_1929",
    "module": "std",
    "tag": 31,
    "exhaustive": false,
@@ -1701,7 +1701,7 @@
   },
   {
    "k": "other",
-   "name": "fn (usize) os.linux.E__enum_1920"
+   "name": "fn (usize) os.linux.E__enum_1929"
   },
   {
    "k": "other",

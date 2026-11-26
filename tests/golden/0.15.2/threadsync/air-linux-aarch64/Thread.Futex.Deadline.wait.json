@@ -322,7 +322,7 @@
      "ty": 15,
      "callee": {
       "ty": 16,
-      "func": "math.sub__anon_4207",
+      "func": "math.sub__anon_4237",
       "module": "std",
       "instance_key": "85a035d52c516295d94477e31536ce828addf229869e1de681013ff709717db1",
       "noreturn": false
@@ -699,7 +699,7 @@
   },
   {
    "k": "struct",
-   "name": "os.linux.timespec__struct_2708",
+   "name": "os.linux.timespec__struct_2734",
    "module": "std",
    "layout": "extern",
    "fields": [

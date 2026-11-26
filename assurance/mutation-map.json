@@ -1497,6 +1497,10 @@
         {
           "path": "Proofs/Sync/Mutex.lean",
           "anchor": "theorem mutexCounter_safe"
+        },
+        {
+          "path": "tests/roadmap/cond-broadcast/check.sh",
+          "anchor": "0.14.1: the translation was expected to be rejected"
         }
       ],
       "mutants": [
@@ -1509,6 +1513,16 @@
           "name": "ac",
           "path": "scripts/mutate.sh",
           "category": "invariant-transfer"
+        },
+        {
+          "name": "broadcast-is-signal",
+          "path": "tests/roadmap/cond-broadcast/mutations.py",
+          "category": "other"
+        },
+        {
+          "name": "broadcast-dropped",
+          "path": "tests/roadmap/cond-broadcast/mutations.py",
+          "category": "other"
         }
       ]
     },
