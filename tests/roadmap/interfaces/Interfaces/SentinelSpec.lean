@@ -46,13 +46,6 @@ open Zig Zig.Full Zig.Full.FAssn Interfaces.Sentinel
 /-- The alignment argument of the generated entries, from its log2. -/
 def al (k : Nat) : mem_Alignment := ⟨BitVec.ofNat 6 k⟩
 
--- fsym does not evaluate the pure helper on its literal (engine ledger #21a)
-theorem fromByteUnits_1 : mem_Alignment_fromByteUnits 1 = pure mem_Alignment.«1» := by
-  have h : (1 : BitVec 64).ctz = 0 := Zig.ctz_twoPow (k := 0) (by decide)
-  unfold mem_Alignment_fromByteUnits math_isPowerOfTwo__anon_38853e1fe316 debug_assert
-  simp only [Zig.ctz, h]
-  rfl
-
 /-! ## The bytes -/
 
 /-- The bytes of `append`'s grant: `len + 2` bytes, the old payload `bs[0, len)`, then `c`, then
@@ -140,7 +133,6 @@ theorem free_spec (s : Slice) (bs : Array Byte) (hlen : s.len.toNat = bs.size) (
       (mem_Allocator_free__anon_1e60e7ef40f5 ⟨ctx, vtp⟩ s)
       (fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) := by
   unfold mem_Allocator_free__anon_1e60e7ef40f5
-  simp only [fromByteUnits_1]
   fsym [free_entry ctx fns I e φ h]
 
 /-- `a.realloc(s, n)` of a nonempty granted `[]u8` (`reallocAdvanced`: `remap`, else `alloc`,
@@ -152,7 +144,6 @@ theorem realloc_spec (s : Slice) (n : BitVec 64) (bs : Array Byte)
       (mem_Allocator_realloc__anon_af0c43114565 ⟨ctx, vtp⟩ s n)
       (fun r => I.own ⋆ (I.reallocResult 0 φ s.ptr bs n n.toNat r ⋆ vtR vtp fns.toList) ⋆ plain) := by
   unfold mem_Allocator_realloc__anon_af0c43114565 mem_Allocator_reallocAdvanced__anon_0df1ef68623e
-  simp only [fromByteUnits_1]
   fsym [CAllocSpec.alloc h, CAllocSpec.remap h, Norm.mulWithOverflow_one,
     free_spec ctx vtp fns I e φ (h := h), free_entry ctx fns I e φ h]
 
@@ -213,7 +204,6 @@ theorem release_spec (s : Slice) (bs : Array Byte) (hlen : s.len.toNat + 1 = bs.
     CTriple (I.own ⋆ (I.granted s.ptr 0 φ bs ⋆ vtR vtp fns.toList)) (release ⟨ctx, vtp⟩ s)
       (fun _ => I.own ⋆ (I.fee φ ⋆ vtR vtp fns.toList)) := by
   unfold release mem_Allocator_free__anon_0ba161b45e0a
-  simp only [fromByteUnits_1]
   fsym [free_entry ctx fns I e φ h]
 
 end Interfaces.SentinelSpec
