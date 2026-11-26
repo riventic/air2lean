@@ -22,7 +22,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 MAX_SCHEMA = 12
 KINDS = {'int', 'float', 'bool', 'void', 'noreturn', 'ptr', 'array', 'vector', 'optional',
-         'error_union', 'error_set', 'struct', 'tuple', 'enum', 'union', 'other'}
+         'error_union', 'error_set', 'struct', 'tuple', 'enum', 'union', 'opaque', 'other'}
 CHILD_FIELDS = ('child', 'error', 'payload', 'tag', 'safety_tag')
 BODY_FIELDS = ('body', 'then', 'else')
 # Tags that must carry these bodies (docs/air-json.md, Inst table).
@@ -130,6 +130,8 @@ class Validator:
                 self.error(where, 'error_union needs error and payload')
             if k in ('array', 'vector') and not is_nat(ty.get('len')):
                 self.error(where, f'{k} needs a natural len')
+            if k == 'opaque' and ('abi_size' in ty or 'abi_align' in ty):
+                self.error(where, 'opaque type with a size or alignment')
             # Pointers break value cycles; every other child edge is by value.
             edges[index] = [] if k == 'ptr' else children
         state = {}

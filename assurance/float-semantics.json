@@ -1153,6 +1153,60 @@
       ],
       "correspondence": "model"
     },
+    "SepAuto.Packed::SepAuto.Packed.fv_bits": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "SepAuto.Packed::SepAuto.Packed.fv_val": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "SepAuto.Packed::SepAuto.Packed.mix_bits": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "SepAuto.Packed::SepAuto.Packed.mix_val": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "SepAuto.Packed::SepAuto.Packed.zf_bits": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
+    "SepAuto.Packed::SepAuto.Packed.zf_val": {
+      "semantics": "abstract-spec",
+      "targets": [
+        "aarch64-linux",
+        "aarch64-macos",
+        "x86_64-linux"
+      ],
+      "correspondence": "model"
+    },
     "Model::T04.linuxGnu_layouts": {
       "semantics": "ieee",
       "targets": [

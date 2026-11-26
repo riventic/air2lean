@@ -114,6 +114,7 @@ def typeKeys : String → Option (List Key)
       req "fields" .arr]
   | "union" => some [req "name" .str, moduleKey, req "layout" (.oneOf containerLayouts),
       opt "no_fields" .marker, opt "tag" .nat, opt "safety_tag" .nat, opt "fields" .arr]
+  | "opaque" => some [req "name" .str, moduleKey]
   | "other" => some [req "name" .str]
   | _ => none
 

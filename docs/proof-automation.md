@@ -742,8 +742,12 @@ Side goals are about words, pointer offsets and sizes. The solver (`arithCore`, 
    bits (`packedValRoundTrip`: `Packed.ofBits (Packed.toBits v) = v`) and those bits are valid
    (`packedValidToBits`); `Packed.mask v = allOnes` by definition for a type without a float field,
    else by a hypothesis or the discharger. The per-type round trips of the
-   proofs are these rewrites (`Proofs/Layout/Proofs.lean`, `Proofs/Threads/Proofs.lean`). A packed
-   union field or a vector field gets no law (fail closed; ledger #packed-lawful-split). Regression:
+   proofs are these rewrites (`Proofs/Layout/Proofs.lean`, `Proofs/Threads/Proofs.lean`). Each
+   direction is derived on its own (`LawfulPackedBits` for `packedRoundTrip`, `LawfulPackedVal`
+   for the other two; ledger #packed-lawful-split, closed): a packed union, and a struct with a
+   packed-union field, has the bits direction only (the value direction fails closed); an array
+   or vector, and a struct with such a field next to fields of any other kind, has each
+   direction its lanes and fields have. Regression:
    `tests/roadmap/sep-auto/SepAuto/Packed.lean`;
 2. normalizes the target the same way;
 3. adds facts about symbolic powers of two (`0 < 2 ^ x`, `2 ^ x < 2 ^ c` from `x < c`), masks of

@@ -8618,8 +8618,9 @@ def source_4 : _root_.Air2Lean.Func :=
 (nat_lit 44))))
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
-(@_root_.Air2Lean.Ty.other
-"anyopaque")
+(@_root_.Air2Lean.Ty.opaque
+"anyopaque"
+@_root_.Bool.false)
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
 (@_root_.Air2Lean.Ty.struct
@@ -13623,8 +13624,9 @@ def source_5 : _root_.Air2Lean.Func :=
 (nat_lit 27))))
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
-(@_root_.Air2Lean.Ty.other
-"anyopaque")
+(@_root_.Air2Lean.Ty.opaque
+"anyopaque"
+@_root_.Bool.false)
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
 (@_root_.Air2Lean.Ty.struct
@@ -19951,8 +19953,9 @@ def source_6 : _root_.Air2Lean.Func :=
 (nat_lit 48))))
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
-(@_root_.Air2Lean.Ty.other
-"anyopaque")
+(@_root_.Air2Lean.Ty.opaque
+"anyopaque"
+@_root_.Bool.false)
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
 (@_root_.Air2Lean.Ty.struct
@@ -24985,8 +24988,9 @@ def source_7 : _root_.Air2Lean.Func :=
 (nat_lit 27))))
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
-(@_root_.Air2Lean.Ty.other
-"anyopaque")
+(@_root_.Air2Lean.Ty.opaque
+"anyopaque"
+@_root_.Bool.false)
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
 (@_root_.Air2Lean.Ty.struct
@@ -31770,8 +31774,9 @@ def source_10 : _root_.Air2Lean.Func :=
 (nat_lit 36))))
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
-(@_root_.Air2Lean.Ty.other
-"anyopaque")
+(@_root_.Air2Lean.Ty.opaque
+"anyopaque"
+@_root_.Bool.false)
 (@_root_.List.cons
 @_root_.Air2Lean.Ty
 (@_root_.Air2Lean.Ty.struct

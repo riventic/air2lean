@@ -2,7 +2,8 @@
 # `--allocator-model translated` (P1): std.heap.page_allocator and FixedBufferAllocator clients
 # translated from their real AIR down to `posix.mmap`/`munmap`/`mremap` (ZigLean/Os/Mmap.lean).
 # P4b: resize/remap/free proved against the full-state FAllocSpec (PageSpec.lean,
-# PageSpecMacos.lean), the whole vtable with alloc for every alignment (PageAlloc.lean), the
+# PageSpecMacos.lean), the whole vtable with alloc for alignments up to a page (PageAlloc.lean for
+# x86_64-linux, PageAllocMacos.lean for aarch64-macos, over the hint state of PageTok.lean), the
 # obstructions (PageObstruction.lean), the O5 regressions (PageAlloc.alloc_high, alloc_top, alloc_edge), a
 # mutant (mutant.sh); the four entries as thread triples and CAllocSpec (PageThread.lean); the
 # memory-safety tutorial's refuted clients over the page allocator (ListsPage.lean). Every Lean
@@ -62,7 +63,11 @@ for name in KernelBytes.start_admissible KernelBytes.push_succeeds ListsPage.con
     PageAlloc.fallocSpec PageAlloc.fallocSpec.creation PageAlloc.fallocSpec.creation_input_at \
     PageAlloc.fallocSpec.creation_admission PageThread.cAllocSpec.creation \
     PageAlloc.alloc_run PageSpec.free_spec PageSpec.resize_spec PageSpec.remap_spec \
-    PageSpecMacos.free_spec PageSpecMacos.resize_spec PageSpecMacos.remap_spec; do
+    PageSpecMacos.free_spec PageSpecMacos.free_dead_spec PageSpecMacos.resize_spec \
+    PageSpecMacos.remap_spec PageAllocMacos.alloc_ct PageAllocMacos.fallocSpec \
+    PageAllocMacos.fallocSpec.creation PageAllocMacos.fallocSpec.creation_input_at \
+    PageAllocMacos.fallocSpec.creation_admission PageTok.hintAligned_iff \
+    PageTok.HintKn_linux_eq; do
   theorems+=(--declaration "AllocTranslated.$name")
 done
 prove() {  # prove LINES: build, audit and run the library of the current tree; LINES: output dir
@@ -70,12 +75,12 @@ prove() {  # prove LINES: build, audit and run the library of the current tree; 
   # translated PageAllocator cannot satisfy AllocSpec, docs/alloc-page.md: PageObstruction.lean),
   # resize/remap/free against the full-state FAllocSpec (PageSpec.lean for x86_64-linux,
   # PageSpecMacos.lean for aarch64-macos: the invariant PageTok.lean and `fsym`), PageAlloc,
-  # PageThread, PageCreation, ListsPage and KernelBytes.
+  # PageAllocMacos, PageThread, PageCreation, ListsPage and KernelBytes.
   python3 -B scripts/fixtures.py build AllocTranslated
   # Axioms from the built environment. A mutant whose shrink leaks the cut pages fails PageSpec
   # (mutant.sh).
   python3 -B scripts/fixtures.py audit PageObstruction PageTok PageSpec PageSpecMacos PageAlloc \
-    PageThread PageCreation ListsPage KernelBytes "${theorems[@]}"
+    PageAllocMacos PageThread PageCreation ListsPage KernelBytes "${theorems[@]}"
   # M02: the model's growth lines against the files the native runs are compared with.
   python3 -B scripts/fixtures.py run "$1" AllocTranslated.Eval:AllocTranslated.Eval.growLinux \
     AllocTranslated.Eval:AllocTranslated.Eval.growMacos \
@@ -133,5 +138,7 @@ if [ -n "${AIR2LEAN_NATIVE_ZIG:-}" ]; then
   python3 -B scripts/check-tree.py create "$tree_retained"
   large "$tree_retained"
   large "$tree"
+  # The designated mutant: a model with the old cap in its default policy fails these lines.
+  bash "$here/mutant-cap.sh" "$work/diff-native/air2lean_libm.a"
 fi
 echo "alloc-translated: ok"

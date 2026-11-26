@@ -92,6 +92,19 @@ def normalize(value, root=True, type_entry=False, checked_profile=None, actual=F
         if key in ("comptime_fn_module", "comptime_fn_instance_key") or (
                 key in ("module", "instance_key") and (root or "func" in value or "name" in value)):
             continue
+        # A declared opaque type (`"k": "opaque"`, docs/air-json.md) is the same AIR as a golden
+        # that predates the kind, where it is `"k": "other"` and a pointer to it has no
+        # `ptr_align`. The kind is checked by translating the actual export (a std one is
+        # rejected on use, and no golden has another one). A pointer's other alignment stays
+        # observable.
+        if root and key == "types" and isinstance(item, list):
+            opaque = {i for i, entry in enumerate(item)
+                      if isinstance(entry, dict) and entry.get("k") == "opaque"}
+            item = [{k: ("other" if k == "k" and i in opaque else v) for k, v in entry.items()
+                     if not (k == "ptr_align" and v == 1 and entry.get("k") == "ptr"
+                             and entry.get("child") in opaque)}
+                    if isinstance(entry, dict) else entry
+                    for i, entry in enumerate(item)]
         identity = key in ("func", "comptime_fn") or (key == "name" and (root or type_entry))
         if identity:
             result[key] = IDENTITY_MARKER.sub(r"__\1_N", item) if isinstance(item, str) else item
