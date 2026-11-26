@@ -91,7 +91,9 @@ def f80_atomic(zig, target, mode, tmp, op):
                           timeout=60).returncode
     if code not in range(4):
         raise ValueError(f'{F80_PROBE} ({op}) exited with {code}')
-    return f'f80atomic {op} runs cell={("other", "model")[code & 1]} result={("other", "model")[code >> 1]}'
+    cell = 'model' if code & 1 else 'other'
+    result = 'model' if code & 2 else 'other'
+    return f'f80atomic {op} runs cell={cell} result={result}'
 
 
 def run(binary, stream):

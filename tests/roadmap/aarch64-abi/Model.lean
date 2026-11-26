@@ -453,9 +453,12 @@ def main (args : List String) : IO UInt32 := do
   for (key, _) in divergencesIn version do
     unless keys.contains key do bad := bad ++ [s!"{key}: declared divergence is not in the file"]
   let f80Rows := lines.filter (·.headD "" == "f80atomic")
-  let floatAtomics := f80Rows.filterMap f80AtomicRow?
+  let mut floatAtomics : List String := []
   for l in f80Rows do
-    if (f80AtomicRow? l).isNone then bad := bad ++ [s!"malformed {" ".intercalate l}"]
+    match f80AtomicRow? l with
+    | some d => floatAtomics := floatAtomics ++ [d]
+    | none => bad := bad ++ [s!"malformed {" ".intercalate l}"]
+  -- With the row count, every op present means each one exactly once.
   for op in f80AtomicOps do
     unless f80Rows.any (·[1]? == some op) do bad := bad ++ [s!"f80atomic {op}: not in the file"]
   for d in diverged do IO.println s!"divergence (not a match) {d}"

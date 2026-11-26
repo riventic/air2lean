@@ -67,12 +67,9 @@ class Driver(unittest.TestCase):
                 rows = [l.split() for l in text.splitlines() if l.startswith('f80atomic ')]
                 self.assertEqual([r[1] for r in rows], list(abi.F80_OPS), (version, triple))
                 # Only 0.17.1's `@atomicStore` compiles, and it does not store the operand.
-                running = [r[1] for r in rows if r[2] == 'runs']
-                stores = ['store_monotonic', 'store_release', 'store_seq_cst']
-                self.assertEqual(running, stores if version == '0.17.1' else [], (version, triple))
-                for r in rows:
-                    if r[2] == 'runs':
-                        self.assertEqual(r[3], 'cell=other', (version, triple, r))
+                stores = ['store_monotonic', 'store_release', 'store_seq_cst'] if version == '0.17.1' else []
+                self.assertEqual([r[1:4] for r in rows if r[2] == 'runs'],
+                                 [[op, 'runs', 'cell=other'] for op in stores], (version, triple))
 
     def test_llvm_error_drops_the_version_suffix(self):
         found = abi.LLVM_ERROR.search("error: Invalid cast (Producer: 'zig 0.17.1' Reader: 'LLVM 22.1.8')")
