@@ -180,8 +180,10 @@ def main : IO Unit := do
     require (has (onValue src 0 (.structFieldVal (.inst 0) 2)) outOfRange)
       s!"field 2 of type {src}: {describe (onValue src 0 (.structFieldVal (.inst 0) 2))}"
     require (onValue 0 src (.aggregateInit #[.inst 0, .inst 0])).isOk s!"literal of type {src} is rejected"
-    require (has (onValue 0 src (.aggregateInit #[.inst 0, .inst 0, .inst 0])) outOfRange)
-      s!"literal of type {src} with three operands is accepted"
+    -- One operand per field: more or fewer would be a record literal that does not type.
+    for operands in [#[], #[Val.inst 0], #[.inst 0, .inst 0, .inst 0]] do
+      require (has (onValue 0 src (.aggregateInit operands)) "operands for the 2 fields of its type")
+        s!"literal of type {src} with {operands.size} operands is accepted"
   require (onValue 2 14 (.aggregateInit #[.inst 0, .inst 0])).isOk "an array literal is rejected"
   -- A field pointer: into a local held as a value it is the value's field; into memory it is an
   -- address, also of a handle.

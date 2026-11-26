@@ -2214,9 +2214,11 @@ partial def checkOp (cx : CheckCtx) (line : Nat) (ty : TyId) (op : Op)
   | .aggregateInit elems =>
     -- An array or vector is its items; every other result is a record of its fields.
     unless cx.types[ty]? matches some (.array ..) | some (.vector ..) do
-      -- No fields at all, or fewer than operands: `valueField`'s diagnostics.
-      if (valueFields? cx.types ty).all (· < elems.size) then
-        cx.valueField line "aggregate_init" (some ty) elems.size
+      match valueFields? cx.types ty with
+      | some n =>
+        unless n == elems.size do
+          cx.fail line s!"`aggregate_init` has {elems.size} operands for the {n} fields of its type"
+      | none => cx.valueField line "aggregate_init" (some ty) 0
     pure line
   -- Pure values, locals, jumps, returns and debug info: `checkTy` of the result and the
   -- whole-function operand checks (`check`) are their rules. Fail closed on any other op: one
