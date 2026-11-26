@@ -219,6 +219,40 @@ theorem FTTLive.of_total {P : FAssn} {c : MemM α} {Q : α → FAssn} (ht : FTTo
   obtain ⟨v, m', e⟩ := ht.2 m r rF hh hp hc ho
   exact ⟨m, r, rF, hh, hp, hc, ho, (v, m'), by rw [e]; rfl⟩
 
+theorem FTTAdmit.mono {P P' : FAssn} (h : FTTAdmit P) (hp : ∀ r, P r → P' r) : FTTAdmit P' :=
+  have ⟨m, r, rF, hh, h, hc, ho, _⟩ := h
+  ⟨m, r, rF, hh, hp r h, hc, ho, trivial⟩
+
+/-- **A part of a thread's admissible input is admissible**: the other part joins the frame, and
+the thread owns each part of what it owns (`Mem.OwnsRes.sepL`). -/
+theorem FTTAdmit.frame {P R : FAssn} (h : FTTAdmit (P ⋆ R)) : FTTAdmit P := by
+  obtain ⟨m, r, rF, hh, ⟨r₁, r₂, hd, rfl, h1, -⟩, hc, ho, -⟩ := h
+  exact ⟨m, r₁, _, Holds.split hd hh, h1, hc, ho.sepL rfl rfl, trivial⟩
+
+theorem FTTAdmit.ex {γ : Type} {P : γ → FAssn} (h : FTTAdmit (FAssn.ex P)) :
+    ∃ x, FTTAdmit (P x) :=
+  have ⟨m, r, rF, hh, ⟨x, h⟩, hc, ho, _⟩ := h
+  ⟨x, m, r, rF, hh, h, hc, ho, trivial⟩
+
+theorem FTTAdmit.lift {φ : Prop} {P : FAssn} (h : FTTAdmit (⟪φ⟫ ⋆ P)) : φ ∧ FTTAdmit P :=
+  have ⟨m, r, rF, hh, h, hc, ho, _⟩ := h
+  have ⟨hφ, hp⟩ := Full.sep_lift.mp h
+  ⟨hφ, m, r, rF, hh, hp, hc, ho, trivial⟩
+
+/-- **A total thread triple carries admissibility from its precondition to a state of its
+postcondition** (the thread analogue of `FAdmit.of_total`): the step returns (`FTTReturns`), and
+the memory it returns with holds the postcondition at the returned value, next to the same frame,
+owned by the thread (`FTTriple`). A witness for a claim whose precondition only a run reaches (a
+grant of an allocator) runs the steps that reach it from an admissible start. -/
+theorem FTTAdmit.of_total {P : FAssn} {c : MemM α} {Q : α → FAssn} (ht : FTTotalTriple P c Q)
+    (h : FTTAdmit P) : ∃ v, FTTAdmit (Q v) := by
+  obtain ⟨m, r, rF, hh, hp, hc, ho, -⟩ := h
+  obtain ⟨v, m', e⟩ := ht.2 m r rF hh hp hc ho
+  have h1 := ht.1 m r rF hh hp hc ho
+  rw [e] at h1
+  obtain ⟨r', hh', hq, hc', ho', -⟩ := h1
+  exact ⟨v, m', r', rF, hh', hq, hc', ho', trivial⟩
+
 /-! ## Concrete `FSeq` memories -/
 
 /-- The default memory (no blocks, one thread) is an `FSeq` memory. -/

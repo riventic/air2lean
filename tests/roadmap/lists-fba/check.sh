@@ -8,9 +8,11 @@
 # Lists.Alloc.freeAll_spec.nonvacuous and Lists.Alloc.freeAll_freed.nonvacuous as verified
 # against the statements. ListsFba/Sentinel.lean does the same for M04's sentinel theorems
 # (tests/roadmap/interfaces/Interfaces/SentinelSpec.lean): the allocator premise is met
-# (ListsFba.Sentinel.fba_spec) and Interfaces.SentinelSpec.make_spec.nonvacuous is verified;
-# ListsFba/Wide.lean for the wider item types (Interfaces/WideSpec.lean: ListsFba.Wide.fba_spec
-# and make{16,32,64}_spec.nonvacuous, one per alignment).
+# (ListsFba.Sentinel.fba_spec) and the witnesses of make_spec, append_grant, resize_grant and
+# release_spec are verified; ListsFba/Wide.lean for the wider item types (Interfaces/WideSpec.lean:
+# ListsFba.Wide.fba_spec and the same four witnesses per item type, one alignment each). The
+# witnesses of append, resize and release hold a grant that the allocator's own alloc made from
+# program start (ListsFba.granted_admissible over AllocFba.FBA.fthread_alloc_room).
 # The modules are the fixture's library ListsFba (tests/roadmap/lakefile.toml) and what it imports:
 # the FixedBufferAllocator of the library AllocFba (alloc-fba/check.sh checks that its translation
 # is the translator's output) and M04's sentinel program and proofs of the library Interfaces (the
@@ -26,26 +28,33 @@ trap 'rm -rf "$work"' EXIT
 python3 -B scripts/fixtures.py build ListsFba Proofs.Lists.Alloc
 # Axioms from the built environment (only the standard ones), and the claims extractor sees the
 # companions next to the claims and checks their statements.
+# The sentinel clients' claims with a witness: `make` at program start, and `append`, `resize`,
+# `release` of a buffer that the allocator's own `alloc` granted (ListsFba.granted_admissible).
+sentinel=(Interfaces.SentinelSpec.make_spec Interfaces.SentinelSpec.append_grant
+  Interfaces.SentinelSpec.resize_grant Interfaces.SentinelSpec.release_spec)
+for w in 16 32 64; do
+  sentinel+=("Interfaces.WideSpec.make${w}_spec" "Interfaces.WideSpec.append${w}_grant"
+    "Interfaces.WideSpec.resize${w}_grant" "Interfaces.WideSpec.release${w}_spec")
+done
 theorems=()
-for name in ListsFba.env_runs ListsFba.start_admissible ListsFba.fba_spec Lists.Append.append_spec.nonvacuous \
+for name in ListsFba.env_runs ListsFba.start_admissible_at ListsFba.start_admissible ListsFba.fba_spec \
+    ListsFba.make_admissible ListsFba.granted_admissible "ListsFba.granted_admissible'" \
+    Lists.Append.append_spec.nonvacuous \
     Lists.Alloc.push_spec.nonvacuous Lists.Alloc.freeAll_spec.nonvacuous \
     Lists.Alloc.freeAll_freed.nonvacuous ListsFba.NotDead.free_not_dead \
-    ListsFba.Sentinel.env_runs ListsFba.Sentinel.fba_spec Interfaces.SentinelSpec.make_spec.nonvacuous \
-    ListsFba.Wide.env_runs ListsFba.Wide.fba_spec Interfaces.WideSpec.make16_spec.nonvacuous \
-    Interfaces.WideSpec.make32_spec.nonvacuous Interfaces.WideSpec.make64_spec.nonvacuous; do
+    ListsFba.Sentinel.env_runs ListsFba.Sentinel.fba_spec \
+    ListsFba.Wide.env_runs ListsFba.Wide.fba_spec "${sentinel[@]/%/.nonvacuous}"; do
   theorems+=(--declaration "$name")
 done
 python3 -B scripts/fixtures.py audit Proofs.Lists.Append Proofs.Lists.Alloc ListsFba.Witness \
   ListsFba.NotDead Interfaces.SentinelSpec ListsFba.Sentinel Interfaces.WideSpec ListsFba.Wide \
   "${theorems[@]}" --output "$work/assurance.json"
-python3 - "$work/assurance.json" <<'PY'
+python3 - "$work/assurance.json" "${sentinel[@]}" <<'PY'
 import json, sys
 report = json.load(open(sys.argv[1]))
 theorems = {t["name"]: t for t in report["theorems"]}
 for name in ("Lists.Append.append_spec", "Lists.Alloc.push_spec", "Lists.Alloc.freeAll_spec",
-             "Lists.Alloc.freeAll_freed", "Interfaces.SentinelSpec.make_spec",
-             "Interfaces.WideSpec.make16_spec", "Interfaces.WideSpec.make32_spec",
-             "Interfaces.WideSpec.make64_spec"):
+             "Lists.Alloc.freeAll_freed", *sys.argv[2:]):
     witness = theorems[name]["statement"]["witnesses"]["nonvacuity"]
     assert witness["status"] == "verified", (name, witness)
     print(f"lists-fba: {name}: non-vacuity {witness['status']} ({witness['theorem']})")

@@ -13,14 +13,15 @@ for the `u8` program (`ListsFba.Sentinel`):
   translated `FixedBufferAllocator`, every other pointer is `.illegal` (`env_runs`); its contract
   comes from the allocator's proof through `CAllocSpec.env_ofRaw` (`fba_spec`), so every theorem
   of `WideSpec` has a satisfiable allocator premise.
-* `Interfaces.WideSpec.make{16,32,64}_spec.nonvacuous`: `make` of zero items at each alignment
+* `Interfaces.WideSpec.make{16,32,64}_spec.nonvacuous`: `make` of one item at each alignment
   (`2 ^ 1`, `2 ^ 2`, `2 ^ 3`), with the precondition at program start
-  (`ListsFba.start_admissible`; the empty list joins the frame).
-
-`append`, `resize` and `release` take a grant of the allocator in their precondition. A witness
-for them needs a state in which the real allocator has granted one, that is, that its `alloc`
-succeeded from the start state; the contract's `allocPost` allows `null`, so this needs a theorem
-about the `FixedBufferAllocator` itself and is not shown here.
+  (`ListsFba.make_admissible`; the empty list joins the frame).
+* `append{16,32,64}_grant.nonvacuous`, `resize{16,32,64}_grant.nonvacuous` and
+  `release{16,32,64}_spec.nonvacuous`: these take a grant of the allocator in their precondition.
+  The contract's `allocPost` allows `null`, so the state comes from the allocator itself
+  (`ListsFba.granted_admissible`): its `alloc` of one item's bytes at the item's alignment, run
+  from program start, returns a grant (`AllocFba.FBA.fthread_alloc_room`: the request has room in
+  the 16-byte buffer), and the grant is the empty buffer's (its sentinel item).
 -/
 
 namespace ListsFba.Wide
@@ -60,27 +61,71 @@ theorem fba_spec (A1 A0 γ : Nat) :
     (fun s k ra φ bs _ h2 h3 => (fthread_free ctx (B A1 A0) γ 0 s k ra φ bs h2 h3).toPartial.post
       fun _ _ h => Full.sep_emp.mpr h))
 
--- `make` of zero items at each alignment: the allocator's invariant, the fee and the vtable at
--- program start; the empty list joins the frame.
+-- `make` of one item at each alignment, at program start (`make_admissible`).
 nonvacuity_witness Interfaces.WideSpec.make16_spec := by
-  obtain ⟨A1, A0, γ, h⟩ := start_admissible
-  exact ⟨ext, ctx, vtp, fns, I0 A1 A0 γ, env0, Frac.one.half, 0, by decide,
-    by simp [finv, ffits, B], fba_spec A1 A0 γ,
-    (FAdmit.Start.frame (R := Lists.Append.alist (I0 A1 A0 γ) Frac.one.half hdr [])
-      (h.mono fun _ h => ac_cast h (by simp only [startPre]; ac_rfl))).cadmit⟩
+  obtain ⟨A1, A0, γ, h⟩ := make_admissible
+  exact ⟨ext, ctx, vtp, fns, I0 A1 A0 γ, env0, Frac.one.half, 1, by decide,
+    fits16 A1 A0 γ (by decide) (by decide), fba_spec A1 A0 γ, h⟩
 
 nonvacuity_witness Interfaces.WideSpec.make32_spec := by
-  obtain ⟨A1, A0, γ, h⟩ := start_admissible
-  exact ⟨ext, ctx, vtp, fns, I0 A1 A0 γ, env0, Frac.one.half, 0, by decide,
-    by simp [finv, ffits, B], fba_spec A1 A0 γ,
-    (FAdmit.Start.frame (R := Lists.Append.alist (I0 A1 A0 γ) Frac.one.half hdr [])
-      (h.mono fun _ h => ac_cast h (by simp only [startPre]; ac_rfl))).cadmit⟩
+  obtain ⟨A1, A0, γ, h⟩ := make_admissible
+  exact ⟨ext, ctx, vtp, fns, I0 A1 A0 γ, env0, Frac.one.half, 1, by decide,
+    fits16 A1 A0 γ (by decide) (by decide), fba_spec A1 A0 γ, h⟩
 
 nonvacuity_witness Interfaces.WideSpec.make64_spec := by
-  obtain ⟨A1, A0, γ, h⟩ := start_admissible
-  exact ⟨ext, ctx, vtp, fns, I0 A1 A0 γ, env0, Frac.one.half, 0, by decide,
-    by simp [finv, ffits, B], fba_spec A1 A0 γ,
-    (FAdmit.Start.frame (R := Lists.Append.alist (I0 A1 A0 γ) Frac.one.half hdr [])
-      (h.mono fun _ h => ac_cast h (by simp only [startPre]; ac_rfl))).cadmit⟩
+  obtain ⟨A1, A0, γ, h⟩ := make_admissible
+  exact ⟨ext, ctx, vtp, fns, I0 A1 A0 γ, env0, Frac.one.half, 1, by decide,
+    fits16 A1 A0 γ (by decide) (by decide), fba_spec A1 A0 γ, h⟩
+
+-- `append`, `resize` and `release` of an empty buffer at each alignment: its grant of one item
+-- (the sentinel's) is the real allocator's, after its `alloc` ran from program start
+-- (`granted_admissible`: 2, 4 and 8 bytes at alignment `2 ^ 1`, `2 ^ 2`, `2 ^ 3`).
+nonvacuity_witness Interfaces.WideSpec.append16_grant := by
+  obtain ⟨A1, A0, γ, p, bs, hbs, h⟩ := granted_admissible 2 1 (by decide) (by decide) (by decide)
+  exact ⟨ext, ctx, vtp, fns, I0 A1 A0 γ, env0, Frac.one.half.half, ⟨p, 0⟩, 0, bs, hbs.symm,
+    by rw [hbs]; decide, fits16 A1 A0 γ (by decide) (by simp), fba_spec A1 A0 γ, CAdmit.of h⟩
+
+nonvacuity_witness Interfaces.WideSpec.resize16_grant := by
+  obtain ⟨A1, A0, γ, p, bs, hbs, h⟩ := granted_admissible 2 1 (by decide) (by decide) (by decide)
+  exact ⟨ext, ctx, vtp, fns, I0 A1 A0 γ, env0, Frac.one.half.half, ⟨p, 0⟩, 1, bs, hbs.symm,
+    by rw [hbs]; decide, by decide, fits16 A1 A0 γ (by decide) (by decide), fba_spec A1 A0 γ,
+    CAdmit.of h⟩
+
+nonvacuity_witness Interfaces.WideSpec.release16_spec := by
+  obtain ⟨A1, A0, γ, p, bs, hbs, h⟩ := granted_admissible' 2 1 (by decide) (by decide) (by decide)
+  exact ⟨ext, ctx, vtp, fns, I0 A1 A0 γ, env0, Frac.one.half.half, ⟨p, 0⟩, bs, hbs.symm,
+    by rw [hbs]; decide, fba_spec A1 A0 γ, CAdmit.of h⟩
+
+nonvacuity_witness Interfaces.WideSpec.append32_grant := by
+  obtain ⟨A1, A0, γ, p, bs, hbs, h⟩ := granted_admissible 4 2 (by decide) (by decide) (by decide)
+  exact ⟨ext, ctx, vtp, fns, I0 A1 A0 γ, env0, Frac.one.half.half, ⟨p, 0⟩, 0, bs, hbs.symm,
+    by rw [hbs]; decide, fits16 A1 A0 γ (by decide) (by simp), fba_spec A1 A0 γ, CAdmit.of h⟩
+
+nonvacuity_witness Interfaces.WideSpec.resize32_grant := by
+  obtain ⟨A1, A0, γ, p, bs, hbs, h⟩ := granted_admissible 4 2 (by decide) (by decide) (by decide)
+  exact ⟨ext, ctx, vtp, fns, I0 A1 A0 γ, env0, Frac.one.half.half, ⟨p, 0⟩, 1, bs, hbs.symm,
+    by rw [hbs]; decide, by decide, fits16 A1 A0 γ (by decide) (by decide), fba_spec A1 A0 γ,
+    CAdmit.of h⟩
+
+nonvacuity_witness Interfaces.WideSpec.release32_spec := by
+  obtain ⟨A1, A0, γ, p, bs, hbs, h⟩ := granted_admissible' 4 2 (by decide) (by decide) (by decide)
+  exact ⟨ext, ctx, vtp, fns, I0 A1 A0 γ, env0, Frac.one.half.half, ⟨p, 0⟩, bs, hbs.symm,
+    by rw [hbs]; decide, fba_spec A1 A0 γ, CAdmit.of h⟩
+
+nonvacuity_witness Interfaces.WideSpec.append64_grant := by
+  obtain ⟨A1, A0, γ, p, bs, hbs, h⟩ := granted_admissible 8 3 (by decide) (by decide) (by decide)
+  exact ⟨ext, ctx, vtp, fns, I0 A1 A0 γ, env0, Frac.one.half.half, ⟨p, 0⟩, 0, bs, hbs.symm,
+    by rw [hbs]; decide, fits16 A1 A0 γ (by decide) (by simp), fba_spec A1 A0 γ, CAdmit.of h⟩
+
+nonvacuity_witness Interfaces.WideSpec.resize64_grant := by
+  obtain ⟨A1, A0, γ, p, bs, hbs, h⟩ := granted_admissible 8 3 (by decide) (by decide) (by decide)
+  exact ⟨ext, ctx, vtp, fns, I0 A1 A0 γ, env0, Frac.one.half.half, ⟨p, 0⟩, 1, bs, hbs.symm,
+    by rw [hbs]; decide, by decide, fits16 A1 A0 γ (by decide) (by decide), fba_spec A1 A0 γ,
+    CAdmit.of h⟩
+
+nonvacuity_witness Interfaces.WideSpec.release64_spec := by
+  obtain ⟨A1, A0, γ, p, bs, hbs, h⟩ := granted_admissible' 8 3 (by decide) (by decide) (by decide)
+  exact ⟨ext, ctx, vtp, fns, I0 A1 A0 γ, env0, Frac.one.half.half, ⟨p, 0⟩, bs, hbs.symm,
+    by rw [hbs]; decide, fba_spec A1 A0 γ, CAdmit.of h⟩
 
 end ListsFba.Wide

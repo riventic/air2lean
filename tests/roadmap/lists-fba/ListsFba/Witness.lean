@@ -29,6 +29,14 @@ precondition are met by a concrete program and memory, so the theorems are not v
   `epFee`), the list (`alist` of `[]`, whose items pointer is the header's own block) and the
   vtable (`vtR_intro`); the rest joins the frame (`FAdmit.Start.frame`). The buffer's region view
   and its bound close by `fsym_entail` (`buffer_parts`, `MemFacts.regionIn_bound`).
+* **A grant of the real allocator** (`granted_admissible`): a precondition that holds a grant is
+  reached by running the allocator. The start is stated with `end_index = 0` and the buffer's
+  address a multiple of 8 (`start_admissible_at`; `start_admissible` forgets both), `alloc` of
+  `n ≤ 16` bytes at an alignment `2 ^ k ≤ 8` has room there and returns a grant
+  (`AllocFba.FBA.fthread_alloc_room`, a total thread triple), and a total thread triple carries
+  admissibility to the state after its run (`FTTAdmit.of_total`). `make_admissible` and
+  `granted_admissible` are the two statements that the witnesses of the sentinel clients
+  (`ListsFba.Sentinel`, `ListsFba.Wide`) instantiate.
 * `Lists.Append.append_spec.nonvacuous`, `Lists.Alloc.push_spec.nonvacuous`,
   `Lists.Alloc.freeAll_spec.nonvacuous` (the empty list): the companions
   that the claims extractor checks against the statements (`docs/claim-strength.md`);
@@ -157,11 +165,18 @@ def startPre (A1 A0 γ : Nat) : FAssn :=
   (I0 A1 A0 γ).own ⋆ ((I0 A1 A0 γ).fee Frac.one.half ⋆
     (Lists.Append.alist (I0 A1 A0 γ) Frac.one.half hdr [] ⋆ vtR vtp fns.toList))
 
+/-- `startPre` with what the start memory fixes besides: `end_index = 0` (`fownAt`) and the
+buffer's address, a multiple of its alignment 8. A witness that needs room in the buffer
+(`granted_admissible`) starts here. -/
+def startPreAt (A1 A0 γ : Nat) : FAssn :=
+  ⟪A1 % 8 = 0⟫ ⋆ (fownAt ctx (B A1 A0) γ 0 0 ⋆ ((I0 A1 A0 γ).fee Frac.one.half ⋆
+    (Lists.Append.alist (I0 A1 A0 γ) Frac.one.half hdr [] ⋆ vtR vtp fns.toList)))
+
 /-- **The precondition of `append` (and of `push`) over the real `FixedBufferAllocator` holds in
 the memory at program start**: the allocator's invariant over the struct and its buffer at the
-start of a new ledger (`fown_init`), the fee and the list's fee (each half of the epoch's token),
-an empty list, the vtable. -/
-theorem start_admissible : ∃ A1 A0 γ, FAdmit.Start (startPre A1 A0 γ ⋆ plain) := by
+start of a new ledger (`fown_init_at`: `end_index = 0`), the fee and the list's fee (each half of
+the epoch's token), an empty list, the vtable. -/
+theorem start_admissible_at : ∃ A1 A0 γ, FAdmit.Start (startPreAt A1 A0 γ ⋆ plain) := by
   have h := (FAdmit.Start.init_claims Placement.fresh gs fit lo).mono fun _ h =>
     ac_cast h (Q := (globals gs ⋆ gclaims gs) ⋆ plain) (by ac_rfl)
   simp only [globals, gclaims, gs, List.length_cons, List.length_nil, sepN, gblock, gext,
@@ -173,7 +188,7 @@ theorem start_admissible : ∃ A1 A0 γ, FAdmit.Start (startPre A1 A0 γ ⋆ pla
   obtain ⟨A2, h⟩ := FAdmit.Start.ex h
   obtain ⟨A3, h⟩ := FAdmit.Start.ex h
   -- the ledger is new: its name `γ` comes out of the update
-  suffices hs : FAdmit.Start ((FAssn.ex fun γ => startPre A1 A0 γ ⋆ left A2) ⋆ plain) by
+  suffices hs : FAdmit.Start ((FAssn.ex fun γ => startPreAt A1 A0 γ ⋆ left A2) ⋆ plain) by
     rw [sep_ex_eq] at hs
     obtain ⟨γ, hs⟩ := FAdmit.Start.ex hs
     exact ⟨A1, A0, γ, FAdmit.Start.frame (R := left A2) (hs.mono fun _ h => ac_cast h (by ac_rfl))⟩
@@ -188,7 +203,7 @@ theorem start_admissible : ∃ A1 A0 γ, FAdmit.Start (startPre A1 A0 γ ⋆ pla
             known 3 A3) ⋆ (known 0 A0 ⋆ (known 1 A1 ⋆ (known 2 A2 ⋆ (bext 0 24 .global ⋆
               (bext 2 32 .constGlobal ⋆ (bext 3 32 .global ⋆
                 (bclaim 3 0 32 ⋆ (bclaim 2 0 32 ⋆ bclaim 0 0 24)))))))))))))))) (by ac_rfl)) ?_
-  refine EUpd.lift fun h3 => EUpd.lift fun h2 => EUpd.lift fun _ => EUpd.lift fun h0 => ?_
+  refine EUpd.lift fun h3 => EUpd.lift fun h2 => EUpd.lift fun h1 => EUpd.lift fun h0 => ?_
   refine EUpd.trans (EUpd.frame (buffer_parts A1 A0)) ?_
   refine EUpd.trans (EUpd.frameL (EUpd.frame (vtR_intro (vtp := vtp) (fns := fns.toList)
     (by simpa [vtp] using h2) (by rw [bs2_size]; rfl) (by decide) bs2_decode))) ?_
@@ -207,8 +222,8 @@ theorem start_admissible : ∃ A1 A0 γ, FAdmit.Start (startPre A1 A0 γ ⋆ pla
   refine EUpd.trans (EUpd.of_imp (P' := (wEnd ctx 0 ⋆ (fparts ctx (B A1 A0) Frac.one.half 1 0 ⋆
       bufStart A1 A0)) ⋆ ((up (bytesAt ⟨some 3, 0⟩ A3 32 .global bs3) ⋆ known 3 A3) ⋆
         (vtR vtp fns.toList ⋆ left A2))) fun r h => ac_cast h (by simp only [fparts, left, B]; ac_rfl)) ?_
-  -- a new ledger whose epoch `0` holds the buffer's claim (`fown_init`)
-  refine EUpd.trans (EUpd.frame (fown_init (by simp [B]) (by simp [B, bufp]; omega)
+  -- a new ledger whose epoch `0` holds the buffer's claim (`fown_init_at`)
+  refine EUpd.trans (EUpd.frame (fown_init_at (by simp [B]) (by simp [B, bufp]; omega)
     (by simp [B, bufp]) (by simpa [B, ctx] using h0) (by simp [ctx]) rfl rfl)) ?_
   refine EUpd.ex fun γ => EUpd.of_imp fun r h => ⟨γ, ?_⟩
   -- the epoch's token: half is the client's fee, half the list's unspent fee
@@ -217,13 +232,89 @@ theorem start_admissible : ∃ A1 A0 γ, FAdmit.Start (startPre A1 A0 γ ⋆ pla
     fun _ x => sep_comm (sep_lift.mpr ⟨Frac.half_pos (show (0 : Rat) < 1 by decide), x⟩)
   have h := ac_cast h (Q := (up (bytesAt ⟨some 3, 0⟩ A3 32 .global bs3) ⋆
       (known 3 A3 ⋆ epTok γ 0 Frac.one.half)) ⋆
-    (fown ctx (B A1 A0) γ 0 ⋆ (epTok γ 0 Frac.one.half ⋆ (vtR vtp fns.toList ⋆ left A2)))) (by ac_rfl)
-  have h : (Lists.Append.alist (I0 A1 A0 γ) Frac.one.half hdr [] ⋆ ((I0 A1 A0 γ).own ⋆
+    (fownAt ctx (B A1 A0) γ 0 0 ⋆ (epTok γ 0 Frac.one.half ⋆ (vtR vtp fns.toList ⋆ left A2)))) (by ac_rfl)
+  have h : (Lists.Append.alist (I0 A1 A0 γ) Frac.one.half hdr [] ⋆ (fownAt ctx (B A1 A0) γ 0 0 ⋆
       ((I0 A1 A0 γ).fee Frac.one.half ⋆ (vtR vtp fns.toList ⋆ left A2)))) r :=
     sep_mono_right (fun _ x => sep_mono_right (fun _ y => sep_mono_left fee y) x)
       (sep_mono_left (fun _ x => header_parts (I0 A1 A0 γ) Frac.one.half A3 h3
         (sep_mono_right (fun _ y => sep_mono_right fee y) x)) h)
-  exact ac_cast h (by simp only [startPre]; ac_rfl)
+  exact ac_cast (Full.sep_lift.mpr ⟨h1, h⟩) (by simp only [startPreAt]; ac_rfl)
+
+/-- The start with the index forgotten (`startPre`: the allocator's invariant `own`). -/
+theorem start_admissible : ∃ A1 A0 γ, FAdmit.Start (startPre A1 A0 γ ⋆ plain) :=
+  have ⟨A1, A0, γ, h⟩ := start_admissible_at
+  ⟨A1, A0, γ, h.mono fun _ h => sep_mono_left (fun _ h =>
+    sep_mono_left (fun _ x => x.fown) (Full.sep_lift.mp h).2) h⟩
+
+/-- **`make`'s precondition at program start** (one statement for every `make` witness of the
+sentinel clients): the allocator's invariant, the fee and the vtable; the empty list joins the
+frame. -/
+theorem make_admissible : ∃ A1 A0 γ, CAdmit ((I0 A1 A0 γ).own ⋆
+    ((I0 A1 A0 γ).fee Frac.one.half ⋆ vtR vtp fns.toList) ⋆ plain) :=
+  have ⟨A1, A0, γ, h⟩ := start_admissible
+  ⟨A1, A0, γ, (FAdmit.Start.frame (R := Lists.Append.alist (I0 A1 A0 γ) Frac.one.half hdr [])
+    (h.mono fun _ h => ac_cast h (by simp only [startPre]; ac_rfl))).cadmit⟩
+
+/-- The requests of at most the buffer's 16 bytes at an alignment up to the buffer's own
+(`2 ^ k ≤ 8`) are in the allocator's request domain. -/
+theorem fits16 (A1 A0 γ : Nat) {n k : Nat} (hk : k ≤ 3) (hn : n ≤ 2 ^ 63) :
+    (I0 A1 A0 γ).fits n k := by
+  have : 2 ^ k ≤ 2 ^ 3 := Nat.pow_le_pow_right (by decide) hk
+  simp only [finv, ffits, B]; omega
+
+/-- **A state in which the real allocator has granted a buffer** (one statement for every
+witness of a client that takes a grant: `append`, `resize`, `release`): `alloc` of `n ≤ 16`
+bytes at an alignment `2 ^ k ≤ 8` from the program's start. The buffer's address is a multiple
+of 8, so the request takes no padding (`fpad_of_aligned`) and has room in the 16 bytes; the total
+triple `fthread_alloc_room` then returns a grant, and its run carries admissibility from the
+start to the state after it (`FTTAdmit.of_total`). The client's fee is half of the start's: a
+quarter of the epoch's token pays for the grant, the other is the fee of the next request. -/
+theorem granted_admissible (n : BitVec 64) (k : Nat) (hn : 0 < n.toNat) (hk : k ≤ 3)
+    (hroom : n.toNat ≤ 16) :
+    ∃ A1 A0 γ p bs, bs.size = n.toNat ∧ FTTAdmit ((I0 A1 A0 γ).own ⋆
+      ((I0 A1 A0 γ).granted p k Frac.one.half.half bs ⋆
+        ((I0 A1 A0 γ).fee Frac.one.half.half ⋆ vtR vtp fns.toList)) ⋆ plain) := by
+  obtain ⟨A1, A0, γ, h⟩ := start_admissible_at
+  have hq : 0 < Frac.one.half.half.val := Frac.half_pos (Frac.half_pos (show (0 : Rat) < 1 by decide))
+  obtain ⟨h8, h⟩ := FTTAdmit.lift (h.fttadmit.mono fun _ h =>
+    ac_cast h (Q := ⟪A1 % 8 = 0⟫ ⋆ ((fownAt ctx (B A1 A0) γ 0 0 ⋆ epFee γ 0 Frac.one.half.half) ⋆
+      (epFee γ 0 Frac.one.half.half ⋆ (vtR vtp fns.toList ⋆ (plain ⋆
+        Lists.Append.alist (I0 A1 A0 γ) Frac.one.half hdr [])))))
+      (by simp only [startPreAt, finv_fee]
+          rw [← Frac.half_add_half Frac.one.half, epFee_add γ 0 hq hq, Frac.half_add_half]
+          ac_rfl))
+  have hpad : fpad (B A1 A0) 0 k = 0 := fpad_of_aligned (by
+    have : A1 % 2 ^ k = 0 := Nat.mod_eq_zero_of_dvd
+      (Nat.dvd_trans (Nat.pow_dvd_pow 2 hk) (Nat.dvd_of_mod_eq_zero h8))
+    simpa [B, bufp] using this)
+  obtain ⟨v, h⟩ := FTTAdmit.of_total ((fthread_alloc_room ctx (B A1 A0) γ 0 0 n k 0
+    Frac.one.half.half hn (by omega) (fits16 A1 A0 γ hk (by omega))
+    (by rw [hpad]; simpa [B] using hroom)).frame) h
+  obtain ⟨p, h⟩ := FTTAdmit.ex (h.mono fun _ h => Full.sep_ex.mp h)
+  obtain ⟨-, h⟩ := FTTAdmit.lift (h.mono fun _ h => sep_assoc h)
+  obtain ⟨bs, h⟩ := FTTAdmit.ex (h.mono fun _ h => Full.sep_ex.mp (ac_cast h
+    (Q := (FAssn.ex fun bs => ⟪bs.size = n.toNat⟫ ⋆ (I0 A1 A0 γ).granted p k Frac.one.half.half bs) ⋆
+      (fownAt ctx (B A1 A0) γ 0 (0 + fpad (B A1 A0) 0 k + n.toNat) ⋆
+        (epFee γ 0 Frac.one.half.half ⋆ (vtR vtp fns.toList ⋆ (plain ⋆
+          Lists.Append.alist (I0 A1 A0 γ) Frac.one.half hdr []))))) (by ac_rfl)))
+  obtain ⟨hbs, h⟩ := FTTAdmit.lift (h.mono fun _ h => sep_assoc h)
+  refine ⟨A1, A0, γ, p, bs, hbs, FTTAdmit.frame
+    (R := Lists.Append.alist (I0 A1 A0 γ) Frac.one.half hdr []) (h.mono fun _ h => ?_)⟩
+  have h : ((I0 A1 A0 γ).granted p k Frac.one.half.half bs ⋆ ((I0 A1 A0 γ).own ⋆
+      ((I0 A1 A0 γ).fee Frac.one.half.half ⋆ (vtR vtp fns.toList ⋆ (plain ⋆
+        Lists.Append.alist (I0 A1 A0 γ) Frac.one.half hdr []))))) _ :=
+    sep_mono_right (fun _ x => sep_mono_left (fun _ y => fownAt.fown y) x) h
+  exact ac_cast h (by ac_rfl)
+
+/-- `granted_admissible` for a client that takes only the grant (`release`): the second fee and
+`plain` join the frame. -/
+theorem granted_admissible' (n : BitVec 64) (k : Nat) (hn : 0 < n.toNat) (hk : k ≤ 3)
+    (hroom : n.toNat ≤ 16) :
+    ∃ A1 A0 γ p bs, bs.size = n.toNat ∧ FTTAdmit ((I0 A1 A0 γ).own ⋆
+      ((I0 A1 A0 γ).granted p k Frac.one.half.half bs ⋆ vtR vtp fns.toList)) :=
+  have ⟨A1, A0, γ, p, bs, hbs, h⟩ := granted_admissible n k hn hk hroom
+  ⟨A1, A0, γ, p, bs, hbs, FTTAdmit.frame (R := (I0 A1 A0 γ).fee Frac.one.half.half ⋆ plain)
+    (h.mono fun _ h => ac_cast h (by ac_rfl))⟩
 
 /-! ## The premises are met -/
 
@@ -246,11 +337,9 @@ nonvacuity_witness Lists.Append.append_spec := by
     (FAdmit.Start.frame (R := plain) h).cadmit⟩
 
 nonvacuity_witness Lists.Alloc.push_spec := by
-  obtain ⟨A1, A0, γ, h⟩ := start_admissible
+  obtain ⟨A1, A0, γ, h⟩ := make_admissible
   exact ⟨ext, ctx, vtp, fns, I0 A1 A0 γ, env0, Frac.one.half, none, 0,
-    by simp [finv, ffits, B], fba_spec A1 A0 γ,
-    (FAdmit.Start.frame (R := Lists.Append.alist (I0 A1 A0 γ) Frac.one.half hdr [])
-      (h.mono fun _ h => ac_cast h (by simp only [startPre]; ac_rfl))).cadmit⟩
+    by simp [finv, ffits, B], fba_spec A1 A0 γ, h⟩
 
 -- `freeAll` of the empty list (`list I φ none []` is `⟪none = none⟫`): the allocator's
 -- invariant and the vtable; the fee, the header and `plain` join the frame.

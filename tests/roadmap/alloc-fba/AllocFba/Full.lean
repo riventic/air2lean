@@ -2,6 +2,7 @@ import AllocFba.Impl
 import ZigLean.Sep.Full.AutoClaims
 import ZigLean.Sep.Full.AutoThread
 import ZigLean.Sep.Full.ResetLedger
+import ZigLean.Os.MmapRun
 
 /-!
 # The translated `FixedBufferAllocator` satisfies the full-state `FAllocSpec`
@@ -36,7 +37,18 @@ token, which every outstanding grant holds a part of, is the evidence that none 
   with the buffer's address and its cells' labels `S`, `K` (a full-state cell's size is a label:
   `FMatch` ignores it).
 
-`fits n k := cap + 2^k + n ≤ 2^64`, as in the legacy proof.
+`fits n k := cap + 2^k + n ≤ 2^64`, as in the legacy proof. It excludes overflow, not a full
+buffer: the contract's `allocPost` allows `null`.
+
+**When `alloc` succeeds.** `fown` hides `end_index`; `fownAt … ei` is the state with
+`end_index = ei` (`fown_eq`: `fown = ∃ ei, fownAt ei`). `fthread_alloc_at` is `alloc` exactly,
+for every request (`allocAt`): with the padding `fpad B ei k` (std's `mem.alignPointerOffset` of
+the first free byte's address, `fpad_spec`), the request has room when
+`ei + fpad B ei k + n ≤ cap`; then the result is the pointer after the padding and
+`end_index = ei + fpad B ei k + n`, else `null` and nothing changed. `fthread_alloc_room` is its
+success case, `fthread_alloc` (the contract's entry) forgets the index, and `fown_init_at` starts
+at `end_index = 0`. A non-vacuity witness of a client that holds a grant runs `alloc` with them
+(`tests/roadmap/lists-fba/ListsFba/Witness.lean`, `granted_admissible`).
 
 **The proofs are the invariant, the general symbolic executor `fsym`**
 (`ZigLean/Sep/Full/Auto.lean`, `docs/proof-automation.md`) **and the updates of the state at the
@@ -116,16 +128,27 @@ attribute [fsym_atom] fcov
 def FFacts (ctx : Ptr) (B : FBuf) (ei : Nat) (tail : Array Byte) (b cb : BlockId) : Prop :=
   FOk ctx B ei tail ∧ B.ptr.block = some b ∧ ctx.block = some cb
 
-/-- The allocator's state at epoch `e` of the ledger `γ` (module doc): the ledger, the struct with
-`end_index = ei`, the parts no entry changes, the tail and its claim, the receipt of the buffer's
-claim, the junk and the coverage. (The parts are written out here, not behind a definition: an
-update that produces one of them, `fparts`, closes it in the postcondition as it stands.) -/
-def fown (ctx : Ptr) (B : FBuf) (γ e : Nat) : FAssn :=
-  FAssn.ex fun ei => FAssn.ex fun tail => FAssn.ex fun q => FAssn.ex fun b => FAssn.ex fun cb =>
+/-- The allocator's state at epoch `e` of the ledger `γ` with `end_index = ei` (module doc): the
+ledger, the struct, the parts no entry changes, the tail and its claim, the receipt of the
+buffer's claim, the junk and the coverage. (The parts are written out here, not behind a
+definition: an update that produces one of them, `fparts`, closes it in the postcondition as it
+stands.) A statement about how much room is left (`fthread_alloc_at`) is over it. -/
+def fownAt (ctx : Ptr) (B : FBuf) (γ e ei : Nat) : FAssn :=
+  FAssn.ex fun tail => FAssn.ex fun q => FAssn.ex fun b => FAssn.ex fun cb =>
     FAssn.ex fun mN => FAssn.ex fun M => FAssn.ex fun jh =>
       ⟪FFacts ctx B ei tail b cb⟫ ⋆
         ((gauthP γ e M none ⋆ LedgerRcpts γ e M) ⋆ ((wEnd ctx ei ⋆ fparts ctx B q b cb) ⋆
           ((ftail B ei tail ⋆ fclaim B ei b γ e) ⋆ (frcpt B b γ e ⋆ (JunkAt jh ⋆ fcov B b ei mN M jh)))))
+
+/-- The allocator's state at epoch `e` of the ledger `γ`, the invariant's `own`: `fownAt` at some
+`end_index`. -/
+def fown (ctx : Ptr) (B : FBuf) (γ e : Nat) : FAssn := FAssn.ex fun ei => fownAt ctx B γ e ei
+
+theorem fown_eq (ctx : Ptr) (B : FBuf) (γ e : Nat) :
+    fown ctx B γ e = FAssn.ex fun ei => fownAt ctx B γ e ei := rfl
+
+theorem fownAt.fown {ctx : Ptr} {B : FBuf} {γ e ei : Nat} {r : Res} (h : fownAt ctx B γ e ei r) :
+    fown ctx B γ e r := ⟨ei, h⟩
 
 /-- What a grant's token says besides naming the grant: it lies in the buffer, with the buffer's
 address and labels. -/
@@ -651,11 +674,127 @@ is local to the thread that owns the invariant and the grant (`ThreadLocal`, dis
 (`CAllocSpec.ofRaw`, `ZigLean/Sep/Full/AllocBridge.lean`). The sequential triples are their
 readings in one thread (`FTTotalTriple.toFTotalTriple`). -/
 
+/-! ### The padding: `mem.alignPointerOffset` -/
+
+/-- What std's `mem.alignPointerOffset(p, 2 ^ k)` returns for a pointer at the address `a`, in
+the form its walk shows: `null` when rounding up overflows a `usize`, else an offset below the
+alignment to a multiple of it. `fpad_spec` reads it as the distance to `alignUp`. -/
+def alignWalk (b : BlockId) (A a k : Nat) : Option (BitVec 64) → FAssn
+  | none => ⟪2 ^ 64 ≤ a + (2 ^ k - 1)⟫ ⋆ known b A
+  | some d => ⟪(a + d.toNat) % 2 ^ k = 0 ∧ d.toNat < 2 ^ k⟫ ⋆ known b A
+
+theorem alignOffset_walk (p : Ptr) (b : BlockId) (A k : Nat) (hk : k < 64) (hb : p.block = some b)
+    (h0 : 0 ≤ p.off) (hA : A + p.off.toNat < 2 ^ 64) :
+    FTTotalTriple (known b A)
+      (mem_alignPointerOffset__anon_1fdb4fd23aee p (Zig.shl (1 : BitVec 64) (BitVec.ofNat 6 k)))
+      (alignWalk b A (A + p.off.toNat) k) := by
+  fsym
+
+/-- The padding before a grant at alignment `2 ^ k` when `end_index = ei`: the value of std's
+`mem.alignPointerOffset(buffer.ptr + end_index, 2 ^ k)`, the distance from the address
+`B.A + B.ptr.off + ei` of the first free byte to the next multiple of `2 ^ k`. -/
+def fpad (B : FBuf) (ei k : Nat) : Nat :=
+  alignUp (B.A + B.ptr.off.toNat + ei) (2 ^ k) - (B.A + B.ptr.off.toNat + ei)
+
+theorem fpad_lt (B : FBuf) (ei k : Nat) : fpad B ei k < 2 ^ k := by
+  have := alignUp_lt (n := B.A + B.ptr.off.toNat + ei) (Nat.two_pow_pos k)
+  have := Nat.two_pow_pos k
+  unfold fpad; omega
+
+/-- The grant's start is aligned. -/
+theorem fpad_aligned (B : FBuf) (ei k : Nat) :
+    (B.A + B.ptr.off.toNat + (ei + fpad B ei k)) % 2 ^ k = 0 := by
+  have := le_alignUp (B.A + B.ptr.off.toNat + ei) (2 ^ k)
+  rw [show B.A + B.ptr.off.toNat + (ei + fpad B ei k) = alignUp (B.A + B.ptr.off.toNat + ei) (2 ^ k) by
+    unfold fpad; omega]
+  exact alignUp_mod_self (Nat.two_pow_pos k)
+
+/-- An address that is aligned already takes no padding. -/
+theorem fpad_of_aligned {B : FBuf} {ei k : Nat} (h : (B.A + B.ptr.off.toNat + ei) % 2 ^ k = 0) :
+    fpad B ei k = 0 := by
+  unfold fpad; rw [alignUp_of_mod (Nat.two_pow_pos k) h]; omega
+
+/-- `mem.alignPointerOffset(buffer.ptr + end_index, 2 ^ k)` as `fpad`: `null` when the aligned
+address is no `usize`. -/
+def padPost (B : FBuf) (ei k : Nat) (b : BlockId) : Option (BitVec 64) → FAssn
+  | none => ⟪2 ^ 64 ≤ B.A + B.ptr.off.toNat + ei + fpad B ei k⟫ ⋆ known b B.A
+  | some d => ⟪d.toNat = fpad B ei k ∧ fpad B ei k < 2 ^ k⟫ ⋆ known b B.A
+
+theorem fpad_spec (B : FBuf) (ei k : Nat) (p : Ptr) (b : BlockId) (hk : k < 64)
+    (hb : p.block = some b) (h0 : 0 ≤ p.off) (hp : p.off.toNat = B.ptr.off.toNat + ei)
+    (hA : B.A + B.ptr.off.toNat + ei < 2 ^ 64) :
+    FTTotalTriple (known b B.A)
+      (mem_alignPointerOffset__anon_1fdb4fd23aee p (Zig.shl (1 : BitVec 64) (BitVec.ofNat 6 k)))
+      (padPost B ei k b) := by
+  refine (alignOffset_walk p b B.A k hk hb h0 (by omega)).conseq (fun _ h => h) fun r _ h => ?_
+  have hP := Nat.two_pow_pos k
+  have hle := le_alignUp (B.A + B.ptr.off.toNat + ei) (2 ^ k)
+  rw [hp, ← Nat.add_assoc] at h
+  cases r with
+  | none =>
+    refine sep_mono_left (fun _ h => ⟨?_, h.2⟩) h
+    have := le_alignUp_of_overflow hP
+      (by rw [show 64 = (64 - k) + k by omega, Nat.pow_add]; exact Nat.mul_mod_left _ _) h.1
+    unfold fpad; omega
+  | some d =>
+    refine sep_mono_left (fun _ h => ⟨?_, h.2⟩) h
+    have := alignUp_unique hP h.1.2 h.1.1
+    exact ⟨by unfold fpad; omega, fpad_lt B ei k⟩
+
+/-- **What `alloc` of `n` bytes at alignment `2 ^ k` does when `end_index = ei`**, exactly: the
+request has room when the padded request ends inside the buffer, `ei + fpad B ei k + n ≤ cap`.
+Then the result is the pointer after the padding, `end_index` is the grant's end and the grant is
+the client's; otherwise the result is `null` and nothing changed. -/
+def allocAt (ctx : Ptr) (B : FBuf) (γ e ei n k : Nat) (φ : Frac) : Option Ptr → FAssn
+  | none => ⟪B.cap < ei + fpad B ei k + n⟫ ⋆ (fownAt ctx B γ e ei ⋆ epFee γ e φ)
+  | some p => ⟪ei + fpad B ei k + n ≤ B.cap ∧ p.block = B.ptr.block ∧
+        p.off = B.ptr.off + ((ei + fpad B ei k : Nat) : Int)⟫ ⋆
+      (fownAt ctx B γ e (ei + fpad B ei k + n) ⋆
+        FAssn.ex fun bs => ⟪bs.size = n⟫ ⋆ (finv ctx B γ e).granted p k φ bs)
+
+/-- **`alloc`, exactly, for every request** (`allocAt`): a total thread triple from the state with
+`end_index = ei`. The walk takes the padding from `fpad_spec` and `alloc_upd` at the grant's end
+`ei + fpad B ei k + n`, whose start `fpad_aligned` aligns. `fthread_alloc` (the contract's
+`allocPost`) forgets the index. -/
+theorem fthread_alloc_at (ctx : Ptr) (B : FBuf) (γ e ei : Nat) (n : BitVec 64) (k : Nat)
+    (ra : BitVec 64) (φ : Frac) (hn : 0 < n.toNat) (hk : k < 64)
+    (hfit : (finv ctx B γ e).fits n.toNat k) :
+    FTTotalTriple (fownAt ctx B γ e ei ⋆ epFee γ e φ) (impl.alloc ctx n k ra)
+      (allocAt ctx B γ e ei n.toNat k φ) := by
+  have u : ∀ {mN : Nat} {tail : Array Byte} {q : Frac} {b cb : BlockId} {M : GMap} {jh : Heap}
+      {w : BitVec 64} (hb : B.ptr.block = some b) (hp0 : 0 ≤ B.ptr.off)
+      (hw : w.toNat = ei + fpad B ei k + n.toNat) (hhi : w.toNat ≤ B.cap)
+      (ht : tail.size = B.cap - ei), EUpd _ _ :=
+    fun {mN tail q b cb M jh w} hb hp0 hw hhi ht =>
+      alloc_upd ctx B γ e n.toNat k φ (mN := mN) (q := q) (cb := cb) (M := M) (jh := jh) hb hp0 hn
+        (by omega) hhi ht (by
+          rw [show w.toNat - n.toNat = ei + fpad B ei k by omega]; exact fpad_aligned B ei k)
+  fsym [fpad_spec B ei k, u]
+
 theorem fthread_alloc (ctx : Ptr) (B : FBuf) (γ e : Nat) (n : BitVec 64) (k : Nat) (ra : BitVec 64)
     (φ : Frac) (hn : 0 < n.toNat) (hk : k < 64) (hfit : (finv ctx B γ e).fits n.toNat k) :
     FTTotalTriple ((finv ctx B γ e).own ⋆ (finv ctx B γ e).fee φ) (impl.alloc ctx n k ra)
       ((finv ctx B γ e).allocPost n.toNat k φ) := by
-  fsym [alloc_upd ctx B γ e n.toNat k φ]
+  refine (FTTotalTriple.ex (P := fun ei => fownAt ctx B γ e ei ⋆ epFee γ e φ) fun ei =>
+    (fthread_alloc_at ctx B γ e ei n k ra φ hn hk hfit).conseq (fun _ h => h) fun v _ h => ?_).conseq
+      (fun _ h => sep_ex.mp h) fun _ _ h => h
+  cases v <;> exact sep_mono_left (fun _ x => x.fown) (sep_lift.mp h).2
+
+/-- **`alloc` succeeds when the padded request has room**: from `end_index = ei` with
+`ei + fpad B ei k + n ≤ cap`, the result is the pointer after the padding, `end_index` is the
+grant's end and the grant is the client's (`fthread_alloc_at` without its `null` case). -/
+theorem fthread_alloc_room (ctx : Ptr) (B : FBuf) (γ e ei : Nat) (n : BitVec 64) (k : Nat)
+    (ra : BitVec 64) (φ : Frac) (hn : 0 < n.toNat) (hk : k < 64)
+    (hfit : (finv ctx B γ e).fits n.toNat k) (hroom : ei + fpad B ei k + n.toNat ≤ B.cap) :
+    FTTotalTriple (fownAt ctx B γ e ei ⋆ epFee γ e φ) (impl.alloc ctx n k ra)
+      (fun r => FAssn.ex fun p => ⟪r = some p ∧ p.block = B.ptr.block ∧
+          p.off = B.ptr.off + ((ei + fpad B ei k : Nat) : Int)⟫ ⋆
+        (fownAt ctx B γ e (ei + fpad B ei k + n.toNat) ⋆
+          FAssn.ex fun bs => ⟪bs.size = n.toNat⟫ ⋆ (finv ctx B γ e).granted p k φ bs)) := by
+  refine (fthread_alloc_at ctx B γ e ei n k ra φ hn hk hfit).conseq (fun _ h => h) fun v _ h => ?_
+  cases v with
+  | none => exact absurd (sep_lift.mp h).1 (by omega)
+  | some p => exact ⟨p, sep_lift.mpr ⟨⟨rfl, (sep_lift.mp h).1.2⟩, (sep_lift.mp h).2⟩⟩
 
 theorem fthread_resize (ctx : Ptr) (B : FBuf) (γ e : Nat) (s : Slice) (k : Nat) (n ra : BitVec 64)
     (A S : Nat) (K : BlockKind) (q q' φ : Frac) (tl : Array Byte) (hk : k < 64) (hn : 0 < n.toNat)
@@ -755,14 +894,15 @@ theorem freset_spec (ctx : Ptr) (B : FBuf) (γ e : Nat) :
 /-- **A fixed buffer's start** (the client's ghost step after `init` stored the struct): from the
 struct's words with `end_index = 0`, the parts no entry changes, the whole buffer as a region and
 the untagged claim on it, a new ledger (`Upd.alloc`) whose epoch `0` holds the buffer's claim
-(`EUpd.lendC`), with that epoch's whole token. -/
-theorem fown_init {ctx : Ptr} {B : FBuf} {q : Frac} {b cb : BlockId} {bs : Array Byte}
+(`EUpd.lendC`), with that epoch's whole token. The new state has `end_index = 0` (`fownAt`);
+`fown_init` forgets the index. -/
+theorem fown_init_at {ctx : Ptr} {B : FBuf} {q : Frac} {b cb : BlockId} {bs : Array Byte}
     (hs : bs.size = B.cap) (hA : B.A + B.ptr.off.toNat + B.cap < 2 ^ 64) (hp0 : 0 ≤ B.ptr.off)
     (hal : (B.cA + ctx.off.toNat) % 8 = 0) (hc0 : 0 ≤ ctx.off) (hb : B.ptr.block = some b)
     (hcb : ctx.block = some cb) :
     EUpd (wEnd ctx 0 ⋆ (fparts ctx B q b cb ⋆ (up (regionIn B.ptr B.A B.S B.K 1 bs) ⋆
         bclaim b B.ptr.off.toNat (bnd B) none)))
-      (FAssn.ex fun γ => fown ctx B γ 0 ⋆ epTok γ 0 Frac.one) := by
+      (FAssn.ex fun γ => fownAt ctx B γ 0 0 ⋆ epTok γ 0 Frac.one) := by
   let P := wEnd ctx 0 ⋆ (fparts ctx B q b cb ⋆ (up (regionIn B.ptr B.A B.S B.K 1 bs) ⋆
     bclaim b B.ptr.off.toNat (bnd B) none))
   refine EUpd.trans (EUpd.trans (EUpd.of_imp fun _ h => sep_comm (sep_emp.mpr h))
@@ -787,7 +927,19 @@ theorem fown_init {ctx : Ptr} {B : FBuf} {q : Frac} {b cb : BlockId} {bs : Array
         ac_rfl)
       (sep_lift.mpr ⟨(show FFacts ctx B 0 bs b cb from
         ⟨⟨Nat.zero_le _, by omega, hA, hp0, hal, hc0⟩, hb, hcb⟩), sep_lift.mpr ⟨hc, h⟩⟩)
-  exact sep_mono_left (fun _ x => ⟨0, bs, q, b, cb, 0, GMap.empty, fun _ => none, x⟩) H
+  exact sep_mono_left (fun _ x => ⟨bs, q, b, cb, 0, GMap.empty, fun _ => none, x⟩) H
+
+/-- **A fixed buffer's start**, as the invariant `fown` (`fown_init_at` with the index
+forgotten). -/
+theorem fown_init {ctx : Ptr} {B : FBuf} {q : Frac} {b cb : BlockId} {bs : Array Byte}
+    (hs : bs.size = B.cap) (hA : B.A + B.ptr.off.toNat + B.cap < 2 ^ 64) (hp0 : 0 ≤ B.ptr.off)
+    (hal : (B.cA + ctx.off.toNat) % 8 = 0) (hc0 : 0 ≤ ctx.off) (hb : B.ptr.block = some b)
+    (hcb : ctx.block = some cb) :
+    EUpd (wEnd ctx 0 ⋆ (fparts ctx B q b cb ⋆ (up (regionIn B.ptr B.A B.S B.K 1 bs) ⋆
+        bclaim b B.ptr.off.toNat (bnd B) none)))
+      (FAssn.ex fun γ => fown ctx B γ 0 ⋆ epTok γ 0 Frac.one) :=
+  EUpd.trans (fown_init_at hs hA hp0 hal hc0 hb hcb)
+    (EUpd.of_imp fun _ ⟨γ, h⟩ => ⟨γ, sep_mono_left (fun _ x => x.fown) h⟩)
 
 /-- **The actual allocator returned after initialization.** The generated `allocator` helper
 returns this struct's context and its generated vtable. At that return the initialized words
