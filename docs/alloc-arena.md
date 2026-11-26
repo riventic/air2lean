@@ -474,10 +474,10 @@ Not proved yet, in order:
 
 ## Legacy models
 
-The hand-written arena model (`.owned a` blocks in `ZigLean/Mem/Owned.lean`, ALC-07) stays for
-the `std`-mode executable checks until the translated arena's specification replaces it
+The hand-written arena model (`.owned a` blocks in `ZigLean/Mem/Owned.lean`, ALC-07) and its
+`std`-mode executable checks (`tests/roadmap/allocator-identity`) are deleted
 ([allocator-model.md](allocator-model.md), removal plan step 2); its proof layer
-(`ZigLean/Sep/Owned.lean`, `ZigLean/Sep/ArenaClient.lean`) is retired, and M01's statements are made
+(`ZigLean/Sep/Owned.lean`, `ZigLean/Sep/ArenaClient.lean`) was retired before, and M01's statements are made
 over the translated arena ([alloc-spec.md](alloc-spec.md), "Retired claims"): a slice the arena
 takes back lies in one of its nodes (`Core.granted_in_node`), and `reset(.free_all)` keeps every
 other resource (`ArenaSpec.reset_free_all_frame`). The session client of M01 waits for a proved

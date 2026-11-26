@@ -5,7 +5,6 @@ import ZigLean.Mem.Enc
 import ZigLean.Mem.ErrWidth
 import ZigLean.Mem.Alloc
 import ZigLean.Mem.Thread
-import ZigLean.Mem.Owned
 import ZigLean.Mem.Repr
 import ZigLean.Mem.AtomicPtr
 import ZigLean.Mem.Tls

@@ -1252,6 +1252,7 @@ theorem Ghost.exts_split {E : BlockId → Option (Nat × BlockKind)} {b : BlockI
   · funext x y; simp [Ghost.add, Ghost.atExt, Ghost.exts, Ghost.unit]
   · simp
   · funext l; simp [Ghost.add, Ghost.atExt, Ghost.exts, Ghost.unit]
+  · funext D; simp [Ghost.add, Ghost.atExt, Ghost.exts, Ghost.unit]
 
 /-- A legacy assertion with the full extent of one block. -/
 theorem up_sep_bext {P : Assn} {b : BlockId} {S : Nat} {K : BlockKind} {r : Res}
@@ -1265,6 +1266,7 @@ theorem up_sep_bext {P : Assn} {b : BlockId} {S : Nat} {K : BlockKind} {r : Res}
   · funext x y; simp [Ghost.atExt, Ghost.exts, Ghost.unit]
   · simp
   · funext l; simp [Ghost.atExt, Ghost.exts, Ghost.unit]
+  · funext D; simp [Ghost.atExt, Ghost.exts, Ghost.unit]
 
 /-! ## Address disjointness of live blocks (stage 3) -/
 
