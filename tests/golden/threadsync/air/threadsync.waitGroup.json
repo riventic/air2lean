@@ -266,7 +266,7 @@
    "ty": 17,
    "callee": {
     "ty": 18,
-    "func": "Thread.spawn__anon_920",
+    "func": "Thread.spawn__anon_916",
     "module": "std",
     "instance_key": "16f53fe5f1a3de4b12b2489242732bd2c62acb1c8ca5c70cf3be0c59a056d4b0",
     "noreturn": false,
@@ -420,7 +420,7 @@
    "ty": 17,
    "callee": {
     "ty": 18,
-    "func": "Thread.spawn__anon_920",
+    "func": "Thread.spawn__anon_916",
     "module": "std",
     "instance_key": "16f53fe5f1a3de4b12b2489242732bd2c62acb1c8ca5c70cf3be0c59a056d4b0",
     "noreturn": false,
@@ -1180,7 +1180,6 @@
    "size": "one",
    "const": false,
    "child": 36,
-   "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
    "address_space": "generic",
@@ -1218,9 +1217,8 @@
    ]
   },
   {
-   "k": "opaque",
-   "name": "c.pthread_t__opaque_749",
-   "module": "std"
+   "k": "other",
+   "name": "c.pthread_t__opaque_728"
   },
   {
    "k": "ptr",

@@ -46,6 +46,7 @@
    "fullfp16",
    "fuse_address",
    "fuse_adrp_add",
+   "fuse_aes",
    "fuse_arith_logic",
    "fuse_crypto_eor",
    "fuse_csel",
@@ -323,7 +324,7 @@
    "ty": 19,
    "callee": {
     "ty": 20,
-    "func": "Thread.spawn__func_737",
+    "func": "Thread.spawn__func_5",
     "module": "std",
     "instance_key": "4a60f40c32acc35a6e8ce66dce66c37fc5eb64f2febd8055c3c8ba8c73205594",
     "noreturn": false,
@@ -1778,7 +1779,6 @@
    "size": "one",
    "const": false,
    "child": 144,
-   "ptr_align": 1,
    "volatile": false,
    "allowzero": false,
    "address_space": "generic",
@@ -3135,9 +3135,8 @@
    "abi_align": 8
   },
   {
-   "k": "opaque",
-   "name": "c.pthread_t__opaque_0",
-   "module": "std"
+   "k": "other",
+   "name": "c.pthread_t__opaque_0"
   },
   {
    "k": "other",
