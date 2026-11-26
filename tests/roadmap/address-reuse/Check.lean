@@ -1,3 +1,4 @@
+import ZigLean.Mem.Alloc
 import ZigLean.Mem.Null
 
 /-! Executable regressions of the address-reuse policy and provenance recovery (M05,
